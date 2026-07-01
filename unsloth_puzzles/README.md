@@ -56,6 +56,10 @@ normally breaks. This is world_size=1, so it does not test cross-rank comms.
 2× NVIDIA box (Kaggle 2× T4, or a Windows machine with 2 GPUs via **WSL2** — native Windows can't do
 NCCL FSDP2):
 
+**Ready-to-run: [`task_b_kaggle_2xT4.ipynb`](task_b_kaggle_2xT4.ipynb)** — open in Kaggle, set the
+accelerator to **GPU T4 ×2**, Run All. It installs deps, runs the single-GPU reference + the 2× T4
+FSDP2 job, and plots the two loss curves (equivalence). Or from a shell on any 2× NVIDIA box:
+
 ```bash
 # 2x GPU
 accelerate launch --config_file unsloth_puzzles/fsdp2_config.yaml unsloth_puzzles/fsdp2_qlora_sft.py

@@ -106,9 +106,16 @@ def main():
         # (sharding, CPU offload, activation checkpointing, bf16 mixed precision) automatically.
     )
     trainer = SFTTrainer(model=model, train_dataset=dataset, processing_class=tok, args=args)
-    if single and trainer.accelerator.is_main_process:
-        print(f"[single-GPU reference] dtype={DTYPE}, steps={MAX_STEPS}")
     trainer.train()
+
+    # Dump the loss curve (main rank) so single-GPU vs FSDP2 can be compared for equivalence.
+    if trainer.accelerator.is_main_process:
+        import json
+
+        tag = "single" if single else "fsdp2"
+        curve = [(h["step"], h["loss"]) for h in trainer.state.log_history if "loss" in h]
+        json.dump(curve, open(f"losses_{tag}.json", "w"))
+        print(f"[{tag}] dtype={DTYPE} steps={MAX_STEPS} | loss curve ({len(curve)} pts) -> losses_{tag}.json")
 
 
 if __name__ == "__main__":
