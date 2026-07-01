@@ -7,10 +7,9 @@ and delete ``experts4bit_qlora/_vendor/`` — no API change for callers.
 """
 
 try:
-    from bitsandbytes.nn import (
-        Experts4bit,
-    )  # upstream (bitsandbytes#1965), once released
-except ImportError:  # stock bitsandbytes: use the vendored copy
+    # Upstream (bitsandbytes#1965) once released; else the vendored copy on stock bitsandbytes.
+    from bitsandbytes.nn import Experts4bit
+except ImportError:
     from ._vendor.experts import Experts4bit
 
 from .lora import ExpertsLoRA, LoRALinear, add_attention_lora
