@@ -47,7 +47,9 @@ def _matmul_4bit_matches_dequant() -> bool:
         )
         ref = F_nn.linear(x, F.dequantize_4bit(q.reshape(-1, 1), quant_state=qs))
         got = bnb.matmul_4bit(x, q.reshape(-1, 1), quant_state=qs)
-        return bool(torch.allclose(ref, got, rtol=1e-2, atol=1e-2))
+        # Accept bf16 gemv rounding vs dequantize-then-linear (a few %); reject the catastrophic
+        # transpose-shim bug on bitsandbytes<0.50 (relative error >> 1).
+        return bool((got - ref).abs().max() / ref.abs().max().clamp_min(1e-6) < 0.05)
     except Exception:
         return False
 
@@ -299,9 +301,9 @@ class Experts4bit(nn.Module):
         compute_dtype = self.compute_dtype if self.compute_dtype is not None else hidden_states.dtype
         hidden_states = hidden_states.to(compute_dtype)
 
-        # matmul_4bit lowers training memory but is only correct on bitsandbytes>=0.50 for the
-        # [packed, 1] weight layout; on older releases fall back to the bit-exact dequantize path.
-        use_matmul_4bit = _matmul_4bit_matches_dequant()
+        # matmul_4bit lowers training memory but is CUDA-only here and only correct on
+        # bitsandbytes>=0.50 for the [packed, 1] layout; otherwise use the bit-exact dequantize path.
+        use_matmul_4bit = hidden_states.is_cuda and _matmul_4bit_matches_dequant()
 
         # Accumulate in float32 for numerical stability with bf16/fp16 routing weights.
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
