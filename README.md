@@ -33,10 +33,8 @@ sparse-MoE on reasonable hardware.
 ## Install
 
 ```bash
-# primitive + adapters + benchmarks (torch + bitsandbytes):
-pip install "git+https://github.com/pjordanandrsn/experts4bit-qlora"
-# + the streaming MoE trainer (transformers>=5.0, datasets, ...):
-pip install "experts4bit-qlora[train] @ git+https://github.com/pjordanandrsn/experts4bit-qlora"
+pip install experts4bit-qlora           # primitive + adapters + benchmarks (torch + bitsandbytes)
+pip install "experts4bit-qlora[train]"  # + the streaming MoE trainer (transformers>=5.0, datasets, ...)
 ```
 
 Runs on a **stock** `pip install bitsandbytes` today — see "Relationship to bitsandbytes" below.
