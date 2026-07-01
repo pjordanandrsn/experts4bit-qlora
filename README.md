@@ -62,17 +62,18 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
 ## Scope
 
 The `Experts4bit` primitive and `ExpertsLoRA` adapters are **model-agnostic**. The **streaming loader /
-trainer** (`python -m experts4bit_qlora.train`) supports fused-MoE architectures that store experts
-per-expert on disk under `model.layers.{i}.mlp.experts.{e}.{gate,up,down}_proj.weight` with a SwiGLU gate:
+trainer** (`python -m experts4bit_qlora.train`) supports SwiGLU fused-MoE architectures — experts stored
+either **per-expert** or already-**fused** on disk:
 
 - **OLMoE** (OLMoE-1B-7B) — convergence-tested end-to-end; fits a 12 GB card at ~4.7 GB.
-- **Qwen3-MoE / Qwen3.5-MoE** — same checkpoint + module layout (verified byte-for-byte identical to
-  OLMoE's on-disk format); structurally tested in `tests/test_loader_architectures.py`. The real weights
-  (30–35B) need a ≥24 GB card — or the CPU-offloading path (tracked separately) — to fit 12 GB.
+- **Qwen3-MoE / Qwen3.5-MoE** — same checkpoint + module layout as OLMoE (verified byte-identical);
+  structurally tested.
+- **Gemma-4 (text tower)** — different internally (experts at `layers.{i}.experts` beside a parallel
+  dense MLP + a custom router; experts fused on disk) — handled and structurally tested.
 
-Anything else **fails fast with a clear error**. **Gemma 4** is a genuinely different design (experts at
-`layers.{i}.experts` beside a parallel dense MLP, with a custom router) and needs its own loader
-adaptation — not yet supported. PRs welcome.
+All three are covered by `tests/test_loader_architectures.py`. Real Qwen3/Gemma weights (26–35B) need a
+≥24 GB card — or the CPU-offloading path (tracked separately) — to fit 12 GB. Unsupported architectures
+**fail fast with a clear error**; PRs for more welcome.
 
 ## Benchmarks
 

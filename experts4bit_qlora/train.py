@@ -1,4 +1,4 @@
-"""End-to-end QLoRA fine-tune of a fused-MoE model (OLMoE, Qwen3-MoE) on a single small GPU.
+"""End-to-end QLoRA fine-tune of a fused-MoE model (OLMoE, Qwen3-MoE, Gemma-4) on a single small GPU.
 
 The expert weights are streamed in and frozen in NF4 (:class:`Experts4bit`); only small per-expert /
 per-projection LoRA adapters train. Set ``MODEL`` to any supported fused-MoE checkpoint (see the

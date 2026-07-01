@@ -15,4 +15,4 @@ except ImportError:
 from .lora import ExpertsLoRA, LoRALinear, add_attention_lora
 
 __all__ = ["Experts4bit", "ExpertsLoRA", "LoRALinear", "add_attention_lora"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
