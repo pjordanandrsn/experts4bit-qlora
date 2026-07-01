@@ -7,6 +7,11 @@ loader's ``SUPPORTED_MODEL_TYPES``). Configured entirely via env vars, e.g.::
     STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
       python -m experts4bit_qlora.train
 
+Set ``OFFLOAD_EXPERTS=1`` to keep the frozen 4-bit experts in (pinned, unless ``OFFLOAD_PIN=0``) CPU
+RAM and stream one layer's experts to the GPU at a time — lowers peak GPU memory (so models whose
+experts exceed VRAM can train) at the cost of a per-layer PCIe transfer. See
+:mod:`experts4bit_qlora.offload` and ``docs/METHODOLOGY.md`` §11.
+
 Requires (beyond this package): a CUDA GPU, transformers>=5.0, datasets, accelerate, safetensors.
 """
 
@@ -33,6 +38,8 @@ TRAIN_EXPERTS = os.environ.get("TRAIN_EXPERTS", "1") == "1"
 TRAIN_ATTENTION = os.environ.get("TRAIN_ATTENTION", "1") == "1"
 TRAIN_ROUTER = os.environ.get("TRAIN_ROUTER", "0") == "1"
 DO_GEN = os.environ.get("DO_GEN", "1") == "1"
+OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
+OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
 OUT = os.environ.get("OUT", "./experts4bit-lora-out")
 
 EVAL_PROMPTS = [
@@ -110,8 +117,11 @@ def main():
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
     tok = AutoTokenizer.from_pretrained(MODEL)
-    model, _ = load_moe_4bit_streaming(MODEL, DEVICE, DTYPE, R, ALPHA)
-    model.to(DEVICE)
+    model, _ = load_moe_4bit_streaming(MODEL, DEVICE, DTYPE, R, ALPHA, offload=OFFLOAD_EXPERTS, pin=OFFLOAD_PIN)
+    # The loader already placed every module; under offload the experts live in pinned CPU RAM by
+    # design, so a blanket model.to(DEVICE) would drag them back onto the GPU and defeat offloading.
+    if not OFFLOAD_EXPERTS:
+        model.to(DEVICE)
     n_attn = add_attention_lora(model, R, ALPHA, DTYPE) if TRAIN_ATTENTION else 0
     log(f"attn LoRA {n_attn} projs | train experts={TRAIN_EXPERTS} attn={TRAIN_ATTENTION} router={TRAIN_ROUTER}")
 
@@ -131,8 +141,11 @@ def main():
     log(
         f"loaded. trainable: {sum(p.numel() for p in trainable):,} "
         f"(lora {sum(p.numel() for p in lora_params):,} + router {sum(p.numel() for p in router_params):,}) "
-        f"| GPU mem: {torch.cuda.memory_allocated() / 1e9:.2f} GB"
+        f"| offload={'on' if OFFLOAD_EXPERTS else 'off'} | GPU mem: {torch.cuda.memory_allocated() / 1e9:.2f} GB"
     )
+    # Reset so the peak we report at the end reflects the training step (a full fwd+bwd), which is
+    # the figure that decides whether a model fits — the point of OFFLOAD_EXPERTS.
+    torch.cuda.reset_peak_memory_stats()
 
     before = {}
     if DO_GEN:
@@ -196,7 +209,10 @@ def main():
                 marker = "  *new best -> saved"
             log(f"  [eval] step {step + 1}: held-out loss {el:.4f} (best {best:.4f}){marker}")
             model.train()
-    log(f"training done in {time.time() - t0:.0f}s")
+    log(
+        f"training done in {time.time() - t0:.0f}s "
+        f"| peak GPU mem: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB (offload={'on' if OFFLOAD_EXPERTS else 'off'})"
+    )
 
     model.gradient_checkpointing_disable()
     eval_after = eval_loss(model, eval_data)

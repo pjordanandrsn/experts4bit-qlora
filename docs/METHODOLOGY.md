@@ -187,3 +187,40 @@ Actual GPU energy on the idle A2000 (70 W cap): background `nvidia-smi` power sa
 Raising batch 64→4096 cuts energy/token **4.4×** (GPU goes from 29 W underutilized to 68 W saturated). 4-bit's memory savings are what let you reach those batches; bf16 hits the wall far sooner.
 
 **Verdict on energy:** same technology, opposite sign depending on whether memory is the binding constraint. **Memory-not-binding (your excluded premise): a 1.2–2.3× energy penalty.** **Memory-binding (the real case for MoE on small cards): the difference between running and not, plus up to 4.4× lower energy/token via freed-memory batch.** Quantization is a memory-capacity technology; its energy benefit is entirely downstream of that.
+
+## 11. Expert CPU-offload (`OFFLOAD_EXPERTS`) — correctness proven, OLMoE A/B specified
+
+Even in 4-bit, the experts are the bulk of a fused-MoE's weights, and for the real targets they alone exceed a 12 GB card: Qwen3-30B-A3B ≈ **15 GB** of 4-bit experts, Gemma-4-26B-A4B ≈ **13 GB**. `OFFLOAD_EXPERTS=1` keeps each `Experts4bit` base's packed weights + absmax in **pinned CPU RAM** and streams one layer's experts to the GPU just-in-time (forward pre-hook on `ExpertsLoRA`), evicting after. Gradient checkpointing (`use_reentrant=False`) recomputes each layer's forward in backward, so the pre-hook re-stages for the recompute; PyTorch stops that recompute *early* (the evict post-hook does **not** fire on it), so a **single-resident-slot** — staging a layer first evicts the previously-staged one — is what keeps **only one layer's experts GPU-resident at a time, in forward and backward alike.** Mechanism and correctness argument: [`experts4bit_qlora/offload.py`](../experts4bit_qlora/offload.py).
+
+### a. Correctness — offload changes tensor *location*, not math (the load-bearing claim)
+
+Offload never alters the computation: staging restores the exact bytes, and eviction is safe because `ExpertsLoRA` uses the dequantize path (`_dequantize_expert` → `F.linear`), so autograd saves the *dequantized* weight for `grad_x` and never the packed base — the packed weight is only read during the forward to produce it. Two independent checks:
+
+- **Unit tests** ([`tests/test_offload.py`](../tests/test_offload.py) — run on CPU-only torch *and* on an **RTX A2000 12 GB, 8/8 pass**): an `ExpertsLoRA` forward is **bit-identical** with vs. without offload; backward still runs after the base is evicted (the frozen base gets no grad); under `use_reentrant=False` gradient checkpointing the pre-hook **re-stages the experts on the backward recompute** (asserted by a pre-hook counter) with gradients matching a non-offloaded reference, and a **single-resident-slot keeps ≤ 1 layer's experts staged through backward** (a 3-layer residency test — without it every recomputed layer would stay staged and accumulate to the full footprint); and the evicted base serializes as a 0-element placeholder so `save_adapter`'s `"lora"` filter is unaffected. This is the location-not-math analogue of §9a's "numerically identical."
+- **OLMoE A/B on an RTX A2000 12 GB** ([`bench/run-offload-ab.sh`](../bench/run-offload-ab.sh), measured): two runs identical in seed/data/hyperparameters (`STEPS=15 GRAD_ACCUM=4 SEQ=192 LR=1e-4`), flipping only `OFFLOAD_EXPERTS`:
+
+| config | BEFORE | AFTER | delta | loaded GPU | peak GPU | s/step |
+|--------|:---:|:---:|:---:|:---:|:---:|:---:|
+| `offload_off` | 1.3975 | 1.2204 | −0.1771 | 4.70 GB | **5.97 GB** | 18.7 |
+| `offload_on`  | 1.3975 | 1.2164 | −0.1810 | **1.08 GB** | **2.57 GB** | 20.8 |
+
+**`BEFORE` is bit-identical (1.3975 == 1.3975)** — the frozen NF4 forward is unchanged, so offload is location, not math (the analogue of §9a's "numerically identical"). The `AFTER`/delta match to within training non-determinism (`index_add_` atomics + async H2D → run-to-run jitter at the 1e-3 level; the deltas are −0.177 vs −0.181). **Peak GPU falls 5.97 → 2.57 GB (−3.40 GB, −57 %)** — the ~3.4 GB of experts leave the card (load-time footprint 4.70 → 1.08 GB), matching the §11b arithmetic — at an **+11 % s/step** PCIe cost. Exactly the memory-for-compute trade of §9b.
+
+### b. The trade — peak GPU down, throughput down (memory-for-compute, not a speedup)
+
+Like the `matmul_4bit` result in §9, this is a **memory optimization, not a throughput one**. Offload moves the resident expert footprint from *all layers* to *one*: for OLMoE (hidden 2048, inter 1024, 16 layers, 64 experts) the packed experts + absmax are ≈ **216 MB/layer** — 128 MB `gate_up` + 64 MB `down` packed, + 16 MB + 8 MB absmax — so ≈ **3.4 GB across 16 layers** collapses to one layer resident. The cost is a per-layer host→device copy on the forward *and* the recompute (so ~2× the transfer of a checkpointing-free forward); at ~0.2 GB/layer over PCIe this is why s/step rises. The §11a A/B measured exactly this — peak GPU down **3.40 GB** (vs the 3.4 GB predicted here) at **+11 %** s/step — a memory optimization, not a speedup (§9b).
+
+### c. The real targets — Qwen3-30B & Gemma-4-26B fit 12 GB *only* with offload (measured)
+
+The benefit scales with layer count: one layer's resident experts ≈ *(total 4-bit experts) / n_layers*. Both real targets were run on the same A2000 with `OFFLOAD_EXPERTS=1` (`STEPS=5 SEQ=128`):
+
+| model | MoE layers × experts | 4-bit experts | loaded GPU | peak GPU (train) | BEFORE → AFTER |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `Qwen/Qwen3-30B-A3B` | 48 × 128 | ~15 GB | 3.77 GB | **7.16 GB** | 4.0085 → 2.1850 |
+| `google/gemma-4-26B-A4B` | 30 × 128 | ~13 GB | 5.32 GB | **8.47 GB** | 1.6829 → 1.2125 |
+
+Both **QLoRA-train on a 12 GB card** — ≈ 0.3–0.4 GB of experts resident per layer, the other 13–15 GB held in pinned CPU RAM — and the adapters learn (delta −1.82 / −0.47). Without offload they don't fit: `Qwen3-30B OFFLOAD_EXPERTS=0` raises `torch.OutOfMemoryError` **during load** (15 GB of experts onto an 11.6 GB card, before a single step), and Gemma-4's 13 GB experts + its heavier non-expert footprint (≈256 K-token embeddings + a parallel dense MLP) likewise exceed the card. Offload is *what makes them fit* — the §11a OLMoE result at the scale it was built for.
+
+*(Loading the real Gemma-4 needed two small loader touch-ups on top of the merged Gemma-4 support, since the released checkpoint is the **multimodal** `gemma4`: build the LM from `text_config`, strip the `model.language_model.` prefix and skip the vision tower, and reconstruct rotary from `text_config`. OLMoE / Qwen3 paths are unchanged — the 15 CPU+GPU tests still pass.)*
+
+**Verdict on offload:** a capacity feature — it decides *what fits*, at a PCIe throughput cost (the honest framing this repo already applies to 4-bit itself). Measured on an RTX A2000 12 GB: correctness is **location, not math** (OLMoE `BEFORE` bit-identical off-vs-on, §11a) *through the gradient-checkpoint recompute* (unit tests, incl. the single-slot residency guard); the trade is **peak GPU ↓ 57 % at +11 % s/step** on OLMoE (§11a–b); and the headline holds — **Qwen3-30B-A3B (peak 7.16 GB) and Gemma-4-26B-A4B (peak 8.47 GB) both QLoRA-train on a 12 GB card with offload, and OOM without it** (§11c).

@@ -13,8 +13,9 @@ export STEPS=${STEPS:-150} GRAD_ACCUM=${GRAD_ACCUM:-4} LR=${LR:-1e-4} SEQ=${SEQ:
 export N_TRAIN=${N_TRAIN:-10000} R=${R:-8} ALPHA=${ALPHA:-16} EVAL_EVERY=${EVAL_EVERY:-50} DO_GEN=${DO_GEN:-0}
 
 # If bitsandbytes can't find the CUDA runtime, point LD_LIBRARY_PATH at torch's bundled nvidia libs.
+# (`nvidia` is a namespace package, so iterate __path__ rather than dirname(__file__), which is None.)
 if python -c "import nvidia" 2>/dev/null; then
-  export LD_LIBRARY_PATH="$(python -c "import os,glob,nvidia; b=os.path.dirname(nvidia.__file__); print(':'.join(sorted(glob.glob(b+'/*/lib'))))")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export LD_LIBRARY_PATH="$(python -c "import glob,nvidia; print(':'.join(sorted(p+'/lib' for b in nvidia.__path__ for p in glob.glob(b+'/*') if glob.glob(p+'/lib'))))")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
 
 echo "[$(date +%H:%M:%S)] ablation start -> $OUT_DIR"

@@ -38,3 +38,6 @@ include = ["experts4bit_qlora*"]
 
 [tool.ruff]
 line-length = 119
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -24,6 +24,15 @@ sparse-MoE on reasonable hardware.
   model in CPU *or* GPU RAM (verified under a 3 GB container RAM cap).
 - **It trains.** QLoRA on the frozen NF4 experts improves a held-out Alpaca eval from
   **1.4813 → 1.0290** (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md)).
+- **It scales past VRAM (`OFFLOAD_EXPERTS=1`).** The frozen 4-bit experts — the bulk of the
+  weights — can be streamed from **pinned CPU RAM** one layer at a time, GPU-resident only for that
+  layer's forward (and its gradient-checkpoint recompute) and evicted after. Peak GPU drops by
+  roughly *(experts footprint − one layer)*, so a fused-MoE whose 4-bit experts exceed the card
+  (Qwen3-30B-A3B ~15 GB, Gemma-4-26B-A4B ~13 GB) can QLoRA-train on 12 GB — **both measured on an
+  RTX A2000** (peak **7.16 GB** / **8.47 GB**; both OOM *without* offload) — at the cost of one PCIe
+  transfer per layer per pass. Same memory-for-compute trade as above: it changes *what fits*, not
+  speed. Offloading changes tensor location, not math — unit-test-verified, including the
+  gradient-checkpoint recompute path (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11).
 - **Honest caveat — this is a memory technology, not an energy one.** On a GPU that *already*
   fits the model, 4-bit is a **1.2–2.3× energy penalty** (NF4 is storage-only; the GEMM runs in
   bf16 either way, plus dequant). The energy win only shows up when memory is the binding
@@ -59,6 +68,10 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
   python -m experts4bit_qlora.train
 ```
 
+Add `OFFLOAD_EXPERTS=1` to keep the frozen 4-bit experts in pinned CPU RAM and stream one layer to
+the GPU at a time (set `OFFLOAD_PIN=0` to skip pinning). Lowers peak GPU memory at a per-layer PCIe
+cost — the way to fit experts that exceed VRAM.
+
 ## Scope
 
 The `Experts4bit` primitive and `ExpertsLoRA` adapters are **model-agnostic**. The **streaming loader /
@@ -67,13 +80,23 @@ either **per-expert** or already-**fused** on disk:
 
 - **OLMoE** (OLMoE-1B-7B) — convergence-tested end-to-end; fits a 12 GB card at ~4.7 GB.
 - **Qwen3-MoE / Qwen3.5-MoE** — same checkpoint + module layout as OLMoE (verified byte-identical);
-  structurally tested.
+  structurally tested in `tests/test_loader_architectures.py`. The real weights (30–35B) need a
+  ≥24 GB card — or the **CPU-offloading path** (`OFFLOAD_EXPERTS=1`, below) — to fit 12 GB.
 - **Gemma-4 (text tower)** — different internally (experts at `layers.{i}.experts` beside a parallel
   dense MLP + a custom router; experts fused on disk) — handled and structurally tested.
 
 All three are covered by `tests/test_loader_architectures.py`. Real Qwen3/Gemma weights (26–35B) need a
-≥24 GB card — or the CPU-offloading path (tracked separately) — to fit 12 GB. Unsupported architectures
-**fail fast with a clear error**; PRs for more welcome.
+≥24 GB card — or the CPU-offloading path (`OFFLOAD_EXPERTS=1`, below) — to fit 12 GB. Unsupported
+architectures **fail fast with a clear error**; PRs for more welcome.
+
+**Expert CPU-offload** (`OFFLOAD_EXPERTS=1`) is orthogonal to the loader: the streaming/eviction
+mechanism (`experts4bit_qlora/offload.py`) is model-agnostic — it hooks any `ExpertsLoRA` — so it
+works for whatever architectures the loader supports. Its correctness is validated here by unit
+tests (offload = location, not math, including the gradient-checkpoint recompute path); the
+peak-memory-drop / throughput A/B ([`bench/run-offload-ab.sh`](bench/run-offload-ab.sh), OLMoE) runs
+on the card. Since the loader supports **Qwen3-MoE** and **Gemma-4**, offload also fits
+**Qwen3-30B-A3B** and **Gemma-4-26B-A4B** on 12 GB — measured on the A2000 (peak **7.16** / **8.47 GB**;
+both OOM without offload). See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
 
 ## Benchmarks
 
