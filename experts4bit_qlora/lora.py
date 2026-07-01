@@ -145,13 +145,17 @@ class LoRALinear(nn.Module):
 
 
 def add_attention_lora(model, r: int, alpha: int, dtype: torch.dtype) -> int:
-    """Wrap each attention q/k/v/o projection with a trainable LoRA adapter (base stays frozen)."""
+    """Wrap each attention q/k/v/o projection with a trainable LoRA adapter (base stays frozen).
+
+    Detects attention blocks **structurally** — any module exposing ``q_proj``/``k_proj``/``v_proj``/
+    ``o_proj`` as ``nn.Linear`` — so it is architecture-agnostic (OLMoE, Qwen3-MoE, ...). Idempotent:
+    once wrapped, a projection is a ``LoRALinear`` (not ``nn.Linear``), so it is not re-wrapped.
+    """
+    projs = ("q_proj", "k_proj", "v_proj", "o_proj")
     n = 0
     for mod in model.modules():
-        if mod.__class__.__name__ == "OlmoeAttention":
-            for name in ("q_proj", "k_proj", "v_proj", "o_proj"):
-                lin = getattr(mod, name, None)
-                if isinstance(lin, nn.Linear):
-                    setattr(mod, name, LoRALinear(lin, r, alpha, dtype))
-                    n += 1
+        if all(isinstance(getattr(mod, p, None), nn.Linear) for p in projs):
+            for name in projs:
+                setattr(mod, name, LoRALinear(getattr(mod, name), r, alpha, dtype))
+                n += 1
     return n

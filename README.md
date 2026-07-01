@@ -1,5 +1,7 @@
 # experts4bit-qlora
 
+[![CI](https://github.com/pjordanandrsn/experts4bit-qlora/actions/workflows/ci.yml/badge.svg)](https://github.com/pjordanandrsn/experts4bit-qlora/actions/workflows/ci.yml)
+
 QLoRA fine-tuning of **fused Mixture-of-Experts** weights on a single small GPU — the part that
 doesn't fit anywhere else yet.
 
@@ -39,8 +41,10 @@ sparse-MoE on reasonable hardware.
 ## Install
 
 ```bash
-pip install -e .            # primitive + adapters + benchmarks (torch + bitsandbytes only)
-pip install -e ".[train]"   # + the OLMoE streaming trainer (transformers>=5.0, datasets, ...)
+# primitive + adapters + benchmarks (torch + bitsandbytes):
+pip install "git+https://github.com/pjordanandrsn/experts4bit-qlora"
+# + the streaming MoE trainer (transformers>=5.0, datasets, ...):
+pip install "experts4bit-qlora[train] @ git+https://github.com/pjordanandrsn/experts4bit-qlora"
 ```
 
 Runs on a **stock** `pip install bitsandbytes` today — see "Relationship to bitsandbytes" below.
@@ -71,19 +75,27 @@ cost — the way to fit experts that exceed VRAM.
 
 ## Scope
 
-The `Experts4bit` primitive and `ExpertsLoRA` adapters are **model-agnostic** — they operate on any
-fused `[num_experts, out, in]` expert stack. The **streaming loader / trainer**
-(`python -m experts4bit_qlora.train`) is currently **OLMoE-specific**: it assumes OLMoE's checkpoint
-key layout, `OlmoeRotaryEmbedding`, and `OlmoeAttention`, and **fails fast with a clear error** on
-other architectures. Other fused-MoE models (e.g. Qwen3-MoE) need a loader adaptation — PRs welcome.
+The `Experts4bit` primitive and `ExpertsLoRA` adapters are **model-agnostic**. The **streaming loader /
+trainer** (`python -m experts4bit_qlora.train`) supports fused-MoE architectures that store experts
+per-expert on disk under `model.layers.{i}.mlp.experts.{e}.{gate,up,down}_proj.weight` with a SwiGLU gate:
+
+- **OLMoE** (OLMoE-1B-7B) — convergence-tested end-to-end; fits a 12 GB card at ~4.7 GB.
+- **Qwen3-MoE / Qwen3.5-MoE** — same checkpoint + module layout (verified byte-for-byte identical to
+  OLMoE's on-disk format); structurally tested in `tests/test_loader_architectures.py`. The real weights
+  (30–35B) need a ≥24 GB card — or the **CPU-offloading path** (`OFFLOAD_EXPERTS=1`, below) — to fit 12 GB.
+
+Anything else **fails fast with a clear error**. **Gemma 4** is a genuinely different design (experts at
+`layers.{i}.experts` beside a parallel dense MLP, with a custom router) and needs its own loader
+adaptation — not yet supported. PRs welcome.
 
 **Expert CPU-offload** (`OFFLOAD_EXPERTS=1`) is orthogonal to the loader: the streaming/eviction
 mechanism (`experts4bit_qlora/offload.py`) is model-agnostic — it hooks any `ExpertsLoRA` — so it
 works for whatever architectures the loader supports. Its correctness is validated here by unit
 tests (offload = location, not math, including the gradient-checkpoint recompute path); the
 peak-memory-drop / throughput A/B ([`bench/run-offload-ab.sh`](bench/run-offload-ab.sh), OLMoE) runs
-on the card, and the measured 26–35B-on-12 GB headline lands once a loader for those architectures
-does. See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
+on the card. Since the loader now supports **Qwen3-MoE**, offload also fits **Qwen3-30B-A3B**
+(~15 GB of 4-bit experts) on 12 GB directly — a measured run is the pending headline; **Gemma-4**
+still needs its own loader. See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
 
 ## Benchmarks
 
