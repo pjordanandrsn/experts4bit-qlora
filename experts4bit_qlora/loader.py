@@ -1,15 +1,15 @@
-"""Streaming 4-bit loader for fused-MoE checkpoints (OLMoE, Qwen3-MoE / Qwen3.5-MoE).
+"""Streaming 4-bit loader for fused-MoE checkpoints (OLMoE, Qwen3-MoE / Qwen3.5-MoE, Gemma-4).
 
 Streams the checkpoint tensor-by-tensor straight onto the GPU, quantizing each fused expert stack
 to NF4 on the way and dropping the bf16 source immediately, so the full bf16 model is never
 materialized in CPU *or* GPU memory. Each layer's fused ``experts`` module is swapped for a frozen
 4-bit :class:`Experts4bit` base wrapped in trainable per-expert :class:`ExpertsLoRA` adapters.
 
-Supports fused-MoE architectures that store experts **per-expert on disk** under
-``model.layers.{i}.mlp.experts.{e}.{gate,up,down}_proj.weight`` with a SwiGLU gate — verified
-identical on OLMoE-1B-7B and Qwen3-30B-A3B. (Gemma-4 differs: experts live at ``layers.{i}.experts``
-beside a parallel dense MLP with a custom router — a separate adaptation, not handled here.)
-Requires transformers>=5.0.
+Supports SwiGLU fused-MoE architectures. Experts may be stored on disk either **per-expert**
+(``...experts.{e}.{gate,up,down}_proj.weight`` — OLMoE, Qwen3-MoE) or already **fused**
+(``...experts.{gate_up,down}_proj`` — Gemma-4); both are handled. The experts module sits under the
+MLP for OLMoE/Qwen3 and directly on the layer (beside a parallel dense MLP) for Gemma-4. Requires
+transformers>=5.0.
 """
 
 import json
@@ -27,9 +27,16 @@ from .lora import ExpertsLoRA
 from .offload import enable_expert_offload
 from .util import log
 
-# model_types whose experts are stored per-expert on disk under
-# `model.layers.{i}.mlp.experts.{e}.{gate,up,down}_proj.weight` with a SwiGLU gate — handled identically.
-SUPPORTED_MODEL_TYPES = {"olmoe", "qwen3_moe", "qwen3_5_moe"}
+# model_type -> experts submodule path relative to `model.layers.{i}`.
+# OLMoE/Qwen3 nest experts under the MLP; Gemma-4 puts them beside a parallel dense MLP.
+SUPPORTED_ARCHITECTURES = {
+    "olmoe": "mlp.experts",
+    "qwen3_moe": "mlp.experts",
+    "qwen3_5_moe": "mlp.experts",
+    "gemma4": "experts",  # multimodal top-level config
+    "gemma4_text": "experts",  # the text tower (what a text-only QLoRA loads)
+}
+SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 
 
 def _assign(model, name, tensor):
@@ -59,13 +66,16 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
     """
     config = AutoConfig.from_pretrained(model_id)
     model_type = getattr(config, "model_type", None)
-    if model_type not in SUPPORTED_MODEL_TYPES:
+    if model_type not in SUPPORTED_ARCHITECTURES:
         raise NotImplementedError(
-            f"Unsupported model_type={model_type!r}. This streaming loader handles per-expert fused-MoE "
-            f"checkpoints (mlp.experts.{{e}}.{{gate,up,down}}_proj, SwiGLU): {sorted(SUPPORTED_MODEL_TYPES)}. "
-            "The Experts4bit primitive itself is model-agnostic — see the README 'Scope' note to adapt "
-            "another architecture (e.g. Gemma-4, whose experts + router are laid out differently)."
+            f"Unsupported model_type={model_type!r}. This streaming loader handles SwiGLU fused-MoE "
+            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}. The Experts4bit primitive itself is "
+            "model-agnostic — see the README 'Scope' note to adapt another architecture."
         )
+    expert_rel = SUPPORTED_ARCHITECTURES[model_type]
+    act_name = getattr(config, "hidden_activation", None) or getattr(config, "hidden_act", "silu")
+    activation = ACT2FN[act_name]
+
     with init_empty_weights():
         model = AutoModelForCausalLM.from_config(config, dtype=dtype)
 
@@ -84,47 +94,48 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
         return handles[weight_map[name]].get_tensor(name)
 
     n_layers = config.num_hidden_layers
-    n_exp = getattr(config, "num_local_experts", None) or config.num_experts
+    n_exp = getattr(config, "num_local_experts", None) or getattr(config, "num_experts", None)
     log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to NF4 (streaming)...")
     expert_keys = set()
     offload_handles = []
     n_moe = 0
     for i in range(n_layers):
-        # Checkpoint stores per-expert Linears; v5 fuses them. gate_up[e] = cat([gate, up]).
-        epfx = f"model.layers.{i}.mlp.experts."
-        # Skip dense layers (e.g. Qwen3 mlp_only_layers / decoder_sparse_step): only fuse where experts exist.
-        if f"{epfx}0.gate_proj.weight" not in weight_map:
-            continue
+        epfx = f"model.layers.{i}.{expert_rel}."  # e.g. "...mlp.experts." (OLMoE/Qwen3) or "...experts." (Gemma-4)
+        if f"{epfx}gate_up_proj" in weight_map:
+            # Already fused on disk (Gemma-4): [num_experts, 2*inter, hidden] / [num_experts, hidden, inter].
+            gate_up = get(f"{epfx}gate_up_proj").to(dtype)
+            down = get(f"{epfx}down_proj").to(dtype)
+            expert_keys.update({f"{epfx}gate_up_proj", f"{epfx}down_proj"})
+        elif f"{epfx}0.gate_proj.weight" in weight_map:
+            # Per-expert Linears on disk (OLMoE, Qwen3): fuse gate_up[e] = cat([gate, up]).
+            gate_up_rows, down_rows = [], []
+            for e in range(n_exp):
+                g, u, d = (
+                    get(f"{epfx}{e}.gate_proj.weight"),
+                    get(f"{epfx}{e}.up_proj.weight"),
+                    get(f"{epfx}{e}.down_proj.weight"),
+                )
+                gate_up_rows.append(torch.cat([g, u], dim=0))  # [2*inter, hidden]
+                down_rows.append(d)  # [hidden, inter]
+                expert_keys.update({f"{epfx}{e}.{p}.weight" for p in ("gate_proj", "up_proj", "down_proj")})
+            gate_up = torch.stack(gate_up_rows).to(dtype)
+            down = torch.stack(down_rows).to(dtype)
+        else:
+            continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
         n_moe += 1
-        gate_up_rows, down_rows = [], []
-        for e in range(n_exp):
-            g, u, d = (
-                get(f"{epfx}{e}.gate_proj.weight"),
-                get(f"{epfx}{e}.up_proj.weight"),
-                get(f"{epfx}{e}.down_proj.weight"),
-            )
-            gate_up_rows.append(torch.cat([g, u], dim=0))  # [2*inter, hidden]
-            down_rows.append(d)  # [hidden, inter]
-            expert_keys.update({f"{epfx}{e}.{p}.weight" for p in ("gate_proj", "up_proj", "down_proj")})
-        gate_up, down = (
-            torch.stack(gate_up_rows).to(dtype),
-            torch.stack(down_rows).to(dtype),
-        )
         base = Experts4bit.from_float(
-            gate_up,
-            down,
-            has_gate=True,
-            activation=ACT2FN[config.hidden_act],
-            quant_type="nf4",
-            compute_dtype=dtype,
+            gate_up, down, has_gate=True, activation=activation, quant_type="nf4", compute_dtype=dtype
         )
         experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:
             # Move this layer's packed experts to (pinned) CPU now, before the next layer is built,
             # so the GPU never holds more than one layer's experts at a time during load.
             offload_handles.append(enable_expert_offload(experts, device, pin=pin))
-        model.get_submodule(f"model.layers.{i}.mlp").experts = experts
-        del gate_up, down, gate_up_rows, down_rows
+        parent, leaf = epfx.rstrip(".").rsplit(
+            ".", 1
+        )  # ("model.layers.i.mlp","experts") or ("model.layers.i","experts")
+        setattr(model.get_submodule(parent), leaf, experts)
+        del gate_up, down
     log(f"  quantized experts on {n_moe}/{n_layers} MoE layers ({n_exp} experts each)")
 
     if offload_handles:
@@ -134,15 +145,17 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
             "(streamed to GPU one layer at a time during train/eval)"
         )
 
-    log("  loading non-expert weights (attention/embeddings/router/norms)...")
+    log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     for name in weight_map:
         if name not in expert_keys:
             _assign(model, name, get(name))
 
-    # Non-persistent buffers (rotary inv_freq) aren't in the checkpoint — recompute the model's own
-    # rotary module (works across architectures; no per-model import).
-    if getattr(model.model, "rotary_emb", None) is not None:
-        model.model.rotary_emb = type(model.model.rotary_emb)(config).to(device)
+    # Non-persistent buffers (rotary inv_freq) aren't in the checkpoint — recompute every rotary module
+    # the model has (some architectures, e.g. Gemma, use more than one). Generic; no per-model import.
+    for name, module in list(model.named_modules()):
+        if type(module).__name__.endswith("RotaryEmbedding"):
+            parent = model.get_submodule(name.rsplit(".", 1)[0]) if "." in name else model
+            setattr(parent, name.rsplit(".", 1)[-1], type(module)(config).to(device))
     # Tie lm_head if the checkpoint relied on weight tying.
     if model.lm_head.weight.is_meta:
         model.lm_head.weight = model.model.embed_tokens.weight

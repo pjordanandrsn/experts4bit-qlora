@@ -23,4 +23,4 @@ __all__ = [
     "enable_expert_offload",
     "offload_model_experts",
 ]
-__version__ = "0.1.0"
+__version__ = "0.1.1"

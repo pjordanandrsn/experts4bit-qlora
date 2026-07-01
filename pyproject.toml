@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.1.0"
+version = "0.1.1"
 description = "QLoRA fine-tuning of fused 4-bit Mixture-of-Experts on a single small GPU, on stock bitsandbytes."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,8 +29,9 @@ train = [
 test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4"]
 
 [project.urls]
-"Upstream primitive (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
-"Tracking issue (bitsandbytes#1849)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/issues/1849"
+Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"
+"Upstream (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
+"Tracking (bitsandbytes#1849)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/issues/1849"
 
 [tool.setuptools.packages.find]
 include = ["experts4bit_qlora*"]
