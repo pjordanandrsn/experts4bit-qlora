@@ -1,7 +1,8 @@
-"""End-to-end QLoRA fine-tune of a fused-MoE model (OLMoE-1B-7B) on a single 12 GB GPU.
+"""End-to-end QLoRA fine-tune of a fused-MoE model (OLMoE, Qwen3-MoE) on a single small GPU.
 
-The 6.4B expert weights are streamed in and frozen in NF4 (:class:`Experts4bit`); only small
-per-expert / per-projection LoRA adapters train. Configured entirely via env vars, e.g.::
+The expert weights are streamed in and frozen in NF4 (:class:`Experts4bit`); only small per-expert /
+per-projection LoRA adapters train. Set ``MODEL`` to any supported fused-MoE checkpoint (see the
+loader's ``SUPPORTED_MODEL_TYPES``). Configured entirely via env vars, e.g.::
 
     STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
       python -m experts4bit_qlora.train
@@ -14,7 +15,7 @@ import time
 
 import torch
 
-from .loader import load_olmoe_4bit_streaming
+from .loader import load_moe_4bit_streaming
 from .lora import add_attention_lora
 from .util import log
 
@@ -81,7 +82,10 @@ def encode_alpaca(tokenizer, split):
             labels[i] = -100
         return {"input_ids": full, "labels": labels}
 
-    return ds.map(encode, remove_columns=ds.column_names)
+    ds = ds.map(encode, remove_columns=ds.column_names)
+    # Drop examples whose response was fully truncated by SEQ (all labels -100 => no supervised
+    # tokens => nan loss); keeps the before/after eval well-defined even at short SEQ.
+    return ds.filter(lambda ex: any(t != -100 for t in ex["labels"]))
 
 
 @torch.no_grad()
@@ -93,8 +97,10 @@ def eval_loss(model, eval_data):
     for ex in eval_data:
         ids = torch.tensor([ex["input_ids"]], device=DEVICE)
         lbl = torch.tensor([ex["labels"]], device=DEVICE)
-        tot += model(input_ids=ids, labels=lbl).loss.item()
-        n += 1
+        loss = model(input_ids=ids, labels=lbl).loss.item()
+        if loss == loss:  # skip nan (e.g. an all-masked example) defensively
+            tot += loss
+            n += 1
     return tot / max(n, 1)
 
 
@@ -104,7 +110,7 @@ def main():
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
     tok = AutoTokenizer.from_pretrained(MODEL)
-    model, _ = load_olmoe_4bit_streaming(MODEL, DEVICE, DTYPE, R, ALPHA)
+    model, _ = load_moe_4bit_streaming(MODEL, DEVICE, DTYPE, R, ALPHA)
     model.to(DEVICE)
     n_attn = add_attention_lora(model, R, ALPHA, DTYPE) if TRAIN_ATTENTION else 0
     log(f"attn LoRA {n_attn} projs | train experts={TRAIN_EXPERTS} attn={TRAIN_ATTENTION} router={TRAIN_ROUTER}")

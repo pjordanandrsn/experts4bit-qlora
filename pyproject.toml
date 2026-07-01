@@ -26,6 +26,7 @@ train = [
     "safetensors>=0.4",
     "huggingface_hub>=0.23",
 ]
+test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4"]
 
 [project.urls]
 "Upstream primitive (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
