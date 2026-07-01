@@ -1,0 +1,21 @@
+# accelerate FSDP2 config for Task B (QLoRA SFT of Llama-3.1-8B on 2 GPUs).
+#   accelerate launch --config_file unsloth_puzzles/fsdp2_config.yaml unsloth_puzzles/fsdp2_qlora_sft.py
+# On 2x Tesla T4 (Turing, no bf16) change mixed_precision to fp16 and set DTYPE via env accordingly.
+compute_environment: LOCAL_MACHINE
+distributed_type: FSDP
+mixed_precision: bf16          # -> fp16 on Tesla T4
+num_machines: 1
+num_processes: 2               # one rank per GPU
+rdzv_backend: static
+same_network: true
+use_cpu: false
+fsdp_config:
+  fsdp_version: 2                                  # FSDP2 (fully_shard / DTensor)
+  fsdp_offload_params: true                        # parameter CPU offload
+  fsdp_activation_checkpointing: true              # activation / gradient checkpointing
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
+  fsdp_reshard_after_forward: true                 # free full params after fwd (FULL_SHARD-equivalent)
+  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_cpu_ram_efficient_loading: true             # rank0-loads then broadcasts (low host RAM)
+  fsdp_use_orig_params: true                       # required for LoRA (mixed frozen/trainable params)
