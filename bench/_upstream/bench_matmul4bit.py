@@ -109,10 +109,17 @@ def correctness(m):
 
 def bench(m, trials, warmup, m_values):
     print(f"=== latency + peak-mem A/B (trials={trials}, warmup={warmup}) ===")
-    print(f"{'M tok':>6} | {'fwd BEFORE':>11} {'fwd AFTER':>10} {'x':>6} | "
-          f"{'f+b BEFORE':>11} {'f+b AFTER':>10} {'x':>6} | {'mem BEF':>8} {'mem AFT':>8} {'save':>6}")
-    before = lambda x: before_proj(m, x)  # bind the layer; timed fns take only x
-    after = lambda x: after_proj(m, x)
+    print(
+        f"{'M tok':>6} | {'fwd BEFORE':>11} {'fwd AFTER':>10} {'x':>6} | "
+        f"{'f+b BEFORE':>11} {'f+b AFTER':>10} {'x':>6} | {'mem BEF':>8} {'mem AFT':>8} {'save':>6}"
+    )
+
+    def before(x):
+        return before_proj(m, x)  # bind the layer; timed fns take only x
+
+    def after(x):
+        return after_proj(m, x)
+
     for M in m_values:
         # fwd-only latency
         xf = make_x(M)
@@ -126,9 +133,11 @@ def bench(m, trials, warmup, m_values):
         ma = peak_mem_mb(after, make_x(M, requires_grad=True), backward=True)
         b_f, a_f = statistics.median(tb_f), statistics.median(ta_f)
         b_fb, a_fb = statistics.median(tb_fb), statistics.median(ta_fb)
-        print(f"{M:>6} | {b_f:>9.3f}ms {a_f:>8.3f}ms {b_f/a_f:>5.2f}x | "
-              f"{b_fb:>9.3f}ms {a_fb:>8.3f}ms {b_fb/a_fb:>5.2f}x | "
-              f"{mb:>6.1f}MB {ma:>6.1f}MB {(1-ma/mb)*100:>4.0f}%")
+        print(
+            f"{M:>6} | {b_f:>9.3f}ms {a_f:>8.3f}ms {b_f / a_f:>5.2f}x | "
+            f"{b_fb:>9.3f}ms {a_fb:>8.3f}ms {b_fb / a_fb:>5.2f}x | "
+            f"{mb:>6.1f}MB {ma:>6.1f}MB {(1 - ma / mb) * 100:>4.0f}%"
+        )
 
 
 def _layer_forward(m, hidden, top_k_index, top_k_weights, proj):
@@ -183,7 +192,9 @@ def layer_mem(m, n_tokens=256, top_k=8):
         run(before)
         run(after)
     mb, ma = run(before), run(after)
-    print(f"  peak fwd+bwd:  BEFORE {mb:7.1f} MB   AFTER {ma:7.1f} MB   saved {mb - ma:6.1f} MB ({(1 - ma / mb) * 100:4.0f}%)")
+    print(
+        f"  peak fwd+bwd:  BEFORE {mb:7.1f} MB   AFTER {ma:7.1f} MB   saved {mb - ma:6.1f} MB ({(1 - ma / mb) * 100:4.0f}%)"
+    )
 
 
 def main():

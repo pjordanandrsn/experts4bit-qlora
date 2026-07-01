@@ -33,3 +33,6 @@ train = [
 
 [tool.setuptools.packages.find]
 include = ["experts4bit_qlora*"]
+
+[tool.ruff]
+line-length = 119

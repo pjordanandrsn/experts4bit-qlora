@@ -43,7 +43,9 @@ class PowerSampler(threading.Thread):
         self._stop = False
         self.proc = subprocess.Popen(
             ["nvidia-smi", "--query-gpu=power.draw", "--format=csv,noheader,nounits", "-lms", "50"],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
         )
 
     def run(self):
@@ -90,7 +92,7 @@ def run_phase(fn, x, backward, sampler, dur=DUR):
 
 
 def main():
-    print(f"device: {torch.cuda.get_device_name(0)} | bf16 | gate_up [{2*INTER},{HIDDEN}]")
+    print(f"device: {torch.cuda.get_device_name(0)} | bf16 | gate_up [{2 * INTER},{HIDDEN}]")
     m, w_bf16 = build()
 
     def native(x):
@@ -117,7 +119,9 @@ def main():
 
     for wl_name, M, bwd in workloads:
         print(f"--- {wl_name} ---")
-        print(f"{'path':>20} | {'ops/s':>9} | {'power W':>8} | {'J/op (tot)':>11} | {'J/op (dyn)':>11} | {'vs native':>9}")
+        print(
+            f"{'path':>20} | {'ops/s':>9} | {'power W':>8} | {'J/op (tot)':>11} | {'J/op (dyn)':>11} | {'vs native':>9}"
+        )
         base = None
         for name, fn in paths:
             x = torch.randn(M, HIDDEN, dtype=DTYPE, device=DEV, requires_grad=bwd)
@@ -130,8 +134,10 @@ def main():
             if base is None:
                 base = r["j_op"]
             ratio = r["j_op"] / base
-            print(f"{name:>20} | {r['ops_s']:>9.0f} | {r['watts']:>8.1f} | {r['j_op']*1e6:>8.2f} uJ | "
-                  f"{dyn*1e6:>8.2f} uJ | {ratio:>8.2f}x")
+            print(
+                f"{name:>20} | {r['ops_s']:>9.0f} | {r['watts']:>8.1f} | {r['j_op'] * 1e6:>8.2f} uJ | "
+                f"{dyn * 1e6:>8.2f} uJ | {ratio:>8.2f}x"
+            )
         print()
 
     sampler.stop()

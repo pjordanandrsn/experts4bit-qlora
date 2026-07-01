@@ -46,7 +46,10 @@ def load_olmoe_4bit_streaming(model_id, device, dtype, r, alpha):
     with init_empty_weights():
         model = AutoModelForCausalLM.from_config(config, dtype=dtype)
 
-    snap = snapshot_download(model_id, allow_patterns=["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"])
+    snap = snapshot_download(
+        model_id,
+        allow_patterns=["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"],
+    )
     weight_map = json.load(open(os.path.join(snap, "model.safetensors.index.json")))["weight_map"]
     handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in set(weight_map.values())}
 
@@ -70,7 +73,10 @@ def load_olmoe_4bit_streaming(model_id, device, dtype, r, alpha):
             gate_up_rows.append(torch.cat([g, u], dim=0))  # [2*inter, hidden]
             down_rows.append(d)  # [hidden, inter]
             expert_keys.update({f"{epfx}{e}.{p}.weight" for p in ("gate_proj", "up_proj", "down_proj")})
-        gate_up, down = torch.stack(gate_up_rows).to(dtype), torch.stack(down_rows).to(dtype)
+        gate_up, down = (
+            torch.stack(gate_up_rows).to(dtype),
+            torch.stack(down_rows).to(dtype),
+        )
         base = Experts4bit.from_float(
             gate_up,
             down,

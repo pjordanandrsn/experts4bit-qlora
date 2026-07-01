@@ -54,7 +54,11 @@ def generate(model, tokenizer, instruction, max_new=48):
     prompt = f"### Instruction:\n{instruction}\n\n### Response:\n"
     ids = tokenizer(prompt, return_tensors="pt").to(DEVICE)
     out = model.generate(
-        **ids, max_new_tokens=max_new, do_sample=False, repetition_penalty=1.3, pad_token_id=tokenizer.eos_token_id
+        **ids,
+        max_new_tokens=max_new,
+        do_sample=False,
+        repetition_penalty=1.3,
+        pad_token_id=tokenizer.eos_token_id,
     )
     return tokenizer.decode(out[0][ids["input_ids"].shape[1] :], skip_special_tokens=True).strip()
 
@@ -151,7 +155,9 @@ def main():
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
     model.train()
-    log(f"training: {STEPS} steps x grad_accum {GRAD_ACCUM} (seq<= {SEQ}), lr={LR}, cosine+warmup, eval every {EVAL_EVERY}")
+    log(
+        f"training: {STEPS} steps x grad_accum {GRAD_ACCUM} (seq<= {SEQ}), lr={LR}, cosine+warmup, eval every {EVAL_EVERY}"
+    )
     it, t0, ema, best = iter(data), time.time(), None, float("inf")
     for step in range(STEPS):
         opt.zero_grad()
@@ -172,7 +178,9 @@ def main():
         sched.step()
         ema = loss_acc if ema is None else 0.9 * ema + 0.1 * loss_acc
         if (step + 1) % 10 == 0 or step == 0:
-            log(f"  step {step + 1}/{STEPS}  loss {loss_acc:.3f}  ema {ema:.3f}  ({(time.time() - t0) / (step + 1):.1f}s/step)")
+            log(
+                f"  step {step + 1}/{STEPS}  loss {loss_acc:.3f}  ema {ema:.3f}  ({(time.time() - t0) / (step + 1):.1f}s/step)"
+            )
         if (step + 1) % EVAL_EVERY == 0:
             el = eval_loss(model, eval_data)
             marker = ""

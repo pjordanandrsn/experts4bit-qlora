@@ -31,7 +31,13 @@ class ExpertsLoRA(nn.Module):
       * ``down``:    ``A[e]`` is ``[r, intermediate]``, ``B[e]`` is ``[hidden, r]``
     """
 
-    def __init__(self, base: "Experts4bit", r: int = 8, alpha: int = 16, dtype: torch.dtype = torch.float32):
+    def __init__(
+        self,
+        base: "Experts4bit",
+        r: int = 8,
+        alpha: int = 16,
+        dtype: torch.dtype = torch.float32,
+    ):
         super().__init__()
         self.base = base
         for p in self.base.parameters():
@@ -79,7 +85,11 @@ class ExpertsLoRA(nn.Module):
 
             # Frozen 4-bit base projection + trainable low-rank delta.
             gate_up_w = base._dequantize_expert(
-                base.gate_up_proj, base.gate_up_absmax, base._gate_up_shape, expert_idx, compute_dtype
+                base.gate_up_proj,
+                base.gate_up_absmax,
+                base._gate_up_shape,
+                expert_idx,
+                compute_dtype,
             )
             proj = F.linear(x, gate_up_w) + self._lora(
                 x, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx]
@@ -92,10 +102,16 @@ class ExpertsLoRA(nn.Module):
                 current_hidden = base.act_fn(proj)
 
             down_w = base._dequantize_expert(
-                base.down_proj, base.down_absmax, base._down_shape, expert_idx, compute_dtype
+                base.down_proj,
+                base.down_absmax,
+                base._down_shape,
+                expert_idx,
+                compute_dtype,
             )
             current_hidden = F.linear(current_hidden, down_w) + self._lora(
-                current_hidden, self.down_lora_A[expert_idx], self.down_lora_B[expert_idx]
+                current_hidden,
+                self.down_lora_A[expert_idx],
+                self.down_lora_B[expert_idx],
             )
 
             current_hidden = current_hidden * top_k_weights[token_idx, top_k_pos, None]
@@ -107,7 +123,13 @@ class ExpertsLoRA(nn.Module):
 class LoRALinear(nn.Module):
     """Frozen base ``nn.Linear`` + trainable low-rank adapter (for the attention projections)."""
 
-    def __init__(self, base: nn.Linear, r: int = 8, alpha: int = 16, dtype: torch.dtype = torch.bfloat16):
+    def __init__(
+        self,
+        base: nn.Linear,
+        r: int = 8,
+        alpha: int = 16,
+        dtype: torch.dtype = torch.bfloat16,
+    ):
         super().__init__()
         self.base = base
         for p in self.base.parameters():

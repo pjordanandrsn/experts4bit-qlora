@@ -126,7 +126,10 @@ class Experts4bit(nn.Module):
         # so blocks tile each expert exactly and absmax reshapes cleanly to
         # [num_experts, blocks_per_expert]. (gate_up in_features is hidden_dim; down_proj
         # in_features is intermediate_dim.)
-        for name, in_features in (("hidden_dim", hidden_dim), ("intermediate_dim", intermediate_dim)):
+        for name, in_features in (
+            ("hidden_dim", hidden_dim),
+            ("intermediate_dim", intermediate_dim),
+        ):
             if in_features % blocksize != 0:
                 raise ValueError(
                     f"{name} ({in_features}) must be divisible by blocksize ({blocksize}) "
@@ -162,7 +165,12 @@ class Experts4bit(nn.Module):
         # Per-expert quantization scales.
         self.register_buffer(
             "gate_up_absmax",
-            torch.empty(num_experts, gate_up_numel // blocksize, dtype=torch.float32, device=device),
+            torch.empty(
+                num_experts,
+                gate_up_numel // blocksize,
+                dtype=torch.float32,
+                device=device,
+            ),
         )
         self.register_buffer(
             "down_absmax",
@@ -318,8 +326,13 @@ class Experts4bit(nn.Module):
             current_state = hidden_states[token_idx]
 
             proj = self._project(
-                self.gate_up_proj, self.gate_up_absmax, self._gate_up_shape, expert_idx, current_state,
-                compute_dtype, use_matmul_4bit,
+                self.gate_up_proj,
+                self.gate_up_absmax,
+                self._gate_up_shape,
+                expert_idx,
+                current_state,
+                compute_dtype,
+                use_matmul_4bit,
             )
             if self.has_gate:
                 gate, up = proj.chunk(2, dim=-1)
@@ -328,8 +341,13 @@ class Experts4bit(nn.Module):
                 current_hidden = self.act_fn(proj)
 
             current_hidden = self._project(
-                self.down_proj, self.down_absmax, self._down_shape, expert_idx, current_hidden,
-                compute_dtype, use_matmul_4bit,
+                self.down_proj,
+                self.down_absmax,
+                self._down_shape,
+                expert_idx,
+                current_hidden,
+                compute_dtype,
+                use_matmul_4bit,
             )
             current_hidden = current_hidden * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden.to(final_hidden_states.dtype))

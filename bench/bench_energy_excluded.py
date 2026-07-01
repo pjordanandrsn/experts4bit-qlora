@@ -13,7 +13,6 @@ import threading
 import time
 
 import torch
-import torch.nn.functional as F_nn
 
 from experts4bit_qlora import Experts4bit
 
@@ -31,7 +30,9 @@ class PowerSampler(threading.Thread):
         self.samples = []
         self.proc = subprocess.Popen(
             ["nvidia-smi", "--query-gpu=power.draw", "--format=csv,noheader,nounits", "-lms", "50"],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
         )
 
     def run(self):
@@ -55,31 +56,39 @@ def memory_wall():
     q4_gb = EXPERT_PARAMS * 0.5 / 1e9 + EXPERT_PARAMS / 64 * 4 / 1e9 + NONEXPERT_GB  # 4bit + fp32 absmax + rest
     total = torch.cuda.get_device_properties(0).total_memory / 1e9
     print(f"  card total: {total:.1f} GB | bf16 model ~{bf16_gb:.1f} GB | 4-bit model ~{q4_gb:.1f} GB")
-    for label, gb in (("bf16 experts (12.9 GB)", EXPERT_PARAMS * 2 / 1e9), ("4-bit experts (3.2 GB)", EXPERT_PARAMS * 0.5 / 1e9)):
+    for label, gb in (
+        ("bf16 experts (12.9 GB)", EXPERT_PARAMS * 2 / 1e9),
+        ("4-bit experts (3.2 GB)", EXPERT_PARAMS * 0.5 / 1e9),
+    ):
         try:
             t = torch.empty(int(gb * 1e9), dtype=torch.uint8, device=DEV)
-            print(f"  allocate {label:26}: OK ({t.numel()/1e9:.1f} GB resident)")
+            print(f"  allocate {label:26}: OK ({t.numel() / 1e9:.1f} GB resident)")
             del t
             torch.cuda.empty_cache()
         except RuntimeError as e:
             print(f"  allocate {label:26}: OOM -> {str(e).splitlines()[0][:60]}")
-    print(f"  => bf16 OLMoE ({bf16_gb:.0f} GB) does not fit a 12 GB card; 4-bit ({q4_gb:.1f} GB) does. "
-          f"On this card bf16 energy/token is undefined (won't run).\n")
+    print(
+        f"  => bf16 OLMoE ({bf16_gb:.0f} GB) does not fit a 12 GB card; 4-bit ({q4_gb:.1f} GB) does. "
+        f"On this card bf16 energy/token is undefined (won't run).\n"
+    )
 
 
 def build_layer():
     torch.manual_seed(0)
     gate_up = torch.randn(N_EXP, 2 * INTER, HIDDEN, dtype=DTYPE)
     down = torch.randn(N_EXP, HIDDEN, INTER, dtype=DTYPE)
-    return Experts4bit.from_float(gate_up, down, has_gate=True, activation=torch.nn.SiLU(),
-                                  quant_type="nf4", compute_dtype=DTYPE).to(DEV)
+    return Experts4bit.from_float(
+        gate_up, down, has_gate=True, activation=torch.nn.SiLU(), quant_type="nf4", compute_dtype=DTYPE
+    ).to(DEV)
 
 
 def utilization_curve(sampler, idle):
     print("=== Part B: tokens-per-joule of the fused 4-bit MoE forward vs batch (utilization) ===")
     print(f"  (idle {idle:.1f} W subtracted for dynamic; total shown too)")
     m = build_layer()
-    print(f"{'batch (tok)':>12} | {'tok/s':>10} | {'power W':>8} | {'J/tok (tot)':>12} | {'J/tok (dyn)':>12} | {'vs batch=64':>11}")
+    print(
+        f"{'batch (tok)':>12} | {'tok/s':>10} | {'power W':>8} | {'J/tok (tot)':>12} | {'J/tok (dyn)':>12} | {'vs batch=64':>11}"
+    )
     base = None
     for n_tok in (64, 256, 1024, 4096):
         torch.manual_seed(1)
@@ -108,7 +117,9 @@ def utilization_curve(sampler, idle):
         j_dyn = max(0.0, p - idle) / tok_s
         if base is None:
             base = j_tot
-        print(f"{n_tok:>12} | {tok_s:>10.0f} | {p:>8.1f} | {j_tot*1e6:>9.3f} uJ | {j_dyn*1e6:>9.3f} uJ | {j_tot/base:>10.2f}x")
+        print(
+            f"{n_tok:>12} | {tok_s:>10.0f} | {p:>8.1f} | {j_tot * 1e6:>9.3f} uJ | {j_dyn * 1e6:>9.3f} uJ | {j_tot / base:>10.2f}x"
+        )
     print()
 
 

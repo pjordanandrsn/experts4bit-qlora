@@ -7,7 +7,9 @@ and delete ``experts4bit_qlora/_vendor/`` — no API change for callers.
 """
 
 try:
-    from bitsandbytes.nn import Experts4bit  # upstream (bitsandbytes#1965), once released
+    from bitsandbytes.nn import (
+        Experts4bit,
+    )  # upstream (bitsandbytes#1965), once released
 except ImportError:  # stock bitsandbytes: use the vendored copy
     from ._vendor.experts import Experts4bit
 
