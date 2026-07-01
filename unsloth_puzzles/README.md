@@ -17,8 +17,8 @@ codebook per nibble — one launch, no intermediate absmax buffer.
 | correct in f16 **and** bf16 | ✅ `assert_close` vs `bnb.dequantize_4bit` (bf16 bit-exact, fp16 within ULP) — `../tests/test_triton_nf4.py` |
 | cache eviction | ✅ `eviction_policy="evict_first"` on the streaming weight load |
 | works in `torch.compile` | ✅ registered as a `torch.library.triton_op`; compiles `fullgraph=True` (no graph breaks) — tested |
-| speedup ≥ 1.15× | **measured 1.29× vs `bnb.dequantize_4bit`** on the A2000 (1.21–1.47× by shape) |
-| custom PTX asm (+3) | ❌ not attempted |
+| custom PTX asm (+3) | ✅ nibble unpack via inline PTX `bfe.u32` (`tl.inline_asm_elementwise`); matches bnb, all tests pass |
+| speedup ≥ 1.15× | **measured ~1.3× vs `bnb.dequantize_4bit`** on the A2000 (1.21–1.47× by shape) |
 
 **Honest caveats on the speedup:** the rubric measures vs Unsloth's `fast_dequantize` on a **T4**.
 I benchmarked vs **bitsandbytes** on an **A2000** (Unsloth/peft wrap bnb; per the puzzle's own numbers

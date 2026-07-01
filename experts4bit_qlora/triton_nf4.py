@@ -11,7 +11,7 @@ bitsandbytes packs weights row-major, element ``2i`` in the **high** nibble of b
 ``2i+1`` in the **low** nibble; ``absmax`` has one entry per 64 weights, and ``state2.absmax`` one
 fp32 per 256 absmax entries (i.e. per ``64*256 = 16384`` weights). Verified bit-exact against
 ``bitsandbytes.functional.dequantize_4bit`` for fp16 and bf16 (``tests/test_triton_nf4.py``), and
-measured ~1.3x faster than it on an RTX A2000.
+measured ~1.3x faster than it on an RTX A2000. The nibble unpack uses inline PTX (``bfe.u32``).
 
 ``your_dequantize_nf4(module)`` matches the Unsloth-puzzle harness and drops into its
 ``test_dequantize``; ``dequantize_nf4_compiled`` is a ``torch.compile``-safe variant (registered as a
@@ -51,7 +51,13 @@ def _dequantize_nf4_kernel(
 
     # --- dequant 2: NF4 nibble -> codebook value, scaled by absmax ---
     byte = tl.load(w_ptr + (offs // 2), mask=mask, other=0, eviction_policy="evict_first").to(tl.int32)
-    nibble = (byte >> tl.where((offs % 2) == 0, 4, 0)) & 0xF  # even -> high nibble, odd -> low
+    start = tl.where((offs % 2) == 0, 4, 0).to(tl.int32)  # high nibble for even element, low for odd
+    # custom PTX: bit-field-extract 4 bits at `start` in a single instruction (register start pos),
+    # vs a shift + mask. Correct + ~same speed; verified against bnb in tests/test_triton_nf4.py.
+    nibble = tl.inline_asm_elementwise(
+        asm="bfe.u32 $0, $1, $2, 4;", constraints="=r,r,r", args=[byte, start],
+        dtype=tl.int32, is_pure=True, pack=1,
+    )
     value = tl.load(nf4_ptr + nibble)  # gather 16-entry NF4 codebook
 
     tl.store(out_ptr + offs, (value * absmax).to(out_ptr.dtype.element_ty), mask=mask)
