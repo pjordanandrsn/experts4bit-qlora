@@ -14,6 +14,14 @@ except ImportError:  # stock bitsandbytes: use the vendored copy
     from ._vendor.experts import Experts4bit
 
 from .lora import ExpertsLoRA, LoRALinear, add_attention_lora
+from .offload import enable_expert_offload, offload_model_experts
 
-__all__ = ["Experts4bit", "ExpertsLoRA", "LoRALinear", "add_attention_lora"]
+__all__ = [
+    "Experts4bit",
+    "ExpertsLoRA",
+    "LoRALinear",
+    "add_attention_lora",
+    "enable_expert_offload",
+    "offload_model_experts",
+]
 __version__ = "0.1.0"

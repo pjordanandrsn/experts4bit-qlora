@@ -26,6 +26,10 @@ train = [
     "safetensors>=0.4",
     "huggingface_hub>=0.23",
 ]
+# Test the offload logic on CPU-only torch (no GPU needed): `pip install -e ".[dev]" && pytest tests/`.
+dev = [
+    "pytest>=7.0",
+]
 
 [project.urls]
 "Upstream primitive (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
@@ -36,3 +40,6 @@ include = ["experts4bit_qlora*"]
 
 [tool.ruff]
 line-length = 119
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

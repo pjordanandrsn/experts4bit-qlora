@@ -20,6 +20,7 @@ from transformers.activations import ACT2FN
 
 from . import Experts4bit
 from .lora import ExpertsLoRA
+from .offload import enable_expert_offload
 from .util import log
 
 
@@ -35,12 +36,18 @@ def _assign(model, name, tensor):
         setattr(mod, attr, tensor)
 
 
-def load_olmoe_4bit_streaming(model_id, device, dtype, r, alpha):
+def load_olmoe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pin=True):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
     Peak memory stays low: the model is built on ``meta`` (no allocation), then each tensor is read
     one at a time directly to the GPU. The big fused-expert stacks are quantized to NF4 (~3.5x
     smaller) and their bf16 source is dropped immediately, so the full bf16 model never exists.
+
+    When ``offload`` is set, each layer's frozen 4-bit experts are moved to (pinned, if ``pin``) CPU
+    RAM *immediately after that layer is built* — inside the per-layer loop, never in a post-load
+    pass (which would require every layer's experts GPU-resident first, defeating the purpose). A
+    forward pre-hook streams a layer's experts back to the GPU just-in-time and a post-hook evicts
+    them, so only one layer's experts are GPU-resident at a time (see :mod:`experts4bit_qlora.offload`).
     """
     config = AutoConfig.from_pretrained(model_id)
     if getattr(config, "model_type", None) != "olmoe":
@@ -65,6 +72,7 @@ def load_olmoe_4bit_streaming(model_id, device, dtype, r, alpha):
     n_layers = config.num_hidden_layers
     n_exp = getattr(config, "num_local_experts", None) or config.num_experts
     expert_keys = set()
+    offload_handles = []
     log(f"  fusing + quantizing {n_layers}x{n_exp} experts to NF4 (streaming)...")
     for i in range(n_layers):
         # Checkpoint stores per-expert Linears; v5 fuses them. gate_up[e] = cat([gate, up]).
@@ -91,10 +99,20 @@ def load_olmoe_4bit_streaming(model_id, device, dtype, r, alpha):
             quant_type="nf4",
             compute_dtype=dtype,
         )
-        model.get_submodule(f"model.layers.{i}.mlp").experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(
-            device
-        )
+        experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
+        if offload:
+            # Move this layer's packed experts to (pinned) CPU now, before the next layer is built,
+            # so the GPU never holds more than one layer's experts at a time during load.
+            offload_handles.append(enable_expert_offload(experts, device, pin=pin))
+        model.get_submodule(f"model.layers.{i}.mlp").experts = experts
         del gate_up, down, gate_up_rows, down_rows
+
+    if offload_handles:
+        pinned = all(h.pinned for h in offload_handles)
+        log(
+            f"  offloaded {len(offload_handles)} layers' 4-bit experts to {'pinned ' if pinned else ''}CPU RAM "
+            "(streamed to GPU one layer at a time during train/eval)"
+        )
 
     log("  loading non-expert weights (attention/embeddings/router/norms)...")
     for name in weight_map:

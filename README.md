@@ -22,6 +22,14 @@ sparse-MoE on reasonable hardware.
   model in CPU *or* GPU RAM (verified under a 3 GB container RAM cap).
 - **It trains.** QLoRA on the frozen NF4 experts improves a held-out Alpaca eval from
   **1.4813 → 1.0290** (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md)).
+- **It scales past VRAM (`OFFLOAD_EXPERTS=1`).** The frozen 4-bit experts — the bulk of the
+  weights — can be streamed from **pinned CPU RAM** one layer at a time, GPU-resident only for that
+  layer's forward (and its gradient-checkpoint recompute) and evicted after. Peak GPU drops by
+  roughly *(experts footprint − one layer)*, so a fused-MoE whose 4-bit experts exceed the card
+  (Qwen3-30B-A3B ~15 GB, Gemma-4-26B-A4B ~13 GB) can QLoRA-train on 12 GB, at the cost of one PCIe
+  transfer per layer per pass. Same memory-for-compute trade as above: it changes *what fits*, not
+  speed. Offloading changes tensor location, not math — unit-test-verified, including the
+  gradient-checkpoint recompute path (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11).
 - **Honest caveat — this is a memory technology, not an energy one.** On a GPU that *already*
   fits the model, 4-bit is a **1.2–2.3× energy penalty** (NF4 is storage-only; the GEMM runs in
   bf16 either way, plus dequant). The energy win only shows up when memory is the binding
@@ -57,6 +65,10 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
   python -m experts4bit_qlora.train
 ```
 
+Add `OFFLOAD_EXPERTS=1` to keep the frozen 4-bit experts in pinned CPU RAM and stream one layer to
+the GPU at a time (set `OFFLOAD_PIN=0` to skip pinning). Lowers peak GPU memory at a per-layer PCIe
+cost — the way to fit experts that exceed VRAM.
+
 ## Scope
 
 The `Experts4bit` primitive and `ExpertsLoRA` adapters are **model-agnostic** — they operate on any
@@ -64,6 +76,14 @@ fused `[num_experts, out, in]` expert stack. The **streaming loader / trainer**
 (`python -m experts4bit_qlora.train`) is currently **OLMoE-specific**: it assumes OLMoE's checkpoint
 key layout, `OlmoeRotaryEmbedding`, and `OlmoeAttention`, and **fails fast with a clear error** on
 other architectures. Other fused-MoE models (e.g. Qwen3-MoE) need a loader adaptation — PRs welcome.
+
+**Expert CPU-offload** (`OFFLOAD_EXPERTS=1`) is orthogonal to the loader: the streaming/eviction
+mechanism (`experts4bit_qlora/offload.py`) is model-agnostic — it hooks any `ExpertsLoRA` — so it
+works for whatever architectures the loader supports. Its correctness is validated here by unit
+tests (offload = location, not math, including the gradient-checkpoint recompute path); the
+peak-memory-drop / throughput A/B ([`bench/run-offload-ab.sh`](bench/run-offload-ab.sh), OLMoE) runs
+on the card, and the measured 26–35B-on-12 GB headline lands once a loader for those architectures
+does. See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
 
 ## Benchmarks
 
