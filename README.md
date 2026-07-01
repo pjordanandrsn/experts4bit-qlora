@@ -28,7 +28,8 @@ sparse-MoE on reasonable hardware.
   weights — can be streamed from **pinned CPU RAM** one layer at a time, GPU-resident only for that
   layer's forward (and its gradient-checkpoint recompute) and evicted after. Peak GPU drops by
   roughly *(experts footprint − one layer)*, so a fused-MoE whose 4-bit experts exceed the card
-  (Qwen3-30B-A3B ~15 GB, Gemma-4-26B-A4B ~13 GB) can QLoRA-train on 12 GB, at the cost of one PCIe
+  (Qwen3-30B-A3B ~15 GB, Gemma-4-26B-A4B ~13 GB) can QLoRA-train on 12 GB — **both measured on an
+  RTX A2000** (peak **7.16 GB** / **8.47 GB**; both OOM *without* offload) — at the cost of one PCIe
   transfer per layer per pass. Same memory-for-compute trade as above: it changes *what fits*, not
   speed. Offloading changes tensor location, not math — unit-test-verified, including the
   gradient-checkpoint recompute path (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11).
@@ -93,9 +94,9 @@ mechanism (`experts4bit_qlora/offload.py`) is model-agnostic — it hooks any `E
 works for whatever architectures the loader supports. Its correctness is validated here by unit
 tests (offload = location, not math, including the gradient-checkpoint recompute path); the
 peak-memory-drop / throughput A/B ([`bench/run-offload-ab.sh`](bench/run-offload-ab.sh), OLMoE) runs
-on the card. Since the loader now supports **Qwen3-MoE** and **Gemma-4**, offload also fits
-**Qwen3-30B-A3B** (~15 GB of 4-bit experts) and Gemma-4-26B-A4B on 12 GB directly — a measured 30B
-run is the pending headline. See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
+on the card. Since the loader supports **Qwen3-MoE** and **Gemma-4**, offload also fits
+**Qwen3-30B-A3B** and **Gemma-4-26B-A4B** on 12 GB — measured on the A2000 (peak **7.16** / **8.47 GB**;
+both OOM without offload). See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
 
 ## Benchmarks
 

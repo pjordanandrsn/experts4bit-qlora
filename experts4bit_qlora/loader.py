@@ -73,11 +73,17 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
             "model-agnostic — see the README 'Scope' note to adapt another architecture."
         )
     expert_rel = SUPPORTED_ARCHITECTURES[model_type]
-    act_name = getattr(config, "hidden_activation", None) or getattr(config, "hidden_act", "silu")
+    # Multimodal configs (e.g. Gemma-4's `gemma4`) nest the language model under `text_config` and
+    # prefix its checkpoint tensors with `model.language_model.` (vision lives under `model.vision_tower.`).
+    # Build + size the text tower from that sub-config, and strip the prefix so keys match the text
+    # CausalLM we build (dropping the vision weights we don't need for a text-only QLoRA).
+    lm_config = getattr(config, "text_config", None) or config
+    ckpt_prefix = "model.language_model." if lm_config is not config else ""
+    act_name = getattr(lm_config, "hidden_activation", None) or getattr(lm_config, "hidden_act", "silu")
     activation = ACT2FN[act_name]
 
     with init_empty_weights():
-        model = AutoModelForCausalLM.from_config(config, dtype=dtype)
+        model = AutoModelForCausalLM.from_config(lm_config, dtype=dtype)
 
     snap = (
         model_id
@@ -87,14 +93,19 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
             allow_patterns=["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"],
         )
     )
-    weight_map = json.load(open(os.path.join(snap, "model.safetensors.index.json")))["weight_map"]
+    raw_map = json.load(open(os.path.join(snap, "model.safetensors.index.json")))["weight_map"]
+    if ckpt_prefix:
+        weight_map = {"model." + k[len(ckpt_prefix) :]: f for k, f in raw_map.items() if k.startswith(ckpt_prefix)}
+        orig_key = {"model." + k[len(ckpt_prefix) :]: k for k in raw_map if k.startswith(ckpt_prefix)}
+    else:
+        weight_map, orig_key = raw_map, {k: k for k in raw_map}
     handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in set(weight_map.values())}
 
     def get(name):
-        return handles[weight_map[name]].get_tensor(name)
+        return handles[weight_map[name]].get_tensor(orig_key[name])
 
-    n_layers = config.num_hidden_layers
-    n_exp = getattr(config, "num_local_experts", None) or getattr(config, "num_experts", None)
+    n_layers = lm_config.num_hidden_layers
+    n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
     log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to NF4 (streaming)...")
     expert_keys = set()
     offload_handles = []
@@ -152,10 +163,12 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
 
     # Non-persistent buffers (rotary inv_freq) aren't in the checkpoint — recompute every rotary module
     # the model has (some architectures, e.g. Gemma, use more than one). Generic; no per-model import.
+    # Use `lm_config` (the text tower's config): a multimodal top-level config (Gemma-4's `Gemma4Config`)
+    # lacks the rotary fields (`max_position_embeddings`, rope_theta) that live on `text_config`.
     for name, module in list(model.named_modules()):
         if type(module).__name__.endswith("RotaryEmbedding"):
             parent = model.get_submodule(name.rsplit(".", 1)[0]) if "." in name else model
-            setattr(parent, name.rsplit(".", 1)[-1], type(module)(config).to(device))
+            setattr(parent, name.rsplit(".", 1)[-1], type(module)(lm_config).to(device))
     # Tie lm_head if the checkpoint relied on weight tying.
     if model.lm_head.weight.is_meta:
         model.lm_head.weight = model.model.embed_tokens.weight
