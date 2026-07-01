@@ -43,6 +43,12 @@ def load_olmoe_4bit_streaming(model_id, device, dtype, r, alpha):
     smaller) and their bf16 source is dropped immediately, so the full bf16 model never exists.
     """
     config = AutoConfig.from_pretrained(model_id)
+    if getattr(config, "model_type", None) != "olmoe":
+        raise NotImplementedError(
+            "This streaming loader is OLMoE-specific (fused-expert key layout, OlmoeRotaryEmbedding, "
+            f"OlmoeAttention); got model_type={getattr(config, 'model_type', None)!r}. The Experts4bit "
+            "primitive itself is model-agnostic — see the README 'Scope' note to adapt another fused-MoE."
+        )
     with init_empty_weights():
         model = AutoModelForCausalLM.from_config(config, dtype=dtype)
 

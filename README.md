@@ -57,6 +57,14 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
   python -m experts4bit_qlora.train
 ```
 
+## Scope
+
+The `Experts4bit` primitive and `ExpertsLoRA` adapters are **model-agnostic** — they operate on any
+fused `[num_experts, out, in]` expert stack. The **streaming loader / trainer**
+(`python -m experts4bit_qlora.train`) is currently **OLMoE-specific**: it assumes OLMoE's checkpoint
+key layout, `OlmoeRotaryEmbedding`, and `OlmoeAttention`, and **fails fast with a clear error** on
+other architectures. Other fused-MoE models (e.g. Qwen3-MoE) need a loader adaptation — PRs welcome.
+
 ## Benchmarks
 
 ```bash

@@ -27,7 +27,7 @@ The bitsandbytes PR adds `Experts4bit`: 4-bit NF4 storage for the **fused 3-D ex
 - a **streaming loader** that reads the checkpoint tensor-by-tensor straight onto the GPU, quantizes each `16×64` expert stack to NF4 on the way, and frees the bf16 source immediately — the full bf16 model is never materialized (fits a 12 GB card with a 3 GB container RAM cap);
 - **per-expert LoRA** adapters over the frozen `Experts4bit` base (`ExpertsLoRA`);
 - **per-projection LoRA** over the frozen attention q/k/v/o (`LoRALinear`);
-- the forward routed through `bnb.matmul_4bit` (the perf change in `97fa09f`).
+- the forward routed through `bnb.matmul_4bit` — a memory optimization auto-engaged on bitsandbytes ≥ 0.50, else the portable dequantize path (§9).
 
 Model: `allenai/OLMoE-1B-7B-0924` (hidden 2048, intermediate 1024, 16 layers, 64 experts, top-8). Hardware: RTX A2000 12 GB. bitsandbytes `0.50.0.dev0`.
 
@@ -69,7 +69,7 @@ Param counts are a consequence of the geometry, not tuned: e.g. `experts_only` =
 
 ## 4. Everything held constant across configs
 
-Set once in `run-ablation.sh` and never varied, so the only independent variable is *placement*:
+Set once in `bench/run-ablation.sh` and never varied, so the only independent variable is *placement*:
 
 ```
 STEPS=150  GRAD_ACCUM=4  LR=1e-4  SEQ=256  N_TRAIN=10000
@@ -120,18 +120,18 @@ Two clean findings: (a) the per-placement deltas do **not** add (experts −0.43
 ## 8. Reproduce
 
 ```bash
-cd /home/node/work/bitsandbytes && . .venv-cuda/bin/activate
+pip install -e ".[train]"
 # one config:
 STEPS=150 GRAD_ACCUM=4 LR=1e-4 SEQ=256 N_TRAIN=10000 R=8 ALPHA=16 EVAL_EVERY=50 DO_GEN=0 \
-  TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 TRAIN_ROUTER=0 OUT=/home/node/work/ablation/experts_only \
-  python -u examples/olmoe_experts4bit_qlora.py
+  TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 TRAIN_ROUTER=0 OUT=./ablation-out/experts_only \
+  python -m experts4bit_qlora.train
 # or the whole 4-config sweep (resumable):
-bash /home/node/work/ablation/run-ablation.sh
+bash bench/run-ablation.sh
 ```
 
 ## 9. Pinning claim #4 — the `matmul_4bit` routing (`97fa09f`), measured
 
-Harness: [bench_matmul4bit.py](bench_matmul4bit.py). Both paths (`_dequantize_expert`→`F.linear` vs `bnb.matmul_4bit`) coexist in the shipped build, so they're A/B'd in one process — no checkout/rebuild. RTX A2000, bf16, OLMoE dims.
+Harness: [bench/_upstream/bench_matmul4bit.py](../bench/_upstream/bench_matmul4bit.py) (requires bitsandbytes ≥ 0.50). Both paths (`_dequantize_expert`→`F.linear` vs `bnb.matmul_4bit`) coexist in the primitive, so they're A/B'd in one process. RTX A2000, bf16, OLMoE dims.
 
 **a. Numerically identical — confirmed bit-exact.** `max|after−before| = 0.000e+00` on CUDA (commit only claimed CPU bit-exactness). So any Δ below is purely the path swap.
 
@@ -157,7 +157,7 @@ The AFTER path saves only the 4-bit packed weight, not each expert's dequantized
 
 **Verdict on #4:** it's a **memory optimization mislabeled `perf:`** — bit-identical results, ~71% lower layer-level training memory, at a small (≤~1.4×) backward compute cost. The commit *body* ("keeping memory low") is accurate; the throughput framing (including my own earlier gloss) was not.
 
-## 10. Energy — measured (`bench_energy.py`, `bench_energy_excluded.py`)
+## 10. Energy — measured ([bench/_upstream/bench_energy.py](../bench/_upstream/bench_energy.py), [bench/bench_energy_excluded.py](../bench/bench_energy_excluded.py))
 
 Actual GPU energy on the idle A2000 (70 W cap): background `nvidia-smi` power sampling against a tight op-loop; energy/op = mean-power ÷ throughput. Three expert-projection paths, incl. an unquantized **native bf16** reference. *Caveat: the idle baseline read high and unstable (clocks slow to drop), so idle-subtracted "dynamic" energy is unreliable — only **total** J is reported. One card, microbench.*
 
