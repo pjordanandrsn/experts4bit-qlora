@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Trained artifacts (push to the HF Hub, not git)
+*.pt
+*.safetensors
+experts4bit-lora-out/
+ablation/*/adapter_*.pt
+
+# Local caches / logs
+hf-cache/
+*.log
+.DS_Store

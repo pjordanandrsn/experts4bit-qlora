@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "experts4bit-qlora"
+version = "0.1.0"
+description = "QLoRA fine-tuning of fused 4-bit Mixture-of-Experts on a single small GPU, on stock bitsandbytes."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Jordan Anderson", email = "paul.jordan.anderson@gmail.com" }]
+keywords = ["bitsandbytes", "qlora", "moe", "mixture-of-experts", "quantization", "nf4", "lora", "olmoe"]
+dependencies = [
+    "torch>=2.2",
+    "bitsandbytes>=0.43",
+]
+
+# The Experts4bit primitive, ExpertsLoRA adapters, and the benchmarks need only torch + bitsandbytes.
+# The end-to-end OLMoE streaming trainer additionally needs transformers>=5.0 (fused expert layout).
+[project.optional-dependencies]
+train = [
+    "transformers>=5.0",
+    "datasets>=2.14",
+    "accelerate>=0.30",
+    "safetensors>=0.4",
+    "huggingface_hub>=0.23",
+]
+
+[project.urls]
+"Upstream primitive (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
+"Tracking issue (bitsandbytes#1849)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/issues/1849"
+
+[tool.setuptools.packages.find]
+include = ["experts4bit_qlora*"]
