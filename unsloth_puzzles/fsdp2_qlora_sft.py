@@ -35,7 +35,10 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, set_seed
 from trl import SFTConfig, SFTTrainer
 
-MODEL = os.environ.get("MODEL", "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit")
+# A 16-bit checkpoint (non-gated) — bitsandbytes quantizes it to NF4 on load *with* a shardable
+# quant_storage (below). A pre-quantized `...-bnb-4bit` model can't set quant_storage, so FSDP2
+# can't flatten its 4-bit params — hence a full-precision source is required here.
+MODEL = os.environ.get("MODEL", "NousResearch/Meta-Llama-3.1-8B-Instruct")
 MAX_SEQ = int(os.environ.get("MAX_SEQ", "2048"))
 MAX_STEPS = int(os.environ.get("MAX_STEPS", "60"))
 SEED = 3407
