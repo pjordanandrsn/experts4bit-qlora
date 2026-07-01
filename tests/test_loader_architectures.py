@@ -138,3 +138,65 @@ def test_unsupported_model_type_errors():
     assert {"olmoe", "qwen3_moe", "gemma4"} <= SUPPORTED_MODEL_TYPES
     with pytest.raises(NotImplementedError, match="Unsupported model_type"):
         load_moe_4bit_streaming("gpt2", "cuda", torch.bfloat16, r=4, alpha=8)
+
+
+@cuda
+@pytest.mark.parametrize(
+    "build,per_expert",
+    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False)],
+    ids=["olmoe", "qwen3_moe", "gemma4"],
+)
+def test_loaded_model_trains_with_frozen_experts(build, per_expert, tmp_path):
+    """Full code-path test: load 4-bit, add LoRA, run real training steps with gradient checkpointing.
+
+    Asserts the whole training path works for each architecture: the held-out loss decreases (the LoRA
+    adapters learn), the frozen 4-bit expert packed weights never receive a gradient and stay
+    bit-identical, and nothing goes NaN.
+    """
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+    from experts4bit_qlora.lora import add_attention_lora
+
+    torch.manual_seed(0)
+    _write_ckpt(build(), str(tmp_path), per_expert=per_expert)
+    model, cfg = load_moe_4bit_streaming(str(tmp_path), "cuda", torch.bfloat16, r=4, alpha=8)
+    add_attention_lora(model, 4, 8, torch.bfloat16)
+
+    trainable = []
+    for n, p in model.named_parameters():
+        p.requires_grad_("lora" in n)  # only LoRA adapters train
+        if p.requires_grad:
+            trainable.append(p)
+    assert trainable
+    # The Experts4bit packed weights are Parameters named `...gate_up_proj` / `...down_proj` (no `.weight`),
+    # which distinguishes them from the dense-MLP Linears (`...mlp.down_proj.weight`).
+    packed_before = {
+        n: p.detach().clone() for n, p in model.named_parameters() if n.endswith(("gate_up_proj", "down_proj"))
+    }
+    assert packed_before  # experts were quantized to frozen 4-bit
+    lora0 = trainable[0].detach().clone()
+
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model.enable_input_require_grads()
+    model.train()
+    opt = torch.optim.Adam(trainable, lr=3e-3)
+
+    torch.manual_seed(1)
+    ids = torch.randint(0, cfg.vocab_size, (2, 16), device="cuda")
+    losses = []
+    for _ in range(20):
+        opt.zero_grad()
+        out = model(input_ids=ids, labels=ids)
+        out.loss.backward()
+        for n, p in model.named_parameters():
+            if not p.requires_grad:
+                assert p.grad is None  # frozen params (incl. the 4-bit experts) never get a gradient
+        opt.step()
+        losses.append(out.loss.item())
+
+    assert all(x == x for x in losses)  # no NaN
+    assert losses[-1] < losses[0]  # the LoRA adapters learned (overfit the fixed batch)
+    assert not torch.equal(trainable[0].detach(), lora0)  # a LoRA parameter actually moved
+    for n, p in model.named_parameters():
+        if n in packed_before:
+            assert torch.equal(p.detach(), packed_before[n])  # frozen 4-bit experts unchanged
