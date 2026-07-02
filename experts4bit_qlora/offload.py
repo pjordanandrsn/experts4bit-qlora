@@ -21,16 +21,18 @@ Why this is correct (and why the hook goes on ``ExpertsLoRA``, not ``Experts4bit
 * ``ExpertsLoRA.forward`` never calls ``base.forward()``; it reads ``base.gate_up_proj`` etc.
   directly and calls ``base._dequantize_expert(...)``. A pre-hook on the base would never fire in
   training, so the hook must sit on the module whose ``__call__`` actually runs — ``ExpertsLoRA``.
-* ``ExpertsLoRA`` uses the **dequantize path**: ``w = base._dequantize_expert(...)`` then
-  ``F.linear(x, w)``. The packed weight has ``requires_grad=False``, so the dequantized ``w`` is a
+* While offloaded, ``ExpertsLoRA`` uses the **dequantize path**: ``w = base._dequantize_expert(...)``
+  then ``F.linear(x, w)``. The packed weight has ``requires_grad=False``, so the dequantized ``w`` is a
   non-grad constant and the dequant op is not on the autograd tape. ``F.linear`` saves the
   *dequantized* ``w`` (for ``grad_x``), never the packed weight. The packed weight is therefore only
   read during the forward (and recompute-forward) to *produce* ``w`` — never needed by backward — so
   evicting it in the post-hook is safe in both the initial forward and the checkpoint recompute.
 
-  **Invariant:** this safety holds only while ``ExpertsLoRA`` uses ``_dequantize_expert`` + ``F.linear``.
-  Do **not** route ``ExpertsLoRA`` through ``bnb.matmul_4bit`` (whose autograd ``Function``
-  re-dequantizes in backward and would need the evicted packed weight) while offloading.
+  **Invariant (enforced in code):** this safety holds only on the dequantize path, so
+  ``ExpertsLoRA._use_matmul_4bit`` returns ``False`` whenever ``self._offload`` is set — the
+  ``bnb.matmul_4bit`` route (a training-memory win when **not** offloading; its autograd ``Function``
+  re-dequantizes the packed weight in backward and would read an evicted placeholder here) can never
+  run on an offloaded layer. Do not weaken that gate.
 
 The tiny NF4 ``code`` buffer and the trainable LoRA adapters stay GPU-resident throughout.
 """
@@ -42,7 +44,10 @@ import torch
 # 0-element GPU placeholders that an evicted base's parameters/buffers point at, shared across all
 # offloaded layers (reads never mutate them, so sharing is safe) and cached per device. Keeping the
 # real "home" data OFF the module — only these placeholders are registered while evicted — means
-# ``model.to(device)`` / ``state_dict()`` / ``save`` never drag the big expert tensors around.
+# ``model.to(device)`` never drags the big expert tensors to the GPU. ``state_dict()`` substitutes
+# the CPU homes for the placeholders via a post-hook (see ``_install_state_dict_hook``) so a
+# full-model save stays *correct* — a naive placeholder state_dict would silently serialize a model
+# with no expert weights — while adapter-only saves (key-filtered) remain exactly as cheap.
 _PLACEHOLDERS: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
 
 
@@ -100,6 +105,29 @@ class _ExpertOffload:
         self.pinned = all(_is_pinned(t) for t in self.home.values())
         self.staged = False
         self.evict()  # start evicted: base holds placeholders, ~0 GPU footprint (frees the load copy)
+        self._install_state_dict_hook()
+
+    def _install_state_dict_hook(self) -> None:
+        """Keep full-model ``state_dict()`` correct while evicted. Between forwards the base's
+        registered tensors are 0-element placeholders, so a naive ``state_dict()`` would silently
+        serialize a model with **no expert weights**. This hook substitutes the (pinned) CPU home
+        copies for any placeholder entries — as references, not copies, so adapter-only saves (which
+        filter by key name and never match ``base.*``) stay exactly as cheap as before. While
+        *staged* (mid-forward) the entries are the real GPU tensors and the hook is a no-op.
+        Note ``load_state_dict`` onto an evicted model still fails loudly on the placeholder shape
+        mismatch — loading into an offloaded model was never supported and is unchanged here."""
+
+        def hook(module, state_dict, prefix, local_metadata):
+            for n in self._names():
+                key = prefix + n
+                t = state_dict.get(key)
+                if t is not None and t.numel() == 0:
+                    state_dict[key] = self.home[n]
+
+        register = getattr(self.base, "register_state_dict_post_hook", None)
+        if register is None:  # older torch: the private hook has the same (mod, sd, prefix, meta) shape
+            register = self.base._register_state_dict_hook
+        self._state_dict_hook_handle = register(hook)
 
     @classmethod
     def _names(cls):

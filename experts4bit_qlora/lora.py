@@ -21,6 +21,20 @@ if TYPE_CHECKING:
     from . import Experts4bit
 
 
+def _matmul_4bit_supported() -> bool:
+    """Whether ``bnb.matmul_4bit`` is correct for the ``[packed, 1]`` layout here (probed once and
+    cached where it lives). The probe sits beside :class:`Experts4bit` — vendored today, and in
+    ``bitsandbytes.nn`` once bitsandbytes#1965 ships (at which point the vendor copy is deleted)."""
+    try:
+        from ._vendor.experts import _matmul_4bit_matches_dequant
+    except ImportError:  # vendor copy deleted after the upstream bitsandbytes release
+        try:
+            from bitsandbytes.nn import _matmul_4bit_matches_dequant  # type: ignore[attr-defined]
+        except ImportError:
+            return False
+    return _matmul_4bit_matches_dequant()
+
+
 class ExpertsLoRA(nn.Module):
     """Per-expert LoRA adapters over a frozen :class:`Experts4bit` base.
 
@@ -60,8 +74,25 @@ class ExpertsLoRA(nn.Module):
         nn.init.normal_(self.down_lora_A, std=1.0 / r)
 
     def _lora(self, x: torch.Tensor, A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
-        # x: [n, in]; A: [r, in]; B: [out, r]  ->  [n, out]
-        return self.scaling * F.linear(F.linear(x, A), B)
+        # x: [n, in]; A: [r, in]; B: [out, r]  ->  [n, out]. Adapters may deliberately sit in a
+        # different (typically higher, e.g. fp32) precision than the compute dtype; matmul requires
+        # matching dtypes, so run the low-rank path in the adapter dtype and cast the delta back.
+        # No-ops (no copies) when the dtypes already match.
+        return (self.scaling * F.linear(F.linear(x.to(A.dtype), A), B)).to(x.dtype)
+
+    def _use_matmul_4bit(self, hidden_states: torch.Tensor) -> bool:
+        """Route the frozen base projections through ``bnb.matmul_4bit`` only when it both helps and
+        is safe. It *helps* only when a backward pass will run: its autograd ``Function`` saves the
+        tiny packed weight and re-dequantizes in backward, instead of ``F.linear`` saving the full
+        dequantized expert as an activation — under ``no_grad`` nothing is saved either way, so the
+        simple dequantize path costs nothing there. It is *safe* only when the packed weight is still
+        resident at backward time — i.e. **never under offload**, whose eviction-correctness proof
+        assumes the dequantize path (see :mod:`experts4bit_qlora.offload`)."""
+        if getattr(self, "_offload", None) is not None:
+            return False  # offload invariant: backward's re-dequant would read an evicted placeholder
+        if not (hidden_states.is_cuda and torch.is_grad_enabled() and hidden_states.requires_grad):
+            return False  # no backward memory to save (or no CUDA) -> keep the dequantize route
+        return _matmul_4bit_supported()
 
     def forward(
         self,
@@ -74,6 +105,10 @@ class ExpertsLoRA(nn.Module):
         hidden_states = hidden_states.to(compute_dtype)
 
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
+        # One route decision per forward: memory-lean matmul_4bit when training un-offloaded (its
+        # backward re-dequantizes the packed weight instead of saving the full dequantized expert),
+        # else the portable dequantize path (required under offload; free under no_grad).
+        use_matmul_4bit = self._use_matmul_4bit(hidden_states)
 
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=base.num_experts).permute(2, 1, 0)
@@ -83,17 +118,16 @@ class ExpertsLoRA(nn.Module):
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             x = hidden_states[token_idx]
 
-            # Frozen 4-bit base projection + trainable low-rank delta.
-            gate_up_w = base._dequantize_expert(
+            # Frozen 4-bit base projection (route per use_matmul_4bit) + trainable low-rank delta.
+            proj = base._project(
                 base.gate_up_proj,
                 base.gate_up_absmax,
                 base._gate_up_shape,
                 expert_idx,
+                x,
                 compute_dtype,
-            )
-            proj = F.linear(x, gate_up_w) + self._lora(
-                x, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx]
-            )
+                use_matmul_4bit,
+            ) + self._lora(x, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
 
             if base.has_gate:
                 gate, up = proj.chunk(2, dim=-1)
@@ -101,14 +135,15 @@ class ExpertsLoRA(nn.Module):
             else:
                 current_hidden = base.act_fn(proj)
 
-            down_w = base._dequantize_expert(
+            current_hidden = base._project(
                 base.down_proj,
                 base.down_absmax,
                 base._down_shape,
                 expert_idx,
+                current_hidden,
                 compute_dtype,
-            )
-            current_hidden = F.linear(current_hidden, down_w) + self._lora(
+                use_matmul_4bit,
+            ) + self._lora(
                 current_hidden,
                 self.down_lora_A[expert_idx],
                 self.down_lora_B[expert_idx],
@@ -141,7 +176,10 @@ class LoRALinear(nn.Module):
         nn.init.normal_(self.lora_A, std=1.0 / r)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.base(x) + self.scaling * F.linear(F.linear(x, self.lora_A), self.lora_B)
+        # Same dtype rule as ExpertsLoRA._lora: adapters may sit in a different precision than the
+        # activations; compute the delta in the adapter dtype, cast back (no-op when they match).
+        delta = self.scaling * F.linear(F.linear(x.to(self.lora_A.dtype), self.lora_A), self.lora_B)
+        return self.base(x) + delta.to(x.dtype)
 
 
 def add_attention_lora(model, r: int, alpha: int, dtype: torch.dtype) -> int:

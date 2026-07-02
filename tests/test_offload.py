@@ -170,16 +170,25 @@ def test_offload_placement_homes_on_cpu_code_and_lora_resident():
     assert lora.gate_up_lora_A.device.type == dev and lora.down_lora_A.device.type == dev
 
 
-def test_offload_save_filter_excludes_base():
-    """save_adapter keeps only keys containing 'lora'. The evicted base tensors appear in a full
-    state_dict as tiny placeholders but never match that filter, so adapter-save is unaffected."""
+def test_offload_state_dict_full_save_correct_and_adapter_filter_unaffected():
+    """A full ``state_dict()`` of an *evicted* model must contain the real expert weights (the CPU
+    home copies, substituted by the offload post-hook) — a placeholder state_dict would silently save
+    a model with no experts. The adapter-save filter ('lora' in key) is key-based, so it never matches
+    ``base.*`` and stays exactly as cheap as before."""
     lora = _build_experts_lora()
-    enable_expert_offload(lora, DEVICE, pin=True)
+    handle = enable_expert_offload(lora, DEVICE, pin=True)
     sd = lora.state_dict()
 
     base_keys = [k for k in sd if k.startswith("base.")]
     assert base_keys and not any("lora" in k for k in base_keys)
-    assert sd["base.gate_up_proj"].numel() == 0  # placeholder, not 15 GB of weights
+    # Full save is CORRECT: the hook substituted the CPU homes for the 0-element placeholders,
+    # as references (no copy) — bit-identical to the offload handle's home tensors.
+    for name in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax"):
+        t = sd[f"base.{name}"]
+        assert t.numel() > 0 and t.device.type == "cpu"
+        assert t.data_ptr() == handle.home[name].data_ptr()  # reference, not a copy
+    # The module itself still holds placeholders (state_dict didn't re-stage anything).
+    assert lora.base.gate_up_proj.numel() == 0 and handle.staged is False
 
     adapter = {k: v for k, v in sd.items() if "lora" in k}
     assert adapter and all(not k.startswith("base.") for k in adapter)

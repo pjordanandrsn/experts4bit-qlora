@@ -5,8 +5,13 @@
 > **Packaging note.** §9–§10 measure `matmul_4bit` on the fork (bnb 0.50-dev). On released bnb (≤ 0.49.x)
 > `matmul_4bit` is **incorrect** for this `[packed, 1]` weight layout, so the packaged `Experts4bit`
 > auto-gates to the portable dequantize forward (`_matmul_4bit_matches_dequant`); the matmul_4bit
-> benches live under `bench/_upstream/`. The ablation eval numbers (§1–§8) are unaffected — training
-> runs through `ExpertsLoRA`, which already uses the dequantize path.
+> benches live under `bench/_upstream/`. The ablation eval numbers (§1–§8) are unaffected — those
+> training runs went through `ExpertsLoRA`, which **at the time always used the dequantize path**.
+> As of v0.1.2, `ExpertsLoRA` routes the frozen base projections through `bnb.matmul_4bit` when it
+> helps and is safe (CUDA + grad enabled + probe passes + **not** offloading — see
+> `ExpertsLoRA._use_matmul_4bit`); §9a shows the two paths are numerically identical, so the eval
+> numbers carry over, while un-offloaded training no longer saves the full dequantized experts as
+> backward activations.
 
 ## 0. What "the numbers" are
 
@@ -18,7 +23,7 @@ Each config produces three scalars on a **fixed held-out set**:
 | `AFTER` | held-out loss after `STEPS` optimizer steps, at the final adapter |
 | `best`  | lowest held-out loss seen at any periodic eval (the checkpoint kept) |
 
-The headline result is the **delta** `AFTER − BEFORE`. A negative delta is the claim we are trying to substantiate: *LoRA adapters trained on top of the frozen NF4 experts (routed through `bnb.matmul_4bit`) actually learn.* The ablation isolates **which adapter placement** is responsible for the gain.
+The headline result is the **delta** `AFTER − BEFORE`. A negative delta is the claim we are trying to substantiate: *LoRA adapters trained on top of the frozen NF4 experts actually learn.* (These runs used `ExpertsLoRA`'s dequantize path — the packaging-note correction above; as of v0.1.2 un-offloaded training routes through `bnb.matmul_4bit`, which §9a shows is numerically identical.) The ablation isolates **which adapter placement** is responsible for the gain.
 
 ## 1. What is under test
 
