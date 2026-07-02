@@ -8,6 +8,7 @@ set -eo pipefail
 # can't serve a stale fsdp2_qlora_sft.py. Bump this SHA when the script changes.
 BASE=https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/b4ae3b2/unsloth_puzzles
 MAX_STEPS="${MAX_STEPS:-20}"
+export MAX_SEQ="${MAX_SEQ:-512}"  # 8B on a T4 at seq 2048 is minutes/step; 512 keeps the demo tractable
 
 pip install -q -U bitsandbytes accelerate peft trl datasets
 wget -qO fsdp2_qlora_sft.py "$BASE/fsdp2_qlora_sft.py"
