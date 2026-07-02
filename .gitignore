@@ -17,3 +17,8 @@ ablation/*/adapter_*.pt
 hf-cache/
 *.log
 .DS_Store
+
+# Task B (FSDP2 + QLoRA) run artifacts
+unsloth_puzzles/losses_*.json
+unsloth_puzzles/outputs-*/
+unsloth_puzzles/loss_curves.png

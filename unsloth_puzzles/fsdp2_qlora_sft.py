@@ -1,8 +1,14 @@
-"""FSDP2 + QLoRA SFT of Llama-3.1-8B on 2+ GPUs — Unsloth Puzzles "Task B".
+"""FSDP2 + QLoRA SFT on 2+ GPUs — Unsloth Puzzles "Task B".
 
 A single script, launched with ``accelerate launch`` using an FSDP2 config (see fsdp2_config.yaml).
-It stays fully transformers-native (``SFTTrainer`` / ``SFTConfig``), so the loss curve is identical
-to single-GPU training given the same seed/data.
+It stays fully transformers-native (``SFTTrainer`` / ``SFTConfig``). With the *global* batch held
+constant across launches (``per_device_bs * grad_accum * world_size`` — see ``main()``), the
+single-GPU and FSDP2 loss curves track closely and converge to the same final loss. They are
+*statistically equivalent*, not bit-identical: data-parallel FSDP2 shards examples differently across
+ranks (``DistributedSampler``) and the cross-rank gradient all-reduce sums in a different
+(non-deterministic) float order than single-GPU accumulation. Equivalence is shown by (a) identical
+tokens consumed per optimizer step across legs, (b) closely-tracking curves with no systematic drift,
+and (c) final ``train_loss`` agreement within a few percent.
 
 Two things make FSDP2 + bitsandbytes-NF4 QLoRA actually work (both handled below):
 
@@ -14,7 +20,7 @@ Two things make FSDP2 + bitsandbytes-NF4 QLoRA actually work (both handled below
    pins layers to devices and is incompatible with FSDP.)
 
 FSDP2 features exercised (all via fsdp2_config.yaml): parameter CPU offload, activation checkpointing,
-bf16 mixed precision, and transformer-layer auto-wrap.
+mixed precision (bf16 on Ampere+, fp16 on Turing/T4), and transformer-layer auto-wrap.
 
 Run (2x GPU, e.g. Kaggle 2x T4 or any 2x NVIDIA / WSL2 box):
 
@@ -44,8 +50,14 @@ MODEL = os.environ.get("MODEL", "unsloth/Llama-3.2-3B-Instruct")
 MAX_SEQ = int(os.environ.get("MAX_SEQ", "2048"))
 MAX_STEPS = int(os.environ.get("MAX_STEPS", "60"))
 SEED = 3407
-# fp16 on T4 (no bf16 on Turing); bf16 on Ampere+.
-DTYPE = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+# Native bf16 on Ampere+ (compute capability >= 8); fp16 on Turing/T4. NB: torch.cuda.is_bf16_supported()
+# returns True on a T4 (bf16 is *emulated* there), which both runs slow and mismatches the fp16 FSDP2
+# mixed-precision config — so gate on the hardware capability, not on is_bf16_supported().
+DTYPE = (
+    torch.bfloat16
+    if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
+    else torch.float16
+)
 
 
 def build_model_and_tokenizer():
@@ -94,10 +106,17 @@ def main():
     url = "https://huggingface.co/datasets/laion/OIG/resolve/main/unified_chip2.jsonl"
     dataset = load_dataset("json", data_files={"train": url}, split="train[:10%]")
 
+    # Hold the *global* batch (per_device_bs * grad_accum * world_size) constant across launches so
+    # the single-GPU and FSDP2 loss curves are directly comparable. `accelerate launch` sets
+    # WORLD_SIZE (= num_processes); a plain `python ... --single` run leaves it unset (=> 1). With
+    # base grad_accum=4 and 2 GPUs this gives 4//2=2, so 2*2*2 == 2*4*1 == 8 seqs/step either way.
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    base_grad_accum = 4
+    grad_accum = max(1, base_grad_accum // world_size)
     args = SFTConfig(
         output_dir="outputs-fsdp2-qlora",
         per_device_train_batch_size=2,
-        gradient_accumulation_steps=4,
+        gradient_accumulation_steps=grad_accum,
         warmup_steps=1,
         max_steps=MAX_STEPS,
         learning_rate=2e-4,

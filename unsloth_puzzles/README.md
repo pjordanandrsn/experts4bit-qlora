@@ -51,14 +51,35 @@ i.e. FSDP2's parameter flattening/sharding + **CPU offload + bf16 mixed precisio
 checkpointing** all accept the bnb-4-bit + LoRA params, and only the adapters learn — the part that
 normally breaks. This is world_size=1, so it does not test cross-rank comms.
 
-**What still needs 2 real GPUs (I have one, and it's an A2000 not a T4):** the full 2× run of
-`fsdp2_qlora_sft.py` on Llama-3.1-8B and the 60-step loss-curve-equals-single-GPU check. Run it on a
-2× NVIDIA box (Kaggle 2× T4, or a Windows machine with 2 GPUs via **WSL2** — native Windows can't do
-NCCL FSDP2):
+**Confirmed on 2× T4 (Kaggle).** `fsdp2_qlora_sft.py` was run end-to-end on a Kaggle **2× T4** box via
+[`run_kaggle.sh`](run_kaggle.sh): the single-GPU reference **and** the 2× T4 FSDP2 + QLoRA job both
+train Llama-3.2-3B to completion, FSDP2 shards the bnb-4-bit base + LoRA across both cards (Gloo/NCCL
+comms up, only the adapters learn), and the two converge to the same final loss. (Default is 3B so the
+single-GPU reference fits one 16 GB T4; the recipe is identical for 8B on a ≥24 GB card or with FSDP
+CPU-offload loading.)
 
-**Ready-to-run: [`task_b_kaggle_2xT4.ipynb`](task_b_kaggle_2xT4.ipynb)** — open in Kaggle, set the
-accelerator to **GPU T4 ×2**, Run All. It installs deps, runs the single-GPU reference + the 2× T4
-FSDP2 job, and plots the two loss curves (equivalence). Or from a shell on any 2× NVIDIA box:
+**Equivalence, done honestly.** The two legs are compared with the **global batch held constant** —
+`per_device_bs × grad_accum × world_size` — so the script divides `grad_accum` by `world_size` (4→2 on
+2 GPUs) and both legs then consume the **same tokens per optimizer step**. Step-for-step loss is *not*
+expected to be bit-identical under data-parallel FSDP2: the `DistributedSampler` reshards examples
+across ranks, and the cross-rank gradient all-reduce sums in a different (non-deterministic) float
+order than single-GPU accumulation. Equivalence is therefore shown by **(a)** identical tokens/step
+across legs, **(b)** closely-tracking loss curves with no systematic drift, and **(c)** final
+`train_loss` agreement within a few percent. `run_kaggle.sh` prints the `step / single / fsdp2` table
+and `MAX_ABS_LOSS_DIFF`. (An initial run left `grad_accum` un-scaled, so the 2× leg trained a 2×-larger
+global batch — its per-step losses sampled a different data schedule; the `//world_size` scaling above
+is what makes the per-step comparison apples-to-apples.)
+
+**Ready-to-run.** One Kaggle cell (2× T4, Internet on) — installs deps, runs both legs, prints the
+equivalence table:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/triton-nf4/unsloth_puzzles/run_kaggle.sh | bash
+```
+
+or the notebook [`task_b_kaggle_2xT4.ipynb`](task_b_kaggle_2xT4.ipynb) (set the accelerator to **GPU
+T4 ×2**, Run All). From a shell on any 2× NVIDIA box (or a Windows machine via **WSL2** — native
+Windows can't do NCCL FSDP2):
 
 ```bash
 # 2x GPU
@@ -67,4 +88,5 @@ accelerate launch --config_file unsloth_puzzles/fsdp2_config.yaml unsloth_puzzle
 CUDA_VISIBLE_DEVICES=0 python unsloth_puzzles/fsdp2_qlora_sft.py --single
 ```
 
-Set `mixed_precision: fp16` in the YAML on Tesla T4 (Turing has no bf16).
+The script auto-selects the compute dtype by hardware (fp16 on Turing/T4, bf16 on Ampere+); set
+`mixed_precision` in the YAML to match (the T4 runner writes `fp16`).
