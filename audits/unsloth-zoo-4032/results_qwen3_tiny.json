@@ -1,0 +1,134 @@
+{
+  "arch": "qwen3_tiny",
+  "model": "/tmp/claude-tiny-qwen3moe",
+  "loader_used": "FastLanguageModel",
+  "audit": {
+    "n_expert_modules": 2,
+    "n_quantized": 2,
+    "expert_bytes_total": 49152,
+    "cuda_allocated_gb": 0.03
+  },
+  "audit_first_module": {
+    "module": "model.layers.0.mlp.experts",
+    "module_class": "Qwen3MoeExperts",
+    "gate_up_proj": {
+      "class": "Params4bit",
+      "dtype": "torch.uint8",
+      "stored_shape": [
+        16384,
+        1
+      ],
+      "nbytes": 16384,
+      "quant_state": {
+        "quant_type": "nf4",
+        "blocksize": 64,
+        "logical_shape": [
+          8,
+          64,
+          64
+        ]
+      },
+      "original_shape": [
+        8,
+        64,
+        64
+      ]
+    },
+    "down_proj": {
+      "class": "Params4bit",
+      "dtype": "torch.uint8",
+      "stored_shape": [
+        8192,
+        1
+      ],
+      "nbytes": 8192,
+      "quant_state": {
+        "quant_type": "nf4",
+        "blocksize": 64,
+        "logical_shape": [
+          8,
+          64,
+          32
+        ]
+      },
+      "original_shape": [
+        8,
+        64,
+        32
+      ]
+    }
+  },
+  "parity": {
+    "ref_max_abs": 10.203542709350586,
+    "err_theirs_vs_ref32": 11.133230209350586,
+    "err_bf16control_vs_ref32": 0.0791325569152832,
+    "rel_err_theirs": 1.0911141871487469,
+    "rel_err_control": 0.007755400175153446,
+    "excess_over_precision_noise": 140.69089440986303,
+    "out_finite": true
+  },
+  "lora_placement_unsloth": {
+    "expert": {
+      "n": 8,
+      "sample": [
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_B.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_B.default.weight"
+      ]
+    },
+    "other": {
+      "n": 16,
+      "sample": [
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight",
+        "base_model.model.model.layers.0.self_attn.k_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.k_proj.lora_B.default.weight"
+      ]
+    }
+  },
+  "train_unsloth_path": {
+    "loss": 13.05843448638916,
+    "loss_finite": true,
+    "grads": {
+      "expert_lora_grads": 8,
+      "expert_lora_nonzero": 4,
+      "other_lora_grads": 16,
+      "other_lora_nonzero": 8,
+      "expert_grad_norm": 0.9610829055309296,
+      "other_grad_norm": 2.202367529273033
+    }
+  },
+  "lora_placement_peft": {
+    "expert": {
+      "n": 8,
+      "sample": [
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_B.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_B.default.weight"
+      ]
+    },
+    "other": {
+      "n": 8,
+      "sample": [
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight",
+        "base_model.model.model.layers.0.self_attn.v_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.v_proj.lora_B.default.weight"
+      ]
+    }
+  },
+  "train_peft_params": {
+    "loss": 13.05843448638916,
+    "loss_finite": true,
+    "grads": {
+      "expert_lora_grads": 8,
+      "expert_lora_nonzero": 4,
+      "other_lora_grads": 8,
+      "other_lora_nonzero": 4,
+      "expert_grad_norm": 1.0119304209947586,
+      "other_grad_norm": 1.264431171119213
+    }
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "arch": "olmoe",
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "loader_used": "FastLanguageModel",
+  "audit": {
+    "n_expert_modules": 16,
+    "n_quantized": 16,
+    "expert_bytes_total": 3221225472,
+    "cuda_allocated_gb": 3.624
+  },
+  "audit_first_module": {
+    "module": "model.layers.0.mlp.experts",
+    "module_class": "OlmoeExperts",
+    "gate_up_proj": {
+      "class": "Params4bit",
+      "dtype": "torch.uint8",
+      "stored_shape": [
+        134217728,
+        1
+      ],
+      "nbytes": 134217728,
+      "quant_state": {
+        "quant_type": "nf4",
+        "blocksize": 64,
+        "logical_shape": [
+          64,
+          2048,
+          2048
+        ]
+      },
+      "original_shape": [
+        64,
+        2048,
+        2048
+      ]
+    },
+    "down_proj": {
+      "class": "Params4bit",
+      "dtype": "torch.uint8",
+      "stored_shape": [
+        67108864,
+        1
+      ],
+      "nbytes": 67108864,
+      "quant_state": {
+        "quant_type": "nf4",
+        "blocksize": 64,
+        "logical_shape": [
+          64,
+          2048,
+          1024
+        ]
+      },
+      "original_shape": [
+        64,
+        2048,
+        1024
+      ]
+    }
+  },
+  "parity": {
+    "error": "RuntimeError: Expected mat_a to be Float32, BFloat16 or Float16 matrix, got Byte"
+  },
+  "lora_placement_unsloth": {
+    "expert": {
+      "n": 64,
+      "sample": [
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_B.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_B.default.weight"
+      ]
+    },
+    "other": {
+      "n": 128,
+      "sample": [
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight",
+        "base_model.model.model.layers.0.self_attn.k_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.k_proj.lora_B.default.weight"
+      ]
+    }
+  },
+  "train_unsloth_path": {
+    "error": "IndexError: Dimension out of range (expected to be in range of [-2, 1], but got 2)"
+  },
+  "lora_placement_peft": {
+    "expert": {
+      "n": 64,
+      "sample": [
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.base_layer.lora_B.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_A.default.weight",
+        "base_model.model.model.layers.0.mlp.experts.lora_B.default.weight"
+      ]
+    },
+    "other": {
+      "n": 64,
+      "sample": [
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight",
+        "base_model.model.model.layers.0.self_attn.v_proj.lora_A.default.weight",
+        "base_model.model.model.layers.0.self_attn.v_proj.lora_B.default.weight"
+      ]
+    }
+  },
+  "train_peft_params": {
+    "error": "IndexError: Dimension out of range (expected to be in range of [-2, 1], but got 2)"
+  }
+}

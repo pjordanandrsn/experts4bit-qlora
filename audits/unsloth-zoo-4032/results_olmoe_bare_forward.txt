@@ -1,0 +1,115 @@
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+==((====))==  Unsloth 2026.6.9: Fast Olmoe patching. Transformers: 5.5.0.
+   \\   /|    NVIDIA RTX A2000 12GB. Num GPUs = 1. Max memory: 11.625 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.11.0+cu128. CUDA: 8.6. CUDA Toolkit: 12.8. Triton: 3.6.0
+\        /    Bfloat16 = TRUE. FA [Xformers = None. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+Loading weights:   0%|          | 0/179 [00:00<?, ?it/s]Loading weights:   1%|          | 1/179 [00:00<02:12,  1.34it/s]Loading weights:   1%|          | 2/179 [00:01<02:13,  1.32it/s]/home/node/e4b-venv/lib/python3.11/site-packages/bitsandbytes/backends/cuda/ops.py:213: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Loading weights:   2%|▏         | 4/179 [00:02<01:35,  1.82it/s]Loading weights:   3%|▎         | 5/179 [00:04<02:36,  1.11it/s]Loading weights:   7%|▋         | 12/179 [00:04<00:38,  4.30it/s]Loading weights:   8%|▊         | 15/179 [00:05<00:47,  3.45it/s]Loading weights:   9%|▉         | 17/179 [00:07<01:09,  2.31it/s]Loading weights:  15%|█▍        | 26/179 [00:08<00:36,  4.22it/s]Loading weights:  16%|█▌        | 28/179 [00:10<00:53,  2.81it/s]Loading weights:  19%|█▉        | 34/179 [00:10<00:31,  4.56it/s]Loading weights:  21%|██        | 37/179 [00:11<00:38,  3.70it/s]Loading weights:  22%|██▏       | 39/179 [00:13<00:55,  2.54it/s]Loading weights:  26%|██▌       | 46/179 [00:13<00:28,  4.62it/s]Loading weights:  27%|██▋       | 49/179 [00:16<00:46,  2.79it/s]Loading weights:  31%|███▏      | 56/179 [00:16<00:26,  4.72it/s]Loading weights:  34%|███▎      | 60/179 [00:19<00:40,  2.92it/s]Loading weights:  37%|███▋      | 67/179 [00:19<00:24,  4.67it/s]Loading weights:  40%|███▉      | 71/179 [00:22<00:36,  2.97it/s]Loading weights:  44%|████▎     | 78/179 [00:22<00:21,  4.63it/s]Loading weights:  46%|████▌     | 82/179 [00:24<00:31,  3.11it/s]Loading weights:  50%|████▉     | 89/179 [00:25<00:18,  4.79it/s]Loading weights:  52%|█████▏    | 93/179 [00:29<00:37,  2.29it/s]Loading weights:  58%|█████▊    | 103/179 [00:30<00:21,  3.47it/s]Loading weights:  59%|█████▊    | 105/179 [00:32<00:27,  2.67it/s]Loading weights:  62%|██████▏   | 111/179 [00:33<00:17,  3.85it/s]Loading weights:  64%|██████▎   | 114/179 [00:35<00:21,  2.99it/s]Loading weights:  65%|██████▍   | 116/179 [00:36<00:25,  2.47it/s]Loading weights:  68%|██████▊   | 122/179 [00:36<00:14,  3.98it/s]Loading weights:  70%|██████▉   | 125/179 [00:37<00:15,  3.51it/s]Loading weights:  71%|███████   | 127/179 [00:40<00:21,  2.40it/s]Loading weights:  73%|███████▎  | 131/179 [00:40<00:13,  3.48it/s]Loading weights:  76%|███████▌  | 136/179 [00:41<00:11,  3.89it/s]Loading weights:  77%|███████▋  | 138/179 [00:42<00:14,  2.80it/s]Loading weights:  80%|████████  | 144/179 [00:42<00:07,  4.73it/s]Loading weights:  82%|████████▏ | 147/179 [00:43<00:07,  4.15it/s]Loading weights:  83%|████████▎ | 149/179 [00:45<00:09,  3.05it/s]Loading weights:  88%|████████▊ | 158/179 [00:46<00:04,  4.29it/s]Loading weights:  89%|████████▉ | 160/179 [00:48<00:06,  3.08it/s]Loading weights:  94%|█████████▍| 169/179 [00:49<00:02,  4.14it/s]Loading weights:  95%|█████████▍| 170/179 [00:51<00:03,  2.85it/s]Loading weights:  99%|█████████▉| 177/179 [00:51<00:00,  4.72it/s]Loading weights: 100%|██████████| 179/179 [00:51<00:00,  3.45it/s]
+Traceback (most recent call last):
+  File "/tmp/claude-1000/-home-node-work-experts4bit-qlora/f2381911-8a88-46a4-8986-85da9c561078/scratchpad/repro2.py", line 11, in <module>
+    model(ids)
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/utils/generic.py", line 876, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<unsloth-fused:OlmoeForCausalLM>", line 27, in forward
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/utils/generic.py", line 952, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/utils/output_capturing.py", line 248, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/models/olmoe/modeling_olmoe.py", line 504, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/modeling_layers.py", line 93, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/models/olmoe/modeling_olmoe.py", line 414, in forward
+    hidden_states = self.mlp(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/work/experts4bit-qlora/outputs/falsify_4032/unsloth_compiled_cache/unsloth_compiled_module_olmoe.py", line 513, in forward
+    return OlmoeSparseMoeBlock_forward(self, hidden_states=hidden_states)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1024, in compile_wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/node/work/experts4bit-qlora/outputs/falsify_4032/unsloth_compiled_cache/unsloth_compiled_module_olmoe.py", line 501, in OlmoeSparseMoeBlock_forward
+    final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).reshape(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/integrations/moe.py", line 511, in forward
+    return experts_forward(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/integrations/moe.py", line 396, in grouped_mm_experts_forward
+    proj_out = _grouped_linear(
+               ^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/integrations/moe.py", line 341, in _grouped_linear
+    out = _grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/integrations/moe.py", line 309, in _grouped_mm
+    return torch.ops.transformers.grouped_mm_fallback(input, weight, offs=offs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_ops.py", line 1269, in __call__
+    return self._op(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_library/autograd.py", line 110, in autograd_impl
+    result = Generated.apply(*args, Metadata(keyset, keyword_only_args))  # type: ignore[attr-defined]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/autograd/function.py", line 596, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_library/autograd.py", line 51, in forward
+    result = op.redispatch(keyset & _C._after_autograd_keyset, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_ops.py", line 872, in redispatch
+    return self._handle.redispatch_boxed(keyset, *args, **kwargs)  # type: ignore[return-value]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_library/custom_ops.py", line 347, in backend_impl
+    result = self._backend_fns[device_type](*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_compile.py", line 54, in inner
+    return disable_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py", line 1263, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/node/e4b-venv/lib/python3.11/site-packages/torch/_library/custom_ops.py", line 382, in wrapped_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/node/venvs/unsloth-falsify-pkgs/transformers/integrations/moe.py", line 186, in _grouped_mm_fallback
+    output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)  # (S, output_dim)
+                                        ^^^^^^^^^^^^^^
+IndexError: Dimension out of range (expected to be in range of [-2, 1], but got 2)

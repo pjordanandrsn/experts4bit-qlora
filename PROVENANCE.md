@@ -41,6 +41,21 @@ a speedup.
 Drafts for posting/pushing (Jordan): `outputs/1965_pr_description.md`, `outputs/1965_add_tests.patch`,
 `outputs/1849_comment.md`.
 
+## Falsification audit — unsloth-zoo MoE 4-bit fix (2026-07-02)
+
+Audit of unsloth-zoo's in-tree MoE bnb-4bit solve (their close of unslothai/unsloth#4032), run
+before commenting publicly. Full environment and verdict grid:
+[`audits/unsloth-zoo-4032/REPORT.md`](audits/unsloth-zoo-4032/REPORT.md) — note its stack differs
+from this file's header (transformers 5.5.0 overlay, inside unsloth's declared matrix; torch 2.11
+outside their `<2.11` pin, disclosed in the filings). Artifact paths below are relative to that dir.
+
+| claim | value | source |
+|---|---|---|
+| shipped-fix verdict | **REAL-BUT-PARTIAL** — real-weights Qwen3-30B-A3B slice quantizes, matches stock math, trains expert LoRA | `REPORT.md` grid · `results_qwen3_30b.json` |
+| silent transposed-weights math on square dims (bf16 **and** 4-bit) | 139× / 140.7× beyond bf16-noise control; transpose-always fix → excess exactly 1.0 | filed as **unsloth-zoo#849** · `results_issue1_inline_repro.txt`, `results_qwen3_tiny.json`, `diag_rootcause.py` |
+| OLMoE `load_in_4bit`: quantized but never routed → first-forward crash | `IndexError` in transformers `_grouped_mm_fallback` (packed 2-D uint8) | filed as **unsloth-zoo#850** · `results_olmoe.json`, `results_olmoe_bare_forward.txt` |
+| public record | both issues + verification comment posted 2026-07-02 | unslothai/unsloth#4032, issuecomment-4870034310 |
+
 ---
 
 <!-- ots-attestation-footer -->

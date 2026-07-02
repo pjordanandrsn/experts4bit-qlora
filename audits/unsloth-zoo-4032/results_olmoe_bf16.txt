@@ -1,0 +1,22 @@
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+Loading weights:   0%|          | 0/47 [00:00<?, ?it/s]Loading weights:   2%|▏         | 1/47 [00:01<01:28,  1.93s/it]Loading weights:   9%|▊         | 4/47 [00:04<00:48,  1.12s/it]Loading weights:  11%|█         | 5/47 [00:04<00:36,  1.16it/s]Loading weights:  32%|███▏      | 15/47 [00:07<00:11,  2.71it/s]Loading weights:  34%|███▍      | 16/47 [00:07<00:11,  2.80it/s]Loading weights:  55%|█████▌    | 26/47 [00:09<00:05,  3.56it/s]Loading weights:  79%|███████▊  | 37/47 [00:13<00:02,  3.50it/s]Loading weights: 100%|██████████| 47/47 [00:13<00:00,  3.56it/s]
+[1mOlmoeForCausalLM LOAD REPORT[0m from: allenai/OLMoE-1B-7B-0924
+Key                                                   | Status     |  | 
+------------------------------------------------------+------------+--+-
+model.layers.{4...15}.input_layernorm.weight          | UNEXPECTED |  | 
+model.layers.{4...15}.mlp.gate.weight                 | UNEXPECTED |  | 
+model.layers.{4...15}.self_attn.v_proj.weight         | UNEXPECTED |  | 
+model.layers.{4...15}.mlp.experts.down_proj           | UNEXPECTED |  | 
+model.layers.{4...15}.self_attn.o_proj.weight         | UNEXPECTED |  | 
+model.layers.{4...15}.self_attn.k_proj.weight         | UNEXPECTED |  | 
+model.layers.{4...15}.mlp.experts.gate_up_proj        | UNEXPECTED |  | 
+model.layers.{4...15}.self_attn.q_proj.weight         | UNEXPECTED |  | 
+model.layers.{4...15}.post_attention_layernorm.weight | UNEXPECTED |  | 
+model.layers.{4...15}.self_attn.k_norm.weight         | UNEXPECTED |  | 
+model.layers.{4...15}.self_attn.q_norm.weight         | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+MODEL=allenai/OLMoE-1B-7B-0924 4bit=False trunc=4 quantized=0/4 BACKEND=(auto)
+PARITY={"ref_max_abs": 1.232409954071045, "err_theirs_vs_ref32": 0.005064547061920166, "err_bf16control_vs_ref32": 0.005847454071044922, "rel_err_theirs": 0.004109466209024314, "rel_err_control": 0.00474473128988362, "excess_over_precision_noise": 0.8661114735382859, "out_finite": true}

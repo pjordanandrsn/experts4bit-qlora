@@ -1,0 +1,94 @@
+{
+  "arch": "gemma4",
+  "model": "google/gemma-4-26B-A4B",
+  "truncated_layers": 4,
+  "loader_used": "AutoModelForCausalLM (post-import-unsloth, patched quantizer)",
+  "audit": {
+    "n_expert_modules": 4,
+    "n_quantized": 4,
+    "expert_bytes_total": 1522532352,
+    "cuda_allocated_gb": 3.256
+  },
+  "audit_first_module": {
+    "module": "model.language_model.layers.0.experts",
+    "module_class": "Gemma4TextExperts",
+    "gate_up_proj": {
+      "class": "Params4bit",
+      "dtype": "torch.uint8",
+      "stored_shape": [
+        253755392,
+        1
+      ],
+      "nbytes": 253755392,
+      "quant_state": {
+        "quant_type": "nf4",
+        "blocksize": 64,
+        "logical_shape": [
+          128,
+          1408,
+          2816
+        ]
+      },
+      "original_shape": [
+        128,
+        1408,
+        2816
+      ]
+    },
+    "down_proj": {
+      "class": "Params4bit",
+      "dtype": "torch.uint8",
+      "stored_shape": [
+        126877696,
+        1
+      ],
+      "nbytes": 126877696,
+      "quant_state": {
+        "quant_type": "nf4",
+        "blocksize": 64,
+        "logical_shape": [
+          128,
+          2816,
+          704
+        ]
+      },
+      "original_shape": [
+        128,
+        2816,
+        704
+      ]
+    }
+  },
+  "parity": {
+    "ref_max_abs": 45.6583137512207,
+    "err_theirs_vs_ref32": 0.13922119140625,
+    "err_bf16control_vs_ref32": 0.14566802978515625,
+    "rel_err_theirs": 0.0030491969581887554,
+    "rel_err_control": 0.0031903944280303547,
+    "excess_over_precision_noise": 0.9557429424396375,
+    "out_finite": true
+  },
+  "lora_placement_peft": {
+    "expert": {
+      "n": 16,
+      "sample": [
+        "base_model.model.model.language_model.layers.0.experts.base_layer.lora_A.default.weight",
+        "base_model.model.model.language_model.layers.0.experts.base_layer.lora_B.default.weight",
+        "base_model.model.model.language_model.layers.0.experts.lora_A.default.weight",
+        "base_model.model.model.language_model.layers.0.experts.lora_B.default.weight"
+      ]
+    },
+    "other": {
+      "n": 124,
+      "sample": [
+        "base_model.model.model.language_model.layers.0.self_attn.q_proj.lora_A.default.weight",
+        "base_model.model.model.language_model.layers.0.self_attn.q_proj.lora_B.default.weight",
+        "base_model.model.model.language_model.layers.0.self_attn.v_proj.lora_A.default.weight",
+        "base_model.model.model.language_model.layers.0.self_attn.v_proj.lora_B.default.weight"
+      ]
+    }
+  },
+  "train_peft_params": {
+    "error": "OutOfMemoryError: CUDA out of memory. Tried to allocate 968.00 MiB. GPU 0 has a total capacity of 11.62 GiB of which 63.69 MiB is free. Including non-PyTorch memory, this process has 9.48 GiB memory in use. Of the allocated memory 9.27 GiB is allocated by PyTorch, and 88.98 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)"
+  }
+}
