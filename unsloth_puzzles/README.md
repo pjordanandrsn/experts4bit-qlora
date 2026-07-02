@@ -88,5 +88,7 @@ accelerate launch --config_file unsloth_puzzles/fsdp2_config.yaml unsloth_puzzle
 CUDA_VISIBLE_DEVICES=0 python unsloth_puzzles/fsdp2_qlora_sft.py --single
 ```
 
-The script auto-selects the compute dtype by hardware (fp16 on Turing/T4, bf16 on Ampere+); set
-`mixed_precision` in the YAML to match (the T4 runner writes `fp16`).
+Training is in **bf16** (native on Ampere+, emulated but functional on a T4), and the YAML uses
+`mixed_precision: bf16` to match — so no fp16 `GradScaler` is involved. (fp16 would crash the
+single-GPU leg: its `unscale_` kernel has no bf16 implementation and this bnb-4-bit + PEFT stack
+produces a bf16 gradient there.)

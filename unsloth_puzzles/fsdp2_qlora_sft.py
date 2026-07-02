@@ -20,7 +20,7 @@ Two things make FSDP2 + bitsandbytes-NF4 QLoRA actually work (both handled below
    pins layers to devices and is incompatible with FSDP.)
 
 FSDP2 features exercised (all via fsdp2_config.yaml): parameter CPU offload, activation checkpointing,
-mixed precision (bf16 on Ampere+, fp16 on Turing/T4), and transformer-layer auto-wrap.
+bf16 mixed precision, and transformer-layer auto-wrap.
 
 Run (2x GPU, e.g. Kaggle 2x T4 or any 2x NVIDIA / WSL2 box):
 
@@ -50,14 +50,13 @@ MODEL = os.environ.get("MODEL", "unsloth/Llama-3.2-3B-Instruct")
 MAX_SEQ = int(os.environ.get("MAX_SEQ", "2048"))
 MAX_STEPS = int(os.environ.get("MAX_STEPS", "60"))
 SEED = 3407
-# Native bf16 on Ampere+ (compute capability >= 8); fp16 on Turing/T4. NB: torch.cuda.is_bf16_supported()
-# returns True on a T4 (bf16 is *emulated* there), which both runs slow and mismatches the fp16 FSDP2
-# mixed-precision config — so gate on the hardware capability, not on is_bf16_supported().
-DTYPE = (
-    torch.bfloat16
-    if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
-    else torch.float16
-)
+# Train in bf16 wherever it's available. torch.cuda.is_bf16_supported() is True on Ampere+ (native)
+# and on a Tesla T4 (bf16 is *emulated* but functional — a full 20-step run completes cleanly). We
+# deliberately do NOT fall back to fp16 on the T4: SFTConfig(fp16=True) turns on a GradScaler whose
+# unscale kernel (_amp_foreach_non_finite_check_and_unscale_) has no bf16 implementation, and this
+# bnb-4bit + PEFT stack produces a bf16 gradient on the single-GPU leg — so fp16 crashes there. bf16
+# needs no scaler, so both legs (and the fp16-only fallback for pre-Pascal cards) stay simple.
+DTYPE = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
 
 
 def build_model_and_tokenizer():
