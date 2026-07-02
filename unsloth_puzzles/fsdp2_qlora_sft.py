@@ -98,7 +98,7 @@ def main():
         learning_rate=2e-4,
         logging_steps=1,
         seed=SEED,
-        max_seq_length=MAX_SEQ,
+        max_length=MAX_SEQ,  # SFTConfig renamed max_seq_length -> max_length as of trl 1.x
         bf16=DTYPE == torch.bfloat16,
         fp16=DTYPE == torch.float16,
         report_to="none",
