@@ -1,8 +1,10 @@
 # Unsloth Puzzles — Task A (Triton NF4) & Task B (FSDP2 + QLoRA)
 
-Developed and verified on a single **RTX A2000 12 GB** (Ampere). Where the puzzle rubric targets a
-**Tesla T4** or a **2× T4 Kaggle** box I don't have, that's called out explicitly — numbers here are
-what was actually measured, not extrapolated silently.
+**Start here: [`SUBMISSION.md`](SUBMISSION.md)** — results at a glance + the two self-contained Run-All
+notebooks. This file is the rubric-by-rubric detail.
+
+Developed and verified on a single **RTX A2000 12 GB** (Ampere); the rubric's **Tesla T4** / **2× T4**
+figures were measured on Kaggle. Numbers here are what was actually measured, not extrapolated silently.
 
 ## A) Convert NF4 to Triton — [`../experts4bit_qlora/triton_nf4.py`](../experts4bit_qlora/triton_nf4.py)
 
@@ -31,17 +33,14 @@ One subtlety mattered: `your_dequantize_nf4` used to call `float(qs.offset)`, wh
 `.item()` **host sync** (`qs.offset` is a CUDA tensor) — that dominated wall-clock and hid the kernel's
 real win. Passing the offset as a device pointer (loaded in-kernel) removed it, so this is both the
 speedup *and* one fewer sync per forward during training. Reproduce:
-`your_dequantize_nf4` used to call `float(qs.offset)`, which forces a per-call `.item()` **host sync**
-(`qs.offset` is a CUDA tensor) — that dominated wall-clock and hid the kernel's real win. Passing the
-offset as a device pointer (loaded in-kernel) removed it, so this is both the speedup *and* one fewer
-sync per forward during training. Reproduce:
 
 ```bash
 pytest tests/test_triton_nf4.py               # correctness (f16 + bf16) + torch.compile
 python unsloth_puzzles/bench_triton_nf4.py    # speedup vs bnb (+ Unsloth if importable), any CUDA GPU
 ```
 
-**On a Kaggle T4** (the rubric hardware) — one cell:
+**On a Kaggle T4** (the rubric hardware) — open [`task_a_triton_nf4.ipynb`](task_a_triton_nf4.ipynb) and
+Run All (self-contained, outputs embedded), or a one-cell `curl | bash`:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/triton-nf4/unsloth_puzzles/run_kaggle_triton.sh | bash
