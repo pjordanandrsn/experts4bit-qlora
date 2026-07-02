@@ -62,22 +62,24 @@ outside their `<2.11` pin, disclosed in the filings). Artifact paths below are r
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-02T11:24:53Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `6e65e8be7cbf424b190526d112de371f0b87551925eb9e811426b2b46c96622a` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[0?0O?*@?=&@$o+o@]`
+- **OTS proof timestamp for visible document:** `2026-07-02T20:13:51Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `dbb3e209d7d7892c42e8b1494db9853e7abc2fd8eaf64dfee0e73ff93b43660a` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-02T11:24:53Z` `6e65e8be7cbf424b190526d112de371f0b87551925eb9e811426b2b46c96622a`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[!@@~?+.#!=!=*#+&]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|        *++.o oo*|
-|       +.O.o.+ + |
-|      o O...* +  |
-|     o + ..o B o |
-|  E .   S oo. =  |
-|   .   o o+  . o |
-|        +o .  o  |
-|       +  +      |
-|        +o oo.   |
+|                 |
+|         o       |
+|        + .      |
+|       = o       |
+|      + S        |
+|     o B = E o = |
+|      *o* B = B. |
+|      o++O *..oo |
+|     oo+=+*+o..+=|
 +-----------------+
 ```
 
