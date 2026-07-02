@@ -6,7 +6,7 @@
 set -eo pipefail
 # Pin to an immutable commit SHA (not the branch) so raw.githubusercontent.com's ~5 min branch cache
 # can't serve a stale fsdp2_qlora_sft.py. Bump this SHA when the script changes.
-BASE=https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/e81be842641f18a1f1babed1734fbd3ce0d32d3c/unsloth_puzzles
+BASE=https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/4c02db2a9ddddf7646897dd46d907853197a3641/unsloth_puzzles
 MAX_STEPS="${MAX_STEPS:-20}"
 export MAX_SEQ="${MAX_SEQ:-512}"  # keep the demo tractable on a T4
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"  # reduce load-time fragmentation
@@ -17,7 +17,7 @@ wget -qO fsdp2_qlora_sft.py "$BASE/fsdp2_qlora_sft.py"
 cat > fsdp2_config.yaml <<'YAML'
 compute_environment: LOCAL_MACHINE
 distributed_type: FSDP
-mixed_precision: fp16
+mixed_precision: bf16          # bf16 (emulated but functional on a T4); avoids the fp16 GradScaler
 num_machines: 1
 num_processes: 2
 rdzv_backend: static
