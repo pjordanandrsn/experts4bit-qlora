@@ -11,7 +11,9 @@ bitsandbytes packs weights row-major, element ``2i`` in the **high** nibble of b
 ``2i+1`` in the **low** nibble; ``absmax`` has one entry per 64 weights, and ``state2.absmax`` one
 fp32 per 256 absmax entries (i.e. per ``64*256 = 16384`` weights). Verified bit-exact against
 ``bitsandbytes.functional.dequantize_4bit`` for fp16 and bf16 (``tests/test_triton_nf4.py``), and
-measured ~1.3x faster than it on an RTX A2000. The nibble unpack uses inline PTX (``bfe.u32``).
+measured ~1.16x faster than it on an RTX A2000 (geomean; 1.08-1.44x by shape). The nibble unpack uses
+inline PTX (``bfe.u32``), and the nested-quant ``offset`` is passed as a device pointer and loaded
+in-kernel so no per-call ``.item()`` host sync sits on the training forward path.
 
 ``your_dequantize_nf4(module)`` matches the Unsloth-puzzle harness and drops into its
 ``test_dequantize``; ``dequantize_nf4_compiled`` is a ``torch.compile``-safe variant (registered as a
@@ -33,7 +35,7 @@ def _dequantize_nf4_kernel(
     s2absmax_ptr,  # *fp32 second-level scales, numel // 16384
     nf4_ptr,  # *fp32 NF4 codebook (16)
     out_ptr,  # *out  numel
-    offset,  # fp32 scalar added back after the nested dequant
+    offset_ptr,  # *fp32 1-element nested-quant offset — loaded on-device (no per-call host sync)
     numel,
     NESTED: tl.constexpr,  # blocksize * state2.blocksize (= 64 * 256 = 16384)
     BLOCK: tl.constexpr,
@@ -47,7 +49,7 @@ def _dequantize_nf4_kernel(
     a_idx = tl.load(absmax_ptr + blk, mask=mask, other=0).to(tl.int32)  # u8 index into s2code
     s2c = tl.load(s2code_ptr + a_idx)  # gather 256-entry codebook
     s2a = tl.load(s2absmax_ptr + (offs // NESTED), mask=mask, other=0.0)
-    absmax = s2c * s2a + offset  # fp32 per-element block scale
+    absmax = s2c * s2a + tl.load(offset_ptr)  # fp32 per-element block scale (offset read on-device)
 
     # --- dequant 2: NF4 nibble -> codebook value, scaled by absmax ---
     byte = tl.load(w_ptr + (offs // 2), mask=mask, other=0, eviction_policy="evict_first").to(tl.int32)
@@ -80,7 +82,7 @@ def _your_dequantize_nf4(weight: torch.Tensor, quant_state) -> torch.Tensor:
     out = torch.empty(numel, dtype=qs.dtype, device=weight.device)
     _launch(
         weight.reshape(-1), qs.absmax, qs.state2.code, qs.state2.absmax, qs.code, out,
-        float(qs.offset), numel, qs.blocksize * qs.state2.blocksize,
+        qs.offset, numel, qs.blocksize * qs.state2.blocksize,  # pass the offset tensor, not float() (sync)
     )
     return out.view(out_features, in_features)
 
@@ -104,7 +106,7 @@ try:
         s2code: torch.Tensor,
         s2absmax: torch.Tensor,
         nf4code: torch.Tensor,
-        offset: float,
+        offset: torch.Tensor,  # 1-element fp32; loaded on-device in the kernel (no host sync)
         out_features: int,
         in_features: int,
         nested: int,
@@ -128,7 +130,7 @@ try:
         o, i = qs.shape
         return _dequantize_nf4_op(
             weight.weight.data.reshape(-1), qs.absmax, qs.state2.code, qs.state2.absmax, qs.code,
-            float(qs.offset), o, i, qs.blocksize * qs.state2.blocksize, qs.dtype,
+            qs.offset, o, i, qs.blocksize * qs.state2.blocksize, qs.dtype,
         )
 except (ImportError, AttributeError):  # older torch without triton_op
     dequantize_nf4_compiled = None

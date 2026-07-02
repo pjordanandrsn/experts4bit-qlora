@@ -57,7 +57,7 @@ def test_torch_compile_no_graph_break():
     qs = lin.weight.quant_state
     args = (
         lin.weight.data.reshape(-1), qs.absmax, qs.state2.code, qs.state2.absmax, qs.code,
-        float(qs.offset), qs.shape[0], qs.shape[1], qs.blocksize * qs.state2.blocksize, qs.dtype,
+        qs.offset, qs.shape[0], qs.shape[1], qs.blocksize * qs.state2.blocksize, qs.dtype,
     )
     eager = _dequantize_nf4_op(*args)
 

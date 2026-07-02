@@ -18,17 +18,30 @@ codebook per nibble — one launch, no intermediate absmax buffer.
 | cache eviction | ✅ `eviction_policy="evict_first"` on the streaming weight load |
 | works in `torch.compile` | ✅ registered as a `torch.library.triton_op`; compiles `fullgraph=True` (no graph breaks) — tested |
 | custom PTX asm (+3) | ✅ nibble unpack via inline PTX `bfe.u32` (`tl.inline_asm_elementwise`); matches bnb, all tests pass |
-| speedup ≥ 1.15× | **measured ~1.3× vs `bnb.dequantize_4bit`** on the A2000 (1.21–1.47× by shape) |
+| speedup ≥ 1.15× | measured **geomean 1.16× vs `bnb.dequantize_4bit`** on the A2000 (1.08–1.44× by shape; ~1.22× vs Unsloth) — [`bench_triton_nf4.py`](bench_triton_nf4.py) |
 
-**Honest caveats on the speedup:** the rubric measures vs Unsloth's `fast_dequantize` on a **T4**.
-I benchmarked vs **bitsandbytes** on an **A2000** (Unsloth/peft wrap bnb; per the puzzle's own numbers
-Unsloth is ~1.05× over bnb → 1.29× vs bnb ≈ ~1.23× vs Unsloth, clearing 1.15×, but that's an
-*extrapolation*). `your_dequantize_nf4(module)` drops straight into the puzzle's `test_dequantize` —
-run it on a T4 for the exact rubric number.
+**Honest caveats on the speedup:** the rubric measures vs Unsloth's `fast_dequantize` on a **T4**; I
+measured vs **bitsandbytes** on an **A2000** — geomean **1.16×** (1.08–1.44× by shape; small matrices
+gain most, where kernel-launch efficiency dominates). Unsloth wraps bnb (~1.05× slower), so vs Unsloth
+this is ≈1.22×. One subtlety mattered: `your_dequantize_nf4` used to call `float(qs.offset)`, which
+forces a per-call `.item()` **host sync** (`qs.offset` is a CUDA tensor) — that dominated wall-clock and
+hid the kernel's real win. Passing the offset as a device pointer (loaded in-kernel) removed it, so this
+is both the speedup *and* one fewer sync per forward during training. Run the benchmark on a T4 for the
+literal rubric figure:
 
 ```bash
-pytest tests/test_triton_nf4.py          # correctness (f16+bf16) + torch.compile
+pytest tests/test_triton_nf4.py               # correctness (f16 + bf16) + torch.compile
+python unsloth_puzzles/bench_triton_nf4.py    # speedup vs bnb (+ Unsloth if importable), any CUDA GPU
 ```
+
+**On a Kaggle T4** (the rubric hardware) — one cell:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/triton-nf4/unsloth_puzzles/run_kaggle_triton.sh | bash
+```
+
+Prefix with `WITH_UNSLOTH=1` (i.e. `curl … | WITH_UNSLOTH=1 bash`) to also install Unsloth and benchmark
+against its `fast_dequantize` for the exact rubric comparison.
 
 ## B) FSDP2 + QLoRA — [`fsdp2_qlora_sft.py`](fsdp2_qlora_sft.py) + [`fsdp2_config.yaml`](fsdp2_config.yaml)
 
