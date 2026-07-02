@@ -58,9 +58,12 @@ def build_model_and_tokenizer():
     model = AutoModelForCausalLM.from_pretrained(
         MODEL,
         quantization_config=bnb_config,
-        torch_dtype=DTYPE,
+        dtype=DTYPE,
         attn_implementation="sdpa",
-        # (2) NO device_map — FSDP2 places + shards the model itself.
+        # (2) Load the quantized model onto THIS process's GPU (bnb-4bit needs CUDA): cuda:0 for the
+        # single-GPU reference; under `accelerate launch` each rank loads on its own GPU (LOCAL_RANK),
+        # then FSDP2 shards the per-rank copy. (No device_map => it stays on CPU and "trains" there.)
+        device_map={"": int(os.environ.get("LOCAL_RANK", "0"))},
     )
     model.config.use_cache = False
     tok = AutoTokenizer.from_pretrained(MODEL)
