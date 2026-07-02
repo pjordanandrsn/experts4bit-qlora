@@ -38,7 +38,9 @@ from trl import SFTConfig, SFTTrainer
 # A 16-bit checkpoint (non-gated) — bitsandbytes quantizes it to NF4 on load *with* a shardable
 # quant_storage (below). A pre-quantized `...-bnb-4bit` model can't set quant_storage, so FSDP2
 # can't flatten its 4-bit params — hence a full-precision source is required here.
-MODEL = os.environ.get("MODEL", "NousResearch/Meta-Llama-3.1-8B-Instruct")
+# Default is Llama-3.2-3B (4-bit ~2 GB) so the single-GPU reference fits one 16 GB T4; the 8B recipe
+# is identical on a >=24 GB card (or with FSDP CPU-offload loading). Override with MODEL=... .
+MODEL = os.environ.get("MODEL", "unsloth/Llama-3.2-3B-Instruct")
 MAX_SEQ = int(os.environ.get("MAX_SEQ", "2048"))
 MAX_STEPS = int(os.environ.get("MAX_STEPS", "60"))
 SEED = 3407
