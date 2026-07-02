@@ -4,7 +4,9 @@
 # Installs deps, fetches the SFT script, writes a T4 (fp16) FSDP2 config, runs the single-GPU
 # reference + the 2x T4 FSDP2 job, and prints the two loss curves side by side (equivalence).
 set -eo pipefail
-BASE=https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/triton-nf4/unsloth_puzzles
+# Pin to an immutable commit SHA (not the branch) so raw.githubusercontent.com's ~5 min branch cache
+# can't serve a stale fsdp2_qlora_sft.py. Bump this SHA when the script changes.
+BASE=https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/b4ae3b2/unsloth_puzzles
 MAX_STEPS="${MAX_STEPS:-20}"
 
 pip install -q -U bitsandbytes accelerate peft trl datasets
