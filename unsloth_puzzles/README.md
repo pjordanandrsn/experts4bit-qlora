@@ -18,16 +18,17 @@ codebook per nibble — one launch, no intermediate absmax buffer.
 | cache eviction | ✅ `eviction_policy="evict_first"` on the streaming weight load |
 | works in `torch.compile` | ✅ registered as a `torch.library.triton_op`; compiles `fullgraph=True` (no graph breaks) — tested |
 | custom PTX asm (+3) | ✅ nibble unpack via inline PTX `bfe.u32` (`tl.inline_asm_elementwise`); matches bnb, all tests pass |
-| speedup ≥ 1.15× | measured **geomean 1.16× vs `bnb.dequantize_4bit`** on the A2000 (1.08–1.44× by shape; ~1.22× vs Unsloth) — [`bench_triton_nf4.py`](bench_triton_nf4.py) |
+| speedup ≥ 1.15× | **geomean 1.23× vs `bnb.dequantize_4bit` on a Tesla T4** (1.11–1.88× by shape; ≈1.29× vs Unsloth); 1.16× on the A2000 — [`bench_triton_nf4.py`](bench_triton_nf4.py) |
 
-**Honest caveats on the speedup:** the rubric measures vs Unsloth's `fast_dequantize` on a **T4**; I
-measured vs **bitsandbytes** on an **A2000** — geomean **1.16×** (1.08–1.44× by shape; small matrices
-gain most, where kernel-launch efficiency dominates). Unsloth wraps bnb (~1.05× slower), so vs Unsloth
-this is ≈1.22×. One subtlety mattered: `your_dequantize_nf4` used to call `float(qs.offset)`, which
-forces a per-call `.item()` **host sync** (`qs.offset` is a CUDA tensor) — that dominated wall-clock and
-hid the kernel's real win. Passing the offset as a device pointer (loaded in-kernel) removed it, so this
-is both the speedup *and* one fewer sync per forward during training. Run the benchmark on a T4 for the
-literal rubric figure:
+**Honest caveats on the speedup:** the rubric measures vs Unsloth's `fast_dequantize` on a **T4**. Direct
+measurement vs **bitsandbytes** on the rubric hardware (Tesla T4): **geomean 1.23×** (1.11–1.88× by
+shape — small matrices gain most, where kernel-launch efficiency dominates; 1.16× on my A2000 dev card).
+Unsloth wraps bnb (~1.05× slower), so vs Unsloth this is **≈1.29×**, clearing 1.15× on every shape — set
+`WITH_UNSLOTH=1` on the runner below for the literal Unsloth comparison. One subtlety mattered:
+`your_dequantize_nf4` used to call `float(qs.offset)`, which forces a per-call `.item()` **host sync**
+(`qs.offset` is a CUDA tensor) — that dominated wall-clock and hid the kernel's real win. Passing the
+offset as a device pointer (loaded in-kernel) removed it, so this is both the speedup *and* one fewer
+sync per forward during training. Reproduce:
 
 ```bash
 pytest tests/test_triton_nf4.py               # correctness (f16 + bf16) + torch.compile

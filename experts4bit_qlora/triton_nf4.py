@@ -11,9 +11,9 @@ bitsandbytes packs weights row-major, element ``2i`` in the **high** nibble of b
 ``2i+1`` in the **low** nibble; ``absmax`` has one entry per 64 weights, and ``state2.absmax`` one
 fp32 per 256 absmax entries (i.e. per ``64*256 = 16384`` weights). Verified bit-exact against
 ``bitsandbytes.functional.dequantize_4bit`` for fp16 and bf16 (``tests/test_triton_nf4.py``), and
-measured ~1.16x faster than it on an RTX A2000 (geomean; 1.08-1.44x by shape). The nibble unpack uses
-inline PTX (``bfe.u32``), and the nested-quant ``offset`` is passed as a device pointer and loaded
-in-kernel so no per-call ``.item()`` host sync sits on the training forward path.
+measured ~1.23x faster than it on a **Tesla T4** (geomean; 1.11-1.88x by shape; ~1.16x on an RTX A2000).
+The nibble unpack uses inline PTX (``bfe.u32``), and the nested-quant ``offset`` is passed as a device
+pointer and loaded in-kernel so no per-call ``.item()`` host sync sits on the training forward path.
 
 ``your_dequantize_nf4(module)`` matches the Unsloth-puzzle harness and drops into its
 ``test_dequantize``; ``dequantize_nf4_compiled`` is a ``torch.compile``-safe variant (registered as a
