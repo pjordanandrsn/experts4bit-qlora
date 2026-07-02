@@ -70,6 +70,22 @@ and `MAX_ABS_LOSS_DIFF`. (An initial run left `grad_accum` un-scaled, so the 2×
 global batch — its per-step losses sampled a different data schedule; the `//world_size` scaling above
 is what makes the per-step comparison apples-to-apples.)
 
+**Measured (Kaggle 2× T4, Llama-3.2-3B, 20 steps, bf16).** With the global batch matched, `num_tokens`
+is **identical per step** across both legs and the loss curves track tightly:
+
+| metric | value |
+|---|---|
+| per-step loss diff — max / mean / median | **0.028** / 0.008 / 0.005 |
+| final `train_loss` — single vs FSDP2 | 1.718 vs 1.724 (**0.35 %**) |
+| tokens/step, single vs FSDP2 | identical (802, 1527, 2099, … on both legs) |
+| wall-clock | 12.0 s/step (1× T4) → 8.0 s/step (2× T4), ~1.5× faster |
+
+The un-matched-batch first run reported `MAX_ABS_LOSS_DIFF = 0.54`; matching the global batch drops it
+**~19× to 0.028** — confirming the earlier gap was the doubled-batch data-schedule artifact, not a
+sharding error. (Sample rows, single / fsdp2: step 1 `2.251 / 2.272`, step 10 `1.695 / 1.697`, step 20
+`1.214 / 1.220`.) The residual ~0.028 is cross-rank all-reduce float-order noise — bf16 mixed precision,
+CPU parameter offload, activation checkpointing, and transformer-layer auto-wrap are all active.
+
 **Ready-to-run.** One Kaggle cell (2× T4, Internet on) — installs deps, runs both legs, prints the
 equivalence table:
 
