@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot Task B runner for a Kaggle 2x T4 notebook cell:
 #   !curl -sSL https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/triton-nf4/unsloth_puzzles/run_kaggle.sh | bash
-# Installs deps, fetches the SFT script, writes a T4 (fp16) FSDP2 config, runs the single-GPU
+# Installs deps, fetches the SFT script, writes a bf16 FSDP2 config, runs the single-GPU
 # reference + the 2x T4 FSDP2 job, and prints the two loss curves side by side (equivalence).
 set -eo pipefail
 # Pin to an immutable commit SHA (not the branch) so raw.githubusercontent.com's ~5 min branch cache
