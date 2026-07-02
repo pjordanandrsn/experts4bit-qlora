@@ -20,7 +20,7 @@ sparse-MoE on reasonable hardware.
 ## What it buys you (measured on an RTX A2000 12 GB)
 
 - **It fits at all.** Full bf16 OLMoE-1B-7B is ~13.9 GB — it **OOMs** on a 12 GB card. In 4-bit
-  it loads at **4.69 GB** and trains in <8 GB. The streaming loader never materializes the bf16
+  it loads at **4.70 GB** and trains in <8 GB. The streaming loader never materializes the bf16
   model in CPU *or* GPU RAM (verified under a 3 GB container RAM cap).
 - **It trains.** QLoRA on the frozen NF4 experts improves a held-out Alpaca eval from
   **1.4813 → 1.0290** (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md)).
