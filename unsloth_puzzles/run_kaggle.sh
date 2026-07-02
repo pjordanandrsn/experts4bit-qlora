@@ -6,7 +6,7 @@
 set -eo pipefail
 # Pin to an immutable commit SHA (not the branch) so raw.githubusercontent.com's ~5 min branch cache
 # can't serve a stale fsdp2_qlora_sft.py. Bump this SHA when the script changes.
-BASE=https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/14be0eae863e623939f0e9873778ba06c1559de1/unsloth_puzzles
+BASE=https://raw.githubusercontent.com/pjordanandrsn/experts4bit-qlora/824512e77b210289507a2ce51321f88cdb87fa53/unsloth_puzzles
 MAX_STEPS="${MAX_STEPS:-20}"
 export MAX_SEQ="${MAX_SEQ:-512}"  # 8B on a T4 at seq 2048 is minutes/step; 512 keeps the demo tractable
 
