@@ -24,8 +24,6 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
-import torch.nn.functional as F  # noqa: E402
-
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, enable_expert_offload  # noqa: E402
 from experts4bit_qlora import lora as lora_mod  # noqa: E402
 
