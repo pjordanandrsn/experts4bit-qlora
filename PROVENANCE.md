@@ -40,3 +40,33 @@ a speedup.
 
 Drafts for posting/pushing (Jordan): `outputs/1965_pr_description.md`, `outputs/1965_add_tests.patch`,
 `outputs/1849_comment.md`.
+
+---
+
+<!-- ots-attestation-footer -->
+
+**OpenTimestamps anchor (self-attestation footer):**
+
+- **OTS proof timestamp for visible document:** `2026-07-02T11:24:53Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `6e65e8be7cbf424b190526d112de371f0b87551925eb9e811426b2b46c96622a` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[0?0O?*@?=&@$o+o@]`
+- Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
+
+```
++----[SHA256]-----+
+|        *++.o oo*|
+|       +.O.o.+ + |
+|      o O...* +  |
+|     o + ..o B o |
+|  E .   S oo. =  |
+|   .   o o+  . o |
+|        +o .  o  |
+|       +  +      |
+|        +o oo.   |
++-----------------+
+```
+
+- **Payload hash actually covered by the current `.ots`:** see `ots info PROVENANCE.md.ots`; by construction this is `SHA-256(this entire file including this footer)` and `ots verify PROVENANCE.md.ots PROVENANCE.md` succeeds against the on-disk bytes.
+- Anchor file: `PROVENANCE.md.ots`
+- Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
+- **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
