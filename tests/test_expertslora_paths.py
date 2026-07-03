@@ -141,6 +141,81 @@ def test_gate_true_when_training_unoffloaded_and_paths_agree():
 
 
 # ---------------------------------------------------------------------------------------------------
+# 1b) The bare primitive applies the same routing rule as the LoRA wrapper.
+# ---------------------------------------------------------------------------------------------------
+def test_base_forward_without_grad_uses_dequant_even_if_probe_says_yes(monkeypatch):
+    """Experts4bit.forward (the bare primitive) must apply the same rule as ExpertsLoRA: no backward
+    => the bit-exact dequantize path, even where the probe passes. matmul_4bit only *helps* when a
+    backward will run; under no_grad it would just route inference through kernels (gemv/gemm at
+    M=1) the probe never validated — and it would break `lora(x) == base(x)` bitwise at LoRA init
+    on bnb>=0.50, where the LoRA wrapper dequantizes but the base would not."""
+    from experts4bit_qlora._vendor import experts as vendor_mod
+
+    lora = _build(torch.float32, torch.float32)
+    monkeypatch.setattr(vendor_mod, "_matmul_4bit_matches_dequant", lambda: True)
+    hs, idx, wts = _inputs(torch.float32)
+
+    with torch.no_grad():
+        assert lora.base._use_matmul_4bit(hs) is False
+        with _Spy() as spy:
+            out_base = lora.base(hs, idx, wts)
+        out_lora = lora(hs, idx, wts)
+    assert spy.matmul_calls == 0 and spy.dequant_calls > 0
+    assert torch.equal(out_lora, out_base)  # zero-delta init identity holds on the same route
+
+
+def test_base_forward_grad_mode_but_non_grad_input_uses_dequant(monkeypatch):
+    """Grad mode on but the input does not require grad (plain eval without no_grad): still no
+    backward through the experts, so still the dequantize route."""
+    from experts4bit_qlora._vendor import experts as vendor_mod
+
+    lora = _build(torch.float32, torch.float32)
+    monkeypatch.setattr(vendor_mod, "_matmul_4bit_matches_dequant", lambda: True)
+    hs, idx, wts = _inputs(torch.float32, requires_grad=False)
+
+    assert lora.base._use_matmul_4bit(hs) is False
+    with _Spy() as spy:
+        lora.base(hs, idx, wts)
+    assert spy.matmul_calls == 0 and spy.dequant_calls > 0
+
+
+@cuda
+def test_base_gate_true_when_input_requires_grad_and_paths_agree():
+    """On CUDA with a supporting bnb: a grad-carrying base forward takes the matmul route and matches
+    the dequantize route within accumulation tolerance (mirror of the ExpertsLoRA positive test)."""
+    dtype = torch.bfloat16
+    lora = _build(dtype, dtype)
+    base = lora.base
+    hs, idx, wts = _inputs(dtype, requires_grad=True)
+
+    if not lora_mod._matmul_4bit_supported():
+        assert base._use_matmul_4bit(hs) is False
+        pytest.skip("bnb matmul_4bit unsupported for [packed,1] here (<=0.49.x): gate correctly False")
+
+    assert base._use_matmul_4bit(hs) is True
+    with _Spy() as spy:
+        out_mm = base(hs, idx, wts)
+    assert spy.matmul_calls > 0 and spy.dequant_calls == 0
+
+    with torch.no_grad():
+        out_dq = base(hs, idx, wts)
+    torch.testing.assert_close(out_mm.detach(), out_dq, atol=3e-2, rtol=3e-2)
+
+
+def test_output_dtype_follows_input_not_compute_dtype():
+    """Drop-in contract: the module hands back the caller's dtype. A bf16 stream through a
+    compute_dtype=fp32 module must come back bf16 (it used to come back fp32, silently upcasting
+    the residual stream downstream)."""
+    lora = _build(torch.float32, torch.float32)  # compute_dtype fp32
+    hs, idx, wts = _inputs(torch.bfloat16)
+    with torch.no_grad():
+        out_lora = lora(hs, idx, wts)
+        out_base = lora.base(hs, idx, wts)
+    assert out_lora.dtype == torch.bfloat16 and out_base.dtype == torch.bfloat16
+    assert torch.isfinite(out_lora.float()).all()
+
+
+# ---------------------------------------------------------------------------------------------------
 # 2) Mixed-dtype adapters (the fp32-adapters-over-bf16-base convention).
 # ---------------------------------------------------------------------------------------------------
 def test_fp32_adapters_over_bf16_base_forward_and_backward():
