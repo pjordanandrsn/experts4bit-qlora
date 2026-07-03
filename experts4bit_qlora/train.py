@@ -42,6 +42,14 @@ OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
 OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
 OUT = os.environ.get("OUT", "./experts4bit-lora-out")
 
+# Optional structured telemetry (both default-off, so a plain run is byte-for-byte unchanged):
+#   WANDB=1            -> log the run to Weights & Biases (offline-safe via WANDB_MODE=offline)
+#   METRICS_JSONL=path -> append per-step metrics as JSON lines (drives the offline charts)
+WANDB = os.environ.get("WANDB", "0") == "1"
+WANDB_PROJECT = os.environ.get("WANDB_PROJECT", "experts4bit-qlora")
+RUN_NAME = os.environ.get("RUN_NAME") or f"{MODEL.split('/')[-1]}-offload-{'on' if OFFLOAD_EXPERTS else 'off'}"
+METRICS_JSONL = os.environ.get("METRICS_JSONL", "")
+
 EVAL_PROMPTS = [
     "List three tips for staying focused while working from home.",
     "Explain what a black hole is in one sentence.",
@@ -53,6 +61,47 @@ def save_adapter(model, out, tag):
     sd = {k: v.detach().cpu() for k, v in model.state_dict().items() if "lora" in k}
     torch.save(sd, os.path.join(out, f"adapter_{tag}.pt"))
     return len(sd)
+
+
+class MetricSink:
+    """Optional per-step telemetry: Weights & Biases and/or a JSONL file. Both are no-ops
+    unless enabled via ``WANDB`` / ``METRICS_JSONL``, so default training runs are unchanged."""
+
+    def __init__(self, config):
+        self.wandb = None
+        self.jsonl = None
+        if WANDB:
+            import wandb
+
+            self.wandb = wandb.init(project=WANDB_PROJECT, name=RUN_NAME, config=config)
+        if METRICS_JSONL:
+            os.makedirs(os.path.dirname(METRICS_JSONL) or ".", exist_ok=True)
+            self.jsonl = open(METRICS_JSONL, "a")
+            self._write({"event": "config", **config})
+
+    def _write(self, record):
+        import json
+
+        self.jsonl.write(json.dumps(record) + "\n")
+        self.jsonl.flush()
+
+    def log(self, step, metrics):
+        if self.wandb is not None:
+            self.wandb.log(metrics, step=step)
+        if self.jsonl is not None:
+            self._write({"step": step, **metrics})
+
+    def summary(self, metrics):
+        if self.wandb is not None:
+            self.wandb.summary.update(metrics)
+        if self.jsonl is not None:
+            self._write({"event": "summary", **metrics})
+
+    def finish(self):
+        if self.wandb is not None:
+            self.wandb.finish()
+        if self.jsonl is not None:
+            self.jsonl.close()
 
 
 @torch.no_grad()
@@ -138,10 +187,11 @@ def main():
             p.requires_grad_(False)
     trainable = lora_params + router_params
     torch.cuda.synchronize()
+    loaded_gpu_gb = torch.cuda.memory_allocated() / 1e9
     log(
         f"loaded. trainable: {sum(p.numel() for p in trainable):,} "
         f"(lora {sum(p.numel() for p in lora_params):,} + router {sum(p.numel() for p in router_params):,}) "
-        f"| offload={'on' if OFFLOAD_EXPERTS else 'off'} | GPU mem: {torch.cuda.memory_allocated() / 1e9:.2f} GB"
+        f"| offload={'on' if OFFLOAD_EXPERTS else 'off'} | GPU mem: {loaded_gpu_gb:.2f} GB"
     )
     # Reset so the peak we report at the end reflects the training step (a full fwd+bwd), which is
     # the figure that decides whether a model fits — the point of OFFLOAD_EXPERTS.
@@ -161,6 +211,22 @@ def main():
     eval_before = eval_loss(model, eval_data)
     log(f"held-out eval loss BEFORE: {eval_before:.4f}")
 
+    sink = MetricSink(
+        {
+            "model": MODEL,
+            "offload_experts": OFFLOAD_EXPERTS,
+            "steps": STEPS,
+            "grad_accum": GRAD_ACCUM,
+            "lr": LR,
+            "r": R,
+            "alpha": ALPHA,
+            "seq": SEQ,
+            "n_train": N_TRAIN,
+            "loaded_gpu_gb": loaded_gpu_gb,
+        }
+    )
+    sink.log(0, {"eval/held_out_loss": eval_before, "eval/best": eval_before})
+
     groups = []
     if lora_params:
         groups.append({"params": lora_params, "lr": LR})
@@ -178,6 +244,7 @@ def main():
         f"training: {STEPS} steps x grad_accum {GRAD_ACCUM} (seq<= {SEQ}), lr={LR}, cosine+warmup, eval every {EVAL_EVERY}"
     )
     it, t0, ema, best = iter(data), time.time(), None, float("inf")
+    t_prev = t0
     for step in range(STEPS):
         opt.zero_grad()
         loss_acc = 0.0
@@ -196,6 +263,20 @@ def main():
         opt.step()
         sched.step()
         ema = loss_acc if ema is None else 0.9 * ema + 0.1 * loss_acc
+        now = time.time()
+        step_time = now - t_prev
+        t_prev = now
+        sink.log(
+            step + 1,
+            {
+                "train/loss": loss_acc,
+                "train/ema": ema,
+                "train/lr": sched.get_last_lr()[0],
+                "perf/s_per_step": step_time,
+                "mem/gpu_alloc_gb": torch.cuda.memory_allocated() / 1e9,
+                "mem/gpu_peak_gb": torch.cuda.max_memory_allocated() / 1e9,
+            },
+        )
         if (step + 1) % 10 == 0 or step == 0:
             log(
                 f"  step {step + 1}/{STEPS}  loss {loss_acc:.3f}  ema {ema:.3f}  ({(time.time() - t0) / (step + 1):.1f}s/step)"
@@ -208,10 +289,13 @@ def main():
                 save_adapter(model, OUT, "best")
                 marker = "  *new best -> saved"
             log(f"  [eval] step {step + 1}: held-out loss {el:.4f} (best {best:.4f}){marker}")
+            sink.log(step + 1, {"eval/held_out_loss": el, "eval/best": best})
             model.train()
+    total_time_s = time.time() - t0
+    peak_gpu_gb = torch.cuda.max_memory_allocated() / 1e9
     log(
-        f"training done in {time.time() - t0:.0f}s "
-        f"| peak GPU mem: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB (offload={'on' if OFFLOAD_EXPERTS else 'off'})"
+        f"training done in {total_time_s:.0f}s "
+        f"| peak GPU mem: {peak_gpu_gb:.2f} GB (offload={'on' if OFFLOAD_EXPERTS else 'off'})"
     )
 
     model.gradient_checkpointing_disable()
@@ -220,6 +304,20 @@ def main():
         f"held-out eval loss: BEFORE {eval_before:.4f} -> AFTER {eval_after:.4f} "
         f"(delta {eval_after - eval_before:+.4f}) | best {best:.4f}"
     )
+    sink.summary(
+        {
+            "offload": OFFLOAD_EXPERTS,
+            "loaded_gpu_gb": loaded_gpu_gb,
+            "peak_gpu_gb": peak_gpu_gb,
+            "eval_before": eval_before,
+            "eval_after": eval_after,
+            "eval_delta": eval_after - eval_before,
+            "eval_best": best,
+            "total_time_s": total_time_s,
+            "s_per_step": total_time_s / max(STEPS, 1),
+        }
+    )
+    sink.finish()
     model.train()
 
     if DO_GEN:
