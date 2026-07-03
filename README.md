@@ -98,6 +98,39 @@ on the card. Since the loader supports **Qwen3-MoE** and **Gemma-4**, offload al
 **Qwen3-30B-A3B** and **Gemma-4-26B-A4B** on 12 GB — measured on the A2000 (peak **7.16** / **8.47 GB**;
 both OOM without offload). See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
 
+## Inference: serve the fine-tune you just made
+
+The adapters were trained against *this exact* NF4 base (same codebook, same per-expert absmax).
+`python -m experts4bit_qlora.infer` serves them over that same base — no re-quantization to
+GGUF/AWQ, so the quantization error at serving time is identical to what training saw:
+
+```bash
+ADAPTER=./out/adapter_best.pt python -m experts4bit_qlora.infer            # generate
+OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora.infer       # timed decode bench
+```
+
+What inference mode adds (all `no_grad`-only; training paths are untouched):
+
+- **Decode fast-path** — a single-token forward skips the one-hot expert-mask machinery and its
+  per-expert host syncs, looping the token's `top_k` experts with 0-d device indices.
+- **Fused 4-bit GEMV** — single-row base projections go through `bnb.matmul_4bit`'s GEMV kernel,
+  which reads the packed NF4 weight directly instead of materializing the dequantized expert
+  (~4x less memory traffic per expert at decode). Gated by a per-configuration correctness probe —
+  and the probe passes on **stock bitsandbytes 0.49.x**, where the multi-row training route is
+  correctly refused.
+- **Prefetched expert offload** (`OFFLOAD_EXPERTS=1`, default `PREFETCH=1`) — decode with experts
+  that exceed VRAM: layer `L+1`'s NF4 experts copy on a side CUDA stream while layer `L` computes.
+  Staging is layer-granular, so the schedule is deterministic — no expert-prediction needed, unlike
+  expert-granular prefetch systems — and residency is bounded at two layers. The last layer
+  prefetches the first: exactly the next token's first need.
+
+Same honest framing as training: this is *capability* (generate with a fused-MoE + live adapters on
+a card the bf16 model OOMs on), not throughput — at decode the per-layer PCIe transfer dominates,
+and prefetch can only hide the compute-sized part of it. `bench/run-decode-bench.sh` measures the
+full grid (offload x prefetch x gemv) and prints one `BENCH` line per config.
+
+Kill-switches for A/B: `E4B_DECODE_FASTPATH=0`, `E4B_INFER_GEMV=0`.
+
 ## Benchmarks
 
 ```bash
