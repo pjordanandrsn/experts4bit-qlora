@@ -24,7 +24,7 @@ from transformers.activations import ACT2FN
 
 from . import Experts4bit
 from .lora import ExpertsLoRA
-from .offload import enable_expert_offload
+from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
 
 # model_type -> experts submodule path relative to `model.layers.{i}`.
@@ -51,7 +51,7 @@ def _assign(model, name, tensor):
         setattr(mod, attr, tensor)
 
 
-def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pin=True):
+def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
     Peak memory stays low: the model is built on ``meta`` (no allocation), then each tensor is read
@@ -63,7 +63,17 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
     pass (which would require every layer's experts GPU-resident first, defeating the purpose). A
     forward pre-hook streams a layer's experts back to the GPU just-in-time and a post-hook evicts
     them, so only one layer's experts are GPU-resident at a time (see :mod:`experts4bit_qlora.offload`).
+
+    ``prefetch=True`` (with ``offload``) additionally links the layers for inference prefetch: during
+    ``no_grad`` forwards each layer starts the next layer's H2D copy on a side stream, overlapping
+    transfer with compute at a bounded cost of two layers resident instead of one. Training forwards
+    are unaffected. See :func:`experts4bit_qlora.offload.enable_inference_prefetch`.
     """
+    if prefetch and not offload:
+        raise ValueError(
+            "prefetch=True requires offload=True: prefetch overlaps the H2D copy of offloaded "
+            "experts; without offload there is nothing to prefetch."
+        )
     config = AutoConfig.from_pretrained(model_id)
     model_type = getattr(config, "model_type", None)
     if model_type not in SUPPORTED_ARCHITECTURES:
@@ -155,6 +165,10 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
             f"  offloaded {len(offload_handles)} layers' 4-bit experts to {'pinned ' if pinned else ''}CPU RAM "
             "(streamed to GPU one layer at a time during train/eval)"
         )
+        if prefetch:
+            # Handles were appended in layer order above, which is what the circular linking needs.
+            enable_inference_prefetch(offload_handles)
+            log("  inference prefetch ON: next layer's experts copy on a side stream during no_grad forwards")
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     for name in weight_map:
