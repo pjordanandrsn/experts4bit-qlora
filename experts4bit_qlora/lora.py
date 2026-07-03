@@ -219,7 +219,9 @@ class ExpertsLoRA(nn.Module):
             and not self.training
             and _decode_fastpath_enabled()
         ):
-            return self._forward_decode(hidden_states, top_k_index, top_k_weights, compute_dtype, use_infer_gemv)
+            return self._forward_decode(
+                hidden_states, top_k_index, top_k_weights, compute_dtype, use_infer_gemv, input_dtype
+            )
 
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         # One route decision per forward: memory-lean matmul_4bit when training un-offloaded (its
@@ -284,6 +286,7 @@ class ExpertsLoRA(nn.Module):
         top_k_weights: torch.Tensor,
         compute_dtype: torch.dtype,
         use_infer_gemv: bool,
+        input_dtype: torch.dtype,
     ) -> torch.Tensor:
         """Single-token (``no_grad``) forward: loop the token's ``top_k`` experts directly.
 
@@ -330,7 +333,8 @@ class ExpertsLoRA(nn.Module):
 
             final_hidden_states += (current_hidden * top_k_weights[0, j]).to(final_hidden_states.dtype)
 
-        return final_hidden_states.to(hidden_states.dtype)
+        # ``hidden_states`` here is already the compute-dtype cast; return the caller's dtype.
+        return final_hidden_states.to(input_dtype)
 
 
 class LoRALinear(nn.Module):

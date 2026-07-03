@@ -200,3 +200,16 @@ def test_decode_gemv_matches_dequant_route(monkeypatch):
         out_dq_off = lora(hs, idx, wts)
     torch.testing.assert_close(out_gemv_off, out_dq_off, atol=3e-2, rtol=3e-2)
     torch.testing.assert_close(out_gemv_off, out_gemv, atol=3e-2, rtol=3e-2)
+
+
+def test_decode_output_in_caller_dtype_not_compute_dtype(monkeypatch):
+    """Dtype contract (parity with the base primitive): a bf16 stream through a compute_dtype=fp32
+    module must come back bf16 — through the decode fast-path AND the mask path. The final cast
+    used to be a no-op because ``hidden_states`` had been rebound to the compute-dtype cast."""
+    lora = _build(compute_dtype=torch.float32, adapter_dtype=torch.float32)
+    hs, idx, wts = _decode_inputs(dtype=torch.bfloat16)
+
+    with torch.no_grad():
+        assert lora(hs, idx, wts).dtype == torch.bfloat16  # fast-path
+        monkeypatch.setenv("E4B_DECODE_FASTPATH", "0")
+        assert lora(hs, idx, wts).dtype == torch.bfloat16  # mask path
