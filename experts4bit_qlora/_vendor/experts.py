@@ -91,7 +91,8 @@ class Experts4bit(nn.Module):
         activation (`Callable`, *optional*): The activation applied to the gate. Defaults
             to ``torch.nn.functional.silu`` (SwiGLU), matching OLMoE / Qwen3-MoE.
         compute_dtype (`torch.dtype`, *optional*): The dtype expert weights are
-            dequantized to for the matmul. When `None`, the input's dtype is used.
+            dequantized to for the matmul. When `None`, the input's dtype is used. The
+            output is always returned in the input's dtype, whatever the compute dtype.
         quant_type (`str`, *optional*, defaults to `"nf4"`): The 4-bit data type, ``nf4``
             or ``fp4``.
         blocksize (`int`, *optional*, defaults to `64`): The quantization block size.
@@ -206,8 +207,28 @@ class Experts4bit(nn.Module):
         if gate_up_proj.dim() != 3 or down_proj.dim() != 3:
             raise ValueError("gate_up_proj and down_proj must be 3D [num_experts, out, in] tensors")
 
-        num_experts, _, hidden_dim = gate_up_proj.shape
+        num_experts, gate_up_out, hidden_dim = gate_up_proj.shape
         intermediate_dim = down_proj.shape[2]
+
+        # Cross-check the two stacks against the documented [num_experts, out, in] layout. Without
+        # this, numel-preserving mistakes — a transposed down_proj, or the grouped-GEMM
+        # [num_experts, in, out] convention some transformers checkpoints use — quantize cleanly
+        # and only surface as a scrambled forward (or a cryptic reshape error inside dequantize).
+        # A transposed stack whose 2D expert weight is square is inherently invisible to a shape
+        # check; the value-level orientation check in tests/test_reference_parity.py covers that.
+        expected_gate_up_out = 2 * intermediate_dim if has_gate else intermediate_dim
+        if (
+            down_proj.shape[0] != num_experts
+            or down_proj.shape[1] != hidden_dim
+            or gate_up_out != expected_gate_up_out
+        ):
+            raise ValueError(
+                f"inconsistent expert stacks for has_gate={has_gate}: expected gate_up_proj "
+                f"[num_experts, {'2*intermediate' if has_gate else 'intermediate'}, hidden] and "
+                f"down_proj [num_experts, hidden, intermediate] (layout [num_experts, out, in]), "
+                f"got gate_up_proj {tuple(gate_up_proj.shape)} vs down_proj {tuple(down_proj.shape)} "
+                "— is one of them transposed / stored [num_experts, in, out]?"
+            )
 
         module = cls(
             num_experts,
@@ -300,18 +321,34 @@ class Experts4bit(nn.Module):
         weight = self._dequantize_expert(packed, absmax, shape, expert_idx, compute_dtype)
         return F_nn.linear(x, weight)
 
+    def _use_matmul_4bit(self, hidden_states: torch.Tensor) -> bool:
+        """Route the projections through ``bnb.matmul_4bit`` only when it helps and is validated.
+        It *helps* only when a backward pass will run: its autograd ``Function`` re-dequantizes the
+        packed weight in backward instead of saving the full dequantized expert as an activation.
+        Under ``no_grad`` nothing is saved either way, so the bit-exact dequantize path costs
+        nothing there — and staying on it keeps inference off the inference-only kernels (gemv /
+        gemm at small M) that :func:`_matmul_4bit_matches_dequant` does not probe. The LoRA wrapper
+        applies the same rule (plus an offload check that has no analogue on the bare primitive),
+        so an adapted forward stays bit-identical to the frozen base at LoRA init on every
+        bitsandbytes release."""
+        if not (hidden_states.is_cuda and torch.is_grad_enabled() and hidden_states.requires_grad):
+            return False
+        return _matmul_4bit_matches_dequant()
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         top_k_index: torch.Tensor,
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
         compute_dtype = self.compute_dtype if self.compute_dtype is not None else hidden_states.dtype
         hidden_states = hidden_states.to(compute_dtype)
 
-        # matmul_4bit lowers training memory but is CUDA-only here and only correct on
-        # bitsandbytes>=0.50 for the [packed, 1] layout; otherwise use the bit-exact dequantize path.
-        use_matmul_4bit = hidden_states.is_cuda and _matmul_4bit_matches_dequant()
+        # matmul_4bit lowers *training* memory but is CUDA-only here and only correct on
+        # bitsandbytes>=0.50 for the [packed, 1] layout; inference and older releases use the
+        # bit-exact dequantize path (see _use_matmul_4bit).
+        use_matmul_4bit = self._use_matmul_4bit(hidden_states)
 
         # Accumulate in float32 for numerical stability with bf16/fp16 routing weights.
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
@@ -352,4 +389,6 @@ class Experts4bit(nn.Module):
             current_hidden = current_hidden * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden.to(final_hidden_states.dtype))
 
-        return final_hidden_states.to(hidden_states.dtype)
+        # Hand back what the caller handed in: a drop-in replacement for a fused-experts module
+        # must not leak compute_dtype into the residual stream when the two differ.
+        return final_hidden_states.to(input_dtype)

@@ -119,13 +119,15 @@ router **hurts**.
 `Experts4bit` is a bitsandbytes primitive, proposed upstream in
 [bitsandbytes#1965](https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965). Until it
 ships in a release, this package **vendors** a copy (`experts4bit_qlora/_vendor/experts.py`) so it
-runs on stock bitsandbytes today. The import shim prefers the upstream class when present:
+runs on stock bitsandbytes today. The import shim prefers the upstream class when present *and
+still exposing the internals `ExpertsLoRA` builds on* (so a reviewed/diverged upstream merge can't
+silently break the adapters — the shim falls back to the vendored copy instead):
 
 ```python
 try:
-    from bitsandbytes.nn import Experts4bit      # once bitsandbytes#1965 releases
+    from bitsandbytes.nn import Experts4bit     # once bitsandbytes#1965 releases (if compatible)
 except ImportError:
-    from ._vendor.experts import Experts4bit     # vendored fallback (stock bnb)
+    from ._vendor.experts import Experts4bit    # vendored fallback (stock bnb)
 ```
 
 The vendored forward also **auto-detects** whether `matmul_4bit` is correct on your installed
