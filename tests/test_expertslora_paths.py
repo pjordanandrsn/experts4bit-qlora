@@ -102,10 +102,13 @@ def test_gate_false_under_offload_even_if_probe_says_yes(monkeypatch):
 
 
 def test_gate_false_without_grad(monkeypatch):
-    """Under no_grad nothing is saved for backward either way, so the simple dequantize path is used
-    (this is also what keeps generation off bnb's single-token gemv path)."""
+    """Under no_grad nothing is saved for backward either way, so the *training* gate stays False
+    and multi-row projections keep the dequantize path. (Single-row projections may instead take
+    the inference GEMV route — a separate gate, pinned off here and covered in
+    test_inference_decode.py.)"""
     lora = _build(torch.float32, torch.float32)
     monkeypatch.setattr(lora_mod, "_matmul_4bit_supported", lambda: True)
+    monkeypatch.setattr(lora_mod, "_gemv_4bit_matches_dequant", lambda *a, **k: False)
     hs, idx, wts = _inputs(torch.float32)
     with torch.no_grad():
         assert lora._use_matmul_4bit(hs) is False
@@ -115,10 +118,13 @@ def test_gate_false_without_grad(monkeypatch):
 
 
 @cuda
-def test_gate_true_when_training_unoffloaded_and_paths_agree():
+def test_gate_true_when_training_unoffloaded_and_paths_agree(monkeypatch):
     """On CUDA with a supporting bnb: an un-offloaded training forward takes the matmul route, and its
     output matches the dequantize route within accumulation tolerance (§9a's 'numerically identical').
     If this bnb's probe fails (released <=0.49.x), the gate must stay False — asserted instead."""
+    # Pin the inference GEMV route off so the no_grad comparison below is the pure dequantize path
+    # (with real routing, an expert hit by exactly one token would otherwise take the GEMV kernel).
+    monkeypatch.setattr(lora_mod, "_gemv_4bit_matches_dequant", lambda *a, **k: False)
     dtype = torch.bfloat16
     lora = _build(dtype, dtype)
     hs, idx, wts = _inputs(dtype, requires_grad=True)
