@@ -229,3 +229,98 @@ Both **QLoRA-train on a 12 GB card** — ≈ 0.3–0.4 GB of experts resident pe
 *(Loading the real Gemma-4 needed two small loader touch-ups on top of the merged Gemma-4 support, since the released checkpoint is the **multimodal** `gemma4`: build the LM from `text_config`, strip the `model.language_model.` prefix and skip the vision tower, and reconstruct rotary from `text_config`. OLMoE / Qwen3 paths are unchanged — the 15 CPU+GPU tests still pass.)*
 
 **Verdict on offload:** a capacity feature — it decides *what fits*, at a PCIe throughput cost (the honest framing this repo already applies to 4-bit itself). Measured on an RTX A2000 12 GB: correctness is **location, not math** (OLMoE `BEFORE` bit-identical off-vs-on, §11a) *through the gradient-checkpoint recompute* (unit tests, incl. the single-slot residency guard); the trade is **peak GPU ↓ 57 % at +11 % s/step** on OLMoE (§11a–b); and the headline holds — **Qwen3-30B-A3B (peak 7.16 GB) and Gemma-4-26B-A4B (peak 8.47 GB) both QLoRA-train on a 12 GB card with offload, and OOM without it** (§11c).
+
+## 12. Inference mode — decode paths + prefetched offload, measured
+
+Serving is the adapter-preservation story: the LoRA weights were trained against *this exact* NF4
+base (same codebook, same per-expert absmax), so `python -m experts4bit_qlora.infer` serves them
+over that same base with no re-quantization round trip — the quantization error at serving time is
+the one training was regularized against. Three additions make that practical, all `no_grad`- and
+eval-mode-only (training paths byte-identical), each with an env kill-switch for A/B:
+
+- **decode fast-path** (`E4B_DECODE_FASTPATH=0` disables): a 1-token forward skips the one-hot
+  expert-mask machinery and loops the token's `top_k` experts with 0-d device indices;
+- **fused 4-bit GEMV** (`E4B_INFER_GEMV=0` disables): single-row base projections dispatch to
+  `bnb.matmul_4bit`'s GEMV kernel (packed weight read directly, no dequantized-expert
+  materialization);
+- **prefetched offload** (`OFFLOAD_EXPERTS=1`, `PREFETCH=1` default): layer `L+1`'s experts copy on
+  a side CUDA stream while layer `L` computes.
+
+### a. Correctness gates (the load-bearing claims)
+
+- **Fast-path = same math, different summation order.** It runs the identical projections with the
+  identical fp32 accumulation; only the order differs (routing order vs ascending expert id).
+  Pinned by [`tests/test_inference_decode.py`](../tests/test_inference_decode.py): equivalence vs
+  the mask path (including deliberately duplicated expert indices — semantics preserved, not
+  "fixed"), kill-switch respected, never taken grad-enabled / multi-token / in train() mode, and
+  output returned in the *caller's* dtype (§the-dtype-contract, PR #4).
+- **GEMV route is probe-gated per configuration.** `bnb.matmul_4bit` dispatches 1-row,
+  `requires_grad=False` inputs to `gemv_4bit` — a kernel the multi-row training probe never
+  exercises. A separate probe validates exactly that decode shape for this module's
+  (quant_type, blocksize, compute dtype) on a deliberately **non-square** weight (an
+  orientation bug cannot pass by symmetry). Measured finding: the probe **passes on stock
+  bitsandbytes 0.49.2**, where the multi-row `[packed, 1]` route is broken and correctly refused —
+  so decode GEMV works on a stock install. The gate also requires `requires_grad=False` (bnb
+  dispatches on the tensor attribute, not grad mode) and eval mode (a reentrant-checkpoint initial
+  forward runs under `no_grad` but must keep training kernels). Under offload the route is safe at
+  inference because the eviction hazard is a *backward* construct (§11a) — there is no backward.
+- **Prefetch = location/timing, not math.** A prefetched no_grad chain is **bit-identical** to a
+  non-offloaded one ([`tests/test_offload_prefetch.py`](../tests/test_offload_prefetch.py)),
+  residency is bounded at two layers (computing + in flight, asserted mid-forward), the circular
+  wrap-around leaves layer 0 pre-warmed for the next token, and the first grad-enabled staging
+  sweeps prefetch leftovers back to the single-slot training invariant (asserted mid-forward — the
+  end state alone would pass without the sweep). Stream safety: consumption waits on the copy's
+  recorded event and `record_stream`-marks the tensors for the compute stream; frees are ordered on
+  the allocation (side) stream, so evicting an in-flight prefetch cannot recycle memory early.
+
+### b. The decode grid — measured ([bench/run-decode-bench.sh](../bench/run-decode-bench.sh))
+
+RTX A2000 12 GB, OLMoE-1B-7B + the §7 r16 experts+attention adapter (192 tensors), greedy decode of
+128 tokens, manual KV-cache loop, warmup pass excluded, `cuda.synchronize` + wall clock:
+
+| config | offload | prefetch | gemv | tok/s | prefill (s) | peak GPU |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| resident, dequantize | – | – | – | **3.08** | 1.42 | 4.86 GB |
+| resident, GEMV | – | – | ✓ | 2.98 | 3.37 | 4.85 GB |
+| resident, mask-path control | – | – | ✓ | 2.99 | 1.31 | 4.85 GB |
+| offload, serial | ✓ | – | ✓ | 0.40 | 2.41 | **1.45 GB** |
+| **offload, prefetched** | ✓ | ✓ | ✓ | **1.44** | 1.36 | **1.68 GB** |
+| offload, prefetched, dequantize | ✓ | ✓ | – | 1.43 | 2.14 | 1.69 GB |
+
+Readings, in the order they matter:
+
+- **Prefetch is the real result: 0.40 → 1.44 tok/s (3.65×) over serial offload.** The schedule is
+  deterministic because staging is layer-granular — the whole expert stack moves together, so no
+  expert-choice prediction is needed (unlike expert-granular prefetch systems) — and the side-stream
+  copy overlaps the *entire* next-layer compute (attention + dense + the current experts), not just
+  the MoE block. Steady state pays `max(transfer, compute)` per layer instead of their sum, and
+  one-layer-ahead already saturates the bus: each pre-hook kicks the next copy immediately, so
+  deeper pipelining cannot beat the per-layer transfer floor.
+- **Decode in 1.68 GB at 47 % of resident speed.** The capability framing of §11 carries over
+  unchanged: offload decides what *generates* on the card, at a PCIe cost — decode is
+  transfer-bound (~216 MB/layer, §11b), which is also why the GEMV column barely moves under
+  offload (1.44 vs 1.43).
+- **GEMV and the fast-path are neutral at OLMoE scale (−3 % / ±0 % resident).** Per-expert
+  dequantize traffic (~12 MB/expert) is small enough that materialize+cuBLAS matches the fused
+  GEMV, and the mask machinery is microseconds against millisecond kernels. Their value is
+  **correctness and portability** — a validated decode route on a stock `pip install bitsandbytes`
+  — not speed. Do not claim speed for them; the kill-switch columns exist so anyone can re-check.
+
+### c. Reproduce + limits
+
+```bash
+ADAPTER=./out/adapter_best.pt python -m experts4bit_qlora.infer                 # generate
+OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora.infer            # one timed config
+OUT_DIR=./decode-bench ADAPTER=./out/adapter_best.pt bash bench/run-decode-bench.sh  # full grid
+```
+
+Limits, stated plainly: batch-1 greedy decode on a single GPU (no batching, no CUDA graphs, no
+`torch.compile`); the grid model is OLMoE — the §11c targets (Qwen3-30B-A3B, Gemma-4-26B-A4B) are
+*expected* to show a larger prefetch win (bigger per-layer stacks, same deterministic schedule) but
+their decode grid has not been run yet; and per-expert GEMV vs a true grouped-GEMM kernel (the
+deferred future work) remains unexplored territory for throughput.
+
+**Verdict on inference mode:** the same honest shape as §9–§11 — **capability, not throughput**.
+It serves the QLoRA fine-tune over the exact base it was trained against, on the card it was
+trained on; prefetch turns offloaded decode from unusable (0.40 tok/s) to usable (1.44 tok/s) in
+1.68 GB; and the decode-route additions are correctness-gated conveniences, not speedups.

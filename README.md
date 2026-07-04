@@ -33,6 +33,11 @@ sparse-MoE on reasonable hardware.
   transfer per layer per pass. Same memory-for-compute trade as above: it changes *what fits*, not
   speed. Offloading changes tensor location, not math — unit-test-verified, including the
   gradient-checkpoint recompute path (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11).
+- **It serves the fine-tune it made (`python -m experts4bit_qlora.infer`).** The adapters run
+  over the *exact* NF4 base they were trained against — no GGUF/AWQ re-quantization shifting the
+  error surface. With `OFFLOAD_EXPERTS=1` + prefetch, OLMoE **decodes at 1.44 tok/s in 1.68 GB**
+  on the A2000 (3.65× over serial offload; resident is 3.08 tok/s at 4.86 GB) — see
+  [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §12.
 - **Honest caveat — this is a memory technology, not an energy one.** On a GPU that *already*
   fits the model, 4-bit is a **1.2–2.3× energy penalty** (NF4 is storage-only; the GEMM runs in
   bf16 either way, plus dequant). The energy win only shows up when memory is the binding
@@ -97,6 +102,51 @@ peak-memory-drop / throughput A/B ([`bench/run-offload-ab.sh`](bench/run-offload
 on the card. Since the loader supports **Qwen3-MoE** and **Gemma-4**, offload also fits
 **Qwen3-30B-A3B** and **Gemma-4-26B-A4B** on 12 GB — measured on the A2000 (peak **7.16** / **8.47 GB**;
 both OOM without offload). See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
+
+## Inference: serve the fine-tune you just made
+
+The adapters were trained against *this exact* NF4 base (same codebook, same per-expert absmax).
+`python -m experts4bit_qlora.infer` serves them over that same base — no re-quantization to
+GGUF/AWQ, so the quantization error at serving time is identical to what training saw:
+
+```bash
+ADAPTER=./out/adapter_best.pt python -m experts4bit_qlora.infer            # generate
+OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora.infer       # timed decode bench
+```
+
+What inference mode adds (all `no_grad`-only; training paths are untouched):
+
+- **Decode fast-path** — a single-token forward skips the one-hot expert-mask machinery and its
+  per-expert host syncs, looping the token's `top_k` experts with 0-d device indices.
+- **Fused 4-bit GEMV** — single-row base projections go through `bnb.matmul_4bit`'s GEMV kernel,
+  which reads the packed NF4 weight directly instead of materializing the dequantized expert
+  (~4x less memory traffic per expert at decode). Gated by a per-configuration correctness probe —
+  and the probe passes on **stock bitsandbytes 0.49.x**, where the multi-row training route is
+  correctly refused.
+- **Prefetched expert offload** (`OFFLOAD_EXPERTS=1`, default `PREFETCH=1`) — decode with experts
+  that exceed VRAM: layer `L+1`'s NF4 experts copy on a side CUDA stream while layer `L` computes.
+  Staging is layer-granular, so the schedule is deterministic — no expert-prediction needed, unlike
+  expert-granular prefetch systems — and residency is bounded at two layers. The last layer
+  prefetches the first: exactly the next token's first need.
+
+Measured on the RTX A2000 (OLMoE + the r16 adapter, 128 greedy tokens; full grid + analysis in
+[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §12):
+
+| config | tok/s | peak GPU |
+|---|:---:|:---:|
+| resident (experts on GPU) | 3.08 | 4.86 GB |
+| offload, serial | 0.40 | 1.45 GB |
+| **offload + prefetch** | **1.44** | **1.68 GB** |
+
+Same honest framing as training: this is *capability* (generate with a fused-MoE + live adapters in
+1.68 GB, where bf16 OOMs), not throughput. Decode under offload is PCIe-bound; **prefetch is the
+lever that matters** (3.65× over serial — the side-stream copy overlaps the entire next layer's
+compute, and the layer-granular schedule needs no expert prediction). The GEMV route and fast-path
+measure *neutral* at OLMoE scale — they are correctness/portability features, not speedups.
+
+Library users: `enable_inference_prefetch(handles)` links the offload handles the loader (or
+`offload_model_experts`) returns; `load_moe_4bit_streaming(..., offload=True, prefetch=True)` does
+it for you. Kill-switches for A/B: `E4B_DECODE_FASTPATH=0`, `E4B_INFER_GEMV=0`.
 
 ## Benchmarks
 
