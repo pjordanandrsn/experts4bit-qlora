@@ -1,7 +1,9 @@
 # Offload transfer notes — where the H2D bandwidth goes
 
-*Workstream A of the offload-diagnostics investigation. Measured on the RTX A2000 12 GB host that
-produces the [`PROVENANCE.md`](../PROVENANCE.md) numbers; reproduce with the env flags at the end.*
+*Workstream A of the offload-diagnostics investigation. Measured on the [`PROVENANCE.md`](../PROVENANCE.md)
+host — an RTX A2000 12 GB in a QNAP TVS-h1688X NAS (Xeon W-1250, PCIe 3.0-only platform), the card in
+the chassis's sole x8 electrical slot, full production stack live (load ~45, GPU shared with six other
+dev-agent containers — not quiesced). Reproduce with the env flags at the end.*
 
 Expert CPU-offload ([`experts4bit_qlora/offload.py`](../experts4bit_qlora/offload.py)) streams each
 layer's frozen NF4 experts host→device per forward. Its throughput is bounded by one number — the
@@ -76,8 +78,9 @@ The bottleneck is the **PCIe 3.0 x8 electrical link (6.16–6.18 GB/s pinned cei
 overhead and not a pinning fallback: each layer's staging copy already runs at 100 % of that ceiling.
 Copy consolidation (A3) does not move the needle — a measured non-win, kept default-off. Prefetch
 hides only the small per-layer compute behind the transfer (stall ≫ slack), so on this host the lever
-that would help most is a wider slot, not a smarter schedule. On an x16 host the same code should see
-roughly double these GB/s — untested here, flagged for anyone who runs it. Net: offload is a
+that would help most is a different host, not a smarter schedule — this chassis has no wider slot to
+give. The identical build on a Gen3 x16 host should see ~2× these GB/s, a Gen4 x16 host ~3.5×
+(untested here, flagged for anyone who runs it). Net: offload is a
 **capacity** feature (it decides what *fits/generates*), transfer-bound by the bus; the diagnostics
 now make that quantitative instead of inferred.
 

@@ -22,7 +22,7 @@ knob is a measured trade, not a vibe. This package pairs the primitive with a **
 loader** and **per-expert LoRA**, so you can actually *fine-tune* a real sparse-MoE on
 reasonable hardware.
 
-## What it buys you (measured on an RTX A2000 12 GB)
+## What it buys you (measured on an RTX A2000 12 GB — in a NAS's PCIe 3.0 x8 slot; see METHODOLOGY "Test host")
 
 - **It fits at all.** Full bf16 OLMoE-1B-7B is ~13.9 GB — it **OOMs** on a 12 GB card. In 4-bit
   it loads at **4.70 GB** and trains in <8 GB. The streaming loader never materializes the bf16

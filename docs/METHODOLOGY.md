@@ -199,6 +199,18 @@ Raising batch 64→4096 cuts energy/token **4.4×** (GPU goes from 29 W underuti
 
 ## 11. Expert CPU-offload (`OFFLOAD_EXPERTS`) — correctness proven, OLMoE A/B specified
 
+**Test host.** All offload numbers in §11–§12 were measured on an RTX A2000 12 GB installed in a
+QNAP TVS-h1688X NAS (QuTS hero, Intel Xeon W-1250) — a Comet Lake platform, PCIe 3.0 only, with the
+card in the chassis's x8 electrical slot (the widest it wires; the A2000 is x16-capable and
+negotiates Gen3 x8 under load — at idle ASPM reads gen 1 and upshifts). Measured pinned H2D ceiling:
+**6.16–6.18 GB/s** (256 MB × 20, event-bracketed; pageable 4.5–5.5). Every per-layer transfer figure
+below runs at ~100 % of that ceiling, so these numbers are a **floor** for the code: the identical
+build on a Gen3 x16 host has ~2× the H2D ceiling, a Gen4 x16 host ~3.5× — untested here. The NAS was
+**not quiesced**: it ran its full production stack during the runs (media automation, two game
+servers, Home Assistant, DNS, seven dev-agent containers *sharing this same A2000*, and CPU fuzzers;
+load average ~45), so the ceiling and per-layer figures are a floor under realistic contention, not a
+quiet-rig best case.
+
 Even in 4-bit, the experts are the bulk of a fused-MoE's weights, and for the real targets they alone exceed a 12 GB card: Qwen3-30B-A3B ≈ **15 GB** of 4-bit experts, Gemma-4-26B-A4B ≈ **13 GB**. `OFFLOAD_EXPERTS=1` keeps each `Experts4bit` base's packed weights + absmax in **pinned CPU RAM** and streams one layer's experts to the GPU just-in-time (forward pre-hook on `ExpertsLoRA`), evicting after. Gradient checkpointing (`use_reentrant=False`) recomputes each layer's forward in backward, so the pre-hook re-stages for the recompute; PyTorch stops that recompute *early* (the evict post-hook does **not** fire on it), so a **single-resident-slot** — staging a layer first evicts the previously-staged one — is what keeps **only one layer's experts GPU-resident at a time, in forward and backward alike.** Mechanism and correctness argument: [`experts4bit_qlora/offload.py`](../experts4bit_qlora/offload.py).
 
 ### a. Correctness — offload changes tensor *location*, not math (the load-bearing claim)
@@ -365,9 +377,10 @@ The takeaway for the whole feature: on the models offload is *for*, the decode s
 at all, in 4.4–6.2 GB, where resident OOMs" (0.24–0.43 tok/s) — capability. Prefetch still helps
 but is nowhere near its OLMoE-scale multiplier, and the GEMV route swings from +46 % (Gemma-4) to
 −8 % (Qwen3-30B) with expert shape — A/B it per model. One more measured anchor for "transfer-
-bound": the measurement host's pinned H2D ceiling is **6.20 GB/s** (A2000 in an x8 electrical
-link; PROVENANCE.md env block) — prefetched OLMoE decode already moves ~5 GB/s effective, ~80 %
-of that ceiling, so on this host there is little left for any schedule to hide.
+bound": the measurement host's pinned H2D ceiling is **6.16–6.18 GB/s** (the §11 *Test host* note —
+an A2000 in a NAS's Gen3 x8 slot), and stats-instrumented decode shows every per-layer copy running
+at ~100 % of it (see [`docs/OFFLOAD-TRANSFER-NOTES.md`](OFFLOAD-TRANSFER-NOTES.md)), so on this host
+there is essentially nothing left for any schedule to hide.
 
 ### d. Reproduce + limits
 
