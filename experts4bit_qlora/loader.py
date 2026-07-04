@@ -22,7 +22,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
-from . import Experts4bit
+from . import Experts4bit, ExpertsNbit
 from .lora import ExpertsLoRA
 from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
@@ -51,7 +51,9 @@ def _assign(model, name, tensor):
         setattr(mod, attr, tensor)
 
 
-def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False):
+def load_moe_4bit_streaming(
+    model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4"
+):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
     Peak memory stays low: the model is built on ``meta`` (no allocation), then each tensor is read
@@ -144,8 +146,12 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
         else:
             continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
         n_moe += 1
-        base = Experts4bit.from_float(
-            gate_up, down, has_gate=True, activation=activation, quant_type="nf4", compute_dtype=dtype
+        # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
+        # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
+        # they did before the ExpertsNbit fold.
+        base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
+        base = base_cls.from_float(
+            gate_up, down, has_gate=True, activation=activation, quant_type=quant_type, compute_dtype=dtype
         )
         experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:
@@ -169,6 +175,12 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
             # Handles were appended in layer order above, which is what the circular linking needs.
             enable_inference_prefetch(offload_handles)
             log("  inference prefetch ON: next layer's experts copy on a side stream during no_grad forwards")
+        from .offload import _arena_enabled, _stats_enabled, report_offload_environment
+
+        if _arena_enabled():
+            log("  offload arena ON (E4B_OFFLOAD_ARENA): experts staged as consolidated per-dtype copies")
+        if _stats_enabled():  # A2: name the PCIe bus + H2D ceiling these per-layer figures ride
+            report_offload_environment(device, log)
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     for name in weight_map:

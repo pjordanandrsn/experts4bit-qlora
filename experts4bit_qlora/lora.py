@@ -8,6 +8,10 @@
 In both, ``B`` is zero-initialised so the adapted module is identical to the frozen base at
 step 0 and only departs as the adapters train (standard LoRA initialisation).
 
+The frozen base may be any :class:`ExpertsNbit` storage scheme (nf4/fp4 4-bit, int8/fp8 blockwise,
+or bf16/fp16 passthrough); the adapters and forward are storage-agnostic. Training routes the base
+through its recompute-in-backward projection (``ExpertsNbit._project``) for every scheme.
+
 Inference (``no_grad``) additions, both default-on with env kill-switches for A/B:
 
 * **Decode fast-path** (``E4B_DECODE_FASTPATH=0`` disables): a single-token forward skips the
@@ -17,7 +21,8 @@ Inference (``no_grad``) additions, both default-on with env kill-switches for A/
   ``bnb.matmul_4bit``'s GEMV kernel, which reads the packed 4-bit weight directly instead of
   materializing the full dequantized expert — ~4x less memory traffic per expert at decode. Only
   under ``no_grad`` (so it is safe under offload too: no backward ever re-reads an evicted
-  weight), and only when the GEMV kernel passes a correctness probe for our ``[packed, 1]``
+  weight), only for **4-bit** bases (``int8``/``fp8``/``bf16``/``fp16`` have no GEMV kernel and use
+  the dequantize path), and only when the kernel passes a correctness probe for our ``[packed, 1]``
   layout (:func:`_gemv_4bit_matches_dequant`).
 """
 
@@ -33,20 +38,6 @@ import torch.nn.functional as F
 
 if TYPE_CHECKING:
     from . import Experts4bit
-
-
-def _matmul_4bit_supported() -> bool:
-    """Whether ``bnb.matmul_4bit`` is correct for the ``[packed, 1]`` layout here (probed once and
-    cached where it lives). The probe sits beside :class:`Experts4bit` — vendored today, and in
-    ``bitsandbytes.nn`` once bitsandbytes#1965 ships (at which point the vendor copy is deleted)."""
-    try:
-        from ._vendor.experts import _matmul_4bit_matches_dequant
-    except ImportError:  # vendor copy deleted after the upstream bitsandbytes release
-        try:
-            from bitsandbytes.nn import _matmul_4bit_matches_dequant  # type: ignore[attr-defined]
-        except ImportError:
-            return False
-    return _matmul_4bit_matches_dequant()
 
 
 @functools.lru_cache(maxsize=None)  # tiny domain: the (quant_type, blocksize, dtype) combos actually used
@@ -153,35 +144,24 @@ class ExpertsLoRA(nn.Module):
         # No-ops (no copies) when the dtypes already match.
         return (self.scaling * F.linear(F.linear(x.to(A.dtype), A), B)).to(x.dtype)
 
-    def _use_matmul_4bit(self, hidden_states: torch.Tensor) -> bool:
-        """Route the frozen base projections through ``bnb.matmul_4bit`` only when it both helps and
-        is safe. It *helps* only when a backward pass will run: its autograd ``Function`` saves the
-        tiny packed weight and re-dequantizes in backward, instead of ``F.linear`` saving the full
-        dequantized expert as an activation — under ``no_grad`` nothing is saved either way, so the
-        simple dequantize path costs nothing there. It is *safe* only when the packed weight is still
-        resident at backward time — i.e. **never under offload**, whose eviction-correctness proof
-        assumes the dequantize path (see :mod:`experts4bit_qlora.offload`)."""
-        if getattr(self, "_offload", None) is not None:
-            return False  # offload invariant: backward's re-dequant would read an evicted placeholder
-        if not (hidden_states.is_cuda and torch.is_grad_enabled() and hidden_states.requires_grad):
-            return False  # no backward memory to save (or no CUDA) -> keep the dequantize route
-        return _matmul_4bit_supported()
-
     def _use_infer_gemv(self, hidden_states: torch.Tensor) -> bool:
         """Whether *single-row* base projections in this forward may route through
-        ``bnb.matmul_4bit`` (which dispatches them to the fused 4-bit GEMV kernel).
+        ``bnb.matmul_4bit`` (which dispatches them to the fused 4-bit GEMV kernel) instead of the
+        base's dequantize path.
 
         Inference-only (``no_grad``): with no backward, nothing ever re-reads the packed weight
-        after the forward, so — unlike the training route above — this is safe **under offload
-        too** (the eviction hazard :mod:`experts4bit_qlora.offload` guards against is a backward
-        construct). The win is memory traffic: the GEMV reads the packed 4-bit weight directly
-        instead of materializing the full dequantized expert for a 1-row matmul. Gated on the
-        decode-shape correctness probe (:func:`_gemv_4bit_matches_dequant`) for this module's
-        exact configuration; multi-row inference projections keep the dequantize path either way
-        (equal cost, no kernel-shim exposure).
+        after the forward, so this is safe **under offload too** (the eviction hazard
+        :mod:`experts4bit_qlora.offload` guards against is a *backward* construct). The win is
+        memory traffic: the GEMV reads the packed 4-bit weight directly instead of materializing
+        the full dequantized expert for a 1-row matmul. Gated on the decode-shape correctness probe
+        (:func:`_gemv_4bit_matches_dequant`) for this module's exact configuration; multi-row
+        inference projections keep the dequantize path either way (equal cost, no kernel exposure).
 
-        The extra bail-outs mirror bnb's own GEMV dispatch and reentrant checkpointing:
+        Bail-outs:
 
+        * ``base.bits != 4`` — the fused GEMV kernel is 4-bit-only; ``int8``/``fp8`` blockwise and
+          ``bf16``/``fp16`` passthrough have no ``matmul_4bit`` analogue, so they always decode via
+          the base's dequantize path.
         * ``hidden_states.requires_grad`` — bnb dispatches to ``gemv_4bit`` only for a
           ``requires_grad=False`` input; a grad-carrying tensor (legal under ``no_grad``) would
           silently fall into ``MatMul4Bit.apply``'s multi-row branch, which is *wrong* for our
@@ -192,9 +172,40 @@ class ExpertsLoRA(nn.Module):
         if torch.is_grad_enabled() or self.training or not hidden_states.is_cuda or hidden_states.requires_grad:
             return False
         base = self.base
+        if getattr(base, "bits", 4) != 4:
+            return False  # gemv_4bit is 4-bit only; N-bit schemes decode via the dequantize path
         return _infer_gemv_enabled() and _gemv_4bit_matches_dequant(
             base.quant_type, base.blocksize, hidden_states.dtype
         )
+
+    def _gemv_project(self, packed, absmax, shape, expert_idx, x, compute_dtype):
+        """One expert's 4-bit projection via bnb's fused GEMV — the inference analogue of
+        :meth:`Experts4bit._project`, reading the packed weight directly rather than dequantizing.
+
+        Mirrors the base's ``[packed, 1]`` ``QuantState`` construction (see
+        ``Experts4bit._dequantize_expert``) so the result matches the dequantize path within
+        kernel rounding. Only reached under :meth:`_use_infer_gemv` (no_grad, eval, CUDA, 4-bit,
+        single-row, probe-validated), so it never participates in autograd."""
+        import bitsandbytes as bnb
+        from bitsandbytes.functional import QuantState
+
+        base = self.base
+        quant_state = QuantState(
+            absmax=absmax[expert_idx],
+            shape=torch.Size(shape),
+            code=base.code,
+            blocksize=base.blocksize,
+            quant_type=base.quant_type,
+            dtype=compute_dtype,
+        )
+        return bnb.matmul_4bit(x, packed[expert_idx].reshape(-1, 1), quant_state=quant_state)
+
+    def _base_project(self, packed, absmax, shape, expert_idx, x, compute_dtype, use_gemv):
+        """Route one expert projection: fused GEMV when ``use_gemv`` (inference 4-bit fast path),
+        else the base's dequantize+recompute path (correct for training and for non-gemv decode)."""
+        if use_gemv:
+            return self._gemv_project(packed, absmax, shape, expert_idx, x, compute_dtype)
+        return self.base._project(packed, absmax, shape, expert_idx, x, compute_dtype)
 
     def forward(
         self,
@@ -224,11 +235,6 @@ class ExpertsLoRA(nn.Module):
             )
 
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
-        # One route decision per forward: memory-lean matmul_4bit when training un-offloaded (its
-        # backward re-dequantizes the packed weight instead of saving the full dequantized expert),
-        # else the portable dequantize path (required under offload; free under no_grad) — except
-        # that at inference, single-row per-expert inputs may take the fused GEMV (see below).
-        use_matmul_4bit = self._use_matmul_4bit(hidden_states)
 
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=base.num_experts).permute(2, 1, 0)
@@ -238,19 +244,19 @@ class ExpertsLoRA(nn.Module):
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             x = hidden_states[token_idx]
 
-            # Per-expert route: the forward-wide decision above, plus the inference GEMV for any
-            # expert that received exactly one token (only 1-row inputs dispatch to gemv_4bit).
-            route_mm = use_matmul_4bit or (use_infer_gemv and x.shape[0] == 1)
+            # Inference 4-bit GEMV for any expert that received exactly one token (only 1-row inputs
+            # dispatch to gemv_4bit); otherwise the base's dequantize+recompute path.
+            use_gemv = use_infer_gemv and x.shape[0] == 1
 
-            # Frozen 4-bit base projection (route per route_mm) + trainable low-rank delta.
-            proj = base._project(
+            # Frozen base projection (dequantize/recompute, or fused GEMV) + trainable low-rank delta.
+            proj = self._base_project(
                 base.gate_up_proj,
                 base.gate_up_absmax,
                 base._gate_up_shape,
                 expert_idx,
                 x,
                 compute_dtype,
-                route_mm,
+                use_gemv,
             ) + self._lora(x, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
 
             if base.has_gate:
@@ -259,14 +265,14 @@ class ExpertsLoRA(nn.Module):
             else:
                 current_hidden = base.act_fn(proj)
 
-            current_hidden = base._project(
+            current_hidden = self._base_project(
                 base.down_proj,
                 base.down_absmax,
                 base._down_shape,
                 expert_idx,
                 current_hidden,
                 compute_dtype,
-                route_mm,
+                use_gemv,
             ) + self._lora(
                 current_hidden,
                 self.down_lora_A[expert_idx],
@@ -305,7 +311,7 @@ class ExpertsLoRA(nn.Module):
         for j in range(top_k_index.shape[1]):
             expert_idx = top_k_index[0, j]  # 0-d device tensor: indexes below without a host sync
 
-            proj = base._project(
+            proj = self._base_project(
                 base.gate_up_proj,
                 base.gate_up_absmax,
                 base._gate_up_shape,
@@ -321,7 +327,7 @@ class ExpertsLoRA(nn.Module):
             else:
                 current_hidden = base.act_fn(proj)
 
-            current_hidden = base._project(
+            current_hidden = self._base_project(
                 base.down_proj,
                 base.down_absmax,
                 base._down_shape,

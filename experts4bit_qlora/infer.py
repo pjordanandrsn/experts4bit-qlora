@@ -38,6 +38,7 @@ ADAPTER = os.environ.get("ADAPTER", "")
 OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
 OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
 PREFETCH = os.environ.get("PREFETCH", "1") == "1"
+QUANT_TYPE = os.environ.get("QUANT_TYPE", "nf4")  # must match the training run
 MAX_NEW = int(os.environ.get("MAX_NEW", "64"))
 BENCH_TOKENS = int(os.environ.get("BENCH_TOKENS", "0"))
 PROMPT = os.environ.get(
@@ -59,6 +60,7 @@ def load_for_inference():
         offload=OFFLOAD_EXPERTS,
         pin=OFFLOAD_PIN,
         prefetch=PREFETCH and OFFLOAD_EXPERTS,
+        quant_type=QUANT_TYPE,
     )
     # Under offload the experts deliberately live in pinned CPU RAM; a blanket .to() would undo that.
     if not OFFLOAD_EXPERTS:
@@ -130,8 +132,11 @@ def main():
     torch.cuda.reset_peak_memory_stats()
 
     if BENCH_TOKENS > 0:
+        from .offload import offload_stats_report, reset_offload_stats
+
         # Warmup: probes (gemv), allocator pools, prefetch steady state — outside the timed region.
         timed_decode(model, tok, PROMPT, min(8, BENCH_TOKENS))
+        reset_offload_stats()  # discard warmup transfers so E4B_OFFLOAD_STATS reflects the timed run only
         text, t_prefill, tps = timed_decode(model, tok, PROMPT, BENCH_TOKENS)
         peak = torch.cuda.max_memory_allocated() / 1e9
         log(f"  prompt tokens: {len(tok(PROMPT).input_ids)} | prefill {t_prefill:.3f}s")
@@ -144,6 +149,7 @@ def main():
             f"tok_s={tps:.3f} prefill_s={t_prefill:.3f} peak_gb={peak:.3f}",
             flush=True,
         )
+        offload_stats_report(log)  # no-op unless E4B_OFFLOAD_STATS=1
     else:
         t0 = time.time()
         out = model.generate(

@@ -152,7 +152,13 @@ def test_training_stage_sweeps_prefetch_leftovers():
     training invariant: the first training stage() sweeps prefetch leftovers, including ones staged
     on layers other than the one about to run (which cannot be cleaned by its early-return). The
     mid-forward residency observation below is what actually pins the sweep — end-state asserts
-    alone pass even without it, drained by the ordinary post-hook evicts."""
+    alone pass even without it, drained by the ordinary post-hook evicts.
+
+    Forward-only by design: every assertion here is about staging state during/after the forward.
+    A *non-checkpointed* backward through an offloaded module is unsupported as of the
+    recompute-in-backward base and fails loudly — pinned by
+    ``test_offload.py::test_non_checkpointed_offload_backward_fails_loudly``; the supported
+    (checkpointed) backward is covered by ``test_offload_survives_gradient_checkpoint_recompute``."""
     chain = _Chain()
     hs, idx, wts = _inputs()
     handles = offload_model_experts(chain)
@@ -177,8 +183,7 @@ def test_training_stage_sweeps_prefetch_leftovers():
     _ExpertOffload.stage = counting
     try:
         hs_g = hs.clone().requires_grad_(True)
-        out = chain(hs_g, idx, wts)  # grad-enabled: pre-hooks take the sync stage() path
-        out.sum().backward()
+        chain(hs_g, idx, wts)  # grad-enabled: pre-hooks take the sync stage() path
     finally:
         _ExpertOffload.stage = orig
 

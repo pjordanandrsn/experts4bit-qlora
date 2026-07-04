@@ -1,22 +1,23 @@
-"""Patch coverage: ExpertsLoRA compute-path selection, mixed-dtype adapters, full save under offload.
+"""ExpertsLoRA: base projection (recompute-in-backward), mixed-dtype adapters, output-dtype
+contract, and full save under offload.
 
-Three behaviors introduced in v0.1.2:
+Behaviors covered:
 
-1. **Path selection** (``ExpertsLoRA._use_matmul_4bit``): the frozen base projections route through
-   ``bnb.matmul_4bit`` only when it helps (a backward will run) *and* is safe (never under offload —
-   backward's re-dequant would read an evicted placeholder). The safety branches are CPU-testable and
-   asserted here by spying on which ``Experts4bit`` method actually runs; the positive branch (matmul
-   taken, and numerically identical to the dequantize path) is CUDA-only and marked accordingly.
+1. **Base projection = recompute-in-backward** (``ExpertsNbit._project`` via
+   :class:`_FrozenLinearRecomputeBackward`): the frozen base saves only its packed buffers and
+   re-dequantizes in backward, so a grad-enabled forward+backward works, the frozen base never
+   receives a gradient, and at LoRA init the adapted forward equals the base forward. (The old
+   ``matmul_4bit`` train/no_grad *route selection* — ``_use_matmul_4bit`` / ``_expert_matmul`` —
+   was removed when the package adopted the recompute-Function base; there is no route to select.)
 
 2. **Mixed-dtype adapters** (``_lora`` / ``LoRALinear``): adapters in a different precision than the
-   compute dtype (the conventional QLoRA setup keeps LoRA in fp32 over a bf16 base) used to crash with
-   ``RuntimeError: expected m1 and m2 to have the same dtype``; the low-rank path now runs in the
-   adapter dtype and casts the delta back. Forward *and* backward are asserted.
+   compute dtype (the conventional QLoRA setup keeps LoRA in fp32 over a bf16 base) run the low-rank
+   path in the adapter dtype and cast the delta back. Forward *and* backward are asserted.
 
-3. **Full save under offload**: covered by
-   ``test_offload.py::test_offload_state_dict_full_save_correct_and_adapter_filter_unaffected``;
-   this file adds the round-trip — a full state_dict taken from an offloaded model loads into a
-   fresh, non-offloaded module and reproduces the same forward.
+3. **Output-dtype contract**: the module returns the caller's dtype, not ``compute_dtype``.
+
+4. **Full save under offload**: a full state_dict taken from an offloaded model loads into a fresh,
+   non-offloaded module and reproduces the same forward.
 """
 
 import pytest
@@ -25,10 +26,8 @@ torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, enable_expert_offload  # noqa: E402
-from experts4bit_qlora import lora as lora_mod  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires a CUDA GPU")
 _QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 E, HID, INTER, TOP_K, N_TOK = 4, 128, 192, 2, 12
 
@@ -52,160 +51,23 @@ def _inputs(dtype, requires_grad=False, seed=1):
     return hs, idx, wts
 
 
-class _Spy:
-    """Wrap Experts4bit._expert_matmul / _dequantize_expert with call counters (class-level, so it
-    covers every instance); restores on exit."""
-
-    def __init__(self):
-        self.matmul_calls = 0
-        self.dequant_calls = 0
-
-    def __enter__(self):
-        self._orig_mm = Experts4bit._expert_matmul
-        self._orig_dq = Experts4bit._dequantize_expert
-        spy = self
-
-        def mm(inner_self, *a, **k):
-            spy.matmul_calls += 1
-            return spy._orig_mm(inner_self, *a, **k)
-
-        def dq(inner_self, *a, **k):
-            spy.dequant_calls += 1
-            return spy._orig_dq(inner_self, *a, **k)
-
-        Experts4bit._expert_matmul = mm
-        Experts4bit._dequantize_expert = dq
-        return self
-
-    def __exit__(self, *exc):
-        Experts4bit._expert_matmul = self._orig_mm
-        Experts4bit._dequantize_expert = self._orig_dq
-        return False
-
-
 # ---------------------------------------------------------------------------------------------------
-# 1) Path selection — safety branches (CPU-runnable), positive branch (CUDA).
+# 1) Base projection: recompute-in-backward, frozen base, init identity.
 # ---------------------------------------------------------------------------------------------------
-def test_gate_false_under_offload_even_if_probe_says_yes(monkeypatch):
-    """The offload check must short-circuit *before* any capability probe: an offloaded layer never
-    takes the matmul route, even on a bnb/device where matmul_4bit is supported."""
+def test_base_recompute_backward_runs_and_leaves_base_frozen():
+    """A grad-enabled forward+backward through the recompute-Function base works and never
+    differentiates the frozen packed weights; at LoRA init (B=0) the adapted forward equals the
+    base forward on the same route."""
     lora = _build(torch.float32, torch.float32)
-    monkeypatch.setattr(lora_mod, "_matmul_4bit_supported", lambda: True)
     hs, idx, wts = _inputs(torch.float32, requires_grad=True)
 
-    enable_expert_offload(lora, DEVICE, pin=False)
-    assert lora._use_matmul_4bit(hs) is False
-    with _Spy() as spy:
-        out = lora(hs, idx, wts)
-        out.sum().backward()
-    assert spy.matmul_calls == 0 and spy.dequant_calls > 0  # dequantize path only, fwd + recompute-free bwd
-
-
-def test_gate_false_without_grad(monkeypatch):
-    """Under no_grad nothing is saved for backward either way, so the *training* gate stays False
-    and multi-row projections keep the dequantize path. (Single-row projections may instead take
-    the inference GEMV route — a separate gate, pinned off here and covered in
-    test_inference_decode.py.)"""
-    lora = _build(torch.float32, torch.float32)
-    monkeypatch.setattr(lora_mod, "_matmul_4bit_supported", lambda: True)
-    monkeypatch.setattr(lora_mod, "_gemv_4bit_matches_dequant", lambda *a, **k: False)
-    hs, idx, wts = _inputs(torch.float32)
     with torch.no_grad():
-        assert lora._use_matmul_4bit(hs) is False
-        with _Spy() as spy:
-            lora(hs, idx, wts)
-    assert spy.matmul_calls == 0 and spy.dequant_calls > 0
+        assert torch.equal(lora(hs, idx, wts), lora.base(hs, idx, wts))  # zero-delta init identity
 
-
-@cuda
-def test_gate_true_when_training_unoffloaded_and_paths_agree(monkeypatch):
-    """On CUDA with a supporting bnb: an un-offloaded training forward takes the matmul route, and its
-    output matches the dequantize route within accumulation tolerance (§9a's 'numerically identical').
-    If this bnb's probe fails (released <=0.49.x), the gate must stay False — asserted instead."""
-    # Pin the inference GEMV route off so the no_grad comparison below is the pure dequantize path
-    # (with real routing, an expert hit by exactly one token would otherwise take the GEMV kernel).
-    monkeypatch.setattr(lora_mod, "_gemv_4bit_matches_dequant", lambda *a, **k: False)
-    dtype = torch.bfloat16
-    lora = _build(dtype, dtype)
-    hs, idx, wts = _inputs(dtype, requires_grad=True)
-
-    if not lora_mod._matmul_4bit_supported():
-        assert lora._use_matmul_4bit(hs) is False
-        pytest.skip("bnb matmul_4bit unsupported for [packed,1] here (<=0.49.x): gate correctly False")
-
-    assert lora._use_matmul_4bit(hs) is True
-    with _Spy() as spy:
-        out_mm = lora(hs, idx, wts)
-    assert spy.matmul_calls > 0 and spy.dequant_calls == 0
-
-    with torch.no_grad():  # force the dequantize route for the comparison
-        out_dq = lora(hs, idx, wts)
-    torch.testing.assert_close(out_mm.detach(), out_dq, atol=3e-2, rtol=3e-2)
-
-    out_mm.sum().backward()  # backward re-dequantizes the (resident) packed weight: must not raise
-    assert lora.gate_up_lora_A.grad is not None and lora.base.gate_up_proj.grad is None
-
-
-# ---------------------------------------------------------------------------------------------------
-# 1b) The bare primitive applies the same routing rule as the LoRA wrapper.
-# ---------------------------------------------------------------------------------------------------
-def test_base_forward_without_grad_uses_dequant_even_if_probe_says_yes(monkeypatch):
-    """Experts4bit.forward (the bare primitive) must apply the same rule as ExpertsLoRA: no backward
-    => the bit-exact dequantize path, even where the probe passes. matmul_4bit only *helps* when a
-    backward will run; under no_grad it would just route inference through kernels (gemv/gemm at
-    M=1) the probe never validated — and it would break `lora(x) == base(x)` bitwise at LoRA init
-    on bnb>=0.50, where the LoRA wrapper dequantizes but the base would not."""
-    from experts4bit_qlora._vendor import experts as vendor_mod
-
-    lora = _build(torch.float32, torch.float32)
-    monkeypatch.setattr(vendor_mod, "_matmul_4bit_matches_dequant", lambda: True)
-    hs, idx, wts = _inputs(torch.float32)
-
-    with torch.no_grad():
-        assert lora.base._use_matmul_4bit(hs) is False
-        with _Spy() as spy:
-            out_base = lora.base(hs, idx, wts)
-        out_lora = lora(hs, idx, wts)
-    assert spy.matmul_calls == 0 and spy.dequant_calls > 0
-    assert torch.equal(out_lora, out_base)  # zero-delta init identity holds on the same route
-
-
-def test_base_forward_grad_mode_but_non_grad_input_uses_dequant(monkeypatch):
-    """Grad mode on but the input does not require grad (plain eval without no_grad): still no
-    backward through the experts, so still the dequantize route."""
-    from experts4bit_qlora._vendor import experts as vendor_mod
-
-    lora = _build(torch.float32, torch.float32)
-    monkeypatch.setattr(vendor_mod, "_matmul_4bit_matches_dequant", lambda: True)
-    hs, idx, wts = _inputs(torch.float32, requires_grad=False)
-
-    assert lora.base._use_matmul_4bit(hs) is False
-    with _Spy() as spy:
-        lora.base(hs, idx, wts)
-    assert spy.matmul_calls == 0 and spy.dequant_calls > 0
-
-
-@cuda
-def test_base_gate_true_when_input_requires_grad_and_paths_agree():
-    """On CUDA with a supporting bnb: a grad-carrying base forward takes the matmul route and matches
-    the dequantize route within accumulation tolerance (mirror of the ExpertsLoRA positive test)."""
-    dtype = torch.bfloat16
-    lora = _build(dtype, dtype)
-    base = lora.base
-    hs, idx, wts = _inputs(dtype, requires_grad=True)
-
-    if not lora_mod._matmul_4bit_supported():
-        assert base._use_matmul_4bit(hs) is False
-        pytest.skip("bnb matmul_4bit unsupported for [packed,1] here (<=0.49.x): gate correctly False")
-
-    assert base._use_matmul_4bit(hs) is True
-    with _Spy() as spy:
-        out_mm = base(hs, idx, wts)
-    assert spy.matmul_calls > 0 and spy.dequant_calls == 0
-
-    with torch.no_grad():
-        out_dq = base(hs, idx, wts)
-    torch.testing.assert_close(out_mm.detach(), out_dq, atol=3e-2, rtol=3e-2)
+    out = lora(hs, idx, wts)
+    out.sum().backward()  # recompute Function re-dequantizes the (resident) packed weight
+    assert lora.gate_up_lora_A.grad is not None and lora.down_lora_A.grad is not None
+    assert lora.base.gate_up_proj.grad is None and lora.base.down_proj.grad is None  # frozen
 
 
 def test_output_dtype_follows_input_not_compute_dtype():

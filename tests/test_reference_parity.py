@@ -31,7 +31,7 @@ pytest.importorskip("bitsandbytes")
 
 import torch.nn.functional as F  # noqa: E402
 
-from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
+from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E402
 
 # bnb signals a missing/broken 4-bit backend in several ways depending on the build; catch them all so
 # a host without a working bnb 4-bit path SKIPS cleanly rather than erroring (matches test_offload.py).
@@ -194,13 +194,21 @@ def _write_ckpt(model, d, per_expert):
 def _roll_experts(model):
     """Negative control: give expert e the packed weights of expert e+1 (shape-safe, definitely wrong).
     The router still routes to e, so a correct load diverges from this by far more than NF4 error."""
+    rolled = 0
     for m in model.modules():
-        if isinstance(m, Experts4bit):
+        # ExpertsNbit, not Experts4bit: the base may be the parent class for non-4-bit schemes,
+        # and a control that silently matches zero modules would nullify this test (the rolled
+        # "corruption" would equal the clean model bit-for-bit).
+        if isinstance(m, ExpertsNbit):
+            rolled += 1
             with torch.no_grad():
                 for name in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax"):
                     t = getattr(m, name)
+                    if t is None:  # passthrough schemes carry no absmax
+                        continue
                     setattr_target = m._parameters if name in m._parameters else m._buffers
                     setattr_target[name] = t.roll(1, dims=0).clone()
+    assert rolled, "negative control matched no expert modules — the control itself is broken"
 
 
 @pytest.mark.parametrize(
