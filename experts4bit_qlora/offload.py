@@ -16,26 +16,33 @@ This lets a fused-MoE whose 4-bit experts exceed VRAM (Qwen3-30B-A3B ~15 GB, Gem
 ~13 GB) QLoRA-train on a 12 GB card, at the cost of one host->device expert transfer per layer per
 pass (a memory-for-compute trade — see ``docs/METHODOLOGY.md`` §11).
 
-Why this is correct (and why the hook goes on ``ExpertsLoRA``, not ``Experts4bit``):
+Why this is correct (and why the hook goes on ``ExpertsLoRA``, not ``ExpertsNbit``):
 
 * ``ExpertsLoRA.forward`` never calls ``base.forward()``; it reads ``base.gate_up_proj`` etc.
-  directly and calls ``base._dequantize_expert(...)``. A pre-hook on the base would never fire in
-  training, so the hook must sit on the module whose ``__call__`` actually runs — ``ExpertsLoRA``.
-* While offloaded, ``ExpertsLoRA`` uses the **dequantize path**: ``w = base._dequantize_expert(...)``
-  then ``F.linear(x, w)``. The packed weight has ``requires_grad=False``, so the dequantized ``w`` is a
-  non-grad constant and the dequant op is not on the autograd tape. ``F.linear`` saves the
-  *dequantized* ``w`` (for ``grad_x``), never the packed weight. The packed weight is therefore only
-  read during the forward (and recompute-forward) to *produce* ``w`` — never needed by backward — so
-  evicting it in the post-hook is safe in both the initial forward and the checkpoint recompute.
+  directly and calls ``base._project(...)``. A pre-hook on the base would never fire in training,
+  so the hook must sit on the module whose ``__call__`` actually runs — ``ExpertsLoRA``.
+* ``ExpertsNbit._project`` runs its projection through :class:`_FrozenLinearRecomputeBackward`,
+  which **re-dequantizes the packed weight in backward** (it saves only the tiny packed buffers,
+  not the full dequantized expert — the training-memory win). So backward *does* read the packed
+  weight, and eviction is safe only where the weight is guaranteed resident at backward time.
 
-  **Invariant (enforced in code):** this safety holds only on the dequantize path, so
-  ``ExpertsLoRA._use_matmul_4bit`` returns ``False`` whenever ``self._offload`` is set — the
-  ``bnb.matmul_4bit`` route (a training-memory win when **not** offloading; its autograd ``Function``
-  re-dequantizes the packed weight in backward and would read an evicted placeholder here) can never
-  run on an offloaded layer **in a grad-enabled forward**. The eviction hazard is a *backward*
-  construct: under ``no_grad`` there is no autograd tape and nothing re-reads a packed weight after
-  its projection ran, so the inference-only GEMV route (``ExpertsLoRA._use_infer_gemv``) is exempt.
-  Do not weaken the grad-enabled gate.
+  **Invariant: offload requires gradient checkpointing (``use_reentrant=False``), which the trainer
+  always enables.** Under checkpointing, each decoder layer's forward is recomputed in backward;
+  the pre-hook re-stages that layer's experts for the recompute, and the recompute Function's
+  backward (the re-dequant) runs *within that layer's backward segment* — while the layer is still
+  the single GPU-resident one, before the next layer to recompute stages and evicts it. So the
+  backward re-dequant always reads a staged weight. (Without checkpointing, the post-hook would
+  evict a layer right after its initial forward and the plain backward's re-dequant would read the
+  evicted placeholder — so **non-checkpointed offload training is unsupported**. It cannot corrupt
+  gradients silently: the read hits a 0-element placeholder and
+  :class:`~experts4bit_qlora._vendor.experts._FrozenLinearRecomputeBackward` raises a pointed
+  error naming this invariant. The shipped trainer always enables checkpointing.) The
+  initial-forward post-hook evict remains safe because the weight is re-staged on the recompute
+  before it is next needed.
+
+  The eviction hazard is purely a *backward* construct: under ``no_grad`` there is no autograd tape
+  and nothing re-reads a packed weight after its projection ran, so the inference-only GEMV route
+  (``ExpertsLoRA._use_infer_gemv``) is exempt and safe under offload.
 
 The tiny NF4 ``code`` buffer and the trainable LoRA adapters stay GPU-resident throughout.
 

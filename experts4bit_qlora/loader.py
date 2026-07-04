@@ -22,7 +22,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
-from . import Experts4bit
+from . import ExpertsNbit
 from .lora import ExpertsLoRA
 from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
@@ -51,7 +51,9 @@ def _assign(model, name, tensor):
         setattr(mod, attr, tensor)
 
 
-def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False):
+def load_moe_4bit_streaming(
+    model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4"
+):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
     Peak memory stays low: the model is built on ``meta`` (no allocation), then each tensor is read
@@ -144,8 +146,8 @@ def load_moe_4bit_streaming(model_id, device, dtype, r, alpha, offload=False, pi
         else:
             continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
         n_moe += 1
-        base = Experts4bit.from_float(
-            gate_up, down, has_gate=True, activation=activation, quant_type="nf4", compute_dtype=dtype
+        base = ExpertsNbit.from_float(
+            gate_up, down, has_gate=True, activation=activation, quant_type=quant_type, compute_dtype=dtype
         )
         experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:

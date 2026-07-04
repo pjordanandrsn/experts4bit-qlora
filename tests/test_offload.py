@@ -75,22 +75,27 @@ def test_offload_forward_is_math_identical(pin):
     assert lora._offload.staged is False  # post-hook evicted after each forward
 
 
-def test_offload_backward_uses_saved_dequant_not_evicted_base():
-    """The core correctness claim: after the forward evicts the packed base, backward still works —
-    because ExpertsLoRA's dequantize path saves the *dequantized* weight (a requires_grad=False
-    constant) for grad_x, never the packed weight. The frozen base receives no gradient."""
+# NB: the pre-ExpertsNbit test `test_offload_backward_uses_saved_dequant_not_evicted_base`
+# (non-checkpointed offload backward) was removed with the fold to the recompute-in-backward base.
+# ExpertsNbit._project re-dequantizes the packed weight in backward, so a *non-checkpointed*
+# offload backward would read the post-hook-evicted placeholder — non-checkpointed offload training
+# is now unsupported (see offload.py). Offload+backward correctness is covered by the checkpointed
+# tests below, which is the only configuration the trainer ever runs.
+
+
+def test_non_checkpointed_offload_backward_fails_loudly():
+    """The unsupported configuration must fail with the pointed invariant error, not a bare shape/
+    index error (and never silently wrong gradients): after the post-hook evicts the layer, a plain
+    (non-checkpointed) backward's re-dequant reads the 0-element placeholder and the recompute
+    Function translates that into the offload-invariant message."""
     lora = _build_experts_lora()
-    torch.nn.init.normal_(lora.gate_up_lora_B, std=0.01)  # B is zero-init; make LoRA contribute
-    torch.nn.init.normal_(lora.down_lora_B, std=0.01)
-    enable_expert_offload(lora, DEVICE, pin=True)
+    enable_expert_offload(lora, DEVICE, pin=False)
 
     hs, idx, w = _inputs()
     hs = hs.clone().requires_grad_(True)
-    lora(hs, idx, w).sum().backward()  # would raise/mis-grad if backward needed the evicted base
-
-    assert lora.gate_up_lora_A.grad is not None and lora.down_lora_A.grad is not None
-    assert lora.base.gate_up_proj.grad is None  # frozen base is never differentiated
-    assert lora._offload.staged is False
+    out = lora(hs, idx, w)  # post-hook evicts the base after this forward
+    with pytest.raises(RuntimeError, match="offload-evicted expert|gradient checkpointing"):
+        out.sum().backward()
 
 
 def test_offload_survives_gradient_checkpoint_recompute():

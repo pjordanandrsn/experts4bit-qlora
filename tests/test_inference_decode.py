@@ -166,9 +166,10 @@ def test_infer_gemv_gate_allowed_under_offload_no_grad(monkeypatch):
     with torch.no_grad():
         expected = DEVICE == "cuda"  # still CUDA-gated
         assert lora._use_infer_gemv(hs) is expected
-    # And the grad-enabled matmul_4bit gate stays hard-False under offload, exactly as before.
+    # Grad-enabled: the GEMV route is inference-only, so it must veto regardless of offload — the
+    # base then takes its recompute-in-backward projection (safe under checkpointed offload).
     hs_g = hs.clone().requires_grad_(True)
-    assert lora._use_matmul_4bit(hs_g) is False
+    assert lora._use_infer_gemv(hs_g) is False
 
 
 @cuda

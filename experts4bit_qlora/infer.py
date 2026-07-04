@@ -38,6 +38,7 @@ ADAPTER = os.environ.get("ADAPTER", "")
 OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
 OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
 PREFETCH = os.environ.get("PREFETCH", "1") == "1"
+QUANT_TYPE = os.environ.get("QUANT_TYPE", "nf4")  # must match the training run
 MAX_NEW = int(os.environ.get("MAX_NEW", "64"))
 BENCH_TOKENS = int(os.environ.get("BENCH_TOKENS", "0"))
 PROMPT = os.environ.get(
@@ -59,6 +60,7 @@ def load_for_inference():
         offload=OFFLOAD_EXPERTS,
         pin=OFFLOAD_PIN,
         prefetch=PREFETCH and OFFLOAD_EXPERTS,
+        quant_type=QUANT_TYPE,
     )
     # Under offload the experts deliberately live in pinned CPU RAM; a blanket .to() would undo that.
     if not OFFLOAD_EXPERTS:

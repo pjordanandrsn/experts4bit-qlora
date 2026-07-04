@@ -40,6 +40,7 @@ TRAIN_ROUTER = os.environ.get("TRAIN_ROUTER", "0") == "1"
 DO_GEN = os.environ.get("DO_GEN", "1") == "1"
 OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
 OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
+QUANT_TYPE = os.environ.get("QUANT_TYPE", "nf4")  # nf4/fp4 (4-bit), int8/fp8 (8-bit), bf16/fp16 (passthrough)
 OUT = os.environ.get("OUT", "./experts4bit-lora-out")
 
 EVAL_PROMPTS = [
@@ -117,7 +118,9 @@ def main():
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
     tok = AutoTokenizer.from_pretrained(MODEL)
-    model, _ = load_moe_4bit_streaming(MODEL, DEVICE, DTYPE, R, ALPHA, offload=OFFLOAD_EXPERTS, pin=OFFLOAD_PIN)
+    model, _ = load_moe_4bit_streaming(
+        MODEL, DEVICE, DTYPE, R, ALPHA, offload=OFFLOAD_EXPERTS, pin=OFFLOAD_PIN, quant_type=QUANT_TYPE
+    )
     # The loader already placed every module; under offload the experts live in pinned CPU RAM by
     # design, so a blanket model.to(DEVICE) would drag them back onto the GPU and defeat offloading.
     if not OFFLOAD_EXPERTS:
