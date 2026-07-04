@@ -33,6 +33,11 @@ sparse-MoE on reasonable hardware.
   transfer per layer per pass. Same memory-for-compute trade as above: it changes *what fits*, not
   speed. Offloading changes tensor location, not math — unit-test-verified, including the
   gradient-checkpoint recompute path (see [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11).
+- **It serves the fine-tune it made (`python -m experts4bit_qlora.infer`).** The adapters run
+  over the *exact* NF4 base they were trained against — no GGUF/AWQ re-quantization shifting the
+  error surface. With `OFFLOAD_EXPERTS=1` + prefetch, OLMoE **decodes at 1.44 tok/s in 1.68 GB**
+  on the A2000 (3.65× over serial offload; resident is 3.08 tok/s at 4.86 GB) — see
+  [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §12.
 - **Honest caveat — this is a memory technology, not an energy one.** On a GPU that *already*
   fits the model, 4-bit is a **1.2–2.3× energy penalty** (NF4 is storage-only; the GEMM runs in
   bf16 either way, plus dequant). The energy win only shows up when memory is the binding
@@ -124,12 +129,24 @@ What inference mode adds (all `no_grad`-only; training paths are untouched):
   expert-granular prefetch systems — and residency is bounded at two layers. The last layer
   prefetches the first: exactly the next token's first need.
 
-Same honest framing as training: this is *capability* (generate with a fused-MoE + live adapters on
-a card the bf16 model OOMs on), not throughput — at decode the per-layer PCIe transfer dominates,
-and prefetch can only hide the compute-sized part of it. `bench/run-decode-bench.sh` measures the
-full grid (offload x prefetch x gemv) and prints one `BENCH` line per config.
+Measured on the RTX A2000 (OLMoE + the r16 adapter, 128 greedy tokens; full grid + analysis in
+[`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §12):
 
-Kill-switches for A/B: `E4B_DECODE_FASTPATH=0`, `E4B_INFER_GEMV=0`.
+| config | tok/s | peak GPU |
+|---|:---:|:---:|
+| resident (experts on GPU) | 3.08 | 4.86 GB |
+| offload, serial | 0.40 | 1.45 GB |
+| **offload + prefetch** | **1.44** | **1.68 GB** |
+
+Same honest framing as training: this is *capability* (generate with a fused-MoE + live adapters in
+1.68 GB, where bf16 OOMs), not throughput. Decode under offload is PCIe-bound; **prefetch is the
+lever that matters** (3.65× over serial — the side-stream copy overlaps the entire next layer's
+compute, and the layer-granular schedule needs no expert prediction). The GEMV route and fast-path
+measure *neutral* at OLMoE scale — they are correctness/portability features, not speedups.
+
+Library users: `enable_inference_prefetch(handles)` links the offload handles the loader (or
+`offload_model_experts`) returns; `load_moe_4bit_streaming(..., offload=True, prefetch=True)` does
+it for you. Kill-switches for A/B: `E4B_DECODE_FASTPATH=0`, `E4B_INFER_GEMV=0`.
 
 ## Benchmarks
 
