@@ -101,6 +101,7 @@ class ExpertsLoRA(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         base = self.base
+        input_dtype = hidden_states.dtype
         compute_dtype = base.compute_dtype if base.compute_dtype is not None else hidden_states.dtype
         hidden_states = hidden_states.to(compute_dtype)
 
@@ -152,7 +153,8 @@ class ExpertsLoRA(nn.Module):
             current_hidden = current_hidden * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden.to(final_hidden_states.dtype))
 
-        return final_hidden_states.to(hidden_states.dtype)
+        # Same contract as the base primitive: output in the caller's dtype, not compute_dtype.
+        return final_hidden_states.to(input_dtype)
 
 
 class LoRALinear(nn.Module):

@@ -13,7 +13,8 @@ Level 1 — ``test_primitive_forward_matches_float_reference`` (CPU-runnable, no
     *and* value) that catches a transpose at the primitive level. Self-calibrating: the correct path
     must be ≥3× closer to the reference than any structural-bug control, so there is no magic tolerance.
 
-Level 2 — ``test_loaded_model_matches_reference_forward`` (GPU + transformers, per architecture):
+Level 2 — ``test_loaded_model_matches_reference_forward`` (transformers, per architecture; runs on
+    the GPU when present, else on CPU — bnb-CPU-4bit permitting — so CPU-only CI exercises the loader):
     the whole streaming-loader path vs the **real transformers model's** forward. This is the test that
     validates the loader's on-disk-layout assumption against each model's *actual* convention —
     transformers-v5 fused experts can be stored ``[E, in, out]`` for ``torch._grouped_mm``, while this
@@ -35,7 +36,7 @@ from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
 # bnb signals a missing/broken 4-bit backend in several ways depending on the build; catch them all so
 # a host without a working bnb 4-bit path SKIPS cleanly rather than erroring (matches test_offload.py).
 _QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
-cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires a CUDA GPU")
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def _relerr(a, b):
@@ -69,11 +70,16 @@ def _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate, *, swap=False, drop=F
 # --------------------------------------------------------------------------------------------------
 # Level 1 — primitive forward vs float reference (CPU-runnable, self-calibrating, with orientation).
 # --------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "quant_type,blocksize",
+    [("nf4", 64), ("fp4", 64), ("nf4", 128)],
+    ids=["nf4-64", "fp4-64", "nf4-128"],
+)
 @pytest.mark.parametrize("has_gate", [True, False], ids=["swiglu", "plain-up"])
-def test_primitive_forward_matches_float_reference(has_gate):
+def test_primitive_forward_matches_float_reference(has_gate, quant_type, blocksize):
     torch.manual_seed(0)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    E, HID, INTER, TOP_K, N_TOK = 6, 128, 192, 2, 40  # HID, INTER divisible by blocksize (64)
+    device = DEVICE
+    E, HID, INTER, TOP_K, N_TOK = 6, 128, 256, 2, 40  # HID, INTER divisible by every blocksize used
     gate_up_out = 2 * INTER if has_gate else INTER
     # Small-magnitude, ~Gaussian weights (what NF4 is designed for). out != in on both projections, so
     # the orientation check's shape assertion actually bites on a transpose.
@@ -85,21 +91,27 @@ def test_primitive_forward_matches_float_reference(has_gate):
 
     try:
         base = Experts4bit.from_float(
-            gate_up, down, has_gate=has_gate, quant_type="nf4", compute_dtype=torch.float32
+            gate_up, down, has_gate=has_gate, quant_type=quant_type, blocksize=blocksize, compute_dtype=torch.float32
         )
     except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {device}: {e}")
+        pytest.skip(f"bitsandbytes 4-bit ({quant_type}/bs{blocksize}) unavailable on {device}: {e}")
     lora = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(device)
 
     got = lora(hs, idx, wts)
 
     # (a) Forward tracks the correct float reference far better than either structural-bug control.
+    # fp4's coarser codebook compounds through the two SwiGLU projections (~2x nf4's forward error,
+    # ~0.20 vs ~0.09 relerr here), so its margin is 2x rather than 3x — the separation from a
+    # structural bug (which lands at or beyond the ~0.55+ controls) stays decisive either way.
+    margin = 0.33 if quant_type == "nf4" else 0.5
     err_ok = _relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate))
     controls = [_relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate, drop=True))]
     if has_gate:
         controls.append(_relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate, swap=True)))
     for c in controls:
-        assert err_ok < 0.33 * c, f"forward relerr {err_ok:.3f} not ≥3x closer than bug control {c:.3f}"
+        assert err_ok < margin * c, (
+            f"forward relerr {err_ok:.3f} not ≥{1 / margin:.0f}x closer than bug control {c:.3f}"
+        )
 
     # (b) Zero LoRA delta at init (B=0): the adapted forward is *bit-for-bit* the frozen base.
     assert torch.equal(got, base(hs, idx, wts))
@@ -138,6 +150,7 @@ def _qwen3_moe():
 
 
 def _gemma4():
+    pytest.importorskip("transformers.models.gemma4", reason="this transformers has no gemma4")
     from transformers.models.gemma4.configuration_gemma4 import Gemma4TextConfig
     from transformers.models.gemma4.modeling_gemma4 import Gemma4ForCausalLM
 
@@ -190,7 +203,6 @@ def _roll_experts(model):
                     setattr_target[name] = t.roll(1, dims=0).clone()
 
 
-@cuda
 @pytest.mark.parametrize(
     "build,per_expert", [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False)],
     ids=["olmoe", "qwen3_moe", "gemma4"],
@@ -202,16 +214,16 @@ def test_loaded_model_matches_reference_forward(build, per_expert, tmp_path):
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     torch.manual_seed(0)
-    ref_model = build().to("cuda", dtype=torch.bfloat16).eval()
+    ref_model = build().to(DEVICE, dtype=torch.bfloat16).eval()
     ref_model.config.use_cache = False
     _write_ckpt(ref_model, str(tmp_path), per_expert=per_expert)
 
-    ids = torch.randint(0, ref_model.config.vocab_size, (1, 16), device="cuda")
+    ids = torch.randint(0, ref_model.config.vocab_size, (1, 16), device=DEVICE)
     with torch.no_grad():
         ref_logits = ref_model(input_ids=ids).logits
 
     try:
-        model, _ = load_moe_4bit_streaming(str(tmp_path), "cuda", torch.bfloat16, r=4, alpha=8)
+        model, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
     except _QUANTIZE_UNAVAILABLE as e:
         pytest.skip(f"bitsandbytes 4-bit unavailable: {e}")
     model.config.use_cache = False

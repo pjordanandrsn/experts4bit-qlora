@@ -184,7 +184,15 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
     on ``experts_lora`` — the module whose ``__call__`` runs on every forward *and* on the
     gradient-checkpoint recompute — and stashes the handle on ``experts_lora._offload`` so it stays
     alive with the module. Returns the handle.
+
+    Idempotent: if ``experts_lora`` is already offloaded, the existing handle is returned unchanged
+    (``device`` / ``pin`` are ignored). This is load-bearing, not a convenience — while evicted the
+    base's registered tensors are 0-element placeholders, so a second handle would capture *those*
+    as its CPU homes (losing the weights) and stack a second pair of stage/evict hooks.
     """
+    existing = getattr(experts_lora, "_offload", None)
+    if existing is not None:
+        return existing
     base = getattr(experts_lora, "base", None)
     if base is None or not all(hasattr(base, n) for n in _ExpertOffload._names()):
         raise TypeError(
@@ -204,7 +212,9 @@ def offload_model_experts(model, device=None, pin: bool = True) -> list[_ExpertO
     Convenience for the already-loaded / test path. The streaming loader does **not** use this — it
     offloads each layer inside its per-layer loop so the experts never all sit on the GPU at once
     (a post-load pass would require every layer GPU-resident first, defeating the purpose). ``device``
-    defaults to the device of the first offloadable base found.
+    defaults to the device of the first offloadable base found. Already-offloaded modules keep their
+    existing handle (see :func:`enable_expert_offload`), so calling this on a model the loader
+    offloaded is a safe no-op.
     """
     from .lora import ExpertsLoRA
 

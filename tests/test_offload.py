@@ -194,6 +194,32 @@ def test_offload_state_dict_full_save_correct_and_adapter_filter_unaffected():
     assert adapter and all(not k.startswith("base.") for k in adapter)
 
 
+def test_enable_expert_offload_is_idempotent():
+    """A second enable on the same module must return the existing handle, not build a new one:
+    while evicted the base's registered tensors are 0-element placeholders, so a fresh handle would
+    capture THOSE as its CPU homes (losing the weights) and stack a second pair of stage/evict
+    hooks whose staging of empty homes breaks the forward. Both public entry points are covered —
+    the direct enable and the model walker on an already-offloaded model."""
+    import torch.nn as nn
+
+    lora = _build_experts_lora()
+    hs, idx, w = _inputs()
+    with torch.no_grad():
+        ref = lora(hs, idx, w)
+
+    h1 = enable_expert_offload(lora, DEVICE, pin=False)
+    h2 = enable_expert_offload(lora, DEVICE, pin=False)
+    assert h2 is h1  # existing handle returned, no re-capture
+    assert all(h1.home[n].numel() > 0 for n in h1.home)  # homes still hold the real weights
+
+    with torch.no_grad():
+        out = lora(hs, idx, w)  # forward still correct (would stage 0-element homes without the guard)
+    assert torch.allclose(ref, out, atol=1e-6, rtol=1e-6)
+
+    handles = offload_model_experts(nn.ModuleList([lora]), pin=False)
+    assert handles == [h1]  # walking an already-offloaded model is a no-op, not a corruption
+
+
 def test_offload_model_experts_walks_all_experts_lora():
     """offload_model_experts offloads every ExpertsLoRA in a container (the already-loaded-model
     entry point) and infers the compute device from the resident base."""
