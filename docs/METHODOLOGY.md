@@ -2,16 +2,18 @@
 
 *Placement ablation for the bitsandbytes `Experts4bit` QLoRA path. Written 2026-07-01.*
 
-> **Packaging note.** §9–§10 measure `matmul_4bit` on the fork (bnb 0.50-dev). On released bnb (≤ 0.49.x)
-> `matmul_4bit` is **incorrect** for this `[packed, 1]` weight layout, so the packaged `Experts4bit`
-> auto-gates to the portable dequantize forward (`_matmul_4bit_matches_dequant`); the matmul_4bit
-> benches live under `bench/_upstream/`. The ablation eval numbers (§1–§8) are unaffected — those
-> training runs went through `ExpertsLoRA`, which **at the time always used the dequantize path**.
-> As of v0.1.2, `ExpertsLoRA` routes the frozen base projections through `bnb.matmul_4bit` when it
-> helps and is safe (CUDA + grad enabled + probe passes + **not** offloading — see
-> `ExpertsLoRA._use_matmul_4bit`); §9a shows the two paths are numerically identical, so the eval
-> numbers carry over, while un-offloaded training no longer saves the full dequantized experts as
-> backward activations.
+> **Packaging note.** §9–§10 measure `matmul_4bit` on the fork (bnb 0.50-dev) — the routing proposed
+> for the upstream PR; those benches live under `bench/_upstream/`. On released bnb (≤ 0.49.x)
+> `matmul_4bit` is **incorrect** for this `[packed, 1]` weight layout in training shapes, and as of
+> v0.2.0 the packaged library doesn't need it: `ExpertsNbit._project` runs dequantize-then-`linear`
+> through a **recompute-in-backward** autograd Function, which delivers §9c's activation-memory
+> property (backward holds only the packed bytes, never the dequantized expert) on **any** released
+> bitsandbytes and every storage scheme, at §9b's small backward re-dequant cost. The only
+> `matmul_4bit` use left in the package is the probe-gated `no_grad` decode GEMV (§12a). The
+> ablation eval numbers (§1–§8) are unaffected — those runs went through `ExpertsLoRA`'s dequantize
+> forward, and the recompute Function computes the *identical* forward (it **is**
+> dequantize-then-`linear`; recomputation changes what is saved for backward, never what is
+> computed).
 
 ## 0. What "the numbers" are
 
@@ -23,7 +25,7 @@ Each config produces three scalars on a **fixed held-out set**:
 | `AFTER` | held-out loss after `STEPS` optimizer steps, at the final adapter |
 | `best`  | lowest held-out loss seen at any periodic eval (the checkpoint kept) |
 
-The headline result is the **delta** `AFTER − BEFORE`. A negative delta is the claim we are trying to substantiate: *LoRA adapters trained on top of the frozen NF4 experts actually learn.* (These runs used `ExpertsLoRA`'s dequantize path — the packaging-note correction above; as of v0.1.2 un-offloaded training routes through `bnb.matmul_4bit`, which §9a shows is numerically identical.) The ablation isolates **which adapter placement** is responsible for the gain.
+The headline result is the **delta** `AFTER − BEFORE`. A negative delta is the claim we are trying to substantiate: *LoRA adapters trained on top of the frozen NF4 experts actually learn.* (These runs used `ExpertsLoRA`'s dequantize path; the v0.2.0 recompute-in-backward Function computes the identical forward — see the packaging note — so the eval numbers carry over.) The ablation isolates **which adapter placement** is responsible for the gain.
 
 ## 1. What is under test
 
@@ -32,7 +34,7 @@ The bitsandbytes PR adds `Experts4bit`: 4-bit NF4 storage for the **fused 3-D ex
 - a **streaming loader** that reads the checkpoint tensor-by-tensor straight onto the GPU, quantizes each `16×64` expert stack to NF4 on the way, and frees the bf16 source immediately — the full bf16 model is never materialized (fits a 12 GB card with a 3 GB container RAM cap);
 - **per-expert LoRA** adapters over the frozen `Experts4bit` base (`ExpertsLoRA`);
 - **per-projection LoRA** over the frozen attention q/k/v/o (`LoRALinear`);
-- the forward routed through `bnb.matmul_4bit` — a memory optimization auto-engaged on bitsandbytes ≥ 0.50, else the portable dequantize path (§9).
+- the frozen-base projections run dequantize-then-`linear` with **re-dequantize-in-backward** — activation memory stays flat in the number of experts, on any released bitsandbytes (§9 measures the upstream `matmul_4bit` equivalent of this trade on the fork).
 
 Model: `allenai/OLMoE-1B-7B-0924` (hidden 2048, intermediate 1024, 16 layers, 64 experts, top-8). Hardware: RTX A2000 12 GB. bitsandbytes `0.50.0.dev0`.
 
@@ -137,6 +139,8 @@ bash bench/run-ablation.sh
 ## 9. Pinning claim #4 — the `matmul_4bit` routing (`97fa09f`), measured
 
 Harness: [bench/_upstream/bench_matmul4bit.py](../bench/_upstream/bench_matmul4bit.py) (requires bitsandbytes ≥ 0.50). Both paths (`_dequantize_expert`→`F.linear` vs `bnb.matmul_4bit`) coexist in the primitive, so they're A/B'd in one process. RTX A2000, bf16, OLMoE dims.
+
+*(Status as of v0.2.0: the packaged library achieves this commit's memory property portably via the recompute-in-backward Function — see the packaging note; the `matmul_4bit` training routing measured here remains the upstream PR's approach, benched on the fork.)*
 
 **a. Numerically identical — confirmed bit-exact.** `max|after−before| = 0.000e+00` on CUDA (commit only claimed CPU bit-exactness). So any Δ below is purely the path swap.
 
@@ -306,7 +310,7 @@ Readings, in the order they matter:
   **correctness and portability** — a validated decode route on a stock `pip install bitsandbytes`
   — not speed. Do not claim speed for them; the kill-switch columns exist so anyone can re-check.
 
-### c. Big models — experts exceed VRAM (Gemma-4-26B-A4B measured; Qwen3-30B pending)
+### c. Big models — experts exceed VRAM (Gemma-4-26B-A4B and Qwen3-30B-A3B measured)
 
 The §11c targets are where offload decode actually matters: their 4-bit experts (~13 GB Gemma-4,
 ~15 GB Qwen3-30B) don't fit a 12 GB card, so the *resident* configs are supposed to OOM — and do.
@@ -336,14 +340,31 @@ Two findings that **correct expectations set by the OLMoE grid** — measure, do
   real decode win, not just a portability feature. This is the scale at which the probed GEMV route
   earns its place; at OLMoE scale (64 experts, smaller stacks) it was correctly reported neutral.
 
-The takeaway for the whole feature: on the models offload is *for*, the decode story is
-"it runs at all, in ~6 GB, where resident OOMs" (0.43 tok/s) — capability, and the GEMV route buys
-a further ~1.5×. Prefetch still helps but is not the multiplier it is at OLMoE scale.
+**Qwen3-30B-A3B** (48 layers × 128 experts; loaded non-expert footprint 3.72 GB; ~15 GB of 4-bit
+experts ≈ 313 MB/layer):
 
-*(Qwen3-30B-A3B, 48 layers × 128 experts, ~15 GB experts: grid pending a disk-space window for the
-~61 GB checkpoint; row to follow. Expectation, stated for the record so it can be checked: same
-shape as Gemma-4 — resident OOM, offload ~sub-0.5 tok/s, GEMV a clear win at 128 experts/layer,
-prefetch a modest ratio because it is even more transfer-bound.)*
+| config | offload | prefetch | gemv | tok/s | peak GPU |
+|---|:---:|:---:|:---:|:---:|:---:|
+| resident | – | – | ✓ | **OOM** | — |
+| offload, serial | ✓ | – | ✓ | 0.203 | 4.07 GB |
+| offload, prefetched | ✓ | ✓ | ✓ | 0.219 | 4.41 GB |
+| **offload, prefetched, dequantize** | ✓ | ✓ | – | **0.238** | 4.42 GB |
+
+Scoring the prediction stated above (recorded for exactly this purpose): resident OOM — ✓;
+offload sub-0.5 tok/s — ✓; prefetch a modest ratio — ✓ (**1.08×**, even more transfer-bound than
+Gemma-4's 1.36×: per-layer compute keeps shrinking relative to the ~313 MB/layer copy); **GEMV a
+clear win — ✗, falsified.** GEMV *loses* 8 % here (0.219 vs 0.238 with it off), and the best
+measured Qwen3 decode config is prefetch **+ dequantize**. Qwen3's per-expert stacks are markedly
+smaller than Gemma-4's (same 128 experts/layer spread over a thinner intermediate), so the
+dequantize traffic GEMV avoids no longer dominates its per-call overhead — the win was
+shape-dependent, not expert-count-dependent as predicted. Same lesson this section already taught
+once with prefetch: **measure, don't extrapolate** — the kill-switches exist so each deployment
+can A/B its own model.
+
+The takeaway for the whole feature: on the models offload is *for*, the decode story is "it runs
+at all, in 4.4–6.2 GB, where resident OOMs" (0.24–0.43 tok/s) — capability. Prefetch still helps
+but is nowhere near its OLMoE-scale multiplier, and the GEMV route swings from +46 % (Gemma-4) to
+−8 % (Qwen3-30B) with expert shape — A/B it per model.
 
 ### d. Reproduce + limits
 
@@ -355,9 +376,9 @@ MODEL=google/gemma-4-26B-A4B bash bench/run-bigmoe-decode.sh                    
 ```
 
 Limits, stated plainly: batch-1 greedy decode on a single GPU (no batching, no CUDA graphs, no
-`torch.compile`); grids are OLMoE (resident-capable) and Gemma-4-26B (offload-only), with
-Qwen3-30B pending (§12c); and per-expert GEMV vs a true grouped-GEMM kernel (the deferred future
-work) remains unexplored territory for throughput.
+`torch.compile`); grids are OLMoE (resident-capable) plus Gemma-4-26B and Qwen3-30B
+(offload-only); and per-expert GEMV vs a true grouped-GEMM kernel (the deferred future work)
+remains unexplored territory for throughput.
 
 **Verdict on inference mode:** the same honest shape as §9–§11 — **capability, not throughput**.
 It serves the QLoRA fine-tune over the exact base it was trained against, on the card it was
