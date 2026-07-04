@@ -364,7 +364,10 @@ can A/B its own model.
 The takeaway for the whole feature: on the models offload is *for*, the decode story is "it runs
 at all, in 4.4–6.2 GB, where resident OOMs" (0.24–0.43 tok/s) — capability. Prefetch still helps
 but is nowhere near its OLMoE-scale multiplier, and the GEMV route swings from +46 % (Gemma-4) to
-−8 % (Qwen3-30B) with expert shape — A/B it per model.
+−8 % (Qwen3-30B) with expert shape — A/B it per model. One more measured anchor for "transfer-
+bound": the measurement host's pinned H2D ceiling is **6.20 GB/s** (A2000 in an x8 electrical
+link; PROVENANCE.md env block) — prefetched OLMoE decode already moves ~5 GB/s effective, ~80 %
+of that ceiling, so on this host there is little left for any schedule to hide.
 
 ### d. Reproduce + limits
 
