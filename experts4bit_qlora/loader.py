@@ -22,7 +22,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
-from . import ExpertsNbit
+from . import Experts4bit, ExpertsNbit
 from .lora import ExpertsLoRA
 from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
@@ -146,7 +146,11 @@ def load_moe_4bit_streaming(
         else:
             continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
         n_moe += 1
-        base = ExpertsNbit.from_float(
+        # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
+        # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
+        # they did before the ExpertsNbit fold.
+        base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
+        base = base_cls.from_float(
             gate_up, down, has_gate=True, activation=activation, quant_type=quant_type, compute_dtype=dtype
         )
         experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
