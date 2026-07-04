@@ -15,14 +15,30 @@ import subprocess
 import threading
 import time
 
+import bitsandbytes as bnb
 import torch
 import torch.nn.functional as F_nn
+from bitsandbytes.functional import QuantState
 
 from experts4bit_qlora import Experts4bit
 
 HIDDEN, INTER, N_EXP, EXPERT = 2048, 1024, 8, 0
 DTYPE, DEV = torch.bfloat16, "cuda"
 DUR = 6.0  # timed seconds per phase
+
+
+def _matmul4bit_proj(m, x):
+    """The 97fa09f 'after' path, reconstructed locally (the packaged primitive retired
+    `_expert_matmul` in v0.2.0 — training now uses recompute-in-backward instead)."""
+    quant_state = QuantState(
+        absmax=m.gate_up_absmax[EXPERT],
+        shape=torch.Size(m._gate_up_shape),
+        code=m.code,
+        blocksize=m.blocksize,
+        quant_type=m.quant_type,
+        dtype=DTYPE,
+    )
+    return bnb.matmul_4bit(x, m.gate_up_proj[EXPERT].reshape(-1, 1), quant_state=quant_state)
 
 
 def build():
@@ -102,7 +118,7 @@ def main():
         return F_nn.linear(x, m._dequantize_expert(m.gate_up_proj, m.gate_up_absmax, m._gate_up_shape, EXPERT, DTYPE))
 
     def after(x):
-        return m._expert_matmul(m.gate_up_proj, m.gate_up_absmax, m._gate_up_shape, EXPERT, x, DTYPE)
+        return _matmul4bit_proj(m, x)
 
     paths = [("native-bf16", native), ("before(dequant)", before), ("after(matmul_4bit)", after)]
     workloads = [

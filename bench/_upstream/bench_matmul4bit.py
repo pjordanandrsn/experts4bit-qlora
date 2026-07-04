@@ -1,11 +1,12 @@
 """Pin the perf/memory effect of commit 97fa09f — "route Experts4bit forward through bnb.matmul_4bit".
 
-Both projection paths the commit swapped still coexist in the current source, so we A/B them in a
-SINGLE process — no git checkout (which would corrupt the live ablation's PYTHONPATH=. import),
-no worktree, no rebuild:
+The BEFORE path still exists in the primitive; the AFTER path was retired from the package in
+v0.2.0 (recompute-in-backward replaced the matmul_4bit training route), so this bench reconstructs
+the exact commit-era call locally (`_matmul4bit_proj`) — still a single process, no git checkout
+(which would corrupt the live ablation's PYTHONPATH=. import), no worktree, no rebuild:
 
   BEFORE (pre-commit):  w = m._dequantize_expert(...); F.linear(x, w)   # materialize [out,in] bf16 weight
-  AFTER  (post-commit): m._expert_matmul(...) -> bnb.matmul_4bit(...)   # fused dequant-in-GEMM
+  AFTER  (post-commit): bnb.matmul_4bit on the per-expert [packed, 1] weight   # fused dequant-in-GEMM
 
 Measures, per tokens-per-expert M: latency (fwd, fwd+bwd) and peak CUDA memory, plus a numerical-
 equivalence check. Run on an IDLE GPU for trustworthy latency.
@@ -17,8 +18,10 @@ equivalence check. Run on an IDLE GPU for trustworthy latency.
 import argparse
 import statistics
 
+import bitsandbytes as bnb
 import torch
 import torch.nn.functional as F_nn
+from bitsandbytes.functional import QuantState
 
 from experts4bit_qlora import Experts4bit
 
@@ -26,6 +29,21 @@ HIDDEN, INTER, N_EXP = 2048, 1024, 8  # OLMoE-1B-7B expert geometry (few experts
 DTYPE = torch.bfloat16
 DEV = "cuda"
 EXPERT = 0
+
+
+def _matmul4bit_proj(m, packed, absmax, shape, expert_idx, x, dtype):
+    """The 97fa09f routing, reconstructed: the packaged primitive retired `_expert_matmul` in
+    v0.2.0, so the bench builds the commit-era call — per-expert QuantState + `[packed, 1]`
+    weight into ``bnb.matmul_4bit`` — itself."""
+    quant_state = QuantState(
+        absmax=absmax[expert_idx],
+        shape=torch.Size(shape),
+        code=m.code,
+        blocksize=m.blocksize,
+        quant_type=m.quant_type,
+        dtype=dtype,
+    )
+    return bnb.matmul_4bit(x, packed[expert_idx].reshape(-1, 1), quant_state=quant_state)
 
 
 def build_layer():
@@ -39,7 +57,7 @@ def build_layer():
 
 # --- the two paths, isolated to the exact lines 97fa09f swapped (gate_up projection) ---
 def after_proj(m, x):  # post-commit: fused 4-bit matmul
-    return m._expert_matmul(m.gate_up_proj, m.gate_up_absmax, m._gate_up_shape, EXPERT, x, DTYPE)
+    return _matmul4bit_proj(m, m.gate_up_proj, m.gate_up_absmax, m._gate_up_shape, EXPERT, x, DTYPE)
 
 
 def before_proj(m, x):  # pre-commit: dequantize full weight, then linear
@@ -173,7 +191,7 @@ def layer_mem(m, n_tokens=256, top_k=8):
     top_k_weights = torch.rand(n_tokens, top_k, dtype=DTYPE, device=DEV)
 
     def after(packed, absmax, shape, idx, x, dt):
-        return m._expert_matmul(packed, absmax, shape, idx, x, dt)
+        return _matmul4bit_proj(m, packed, absmax, shape, idx, x, dt)
 
     def before(packed, absmax, shape, idx, x, dt):
         return F_nn.linear(x, m._dequantize_expert(packed, absmax, shape, idx, dt))
