@@ -306,19 +306,58 @@ Readings, in the order they matter:
   **correctness and portability** — a validated decode route on a stock `pip install bitsandbytes`
   — not speed. Do not claim speed for them; the kill-switch columns exist so anyone can re-check.
 
-### c. Reproduce + limits
+### c. Big models — experts exceed VRAM (Gemma-4-26B-A4B measured; Qwen3-30B pending)
+
+The §11c targets are where offload decode actually matters: their 4-bit experts (~13 GB Gemma-4,
+~15 GB Qwen3-30B) don't fit a 12 GB card, so the *resident* configs are supposed to OOM — and do.
+Same A2000, base model (no adapter), 96 greedy tokens, `run-bigmoe-decode.sh`:
+
+**Gemma-4-26B-A4B** (30 layers × 128 experts; loaded non-expert footprint 5.27 GB, matching §11c):
+
+| config | offload | prefetch | gemv | tok/s | peak GPU |
+|---|:---:|:---:|:---:|:---:|:---:|
+| resident | – | – | ✓ | **OOM** | — |
+| offload, serial | ✓ | – | ✓ | 0.315 | 5.73 GB |
+| **offload, prefetched** | ✓ | ✓ | ✓ | **0.429** | 6.16 GB |
+| offload, prefetched, dequantize | ✓ | ✓ | – | 0.293 | 6.17 GB |
+
+Two findings that **correct expectations set by the OLMoE grid** — measure, don't extrapolate:
+
+- **Prefetch's *relative* win shrinks with expert size: 1.36× here vs 3.65× on OLMoE.** I had
+  predicted a *larger* win for big models; the measurement says the opposite, and the mechanism is
+  clear in hindsight. Prefetch overlaps a layer's transfer with the *next layer's compute*, so its
+  ceiling is the per-layer compute time. Gemma-4 moves ~433 MB/layer (2× OLMoE's ~216 MB) against
+  a per-layer compute that hasn't grown proportionally — so decode is more deeply PCIe-bound and
+  less of each transfer can hide behind compute. The absolute speedup holds (0.315 → 0.429); the
+  *ratio* falls as experts/layer grow. Offload decode of a big MoE is transfer-bound, full stop.
+- **GEMV flips from neutral (OLMoE) to a 1.46× win here (0.429 vs 0.293 with it off).** At 128
+  experts/layer the per-expert dequantize traffic — materializing a full bf16 expert just to matmul
+  one token — finally dominates, so the fused GEMV reading the packed 4-bit weight directly is a
+  real decode win, not just a portability feature. This is the scale at which the probed GEMV route
+  earns its place; at OLMoE scale (64 experts, smaller stacks) it was correctly reported neutral.
+
+The takeaway for the whole feature: on the models offload is *for*, the decode story is
+"it runs at all, in ~6 GB, where resident OOMs" (0.43 tok/s) — capability, and the GEMV route buys
+a further ~1.5×. Prefetch still helps but is not the multiplier it is at OLMoE scale.
+
+*(Qwen3-30B-A3B, 48 layers × 128 experts, ~15 GB experts: grid pending a disk-space window for the
+~61 GB checkpoint; row to follow. Expectation, stated for the record so it can be checked: same
+shape as Gemma-4 — resident OOM, offload ~sub-0.5 tok/s, GEMV a clear win at 128 experts/layer,
+prefetch a modest ratio because it is even more transfer-bound.)*
+
+### d. Reproduce + limits
 
 ```bash
 ADAPTER=./out/adapter_best.pt python -m experts4bit_qlora.infer                 # generate
 OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora.infer            # one timed config
-OUT_DIR=./decode-bench ADAPTER=./out/adapter_best.pt bash bench/run-decode-bench.sh  # full grid
+OUT_DIR=./decode-bench ADAPTER=./out/adapter_best.pt bash bench/run-decode-bench.sh  # OLMoE grid
+MODEL=google/gemma-4-26B-A4B bash bench/run-bigmoe-decode.sh                    # big-model grid
 ```
 
 Limits, stated plainly: batch-1 greedy decode on a single GPU (no batching, no CUDA graphs, no
-`torch.compile`); the grid model is OLMoE — the §11c targets (Qwen3-30B-A3B, Gemma-4-26B-A4B) are
-*expected* to show a larger prefetch win (bigger per-layer stacks, same deterministic schedule) but
-their decode grid has not been run yet; and per-expert GEMV vs a true grouped-GEMM kernel (the
-deferred future work) remains unexplored territory for throughput.
+`torch.compile`); grids are OLMoE (resident-capable) and Gemma-4-26B (offload-only), with
+Qwen3-30B pending (§12c); and per-expert GEMV vs a true grouped-GEMM kernel (the deferred future
+work) remains unexplored territory for throughput.
 
 **Verdict on inference mode:** the same honest shape as §9–§11 — **capability, not throughput**.
 It serves the QLoRA fine-tune over the exact base it was trained against, on the card it was
