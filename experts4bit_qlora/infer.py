@@ -132,8 +132,11 @@ def main():
     torch.cuda.reset_peak_memory_stats()
 
     if BENCH_TOKENS > 0:
+        from .offload import offload_stats_report, reset_offload_stats
+
         # Warmup: probes (gemv), allocator pools, prefetch steady state — outside the timed region.
         timed_decode(model, tok, PROMPT, min(8, BENCH_TOKENS))
+        reset_offload_stats()  # discard warmup transfers so E4B_OFFLOAD_STATS reflects the timed run only
         text, t_prefill, tps = timed_decode(model, tok, PROMPT, BENCH_TOKENS)
         peak = torch.cuda.max_memory_allocated() / 1e9
         log(f"  prompt tokens: {len(tok(PROMPT).input_ids)} | prefill {t_prefill:.3f}s")
@@ -146,6 +149,7 @@ def main():
             f"tok_s={tps:.3f} prefill_s={t_prefill:.3f} peak_gb={peak:.3f}",
             flush=True,
         )
+        offload_stats_report(log)  # no-op unless E4B_OFFLOAD_STATS=1
     else:
         t0 = time.time()
         out = model.generate(

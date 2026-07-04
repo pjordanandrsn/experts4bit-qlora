@@ -175,6 +175,12 @@ def load_moe_4bit_streaming(
             # Handles were appended in layer order above, which is what the circular linking needs.
             enable_inference_prefetch(offload_handles)
             log("  inference prefetch ON: next layer's experts copy on a side stream during no_grad forwards")
+        from .offload import _arena_enabled, _stats_enabled, report_offload_environment
+
+        if _arena_enabled():
+            log("  offload arena ON (E4B_OFFLOAD_ARENA): experts staged as consolidated per-dtype copies")
+        if _stats_enabled():  # A2: name the PCIe bus + H2D ceiling these per-layer figures ride
+            report_offload_environment(device, log)
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     for name in weight_map:

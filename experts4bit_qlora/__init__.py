@@ -36,7 +36,14 @@ else:
     from ._vendor.experts import Experts4bit, ExpertsNbit
 
 from .lora import ExpertsLoRA, LoRALinear, add_attention_lora
-from .offload import enable_expert_offload, enable_inference_prefetch, offload_model_experts
+from .offload import (
+    enable_expert_offload,
+    enable_inference_prefetch,
+    offload_model_experts,
+    offload_stats_report,
+    report_offload_environment,
+    reset_offload_stats,
+)
 
 __all__ = [
     "Experts4bit",
@@ -47,5 +54,8 @@ __all__ = [
     "enable_expert_offload",
     "enable_inference_prefetch",
     "offload_model_experts",
+    "offload_stats_report",
+    "report_offload_environment",
+    "reset_offload_stats",
 ]
 __version__ = "0.2.0"

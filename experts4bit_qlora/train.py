@@ -181,6 +181,9 @@ def main():
         f"training: {STEPS} steps x grad_accum {GRAD_ACCUM} (seq<= {SEQ}), lr={LR}, cosine+warmup, eval every {EVAL_EVERY}"
     )
     it, t0, ema, best = iter(data), time.time(), None, float("inf")
+    from .offload import offload_stats_report, reset_offload_stats
+
+    reset_offload_stats()  # measure the training loop only (drop load/BEFORE-eval transfers)
     for step in range(STEPS):
         opt.zero_grad()
         loss_acc = 0.0
@@ -216,6 +219,7 @@ def main():
         f"training done in {time.time() - t0:.0f}s "
         f"| peak GPU mem: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB (offload={'on' if OFFLOAD_EXPERTS else 'off'})"
     )
+    offload_stats_report(log)  # no-op unless E4B_OFFLOAD_STATS=1
 
     model.gradient_checkpointing_disable()
     eval_after = eval_loss(model, eval_data)

@@ -71,7 +71,58 @@ stream the copy runs on.
 
 from __future__ import annotations
 
+import os
+
 import torch
+
+
+def _stats_enabled() -> bool:
+    """Per-copy transfer instrumentation (``E4B_OFFLOAD_STATS=1``, default off). Zero overhead and
+    zero extra CUDA events on the hot path when off."""
+    return os.environ.get("E4B_OFFLOAD_STATS", "0") == "1"
+
+
+def _arena_enabled() -> bool:
+    """Copy-consolidation (``E4B_OFFLOAD_ARENA=1``, default off): pack a layer's four homes into one
+    contiguous pinned arena per dtype so staging is 1-2 ``copy_``s instead of 4. Correctness is
+    identical (same bytes land in the same per-tensor views); only the number of H2D copies changes."""
+    return os.environ.get("E4B_OFFLOAD_ARENA", "0") == "1"
+
+
+class _OffloadStats:
+    """Accumulates CUDA-event-bracketed copy timings, prefetch stall/slack, and cold-miss counts for
+    :func:`offload_stats_report`. Events are recorded on the stream that carries each copy and are
+    reduced with a single ``synchronize()`` at report time — never in the hot path (a sync there
+    would perturb the very overlap being measured)."""
+
+    def __init__(self):
+        self.copies = []  # (start_evt, end_evt, nbytes, ncopies, policy)
+        self.stalls = []  # (wait_marker_evt, copy_end_evt) — reduced to stall(+)/slack(-) at report
+        self.cold_misses = 0
+
+    def record_copy(self, start, end, nbytes, ncopies, policy):
+        self.copies.append((start, end, nbytes, ncopies, policy))
+
+    def record_stall(self, wait_marker, copy_end):
+        self.stalls.append((wait_marker, copy_end))
+
+
+_STATS: "_OffloadStats | None" = None
+
+
+def _stats() -> _OffloadStats:
+    global _STATS
+    if _STATS is None:
+        _STATS = _OffloadStats()
+    return _STATS
+
+
+def reset_offload_stats() -> None:
+    """Drop accumulated stats (and their retained CUDA events). Called at the start of a timed
+    region so a warmup pass doesn't pollute the measured numbers."""
+    global _STATS
+    _STATS = None
+
 
 # 0-element GPU placeholders that an evicted base's parameters/buffers point at, shared across all
 # offloaded layers (reads never mutate them, so sharing is safe) and cached per device. Keeping the
@@ -155,10 +206,20 @@ class _ExpertOffload:
         # the live Parameter object instead would alias the very tensor we later overwrite with a
         # placeholder — losing the weights. The source is on the GPU at load time, so ``.to("cpu")``
         # is a real device->host copy that decouples the home from the module.
-        self.home = {n: self._to_home(getattr(base, n).detach(), pin) for n in self._names()}
+        #
+        # Arena mode (E4B_OFFLOAD_ARENA=1) packs the four homes into one contiguous pinned arena per
+        # dtype; ``self.home[n]`` is then a correctly-shaped CPU *view* into its arena (so the
+        # state_dict hook and any per-tensor reader see the same thing as the non-arena path), and
+        # staging copies whole arenas (1-2 copies) instead of four separate tensors.
+        self.home, self._arena_cpu, self._arena_layout = self._build_homes(base, pin, _arena_enabled())
+        self._staged_dev = None  # arena mode: the device-side arena tensors kept alive while staged
         # True iff every home landed in pinned memory (so staging's non_blocking H2D is real); False
         # when pin=False or pin_memory fell back to pageable. Surfaced by the loader's summary log.
         self.pinned = all(_is_pinned(t) for t in self.home.values())
+        # Precomputed for stats: total H2D bytes per stage, and how many copies a stage issues
+        # (arena: one per dtype; non-arena: one per tensor).
+        self._stage_nbytes = sum(t.numel() * t.element_size() for t in self.home.values())
+        self._stage_ncopies = len(self._arena_cpu) if self._arena_layout is not None else len(self._names())
         self.staged = False
         self.evict()  # start evicted: base holds placeholders, ~0 GPU footprint (frees the load copy)
         self._install_state_dict_hook()
@@ -199,15 +260,66 @@ class _ExpertOffload:
                 pass  # pinning is best-effort; pageable fallback is correct, just no async H2D
         return cpu
 
-    def _copy_home_to_device(self) -> None:
-        """Enqueue the four H2D copies on the *current* stream and mark this handle staged. The
-        destination tensors are allocated on that stream, so a later free is stream-ordered
-        against the copies automatically."""
+    @classmethod
+    def _build_homes(cls, base, pin: bool, arena: bool):
+        """Return ``(home, arena_cpu, layout)``. Non-arena: ``home[n]`` is an independent (pinned)
+        CPU tensor, ``arena_cpu``/``layout`` are ``None`` — byte-identical to the pre-arena path.
+        Arena: one contiguous pinned CPU tensor per dtype (``arena_cpu[dtype]``), ``home[n]`` a
+        shaped view into it, and ``layout[n] = (dtype, start, stop, shape)`` for device re-viewing."""
+        names = cls._names()
+        srcs = {n: getattr(base, n).detach().to("cpu") for n in names}
+        if not arena:
+            return {n: cls._to_home(srcs[n], pin) for n in names}, None, None
+
+        by_dtype: dict = {}
+        for n in names:  # preserve _names() order within each dtype group
+            by_dtype.setdefault(srcs[n].dtype, []).append(n)
+        home, arena_cpu, layout = {}, {}, {}
+        for dt, ns in by_dtype.items():
+            total = sum(srcs[n].numel() for n in ns)
+            buf = cls._to_home(torch.empty(total, dtype=dt), pin)  # pin the arena, then view it
+            off = 0
+            for n in ns:
+                k = srcs[n].numel()
+                buf[off : off + k].copy_(srcs[n].reshape(-1))
+                home[n] = buf[off : off + k].view(srcs[n].shape)
+                layout[n] = (dt, off, off + k, tuple(srcs[n].shape))
+                off += k
+            arena_cpu[dt] = buf
+        return home, arena_cpu, layout
+
+    def _copy_home_to_device(self, policy: str = "sync") -> None:
+        """Enqueue this layer's H2D copies on the *current* stream and mark the handle staged. The
+        destination tensors are allocated on that stream, so a later free is stream-ordered against
+        the copies automatically. Non-arena issues four copies (one per tensor); arena issues one
+        per dtype and re-views the params/buffers into the device arena. ``policy`` tags the copy for
+        :func:`offload_stats_report` (``sync`` / ``cold_miss`` / ``prefetch``)."""
+        stats = _stats() if _stats_enabled() else None
+        if stats is not None:
+            stream = torch.cuda.current_stream(self.device)
+            start = torch.cuda.Event(enable_timing=True)
+            start.record(stream)
+
         b = self.base
-        for n in self._NAMES_PARAM:
-            b._parameters[n].data = self.home[n].to(self.device, non_blocking=True)
-        for n in self._NAMES_BUFFER:
-            b._buffers[n] = self.home[n].to(self.device, non_blocking=True)
+        if self._arena_layout is not None:
+            dev = {dt: a.to(self.device, non_blocking=True) for dt, a in self._arena_cpu.items()}
+            for n in self._NAMES_PARAM:
+                dt, s, e, shape = self._arena_layout[n]
+                b._parameters[n].data = dev[dt][s:e].view(shape)
+            for n in self._NAMES_BUFFER:
+                dt, s, e, shape = self._arena_layout[n]
+                b._buffers[n] = dev[dt][s:e].view(shape)
+            self._staged_dev = dev  # keep the device arenas alive (the param views also reference them)
+        else:
+            for n in self._NAMES_PARAM:
+                b._parameters[n].data = self.home[n].to(self.device, non_blocking=True)
+            for n in self._NAMES_BUFFER:
+                b._buffers[n] = self.home[n].to(self.device, non_blocking=True)
+
+        if stats is not None:
+            end = torch.cuda.Event(enable_timing=True)
+            end.record(stream)
+            stats.record_copy(start, end, self._stage_nbytes, self._stage_ncopies, policy)
         self.staged = True
 
     def _consume_ready_event(self) -> None:
@@ -218,6 +330,13 @@ class _ExpertOffload:
         if self.ready_event is None:
             return
         s = torch.cuda.current_stream(self.device)
+        if _stats_enabled():
+            # Stall = time the compute stream waits for the copy. Marker on the compute stream at
+            # wait-issue vs the copy's end event: positive elapsed = real stall (overlap too small),
+            # negative = slack (copy already done — overlap succeeded).
+            marker = torch.cuda.Event(enable_timing=True)
+            marker.record(s)
+            _stats().record_stall(marker, self.ready_event)
         s.wait_event(self.ready_event)
         self.ready_event = None
         b = self.base
@@ -240,7 +359,7 @@ class _ExpertOffload:
                 h.evict()
         if cls._resident is not None and cls._resident is not self:
             cls._resident.evict()  # single-slot: free the prior layer before staging this one
-        self._copy_home_to_device()
+        self._copy_home_to_device("sync")
         cls._resident = self
 
     def stage_for_inference(self) -> None:
@@ -252,12 +371,14 @@ class _ExpertOffload:
         cls = type(self)
         if not self.staged:
             # Cold start / miss: nothing prefetched this layer — stage synchronously, like stage().
+            if _stats_enabled():
+                _stats().cold_misses += 1
             for h in list(cls._staged_now):
                 if h is not self:
                     h.evict()
             if cls._resident is not None and cls._resident is not self:
                 cls._resident.evict()
-            self._copy_home_to_device()
+            self._copy_home_to_device("cold_miss")
         else:
             self._consume_ready_event()
         cls._staged_now.add(self)
@@ -270,8 +391,10 @@ class _ExpertOffload:
             # today nxt.device == self.device; this keeps the invariant local.)
             stream = _prefetch_stream(nxt.device)
             with torch.cuda.stream(stream):
-                nxt._copy_home_to_device()
-            evt = torch.cuda.Event()
+                nxt._copy_home_to_device("prefetch")
+            # Timing-enabled only under stats (so _consume_ready_event can measure stall vs this
+            # event); a plain non-timing event otherwise, exactly as before.
+            evt = torch.cuda.Event(enable_timing=True) if _stats_enabled() else torch.cuda.Event()
             evt.record(stream)
             nxt.ready_event = evt
             cls._staged_now.add(nxt)
@@ -287,6 +410,7 @@ class _ExpertOffload:
             b._parameters[n].data = ph_u8
         for n in self._NAMES_BUFFER:
             b._buffers[n] = ph_f32
+        self._staged_dev = None  # drop our reference to the device arena(s); the param views are now placeholders
         self.staged = False
         self.ready_event = None
         cls = type(self)
@@ -361,6 +485,115 @@ def enable_inference_prefetch(handles) -> list[_ExpertOffload]:
     for h, nxt in zip(handles, handles[1:] + handles[:1]):
         h._prefetch_next = nxt
     return handles
+
+
+def offload_stats_report(log=None) -> "dict | None":
+    """Reduce the accumulated per-copy stats to a summary (``E4B_OFFLOAD_STATS=1``). Returns ``None``
+    when stats are off or nothing was staged. Synchronizes once here (never in the hot path) to make
+    the retained CUDA events readable, then reports, per policy: GB moved, copy count, mean per-copy
+    ms, implied GB/s; plus total prefetch stall vs slack ms and the cold-miss count. ``implied GB/s``
+    against the pinned ceiling (see :func:`report_offload_environment`) is the A-workstream number."""
+    stats = _STATS
+    if stats is None or not stats.copies:
+        return None
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+    by_policy: dict = {}
+    for start, end, nbytes, ncopies, policy in stats.copies:
+        ms = start.elapsed_time(end)
+        agg = by_policy.setdefault(policy, {"ms": 0.0, "bytes": 0, "stages": 0, "copies": 0})
+        agg["ms"] += ms
+        agg["bytes"] += nbytes
+        agg["stages"] += 1
+        agg["copies"] += ncopies
+
+    stall_ms = slack_ms = 0.0
+    for marker, copy_end in stats.stalls:
+        d = marker.elapsed_time(copy_end)  # +: compute waited (stall); -: copy already done (slack)
+        if d >= 0:
+            stall_ms += d
+        else:
+            slack_ms += -d
+
+    report = {"by_policy": {}, "stall_ms": stall_ms, "slack_ms": slack_ms, "cold_misses": stats.cold_misses}
+    for policy, a in sorted(by_policy.items()):
+        gb = a["bytes"] / 1e9
+        gbps = gb / (a["ms"] / 1e3) if a["ms"] > 0 else 0.0
+        report["by_policy"][policy] = {
+            "gb": gb,
+            "stages": a["stages"],
+            "copies": a["copies"],
+            "mean_stage_ms": a["ms"] / a["stages"],
+            "gbps": gbps,
+        }
+
+    if log is not None:
+        log("offload transfer stats (E4B_OFFLOAD_STATS):")
+        for policy, r in report["by_policy"].items():
+            log(
+                f"  {policy:<10} {r['gb']:.2f} GB in {r['stages']} stages / {r['copies']} copies "
+                f"| {r['mean_stage_ms']:.2f} ms/stage | {r['gbps']:.2f} GB/s"
+            )
+        log(f"  prefetch stall {stall_ms:.1f} ms | slack {slack_ms:.1f} ms | cold misses {stats.cold_misses}")
+    return report
+
+
+def report_offload_environment(device, log, ceiling_mb: int = 256, iters: int = 20) -> "dict | None":
+    """One-shot PCIe link + H2D-ceiling report (``E4B_OFFLOAD_STATS=1``). Names the bus every
+    per-layer ``GB/s`` should be read against, and warns if the link negotiated below its max width
+    (a chipset x4/x8 slot produces exactly the reduced bandwidth the offload figures reflect).
+    Fail-soft: any probe that raises is skipped, never breaks a load."""
+    dev = torch.device(device)
+    out: dict = {}
+
+    try:  # PCIe link status via nvidia-smi (fail-soft: absent in many containers)
+        import subprocess
+
+        q = "name,pcie.link.gen.current,pcie.link.gen.max,pcie.link.width.current,pcie.link.width.max"
+        r = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={q}", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            row = r.stdout.strip().splitlines()[0]
+            out["pcie"] = row
+            log(f"offload env: PCIe {row}")
+            parts = [p.strip() for p in row.split(",")]
+            if len(parts) == 5:
+                gcur, gmax, wcur, wmax = parts[1:]
+                if wcur.split("x")[-1] != wmax.split("x")[-1] or gcur != gmax:
+                    log(
+                        f"  WARNING: link negotiated below max (gen {gcur}/{gmax}, width {wcur}/{wmax}) "
+                        "— reduced H2D bandwidth is expected; this bounds offload/prefetch throughput"
+                    )
+    except Exception as e:
+        log(f"offload env: PCIe probe unavailable ({type(e).__name__})")
+
+    if dev.type == "cuda" and torch.cuda.is_available():  # H2D ceiling micro-bench (pinned + pageable)
+        try:
+            n = ceiling_mb * 1024 * 1024
+            dst = torch.empty(n, dtype=torch.uint8, device=dev)
+            for kind, pin in (("pinned", True), ("pageable", False)):
+                src = torch.empty(n, dtype=torch.uint8)
+                if pin:
+                    src = src.pin_memory()
+                for _ in range(3):  # warm the path
+                    dst.copy_(src, non_blocking=pin)
+                torch.cuda.synchronize()
+                s = torch.cuda.Event(enable_timing=True)
+                e = torch.cuda.Event(enable_timing=True)
+                s.record()
+                for _ in range(iters):
+                    dst.copy_(src, non_blocking=pin)
+                e.record()
+                torch.cuda.synchronize()
+                gbps = iters * n / 1e9 / (s.elapsed_time(e) / 1e3)
+                out[f"ceiling_{kind}_gbps"] = gbps
+                log(f"offload env: {kind} H2D ceiling {gbps:.2f} GB/s ({ceiling_mb} MB x {iters})")
+        except Exception as e:
+            log(f"offload env: ceiling micro-bench unavailable ({type(e).__name__})")
+    return out or None
 
 
 def offload_model_experts(model, device=None, pin: bool = True) -> list[_ExpertOffload]:

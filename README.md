@@ -97,6 +97,12 @@ the number of experts — on any released bitsandbytes, for every storage scheme
   combination fails loudly rather than mis-training. Details in
   [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11.
 
+Transfer diagnostics (default off): `E4B_OFFLOAD_STATS=1` prints per-layer H2D bandwidth, prefetch
+stall/slack, and a one-shot PCIe-link + ceiling report; `E4B_OFFLOAD_ARENA=1` consolidates each
+layer's four expert tensors into two per-dtype copies. What they measured on the reference host —
+and why offload is PCIe-bound there — is in
+[`docs/OFFLOAD-TRANSFER-NOTES.md`](docs/OFFLOAD-TRANSFER-NOTES.md).
+
 ## Scope
 
 The `ExpertsNbit` primitive and `ExpertsLoRA` adapters are **model-agnostic**. The **streaming
