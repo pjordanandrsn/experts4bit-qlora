@@ -82,28 +82,78 @@ python scripts/make_olmoe_repeat_manifest.py --phase 3 --jobs-root /workspace/ru
   --out runs/job_manifest/olmoe_query_jobs.jsonl
 ```
 
+## Results (bundle olmoe-qlora-grid-20260705-1351)
+
+Phases 1 (12 train repeats) and 2 (3 decode repeats) complete, 15/15 pass. Aggregates:
+`runs/results/olmoe_repeat_*.{csv,jsonl}`, `runs/results/summary.md`. Provenance: gate report at
+`runs/results/provenance_report.json` — all 15 class `debug_only` on the per-job commit check only
+(git-archive worker trees; see caveat below); metrics/env/GPU/versions fully captured.
+
+### Training repeats — best held-out eval per seed
+
+| mode | seed 1337 | seed 2027 | seed 3407 | aggregate best (mean ± std) | peak GB | s/step |
+|---|---|---|---|---|---|---|
+| int8-offload | 1.0181 | 1.0339 | 1.0262 | **1.0261 ± 0.0079** | 2.72 | 17.0 |
+| nf4-offload | 1.0214 | 1.0346 | 1.0315 | 1.0292 ± 0.0069 | 2.52 | 14.7 |
+| int8-resident | 1.0213 | 1.0383 | 1.0343 | 1.0313 ± 0.0089 | 8.50 | 11.9 |
+| nf4-resident | 1.0211 | 1.0441 | 1.0287 | 1.0313 ± 0.0117 | 5.28 | 12.0 |
+
+### Decode repeats — resident, 5 samples + 1 discarded warmup
+
+| mode | tok/s (mean ± std) [min, max] | peak GB |
+|---|---|---|
+| fp4 | 12.87 ± 0.20 [12.61, 13.10] | 4.72 |
+| nf4 | 12.68 ± 0.22 [12.29, 12.86] | 4.72 |
+| int8 | 11.63 ± 0.02 [11.61, 11.65] | 7.95 |
+
+### Claim status (summarizer's printed rules)
+
+- **int8-offload posts the best training eval — OLMoE-supported, host-specific.** Best-eval win in
+  3/3 seeds vs every other repeated mode; aggregate mean is lowest of the four. Its ~2.72 GB peak
+  is near the 4-bit floor, so this is a low-VRAM/high-fidelity *candidate regime for OLMoE* — not
+  a Qwen3 claim, and bf16/fp16-offload (single-run) are excluded from the ranking.
+- **offload collapses the storage-width memory gap — OLMoE-supported, host-specific.** Offload
+  width-delta 0.20 GB vs resident 3.22 GB (ratio 0.06), 3/3 seeds.
+- **resident memory scales with storage width — OLMoE-supported, host-specific.** 3/3 seeds.
+- **BEFORE-training fidelity ordering (int8 < nf4) — OLMoE-supported, host-specific.** 3/3 pairs.
+- **fp4 decode faster than nf4 — NOT supported on repeat.** The single-run signal (nf4 10.12
+  tok/s) was a slow outlier; repeat-5 puts fp4 (12.87 ± 0.20) and nf4 (12.68 ± 0.22) within a
+  standard deviation. Reported as tied. This is the repeat grid doing its job — a candidate that
+  did not survive.
+
+### Provenance caveat
+
+Per-job commit was not self-reported (workers ran `git archive` trees with no `.git`), so the gate
+classes all 15 `debug_only` on the commit check. Metrics, environment, GPU, and library versions
+are fully captured; the executed training path is functionally identical across the bundle's
+branch commits (only difference: a gated no-op profiler hook the repeat jobs never enabled). The
+runner now records commit via `E4B_COMMIT` (`scripts/runpod_claim_and_run.py`) so subsequent runs
+self-attest. Seed-reproduction rests on the captured metrics, not on commit attestation.
+
 ---
 
 <!-- ots-attestation-footer -->
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T09:22:23Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `ec3a43133ebb7ce900a5775f7fc999b5cda590884972a6b0c9a6fe1176abe01d` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[?&~%o~:~~?@@=&?#]`
+- **OTS proof timestamp for visible document:** `2026-07-05T13:53:11Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `d9c0ecd7ab94cff03795cc7e25d16b1213a5de8d0bcf872630fe4748df1b33a2` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T09:22:23Z` `ec3a43133ebb7ce900a5775f7fc999b5cda590884972a6b0c9a6fe1176abe01d`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[!#&.?&!=%@#o&$$.]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|                 |
-|                 |
-|    . o +        |
-|   . *.B o . .   |
-|    X.+.S . +   o|
-|   + ==+ . . o.oO|
-|  o E.o+...   o*+|
-| o o =+oo      . |
-|  o.+ +*.        |
+|              .. |
+|       o     ..  |
+|        +    ... |
+|       . + .ooo.o|
+|        S =.o+*++|
+|         o +.B+%+|
+|          = +.@oB|
+|         . E o++.|
+|          . =o ..|
 +-----------------+
 ```
 
