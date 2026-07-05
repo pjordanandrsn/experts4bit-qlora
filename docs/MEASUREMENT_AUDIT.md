@@ -116,28 +116,57 @@ bf16-offload's 1.0112 is the lowest training eval in the entire bundle. Caveats:
 None of D1–D3 are run here (no pod; explicit-instruction-gated). The decode-profiler fix ships so
 the next decode-profile run is non-empty.
 
+## 7. Debt resolution addendum (2026-07-05, post-audit session — pointers only)
+
+All three debts were run the same day under the post-audit work queue
+(`docs/POST_AUDIT_WORK_QUEUE.md`); this section records outcomes, the details live in the cited
+docs:
+
+- **D3 PAID — §3 acquitted at one-step granularity, and then some.** Five trios (bf16+int8 ×
+  default/deterministic kernels × dropout OFF/ON): null AND placement **bitwise-equal on every
+  object** (losses, logits, grads, weights, optimizer state). The offload training path is not a
+  different one-step experiment. The anomaly is run-level: T5 forensics found the repeat grid's
+  placement pairs were ALL cross-architecture (4090↔A5000, evaluator offset 0.0026–0.0054 —
+  same scale as the claimed effects), which explains the "3/3 seeds" cells; the same-host
+  single-run bf16 0.0108 pair remains unexplained (scoped S10; divergence-onset probe gated).
+  Quarantine on offload-trained precision claims HOLDS. `docs/TRAIN_PLACEMENT_CERTIFICATE.md`.
+- **D2 PAID — placement is bitwise-exact at serve.** 384/384 per-example null evals identical
+  resident-vs-offload across all six modes; eval determinism repeat 64/64 bitwise. §3 localizes
+  strictly outside the forward path. `runs/results/postaudit/null_ladder_per_example.md`.
+- **D1 PAID — and S9 FIRED.** Per-example paired SEs put G_int8 = +0.0094 ± 0.0076 (|t|=1.24)
+  and G_total = +0.0088 ± 0.0080 (|t|=1.09) at n=64: the ladder's fine ordering, coverage=108%,
+  and §1's scramble reading are all within sampling noise of this eval size (the pinned-set
+  ordering itself is deterministic; the noise is distributional, not measurement). The
+  preregistered n=1024 re-pin (`docs/NULL_LADDER_1024_AMENDMENT.md`) is the confirmation
+  instrument; no G-denominated claim ships while S9 holds.
+- §4's mechanism was **confirmed in form** (workspace exists iff quantized,
+  precision-independent ≈0.64 GB; 16-bit floor code-backed) — `docs/OFFLOAD_MEMORY_FACTS.md`,
+  which also nails the resident decomposition (fixed = 1.655 ± 0.001 GB + slab).
+
 ---
 
 <!-- ots-attestation-footer -->
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T16:48:26Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `62fc92ea4193d118538cabd40758d8678c65172000955a45a9bb71dbb067005c` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[0+$&#+?%o:#~!::*]`
+- **OTS proof timestamp for visible document:** `2026-07-05T18:11:13Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `de63a344f11ac6b95402e64682d0ed452c7ded31204a5ecb20eb99c059afca9b` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T16:48:26Z` `62fc92ea4193d118538cabd40758d8678c65172000955a45a9bb71dbb067005c`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[!?0~%~oo$::%&0@#]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|.ooXBO=.o.       |
-|  = EB=.         |
-| + +o=.          |
-|. = o+.          |
-| . ++.+ S        |
-|  +.+o +         |
-|   +.*o .        |
-|  . oo+.         |
-|   .oo           |
+|.o.+++B .o       |
+|. ==+X++. +      |
+|.o..o+=.o..o     |
+| o oo. . *.      |
+|  +.    S .      |
+|. .    = =       |
+| o      = =      |
+|  o    . o o     |
+| E      .        |
 +-----------------+
 ```
 
