@@ -1,0 +1,4 @@
+resident BENCH offload=0 prefetch=0 gemv=1 fastpath=1 tok_s=5.189 prefill_s=1.458 peak_gb=20.039
+offload-serial BENCH offload=1 prefetch=0 gemv=1 fastpath=1 tok_s=1.147 prefill_s=2.063 peak_gb=4.071
+offload-prefetch BENCH offload=1 prefetch=1 gemv=1 fastpath=1 tok_s=1.653 prefill_s=3.170 peak_gb=4.411
+offload-prefetch-dq BENCH offload=1 prefetch=1 gemv=0 fastpath=1 tok_s=1.653 prefill_s=2.230 peak_gb=4.417

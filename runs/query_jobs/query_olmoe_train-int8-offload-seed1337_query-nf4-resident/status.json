@@ -1,0 +1,10 @@
+{
+  "claimed_at": "2026-07-05T14:07:29Z",
+  "commit": "f28c4ff8622e468cdee465ceec789c08920a79ce",
+  "finished_at": "2026-07-05T14:41:25Z",
+  "hostname": "149d17ceaf99",
+  "pid": 377,
+  "pod_id": "149d17ceaf99",
+  "started_at": "2026-07-05T14:39:39Z",
+  "status": "pass"
+}
