@@ -1,0 +1,1 @@
+resident BENCH offload=0 prefetch=0 gemv=1 fastpath=1 tok_s=4.143 prefill_s=1.754 peak_gb=20.039

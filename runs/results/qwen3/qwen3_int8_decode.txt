@@ -1,0 +1,1 @@
+resident BENCH offload=0 prefetch=0 gemv=1 RESULT=OOM
