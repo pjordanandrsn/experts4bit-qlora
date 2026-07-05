@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import sys
 
@@ -57,6 +58,7 @@ def build_pairs(layers, experts):
             "tokens_routed": e["tokens_routed"],
             "per_expert_bytes": layer.get("per_expert_bytes", 0),
             "projected_stall_ms": layer_stall * frac,
+            "h2d_bytes_share": layer.get("per_expert_bytes", 0) * layer.get("stage_copies", 0),
         })
     return pairs
 
@@ -85,25 +87,46 @@ def concentration(pairs, key):
     return out, total
 
 
-def budget_projection(pairs, total_stall):
-    """Greedy by projected stall per byte: fill each budget with the highest-stall pairs whose
-    cumulative per-expert bytes fit, report the projected stall covered."""
-    ordered = sorted(pairs, key=lambda p: (p["projected_stall_ms"] / p["per_expert_bytes"])
-                     if p["per_expert_bytes"] else 0.0, reverse=True)
+def _pin_score(p, score):
+    b = p["per_expert_bytes"]
+    if not b:
+        return 0.0
+    if score == "stall-per-byte":
+        return p["projected_stall_ms"] / b
+    if score == "bytes-per-byte":  # fallback when stall timing is noisy
+        return p["h2d_bytes_share"] / b
+    if score == "hits-bytes-per-byte":
+        return p["hits"] * p["h2d_bytes_share"] / b
+    raise ValueError(f"unknown score {score!r}")
+
+
+def budget_projection(pairs, total_stall, score="stall-per-byte"):
+    """Greedy by ``score`` (default: projected stall per resident byte): fill each budget with
+    the highest-value pairs whose cumulative per-expert bytes fit. Returns one row per budget:
+    (budget_gb, selected_pairs, used_gb, stall_covered_frac, h2d_gb_avoided, hit_covered_frac).
+    Greedy, not a knapsack — v1 by design."""
+    ordered = sorted(pairs, key=lambda p: _pin_score(p, score), reverse=True)
+    total_hits = sum(p["hits"] for p in pairs)
     rows = []
     for gb in BUDGETS_GB:
         cap = gb * 1e9
         used = 0
         covered = 0.0
-        pinned = 0
+        avoided = 0
+        hits_cov = 0
+        selected = []
         for p in ordered:
             b = p["per_expert_bytes"]
             if b and used + b <= cap:
                 used += b
                 covered += p["projected_stall_ms"]
-                pinned += 1
-        frac = covered / total_stall if total_stall else 0.0
-        rows.append((gb, pinned, used / 1e9, frac))
+                avoided += p["h2d_bytes_share"]
+                hits_cov += p["hits"]
+                selected.append(p)
+        rows.append((gb, selected, used / 1e9,
+                     covered / total_stall if total_stall else 0.0,
+                     avoided / 1e9,
+                     hits_cov / total_hits if total_hits else 0.0))
     return rows
 
 
@@ -159,11 +182,14 @@ def render(meta, layers, experts):
     md.append("")
 
     md += ["## Projected pinning budgets (greedy by stall-per-byte)", "",
-           "Estimated projected-stall coverage if the hottest experts were held resident within a "
-           "GPU cache budget (a projection under the attribution rule, not a measured speedup):", "",
-           "| budget GB | experts pinned | actual GB | projected stall covered |", "|---|---|---|---|"]
-    for gb, pinned, used, frac in budget_projection(pairs, total_stall):
-        md.append(f"| {gb:.2f} | {pinned} | {used:.2f} | {frac:.0%} |")
+           "Estimated coverage if the hottest experts were held resident within a GPU cache "
+           "budget (projections under the attribution rule, not measured speedups). Offload is "
+           "not binary: this table is the dial a user would spend spare VRAM on.", "",
+           "| budget GB | pinned experts | added VRAM GB | projected stall covered | "
+           "H2D GB avoided | hit % covered |", "|---|---|---|---|---|---|"]
+    for gb, selected, used, frac, avoided, hitfrac in budget_projection(pairs, total_stall):
+        md.append(f"| {gb:.2f} | {len(selected)} | {used:.2f} | {frac:.0%} | "
+                  f"{avoided:.2f} | {hitfrac:.0%} |")
     md.append("")
 
     md += ["## Decision", "", decide(pairs), "",
@@ -176,10 +202,59 @@ def render(meta, layers, experts):
     return "\n".join(md)
 
 
+def write_policies(meta, layers, experts, policies_dir, score="stall-per-byte"):
+    """Controller-generated machine-readable hot-static policies, one per budget. Field names are
+    honest: per-expert stall is stall_ms_projected (layer-granular staging; see module docstring),
+    not an observation of isolated per-expert transfer."""
+    pairs = build_pairs(layers, experts)
+    total_stall = sum(lr.get("h2d_ms_total", 0.0) for lr in layers.values())
+    storage = next(iter({lr["storage_mode"] for lr in layers.values()}), "unknown")
+    os.makedirs(policies_dir, exist_ok=True)
+    written = []
+    for gb, selected, used, frac, avoided, hitfrac in budget_projection(pairs, total_stall, score):
+        policy = {
+            "policy": "hot-static",
+            "model": meta.get("model"),
+            "storage_mode": storage,
+            "offload": meta.get("offload"),
+            "phase_profiled": meta.get("phase"),
+            "seed": meta.get("seed"),
+            "budget_gb": gb,
+            "score": score,
+            "attribution": "per-expert stall is a PROJECTION: layer staging stall shared by "
+                           "token fraction (staging is layer-granular)",
+            "added_vram_gb": round(used, 4),
+            "projected_stall_covered": round(frac, 4),
+            "h2d_gb_avoided": round(avoided, 4),
+            "hit_fraction_covered": round(hitfrac, 4),
+            "selected_experts": [
+                {"layer": p["layer_id"], "expert": p["expert_id"],
+                 "resident_bytes": p["per_expert_bytes"],
+                 "score": round(_pin_score(p, score), 6),
+                 "stall_ms_projected": round(p["projected_stall_ms"], 3),
+                 "hits": p["hits"], "tokens_routed": p["tokens_routed"]}
+                for p in selected
+            ],
+        }
+        name = (f"{'olmoe' if 'OLMoE' in str(meta.get('model')) else 'model'}_{storage}_"
+                f"{'offload' if meta.get('offload') else 'resident'}_hotstatic_budget{gb}gb.json")
+        path = os.path.join(policies_dir, name)
+        with open(path, "w") as f:
+            json.dump(policy, f, indent=2, sort_keys=True)
+            f.write("\n")
+        written.append(path)
+    return written
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", required=True)
     ap.add_argument("--out-md", required=True)
+    ap.add_argument("--policies-out", default=None,
+                    help="controller-only: also write hot-static policy JSONs per budget here")
+    ap.add_argument("--score", default="stall-per-byte",
+                    choices=("stall-per-byte", "bytes-per-byte", "hits-bytes-per-byte"),
+                    help="greedy pin score; the byte-based fallbacks are for noisy stall timing")
     args = ap.parse_args()
     meta, layers, experts = load(args.input)
     md = render(meta, layers, experts)
@@ -187,6 +262,9 @@ def main():
     with open(args.out_md, "w") as f:
         f.write(md)
     print(md)
+    if args.policies_out:
+        for path in write_policies(meta, layers, experts, args.policies_out, args.score):
+            print(f"wrote policy {path}")
     print(f"\nwrote {args.out_md}")
     return 0
 

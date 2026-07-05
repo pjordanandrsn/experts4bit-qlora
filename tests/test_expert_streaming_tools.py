@@ -52,16 +52,39 @@ def test_concentration_and_decision_hot():
     assert "BUILD hot-static" in summ.decide(pairs)
 
 
-def test_budget_projection_monotonic():
+def test_budget_projection_monotonic_and_covers():
     layer_stalls = {lid: 100.0 for lid in range(4)}
     routing = {(lid, e): (e + 1) * 10 for lid in range(4) for e in range(8)}
     layers, experts = _profile(layer_stalls, routing)
     pairs = summ.build_pairs(layers, experts)
     total = sum(v["h2d_ms_total"] for v in layers.values())
     rows = summ.budget_projection(pairs, total)
-    covered = [frac for _, _, _, frac in rows]
+    covered = [frac for _, _, _, frac, _, _ in rows]
+    hitcov = [h for _, _, _, _, _, h in rows]
     assert covered == sorted(covered)  # more budget never covers less
-    assert all(0.0 <= f <= 1.0 for f in covered)
+    assert all(0.0 <= f <= 1.0 for f in covered + hitcov)
+    # 32 pairs x 1e7 bytes = 0.32 GB total: the 0.5 GB budget pins everything.
+    gb, selected, used, frac, avoided, hitfrac = rows[1]
+    assert len(selected) == 32 and abs(frac - 1.0) < 1e-9 and abs(hitfrac - 1.0) < 1e-9
+    # fallback scores also run
+    assert summ.budget_projection(pairs, total, score="bytes-per-byte")
+    assert summ.budget_projection(pairs, total, score="hits-bytes-per-byte")
+
+
+def test_policy_files_written(tmp_path):
+    layer_stalls = {0: 1000.0, 1: 10.0}
+    routing = {(0, 0): 900, (0, 1): 100, (1, 0): 50}
+    layers, experts = _profile(layer_stalls, routing)
+    meta = {"model": "allenai/OLMoE-1B-7B-0924", "offload": True, "phase": "train", "seed": 1337}
+    paths = summ.write_policies(meta, layers, experts, str(tmp_path))
+    assert len(paths) == 4  # one per budget
+    import json
+    pol = json.load(open(paths[2]))  # 1.0 GB
+    assert pol["policy"] == "hot-static" and pol["budget_gb"] == 1.0
+    assert pol["selected_experts"][0]["layer"] == 0  # hottest first under greedy
+    assert "stall_ms_projected" in pol["selected_experts"][0]  # projected, honestly named
+    assert "PROJECTION" in pol["attribution"]
+    assert "olmoe_int8_offload_hotstatic_budget1.0gb.json" in paths[2]
 
 
 def test_decision_insufficient_data():
