@@ -128,6 +128,9 @@ def main():
     ap.add_argument("--n-eval", type=int, default=64)
     ap.add_argument("--router-telemetry", action="store_true",
                     help="also record per-layer router top-k boundary margins per example")
+    ap.add_argument("--adapter-path", default=None,
+                    help="S-B lane: load a trained LoRA adapter (adapter_best.pt) before eval — "
+                         "the job is then an ADAPTED eval, not a ∅ eval")
     ap.add_argument("--hash-only", action="store_true",
                     help="print the eval-set SHA-256 for these (--n-train, --n-eval, --seq) and exit")
     args = ap.parse_args()
@@ -165,6 +168,18 @@ def main():
     if not args.offload:
         model.to("cuda")
     add_attention_lora(model, 8, 16, torch.bfloat16)  # B=0: adapters contribute exactly zero
+
+    adapter_report = None
+    if args.adapter_path:
+        sd = torch.load(args.adapter_path, map_location="cuda")
+        missing, unexpected = model.load_state_dict(sd, strict=False)
+        n_loaded = len(sd) - len(unexpected)
+        if n_loaded == 0 or unexpected:
+            raise RuntimeError(
+                f"adapter load mismatch: {n_loaded}/{len(sd)} keys loaded, "
+                f"{len(unexpected)} unexpected — wrong base structure for this adapter")
+        adapter_report = {"adapter_path": args.adapter_path, "n_keys": len(sd), "n_loaded": n_loaded}
+        print(f"loaded adapter: {n_loaded}/{len(sd)} keys from {args.adapter_path}")
 
     model.eval()
     model.config.use_cache = False
@@ -207,6 +222,7 @@ def main():
         "eval_slice": f"train[{args.n_train}:{args.n_train + args.n_eval}]",
         "eval_set_sha256": set_hash,
         "router_telemetry": args.router_telemetry,
+        "adapter": adapter_report,
         "peak_gpu_gb": round(torch.cuda.max_memory_allocated() / 1e9, 3),
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
