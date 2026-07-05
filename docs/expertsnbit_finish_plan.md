@@ -146,3 +146,33 @@ multi-GPU/FSDP. No new architecture campaign. No public-API breaks (aliases only
 version bump or release in this pass. `PROVENANCE.md` is append-only (OTS-stamped) and is
 not touched; it states the v0.2.0 counts, and the README points at the validation script
 instead of promising counts.
+
+---
+
+<!-- ots-attestation-footer -->
+
+**OpenTimestamps anchor (self-attestation footer):**
+
+- **OTS proof timestamp for visible document:** `2026-07-05T08:44:39Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `efebd670414547c6237cb97683e6cbb1959475f5afc3fc76b21453750b3a2941` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[?$?@!0=.o:oOo=&0]`
+- Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
+
+```
++----[SHA256]-----+
+|        .E  .+ooX|
+|          . +o.*O|
+|         . =  +.O|
+|          . oo Bo|
+|        S   o.= =|
+|         .. .= * |
+|          .+. @  |
+|         .. .=.oo|
+|         o+.  .+o|
++-----------------+
+```
+
+- **Payload hash actually covered by the current `.ots`:** see `ots info expertsnbit_finish_plan.md.ots`; by construction this is `SHA-256(this entire file including this footer)` and `ots verify expertsnbit_finish_plan.md.ots expertsnbit_finish_plan.md` succeeds against the on-disk bytes.
+- Anchor file: `expertsnbit_finish_plan.md.ots`
+- Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
+- **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.

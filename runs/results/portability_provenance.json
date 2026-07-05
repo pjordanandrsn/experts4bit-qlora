@@ -1,0 +1,130 @@
+{
+  "counts": {
+    "claim_usable": 24,
+    "debug_only": 0,
+    "invalid": 0,
+    "missing": 0
+  },
+  "jobs": {
+    "query_olmoe_train-int8-offload-seed1337_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-offload-seed1337_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-offload-seed2027_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-offload-seed2027_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-offload-seed3407_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-offload-seed3407_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-resident-seed1337_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-resident-seed1337_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-resident-seed2027_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-resident-seed2027_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-resident-seed3407_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-int8-resident-seed3407_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-offload-seed1337_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-offload-seed1337_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-offload-seed2027_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-offload-seed2027_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-offload-seed3407_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-offload-seed3407_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-resident-seed1337_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-resident-seed1337_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-resident-seed2027_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-resident-seed2027_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-resident-seed3407_query-int8-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    },
+    "query_olmoe_train-nf4-resident-seed3407_query-nf4-resident": {
+      "classification": "claim_usable",
+      "in_manifest": false,
+      "reasons": []
+    }
+  }
+}

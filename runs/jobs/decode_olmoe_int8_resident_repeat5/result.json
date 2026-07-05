@@ -1,0 +1,43 @@
+{
+  "bitsandbytes_version": "0.49.2",
+  "claimed_at": "2026-07-05T09:44:51Z",
+  "command": "env QUANT_TYPE=int8 MODEL=allenai/OLMoE-1B-7B-0924 OFFLOAD_EXPERTS=0 python -u scripts/decode_repeat.py --samples 5 --tokens 128 --job-dir /workspace/runs/jobs/decode_olmoe_int8_resident_repeat5",
+  "commit": null,
+  "cuda_version": "12.8",
+  "decode_settings": {
+    "fastpath": true,
+    "gemv": true,
+    "greedy": true
+  },
+  "exit_code": 0,
+  "finished_at": "2026-07-05T13:01:54Z",
+  "generated_tokens": 128,
+  "gpu_name": "NVIDIA RTX A5000",
+  "hostname": "49992ca88d76",
+  "job_id": "decode_olmoe_int8_resident_repeat5",
+  "job_type": "decode",
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "offload": false,
+  "peak_gpu_gb": 7.953,
+  "pid": 377,
+  "pod_id": "49992ca88d76",
+  "prompt_tokens": 24,
+  "samples": 5,
+  "started_at": "2026-07-05T13:00:32Z",
+  "status": "pass",
+  "storage_mode": "int8",
+  "timestamp": "2026-07-05T13:01:52Z",
+  "tok_s_all": [
+    11.607,
+    11.609,
+    11.648,
+    11.653,
+    11.62
+  ],
+  "tok_s_max": 11.653,
+  "tok_s_mean": 11.628,
+  "tok_s_min": 11.607,
+  "tok_s_std": 0.022,
+  "torch_version": "2.8.0+cu128",
+  "warmup_discarded": 1
+}

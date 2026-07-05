@@ -182,6 +182,28 @@ say why (e.g. a host whose bitsandbytes can't quantize a scheme). The full suite
 `pip install -e ".[test]" && pytest tests/ -q`; big-model numbers reproduce via the manual
 [Benchmarks](#benchmarks) scripts, not this report.
 
+### Validation grids
+
+experts4bit-qlora does not name a winning quantization mode — it produces a measured decision
+surface (fit / fidelity / speed / portability / residency budget) with per-cell provenance. An
+OLMoE-1B-7B validation grid (bundle `olmoe-qlora-grid-20260705-1351`, 3 seeds) shows a storage/
+offload asymmetry — resident training exposes the memory cost of wider storage while offload
+collapses the 4-bit-vs-int8 gap to ~2.4–2.7 GB — and finds int8-offload a low-VRAM/high-fidelity
+training candidate *for OLMoE* (best eval 3/3 seeds). Repeating also corrected a single-run
+artifact: fp4 decode is **not** faster than nf4 once sampled. Expert-streaming profiling found the
+offload wall **diffuse** (no hot-static pinning justified). Qwen3-30B-A3B is a separate
+scale-transfer probe: nf4 resident fits a 24 GB card, int8 resident is impractical, offload is
+blocked by the pod's RAM cap. Start with
+[`docs/results_summary.md`](docs/results_summary.md) and
+[`docs/support_matrix.md`](docs/support_matrix.md); details in
+[`OLMOE_EXPERTSNBIT_GRID`](docs/OLMOE_EXPERTSNBIT_GRID.md),
+[`OLMOE_REPEAT_VALIDATION_PLAN`](docs/OLMOE_REPEAT_VALIDATION_PLAN.md),
+[`MODE_DECOUPLED_ADAPTERS`](docs/MODE_DECOUPLED_ADAPTERS.md),
+[`EXPERT_STREAMING_PROFILE`](docs/EXPERT_STREAMING_PROFILE.md),
+[`QWEN3_30B_EXPERTSNBIT_GRID`](docs/QWEN3_30B_EXPERTSNBIT_GRID.md); apparatus in
+[`RUNPOD_DISTRIBUTED_VALIDATION`](docs/RUNPOD_DISTRIBUTED_VALIDATION.md) and
+[`provenance_contract`](docs/provenance_contract.md).
+
 ## Training + expert offload
 
 Training holds no dequantized-expert activations: the frozen base projections re-dequantize from

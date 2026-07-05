@@ -113,7 +113,7 @@ def eval_loss(model, eval_data):
 
 
 def main():
-    torch.manual_seed(0)
+    torch.manual_seed(int(os.environ.get("SEED", "0")))  # default unchanged; the mode-matrix scripts set it
     log(f"loading {MODEL} via streaming 4-bit loader (CPU-RAM-light)...")
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
@@ -127,6 +127,10 @@ def main():
         model.to(DEVICE)
     n_attn = add_attention_lora(model, R, ALPHA, DTYPE) if TRAIN_ATTENTION else 0
     log(f"attn LoRA {n_attn} projs | train experts={TRAIN_EXPERTS} attn={TRAIN_ATTENTION} router={TRAIN_ROUTER}")
+
+    from . import expert_profile
+
+    expert_profile.attach(model)  # no-op unless E4B_EXPERT_PROFILE is set (profile-only)
 
     lora_params, router_params = [], []
     for n, p in model.named_parameters():

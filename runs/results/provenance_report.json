@@ -1,0 +1,115 @@
+{
+  "counts": {
+    "claim_usable": 0,
+    "debug_only": 15,
+    "invalid": 0,
+    "missing": 0
+  },
+  "jobs": {
+    "decode_olmoe_fp4_resident_repeat5": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "decode_olmoe_int8_resident_repeat5": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "decode_olmoe_nf4_resident_repeat5": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_int8_offload_seed1337": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_int8_offload_seed2027": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_int8_offload_seed3407": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_int8_resident_seed1337": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_int8_resident_seed2027": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_int8_resident_seed3407": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_nf4_offload_seed1337": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_nf4_offload_seed2027": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_nf4_offload_seed3407": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_nf4_resident_seed1337": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_nf4_resident_seed2027": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    },
+    "train_olmoe_nf4_resident_seed3407": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "missing commit"
+      ]
+    }
+  }
+}

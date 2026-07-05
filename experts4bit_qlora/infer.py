@@ -127,6 +127,9 @@ def main():
         f" | adapter={'yes' if ADAPTER else 'no'}"
     )
     tok, model = load_for_inference()
+    from . import expert_profile
+
+    expert_profile.attach(model)  # no-op unless E4B_EXPERT_PROFILE is set (profile-only)
     torch.cuda.synchronize()
     log(f"loaded. GPU mem: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
     torch.cuda.reset_peak_memory_stats()
