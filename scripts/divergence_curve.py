@@ -39,11 +39,12 @@ def build_batches(n, seq, n_train, grad_accum):
     return batches
 
 
-def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, snap_path):
-    """Run one leg; STREAM each step's flat fp32 LoRA-weight vector to the disk memmap at
-    ``snap_path`` (shape [steps, n_params]) instead of holding snapshots in RAM (the rev1 OOM:
-    486 MB fp64/step × steps × legs blew the 25 GB container cap). Returns (n_params,
-    routed_sets per step, losses); the caller diffs legs by reading the memmaps row-by-row."""
+def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, subset_idx):
+    """Run one leg; per step, keep only a fixed random SUBSET of the flat LoRA weights (the
+    same ``subset_idx`` across all legs), fp32, in a RAM list. rev1 OOM'd on full fp64
+    snapshots; rev2 OOM'd on a network-FS memmap whose page cache charged the cgroup. A fixed
+    random subset (unbiased sample) preserves divergence onset / growth shape / A-vs-B-vs-C
+    ratio at ~0.5 GB/leg. Returns (subset_snapshots [steps, K] fp32, routed_sets, losses)."""
     import numpy as np
     import torch
     from experts4bit_qlora.loader import load_moe_4bit_streaming
@@ -81,8 +82,8 @@ def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, snap
             return hook
         handles.append(mod.register_forward_pre_hook(mk(li)))
 
-    n_params = sum(p.numel() for _, p in lora)
-    mm = np.lib.format.open_memmap(snap_path, mode="w+", dtype=np.float32, shape=(steps, n_params))
+    idx_t = torch.as_tensor(subset_idx, device="cuda")
+    snaps = np.empty((steps, len(subset_idx)), dtype=np.float32)
     routed_per_step, losses = [], []
     bi = 0
     for step in range(steps):
@@ -103,15 +104,14 @@ def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, snap
         opt.step(); sched.step()
         losses.append(lacc)
         routed_per_step.append(step_routed)
-        flat = torch.cat([p.detach().float().reshape(-1).cpu() for _, p in lora])
-        mm[step] = flat.numpy()  # stream to disk; nothing accumulates in RAM
+        flat = torch.cat([p.detach().float().reshape(-1) for _, p in lora])  # on GPU
+        snaps[step] = flat[idx_t].cpu().numpy()  # keep only the K-subset
         del flat
-    mm.flush(); del mm
     for h in handles:
         h.remove()
     del model, opt, sched
     import gc; gc.collect(); torch.cuda.empty_cache()
-    return n_params, routed_per_step, losses
+    return snaps, routed_per_step, losses
 
 
 def main():
@@ -124,6 +124,7 @@ def main():
     ap.add_argument("--n-train", type=int, default=10000)
     ap.add_argument("--grad-accum", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--subset", type=int, default=2_000_000, help="fixed random weight-subset size (RAM-bounded)")
     args = ap.parse_args()
     os.makedirs(args.job_dir, exist_ok=True)
     os.environ["SEQ"] = str(args.seq); os.environ["N_TRAIN"] = str(args.n_train)
@@ -132,27 +133,31 @@ def main():
     import torch  # noqa
     batches = build_batches(args.steps, args.seq, args.n_train, args.grad_accum)
 
-    paths = {t: os.path.join(args.job_dir, f"snaps_{t}.npy")
-             for t in ("A_resident", "B_resident", "C_offload")}
+    # Fixed random subset of LoRA params, SAME across legs (seeded, independent of the leg
+    # torch.manual_seed). LoRA count for OLMoE r=8 = 60,817,408; sample K=2M.
+    K = min(args.subset, 60_817_408)
+    rng = np.random.default_rng(12345)
+    subset_idx = np.sort(rng.choice(60_817_408, size=K, replace=False)).astype(np.int64)
+
+    snaps = {}
     routed = {}
     losses = {}
     for tag, offload in (("A_resident", False), ("B_resident", False), ("C_offload", True)):
         print(f"[leg {tag}] offload={offload}", flush=True)
-        _, r, l = run_leg(args.quant_type, offload, args.seed, args.steps, args.seq,
-                          args.grad_accum, args.lr, batches, paths[tag])
-        routed[tag] = r; losses[tag] = l
+        s, r, l = run_leg(args.quant_type, offload, args.seed, args.steps, args.seq,
+                          args.grad_accum, args.lr, batches, subset_idx)
+        snaps[tag] = s; routed[tag] = r; losses[tag] = l
 
-    def weight_div_disk(pa, pb):
-        a = np.load(pa, mmap_mode="r"); b = np.load(pb, mmap_mode="r")
-        return [float(np.linalg.norm(np.asarray(a[k], dtype=np.float64) - np.asarray(b[k], dtype=np.float64)))
+    def weight_div(a, b):  # scaled L2 on the K-subset (unbiased estimate of full L2 up to sqrt(N/K))
+        return [float(np.linalg.norm(a[k].astype(np.float64) - b[k].astype(np.float64)))
                 for k in range(a.shape[0])]
 
     def flip_curve(x, y):
         return [sum(len(x[k].get(li, set()) ^ y[k].get(li, set())) for li in set(x[k]) | set(y[k]))
                 for k in range(len(x))]
 
-    ab_w = weight_div_disk(paths["A_resident"], paths["B_resident"])
-    ac_w = weight_div_disk(paths["A_resident"], paths["C_offload"])
+    ab_w = weight_div(snaps["A_resident"], snaps["B_resident"])
+    ac_w = weight_div(snaps["A_resident"], snaps["C_offload"])
     ab_f = flip_curve(routed["A_resident"], routed["B_resident"])
     ac_f = flip_curve(routed["A_resident"], routed["C_offload"])
 
@@ -165,6 +170,8 @@ def main():
     result = {
         "job_type": "divergence_curve", "status": "pass",
         "storage_mode": args.quant_type, "seed": args.seed, "steps": args.steps,
+        "subset_K": int(K), "n_params_total": 60_817_408,
+        "weight_div_note": "L2 on a fixed random K-subset; multiply by sqrt(60817408/K) for a full-vector estimate",
         "loss_A": losses["A_resident"], "loss_B": losses["B_resident"], "loss_C": losses["C_offload"],
         "weight_div_AB": ab_w, "weight_div_AC": ac_w,
         "flip_AB": ab_f, "flip_AC": ac_f,
@@ -184,11 +191,6 @@ def main():
         result["bitsandbytes_version"] = None
     with open(os.path.join(args.job_dir, "result.json"), "w") as f:
         json.dump(result, f, indent=2, sort_keys=True); f.write("\n")
-    for p in paths.values():  # the per-leg snapshot memmaps are ~15 GB each — drop after diffing
-        try:
-            os.remove(p)
-        except OSError:
-            pass
     print(f"first weight-div step: A-vs-B {result['first_weight_div_step_AB']}, "
           f"A-vs-C {result['first_weight_div_step_AC']}")
     print(f"first flip step: A-vs-B {result['first_flip_step_AB']}, A-vs-C {result['first_flip_step_AC']}")

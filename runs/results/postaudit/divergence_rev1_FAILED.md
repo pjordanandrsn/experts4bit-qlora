@@ -16,3 +16,22 @@ Per Q4: the red is committed before the fix. This is the red.
   legs B and C diff against leg A's on-disk vectors online (one vector resident at a time), so
   peak RAM is O(one snapshot) instead of O(steps × legs). fp32 (not fp64) is ample for a
   divergence *curve* and still resolves ~1e-7 onset.
+
+## rev2 — ALSO FAILED (distinct bug: network-FS memmap page-cache charged to cgroup)
+
+Leg A completed and wrote its full 14.6 GB fp32 memmap (`snaps_A_resident.npy`), but the
+process died at leg B's model load. On the RunPod network volume (mfs), the 14.6 GB of
+memmap page cache from leg A is charged to the 25 GB container cgroup and was not reclaimed
+before leg B's bf16 load needed it → OOM at leg B. Moving the snapshots to disk removed the
+Python-object RAM but not the page-cache charge. No curve produced (leg A's raw memmap is not
+a comparison). Static diff still stands.
+
+## Fix (rev3): fixed random-subset sketch in RAM — no full vectors, no disk
+
+Store per step only a fixed random **2M-index subset** (same indices across all three legs,
+seeded) of the LoRA weights, fp32, in a small RAM list: 2M × 4 B × 60 steps × 3 legs ≈ 1.4 GB
+total, no file. A fixed random subset is an unbiased sample of the full weight vector, so the
+divergence *onset* (first step any sampled param differs), *growth shape*, and the
+A-vs-B / A-vs-C *ratio* — the actual deliverables — are all preserved; only the absolute L2 is
+a scaled estimate (reported as such). Sidesteps both the RAM-list OOM (rev1) and the
+memmap-page-cache OOM (rev2).
