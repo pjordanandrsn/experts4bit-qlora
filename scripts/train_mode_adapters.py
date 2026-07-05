@@ -81,7 +81,7 @@ def _parse_train_log(log_path):
     """Pull the trainer's own reported numbers out of its log (the same lines the repo's
     existing runner-shell summaries grep)."""
     out = {"train_eval_before": None, "train_eval_after": None, "train_eval_best": None,
-           "peak_train_gpu_gb": None, "seconds_per_step": None}
+           "peak_train_gpu_gb": None, "seconds_per_step": None, "total_runtime_sec": None}
     try:
         text = open(log_path, errors="replace").read().replace("\r", "\n")
     except OSError:
@@ -92,6 +92,9 @@ def _parse_train_log(log_path):
     m = re.search(r"peak GPU mem: ([0-9.]+) GB", text)
     if m:
         out["peak_train_gpu_gb"] = float(m.group(1))
+    m = re.search(r"training done in ([0-9.]+)s", text)
+    if m:
+        out["total_runtime_sec"] = float(m.group(1))
     steps = re.findall(r"\(([0-9.]+)s/step\)", text)
     if steps:
         out["seconds_per_step"] = float(steps[-1])
@@ -203,8 +206,11 @@ def main():
             "status": status,
             "skip_or_fail_reason": None if status == "pass" else f"trainer exit={rc}, see {log_path}",
             "timestamp": utc_now(),
-            **{k: parsed[k] for k in ("train_eval_before", "train_eval_after", "peak_train_gpu_gb")},
+            **{k: parsed[k] for k in ("train_eval_before", "train_eval_after", "train_eval_best",
+                                      "peak_train_gpu_gb", "total_runtime_sec")},
             "train_s_per_step": parsed["seconds_per_step"],
+            "seed": args.seed,
+            "steps": args.steps,
             "commit": commit,
             **{k: env_info[k] for k in ("torch_version", "cuda_version", "bitsandbytes_version", "gpu_name")},
             "host": env_info["train_host"],
