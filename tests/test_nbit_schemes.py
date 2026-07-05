@@ -73,15 +73,25 @@ def test_lora_trains_over_nbit_base(quant_type):
 
 
 def test_fidelity_ordering():
-    """Reconstruction error should fall as bits rise: bf16 passthrough ~exact < int8 < nf4.
-    (fp8's e4m3 codebook is coarser than int8's dynamic map, so it is not asserted in the chain.)"""
+    """Reconstruction error falls as representable precision rises, across all six schemes:
+
+        fp16 < bf16 < int8 < fp8 < nf4 < fp4
+
+    fp16 < bf16: passthrough rounding, 11 vs 8 significand bits — by construction. int8 < fp8: both
+    are 256-entry blockwise codebooks; int8's dynamic map is denser than fp8's e4m3 grid where
+    ~Gaussian weights live — pinned by MEASUREMENT on bitsandbytes' current codebooks, not by
+    construction. If a future bnb reshapes them and flips this one link, demote it to documentation
+    rather than forcing the assert. fp8 < nf4 (256 vs 16 entries) and nf4 < fp4 (NF4's quantiles are
+    optimal for normal weights; FP4's exponent grid is not) are robust multi-x gaps."""
     gate_up, _ = _weights()
     err = {}
-    for q in ("nf4", "int8", "bf16"):
+    for q in ALL_SCHEMES:
         base = _build(q)
         deq = base._dequantize_expert(base.gate_up_proj, base.gate_up_absmax, base._gate_up_shape, 0, torch.float32)
         err[q] = (deq - gate_up[0]).abs().mean().item()
-    assert err["bf16"] < err["int8"] < err["nf4"], err
+    order = ["fp16", "bf16", "int8", "fp8", "nf4", "fp4"]
+    for finer, coarser in zip(order, order[1:]):
+        assert err[finer] < err[coarser], (finer, coarser, err)
 
 
 @pytest.mark.parametrize("quant_type", ALL_SCHEMES)
@@ -96,6 +106,23 @@ def test_state_dict_roundtrip(quant_type):
     dst = _build(quant_type, seed=7)  # different weights until load
     sd = {k: v for k, v in base.state_dict().items() if not k.endswith("code")}
     dst.load_state_dict(sd, strict=False)
+    with torch.no_grad():
+        got = dst(hs, idx, wts)
+    torch.testing.assert_close(got, ref)
+
+
+@pytest.mark.parametrize("quant_type", ["nf4", "bf16"])
+def test_state_dict_roundtrip_strict(quant_type):
+    """A same-config round-trip must load under ``strict=True`` — pinning the serialization contract
+    across package versions (a checkpoint saved by this build loads strictly into this build; nf4
+    covers the absmax-carrying family, bf16 the passthrough family with no absmax keys)."""
+    base = _build(quant_type, seed=0)
+    hs, idx, wts = _inputs(seed=2)
+    with torch.no_grad():
+        ref = base(hs, idx, wts)
+
+    dst = _build(quant_type, seed=7)  # different weights until load
+    dst.load_state_dict(base.state_dict(), strict=True)
     with torch.no_grad():
         got = dst(hs, idx, wts)
     torch.testing.assert_close(got, ref)

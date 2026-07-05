@@ -234,7 +234,15 @@ def test_loader_handles_multimodal_gemma4_checkpoint(tmp_path):
     ids = torch.randint(0, ref.config.vocab_size, (1, 8), device=DEVICE)
     with torch.no_grad():
         got = model(input_ids=ids).logits
-        want = ref(input_ids=ids).logits
+        try:
+            want = ref(input_ids=ids).logits
+        except RuntimeError as e:
+            # Oracle limitation, not a library defect: stock transformers routes fused MoE through
+            # torch._grouped_mm, hard-gated to cc 9.0 — the REFERENCE dies on sm_120 (Blackwell)
+            # while this package's own path runs (see the same guard in test_reference_parity.py).
+            if "_grouped_mm" in str(e):
+                pytest.skip(f"transformers reference (the oracle) cannot run on this device: {e}")
+            raise
     cos = torch.nn.functional.cosine_similarity(got.flatten(0, 1).float(), want.flatten(0, 1).float(), dim=-1)
     assert cos.mean() > 0.9  # same function as the text tower, within NF4-on-experts error
 
