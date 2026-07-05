@@ -35,8 +35,16 @@ from datetime import datetime, timezone
 
 
 def _sha(t) -> str:
-    """SHA-256 of a tensor's raw bytes (native dtype — bitwise comparison, not float compare)."""
-    return hashlib.sha256(t.detach().cpu().contiguous().view(-1).numpy().tobytes()).hexdigest()
+    """SHA-256 of a tensor's raw bytes (native dtype — bitwise comparison, not float compare).
+
+    The uint8 dtype-view is load-bearing: ``Tensor.numpy()`` rejects bf16 outright
+    (rev1 red: runs/results/postaudit_cert_rev1_FAILED.md), and hashing raw bytes must not
+    round-trip through a float cast anyway."""
+    import torch
+
+    return hashlib.sha256(
+        t.detach().cpu().contiguous().view(-1).view(torch.uint8).numpy().tobytes()
+    ).hexdigest()
 
 
 def _utc() -> str:
