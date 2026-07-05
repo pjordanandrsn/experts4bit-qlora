@@ -125,6 +125,28 @@ where bf16 magnitudes fall into fp16's subnormal range (|w| ≲ 2⁻¹⁷ loses 
 matched by construction, the observed ρ(int8, fp16) cannot be a kernel-path artifact and
 stands as example-level smooth-sensitivity, pending the n=1024 replication.
 
+### W_RMS measured (O-4 + Addendum-1 S-A x-axis)
+
+`scripts/wrms_per_format.py` (relative RMS of packed-dequantized experts vs the bf16
+reference, per projection, whole model):
+
+| format | W_RMS |
+|---|---|
+| fp16 | 0.00000 |
+| int8 | 0.00970 |
+| fp8 | 0.02478 |
+| nf4 | 0.09241 |
+| fp4 | 0.12307 |
+
+**O-4 resolved clean:** the weight-perturbation ordering is *exactly* the test-pinned
+reconstruction chain `fp4 > nf4 > fp8 > int8 > fp16` (worst→best) — no metric conflict, no
+finding. **Addendum-1's committed "fp8 lands nearer the 4-bit formats (~2e-2, ≲ nf4)" is
+REFUTED:** fp8 (0.0248) is 3.7× closer to int8 (0.0097) than to nf4 (0.0924). This converges
+with the n=1024 routing telemetry (fp8 = 6.0 flips vs bf16, with the int8/fp16 family at
+2.2–3.8, NOT the 4-bit family at 16.7–20.4). The n=64 "fp8 behaves like 4-bit" covariance
+reading was itself the shared-outlier artifact the Z1 Spearman check flagged — fp8 is 8-bit
+on weights, on routing, and on the flat-top ladder.
+
 ## The floor headline (audit §4), now code-backed
 
 **bf16-offload trains at 2.41 GB — below the 4-bit floor (2.52 GB), with no quantization at
@@ -141,25 +163,26 @@ measurements independent of the training-eval anomaly.
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T20:03:55Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `e113368d9c3c991b2efb8ce823fb9316b8b4254ffa7311837d5560af89311bb3` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T22:22:03Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `42a0dfeb0ec349e75c3739b8cf6d0a729816e76b1e03046416896db5e6c8ef35` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T20:03:55Z` `e113368d9c3c991b2efb8ce823fb9316b8b4254ffa7311837d5560af89311bb3`
   - `2026-07-05T18:18:30Z` `0f9e8a7dc51d38082ae0eca173e2b3d4987ccbc4ce7fc5982f66436c79db3672`
   - `2026-07-05T17:13:39Z` `770f2824bdd35f586fc3352e265b69872b910a8ad7076281cd08b56aea49ced6`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[?::~~0*!#&~&##:@]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[o+%.!$?@.?&~o#?=]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|          oo.    |
-|       o B..     |
-|     o  ^.. .    |
-|    . ++./ o     |
-|   .  .+E o      |
-|  + + .o .       |
-| . O o..         |
-|  = B..+         |
-|  .B==. o        |
+|   +B+.          |
+|  .++o .         |
+|  ..  =          |
+|   o B   . .     |
+|    = B S =      |
+|   o * @ o o     |
+|    = X E        |
+|     * +.O ..    |
+|     .+oo +o.    |
 +-----------------+
 ```
 

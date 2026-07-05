@@ -74,28 +74,37 @@ cites:    plan-routed-v3 <hash> + PLAN_ROUTED_V3_AMENDMENTS_A1-A4 <hash>
   for the other.
 - P-B1..P-B4 are indexed in `docs/PREDICTION_LEDGER.md` as filed-not-graded.
 
+**P-B4 coupling resolved (2026-07-05, at ladder drain):** the re-pin primary **CLEARED**
+(G_int8 |t| = 7.29). Per P-B4's "if it clears" arm, the int8/16-bit cache lanes **hold the A2
+economic priors unchanged** — no one-tier demotion. The ≥8-bit serve lanes keep their quality
+justification (the trio-flat result even sharpens it: stop-at-int8 is a positive fidelity
+license, not just a memory one). P-B1/P-B2 (margin→locality) still await the Phase-1 trace
+join; margins telemetry is captured in the n=1024 `routed_sets.jsonl` per example.
+
 ---
 
 <!-- ots-attestation-footer -->
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T18:22:03Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `c67e654ec5dd2e0374b09403cc55df86e4df6ff5b8bb4052bcd67a1bdca85019` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[&0=?0Oo?&O!!+?.~]`
+- **OTS proof timestamp for visible document:** `2026-07-05T22:23:00Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `ee07b075f2d93aa718c95c1a136a902f95f644c42abc84155c9554940cc7fcab` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T18:22:03Z` `c67e654ec5dd2e0374b09403cc55df86e4df6ff5b8bb4052bcd67a1bdca85019`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[??.=@.=O$+!#~%%=]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|         o.o=++  |
-|          o+o* +o|
-|            E.= *|
-|       .   . B +.|
-|        S . X + =|
-|       o   X o *+|
-|        . o + * =|
-|         . . + = |
-|            . =o |
+|   ..o.=*O+.     |
+|    o. oo.=      |
+|   +o +.o  .     |
+|  . +=o+o.. .    |
+|   ..o++S+.o .   |
+|    .o.+.*o o    |
+|        B. o     |
+|       . oE .    |
+|        o..+     |
 +-----------------+
 ```
 

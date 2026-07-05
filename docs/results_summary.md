@@ -19,19 +19,26 @@ jobs is bundle-attested, not self-reported (git-archive worker trees; runner sin
 - **Offload collapses the storage-width memory gap.** Resident training peak scales cleanly with
   width (5.28 / 8.50 / 14.54 GB for 4- / 8- / 16-bit); offload flattens all of them to
   2.41–2.72 GB. Offload width-delta 0.20 GB vs resident 3.22 GB (ratio 0.06), 3/3 seeds.
-- **int8-offload best eval — CONFOUNDED; D3 now paid and the confound is worse than feared.**
-  Best in 3/3 seeds (1.0261 ± 0.0079), but the one-step placement certificate came back
-  **bitwise-exact** (offload training is numerically identical to resident at step granularity,
-  all five configurations — `docs/TRAIN_PLACEMENT_CERTIFICATE.md`), and T5 forensics showed
-  every seed-matched placement pair in the repeat grid was a **cross-architecture comparison**
-  (4090↔A5000; evaluator offset 0.0026–0.0054 on identical bytes — the scale of the claimed
-  effect). No placement mechanism exists at one step; the "wins" are best explained as
-  architecture offset + run-level variance. Quarantined (`pending-mechanism`). Note also S9:
-  the frozen-precision axis itself is within sampling noise at n=64 (n=1024 re-pin running,
-  `docs/NULL_LADDER_1024_AMENDMENT.md`). **The honest headline is memory, not this eval:**
-  bf16-offload trains at 2.41 GB — below the nf4 floor, no quantization — vs 14.54 GB resident
-  (decomposition code-verified in `docs/OFFLOAD_MEMORY_FACTS.md`).
-- **BEFORE-training eval tracks reconstruction fidelity** (int8 < nf4; 4-bit worst), 3/3 pairs.
+- **int8-offload best-eval "win" — REFUTED as a placement effect (D3 closed, engagement-attested).**
+  Best in 3/3 seeds (1.0261 ± 0.0079), but the one-step placement certificate is **bitwise-exact**
+  — offload training is numerically identical to resident, all five configs, now with offload
+  engagement attested (16/16 evicted, rev3; `docs/TRAIN_PLACEMENT_CERTIFICATE.md`) — and T5
+  forensics showed every seed-matched pair in the repeat grid was **cross-architecture**
+  (4090↔A5000; evaluator offset 0.0026–0.0054, the scale of the claimed effect). No one-step
+  placement mechanism exists; the "win" was architecture offset + run-level variance. The one
+  open thread is the same-host 150-step bf16 0.0108 gap (divergence-onset probe, gated).
+- **The frozen-precision axis IS real (S9 resolved, n=1024).** The pilot's n=64 ambiguity is
+  settled: **G_int8 = +0.0166 ± 0.0023 (|t| = 7.29, Wilcoxon z = 12.4)**; frozen int8 covers
+  106% of the nf4→bf16 gap. **The trio {int8, bf16, fp16} is flat within ±0.0019** — so
+  **stop-at-int8 is licensed on fidelity grounds**; nothing above int8 separates, and the two
+  4-bit formats sit ≥7σ below everything 8-bit-and-up (fp4 and nf4 don't separate from each
+  other). fp8 is at the flat top, not above it (fp8−bf16 n.s.). See
+  `docs/NULL_LADDER_1024_AMENDMENT.md` and `runs/results/postaudit/null_ladder_1024.md`.
+- **The honest memory headline stands, now code + engagement backed:** bf16-offload trains at
+  2.41 GB — below the nf4 floor, no quantization — vs 14.54 GB resident
+  (`docs/OFFLOAD_MEMORY_FACTS.md`).
+- **BEFORE-training eval tracks reconstruction fidelity** (int8 < nf4; 4-bit worst), 3/3 pairs —
+  and the W_RMS weight-perturbation ordering matches the reconstruction chain exactly (O-4).
 
 ## What a single run got wrong, and repeating fixed
 
@@ -127,27 +134,28 @@ with `scripts/validate_job_provenance.py`; docs are OTS-stamped (`docs/*.md.ots`
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T20:04:10Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `8901fc998ac2771199cfca3a531b72877d9d8e92419dd534a79c1d69d2a883da` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T22:22:14Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `a7d46561a2fff4cf2dfefde27165b8a4c31cdff6bb2fdd4116d96c204f1796bc` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T20:04:10Z` `8901fc998ac2771199cfca3a531b72877d9d8e92419dd534a79c1d69d2a883da`
   - `2026-07-05T18:11:19Z` `4f6df7c749dc6cb00cf3c32fcad96c387a7b4c7ac87623391d8e2a1e52a9e558`
   - `2026-07-05T16:48:56Z` `7bd7d4a5b3c9f18fdd5ce7c6035132d00b162428ac8926de56507558979f86ca`
   - `2026-07-05T14:52:18Z` `ce2030434782e4ea2b1ada367261fb4a2ae1f4e4f14b674787382b0b101df026`
   - `2026-07-05T14:00:26Z` `0b455296684992211f5b5b703cb21bebd38cfdb33e8b15575b54fbe12e672327`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[*#.:$&##*%&+==::]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%=!o0O0:%+$$$o&$]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|   .. o     oooo.|
-|    .=     ..+*+.|
-|     .=o. + .+o. |
-|     .+* = o     |
-|.  ...B S . o    |
-|...o.O = E o     |
-| .. * + + o      |
-|   + . o . .     |
-|    o   .        |
+|          . + +=*|
+|         . o =.*+|
+|        .   o ..o|
+|         o o   E |
+|        S + o = o|
+|       . o = * =.|
+|        .   * =.*|
+|             .+**|
+|             ooB#|
 +-----------------+
 ```
 

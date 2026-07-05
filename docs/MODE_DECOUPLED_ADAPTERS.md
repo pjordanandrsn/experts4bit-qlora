@@ -185,6 +185,12 @@ What the seeds confirm — and correct:
   "within a standard deviation" caveat used marginal cell stds — the wrong ruler
   for a same-adapter paired design; full paired tables:
   `runs/results/paired_transfer.md`, via `scripts/summarize_paired_transfer.py`.)
+- **Re-denominated in the certified yardstick (n=1024 G_int8 = 0.01657 ± 0.00227).** The
+  downward penalty (int8-resident, +0.0075 ± 0.0016) is **0.45 ± 0.11 G** — a serve downgrade
+  costs about half the frozen precision gap. Upgrade transfer for nf4-resident (+0.0002) is
+  **0.01 G**, i.e. the adapter forfeits ≈99% of the frozen base's improvement on upgrade
+  (SE-wide, held loosely). These ratios are now licensed: S9 cleared, so G is a real
+  denominator, not a noise floor.
 
 ### Portability status of the tested pairs
 
@@ -258,26 +264,27 @@ Both grid scripts print their planned legs before running, support `--dry-run`, 
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T19:01:12Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `f3574a78685ed298204732de140df26e9a720754b618ce729c190d4b315f0369` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T22:22:43Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `5118ac85d468d07422b24d54d7204fd2af734f9c1049a864329f33cd533d5609` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T19:01:12Z` `f3574a78685ed298204732de140df26e9a720754b618ce729c190d4b315f0369`
   - `2026-07-05T16:48:44Z` `8cb935bc7af6b3104789ebb452223708993a13f2614d15f80957d578c84d22f3`
   - `2026-07-05T14:52:04Z` `9b736b4fb5d7ccb1194ddfff51c87ee59ce8b4489ec74d1476595d1f20cb70a0`
   - `2026-07-05T12:47:30Z` `45db13c636a21677550245709d5ef170d21225f48494105a8a7e919ae2aa2be9`
   - `2026-07-05T08:44:38Z` `f19b86ea6551dd28d67ca7dcde37728ac8bddea6e44a521d7a98e87c464b8d44`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[$~O=o%=*0*O?!+#*]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[O::*%&*O!o0*!.=o]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|      @+O*o      |
-|     * ^Eo..     |
-|    . &.B        |
-|     + + . *     |
-|      . S B = .  |
-|       = = = o   |
-|    . + . o o    |
-|     o .   .     |
+|  ..=*B**BooEo.. |
+|   =o.BOB.= + .  |
+|  . .B Boo o .   |
+|      B +.o      |
+|       oSo o .   |
+|        o . +    |
+|         o o     |
+|            .    |
 |                 |
 +-----------------+
 ```

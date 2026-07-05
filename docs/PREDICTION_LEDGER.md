@@ -4,6 +4,38 @@ Graded predictions and adopted forecasting rules, one entry per grading event, n
 Entries are recorded verbatim from their source documents at filing time; gradings are never
 edited after the fact — corrections are new entries.
 
+## 2026-07-05 — GRADED at drain (n=1024 + rev3 + spine extras)
+
+**Amendment §4 branch table (confirmatory, `runs/results/postaudit/null_ladder_1024.md`):**
+- PRIMARY nf4−int8 **CLEARS**: G_int8 = +0.01657 ± 0.00227, |t| = 7.29; Wilcoxon z = +12.43.
+  S9 branch 1 — the precision gap is real; the pilot was under-resolved, not null.
+- G_total +0.01566 (|t| 7.20); coverage 106% (both clear 3σ → licensed).
+- Trio {int8,bf16,fp16} flat within ±0.0019 → **stop-at-int8 ships**. fp4−nf4 NOT separable
+  (t 2.24); all 4-bit-vs-≥8-bit pairs survive Bonferroni at t 7.2–9.5.
+- fp8>{nf4,fp4} fires by letter, but fp8−bf16 n.s. (t 1.39) — regularizer premise dead;
+  S-D stays closed.
+- Tail: top-10% = 45% (subpopulation branch does NOT fire, <50%).
+- D2 at n=1024: 6×1024 bitwise placement-identical; determinism repeat 1024/1024 bitwise.
+
+**P-A (Addendum 1) — the pilot factor structure was the shared-outlier artifact:**
+- **P-A1 FAILS** (PC1 39% < 50%); **P-A2 FAILS** (ρ −0.05); **P-A4 FAILS** (fp8 flips 6.0 vs
+  nf4 16.7 — fp8 routes 8-bit-like). nf4−fp8 deviation corr 0.790 → −0.009 on the disjoint set.
+- **P-A3 PARTIAL**: ρ(int8,fp16) = 0.527 replicates (smooth channel real), flip-free clause fails.
+- **P-A5 HOLDS**: pilot fragile examples transfer at 5× enrichment (3/6 above the n=1024 cutoff).
+- Jaccard(int8,bf16) 0.9955 ≫ (nf4,bf16) 0.9806 — HOLDS.
+
+**O-4 (W_RMS):** ordering = reconstruction chain exactly (no conflict); Addendum-1's
+"fp8 near 4-bit" REFUTED (fp8 W_RMS 0.0248, 3.7× closer to int8 than nf4).
+
+**S-B (adapters steer routing):** J(base,adapted) 0.94 ∈ [0.85,0.97] HOLDS; corr(shift, gain)
+0.58–0.60 HOLDS (graduation met) — but shift 0.055 > both precision perturbations, so the
+"between int8 and nf4" clause FAILS: the adapter is the dominant routing mover.
+
+**D3 rev3:** engagement attested (16/16 evicted, single-slot honored); null+placement bitwise —
+certificate self-contained.
+
+**P-C1 (Addendum 3) FAILS:** no shape model reaches <0.10 GB residual on offload peaks.
+
 ## 2026-07-05 — Filed, not graded (index)
 
 - **P-B1..P-B4** (cache-lane posture: margin→locality, churn quartiles, lane odds
@@ -82,25 +114,26 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T20:04:03Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `f23487b74d50e842b37b930f02174c72ecf2846b18ca542b55d4424d56b2e765` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T22:22:31Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `80f86be8b06dcbb5e0a9d96013f1435ac5daa93b16049ad212006d91461bbf47` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T20:04:03Z` `f23487b74d50e842b37b930f02174c72ecf2846b18ca542b55d4424d56b2e765`
   - `2026-07-05T18:22:04Z` `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4`
   - `2026-07-05T18:18:28Z` `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[$+~o*=@=o!O.?*o+]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[*.$*0@?*@.0!&@@O]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|     +=B*....    |
-|    o .+Oo..     |
-|   o . =.=o E    |
-|  o o + *+.+     |
-| o o o.BSo+..    |
-|  o . o+++=+     |
-|     .  .o.+.    |
-|            .    |
-|                 |
+|=o+o..           |
+|..==.o           |
+|.B+o= E          |
+|= B+ = .         |
+|.+.o+ . S        |
+|  .+.o           |
+|ooo *            |
+|.@oO .           |
+|+oX.o            |
 +-----------------+
 ```
 

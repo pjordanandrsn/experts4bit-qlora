@@ -171,6 +171,14 @@ at load under offload, and ≤1 base is resident after the step) plus leg-scoped
 accounting, and reruns one bf16 + one int8 trio. Until rev3 lands, the row-4 filing stands on
 eval-path evidence + the guard-free rev2 bitwise results.
 
+**REV3 (2026-07-05, commit 160bfda): engagement ATTESTED, certificate now self-contained.**
+Both trios: leg (c) shows **16/16 expert bases evicted at load, exactly 1 GPU-resident after
+the step** (offload engaged, single-slot invariant honored), leg-scoped peaks at offload
+scale (bf16 3.75 GB / int8 3.78 GB vs resident leg-a 14.85 / 9.15 GB), while resident legs
+show 0/16 evicted. Null AND placement remain **bitwise** on every object. The rev2 result was
+not vacuous — offload genuinely engaged and one training step is still bit-identical to
+resident. D3 closes self-contained; the row-4 filing no longer leans on eval-path inference.
+
 **Predictions scored:** P2, P3, P4 — confirmed (and more sharply than predicted). P1 —
 **wrong in the informative direction**: the default-kernel null is bitwise at one step; the
 MoE-combine atomics and SDPA backward did not produce run-to-run noise on these shapes.
@@ -201,25 +209,26 @@ with T2/T3 (serve path bitwise placement-exact, 384/384) and T5:
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T19:39:08Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `a657bccbe80139f15e9633d3536d9ae8157b089a1851604bdf4b81ad8db00ac9` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T22:21:53Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `7b074e8ff0e690ced6dffebf3aa85e05fff210c44cf795a74d7e6bbb51168c2c` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T19:39:08Z` `a657bccbe80139f15e9633d3536d9ae8157b089a1851604bdf4b81ad8db00ac9`
   - `2026-07-05T18:09:34Z` `10a9897aafde7afe3aea060cb02905dc3eba2156620789b4b971a1e36ad31f4c`
   - `2026-07-05T17:13:37Z` `c7d3973bd217e7fc444d351ad588e66680b4ad3b69f3e532a2293eb652c319a8`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%0O=@&&@?*.:~#$:]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[=@.=o?*$$.?0#.&?]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|        =o.o.    |
-|       o.+.... . |
-|   . .. oo.++ o o|
-|    E  +.+o*.= B |
-|     .+.S % = * .|
-|      .* + * o . |
-|      . + . .    |
-|       . + .     |
-|       .o o      |
+|             . .o|
+|            = +.=|
+|           E * Bo|
+|            = . =|
+|        S o  +  =|
+|         B +. o+.|
+|        +.*.+o.o.|
+|       o.=oo o+..|
+|       .+oo..o==*|
 +-----------------+
 ```
 
