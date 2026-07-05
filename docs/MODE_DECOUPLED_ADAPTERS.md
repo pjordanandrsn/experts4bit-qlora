@@ -145,3 +145,33 @@ python scripts/summarize_train_query_matrix.py \
 
 Both grid scripts print their planned legs before running, support `--dry-run`, `--resume`, and
 `--fail-fast`, and never download anything not implied by `--model`.
+
+---
+
+<!-- ots-attestation-footer -->
+
+**OpenTimestamps anchor (self-attestation footer):**
+
+- **OTS proof timestamp for visible document:** `2026-07-05T08:44:38Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `f19b86ea6551dd28d67ca7dcde37728ac8bddea6e44a521d7a98e87c464b8d44` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[$:#@*0?%0OO:!!+*]`
+- Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
+
+```
++----[SHA256]-----+
+|         E       |
+|        .  + o   |
+|        ..+.= o .|
+|        o=B..o + |
+|       .SO.+  o .|
+|      o +ooo   ..|
+|       ++=+. . o+|
+|       +*.= o.+ o|
+|     .o  +oB+o   |
++-----------------+
+```
+
+- **Payload hash actually covered by the current `.ots`:** see `ots info MODE_DECOUPLED_ADAPTERS.md.ots`; by construction this is `SHA-256(this entire file including this footer)` and `ots verify MODE_DECOUPLED_ADAPTERS.md.ots MODE_DECOUPLED_ADAPTERS.md` succeeds against the on-disk bytes.
+- Anchor file: `MODE_DECOUPLED_ADAPTERS.md.ots`
+- Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
+- **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
