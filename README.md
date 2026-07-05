@@ -182,6 +182,19 @@ say why (e.g. a host whose bitsandbytes can't quantize a scheme). The full suite
 `pip install -e ".[test]" && pytest tests/ -q`; big-model numbers reproduce via the manual
 [Benchmarks](#benchmarks) scripts, not this report.
 
+### Validation grids (in progress)
+
+An OLMoE-1B-7B validation grid shows a useful storage/offload asymmetry: resident training
+exposes the memory cost of wider storage, while offload largely collapses the GPU-memory
+difference between 4-bit and int8. Early single-run OLMoE results suggest int8-offload may be a
+strong low-VRAM/high-fidelity training candidate, and fp4 decode may be faster than nf4 on this
+host/path, but both are candidate findings pending repeat validation. Qwen3-30B-A3B is tracked
+separately as a larger gated validation target. See
+[`docs/OLMOE_EXPERTSNBIT_GRID.md`](docs/OLMOE_EXPERTSNBIT_GRID.md),
+[`docs/OLMOE_REPEAT_VALIDATION_PLAN.md`](docs/OLMOE_REPEAT_VALIDATION_PLAN.md), and
+[`docs/RUNPOD_DISTRIBUTED_VALIDATION.md`](docs/RUNPOD_DISTRIBUTED_VALIDATION.md) for how the
+repeats run across pods.
+
 ## Training + expert offload
 
 Training holds no dequantized-expert activations: the frozen base projections re-dequantize from
