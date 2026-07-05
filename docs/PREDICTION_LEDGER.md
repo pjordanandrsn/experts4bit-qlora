@@ -4,6 +4,18 @@ Graded predictions and adopted forecasting rules, one entry per grading event, n
 Entries are recorded verbatim from their source documents at filing time; gradings are never
 edited after the fact — corrections are new entries.
 
+## 2026-07-05 — Filed, not graded (index)
+
+- **P-B1..P-B4** (cache-lane posture: margin→locality, churn quartiles, lane odds
+  40%/15%/70%, re-pin coupling) — `docs/SPECULATIVE_LANES_ADDENDUM_2.md`, timestamped by
+  its commit; P-B1/P-B2 await the margins×traces join; P-B3 grades at program end.
+- **P-A1..P-A6** (factor structure at n=1024) — `docs/SPECULATIVE_LANES_ADDENDUM_1.md`;
+  graded when `scripts/analyze_factor_1024.py` runs post-drain.
+- **Amendment §4 branch table** (n=1024 primary, trio resolution, fp8, tail, routing) —
+  `docs/NULL_LADDER_1024_AMENDMENT.md`; graded by `scripts/analyze_ladder1024.py`.
+- **S-A/S-B/S-C committed predictions + surprise-bet order S-A>S-C>S-B>S-E>S-D** —
+  `docs/SPECULATIVE_LANES_PLAN.md` (S-A items superseded by P-A series per Addendum 1).
+
 ## 2026-07-05 — Lanes Addendum 1 §2 (recorded verbatim, per Z5)
 
 - **FALSIFIED (n=64):** the example-level independence gloss "the scattered formats
@@ -45,22 +57,24 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T18:18:28Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[O?@$%o@o:#~?~~O:]`
+- **OTS proof timestamp for visible document:** `2026-07-05T18:22:04Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T18:18:28Z` `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%o#$&=&@#$~O:&*.]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|                 |
-|               . |
-|        E .  o .=|
-|         o. + *.=|
-|        S o=.+ ++|
-|       . ..o=..=o|
-|        o.o*+++ +|
-|      ..o+OB.=...|
-|     ... o*++o.  |
+|  .o++ o+.       |
+|. ... oo+. o     |
+| + + o.+. + .    |
+|. B + *+o.   .   |
+|.. E +o+So    .  |
+| .. o. ooo   . . |
+|  + . . o o   +  |
+| o o     o . o . |
+|  .       o.o    |
 +-----------------+
 ```
 
