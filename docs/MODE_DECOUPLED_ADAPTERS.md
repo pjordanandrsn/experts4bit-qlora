@@ -154,8 +154,14 @@ What the seeds confirm — and correct:
   nf4-trained adapters are query-mode-agnostic (nf4→int8 1.0316 ≈ nf4→nf4 1.0319). The
   asymmetry seed 0 hinted at holds across seeds: train-finer/query-coarser costs a little;
   train-coarser/query-finer does not.
-- **Validated (3 seeds): int8-offload adapters transfer well.** Best or near-best in both query
-  columns — echoing the grid's int8-offload eval strength, now across seeds.
+- **int8-offload adapters transfer well — but CONFOUNDED (audit).** Best or near-best in both
+  query columns, yet the audit's G-decomposition shows the load-bearing *resident* comparison
+  (int8→int8 vs nf4→int8) is a **tie** (+0.07 G) — train precision buys nothing at certified
+  placement. The int8-offload advantage lives only in the offload-trained rows, which §3 of
+  `docs/MEASUREMENT_AUDIT.md` shows are running a different experiment (bf16 control: 0.0108
+  best-eval gap on byte-identical weights). Downgraded to candidate pending debt D3. The
+  **downward-transfer penalty and nf4-query-agnosticism remain validated** — those are resident,
+  certified comparisons.
 - **Not re-tested here:** the fp4/bf16/fp16 query columns (phase 3 covered nf4/int8 only), so the
   seed-0 "fp4-query degrades every adapter" stays a single-seed observation.
 - **Caveat: the cross-mode gaps are within a standard deviation.** These are directional
@@ -229,25 +235,26 @@ Both grid scripts print their planned legs before running, support `--dry-run`, 
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T14:52:04Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `9b736b4fb5d7ccb1194ddfff51c87ee59ce8b4489ec74d1476595d1f20cb70a0` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T16:48:44Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `8cb935bc7af6b3104789ebb452223708993a13f2614d15f80957d578c84d22f3` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T14:52:04Z` `9b736b4fb5d7ccb1194ddfff51c87ee59ce8b4489ec74d1476595d1f20cb70a0`
   - `2026-07-05T12:47:30Z` `45db13c636a21677550245709d5ef170d21225f48494105a8a7e919ae2aa2be9`
   - `2026-07-05T08:44:38Z` `f19b86ea6551dd28d67ca7dcde37728ac8bddea6e44a521d7a98e87c464b8d44`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[#@=~0@o$@O!=&&@:]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[*&@#~O@&=%$0@~:.]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|         o.o ...B|
-|        . + o  +=|
-|       E   o  . =|
-|             . ++|
-|        S     =o*|
-|         o   o.B@|
-|        + ..oo==X|
-|         o+o=o.+o|
-|         ..=oo  .|
+|    .ooo+oo*.    |
+|   =o .  =+o+    |
+|o * .+ .. E.     |
+|.= o .o= o       |
+|+ . o * S .      |
+| o   o O *       |
+|      o =        |
+|       oo..      |
+|      .o .oo     |
 +-----------------+
 ```
 

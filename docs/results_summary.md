@@ -19,10 +19,13 @@ jobs is bundle-attested, not self-reported (git-archive worker trees; runner sin
 - **Offload collapses the storage-width memory gap.** Resident training peak scales cleanly with
   width (5.28 / 8.50 / 14.54 GB for 4- / 8- / 16-bit); offload flattens all of them to
   2.41–2.72 GB. Offload width-delta 0.20 GB vs resident 3.22 GB (ratio 0.06), 3/3 seeds.
-- **int8-offload is a low-VRAM / high-fidelity training candidate for OLMoE.** Best held-out eval
-  in 3/3 seeds (aggregate 1.0261 ± 0.0079, lowest of the four repeated modes) at a ~2.72 GB peak
-  near the 4-bit floor. A candidate regime for OLMoE — not a Qwen3 claim, and single-run
-  bf16/fp16-offload are excluded from the ranking.
+- **int8-offload best eval — CONFOUNDED, downgraded by audit.** Best in 3/3 seeds (1.0261 ±
+  0.0079) but the effect lives only in the offload-trained rows: at resident placement
+  int8-vs-nf4 training ties, and byte-identical bf16 resident-vs-offload differ 0.0108 (RNG/
+  recompute). One uncertified mechanism, waiting on debt D3. And frozen int8 already covers 108%
+  of the nf4→bf16 gap, so training precision is nearly a flat axis here. See
+  `docs/MEASUREMENT_AUDIT.md`. **The honest headline is memory, not this eval:** bf16-offload
+  trains at 2.41 GB — below the nf4 floor, no quantization — vs 14.54 GB resident.
 - **BEFORE-training eval tracks reconstruction fidelity** (int8 < nf4; 4-bit worst), 3/3 pairs.
 
 ## What a single run got wrong, and repeating fixed
@@ -100,24 +103,25 @@ with `scripts/validate_job_provenance.py`; docs are OTS-stamped (`docs/*.md.ots`
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T14:52:18Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `ce2030434782e4ea2b1ada367261fb4a2ae1f4e4f14b674787382b0b101df026` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T16:48:56Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `7bd7d4a5b3c9f18fdd5ce7c6035132d00b162428ac8926de56507558979f86ca` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T14:52:18Z` `ce2030434782e4ea2b1ada367261fb4a2ae1f4e4f14b674787382b0b101df026`
   - `2026-07-05T14:00:26Z` `0b455296684992211f5b5b703cb21bebd38cfdb33e8b15575b54fbe12e672327`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[&?+.~.o~o=*+?o?%]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[=@!=!o%O@~&#$:*$]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|.++oo            |
-|o.oo.            |
-| E++             |
-|. ++    . .      |
-|..  . .oSo .     |
-|o.+o . ++ .      |
-|++=+oo +o.       |
-|=**oo.= .        |
-|B=o+.o.          |
+|    o...++.==    |
+|   . o o. o+ + . |
+|  . + .   . + * .|
+|.o o .     . * o.|
+|+ . .   S . . * .|
+| . o     E   = * |
+|  .     . . . *.+|
+|         . .   *B|
+|              ..B|
 +-----------------+
 ```
 

@@ -29,10 +29,14 @@ def main():
 
     import torch  # noqa: E402
 
-    from experts4bit_qlora import infer  # noqa: E402  (env-driven: MODEL/QUANT_TYPE/OFFLOAD_EXPERTS)
+    from experts4bit_qlora import expert_profile, infer  # noqa: E402  (env-driven)
 
     torch.manual_seed(0)
     tok, model = infer.load_for_inference()
+    # Attach the decode-phase profiler if E4B_EXPERT_PROFILE is set. infer.main() does this, but
+    # this script bypasses main() — without the attach the env var is set yet nothing hooks the
+    # model, so the profile writes zero rows (the empty decode profiles in the first bundle).
+    expert_profile.attach(model)
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
 
