@@ -128,6 +128,10 @@ def main():
     n_attn = add_attention_lora(model, R, ALPHA, DTYPE) if TRAIN_ATTENTION else 0
     log(f"attn LoRA {n_attn} projs | train experts={TRAIN_EXPERTS} attn={TRAIN_ATTENTION} router={TRAIN_ROUTER}")
 
+    from . import expert_profile
+
+    expert_profile.attach(model)  # no-op unless E4B_EXPERT_PROFILE is set (profile-only)
+
     lora_params, router_params = [], []
     for n, p in model.named_parameters():
         train_lora = "lora" in n and ((TRAIN_EXPERTS and "experts" in n) or (TRAIN_ATTENTION and "self_attn" in n))
