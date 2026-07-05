@@ -60,9 +60,13 @@ def test_build_and_forward(quant_type):
         assert base.gate_up_absmax is not None
 
 
-@pytest.mark.parametrize("quant_type", EIGHT_AND_SIXTEEN)
+@pytest.mark.parametrize("quant_type", ALL_SCHEMES)
 def test_lora_trains_over_nbit_base(quant_type):
-    """Per-expert LoRA trains over any storage scheme; the frozen base never gets a gradient."""
+    """Per-expert LoRA trains over any storage scheme: the frozen base never gets a gradient, and
+    an optimizer step moves the adapters while the packed storage stays bit-identical.
+
+    NB the step assertion checks ``lora_B``, not ``lora_A``: at init B=0, so dL/dA (which factors
+    through B) is exactly zero — an A-moved assertion would be a false failure, not a real bug."""
     base = _build(quant_type)
     lora = ExpertsLoRA(base, r=4, alpha=8, dtype=torch.float32).to(DEVICE)
     hs, idx, wts = _inputs()
@@ -70,6 +74,34 @@ def test_lora_trains_over_nbit_base(quant_type):
     lora(hs, idx, wts).sum().backward()
     assert lora.gate_up_lora_A.grad is not None and lora.down_lora_A.grad is not None
     assert base.gate_up_proj.grad is None  # frozen storage, any scheme
+
+    packed_before = base.gate_up_proj.detach().clone()
+    b_before = lora.gate_up_lora_B.detach().clone()
+    opt = torch.optim.SGD([p for p in lora.parameters() if p.requires_grad], lr=1e-2)
+    opt.step()
+    assert not torch.equal(lora.gate_up_lora_B.detach(), b_before)  # the adapters moved...
+    assert torch.equal(base.gate_up_proj.detach(), packed_before)  # ...the packed storage did not
+
+
+@pytest.mark.parametrize("quant_type", ALL_SCHEMES)
+def test_recompute_function_on_tape_for_every_scheme(quant_type):
+    """The memory-saving recompute path IS the training path, for every storage scheme: a
+    grad-enabled forward's autograd graph contains _FrozenLinearRecomputeBackward nodes (which
+    re-dequantize the frozen weight in backward instead of keeping it as a saved activation)."""
+    base = _build(quant_type)
+    lora = ExpertsLoRA(base, r=4, alpha=8, dtype=torch.float32).to(DEVICE)
+    hs, idx, wts = _inputs()
+    out = lora(hs.clone().requires_grad_(True), idx, wts)
+
+    seen, stack, found = set(), [out.grad_fn], False
+    while stack and not found:
+        fn = stack.pop()
+        if fn is None or fn in seen:
+            continue
+        seen.add(fn)
+        found = "FrozenLinearRecomputeBackward" in type(fn).__name__
+        stack.extend(next_fn for next_fn, _ in fn.next_functions)
+    assert found, f"recompute Function not on the autograd tape for {quant_type}"
 
 
 def test_fidelity_ordering():

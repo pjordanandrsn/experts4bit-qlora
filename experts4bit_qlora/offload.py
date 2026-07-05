@@ -125,23 +125,22 @@ def reset_offload_stats() -> None:
 
 
 # 0-element GPU placeholders that an evicted base's parameters/buffers point at, shared across all
-# offloaded layers (reads never mutate them, so sharing is safe) and cached per device. Keeping the
-# real "home" data OFF the module — only these placeholders are registered while evicted — means
-# ``model.to(device)`` never drags the big expert tensors to the GPU. ``state_dict()`` substitutes
-# the CPU homes for the placeholders via a post-hook (see ``_install_state_dict_hook``) so a
-# full-model save stays *correct* — a naive placeholder state_dict would silently serialize a model
-# with no expert weights — while adapter-only saves (key-filtered) remain exactly as cheap.
-_PLACEHOLDERS: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
+# offloaded layers (reads never mutate them, so sharing is safe) and cached per (device, dtype) —
+# quantized schemes evict to uint8/float32, passthrough schemes to their storage dtype, so an
+# evicted module's tensors keep honest dtypes. Keeping the real "home" data OFF the module — only
+# these placeholders are registered while evicted — means ``model.to(device)`` never drags the big
+# expert tensors to the GPU. ``state_dict()`` substitutes the CPU homes for the placeholders via a
+# post-hook (see ``_install_state_dict_hook``) so a full-model save stays *correct* — a naive
+# placeholder state_dict would silently serialize a model with no expert weights — while
+# adapter-only saves (key-filtered) remain exactly as cheap.
+_PLACEHOLDERS: dict[tuple[torch.device, torch.dtype], torch.Tensor] = {}
 
 
-def _placeholders(device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
-    ph = _PLACEHOLDERS.get(device)
+def _placeholder(device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    ph = _PLACEHOLDERS.get((device, dtype))
     if ph is None:
-        ph = (
-            torch.empty(0, dtype=torch.uint8, device=device),
-            torch.empty(0, dtype=torch.float32, device=device),
-        )
-        _PLACEHOLDERS[device] = ph
+        ph = torch.empty(0, dtype=dtype, device=device)
+        _PLACEHOLDERS[(device, dtype)] = ph
     return ph
 
 
@@ -170,16 +169,19 @@ def _prefetch_stream(device: torch.device) -> "torch.cuda.Stream":
 
 
 class _ExpertOffload:
-    """Owns the pinned-CPU home copies of one :class:`Experts4bit` base's four big tensors and
-    streams them to ``device`` for the duration of each forward / gradient-checkpoint recompute.
+    """Owns the pinned-CPU home copies of one :class:`ExpertsNbit` base's big tensors (the two
+    packed projections plus, for quantized schemes, their two absmax scales — passthrough bf16/fp16
+    bases have no absmax) and streams them to ``device`` for the duration of each forward /
+    gradient-checkpoint recompute.
 
     The base's own ``gate_up_proj`` / ``down_proj`` parameters and ``gate_up_absmax`` /
     ``down_absmax`` buffers hold shared 0-element GPU placeholders while evicted, so nothing that
     walks the module tree (``.to()``, ``state_dict()``, checkpoint-save) touches the offloaded data.
     """
 
-    _NAMES_PARAM = ("gate_up_proj", "down_proj")  # nn.Parameter (uint8, packed 4-bit, frozen)
-    _NAMES_BUFFER = ("gate_up_absmax", "down_absmax")  # float32 quantization scales (buffers)
+    _NAMES_PARAM = ("gate_up_proj", "down_proj")  # nn.Parameter (packed storage, frozen)
+    _NAMES_BUFFER = ("gate_up_absmax", "down_absmax")  # float32 quantization scales (buffers);
+    # registered as None on passthrough (bf16/fp16) bases — the instance tuples below skip those.
 
     # The single handle whose experts are currently GPU-staged. Under use_reentrant=False gradient
     # checkpointing the backward RECOMPUTE re-runs the layer forward but PyTorch stops it early (once
@@ -202,6 +204,12 @@ class _ExpertOffload:
         # one in forward order, and the CUDA event marking this handle's in-flight prefetch copy.
         self._prefetch_next = None
         self.ready_event = None
+        # Offload only the tensors this base actually carries: passthrough (bf16/fp16) schemes
+        # register their absmax buffers as None — those stay None throughout (never swapped for a
+        # placeholder), so `base.gate_up_absmax is None` remains a valid passthrough test while
+        # offloaded, evicted, or staged.
+        self._param_names = self._NAMES_PARAM
+        self._buffer_names = tuple(n for n in self._NAMES_BUFFER if getattr(base, n, None) is not None)
         # Capture the homes as SEPARATE (pinned) CPU tensors BEFORE any placeholder swap. Capturing
         # the live Parameter object instead would alias the very tensor we later overwrite with a
         # placeholder — losing the weights. The source is on the GPU at load time, so ``.to("cpu")``
@@ -211,7 +219,9 @@ class _ExpertOffload:
         # dtype; ``self.home[n]`` is then a correctly-shaped CPU *view* into its arena (so the
         # state_dict hook and any per-tensor reader see the same thing as the non-arena path), and
         # staging copies whole arenas (1-2 copies) instead of four separate tensors.
-        self.home, self._arena_cpu, self._arena_layout = self._build_homes(base, pin, _arena_enabled())
+        self.home, self._arena_cpu, self._arena_layout = self._build_homes(
+            base, self._param_names + self._buffer_names, pin, _arena_enabled()
+        )
         self._staged_dev = None  # arena mode: the device-side arena tensors kept alive while staged
         # True iff every home landed in pinned memory (so staging's non_blocking H2D is real); False
         # when pin=False or pin_memory fell back to pageable. Surfaced by the loader's summary log.
@@ -219,7 +229,7 @@ class _ExpertOffload:
         # Precomputed for stats: total H2D bytes per stage, and how many copies a stage issues
         # (arena: one per dtype; non-arena: one per tensor).
         self._stage_nbytes = sum(t.numel() * t.element_size() for t in self.home.values())
-        self._stage_ncopies = len(self._arena_cpu) if self._arena_layout is not None else len(self._names())
+        self._stage_ncopies = len(self._arena_cpu) if self._arena_layout is not None else len(self.home)
         self.staged = False
         self.evict()  # start evicted: base holds placeholders, ~0 GPU footprint (frees the load copy)
         self._install_state_dict_hook()
@@ -235,7 +245,7 @@ class _ExpertOffload:
         mismatch — loading into an offloaded model was never supported and is unchanged here."""
 
         def hook(module, state_dict, prefix, local_metadata):
-            for n in self._names():
+            for n in self._param_names + self._buffer_names:
                 key = prefix + n
                 t = state_dict.get(key)
                 if t is not None and t.numel() == 0:
@@ -261,12 +271,13 @@ class _ExpertOffload:
         return cpu
 
     @classmethod
-    def _build_homes(cls, base, pin: bool, arena: bool):
-        """Return ``(home, arena_cpu, layout)``. Non-arena: ``home[n]`` is an independent (pinned)
-        CPU tensor, ``arena_cpu``/``layout`` are ``None`` — byte-identical to the pre-arena path.
-        Arena: one contiguous pinned CPU tensor per dtype (``arena_cpu[dtype]``), ``home[n]`` a
-        shaped view into it, and ``layout[n] = (dtype, start, stop, shape)`` for device re-viewing."""
-        names = cls._names()
+    def _build_homes(cls, base, names, pin: bool, arena: bool):
+        """Return ``(home, arena_cpu, layout)`` for the given tensor ``names`` (the instance's
+        param+buffer tuples — passthrough bases carry no absmax). Non-arena: ``home[n]`` is an
+        independent (pinned) CPU tensor, ``arena_cpu``/``layout`` are ``None`` — byte-identical to
+        the pre-arena path. Arena: one contiguous pinned CPU tensor per dtype (``arena_cpu[dtype]``),
+        ``home[n]`` a shaped view into it, and ``layout[n] = (dtype, start, stop, shape)`` for
+        device re-viewing."""
         srcs = {n: getattr(base, n).detach().to("cpu") for n in names}
         if not arena:
             return {n: cls._to_home(srcs[n], pin) for n in names}, None, None
@@ -291,8 +302,8 @@ class _ExpertOffload:
     def _copy_home_to_device(self, policy: str = "sync") -> None:
         """Enqueue this layer's H2D copies on the *current* stream and mark the handle staged. The
         destination tensors are allocated on that stream, so a later free is stream-ordered against
-        the copies automatically. Non-arena issues four copies (one per tensor); arena issues one
-        per dtype and re-views the params/buffers into the device arena. ``policy`` tags the copy for
+        the copies automatically. Non-arena issues one copy per home tensor; arena issues one per
+        dtype and re-views the params/buffers into the device arena. ``policy`` tags the copy for
         :func:`offload_stats_report` (``sync`` / ``cold_miss`` / ``prefetch``)."""
         stats = _stats() if _stats_enabled() else None
         if stats is not None:
@@ -303,17 +314,17 @@ class _ExpertOffload:
         b = self.base
         if self._arena_layout is not None:
             dev = {dt: a.to(self.device, non_blocking=True) for dt, a in self._arena_cpu.items()}
-            for n in self._NAMES_PARAM:
+            for n in self._param_names:
                 dt, s, e, shape = self._arena_layout[n]
                 b._parameters[n].data = dev[dt][s:e].view(shape)
-            for n in self._NAMES_BUFFER:
+            for n in self._buffer_names:
                 dt, s, e, shape = self._arena_layout[n]
                 b._buffers[n] = dev[dt][s:e].view(shape)
             self._staged_dev = dev  # keep the device arenas alive (the param views also reference them)
         else:
-            for n in self._NAMES_PARAM:
+            for n in self._param_names:
                 b._parameters[n].data = self.home[n].to(self.device, non_blocking=True)
-            for n in self._NAMES_BUFFER:
+            for n in self._buffer_names:
                 b._buffers[n] = self.home[n].to(self.device, non_blocking=True)
 
         if stats is not None:
@@ -340,13 +351,13 @@ class _ExpertOffload:
         s.wait_event(self.ready_event)
         self.ready_event = None
         b = self.base
-        for n in self._NAMES_PARAM:
+        for n in self._param_names:
             b._parameters[n].data.record_stream(s)
-        for n in self._NAMES_BUFFER:
+        for n in self._buffer_names:
             b._buffers[n].record_stream(s)
 
     def stage(self) -> None:
-        """Copy the four big tensors onto ``device`` (idempotent), first evicting the previously
+        """Copy the home tensors onto ``device`` (idempotent), first evicting the previously
         staged layer so at most one layer's experts are GPU-resident (holds through the backward
         recompute, where the evict post-hook does not fire). The H2D copy is enqueued on the current
         stream, so the immediately-following dequant kernels are correctly ordered after it."""
@@ -400,16 +411,16 @@ class _ExpertOffload:
             cls._staged_now.add(nxt)
 
     def evict(self) -> None:
-        """Point the four big tensors back at shared 0-element placeholders (idempotent), dropping
-        the GPU copies so the caching allocator can reuse the memory for the next layer. Safe even
-        for a still-in-flight prefetch: the dropped tensors were allocated on the side stream, so
-        their reuse is stream-ordered after the pending copy."""
-        ph_u8, ph_f32 = _placeholders(self.device)
+        """Point the big tensors back at shared 0-element placeholders (idempotent), dropping the
+        GPU copies so the caching allocator can reuse the memory for the next layer. Placeholders
+        keep each tensor's home dtype (uint8 packed / float32 absmax / bf16-fp16 passthrough). Safe
+        even for a still-in-flight prefetch: the dropped tensors were allocated on the side stream,
+        so their reuse is stream-ordered after the pending copy."""
         b = self.base
-        for n in self._NAMES_PARAM:
-            b._parameters[n].data = ph_u8
-        for n in self._NAMES_BUFFER:
-            b._buffers[n] = ph_f32
+        for n in self._param_names:
+            b._parameters[n].data = _placeholder(self.device, self.home[n].dtype)
+        for n in self._buffer_names:
+            b._buffers[n] = _placeholder(self.device, self.home[n].dtype)
         self._staged_dev = None  # drop our reference to the device arena(s); the param views are now placeholders
         self.staged = False
         self.ready_event = None
@@ -605,6 +616,11 @@ def offload_model_experts(model, device=None, pin: bool = True) -> list[_ExpertO
     defaults to the device of the first offloadable base found. Already-offloaded modules keep their
     existing handle (see :func:`enable_expert_offload`), so calling this on a model the loader
     offloaded is a safe no-op.
+
+    Raises:
+        RuntimeError: If ``model`` contains no :class:`ExpertsLoRA` modules. Offload was requested
+            and nothing would be offloaded — every expert would silently stay GPU-resident, which
+            is the exact silent-skip failure this package exists to prevent.
     """
     from .lora import ExpertsLoRA
 
@@ -613,4 +629,10 @@ def offload_model_experts(model, device=None, pin: bool = True) -> list[_ExpertO
         if isinstance(module, ExpertsLoRA):
             dev = device if device is not None else module.base.gate_up_proj.device
             handles.append(enable_expert_offload(module, dev, pin=pin))
+    if not handles:
+        raise RuntimeError(
+            "offload_model_experts found no ExpertsLoRA modules — nothing would be offloaded and "
+            "every expert would stay GPU-resident. Wrap the fused expert modules in ExpertsLoRA "
+            "first, or load via load_moe_4bit_streaming(..., offload=True)."
+        )
     return handles

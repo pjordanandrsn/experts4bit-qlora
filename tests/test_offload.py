@@ -14,7 +14,7 @@ pytest.importorskip("bitsandbytes")
 
 from torch.utils.checkpoint import checkpoint  # noqa: E402
 
-from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
+from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E402
 from experts4bit_qlora import enable_expert_offload, offload_model_experts  # noqa: E402
 from experts4bit_qlora.offload import _ExpertOffload  # noqa: E402
 
@@ -36,14 +36,15 @@ def _reset_resident_slot():
 _QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 
 
-def _build_experts_lora(seed=0):
+def _build_experts_lora(seed=0, quant_type="nf4"):
     torch.manual_seed(seed)
     gate_up = torch.randn(N_EXP, 2 * INTER, HIDDEN, dtype=DTYPE, device=DEVICE)
     down = torch.randn(N_EXP, HIDDEN, INTER, dtype=DTYPE, device=DEVICE)
+    cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit  # mirror the loader's dispatch
     try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=DTYPE)
-    except _QUANTIZE_UNAVAILABLE as e:  # bnb can't 4-bit quantize on this device
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+        base = cls.from_float(gate_up, down, quant_type=quant_type, compute_dtype=DTYPE)
+    except _QUANTIZE_UNAVAILABLE as e:  # bnb can't quantize this scheme on this device
+        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
     return ExpertsLoRA(base, r=8, alpha=16, dtype=DTYPE).to(DEVICE)
 
 
@@ -55,17 +56,26 @@ def _inputs(seed=1):
     return hidden_states, top_k_index, top_k_weights
 
 
+@pytest.mark.parametrize("quant_type", ["nf4", "int8", "bf16"])
 @pytest.mark.parametrize("pin", [True, False])
-def test_offload_forward_is_math_identical(pin):
+def test_offload_forward_is_math_identical(pin, quant_type):
     """Offload swaps where the experts live, not the computation: output must be unchanged, and
     the evict->reload cycle must be idempotent across repeated forwards. Covers both the pinned and
-    the pageable (``OFFLOAD_PIN=0``) home paths."""
-    lora = _build_experts_lora()
+    the pageable (``OFFLOAD_PIN=0``) home paths, across the three storage families (4-bit packed,
+    8-bit blockwise, 16-bit passthrough — the passthrough base carries NO absmax buffers, which the
+    offload handle must tolerate rather than crash on)."""
+    lora = _build_experts_lora(quant_type=quant_type)
     hs, idx, w = _inputs()
     with torch.no_grad():
         ref = lora(hs, idx, w)
 
     enable_expert_offload(lora, DEVICE, pin=pin)
+    if quant_type == "bf16":
+        # Passthrough: only the two projections have homes; the absmax buffers stay registered as
+        # None — offload must preserve their None-ness (a placeholder here would break the
+        # `absmax is None` passthrough test other code relies on).
+        assert set(lora._offload.home) == {"gate_up_proj", "down_proj"}
+        assert lora.base.gate_up_absmax is None and lora.base.down_absmax is None
     with torch.no_grad():
         out1 = lora(hs, idx, w)
         out2 = lora(hs, idx, w)  # a second pass proves stage->evict->stage round-trips cleanly
@@ -73,6 +83,8 @@ def test_offload_forward_is_math_identical(pin):
     assert torch.allclose(ref, out1, atol=1e-6, rtol=1e-6)
     assert torch.allclose(ref, out2, atol=1e-6, rtol=1e-6)
     assert lora._offload.staged is False  # post-hook evicted after each forward
+    if quant_type == "bf16":
+        assert lora.base.gate_up_absmax is None  # still None after stage->evict cycles
 
 
 # NB: the pre-ExpertsNbit test `test_offload_backward_uses_saved_dequant_not_evicted_base`
@@ -223,6 +235,16 @@ def test_enable_expert_offload_is_idempotent():
 
     handles = offload_model_experts(nn.ModuleList([lora]), pin=False)
     assert handles == [h1]  # walking an already-offloaded model is a no-op, not a corruption
+
+
+def test_offload_model_experts_raises_when_none_found():
+    """Offload was requested and nothing would be offloaded: that must be a loud RuntimeError, not
+    a silent no-op that leaves every expert GPU-resident (no ExpertsLoRA modules, no quantization —
+    runs on any host)."""
+    import torch.nn as nn
+
+    with pytest.raises(RuntimeError, match="no ExpertsLoRA"):
+        offload_model_experts(nn.Sequential(nn.Linear(4, 4)))
 
 
 def test_offload_model_experts_walks_all_experts_lora():
