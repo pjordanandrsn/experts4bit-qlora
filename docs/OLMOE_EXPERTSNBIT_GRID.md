@@ -13,17 +13,30 @@ control and stays comparable to the ablation).
 
 ## The grid (single run per cell — statuses per finding below)
 
+All 18 legs complete (2026-07-05, single run per cell). "best eval" = best held-out Alpaca loss.
+
 | mode | train resident<br>peak GB · s/step · best eval | train offload<br>peak GB · s/step · best eval | resident decode<br>tok/s · peak GB |
 |---|---|---|---|
 | nf4 | 5.28 · 12.4 · 1.0289 | 2.52 · 16.7 · 1.0304 | 10.12 · 4.72 |
 | fp4 | 5.28 · 14.0 · 1.0293 | 2.52 · 16.5 · 1.0297 | 12.59 · 4.72 |
-| int8 | 8.50 · 12.1 · 1.0245 | 2.72 · 18.5 · **1.0140** | 9.35 · 7.95 |
-| fp8 | *legs completing* | | |
-| bf16 | *legs completing* | | |
-| fp16 | *legs completing* | | |
+| int8 | 8.50 · 12.1 · 1.0245 | 2.72 · 18.5 · 1.0140 | 9.35 · 7.95 |
+| fp8 | 8.50 · 13.8 · 1.0204 | 2.72 · 19.3 · 1.0281 | 9.35 · 7.95 |
+| bf16 | 14.54 · 11.0 · 1.0220 | 2.41 · 20.8 · **1.0112** | 13.26 · 13.99 |
+| fp16 | 14.54 · 11.2 · 1.0194 | 2.41 · 20.5 · 1.0181 | 12.57 · 13.99 |
 
-Held-out eval loss BEFORE training: int8 1.4811 < nf4 1.4905 < fp4 1.5041 — the test-pinned
-reconstruction-fidelity ordering surfacing in end-model terms.
+Held-out eval loss BEFORE training tracks the reconstruction-fidelity chain in end-model terms:
+fp8 1.4724 < fp16 1.4780 < bf16 1.4818 < int8 1.4811 < nf4 1.4905 < fp4 1.5041 (the fp8/int8 and
+fp16/bf16 pairs are within noise of each other; the 4-bit modes are clearly worst, as expected).
+
+Shape of the completed grid (all observed in this run):
+- **Resident peak scales cleanly with storage width:** ~5.28 GB (4-bit) → 8.50 (8-bit) → 14.54
+  (16-bit).
+- **Offload collapses every width to ~2.4–2.7 GB** — and the ordering even inverts slightly
+  (16-bit offload 2.41 GB < 4-bit 2.52 GB), because passthrough carries no absmax buffers and no
+  dequant workspace. The storage-width memory axis nearly vanishes under offload.
+- **Offload s/step rises with bytes-streamed:** ~16.5 (4-bit) → ~19 (8-bit) → ~20.7 (16-bit).
+- **Decode throughput** (resident): bf16 13.26 > fp4 12.59 ≈ fp16 12.57 > nf4 10.12 > int8 ≈
+  fp8 9.35 tok/s.
 
 ## The storage/offload asymmetry (why this grid matters)
 
@@ -39,12 +52,12 @@ that split is the portability question — measured separately
 
 | finding | status |
 |---|---|
-| offload collapses the storage-width memory difference | Candidate (expected Stable + Host-specific) — repeats running |
-| resident memory scales with storage width | Candidate (expected Stable + Host-specific) — repeats running |
-| int8-offload posts the best training eval (1.0140) | **Candidate** — single run, outside the ~±0.006 spread of the other legs, needs seeds |
-| fp4 resident decode faster than nf4 (12.59 vs 10.12 tok/s) | **Candidate** — single sample each, decode is noisy, repeat-5 jobs queued |
-| offload eval matches resident eval | Candidate — same math by design; AFTER values drift ~0.9% from GPU nondeterminism accumulated over 150 steps, not offload math |
-| BEFORE-eval fidelity ordering int8 < nf4 < fp4 | Candidate (mechanism separately test-pinned by the reconstruction chain) |
+| offload collapses the storage-width memory difference (now across all 6 modes: resident 5.28/8.50/14.54 GB → offload 2.41–2.72 GB) | Candidate (expected Stable + Host-specific) — nf4/int8 repeats running |
+| resident memory scales with storage width (4→8→16-bit: 5.28→8.50→14.54 GB) | Candidate (expected Stable + Host-specific) — nf4/int8 repeats running |
+| the lowest single-run offload eval is bf16-offload 1.0112, then int8-offload 1.0140 | **Candidate** — single run each; only nf4/int8 are being repeated, so bf16's 1.0112 stays an unrepeated observation. Do NOT rank offload modes by eval on one run |
+| fp4 resident decode faster than nf4 (12.59 vs 10.12 tok/s); bf16 fastest overall (13.26) | **Candidate** — single sample each, decode is noisy, repeat-5 jobs queued for nf4/fp4/int8 |
+| offload eval ≈ resident eval | Candidate — same math by design; AFTER values drift from GPU nondeterminism accumulated over 150 steps, not offload math |
+| BEFORE-eval fidelity ordering (4-bit worst; 8/16-bit clustered) | Candidate (mechanism separately test-pinned by the reconstruction chain) |
 
 Repeat plan and graduation rules: `docs/OLMOE_REPEAT_VALIDATION_PLAN.md`. Distributed execution:
 `docs/RUNPOD_DISTRIBUTED_VALIDATION.md`.
@@ -64,22 +77,24 @@ Repeat plan and graduation rules: `docs/OLMOE_REPEAT_VALIDATION_PLAN.md`. Distri
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T09:22:21Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `df17a36577b78ceedcce7b029e54b759208c41502570948834a6bb945078e763` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[!$:=%~0O==@=*&??]`
+- **OTS proof timestamp for visible document:** `2026-07-05T12:47:30Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `7ed1e2a56c3b28abd783d840af4d76608388218695555791426d75f83dbcf69e` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T09:22:21Z` `df17a36577b78ceedcce7b029e54b759208c41502570948834a6bb945078e763`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[=?!:?+%O0&~@+*%@]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|   ...+.oBB*.    |
-|  ...oo...o.o .  |
-|  ...o       . . |
-|   . oE       . o|
-|    +. .S    .=.B|
-|   . .   . .o+o*+|
-|    .     .oo+.o |
-|            =.+ .|
-|            .+.*o|
+|...o....ooo+...  |
+|+..    .. + ..   |
+|oo . .   o   ... |
+|. . o +    .  .o.|
+|   . o oS o o   o|
+|    . +..o =   o |
+|     O +..*   . .|
+|    o * +o..    o|
+|    .o.o ...   E.|
 +-----------------+
 ```
 

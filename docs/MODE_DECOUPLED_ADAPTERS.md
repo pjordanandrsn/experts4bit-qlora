@@ -87,15 +87,62 @@ reasons, never absent cells of unknown meaning.
 
 ## Matrix
 
-*To be filled from the first run's generated tables (see Reproduction). Until then this document
-defines the method; it reports nothing.*
+First run: OLMoE-1B-7B, seed 0, host RTX A5000, 25/25 legs pass (raw:
+`runs/results/portability/query_matrix.{jsonl,csv,md}`). Adapters trained under each row mode,
+then queried under each column mode. **Single seed — every cell is an observation, not a
+validated pair.** Provenance note: this first matrix ran via the direct chain that predates the
+job runner, so its rows carry GPU/versions/host but not a commit field; the seeded phase-3
+portability jobs (`docs/OLMOE_REPEAT_VALIDATION_PLAN.md`) run through the runner and carry full
+provenance.
+
+Held-out eval loss with adapter (lower = better; base-no-adapter ≈ 1.48–1.50 per query mode):
+
+| train ↓ \ query → | nf4 | int8 | bf16 | fp16 | fp4 |
+|---|---|---|---|---|---|
+| nf4 | **1.0208** | 1.0217 | 1.0271 | 1.0265 | 1.0354 |
+| nf4-offload | 1.0216 | 1.0242 | 1.0245 | 1.0245 | 1.0361 |
+| int8 | 1.0237 | 1.0171 | 1.0179 | 1.0173 | 1.0378 |
+| int8-offload | 1.0226 | **1.0126** | 1.0147 | 1.0153 | 1.0360 |
+| fp4 | 1.0210 | 1.0301 | 1.0314 | 1.0315 | 1.0348 |
+
+Query-mode peak GPU is set by the query mode alone (the base loads in that mode), independent of
+which mode trained the adapter: nf4/fp4 ≈ 4.96 GB, int8 ≈ 8.18 GB, bf16/fp16 ≈ 14.22 GB.
 
 ## Observations
 
-*To be filled from the first run. Template discipline: "In this run, adapters trained under X
-transferred to Y with [improvement/degradation] relative to same-mode query." "The result
-suggests, but does not prove, that ..." This should be read as a storage-mode portability test,
-not as a benchmark.*
+All observed in this single-seed run; none proven. The seeded phase-3 jobs (nf4/int8 query
+columns) will test whether these hold.
+
+- **fp4 as a *query* mode degrades every adapter** — the fp4 column is uniformly the worst
+  (1.0348–1.0378), ~0.01–0.02 above the same adapter queried under nf4/int8/bf16/fp16. Querying
+  under a coarser codebook than you can afford costs quality here. Classified `quality_shift`.
+- **Upward transfer (train coarser, query finer) roughly preserves same-mode quality.** nf4→int8
+  1.0217 vs nf4→nf4 1.0208 (+0.0009); nf4→bf16/fp16 within ~0.006. Training under the cheap
+  regime and querying under a finer one did not, in this run, cost much.
+- **Downward transfer (train finer, query coarser) degrades a little more.** int8→nf4 1.0237 vs
+  int8→int8 1.0171 (+0.0066). A mild asymmetry: in this run, upward transfer preserved better
+  than downward — the direction matters, which is exactly why the matrix records the pair rather
+  than assuming symmetry.
+- **The single strongest cell is int8-offload → int8 query (1.0126)**, and int8-offload
+  transferred strongly to every non-fp4 query mode. This echoes the grid's int8-offload
+  observation but is *one seed* — it does not rank offload modes and does not survive as a claim
+  until the seeded repeats.
+- **Best query mode per train mode is always same-or-finer, never fp4.** Every row's best column
+  is its own storage mode or a finer one; fp4 is never anyone's best query mode (including fp4's
+  own adapter, whose best query is nf4).
+
+### Portability status of the tested pairs (this run)
+
+| pair class | status | note |
+|---|---|---|
+| same-mode query (diagonal) | measured pass | the cleanest contract; runnable and useful this run |
+| upward (train 4-bit → query 8/16-bit) | measured pass, quality preserved | not yet `validated` (one seed) |
+| downward (train 8-bit → query 4-bit) | `quality_shift` (mild) | small consistent degradation this run |
+| any → fp4 query | `quality_shift` | fp4 query degrades every adapter |
+| not-yet-tested regimes (e.g. offload query, fp8/bf16/fp16 train rows in repeats) | `not_tested` | outside this run's scope |
+
+Statuses use the shared taxonomy: `validated` / `quality_shift` / `broken` / `impractical` /
+`not_tested` / `blocked`. Nothing here is `validated` yet — that requires the seeded repeats.
 
 ## Guidance
 
@@ -152,22 +199,24 @@ Both grid scripts print their planned legs before running, support `--dry-run`, 
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T08:44:38Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `f19b86ea6551dd28d67ca7dcde37728ac8bddea6e44a521d7a98e87c464b8d44` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[$:#@*0?%0OO:!!+*]`
+- **OTS proof timestamp for visible document:** `2026-07-05T12:47:30Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `45db13c636a21677550245709d5ef170d21225f48494105a8a7e919ae2aa2be9` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T08:44:38Z` `f19b86ea6551dd28d67ca7dcde37728ac8bddea6e44a521d7a98e87c464b8d44`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[oO!@:~&0~0%+:0==]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|         E       |
-|        .  + o   |
-|        ..+.= o .|
-|        o=B..o + |
-|       .SO.+  o .|
-|      o +ooo   ..|
-|       ++=+. . o+|
-|       +*.= o.+ o|
-|     .o  +oB+o   |
+|          ..O@&XB|
+|        .ooO=o+X=|
+|        .+B+o...+|
+|       .o+ . . . |
+|      ..S .      |
+|     . . .       |
+| .    .          |
+|o    .           |
+|.Eoo.            |
 +-----------------+
 ```
 
