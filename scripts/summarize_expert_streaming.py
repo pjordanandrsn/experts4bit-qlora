@@ -51,14 +51,21 @@ def build_pairs(layers, experts):
         layer = layers.get(lid, {})
         layer_stall = layer.get("h2d_ms_total", 0.0)
         frac = e["tokens_routed"] / tokens_in_layer[lid] if tokens_in_layer.get(lid) else 0.0
+        # per_expert_bytes recorded by the profiler reads 0 when the base was offload-evicted at
+        # attach time (0-element placeholders). Derive it from the layer's staged bytes instead:
+        # h2d_bytes = stage_nbytes x stage_copies, so one stage / num_experts = per-expert bytes.
+        per_expert = layer.get("per_expert_bytes", 0)
+        copies, nexp = layer.get("stage_copies", 0), layer.get("num_experts", 0)
+        if not per_expert and copies and nexp:
+            per_expert = layer.get("h2d_bytes", 0) / copies / nexp
         pairs.append({
             "layer_id": lid,
             "expert_id": e["expert_id"],
             "hits": e["hits"],
             "tokens_routed": e["tokens_routed"],
-            "per_expert_bytes": layer.get("per_expert_bytes", 0),
+            "per_expert_bytes": per_expert,
             "projected_stall_ms": layer_stall * frac,
-            "h2d_bytes_share": layer.get("per_expert_bytes", 0) * layer.get("stage_copies", 0),
+            "h2d_bytes_share": per_expert * copies,
         })
     return pairs
 

@@ -1,0 +1,20 @@
+{
+  "claimed_at": "2026-07-05T13:01:54Z",
+  "command": "env MODEL=allenai/OLMoE-1B-7B-0924 QUANT_TYPE=int8 OFFLOAD_EXPERTS=1 STEPS=100 SEED=1337 DO_GEN=0 EVAL_EVERY=100 E4B_PROFILE_PHASE=train E4B_EXPERT_PROFILE=/workspace/runs/expert_streaming/jobs/profile_olmoe_int8_offload_train_seed1337_steps100/profile.jsonl OUT=/workspace/runs/expert_streaming/jobs/profile_olmoe_int8_offload_train_seed1337_steps100/adapter python -u -m experts4bit_qlora.train",
+  "commit": null,
+  "exit_code": 0,
+  "finished_at": "2026-07-05T13:32:43Z",
+  "hostname": "49992ca88d76",
+  "job_id": "profile_olmoe_int8_offload_train_seed1337_steps100",
+  "job_type": "profile_train",
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "offload": true,
+  "phase": "train",
+  "pid": 3919,
+  "pod_id": "49992ca88d76",
+  "seed": 1337,
+  "started_at": "2026-07-05T13:01:54Z",
+  "status": "pass",
+  "steps": 100,
+  "storage_mode": "int8"
+}

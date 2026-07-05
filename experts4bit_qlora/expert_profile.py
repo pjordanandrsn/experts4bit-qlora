@@ -52,12 +52,18 @@ class _LayerProbe:
         # quantity a pinning policy would keep resident per expert.
         n = self.num_experts
 
-        def _slice_bytes(t):
+        # Under offload the base tensors are 0-element placeholders at attach time, so read the
+        # real byte sizes from the offload handle's CPU home copies when present; fall back to the
+        # (resident) base tensors otherwise. The summarizer also re-derives this from staged bytes
+        # if it still lands at 0, so an old placeholder-zeroed profile stays salvageable.
+        home = getattr(getattr(module, "_offload", None), "home", None)
+
+        def _slice_bytes(name):
+            t = home.get(name) if home is not None else getattr(base, name, None)
             return 0 if t is None else t.numel() * t.element_size() // n
 
         self.per_expert_bytes = sum(
-            _slice_bytes(getattr(base, name, None))
-            for name in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
+            _slice_bytes(name) for name in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
         )
         self.hits = None  # lazy: allocated on the device of the first routed index tensor
         self.tokens = None
