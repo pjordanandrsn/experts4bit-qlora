@@ -118,6 +118,27 @@ int8 < fp8 included (7.4e-4 vs 1.7e-3 mean-abs).
   mode×check `[PASS|FAIL|SKIP]` lines with reasons, peak CUDA memory, nonzero exit on FAIL.
   No model downloads; big-model validation stays manual (`bench/`, `infer.py`).
 
+## Verification record (2026-07-04, this pass)
+
+Full suite (`pytest tests/ -q`) + `scripts/validate_expertsnbit.py` (37 checks), every host on
+stock bitsandbytes 0.49.2:
+
+| host | arch | torch | suite | validate |
+|---|---|---|---|---|
+| RTX A2000 12GB (reference) | sm_86 | 2.6.0+cu124 | 115 passed / 1 skipped | 37/0/0 |
+| same host, CPU | — | 2.6.0 | 109 passed / 7 skipped | 37/0/0 |
+| RTX 4090 (RunPod) | sm_89 | 2.8.0+cu128 | 115 passed / 1 skipped | 37/0/0 |
+| RTX 5090 (RunPod) | sm_120 | 2.8.0+cu128 | 111 passed / 5 skipped, **0 failed** | 37/0/0 |
+| H100 PCIe (RunPod) | sm_90 | 2.8.0+cu128 | 115 passed / 1 skipped | 37/0/0 |
+
+Baseline at `2503de4` reproduced first (GPU 77/1, CPU 71/7 — the PROVENANCE v0.2.0 counts). The
+sm_120 row is the oracle-skip guard's positive verification: at v0.2.0 that machine hard-failed 4
+tests inside the *transformers reference's* `torch._grouped_mm`; those four are now skips whose
+reason names the oracle. The sm_90 row is the guard's negative control — the one arch where the
+oracle runs `_grouped_mm` natively; its only skip is the CPU-only branch, i.e. the Level-2 tests
+PASSED there rather than skipping. Forward relerrs were bit-identical across every CUDA arch
+tested (sm_86/89/90/120).
+
 ## Non-goals
 
 No grouped GEMM. No double quantization. No Transformers-wide walker integration. No
