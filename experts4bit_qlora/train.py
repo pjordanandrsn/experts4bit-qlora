@@ -113,7 +113,7 @@ def eval_loss(model, eval_data):
 
 
 def main():
-    torch.manual_seed(0)
+    torch.manual_seed(int(os.environ.get("SEED", "0")))  # default unchanged; the mode-matrix scripts set it
     log(f"loading {MODEL} via streaming 4-bit loader (CPU-RAM-light)...")
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
