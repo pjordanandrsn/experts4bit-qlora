@@ -158,6 +158,19 @@ placement (a≡c) alike:**
 
 Deterministic-mode op warnings: none (0 in both deterministic trios).
 
+**FLAGGED (self-caught, pending rev3 verification): offload engagement in leg (c) is not
+self-attested by the rev2 artifacts.** The rev2 script reset peak-memory at leg END, so each
+leg's recorded peak carries in-process carryover and leg (c)'s peaks read anomalously
+(bf16 14.1 GB / int8 8.1 GB — neither offload- nor cleanly resident-scale). Because leg (c)'s
+bitwise-equality is consistent with BOTH an engaged-offload leg and a silently-resident one,
+the rev2 certificate is provisionally supported rather than self-contained: the engagement
+default rests on the eval-path evidence (identical loader call + flag wiring measurably
+engages offload in fresh processes — 2.53 vs 14.77 GB for bf16 in the n=64 ladder jobs).
+Rev3 adds a vacuity guard (fails loudly unless all 16 expert bases are 0-element placeholders
+at load under offload, and ≤1 base is resident after the step) plus leg-scoped memory
+accounting, and reruns one bf16 + one int8 trio. Until rev3 lands, the row-4 filing stands on
+eval-path evidence + the guard-free rev2 bitwise results.
+
 **Predictions scored:** P2, P3, P4 — confirmed (and more sharply than predicted). P1 —
 **wrong in the informative direction**: the default-kernel null is bitwise at one step; the
 MoE-combine atomics and SDPA backward did not produce run-to-run noise on these shapes.
@@ -188,24 +201,25 @@ with T2/T3 (serve path bitwise placement-exact, 384/384) and T5:
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T18:09:34Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `10a9897aafde7afe3aea060cb02905dc3eba2156620789b4b971a1e36ad31f4c` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T19:39:08Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `a657bccbe80139f15e9633d3536d9ae8157b089a1851604bdf4b81ad8db00ac9` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T18:09:34Z` `10a9897aafde7afe3aea060cb02905dc3eba2156620789b4b971a1e36ad31f4c`
   - `2026-07-05T17:13:37Z` `c7d3973bd217e7fc444d351ad588e66680b4ad3b69f3e532a2293eb652c319a8`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[:.%#*#=%%$!?=%$?]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%0O=@&&@?*.:~#$:]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|=oo.  ..         |
-|o+=.. ..         |
-|.Xoo o.          |
-|*o*=o  .         |
-|=+= .E  S        |
-|==o o            |
-|+=oo o           |
-|..o.= .          |
-| +**+=.          |
+|        =o.o.    |
+|       o.+.... . |
+|   . .. oo.++ o o|
+|    E  +.+o*.= B |
+|     .+.S % = * .|
+|      .* + * o . |
+|      . + . .    |
+|       . + .     |
+|       .o o      |
 +-----------------+
 ```
 

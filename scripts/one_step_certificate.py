@@ -91,6 +91,10 @@ def run_leg(tag, quant_type, offload, seed, seq, grad_accum, lr, batches, dropou
     import experts4bit_qlora.train as train
     from transformers import get_cosine_schedule_with_warmup
 
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()  # leg-scoped accounting: reset at START, not carried over
+    mem = {"leg_start_gb": round(torch.cuda.memory_allocated() / 1e9, 3)}
+
     torch.manual_seed(seed)
     model, _ = load_moe_4bit_streaming(
         train.MODEL, "cuda", torch.bfloat16, 8, 16, offload=offload, pin=True, quant_type=quant_type
@@ -98,6 +102,22 @@ def run_leg(tag, quant_type, offload, seed, seq, grad_accum, lr, batches, dropou
     if not offload:
         model.to("cuda")
     add_attention_lora(model, 8, 16, torch.bfloat16)
+    mem["post_load_gb"] = round(torch.cuda.memory_allocated() / 1e9, 3)
+
+    # OFFLOAD ENGAGEMENT ATTESTATION (vacuity guard): while evicted, every offloaded base's
+    # packed tensors are 0-element placeholders. A resident-when-offload-was-requested leg
+    # would make the placement comparison vacuous — fail loudly instead of certifying nothing.
+    from experts4bit_qlora._vendor.experts import ExpertsNbit
+
+    bases = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+    n_evicted = sum(1 for b in bases if b.gate_up_proj.numel() == 0)
+    if offload and n_evicted != len(bases):
+        raise RuntimeError(
+            f"offload requested but only {n_evicted}/{len(bases)} expert bases are evicted "
+            "at load — offload did not engage; a placement certificate from this leg would "
+            "be vacuous")
+    if not offload and n_evicted != 0:
+        raise RuntimeError(f"resident leg has {n_evicted} evicted bases — placement mislabeled")
 
     n_dropout_mods = force_attention_dropout(model, dropout_p) if dropout_p > 0 else 0
 
@@ -140,6 +160,12 @@ def run_leg(tag, quant_type, offload, seed, seq, grad_accum, lr, batches, dropou
                 opt_state[f"{n}.{k}"] = st[k].detach().clone()
 
     torch.cuda.synchronize()
+    mem["post_step_gb"] = round(torch.cuda.memory_allocated() / 1e9, 3)
+    n_resident_after_step = sum(1 for b in bases if b.gate_up_proj.numel() > 0)
+    if offload and n_resident_after_step > 1:
+        raise RuntimeError(
+            f"single-slot violation: {n_resident_after_step} expert bases GPU-resident after "
+            "the step under offload")
     art = {
         "tag": tag,
         "offload": offload,
@@ -147,6 +173,9 @@ def run_leg(tag, quant_type, offload, seed, seq, grad_accum, lr, batches, dropou
         "n_dropout_modules": n_dropout_mods,
         "config_attention_dropout": float(getattr(model.config, "attention_dropout", -1.0)),
         "n_grad_tensors": len(grads),
+        "offload_engagement": {"n_bases": len(bases), "n_evicted_at_load": n_evicted,
+                               "n_resident_after_step": n_resident_after_step},
+        "memory_gb": mem,
         "logits_mb0_sha256": _sha(logits_mb0),
         "grads_sha256": {n: _sha(g) for n, g in grads.items()},
         "weights_sha256": {n: _sha(w) for n, w in weights.items()},
