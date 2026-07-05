@@ -60,9 +60,13 @@ def test_build_and_forward(quant_type):
         assert base.gate_up_absmax is not None
 
 
-@pytest.mark.parametrize("quant_type", EIGHT_AND_SIXTEEN)
+@pytest.mark.parametrize("quant_type", ALL_SCHEMES)
 def test_lora_trains_over_nbit_base(quant_type):
-    """Per-expert LoRA trains over any storage scheme; the frozen base never gets a gradient."""
+    """Per-expert LoRA trains over any storage scheme: the frozen base never gets a gradient, and
+    an optimizer step moves the adapters while the packed storage stays bit-identical.
+
+    NB the step assertion checks ``lora_B``, not ``lora_A``: at init B=0, so dL/dA (which factors
+    through B) is exactly zero — an A-moved assertion would be a false failure, not a real bug."""
     base = _build(quant_type)
     lora = ExpertsLoRA(base, r=4, alpha=8, dtype=torch.float32).to(DEVICE)
     hs, idx, wts = _inputs()
@@ -71,17 +75,55 @@ def test_lora_trains_over_nbit_base(quant_type):
     assert lora.gate_up_lora_A.grad is not None and lora.down_lora_A.grad is not None
     assert base.gate_up_proj.grad is None  # frozen storage, any scheme
 
+    packed_before = base.gate_up_proj.detach().clone()
+    b_before = lora.gate_up_lora_B.detach().clone()
+    opt = torch.optim.SGD([p for p in lora.parameters() if p.requires_grad], lr=1e-2)
+    opt.step()
+    assert not torch.equal(lora.gate_up_lora_B.detach(), b_before)  # the adapters moved...
+    assert torch.equal(base.gate_up_proj.detach(), packed_before)  # ...the packed storage did not
+
+
+@pytest.mark.parametrize("quant_type", ALL_SCHEMES)
+def test_recompute_function_on_tape_for_every_scheme(quant_type):
+    """The memory-saving recompute path IS the training path, for every storage scheme: a
+    grad-enabled forward's autograd graph contains _FrozenLinearRecomputeBackward nodes (which
+    re-dequantize the frozen weight in backward instead of keeping it as a saved activation)."""
+    base = _build(quant_type)
+    lora = ExpertsLoRA(base, r=4, alpha=8, dtype=torch.float32).to(DEVICE)
+    hs, idx, wts = _inputs()
+    out = lora(hs.clone().requires_grad_(True), idx, wts)
+
+    seen, stack, found = set(), [out.grad_fn], False
+    while stack and not found:
+        fn = stack.pop()
+        if fn is None or fn in seen:
+            continue
+        seen.add(fn)
+        found = "FrozenLinearRecomputeBackward" in type(fn).__name__
+        stack.extend(next_fn for next_fn, _ in fn.next_functions)
+    assert found, f"recompute Function not on the autograd tape for {quant_type}"
+
 
 def test_fidelity_ordering():
-    """Reconstruction error should fall as bits rise: bf16 passthrough ~exact < int8 < nf4.
-    (fp8's e4m3 codebook is coarser than int8's dynamic map, so it is not asserted in the chain.)"""
+    """Reconstruction error falls as representable precision rises, across all six schemes:
+
+        fp16 < bf16 < int8 < fp8 < nf4 < fp4
+
+    fp16 < bf16: passthrough rounding, 11 vs 8 significand bits — by construction. int8 < fp8: both
+    are 256-entry blockwise codebooks; int8's dynamic map is denser than fp8's e4m3 grid where
+    ~Gaussian weights live — pinned by MEASUREMENT on bitsandbytes' current codebooks, not by
+    construction. If a future bnb reshapes them and flips this one link, demote it to documentation
+    rather than forcing the assert. fp8 < nf4 (256 vs 16 entries) and nf4 < fp4 (NF4's quantiles are
+    optimal for normal weights; FP4's exponent grid is not) are robust multi-x gaps."""
     gate_up, _ = _weights()
     err = {}
-    for q in ("nf4", "int8", "bf16"):
+    for q in ALL_SCHEMES:
         base = _build(q)
         deq = base._dequantize_expert(base.gate_up_proj, base.gate_up_absmax, base._gate_up_shape, 0, torch.float32)
         err[q] = (deq - gate_up[0]).abs().mean().item()
-    assert err["bf16"] < err["int8"] < err["nf4"], err
+    order = ["fp16", "bf16", "int8", "fp8", "nf4", "fp4"]
+    for finer, coarser in zip(order, order[1:]):
+        assert err[finer] < err[coarser], (finer, coarser, err)
 
 
 @pytest.mark.parametrize("quant_type", ALL_SCHEMES)
@@ -101,8 +143,78 @@ def test_state_dict_roundtrip(quant_type):
     torch.testing.assert_close(got, ref)
 
 
+@pytest.mark.parametrize("quant_type", ["nf4", "bf16"])
+def test_state_dict_roundtrip_strict(quant_type):
+    """A same-config round-trip must load under ``strict=True`` — pinning the serialization contract
+    across package versions (a checkpoint saved by this build loads strictly into this build; nf4
+    covers the absmax-carrying family, bf16 the passthrough family with no absmax keys)."""
+    base = _build(quant_type, seed=0)
+    hs, idx, wts = _inputs(seed=2)
+    with torch.no_grad():
+        ref = base(hs, idx, wts)
+
+    dst = _build(quant_type, seed=7)  # different weights until load
+    dst.load_state_dict(base.state_dict(), strict=True)
+    with torch.no_grad():
+        got = dst(hs, idx, wts)
+    torch.testing.assert_close(got, ref)
+
+
 def test_experts4bit_rejects_8_and_16_bit():
     gate_up, down = _weights()
     for q in EIGHT_AND_SIXTEEN:
         with pytest.raises(ValueError, match="quant_type must be one of"):
             Experts4bit.from_float(gate_up, down, quant_type=q)
+
+
+def test_extra_state_saved_and_scheme_mismatch_rejected():
+    """state_dict carries construction metadata, and loading a checkpoint of one scheme into a
+    module built for another raises — nf4 and fp4 packed bytes are shape-identical, so without the
+    metadata this load would succeed and silently decode against the wrong codebook."""
+    base = _build("nf4", seed=0)
+    sd = base.state_dict()
+    extra = sd.get("_extra_state")
+    assert isinstance(extra, dict) and extra["quant_type"] == "nf4" and extra["blocksize"] == base.blocksize
+
+    dst = _build("fp4", seed=7)  # identical dims/blocksize: every tensor shape matches
+    with pytest.raises(ValueError, match="quant_type: checkpoint='nf4' vs module='fp4'"):
+        dst.load_state_dict(sd, strict=True)
+
+
+def test_extra_state_dim_or_blocksize_mismatch_rejected():
+    """A config mismatch is named field-by-field (here blocksize), not surfaced as a bare tensor
+    shape complaint."""
+    base = _build("nf4", seed=0)  # blocksize 64
+    gate_up, down = _weights(seed=7)
+    try:
+        dst = ExpertsNbit.from_float(gate_up, down, quant_type="nf4", blocksize=32)  # 32 divides HID and INTER
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes nf4/bs32 quantize unavailable on {DEVICE}: {e}")
+    with pytest.raises(ValueError, match="blocksize: checkpoint=64 vs module=32"):
+        dst.load_state_dict(base.state_dict(), strict=False)
+
+
+def test_legacy_checkpoint_without_extra_state_loads():
+    """A checkpoint from before the metadata existed (no ``_extra_state`` key) loads under BOTH
+    strict modes, bit-identically to the old behavior — the metadata is additive, not gating."""
+    base = _build("nf4", seed=0)
+    hs, idx, wts = _inputs(seed=2)
+    with torch.no_grad():
+        ref = base(hs, idx, wts)
+
+    legacy_sd = {k: v for k, v in base.state_dict().items() if k != "_extra_state"}
+    for strict in (True, False):
+        dst = _build("nf4", seed=7)
+        dst.load_state_dict(dict(legacy_sd), strict=strict)
+        with torch.no_grad():
+            torch.testing.assert_close(dst(hs, idx, wts), ref)
+
+
+def test_newer_extra_state_schema_rejected():
+    """Metadata from a future package version fails loudly with an upgrade hint instead of being
+    half-understood."""
+    base = _build("nf4", seed=0)
+    sd = base.state_dict()
+    sd["_extra_state"] = dict(sd["_extra_state"], schema=99)
+    with pytest.raises(ValueError, match="upgrade experts4bit-qlora"):
+        _build("nf4", seed=7).load_state_dict(sd, strict=False)

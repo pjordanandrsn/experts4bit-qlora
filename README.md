@@ -17,10 +17,11 @@ weights. `load_in_4bit` "shrinks" the model but the experts stay in full precisi
 `Experts4bit` is the primitive that 4-bit-quantizes exactly that fused stack. As of v0.2.0 it is
 the 4-bit face of **`ExpertsNbit`**, which stores the same stack at selectable precision — `nf4`
 / `fp4` (4-bit packed), `int8` / `fp8` (8-bit blockwise), or `bf16` / `fp16` (passthrough) — with
-a test-pinned fidelity ordering (`bf16` < `int8` < `nf4` reconstruction error) so the precision
-knob is a measured trade, not a vibe. This package pairs the primitive with a **streaming
-loader** and **per-expert LoRA**, so you can actually *fine-tune* a real sparse-MoE on
-reasonable hardware.
+a test-pinned fidelity ordering (`fp16` < `bf16` < `int8` < `fp8` < `nf4` < `fp4` reconstruction
+error) so the precision knob is a measured trade, not a vibe. What each mode does and doesn't
+promise is in [the support matrix](#storage-modes-the-support-matrix). This package pairs the
+primitive with a **streaming loader** and **per-expert LoRA**, so you can actually *fine-tune* a
+real sparse-MoE on reasonable hardware.
 
 ## What it buys you (measured on an RTX A2000 12 GB — in a NAS's PCIe 3.0 x8 slot; see METHODOLOGY "Test host")
 
@@ -77,6 +78,110 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
   python -m experts4bit_qlora.train
 ```
 
+## Storage modes: the support matrix
+
+One knob selects the frozen experts' storage: `quant_type=` in code, `QUANT_TYPE=` in the
+train/infer scripts — the same validation path, checked **before any checkpoint I/O**. Canonical
+names are the six below; `bfloat16`/`float16` are accepted aliases (case/whitespace-insensitive);
+anything else raises listing the valid set. There is no per-expert mode mixing: one module, one
+scheme.
+
+**What the words mean.** *Supported* means tested under the stated conditions — no more: an
+exposed code path is not a warranty. *Experimental* means the path exists but may change or break
+(the `ExpertsNbit` primitive as a whole carries upstream's experimental tag until
+bitsandbytes#1965 settles). *Unsupported* means it fails loudly by design — never a silent no-op.
+
+| Mode | Status | Intended use | Memory | Quality risk¹ | Training | Inference | Offload | Notes |
+|---|---|---|---|---|---|---|---|---|
+| `nf4` | supported + benchmarked | the QLoRA default | 4x smaller | ~0.17 (cap 0.25) | end-to-end (20-step test + convergence run) | fast-path + probed GEMV + prefetch | tested + benchmarked | the headline path |
+| `fp4` | supported | nf4 alternative codebook | 4x | ~0.22 (0.30) | recompute-tested | dequantize + probed GEMV | same code path as nf4 | coarser than nf4 on ~Gaussian weights |
+| `int8` | supported (tested contract) | higher-fidelity frozen base | 2x | ~0.017 (0.03) | LoRA step tested | dequantize (no GEMV) | identity-tested | blockwise dynamic map — **not** LLM.int8() |
+| `fp8` | supported (tested contract) | int8 alternative | 2x | ~0.045 (0.08) | LoRA step tested | dequantize | same code path as int8 | bnb e4m3 **codebook**, not torch float8; coarser than int8 (test-pinned) |
+| `bf16` | supported (tested contract) | reference baseline / per-layer opt-out | 1x (none) | ~0.003 (8e-3) | LoRA step tested | dequantize | identity-tested | passthrough; no absmax buffers |
+| `fp16` | supported (tested contract) | as bf16 | 1x | ~0.0004 (1e-3) | LoRA step tested | dequantize | same code path as bf16 | passthrough |
+
+¹ Forward relerr vs a float reference on synthetic ~Gaussian expert weights, measured on CPU and
+A2000 kernels (bnb 0.49.2); the parenthesized cap is the calibrated test ceiling
+(`tests/test_reference_parity.py`). Not an end-task quality claim.
+
+**"Tested contract"** = build, forward parity vs a float reference (per-scheme ceilings), a
+state_dict round-trip with validated metadata, a LoRA-over-frozen-base training step with the
+recompute Function on the autograd tape, and offload math-identity. Offload is identity-tested
+directly on `nf4`/`int8`/`bf16`; `fp4`/`fp8`/`fp16` ride the same code paths byte-for-byte. Only
+`nf4` is performance-benchmarked end-to-end — the other five are correctness-tested, not measured
+for speed or end-task quality.
+
+### What ExpertsNbit is / is not
+
+**Is:** frozen quantized *storage* for fused expert stacks (`[num_experts, out, in]`) — a
+per-expert-loop forward, quantization blocks that never cross an expert boundary, and a
+recompute-in-backward projection so training holds no dequantized-expert activations.
+
+**Is not:** grouped-GEMM (per-expert loop only, intentionally), a Transformers-wide quantization
+walker, double quantization, multi-GPU/FSDP, or a speed play — on a card that already fits the
+model it is strictly a memory trade (see the energy caveat above).
+
+### Experts4bit compatibility
+
+`Experts4bit` is the 4-bit-restricted subclass (`nf4`/`fp4` only — it rejects the 8/16-bit names
+*and their aliases*) and keeps its pre-0.2 API: same constructor, same `from_float`, same
+state_dict tensor keys. The loader still instantiates `Experts4bit` for 4-bit runs, so existing
+`isinstance(m, Experts4bit)` checks keep working.
+
+### Known limitations & unsupported paths
+
+- **Checkpoint metadata:** state_dicts now embed construction metadata (scheme, blocksize, dims)
+  and loads validate it — loading an `fp4` checkpoint into an `nf4`-built module raises instead
+  of silently decoding against the wrong codebook (the packed bytes are shape-identical).
+  Pre-metadata checkpoints load unvalidated, under both `strict` modes. *New* checkpoints into
+  ≤0.2.0 code: `strict=False` works (`_extra_state` lands in `unexpected_keys`); `strict=True`
+  fails loudly on the unexpected key.
+- **safetensors full-module saves:** the `_extra_state` entry is a dict, which safetensors
+  refuses (loudly). Filter it — `{k: v for k, v in sd.items() if not k.endswith("_extra_state")}`
+  — and the save loads as a legacy (unvalidated) checkpoint. Adapter-only saves never carry it.
+- **Non-checkpointed offload *training* is unsupported** and fails loudly naming the invariant
+  (the shipped trainer always enables gradient checkpointing).
+- **`offload_model_experts` raises when it finds no `ExpertsLoRA` modules** (changed this
+  version: it used to return `[]` silently). The streaming loader likewise refuses to return a
+  model on which it quantized zero expert layers.
+- **GEMV is 4-bit-only** and probe-gated per configuration; the 8/16-bit schemes always decode
+  via the dequantize path.
+- **Loader scope** is the three architectures under [Scope](#scope); the `ExpertsNbit` primitive
+  itself is model-agnostic.
+
+### Reading the headline memory numbers
+
+The **7.16 GB** for Qwen3-30B-A3B (and 8.47 GB for Gemma-4-26B-A4B) is **peak GPU allocation
+during a QLoRA training step with `OFFLOAD_EXPERTS=1`** on the reference A2000: roughly one
+layer's experts resident plus activations/adapters, while the other ~13–15 GB of packed experts
+sit in pinned CPU RAM. It is a *capability* number — fits vs doesn't fit — not a throughput
+claim: the same mechanism costs ~+11 % s/step at OLMoE scale and is PCIe-bound at 26–30B scale
+(0.22–0.43 tok/s decode). Method and grids: [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11–§12;
+environment and commit pins: [`PROVENANCE.md`](PROVENANCE.md).
+
+### How to reproduce validation
+
+One command, no model downloads, nonzero exit on any FAIL:
+
+```bash
+python scripts/validate_expertsnbit.py
+```
+
+```
+experts4bit-qlora validate | v0.2.0 | commit <sha> | torch 2.6.0+cu124 | bnb 0.49.2 | cuda yes | NVIDIA RTX A2000 12GB
+[PASS] nf4   build            0.15s
+[PASS] nf4   forward_parity   relerr=0.1691 (tol 0.25)
+...
+[PASS] -     metadata_guard   raised ValueError: checkpoint/module config mismatch...
+SUMMARY pass=37 fail=0 skip=0 -> exit 0
+```
+
+It runs the tested contract per scheme (build, forward parity, state round-trip, LoRA step,
+synthetic decode sanity, offload identity) plus the checkpoint-metadata guard; SKIP lines always
+say why (e.g. a host whose bitsandbytes can't quantize a scheme). The full suite is
+`pip install -e ".[test]" && pytest tests/ -q`; big-model numbers reproduce via the manual
+[Benchmarks](#benchmarks) scripts, not this report.
+
 ## Training + expert offload
 
 Training holds no dequantized-expert activations: the frozen base projections re-dequantize from
@@ -85,7 +190,9 @@ the number of experts — on any released bitsandbytes, for every storage scheme
 
 - **`QUANT_TYPE=nf4|fp4|int8|fp8|bf16|fp16`** selects the frozen base's storage precision
   end-to-end (loader → training → serving). Default `nf4`; serve with the same value you trained
-  with.
+  with (the checkpoint metadata now enforces this). Aliases `bfloat16`/`float16` accepted;
+  anything else fails before any checkpoint I/O — see
+  [the support matrix](#storage-modes-the-support-matrix).
 - **`OFFLOAD_EXPERTS=1`** keeps the frozen experts in pinned CPU RAM (set `OFFLOAD_PIN=0` to skip
   pinning) and streams one layer to the GPU at a time — GPU-resident only for that layer's
   forward and its gradient-checkpoint recompute, evicted after. Peak GPU drops by roughly
@@ -191,8 +298,10 @@ router **hurts**.
 [bitsandbytes#1965](https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965). Until that
 ships in a release, this package **vendors** a copy (`experts4bit_qlora/_vendor/experts.py`) so it
 runs on stock bitsandbytes today. The import shim prefers the upstream classes when present *and
-still exposing the internals `ExpertsLoRA` builds on* — both names must resolve to the same
-implementation, never a mix — and falls back to the vendored copy otherwise:
+still satisfying everything this package promises about them*: the internals `ExpertsLoRA` builds
+on, `Experts4bit` a subclass of `ExpertsNbit`, and the state_dict metadata contract
+(`get`/`set_extra_state` overrides). Both names must resolve to the same implementation, never a
+mix — and anything less falls back to the vendored copy:
 
 ```python
 try:

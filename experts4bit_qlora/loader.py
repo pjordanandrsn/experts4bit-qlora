@@ -22,7 +22,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
-from . import Experts4bit, ExpertsNbit
+from . import Experts4bit, ExpertsNbit, normalize_quant_type
 from .lora import ExpertsLoRA
 from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
@@ -71,6 +71,11 @@ def load_moe_4bit_streaming(
     transfer with compute at a bounded cost of two layers resident instead of one. Training forwards
     are unaffected. See :func:`experts4bit_qlora.offload.enable_inference_prefetch`.
     """
+    # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
+    # fetch, snapshot download, or shard read — and the Experts4bit-vs-ExpertsNbit class dispatch
+    # below must only ever see canonical names (an unnormalized alias would silently pick the
+    # wrong class).
+    quant_type = normalize_quant_type(quant_type)
     if prefetch and not offload:
         raise ValueError(
             "prefetch=True requires offload=True: prefetch overlaps the H2D copy of offloaded "
@@ -118,7 +123,7 @@ def load_moe_4bit_streaming(
 
     n_layers = lm_config.num_hidden_layers
     n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
-    log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to NF4 (streaming)...")
+    log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to {quant_type} (streaming)...")
     expert_keys = set()
     offload_handles = []
     n_moe = 0
@@ -163,6 +168,14 @@ def load_moe_4bit_streaming(
         )  # ("model.layers.i.mlp","experts") or ("model.layers.i","experts")
         setattr(model.get_submodule(parent), leaf, experts)
         del gate_up, down
+    if n_moe == 0:
+        raise RuntimeError(
+            f"no fused expert stacks found in {model_id!r} (model_type={model_type!r}): expected "
+            f"'model.layers.<i>.{expert_rel}.gate_up_proj' (fused) or "
+            f"'model.layers.<i>.{expert_rel}.0.gate_proj.weight' (per-expert) tensors in the "
+            "checkpoint. Refusing to return a model with zero quantized expert layers — silently "
+            "skipping the experts is the exact failure this loader exists to prevent."
+        )
     log(f"  quantized experts on {n_moe}/{n_layers} MoE layers ({n_exp} experts each)")
 
     if offload_handles:

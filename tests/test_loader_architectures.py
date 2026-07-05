@@ -152,11 +152,16 @@ def test_loader_handles_architecture(build, per_expert, tmp_path):
     assert tuple(out.logits.shape) == (1, 8, cfg.vocab_size)
 
 
-@pytest.mark.parametrize("quant_type", ["int8", "bf16"])
-def test_loader_quant_type_threads_through(quant_type, tmp_path):
+@pytest.mark.parametrize(
+    "quant_type,expected",
+    [("int8", "int8"), ("bf16", "bf16"), ("BFLOAT16", "bf16")],
+    ids=["int8", "bf16", "alias-BFLOAT16"],
+)
+def test_loader_quant_type_threads_through(quant_type, expected, tmp_path):
     """The loader's ``quant_type`` knob reaches the fused-expert quantizer: an OLMoE checkpoint
     streamed with a non-nf4 scheme builds ExpertsNbit bases of that scheme and runs a forward.
-    (int8 = 8-bit blockwise; bf16 = 16-bit passthrough — spans both non-4-bit storage families.)"""
+    (int8 = 8-bit blockwise; bf16 = 16-bit passthrough — spans both non-4-bit storage families;
+    the alias spelling proves normalization happens before the class dispatch, not after.)"""
     from experts4bit_qlora import ExpertsLoRA
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
@@ -168,10 +173,42 @@ def test_loader_quant_type_threads_through(quant_type, tmp_path):
         pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
 
     experts = [m.base for m in model.modules() if isinstance(m, ExpertsLoRA)]
-    assert experts and all(b.quant_type == quant_type for b in experts)
+    assert experts and all(b.quant_type == expected for b in experts)
     model.config.use_cache = False
     out = model(input_ids=torch.randint(0, cfg.vocab_size, (1, 8), device=DEVICE))
     assert tuple(out.logits.shape) == (1, 8, cfg.vocab_size)
+
+
+def test_loader_rejects_bad_quant_type_before_any_io(tmp_path):
+    """A bad quant_type fails BEFORE any config read, download, or shard streaming: the target
+    directory is empty, so getting the quant_type ValueError (and not a file-not-found error)
+    proves validation runs first."""
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    with pytest.raises(ValueError, match="quant_type must be one of"):
+        load_moe_4bit_streaming(str(tmp_path), "cpu", torch.bfloat16, r=4, alpha=8, quant_type="int4")
+
+
+def test_loader_rejects_checkpoint_with_no_experts(tmp_path):
+    """A supported model_type whose checkpoint contains zero expert tensors must fail loudly, not
+    return a model that silently skipped quantization (the bnb#1849 failure class this loader
+    exists to prevent). No quantize happens before the guard, so this runs on any host."""
+    from safetensors.torch import save_file
+
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    model = _olmoe()
+    new = {k: v.to(DTYPE).contiguous().clone() for k, v in model.state_dict().items() if "experts." not in k}
+    save_file(new, os.path.join(tmp_path, "model.safetensors"))
+    json.dump(
+        {"weight_map": {k: "model.safetensors" for k in new}},
+        open(os.path.join(tmp_path, "model.safetensors.index.json"), "w"),
+    )
+    model.config.save_pretrained(tmp_path)
+
+    with pytest.raises(RuntimeError, match="no fused expert stacks found"):
+        load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8)
 
 
 def test_unsupported_model_type_errors(tmp_path):
@@ -234,7 +271,15 @@ def test_loader_handles_multimodal_gemma4_checkpoint(tmp_path):
     ids = torch.randint(0, ref.config.vocab_size, (1, 8), device=DEVICE)
     with torch.no_grad():
         got = model(input_ids=ids).logits
-        want = ref(input_ids=ids).logits
+        try:
+            want = ref(input_ids=ids).logits
+        except RuntimeError as e:
+            # Oracle limitation, not a library defect: stock transformers routes fused MoE through
+            # torch._grouped_mm, hard-gated to cc 9.0 — the REFERENCE dies on sm_120 (Blackwell)
+            # while this package's own path runs (see the same guard in test_reference_parity.py).
+            if "_grouped_mm" in str(e):
+                pytest.skip(f"transformers reference (the oracle) cannot run on this device: {e}")
+            raise
     cos = torch.nn.functional.cosine_similarity(got.flatten(0, 1).float(), want.flatten(0, 1).float(), dim=-1)
     assert cos.mean() > 0.9  # same function as the text tower, within NF4-on-experts error
 

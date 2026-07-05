@@ -16,27 +16,47 @@ except ImportError:
     _upstream_experts4bit = None
     _upstream_experts_nbit = None
 
-# ExpertsLoRA reaches into the base internals (from_float / _project / _dequantize_expert), so
-# prefer the upstream classes only while they still expose that surface — a future bitsandbytes
-# whose merged classes diverged from the vendored copy must fall back to the vendored implementation
-# rather than silently break at forward time. Both names must resolve to the *same* implementation
-# (upstream or vendored), never a mix, so ExpertsLoRA's assumptions hold for either base class.
+# ExpertsLoRA reaches into the base internals (from_float / _project / _dequantize_expert), the
+# loader's class dispatch assumes Experts4bit IS an ExpertsNbit, and this package promises the
+# state_dict metadata contract (get/set_extra_state) — so prefer the upstream classes only while
+# they satisfy all of that; a future bitsandbytes whose merged classes diverged from the vendored
+# copy must fall back to the vendored implementation rather than silently break at forward or load
+# time. Both names must resolve to the *same* implementation (upstream or vendored), never a mix,
+# so ExpertsLoRA's assumptions hold for either base class.
+def _upstream_contract_ok(experts_4bit, experts_nbit) -> bool:
+    from torch import nn as _nn
+
+    return (
+        # issubclass(X, X) is True, so an upstream that aliases both names still qualifies.
+        issubclass(experts_4bit, experts_nbit)
+        and all(
+            hasattr(cls, attr)
+            for cls in (experts_4bit, experts_nbit)
+            for attr in ("from_float", "_project", "_dequantize_expert")
+        )
+        # get/set_extra_state exist on every nn.Module (as raising stubs) — require real OVERRIDES,
+        # i.e. an upstream that actually implements the metadata contract.
+        and experts_nbit.get_extra_state is not _nn.Module.get_extra_state
+        and experts_nbit.set_extra_state is not _nn.Module.set_extra_state
+    )
+
+
 if (
     _upstream_experts4bit is not None
     and _upstream_experts_nbit is not None
-    and all(
-        hasattr(cls, attr)
-        for cls in (_upstream_experts4bit, _upstream_experts_nbit)
-        for attr in ("from_float", "_project", "_dequantize_expert")
-    )
+    and _upstream_contract_ok(_upstream_experts4bit, _upstream_experts_nbit)
 ):
     Experts4bit = _upstream_experts4bit
     ExpertsNbit = _upstream_experts_nbit
 else:
     from ._vendor.experts import Experts4bit, ExpertsNbit
 
-from .lora import ExpertsLoRA, LoRALinear, add_attention_lora
-from .offload import (
+# These imports must follow the class resolution above (lora/offload import the resolved names),
+# hence the E402s. normalize_quant_type is package-owned regardless of which implementation is
+# adopted: the canonical scheme names and their accepted aliases are this package's contract.
+from ._vendor.experts import normalize_quant_type  # noqa: E402
+from .lora import ExpertsLoRA, LoRALinear, add_attention_lora  # noqa: E402
+from .offload import (  # noqa: E402
     enable_expert_offload,
     enable_inference_prefetch,
     offload_model_experts,
@@ -53,6 +73,7 @@ __all__ = [
     "add_attention_lora",
     "enable_expert_offload",
     "enable_inference_prefetch",
+    "normalize_quant_type",
     "offload_model_experts",
     "offload_stats_report",
     "report_offload_environment",

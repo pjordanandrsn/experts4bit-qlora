@@ -1,4 +1,5 @@
-"""Constructor-contract tests for ``Experts4bit``: reject wrong layouts loudly, at build time.
+"""Constructor-contract tests for ``Experts4bit``/``ExpertsNbit``: reject wrong layouts and wrong
+scheme names loudly, at build time — and normalize the accepted scheme spellings in one place.
 
 The documented layout is ``[num_experts, out, in]`` for both stacks. Numel-preserving mistakes — a
 transposed ``down_proj``, or the grouped-GEMM ``[num_experts, in, out]`` convention some
@@ -20,7 +21,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
-from experts4bit_qlora import Experts4bit  # noqa: E402
+from experts4bit_qlora import Experts4bit, ExpertsNbit, normalize_quant_type  # noqa: E402
 
 E, HID, INTER = 2, 128, 192  # non-square everywhere, so every transposition is shape-visible
 
@@ -67,6 +68,46 @@ def test_from_float_rejects_non_3d():
 def test_init_rejects_bad_quant_type():
     with pytest.raises(ValueError, match="quant_type"):
         Experts4bit(E, HID, INTER, quant_type="int4")
+
+
+def test_normalize_quant_type_function():
+    """The single scheme-name validation path: canonical names pass through, spellings normalize
+    (case/whitespace + the two torch-dtype longhands), everything else raises listing the allowed
+    set — the same error users hit from the constructors and the loader."""
+    assert normalize_quant_type("nf4") == "nf4"
+    assert normalize_quant_type("NF4") == "nf4"
+    assert normalize_quant_type(" BFloat16 ") == "bf16"
+    assert normalize_quant_type("FLOAT16") == "fp16"
+    assert normalize_quant_type("Fp8") == "fp8"
+    for bad in ("int4", "nf3", "float8", ""):
+        with pytest.raises(ValueError, match="quant_type must be one of"):
+            normalize_quant_type(bad)
+    with pytest.raises(ValueError, match="quant_type must be one of"):
+        normalize_quant_type(torch.bfloat16)  # a torch.dtype is not a scheme name
+
+
+def test_constructor_accepts_aliases():
+    """Aliases normalize at construction — the module's own quant_type is always canonical (no
+    quantize needed: constructor-time only, so this runs on any host)."""
+    assert ExpertsNbit(E, HID, INTER, quant_type="bfloat16").quant_type == "bf16"
+    assert ExpertsNbit(E, HID, INTER, quant_type=" FP16 ").quant_type == "fp16"
+    assert Experts4bit(E, HID, INTER, quant_type="NF4", device="cpu").quant_type == "nf4"
+
+
+def test_experts4bit_rejects_alias_of_16bit():
+    """Experts4bit stays 4-bit-only through the alias path: 'float16' normalizes to fp16 and is
+    then rejected against the subclass's allowed set — not silently accepted via the longhand."""
+    with pytest.raises(ValueError, match=r"quant_type must be one of \('nf4', 'fp4'\)"):
+        Experts4bit(E, HID, INTER, quant_type="float16")
+
+
+def test_bare_constructor_default_device_is_consistent():
+    """ExpertsNbit(...) with no device must build a single-device (CPU) module on any host:
+    torch.empty(device=None) puts the packed buffers on CPU, and the codebook must follow — not
+    take bitsandbytes' get_4bit_type default of "cuda", which crashed CUDA-less hosts and split
+    the module across devices on CUDA ones."""
+    m = Experts4bit(E, HID, INTER, quant_type="nf4")
+    assert m.gate_up_proj.device.type == "cpu" and m.code.device.type == "cpu"
 
 
 @pytest.mark.parametrize("hidden,inter", [(100, INTER), (HID, 100)], ids=["hidden", "intermediate"])

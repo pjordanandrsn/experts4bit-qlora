@@ -7,11 +7,13 @@ writes and reads* is invisible: training loss still falls because the LoRA adapt
 a scrambled base. These two tests close that gap.
 
 Level 1 — ``test_primitive_forward_matches_float_reference`` (CPU-runnable, no transformers needed):
-    the ``Experts4bit`` / ``ExpertsLoRA`` forward vs a hand-written float SwiGLU-MoE reference, with
-    **negative controls** (gate/up swapped, routing weights dropped) that prove the check would *catch*
-    those bugs, plus a per-expert **orientation** check (dequantized stored weight == source, in shape
-    *and* value) that catches a transpose at the primitive level. Self-calibrating: the correct path
-    must be ≥3× closer to the reference than any structural-bug control, so there is no magic tolerance.
+    the ``Experts4bit``/``ExpertsNbit`` + ``ExpertsLoRA`` forward vs a hand-written float SwiGLU-MoE
+    reference, across every storage scheme, with **negative controls** (gate/up swapped, routing
+    weights dropped) that prove the check would *catch* those bugs, plus a per-expert **orientation**
+    check (dequantized stored weight == source, in shape *and* value) that catches a transpose at the
+    primitive level. Two-sided: self-calibrating margins (the correct path must be ≥2-3× closer to the
+    reference than any structural-bug control) AND per-scheme absolute ceilings (``TOL``), so a scheme
+    whose reconstruction quietly degraded fails even though it still beats the bug controls.
 
 Level 2 — ``test_loaded_model_matches_reference_forward`` (transformers, per architecture; runs on
     the GPU when present, else on CPU — bnb-CPU-4bit permitting — so CPU-only CI exercises the loader):
@@ -37,6 +39,29 @@ from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E40
 # a host without a working bnb 4-bit path SKIPS cleanly rather than erroring (matches test_offload.py).
 _QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Per-scheme absolute ceilings, calibrated 2026-07-04 against the worst error observed across CPU
+# and A2000 CUDA kernels at these exact shapes/seed (bnb 0.49.2; CUDA runs ~9% hotter than CPU) with
+# ~1.4-2.6x headroom for kernel/backend drift. Forward relerr compounds through the two projections,
+# so it gets its own (looser) ceiling; the weight relerr is the primitive reconstruction quantity.
+# Observed forward maxima: nf4 0.169, fp4 0.220, int8 0.0175, fp8 0.0449, bf16 0.0031, fp16 0.0004.
+# int8's dynamic map and fp8's e4m3 map are both 256-entry blockwise codebooks — int8 is denser
+# where ~Gaussian weights live, hence tighter. bf16/fp16 are passthrough: pure rounding
+# (2^-8 / 2^-11 relative).
+TOL_FWD = {"nf4": 0.25, "fp4": 0.30, "int8": 0.03, "fp8": 0.08, "bf16": 8e-3, "fp16": 1e-3}
+# Observed weight maxima: nf4 0.093, fp4 0.122, int8 0.0096, fp8 0.0251, bf16 0.0017, fp16 0.0002.
+TOL_WEIGHT = {"nf4": 0.15, "fp4": 0.20, "int8": 0.02, "fp8": 0.04, "bf16": 3e-3, "fp16": 5e-4}
+# Self-calibrating margin vs the structural-bug controls: fp4's coarser codebook compounds through
+# the two SwiGLU projections (~2x nf4's forward error), so its margin is 2x rather than 3x — the
+# separation from a structural bug (which lands at or beyond the ~0.55+ controls) stays decisive.
+# Every other scheme reconstructs at least as well as nf4 and clears 3x trivially.
+MARGIN = {"fp4": 0.5}
+
+
+def _nbit_cls(quant_type):
+    """Mirror the loader's dispatch: the 4-bit schemes build the Experts4bit subclass (so existing
+    ``isinstance(m, Experts4bit)`` checks keep holding), everything else the ExpertsNbit base."""
+    return Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
 
 
 def _relerr(a, b):
@@ -72,8 +97,8 @@ def _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate, *, swap=False, drop=F
 # --------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "quant_type,blocksize",
-    [("nf4", 64), ("fp4", 64), ("nf4", 128)],
-    ids=["nf4-64", "fp4-64", "nf4-128"],
+    [("nf4", 64), ("fp4", 64), ("nf4", 128), ("int8", 64), ("fp8", 64), ("bf16", 64), ("fp16", 64)],
+    ids=["nf4-64", "fp4-64", "nf4-128", "int8-64", "fp8-64", "bf16-64", "fp16-64"],
 )
 @pytest.mark.parametrize("has_gate", [True, False], ids=["swiglu", "plain-up"])
 def test_primitive_forward_matches_float_reference(has_gate, quant_type, blocksize):
@@ -90,21 +115,22 @@ def test_primitive_forward_matches_float_reference(has_gate, quant_type, blocksi
     wts = torch.rand(N_TOK, TOP_K, device=device)
 
     try:
-        base = Experts4bit.from_float(
+        base = _nbit_cls(quant_type).from_float(
             gate_up, down, has_gate=has_gate, quant_type=quant_type, blocksize=blocksize, compute_dtype=torch.float32
         )
     except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit ({quant_type}/bs{blocksize}) unavailable on {device}: {e}")
+        pytest.skip(f"bitsandbytes {quant_type}/bs{blocksize} quantize unavailable on {device}: {e}")
     lora = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(device)
 
     got = lora(hs, idx, wts)
 
-    # (a) Forward tracks the correct float reference far better than either structural-bug control.
-    # fp4's coarser codebook compounds through the two SwiGLU projections (~2x nf4's forward error,
-    # ~0.20 vs ~0.09 relerr here), so its margin is 2x rather than 3x — the separation from a
-    # structural bug (which lands at or beyond the ~0.55+ controls) stays decisive either way.
-    margin = 0.33 if quant_type == "nf4" else 0.5
+    # (a) Forward tracks the correct float reference: under the per-scheme absolute ceiling AND far
+    # better than either structural-bug control (see TOL/MARGIN at the top).
     err_ok = _relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate))
+    assert err_ok < TOL_FWD[quant_type], (
+        f"forward relerr {err_ok:.4f} over the {quant_type} ceiling {TOL_FWD[quant_type]}"
+    )
+    margin = MARGIN.get(quant_type, 0.33)
     controls = [_relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate, drop=True))]
     if has_gate:
         controls.append(_relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, has_gate, swap=True)))
@@ -117,12 +143,65 @@ def test_primitive_forward_matches_float_reference(has_gate, quant_type, blocksi
     assert torch.equal(got, base(hs, idx, wts))
 
     # (c) Orientation: each dequantized stored expert == its SOURCE weight, in shape AND value (within
-    #     NF4). Compared against the original tensor (not a re-quant), so a transpose is caught here.
+    #     the scheme's ceiling). Compared against the original tensor (not a re-quant), so a transpose
+    #     is caught here.
     for e in range(E):
         dq_gu = base._dequantize_expert(base.gate_up_proj, base.gate_up_absmax, base._gate_up_shape, e, torch.float32)
         dq_dn = base._dequantize_expert(base.down_proj, base.down_absmax, base._down_shape, e, torch.float32)
         assert dq_gu.shape == gate_up[e].shape and dq_dn.shape == down[e].shape
-        assert _relerr(dq_gu, gate_up[e]) < 0.2 and _relerr(dq_dn, down[e]) < 0.2
+        assert _relerr(dq_gu, gate_up[e]) < TOL_WEIGHT[quant_type]
+        assert _relerr(dq_dn, down[e]) < TOL_WEIGHT[quant_type]
+
+
+@pytest.mark.parametrize("quant_type", ["nf4", "int8"])
+def test_primitive_square_dims_parity(quant_type):
+    """hidden == intermediate makes the down projection square, so a transposed stack is
+    shape-invisible — only the value checks bite. Covers the two dequant families (4-bit packed,
+    8-bit blockwise) on exactly the shapes where Level 1's orientation shape-assert has no power.
+    (OLMoE's real config has square experts, so this is not a hypothetical.)"""
+    torch.manual_seed(0)
+    E, HID, INTER, TOP_K, N_TOK = 4, 128, 128, 2, 16
+    gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
+    down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
+    hs = torch.randn(N_TOK, HID, device=DEVICE)
+    idx = torch.randint(0, E, (N_TOK, TOP_K), device=DEVICE)
+    wts = torch.rand(N_TOK, TOP_K, device=DEVICE)
+    try:
+        base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
+
+    with torch.no_grad():
+        got = base(hs, idx, wts)
+    assert _relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, True)) < TOL_FWD[quant_type]
+    for e in range(E):
+        dq_dn = base._dequantize_expert(base.down_proj, base.down_absmax, base._down_shape, e, torch.float32)
+        # The square case: this VALUE comparison is the only thing standing between a stored
+        # transpose and a clean pass.
+        assert _relerr(dq_dn, down[e]) < TOL_WEIGHT[quant_type]
+        assert _relerr(dq_dn, down[e].T) > 3 * TOL_WEIGHT[quant_type]  # and it would catch one
+
+
+@pytest.mark.parametrize("quant_type", ["nf4", "bf16"])
+def test_primitive_many_experts_sparse_hit(quant_type):
+    """num_experts >> top_k * n_tokens: most experts receive zero tokens. The per-expert loop must
+    skip cold experts and still route/scale the hit ones correctly. (bf16 passthrough runs even
+    where bnb has no working quantize backend, so this shape is always covered.)"""
+    torch.manual_seed(0)
+    E, HID, INTER, TOP_K, N_TOK = 64, 64, 64, 2, 8
+    gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
+    down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
+    hs = torch.randn(N_TOK, HID, device=DEVICE)
+    idx = torch.randint(0, E, (N_TOK, TOP_K), device=DEVICE)
+    wts = torch.rand(N_TOK, TOP_K, device=DEVICE)
+    try:
+        base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
+
+    with torch.no_grad():
+        got = base(hs, idx, wts)
+    assert _relerr(got, _ref_swiglu_moe(hs, idx, wts, gate_up, down, True)) < TOL_FWD[quant_type]
 
 
 # --------------------------------------------------------------------------------------------------
@@ -228,7 +307,16 @@ def test_loaded_model_matches_reference_forward(build, per_expert, tmp_path):
 
     ids = torch.randint(0, ref_model.config.vocab_size, (1, 16), device=DEVICE)
     with torch.no_grad():
-        ref_logits = ref_model(input_ids=ids).logits
+        try:
+            ref_logits = ref_model(input_ids=ids).logits
+        except RuntimeError as e:
+            # Known oracle limitation, not a library defect: stock transformers routes fused MoE
+            # through torch._grouped_mm on GPUs it *thinks* support it, but torch hard-gates the op
+            # to compute capability 9.0 — on sm_120 (Blackwell) the REFERENCE forward itself dies
+            # (seen on an RTX 5090; this package's own path runs fine there).
+            if "_grouped_mm" in str(e):
+                pytest.skip(f"transformers reference (the oracle) cannot run on this device: {e}")
+            raise
 
     try:
         model, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)

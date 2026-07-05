@@ -29,9 +29,43 @@ _SCHEME_BITS = {
 
 _PASSTHROUGH_DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16}
 
+# Version tag for the construction metadata carried in state_dict (see ExpertsNbit.get_extra_state).
+# Bump when the payload's meaning changes; set_extra_state refuses payloads newer than it knows.
+_EXTRA_STATE_SCHEMA = 1
+
+# Accepted spellings for each canonical scheme name. Deliberately minimal — only the obvious
+# torch-dtype longhands; everything else must be spelled canonically. ("float8" stays out: it is
+# ambiguous between e4m3/e5m2, and this fp8 is a bitsandbytes e4m3 *codebook*, not a torch dtype.)
+_QUANT_TYPE_ALIASES = {"bfloat16": "bf16", "float16": "fp16"}
+
+
+def normalize_quant_type(quant_type, allowed: tuple = tuple(_SCHEME_BITS)) -> str:
+    """Canonicalize a storage-scheme name: case/whitespace-insensitive, plus the torch-dtype
+    longhands ``bfloat16``/``float16``. The single validation path for the constructors and the
+    loader, so a typo fails identically everywhere — with the allowed set in the message — before
+    any real work (quantization, checkpoint streaming) starts.
+
+    Raises:
+        ValueError: If ``quant_type`` does not normalize to a member of ``allowed``.
+    """
+    if not isinstance(quant_type, str):
+        raise ValueError(f"quant_type must be one of {allowed}, got {type(quant_type).__name__}")
+    q = quant_type.strip().lower()
+    q = _QUANT_TYPE_ALIASES.get(q, q)
+    if q not in allowed:
+        hint = f" (normalized from {quant_type!r})" if q != quant_type else ""
+        raise ValueError(f"quant_type must be one of {allowed}, got {q!r}{hint}")
+    return q
+
 
 def _build_code(quant_type: str, device) -> Optional[torch.Tensor]:
     """The shared per-scheme codebook (`None` for 16-bit passthrough)."""
+    if device is None:
+        # Match where torch.empty(device=None) puts the packed buffers (CPU), instead of letting
+        # bitsandbytes' get_4bit_type default it to "cuda" — which crashes a bare
+        # ExpertsNbit(...) constructor on a CUDA-less host and splits the module across devices
+        # on a CUDA one.
+        device = "cpu"
     if quant_type in ("nf4", "fp4"):
         return F.get_4bit_type(quant_type, device=device)
     if quant_type == "int8":
@@ -113,7 +147,12 @@ class ExpertsNbit(nn.Module):
     quantization statistics (``absmax``) live on the module as ordinary buffers. This
     avoids bending :class:`Params4bit`'s tensor-subclass and device-movement machinery
     around a 3D stack, and it means the module serializes through the standard
-    ``state_dict`` mechanism with no custom save/load hooks.
+    ``state_dict`` mechanism. Construction metadata (``quant_type``, ``blocksize``,
+    dims) rides along in the standard ``_extra_state`` entry and is validated on load —
+    a checkpoint of one scheme cannot silently mis-decode in a module built for another
+    (``nf4`` and ``fp4`` packed bytes are shape-identical). Checkpoints from before the
+    metadata existed load unvalidated, under both ``strict`` modes (see
+    :meth:`set_extra_state`).
 
     The forward pass dequantizes a single expert at a time (a per-expert loop), mirroring
     the reference fused-experts forward. In training, the dequantized weight is not kept
@@ -138,7 +177,8 @@ class ExpertsNbit(nn.Module):
         compute_dtype (`torch.dtype`, *optional*): The dtype expert weights are
             dequantized to for the matmul. When `None`, the input's dtype is used.
         quant_type (`str`, *optional*, defaults to `"nf4"`): The storage scheme — one of
-            ``nf4``, ``fp4``, ``int8``, ``fp8``, ``bf16``, ``fp16``.
+            ``nf4``, ``fp4``, ``int8``, ``fp8``, ``bf16``, ``fp16`` (case/whitespace-insensitive;
+            ``bfloat16``/``float16`` accepted as aliases — see :func:`normalize_quant_type`).
         blocksize (`int`, *optional*, defaults to `64`): The quantization block size.
             Ignored for the 16-bit passthrough schemes.
         device (*optional*): The device for the (empty) packed buffers.
@@ -165,9 +205,9 @@ class ExpertsNbit(nn.Module):
     ):
         super().__init__()
 
-        allowed = type(self)._ALLOWED_QUANT_TYPES
-        if quant_type not in allowed:
-            raise ValueError(f"quant_type must be one of {allowed}, got {quant_type!r}")
+        # Normalized once here; every consumer downstream (self.quant_type, _build_code, the
+        # loader's class dispatch) sees only canonical names.
+        quant_type = normalize_quant_type(quant_type, allowed=type(self)._ALLOWED_QUANT_TYPES)
 
         self.bits = _SCHEME_BITS[quant_type]
 
@@ -234,6 +274,57 @@ class ExpertsNbit(nn.Module):
         # The codebook is identical for every expert and fully determined by quant_type,
         # so it is reconstructed at init rather than serialized.
         self.register_buffer("code", _build_code(quant_type, device), persistent=False)
+
+    # Construction metadata serialized with the tensors. Everything a load must agree on to decode
+    # the packed bytes; compute_dtype/activation stay out — they affect execution, not decoding.
+    _EXTRA_STATE_FIELDS = ("quant_type", "blocksize", "has_gate", "num_experts", "hidden_dim", "intermediate_dim")
+
+    def get_extra_state(self) -> dict:
+        """Construction metadata carried in ``state_dict`` (torch's standard ``_extra_state`` key)
+        so a checkpoint validates against the module it is loaded into. A plain dict of
+        str/int/bool: ``torch.save``/``torch.load(weights_only=True)``-safe. NOT safetensors-safe —
+        ``safetensors`` stores only tensors, so filter ``_extra_state`` keys for a full-module
+        safetensors save (validation is then skipped on load, as for pre-metadata checkpoints)."""
+        state = {"schema": _EXTRA_STATE_SCHEMA}
+        state.update({k: getattr(self, k) for k in self._EXTRA_STATE_FIELDS})
+        return state
+
+    def set_extra_state(self, state) -> None:
+        """Validate checkpoint metadata against this module's construction, raising on mismatch.
+
+        The load-bearing case is a same-shaped checkpoint of a different scheme: ``nf4`` and ``fp4``
+        packed bytes are byte-compatible and would silently mis-decode without this. ``None`` is
+        tolerated as "nothing to validate" — a checkpoint written before the metadata existed
+        (:meth:`_load_from_state_dict` injects it so legacy checkpoints load under both ``strict``
+        modes). On failure the module's tensors may already be part-written: discard the module.
+        """
+        if state is None:
+            return  # legacy checkpoint (pre-metadata): load as before, unvalidated
+        if not isinstance(state, dict) or not isinstance(state.get("schema"), int):
+            raise ValueError(f"unrecognized ExpertsNbit extra state: {type(state).__name__}")
+        if state["schema"] > _EXTRA_STATE_SCHEMA:
+            raise ValueError(
+                f"checkpoint carries ExpertsNbit metadata schema {state['schema']}; this build "
+                f"understands <= {_EXTRA_STATE_SCHEMA} — upgrade experts4bit-qlora to load it"
+            )
+        bad = {
+            k: (state[k], getattr(self, k))
+            for k in self._EXTRA_STATE_FIELDS
+            if k in state and state[k] != getattr(self, k)
+        }
+        if bad:
+            detail = ", ".join(f"{k}: checkpoint={c!r} vs module={m!r}" for k, (c, m) in bad.items())
+            raise ValueError(
+                "checkpoint/module config mismatch — re-instantiate the module with the "
+                f"checkpoint's construction arguments ({detail})"
+            )
+
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        # Checkpoints written before get_extra_state existed carry no `_extra_state` key; under
+        # strict=True torch would report it missing. Injecting a tolerated None keeps legacy
+        # checkpoints loading under BOTH strict modes, bit-identically to before.
+        state_dict.setdefault(prefix + "_extra_state", None)
+        super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
     @classmethod
     def from_float(
