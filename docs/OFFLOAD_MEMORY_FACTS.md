@@ -85,6 +85,25 @@ workspace predicts — storage width sets the slab, the workspace does not scale
   rather than temps outliving their matmuls. A one-step `torch.cuda.memory` snapshot timeline
   under offload would pin it; that is a GPU probe, queued behind the certificate work.
 
+## Z3 (lanes addendum 1): compute path per ladder mode — SHARED
+
+Source read for `SPECULATIVE_LANES_ADDENDUM_1.md` Z3/Z4. The loader passes
+`compute_dtype=dtype` (bf16) to every `ExpertsNbit` regardless of storage scheme
+(`loader.py:159`), and every mode's multi-row projection flows through the same call chain —
+`ExpertsLoRA._base_project → ExpertsNbit._project → _FrozenLinearRecomputeBackward.apply →
+F.linear(x, W_bf16)` — with a bf16 weight of identical shape/stride/dtype. **The matmul path
+is one path.** The only per-mode difference is how that bf16 weight is materialized: identity
+view (bf16 storage), fp16→bf16 cast kernel (fp16 storage), or bnb dequant kernel (4-/8-bit).
+The GEMV branch is decode-only (single-row, `no_grad`) and never runs in the ladder evals.
+
+Consequence for Z4: the fp16 ladder point is NOT an "activation-channel intercept" —
+activations are bf16 in all modes by construction. fp16-vs-bf16 weight values differ only
+where bf16 magnitudes fall into fp16's subnormal range (|w| ≲ 2⁻¹⁷ loses relative precision;
+|w| < 2⁻²⁴ flushes), so fp16 is the **minimal weight-perturbation point on the same curve**
+(its exact W_RMS is measured by `scripts/wrms_per_format.py`). Per P-A6, since the paths are
+matched by construction, the observed ρ(int8, fp16) cannot be a kernel-path artifact and
+stands as example-level smooth-sensitivity, pending the n=1024 replication.
+
 ## The floor headline (audit §4), now code-backed
 
 **bf16-offload trains at 2.41 GB — below the 4-bit floor (2.52 GB), with no quantization at
@@ -101,22 +120,24 @@ measurements independent of the training-eval anomaly.
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T17:13:39Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `770f2824bdd35f586fc3352e265b69872b910a8ad7076281cd08b56aea49ced6` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[==.$+*+o@!!~O$O*]`
+- **OTS proof timestamp for visible document:** `2026-07-05T18:18:30Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `0f9e8a7dc51d38082ae0eca173e2b3d4987ccbc4ce7fc5982f66436c79db3672` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T17:13:39Z` `770f2824bdd35f586fc3352e265b69872b910a8ad7076281cd08b56aea49ced6`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[.$#?*%=!&O:!~*.*]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-| ...             |
-|  . *  .         |
-|   + +. o     ...|
-|  .   .o o ..o=.o|
-| o   o oS +++B.=o|
-|o   o + o+.oB++..|
-|.... o . o o...  |
-|=..E.   .   .    |
-|.=               |
+|                 |
+|.     .          |
+|o.   . . . .     |
+| +. .   . o .    |
+|o ..  . S. o .   |
+|=.*    O Bo .    |
+|.O =  o *.+      |
+|.o* .o B.+ E     |
+| .o=o.*.o + .    |
 +-----------------+
 ```
 

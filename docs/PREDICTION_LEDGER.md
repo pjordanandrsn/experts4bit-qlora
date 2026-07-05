@@ -1,0 +1,70 @@
+# Prediction ledger
+
+Graded predictions and adopted forecasting rules, one entry per grading event, newest first.
+Entries are recorded verbatim from their source documents at filing time; gradings are never
+edited after the fact — corrections are new entries.
+
+## 2026-07-05 — Lanes Addendum 1 §2 (recorded verbatim, per Z5)
+
+- **FALSIFIED (n=64):** the example-level independence gloss "the scattered formats
+  flip different subsets." Deviations share a dominant common core; nf4 is a
+  near-pure readout of it. Expert-level sharing (same experts vs same examples)
+  remains OPEN until telemetry.
+- **STILL OPEN, not falsified:** the committed prediction corr(|d_i|, flip count) ≈ 0
+  within the {int8, bf16, fp16} trio. Under the two-factor reading this is expected
+  to HOLD (factor 2 is the flip-free channel). The prior chat grading conflated
+  deviation–deviation correlation with |d_i|–flip correlation; this entry corrects it.
+- **STANDS:** the SD-clustering observation; the fp8-nearer-nf4-than-int8 expectation
+  (now supported at the variance level).
+
+### Z1 post-verification annotation (same day, after the raw-vector rerun)
+
+The addendum's §1 numbers reproduce exactly on the raw vectors. The preregistered
+Pearson-vs-Spearman check then **largely confirms the shared-outlier alternative for
+factor 1**: scattered-format correlations collapse under ranks (nf4–fp8 0.790→0.145,
+nf4–fp16 0.520→0.032) while int8–fp16 survives (0.745→0.636). The "common core" is
+substantially a shared fragile-example subpopulation; factor 2 is the distribution-robust
+channel. Details: `runs/results/postaudit/factor_structure_n64.md`. Z4 resolved by Z3
+(shared compute path; fp16 = minimal weight perturbation, not an activation channel —
+`docs/OFFLOAD_MEMORY_FACTS.md`).
+
+## 2026-07-05 — Certificate predictions P1–P4 (`docs/TRAIN_PLACEMENT_CERTIFICATE.md`)
+
+- **P2, P3, P4 CONFIRMED** (placement bitwise-exact, all five trios).
+- **P1 WRONG in the informative direction**: the default-kernel one-step null is bitwise;
+  the MoE-combine atomics did not produce noise on these shapes.
+
+## 2026-07-05 — Amendment §6 ledger note (adopted rule, recorded verbatim)
+
+No significance forecasts without the instrument's n in hand. The prior forecasts
+(75% G clears; 10–15% S9) missed on a knowable instrument parameter, not on physics.
+
+---
+
+<!-- ots-attestation-footer -->
+
+**OpenTimestamps anchor (self-attestation footer):**
+
+- **OTS proof timestamp for visible document:** `2026-07-05T18:18:28Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[O?@$%o@o:#~?~~O:]`
+- Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
+
+```
++----[SHA256]-----+
+|                 |
+|               . |
+|        E .  o .=|
+|         o. + *.=|
+|        S o=.+ ++|
+|       . ..o=..=o|
+|        o.o*+++ +|
+|      ..o+OB.=...|
+|     ... o*++o.  |
++-----------------+
+```
+
+- **Payload hash actually covered by the current `.ots`:** see `ots info PREDICTION_LEDGER.md.ots`; by construction this is `SHA-256(this entire file including this footer)` and `ots verify PREDICTION_LEDGER.md.ots PREDICTION_LEDGER.md` succeeds against the on-disk bytes.
+- Anchor file: `PREDICTION_LEDGER.md.ots`
+- Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
+- **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
