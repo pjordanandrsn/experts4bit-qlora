@@ -159,6 +159,29 @@ claim: the same mechanism costs ~+11 % s/step at OLMoE scale and is PCIe-bound a
 (0.22–0.43 tok/s decode). Method and grids: [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) §11–§12;
 environment and commit pins: [`PROVENANCE.md`](PROVENANCE.md).
 
+### How to reproduce validation
+
+One command, no model downloads, nonzero exit on any FAIL:
+
+```bash
+python scripts/validate_expertsnbit.py
+```
+
+```
+experts4bit-qlora validate | v0.2.0 | commit <sha> | torch 2.6.0+cu124 | bnb 0.49.2 | cuda yes | NVIDIA RTX A2000 12GB
+[PASS] nf4   build            0.15s
+[PASS] nf4   forward_parity   relerr=0.1691 (tol 0.25)
+...
+[PASS] -     metadata_guard   raised ValueError: checkpoint/module config mismatch...
+SUMMARY pass=37 fail=0 skip=0 -> exit 0
+```
+
+It runs the tested contract per scheme (build, forward parity, state round-trip, LoRA step,
+synthetic decode sanity, offload identity) plus the checkpoint-metadata guard; SKIP lines always
+say why (e.g. a host whose bitsandbytes can't quantize a scheme). The full suite is
+`pip install -e ".[test]" && pytest tests/ -q`; big-model numbers reproduce via the manual
+[Benchmarks](#benchmarks) scripts, not this report.
+
 ## Training + expert offload
 
 Training holds no dequantized-expert activations: the frozen base projections re-dequantize from
