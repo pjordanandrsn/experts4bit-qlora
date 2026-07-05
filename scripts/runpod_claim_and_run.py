@@ -45,6 +45,12 @@ def _utc() -> str:
 
 
 def _repo_commit():
+    # Workers often run from a `git archive` tree (no .git), so git rev-parse yields nothing.
+    # The controller pins the shipped SHA in E4B_COMMIT at bootstrap — that is the self-reported
+    # commit for this job. Fall back to git only when running inside a real checkout.
+    env_commit = os.environ.get("E4B_COMMIT")
+    if env_commit:
+        return env_commit.strip()
     try:
         r = subprocess.run(
             ["git", "-C", os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "rev-parse", "HEAD"],
