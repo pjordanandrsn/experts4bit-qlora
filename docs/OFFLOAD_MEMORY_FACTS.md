@@ -1,0 +1,126 @@
+# Offload memory facts — peak decomposition, code-verified (debt T4)
+
+```
+status:   code-read + arithmetic against already-measured peaks. No new GPU runs.
+queue:    POST_AUDIT_WORK_QUEUE.md T4 (audit §4 hypothesis check)
+sources:  experts4bit_qlora/_vendor/experts.py (storage + dequant paths),
+          experts4bit_qlora/offload.py (staging), bundle olmoe-qlora-grid-20260705-1351
+          (grid peak-GB cells, single A5000 host)
+```
+
+## The mechanism, from source (never from behavior)
+
+`ExpertsNbit._dequantize_expert` (`_vendor/experts.py:428-457`) is the entire
+precision-dependent compute path:
+
+- **16-bit passthrough**: `packed[expert_idx].reshape(shape).to(dtype)`. With bf16 storage and
+  bf16 compute, `.to(dtype)` is an identity — a **view, zero allocation**. (fp16 storage under
+  bf16 compute does cast — one transient [out, in] tensor per projection, ~8–13 MB, invisible
+  at 2-decimal GB; consistent with fp16 and bf16 measuring identical peaks.)
+- **8-bit / 4-bit**: `F.dequantize_blockwise` / `F.dequantize_4bit` allocate a fresh
+  **compute-dtype** [out, in] weight per projection per expert — the dequant workspace. Its
+  size is set by `compute_dtype` (bf16), NOT by storage width — the audit's "bf16-sized
+  workspace" is the correct shape of the claim.
+
+Storage slabs, from module construction (`experts.py:246-272`): 4-bit = packed uint8 (2
+values/byte) + fp32 absmax (1 per 64 block); 8-bit = uint8 (1/byte) + absmax; 16-bit = the
+weights themselves, **no absmax**.
+
+## Exact slab arithmetic (OLMoE-1B-7B: 16 layers × 64 experts, H=2048, I=1024)
+
+Per-layer expert params: 64 × (2048·2048 + 2048·1024) = 402,653,184.
+
+| scheme | packed B/layer | absmax B/layer | slab GB/layer | ×16 GB |
+|---|---|---|---|---|
+| nf4/fp4 | 201.3 MB | 25.2 MB | 0.2265 | 3.624 |
+| int8/fp8 | 402.7 MB | 25.2 MB | 0.4278 | 6.845 |
+| bf16/fp16 | 805.3 MB | — | 0.8053 | 12.885 |
+
+## Resident peaks: slab-additive to three digits
+
+`fixed := measured resident training peak − total slab`:
+
+| scheme | measured GB | slab GB | fixed GB |
+|---|---|---|---|
+| 4-bit | 5.28 | 3.624 | **1.656** |
+| 8-bit | 8.50 | 6.845 | **1.655** |
+| 16-bit | 14.54 | 12.885 | **1.655** |
+
+Three independent widths agree on `fixed = 1.655 ± 0.001 GB` (non-expert weights, LoRA,
+optimizer, activations under checkpointing). Resident peak = `fixed + slab(p)`, with no
+visible precision-dependent workspace (the per-expert dequant temp is transient ~13 MB,
+below resolution).
+
+## Offload peaks: `fixed + slab(p)/16 + W·[p quantized]`
+
+Predicted = `fixed + one layer's slab` (single-slot staging, offload.py):
+
+| scheme | predicted GB | measured GB | residual |
+|---|---|---|---|
+| nf4 | 1.882 | 2.52 | **+0.64** |
+| fp4 | 1.882 | 2.52 | **+0.64** |
+| int8 | 2.083 | 2.72 | **+0.64** |
+| fp8 | 2.083 | 2.72 | **+0.64** |
+| bf16 | 2.460 | 2.41 | **−0.05** |
+| fp16 | 2.460 | 2.41 | **−0.05** |
+
+The residual is a **constant ≈0.64 GB for the four quantized schemes and ≈0 for passthrough**.
+Precision-independence across 4-bit and 8-bit storage is exactly what a compute-dtype (bf16)
+workspace predicts — storage width sets the slab, the workspace does not scale with it.
+
+## Verdict on the audit §4 hypothesis
+
+**Confirmed in form, measured in size, not yet derived in size.**
+
+- Confirmed from code: quantized offload paths materialize bf16 dequant weights; the 16-bit
+  path allocates nothing (bf16) — the workspace term exists iff quantized. Slab is the only
+  other precision term. The predicted ordering (16-bit offload BELOW 4-bit, despite an 806 MB
+  vs 227 MB staged slab) is reproduced by the decomposition.
+- Measured: W ≈ 0.64 GB, identical across nf4/fp4/int8/fp8.
+- **Open (flagged, not papered over):** a naive one-live-temp reading of the dequant loop
+  predicts ~13 MB transient, not 0.64 GB (~79% of one fully-dequantized layer, 0.805 GB). The
+  code-read cannot pin why that many compute-dtype bytes coexist at the peak instant under
+  offload but not resident — candidate explanations are caching-allocator/stream interactions
+  with the per-layer staging pattern (fresh slab allocations each layer rotating block pools)
+  rather than temps outliving their matmuls. A one-step `torch.cuda.memory` snapshot timeline
+  under offload would pin it; that is a GPU probe, queued behind the certificate work.
+
+## The floor headline (audit §4), now code-backed
+
+**bf16-offload trains at 2.41 GB — below the 4-bit floor (2.52 GB), with no quantization at
+all — vs 14.54 GB resident**, because passthrough offload carries no absmax, no dequant
+workspace, and no dequant kernel; its only cost above `fixed` is one layer's staged slab.
+This is a memory claim about the measured host and model; per POST_AUDIT_WORK_QUEUE.md §T4 it
+is held as the campaign headline pending T1 only insofar as any *eval-quality* rider is
+attached — the memory numbers themselves are 3-seed (repeat grid) and single-run (grid)
+measurements independent of the training-eval anomaly.
+
+---
+
+<!-- ots-attestation-footer -->
+
+**OpenTimestamps anchor (self-attestation footer):**
+
+- **OTS proof timestamp for visible document:** `2026-07-05T17:13:39Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `770f2824bdd35f586fc3352e265b69872b910a8ad7076281cd08b56aea49ced6` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[==.$+*+o@!!~O$O*]`
+- Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
+
+```
++----[SHA256]-----+
+| ...             |
+|  . *  .         |
+|   + +. o     ...|
+|  .   .o o ..o=.o|
+| o   o oS +++B.=o|
+|o   o + o+.oB++..|
+|.... o . o o...  |
+|=..E.   .   .    |
+|.=               |
++-----------------+
+```
+
+- **Payload hash actually covered by the current `.ots`:** see `ots info OFFLOAD_MEMORY_FACTS.md.ots`; by construction this is `SHA-256(this entire file including this footer)` and `ots verify OFFLOAD_MEMORY_FACTS.md.ots OFFLOAD_MEMORY_FACTS.md` succeeds against the on-disk bytes.
+- Anchor file: `OFFLOAD_MEMORY_FACTS.md.ots`
+- Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
+- **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
