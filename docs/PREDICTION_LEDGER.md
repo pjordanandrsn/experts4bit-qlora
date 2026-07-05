@@ -16,6 +16,31 @@ edited after the fact — corrections are new entries.
 - **S-A/S-B/S-C committed predictions + surprise-bet order S-A>S-C>S-B>S-E>S-D** —
   `docs/SPECULATIVE_LANES_PLAN.md` (S-A items superseded by P-A series per Addendum 1).
 
+## 2026-07-05 — Addendum 3 §4 (recorded verbatim) + same-day executor gradings
+
+Reviewer's own gradings (source-read addendum, authored from main_11.zip):
+
+- **RETRACTED (wrong):** "workspace removal → nf4-offload ≈ 1.8 GB." The mechanism it
+  assumed does not exist.
+- **CORRECTED (overreach):** prior turn's "~85%, RNG mechanism named in a docstring."
+  Actual content of the read: one candidate eliminated, none confirmed.
+- **CORRECTED (inference vs measurement):** "atomics → non-bitwise" deferred to D2's
+  measured bitwise repeat. R9 cuts both ways.
+- **STANDS:** the bf16-offload memory inversion and its user-facing claim.
+
+Executor gradings on the same window:
+
+- **P-C1 (Addendum 3 §2) FAILS**: no shape-derived model reaches per-mode residual
+  < 0.10 GB against the six offload train peaks (A/B miss +0.63 quantized; C misses
+  −0.17) — no mechanism sentence ships (`docs/OFFLOAD_MEMORY_FACTS.md` T4b).
+- **T1.0b resolved**: torch 2.8 non-reentrant checkpointing preserves RNG
+  unconditionally; HF passes kwargs verbatim; offload.py touches zero generators
+  (`docs/LAYOUT_FACTS.md`). Combined with no-dropout-on-path (T1.0) and the bitwise
+  certificate (D3), the RNG sub-mechanism is dead three ways.
+- **Addendum 3 §1's ~75–80% environment-branch estimate: overtaken by measurement**
+  before filing — D3's five trios are bitwise in null AND placement; no one-step
+  divergence mechanism exists to apportion.
+
 ## 2026-07-05 — Lanes Addendum 1 §2 (recorded verbatim, per Z5)
 
 - **FALSIFIED (n=64):** the example-level independence gloss "the scattered formats
@@ -57,24 +82,25 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T18:22:04Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T20:04:03Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `f23487b74d50e842b37b930f02174c72ecf2846b18ca542b55d4424d56b2e765` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T18:22:04Z` `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4`
   - `2026-07-05T18:18:28Z` `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%o#$&=&@#$~O:&*.]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[$+~o*=@=o!O.?*o+]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|  .o++ o+.       |
-|. ... oo+. o     |
-| + + o.+. + .    |
-|. B + *+o.   .   |
-|.. E +o+So    .  |
-| .. o. ooo   . . |
-|  + . . o o   +  |
-| o o     o . o . |
-|  .       o.o    |
+|     +=B*....    |
+|    o .+Oo..     |
+|   o . =.=o E    |
+|  o o + *+.+     |
+| o o o.BSo+..    |
+|  o . o+++=+     |
+|     .  .o.+.    |
+|            .    |
+|                 |
 +-----------------+
 ```
 

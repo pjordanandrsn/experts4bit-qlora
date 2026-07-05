@@ -83,6 +83,14 @@ There is no single best mode. There is a decision surface:
 - **at 30B** → resident nf4 fits a 24 GB card; int8 needs a bigger card; **offload fits a 30B
   model in ~4–5 GB of VRAM** (needs a host with enough system RAM to stage it).
 
+## Falsification / audits
+
+The strongest single artifact in the portfolio is the unsloth-zoo MoE-4bit audit
+([`audits/unsloth-zoo-4032/REPORT.md`](../audits/unsloth-zoo-4032/REPORT.md)) — the
+falsification run that produced unsloth-zoo#849 (silent transposed-expert training when
+`2*moe_intermediate == hidden_size`) and #850 (4-bit fused-expert loads that crash on first
+forward for uncovered archs).
+
 ## Provenance and reproduction
 
 Every number traces to a job-local result under `runs/jobs/` or `runs/expert_streaming/jobs/`,
@@ -119,26 +127,27 @@ with `scripts/validate_job_provenance.py`; docs are OTS-stamped (`docs/*.md.ots`
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T18:11:19Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `4f6df7c749dc6cb00cf3c32fcad96c387a7b4c7ac87623391d8e2a1e52a9e558` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T20:04:10Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `8901fc998ac2771199cfca3a531b72877d9d8e92419dd534a79c1d69d2a883da` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T18:11:19Z` `4f6df7c749dc6cb00cf3c32fcad96c387a7b4c7ac87623391d8e2a1e52a9e558`
   - `2026-07-05T16:48:56Z` `7bd7d4a5b3c9f18fdd5ce7c6035132d00b162428ac8926de56507558979f86ca`
   - `2026-07-05T14:52:18Z` `ce2030434782e4ea2b1ada367261fb4a2ae1f4e4f14b674787382b0b101df026`
   - `2026-07-05T14:00:26Z` `0b455296684992211f5b5b703cb21bebd38cfdb33e8b15575b54fbe12e672327`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[o$0!$=&=o#!&0&@.]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[*#.:$&##*%&+==::]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|                 |
-|                 |
-|            o .  |
-|         . . *.+.|
-|        E . o Bo+|
-|       B o . .+*.|
-|      + o .. @.o=|
-|       ... .&=X..|
-|       ...o==Xo. |
+|   .. o     oooo.|
+|    .=     ..+*+.|
+|     .=o. + .+o. |
+|     .+* = o     |
+|.  ...B S . o    |
+|...o.O = E o     |
+| .. * + + o      |
+|   + . o . .     |
+|    o   .        |
 +-----------------+
 ```
 

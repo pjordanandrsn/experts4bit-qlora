@@ -85,6 +85,27 @@ workspace predicts — storage width sets the slab, the workspace does not scale
   rather than temps outliving their matmuls. A one-step `torch.cuda.memory` snapshot timeline
   under offload would pin it; that is a GPU probe, queued behind the certificate work.
 
+## T4b (Addendum 3 §2): shape-derived models vs measured peaks — P-C1 FAILS
+
+Addendum 3 refutes the *persistent*-workspace reading (correct — the dequant is a transient;
+this doc never claimed persistence but used the "workspace" name loosely; retired here) and
+commits P-C1: a shape-derived model reproduces the six offload train peaks with per-mode
+residual < 0.10 GB. Executed:
+
+| model (from tensor shapes only) | nf4/fp4 pred | int8/fp8 pred | bf16/fp16 pred | residuals vs 2.52/2.72/2.41 |
+|---|---|---|---|---|
+| A/B — fixed 1.655 + staged slab + per-expert transient (0.013) | 1.89 | 2.10 | 2.46 | **+0.63 / +0.62 / −0.05** |
+| C — fixed + staged packed+absmax + full-layer bf16 dequant (0.805) | 2.69 | 2.89 | 2.46 | **−0.17 / −0.17 / −0.05** |
+
+(The packed-bytes-adder model and A/B coincide when stated from shapes; Addendum 3's
+delta-over-bf16 arithmetic implicitly assumed model C.) **No shape model reaches <0.10 GB
+per-mode residual → P-C1 FAILS**; per Addendum 3 §6, no mechanism sentence ships. What the
+data does pin: the quantized-over-shape-model excess is constant across 4-bit and 8-bit
+(~0.63 under A/B, ~0.17 under C) — a precision-independent term of unresolved identity. The
+n=64 eval-job peaks cannot disambiguate (the eval script never reset after load, so
+load-phase quantize transients pollute them). Resolver: the one-step
+`torch.cuda.memory` timeline probe (gated), or a rev3-style leg-scoped eval measurement.
+
 ## Z3 (lanes addendum 1): compute path per ladder mode — SHARED
 
 Source read for `SPECULATIVE_LANES_ADDENDUM_1.md` Z3/Z4. The loader passes
@@ -120,24 +141,25 @@ measurements independent of the training-eval anomaly.
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T18:18:30Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `0f9e8a7dc51d38082ae0eca173e2b3d4987ccbc4ce7fc5982f66436c79db3672` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T20:03:55Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `e113368d9c3c991b2efb8ce823fb9316b8b4254ffa7311837d5560af89311bb3` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T18:18:30Z` `0f9e8a7dc51d38082ae0eca173e2b3d4987ccbc4ce7fc5982f66436c79db3672`
   - `2026-07-05T17:13:39Z` `770f2824bdd35f586fc3352e265b69872b910a8ad7076281cd08b56aea49ced6`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[.$#?*%=!&O:!~*.*]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[?::~~0*!#&~&##:@]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|                 |
-|.     .          |
-|o.   . . . .     |
-| +. .   . o .    |
-|o ..  . S. o .   |
-|=.*    O Bo .    |
-|.O =  o *.+      |
-|.o* .o B.+ E     |
-| .o=o.*.o + .    |
+|          oo.    |
+|       o B..     |
+|     o  ^.. .    |
+|    . ++./ o     |
+|   .  .+E o      |
+|  + + .o .       |
+| . O o..         |
+|  = B..+         |
+|  .B==. o        |
 +-----------------+
 ```
 
