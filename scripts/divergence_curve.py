@@ -39,9 +39,12 @@ def build_batches(n, seq, n_train, grad_accum):
     return batches
 
 
-def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches):
-    """Return (weight_snapshots per step, routed_sets per step, losses). weight_snapshots[k]
-    is a flat CPU fp64 vector of all LoRA params after step k."""
+def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, snap_path):
+    """Run one leg; STREAM each step's flat fp32 LoRA-weight vector to the disk memmap at
+    ``snap_path`` (shape [steps, n_params]) instead of holding snapshots in RAM (the rev1 OOM:
+    486 MB fp64/step × steps × legs blew the 25 GB container cap). Returns (n_params,
+    routed_sets per step, losses); the caller diffs legs by reading the memmaps row-by-row."""
+    import numpy as np
     import torch
     from experts4bit_qlora.loader import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora, ExpertsLoRA
@@ -78,7 +81,9 @@ def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches):
             return hook
         handles.append(mod.register_forward_pre_hook(mk(li)))
 
-    snaps, routed_per_step, losses = [], [], []
+    n_params = sum(p.numel() for _, p in lora)
+    mm = np.lib.format.open_memmap(snap_path, mode="w+", dtype=np.float32, shape=(steps, n_params))
+    routed_per_step, losses = [], []
     bi = 0
     for step in range(steps):
         opt.zero_grad()
@@ -98,11 +103,15 @@ def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches):
         opt.step(); sched.step()
         losses.append(lacc)
         routed_per_step.append(step_routed)
-        flat = torch.cat([p.detach().double().reshape(-1).cpu() for _, p in lora])
-        snaps.append(flat)
+        flat = torch.cat([p.detach().float().reshape(-1).cpu() for _, p in lora])
+        mm[step] = flat.numpy()  # stream to disk; nothing accumulates in RAM
+        del flat
+    mm.flush(); del mm
     for h in handles:
         h.remove()
-    return snaps, routed_per_step, losses
+    del model, opt, sched
+    import gc; gc.collect(); torch.cuda.empty_cache()
+    return n_params, routed_per_step, losses
 
 
 def main():
@@ -119,30 +128,31 @@ def main():
     os.makedirs(args.job_dir, exist_ok=True)
     os.environ["SEQ"] = str(args.seq); os.environ["N_TRAIN"] = str(args.n_train)
 
+    import numpy as np
     import torch  # noqa
     batches = build_batches(args.steps, args.seq, args.n_train, args.grad_accum)
 
-    legs = {}
+    paths = {t: os.path.join(args.job_dir, f"snaps_{t}.npy")
+             for t in ("A_resident", "B_resident", "C_offload")}
     routed = {}
     losses = {}
     for tag, offload in (("A_resident", False), ("B_resident", False), ("C_offload", True)):
         print(f"[leg {tag}] offload={offload}", flush=True)
-        s, r, l = run_leg(args.quant_type, offload, args.seed, args.steps, args.seq,
-                          args.grad_accum, args.lr, batches)
-        legs[tag] = s; routed[tag] = r; losses[tag] = l
+        _, r, l = run_leg(args.quant_type, offload, args.seed, args.steps, args.seq,
+                          args.grad_accum, args.lr, batches, paths[tag])
+        routed[tag] = r; losses[tag] = l
 
-    def weight_div(x, y):
-        return [float((x[k] - y[k]).norm().item()) for k in range(len(x))]
+    def weight_div_disk(pa, pb):
+        a = np.load(pa, mmap_mode="r"); b = np.load(pb, mmap_mode="r")
+        return [float(np.linalg.norm(np.asarray(a[k], dtype=np.float64) - np.asarray(b[k], dtype=np.float64)))
+                for k in range(a.shape[0])]
 
     def flip_curve(x, y):
-        out = []
-        for k in range(len(x)):
-            f = sum(len(x[k].get(li, set()) ^ y[k].get(li, set())) for li in set(x[k]) | set(y[k]))
-            out.append(f)
-        return out
+        return [sum(len(x[k].get(li, set()) ^ y[k].get(li, set())) for li in set(x[k]) | set(y[k]))
+                for k in range(len(x))]
 
-    ab_w = weight_div(legs["A_resident"], legs["B_resident"])
-    ac_w = weight_div(legs["A_resident"], legs["C_offload"])
+    ab_w = weight_div_disk(paths["A_resident"], paths["B_resident"])
+    ac_w = weight_div_disk(paths["A_resident"], paths["C_offload"])
     ab_f = flip_curve(routed["A_resident"], routed["B_resident"])
     ac_f = flip_curve(routed["A_resident"], routed["C_offload"])
 
@@ -174,6 +184,11 @@ def main():
         result["bitsandbytes_version"] = None
     with open(os.path.join(args.job_dir, "result.json"), "w") as f:
         json.dump(result, f, indent=2, sort_keys=True); f.write("\n")
+    for p in paths.values():  # the per-leg snapshot memmaps are ~15 GB each — drop after diffing
+        try:
+            os.remove(p)
+        except OSError:
+            pass
     print(f"first weight-div step: A-vs-B {result['first_weight_div_step_AB']}, "
           f"A-vs-C {result['first_weight_div_step_AC']}")
     print(f"first flip step: A-vs-B {result['first_flip_step_AB']}, A-vs-C {result['first_flip_step_AC']}")
