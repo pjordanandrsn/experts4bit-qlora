@@ -101,6 +101,15 @@ def test_experts4bit_rejects_alias_of_16bit():
         Experts4bit(E, HID, INTER, quant_type="float16")
 
 
+def test_bare_constructor_default_device_is_consistent():
+    """ExpertsNbit(...) with no device must build a single-device (CPU) module on any host:
+    torch.empty(device=None) puts the packed buffers on CPU, and the codebook must follow — not
+    take bitsandbytes' get_4bit_type default of "cuda", which crashed CUDA-less hosts and split
+    the module across devices on CUDA ones."""
+    m = Experts4bit(E, HID, INTER, quant_type="nf4")
+    assert m.gate_up_proj.device.type == "cpu" and m.code.device.type == "cpu"
+
+
 @pytest.mark.parametrize("hidden,inter", [(100, INTER), (HID, 100)], ids=["hidden", "intermediate"])
 def test_init_rejects_blocksize_misaligned_dims(hidden, inter):
     """in_features must divide the blocksize so quantization blocks never straddle an expert."""

@@ -189,6 +189,28 @@ def test_loader_rejects_bad_quant_type_before_any_io(tmp_path):
         load_moe_4bit_streaming(str(tmp_path), "cpu", torch.bfloat16, r=4, alpha=8, quant_type="int4")
 
 
+def test_loader_rejects_checkpoint_with_no_experts(tmp_path):
+    """A supported model_type whose checkpoint contains zero expert tensors must fail loudly, not
+    return a model that silently skipped quantization (the bnb#1849 failure class this loader
+    exists to prevent). No quantize happens before the guard, so this runs on any host."""
+    from safetensors.torch import save_file
+
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    model = _olmoe()
+    new = {k: v.to(DTYPE).contiguous().clone() for k, v in model.state_dict().items() if "experts." not in k}
+    save_file(new, os.path.join(tmp_path, "model.safetensors"))
+    json.dump(
+        {"weight_map": {k: "model.safetensors" for k in new}},
+        open(os.path.join(tmp_path, "model.safetensors.index.json"), "w"),
+    )
+    model.config.save_pretrained(tmp_path)
+
+    with pytest.raises(RuntimeError, match="no fused expert stacks found"):
+        load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8)
+
+
 def test_unsupported_model_type_errors(tmp_path):
     """A non-fused-MoE architecture (e.g. a dense model) fails fast with a clear message. Resolved
     from a local config dir so the test never touches the Hub (it used to fetch "gpt2" and errored

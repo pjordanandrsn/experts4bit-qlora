@@ -168,6 +168,14 @@ def load_moe_4bit_streaming(
         )  # ("model.layers.i.mlp","experts") or ("model.layers.i","experts")
         setattr(model.get_submodule(parent), leaf, experts)
         del gate_up, down
+    if n_moe == 0:
+        raise RuntimeError(
+            f"no fused expert stacks found in {model_id!r} (model_type={model_type!r}): expected "
+            f"'model.layers.<i>.{expert_rel}.gate_up_proj' (fused) or "
+            f"'model.layers.<i>.{expert_rel}.0.gate_proj.weight' (per-expert) tensors in the "
+            "checkpoint. Refusing to return a model with zero quantized expert layers — silently "
+            "skipping the experts is the exact failure this loader exists to prevent."
+        )
     log(f"  quantized experts on {n_moe}/{n_layers} MoE layers ({n_exp} experts each)")
 
     if offload_handles:

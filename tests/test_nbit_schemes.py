@@ -133,3 +133,56 @@ def test_experts4bit_rejects_8_and_16_bit():
     for q in EIGHT_AND_SIXTEEN:
         with pytest.raises(ValueError, match="quant_type must be one of"):
             Experts4bit.from_float(gate_up, down, quant_type=q)
+
+
+def test_extra_state_saved_and_scheme_mismatch_rejected():
+    """state_dict carries construction metadata, and loading a checkpoint of one scheme into a
+    module built for another raises — nf4 and fp4 packed bytes are shape-identical, so without the
+    metadata this load would succeed and silently decode against the wrong codebook."""
+    base = _build("nf4", seed=0)
+    sd = base.state_dict()
+    extra = sd.get("_extra_state")
+    assert isinstance(extra, dict) and extra["quant_type"] == "nf4" and extra["blocksize"] == base.blocksize
+
+    dst = _build("fp4", seed=7)  # identical dims/blocksize: every tensor shape matches
+    with pytest.raises(ValueError, match="quant_type: checkpoint='nf4' vs module='fp4'"):
+        dst.load_state_dict(sd, strict=True)
+
+
+def test_extra_state_dim_or_blocksize_mismatch_rejected():
+    """A config mismatch is named field-by-field (here blocksize), not surfaced as a bare tensor
+    shape complaint."""
+    base = _build("nf4", seed=0)  # blocksize 64
+    gate_up, down = _weights(seed=7)
+    try:
+        dst = ExpertsNbit.from_float(gate_up, down, quant_type="nf4", blocksize=32)  # 32 divides HID and INTER
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes nf4/bs32 quantize unavailable on {DEVICE}: {e}")
+    with pytest.raises(ValueError, match="blocksize: checkpoint=64 vs module=32"):
+        dst.load_state_dict(base.state_dict(), strict=False)
+
+
+def test_legacy_checkpoint_without_extra_state_loads():
+    """A checkpoint from before the metadata existed (no ``_extra_state`` key) loads under BOTH
+    strict modes, bit-identically to the old behavior — the metadata is additive, not gating."""
+    base = _build("nf4", seed=0)
+    hs, idx, wts = _inputs(seed=2)
+    with torch.no_grad():
+        ref = base(hs, idx, wts)
+
+    legacy_sd = {k: v for k, v in base.state_dict().items() if k != "_extra_state"}
+    for strict in (True, False):
+        dst = _build("nf4", seed=7)
+        dst.load_state_dict(dict(legacy_sd), strict=strict)
+        with torch.no_grad():
+            torch.testing.assert_close(dst(hs, idx, wts), ref)
+
+
+def test_newer_extra_state_schema_rejected():
+    """Metadata from a future package version fails loudly with an upgrade hint instead of being
+    half-understood."""
+    base = _build("nf4", seed=0)
+    sd = base.state_dict()
+    sd["_extra_state"] = dict(sd["_extra_state"], schema=99)
+    with pytest.raises(ValueError, match="upgrade experts4bit-qlora"):
+        _build("nf4", seed=7).load_state_dict(sd, strict=False)
