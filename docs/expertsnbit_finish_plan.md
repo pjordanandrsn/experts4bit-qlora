@@ -87,6 +87,17 @@ Fidelity chain (single seed, mean-abs): `fp16 < bf16 < int8 < fp8 < nf4 < fp4`. 
 `int8 < fp8` link is pinned by measurement, not construction — if a bitsandbytes codebook
 change ever flips it, demote that link to documentation rather than forcing it.
 
+**Calibration outcome (2026-07-04, CPU + A2000, bnb 0.49.2):** the nf4 anchor above was wrong —
+the "~0.09" in the old test comment did not match what the test's shapes/seed actually produce
+(measured forward relerr 0.154 CPU / 0.169 CUDA; fp4 0.220, int8 0.0175, fp8 0.0449, bf16
+0.0031, fp16 0.0004). Shipped ceilings moved accordingly and split into forward vs weight dicts:
+`TOL_FWD = {nf4 0.25, fp4 0.30, int8 0.03, fp8 0.08, bf16 8e-3, fp16 1e-3}`,
+`TOL_WEIGHT = {nf4 0.15, fp4 0.20, int8 0.02, fp8 0.04, bf16 3e-3, fp16 5e-4}` — ~1.4–2.6x
+headroom over the worst observed kernel, not the blanket ≥3x this plan first proposed (for the
+4-bit modes that would exceed the structural-bug-control level and make the ceiling meaningless).
+`tests/test_reference_parity.py` is the source of truth. The fidelity chain held as predicted,
+int8 < fp8 included (7.4e-4 vs 1.7e-3 mean-abs).
+
 ## Changes
 
 - `_vendor/experts.py` — `normalize_quant_type()` + the two aliases; extra-state trio
