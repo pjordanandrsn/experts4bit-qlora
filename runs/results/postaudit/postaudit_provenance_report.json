@@ -1,0 +1,117 @@
+{
+  "counts": {
+    "claim_usable": 13,
+    "debug_only": 6,
+    "invalid": 0,
+    "missing": 0
+  },
+  "jobs": {
+    "cert_olmoe_bf16_dropoutOFF_default": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "status='fail': exit=1, see /workspace/runs/postaudit_jobs/cert_olmoe_bf16_dropoutOFF_default/run.log"
+      ]
+    },
+    "cert_olmoe_bf16_dropoutOFF_default_rev2": {
+      "classification": "debug_only",
+      "in_manifest": false,
+      "reasons": [
+        "result.json missing; job dir exists (ran or partially ran)"
+      ]
+    },
+    "cert_olmoe_bf16_dropoutOFF_deterministic": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "status='fail': exit=1, see /workspace/runs/postaudit_jobs/cert_olmoe_bf16_dropoutOFF_deterministic/run.log"
+      ]
+    },
+    "cert_olmoe_bf16_dropoutON_default": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "status='fail': exit=1, see /workspace/runs/postaudit_jobs/cert_olmoe_bf16_dropoutON_default/run.log"
+      ]
+    },
+    "cert_olmoe_int8_dropoutOFF_default": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "status='fail': exit=1, see /workspace/runs/postaudit_jobs/cert_olmoe_int8_dropoutOFF_default/run.log"
+      ]
+    },
+    "cert_olmoe_int8_dropoutOFF_deterministic": {
+      "classification": "debug_only",
+      "in_manifest": true,
+      "reasons": [
+        "status='fail': exit=1, see /workspace/runs/postaudit_jobs/cert_olmoe_int8_dropoutOFF_deterministic/run.log"
+      ]
+    },
+    "null_olmoe_bf16_offload_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_bf16_resident_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_fp16_offload_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_fp16_resident_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_fp4_offload_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_fp4_resident_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_fp8_offload_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_fp8_resident_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_int8_offload_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_int8_resident_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_int8_resident_perexample_rep2": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_nf4_offload_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    },
+    "null_olmoe_nf4_resident_perexample": {
+      "classification": "claim_usable",
+      "in_manifest": true,
+      "reasons": []
+    }
+  }
+}

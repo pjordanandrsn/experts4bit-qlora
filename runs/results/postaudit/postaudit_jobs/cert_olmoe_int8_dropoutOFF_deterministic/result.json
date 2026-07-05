@@ -1,0 +1,20 @@
+{
+  "claimed_at": "2026-07-05T17:30:08Z",
+  "command": "python -u scripts/one_step_certificate.py --job-dir /workspace/runs/postaudit_jobs/cert_olmoe_int8_dropoutOFF_deterministic --quant-type int8 --seed 1337 --deterministic",
+  "commit": "a46bb61e732ceb5df8f10dbaa5673820611459d2",
+  "deterministic": true,
+  "dropout": 0.0,
+  "exit_code": 1,
+  "fail_or_skip_reason": "exit=1, see /workspace/runs/postaudit_jobs/cert_olmoe_int8_dropoutOFF_deterministic/run.log",
+  "finished_at": "2026-07-05T17:52:33Z",
+  "hostname": "41a04ccbc77d",
+  "job_id": "cert_olmoe_int8_dropoutOFF_deterministic",
+  "job_type": "cert",
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "pid": 479,
+  "pod_id": "41a04ccbc77d",
+  "seed": 1337,
+  "started_at": "2026-07-05T17:51:33Z",
+  "status": "fail",
+  "storage_mode": "int8"
+}

@@ -138,28 +138,74 @@ cert_olmoe_int8_dropoutOFF_deterministic
 All five run on ONE pod (single GPU) — the T5(c) confound makes single-host execution a hard
 requirement for every future comparison, this one first.
 
+## RESULTS (2026-07-05, pod 41a04ccbc77d, RTX A5000, commit 14889f8) — decision-tree row 4
+
+Q4 lineage: rev1 red (`runs/results/postaudit_cert_rev1_FAILED.md`, df351f3 — harness `_sha`
+crash, no scientific object measured) → `_sha` fix (14889f8) → this rev2 rerun. Raw:
+`runs/results/postaudit/postaudit_jobs/cert_olmoe_*_rev2/result.json`; leg tensors job-local
+on the volume.
+
+**Every comparison in every configuration is BITWISE-equal — the null (a≡b) and the
+placement (a≡c) alike:**
+
+| trio (rev2) | forward losses | logits(mb0) | 192 grad tensors | 192 post-step weights | 384 opt-state tensors |
+|---|---|---|---|---|---|
+| bf16 dropout-OFF default | ≡ | ≡ | ≡ | ≡ | ≡ |
+| bf16 dropout-OFF deterministic | ≡ | ≡ | ≡ | ≡ | ≡ |
+| bf16 dropout-ON (16 modules @ p=0.1) | ≡ | ≡ | ≡ | ≡ | ≡ |
+| int8 dropout-OFF default | ≡ | ≡ | ≡ | ≡ | ≡ |
+| int8 dropout-OFF deterministic | ≡ | ≡ | ≡ | ≡ | ≡ |
+
+Deterministic-mode op warnings: none (0 in both deterministic trios).
+
+**Predictions scored:** P2, P3, P4 — confirmed (and more sharply than predicted). P1 —
+**wrong in the informative direction**: the default-kernel null is bitwise at one step; the
+MoE-combine atomics and SDPA backward did not produce run-to-run noise on these shapes.
+
+**Filing (pre-committed tree, row 4): the one-step training machinery is placement-EXACT —
+bitwise, in both quantized and passthrough paths, with and without dropout, under default and
+deterministic kernels. M-A is refuted. The anomaly, if real, lives at RUN level.** Combined
+with T2/T3 (serve path bitwise placement-exact, 384/384) and T5:
+
+- For the **repeat grid**, the run-level difference IS identified: every seed-matched
+  placement pair was cross-architecture, with evaluator offsets (0.0026–0.0054) at the scale
+  of the claimed effects. The int8-offload "3/3 seeds" claim stays quarantined
+  (pending-mechanism) and is now best explained as architecture offset + run-level variance,
+  not a placement mechanism.
+- For the **single-run same-host bf16 control pair** (the audit's 0.0108): unexplained by any
+  measured mechanism — one-step training is bitwise, eval is bitwise, yet two 150-step legs
+  differed. Divergence must onset mid-run (a shape-dependent nondeterministic kernel on a
+  later batch is the leading candidate; batches vary in length). This is a SCOPED S10: not an
+  apparatus halt (the quarantine already covers it), but the training-lane claims stay frozen
+  until a **divergence-onset probe** runs — gated proposal: one 150-step twin trio
+  (resident/resident/offload, per-step loss + adapter hashes, one pod). ~2.5 A5000-hours.
+  This same run doubles as S-E's twin pair (SPECULATIVE_LANES_PLAN.md) with the dropout-ON
+  leg available as the certificate-validated order-1 perturbation source.
+
 ---
 
 <!-- ots-attestation-footer -->
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T17:13:37Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `c7d3973bd217e7fc444d351ad588e66680b4ad3b69f3e532a2293eb652c319a8` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[&=!~#=~@!+:=?=$&]`
+- **OTS proof timestamp for visible document:** `2026-07-05T18:09:34Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `10a9897aafde7afe3aea060cb02905dc3eba2156620789b4b971a1e36ad31f4c` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T17:13:37Z` `c7d3973bd217e7fc444d351ad588e66680b4ad3b69f3e532a2293eb652c319a8`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[:.%#*#=%%$!?=%$?]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|       ...   o.+o|
-|        .o. o + +|
-|   .    . .+ .  .|
-|  . .    o .+  o.|
-| . . o  S +o. o.+|
-|E   =    + . o =o|
-|   . .  *   o + =|
-|  . +  o.+oo . +.|
-|   +o+o. ..o.   .|
+|=oo.  ..         |
+|o+=.. ..         |
+|.Xoo o.          |
+|*o*=o  .         |
+|=+= .E  S        |
+|==o o            |
+|+=oo o           |
+|..o.= .          |
+| +**+=.          |
 +-----------------+
 ```
 
