@@ -22,7 +22,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
-from . import Experts4bit, ExpertsNbit
+from . import Experts4bit, ExpertsNbit, normalize_quant_type
 from .lora import ExpertsLoRA
 from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
@@ -71,6 +71,11 @@ def load_moe_4bit_streaming(
     transfer with compute at a bounded cost of two layers resident instead of one. Training forwards
     are unaffected. See :func:`experts4bit_qlora.offload.enable_inference_prefetch`.
     """
+    # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
+    # fetch, snapshot download, or shard read — and the Experts4bit-vs-ExpertsNbit class dispatch
+    # below must only ever see canonical names (an unnormalized alias would silently pick the
+    # wrong class).
+    quant_type = normalize_quant_type(quant_type)
     if prefetch and not offload:
         raise ValueError(
             "prefetch=True requires offload=True: prefetch overlaps the H2D copy of offloaded "
@@ -118,7 +123,7 @@ def load_moe_4bit_streaming(
 
     n_layers = lm_config.num_hidden_layers
     n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
-    log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to NF4 (streaming)...")
+    log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to {quant_type} (streaming)...")
     expert_keys = set()
     offload_handles = []
     n_moe = 0

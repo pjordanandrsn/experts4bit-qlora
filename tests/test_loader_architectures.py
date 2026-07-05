@@ -152,11 +152,16 @@ def test_loader_handles_architecture(build, per_expert, tmp_path):
     assert tuple(out.logits.shape) == (1, 8, cfg.vocab_size)
 
 
-@pytest.mark.parametrize("quant_type", ["int8", "bf16"])
-def test_loader_quant_type_threads_through(quant_type, tmp_path):
+@pytest.mark.parametrize(
+    "quant_type,expected",
+    [("int8", "int8"), ("bf16", "bf16"), ("BFLOAT16", "bf16")],
+    ids=["int8", "bf16", "alias-BFLOAT16"],
+)
+def test_loader_quant_type_threads_through(quant_type, expected, tmp_path):
     """The loader's ``quant_type`` knob reaches the fused-expert quantizer: an OLMoE checkpoint
     streamed with a non-nf4 scheme builds ExpertsNbit bases of that scheme and runs a forward.
-    (int8 = 8-bit blockwise; bf16 = 16-bit passthrough — spans both non-4-bit storage families.)"""
+    (int8 = 8-bit blockwise; bf16 = 16-bit passthrough — spans both non-4-bit storage families;
+    the alias spelling proves normalization happens before the class dispatch, not after.)"""
     from experts4bit_qlora import ExpertsLoRA
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
@@ -168,10 +173,20 @@ def test_loader_quant_type_threads_through(quant_type, tmp_path):
         pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
 
     experts = [m.base for m in model.modules() if isinstance(m, ExpertsLoRA)]
-    assert experts and all(b.quant_type == quant_type for b in experts)
+    assert experts and all(b.quant_type == expected for b in experts)
     model.config.use_cache = False
     out = model(input_ids=torch.randint(0, cfg.vocab_size, (1, 8), device=DEVICE))
     assert tuple(out.logits.shape) == (1, 8, cfg.vocab_size)
+
+
+def test_loader_rejects_bad_quant_type_before_any_io(tmp_path):
+    """A bad quant_type fails BEFORE any config read, download, or shard streaming: the target
+    directory is empty, so getting the quant_type ValueError (and not a file-not-found error)
+    proves validation runs first."""
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    with pytest.raises(ValueError, match="quant_type must be one of"):
+        load_moe_4bit_streaming(str(tmp_path), "cpu", torch.bfloat16, r=4, alpha=8, quant_type="int4")
 
 
 def test_unsupported_model_type_errors(tmp_path):

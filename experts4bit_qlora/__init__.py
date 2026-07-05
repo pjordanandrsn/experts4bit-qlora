@@ -35,6 +35,9 @@ if (
 else:
     from ._vendor.experts import Experts4bit, ExpertsNbit
 
+# Package-owned regardless of which class implementation is adopted above: the canonical scheme
+# names and their accepted aliases are this package's contract, not upstream's.
+from ._vendor.experts import normalize_quant_type
 from .lora import ExpertsLoRA, LoRALinear, add_attention_lora
 from .offload import (
     enable_expert_offload,
@@ -53,6 +56,7 @@ __all__ = [
     "add_attention_lora",
     "enable_expert_offload",
     "enable_inference_prefetch",
+    "normalize_quant_type",
     "offload_model_experts",
     "offload_stats_report",
     "report_offload_environment",

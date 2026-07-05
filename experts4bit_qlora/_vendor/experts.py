@@ -29,6 +29,30 @@ _SCHEME_BITS = {
 
 _PASSTHROUGH_DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16}
 
+# Accepted spellings for each canonical scheme name. Deliberately minimal — only the obvious
+# torch-dtype longhands; everything else must be spelled canonically. ("float8" stays out: it is
+# ambiguous between e4m3/e5m2, and this fp8 is a bitsandbytes e4m3 *codebook*, not a torch dtype.)
+_QUANT_TYPE_ALIASES = {"bfloat16": "bf16", "float16": "fp16"}
+
+
+def normalize_quant_type(quant_type, allowed: tuple = tuple(_SCHEME_BITS)) -> str:
+    """Canonicalize a storage-scheme name: case/whitespace-insensitive, plus the torch-dtype
+    longhands ``bfloat16``/``float16``. The single validation path for the constructors and the
+    loader, so a typo fails identically everywhere — with the allowed set in the message — before
+    any real work (quantization, checkpoint streaming) starts.
+
+    Raises:
+        ValueError: If ``quant_type`` does not normalize to a member of ``allowed``.
+    """
+    if not isinstance(quant_type, str):
+        raise ValueError(f"quant_type must be one of {allowed}, got {type(quant_type).__name__}")
+    q = quant_type.strip().lower()
+    q = _QUANT_TYPE_ALIASES.get(q, q)
+    if q not in allowed:
+        hint = f" (normalized from {quant_type!r})" if q != quant_type else ""
+        raise ValueError(f"quant_type must be one of {allowed}, got {q!r}{hint}")
+    return q
+
 
 def _build_code(quant_type: str, device) -> Optional[torch.Tensor]:
     """The shared per-scheme codebook (`None` for 16-bit passthrough)."""
@@ -138,7 +162,8 @@ class ExpertsNbit(nn.Module):
         compute_dtype (`torch.dtype`, *optional*): The dtype expert weights are
             dequantized to for the matmul. When `None`, the input's dtype is used.
         quant_type (`str`, *optional*, defaults to `"nf4"`): The storage scheme — one of
-            ``nf4``, ``fp4``, ``int8``, ``fp8``, ``bf16``, ``fp16``.
+            ``nf4``, ``fp4``, ``int8``, ``fp8``, ``bf16``, ``fp16`` (case/whitespace-insensitive;
+            ``bfloat16``/``float16`` accepted as aliases — see :func:`normalize_quant_type`).
         blocksize (`int`, *optional*, defaults to `64`): The quantization block size.
             Ignored for the 16-bit passthrough schemes.
         device (*optional*): The device for the (empty) packed buffers.
@@ -165,9 +190,9 @@ class ExpertsNbit(nn.Module):
     ):
         super().__init__()
 
-        allowed = type(self)._ALLOWED_QUANT_TYPES
-        if quant_type not in allowed:
-            raise ValueError(f"quant_type must be one of {allowed}, got {quant_type!r}")
+        # Normalized once here; every consumer downstream (self.quant_type, _build_code, the
+        # loader's class dispatch) sees only canonical names.
+        quant_type = normalize_quant_type(quant_type, allowed=type(self)._ALLOWED_QUANT_TYPES)
 
         self.bits = _SCHEME_BITS[quant_type]
 
