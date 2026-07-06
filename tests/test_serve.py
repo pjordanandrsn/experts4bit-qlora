@@ -223,6 +223,17 @@ def test_seed_passthrough(client):
     assert client.engine.last_job["seed"] == 42
 
 
+def test_stop_passthrough_and_normalization(client):
+    client.post("/generate", json={"prompt": "hi", "stop": "\n"})
+    assert client.engine.last_job["stop_strings"] == ["\n"]
+    client.post("/generate", json={"prompt": "hi", "stop": ["}", ""]})
+    assert client.engine.last_job["stop_strings"] == ["}"]  # empties dropped
+    client.post("/generate", json={"prompt": "hi"})
+    assert client.engine.last_job["stop_strings"] is None
+    client.post("/v1/completions", json={"prompt": "hi", "stop": "END"})
+    assert client.engine.last_job["stop_strings"] == ["END"]
+
+
 def test_stop_signal_reasons():
     from experts4bit_qlora.serve import _StopSignal
     import threading

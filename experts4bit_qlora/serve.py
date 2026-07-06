@@ -50,7 +50,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 
@@ -378,7 +378,8 @@ class Engine:
         return (time.perf_counter() - t0) * 1000.0
 
     def _generate_once(
-        self, prompt, adapter, max_new_tokens, temperature, top_p, repetition_penalty, seed, stop_event, streamer
+        self, prompt, adapter, max_new_tokens, temperature, top_p, repetition_penalty, seed, stop_event, streamer,
+        stop_strings=None,
     ) -> dict:
         """The one function that touches the GPU (worker thread only): swap, generate, account."""
         from transformers import StoppingCriteriaList
@@ -405,11 +406,22 @@ class Engine:
                 pad_token_id=tok.eos_token_id,
                 stopping_criteria=StoppingCriteriaList([stop]),
                 streamer=streamer,
+                # transformers' native stop-sequence support (needs the tokenizer to bind them).
+                stop_strings=stop_strings or None,
+                tokenizer=tok if stop_strings else None,
             )
         dt = time.perf_counter() - t0
         n_new = out.shape[1] - n_prompt
         text = tok.decode(out[0][n_prompt:], skip_special_tokens=True)
-        stopped = stop.reason or ("length" if n_new >= max_new_tokens else "eos")
+        # generate() includes the matched stop string in the output — trim it (and anything a
+        # multi-token stop dragged in past it) so callers can parse the text directly.
+        hit_stop = False
+        if stop_strings:
+            cuts = [i for i in (text.find(s) for s in stop_strings) if i != -1]
+            if cuts:
+                text = text[: min(cuts)]
+                hit_stop = True
+        stopped = stop.reason or ("stop" if hit_stop else "length" if n_new >= max_new_tokens else "eos")
 
         # Return freed allocator blocks to the driver when nothing is waiting, so bursty
         # neighbors (TTS/SDXL) see the memory. Benign race on _pending: worst case we skip once.
@@ -472,6 +484,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
         repetition_penalty: float = 1.3
         stream: bool = False
         seed: Optional[int] = None
+        stop: Optional[Union[str, List[str]]] = None  # stop sequence(s), trimmed from the output
 
     class CompletionRequest(BaseModel):
         prompt: str
@@ -481,6 +494,12 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
         top_p: float = 1.0
         stream: bool = False
         seed: Optional[int] = None
+        stop: Optional[Union[str, List[str]]] = None  # OpenAI-compat: string or list
+
+    def _stop_list(stop) -> Optional[List[str]]:
+        if not stop:
+            return None
+        return [stop] if isinstance(stop, str) else [s for s in stop if s]
 
     def _check(req_adapter: str, prompt: str, max_new: int) -> int:
         """Shared admission checks; returns the clamped max_new_tokens."""
@@ -494,7 +513,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             raise HTTPException(413, f"prompt exceeds E4B_MAX_INPUT_TOKENS={cfg.max_input_tokens}")
         return max(1, min(max_new, cfg.max_new_tokens))
 
-    def _job_kwargs(prompt, adapter, max_new, temperature, top_p, repetition_penalty, seed) -> dict:
+    def _job_kwargs(prompt, adapter, max_new, temperature, top_p, repetition_penalty, seed, stop=None) -> dict:
         return dict(
             prompt=prompt,
             adapter=adapter,
@@ -504,6 +523,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             repetition_penalty=repetition_penalty,
             seed=seed,
             stop_event=None,
+            stop_strings=_stop_list(stop),
         )
 
     async def _run(job: dict) -> dict:
@@ -575,7 +595,9 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
     @app.post("/generate")
     async def generate(req: GenerateRequest):
         max_new = _check(req.adapter, req.prompt, req.max_new_tokens)
-        job = _job_kwargs(req.prompt, req.adapter, max_new, req.temperature, req.top_p, req.repetition_penalty, req.seed)
+        job = _job_kwargs(
+            req.prompt, req.adapter, max_new, req.temperature, req.top_p, req.repetition_penalty, req.seed, req.stop
+        )
         if not req.stream:
             return await _run(job)
         return _sse_stream(
@@ -596,7 +618,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
     @app.post("/v1/completions")
     async def v1_completions(req: CompletionRequest):
         max_new = _check(req.model, req.prompt, req.max_tokens)
-        job = _job_kwargs(req.prompt, req.model, max_new, req.temperature, req.top_p, 1.3, req.seed)
+        job = _job_kwargs(req.prompt, req.model, max_new, req.temperature, req.top_p, 1.3, req.seed, req.stop)
         rid, created = f"cmpl-{int(time.time() * 1000):x}", int(time.time())
 
         def _oai(meta: dict, text: str, finish: Optional[str]) -> dict:
@@ -615,7 +637,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
 
         if not req.stream:
             meta = await _run(job)
-            finish = "stop" if meta["stopped"] == "eos" else "length"
+            finish = "stop" if meta["stopped"] in ("eos", "stop") else "length"
             return _oai(meta, meta["text"], finish)
 
         def token_to_event(piece: str) -> str:
@@ -623,7 +645,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             return f"data: {json.dumps(chunk)}\n\n"
 
         def meta_to_event(meta):
-            finish = "stop" if meta["stopped"] == "eos" else "length"
+            finish = "stop" if meta["stopped"] in ("eos", "stop") else "length"
             yield f"data: {json.dumps(_oai(meta, '', finish))}\n\n"
             yield "data: [DONE]\n\n"
 
