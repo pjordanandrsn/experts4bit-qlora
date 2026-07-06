@@ -1,0 +1,33 @@
+{
+  "bitsandbytes_version": "0.49.2",
+  "cuda_version": "12.8",
+  "decode_settings": {
+    "fastpath": true,
+    "gemv": true,
+    "greedy": true
+  },
+  "generated_tokens": 128,
+  "gpu_name": "NVIDIA RTX A5000",
+  "job_type": "decode",
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "offload": false,
+  "peak_gpu_gb": 13.985,
+  "prompt_tokens": 24,
+  "samples": 5,
+  "status": "pass",
+  "storage_mode": "bf16",
+  "timestamp": "2026-07-06T03:46:14Z",
+  "tok_s_all": [
+    13.935,
+    12.903,
+    13.456,
+    14.555,
+    13.77
+  ],
+  "tok_s_max": 14.555,
+  "tok_s_mean": 13.724,
+  "tok_s_min": 12.903,
+  "tok_s_std": 0.609,
+  "torch_version": "2.8.0+cu128",
+  "warmup_discarded": 1
+}

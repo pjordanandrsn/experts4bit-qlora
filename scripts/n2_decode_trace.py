@@ -51,7 +51,6 @@ class TraceRecorder:
     calls are decode tokens; multi-row calls are prefill and are skipped."""
 
     def __init__(self, model):
-        import torch.nn as nn
         from experts4bit_qlora.lora import ExpertsLoRA
 
         self.per_layer_sets = {}
@@ -61,8 +60,10 @@ class TraceRecorder:
         self.n_layers = len(moe)
         for li, mod in enumerate(moe):
             self.handles.append(mod.register_forward_pre_hook(self._expert_hook(li)))
-        routers = [m for n, m in model.named_modules()
-                   if n.endswith("mlp.gate") and isinstance(m, nn.Linear)]
+        # OLMoE's router is an OlmoeTopKRouter (NOT nn.Linear) whose forward returns
+        # (router_logits[.,E], router_scores[.,k], router_indices[.,k]); match by name and
+        # take output[0] for the full-logit top-k boundary margin.
+        routers = [m for n, m in model.named_modules() if n.endswith("mlp.gate")]
         for li, mod in enumerate(routers):
             self.handles.append(mod.register_forward_hook(self._margin_hook(li)))
 
@@ -76,8 +77,9 @@ class TraceRecorder:
 
     def _margin_hook(self, li):
         def hook(module, args, output):
-            if output.shape[0] == 1:
-                vals = output.detach().float().sort(dim=-1, descending=True).values[0]
+            logits = output[0] if isinstance(output, (tuple, list)) else output
+            if logits.shape[0] == 1:  # decode token (not prefill)
+                vals = logits.detach().float().sort(dim=-1, descending=True).values[0]
                 k = 8 if vals.shape[-1] > 8 else vals.shape[-1] - 1
                 self.per_layer_margins.setdefault(li, []).append(
                     round(float(vals[k - 1] - vals[k]), 5))

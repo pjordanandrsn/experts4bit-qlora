@@ -1,0 +1,33 @@
+{
+  "bw": {
+    "bf16": {
+      "gather_gbps": 8.97,
+      "gather_ms_per_layer": 11.2259,
+      "slab_bytes": 12582912
+    },
+    "int8": {
+      "gather_gbps": 13.38,
+      "gather_ms_per_layer": 3.9953,
+      "slab_bytes": 6684672
+    },
+    "nf4": {
+      "gather_gbps": 13.34,
+      "gather_ms_per_layer": 2.1229,
+      "slab_bytes": 3538944
+    }
+  },
+  "ceiling_256mb_gbps": 9.34,
+  "gpu_name": "NVIDIA RTX A5000",
+  "job_type": "n2_bw_gather",
+  "k_experts": 8,
+  "n_layers": 16,
+  "reps": 100,
+  "status": "pass",
+  "t_fetch_ms_per_token": {
+    "bf16": 179.61,
+    "int8": 63.93,
+    "nf4": 33.97
+  },
+  "timestamp": "2026-07-06T03:42:11Z",
+  "torch_version": "2.8.0+cu128"
+}
