@@ -4,6 +4,17 @@ Graded predictions and adopted forecasting rules, one entry per grading event, n
 Entries are recorded verbatim from their source documents at filing time; gradings are never
 edited after the fact — corrections are new entries.
 
+## 2026-07-06 — N3 fragility attribution GRADED (mixed-precision cell gate)
+
+Committed S-C gate (ba23461, pre-data): top-decile |d_i| flips concentrate ≥ 2× over uniform.
+**Literal gate MET** (top-10% of pairs hold 52% = 5.2× uniform) — **but the fragility-specificity
+control FAILS**: the least-fragile decile is equally concentrated (55%), so routing flips localize
+to the same experts regardless of precision fragility. "Top-fragility experts" is not a set
+distinct from "top-flip experts," and they don't track |d_i|. **N3 CLOSES** on the control
+(transparently — the literal committed gate passed; it was under-specified, concentration alone
+being non-diagnostic). Per-expert precision is not the dial. Fragile examples do flip more in
+total (2341 vs 1591) but on the same expert distribution. `runs/results/postaudit/n3_fragility_attribution.md`.
+
 ## 2026-07-06 — N1 routing-pinned serve GRADED (next-campaign lane, first result)
 
 Committed odds 30/45/25 (`docs/N1_ROUTING_PINNED_SERVE.md`). **Middle branch (0 < R < 0.50,
@@ -147,29 +158,30 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T02:01:24Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `abdbb765824bcc92396b7dc401e7a7e645c6e72aa9747ea8060cd8c71a1cf1b0` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-06T02:10:19Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `1eabe6aedfaf050152834a38f631bc4f06d1661f3b85a3aefeb56a8a85b33e55` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T02:01:24Z` `abdbb765824bcc92396b7dc401e7a7e645c6e72aa9747ea8060cd8c71a1cf1b0`
   - `2026-07-06T00:36:02Z` `3f7b908c9fececbefdf161bdfde661363339406cc05c77f99c48d97013438fed`
   - `2026-07-06T00:19:00Z` `c1d2c77eacd785d924482fdec33fcab841d843b751139dc64431f57a4152b8e1`
   - `2026-07-05T22:22:31Z` `80f86be8b06dcbb5e0a9d96013f1435ac5daa93b16049ad212006d91461bbf47`
   - `2026-07-05T20:04:03Z` `f23487b74d50e842b37b930f02174c72ecf2846b18ca542b55d4424d56b2e765`
   - `2026-07-05T18:22:04Z` `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4`
   - `2026-07-05T18:18:28Z` `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%@!@@=0O*+o@&&#+]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[:?%@?0%?!$%$.O.:]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|    o.           |
-|    .+  . .      |
-|   +Eo.  + .     |
-|  . = o   o = .  |
-|     *  S. * o   |
-|    . o= o= . .  |
-|      =oB+o+o.   |
-|      .Oo+B+o    |
-|     .+o==o+     |
+| ...+o+ .        |
+|o..=.= * .       |
+|.o..B o *        |
+|  .o E + .       |
+|    *   S        |
+|  .. o . +       |
+| o...  .o .      |
+| .=. .oo..       |
+|.+oo=O*.oo.      |
 +-----------------+
 ```
 
