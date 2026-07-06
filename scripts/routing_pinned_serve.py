@@ -106,7 +106,8 @@ def main():
     ap.add_argument("--seq", type=int, default=256)
     args = ap.parse_args()
     os.makedirs(args.job_dir, exist_ok=True)
-    os.environ["SEQ"] = str(args.seq); os.environ["N_TRAIN"] = str(args.n_train)
+    os.environ["SEQ"] = str(args.seq)
+    os.environ["N_TRAIN"] = str(args.n_train)
 
     import torch
     import experts4bit_qlora.train as train
@@ -121,19 +122,26 @@ def main():
     print("[C0] nf4 base + adapter — capture routing", flush=True)
     m0, nl0 = load_model(args.train_mode, args.adapter)
     L0, _ = eval_pass(m0, eval_data, "capture", capture=capture)
-    del m0; import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+    del m0
+    gc.collect()
+    torch.cuda.empty_cache()
 
     # C1: unpinned upgrade (int8 base + adapter)
     print("[C1] int8 base + adapter — unpinned", flush=True)
     m1, nl1 = load_model(args.serve_mode, args.adapter)
     L1, _ = eval_pass(m1, eval_data, "plain")
-    del m1; gc.collect(); torch.cuda.empty_cache()
+    del m1
+    gc.collect()
+    torch.cuda.empty_cache()
 
     # C2: pinned upgrade (int8 base + adapter, replay C0 routing)
     print("[C2] int8 base + adapter — routing pinned to C0", flush=True)
     m2, nl2 = load_model(args.serve_mode, args.adapter)
     L2, n_over = eval_pass(m2, eval_data, "replay", replay=capture)
-    del m2; gc.collect(); torch.cuda.empty_cache()
+    del m2
+    gc.collect()
+    torch.cuda.empty_cache()
 
     # paired means on the shared non-nan set
     idx_ok = [i for i in range(len(L0)) if L0[i] == L0[i] and L1[i] == L1[i] and L2[i] == L2[i]]
@@ -171,7 +179,8 @@ def main():
     except Exception:
         result["bitsandbytes_version"] = None
     with open(os.path.join(args.job_dir, "result.json"), "w") as f:
-        json.dump(result, f, indent=2, sort_keys=True); f.write("\n")
+        json.dump(result, f, indent=2, sort_keys=True)
+        f.write("\n")
     print(f"L0(home) {m0m:.4f} | L1(unpinned) {m1m:.4f} | L2(pinned) {m2m:.4f}")
     print(f"forfeit (L1-L0) {m1m-m0m:+.4f} | recovery (L1-L2) {m1m-m2m:+.4f}")
     print(f"R = {R:.3f} ± {R_se_full:.3f} of G  -> {result['verdict']}")

@@ -32,7 +32,7 @@ def load_jobs(jobs_root):
         if not (os.path.exists(rp) and os.path.exists(rows_p)):
             continue
         res = json.load(open(rp))
-        rows = [json.loads(l) for l in open(rows_p)]
+        rows = [json.loads(line) for line in open(rows_p)]
         losses = {r["example_index"]: r["loss"] for r in rows if not r.get("is_nan")}
         out[os.path.basename(d)] = {"result": res, "losses": losses}
     return out

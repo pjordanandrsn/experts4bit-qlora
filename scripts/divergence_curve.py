@@ -92,7 +92,8 @@ def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, subs
         step_routed = None
         lacc = 0.0
         for g in range(grad_accum):
-            ex = batches[bi]; bi += 1
+            ex = batches[bi]
+            bi += 1
             ids = torch.tensor([ex["input_ids"]], device="cuda")
             lbl = torch.tensor([ex["labels"]], device="cuda")
             out = model(input_ids=ids, labels=lbl)
@@ -101,7 +102,8 @@ def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, subs
             (out.loss / grad_accum).backward()
             lacc += out.loss.item() / grad_accum
         torch.nn.utils.clip_grad_norm_(params, 1.0)
-        opt.step(); sched.step()
+        opt.step()
+        sched.step()
         losses.append(lacc)
         routed_per_step.append(step_routed)
         flat = torch.cat([p.detach().float().reshape(-1) for _, p in lora])  # on GPU
@@ -110,7 +112,9 @@ def run_leg(quant_type, offload, seed, steps, seq, grad_accum, lr, batches, subs
     for h in handles:
         h.remove()
     del model, opt, sched
-    import gc; gc.collect(); torch.cuda.empty_cache()
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()
     return snaps, routed_per_step, losses
 
 
@@ -127,7 +131,8 @@ def main():
     ap.add_argument("--subset", type=int, default=2_000_000, help="fixed random weight-subset size (RAM-bounded)")
     args = ap.parse_args()
     os.makedirs(args.job_dir, exist_ok=True)
-    os.environ["SEQ"] = str(args.seq); os.environ["N_TRAIN"] = str(args.n_train)
+    os.environ["SEQ"] = str(args.seq)
+    os.environ["N_TRAIN"] = str(args.n_train)
 
     import numpy as np
     import torch  # noqa
@@ -144,9 +149,11 @@ def main():
     losses = {}
     for tag, offload in (("A_resident", False), ("B_resident", False), ("C_offload", True)):
         print(f"[leg {tag}] offload={offload}", flush=True)
-        s, r, l = run_leg(args.quant_type, offload, args.seed, args.steps, args.seq,
-                          args.grad_accum, args.lr, batches, subset_idx)
-        snaps[tag] = s; routed[tag] = r; losses[tag] = l
+        s, r, lo = run_leg(args.quant_type, offload, args.seed, args.steps, args.seq,
+                           args.grad_accum, args.lr, batches, subset_idx)
+        snaps[tag] = s
+        routed[tag] = r
+        losses[tag] = lo
 
     def weight_div(a, b):  # scaled L2 on the K-subset (unbiased estimate of full L2 up to sqrt(N/K))
         return [float(np.linalg.norm(a[k].astype(np.float64) - b[k].astype(np.float64)))
@@ -190,7 +197,8 @@ def main():
     except Exception:
         result["bitsandbytes_version"] = None
     with open(os.path.join(args.job_dir, "result.json"), "w") as f:
-        json.dump(result, f, indent=2, sort_keys=True); f.write("\n")
+        json.dump(result, f, indent=2, sort_keys=True)
+        f.write("\n")
     print(f"first weight-div step: A-vs-B {result['first_weight_div_step_AB']}, "
           f"A-vs-C {result['first_weight_div_step_AC']}")
     print(f"first flip step: A-vs-B {result['first_flip_step_AB']}, A-vs-C {result['first_flip_step_AC']}")
