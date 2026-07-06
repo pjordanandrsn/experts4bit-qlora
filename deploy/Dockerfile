@@ -15,8 +15,10 @@ WORKDIR /app
 COPY deploy/requirements.txt /app/deploy/requirements.txt
 RUN python3.11 -m pip install --no-cache-dir -r /app/deploy/requirements.txt
 
+# Plain (non-editable) install: -e needs the PEP 660 build_editable hook, which fails against
+# Ubuntu 22.04's python3.11 (an ~rc1 build) — and editable buys nothing inside an image anyway.
 COPY . /app
-RUN python3.11 -m pip install --no-cache-dir --no-deps -e .
+RUN python3.11 -m pip install --no-cache-dir --no-deps .
 
 # Serving defaults; compose overrides per deployment. OFFLOAD_EXPERTS=1 is the shim's default
 # too — restated here so a bare `docker run` is honest about what it does.
