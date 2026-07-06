@@ -187,7 +187,7 @@ def main():
                     if li in r2["layers"]:
                         js.append(jaccard(r["layers"][li], r2["layers"][li]))
         if js:
-            L.append(f"## O1 byproduct — base vs adapter routing on identical streams")
+            L.append("## O1 byproduct — base vs adapter routing on identical streams")
             L.append("")
             L.append(f"- mean per-token routed-set Jaccard = **{sum(js)/len(js):.4f}** "
                      f"(eval-set S-B number was 0.9418; trace-workload confirmation)")
