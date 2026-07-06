@@ -162,6 +162,15 @@ def test_health_shape(client):
     assert body["queue_depth"] == 0
 
 
+def test_health_503_when_load_failed(client):
+    """A dead engine must fail the docker healthcheck — 200-with-"error" reads as healthy."""
+    client.engine.state = "error"
+    client.engine.error = "boom"
+    r = client.get("/health")
+    assert r.status_code == 503
+    assert r.json()["status"] == "error"
+
+
 def test_generate_roundtrip_and_clamp(client):
     r = client.post("/generate", json={"prompt": "hi there", "adapter": "alpaca", "max_new_tokens": 10_000})
     assert r.status_code == 200
