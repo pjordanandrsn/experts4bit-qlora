@@ -4,6 +4,17 @@ Graded predictions and adopted forecasting rules, one entry per grading event, n
 Entries are recorded verbatim from their source documents at filing time; gradings are never
 edited after the fact — corrections are new entries.
 
+## 2026-07-06 — Reviewer closure claim CORRECTED (operator-caught)
+
+"Queue state after this document: empty" (DIVERGENCE_ONSET_PROBE) and the reviewer's
+"the queue reads empty" **overstated closure**: the filed-not-graded index below held
+P-B1–P-B4 open, and two graduation clauses had fired (S-B → routing-pinned serve; S-C
+precondition → G cleared). Correct statement: the **confirmatory** queue is empty; three
+licensed continuations remain (N1 routing-pinned serve, N2 routed-stream T7, N3 mixed-precision
+cell — `docs/NEXT_CAMPAIGN_LANES.md`). Caught by the operator, not the apparatus — the
+three-verb test does not check claims of absence. **Rule adopted:** a closure claim is a claim;
+grade it against the filed-not-graded index before making it.
+
 ## 2026-07-06 — Divergence-onset probe GRADED (the final gate)
 
 Committed odds 30/55/15 (`docs/DIVERGENCE_ONSET_PROBE.md`). **Branch 2 (55%) HIT** in its
@@ -126,27 +137,28 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T00:19:00Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `c1d2c77eacd785d924482fdec33fcab841d843b751139dc64431f57a4152b8e1` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-06T00:36:02Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `3f7b908c9fececbefdf161bdfde661363339406cc05c77f99c48d97013438fed` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T00:19:00Z` `c1d2c77eacd785d924482fdec33fcab841d843b751139dc64431f57a4152b8e1`
   - `2026-07-05T22:22:31Z` `80f86be8b06dcbb5e0a9d96013f1435ac5daa93b16049ad212006d91461bbf47`
   - `2026-07-05T20:04:03Z` `f23487b74d50e842b37b930f02174c72ecf2846b18ca542b55d4424d56b2e765`
   - `2026-07-05T18:22:04Z` `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4`
   - `2026-07-05T18:18:28Z` `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[&:!+&==?%&!=*O!#]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[~$=@#.*&#$?&?&@?]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|            ..*@B|
-|       o . . =++=|
-|      . + o.+o*.o|
-|       . ++o.EoB.|
-|        S..++.B +|
-|          .o.. = |
-|          ... ...|
-|           .+ . .|
-|           o.o   |
+|          o..o=B+|
+|           oooo==|
+|            .+o.=|
+|            o. oo|
+|        So . .  E|
+|        ..+   . o|
+|         ooo  .%.|
+|         .++. +o@|
+|         +Bo...+*|
 +-----------------+
 ```
 

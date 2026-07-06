@@ -117,14 +117,17 @@ with `scripts/validate_job_provenance.py`; docs are OTS-stamped (`docs/*.md.ots`
 - ~~D1/D2/D3 (audit debts)~~ — **done** same-day: D2 bitwise placement-exact at serve, D3
   bitwise placement-exact at one training step, D1 fired S9 (precision ladder within sampling
   noise at n=64). See `docs/MEASUREMENT_AUDIT.md` §7.
-- **n=1024 ∅-ladder re-pin** — preregistered (`docs/NULL_LADDER_1024_AMENDMENT.md`), running.
-- **Divergence-onset probe** (gated): 150-step twin trio with per-step hashes — the remaining
-  open question is why the same-host single-run bf16 pair differed 0.0108 when one step is
-  bitwise-exact.
-- Speculative lanes (S-A response curve, S-B adapter-routing, …): `docs/SPECULATIVE_LANES_PLAN.md`
-  — second-class by construction, byproduct analyses of the scheduled runs.
+- ~~n=1024 ∅-ladder re-pin~~ — **done**: G_int8 = 0.0166 (|t| 7.29), S9 resolved, stop-at-int8
+  licensed (`docs/NULL_LADDER_1024_AMENDMENT.md`).
+- ~~Divergence-onset probe~~ — **done**: the same-host 150-step bf16 0.0108 gap is run-to-run
+  chaos, not placement (resident twin diverges as much; `docs/DIVERGENCE_ONSET_PROBE.md`).
 - ~~Qwen3-30B offload on a >40 GB-RAM pod~~ — **done** (A100, 236 GB RAM): offload fits a 30B
   model in ~4–5 GB VRAM; the topology transfers. See the Qwen3 section above.
+- **The confirmatory queue is empty; three licensed continuations remain** for the next
+  campaign (`docs/NEXT_CAMPAIGN_LANES.md`): **N1** routing-pinned serve (S-B graduation fired —
+  highest value, most product-shaped), **N2** routed-stream Phases 0–6 (T7; batch-1 decode
+  temporal locality), **N3** the mixed-precision cell (one CPU attribution join short of
+  preregistration). These are the PR's future-work section; none precede submission.
 - Related-work positioning: existing work made large-MoE inference practical (quantization,
   offload, expert caching, fused kernels) and QLoRA made low-bit adapter training practical for
   dense-style layouts; this apparatus targets the under-instrumented intersection — fused-MoE
@@ -137,29 +140,30 @@ with `scripts/validate_job_provenance.py`; docs are OTS-stamped (`docs/*.md.ots`
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T00:19:14Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `0a69be5bf1d2f5455fe13a1b59b479de4b6515e6e3cbf6f5c2a2e760813e8043` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-06T00:36:19Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `d07db92892384ac3120f4d2f05020e5532a0761b2f2c164510dff1b98a9d2b20` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T00:19:14Z` `0a69be5bf1d2f5455fe13a1b59b479de4b6515e6e3cbf6f5c2a2e760813e8043`
   - `2026-07-05T22:22:14Z` `a7d46561a2fff4cf2dfefde27165b8a4c31cdff6bb2fdd4116d96c204f1796bc`
   - `2026-07-05T20:04:10Z` `8901fc998ac2771199cfca3a531b72877d9d8e92419dd534a79c1d69d2a883da`
   - `2026-07-05T18:11:19Z` `4f6df7c749dc6cb00cf3c32fcad96c387a7b4c7ac87623391d8e2a1e52a9e558`
   - `2026-07-05T16:48:56Z` `7bd7d4a5b3c9f18fdd5ce7c6035132d00b162428ac8926de56507558979f86ca`
   - `2026-07-05T14:52:18Z` `ce2030434782e4ea2b1ada367261fb4a2ae1f4e4f14b674787382b0b101df026`
   - `2026-07-05T14:00:26Z` `0b455296684992211f5b5b703cb21bebd38cfdb33e8b15575b54fbe12e672327`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[.%0#@?O@$:!+$OoO]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[!.=!@#+*#+~*o%&~]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|               =o|
-|              = =|
-|    E         .B=|
-|   . o   .   .=+*|
-|    * o S o  =.o+|
-|   o o B . o .* o|
-|    . + = o .o =.|
-|     o . o .o + +|
-|    o.    .+.. .o|
+|*=X=o.           |
+|++o=. o...   .   |
+|++o+...o. . o    |
+|.=+.+. o.  o .   |
+|.o=+o.o.S . .    |
+|E+.o+.o. .       |
+|. o. +           |
+|   .  .          |
+|    ..           |
 +-----------------+
 ```
 
