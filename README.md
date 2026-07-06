@@ -146,7 +146,7 @@ state_dict tensor keys. The loader still instantiates `Experts4bit` for 4-bit ru
   model on which it quantized zero expert layers.
 - **GEMV is 4-bit-only** and probe-gated per configuration; the 8/16-bit schemes always decode
   via the dequantize path.
-- **Loader scope** is the four architecture families under [Scope](#scope); the `ExpertsNbit`
+- **Loader scope** is the five architecture families under [Scope](#scope); the `ExpertsNbit`
   primitive itself is model-agnostic.
 
 ### Reading the headline memory numbers
@@ -243,6 +243,10 @@ loader / trainer** (`python -m experts4bit_qlora.train`) supports SwiGLU fused-M
 experts stored either **per-expert** or already-**fused** on disk:
 
 - **OLMoE** (OLMoE-1B-7B) — convergence-tested end-to-end; fits a 12 GB card at ~4.7 GB.
+- **Qwen2-MoE** (Qwen1.5-MoE-A2.7B) — experts per-expert on disk at `layers.{i}.mlp.experts`
+  (same layout as OLMoE/Qwen3), **plus a parallel shared expert + sigmoid gate** beside them in
+  the same block; the loader swaps only `mlp.experts`, so the shared branch loads untouched in
+  full precision — handled and structurally tested, shared-expert forward parity included.
 - **Qwen3-MoE / Qwen3.5-MoE** — same checkpoint + module layout as OLMoE (verified
   byte-identical); structurally tested.
 - **Gemma-4 (text tower)** — different internally (experts at `layers.{i}.experts` beside a
@@ -253,7 +257,7 @@ experts stored either **per-expert** or already-**fused** on disk:
   own converter does); handled and structurally tested. The 1b/3b checkpoints fit a 12 GB card
   without offload.
 
-All four are covered by `tests/test_loader_architectures.py`. Real Qwen3/Gemma weights (26–35B)
+All five are covered by `tests/test_loader_architectures.py`. Real Qwen3/Gemma weights (26–35B)
 need a ≥24 GB card — or the expert-offload path above — to fit 12 GB. Unsupported architectures
 **fail fast with a clear error**; PRs for more welcome.
 
