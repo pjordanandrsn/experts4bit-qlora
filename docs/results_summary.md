@@ -25,8 +25,11 @@ jobs is bundle-attested, not self-reported (git-archive worker trees; runner sin
   engagement attested (16/16 evicted, rev3; `docs/TRAIN_PLACEMENT_CERTIFICATE.md`) — and T5
   forensics showed every seed-matched pair in the repeat grid was **cross-architecture**
   (4090↔A5000; evaluator offset 0.0026–0.0054, the scale of the claimed effect). No one-step
-  placement mechanism exists; the "win" was architecture offset + run-level variance. The one
-  open thread is the same-host 150-step bf16 0.0108 gap (divergence-onset probe, gated).
+  placement mechanism exists; the "win" was architecture offset + run-level variance. The
+  last thread — the same-host 150-step bf16 0.0108 gap — is now **closed**: the
+  divergence-onset probe showed an identical resident rerun (twin A vs B) diverges at the same
+  step and marginally more than resident-vs-offload, so the gap is run-to-run training chaos
+  (nondeterministic atomics over 150 steps), not placement (`docs/DIVERGENCE_ONSET_PROBE.md`).
 - **The frozen-precision axis IS real (S9 resolved, n=1024).** The pilot's n=64 ambiguity is
   settled: **G_int8 = +0.0166 ± 0.0023 (|t| = 7.29, Wilcoxon z = 12.4)**; frozen int8 covers
   106% of the nf4→bf16 gap. **The trio {int8, bf16, fp16} is flat within ±0.0019** — so
@@ -134,28 +137,29 @@ with `scripts/validate_job_provenance.py`; docs are OTS-stamped (`docs/*.md.ots`
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T22:22:14Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `a7d46561a2fff4cf2dfefde27165b8a4c31cdff6bb2fdd4116d96c204f1796bc` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-06T00:19:14Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `0a69be5bf1d2f5455fe13a1b59b479de4b6515e6e3cbf6f5c2a2e760813e8043` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T22:22:14Z` `a7d46561a2fff4cf2dfefde27165b8a4c31cdff6bb2fdd4116d96c204f1796bc`
   - `2026-07-05T20:04:10Z` `8901fc998ac2771199cfca3a531b72877d9d8e92419dd534a79c1d69d2a883da`
   - `2026-07-05T18:11:19Z` `4f6df7c749dc6cb00cf3c32fcad96c387a7b4c7ac87623391d8e2a1e52a9e558`
   - `2026-07-05T16:48:56Z` `7bd7d4a5b3c9f18fdd5ce7c6035132d00b162428ac8926de56507558979f86ca`
   - `2026-07-05T14:52:18Z` `ce2030434782e4ea2b1ada367261fb4a2ae1f4e4f14b674787382b0b101df026`
   - `2026-07-05T14:00:26Z` `0b455296684992211f5b5b703cb21bebd38cfdb33e8b15575b54fbe12e672327`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%=!o0O0:%+$$$o&$]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[.%0#@?O@$:!+$OoO]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|          . + +=*|
-|         . o =.*+|
-|        .   o ..o|
-|         o o   E |
-|        S + o = o|
-|       . o = * =.|
-|        .   * =.*|
-|             .+**|
-|             ooB#|
+|               =o|
+|              = =|
+|    E         .B=|
+|   . o   .   .=+*|
+|    * o S o  =.o+|
+|   o o B . o .* o|
+|    . + = o .o =.|
+|     o . o .o + +|
+|    o.    .+.. .o|
 +-----------------+
 ```
 

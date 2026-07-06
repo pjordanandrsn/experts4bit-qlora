@@ -37,9 +37,43 @@ target:   the same-host 150-step bf16 resident-vs-offload gap of 0.0108 —
 - Whatever the branch, output is one paragraph in the results doc + a graded line in
   PREDICTION_LEDGER.md. No new lanes open from this item.
 
+## RESULT (2026-07-06, A5000, `runs/results/postaudit/divergence_bf16_result.json`)
+
+**Branch 2 confirmed, in its strongest form: the divergence is run-to-run nondeterminism;
+placement is incidental.** Three legs from byte-identical state (bf16, seed 0, 60 steps):
+resident-twin A, resident-twin B, offload C. Subset-sketch weight divergence + routing flips
+vs twin A:
+
+| step | wdiv A–B | wdiv A–C | flip A–B | flip A–C |
+|---|---|---|---|---|
+| 1 | 0 | 0 | 0 | 0 |
+| 2 | 1.5e-4 | 1.4e-4 | 0 | 0 |
+| 3 | 3.6e-3 | 3.8e-3 | 7 | 6 |
+| 10 | 3.96e-2 | 3.59e-2 | 9 | 6 |
+| 30 | 1.36e-1 | 1.22e-1 | 9 | 10 |
+| 60 | 2.28e-1 | 2.03e-1 | 24 | 18 |
+
+- **Step 1 bitwise across all three legs** — the D3 boundary is respected exactly.
+- **First divergence at step 2, identical for the resident twin (A–B) and placement (A–C).**
+  The offload pair diverges no earlier than an identical resident rerun does.
+- **First routing flip at step 3, both** — flips FOLLOW weight divergence, they do not cause
+  it (predicted).
+- **A–C tracks A–B the whole way and is marginally SMALLER** (final ratio A–C/A–B = 0.89;
+  mean flips/step 13.3 vs 14.4). Placement adds nothing beyond the chaos an identical rerun
+  already produces.
+
+**Attribution:** the same-host 150-step bf16 0.0108 best-eval gap is a **chaos measurement** —
+the training process is nondeterministic (fp32 `index_add_` atomics in the MoE combine + SDPA
+backward, per T1.0/LAYOUT_FACTS), so any two runs from identical state diverge and amplify over
+150 steps; best-of-3-evals then samples different points of two chaotic trajectories. Offload
+is numerically innocent (D3: bitwise at one step; here: A–C ≤ A–B across 60). **The placement
+question is closed and stays closed** — this is not a placement effect. Committed odds graded:
+branch 2 (55%) hit; branches 1 (30%, static — ruled out clean) and 3 (15%, other) did not.
+
 ## Queue state after this document
 
-Empty. New questions belong to the job or to the next campaign.
+Empty. The campaign's last unattributed number now has a mechanism. New questions belong to
+the job or to the next campaign.
 
 ---
 
@@ -60,22 +94,24 @@ Empty. New questions belong to the job or to the next campaign.
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T22:57:37Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `b856ab52a7094321eb9bc588e59b73223ece6843dde42c1a83a150c5a257d096` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[@*O0%@O+%=.#o~+:]`
+- **OTS proof timestamp for visible document:** `2026-07-06T00:18:55Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `18a88feb1357ccc94731c8e4c8daa054d9e46d67ef9bf05cb27fecfa5ac1b20a` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T22:57:37Z` `b856ab52a7094321eb9bc588e59b73223ece6843dde42c1a83a150c5a257d096`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[:*%**$?@:~O=&&&#]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|  .=..           |
-|  + E            |
-| o * .           |
-|+ + .. .         |
-|+B.+= . S        |
-|+++o=+.o..       |
-|. +*.+o+.        |
-|+=B o.o.         |
-|==o+ ..          |
+|   .++..o.       |
+|  .o.=+ ..       |
+| .. +=o= o       |
+|.. =  Bo+ .   .  |
+|. o ....S  . . o |
+|  .o.     .   o .|
+|  .o.    E o o.. |
+|  ..      = B .o |
+| .o.       B.+*o |
 +-----------------+
 ```
 

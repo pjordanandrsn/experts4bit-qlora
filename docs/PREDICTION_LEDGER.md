@@ -4,6 +4,18 @@ Graded predictions and adopted forecasting rules, one entry per grading event, n
 Entries are recorded verbatim from their source documents at filing time; gradings are never
 edited after the fact — corrections are new entries.
 
+## 2026-07-06 — Divergence-onset probe GRADED (the final gate)
+
+Committed odds 30/55/15 (`docs/DIVERGENCE_ONSET_PROBE.md`). **Branch 2 (55%) HIT** in its
+strongest form. The resident-twin null (A–B) diverges at the same step (2) and to a marginally
+larger magnitude (final A–C/A–B = 0.89) than the placement pair (A–C): the same-host 150-step
+bf16 0.0108 gap is run-to-run chaos (nondeterministic atomics amplified over 150 steps),
+**not a placement effect**. Step 1 bitwise (D3 respected); routing flips follow weight
+divergence (step 3 vs step 2), they don't cause it. Branch 1 (static, clean — ruled out) and
+branch 3 (other) did not fire. Placement question closed and stays closed.
+Harness: two pre-fix reds under Q4 (rev1 fp64-RAM OOM, rev2 network-memmap page-cache OOM);
+rev3 fixed-subset sketch produced the result. `runs/results/postaudit/divergence_bf16_result.json`.
+
 ## 2026-07-05 — GRADED at drain (n=1024 + rev3 + spine extras)
 
 **Amendment §4 branch table (confirmatory, `runs/results/postaudit/null_ladder_1024.md`):**
@@ -114,26 +126,27 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T22:22:31Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `80f86be8b06dcbb5e0a9d96013f1435ac5daa93b16049ad212006d91461bbf47` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-06T00:19:00Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `c1d2c77eacd785d924482fdec33fcab841d843b751139dc64431f57a4152b8e1` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T22:22:31Z` `80f86be8b06dcbb5e0a9d96013f1435ac5daa93b16049ad212006d91461bbf47`
   - `2026-07-05T20:04:03Z` `f23487b74d50e842b37b930f02174c72ecf2846b18ca542b55d4424d56b2e765`
   - `2026-07-05T18:22:04Z` `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4`
   - `2026-07-05T18:18:28Z` `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[*.$*0@?*@.0!&@@O]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[&:!+&==?%&!=*O!#]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|=o+o..           |
-|..==.o           |
-|.B+o= E          |
-|= B+ = .         |
-|.+.o+ . S        |
-|  .+.o           |
-|ooo *            |
-|.@oO .           |
-|+oX.o            |
+|            ..*@B|
+|       o . . =++=|
+|      . + o.+o*.o|
+|       . ++o.EoB.|
+|        S..++.B +|
+|          .o.. = |
+|          ... ...|
+|           .+ . .|
+|           o.o   |
 +-----------------+
 ```
 
