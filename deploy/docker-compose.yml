@@ -85,3 +85,42 @@ services:
       retries: 3
       # First boot = ~60 GB download + streaming NF4 quantize of a 30B — give it a full hour.
       start_period: 3600s
+
+  # Optional featherweight endpoint: Granite-3.0-1B-A400M (needs the loader's granitemoe
+  # support — build from a branch that includes it). Fast for its size (~4.3 tok/s @ ~0.4 GB
+  # peak on an A2000): the "cheap local text jobs" tier. Opt in: docker compose --profile granite up -d
+  e4b-serve-granite:
+    profiles: ["granite"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: e4b-serve-granite
+    runtime: ${E4B_GPU_RUNTIME:-nvidia}
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - MODEL=ibm-granite/granite-3.0-1b-a400m-instruct
+      - R=8
+      - ALPHA=16
+      - QUANT_TYPE=nf4
+      - OFFLOAD_EXPERTS=1
+      - PREFETCH=1
+      - E4B_PORT=8783
+      - E4B_QUEUE_MAX=2
+      - E4B_MAX_INPUT_TOKENS=2048
+      - E4B_MAX_NEW_TOKENS=256
+      - E4B_REQUEST_TIMEOUT_S=600
+    ports:
+      - "8783:8783"
+    volumes:
+      - ../../hf-cache:/root/.cache/huggingface
+      - ../../adapters:/adapters:ro
+    ulimits:
+      memlock: -1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8783/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # ~2.6 GB download + a small streaming load; generous anyway.
+      start_period: 900s
