@@ -9,6 +9,8 @@ exercised through a fake engine — the real GPU path is the deploy-time verific
 not a unit test.
 """
 
+import asyncio
+
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -141,7 +143,8 @@ class FakeEngine(Engine):
                 "stopped": "eos",
             }
 
-        return run()
+        # Like the real submit, return a Future (the app attaches release-on-done callbacks).
+        return asyncio.get_running_loop().create_task(run())
 
 
 @pytest.fixture()
