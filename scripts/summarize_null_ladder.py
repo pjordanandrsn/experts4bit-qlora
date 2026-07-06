@@ -31,8 +31,8 @@ def load_jobs(jobs_root):
         rows_p = os.path.join(d, "result_rows.jsonl")
         if not (os.path.exists(rp) and os.path.exists(rows_p)):
             continue
-        res = json.load(open(rp))
-        rows = [json.loads(line) for line in open(rows_p)]
+        res = json.load(open(rp, encoding="utf-8"))
+        rows = [json.loads(line) for line in open(rows_p, encoding="utf-8")]
         losses = {r["example_index"]: r["loss"] for r in rows if not r.get("is_nan")}
         out[os.path.basename(d)] = {"result": res, "losses": losses}
     return out
@@ -65,6 +65,7 @@ def job_key(mode, placement, rep=None):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # output has non-ASCII; Windows pipes default to the locale codepage
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--jobs-root", required=True)
     ap.add_argument("--out", required=True)
@@ -148,7 +149,7 @@ def main():
         lines.append("")
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w") as f:
+    with open(args.out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print("\n".join(lines))
     print(f"\nwrote {args.out}")

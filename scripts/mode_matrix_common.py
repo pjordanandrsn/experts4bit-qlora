@@ -139,7 +139,7 @@ def write_metadata(adapter_dir: str, meta: dict) -> str:
     meta.setdefault("metadata_schema", METADATA_SCHEMA)
     meta.setdefault("timestamp", utc_now())
     path = os.path.join(adapter_dir, METADATA_FILENAME)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2, sort_keys=True)
         f.write("\n")
     return path
@@ -150,7 +150,7 @@ def read_metadata(adapter_dir: str):
     path = os.path.join(adapter_dir, METADATA_FILENAME)
     if not os.path.exists(path):
         return None
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -168,13 +168,13 @@ def validate_row(row: dict) -> dict:
 
 def append_jsonl(path: str, row: dict) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "a") as f:
+    with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, sort_keys=True) + "\n")
 
 
 def read_jsonl(path: str):
     rows = []
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -290,7 +290,7 @@ def write_csv(path: str, rows) -> None:
         return
     keys = sorted({k for r in rows for k in r})
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with open(path, "w", newline="") as f:
+    with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=keys)
         w.writeheader()
         for r in rows:

@@ -45,7 +45,7 @@ def load_results(jobs_root):
     rows = []
     for p in sorted(glob.glob(os.path.join(jobs_root, "*", "result.json"))):
         try:
-            rows.append(json.load(open(p)))
+            rows.append(json.load(open(p, encoding="utf-8")))
         except Exception as e:
             rows.append({"job_id": os.path.basename(os.path.dirname(p)), "status": "fail",
                          "fail_or_skip_reason": f"unreadable result.json: {e}"})
@@ -182,6 +182,7 @@ def claims_table(train_rows, decode_rows):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # output has non-ASCII; Windows pipes default to the locale codepage
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--jobs-root", required=True)
     ap.add_argument("--results-root", required=True)
@@ -196,7 +197,7 @@ def main():
     os.makedirs(args.results_root, exist_ok=True)
     for name, subset in (("olmoe_repeat_training_all", train), ("olmoe_repeat_decode_all", decode),
                          ("olmoe_portability_all", query)):
-        with open(os.path.join(args.results_root, f"{name}.jsonl"), "w") as f:
+        with open(os.path.join(args.results_root, f"{name}.jsonl"), "w", encoding="utf-8") as f:
             for r in subset:
                 f.write(json.dumps(r, sort_keys=True) + "\n")
         write_csv(os.path.join(args.results_root, f"{name}.csv"), subset)
@@ -218,7 +219,7 @@ def main():
         md += [f"- {r.get('job_id')}: {r.get('status')} — {r.get('fail_or_skip_reason')}" for r in failed]
         md.append("")
     out_md = os.path.join(args.results_root, "summary.md")
-    with open(out_md, "w") as f:
+    with open(out_md, "w", encoding="utf-8") as f:
         f.write("\n".join(md))
     print("\n".join(md))
     print(f"\nwrote aggregates under {args.results_root}")
