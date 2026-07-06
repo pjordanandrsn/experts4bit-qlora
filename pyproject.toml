@@ -26,7 +26,17 @@ train = [
     "safetensors>=0.4",
     "huggingface_hub>=0.23",
 ]
-test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4"]
+# The HTTP serving shim (experts4bit_qlora.serve) — loader deps included so it installs without [train].
+serve = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2",
+    "transformers>=5.0",
+    "accelerate>=0.30",
+    "safetensors>=0.4",
+    "huggingface_hub>=0.23",
+]
+test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27"]
 
 [project.urls]
 Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"

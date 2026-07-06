@@ -1,0 +1,15 @@
+# The exact stack the A2000 numbers in docs/METHODOLOGY.md were measured with (mirrors the
+# validated venv in the NAS's gpu-dev container). torch comes from the cu124 wheel index; its
+# bundled nvidia/* wheels supply the CUDA libs, so the runtime base image needs no toolkit.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+bitsandbytes==0.49.2
+transformers==5.13.0
+accelerate==1.14.0
+safetensors==0.8.0
+huggingface_hub==1.22.0
+tokenizers==0.22.2
+numpy==2.2.6
+fastapi==0.139.0
+uvicorn==0.50.2
+pydantic==2.13.4
