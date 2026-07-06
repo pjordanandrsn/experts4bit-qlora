@@ -10,7 +10,9 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     container_name: e4b-serve
-    runtime: nvidia
+    # Docker's registered NVIDIA runtime name varies by host (stock: "nvidia"; QNAP Container
+    # Station: "nvidia-runtime") — override in a .env file next to this compose file.
+    runtime: ${E4B_GPU_RUNTIME:-nvidia}
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - MODEL=allenai/OLMoE-1B-7B-0924
