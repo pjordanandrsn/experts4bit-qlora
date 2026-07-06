@@ -364,11 +364,18 @@ class Engine:
     def _swap_adapter(self, name: str) -> float:
         """Copy an adapter's tensors over the live LoRA parameters (worker thread only). The
         copies are enqueued on the compute stream, so a following generate is ordered after them;
-        the sync is only to keep the reported swap_ms honest."""
+        the sync is only to keep the reported swap_ms honest.
+
+        ``active_adapter`` is cleared BEFORE the copies and only restored after they all land: a
+        mid-swap failure otherwise leaves the live weights a mix of two adapters while the name
+        still claims the old one — and every later same-adapter request would skip the swap and
+        generate silently wrong output. With the clear, the next request re-swaps from scratch
+        (the copies are idempotent full overwrites, so a re-swap always converges)."""
         if name == self.active_adapter:
             return 0.0
         t0 = time.perf_counter()
         sd = self.registry[name]
+        self.active_adapter = None
         with torch.no_grad():
             for k, src in sd.items():
                 self._lora_params[k].data.copy_(src, non_blocking=True)
@@ -526,15 +533,29 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             stop_strings=_stop_list(stop),
         )
 
+    def _release_when_done(fut) -> None:
+        """Free the admission slot when the GPU job actually finishes — not when the HTTP
+        handler unwinds. A client disconnect cancels the handler coroutine, but the worker keeps
+        generating until the stop event lands; releasing early would let admits outrun the GPU
+        and queue real work behind a phantom-free slot. Runs on the event loop thread (the only
+        mutator of the pending counter)."""
+        engine.release()
+        if not fut.cancelled():
+            fut.exception()  # retrieve, so an abandoned failure doesn't warn at GC
+
     async def _run(job: dict) -> dict:
         try:
             engine.admit()
         except BusyError as e:
             raise HTTPException(503, str(e), headers={"Retry-After": "60"})
+        stop_event = threading.Event()
+        fut = engine.submit(streamer=None, **dict(job, stop_event=stop_event))
+        fut.add_done_callback(_release_when_done)
         try:
-            return await engine.submit(streamer=None, **job)
-        finally:
-            engine.release()
+            return await asyncio.shield(fut)
+        except asyncio.CancelledError:
+            stop_event.set()  # client went away: end the generation at its next token
+            raise
 
     def _sse_stream(job: dict, token_to_event, meta_to_event) -> StreamingResponse:
         """Shared SSE plumbing: the generation runs on the GPU worker; tokens cross to the event
@@ -552,6 +573,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             engine.tokenizer, skip_prompt=True, skip_special_tokens=True, timeout=cfg.request_timeout_s + 60
         )
         fut = engine.submit(streamer=streamer, **job)
+        fut.add_done_callback(_release_when_done)
 
         async def gen():
             try:
@@ -568,8 +590,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             except Exception as e:  # the response already started; surface the failure in-band
                 yield f"data: {json.dumps({'error': f'{type(e).__name__}: {e}'})}\n\n"
             finally:
-                stop_event.set()
-                engine.release()
+                stop_event.set()  # the slot itself frees when the worker finishes (done callback)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -637,7 +658,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
 
         if not req.stream:
             meta = await _run(job)
-            finish = "stop" if meta["stopped"] in ("eos", "stop") else "length"
+            finish = {"eos": "stop", "stop": "stop", "length": "length"}.get(meta["stopped"], meta["stopped"])
             return _oai(meta, meta["text"], finish)
 
         def token_to_event(piece: str) -> str:
@@ -645,7 +666,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             return f"data: {json.dumps(chunk)}\n\n"
 
         def meta_to_event(meta):
-            finish = "stop" if meta["stopped"] in ("eos", "stop") else "length"
+            finish = {"eos": "stop", "stop": "stop", "length": "length"}.get(meta["stopped"], meta["stopped"])
             yield f"data: {json.dumps(_oai(meta, '', finish))}\n\n"
             yield "data: [DONE]\n\n"
 
