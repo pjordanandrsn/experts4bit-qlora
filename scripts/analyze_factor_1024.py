@@ -42,14 +42,14 @@ def load_job(jobs_root, mode, placement="resident"):
     losses, routed = {}, {}
     if not os.path.exists(os.path.join(d, "result.json")):
         return None
-    for l in open(os.path.join(d, "result_rows.jsonl")):
-        r = json.loads(l)
+    for line in open(os.path.join(d, "result_rows.jsonl")):
+        r = json.loads(line)
         if not r.get("is_nan"):
             losses[r["example_index"]] = r["loss"]
     sp = os.path.join(d, "routed_sets.jsonl")
     if os.path.exists(sp):
-        for l in open(sp):
-            r = json.loads(l)
+        for line in open(sp):
+            r = json.loads(line)
             routed[r["example_index"]] = {k: {e for e, _ in v} for k, v in r["routed"].items()}
     return {"losses": losses, "routed": routed}
 
@@ -151,7 +151,7 @@ def main():
     pc1_share = ev[0] / len(MODES)
     L.append("")
     L.append(f"- eigenvalues: {[round(e, 3) for e in ev]} — PC1 share {100 * pc1_share:.0f}%")
-    L.append(f"- PC1 loadings: { {m: round(l, 3) for m, l in zip(MODES, pc1_load)} }")
+    L.append(f"- PC1 loadings: { {m: round(ld, 3) for m, ld in zip(MODES, pc1_load)} }")
     L.append(f"- **P-A1 (PC1 ≥ 50%): {'HOLDS' if pc1_share >= 0.5 else 'FAILS'}**")
 
     # PC1 scores (standardized deviations)
@@ -171,7 +171,7 @@ def main():
         L.append("")
         L.append("## Telemetry joins")
         L.append("")
-        L.append(f"- mean flip count vs bf16: " + ", ".join(f"{m} {sum(fc[m])/len(ks):.1f}" for m in MODES))
+        L.append("- mean flip count vs bf16: " + ", ".join(f"{m} {sum(fc[m])/len(ks):.1f}" for m in MODES))
         L.append(f"- **P-A2 (Spearman(PC1 score, scattered flips) > 0.4): ρ = {rho_a2:+.3f} — "
                  f"{'HOLDS' if rho_a2 > 0.4 else 'FAILS'}** (sign convention: |ρ| judged, loadings sign-free: "
                  f"|ρ| = {abs(rho_a2):.3f})")

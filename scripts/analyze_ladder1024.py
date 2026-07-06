@@ -39,13 +39,13 @@ def load(jobs_root):
         if not (os.path.exists(rp) and os.path.exists(rows_p)):
             continue
         res = json.load(open(rp))
-        rows = [json.loads(l) for l in open(rows_p)]
+        rows = [json.loads(line) for line in open(rows_p)]
         losses = {r["example_index"]: r["loss"] for r in rows if not r.get("is_nan")}
         routed = {}
         sp = os.path.join(d, "routed_sets.jsonl")
         if os.path.exists(sp):
-            for l in open(sp):
-                r = json.loads(l)
+            for line in open(sp):
+                r = json.loads(line)
                 routed[r["example_index"]] = {k: {e for e, _ in v} for k, v in r["routed"].items()}
         out[os.path.basename(d)] = {"result": res, "losses": losses, "routed": routed}
     return out
