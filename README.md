@@ -146,8 +146,8 @@ state_dict tensor keys. The loader still instantiates `Experts4bit` for 4-bit ru
   model on which it quantized zero expert layers.
 - **GEMV is 4-bit-only** and probe-gated per configuration; the 8/16-bit schemes always decode
   via the dequantize path.
-- **Loader scope** is the three architectures under [Scope](#scope); the `ExpertsNbit` primitive
-  itself is model-agnostic.
+- **Loader scope** is the four architecture families under [Scope](#scope); the `ExpertsNbit`
+  primitive itself is model-agnostic.
 
 ### Reading the headline memory numbers
 
@@ -247,8 +247,13 @@ experts stored either **per-expert** or already-**fused** on disk:
   byte-identical); structurally tested.
 - **Gemma-4 (text tower)** — different internally (experts at `layers.{i}.experts` beside a
   parallel dense MLP + a custom router; experts fused on disk) — handled and structurally tested.
+- **GraniteMoe** (Granite-3.0-1b-a400m / 3b-a800m, PowerMoE-3b) — experts at
+  `layers.{i}.block_sparse_moe.experts`, fused on disk under the legacy
+  `input_linear`/`output_linear` spellings (the loader applies the same renames transformers'
+  own converter does); handled and structurally tested. The 1b/3b checkpoints fit a 12 GB card
+  without offload.
 
-All three are covered by `tests/test_loader_architectures.py`. Real Qwen3/Gemma weights (26–35B)
+All four are covered by `tests/test_loader_architectures.py`. Real Qwen3/Gemma weights (26–35B)
 need a ≥24 GB card — or the expert-offload path above — to fit 12 GB. Unsupported architectures
 **fail fast with a clear error**; PRs for more welcome.
 
