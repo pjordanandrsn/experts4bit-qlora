@@ -1,4 +1,4 @@
-"""Streaming 4-bit loader for fused-MoE checkpoints (OLMoE, Qwen3-MoE / Qwen3.5-MoE, Gemma-4, GraniteMoe).
+"""Streaming 4-bit loader for fused-MoE checkpoints (OLMoE, Qwen2-MoE, Qwen3-MoE / Qwen3.5-MoE, Gemma-4, GraniteMoe).
 
 Streams the checkpoint tensor-by-tensor straight onto the GPU, quantizing each fused expert stack
 to NF4 on the way and dropping the bf16 source immediately, so the full bf16 model is never
@@ -6,11 +6,14 @@ materialized in CPU *or* GPU memory. Each layer's fused ``experts`` module is sw
 4-bit :class:`Experts4bit` base wrapped in trainable per-expert :class:`ExpertsLoRA` adapters.
 
 Supports SwiGLU fused-MoE architectures. Experts may be stored on disk either **per-expert**
-(``...experts.{e}.{gate,up,down}_proj.weight`` — OLMoE, Qwen3-MoE) or already **fused**
+(``...experts.{e}.{gate,up,down}_proj.weight`` — OLMoE, Qwen2-MoE, Qwen3-MoE) or already **fused**
 (``...experts.{gate_up,down}_proj`` — Gemma-4, GraniteMoe); both are handled. The experts module
-sits under the MLP for OLMoE/Qwen3, directly on the layer (beside a parallel dense MLP) for
+sits under the MLP for OLMoE/Qwen2/Qwen3, directly on the layer (beside a parallel dense MLP) for
 Gemma-4, and under a ``block_sparse_moe`` block for GraniteMoe — whose Hub checkpoints use legacy
-tensor spellings (``input_linear``/``output_linear``, see :data:`LEGACY_KEY_RENAMES`). Requires
+tensor spellings (``input_linear``/``output_linear``, see :data:`LEGACY_KEY_RENAMES`). Qwen2-MoE
+(Qwen1.5-MoE-A2.7B) additionally runs a *shared* expert + sigmoid gate in parallel with the routed
+experts inside the same MLP block; those live beside — not under — ``mlp.experts``, so the swap
+leaves them untouched and the generic non-expert pass loads them in full precision. Requires
 transformers>=5.0.
 """
 
@@ -30,10 +33,13 @@ from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
 
 # model_type -> experts submodule path relative to `model.layers.{i}`.
-# OLMoE/Qwen3 nest experts under the MLP; Gemma-4 puts them beside a parallel dense MLP; GraniteMoe
-# nests them under a `block_sparse_moe` block (router + experts; no parallel dense branch).
+# OLMoE/Qwen2/Qwen3 nest experts under the MLP; Gemma-4 puts them beside a parallel dense MLP;
+# GraniteMoe nests them under a `block_sparse_moe` block (router + experts; no parallel dense
+# branch). Qwen2-MoE's block also holds a parallel `shared_expert` + `shared_expert_gate` *beside*
+# `mlp.experts` — siblings of the replaced module, so they survive the swap and load bf16.
 SUPPORTED_ARCHITECTURES = {
     "olmoe": "mlp.experts",
+    "qwen2_moe": "mlp.experts",  # Qwen1.5-MoE-A2.7B (routed experts + parallel shared expert)
     "qwen3_moe": "mlp.experts",
     "qwen3_5_moe": "mlp.experts",
     "gemma4": "experts",  # multimodal top-level config
@@ -180,7 +186,7 @@ def load_moe_4bit_streaming(
             down = get(f"{epfx}down_proj").to(dtype)
             expert_keys.update({f"{epfx}gate_up_proj", f"{epfx}down_proj"})
         elif f"{epfx}0.gate_proj.weight" in weight_map:
-            # Per-expert Linears on disk (OLMoE, Qwen3): fuse gate_up[e] = cat([gate, up]).
+            # Per-expert Linears on disk (OLMoE, Qwen2-MoE, Qwen3): fuse gate_up[e] = cat([gate, up]).
             gate_up_rows, down_rows = [], []
             for e in range(n_exp):
                 g, u, d = (
@@ -194,7 +200,7 @@ def load_moe_4bit_streaming(
             gate_up = torch.stack(gate_up_rows).to(dtype)
             down = torch.stack(down_rows).to(dtype)
         else:
-            continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
+            continue  # dense layer (no experts here — e.g. Qwen2/Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
         n_moe += 1
         # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
         # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as

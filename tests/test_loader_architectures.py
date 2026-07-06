@@ -1,8 +1,8 @@
 """Structural tests: the generalized streaming loader handles each supported fused-MoE architecture.
 
 For each architecture, build a tiny model, write it as a checkpoint in the on-disk expert layout that
-architecture's real checkpoints use (per-expert for OLMoE/Qwen3, fused for Gemma-4/GraniteMoe), run
-``load_moe_4bit_streaming`` end-to-end, and assert experts were quantized to ``Experts4bit`` +
+architecture's real checkpoints use (per-expert for OLMoE/Qwen2/Qwen3, fused for Gemma-4/GraniteMoe),
+run ``load_moe_4bit_streaming`` end-to-end, and assert experts were quantized to ``Experts4bit`` +
 ``ExpertsLoRA``, attention LoRA attached, no meta tensors remain, and a forward pass runs.
 
 Nothing in the loader is CUDA-specific: on a host whose bitsandbytes can 4-bit quantize on CPU these
@@ -44,6 +44,28 @@ def _olmoe():
             num_experts=8,
             num_experts_per_tok=2,
             vocab_size=128,
+        )
+    )
+
+
+def _qwen2_moe():
+    from transformers.models.qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
+    from transformers.models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM
+
+    return Qwen2MoeForCausalLM(
+        Qwen2MoeConfig(
+            hidden_size=64,
+            intermediate_size=128,
+            moe_intermediate_size=64,
+            shared_expert_intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_experts=8,
+            num_experts_per_tok=2,
+            vocab_size=128,
+            decoder_sparse_step=1,
+            mlp_only_layers=[],
         )
     )
 
@@ -111,9 +133,10 @@ def _granitemoe(tie_word_embeddings=False):
     )
 
 
-def _write_ckpt(model, d, per_expert):
-    """Save a checkpoint. per_expert=True splits fused experts back to per-expert Linears (OLMoE/Qwen3
-    on-disk layout); per_expert=False keeps them fused (Gemma-4 on-disk layout)."""
+def _write_ckpt(model, d, per_expert, dtype=DTYPE):
+    """Save a checkpoint. per_expert=True splits fused experts back to per-expert Linears
+    (OLMoE/Qwen2/Qwen3 on-disk layout); per_expert=False keeps them fused (Gemma-4 on-disk layout).
+    ``dtype`` overrides the module-level DTYPE for parity tests that pin bf16 on every host."""
     from safetensors.torch import save_file
 
     new = {}
@@ -130,11 +153,11 @@ def _write_ckpt(model, d, per_expert):
                 new[f"{base}{e}.down_proj.weight"] = v[e].contiguous()
         else:
             new[k] = v  # keep fused (Gemma-4) or non-expert tensors as-is
-    # DTYPE: bf16 on GPU, fp32 on CPU (see top). .clone() breaks shared storage (e.g. Gemma-4 ties
-    # lm_head to embed_tokens) — safetensors refuses tensors that share memory. Under bf16 the .to()
-    # already copied; under fp32 it's a no-op, so the clone is load-bearing (matches the
-    # test_reference_parity.py writer).
-    new = {k: v.to(DTYPE).contiguous().clone() for k, v in new.items()}
+    # dtype: bf16 on GPU, fp32 on CPU by default (see top). .clone() breaks shared storage (e.g.
+    # Gemma-4 ties lm_head to embed_tokens) — safetensors refuses tensors that share memory. Under
+    # bf16 the .to() already copied; under fp32 it's a no-op, so the clone is load-bearing (matches
+    # the test_reference_parity.py writer).
+    new = {k: v.to(dtype).contiguous().clone() for k, v in new.items()}
     save_file(new, os.path.join(d, "model.safetensors"))
     json.dump(
         {"weight_map": {k: "model.safetensors" for k in new}},
@@ -145,8 +168,8 @@ def _write_ckpt(model, d, per_expert):
 
 @pytest.mark.parametrize(
     "build,per_expert",
-    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
-    ids=["olmoe", "qwen3_moe", "gemma4", "granitemoe"],
+    [(_olmoe, True), (_qwen2_moe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
+    ids=["olmoe", "qwen2_moe", "qwen3_moe", "gemma4", "granitemoe"],
 )
 def test_loader_handles_architecture(build, per_expert, tmp_path):
     from experts4bit_qlora import ExpertsLoRA
@@ -236,7 +259,7 @@ def test_unsupported_model_type_errors(tmp_path):
     on any host without Hub reachability instead of exercising the fail-fast path)."""
     from experts4bit_qlora.loader import SUPPORTED_MODEL_TYPES, load_moe_4bit_streaming
 
-    assert {"olmoe", "qwen3_moe", "gemma4", "granitemoe"} <= SUPPORTED_MODEL_TYPES
+    assert {"olmoe", "qwen2_moe", "qwen3_moe", "gemma4", "granitemoe"} <= SUPPORTED_MODEL_TYPES
     (tmp_path / "config.json").write_text(json.dumps({"model_type": "gpt2"}))
     with pytest.raises(NotImplementedError, match="Unsupported model_type"):
         load_moe_4bit_streaming(str(tmp_path), "cpu", torch.bfloat16, r=4, alpha=8)
@@ -355,10 +378,75 @@ def test_loader_handles_legacy_granitemoe_checkpoint(tmp_path):
     assert cos.mean() > 0.9  # same function as the reference, within NF4-on-experts error
 
 
+def test_loader_preserves_qwen2moe_shared_expert(tmp_path):
+    """qwen2_moe (Qwen1.5-MoE-A2.7B): the sparse block runs a *shared* expert + sigmoid gate in
+    parallel with the routed experts, inside the same `mlp` block the loader reaches into. The
+    `mlp.experts` swap must leave the sibling `shared_expert` / `shared_expert_gate` untouched:
+    their weights load bit-identical (assigned, never quantized), and the loaded model computes
+    the same function as the stock bf16 reference — whose forward includes the shared branch, so
+    parity would fail if the loader dropped or corrupted it. A down_proj-zeroing probe then shows
+    the logits move, proving the shared branch is actually *live* in the loaded model's forward
+    (parity alone cannot distinguish 'preserved' from 'dead weight the swap orphaned')."""
+    from experts4bit_qlora import ExpertsLoRA
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    ref = _qwen2_moe().to(DEVICE, dtype=torch.bfloat16).eval()
+    ref.config.use_cache = False
+    # Real Qwen1.5-MoE checkpoints store experts per-expert (verified against the Hub safetensors
+    # index: `model.layers.{i}.mlp.experts.{e}.{gate,up,down}_proj.weight`, with the shared branch
+    # beside them at `mlp.shared_expert.*` / `mlp.shared_expert_gate.weight`).
+    _write_ckpt(ref, str(tmp_path), per_expert=True, dtype=torch.bfloat16)
+
+    try:
+        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+
+    assert cfg.model_type == "qwen2_moe"  # the loader really took the qwen2_moe path
+    assert sum(isinstance(m, ExpertsLoRA) for m in model.modules()) == cfg.num_hidden_layers
+    for got_layer, ref_layer in zip(model.model.layers, ref.model.layers):
+        assert isinstance(got_layer.mlp.experts, ExpertsLoRA)  # routed experts: quantized + adapted
+        # The parallel shared branch is NOT quantized or wrapped — same module class as the
+        # reference, weights bit-identical (it rode the generic non-expert `_assign` pass).
+        assert not any(isinstance(m, ExpertsLoRA) for m in got_layer.mlp.shared_expert.modules())
+        assert type(got_layer.mlp.shared_expert).__name__ == type(ref_layer.mlp.shared_expert).__name__
+        for proj in ("gate_proj", "up_proj", "down_proj"):
+            got_w = getattr(got_layer.mlp.shared_expert, proj).weight
+            ref_w = getattr(ref_layer.mlp.shared_expert, proj).weight
+            assert torch.equal(got_w, ref_w)
+        assert torch.equal(got_layer.mlp.shared_expert_gate.weight, ref_layer.mlp.shared_expert_gate.weight)
+    assert not [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.is_meta]
+
+    model.eval()
+    model.config.use_cache = False
+    ids = torch.randint(0, ref.config.vocab_size, (1, 8), device=DEVICE)
+    with torch.no_grad():
+        got = model(input_ids=ids).logits
+        try:
+            want = ref(input_ids=ids).logits  # stock forward: routed experts + shared branch
+        except RuntimeError as e:
+            # Oracle limitation, not a library defect: stock transformers routes fused MoE through
+            # torch._grouped_mm, hard-gated to cc 9.0 — the REFERENCE dies on sm_120 (Blackwell)
+            # while this package's own path runs (see the same guard in test_reference_parity.py).
+            if "_grouped_mm" in str(e):
+                pytest.skip(f"transformers reference (the oracle) cannot run on this device: {e}")
+            raise
+    cos = torch.nn.functional.cosine_similarity(got.flatten(0, 1).float(), want.flatten(0, 1).float(), dim=-1)
+    assert cos.mean() > 0.9  # same function INCLUDING the shared expert path, within NF4-on-experts error
+
+    # Liveness probe: zero one layer's shared_expert.down_proj (kills that branch's contribution
+    # exactly — sigmoid-gated or not, its output becomes 0) and check the logits move.
+    with torch.no_grad():
+        model.model.layers[0].mlp.shared_expert.down_proj.weight.zero_()
+        maimed = model(input_ids=ids).logits
+    assert not torch.equal(maimed, got)  # the shared branch feeds the loaded model's forward
+
+
 @pytest.mark.parametrize(
     "build,per_expert",
-    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
-    ids=["olmoe", "qwen3_moe", "gemma4", "granitemoe"],
+    [(_olmoe, True), (_qwen2_moe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
+    ids=["olmoe", "qwen2_moe", "qwen3_moe", "gemma4", "granitemoe"],
 )
 def test_loaded_model_trains_with_frozen_experts(build, per_expert, tmp_path):
     """Full code-path test: load 4-bit, add LoRA, run real training steps with gradient checkpointing.
