@@ -202,7 +202,11 @@ blocked by the pod's RAM cap. Start with
 [`EXPERT_STREAMING_PROFILE`](docs/EXPERT_STREAMING_PROFILE.md),
 [`QWEN3_30B_EXPERTSNBIT_GRID`](docs/QWEN3_30B_EXPERTSNBIT_GRID.md); apparatus in
 [`RUNPOD_DISTRIBUTED_VALIDATION`](docs/RUNPOD_DISTRIBUTED_VALIDATION.md) and
-[`provenance_contract`](docs/provenance_contract.md).
+[`provenance_contract`](docs/provenance_contract.md). An external review pass —
+[`MEASUREMENT_AUDIT`](docs/MEASUREMENT_AUDIT.md) — recomputed every number, computed the ∅/G
+quality yardstick that was latent in the bundle, and downgraded the int8-offload "best eval"
+claims to confounded (a precision×placement interaction the bf16 control exposes); read it
+alongside the results.
 
 ## Training + expert offload
 

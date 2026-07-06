@@ -1,0 +1,201 @@
+{
+  "bitsandbytes_version": "0.49.2",
+  "claimed_at": "2026-07-05T21:50:02Z",
+  "command": "python -u scripts/one_step_certificate.py --job-dir /workspace/runs/postaudit_jobs/cert_olmoe_int8_dropoutOFF_default_rev3 --quant-type int8 --seed 1337",
+  "commit": "160bfda5cb0322d43c50acbcc9e6f26b3d21fd25",
+  "cublas_workspace_config": null,
+  "cuda_version": "12.8",
+  "deterministic": false,
+  "deterministic_op_warnings": [],
+  "dropout": 0.0,
+  "exit_code": 0,
+  "finished_at": "2026-07-05T21:53:18Z",
+  "gpu_name": "NVIDIA RTX A5000",
+  "grad_accum": 4,
+  "hostname": "41a04ccbc77d",
+  "job_id": "cert_olmoe_int8_dropoutOFF_default_rev3",
+  "job_type": "cert",
+  "legs": {
+    "a": {
+      "config_attention_dropout": 0.0,
+      "losses": [
+        1.2939344644546509,
+        0.6781356334686279,
+        1.1915197372436523,
+        1.5757017135620117
+      ],
+      "memory_gb": {
+        "leg_start_gb": 0.0,
+        "post_load_gb": 7.92,
+        "post_step_gb": 8.806
+      },
+      "n_dropout_modules": 0,
+      "n_grad_tensors": 192,
+      "offload": false,
+      "offload_engagement": {
+        "n_bases": 16,
+        "n_evicted_at_load": 0,
+        "n_resident_after_step": 16
+      },
+      "peak_gpu_gb": 9.145,
+      "tag": "a"
+    },
+    "b": {
+      "config_attention_dropout": 0.0,
+      "losses": [
+        1.2939344644546509,
+        0.6781356334686279,
+        1.1915197372436523,
+        1.5757017135620117
+      ],
+      "memory_gb": {
+        "leg_start_gb": 0.51,
+        "post_load_gb": 8.43,
+        "post_step_gb": 9.299
+      },
+      "n_dropout_modules": 0,
+      "n_grad_tensors": 192,
+      "offload": false,
+      "offload_engagement": {
+        "n_bases": 16,
+        "n_evicted_at_load": 0,
+        "n_resident_after_step": 16
+      },
+      "peak_gpu_gb": 9.655,
+      "tag": "b"
+    },
+    "c": {
+      "config_attention_dropout": 0.0,
+      "losses": [
+        1.2939344644546509,
+        0.6781356334686279,
+        1.1915197372436523,
+        1.5757017135620117
+      ],
+      "memory_gb": {
+        "leg_start_gb": 1.003,
+        "post_load_gb": 2.078,
+        "post_step_gb": 3.777
+      },
+      "n_dropout_modules": 0,
+      "n_grad_tensors": 192,
+      "offload": true,
+      "offload_engagement": {
+        "n_bases": 16,
+        "n_evicted_at_load": 16,
+        "n_resident_after_step": 1
+      },
+      "peak_gpu_gb": 3.777,
+      "tag": "c"
+    }
+  },
+  "loss_delta_ab": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "loss_delta_ac": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "losses": {
+    "a": [
+      1.2939344644546509,
+      0.6781356334686279,
+      1.1915197372436523,
+      1.5757017135620117
+    ],
+    "b": [
+      1.2939344644546509,
+      0.6781356334686279,
+      1.1915197372436523,
+      1.5757017135620117
+    ],
+    "c": [
+      1.2939344644546509,
+      0.6781356334686279,
+      1.1915197372436523,
+      1.5757017135620117
+    ]
+  },
+  "lr": 0.0001,
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "null_ab": {
+    "grads": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 192,
+      "n_tensors": 192
+    },
+    "logits_mb0": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 1,
+      "n_tensors": 1
+    },
+    "opt_state": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 384,
+      "n_tensors": 384
+    },
+    "weights": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 192,
+      "n_tensors": 192
+    }
+  },
+  "pid": 12818,
+  "placement_ac": {
+    "grads": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 192,
+      "n_tensors": 192
+    },
+    "logits_mb0": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 1,
+      "n_tensors": 1
+    },
+    "opt_state": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 384,
+      "n_tensors": 384
+    },
+    "weights": {
+      "all_bitwise": true,
+      "max_abs_diff": 0.0,
+      "max_rel_norm_diff": 0.0,
+      "n_bitwise_equal": 192,
+      "n_tensors": 192
+    }
+  },
+  "pod_id": "41a04ccbc77d",
+  "seed": 1337,
+  "seq": 256,
+  "started_at": "2026-07-05T21:51:36Z",
+  "status": "pass",
+  "storage_mode": "int8",
+  "timestamp": "2026-07-05T21:53:14Z",
+  "torch_version": "2.8.0+cu128",
+  "verdict": {
+    "null_bitwise": true,
+    "placement_bitwise": true,
+    "placement_within_null": true
+  },
+  "verifies": "cert_olmoe_int8_dropoutOFF_default_rev2 (engagement attestation)"
+}

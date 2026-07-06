@@ -36,7 +36,10 @@ silent one.
   adapter, the same-storage *resident* query is its same-mode anchor (offload changes tensor
   location, not math).
 - **upward transfer** — trained under a lower-fidelity scheme, queried under a higher-fidelity
-  one (fidelity per the test-pinned reconstruction chain `fp4 < nf4 < fp8 < int8 < bf16 < fp16`).
+  one (fidelity per the test-pinned ***reconstruction***-fidelity chain
+  `fp4 < nf4 < fp8 < int8 < bf16 < fp16`; the *functional* ordering is measured separately —
+  the n=64 per-example covariance places fp8's behavior with the 4-bit formats even though
+  frozen means place it best. "Upward/downward" in this doc refers to the reconstruction axis).
 - **downward transfer** — the reverse.
 - **offload transfer** — same storage scheme, offload flag differs.
 
@@ -118,7 +121,10 @@ columns) will test whether these hold.
   under a coarser codebook than you can afford costs quality here. Classified `quality_shift`.
 - **Upward transfer (train coarser, query finer) roughly preserves same-mode quality.** nf4→int8
   1.0217 vs nf4→nf4 1.0208 (+0.0009); nf4→bf16/fp16 within ~0.006. Training under the cheap
-  regime and querying under a finer one did not, in this run, cost much.
+  regime and querying under a finer one did not, in this run, cost much. The complementary
+  reading: the adapter also forfeits essentially all of the frozen base's improvement when
+  upgraded (the base-vs-base gap is not carried); percentage forms of this statement are held
+  while S9 is open.
 - **Downward transfer (train finer, query coarser) degrades a little more.** int8→nf4 1.0237 vs
   int8→int8 1.0171 (+0.0066). A mild asymmetry: in this run, upward transfer preserved better
   than downward — the direction matters, which is exactly why the matrix records the pair rather
@@ -154,12 +160,37 @@ What the seeds confirm — and correct:
   nf4-trained adapters are query-mode-agnostic (nf4→int8 1.0316 ≈ nf4→nf4 1.0319). The
   asymmetry seed 0 hinted at holds across seeds: train-finer/query-coarser costs a little;
   train-coarser/query-finer does not.
-- **Validated (3 seeds): int8-offload adapters transfer well.** Best or near-best in both query
-  columns — echoing the grid's int8-offload eval strength, now across seeds.
+- **Observed across 3 seeds, pending-mechanism (D3):** int8-offload-trained adapters
+  posted best-or-near-best cells in both query columns. The bf16 resident/offload
+  control pair shows training-placement effects of this magnitude where no precision
+  difference exists, so this line is quarantined from `validated` until the one-step
+  training certificate (D3) attributes the placement effect. The audit's G-decomposition
+  agrees: the load-bearing *resident* comparison (int8→int8 vs nf4→int8) is a tie (+0.07 G) —
+  `docs/MEASUREMENT_AUDIT.md` §3. *(D3 status, 2026-07-05: the certificate landed — one-step
+  training is bitwise placement-exact, attribution moved to run level, and the quarantine
+  HOLDS; `docs/TRAIN_PLACEMENT_CERTIFICATE.md`.)* The
+  **downward-transfer penalty and nf4-query-agnosticism remain validated** — those are resident,
+  certified comparisons.
 - **Not re-tested here:** the fp4/bf16/fp16 query columns (phase 3 covered nf4/int8 only), so the
   seed-0 "fp4-query degrades every adapter" stays a single-seed observation.
-- **Caveat: the cross-mode gaps are within a standard deviation.** These are directional
-  tendencies observed across 3 seeds, not large separations; reported as such.
+- **Validated (3 seeds, paired, both placements): the downward-transfer penalty.**
+  Same adapter, two query modes, per-seed deltas L(→nf4) − L(→int8):
+  int8-resident +0.0069 / +0.0106 / +0.0050 (paired sd 0.0028, t ≈ 4.55);
+  int8-offload +0.0022 / +0.0068 / +0.0091 — 6/6 same-sign. The mirrored seed-paired
+  cross-adapter contrast agrees: int8-trained trails nf4-trained on nf4-serve in
+  3/3 seeds (+0.0079 mean). Upward transfer remains near-zero on the paired ruler
+  for nf4-resident (+0.0021 / +0.0033 / −0.0047), with one heterogeneity note:
+  seed 3407's nf4-offload adapter loses 0.0140 on upgrade to int8-serve while its
+  siblings sit at ~0 — the mean masks real per-adapter variation. (The previous
+  "within a standard deviation" caveat used marginal cell stds — the wrong ruler
+  for a same-adapter paired design; full paired tables:
+  `runs/results/paired_transfer.md`, via `scripts/summarize_paired_transfer.py`.)
+- **Re-denominated in the certified yardstick (n=1024 G_int8 = 0.01657 ± 0.00227).** The
+  downward penalty (int8-resident, +0.0075 ± 0.0016) is **0.45 ± 0.11 G** — a serve downgrade
+  costs about half the frozen precision gap. Upgrade transfer for nf4-resident (+0.0002) is
+  **0.01 G**, i.e. the adapter forfeits ≈99% of the frozen base's improvement on upgrade
+  (SE-wide, held loosely). These ratios are now licensed: S9 cleared, so G is a real
+  denominator, not a noise floor.
 
 ### Portability status of the tested pairs
 
@@ -193,7 +224,11 @@ recording behavior lives in the validation scripts, and existing adapter loading
   host/model/dataset/run specific.
 - The held-out eval loss is the only quality signal; no end-task suites.
 - Offload legs measure the same math at different tensor locations; their eval deltas vs
-  resident training reflect GPU nondeterminism accumulated over training, not offload math.
+  resident training are pending attribution: the serve-side forward path is certified bitwise
+  placement-identical (D2, 384 example-evals), so any training-side delta arises in the
+  backward / recompute / RNG / data-order path — mechanism to be settled by the one-step
+  training certificate (D3), not asserted here. *(D3 landed 2026-07-05: one-step training is
+  also bitwise placement-exact; the delta is run-level — `docs/TRAIN_PLACEMENT_CERTIFICATE.md`.)*
 - Decode throughput is not measured by the matrix scripts in this pass (`decode_tok_s` is
   reserved in the schema).
 - fp8 is present in the mode vocabulary but not in the first matrix's train rows.
@@ -229,25 +264,28 @@ Both grid scripts print their planned legs before running, support `--dry-run`, 
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T14:52:04Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `9b736b4fb5d7ccb1194ddfff51c87ee59ce8b4489ec74d1476595d1f20cb70a0` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T22:22:43Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `5118ac85d468d07422b24d54d7204fd2af734f9c1049a864329f33cd533d5609` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T19:01:12Z` `f3574a78685ed298204732de140df26e9a720754b618ce729c190d4b315f0369`
+  - `2026-07-05T16:48:44Z` `8cb935bc7af6b3104789ebb452223708993a13f2614d15f80957d578c84d22f3`
+  - `2026-07-05T14:52:04Z` `9b736b4fb5d7ccb1194ddfff51c87ee59ce8b4489ec74d1476595d1f20cb70a0`
   - `2026-07-05T12:47:30Z` `45db13c636a21677550245709d5ef170d21225f48494105a8a7e919ae2aa2be9`
   - `2026-07-05T08:44:38Z` `f19b86ea6551dd28d67ca7dcde37728ac8bddea6e44a521d7a98e87c464b8d44`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[#@=~0@o$@O!=&&@:]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[O::*%&*O!o0*!.=o]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|         o.o ...B|
-|        . + o  +=|
-|       E   o  . =|
-|             . ++|
-|        S     =o*|
-|         o   o.B@|
-|        + ..oo==X|
-|         o+o=o.+o|
-|         ..=oo  .|
+|  ..=*B**BooEo.. |
+|   =o.BOB.= + .  |
+|  . .B Boo o .   |
+|      B +.o      |
+|       oSo o .   |
+|        o . +    |
+|         o o     |
+|            .    |
+|                 |
 +-----------------+
 ```
 

@@ -1,0 +1,52 @@
+{
+  "bitsandbytes_version": "0.49.2",
+  "blocksize": 64,
+  "claimed_at": "2026-07-05T21:53:18Z",
+  "command": "python -u scripts/wrms_per_format.py --job-dir /workspace/runs/postaudit_jobs/wrms_olmoe --model allenai/OLMoE-1B-7B-0924",
+  "commit": "160bfda5cb0322d43c50acbcc9e6f26b3d21fd25",
+  "cuda_version": "12.8",
+  "exit_code": 0,
+  "finished_at": "2026-07-05T21:53:36Z",
+  "gpu_name": "NVIDIA RTX A5000",
+  "hostname": "41a04ccbc77d",
+  "job_id": "wrms_olmoe",
+  "job_type": "wrms",
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "n_expert_projections": 2048,
+  "pid": 12816,
+  "pod_id": "41a04ccbc77d",
+  "reference": "bf16 passthrough (streamed)",
+  "started_at": "2026-07-05T21:53:18Z",
+  "status": "pass",
+  "timestamp": "2026-07-05T21:53:35Z",
+  "torch_version": "2.8.0+cu128",
+  "w_rms": {
+    "fp16": 2.3958933968163345e-08,
+    "fp4": 0.12307360980330458,
+    "fp8": 0.024781317357663202,
+    "int8": 0.00969925884352973,
+    "nf4": 0.09240615288493643
+  },
+  "w_rms_by_proj": {
+    "fp16": {
+      "down": 2.516176681945579e-08,
+      "gate_up": 2.3401132969889085e-08
+    },
+    "fp4": {
+      "down": 0.1230353164129272,
+      "gate_up": 0.1230907275978263
+    },
+    "fp8": {
+      "down": 0.024780711327206818,
+      "gate_up": 0.02478158831974819
+    },
+    "int8": {
+      "down": 0.009699872580439075,
+      "gate_up": 0.009698984418395225
+    },
+    "nf4": {
+      "down": 0.0923949701230675,
+      "gate_up": 0.09241115245672543
+    }
+  }
+}

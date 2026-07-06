@@ -58,7 +58,7 @@ across all three seeds under the summarizer's printed rule; still host-specific.
 |---|---|
 | offload collapses the storage-width memory difference (resident 5.28/8.50/14.54 GB → offload 2.41–2.72 GB) | **OLMoE-supported, host-specific** — 3/3 seeds; offload width-delta 0.20 GB vs resident 3.22 GB (ratio 0.06) |
 | resident memory scales with storage width (4→8→16-bit) | **OLMoE-supported, host-specific** — 3/3 seeds |
-| int8-offload posts the best training eval | **OLMoE-supported, host-specific** — best-eval in 3/3 seeds; aggregate 1.0261 ± 0.0079, lowest of the four repeated modes (int8-resident 1.0313, nf4-offload 1.0292, nf4-resident 1.0313). bf16/fp16-offload were single-run only, so no all-mode ranking is claimed |
+| int8-offload posts the best training eval | **Candidate, CONFOUNDED** (downgraded by audit) — best-eval in 3/3 seeds (agg 1.0261 ± 0.0079), but the audit shows the offload-trained rows carry a precision×placement interaction: at *resident* placement int8-vs-nf4 training is a tie (+0.00 G), and byte-identical bf16 resident-vs-offload differ 0.0108 (RNG/recompute, not math). The offload-trained "best" is one uncertified mechanism — see `docs/MEASUREMENT_AUDIT.md` §3; needs debt D3. Also: frozen int8 already covers 108% of the nf4→bf16 quality gap (∅ ladder, §1) — the training-precision axis is nearly flat here |
 | fp4 resident decode faster than nf4 | **NOT supported on repeat** — repeat-5: fp4 12.87 ± 0.20 vs nf4 12.68 ± 0.22 tok/s, overlapping within a std. The single-run 10.12 nf4 was a slow outlier; on repeats they tie. int8 decode is slower (11.63 ± 0.02). |
 | offload eval ≈ resident eval | Observed — same math by design; per-seed AFTER drift is GPU nondeterminism, not offload math |
 | BEFORE-eval fidelity ordering (int8 < nf4; 4-bit worst) | **OLMoE-supported, host-specific** — 3/3 seed-matched pairs |
@@ -89,26 +89,27 @@ Distributed execution: `docs/RUNPOD_DISTRIBUTED_VALIDATION.md`.
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-05T13:53:44Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `db6897adffbbeb8f107366e72b000fb59c47ee8db459b11563b42f8cf4f408a7` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-05T16:48:27Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `da27fc023ff59a02638649db4fff218f5d05780c02d0fdd8bfde0e247571630a` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-05T13:53:44Z` `db6897adffbbeb8f107366e72b000fb59c47ee8db459b11563b42f8cf4f408a7`
   - `2026-07-05T13:53:02Z` `dd842d5829cf809a2dc7a940dfb625391bf0075297f5f54ccd306f5479a6d680`
   - `2026-07-05T12:47:30Z` `7ed1e2a56c3b28abd783d840af4d76608388218695555791426d75f83dbcf69e`
   - `2026-07-05T09:22:21Z` `df17a36577b78ceedcce7b029e54b759208c41502570948834a6bb945078e763`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[!@0*#=%!$$@@?@*$]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[!%+=$&.+~$$O#%.+]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|              .=.|
-|           . ...+|
-|          o B o.+|
-|         o = % =.|
-|        S + E # +|
-|         + = @ = |
-|        + + +   .|
-|       . . . o ..|
-|          ...oO*.|
+|      .o.o.E.  +.|
+|        . ...+o +|
+|           +..= .|
+|    .     . oo o |
+|   . =  S   ... .|
+|    + B+. .  o.. |
+|     o.B+oo.. o. |
+|        *+.*.o.o |
+|         +=o+...o|
 +-----------------+
 ```
 
