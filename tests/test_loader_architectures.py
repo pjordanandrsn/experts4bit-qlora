@@ -1,7 +1,7 @@
 """Structural tests: the generalized streaming loader handles each supported fused-MoE architecture.
 
 For each architecture, build a tiny model, write it as a checkpoint in the on-disk expert layout that
-architecture's real checkpoints use (per-expert for OLMoE/Qwen3, fused for Gemma-4), run
+architecture's real checkpoints use (per-expert for OLMoE/Qwen3, fused for Gemma-4/GraniteMoe), run
 ``load_moe_4bit_streaming`` end-to-end, and assert experts were quantized to ``Experts4bit`` +
 ``ExpertsLoRA``, attention LoRA attached, no meta tensors remain, and a forward pass runs.
 
@@ -92,6 +92,25 @@ def _gemma4():
     )
 
 
+def _granitemoe(tie_word_embeddings=False):
+    from transformers.models.granitemoe.configuration_granitemoe import GraniteMoeConfig
+    from transformers.models.granitemoe.modeling_granitemoe import GraniteMoeForCausalLM
+
+    return GraniteMoeForCausalLM(
+        GraniteMoeConfig(
+            hidden_size=64,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            num_local_experts=8,
+            num_experts_per_tok=2,
+            vocab_size=128,
+            tie_word_embeddings=tie_word_embeddings,
+        )
+    )
+
+
 def _write_ckpt(model, d, per_expert):
     """Save a checkpoint. per_expert=True splits fused experts back to per-expert Linears (OLMoE/Qwen3
     on-disk layout); per_expert=False keeps them fused (Gemma-4 on-disk layout)."""
@@ -126,8 +145,8 @@ def _write_ckpt(model, d, per_expert):
 
 @pytest.mark.parametrize(
     "build,per_expert",
-    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False)],
-    ids=["olmoe", "qwen3_moe", "gemma4"],
+    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
+    ids=["olmoe", "qwen3_moe", "gemma4", "granitemoe"],
 )
 def test_loader_handles_architecture(build, per_expert, tmp_path):
     from experts4bit_qlora import ExpertsLoRA
@@ -217,7 +236,7 @@ def test_unsupported_model_type_errors(tmp_path):
     on any host without Hub reachability instead of exercising the fail-fast path)."""
     from experts4bit_qlora.loader import SUPPORTED_MODEL_TYPES, load_moe_4bit_streaming
 
-    assert {"olmoe", "qwen3_moe", "gemma4"} <= SUPPORTED_MODEL_TYPES
+    assert {"olmoe", "qwen3_moe", "gemma4", "granitemoe"} <= SUPPORTED_MODEL_TYPES
     (tmp_path / "config.json").write_text(json.dumps({"model_type": "gpt2"}))
     with pytest.raises(NotImplementedError, match="Unsupported model_type"):
         load_moe_4bit_streaming(str(tmp_path), "cpu", torch.bfloat16, r=4, alpha=8)
@@ -284,10 +303,62 @@ def test_loader_handles_multimodal_gemma4_checkpoint(tmp_path):
     assert cos.mean() > 0.9  # same function as the text tower, within NF4-on-experts error
 
 
+def test_loader_handles_legacy_granitemoe_checkpoint(tmp_path):
+    """The real GraniteMoe on-disk layout — legacy tensor spellings AND no index file: Hub Granite
+    checkpoints (e.g. ibm-granite/granite-3.0-1b-a400m-instruct) store the fused expert stacks as
+    `block_sparse_moe.input_linear.weight` [E, 2*inter, hidden] / `output_linear.weight`
+    [E, hidden, inter], the router one module deeper at `router.layer.weight`, drop `lm_head.weight`
+    (tied) — and, being small, ship as a single `model.safetensors` with no
+    `model.safetensors.index.json`. The loader must synthesize the weight map from the file's own
+    header, apply the legacy renames, tie lm_head — and compute the same function as the reference
+    it came from (ExpertsLoRA is zero-delta at init, so the logits isolate NF4 error)."""
+    from safetensors.torch import save_file
+
+    from experts4bit_qlora import ExpertsLoRA
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    ref = _granitemoe(tie_word_embeddings=True).to(DEVICE, dtype=torch.bfloat16).eval()
+    ref.config.use_cache = False
+
+    # Write the checkpoint the way the Hub GraniteMoe checkpoints store it (verified against the
+    # safetensors header of granite-3.0-1b-a400m-instruct).
+    sd = {}
+    for k, v in ref.state_dict().items():
+        if k == "lm_head.weight":
+            continue  # tied to embed_tokens on disk
+        k = k.replace("block_sparse_moe.experts.gate_up_proj", "block_sparse_moe.input_linear.weight")
+        k = k.replace("block_sparse_moe.experts.down_proj", "block_sparse_moe.output_linear.weight")
+        k = k.replace("block_sparse_moe.router.weight", "block_sparse_moe.router.layer.weight")
+        sd[k] = v.to(torch.bfloat16).contiguous().clone()
+    save_file(sd, os.path.join(tmp_path, "model.safetensors"))  # single file — deliberately no index.json
+    ref.config.save_pretrained(tmp_path)
+
+    try:
+        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+
+    assert cfg.model_type == "granitemoe"  # the loader really took the granitemoe + legacy-rename path
+    assert sum(isinstance(m, ExpertsLoRA) for m in model.modules()) == cfg.num_hidden_layers
+    assert not model.lm_head.weight.is_meta  # tied, not left on meta
+    assert model.lm_head.weight.data_ptr() == model.model.embed_tokens.weight.data_ptr()
+    assert not [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.is_meta]
+
+    model.eval()
+    model.config.use_cache = False
+    ids = torch.randint(0, ref.config.vocab_size, (1, 8), device=DEVICE)
+    with torch.no_grad():
+        got = model(input_ids=ids).logits
+        want = ref(input_ids=ids).logits
+    cos = torch.nn.functional.cosine_similarity(got.flatten(0, 1).float(), want.flatten(0, 1).float(), dim=-1)
+    assert cos.mean() > 0.9  # same function as the reference, within NF4-on-experts error
+
+
 @pytest.mark.parametrize(
     "build,per_expert",
-    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False)],
-    ids=["olmoe", "qwen3_moe", "gemma4"],
+    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
+    ids=["olmoe", "qwen3_moe", "gemma4", "granitemoe"],
 )
 def test_loaded_model_trains_with_frozen_experts(build, per_expert, tmp_path):
     """Full code-path test: load 4-bit, add LoRA, run real training steps with gradient checkpointing.
