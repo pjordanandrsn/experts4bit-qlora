@@ -46,3 +46,42 @@ services:
       retries: 3
       # First boot = 14 GB download + streaming NF4 load + warmup; don't flap before it's done.
       start_period: 900s
+
+  # Optional second endpoint: a big-MoE "capability" model — offload-only on a 12 GB card
+  # (~4.4 GB GPU @ ~0.22 tok/s decode: batch-quality jobs, not chat). One base model per
+  # process/container by design. Opt in with: docker compose --profile qwen up -d
+  e4b-serve-qwen:
+    profiles: ["qwen"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: e4b-serve-qwen
+    runtime: ${E4B_GPU_RUNTIME:-nvidia}
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - MODEL=Qwen/Qwen3-30B-A3B
+      - R=8
+      - ALPHA=16
+      - QUANT_TYPE=nf4
+      - OFFLOAD_EXPERTS=1
+      - PREFETCH=1
+      - E4B_PORT=8781
+      - E4B_QUEUE_MAX=2
+      - E4B_MAX_INPUT_TOKENS=2048
+      # At ~0.22 tok/s a long reply takes minutes — cap output, stretch the deadline.
+      - E4B_MAX_NEW_TOKENS=192
+      - E4B_REQUEST_TIMEOUT_S=1800
+    ports:
+      - "8781:8781"
+    volumes:
+      - ../../hf-cache:/root/.cache/huggingface
+    ulimits:
+      memlock: -1  # ~15 GB of 4-bit experts must pin (see the note on the primary service)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8781/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # First boot = ~60 GB download + streaming NF4 quantize of a 30B — give it a full hour.
+      start_period: 3600s
