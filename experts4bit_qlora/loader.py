@@ -1,4 +1,4 @@
-"""Streaming 4-bit loader for fused-MoE checkpoints (OLMoE, Qwen3-MoE / Qwen3.5-MoE, Gemma-4).
+"""Streaming 4-bit loader for fused-MoE checkpoints (OLMoE, Qwen3-MoE / Qwen3.5-MoE, Gemma-4, GraniteMoe).
 
 Streams the checkpoint tensor-by-tensor straight onto the GPU, quantizing each fused expert stack
 to NF4 on the way and dropping the bf16 source immediately, so the full bf16 model is never
@@ -7,8 +7,10 @@ materialized in CPU *or* GPU memory. Each layer's fused ``experts`` module is sw
 
 Supports SwiGLU fused-MoE architectures. Experts may be stored on disk either **per-expert**
 (``...experts.{e}.{gate,up,down}_proj.weight`` — OLMoE, Qwen3-MoE) or already **fused**
-(``...experts.{gate_up,down}_proj`` — Gemma-4); both are handled. The experts module sits under the
-MLP for OLMoE/Qwen3 and directly on the layer (beside a parallel dense MLP) for Gemma-4. Requires
+(``...experts.{gate_up,down}_proj`` — Gemma-4, GraniteMoe); both are handled. The experts module
+sits under the MLP for OLMoE/Qwen3, directly on the layer (beside a parallel dense MLP) for
+Gemma-4, and under a ``block_sparse_moe`` block for GraniteMoe — whose Hub checkpoints use legacy
+tensor spellings (``input_linear``/``output_linear``, see :data:`LEGACY_KEY_RENAMES`). Requires
 transformers>=5.0.
 """
 
@@ -28,15 +30,35 @@ from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
 
 # model_type -> experts submodule path relative to `model.layers.{i}`.
-# OLMoE/Qwen3 nest experts under the MLP; Gemma-4 puts them beside a parallel dense MLP.
+# OLMoE/Qwen3 nest experts under the MLP; Gemma-4 puts them beside a parallel dense MLP; GraniteMoe
+# nests them under a `block_sparse_moe` block (router + experts; no parallel dense branch).
 SUPPORTED_ARCHITECTURES = {
     "olmoe": "mlp.experts",
     "qwen3_moe": "mlp.experts",
     "qwen3_5_moe": "mlp.experts",
     "gemma4": "experts",  # multimodal top-level config
     "gemma4_text": "experts",  # the text tower (what a text-only QLoRA loads)
+    "granitemoe": "block_sparse_moe.experts",  # IBM Granite MoE (granite-3.0-*-a*m, PowerMoE-3b)
 }
 SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
+
+# model_type -> ((legacy on-disk spelling, name in the transformers>=5 module tree), ...).
+# GraniteMoe checkpoints on the Hub predate the standardized fused-experts interface: the fused
+# stacks are stored as `block_sparse_moe.input_linear.weight` [num_experts, 2*inter, hidden]
+# (gate+up pre-fused, gate first — the module chunks the projection in half and activates the first
+# half, matching Experts4bit's has_gate convention) and `block_sparse_moe.output_linear.weight`
+# [num_experts, hidden, inter]; the router weight sits one module deeper, at `router.layer.weight`.
+# transformers' own from_pretrained applies exactly these renames (conversion_mapping.py,
+# "granitemoe"); this loader reads shards directly, so it must apply them itself. Substring
+# renames over the whole key set: a checkpoint already saved with the current names matches
+# nothing and passes through unchanged.
+LEGACY_KEY_RENAMES = {
+    "granitemoe": (
+        ("block_sparse_moe.input_linear.weight", "block_sparse_moe.experts.gate_up_proj"),
+        ("block_sparse_moe.output_linear.weight", "block_sparse_moe.experts.down_proj"),
+        ("block_sparse_moe.router.layer.weight", "block_sparse_moe.router.weight"),
+    ),
+}
 
 
 def _assign(model, name, tensor):
@@ -110,12 +132,34 @@ def load_moe_4bit_streaming(
             allow_patterns=["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"],
         )
     )
-    raw_map = json.load(open(os.path.join(snap, "model.safetensors.index.json")))["weight_map"]
+    index_path = os.path.join(snap, "model.safetensors.index.json")
+    if os.path.exists(index_path):
+        raw_map = json.load(open(index_path))["weight_map"]
+    else:
+        # Small checkpoints ship unsharded with no index (e.g. granite-3.0-1b-a400m-instruct is a
+        # single model.safetensors): synthesize the weight map from the file's own key list so the
+        # streaming path below works unchanged. Anything else is unstreamable — fail loudly.
+        single_path = os.path.join(snap, "model.safetensors")
+        if not os.path.exists(single_path):
+            raise FileNotFoundError(
+                f"{model_id!r}: found neither 'model.safetensors.index.json' (sharded) nor "
+                "'model.safetensors' (single-file) in the snapshot — nothing this loader can stream."
+            )
+        with safe_open(single_path, framework="pt", device="cpu") as f:
+            raw_map = dict.fromkeys(f.keys(), "model.safetensors")
     if ckpt_prefix:
         weight_map = {"model." + k[len(ckpt_prefix) :]: f for k, f in raw_map.items() if k.startswith(ckpt_prefix)}
         orig_key = {"model." + k[len(ckpt_prefix) :]: k for k in raw_map if k.startswith(ckpt_prefix)}
     else:
         weight_map, orig_key = raw_map, {k: k for k in raw_map}
+    # Normalize legacy tensor spellings (see LEGACY_KEY_RENAMES) so the expert-fusing loop and the
+    # non-expert `_assign` pass below only ever see the module names the built model actually has;
+    # `orig_key` keeps pointing at the on-disk spelling the shard must be read with.
+    for old, new in LEGACY_KEY_RENAMES.get(model_type, ()):
+        for key in [k for k in weight_map if old in k]:
+            renamed = key.replace(old, new)
+            weight_map[renamed] = weight_map.pop(key)
+            orig_key[renamed] = orig_key.pop(key)
     handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in set(weight_map.values())}
 
     def get(name):
@@ -128,9 +172,10 @@ def load_moe_4bit_streaming(
     offload_handles = []
     n_moe = 0
     for i in range(n_layers):
-        epfx = f"model.layers.{i}.{expert_rel}."  # e.g. "...mlp.experts." (OLMoE/Qwen3) or "...experts." (Gemma-4)
+        epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
         if f"{epfx}gate_up_proj" in weight_map:
-            # Already fused on disk (Gemma-4): [num_experts, 2*inter, hidden] / [num_experts, hidden, inter].
+            # Already fused on disk (Gemma-4; GraniteMoe after the legacy rename above):
+            # [num_experts, 2*inter, hidden] / [num_experts, hidden, inter].
             gate_up = get(f"{epfx}gate_up_proj").to(dtype)
             down = get(f"{epfx}down_proj").to(dtype)
             expert_keys.update({f"{epfx}gate_up_proj", f"{epfx}down_proj"})
