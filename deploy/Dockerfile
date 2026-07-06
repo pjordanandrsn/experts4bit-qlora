@@ -4,8 +4,10 @@
 # for parity, not necessity); python3.11 is the tested interpreter.
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
+# gcc + python3.11-dev: triton (pulled in by bitsandbytes) JIT-compiles a small cuda_utils
+# module at import time and needs a host C compiler — without them the server crash-loops.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3.11 python3.11-venv python3-pip curl \
+    && apt-get install -y --no-install-recommends python3.11 python3.11-venv python3.11-dev python3-pip gcc curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
