@@ -42,13 +42,13 @@ def load_job(jobs_root, mode, placement="resident"):
     losses, routed = {}, {}
     if not os.path.exists(os.path.join(d, "result.json")):
         return None
-    for line in open(os.path.join(d, "result_rows.jsonl")):
+    for line in open(os.path.join(d, "result_rows.jsonl"), encoding="utf-8"):
         r = json.loads(line)
         if not r.get("is_nan"):
             losses[r["example_index"]] = r["loss"]
     sp = os.path.join(d, "routed_sets.jsonl")
     if os.path.exists(sp):
-        for line in open(sp):
+        for line in open(sp, encoding="utf-8"):
             r = json.loads(line)
             routed[r["example_index"]] = {k: {e for e, _ in v} for k, v in r["routed"].items()}
     return {"losses": losses, "routed": routed}
@@ -115,6 +115,7 @@ def flip_count(routed_a, routed_b, k):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # output has non-ASCII; Windows pipes default to the locale codepage
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--jobs-root", required=True)
     ap.add_argument("--pilot-probe", required=True)
@@ -194,7 +195,7 @@ def main():
         L.append("- routing telemetry incomplete; P-A2/P-A3/P-A4 not computable")
 
     # P-A5: cross-set threshold transfer
-    pilot = json.load(open(args.pilot_probe))["candidates"]
+    pilot = json.load(open(args.pilot_probe, encoding="utf-8"))["candidates"]
     ad = sorted((abs(d) for d in D["nf4"]), reverse=True)
     cutoff = ad[max(0, len(ad) // 10 - 1)]
     top_pilot = [c for c in pilot if c["rank"] <= max(1, len(pilot) // 10)]
@@ -217,7 +218,7 @@ def main():
              "replicates (see P-A3).")
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w") as f:
+    with open(args.out, "w", encoding="utf-8") as f:
         f.write("\n".join(L) + "\n")
     print("\n".join(L))
     print(f"\nwrote {args.out}")

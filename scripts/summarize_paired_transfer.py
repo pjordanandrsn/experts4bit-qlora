@@ -34,7 +34,7 @@ JOB_RE = re.compile(r"query_olmoe_train-(\w+)-(resident|offload)-seed(\d+)_query
 def load(query_jobs_root):
     rows = {}
     for p in sorted(glob.glob(os.path.join(query_jobs_root, "query_olmoe_*", "result.json"))):
-        r = json.load(open(p))
+        r = json.load(open(p, encoding="utf-8"))
         m = JOB_RE.match(r.get("job_id", ""))
         if not m or r.get("status") != "pass":
             continue
@@ -56,6 +56,7 @@ def paired_stats(deltas):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # output has non-ASCII; Windows pipes default to the locale codepage
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--query-jobs", required=True)
     ap.add_argument("--out-md", required=True)
@@ -121,9 +122,9 @@ def main():
                                  "t": f"{st['t']:.3f}", "n_pos": st["pos"], "n": st["n"]})
 
     os.makedirs(os.path.dirname(args.out_md) or ".", exist_ok=True)
-    with open(args.out_md, "w") as f:
+    with open(args.out_md, "w", encoding="utf-8") as f:
         f.write("\n".join(md) + "\n")
-    with open(args.out_csv, "w", newline="") as f:
+    with open(args.out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["kind", "train_row", "contrast", "deltas", "mean",
                                           "paired_sd", "t", "n_pos", "n"])
         w.writeheader()

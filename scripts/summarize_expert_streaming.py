@@ -246,7 +246,7 @@ def write_policies(meta, layers, experts, policies_dir, score="stall-per-byte"):
         name = (f"{'olmoe' if 'OLMoE' in str(meta.get('model')) else 'model'}_{storage}_"
                 f"{'offload' if meta.get('offload') else 'resident'}_hotstatic_budget{gb}gb.json")
         path = os.path.join(policies_dir, name)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(policy, f, indent=2, sort_keys=True)
             f.write("\n")
         written.append(path)
@@ -254,6 +254,7 @@ def write_policies(meta, layers, experts, policies_dir, score="stall-per-byte"):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # output has non-ASCII; Windows pipes default to the locale codepage
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", required=True)
     ap.add_argument("--out-md", required=True)
@@ -266,7 +267,7 @@ def main():
     meta, layers, experts = load(args.input)
     md = render(meta, layers, experts)
     os.makedirs(os.path.dirname(os.path.abspath(args.out_md)), exist_ok=True)
-    with open(args.out_md, "w") as f:
+    with open(args.out_md, "w", encoding="utf-8") as f:
         f.write(md)
     print(md)
     if args.policies_out:

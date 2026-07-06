@@ -38,13 +38,13 @@ def load(jobs_root):
         rp, rows_p = os.path.join(d, "result.json"), os.path.join(d, "result_rows.jsonl")
         if not (os.path.exists(rp) and os.path.exists(rows_p)):
             continue
-        res = json.load(open(rp))
-        rows = [json.loads(line) for line in open(rows_p)]
+        res = json.load(open(rp, encoding="utf-8"))
+        rows = [json.loads(line) for line in open(rows_p, encoding="utf-8")]
         losses = {r["example_index"]: r["loss"] for r in rows if not r.get("is_nan")}
         routed = {}
         sp = os.path.join(d, "routed_sets.jsonl")
         if os.path.exists(sp):
-            for line in open(sp):
+            for line in open(sp, encoding="utf-8"):
                 r = json.loads(line)
                 routed[r["example_index"]] = {k: {e for e, _ in v} for k, v in r["routed"].items()}
         out[os.path.basename(d)] = {"result": res, "losses": losses, "routed": routed}
@@ -141,6 +141,7 @@ def fmt_p(p):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # output has non-ASCII; Windows pipes default to the locale codepage
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--jobs-root", required=True)
     ap.add_argument("--out", required=True)
@@ -309,7 +310,7 @@ def main():
                  f"within-trio ρ: {['%+.3f' % r for r in corr_trio_small]}")
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w") as f:
+    with open(args.out, "w", encoding="utf-8") as f:
         f.write("\n".join(L) + "\n")
     print("\n".join(L))
     print(f"\nwrote {args.out}")

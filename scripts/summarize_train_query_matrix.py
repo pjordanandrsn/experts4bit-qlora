@@ -69,6 +69,7 @@ def render_markdown(rows) -> str:
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")  # output has non-ASCII; Windows pipes default to the locale codepage
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", required=True)
     ap.add_argument("--out-md", required=True)
@@ -80,7 +81,7 @@ def main():
         raise SystemExit(f"no rows in {args.input}")
     md = render_markdown(rows)
     os.makedirs(os.path.dirname(os.path.abspath(args.out_md)), exist_ok=True)
-    with open(args.out_md, "w") as f:
+    with open(args.out_md, "w", encoding="utf-8") as f:
         f.write(md)
     write_csv(args.out_csv, rows)
     print(md)

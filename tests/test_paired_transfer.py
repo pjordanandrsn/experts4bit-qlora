@@ -23,8 +23,8 @@ def test_paired_transfer_reproduces_review_numbers(tmp_path):
         capture_output=True, text=True,
     )
     assert r.returncode == 0, r.stderr
-    golden = open(os.path.join(REPO, "tests", "fixtures", "paired_transfer_golden.md")).read()
-    assert out_md.read_text() == golden
+    golden = open(os.path.join(REPO, "tests", "fixtures", "paired_transfer_golden.md"), encoding="utf-8").read()
+    assert out_md.read_text(encoding="utf-8") == golden
 
     # The review's E3 anchors, verbatim in the output (sign convention: script emits
     # L(int8-resident) - L(nf4-resident), the negation of the review's L(nf4)-L(int8)).
