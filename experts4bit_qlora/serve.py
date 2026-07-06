@@ -447,7 +447,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
     """App factory. ``engine`` injection exists for tests (a fake with the same surface)."""
     from contextlib import asynccontextmanager
 
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Response
     from fastapi.responses import StreamingResponse
     from pydantic import BaseModel
 
@@ -554,7 +554,12 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
         return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.get("/health")
-    async def health():
+    async def health(response: Response):
+        # A failed load must FAIL the healthcheck: 200-with-status-"error" reads as healthy to
+        # docker/compose and leaves a dead endpoint looking green. "loading" stays 200 — the
+        # compose start_period covers boot, and a 5xx there would just flap the check early.
+        if engine.state == "error":
+            response.status_code = 503
         return {
             "status": "busy" if (engine.state == "ready" and engine.queue_depth > 0) else engine.state,
             "error": engine.error,
