@@ -1,0 +1,28 @@
+{
+  "G_cert": 0.01657,
+  "L0_home": 1.2248623035175115,
+  "L1_unpinned": 1.221693368913293,
+  "L2_pinned": 1.2156454843952815,
+  "R_recovered_fraction_of_G": 0.3649900131569954,
+  "R_se": 0.09212965102739536,
+  "adapter": "/workspace/matrix/olmoe_mode_adapters/nf4/adapter_best.pt",
+  "adapter_keys_loaded": [
+    192,
+    192,
+    192
+  ],
+  "bitsandbytes_version": "0.49.2",
+  "forfeit_L1_minus_L0": -0.0031689346042185207,
+  "gpu_name": "NVIDIA RTX A5000",
+  "job_type": "routing_pinned_serve",
+  "n_eval_used": 1024,
+  "pin_overrides_applied": 16384,
+  "pin_overrides_expected": 16384,
+  "recovery_L1_minus_L2": 0.006047884518011415,
+  "serve_mode": "int8",
+  "status": "pass",
+  "timestamp": "2026-07-06T01:59:25Z",
+  "torch_version": "2.8.0+cu128",
+  "train_mode": "nf4",
+  "verdict": "0<R<0.50 PARTIAL"
+}

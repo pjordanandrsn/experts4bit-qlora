@@ -60,6 +60,34 @@ Fraction of the frozen serve-upgrade gain the pinned adapter recovers:
 - No serving-framework claim — this is a provenance/validation measurement, per the repo's
   standing scope.
 
+## RESULT (2026-07-06, A5000, `runs/results/postaudit/n1_routing_pinned_result.json`)
+
+**PARTIAL — the committed middle branch (45%): routing mismatch is a real forfeit term, but
+not the majority.** nf4-trained seed-0 adapter, pinned n=1024 set, resident; pin engaged fully
+(16384/16384 layer×example overrides).
+
+| condition | eval loss |
+|---|---|
+| C0 home (nf4 base + adapter) | 1.22486 |
+| C1 unpinned upgrade (int8 base + adapter) | 1.22169 |
+| C2 routing-pinned upgrade (int8 base, nf4-home routing) | 1.21565 |
+
+**R = (L1 − L2) / G = 0.365 ± 0.092** (|t| ≈ 4.0 — recovery is real; the point estimate is
+below the 0.50 success bar, CI ~[0.18, 0.55]). Pinning the int8-served model's routing to the
+nf4 home reference recovers **~37% of the certified precision gap** — a significant lever, but
+the majority of the forfeit survives pinning, i.e. it is value-space co-adaptation (the adapter
+learned nf4's specific quantization errors; served int8 experts differ in *magnitude*, which
+pinning routing cannot correct) rather than routing identity. This confirms S-B's serving
+relevance (adapter-steered routing matters at serve time) while bounding it.
+
+Honest caveats: (1) on this seed-0 adapter the *absolute* forfeit L1−L0 = −0.0032 was small
+(the unpinned int8 serve was already ≈ nf4-home), so R measures pinning *recovery* against G,
+not recovery of a large observed forfeit; the lane's "~100% forfeit" framing came from 3-seed
+matrix means, not this single article. (2) One adapter, one host, one eval set — per the
+no-claims list, this positive-but-partial result licenses a **seed-replicated follow-up**
+before any serving claim ships; it does not itself ship one. Committed odds graded:
+middle branch (0 < R < 0.50, 45%) **HIT**; R ≥ 0.50 (30%) and R ≤ 0 (25%) did not.
+
 ## Mechanism (how the pin is built)
 
 A forward pre-hook on each `ExpertsLoRA`, active only in pinned mode: it overrides the
@@ -75,22 +103,24 @@ Script: `scripts/routing_pinned_serve.py` (reuses the eval + telemetry scaffoldi
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T00:52:06Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `ea42c4880c89d6e6be1746d6c5d80cac4ff18aa72894589e51b893c1813ab787` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[?%o+&o**.&*#!0?0]`
+- **OTS proof timestamp for visible document:** `2026-07-06T02:01:18Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `0c8a62a865f73c37e0574569b42c92b9188afff432ce9988ea0277f93df202bc` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T00:52:06Z` `ea42c4880c89d6e6be1746d6c5d80cac4ff18aa72894589e51b893c1813ab787`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[.&*%0+%*0O$=~&~=]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|.+oo  ..*        |
-|=.+o.  + =       |
-|=.oB  o +        |
-|+.O.o+ o .       |
-|.=oBo + S        |
-|.oE.o+ =         |
-|.  o+ =          |
-| . o.+           |
-|  . ...          |
+|           .o.   |
+|         o oo.   |
+|      o + ..+    |
+|.  o o = o o     |
+|o.=.+.o S .      |
+|++.o=+ . .       |
+|o. ..+*.+        |
+|.  .E=*Bo.       |
+|+o. ..**o.       |
 +-----------------+
 ```
 

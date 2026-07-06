@@ -20,14 +20,18 @@ cites:    PREDICTION_LEDGER.md (filed-not-graded index) · SPECULATIVE_LANES_PLA
 > claims of absence. Rule adopted: a closure claim is a claim; grade it against the
 > filed-not-graded index before making it.
 
-## Lane N1 — Routing-pinned serve (licensed by S-B graduation clause; FIRED)
+## Lane N1 — Routing-pinned serve (licensed by S-B graduation clause; FIRED) — **RUN 2026-07-06: PARTIAL**
 
 Mechanism-complete: adapters move 5.6% of routing, gains track the movement
 (ρ 0.58–0.60), forfeit measured ~100% of certified G = 0.0166 ± 0.0023.
 Experiment: freeze/pin routing decisions from the train-base forward while serving
 int8 experts; artifacts on disk; ~2–3 eval passes + one hook.
-Success = recovers ≥ 50% of G at resident-certified placement. This is the
-highest-value open item and the most product-shaped.
+Success = recovers ≥ 50% of G at resident-certified placement.
+
+**Result (`docs/N1_ROUTING_PINNED_SERVE.md`): R = 0.365 ± 0.092 — PARTIAL (middle branch).**
+Pinning recovers ~37% of G (real, |t|≈4) but below the 0.50 bar; routing mismatch is a
+significant term, the majority is value-space co-adaptation. Next step (no clock): a
+seed-replicated follow-up to confirm before any serving claim.
 
 ## Lane N2 — Routed-stream Phases 0–6 (T7; never closed)
 
@@ -85,22 +89,24 @@ campaign task; N2 is its own arc; N3 waits on one join. Nothing here has a clock
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T00:36:01Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `2d7b369eddc7837d5218176cd66716803cd8bd2acb4b4bd9f22eeb9967b9e39b` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[+!=@~0#?!!&=*~=!]`
+- **OTS proof timestamp for visible document:** `2026-07-06T02:01:46Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `85f56abb01baff49d61993aa00a323cd2d4a458b1c24632d7fca1664ad6a6f05` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T00:36:01Z` `2d7b369eddc7837d5218176cd66716803cd8bd2acb4b4bd9f22eeb9967b9e39b`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[*O$O0%@@.:@%$$o#]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|          + o.o.o|
-|         . = . ==|
-|            . +oo|
-|         .   .. .|
-|        S . .  + |
-|         +o.  . .|
-|        o=*.. oo |
-|        oB*O.o.o+|
-|        .B@E= .oo|
+|oo. .     .      |
+|+o + .   o .     |
+| .=..   . . .    |
+|. +E..   . . .   |
+| oooB   S o +    |
+| =.* + . o + +   |
+|o.O o o   * o    |
+|.o =   o + +     |
+|. .   ..o.+      |
 +-----------------+
 ```
 
