@@ -1,0 +1,130 @@
+[
+  {
+    "arm": "single_resident",
+    "peak_mib_per_gpu": {
+      "0": 18311,
+      "1": 4
+    },
+    "n_samples": {
+      "0": 439,
+      "1": 439
+    },
+    "loaded_plateau_mib_per_gpu": {
+      "0": 5154,
+      "1": 1
+    },
+    "homed_lines": [],
+    "n_train_logs": 0,
+    "first_train_loss": null,
+    "final_train_loss": null,
+    "eval_losses": [],
+    "train_runtime_s": null,
+    "s_per_step_tqdm_median": 0.21
+  },
+  {
+    "arm": "single_offload",
+    "peak_mib_per_gpu": {
+      "0": 15737,
+      "1": 266
+    },
+    "n_samples": {
+      "0": 452,
+      "1": 452
+    },
+    "loaded_plateau_mib_per_gpu": {
+      "0": 2740,
+      "1": null
+    },
+    "homed_lines": [
+      "[2026-07-06 14:50:05,257] [INFO] [axolotl.integrations.expert_offload.offload] expert_offload: homed 32 expert layers across 16 MoE blocks (3.22 GB) to pinned CPU RAM; one block resident on cuda:0 at a time."
+    ],
+    "loaded_at_anchor_mib_per_gpu": {
+      "0": 1238,
+      "1": 1
+    },
+    "anchor_line": "[2026-07-06 14:50:05,257] [INFO] [axolotl.integrations.expert_offload.offload] expert_offload: homed 32 expert layers across 16 MoE blocks (3.22 GB) to pinned C",
+    "n_train_logs": 0,
+    "first_train_loss": null,
+    "final_train_loss": null,
+    "eval_losses": [],
+    "train_runtime_s": null,
+    "s_per_step_tqdm_median": 0.334
+  },
+  {
+    "arm": "ddp_resident",
+    "peak_mib_per_gpu": {
+      "0": 18326,
+      "1": 18326
+    },
+    "n_samples": {
+      "0": 345,
+      "1": 345
+    },
+    "loaded_plateau_mib_per_gpu": {
+      "0": 5312,
+      "1": 5312
+    },
+    "homed_lines": [],
+    "n_train_logs": 0,
+    "first_train_loss": null,
+    "final_train_loss": null,
+    "eval_losses": [],
+    "train_runtime_s": null,
+    "s_per_step_tqdm_median": 0.73
+  },
+  {
+    "arm": "ddp_offload",
+    "peak_mib_per_gpu": {
+      "0": 16093,
+      "1": 16093
+    },
+    "n_samples": {
+      "0": 423,
+      "1": 423
+    },
+    "loaded_plateau_mib_per_gpu": {
+      "0": 4210,
+      "1": 4210
+    },
+    "homed_lines": [
+      "[2026-07-06 15:17:10,580] [INFO] [axolotl.integrations.expert_offload.offload] expert_offload [rank 0]: homed 32 expert layers across 16 MoE blocks (3.22 GB) to pinned CPU RAM; one block resident on cuda:0 at a time."
+    ],
+    "loaded_at_anchor_mib_per_gpu": {
+      "0": 1394,
+      "1": 1394
+    },
+    "anchor_line": "[2026-07-06 15:17:10,580] [INFO] [axolotl.integrations.expert_offload.offload] expert_offload [rank 0]: homed 32 expert layers across 16 MoE blocks (3.22 GB) to",
+    "n_train_logs": 0,
+    "first_train_loss": null,
+    "final_train_loss": null,
+    "eval_losses": [],
+    "train_runtime_s": null,
+    "s_per_step_tqdm_median": 0.595
+  }
+]
+
+| arm | loaded GPU (GB) | peak GPU (GB) | s/step | final eval loss |
+|---|--:|--:|--:|--:|
+| single_resident | 5.03/0.00 | 17.88/0.00 | ? | ? |
+| single_offload | 1.21/0.00 | 15.37/0.26 | ? | ? |
+| ddp_resident | 5.19/5.19 | 17.90/17.90 | ? | ? |
+| ddp_offload | 1.36/1.36 | 15.72/15.72 | ? | ? |
+
+== trainer metrics (quoted-loss extraction, steady-state s/it = median of last-30 train-bar timings) ==
+arm              first_loss last_loss evals(0/50/100/150)              train_runtime_s  s/it
+single_resident  5.469      2.199     5.456 3.678 2.493 2.359          544.9            2.62
+single_offload   5.469      2.221     5.456 3.684 2.496 2.365          758.6            3.55
+ddp_resident     5.583      2.233     5.476 3.560 2.337 2.214          494.2            2.73
+ddp_offload      5.583      2.231     5.476 3.555 2.332 2.213          667.5            3.66
+
+== final table ==
+| arm | loaded GPU (GB) | peak GPU (GB) | s/it steady | final eval loss |
+|---|--:|--:|--:|--:|
+| single resident        | 5.03      | 17.9      | 2.62 | 2.359 |
+| single offload         | **1.21**  | 15.4      | 3.55 | 2.365 |
+| DDP resident (per rank)| 5.19      | 17.9      | 2.73 | 2.214 |
+| DDP offload (per rank) | **1.36**  | 15.7      | 3.66 | 2.213 |
+
+offload s/it overhead: +35.5% single, +34.1% DDP per-rank -> NCCL-vs-H2D contention delta ~ -1.4 pts (none measurable)
+homed per rank: 3.22 GB pinned (32 stacks / 16 blocks); loaded-footprint reduction: -76% single, -74% DDP
+host: 2x RTX 3090 24GB (SECURE, one pod, all four arms one session); seed 42 both pairs — resident/offload eval curves overlay within noise
