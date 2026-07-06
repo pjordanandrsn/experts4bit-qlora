@@ -1,0 +1,13 @@
+{
+  "adapter": null,
+  "decode_tokens_traced": 4011,
+  "gpu_name": "NVIDIA RTX A5000",
+  "job_type": "n2_trace",
+  "mode": "generate",
+  "n_moe_layers": 16,
+  "n_prompts": 16,
+  "status": "pass",
+  "storage_mode": "nf4",
+  "timestamp": "2026-07-06T04:19:56Z",
+  "torch_version": "2.8.0+cu128"
+}

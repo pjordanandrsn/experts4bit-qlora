@@ -58,6 +58,46 @@ authorized: operator "please" on option (b), 2026-07-06.
   number; the eval-set number was 0.94).
 - P-B3 (lane odds) does NOT grade here — it grades at lane end, after the build/kill decision.
 
+## RESULT (2026-07-06, A5000, `runs/results/postaudit/n2b/`; rev1 margin-hook red fixed)
+
+Host attest 64/64 bitwise (P0.a passed). Phase-0 probes: BW_gather 13.3 GB/s (nf4/int8) /
+9.0 (bf16); T_ovh 79.7/95.6/72.9 ms; t_fetch 34.0/63.9/179.6 ms/token. Three traces ×4k
+decode tokens.
+
+**Core lane verdict — SPARE all three cache lanes (build is justified), correcting A2.**
+
+| precision | ceiling gap | best h(2GB) | best gain | verdict |
+|---|---|---|---|---|
+| nf4 | +43% | 0.854 | +34.3% | SPARE |
+| int8 | +67% | 0.626 | +33.7% | SPARE |
+| bf16 (proxy stream) | +246% | 0.424 | +43.1% | SPARE |
+
+Decode routing has **low sequential locality** (consecutive-token Jaccard ≈ 0.30, churn ≈ 0.70)
+but a **bounded working set** a 2 GB LRU captures well — so caching pays on working-set capture,
+not sequential reuse. A2's prior (**kill nf4**, spare int8/16-bit) is **corrected**: nf4 is
+spared too (gain +34%). The cache is a plain-LRU working-set cache.
+
+**O2 margin-aware eviction — NO benefit (clean negative).** Margin-LRU ≈ plain LRU (int8
+0.626→0.630, nf4 unchanged, bf16 0.424→**0.386 worse**). Do not build the margin-aware policy.
+
+**P-B1 (margin→locality) — BORDERLINE, directionally right.** Spearman corr(near-margin frac,
+Jaccard) across the 16 layers: nf4-base −0.415 (HOLDS <−0.40), int8-base −0.435 (HOLDS),
+nf4-adapter −0.350 (FAILS). All negative and ~−0.4, so low-margin layers do route less stably
+— but with n=16 layers the estimate straddles the committed −0.40 bar (2/3 clear it). Weakly
+supported, not robust.
+
+**P-B2 (churn quartile ≥ 1.5×) — FAILS.** Top-vs-bottom near-margin-quartile churn ratio is
+1.09–1.10× (real, tiny). The margin signal is too weak to stratify layers for a policy —
+consistent with O2's no-benefit.
+
+**O1 byproduct — base-vs-adapter decode routing Jaccard 0.771** (vs eval-set 0.942): adapters
+move routing MORE under autoregressive decode than under teacher-forced eval, reinforcing S-B.
+
+**Net:** build the simple working-set LRU cache (SPARE, A2-corrected); skip the margin-aware
+refinement (O2 no help, P-B2 fails, P-B1 borderline). P-B3 (lane odds) grades whenever a real
+build/kill decision is made — the kill table now supplies its input. Reconstruction caveat
+stands: re-grade against plan-routed-v3 if it lands.
+
 ## What will not be claimed
 
 - Nothing about v3's actual Phase 0–1 — this is a reconstruction, labeled as such throughout.
@@ -73,22 +113,24 @@ authorized: operator "please" on option (b), 2026-07-06.
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T02:51:02Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `bc4db0ef06f20437bf188617876c1a6917f204ff926749e79bdaec0734b01288` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[@&o!@.?$.0$+.o~=]`
+- **OTS proof timestamp for visible document:** `2026-07-06T04:36:32Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `faf7756b6d16598ad8bbe3b80c6fc488ec579394266af3e2ed18f56187983d12` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T02:51:02Z` `bc4db0ef06f20437bf188617876c1a6917f204ff926749e79bdaec0734b01288`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[$%$==O0@0!:0O#*%]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|     ..o         |
-|    E o.+ .      |
-|       *o+.o.    |
-|      =.@*o+o    |
-|     . OS**...   |
-|      + *O. .o   |
-|       *.+o.o.   |
-|        o.o+  .  |
-|         .o.+.   |
+|                 |
+|                 |
+|        E  .     |
+|        .=+.    .|
+|     . oS**+.. .o|
+|      *o.+B+o .o |
+|     ooo.o.. .. +|
+|      o=o+o.o. o=|
+|     .o++o=++o.+ |
 +-----------------+
 ```
 

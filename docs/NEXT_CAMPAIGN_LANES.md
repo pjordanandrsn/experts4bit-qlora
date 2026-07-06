@@ -33,13 +33,18 @@ Pinning recovers ~37% of G (real, |t|≈4) but below the 0.50 bar; routing misma
 significant term, the majority is value-space co-adaptation. Next step (no clock): a
 seed-replicated follow-up to confirm before any serving claim.
 
-## Lane N2 — Routed-stream Phases 0–6 (T7; never closed)
+## Lane N2 — Routed-stream Phases 0–6 (T7) — **PHASE 0–1 RUN 2026-07-06 (reconstruction)**
 
-P-B1/P-B2 await the margins×traces join; P-B3 grades at lane end. Note for the
-record: P-B4's coupling resolved BULLISH — G real ⇒ ≥8-bit serve is
-quality-justified ⇒ the cache's int8/16-bit lanes keep their A2 priors (+38%/+79%
-ceilings). The deciding measurement remains batch-1 decode temporal locality
-(Phase 1, adapter-active per O1).
+P-B4's coupling resolved BULLISH earlier. Phase 0–1 now run as a reconstruction
+(`docs/N2_PHASE01_RECONSTRUCTION.md`, v3 not-in-repo):
+
+**Build the simple working-set LRU cache — SPARE all lanes, A2's "kill nf4" prior corrected.**
+Decode locality is low (consecutive-token Jaccard ≈0.30) but the working set fits 2 GB
+(h 0.85/0.63/0.42), so the cache pays +34–43% on all precisions. O2 margin-aware eviction adds
+nothing (clean negative); P-B1 (margin→locality) is borderline (−0.4-ish, n=16 fragile), P-B2
+fails (1.1×). O1: adapters move routing more under decode (Jaccard 0.771) than eval (0.942).
+**Remaining in N2:** Phases 2–6 (the actual cache build + serving integration), the Qwen3
+parts (A100), and P-B3 lane-odds grading at a real build/kill decision — all no-clock.
 
 ## Lane N3 — S-C mixed-precision cell (HALF-licensed; one CPU join short) — **RUN 2026-07-06: CLOSED**
 
@@ -97,25 +102,26 @@ campaign task; N2 is its own arc; N3 waits on one join. Nothing here has a clock
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T02:10:11Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `5c34eb0f8d386ea774e2e63d5d1e4a08979ff049a880522e4f7b5257b976ade8` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-06T04:37:03Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `a7d1ead39cfda1a4ac5f5cbabea2764ad6cbf9991353f54673f99f159d101e6a` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T02:10:11Z` `5c34eb0f8d386ea774e2e63d5d1e4a08979ff049a880522e4f7b5257b976ade8`
   - `2026-07-06T02:01:46Z` `85f56abb01baff49d61993aa00a323cd2d4a458b1c24632d7fca1664ad6a6f05`
   - `2026-07-06T00:36:01Z` `2d7b369eddc7837d5218176cd66716803cd8bd2acb4b4bd9f22eeb9967b9e39b`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[O&~o?@.$*!~*0?%=]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[%=!:?%!~#&$!%:%o]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-|          o.     |
-|    .    .oo     |
-|   o .   .o+ .   |
-|  o + o.o+Boo .  |
-|   = o oS=+O.+   |
-|    + ....ooB o  |
-|     o  =.oo.+ . |
-|       +.*E o .  |
-|       o+ ..     |
+|             +o +|
+|            o .==|
+|           E . o*|
+|         ..   . =|
+|        S o  ...+|
+|         * .oo ..|
+|        =o.o=o.  |
+|       +oo**o= . |
+|       .=BB+O+.  |
 +-----------------+
 ```
 

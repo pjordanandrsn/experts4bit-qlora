@@ -4,6 +4,21 @@ Graded predictions and adopted forecasting rules, one entry per grading event, n
 Entries are recorded verbatim from their source documents at filing time; gradings are never
 edited after the fact — corrections are new entries.
 
+## 2026-07-06 — N2 routed-stream Phase 0–1 (reconstruction) GRADED
+
+Reconstruction of v3 Phase 0–1 (`docs/N2_PHASE01_RECONSTRUCTION.md`; not the real v3).
+Rev1 had a margin-hook red (OlmoeTopKRouter ≠ nn.Linear → empty margins, vacuous P-B); fixed
+(take router_logits from the tuple) and re-run.
+- **Core: SPARE all cache lanes** (nf4 +34.3% / int8 +33.7% / bf16 +43.1% at 2 GB) — decode
+  locality low (Jaccard ≈0.30) but working set cacheable. **A2's "kill nf4" prior CORRECTED.**
+- **O2 margin-aware eviction: no benefit** (≈ plain LRU, bf16 worse) — clean negative.
+- **P-B1 (corr(near-margin, Jaccard) < −0.40): BORDERLINE** — −0.415/−0.435 (HOLD),
+  −0.350 (adapter, FAILS); all negative ~−0.4 but n=16 layers makes it non-robust.
+- **P-B2 (churn quartile ≥ 1.5×): FAILS** (1.09–1.10×).
+- **O1 byproduct:** base-vs-adapter decode routing Jaccard 0.771 (< eval-set 0.942) —
+  adapters move routing more under decode, reinforcing S-B.
+Net: build the simple working-set LRU; skip margin-aware complexity. `runs/results/postaudit/n2b/`.
+
 ## 2026-07-06 — N3 fragility attribution GRADED (mixed-precision cell gate)
 
 Committed S-C gate (ba23461, pre-data): top-decile |d_i| flips concentrate ≥ 2× over uniform.
@@ -158,9 +173,10 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 
 **OpenTimestamps anchor (self-attestation footer):**
 
-- **OTS proof timestamp for visible document:** `2026-07-06T02:10:19Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
-- **Disclosed pre-footer content hash:** `1eabe6aedfaf050152834a38f631bc4f06d1661f3b85a3aefeb56a8a85b33e55` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
+- **OTS proof timestamp for visible document:** `2026-07-06T04:36:37Z` (the moment the current `.ots` was submitted to the calendars; this is the legally operative timestamp for the visible file as published).
+- **Disclosed pre-footer content hash:** `e1e509306a1392ea765fb6b7247030cdd11bde4e1c1be3c69c8bbcbb145a017c` (the SHA-256 of the document *before* this footer was appended — disclosed inside the OTS-anchored visible document for human-readable historical reference; this hash is *not* the payload of the current `.ots` file).
 - **Prior disclosed pre-footer hashes (chain, newest first):**
+  - `2026-07-06T02:10:19Z` `1eabe6aedfaf050152834a38f631bc4f06d1661f3b85a3aefeb56a8a85b33e55`
   - `2026-07-06T02:01:24Z` `abdbb765824bcc92396b7dc401e7a7e645c6e72aa9747ea8060cd8c71a1cf1b0`
   - `2026-07-06T00:36:02Z` `3f7b908c9fececbefdf161bdfde661363339406cc05c77f99c48d97013438fed`
   - `2026-07-06T00:19:00Z` `c1d2c77eacd785d924482fdec33fcab841d843b751139dc64431f57a4152b8e1`
@@ -168,20 +184,20 @@ No significance forecasts without the instrument's n in hand. The prior forecast
   - `2026-07-05T20:04:03Z` `f23487b74d50e842b37b930f02174c72ecf2846b18ca542b55d4424d56b2e765`
   - `2026-07-05T18:22:04Z` `a49fc7cb9f351c8096608c5ea1bb281e065c237f9d6d8268c055035c7ea9c2b4`
   - `2026-07-05T18:18:28Z` `5ebfa4b4193e3351723ed1aa29578ae2f53de51e7d34fc54bcb075e7aa712024`
-- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[:?%@?0%?!$%$.O.:]`
+- integrity-attestor glyph (`core.fingerprint`, first 8 bytes of the disclosed pre-footer hash): `[?:?O.#~.0%:~#+?%]`
 - Drunken-bishop randomart (full disclosed pre-footer SHA-256, OpenSSH-style):
 
 ```
 +----[SHA256]-----+
-| ...+o+ .        |
-|o..=.= * .       |
-|.o..B o *        |
-|  .o E + .       |
-|    *   S        |
-|  .. o . +       |
-| o...  .o .      |
-| .=. .oo..       |
-|.+oo=O*.oo.      |
+|  ... +o.        |
+|  .. oo+oE +     |
+| .  +o o=.X *    |
+|.  . .o. B.%     |
+|.    . .SoB .    |
+| o .  oooo.o     |
+|. . . oo.o.      |
+|     . .+o       |
+|        .++      |
 +-----------------+
 ```
 

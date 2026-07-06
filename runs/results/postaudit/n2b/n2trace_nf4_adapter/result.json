@@ -1,0 +1,13 @@
+{
+  "adapter": "/workspace/matrix/olmoe_mode_adapters/nf4/adapter_best.pt",
+  "decode_tokens_traced": 4027,
+  "gpu_name": "NVIDIA RTX A5000",
+  "job_type": "n2_trace",
+  "mode": "replay",
+  "n_moe_layers": 16,
+  "n_prompts": 16,
+  "status": "pass",
+  "storage_mode": "nf4",
+  "timestamp": "2026-07-06T04:26:36Z",
+  "torch_version": "2.8.0+cu128"
+}
