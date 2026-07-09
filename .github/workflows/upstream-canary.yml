@@ -91,6 +91,9 @@ jobs:
         run: python scripts/upstream_canary.py 2>&1 | tee canary.log
 
       - name: Assert wall budget (<= 10 min)
+        # always(): the wall time must be reported and asserted even when an earlier
+        # step already failed — a slow AND broken run should show both signals.
+        if: always()
         run: |
           ELAPSED=$(( $(date +%s) - $(cat /tmp/job_start) ))
           echo "canary wall: ${ELAPSED}s"
