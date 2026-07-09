@@ -1,0 +1,77 @@
+name: Upstream canary
+
+# Weekly tripwire: transformers@main + bitsandbytes@main + this package@main against the
+# fused-MoE expert surface (layout / quantize / train probes in scripts/upstream_canary.py).
+# A red run auto-opens (or updates) an 'upstream-canary' issue with the versions manifest,
+# so upstream layout moves reach us as fixes-in-progress rather than user bug reports.
+
+on:
+  schedule:
+    - cron: "0 5 * * 3" # Wednesdays 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      sabotage:
+        description: "Failure-path drill: install a pre-OLMoE transformers so the layout probe fails"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install (CPU torch + upstream mains)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          if [ "${{ inputs.sabotage }}" = "true" ]; then
+            echo "SABOTAGE: installing pre-OLMoE transformers to exercise the failure path"
+            pip install "transformers==4.44.2"
+          else
+            pip install "git+https://github.com/huggingface/transformers"
+          fi
+          pip install "git+https://github.com/bitsandbytes-foundation/bitsandbytes"
+          pip install -e .
+
+      - name: Versions manifest
+        if: always()
+        run: pip freeze | tee versions.txt
+
+      - name: Run canary
+        run: python scripts/upstream_canary.py 2>&1 | tee canary.log
+
+      - name: Upload manifest + log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-${{ github.run_id }}
+          path: |
+            versions.txt
+            canary.log
+
+      - name: Open or update failure issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create upstream-canary --repo "$GITHUB_REPOSITORY" \
+            --description "Weekly transformers/bnb main canary" --color D93F0B 2>/dev/null || true
+          BODY=$(printf 'Upstream canary failed: %s\n\nRun: %s/%s/actions/runs/%s\n\n### Versions\n```\n%s\n```\n\n### Log tail\n```\n%s\n```\n' \
+            "$(date -u +%F)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
+            "$(grep -iE 'torch|transformers|bitsandbytes|experts4bit' versions.txt | head -12 || true)" \
+            "$(tail -25 canary.log 2>/dev/null || echo 'no log')")
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-canary --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label upstream-canary \
+              --title "Upstream canary failed $(date -u +%F)" --body "$BODY"
+          fi
