@@ -100,7 +100,11 @@ jobs:
           { cat wheel-info.txt 2>/dev/null || true; pip freeze; } | tee versions.txt
 
       - name: Run canary
-        run: python scripts/upstream_canary.py 2>&1 | tee canary.log
+        # pipefail is load-bearing: without it the step reports tee's exit 0 and a
+        # crashed canary goes green (caught by the sabotage drill, 2026-07-09).
+        run: |
+          set -o pipefail
+          python scripts/upstream_canary.py 2>&1 | tee canary.log
 
       - name: Assert wall budget (<= 10 min)
         # always(): the wall time must be reported and asserted even when an earlier
