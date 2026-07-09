@@ -27,11 +27,14 @@ services:
       - E4B_MAX_INPUT_TOKENS=2048
       - E4B_MAX_NEW_TOKENS=256
       - E4B_REQUEST_TIMEOUT_S=600
+      # One JSON line per generation (tokens, peak VRAM, wall, versions) -> ./receipts on the host.
+      - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
     ports:
       - "8777:8777"
     volumes:
       - ../../hf-cache:/root/.cache/huggingface
       - ../../adapters:/adapters:ro
+      - ../../receipts:/receipts
     ulimits:
       # Required: the offload homes must pin (mlock) ~5 GB for OLMoE. Without this the pin
       # silently falls back to pageable and decode drops from 1.44 to ~0.4 tok/s.

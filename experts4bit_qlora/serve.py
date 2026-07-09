@@ -35,7 +35,9 @@ Variables: ``MODEL``, ``R``/``ALPHA`` (must match the adapters), ``QUANT_TYPE``,
 ``E4B_MAX_INPUT_TOKENS`` (default 2048 -> 413), ``E4B_MAX_NEW_TOKENS`` (cap, default 256),
 ``E4B_REQUEST_TIMEOUT_S`` (default 600; partial text with ``stopped:"timeout"``),
 ``E4B_EMPTY_CACHE`` (default 1: release allocator blocks to the driver when idle),
-``E4B_VRAM_FRACTION`` (optional hard cap), ``E4B_WARMUP_TOKENS`` (default 8).
+``E4B_VRAM_FRACTION`` (optional hard cap), ``E4B_WARMUP_TOKENS`` (default 8),
+``E4B_RECEIPTS_PATH`` (append a one-line JSON receipt per generation — token counts,
+peak VRAM, wall time, versions; empty/unset = off).
 
 Endpoints: ``POST /generate`` (JSON or SSE), ``GET /health``, and OpenAI-compatible
 ``/v1/completions`` + ``/v1/models`` (``model`` selects the adapter). There is deliberately no
@@ -87,6 +89,7 @@ class ServeConfig:
     vram_fraction: float = 0.0  # 0 = off
     warmup_tokens: int = 8
     device: str = "cuda"
+    receipts_path: str = ""  # "" = receipts off
 
     @classmethod
     def from_env(cls) -> "ServeConfig":
@@ -108,6 +111,7 @@ class ServeConfig:
             empty_cache=os.environ.get("E4B_EMPTY_CACHE", "1") == "1",
             vram_fraction=float(os.environ.get("E4B_VRAM_FRACTION", "0")),
             warmup_tokens=int(os.environ.get("E4B_WARMUP_TOKENS", "8")),
+            receipts_path=os.environ.get("E4B_RECEIPTS_PATH", ""),
         )
 
 
@@ -333,6 +337,7 @@ class Engine:
                 seed=None,
                 stop_event=None,
                 streamer=None,
+                record_receipt=False,  # synthetic startup traffic — keep the audit log real
             )
         torch.cuda.synchronize()
         log(f"serve: ready. GPU allocated {torch.cuda.memory_allocated() / 1e9:.2f} GB")
@@ -378,12 +383,26 @@ class Engine:
         return (time.perf_counter() - t0) * 1000.0
 
     def _generate_once(
-        self, prompt, adapter, max_new_tokens, temperature, top_p, repetition_penalty, seed, stop_event, streamer
+        self,
+        prompt,
+        adapter,
+        max_new_tokens,
+        temperature,
+        top_p,
+        repetition_penalty,
+        seed,
+        stop_event,
+        streamer,
+        record_receipt=True,
     ) -> dict:
         """The one function that touches the GPU (worker thread only): swap, generate, account."""
         from transformers import StoppingCriteriaList
 
         tok, model, cfg = self.tokenizer, self.model, self.cfg
+        write_receipt = bool(cfg.receipts_path) and record_receipt
+        if write_receipt and torch.cuda.is_available():
+            # Single worker thread: the peak window is exactly this request (swap + generate).
+            torch.cuda.reset_peak_memory_stats()
         swap_ms = self._swap_adapter(adapter)
         if seed is not None:
             torch.manual_seed(seed)
@@ -411,6 +430,25 @@ class Engine:
         text = tok.decode(out[0][n_prompt:], skip_special_tokens=True)
         stopped = stop.reason or ("length" if n_new >= max_new_tokens else "eos")
 
+        if write_receipt:
+            _append_receipt(
+                cfg.receipts_path,
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "adapter": adapter,
+                    "input_tokens": n_prompt,
+                    "output_tokens": n_new,
+                    # 1e9 divisor to stay comparable with /health's *_gb fields.
+                    "peak_vram_gb": round(torch.cuda.max_memory_allocated() / 1e9, 3)
+                    if torch.cuda.is_available()
+                    else None,
+                    "wall_s": round(dt, 1),
+                    "tok_per_s": round(n_new / dt, 3) if dt > 0 else 0.0,
+                    "stopped": stopped,
+                    "e4b_version": _E4B_VERSION,
+                    "torch": torch.__version__,
+                },
+            )
         # Return freed allocator blocks to the driver when nothing is waiting, so bursty
         # neighbors (TTS/SDXL) see the memory. Benign race on _pending: worst case we skip once.
         if cfg.empty_cache and self._pending <= 1 and torch.cuda.is_available():
@@ -424,6 +462,27 @@ class Engine:
             "swap_ms": round(swap_ms, 1),
             "stopped": stopped,
         }
+
+
+try:
+    import importlib.metadata
+
+    _E4B_VERSION = importlib.metadata.version("experts4bit-qlora")
+except Exception:  # not installed as a dist (e.g. PYTHONPATH use)
+    from . import __version__ as _E4B_VERSION
+
+
+def _append_receipt(path: str, record: dict) -> None:
+    """Append one JSON line to the receipts log. Never raises — a receipts problem
+    (read-only mount, full disk) must not break serving."""
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except OSError as e:
+        log(f"receipts: dropped record ({e})")
 
 
 def _gpu_stats() -> Optional[dict]:
