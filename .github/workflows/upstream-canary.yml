@@ -63,7 +63,7 @@ jobs:
             echo "DRILL: simulating main-wheel-unavailable"
           else
             ASSET=$(gh api repos/bitsandbytes-foundation/bitsandbytes/releases/tags/continuous-release_main \
-              --jq '[.assets[] | select(.name | test("manylinux.*x86_64\\.whl$"))][0] | "\(.browser_download_url)|\(.updated_at)"' \
+              --jq '([.assets[] | select(.name | test("manylinux.*x86_64\\.whl$"))][0] // empty) | "\(.browser_download_url)|\(.updated_at)"' \
               2>/dev/null || true)
             WHEEL_URL="${ASSET%%|*}"
             WHEEL_TS="${ASSET##*|}"
