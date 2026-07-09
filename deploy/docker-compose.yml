@@ -74,10 +74,12 @@ services:
       # At ~0.22 tok/s a long reply takes minutes — cap output, stretch the deadline.
       - E4B_MAX_NEW_TOKENS=192
       - E4B_REQUEST_TIMEOUT_S=1800
+      - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
     ports:
       - "8781:8781"
     volumes:
       - ../../hf-cache:/root/.cache/huggingface
+      - ../../receipts:/receipts
     ulimits:
       memlock: -1  # ~15 GB of 4-bit experts must pin (see the note on the primary service)
     restart: unless-stopped
@@ -112,11 +114,13 @@ services:
       - E4B_MAX_INPUT_TOKENS=2048
       - E4B_MAX_NEW_TOKENS=256
       - E4B_REQUEST_TIMEOUT_S=600
+      - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
     ports:
       - "8783:8783"
     volumes:
       - ../../hf-cache:/root/.cache/huggingface
       - ../../adapters:/adapters:ro
+      - ../../receipts:/receipts
     ulimits:
       memlock: -1
     restart: unless-stopped
