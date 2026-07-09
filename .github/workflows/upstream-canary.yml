@@ -57,22 +57,34 @@ jobs:
           fi
 
           # bitsandbytes: resolve the rolling main-wheel asset dynamically (filename
-          # changes per build; only the release tag is stable).
-          WHEEL_URL="" WHEEL_TS=""
+          # changes per build; only the release tag is stable). The wheel MUST be saved
+          # under its original filename — pip parses name/version/tags from it and
+          # rejects a renamed file ("wrong number of parts").
+          WHEEL_NAME="" WHEEL_URL="" WHEEL_TS=""
           if [ "${{ inputs.wheel_missing }}" = "true" ]; then
             echo "DRILL: simulating main-wheel-unavailable"
           else
             ASSET=$(gh api repos/bitsandbytes-foundation/bitsandbytes/releases/tags/continuous-release_main \
-              --jq '([.assets[] | select(.name | test("manylinux.*x86_64\\.whl$"))][0] // empty) | "\(.browser_download_url)|\(.updated_at)"' \
-              2>/dev/null || true)
-            WHEEL_URL="${ASSET%%|*}"
-            WHEEL_TS="${ASSET##*|}"
+              --jq '([.assets[] | select(.name | test("manylinux.*x86_64\\.whl$"))][0] // empty) | "\(.name)|\(.browser_download_url)|\(.updated_at)"') \
+              || { echo "wheel-resolve failed: $ASSET"; ASSET=""; }
+            case "$ASSET" in
+              *.whl\|https://*) WHEEL_NAME="${ASSET%%|*}"; REST="${ASSET#*|}";
+                                WHEEL_URL="${REST%%|*}"; WHEEL_TS="${REST##*|}";;
+              *) echo "wheel-resolve returned nothing usable: '$ASSET'";;
+            esac
           fi
-          if [ -n "$WHEEL_URL" ] \
-             && curl -fsSL -o /tmp/bnb-main.whl "$WHEEL_URL" \
-             && pip install /tmp/bnb-main.whl \
-             && python -c "import bitsandbytes"; then
-            echo "bnb-install: main-wheel $WHEEL_URL (asset updated $WHEEL_TS)" > wheel-info.txt
+          BNB_MAIN_OK=""
+          if [ -n "$WHEEL_URL" ]; then
+            if curl -fSL --retry 2 -o "/tmp/$WHEEL_NAME" "$WHEEL_URL" \
+               && pip install "/tmp/$WHEEL_NAME" \
+               && python -c "import bitsandbytes; print('bnb import ok:', bitsandbytes.__version__)"; then
+              BNB_MAIN_OK=1
+            else
+              echo "wheel download/install/import FAILED (see above)"
+            fi
+          fi
+          if [ -n "$BNB_MAIN_OK" ]; then
+            echo "bnb-install: main-wheel $WHEEL_NAME (asset updated $WHEEL_TS)" > wheel-info.txt
             echo "degraded=" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::degraded: main-wheel-unavailable — falling back to last released bitsandbytes"
