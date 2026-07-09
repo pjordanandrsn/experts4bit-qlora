@@ -1,9 +1,16 @@
 name: Upstream canary
 
-# Weekly tripwire: transformers@main + bitsandbytes@main + this package@main against the
-# fused-MoE expert surface (layout / quantize / train probes in scripts/upstream_canary.py).
-# A red run auto-opens (or updates) an 'upstream-canary' issue with the versions manifest,
-# so upstream layout moves reach us as fixes-in-progress rather than user bug reports.
+# Weekly tripwire: transformers@main + bitsandbytes@main against the fused-MoE expert
+# surface (layout / quantize / train probes in scripts/upstream_canary.py).
+#
+# Install strategy (Amendment E2a): bitsandbytes comes from the rolling prebuilt
+# "Latest `main` wheel" release (tag continuous-release_main) — a compiled package is
+# tested as a wheel, so a red run means upstream moved, never "the build timed out".
+# If the wheel is unavailable, the run DEGRADES to the last released bnb (--pre),
+# still tests transformers-tip against the package, and does not page.
+#
+# A red run auto-opens (or updates) an 'upstream-canary' issue with the versions
+# manifest. Wall budget <= 10 min is asserted — a slow canary is a failed canary.
 
 on:
   schedule:
@@ -12,6 +19,10 @@ on:
     inputs:
       sabotage:
         description: "Failure-path drill: install a pre-OLMoE transformers so the layout probe fails"
+        type: boolean
+        default: false
+      wheel_missing:
+        description: "Degraded-path drill: pretend the rolling main wheel is unavailable"
         type: boolean
         default: false
 
@@ -23,12 +34,18 @@ jobs:
   canary:
     runs-on: ubuntu-latest
     steps:
+      - name: Start budget clock
+        run: date +%s > /tmp/job_start
+
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install (CPU torch + upstream mains)
+      - name: Install (CPU torch + transformers@main + bnb main wheel)
+        id: install
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
@@ -38,15 +55,49 @@ jobs:
           else
             pip install "git+https://github.com/huggingface/transformers"
           fi
-          pip install "git+https://github.com/bitsandbytes-foundation/bitsandbytes"
+
+          # bitsandbytes: resolve the rolling main-wheel asset dynamically (filename
+          # changes per build; only the release tag is stable).
+          WHEEL_URL="" WHEEL_TS=""
+          if [ "${{ inputs.wheel_missing }}" = "true" ]; then
+            echo "DRILL: simulating main-wheel-unavailable"
+          else
+            ASSET=$(gh api repos/bitsandbytes-foundation/bitsandbytes/releases/tags/continuous-release_main \
+              --jq '([.assets[] | select(.name | test("manylinux.*x86_64\\.whl$"))][0] // empty) | "\(.browser_download_url)|\(.updated_at)"' \
+              2>/dev/null || true)
+            WHEEL_URL="${ASSET%%|*}"
+            WHEEL_TS="${ASSET##*|}"
+          fi
+          if [ -n "$WHEEL_URL" ] \
+             && curl -fsSL -o /tmp/bnb-main.whl "$WHEEL_URL" \
+             && pip install /tmp/bnb-main.whl \
+             && python -c "import bitsandbytes"; then
+            echo "bnb-install: main-wheel $WHEEL_URL (asset updated $WHEEL_TS)" > wheel-info.txt
+            echo "degraded=" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::degraded: main-wheel-unavailable — falling back to last released bitsandbytes"
+            pip install --pre --upgrade bitsandbytes
+            echo "bnb-install: degraded main-wheel-unavailable (fell back to --pre release)" > wheel-info.txt
+            echo "degraded=main-wheel-unavailable" >> "$GITHUB_OUTPUT"
+          fi
           pip install -e .
 
       - name: Versions manifest
         if: always()
-        run: pip freeze | tee versions.txt
+        run: |
+          { cat wheel-info.txt 2>/dev/null || true; pip freeze; } | tee versions.txt
 
       - name: Run canary
         run: python scripts/upstream_canary.py 2>&1 | tee canary.log
+
+      - name: Assert wall budget (<= 10 min)
+        # always(): the wall time must be reported and asserted even when an earlier
+        # step already failed — a slow AND broken run should show both signals.
+        if: always()
+        run: |
+          ELAPSED=$(( $(date +%s) - $(cat /tmp/job_start) ))
+          echo "canary wall: ${ELAPSED}s"
+          test "$ELAPSED" -le 600 || { echo "::error::BUDGET: ${ELAPSED}s > 600s — a canary nobody waits for is a canary nobody trusts"; exit 1; }
 
       - name: Upload manifest + log
         if: always()
@@ -66,7 +117,7 @@ jobs:
             --description "Weekly transformers/bnb main canary" --color D93F0B 2>/dev/null || true
           BODY=$(printf 'Upstream canary failed: %s\n\nRun: %s/%s/actions/runs/%s\n\n### Versions\n```\n%s\n```\n\n### Log tail\n```\n%s\n```\n' \
             "$(date -u +%F)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" \
-            "$(grep -iE 'torch|transformers|bitsandbytes|experts4bit' versions.txt | head -12 || true)" \
+            "$(grep -iE 'bnb-install|^(torch|transformers|bitsandbytes|experts4bit)' versions.txt | head -12 || true)" \
             "$(tail -25 canary.log 2>/dev/null || echo 'no log')")
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label upstream-canary --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
