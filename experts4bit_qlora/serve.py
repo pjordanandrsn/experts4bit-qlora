@@ -337,6 +337,7 @@ class Engine:
                 seed=None,
                 stop_event=None,
                 streamer=None,
+                record_receipt=False,  # synthetic startup traffic — keep the audit log real
             )
         torch.cuda.synchronize()
         log(f"serve: ready. GPU allocated {torch.cuda.memory_allocated() / 1e9:.2f} GB")
@@ -382,13 +383,24 @@ class Engine:
         return (time.perf_counter() - t0) * 1000.0
 
     def _generate_once(
-        self, prompt, adapter, max_new_tokens, temperature, top_p, repetition_penalty, seed, stop_event, streamer
+        self,
+        prompt,
+        adapter,
+        max_new_tokens,
+        temperature,
+        top_p,
+        repetition_penalty,
+        seed,
+        stop_event,
+        streamer,
+        record_receipt=True,
     ) -> dict:
         """The one function that touches the GPU (worker thread only): swap, generate, account."""
         from transformers import StoppingCriteriaList
 
         tok, model, cfg = self.tokenizer, self.model, self.cfg
-        if cfg.receipts_path and torch.cuda.is_available():
+        write_receipt = bool(cfg.receipts_path) and record_receipt
+        if write_receipt and torch.cuda.is_available():
             # Single worker thread: the peak window is exactly this request (swap + generate).
             torch.cuda.reset_peak_memory_stats()
         swap_ms = self._swap_adapter(adapter)
@@ -418,7 +430,7 @@ class Engine:
         text = tok.decode(out[0][n_prompt:], skip_special_tokens=True)
         stopped = stop.reason or ("length" if n_new >= max_new_tokens else "eos")
 
-        if cfg.receipts_path:
+        if write_receipt:
             _append_receipt(
                 cfg.receipts_path,
                 {
@@ -426,7 +438,8 @@ class Engine:
                     "adapter": adapter,
                     "input_tokens": n_prompt,
                     "output_tokens": n_new,
-                    "peak_vram_gb": round(torch.cuda.max_memory_allocated() / 2**30, 3)
+                    # 1e9 divisor to stay comparable with /health's *_gb fields.
+                    "peak_vram_gb": round(torch.cuda.max_memory_allocated() / 1e9, 3)
                     if torch.cuda.is_available()
                     else None,
                     "wall_s": round(dt, 1),
