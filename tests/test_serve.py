@@ -236,3 +236,37 @@ def test_engine_release_never_negative():
         assert eng.queue_depth == 0
     finally:
         eng.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Receipts (E4B_RECEIPTS_PATH)
+# ---------------------------------------------------------------------------
+
+
+def test_receipts_config_from_env(monkeypatch):
+    assert ServeConfig().receipts_path == ""  # off by default
+    monkeypatch.setenv("E4B_RECEIPTS_PATH", "/receipts/runs.jsonl")
+    assert ServeConfig.from_env().receipts_path == "/receipts/runs.jsonl"
+
+
+def test_append_receipt_writes_jsonl(tmp_path):
+    import json
+
+    from experts4bit_qlora.serve import _append_receipt
+
+    path = tmp_path / "sub" / "runs.jsonl"  # parent dir created on demand
+    _append_receipt(str(path), {"input_tokens": 3, "output_tokens": 5})
+    _append_receipt(str(path), {"input_tokens": 7, "output_tokens": 11})
+
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert len(lines) == 2
+    assert lines[0]["output_tokens"] == 5 and lines[1]["input_tokens"] == 7
+
+
+def test_append_receipt_never_raises(tmp_path):
+    from experts4bit_qlora.serve import _append_receipt
+
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("")
+    # Parent path is a file -> open/makedirs fail; receipts must swallow, not break serving.
+    _append_receipt(str(blocker / "runs.jsonl"), {"input_tokens": 1})
