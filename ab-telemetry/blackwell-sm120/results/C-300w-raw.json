@@ -1,0 +1,15 @@
+{
+  "sku": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+  "watt_cap": 300,
+  "power_limit_csv": "300.00 W, 300.00 W, 325.00 W",
+  "cloud": "COMMUNITY (Max-Q never appeared in SECURE)",
+  "cost_per_hr_usd": 1.64,
+  "config": "Arm-1 resident, 200-step fixed slice, seed 42 (config body sha db030f4c0eeab843 == 600W)",
+  "n_steps_measured": 393,
+  "median_s_per_step": 3.85,
+  "median_tokens_per_sec_per_gpu": 2127.8,
+  "actual_power_w_median": 300.0,
+  "actual_power_w_max": 309.4,
+  "sm_clock_mhz_median": 2025.0,
+  "driver": "580.126.09"
+}

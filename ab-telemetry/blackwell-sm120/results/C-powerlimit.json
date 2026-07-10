@@ -1,14 +1,47 @@
 {
-  "sku": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
-  "watt_cap": 600,
-  "gate2_pl_writable": "no (host-locked)",
-  "config": "Arm-1 resident, 200-step fixed slice, seed 42",
-  "median_s_per_step": 3.14,
-  "median_tokens_per_sec_per_gpu": 1434.0,
-  "dmon_power_w_median": null,
-  "dmon_power_w_max": null,
-  "maxq_300w_half": "PENDING \u2014 RTX PRO 6000 Max-Q out of stock at all attempts this session",
-  "quarantine_note": "cross-SKU comparison would be different physical hosts; seed/config/commit pinned for when Max-Q obtainable",
-  "actual_power_w_median": 483.9,
-  "actual_power_w_max": 509.9
+  "workstream": "C \u2014 real Max-Q (300W) vs Workstation (600W), same SKU family, both sm_120 / 96GB",
+  "method": "identical 200-step Arm-1 resident slice; config body sha256 db030f4c0eeab843 IDENTICAL on both (only output_dir/wandb_name differ); seed 42; same data order; axolotl fd12f92 + bnb e7f4d86 (sm_120, cu130) verified by SHA on both pods",
+  "gate2_pl_writable": "no (host-locked, no SYS_ADMIN) \u2014 the handoff's -pl simulation was impossible, so BOTH halves are REAL silicon",
+  "throughput_definition": "tokens/step = sequence_len(2048) x micro_batch(1) x grad_accum(4) = 8192 nominal packed tokens; applied IDENTICALLY to both halves. NOTE: an earlier 600W artifact recorded 1434 tok/s under a different, unreproducible definition (~4503 tok/step); it is superseded here rather than mixed.",
+  "s_per_step_method": "median of steady-state progress-bar s/it, first 10 samples (warmup) dropped",
+  "arms": {
+    "workstation_600w": {
+      "median_s_per_step": 3.14,
+      "actual_power_w_median": 483.9,
+      "actual_power_w_max": 509.9,
+      "watt_cap": 600,
+      "cost_per_hr_usd": 1.89,
+      "cloud": "SECURE",
+      "driver": "580.126.16",
+      "tokens_per_sec": 2608.9,
+      "tokens_per_sec_per_watt": 5.391,
+      "power_headroom_note": "drew 483.9W median against a 600W cap \u2014 this workload never saturates the 600W budget"
+    },
+    "maxq_300w": {
+      "sku": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+      "watt_cap": 300,
+      "power_limit_csv": "300.00 W, 300.00 W, 325.00 W",
+      "cloud": "COMMUNITY (Max-Q never appeared in SECURE)",
+      "cost_per_hr_usd": 1.64,
+      "median_s_per_step": 3.85,
+      "actual_power_w_median": 300.0,
+      "actual_power_w_max": 309.4,
+      "sm_clock_mhz_median": 2025.0,
+      "driver": "580.126.09"
+    }
+  },
+  "deltas": {
+    "maxq_step_time_vs_600w": "+22.6% (slower)",
+    "maxq_throughput_fraction_of_600w": "81.6%",
+    "maxq_power_fraction_of_600w": "62.0% (of ACTUAL draw, not of cap)",
+    "maxq_perf_per_watt_vs_600w": "+31.6%",
+    "maxq_cost_per_hr_fraction": "86.8%"
+  },
+  "verdict": "Max-Q delivers ~82% of the 600W card's training throughput at ~62% of its actual power draw -> ~+32% perf/W. Both cards hold the full 96GB and identical numerics (same sm_120 kernels).",
+  "caveats": [
+    "DIFFERENT PHYSICAL HOSTS and clouds (600W=SECURE, Max-Q=COMMUNITY; Max-Q never appeared in SECURE across 8 attempts). Host CPU/PCIe/neighbour variance is NOT controlled. This is a cross-host cross-SKU comparison, stated as such.",
+    "driver differs slightly: 580.126.16 (600W) vs 580.126.09 (Max-Q)",
+    "single slice per SKU, no repeats; s/step medians are steady-state but each pod saw occasional shared-host stalls (excluded by the median, visible in the raw csv)",
+    "Max-Q sustained exactly its 300.0W cap (max 309.4W) -> it IS power-limited; the 600W card was NOT (483.9W of 600W). A more power-hungry workload would widen the gap."
+  ]
 }

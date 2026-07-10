@@ -95,33 +95,64 @@ Artifacts: `results/B-ab-summary.json`, `results/B-qwen30b_resident.jsonl`, `res
 
 **Headline contrast: Qwen3-30B-A3B decodes resident at 11.56 tok/s in 20 GB on the 96 GB card — where the A2000 OOMs resident and manages ~0.22 tok/s offloaded (a ~52× resident-vs-offloaded-A2000 gap).** Prefetch recovers 1.514 → 1.752 tok/s (1.16×) over serial offload; GEMV is neutral at this model shape (1.752 vs 1.751), matching the METHODOLOGY's Qwen3-30B finding. Artifact: `results/B4-decode.json`.
 
-## Workstream C — real Max-Q (300 W) vs Workstation (600 W)  ◑ 600 W half done; 300 W pending stock
+## Workstream C — real Max-Q (300 W) vs Workstation (600 W)  ✅ both halves measured
 
-Gate 2 failed (`-pl` host-locked), so the handoff's power-limit *simulation* is impossible on this
-pod — vindicating the owner's "rent both SKUs, measure real" choice (also better silicon-truth than
-a power-capped 600 W card). **The real Max-Q SKU was out of stock at every attempt this session**
-(6 tries, "no instances currently available"). Per the de-risk plan, the **600 W half is captured**
-so only the 300 W half remains against the same pinned seed/config/commit whenever a Max-Q pod frees:
+Gate 2 failed (`-pl` host-locked, no `SYS_ADMIN`), so the handoff's power-limit *simulation* was
+impossible. Both halves are therefore **real silicon** — which is the better evidence anyway: a
+power-capped 600 W card is not a Max-Q (different binning, clock/voltage curve, cooling).
 
-| SKU | watts | s/step (200-step slice, seed 42) | tok/s/gpu | actual draw (median / max) |
-|---|:---:|:---:|:---:|:---:|
-| Workstation Edition | 600 | **3.14** | 1434 | 483.9 W / 509.9 W |
-| Max-Q Workstation | 300 | ⟨pending stock⟩ | — | — |
+**Why Max-Q looked out of stock for eight attempts:** every attempt queried `cloudType: SECURE`
+only. Max-Q is a *workstation* card and lives in **Community Cloud**. Widening the ladder to
+SECURE → COMMUNITY (on-demand, then spot) secured one on the first try. The stock "shortage" was a
+search-space bug, not a market fact.
 
-The 600 W card draws only ~484 W median under this training slice — already below the 600 W cap,
-which is a useful prior for the Max-Q comparison (a 300 W cap may bite less than the nameplate
-suggests here). Artifact: `results/C-powerlimit.json`. **Cross-SKU caveat:** the two SKUs are
-different physical hosts, so the eventual delta carries host variance, not just the power binning —
-recorded in the artifact.
+Both arms ran the identical 200-step Arm-1 resident slice — config body `sha256 db030f4c0eeab843`
+**byte-identical** across the two pods (only `output_dir`/`wandb_name` differ), seed 42, same data
+order, `axolotl fd12f92` + `bnb e7f4d86` (sm_120, cu130) **SHA-verified on both pods**.
+
+| SKU | cap | median s/step | tok/s | actual draw (median / max) | SM clock | $/hr |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Workstation Edition | 600 W | **3.14** | 2608.9 | 483.9 W / 509.9 W | — | 1.89 |
+| **Max-Q Workstation** | 300 W | **3.85** | 2127.8 | **300.0 W** / 309.4 W | 2025 MHz | 1.64 |
+
+| delta | value |
+|---|---|
+| Max-Q step time | **+22.6 %** (slower) |
+| Max-Q throughput | **81.6 %** of the 600 W card |
+| Max-Q power (of *actual* draw, not cap) | **62.0 %** |
+| **Max-Q perf/W** | **+31.6 %** |
+
+**Verdict:** the Max-Q delivers **~82 % of the 600 W card's training throughput at ~62 % of its
+actual power draw — ~+32 % perf/W**. Both hold the full 96 GB and run identical sm_120 numerics.
+
+**The 600 W card was never power-limited on this workload** (483.9 W median against a 600 W cap),
+while the Max-Q sat pinned at exactly its 300.0 W cap. So this is close to a best case for Max-Q: a
+more power-hungry workload would widen the gap, because only one of the two cards has headroom left.
+
+**Throughput definition (both halves recomputed identically):** tokens/step = `sequence_len(2048) ×
+micro_batch(1) × grad_accum(4)` = 8192 nominal packed tokens. An earlier 600 W artifact recorded
+`1434 tok/s` under a different, unreproducible definition (~4503 tok/step); rather than mix
+definitions across the comparison, **both halves are recomputed under the one above and the old
+figure is superseded**. The s/step medians (the primary metric) are unaffected.
+
+**Caveats, stated plainly:** the two SKUs ran on **different physical hosts and different clouds**
+(600 W = SECURE, Max-Q = COMMUNITY), so host CPU/PCIe/neighbour variance is *not* controlled; driver
+differs slightly (580.126.16 vs 580.126.09); one slice per SKU, no repeats. Medians exclude warmup
+and are robust to the occasional shared-host stall visible in the raw CSVs.
+
+Artifacts: `results/C-powerlimit.json`, `results/C-300w-raw.json`, `configs/cslice_300w.yaml`,
+`vram/cslice_300w{,_dmon,_pl}.*` (461 `dmon -s pucm` samples).
 
 ## Deviations from handoff
 
 1. **torch cu130, not cu128** — axolotl pins force it; bnb must be built with the CUDA 13.0 toolkit (see Environment). The handoff's `-DCMAKE_CUDA_ARCHITECTURES=120` is correct; the toolkit version is the added step.
 2. **No persistent volume** — US-IL-1 had no PRO 6000 WS stock; fell back to any-DC ephemeral. Cost: cold HF download (~61 GB Qwen3-30B). No effect on results.
-3. **Gate 2 host-locked** → Workstream C via `-pl` impossible; pivoted to real-SKU rental (owner-approved).
+3. **Gate 2 host-locked** → Workstream C via `-pl` impossible; pivoted to real-SKU rental (owner-approved). **Both SKUs measured** (Max-Q found on COMMUNITY cloud after SECURE-only attempts kept returning no-stock).
 4. **Pod is on-demand, not spot** — SECURE on-demand at $1.89/hr (the SKU wasn't offered interruptible at launch).
 5. **`test_experts_nbit.py` absent** on the branch — pinned count is from `test_experts4bit.py` (59).
 6. **Push from Mac, not pod** — no GitHub credential placed on the rented pod (tighter than the handoff's PAT-on-pod).
+7. **Throughput definition superseded** — the 600 W half's original `1434 tok/s` used an unreproducible tokens/step; both halves recomputed under one explicit definition for the cross-SKU table (s/step medians unchanged).
+8. **Max-Q rented on COMMUNITY cloud**, on-demand $1.64/hr — it never appeared in SECURE across 8 attempts.
 7. **Workstream C is half-complete** — 600 W measured; 300 W blocked on Max-Q stock all session. Not skipped: pinned for resumption.
 
 ## Cost ledger
