@@ -1,0 +1,12 @@
+{
+  "probe": "routed-decode (EXPERIMENTAL HACK, not the plugin)",
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "tokens": 64,
+  "note": "absolute tok/s VOID per quarantine; direction + reads/token only",
+  "resident_ref_tok_s": 28.507,
+  "reads_per_token": {
+    "ram_whole_block": "all experts/layer staged per token",
+    "file_routed": "only top-k routed experts read per token"
+  },
+  "direction_hypothesis": "file_routed reads fewer bytes/token than ram_whole_block at batch 1"
+}

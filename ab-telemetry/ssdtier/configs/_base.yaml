@@ -1,0 +1,67 @@
+# Benchmark arm: single_resident — derived from the PR's shipped example
+# (src/axolotl/integrations/expert_offload/examples/olmoe-1b-7b-qlora-expert-offload.yaml).
+# Deltas from the example, identical across all arms: seed, max_steps 150, eval_steps 50,
+# save_strategy no, wandb offline, flash_attention false. Per-arm deltas: expert_offload,
+# output_dir, wandb_name. DDP arms differ only by visible-GPU count at launch.
+
+base_model: allenai/OLMoE-1B-7B-0924
+trust_remote_code: true
+
+plugins:
+  - axolotl.integrations.expert_offload.ExpertOffloadPlugin
+
+expert_offload: false
+
+load_in_8bit: false
+load_in_4bit: true
+# required on current upstream main: default false leaves MoE experts UNQUANTIZED
+# (bf16) under load_in_4bit -> resident arms OOM 24GB and there is nothing 4-bit to
+# offload (smoke round 6, 2026-07-06)
+quantize_moe_experts: true
+adapter: qlora
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+
+datasets:
+  - path: tatsu-lab/alpaca
+    type: alpaca
+dataset_prepared_path: /root/s3/prepared
+val_set_size: 0.05
+output_dir: /root/s3/outputs/__ARM__
+
+sequence_len: 2048
+sample_packing: true
+
+gradient_accumulation_steps: 4
+micro_batch_size: 1
+num_epochs: 1
+max_steps: 150
+seed: 42
+optimizer: adamw_torch_fused
+lr_scheduler: cosine
+learning_rate: 0.0001
+
+bf16: auto
+tf32: true
+flash_attention: false
+
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+
+logging_steps: 1
+warmup_ratio: 0.1
+eval_steps: 50
+save_strategy: "no"
+weight_decay: 0.0
+special_tokens:
+
+wandb_project: expert-offload-axolotl-ab
+wandb_name: __ARM__
+wandb_mode: offline

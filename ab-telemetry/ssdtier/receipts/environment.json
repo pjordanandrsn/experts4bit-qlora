@@ -1,0 +1,13 @@
+{
+  "device": "NVIDIA GeForce RTX 3090",
+  "capability": [
+    8,
+    6
+  ],
+  "torch": "2.13.0+cu130",
+  "torch_cuda": "13.0",
+  "bnb_sha": "e7f4d86052787b0f458fc0f2daa5335d31738c25",
+  "axolotl_sha": "fd12f92785363c2bb2b544a8ce7c745302968b4d",
+  "driver": "580.65.06",
+  "odirect": "supported (dd read 4.2 GB/s); FileStore mode=odirect confirmed in real training"
+}
