@@ -1,0 +1,38 @@
+{
+  "registered_stage": 1,
+  "registered": "2026-07-10 — host-INDEPENDENT pre-registration, committed BEFORE any bare-metal sweep. Stage 2 (the S/L-dependent NUMBERS) is filled in on the host AFTER the fio ladder + link measurement but BEFORE the placement sweep (the two-stage discipline the handoff mandates).",
+  "model": "Qwen3-30B-A3B",
+  "quantity": "4-bit NF4 fused experts; per-layer packed stack ~= 302 MB (14.5 GB / 48 MoE layers), the unit a placement map moves between tiers",
+  "knee_formula": "f_knee = 1 - S/L,  S = measured striped NVMe sequential read (GB/s), L = measured pinned H2D link bandwidth (GB/s). f = fraction of expert blocks on the RAM/fast tier.",
+  "stage2_to_measure_on_host": {
+    "S1_single_drive_GBps": null,
+    "S2_raid0_stripe_GBps": null,
+    "L_pinned_h2d_GBps": null,
+    "pcie": "record 4.0x16 | 5.0x16",
+    "f_knee_S1": "= 1 - S1/L  (compute after fio + link)",
+    "f_knee_S2": "= 1 - S2/L",
+    "pred_flat_region_s_per_step": "compute from L and bytes/step once L measured",
+    "pred_degraded_s_per_step_f0": "compute from min(S,L) once measured"
+  },
+  "access_informed_slices": {
+    "source": "Phase 0 access-pattern measurement (bench/access-pattern), Qwen3-30B real routing",
+    "rationale": "the crossover surface is (placement f x access eff_tokens); Phase 0 showed real read_fraction crosses 0.5 at ~58 tok and plateaus 0.80 — so the interesting access slices are the below-knee / at-knee / plateau points, NOT the saturated >=1024-of-uniform grid",
+    "slices": [
+      {"eff_tokens": 64,   "batch": 1, "seq": 64,   "measured_read_fraction": 0.53, "regime": "below access-knee"},
+      {"eff_tokens": 256,  "batch": 1, "seq": 256,  "measured_read_fraction": 0.69, "regime": "at access-knee"},
+      {"eff_tokens": 2048, "batch": 1, "seq": 2048, "measured_read_fraction": 0.80, "regime": "access plateau"}
+    ]
+  },
+  "shape_prior_from_containerized_reprobe": {
+    "source": "bench/ssdtier + private e4b-ssdtier knee re-probe (AFTER the async-H2D fix)",
+    "observed": "placement s/step is MONOTONE and smooth in f after the async fix (f=1.0 3.83 -> f=0.0 5.32 s/step, +0/6.3/14.4/25.1/38.9%); f=1.0 == pure RAMStore to 0.5% (perf degenerate-end gate PASS)",
+    "prediction": "on a bandwidth-limited host (containerized S/L small) the knee sits near f=1.0 (little flat region); on a fast dedicated NVMe stripe (S/L larger) f_knee = 1 - S/L moves left, EXPOSING a flat region for f > f_knee. Whether that flat region materializes is THE bare-metal question this session answers."
+  },
+  "gates_precommitted": {
+    "G1_bit_exact": "byte-identical control arm; torch.equal-exact degenerate ends; loss parity below the harness GPU noise floor (the measured-control method, not an epsilon)",
+    "G2_perf_degenerate": "at f=1.0, step-time overhead vs the resident baseline <= 0.5% (was 15.4% pre-async-fix). FAIL => measuring serialization, STOP before recording.",
+    "G3_stripe_saturates_lane": "measured striped sequential read S >= PCIe link bandwidth L BEFORE the sweep. If the stripe doesn't saturate the lane, the f-axis measures the wrong bottleneck and the crossover location is meaningless."
+  },
+  "falsifiable_claim_4_5": "there exists a placement fraction f* below which throughput holds ~link-floor (flat) and above which it degrades toward the SSD-bound floor, and f* tracks 1 - S/L; the crossover diagonal in (f, eff_tokens) is the located boundary of the SSD-tier regime.",
+  "non_goals": "no absolute-bandwidth claim from any containerized pod (quarantine rule); 397B/shared-expert models out of scope until e4b extends; full 2D grid avoided — only the Phase-0 access slices are measured."
+}
