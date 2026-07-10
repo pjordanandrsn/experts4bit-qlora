@@ -1,0 +1,57 @@
+{
+  "workstream": "B \u2014 Qwen3-30B-A3B seed-matched expert_offload A/B on Blackwell sm_120",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition (sm_120, 96GB, 600W)",
+  "shared_config": "seed=42, max_steps=150, eval_steps=50, seq_len=2048, sample_packing, grad_accum=4, micro_batch=1, lr=1e-4 cosine, r=8 alpha=16, attn-only LoRA(q,k,v,o), quantize_moe_experts=true, flash_attention=false(SDPA)",
+  "single_variable": "expert_offload false(resident) vs true(offload) \u2014 configs differ ONLY by that + output_dir + wandb_name",
+  "prior_baseline_A2000": "OLMoE-1B-7B(sm_86): resident peak 6.00GB / offload 2.60GB; Qwen3-30B resident OOM'd on 12GB",
+  "arms": {
+    "qwen30b_resident": {
+      "n_train_logs": 150,
+      "first_loss": 5.547,
+      "last_loss": 1.523,
+      "eval_losses": [
+        5.3,
+        1.874,
+        1.536,
+        1.512
+      ],
+      "eval_steps": [
+        0,
+        50,
+        100,
+        150
+      ],
+      "BEFORE_step0": 5.3,
+      "AFTER_step150": 1.512,
+      "median_s_per_step": 3.15,
+      "train_mem_max_active_gib": 73.61,
+      "peak_vram_mib_smi": 76992,
+      "homed_line": null,
+      "jsonl": "results/B-qwen30b_resident.jsonl"
+    },
+    "qwen30b_offload": {
+      "n_train_logs": 150,
+      "first_loss": 5.547,
+      "last_loss": 1.516,
+      "eval_losses": [
+        5.3,
+        1.868,
+        1.534,
+        1.51
+      ],
+      "eval_steps": [
+        0,
+        50,
+        100,
+        150
+      ],
+      "BEFORE_step0": 5.3,
+      "AFTER_step150": 1.51,
+      "median_s_per_step": 7.12,
+      "train_mem_max_active_gib": 60.39,
+      "peak_vram_mib_smi": 63948,
+      "homed_line": "homed 96 expert layers across 48 MoE blocks (14.50 GB) to pinned CPU RAM; one block resident on cuda:0 at a time.",
+      "jsonl": "results/B-qwen30b_offload.jsonl"
+    }
+  }
+}

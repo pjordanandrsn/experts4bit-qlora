@@ -1,0 +1,14 @@
+{
+  "sku": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "watt_cap": 600,
+  "gate2_pl_writable": "no (host-locked)",
+  "config": "Arm-1 resident, 200-step fixed slice, seed 42",
+  "median_s_per_step": 3.14,
+  "median_tokens_per_sec_per_gpu": 1434.0,
+  "dmon_power_w_median": null,
+  "dmon_power_w_max": null,
+  "maxq_300w_half": "PENDING \u2014 RTX PRO 6000 Max-Q out of stock at all attempts this session",
+  "quarantine_note": "cross-SKU comparison would be different physical hosts; seed/config/commit pinned for when Max-Q obtainable",
+  "actual_power_w_median": 483.9,
+  "actual_power_w_max": 509.9
+}

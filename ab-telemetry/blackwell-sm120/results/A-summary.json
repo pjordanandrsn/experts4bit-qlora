@@ -1,0 +1,46 @@
+{
+  "workstream": "A \u2014 e4b test suite on Blackwell sm_120 (first run on this arch)",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition (sm_120, 96GB, 600W)",
+  "bnb_sha": "e7f4d86052787b0f458fc0f2daa5335d31738c25",
+  "bnb_branch": "feature/experts-4bit",
+  "bnb_native_lib": "libbitsandbytes_cuda130.so (built CMAKE_CUDA_ARCHITECTURES=120)",
+  "kit_sha": "ed796e5d1c6bf1c571c1d7d083f10d6d5d752010",
+  "results": [
+    {
+      "suite": "bitsandbytes tests/test_experts4bit.py",
+      "collected": 59,
+      "passed": 59,
+      "failed": 0,
+      "wall_s": 7.28,
+      "log": "results/A-testsuite-sm120.log"
+    },
+    {
+      "suite": "bitsandbytes tests/ -k experts (full-tree sweep)",
+      "collected": 59,
+      "deselected": 6957,
+      "passed": 59,
+      "failed": 0,
+      "wall_s": 7.19,
+      "log": "results/A-sweep-k-experts.log",
+      "note": "confirms -k experts matches exactly test_experts4bit.py; no experts tests live elsewhere"
+    },
+    {
+      "suite": "experts4bit-qlora kit tests/",
+      "passed": 168,
+      "skipped": 4,
+      "failed": 0,
+      "wall_s": 12.64,
+      "log": "results/A-kit-tests-sm120.log"
+    }
+  ],
+  "PINNED_TEST_COUNT": 59,
+  "pinned_claim": "59/59 experts-4bit tests pass on Blackwell sm_120 (bnb e7f4d86, sm_120-compiled kernels)",
+  "files_absent": [
+    "tests/test_experts_nbit.py \u2014 does NOT exist on e7f4d86 (handoff anticipated 'if present post-split')"
+  ],
+  "environmental_fixes_applied": [
+    "pip install lion_pytorch \u2014 tests/test_optim.py failed to IMPORT at collection time (ModuleNotFoundError). Unrelated to experts; import-time only, not a test failure. Handoff permits one environmental fix."
+  ],
+  "library_code_patched": false,
+  "note": "No library code was modified to make any test pass."
+}

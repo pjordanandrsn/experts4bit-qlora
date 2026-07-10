@@ -1,0 +1,28 @@
+{
+  "axolotl_pr": 3797,
+  "axolotl_branch": "expert-offload-integration",
+  "axolotl_sha": "fd12f92785363c2bb2b544a8ce7c745302968b4d",
+  "bnb_branch": "feature/experts-4bit",
+  "bnb_sha": "e7f4d86052787b0f458fc0f2daa5335d31738c25",
+  "bnb_built_arch": "sm_120 (CMAKE_CUDA_ARCHITECTURES=120)",
+  "bnb_native_lib": "libbitsandbytes_cuda130.so",
+  "build_toolkit": "Build cuda_13.0.r13.0/compiler.36424714_0",
+  "torch": "2.13.0+cu130",
+  "torch_cuda": "13.0",
+  "device": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "capability": [
+    12,
+    0
+  ],
+  "versions": {
+    "transformers": "5.12.1",
+    "peft": "0.19.1",
+    "accelerate": "1.13.0",
+    "trl": "1.5.1",
+    "bitsandbytes": "0.50.0.dev0",
+    "datasets": "4.8.5",
+    "torchvision": "0.28.0+cu130"
+  },
+  "attention_backend": "PyTorch SDPA (flash_attention: false; xformers NOT built - not required)",
+  "pip_freeze": "receipts/pip-freeze.txt"
+}

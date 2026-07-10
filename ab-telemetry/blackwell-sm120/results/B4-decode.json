@@ -1,0 +1,41 @@
+{
+  "workstream": "B4 \u2014 Qwen3-30B-A3B decode on RTX PRO 6000 Blackwell WS (sm_120)",
+  "tokens": 96,
+  "rows": [
+    {
+      "config": "resident",
+      "offload": 0,
+      "prefetch": 0,
+      "gemv": 1,
+      "tok_s": 11.559,
+      "peak_gb": 20.064
+    },
+    {
+      "config": "offload-serial",
+      "offload": 1,
+      "prefetch": 0,
+      "gemv": 1,
+      "tok_s": 1.514,
+      "peak_gb": 4.096
+    },
+    {
+      "config": "offload-prefetch",
+      "offload": 1,
+      "prefetch": 1,
+      "gemv": 1,
+      "tok_s": 1.752,
+      "peak_gb": 4.436
+    },
+    {
+      "config": "offload-prefetch-dq",
+      "offload": 1,
+      "prefetch": 1,
+      "gemv": 0,
+      "tok_s": 1.751,
+      "peak_gb": 4.442
+    }
+  ],
+  "headline": "resident decode FITS at 20.06 GB / 11.559 tok/s on the 96GB card",
+  "prior_A2000": "resident OOM'd (12GB); best offloaded ~0.22 tok/s",
+  "note": "sm_120, greedy batch-1"
+}

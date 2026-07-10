@@ -1,0 +1,35 @@
+{
+  "gate1_compute_capability": [
+    12,
+    0
+  ],
+  "gate1_pass": true,
+  "device_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "driver_version": "580.126.16",
+  "vbios_version": "98.02.81.00.07",
+  "gpu_uuid": "GPU-656bc4fc-6151-4398-373f-ae9a94167237",
+  "memory_total": "97887 MiB",
+  "power_limit_default": "600.00 W",
+  "power_limit_max": "600.00 W",
+  "power_limit_min": "150.00 W",
+  "gate2_pl_writable": "no",
+  "torch_version": "2.8.0+cu128",
+  "torch_cuda": "12.8",
+  "cudnn": 91002,
+  "python": "3.12.13",
+  "gate3_disk_workspace_gb": {
+    "total": 921451.6,
+    "free": 600479.3
+  },
+  "gate3_disk_root_gb": {
+    "total": 107.4,
+    "free": 107.4
+  },
+  "pod_id": "x6opj6u8imwv3y",
+  "cost_per_hr_usd": 1.89,
+  "sku": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "cloud": "SECURE",
+  "interruptible": false,
+  "network_volume": null,
+  "note_volume": "US-IL-1 PRO6000-WS out of stock; fell back to any-DC + fresh 200GB ephemeral volume (cold HF cache)"
+}
