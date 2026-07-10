@@ -1,0 +1,31 @@
+{
+  "registered": "2026-07-10, Phase 0 — BEFORE running the real model. Predictions are the occupancy NULL (uniform routing); the measurement tests deviation from it.",
+  "model": "Qwen3-30B-A3B",
+  "n_experts_total": 128,
+  "n_experts_active_per_token": 8,
+  "n_moe_layers": 48,
+  "read_fraction_def": "mean over layers of (distinct experts gathered in one forward / n_experts_total)",
+  "null_model": {
+    "name": "occupancy / coupon-collector, UNIFORM routing, tokens independent",
+    "formula": "read_fraction(eff_tokens) = 1 - (1 - k/E)^eff_tokens,  k=8, E=128, (1-k/E)=0.9375",
+    "crossings_tokens": {"0.5": 10.7, "0.9": 35.7, "0.99": 71.4}
+  },
+  "headline_finding_from_analysis": "Under the null, read_fraction is 1.0000 at every cell of the handoff's DEFAULT grid (batch 1-64 x seq 1024-4096, all >= 1024 eff_tokens). The crossover, if it exists, lives at eff_tokens in [1, ~128] — decode / sub-sequence scale, NOT the batch-scaling grid. The grid is reframed to a token-count sweep accordingly (see predictions[]).",
+  "hypothesis_under_test": "Real routing is NOT uniform: adjacent tokens in a sequence route to correlated experts, and learned load-imbalance concentrates mass. Both make the real union grow SLOWER than the null -> real read_fraction sits BELOW 1 - 0.9375^n, and the 0.9 crossing moves to HIGHER eff_tokens than 35.7. The measurement quantifies that gap. If instead real ~= null, the sparse-read window is decode-scale and the SSD-tier thesis's useful regime is small-batch serving (a sharp, honest scoping result -> D2 becomes load-bearing).",
+  "grid": "eff_tokens swept via batch=1 x seq in {1,2,4,8,16,32,64,128,256,512,1024,2048}; plus batch>1 checks at eff_tokens 64 and 512 (batch=8 x seq 8 and 64) to test whether cross-sequence batching gathers a WIDER union than one long sequence of equal token count — i.e. does within-sequence correlation matter vs across-batch independence.",
+  "predictions": [
+    {"eff_tokens": 1,    "batch": 1, "seq": 1,    "pred_read_fraction_null": 0.0625},
+    {"eff_tokens": 8,    "batch": 1, "seq": 8,    "pred_read_fraction_null": 0.4033},
+    {"eff_tokens": 16,   "batch": 1, "seq": 16,   "pred_read_fraction_null": 0.6432},
+    {"eff_tokens": 32,   "batch": 1, "seq": 32,   "pred_read_fraction_null": 0.8729},
+    {"eff_tokens": 64,   "batch": 1, "seq": 64,   "pred_read_fraction_null": 0.9838},
+    {"eff_tokens": 128,  "batch": 1, "seq": 128,  "pred_read_fraction_null": 0.9997},
+    {"eff_tokens": 512,  "batch": 1, "seq": 512,  "pred_read_fraction_null": 1.0000},
+    {"eff_tokens": 2048, "batch": 1, "seq": 2048, "pred_read_fraction_null": 1.0000},
+    {"eff_tokens": 64,   "batch": 8, "seq": 8,    "pred_read_fraction_null": 0.9838, "note": "same eff_tokens as batch1xseq64 — batch>1 vs long-seq comparison"},
+    {"eff_tokens": 512,  "batch": 8, "seq": 64,   "pred_read_fraction_null": 1.0000, "note": "batch>1 vs long-seq comparison"}
+  ],
+  "pred_knee_eff_tokens_null": {"0.5": 10.7, "0.9": 35.7},
+  "deliverable": "access_pattern.jsonl -> read_fraction vs eff_tokens (measured), overlaid on the null; the eff_tokens where MEASURED read_fraction crosses 0.5 and 0.9 are the only vertical slices Session 4 pays to measure.",
+  "second_curve_rationale_D2": "OLMoE (E=64) crosses 0.9 at ~17 tokens (even narrower); a hypothetical 256-expert stack at ~73, 512-expert at ~146. The wide-window regime the SSD-tier thesis leans on requires MANY experts; 128 is already narrow. If 30B measures ~null, only a >=256-expert stack demonstrates a usefully wide window — which is the quantitative argument for D2."
+}
