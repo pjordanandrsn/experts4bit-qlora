@@ -1,0 +1,7 @@
+{
+  "filestore_parity": "byte-identical blocks; grads bit-identical to RAMStore arms",
+  "filestore_vs_ram_s_per_step_ratio": {"predicted_range": [1.0, 3.5], "note": "ceiling unknown on shared host; O_DIRECT mode dependent"},
+  "prefetch_recovery": {"predicted": "recovers most of the FileStore gap when compute/step > read/step; direction asserted, magnitude not"},
+  "gpu_peak_delta_prefetch": "+1 staged block exactly",
+  "decode_probe_direction": "routed per-expert FileStore decode >= whole-block RAM decode tok/s at batch 1"
+}
