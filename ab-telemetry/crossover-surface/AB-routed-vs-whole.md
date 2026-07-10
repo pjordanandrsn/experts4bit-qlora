@@ -1,7 +1,18 @@
 # A/B: routed-subset vs whole-layer staging (2026-07-10, 3090, quarantined)
 
-**Verdict: whole-layer WINS. Routed-subset diverges on the real e4b forward — NOT ready for the
-bare-metal run.** The cheap-3090 A/B did exactly its job: caught a broken design before it reached
+**RESOLVED 2026-07-10: routed-subset is FIXED and correct.** The original A/B caught it diverging
+(loss 11.75); root cause was per-expert ADDRESSING (n_experts read the packed `shape[0]` = flat
+byte count under bnb `quantize_moe_experts`, not the real 64). Fixed to byte-range addressing with
+the real count (forward bit-identical) + deterministic real-expert fill for un-routed rows
+(training within the atomic-noise floor). Verified: routed test suite green; step-0 loss
+0.7038==0.7038; routed-vs-whole grad_norm 5.4% <= whole-vs-whole 6.7%; 15-step loss tracks whole
+(mean 0.018). Routed reads only the routed subset from the store — the bandwidth win. Both designs
+now valid; routed-subset is the stronger one for low-eff-tokens (its staging shrinks with
+read_fraction). Opt-in `AXOLOTL_EXPERT_OFFLOAD_ROUTED=1` pending a full convergence A/B; whole_layer
+default. **The cheap-3090 A/B + debug did their job: caught the bug AND fixed it before bare metal.**
+
+---
+_Original verdict (superseded):_ whole-layer wins; routed diverges. The cheap-3090 A/B did exactly its job: caught a broken design before it reached
 expensive silicon.
 
 ## Design under test
