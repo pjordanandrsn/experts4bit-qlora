@@ -1,0 +1,95 @@
+{
+  "session": "quarantined crossover surface \u2014 OLMoE FusedStore, placement f x access eff_tokens",
+  "QUARANTINE": "containerized shared 3090; O_DIRECT-honest reads but NO absolute bandwidth, NO located f_knee (needs measured S/L on bare-metal NVMe). RELATIVE shape only.",
+  "cells": [
+    {
+      "eff_tokens": 64,
+      "f": 1.0,
+      "s_per_step": 1.97,
+      "tier": "ram=16,flash=0",
+      "loss0": 1.214
+    },
+    {
+      "eff_tokens": 64,
+      "f": 0.5,
+      "s_per_step": 4.48,
+      "tier": "ram=8,flash=8",
+      "loss0": 1.214
+    },
+    {
+      "eff_tokens": 64,
+      "f": 0.0,
+      "s_per_step": 7.34,
+      "tier": "ram=0,flash=16",
+      "loss0": 1.214
+    },
+    {
+      "eff_tokens": 256,
+      "f": 1.0,
+      "s_per_step": 2.04,
+      "tier": "ram=16,flash=0",
+      "loss0": 3.092
+    },
+    {
+      "eff_tokens": 256,
+      "f": 0.5,
+      "s_per_step": 4.62,
+      "tier": "ram=8,flash=8",
+      "loss0": 3.092
+    },
+    {
+      "eff_tokens": 256,
+      "f": 0.0,
+      "s_per_step": 7.33,
+      "tier": "ram=0,flash=16",
+      "loss0": 3.092
+    },
+    {
+      "eff_tokens": 2048,
+      "f": 1.0,
+      "s_per_step": 3.6,
+      "tier": "ram=16,flash=0",
+      "loss0": 5.479
+    },
+    {
+      "eff_tokens": 2048,
+      "f": 0.5,
+      "s_per_step": 4.67,
+      "tier": "ram=8,flash=8",
+      "loss0": 5.479
+    },
+    {
+      "eff_tokens": 2048,
+      "f": 0.0,
+      "s_per_step": 7.52,
+      "tier": "ram=0,flash=16",
+      "loss0": 5.479
+    }
+  ],
+  "per_slice": {
+    "64": {
+      "ram_baseline_s": 1.95,
+      "f1_s": 1.97,
+      "f0_s": 7.34,
+      "placement_penalty_f0_over_f1_pct": 272.6,
+      "G2_f1_vs_ramstore_pct": 1.0,
+      "G2_pass": true
+    },
+    "256": {
+      "ram_baseline_s": 2.05,
+      "f1_s": 2.04,
+      "f0_s": 7.33,
+      "placement_penalty_f0_over_f1_pct": 259.3,
+      "G2_f1_vs_ramstore_pct": -0.5,
+      "G2_pass": true
+    },
+    "2048": {
+      "ram_baseline_s": 3.6,
+      "f1_s": 3.6,
+      "f0_s": 7.52,
+      "placement_penalty_f0_over_f1_pct": 108.9,
+      "G2_f1_vs_ramstore_pct": 0.0,
+      "G2_pass": true
+    }
+  }
+}
