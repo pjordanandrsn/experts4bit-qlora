@@ -1,0 +1,16 @@
+{
+  "registered": "2026-07-10, BEFORE the routed arm finished (routed at step 50/150, no eval past 5.3 seen)",
+  "subject": "Qwen3-30B-A3B, public ExpertOffloadPlugin + RAMStore, seq 2048 + sample_packing, 150 steps, seed 42, published bench/sm120-pro6000 body (sha 1ac53e39c14d4f42)",
+  "arms": ["whole_a", "routed", "whole_b"],
+  "bracket_rationale": "whole_a -> routed -> whole_b puts any session drift INSIDE the floor (|whole_a-whole_b|), not confounding the treatment",
+  "read_fraction_regime": "rf ~ 0.80 at seq 2048 (Phase 0 Qwen3-30B plateau) -> ~20% of expert rows get the deterministic fill. HIGH-rf; the low-rf/decode cell (routed's target regime) is NOT covered here.",
+  "criteria": {
+    "primary": "final eval loss. PASS iff |routed - mean(whole_a, whole_b)| <= |whole_a - whole_b| (routed within the measured whole-vs-whole floor).",
+    "secondary": "mean |routed - whole_a| train loss over 150 steps < the mean |whole_b - whole_a| train loss.",
+    "positive_control": "routed staged-experts/block ~ 0.80*128 (~100-105); whole = 128/128. Measured by a forward-only probe post-arms. If routed shows 128 -> flag didn't subset -> void.",
+    "bleed_control": "whole_a and whole_b emit the generic 'homed ... pinned CPU RAM' line and NO routed INFO line; routed emits 'reads only the routed expert subset'. CONFIRMED for whole_a (0 routed lines) and routed (1)."
+  },
+  "calibration_prior": "archival same-config pair on sm120: offload eval 1.510 vs resident 1.512 = 0.002 apart across DIFFERENT code paths. If whole_a-vs-whole_b (SAME code path) comes in >> 0.002 (e.g. 0.02), that is a DRIFTED SESSION, not a generous floor -> investigate before judging. whole_a final eval measured 1.509 (matches 1.510 anchor -> session not drifted at arm 1).",
+  "failure_path": "if routed lands OUTSIDE the floor: tear down (do not debug at $1.89/hr), reproduce on a 3090 with OLMoE (pennies).",
+  "on_pass": "docs graduate 'pending A/B' -> 'green at published-config scale (150 steps, rf~0.80); long-run and low-rf/decode pending'. Flag stays opt-in."
+}
