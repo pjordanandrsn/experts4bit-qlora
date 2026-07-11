@@ -1,0 +1,12 @@
+38aa5b44a2697141d289d66b857e8bdfc54fd8cc
+ src/axolotl/integrations/expert_offload/offload.py | 4 ++++
+ 1 file changed, 4 insertions(+)
+accelerate==1.13.0
+axolotl-contribs-lgpl==0.0.7
+axolotl-contribs-mit==0.0.6
+peft==0.19.1
+torch==2.13.0
+torchao==0.17.0
+torchaudio==2.11.0
+torchvision==0.28.0
+transformers==5.12.1

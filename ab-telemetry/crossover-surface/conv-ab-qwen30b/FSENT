@@ -1,0 +1,3 @@
+FOLLOWON_START 2026-07-11T00:32:09Z
+STAGEDCNT block=base_model.model.model.layers.0.mlp.experts staged=124/128 rf=0.969
+FOLLOWON_KILLED post-verdict 2026-07-11T00:46:19Z — lo pair moved to cheap-silicon repro

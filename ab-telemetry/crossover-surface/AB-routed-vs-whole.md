@@ -1,15 +1,42 @@
 # A/B: routed-subset vs whole-layer staging (2026-07-10, 3090, quarantined)
 
-**RESOLVED 2026-07-10: routed-subset is FIXED and correct.** The original A/B caught it diverging
-(loss 11.75); root cause was per-expert ADDRESSING (n_experts read the packed `shape[0]` = flat
-byte count under bnb `quantize_moe_experts`, not the real 64). Fixed to byte-range addressing with
-the real count (forward bit-identical) + deterministic real-expert fill for un-routed rows
-(training within the atomic-noise floor). Verified: routed test suite green; step-0 loss
-0.7038==0.7038; routed-vs-whole grad_norm 5.4% <= whole-vs-whole 6.7%; 15-step loss tracks whole
-(mean 0.018). Routed reads only the routed subset from the store — the bandwidth win. Both designs
-now valid; routed-subset is the stronger one for low-eff-tokens (its staging shrinks with
-read_fraction). Opt-in `AXOLOTL_EXPERT_OFFLOAD_ROUTED=1` pending a full convergence A/B; whole_layer
-default. **The cheap-3090 A/B + debug did their job: caught the bug AND fixed it before bare metal.**
+> **CONVERGENCE VERDICT AT SCALE (2026-07-10/11, Qwen3-30B-A3B, pre-registered): FAIL for
+> training.** The full convergence A/B this file was "pending" ran at published-config scale
+> (150 steps, seq 2048 + packing, seed 42, bracket whole_a → routed → whole_b) against
+> [`conv_ab_prereg.json`](conv_ab_prereg.json). Final eval: whole_a **1.509**, whole_b **1.511**,
+> routed **1.572**. Measured floor |whole_a−whole_b| = **0.002** (exactly the archival calibration
+> prior — session not drifted); routed sits **0.062 off the whole mean = 31× the floor**, and the
+> direction is one-sided: routed's train loss is higher on **146/150 steps** (signed mean +0.0634
+> vs whole-vs-whole +0.0019, a coin-flip 97/150). Both pre-registered criteria fail; both validity
+> controls passed (no staging-flag bleed; whole_a reproduced the 1.510 anchor). Wall-clock showed
+> **no speed win either**: routed 1187 s vs whole 1044/1230 s — inside arm-to-arm variance, as
+> expected at the measured **rf ≈ 0.97** (layer-0 staged 124/128; at seq 2048 × top-k 8 the routed
+> union approaches the full stack, so there were barely any bytes to save). Full logs/configs/env:
+> [`conv-ab-qwen30b/`](conv-ab-qwen30b/).
+>
+> **Standing decision:** `whole_layer` is the only training-validated staging. Routed-subset is
+> demoted to **forward/decode only** (where it remains bit-identical-validated and where low rf
+> actually pays); its training path is experimental **with a failed A/B at scale**, not "pending."
+> The 15-step OLMoE pass below did not transfer — small-scale/short-horizon equivalence is not
+> evidence of at-scale convergence. Mechanism consistent with the earlier zeros→12 result: the
+> training path is sensitive to un-routed row content, and the deterministic fill makes that error
+> quiet and reproducible, not absent. Next step per the pre-registered failure path: reproduce
+> cheaply (OLMoE/3090 or CPU, longer horizon) and test dose-response — does the gap scale with
+> fill mass (1−rf)? The low-rf mini-pair (seq 256, 50 steps) was killed post-verdict ~7 min into
+> its step-0 eval (staging-bound at low seq → projected ~$3 more on the $1.89/hr pod); **low-rf
+> remains PENDING**, to run on cheap silicon with the exact synced configs
+> ([`conv-ab-qwen30b/configs/`](conv-ab-qwen30b/configs/)). Full reduction:
+> [`conv-ab-qwen30b/reduction.json`](conv-ab-qwen30b/reduction.json).
+
+**Fix history (2026-07-10, superseded as a training claim by the verdict above):** the original
+A/B caught routed diverging (loss 11.75); root cause was per-expert ADDRESSING (n_experts read the
+packed `shape[0]` = flat byte count under bnb `quantize_moe_experts`, not the real 64). Fixed to
+byte-range addressing with the real count (forward bit-identical) + deterministic real-expert fill
+for un-routed rows. Verified then: routed test suite green; step-0 loss 0.7038==0.7038;
+routed-vs-whole grad_norm 5.4% <= whole-vs-whole 6.7%; 15-step OLMoE loss tracked whole (mean
+0.018) — **but the convergence A/B above shows that did not hold at 150-step/30B scale.** The
+forward/decode bit-identity claims stand. The cheap-3090 A/B + debug did their job; so did the
+at-scale A/B.
 
 ---
 _Original verdict (superseded):_ whole-layer wins; routed diverges. The cheap-3090 A/B did exactly its job: caught a broken design before it reached

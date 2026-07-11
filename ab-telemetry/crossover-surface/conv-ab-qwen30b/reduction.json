@@ -1,0 +1,69 @@
+{
+  "prereg": "../conv_ab_prereg.json (committed ba06f1f, BEFORE the routed arm finished)",
+  "subject": "Qwen3-30B-A3B, public ExpertOffloadPlugin + RAMStore, seq 2048 + sample_packing, 150 steps, seed 42, published sm120 body (sha 1ac53e39c14d4f42)",
+  "host": "RunPod RTX PRO 6000 WS (sm_120), axolotl feature/expert-store @ 38aa5b44 (+4-line one-shot STAGEDCNT log), transformers 5.12.1, torch 2.13.0, peft 0.19.1",
+  "arms": {
+    "whole_a": {
+      "eval": [
+        5.3,
+        1.872,
+        1.533,
+        1.509
+      ],
+      "wall_s": 1230,
+      "rc": 0
+    },
+    "routed": {
+      "eval": [
+        5.3,
+        1.958,
+        1.598,
+        1.572
+      ],
+      "wall_s": 1187,
+      "rc": 0
+    },
+    "whole_b": {
+      "eval": [
+        5.3,
+        1.873,
+        1.534,
+        1.511
+      ],
+      "wall_s": 1044,
+      "rc": 0
+    }
+  },
+  "primary": {
+    "floor_abs_wholeA_minus_wholeB": 0.002,
+    "routed_vs_whole_mean": 0.062,
+    "ratio_over_floor": 31,
+    "verdict": "FAIL"
+  },
+  "secondary": {
+    "signed_mean_routed_minus_wholeA_train": 0.0634,
+    "routed_higher_on_steps": "146/150",
+    "signed_mean_wholeB_minus_wholeA_train": 0.0019,
+    "wholeB_higher_on_steps": "97/150",
+    "verdict": "FAIL (one-sided systematic, ~33x the floor)"
+  },
+  "controls": {
+    "bleed": "PASS \u2014 whole arms emitted 0 routed INFO lines + generic homed line; routed emitted the routed line",
+    "calibration": "PASS \u2014 floor 0.002 == archival same-config prior 0.002; whole_a final 1.509 matches 1.510 anchor (session not drifted)",
+    "positive_control_staged_count": {
+      "measured": "layer-0 staged 124/128, rf=0.969 (one-shot log, pc.yaml = routed 1-step at seq 2048)",
+      "prereg_expected": "~100-105/128 (rf~0.80 from Phase-0)",
+      "note": "routing subset ACTIVE (not 128/128, so not void), but rf prediction was wrong: at seq 2048 x top-k 8 the per-forward union approaches the full stack. Consequence: routed saved almost no bytes at this regime \u2014 and still diverged."
+    }
+  },
+  "low_rf_mini_pair": {
+    "config": "seq 256, 50 steps, same body otherwise (whole_lo vs routed_lo)",
+    "purpose": "dose-response: does the divergence grow with fill mass (1-rf)?",
+    "result": "KILLED post-verdict at step-0 eval (~7 min in): at seq 256 the eval loop is staging-bound (~8x the forwards of seq 2048, each staging all 48 layers) -> projected ~90 min/$3 for the pair on the $1.89/hr pod. Per the pre-registered failure path the pod's job ended with the primary FAIL; the exact configs (configs/{whole,routed}_lo.yaml) run on a 3090 with offload (README: Qwen3-30B trains at 7.16 GB peak). LOW-RF REMAINS PENDING, on cheap silicon."
+  },
+  "decision": "whole_layer is the only training-validated staging. routed demoted to forward/decode-only (bit-identity claims stand). Gate wording updated in axolotl feature/expert-store @ b22b533. Failure path per prereg: reproduce cheaply (OLMoE/3090 or CPU, longer horizon) before any further routed-training work.",
+  "pod": {
+    "terminated": "2026-07-11T00:47Z (HTTP 204, re-query 404, zero pods remaining)",
+    "primary_sweep_wall": "23:34->00:32 UTC (incl. 3 arms + model loads)"
+  }
+}
