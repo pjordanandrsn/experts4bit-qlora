@@ -1,0 +1,35 @@
+{
+  "leg": "seq512 THIRD dose point (curve-shape test)",
+  "prereg": ["../preregistration/prereg_qwen3_seq512_shape.json (d924c98, pre-launch)",
+             "../preregistration/prereg_shape_verdict.json (e0d1244, committed 12:12:38Z with the routed arm still running per SENT 12:12:02Z; OTS-stamped eff2737)",
+             "../preregistration/prereg_rf512.json (e0d1244; its measured/delta fields are completed HERE, the frozen file is untouched)"],
+  "host": "RunPod SECURE RTX PRO 6000 Blackwell WS (sm_120), pod x5274jeaqof7w1, driver 580; axolotl feature/expert-store @ 7f67e93, bnb @ e7f4d86 sm_120",
+  "arms": {
+    "warmup": "throwaway, 711 s",
+    "whole_a": {"final": 1.324, "wall_s": 1792},
+    "whole_b": {"final": 1.325, "wall_s": 1798},
+    "whole_c": {"final": 1.325, "wall_s": 1789},
+    "routed":  {"eval": [3.695, 1.557, 1.421, 1.409], "final": 1.409, "wall_s": 2079}
+  },
+  "floor": {"spread": 0.0010, "mean": 1.3247, "note": "FOURTH consecutive clean n=3 warm floor at 0.0010 — instrument validated (A5); stop re-justifying"},
+  "gap": {"routed_vs_whole_mean": 0.0843, "ratio_over_floor": 84, "direction_check": "H_FILL reconfirmed (FAIL at 84x floor)"},
+  "rf": {"mean": 0.806, "range_across_blocks": "0.680-0.984 (48 blocks)", "fill": 0.194,
+         "transfer_test_3": {"predicted": 0.730, "measured": 0.806, "delta": "+0.076 (above prediction = packing direction; between test#1's +0.174 and test#2's +0.001)"}},
+  "A1_frozen_rule_application": {
+    "predictions_at_measured_fill_0.194": {"power": 0.1481, "affine": 0.1345},
+    "distances": {"d_power": 0.0638, "d_affine": 0.0501, "margin": 0.0137, "three_x_floor": 0.0030},
+    "in_discriminating_zone": true,
+    "branch_fired": "affine (closer, margin >= 3x floor) — recorded exactly as the frozen rule dictates",
+    "A2_standing_interpretation": "the affine comparator was declared physically non-viable PRE-DATA (intercept 0.049 vs the ~0.001 bit-identity boundary), and BOTH frozen predictions missed the measured gap by >=50x the floor (power -0.064, affine -0.050). Per the frozen A2 framing this leg was a third-point CONSISTENCY TEST of the power law: THE POWER LAW FAILED IT. The mechanical 'affine' branch is vacuous — a nearer miss by a non-viable model, not a fit."
+  },
+  "three_point_shape": {
+    "points_fill_gap": [[0.03, 0.062], [0.194, 0.0843], [0.312, 0.186]],
+    "normalized_by_whole_mean_scale_check": [[0.03, 0.041], [0.194, 0.064], [0.312, 0.147]],
+    "segment_slopes_gap_per_unit_fill": [0.136, 0.861],
+    "finding": "monotone in fill (H_FILL direction holds at all three points) but CONVEX/SUPERLINEAR — the 2->3 segment is ~6x steeper than 1->2, and convexity survives the whole-mean normalization (so it is not a cross-seq eval-scale artifact). Neither frozen 2-parameter model (concave power, affine) describes the curve.",
+    "mechanism_note": "convexity disfavors A4's quadrature/independent-noise story (which predicts concave sqrt-fill); consistent with compounding or coherent interaction growing with fill. A4's registered gradient-averaging attenuation prediction for the mask-fix acceptance run STANDS and now discriminates more sharply (incoherent -> attenuates; coherent/compounding -> does not).",
+    "scope": "three points; shape claims are descriptive of this range (fill 0.03-0.31, Qwen3-30B, 150 steps)"
+  },
+  "cost_usd_approx": 4.6,
+  "pods_at_end": "zero (autopilot pull->teardown->email cycle completed 12:19Z)"
+}

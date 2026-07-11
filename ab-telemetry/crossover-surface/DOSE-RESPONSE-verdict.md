@@ -53,3 +53,34 @@ gate wording already noting the failed A/B.
 fit is descriptive of exactly two measurements. A third point (e.g. seq 512 / seq 1024, rf ~0.73/0.78)
 would test the shape, but the *sign and magnitude* of the dose-response — the thing that decides
 whether the fix is needed — is settled.
+
+---
+
+## Third point (seq 512, 2026-07-11): shape is CONVEX — both frozen models rejected
+
+The seq 512 leg ran under frozen verdict rules (`prereg_shape_verdict.json` @ `e0d1244`,
+committed at 12:12:38Z with the routed arm still running; OTS-stamped). Measured: **rf 0.806 →
+fill 0.194** (transfer test #3: predicted 0.730, +0.076 in the packing direction), floor
+0.0010 (fourth consecutive clean n=3 warm floor — instrument validated, per A5), routed gap
+**0.0843 = 84× floor** (H_FILL direction reconfirmed).
+
+**Frozen-rule outcome:** at fill 0.194 the frozen fits predicted power 0.148 / affine 0.135;
+the measured 0.0843 missed **both by ≥50× the floor**. The A1 rule mechanically fired "affine"
+(nearer miss, margin 0.0137 ≥ 3×floor) — recorded as such — but per the pre-registered A2
+framing (affine is physically non-viable: its intercept violates the bit-identity boundary
+~50×), the meaning is: **the power law failed its third-point consistency test, and the
+"affine" branch is a vacuous nearer-miss, not a fit.**
+
+**What the three points actually show** (gap vs fill, with a whole-mean-normalized scale check
+that preserves the conclusion): (0.03, 0.062) → (0.194, 0.084) → (0.312, 0.186). Monotone —
+but **convex**: the upper segment is ~6× steeper than the lower. Marginal fill gets *more*
+damaging, not less. This disfavors the quadrature/independent-noise mechanism (which predicts
+concave √fill) and points at compounding or coherent interaction growing with fill. The A4
+registered prediction for the mask-fix acceptance run (incoherent noise attenuates under
+gradient averaging; coherent bias does not) stands and now discriminates more sharply.
+
+**Unchanged consequences:** direction and magnitude are settled at three points (31× / 84× /
+186× floor); routed's target regime is still where damage is worst — convexity makes that
+*stronger* (the curve accelerates exactly where routed wants to operate); the mask fix remains
+load-bearing. Shape claims are descriptive of fill 0.03–0.31 on Qwen3-30B at 150 steps.
+Evidence: [`qwen30b-seq512-shape/`](qwen30b-seq512-shape/).
