@@ -1,0 +1,4 @@
+pcie: NVIDIA GeForce RTX 3090
+pin16GB: OK is_pinned= True
+h2d pinned: 22.98 GB/s
+h2d pageable: 6.72 GB/s

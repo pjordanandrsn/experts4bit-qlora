@@ -1,0 +1,40 @@
+{
+  "prereg": "../preregistration/prereg_olmoe_lo_weight.json (7e988af, committed blind before olmoe_lo_routed started)",
+  "subject": "allenai/OLMoE-1B-7B-0924 (E=64, k=8), public ExpertOffloadPlugin + RAMStore, sample_packing, 150 steps, seed 42, prediction_loss_only patch",
+  "host": "RunPod SECURE RTX 3090 (sm_86) pod 4nz7nio7ymukij; axolotl feature/expert-store @ b22b533 + STAGEDCNT probe; bnb feature/experts-4bit @ e7f4d86 built sm_86; torch 2.13.0+cu130, transformers 5.12.1",
+  "hi_bracket_seq2048": {
+    "eval_final": {"whole_a": 2.358, "routed": 2.370, "whole_b": 2.336},
+    "floor_abs": 0.022, "gap_vs_whole_mean": 0.023, "ratio": 1.05,
+    "verdict_literal": "FAIL (1.05x floor)",
+    "floor_quality": "CONTAMINATED — one-sided (whole_b < whole_a on 142/150 steps); cold first-arm-on-fresh-pod",
+    "rf_mean": 0.989, "rf_note": "16 blocks; near-full unions at seq2048; ~1% fill -> near-zero-power instrument",
+    "weight": "near-zero (amended); effectively a third floor sample"
+  },
+  "lo_bracket_seq256": {
+    "eval_final": {"whole_a": 1.428, "routed": 1.489, "whole_b": 1.427},
+    "floor_abs": 0.0010, "gap_vs_whole_mean": 0.0615, "ratio": 61.5,
+    "verdict_literal": "FAIL (61.5x floor)",
+    "floor_quality": "CLEAN — warm host; signed train wb-wa +0.0029, higher 89/150 (coin-flip)",
+    "train_signed_routed_minus_wa": 0.0720, "routed_higher_steps": "148/150",
+    "rf_mean": 0.970, "rf_range": "0.953-1.000", "rf_phase0_prediction": 0.973,
+    "weight_by_rule_0.1": "NEAR-ZERO — rf 0.970 >= 0.90 branch fired (dose-incapable; NOT a dose-response point)"
+  },
+  "determinism_probe": {
+    "host": "SECURE 3090 pod pob48phbtojnxo",
+    "branch": "D (none of A/B/C cleanly)",
+    "index_add_under_det": "RAN, did not raise (torch 2.13 has a deterministic index_add_ impl) -> NOT Branch B",
+    "det_pair_det_a2_vs_det_b2": {"train_max_abs_diff": 0.010, "train_bitexact_steps": "2/30", "eval": [2.375, 2.373], "eval_diff": 0.002},
+    "child_det_verified": "accelerate launch of a probe script printed are_deterministic_algorithms_enabled=True, DETERMINISM_PROBE=1",
+    "mechanism": "residual nondeterminism OUTSIDE torch coverage = bitsandbytes custom 4bit-dequant + fused-MoE GEMM kernels; use_deterministic_algorithms cannot constrain them",
+    "det_wall_vs_nondet": "663/663 s vs 709/710 s (det slightly faster = host noise; no overhead, no benefit)",
+    "procedure_bug_fixed": "distro /usr/lib/python3.12/sitecustomize.py shadows dist-packages; first det_a/det_b pair ran hook-inert (Branch C), redone as det_a2/det_b2 with the hook appended to the distro file",
+    "design_consequence": "floor irreducible for this stack -> decisive leg uses n>=3 whole arms per regime, floor = sample spread. Warm brackets already hit 0.001-0.002, as tight as deterministic mode."
+  },
+  "pin_test_seq256_hostcheck": {
+    "pin_16GB": "OK (is_pinned=True) despite 8MB RLIMIT_MEMLOCK -> cudaHostAlloc not gated by memlock",
+    "h2d_pinned_GBps": 22.98, "h2d_pageable_GBps": 6.72,
+    "consequence": "the 3090 Qwen3-30B training hang (observed twice) is UNATTRIBUTED, not a proven pin/PCIe failure"
+  },
+  "cost_usd_approx": 2.7,
+  "pods_at_end": "zero (both terminated: HTTP 204, pods list [])"
+}
