@@ -1,0 +1,15 @@
+{
+  "arm": "olmoe_seq256_routed_vs_whole",
+  "rule": "conditional evidential weight by measured rf",
+  "branches": [
+    {"if_rf": ">= 0.90", "weight": "near-zero regardless of outcome",
+     "reason": "E=64 saturates at any seq; dose-incapable instrument. A marginal pass does not rehabilitate routed; a marginal fail does not condemn it."},
+    {"if_rf": "<= 0.75", "weight": "full; counts toward dose-response curve",
+     "reason": "real fill mass at 3090 prices"},
+    {"if_rf": "0.75-0.90", "weight": "partial; report but flag as weak dose"}
+  ],
+  "committed_before_inspecting_arm_outputs": true,
+  "committed_at_utc": "2026-07-11T04:52Z",
+  "arm_state_at_commit": "lo bracket mid-flight on pod 4nz7nio7ymukij: olmoe_lo_whole_a ARM_START 04:31:02Z (completion not yet observed by this session); olmoe_lo_routed (the rf-bearing arm) not observed started; olmoe_lo_whole_b pending. No lo eval values, no lo STAGEDCNT lines, no lo logs read. Only SENT start/stop metadata observed.",
+  "rf_source": "mean rf over the 16 per-block STAGEDCNT lines in out_olmoe_lo_routed.log (same instrument as the hi bracket)"
+}

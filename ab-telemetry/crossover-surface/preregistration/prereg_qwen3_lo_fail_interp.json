@@ -1,0 +1,9 @@
+{
+  "leg": "qwen3-30b_seq256_routed_vs_whole",
+  "fail_interpretation": "FAIL = fill pathway scales with dose. Consequence: routed stays opt-in; the fix is masking the checkpointed-backward recompute dequant to routed rows. NOT design abandonment.",
+  "phase0_transfer_prediction": {"rf_at_seq256": 0.70,
+    "note": "second transfer test; first (hi leg) came in high (0.97 vs 0.80), so expect the same optimism direction unless packing is off for this leg"},
+  "pass_bound": "TBD at G-LO from measured floor (deterministic mode or n>=3 bracket spread, per determinism-probe branch)",
+  "committed_at_utc": "2026-07-11T04:52Z",
+  "committed_before_any_qwen3_lo_arm_exists": true
+}
