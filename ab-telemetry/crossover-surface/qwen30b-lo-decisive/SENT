@@ -1,0 +1,12 @@
+QLO_START 2026-07-11T06:24:26Z
+ARM_START qwen_warmup 2026-07-11T06:24:26Z
+qwen_warmup_DONE rc=0 wall_s=1140 2026-07-11T06:43:26Z
+ARM_START qwen_lo_whole_a 2026-07-11T06:43:26Z
+qwen_lo_whole_a_DONE rc=0 wall_s=2389 2026-07-11T07:23:15Z
+ARM_START qwen_lo_whole_b 2026-07-11T07:23:15Z
+qwen_lo_whole_b_DONE rc=0 wall_s=2217 2026-07-11T08:00:12Z
+ARM_START qwen_lo_whole_c 2026-07-11T08:00:12Z
+qwen_lo_whole_c_DONE rc=0 wall_s=2178 2026-07-11T08:36:30Z
+ARM_START qwen_lo_routed 2026-07-11T08:36:30Z
+qwen_lo_routed_DONE rc=0 wall_s=2308 2026-07-11T09:14:58Z
+BRACKET_ALL_DONE 2026-07-11T09:14:58Z

@@ -1,0 +1,33 @@
+{
+  "leg": "DECISIVE Qwen3-30B lo (the H_FILL vs H_DISCRETE separator)",
+  "prereg": "../preregistration/prereg_qwen3_lo_decisive_design.json (3c34347, committed before any arm ran)",
+  "host": "RunPod SECURE RTX PRO 6000 Blackwell Workstation Edition (sm_120, 96GB), pod hpj0pdvk69m8m1, driver 610; memlock gate WAIVED (false gate, pin test refuted it)",
+  "subject": "Qwen/Qwen3-30B-A3B, seq 256, sample_packing, seed 42, prediction_loss_only, 150 steps, eval_steps 50; axolotl feature/expert-store @ b22b533 + STAGEDCNT, bnb feature/experts-4bit @ e7f4d86 built sm_120",
+  "arms": {
+    "warmup": "throwaway (3 steps), discarded — warmed cache/kernels so the 3 whole arms are warm-equivalent",
+    "whole_a": {"eval": [2.902, 1.348, 1.269, 1.263], "wall_s": 2389},
+    "whole_b": {"eval": [2.902, 1.347, 1.267, 1.262], "wall_s": 2217},
+    "whole_c": {"eval": [2.902, 1.346, 1.267, 1.262], "wall_s": 2178},
+    "routed":  {"eval": [2.902, 1.571, 1.457, 1.448], "wall_s": 2308}
+  },
+  "floor": {"whole_finals": [1.263, 1.262, 1.262], "mean": 1.2623, "spread_maxmin": 0.0010, "two_stdev": 0.0009,
+            "quality": "CLEAN + warm (warm-up did its job; no cold-arm contamination like OLMoE-hi's 0.022)"},
+  "primary_criterion": {"routed_final": 1.448, "gap_to_whole_mean": 0.1857, "floor": 0.0010, "ratio": 186,
+                        "verdict": "FAIL (186x floor)"},
+  "rf": {"mean": 0.688, "range": "73-109/128 over 48 blocks", "registered_prediction": 0.70,
+         "note": "FIRST clean Phase-0 transfer for Qwen3-30B (Phase-0 measured 0.687 at eff256); positive control PASS"},
+  "controls": {
+    "bleed": "PASS — step-0 eval 2.902 identical across all 4 arms; STAGEDCNT in routed only",
+    "fingerprint": "PASS — identical step-0 eval confirms same starting point"
+  },
+  "DISCRIMINATOR": {
+    "hi_leg": {"fill": 0.03, "rf": 0.97, "gap": 0.062},
+    "lo_leg": {"fill": 0.312, "rf": 0.688, "gap": 0.1857},
+    "result": "fill x10.4 (0.03 -> 0.312) => gap x3.0 (0.062 -> 0.186). H_FILL CONFIRMED, H_DISCRETE REFUTED.",
+    "scaling": "sublinear: log(3.0)/log(10.4) ~ 0.47, i.e. gap ~ sqrt(fill) over these two points (2 points only — shape not claimed)",
+    "horizon_within_run": "routed-vs-whole gap by eval 0/50/100/150 = 0.0/0.224/0.189/0.186 — established by step 50, stable-to-declining, NOT horizon-accumulating -> horizon is not the driver; fill is"
+  },
+  "conclusion": "Routed-subset TRAINING divergence scales with fill mass (1-rf). Worst exactly in routed's TARGET regime (low rf: decode / short sequences), so the fix is essential, not optional. Per pre-registered FAIL interpretation: routed stays opt-in; the fix = mask the checkpointed-backward recompute dequant to the routed rows (make the backward truly sparse / eliminate the un-routed deterministic fill). NOT design abandonment.",
+  "cost_usd_approx": 6.9,
+  "pods_at_end": "zero (HTTP 204, pods list [])"
+}
