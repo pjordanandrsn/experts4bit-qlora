@@ -13,5 +13,12 @@
     "controls": "step-0 eval identity across all three arms at print precision (forward fingerprint — routed staging is active during routed_lo's step-0 eval); whole arms emit no routed INFO line and no STAGEDCNT (bleed); STAGEDCNT present in routed_lo only."
   },
   "cost_box": "3090 at <= $0.60/hr; projected 3-6 h total (the seq-256 eval loop is staging-bound: ~8x the forwards of seq 2048, each staging all 48 layers). ABORT-and-keep-partials if a single arm exceeds 3 h wall.",
-  "notes": "eval set = alpaca val 5% packed at 256 (2 evals/arm, steps 0 and 50) dominates wall-clock. Configs byte-identical to the committed lo configs except output_dir/wandb_name (+ whole_lo duplicated into whole_lo_a/whole_lo_b)."
+  "notes": "eval set = alpaca val 5% packed at 256 (2 evals/arm, steps 0 and 50) dominates wall-clock. Configs byte-identical to the committed lo configs except output_dir/wandb_name (+ whole_lo duplicated into whole_lo_a/whole_lo_b).",
+  "deviations_for_24gb_fit": {
+    "recorded": "2026-07-11, BEFORE any valid arm produced a number (arm-1 attempt #1 OOMed at eval batch 876/1036 and was discarded).",
+    "why": "The primary A/B ran on a 96GB PRO 6000; this repro is on a 24GB 3090. At seq 256 the alpaca val 5% packs into 1036 eval batches (8x the primary's ~130 at seq 2048), and HF Trainer's eval logit path (Qwen3 vocab ~152k) overran 24GB even with eval_accumulation_steps=grad_accum(4). Steady-state weights are ~7GB (memory: model runs on a 12GB A2000 with offload), so the overrun is eval-time, not the model.",
+    "change": "prediction_loss_only=True forced into axolotl's causal trainer builder (schema doesn't expose it). eval_loss is computed identically with or without gathering predictions, so the measured quantity and the whole/routed treatment are unchanged; it only stops the unused logit gather. Applied to ALL THREE arms equally, so the bracket floor stays fair.",
+    "metric_neutrality_check": "whole_lo_a's final eval under this build should track the primary whole arms' trajectory shape (started 5.3 -> ~1.5 band); if it doesn't, the deviation is NOT neutral and the run is void.",
+    "escalation": "if prediction_loss_only did NOT make it fit (i.e. the 23GB was steady-state, not logits), the 3090 is too small for this config -> re-run on a bigger card, do not shrink the val set (that would change the floor's noise)."
+  }
 }
