@@ -1,0 +1,35 @@
+{
+  "leg": "mask-fix ACCEPTANCE + A4 attenuation (efficacy of dcd9ac2 at the decisive seq256 point)",
+  "authorized": "2026-07-11 by Jordan ('launch it with the A4 attenuation arm')",
+  "committed_before_any_arm_produced_a_number": true,
+  "fix_under_test": "axolotl feature/expert-store @ dcd9ac2 — un-routed rows filled with the zero-decode byte (nf4 0x77 / fp4 0x00 / float 0x00) -> dequantize to EXACTLY 0.0 (proven per-expert on real bnb). Default staging=routed behaviour.",
+  "host": "RunPod SECURE PRO 6000 Blackwell WS (sm_120); build gates driver>=580, memlock waived (false gate); torchvision pin; prediction_loss_only.",
+  "body": "Qwen3-30B-A3B, seq 256, sample_packing, seed 42, 150 steps, eval_steps 50 — the decisive-leg body (its routed-legacy gap was 0.186 = 186x floor at rf 0.688).",
+  "arms": {
+    "warmup": "throwaway, ga4",
+    "whole_a": "ga4", "whole_b": "ga4", "whole_c": "ga4 — the ga4 floor (spread of 3 finals)",
+    "routed_mask": "ga4, DEFAULT fix — EFFICACY arm",
+    "routed_legacy": "ga4, AXOLOTL_EXPERT_OFFLOAD_ROUTED_FILL=real — POSITIVE CONTROL (must reproduce the bug) + A4 baseline gap4",
+    "whole_ga8": "ga8 (single arm) — the ga8 whole reference",
+    "routed_legacy_ga8": "ga8, FILL=real — A4 arm (gap8)"
+  },
+  "efficacy_criterion": {
+    "floor": "spread(max-min) of whole_a/b/c ga4 finals (prior 4 brackets all 0.0010)",
+    "gap_mask": "|routed_mask_final - mean(whole ga4)|",
+    "STRONG_PASS": "gap_mask <= 1x floor (indistinguishable from same-config noise -> fix fully closes it)",
+    "PASS": "gap_mask <= 5x floor (>=97% collapse from the 186x bug; residual within a small multiple of noise)",
+    "FAIL": "gap_mask > 5x floor (meaningful residual divergence)",
+    "VOID_UNLESS": "routed_legacy (ga4) reproduces gap >= 100x floor -> the harness still exhibits the bug the fix targets; else the run is void (bug not reproduced, efficacy unmeasurable)"
+  },
+  "A4_attenuation": {
+    "gap4": "|routed_legacy(ga4) - mean(whole ga4)| (expect ~0.186)",
+    "gap8": "|routed_legacy_ga8 - whole_ga8|",
+    "ratio": "gap8 / gap4",
+    "incoherent_noise_prediction": "ratio ~ sqrt(4/8) = 0.71 (averaging 8 vs 4 microbatch gradients attenuates independent per-row perturbations)",
+    "coherent_bias_prediction": "ratio ~ 1.0 (no attenuation)",
+    "readout": "ATTENUATES if ratio <= 0.85 (supports quadrature/independent-noise, the k~0.47 signature); DOES-NOT-ATTENUATE if ratio >= 0.85 (supports coherent/compounding, corroborating the seq512 CONVEXITY which already argued against pure sqrt). ONE comparison of two noisy gaps -> directional evidence, not a hard verdict.",
+    "confound_note": "ga8 sees 2x tokens/step over the same 150 steps -> different trajectory, but the GAP at each ga controls for that (both ga8 arms share the trajectory); gap8-vs-gap4 is the clean averaging comparison."
+  },
+  "cost_budget": "8 arms, ~$13, ~5h on the PRO 6000. ABORT any arm >90 min wall.",
+  "scope": "Establishes fix EFFICACY (does routed_mask collapse the 186x gap) + the A4 mechanism readout. Correctness of the mask (un-routed -> exact 0.0) is already proven on real bnb (commit dcd9ac2); this is the training-convergence claim the unit tests explicitly do NOT make."
+}
