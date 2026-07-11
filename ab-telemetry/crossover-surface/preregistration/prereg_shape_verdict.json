@@ -1,0 +1,20 @@
+{
+  "leg": "qwen3-30b seq512 shape verdict rules (ADDENDUM A1+A4)",
+  "committed_at_utc": "2026-07-11T12:12Z",
+  "arm_state_at_commit": "q512_routed ARM_START 11:44:32Z, still running at 12:12:02Z (SENT metadata only read; no rf probe or eval output opened)",
+  "frozen_fits_through_the_two_anchors": {
+    "anchors": [{"fill": 0.03, "gap": 0.062}, {"fill": 0.31, "gap": 0.186}],
+    "power": "gap = 0.32 * fill^0.47",
+    "affine": "gap = 0.049 + 0.44 * fill",
+    "no_refit_after_data": true,
+    "separation": "peaks ~0.017 (~17x floor) around fill 12-15%; collapses below ~6x floor outside fill ~6-25% (rf ~0.75-0.94)"
+  },
+  "verdict_rule": [
+    "1. compute both point-predictions at the MEASURED rf (not nominal, not predicted)",
+    "2. verdict = the model whose prediction the measured gap lands closer to, ONLY IF |d_power - d_affine| >= 3x floor (floor = 0.0010, today's bracket)",
+    "3. otherwise the recorded verdict is exactly 'shape underdetermined at this fill point' — no leaning language, no 'consistent with', no directional gloss",
+    "4. if measured fill lands outside 6-25%, record 'outside discriminating zone' and apply rule 3 regardless of proximity"
+  ],
+  "comparator_status_A2": "the affine comparator is already physically non-viable at the boundary: forward bit-identity forces gap(fill=0) ~= floor ~= 0.001, and the affine intercept is 0.049 (~50x violation of a free constraint); linear-through-origin cannot fit both anchors (implied slopes 2.07 vs 0.60). Today is a THIRD-POINT CONSISTENCY TEST of the power law against a non-viable comparator, NOT a two-model horse race. Mid-zone power-side language: 'power law holds at a third point', NOT 'power beat linear'.",
+  "registered_prediction_for_fix_acceptance_A4": "k ~ 0.47 ~ 0.5 is the quadrature signature: per-filled-row perturbations acting as independent noise injections (variances add -> gap ~ sqrt(fill)); coherent systematic bias would scale linearly. PREDICTION (for the mask-fix acceptance run, NOT tested today): if the corruption is incoherent noise, the gap should ATTENUATE under gradient averaging (larger batch or more accumulation steps at fixed fill); coherent bias would NOT attenuate. Committed now so it predates any fix work."
+}

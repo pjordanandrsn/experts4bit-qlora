@@ -1,0 +1,12 @@
+{
+  "test": "Phase-0 transfer test #3: rf at seq512 (ADDENDUM A3)",
+  "committed_at_utc": "2026-07-11T12:12Z",
+  "arm_state_at_commit": "q512_routed still running (11:44:32Z start; SENT metadata only)",
+  "packing": "ON for this leg -> registered against REALIZED eff_tokens per forward. micro_batch 1 x seq 512 x sample_packing => each forward is one packed ~512-token row, so realized eff_tokens ~= 512 (packing shortfall <2%); document-MIX inside a packed row is the known mechanism that pushed measured rf ABOVE Phase-0 at seq2048 (0.97 vs 0.796) — Phase-0 measured single documents.",
+  "prediction": {"phase0_rf_at_eff512": 0.730, "expected_direction_of_miss": "measured rf ABOVE 0.730 (packing document-mix), consistent with transfer tests #1-2"},
+  "ledger": [
+    {"test": 1, "leg": "hi seq2048", "predicted": 0.796, "measured": 0.97, "delta": "+0.174 (packing document-mix)"},
+    {"test": 2, "leg": "lo seq256", "predicted": 0.687, "measured": 0.688, "delta": "+0.001 (clean)"},
+    {"test": 3, "leg": "seq512", "predicted": 0.730, "measured": "PENDING (this file predates the probe read)", "delta": "PENDING"}
+  ]
+}
