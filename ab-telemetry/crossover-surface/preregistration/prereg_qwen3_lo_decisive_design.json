@@ -1,0 +1,25 @@
+{
+  "leg": "qwen3-30b_seq256_DECISIVE (the H_FILL vs H_DISCRETE separator)",
+  "authorized": "2026-07-11 by Jordan ('go') after the G-LO synthesis (c9338de)",
+  "committed_before_any_arm_produced_a_number": true,
+  "host": "RunPod SECURE RTX PRO 6000 Blackwell Workstation Edition (sm_120, 96GB), pod hpj0pdvk69m8m1, driver 610",
+  "design": {
+    "arms": ["warmup(throwaway, whole, 3 steps)", "qwen_lo_whole_a", "qwen_lo_whole_b", "qwen_lo_whole_c", "qwen_lo_routed(+STAGEDCNT)"],
+    "subject": "Qwen/Qwen3-30B-A3B, seq 256, sample_packing, seed 42, prediction_loss_only (committed deviation), 150 steps, eval_steps 50",
+    "n_whole": 3,
+    "floor_def": "spread of the 3 whole-arm final eval_loss = max - min (report 2*stdev too)",
+    "primary_criterion": "PASS iff |routed_final - mean(3 whole finals)| <= floor_spread",
+    "warmup_rationale": "the OLMoE-hi cold-first-arm contaminated its floor (0.022, one-sided); a throwaway warm-up before arm 1 keeps all 3 whole arms warm-equivalent"
+  },
+  "step_count_change": "150 steps, NOT the original lo-config's 50. Reason: comparability to BOTH 150-step references (the Qwen3-hi primary FAIL and the OLMoE dose-response). The criterion is floor-relative and measured fresh from THIS leg's whole arms, so step count does not bias PASS/FAIL. Recorded as a deliberate, pre-data change.",
+  "rf_prediction": {"phase0_at_seq256": 0.70, "note": "Phase-0 Qwen3-30B E=128 measured 0.687 at eff256; the hi leg's packing ran rf optimistic (0.80->0.97) so expect the same direction — measured rf may come in >0.70"},
+  "discriminator": {
+    "H_DISCRETE": "routed gap ~= 0.06 (same as the hi FAIL) regardless of the higher fill -> per-step corruption, horizon-driven",
+    "H_FILL": "routed gap >> 0.06, scaling with the ~30% fill mass -> fill-mass-driven",
+    "horizon_readout_free": "the routed arm's 50/100/150 intermediate evals give within-run horizon dependence at no extra arm cost (evals dominate wall, so a separate short-horizon arm is not cost-justified)"
+  },
+  "fail_interpretation": "per prereg_qwen3_lo_fail_interp.json: FAIL = fill pathway scales with dose -> routed stays opt-in, fix = mask the checkpointed-backward recompute dequant to routed rows. NOT abandonment.",
+  "memlock_gate_correction": "build_env.sh carried a memlock>=16GB gate built on the (now REFUTED) theory that 8MB rlimit breaks pinning. The pin test proved cudaHostAlloc is not memlock-gated (16GB pins fine under 8MB). The PRO 6000 also has 8MB memlock and ran the primary 30B leg fine. Gate WAIVED for this pod; it is a false gate and should be removed from the bundle.",
+  "controls": "step-0 eval fingerprint identical across all 5 arms; bleed (whole arms emit no routed INFO line, no STAGEDCNT); STAGEDCNT in routed only",
+  "cost_budget": "~$6-8 at $1.89/hr (~3h, seq256 evals dominate). ABORT any arm exceeding 90 min wall."
+}
