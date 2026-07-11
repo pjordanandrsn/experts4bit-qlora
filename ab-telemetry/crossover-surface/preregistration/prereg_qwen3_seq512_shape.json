@@ -1,0 +1,28 @@
+{
+  "leg": "Qwen3-30B seq512 — THIRD dose point, tests the fill->gap CURVE SHAPE",
+  "authorized": "2026-07-11 by Jordan ('add the seq 512 point to test the curve shape')",
+  "committed_before_any_arm_produced_a_number": true,
+  "host": "RunPod SECURE RTX PRO 6000 Blackwell WS (sm_120, 96GB), pod x5274jeaqof7w1, driver 580; memlock gate waived (false gate)",
+  "design": "IDENTICAL to the decisive leg: warm-up throwaway + 3 warm whole floor arms + 1 routed(+STAGEDCNT), Qwen3-30B, seq 512, sample_packing, seed 42, prediction_loss_only, 150 steps, eval_steps 50. Floor = spread of 3 whole finals; PASS iff |routed - mean(whole)| <= spread.",
+  "x_coordinate_is_MEASURED_not_assumed": {
+    "phase0_unpacked_prediction": {"rf": 0.730, "fill": 0.270},
+    "packing_caveat": "Phase-0 is UNRELIABLE under sample_packing: the hi leg predicted rf 0.796 (fill 0.204) at seq2048 but MEASURED 0.97 (fill 0.03) because packing diversifies routing. seq256 happened to match (0.687 pred ~= 0.688 meas). So seq512 MEASURED rf will likely land ABOVE 0.73 (fill BELOW 0.27), probably ~0.78-0.85 (fill ~0.15-0.22).",
+    "rule": "the STAGEDCNT-measured mean rf is the x-coordinate. The shape test is evaluated at whatever fill is measured, NOT the prediction."
+  },
+  "anchors": [
+    {"leg": "hi seq2048", "fill_measured": 0.03, "gap": 0.062},
+    {"leg": "lo seq256",  "fill_measured": 0.312, "gap": 0.186}
+  ],
+  "competing_shape_laws_through_the_two_anchors": {
+    "power_law_sqrt_ish": {"form": "gap = 0.321 * fill^0.469", "note": "convex-down (fast rise then flatten); fit exponent 0.469 ~ sqrt"},
+    "linear_in_fill": {"form": "gap = 0.062 + (0.186-0.062)*(fill-0.03)/(0.312-0.03)"},
+    "predictions_at_candidate_fills": {
+      "if_fill_0.27": {"power": 0.174, "linear": 0.167, "delta": 0.007, "verdict": "WEAK — too close to seq256, laws barely separate"},
+      "if_fill_0.20": {"power": 0.152, "linear": 0.137, "delta": 0.015, "verdict": "OK"},
+      "if_fill_0.15": {"power": 0.132, "linear": 0.114, "delta": 0.018, "verdict": "GOOD — laws separate by ~18x the floor"}
+    }
+  },
+  "shape_verdict_rule": "place the measured (fill, gap). If gap is closer to the POWER prediction -> convex/saturating dose-response (marginal fill matters less as fill grows). If closer to LINEAR -> constant marginal cost per fill unit. If fill lands >=0.25, report the point but flag the shape test as low-power (predictions too close).",
+  "cost_budget": "~$6-8 (5 arms; seq512 evals are ~2x seq256's per-batch but ~half the batch count -> similar wall).",
+  "scope": "Third point tests SHAPE. The DIRECTION (H_FILL) is already settled (da6e776); this does not re-litigate it."
+}
