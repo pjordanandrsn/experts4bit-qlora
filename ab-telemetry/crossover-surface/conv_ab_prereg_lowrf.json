@@ -1,0 +1,17 @@
+{
+  "registered": "2026-07-10, before any low-rf arm ran (high-rf verdict already known: FAIL, 31x the floor — see conv_ab_prereg.json + conv-ab-qwen30b/reduction.json)",
+  "subject": "Same published Qwen3-30B-A3B body at sequence_len 256, max_steps 50 — the killed lo configs verbatim (conv-ab-qwen30b/configs/*_lo.yaml); only host and output paths differ. Host: RunPod RTX 3090 (sm_86), axolotl feature/expert-store @ b22b533, bnb feature/experts-4bit @ e7f4d86 source-built sm_86.",
+  "arms": ["whole_lo_a", "routed_lo", "whole_lo_b"],
+  "bracket_rationale": "same bracket as the primary: whole -> routed -> whole gives the pair its own measured floor at this seq/step count (the 50-step seq-256 noise floor is unknown a priori).",
+  "purpose": "dose-response for the high-rf FAIL. At seq 256 the per-forward routed union is predicted well below the seq-2048 near-full union, so far more rows carry the deterministic fill. Does the divergence grow with fill mass (1 - rf)?",
+  "rf_instrument": "per-BLOCK one-shot STAGEDCNT (48 lines on the first routed forward, STAGED_COUNT_LOG=1 on routed_lo only) — fixes the primary positive-control's layer-0-only blind spot. Phase-0 mean-rf prior at eff_tokens 256: ~0.69 (predicted mean staged ~80-95/128); layer 0 likely higher (it read 0.969 at seq 2048).",
+  "criteria": {
+    "primary": "final eval loss: PASS iff |routed_lo - mean(whole_lo_a, whole_lo_b)| <= |whole_lo_a - whole_lo_b|.",
+    "expectation": "FAIL (given the at-scale high-rf FAIL); the question here is MAGNITUDE, not direction.",
+    "dose_response_readout": "gap_lo = |routed_lo - mean(whole_lo)| and its ratio to floor_lo, read against measured mean fill (1 - mean rf). H_FILL (fill-mass-proportional mechanism) predicts gap_lo well above the high-rf 0.062 in train-loss terms; H_DISCRETE (per-step corruption independent of fill mass) predicts a comparable gap; routed_lo WITHIN its floor would localize the defect to the high-rf/long-seq regime (e.g. a packing interaction with the routing interception) and redirect the repro.",
+    "secondary": "signed per-step train-loss direction: fraction of steps routed_lo > whole_lo_a, vs whole_lo_b > whole_lo_a (coin-flip null).",
+    "controls": "step-0 eval identity across all three arms at print precision (forward fingerprint — routed staging is active during routed_lo's step-0 eval); whole arms emit no routed INFO line and no STAGEDCNT (bleed); STAGEDCNT present in routed_lo only."
+  },
+  "cost_box": "3090 at <= $0.60/hr; projected 3-6 h total (the seq-256 eval loop is staging-bound: ~8x the forwards of seq 2048, each staging all 48 layers). ABORT-and-keep-partials if a single arm exceeds 3 h wall.",
+  "notes": "eval set = alpaca val 5% packed at 256 (2 evals/arm, steps 0 and 50) dominates wall-clock. Configs byte-identical to the committed lo configs except output_dir/wandb_name (+ whole_lo duplicated into whole_lo_a/whole_lo_b)."
+}
