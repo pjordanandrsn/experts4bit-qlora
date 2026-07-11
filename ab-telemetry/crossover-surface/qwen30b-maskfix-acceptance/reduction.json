@@ -1,0 +1,35 @@
+{
+  "leg": "mask-fix ACCEPTANCE + A4 attenuation",
+  "prereg": "../preregistration/prereg_maskfix_acceptance.json (411b57f, OTS-stamped, committed before any arm)",
+  "fix_under_test": "axolotl feature/expert-store @ dcd9ac2 (zero-decode mask of un-routed rows); build gated on _zero_decode_byte present",
+  "host": "RunPod SECURE PRO 6000 Blackwell WS (sm_120), pod l6bmb14xbo3mxv, driver 610",
+  "body": "Qwen3-30B-A3B seq256, sample_packing, seed 42, 150 steps, eval_steps 50; prediction_loss_only",
+  "ga4_floor": {"whole_finals": [1.262, 1.263, 1.263], "mean": 1.2627, "spread": 0.0010,
+                "note": "5th consecutive clean warm floor; mean reproduces the decisive leg's 1.2623 on a fresh pod"},
+  "efficacy": {
+    "routed_mask_final": 1.3670, "gap": 0.1043, "ratio_over_floor": 104,
+    "verdict": "FAIL (bar was <=5x floor)",
+    "step0_eval": "2.902 == whole 2.902 (forward mask bit-identical, as proven); gap appears by step50 and holds"
+  },
+  "positive_control": {
+    "routed_legacy_ga4_final": 1.4450, "gap": 0.1823, "ratio_over_floor": 182,
+    "verdict": "VALID (>=100x void-gate); reproduces the decisive leg's 0.186",
+    "mask_reduction_factor": 1.75, "note": "mask cuts the legacy gap 0.1823 -> 0.1043 (~1.75x), same-bracket, real signal not noise"
+  },
+  "A4_attenuation": {
+    "gap4_legacy": 0.1823, "gap8_legacy": 0.1670,
+    "whole_ga8": 1.2510, "routed_legacy_ga8": 1.4180,
+    "ratio_gap8_over_gap4": 0.916,
+    "predictions": {"incoherent_noise_quadrature": 0.71, "coherent_bias": 1.0},
+    "readout": "DOES NOT ATTENUATE (0.916 ~ 1.0, far from 0.71) -> the divergence is a COHERENT/COMPOUNDING bias, NOT independent per-row noise. Doubling gradient averaging (ga4->ga8) barely moved the gap.",
+    "corroboration": "consistent with the seq512 CONVEXITY (which already argued against the sqrt-quadrature/independent-noise story); two independent lines (dose-response curvature + gradient-averaging) now agree the mechanism is coherent."
+  },
+  "synthesis": {
+    "conclusion": "The mask fix is CORRECT (un-routed rows -> exact 0.0, proven on real bnb) but INSUFFICIENT: it removes ~44% of the divergence (the fill-CONTENT component) and leaves a ~104x-floor coherent residual. Content was never the whole story.",
+    "residual_mechanism_hypothesis": "routing DRIFT across the gradient-checkpoint recompute: as the attention LoRA trains, recomputed hidden states route some tokens to experts OUTSIDE the originally-staged union; those read a zeroed row instead of the correct expert -> a coherent, systematic (not random) error that gradient averaging cannot cancel and that GROWS with fill (fewer staged experts -> more drift-exposed tokens). Explains BOTH the 1.75x-not-full reduction AND the non-attenuation AND the convexity.",
+    "consequence": "routed-subset TRAINING remains non-viable; the fix is a partial mitigation, not a solution. Forward/decode stays bit-identical and unaffected. whole_layer is still the only training-validated staging.",
+    "next_step_options": "(a) test the drift hypothesis directly: log the recompute routed-set vs the forward routed-set overlap (cheap instrumentation, one short run); (b) drift-robust staging = stage a superset (union over a few recent forwards, or top-k with margin) -> trades bandwidth for correctness, converges toward whole_layer as drift grows; (c) re-derive the routed set at recompute time from the recompute's own routing (requires the stager to see the recompute forward)."
+  },
+  "cost_usd_approx": 13.5,
+  "pods_at_end": "zero (HTTP 204)"
+}
