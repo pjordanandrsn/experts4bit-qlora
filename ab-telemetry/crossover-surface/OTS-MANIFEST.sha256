@@ -1,0 +1,35 @@
+# OTS manifest — routed-subset dose-response evidential chain (2026-07-11)
+# sha256 of every artifact + the git commits that introduced them.
+# What a stamp proves: the manifest (hence each hash) existed before the Bitcoin block
+# that confirms it. FINE ORDERING vs the arms (minutes) is NOT resolvable by OTS;
+# it rests on the pod SENT timestamps + GitHub server-side push receipts, disclosed
+# in each prereg commit message. Stamps bound the chain from stamp-time forward.
+git_commits: 7e988af(blind preregs) ba06f1f(primary prereg) 3c34347(decisive design) d924c98(seq512 shape) e0d1244(shape-verdict rules, pre-arm) da6e776(dose-response verdict) c9338de(G-LO) 6a0ac4c(primary logs)
+d1d23452a474e86e53b6a262ef28d9d7d9c53a585411a3a2f261f22dc69cfbd6  preregistration/prereg_olmoe_lo_weight.json
+f507be73d16ffaa056bd52360db3efdf582d1d3841be80e1e75f031a8fd656c8  preregistration/prereg_qwen3_lo_decisive_design.json
+400890a758ec04bb6d964d23dd60c860cf7ba40685921ce63e149a3d586fd712  preregistration/prereg_qwen3_lo_fail_interp.json
+39affaf7f4301b6a052bb052e579b3467bdf7bc39e53b67e095d727cd1ddbf90  preregistration/prereg_qwen3_seq512_shape.json
+47913ccba6d27ef02712a1fb365f05d4afc77cafd6086245cb9b18f53888d7c5  preregistration/prereg_rf512.json
+4afec8e025dc127f62dbb66211ecfff26d9ceba56caff9061b73dd9e6909de08  preregistration/prereg_shape_verdict.json
+24fd926abb51cb0d54d35a6306e6047b5c4667d80f926244ec8400c85c77be61  conv_ab_prereg.json
+4ba9216f84df7823ddd5d07c37ef8f738572a9118e3037c4b71f1c65e75c7c10  conv_ab_prereg_lowrf.json
+8be5a41818c000ef5fd1e40d56d816514f19e7a6b33b565def0989bf9319cfbf  G-LO_synthesis.md
+0de219029abd0430399e1ccdd2ee1e0b89582ffafc529cd311ff15b514519985  DOSE-RESPONSE-verdict.md
+87ed9e685d3214b2d482dfef98d9001da290bd90c339210e8335c560054de1b2  AB-routed-vs-whole.md
+d5af268eb73373b7ed144736e4a3083ed0636e620b2a2129919f78d7385156f6  conv-ab-qwen30b/reduction.json
+b5366e7b3b97a07f78b77d5a93f6d9fb4d00eee39b0f21824ac99a12f2d3e4a5  olmoe-dose-response/reduction.json
+19ab9a4a697fb460e0fcaf34e5699aaba796857d94b15cc7c20cd587b1e2c178  qwen30b-lo-decisive/reduction.json
+92f0a5dad5cf6e9183bc1cdb940159f58db39b8008c182d9c2e1728f26f21640  conv-ab-qwen30b/logs/out_routed.log.gz
+363659b916331d736ac47c10ea2f8449ed354d0d53acb89a8b428cdb20605687  conv-ab-qwen30b/logs/out_whole_a.log.gz
+f574b5c7aa0500504a556baf5d29f1abe6b62628a29281d27d7397fe80d67827  conv-ab-qwen30b/logs/out_whole_b.log.gz
+cb7bfe7343b292b2c0ffb2a38d68024130fe1334438711f419997f0abbd1f727  conv-ab-qwen30b/logs/pc.log.gz
+1e1717fc90a274f7938f98423573038ff2777ffef1ff3b29eba11dc298f24bcb  olmoe-dose-response/logs/out_olmoe_hi_routed.log.gz
+48f77836dc029373d05b913dec3dd239c3cb199b0d7b15f9bcfb4d223aa24d48  olmoe-dose-response/logs/out_olmoe_hi_whole_a.log.gz
+c5f8d50c53a8b4d73bebc4fabc814ef8415e73c39eafb888fa01a95b3f67f7bf  olmoe-dose-response/logs/out_olmoe_hi_whole_b.log.gz
+878bc5a51ff3c4ceaf9f9b3012bd8543cf18a63bc40a85048ea12a9a37290211  olmoe-dose-response/logs/out_olmoe_lo_routed.log.gz
+0ac5f404c5c7b5252b60966a12cf9a587541359c4f0b43b478174ce4467fddcd  olmoe-dose-response/logs/out_olmoe_lo_whole_a.log.gz
+ab11bfec8e3a780c30187df67ea211b7bd13beb7dddab2f8b7d9dbef3e8b6f41  olmoe-dose-response/logs/out_olmoe_lo_whole_b.log.gz
+ce22896f1af17f62aa214365934d746e830cebb4e9c2ad927def415ced2f8e74  qwen30b-lo-decisive/logs/out_qwen_lo_routed.log.gz
+3d99cee8e4654226f615f5ad1c13f73bb9abb40a2b41ebb85a8326f5131b8c6b  qwen30b-lo-decisive/logs/out_qwen_lo_whole_a.log.gz
+a44384dc1dead0add3ba2b996ade3f34233e814d702fd724999ad91b0b95b03c  qwen30b-lo-decisive/logs/out_qwen_lo_whole_b.log.gz
+49cbc1d0ab4df38422ad2b1833f5776844901866a9b5234b647280ca242159e4  qwen30b-lo-decisive/logs/out_qwen_lo_whole_c.log.gz
