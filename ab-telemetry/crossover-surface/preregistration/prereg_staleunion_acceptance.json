@@ -1,0 +1,17 @@
+{
+  "leg": "stale-union fix ACCEPTANCE (routing-aware guard + incremental top-up, on top of the zero-decode mask)",
+  "authorized": "2026-07-11 by Jordan ('yes' to the 5-arm re-run)",
+  "committed_before_any_arm_produced_a_number": true,
+  "fix_under_test": "axolotl fix/routed-stale-union @ 45d2904 — stage() cover-checks each call's routed union against the staged one and tops up ONLY missing experts into the live resident tensor. Mechanism confirmed by the drift probe (42/42 escapes on layers.0 only, decaying counts, 15/15 steps clean).",
+  "prior_layers": "bug layer 1 = fill CONTENT (fixed by zero-decode mask dcd9ac2, halved the gap 0.182->0.104); bug layer 2 = STALE UNION at the backward->forward boundary block (this fix). Prediction if these are ALL the layers: gap collapses to ~1x floor.",
+  "design": "warm-up throwaway + 3 whole arms + 1 routed_fixed (ROUTED=1, DRIFT_LOG=1, STAGEDCNT), Qwen3-30B seq256/150 steps, seed 42, prediction_loss_only — the standard bracket at the decisive point.",
+  "criteria": {
+    "floor": "spread of the 3 whole finals (five prior brackets: 0.0010)",
+    "STRONG_PASS": "gap <= 1x floor — routed training indistinguishable from whole; graduates to feature/expert-store and the gate OPENS for training",
+    "PASS": "gap <= 5x floor — accept with a residual note; graduate with the gate documenting the residual",
+    "FAIL": "gap > 5x floor — a third bug layer exists; fix stays on the side branch, gate stays closed",
+    "in_run_mechanism_control": "DRIFT lines must appear (block-0-only) — proves the top-up path is live in THIS run; zero drift lines would mean the fix didn't engage (void)"
+  },
+  "cost_budget": "5 arms ~ $8.5, ~3 h, PRO 6000. ABORT any arm > 90 min.",
+  "note_on_expectations": "two short-horizon extrapolations already failed in this program (15-step OLMoE, CPU-fake efficacy); this bracket is the only accepted standard."
+}
