@@ -14,6 +14,13 @@
   },
   "cost_box": "3090 at <= $0.60/hr; projected 3-6 h total (the seq-256 eval loop is staging-bound: ~8x the forwards of seq 2048, each staging all 48 layers). ABORT-and-keep-partials if a single arm exceeds 3 h wall.",
   "notes": "eval set = alpaca val 5% packed at 256 (2 evals/arm, steps 0 and 50) dominates wall-clock. Configs byte-identical to the committed lo configs except output_dir/wandb_name (+ whole_lo duplicated into whole_lo_a/whole_lo_b).",
+  "amendment_both_legs": {
+    "registered": "2026-07-11 ~04:10Z, after the OLMoE sweep LAUNCHED but before any of its numbers were read.",
+    "why": "Qwen3-30B cannot train usably on the 3090: container memlock hard-capped at 8 MB (the 14.5 GB expert home cannot pin -> synchronous pageable H2D per stage) + PCIe negotiated gen1. One training step did not finish in 14 min (no-eval diagnostic, peak 16.4 GB — memory was NOT the binding constraint). Owner chose BOTH legs.",
+    "leg_1_olmoe_3090": "6 arms on the existing 3090: hi bracket seq 2048 + lo bracket seq 256, each whole_a -> routed -> whole_b, 150 steps (the old 15-step OLMoE probe was too short by construction). Same primary criterion per bracket; dose-response readout = gap-over-floor at measured rf_hi vs rf_lo (per-block STAGEDCNT in both routed arms). OLMoE = allenai/OLMoE-1B-7B-0924, E=64, same body otherwise.",
+    "leg_2_qwen30b_bigger_card": "3-arm lo bracket (seq 256, 50 steps, the committed lo configs + the prediction_loss_only deviation) on a PRO-6000-class host AFTER the OLMoE leg completes (one pod at a time). Its high-rf point already exists: the primary FAIL (0.062, 31x floor). Host gate: driver >= 580 AND memlock unlimited/>=16 GB.",
+    "interpretation_note": "OLMoE hi bracket doubles as an architecture-transfer check of the Qwen3-30B high-rf FAIL: if OLMoE hi ALSO fails at 150 steps, the earlier 15-step OLMoE pass was a horizon artifact; if OLMoE hi passes, the divergence has an architecture-dependent component."
+  },
   "deviations_for_24gb_fit": {
     "recorded": "2026-07-11, BEFORE any valid arm produced a number (arm-1 attempt #1 OOMed at eval batch 876/1036 and was discarded).",
     "why": "The primary A/B ran on a 96GB PRO 6000; this repro is on a 24GB 3090. At seq 256 the alpaca val 5% packs into 1036 eval batches (8x the primary's ~130 at seq 2048), and HF Trainer's eval logit path (Qwen3 vocab ~152k) overran 24GB even with eval_accumulation_steps=grad_accum(4). Steady-state weights are ~7GB (memory: model runs on a 12GB A2000 with offload), so the overrun is eval-time, not the model.",
