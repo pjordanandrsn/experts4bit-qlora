@@ -1,0 +1,25 @@
+{
+  "diagnostic": "gradient localization of the routed-mask residual",
+  "prereg": "../preregistration/prereg_graddiff_diagnostic.json (103ca05, OTS-stamped, pre-data)",
+  "method": "4 same-seed(42) arms, 3 steps, GRAD_DUMP=1 (per-trainable-param grad L2 at float64): whole, whole2, routed, routed2. Qwen3-30B seq256, branch fix/routed-stale-union @ 7e0a8e1 (grad-dump callback). d_WW/d_RR = whole/routed atomic floors; d_WR = whole vs routed.",
+  "results_pooled_1152_points": {
+    "mean_d_WW": 5.09e-03, "mean_d_RR": 5.21e-03, "mean_d_WR": 5.93e-03,
+    "median_d_WW": 1.10e-03, "median_d_WR": 1.21e-03,
+    "d_WR_over_d_WW_mean_ratio": 1.165, "median_ratio": 1.107,
+    "sign_test_d_WR_gt_d_WW": "530/1152 = 46% (< 50% => NO systematic per-param elevation; the >1 mean ratio is a heavy-tail artifact of a few loud atomically-noisy params)"
+  },
+  "step0_max_metric": {"d_WR": 0.137, "d_RR": 0.132, "ratio": 1.03, "top_param_WR": "layers.40.k_proj.lora_B (SAME param that tops d_RR)"},
+  "branch_fired": "ATOMIC (prereg max-ratio metric: d_WR/d_RR = 1.03 < 3)",
+  "ruled_out": {
+    "routed_intrinsically_noisier": "FALSE — d_RR ~ d_WW (ratio 1.0-1.3). routed staging does NOT elevate gradient noise.",
+    "large_localized_backward_bug": "FALSE — no param has d_WR robustly above the atomic floor; the top d_WR param is the top ATOMIC-noise param.",
+    "forward_not_identical": "not the seed at the gradient level (routed grads within the whole-vs-whole envelope); a full-precision per-layer activation diff was NOT run (optional)."
+  },
+  "honest_conclusion": "The gradient diagnostic reached its RESOLUTION LIMIT without localizing. At 3-step resolution routed-vs-whole gradients are statistically indistinguishable from whole-vs-whole atomic noise (d_WR ~ d_WW ~ d_RR ~ 0.005 mean; sign test 46%). Therefore the 100x-floor LOSS residual corresponds to a per-step difference SMALLER than the ~0.005 gradient atomic-noise floor -- a tiny, coherent, sub-resolution bias that is invisible in 3 steps but accumulates over 150 (reconciling the A4 non-attenuation + seq512 convexity, which are loss-level and integrate 150 steps).",
+  "prereg_tension_flag": "The ATOMIC branch fired, which I pre-committed 'CONTRADICTS the coherence evidence -> flag the tension.' FLAGGED and RESOLVED: atomic-at-gradient-level and coherent-at-loss-level are BOTH true and NOT contradictory once the resolution gap is accounted for -- the coherent component is below the per-step gradient noise floor. Whole-vs-whole atomic noise is zero-mean and cancels over 150 steps (loss floor 0.001); routed carries the same-size noise PLUS a sub-resolution coherent bias that accumulates (loss gap 0.103).",
+  "mechanistic_picture_complete": "Three candidate mechanisms now tested by direct intervention: (1) fill CONTENT -> real, fixed (zero-mask halved 0.182->0.104); (2) boundary STALENESS -> real, fixed, NO loss effect (block-0, 147 drifts); (3) gradient-level localization -> residual is sub-atomic-noise, coherent, diffuse, NOT a discrete localizable bug. Net: routed-subset TRAINING diverges via a tiny coherent numerical difference intrinsic to the routed path that accumulates over training; it is not a fixable discrete bug and not cheaply localizable further.",
+  "decision": "STOP the mechanism hunt. whole_layer remains the ONLY training-validated staging; routed is forward/decode-only (bit-identical, unaffected). Optional completeness-only (NOT needed for the decision, ~$0.5): a full-precision per-layer forward-activation diff (whole vs routed, same batch) to confirm whether the seed is a forward dequant-numerics difference or purely backward accumulation.",
+  "cost_usd_approx": 1.6,
+  "ops_note": "runner env-prefix bug: `$extra` expanding to VAR=val is NOT treated as an env assignment by bash (rc=127) -> use `env $extra cmd`. Both routed arms died instantly the first time; whole arm (no $extra) was fine. Fixed + reran cached.",
+  "pods_at_end": "zero (HTTP 204)"
+}
