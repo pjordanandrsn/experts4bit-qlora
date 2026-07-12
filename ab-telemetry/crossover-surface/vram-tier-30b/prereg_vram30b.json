@@ -1,0 +1,17 @@
+{
+  "registered_utc": "2026-07-12T14:55:00Z",
+  "purpose": "Scale check for the VRAM tier: does fv-linearity hold at 30B-class (Qwen3-30B-A3B, E=128, 48 MoE blocks, ~15 GB 4-bit pool) on a 24 GB card, where residency fraction is bounded by VRAM? Discovers fv_max (max residency that trains) as a first-class result — the practical 'how much of a 30B pool fits beside training on consumer silicon' number. Ordered #3 in the program queue (after #1 stalled on Latitude H100 stock; stock-watcher armed, session-2 prereg 2bbd2e2 unchanged).",
+  "host": "RunPod RTX 3090 24GB (community first, SECURE fallback; wedge-kill after 10 min RUNNING/no-IP). L = pinned H2D measured at rig check. Gen1-under-load lottery noted per arm (#4). Fallback ladder if the unattributed 3090-30B hang recurs (probe gate below): roll 3090 once -> 4090 24GB -> abort with report (a 96GB card defeats the forced-fv purpose).",
+  "workload_frozen": "The graddiff whole.yaml body verbatim (Qwen3-30B-A3B, seq256, alpaca, qlora r=8, quantize_moe_experts, whole_layer, val_set_size 0) with: max_steps 40, gradient_accumulation_steps 4->1, seed 42, prefetch OFF, metric = HF train_steps_per_second. Pool bytes P read from the install line ('homed .. (X GB)').",
+  "arms": "probe (3 steps, R config) -> warmup 40 (discard) -> R n=2 -> fused ascending fv ladder {0.0, 0.25, 0.5, 0.65, 0.8, 0.9, 1.0}, STOP at first OOM; fv_max = last that trained. n=1 per ladder point.",
+  "gates": "probe step time <= 5 min and no hang >8 min (else host-abort per fallback ladder); real quantize smoke; ThreeTier+Placement pytest on pod; LD_LIBRARY_PATH=nvidia pip libs (the cuda130 dlopen trap); per-arm engagement assertions; private code RAM-only /dev/shm, shredded at teardown.",
+  "frozen_predictions": {
+    "S1_linearity_at_scale": "measured ladder points (excluding OOM) fit t(fv) = a - b*fv with every interior residual <= 10% of the fitted value.",
+    "S2_slope_physics": "fitted per-unit-fv saving b in [0.5, 2.0] x (2P/L) with P from the install line and L from rig check (same band discipline as the 3090 OLMoE P3).",
+    "S3_fv_max": "fv_max >= 0.25 on 24 GB at seq256 (below that, the scale check FAILS on this SKU). Reported with the peak-VRAM reading of the largest surviving arm.",
+    "S4_practical_recovery": "at fv_max, measured saving >= 0.8 x fv_max x b (>= 80% of the linear prediction).",
+    "context_note": "OLMoE anchors for cross-scale comparison: 3090 per-GB promotion value 0.0395 s/GB at L=20.36; H100 0.0033 at L=56.74. The 30B slope/P gives this box's per-GB value at 4.7x the pool size."
+  },
+  "floors": "R n=2 spread is the floor; ladder verdicts use fitted residuals, not point deltas.",
+  "budget": "~$0.5-1.5 expected (3090 $0.22-0.46/hr, ~1.5h); hard 3h watchdog deadline, evidence-first pull + mailcow email + 404-verified teardown."
+}
