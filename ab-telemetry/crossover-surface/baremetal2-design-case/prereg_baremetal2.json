@@ -1,0 +1,23 @@
+{
+  "registered_utc": "2026-07-12T14:20:00Z",
+  "purpose": "Session 2 on Latitude bare metal: the DESIGN-CASE knee (prefetch ON — every prior surface ran prefetch OFF to expose raw store cost), the RAID-0 stripe point (S2), and the seq-residue decomposition (un-hidden H2D residue grew 21->35->102 ms with seq on box 1, against expectation).",
+  "host": "Latitude.sh g3.h100.small (MEX2), provisioned with raid: raid-0 (2x 3.5TB NVMe striped). Genuine root, real drop_caches. Rig check records: fio O_DIRECT seq-read ladder on the striped fs (S2, QD1/QD2), pinned H2D (L), driver, and a REAL bnb quantize smoke (import checks are insufficient - 3090 lesson).",
+  "workload_frozen": "Identical to box 1: OLMoE-1B-7B 4-bit quantize_moe_experts QLoRA r=8, whole_layer, seq64 (except residue arms), gas=1 mbs=1, 40 steps, seed 42, warmup discarded, metric = HF train_steps_per_second, drop_caches before every flash-touching arm, per-arm engagement assertions.",
+  "arms": {
+    "anchors_pOFF": "fused f=1.0 and f=0.5, prefetch OFF (cross-box check vs box-1 0.2276 / 0.8224; expect within ±10%, same SKU)",
+    "design_case_pON": "fused prefetch ON at ram-fraction f in {1.0, 0.9375, 0.875, 0.75, 0.5, 0.0} (flash share 0..1); flash on the RAID-0 stripe",
+    "three_tier_pON": "centroid (fv=fr=ff=1/3) prefetch ON + same centroid prefetch OFF on this box",
+    "residue": "V (resident) and R (RAMStore) at seq in {64, 512, 2048}, prefetch OFF; then the discriminator: R at seq2048 with the public expert_offload_prefetch: true"
+  },
+  "frozen_predictions": {
+    "S2_stripe": "fio QD1 1MiB seq-read on the stripe >= 1.6x box-1 single-drive S1_QD1=1.52 GB/s (band [2.4, 3.6] GB/s). f_knee update = 1 - S2_eff/L computed from THIS box's measured values (formula frozen, inputs measured).",
+    "K1_flat_region_exists": "prefetch-ON at flash share 1/16 (f=0.9375) lands within 5% of the f=1.0 floor. This is the claim the whole design rides on: with a read-ahead lane, a small flash share is FREE. (Box-1 prefetch-OFF rose immediately - no flat region without the lane.)",
+    "K2_prefetch_dominates": "prefetch-ON <= prefetch-OFF at every interior f; at f=0.5 the ON arm removes >= 25% of the OFF arm's flash penalty (penalty = t(f) - t(1.0)).",
+    "K3_composition": "three-tier centroid ON <= centroid OFF, and ON-curve ends parity holds (f=1.0 ON within 3% of f=1.0 OFF - the lane must be inert with zero flash blocks).",
+    "R1_residue_discriminator": "IF public expert_offload_prefetch: true at seq2048 removes >= 70% of the R-V residue (box-1: 102 ms) THEN the residue is copy-serialization hidden by lookahead (H-A). IF it moves it < 30% THEN the residue is bandwidth/allocator-side (H-B/H-C) and one best-effort profiled run follows (identification, not pass/fail). Between 30-70% = partial, both mechanisms live.",
+    "R2_residue_reproduces": "box-2 R-V residue at seq2048 lands within a factor 2 of box-1's 102 ms (same SKU; if it does NOT reproduce, box-1's residue was host-specific and the anomaly is downgraded)."
+  },
+  "floors": "f=1.0 arms run n=2 (ON and OFF each); floor = |a-b|. Verdict comparisons use means.",
+  "gates_before_arms": "real quantize smoke on-device; pytest ThreeTier+Placement on the box; fio + link measured before any training arm; private code RAM-only tmpfs (/mnt/ramcode pattern), shredded at teardown.",
+  "budget": "~$3.4/1.5h expected, hard 2.5h deadline + $33 spend cap, session-independent watchdog (file-driven deadline + sentinel + 404-verify + mailcow), evidence-first."
+}
