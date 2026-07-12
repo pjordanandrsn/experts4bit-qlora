@@ -1,0 +1,12 @@
+{
+ "L_gbps": 19.22,
+ "pool_gb": 14.5,
+ "R": [
+  null,
+  null
+ ],
+ "ladder": {
+  "f0p0": null
+ },
+ "reduction_error": "unsupported operand type(s) for +: 'NoneType' and 'NoneType'"
+}
