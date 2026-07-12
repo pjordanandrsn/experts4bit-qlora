@@ -1,0 +1,59 @@
+{
+ "arms": {
+  "v1": 0.3792,
+  "r1": 0.6211,
+  "v2": 0.3679,
+  "r2": 0.6345,
+  "f0p0": 0.6277,
+  "f0p25": 0.5682,
+  "f0p5": 0.5126,
+  "f0p75": 0.4219,
+  "f1p0": 0.3676
+ },
+ "L_gbps": 20.36,
+ "corners": {
+  "V": 0.3735,
+  "R": 0.6278,
+  "floor_V": 0.0113,
+  "floor_R": 0.0134,
+  "tax_s": 0.2542,
+  "per_gb_promotion_value_s": 0.03948
+ },
+ "P3": {
+  "tax_pred_s": 0.1507,
+  "measured": 0.2542,
+  "pass": true
+ },
+ "P1": {
+  "f1p0_vs_V_pct": -1.6,
+  "f0p0_vs_R_pct": -0.0,
+  "pass": true
+ },
+ "P2": {
+  "points": {
+   "f0p25": {
+    "pred": 0.5642,
+    "meas": 0.5682,
+    "err_pct": 0.7
+   },
+   "f0p5": {
+    "pred": 0.5007,
+    "meas": 0.5126,
+    "err_pct": 2.4
+   },
+   "f0p75": {
+    "pred": 0.4371,
+    "meas": 0.4219,
+    "err_pct": -3.5
+   }
+  },
+  "pass": true
+ },
+ "P4": {
+  "recovered_frac": 0.453,
+  "pass": true
+ },
+ "headline": {
+  "per_gb_value_vs_h100_x": 12.0
+ }
+}
