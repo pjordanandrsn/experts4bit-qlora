@@ -1,0 +1,27 @@
+{
+  "experiment": "R128 bisection (same expert COUNT both sides) + piggybacked signed-mean activation diff",
+  "authorized": "2026-07-12 by Jordan ('what if we moved the same number of experts per step on both sides' -> yes)",
+  "committed_before_any_arm_data": true,
+  "code": "axolotl fix/routed-stale-union @ 935e6a3 (ROUTED_PAD=full + ACT_DUMP)",
+  "host": "RunPod PRO 6000 WS (sm_120); PyPI pre-check before build",
+  "loss_bisection": {
+    "arms": ["warmup", "whole_anchor", "R128 (routed staging, ROUTED_PAD=full -> all 128 experts, byte-identical to whole)", "routed_control (normal routed-mask)"],
+    "config": "Qwen3-30B seq256, 150 steps, seed 42, eval_steps 50, prediction_loss_only",
+    "anchor_validity": "whole_anchor MUST land 1.2623 +/- 0.001 (6 prior floors); else pod/session drift -> void",
+    "control_validity": "routed_control MUST reproduce ~1.365 (mask-only gap ~0.104); else the bug didn't manifest -> void",
+    "R128 is n=1 (single arm) vs the anchor; floor := 0.001 (resolution-limited, 6-bracket-consistent)",
+    "frozen_branches": {
+      "SUBSET_INTRINSIC": "R128 final within 5x floor of the whole_anchor (|R128 - anchor| <= 0.005) -> moving the same COUNT removes the divergence => the residual is intrinsic to SUBSETTING (zero rows / fewer distinct experts), NOT the assembly path. Confirms the closure verdict with a sharp boundary; routed training stays non-viable, not fixable at the staging layer.",
+      "ASSEMBLY_MECHANICS": "R128 final still diverges like routed_control (|R128 - anchor| >= 0.05, ~half-or-more of the routed gap) -> same bytes/count still diverge => the bias is in routed's ASSEMBLY mechanics (torch.empty alloc + per-expert copy -> layout/kernel-scheduling -> atomic rounding), NOT the subset. ACTIONABLE: stage into a whole-identical buffer; routed training may become viable. REOPENS the question.",
+      "PARTIAL": "0.005 < |R128 - anchor| < 0.05 -> BOTH contribute; report the split fraction (R128 gap / routed gap) as the assembly-vs-subset share."
+    }
+  },
+  "activation_diff": {
+    "arms": "same 4 passes emit ACT_DUMP (step-0 per-block output signed mean, f64)",
+    "quantities": "per MoE block: |signed_mean(routed) - signed_mean(whole_anchor)| vs |signed_mean(whole2) - signed_mean(whole_anchor)| atomic floor",
+    "note": "the whole runs give the signed-mean atomic floor; routed's excess signed-mean = the COHERENT forward bias the gradient max-diff could not resolve. If routed signed-mean bias >> whole floor AND grows with layer depth -> the seed is a forward dequant-numerics difference; if ~floor -> forward is coherently identical and the seed is purely in backward accumulation.",
+    "resolution": "~ abs_mean / sqrt(numel) per block (~500k-1M values/block) -> ~1e3 x finer than the per-value max-diff"
+  },
+  "cost": "~$6, ~2.5h (4 loss arms) + ~$0 (act-dump piggybacks the same passes on step 0). Both answers from one build.",
+  "purpose": "CLOSURE for the routed-training arc: the loss bisection is the first probe that can REOPEN viability (if ASSEMBLY_MECHANICS); the activation diff settles forward-vs-backward as the seed."
+}
