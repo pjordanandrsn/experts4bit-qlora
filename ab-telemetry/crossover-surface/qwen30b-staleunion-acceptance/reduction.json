@@ -1,0 +1,28 @@
+{
+  "leg": "stale-union fix ACCEPTANCE (routing-aware guard + top-up, on top of the zero-decode mask)",
+  "prereg": "../preregistration/prereg_staleunion_acceptance.json (e6a1e55, OTS-stamped, pre-launch)",
+  "fix_under_test": "axolotl fix/routed-stale-union @ 45d2904 (zero-mask + routing-aware incremental top-up)",
+  "host": "RunPod COMMUNITY RTX PRO 6000 Max-Q (sm_120), pod zkxpsuwd0d4em3, driver 590 (2nd Max-Q; the 1st, m1yggco0kpcdof, was NETWORK-DEAD -> killed, ~$1; added a PyPI pre-check)",
+  "body": "Qwen3-30B-A3B seq256, sample_packing, seed 42, 150 steps, eval_steps 50, prediction_loss_only",
+  "floor": {"whole_finals": [1.262, 1.262, 1.263], "mean": 1.2623, "raw_spread": 0.0010, "floor": 0.0010,
+            "note": "6th consecutive clean warm floor across 3 pods / 2 SKUs; mean reproduces the decisive leg + mask-fix leg to 4 places"},
+  "verdict": {
+    "routed_fixed_final": 1.3650, "gap": 0.1027, "ratio_over_floor": 103,
+    "result": "FAIL (bar <=5x floor)",
+    "vs_mask_only": "0.1027 vs 0.1043 — the top-up changed the gap by 0.0016 (< 2x floor = NOISE). The stale-union fix bought essentially nothing.",
+    "vs_legacy": "0.182; vs mask-only 0.104; vs mask+topup 0.103"
+  },
+  "mechanism_control_DRIFT": {
+    "events": 147, "all_on_block": "layers.0 (100%)",
+    "prediction_was": "block-0-only, ~once per microbatch — CONFIRMED EXACTLY",
+    "reading": "the stale-union bug is REAL and the top-up caught+staged every escape with correct content, yet the loss gap is unchanged -> block-0 boundary staleness contributes NEGLIGIBLY to the convergence divergence."
+  },
+  "synthesis": {
+    "conclusion": "TWO real bugs found and fixed by direct intervention — (1) un-routed fill CONTENT (zero-decode mask: halved 0.182->0.104), (2) boundary-block STALENESS (top-up: confirmed 147/147 on block 0, but 0.104->0.103 = no effect). NEITHER is the dominant residual. A ~103x-floor coherent residual persists whose source is now known NOT to be fill content or block-0 freshness.",
+    "what_this_rules_out": "the content-sensitivity (legacy 0.182 vs mask 0.104) is NOT caused by block-0 staleness (fixing staleness didn't move it). So some OTHER path is sensitive to the routed-vs-whole difference, and it is not the sparse forward (bit-identical) nor the boundary block.",
+    "recommendation": "STOP the blind-fix + $13-bracket loop (3 brackets, ~$33, 2 real bugs, gap stuck ~100x). The disciplined next step is a CHEAP localizing diagnostic, NOT a third guessed fix: run whole vs routed-mask for a handful of steps on a SMALL MoE (OLMoE) and diff the per-parameter GRADIENTS (and per-layer activations) to pinpoint WHERE the routed-vs-whole training signal first diverges. ~$1, decisive about the mechanism; only then design a targeted fix.",
+    "fix_disposition": "fix/routed-stale-union stays a SIDE BRANCH — it corrects a real staleness bug (a correctness improvement) but has zero convergence benefit and a small top-up cost, and routed TRAINING is still non-viable, so it has no consumer to merge into. Do NOT graduate to feature/expert-store."
+  },
+  "cost_usd_approx": 8,
+  "pods_at_end": "zero (autopilot pull->teardown->verdict-email completed 01:09Z)"
+}
