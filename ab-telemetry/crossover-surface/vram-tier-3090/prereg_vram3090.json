@@ -1,0 +1,27 @@
+{
+  "registered_utc": "2026-07-12T13:05:00Z",
+  "purpose": "Validate the e4b-ssdtier VRAM hot tier (aa8cc1f) where the model says it pays: slow-PCIe consumer silicon. Second dose point on the link axis (H100 gen5 L=56.74 GB/s was the first).",
+  "host": "RunPod RTX 3090, COMMUNITY preferred; up to 3 provisioning rolls keeping the SLOWEST measured pinned-H2D link L (community hosts range gen1..gen4). L and pcie.link.gen/width recorded at rig check BEFORE any arm.",
+  "workload_frozen": "OLMoE-1B-7B-0924 4-bit quantize_moe_experts QLoRA r=8, whole_layer, prefetch OFF, seq64, gas=1 mbs=1, 40 steps, seed 42, warmup arm discarded, metric = HF train_steps_per_second (inverted); same base.yaml as the H100 chain (from bm-final.tgz sha256 9d93472e...).",
+  "arms": "warmup, then interleaved V,R,V,R (V=resident expert_offload:false; R=public RAMStore), then FusedStore vram+ram fv in {0.0,0.25,0.5,0.75,1.0} with fused_ram_fraction=1-fv, NO flash tier.",
+  "scope_note": "No flash arms: RAM and VRAM staging have no page-cache dependence, so this validation is pod-legal without drop_caches (the flash quarantine rule does not apply).",
+  "h100_anchors": {
+    "V_h100_s": 0.2075,
+    "R_h100_s": 0.2286,
+    "tax_h100_s": 0.0211,
+    "L_h100_gbps": 56.74,
+    "transfer_per_step_gb": 6.44,
+    "hidden_h100_s": 0.092,
+    "per_gb_promotion_value_h100_s": 0.0033
+  },
+  "frozen_predictions": {
+    "P1_ends_parity": "fused fv=1.0 == mean(V) and fv=0.0 == mean(R), each within ±3%",
+    "P2_interior_linearity": "fv=0.25/0.5/0.75 within ±10% of t(fv)=V+(1-fv)(R-V)",
+    "P3_tax_model": "tax_pred = max(0, 6.44/L_3090 - 0.092*(V_3090/0.2075)); PASS if measured (R-V) in [0.5,2.0]*tax_pred when tax_pred>=0.020 s, else within ±0.020 s absolute. Rationale: transfer scales 1/L; the hideable window scales with per-layer compute, proxied by V.",
+    "P4_half_residency": "fv=0.5 recovers 40-60% of the measured tax",
+    "headline_directional": "per-GB promotion value (R-V)/6.44 exceeds the H100's 0.0033 s/GB by >=2x for any L < ~30 GB/s"
+  },
+  "floors": "V and R each n=2; floor = |V1-V2| and |R1-R2|; tax uses means. An arm with s/step=NA, missing loss lines, or wrong engagement signature (store arms must log 'homed .. MoE blocks'; resident must log quantize WITHOUT homed) voids the run.",
+  "gates_before_arms": "PyPI reachable; driver >= 580; pytest ThreeTier+Placement green on the pod; e4b code RAM-only (/dev/shm, PYTHONDONTWRITEBYTECODE=1, shredded at teardown; tarball from the mini, no GitHub token on the pod).",
+  "budget": "community $0.22-0.26/hr or SECURE $0.46/hr fallback; hard 3h teardown deadline, session-independent watchdog with evidence-first pull + mailcow email; expected total <$1.5."
+}
