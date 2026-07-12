@@ -1,0 +1,75 @@
+{
+ "L_gbps": 56.66,
+ "S2_stripe_gbps": {
+  "1": 3613.796,
+  "2": 3879.199,
+  "4": 3926.3
+ },
+ "prefetch_off": {
+  "1.0": 0.2238,
+  "1.0001": 0.2236,
+  "0.9375": 0.2323,
+  "0.875": 0.272,
+  "0.75": 0.3495,
+  "0.5": 0.5187,
+  "0.0": 0.7519
+ },
+ "prefetch_on": {
+  "1.0": 0.2229,
+  "1.0001": 0.2241,
+  "0.9375": 0.2394,
+  "0.875": 0.2715,
+  "0.75": 0.3758,
+  "0.5": 0.6427,
+  "0.0": 1.0672
+ },
+ "floors": {
+  "off_f1_mean": 0.2237,
+  "off_f1_spread": 0.0002,
+  "on_f1_mean": 0.2235,
+  "on_f1_spread": 0.0012
+ },
+ "K1_flat_region": {
+  "on_f0p9375_vs_floor_pct": 7.1,
+  "pass": false
+ },
+ "K2_dominates": {
+  "all_interior_leq": false,
+  "f0p5_penalty_reduction": -0.421,
+  "pass": false
+ },
+ "K3_composition": {
+  "centroid_off": 0.4013,
+  "centroid_on": 0.4284,
+  "on_leq_off": false,
+  "lane_inert_f1_pct": -0.1,
+  "pass": false
+ },
+ "residue": {
+  "V": {
+   "64": 0.2021,
+   "512": 0.214,
+   "2048": 0.2518
+  },
+  "R": {
+   "64": 0.2237,
+   "512": 0.2543,
+   "2048": 0.3539
+  },
+  "tax_ms": {
+   "64": 21.6,
+   "512": 40.3,
+   "2048": 102.1
+  }
+ },
+ "R1_discriminator": {
+  "r2048_prefetch": 0.3531,
+  "residue_removed_frac": 0.008,
+  "classification": "H-B/H-C bandwidth-or-allocator"
+ },
+ "R2_reproduces": {
+  "tax_ms": 102.1,
+  "box1_ms": 101.8,
+  "pass": true
+ }
+}
