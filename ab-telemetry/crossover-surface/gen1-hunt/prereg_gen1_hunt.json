@@ -1,0 +1,18 @@
+{
+  "registered_utc": "2026-07-12T21:50:00Z",
+  "purpose": "Third dose point on the link axis, at the slowest link findable: hunt RunPod hosts for a genuinely slow PCIe link (target < 8 GB/s pinned H2D under load — 'gen1-class'), then run the exact vram-tier validation (prereg acabdfc pattern) there. Two points exist: H100 L=56.74 (per-GB promotion value 0.0033 s/GB) and 3090 L=20.36 (0.0395 s/GB, 12x). A <8 GB/s point tests whether the super-linear rise continues.",
+  "hunt_protocol": "Cheap community pods (3090/4090 class), up to 6 rolls or $2, whichever first. Per pod: PyPI reachability pre-check, then pinned-H2D L measured UNDER LOAD (repeated large pinned transfers, method of 03_measure_link.py) — idle pcie.link.gen.current is ASPM noise and is recorded but never used for the decision. Every measured L is a kept data point (SKU, DC, L, gen/width under load) regardless of qualification; pods that wedge (RUNNING/no-IP) are killed within 10 min per the standing rule.",
+  "qualification": "L < 8 GB/s pinned under load -> run the full arm set on that pod. 8 <= L < 15 -> run it too, labeled 'slow-gen3/near-gen1' (still a new dose point). L >= 15 on all rolls -> close as NO-STOCK negative: report every L measured; the hunt itself is the result.",
+  "workload_frozen": "Identical to prereg acabdfc (the 3090 run): OLMoE-1B-7B-0924 4-bit quantize_moe_experts QLoRA r=8, whole_layer, prefetch OFF, seq64, gas=1 mbs=1, 40 steps, seed 42, warmup discarded, metric = HF train_steps_per_second. Arms: warmup, V,R,V,R interleaved, then fused vram+ram fv in {0.0,0.25,0.5,0.75,1.0} (fused_ram_fraction=1-fv), NO flash tier (pod-legal: no page-cache dependence).",
+  "frozen_predictions": {
+    "P1_ends_parity": "fused fv=1.0 == mean(V) and fv=0.0 == mean(R), each within +/-3%",
+    "P2_interior_linearity": "fv=0.25/0.5/0.75 within +/-10% of t(fv) = V + (1-fv)(R-V)",
+    "P3_tax_model": "tax_pred = max(0, 6.44/L - 0.092*(V/0.2075)); PASS if measured (R-V) in [0.5,2.0] x tax_pred (tax_pred >= 0.020 s here by construction at L < 15)",
+    "P4_half_residency": "fv=0.5 recovers 40-60% of the measured tax",
+    "P5_dose_response": "per-GB promotion value (R-V)/6.44 at the new L exceeds the 3090's 0.0395 s/GB if L < 15 GB/s (monotone in 1/L); the three-point (L, value) curve is reported either way and super-linearity is assessed against value ~ (1/L)^a, a>1"
+  },
+  "floors": "V and R each n=2; floor = spreads; NA/missing-loss/wrong-engagement voids the arm (same validity rules as acabdfc).",
+  "gates_before_arms": "PyPI reachable; driver >= 580 for cu130 wheels; REAL bnb quantize smoke (LD_LIBRARY_PATH = pip nvidia/*/lib dirs — import success is not a gate); pytest ThreeTier+Placement on-pod; private code RAM-only, tarball from the mini, no GitHub token on the pod, shredded before teardown.",
+  "budget": "hunt cap $2; if a pod qualifies, arms ~$0.5-1.5 more (SECURE fallback allowed once qualified to avoid mid-run wedges). Hard 3 h deadline + session-independent mini-side watchdog (sentinel + evidence-first pull + terminate + 404-verify + mailcow receipt).",
+  "caveats": "No git pushes this session (owner directive): timestamp proof = OTS stamp. A no-qualifying-stock outcome is a reportable negative, not a failure to run."
+}

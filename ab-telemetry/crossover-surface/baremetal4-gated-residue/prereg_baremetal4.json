@@ -1,0 +1,29 @@
+{
+  "registered_utc": "2026-07-12T21:50:00Z",
+  "purpose": "Session BM4 on Latitude bare metal, two parts on one box: (a) rerun prereg 2bbd2e2's prefetch ON ladder UNCHANGED against the v3 reader (next-flash lookahead + adaptive gate) — bars K1/K2/K3 verbatim from that prereg; (b) the instrumented H2D long-seq residue decomposition filed by RESULTS-baremetal2 R1 (residue is NOT lookahead-hideable; discriminate H-B copy-path degradation vs H-C host allocator/serialization).",
+  "host": "Latitude.sh g3-h100-small DAL, provisioned raid: raid-0. Same SKU as bm2/bm3 (bm2/bm3 landed on the same physical server sv_gXQvNeZGl5zpb; whichever serial we get is recorded and cross-provision variance is a stated caveat, as in bm3). fio QD1 + pinned H2D (L) measured before any arm.",
+  "code_freeze": {
+    "axolotl_public": "feature/expert-store @ 5cb0dbc (GitHub) + LOCAL commit 52a0661 (E4B_H2D_PROBE stage-copy instrumentation) deployed as a format-patch file over ssh — no-push session; this prereg's OTS stamp carries the timestamp burden the push receipt normally shares.",
+    "e4b_ssdtier_private": "main @ 0a5eb8b (v3 reader: precomputed next-flash tables both directions; gate = allow iff full-hiding [gap x cadence-EMA >= read-EMA x margin] OR consecutive-flash run [gap 1 from a flash block]; bootstrap-allow while EMAs empty; margin 1.0 default).",
+    "no_tune_clause": "Gate margin (1.0), EMA alphas (0.2 cadence / 0.3 read), and outlier clamp (5x) are frozen at 0a5eb8b. A K-bar FAIL is reported as FAIL; any same-session parameter change is a new experiment, not a pass."
+  },
+  "workload_frozen": "Identical to bm2/bm3: OLMoE-1B-7B-0924 4-bit quantize_moe_experts QLoRA r=8, whole_layer staging, seq64 (except residue arms), gas=1 mbs=1, 40 steps, seed 42, warmup arm discarded, metric = HF train_steps_per_second, drop_caches before every flash-touching arm, per-arm offload-engagement assertions ('homed .. MoE blocks' for store arms; quantize WITHOUT homed for resident arms).",
+  "arms": {
+    "ladder_pOFF": "fused prefetch OFF at f in {1.0 (n=2), 0.5, 0.0} + three-tier centroid OFF — the same OFF comparator set bm3 ran",
+    "ladder_pON_gated": "fused prefetch ON (v3 gated) at f in {1.0 (n=2), 0.9375, 0.875, 0.75, 0.5, 0.0} + centroid ON; E4B_PREFETCH_STATS=1 on every ON arm (gate decision counters are part of the record)",
+    "residue": "V (resident, no offload) at seq {64, 512, 2048}; R (public RAMStore, prefetch OFF) at seq {64, 512, 2048} with E4B_H2D_PROBE=1, R@2048 n=2 for the floor; probe-overhead pair = R@64 WITHOUT probe vs R@64 WITH probe. The R@64 no-probe arm doubles as the G2 perf-degenerate reference."
+  },
+  "frozen_predictions": {
+    "K1_flat_region": "prefetch-ON at flash share 1/16 (f=0.9375) lands within 5% of the f=1.0 ON floor. (v2 rebuilt reader measured +6.6%.)",
+    "K2_prefetch_dominates": "prefetch-ON <= prefetch-OFF at every interior f; at f=0.5 the ON arm removes >= 25% of the OFF arm's flash penalty (penalty = t(f) - t(1.0)). (v2 measured +13.1% ADDED.)",
+    "K3_composition": "three-tier centroid ON <= centroid OFF, and f=1.0 ON within 3% of f=1.0 OFF (lane inert with zero flash blocks).",
+    "K4_all_flash_no_regression": "f=0.0 ON <= f=0.0 OFF: the run rule must preserve the v3 all-flash win (-6.9%); a regression here means the gate itself costs more than it saves and is reported as a defect regardless of K1-K3.",
+    "R3_residue_reproduces": "this box's R-V residue at seq2048 lands within a factor 2 of the 102 ms measured on boxes 1 and 2 (same SKU). Fail -> residue probe results reported but downgraded to host-specific.",
+    "R4_probe_overhead": "R@64 WITH probe within 3% s/step of R@64 WITHOUT. Fail -> probe results labeled perturbed; identification demoted to best-effort diagnostics.",
+    "R5_decision_rules": "On medians over steps 10..40 per stage record: (H-C) submit_ms at seq2048 >= 1.5x seq64 AND dev_ms/GB ratio < 1.3x -> host allocator/serialization; (H-B) dev_ms/GB at seq2048 >= 1.5x seq64 AND submit ratio < 1.3x -> copy path degrades; (BOTH) both >= 1.5x -> both live, report the magnitude split; (H-D) neither >= 1.3x while the exposed residue reproduces -> the growth lives BETWEEN stage copies; report the exposed-copy accounting (sum of submit + measured device tails vs the R-V residue) and attach one best-effort torch.profiler arm (3 steps) as identification-not-pass/fail, mirroring the R1 framing. Secondary, non-binding corroboration: num_alloc_retries / reserved-bytes growth at seq2048 vs seq64 from the probe's memory_stats snapshots."
+  },
+  "floors": "Ladder: f=1.0 n=2 pairs for ON and OFF (spread = floor; verdicts on means). Residue: R@2048 n=2 spread; V arms n=1 (V floors were 0.0002-0.0012 on this SKU in bm2/bm3).",
+  "gates_before_arms": "real bnb quantize smoke on-device (import checks insufficient); private suite tests/test_fused.py (44) green on-box; public TestRecompute subset green on-box; fio QD1 O_DIRECT + pinned-H2D L measured and recorded; G2 perf-degenerate: fused-OFF f=1.0 within 0.5% of the public RAMStore arm; private code RAM-only tmpfs (/mnt/ramcode), PYTHONDONTWRITEBYTECODE=1, shredded before teardown.",
+  "budget": "expected ~$5 / ~2.2 h at ~$2.24/hr; HARD $12 spend cap + 3.5 h deadline via the file-driven mini-side billcap watchdog (extendable deadline epoch file + teardown sentinel + DELETE + 404-verify + mailcow receipt); evidence tarball hashed on the mini BEFORE teardown; all arm logs, configs, probe JSONL, and prefetch stats lines packed.",
+  "caveats": "No git pushes this session (owner directive): prereg timestamp proof = OTS stamp only; commit + push follow owner review. Same-SKU-not-necessarily-same-serial for the bm3 comparison; the K-bars are within-box (ON vs OFF same provision) so the verdict does not depend on cross-provision comparability — only the v2-vs-v3 delta table does."
+}
