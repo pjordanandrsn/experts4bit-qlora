@@ -1,0 +1,38 @@
+{
+ "L_gbps": 56.58,
+ "reader": "wait-dont-duplicate @ 08c05c3",
+ "off": {
+  "1.0": 0.2449,
+  "0.5": 0.5353,
+  "0.0": 0.7616
+ },
+ "on": {
+  "1.0": 0.2452,
+  "0.9375": 0.2615,
+  "0.875": 0.2979,
+  "0.75": 0.3949,
+  "0.5": 0.6053,
+  "0.0": 0.7092
+ },
+ "floors": {
+  "off_spread": 0.0004,
+  "on_spread": 0.0008
+ },
+ "K1_flat_region": {
+  "on_f0p9375_vs_floor_pct": 6.6,
+  "pass": false
+ },
+ "K2_dominates": {
+  "on_leq_off_at_0p5_and_0": false,
+  "f0p5_penalty_reduction": -0.24,
+  "on_f0_vs_off_f0_pct": -6.9,
+  "pass": false
+ },
+ "K3_composition": {
+  "centroid_off": 0.3959,
+  "centroid_on": 0.4371,
+  "on_leq_off": false,
+  "lane_inert_f1_pct": 0.1,
+  "pass": false
+ }
+}
