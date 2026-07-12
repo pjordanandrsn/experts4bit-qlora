@@ -1,0 +1,18 @@
+{
+  "diagnostic": "gradient localization — WHERE does the routed-mask vs whole training signal first diverge?",
+  "authorized": "2026-07-12 by Jordan ('yes' to the gradient-diff diagnostic)",
+  "committed_before_any_grad_data": true,
+  "method": "3 processes, SAME seed 42 (=> identical LoRA init, batch order, dropout masks, frozen router/experts; the ONLY difference is staging or atomic order): (A) whole_layer, (B) routed+mask, (C) routed+mask AGAIN. Each runs 3 optimizer steps with GRAD_DUMP=1 -> per-trainable-param grad L2+absmax at float64. Subject: Qwen3-30B seq256 (E=128, rf~0.69 real fill — OLMoE is dose-incapable so NOT usable here). No optimizer LR matters for step-0 grads; steps 1-2 show whether divergence is step-0 or accretes.",
+  "quantities": {
+    "d_WR": "max over params of |gradnorm_A - gradnorm_B| at step 0 (whole vs routed, systematic candidate)",
+    "d_RR": "max over params of |gradnorm_B - gradnorm_C| at step 0 (routed self-reproducibility = the index_add_ atomic-noise floor at the gradient level)",
+    "loss_hp": "training loss to full float precision per arm (is the 'bit-identical' forward real at f32 or only at 3-decimal eval?)"
+  },
+  "frozen_interpretation": {
+    "ATOMIC": "if d_WR ~ d_RR (whole-vs-routed grad difference is within routed's OWN run-to-run atomic floor) -> the residual is index_add_ accumulation nondeterminism (routed loops fewer experts -> systematically different rounding), NOT a logic bug. Consequence: unfixable without deterministic scatter; whole_layer stays the training path; routed forward/decode only. Corroboration to check: does it match the seq512 convexity / A4 non-attenuation? Atomic noise would NOT be coherent, so if ATOMIC fires it CONTRADICTS the coherence evidence -> flag the tension.",
+    "BACKWARD_PATH": "if d_WR >> d_RR (>= 10x) -> a real routed-vs-whole-sensitive backward path. Localize: report the LAYER/param with the largest d_WR and whether it is concentrated (few layers) or diffuse (propagation). This is the actionable finding -> design a targeted fix there.",
+    "FORWARD": "if loss_hp differs between A and B at f32 despite the 3-decimal eval match -> the forward is NOT truly identical; the divergence seeds in the forward and I diff activations next."
+  },
+  "cost": "~$0.7, 3 short arms (3 steps each), PRO 6000 or 3090. DECISIVE about mechanism class; replaces guessing with measurement.",
+  "note": "This is a diagnostic, not a verdict — but the interpretation branches are pre-committed so the result cannot be rationalized after the fact."
+}
