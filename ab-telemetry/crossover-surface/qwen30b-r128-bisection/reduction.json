@@ -1,0 +1,22 @@
+{
+  "experiment": "R128 bisection (same expert COUNT both sides) + signed-mean activation diff — the mechanistic CLOSURE",
+  "prereg": "../preregistration/prereg_pad_bisection.json (66a2f2e, OTS-stamped, pre-launch)",
+  "code": "axolotl fix/routed-stale-union @ 935e6a3 (ROUTED_PAD=full + ACT_DUMP)",
+  "host": "RunPod SECURE PRO 6000 WS (sm_120), pod gki4qpcp28f5rv, driver 610",
+  "loss_bisection": {
+    "whole_anchor": {"final": 1.2630, "validity": "OK (7th consecutive reproduction of 1.2623+/-0.001)"},
+    "R128": {"final": 1.2630, "gap_vs_anchor": 0.0000, "wall_s": 2872, "note": "routed staging padded to all 128 experts (byte-identical to whole) via the routed ASSEMBLY path; wall 2872s = full-stack, confirms the pad staged 128 (vs control's 2296s subset)"},
+    "routed_control": {"final": 1.3670, "gap_vs_anchor": 0.1040, "ratio_over_floor": 104, "wall_s": 2296, "validity": "VALID (reproduces the ~0.10 bug)"},
+    "VERDICT": "SUBSET_INTRINSIC. R128 (same code path, full count) is byte- and loss-identical to whole (gap 0.000); routed_control (same code path, subset) diverges 104x. The ONLY difference is the number of experts staged -> the divergence is 100% attributable to SUBSETTING, and the assembly path (torch.empty + per-expert copy) is INNOCENT."
+  },
+  "activation_diff_forward_seed": {
+    "instrument": "per-MoE-block output SIGNED MEAN at float64, step 0 (resolution ~ abs_mean/sqrt(numel), numel ~524288/block -> ~1000x finer than the per-value max-diff the gradient probe used)",
+    "R128_vs_whole": "signed-mean diff EXACTLY 0.000e+00 at ALL 48 layers -> same bytes -> bit-reproducible forward (the identity floor)",
+    "routed_vs_whole": "signed-mean diff NON-ZERO and GROWS with depth: 1.0e-7 (layer0) -> 2.0e-4 (layer47), mean 5.0e-5",
+    "conclusion": "The zero-decode masked rows PERTURB THE FORWARD numerically, even though the sparse expert loop never reads them (the fused whole-stack dequant processes them). The perturbation is tiny (5e-5 signed mean vs abs-mean 0.02-0.62), COHERENT, and DEPTH-ACCUMULATING through the residual stream. It is BELOW the 3-decimal eval precision (why step-0 eval read 'bit-identical') and BELOW the gradient atomic-noise floor (why the gradient diff could not resolve it), but real -> compounds over 150 steps into the 104x loss gap. SEED = FORWARD dequant numerics, NOT backward accumulation.",
+    "why_the_signed_mean_saw_it": "atomic noise is zero-mean and cancels in a mean over ~500k values; a coherent bias survives. The gradient max-diff was swamped by per-value atomic noise; the signed mean integrates it out."
+  },
+  "closes": "The routed-subset TRAINING investigation. Complete causal chain, all by direct intervention: (1) content mask -> real, halved 0.182->0.104; (2) stale-union top-up -> real bug, NO loss effect; (3) gradient diff -> residual sub-atomic-noise; (4) R128 -> divergence is subset-intrinsic, assembly innocent; (5) activation diff -> the seed is a coherent, depth-growing FORWARD dequant perturbation from the zero/un-staged rows. Not fixable at the staging layer (R128 shows full-count = whole exactly); recovers only at rf=1.0, which defeats the bandwidth purpose. Routed-subset staging = forward/decode-only; whole_layer = the only training-validated staging.",
+  "cost_usd_approx": 6,
+  "pods_at_end": "zero (HTTP 204; autopilot stood down via in-session marker)"
+}
