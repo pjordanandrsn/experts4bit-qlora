@@ -9,7 +9,7 @@
     "config": "Qwen3-30B seq256, 150 steps, seed 42, eval_steps 50, prediction_loss_only",
     "anchor_validity": "whole_anchor MUST land 1.2623 +/- 0.001 (6 prior floors); else pod/session drift -> void",
     "control_validity": "routed_control MUST reproduce ~1.365 (mask-only gap ~0.104); else the bug didn't manifest -> void",
-    "R128 is n=1 (single arm) vs the anchor; floor := 0.001 (resolution-limited, 6-bracket-consistent)",
+    "R128_measurement": "n=1 (single arm) vs the anchor; floor := 0.001 (resolution-limited, 6-bracket-consistent)",
     "frozen_branches": {
       "SUBSET_INTRINSIC": "R128 final within 5x floor of the whole_anchor (|R128 - anchor| <= 0.005) -> moving the same COUNT removes the divergence => the residual is intrinsic to SUBSETTING (zero rows / fewer distinct experts), NOT the assembly path. Confirms the closure verdict with a sharp boundary; routed training stays non-viable, not fixable at the staging layer.",
       "ASSEMBLY_MECHANICS": "R128 final still diverges like routed_control (|R128 - anchor| >= 0.05, ~half-or-more of the routed gap) -> same bytes/count still diverge => the bias is in routed's ASSEMBLY mechanics (torch.empty alloc + per-expert copy -> layout/kernel-scheduling -> atomic rounding), NOT the subset. ACTIONABLE: stage into a whole-identical buffer; routed training may become viable. REOPENS the question.",
