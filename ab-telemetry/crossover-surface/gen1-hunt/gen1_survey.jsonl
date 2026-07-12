@@ -1,0 +1,7 @@
+{"pod":"rn54ggxcj2xxup","gpu":"NVIDIA RTX A4500","cloud":"COMMUNITY","result":"wedge"}
+{"pod":"tb6xd91gdxk3hs","gpu":"NVIDIA RTX A4000","cloud":"COMMUNITY","meas":,"delete_verify":"404"}
+{"pod":"zccyhqyy4l8qdk","gpu":"NVIDIA RTX A4500","cloud":"COMMUNITY","result":"wedge"}
+{"pod":"ct0tay59lp1zxl","gpu":"NVIDIA RTX A4000","cloud":"COMMUNITY","meas":{"L_gbps": 4.82, "idle_pcie": "1, 16, NVIDIA RTX A4000"},"delete_verify":"404"}
+{"pod":"hbj9mqx5v543n9","gpu":"NVIDIA L4","cloud":"SECURE","meas":{"L_gbps": 13.33, "idle_pcie": "1, 8, NVIDIA L4"},"delete_verify":"404"}
+{"pod":"bfru9rcjbnclo1","gpu":"NVIDIA RTX A4000","cloud":"COMMUNITY","meas":{"L_gbps": 4.8, "idle_pcie": "1, 16, NVIDIA RTX A4000"},"result":"QUALIFIED-HELD"}
+{"pod":"bfru9rcjbnclo1","gpu":"NVIDIA RTX A4000","cloud":"COMMUNITY","result":"ARMS-COMPLETE","delete_verify":"404"}

@@ -1,0 +1,52 @@
+{
+ "L_gbps": 4.65,
+ "arms_s_per_step": {
+  "warmup": 1.9084,
+  "v_a": 0.6154,
+  "r_a": 1.9084,
+  "v_b": 0.5851,
+  "r_b": 1.9048,
+  "fv000": 1.7889,
+  "fv025": 1.6393,
+  "fv050": 1.2453,
+  "fv075": 0.8865,
+  "fv100": 0.6329
+ },
+ "floors": {
+  "v_spread": 0.0302,
+  "r_spread": 0.0036
+ },
+ "tax_s": 1.3063,
+ "per_gb_value_s": 0.2028,
+ "verdicts": {
+  "P1": {
+   "fv1_vs_V_pct": 5.4,
+   "fv0_vs_R_pct": -6.2,
+   "pass": false
+  },
+  "P2": {
+   "err_pct": {
+    "fv025": 3.8,
+    "fv050": -0.6,
+    "fv075": -4.3
+   },
+   "pass": true
+  },
+  "P3": {
+   "tax_pred_s": 1.1188,
+   "tax_meas_s": 1.3063,
+   "ratio": 1.17,
+   "pass": true
+  },
+  "P4": {
+   "fv05_recovery_pct": 50.6,
+   "pass": true
+  },
+  "P5": {
+   "per_gb_value_s": 0.2028,
+   "vs_3090_x": 5.14,
+   "pass": true
+  }
+ },
+ "verdict_line": "L=4.65 P1=FAIL P2=PASS P3=PASS P4=PASS P5=PASS"
+}
