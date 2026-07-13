@@ -1,0 +1,244 @@
+{
+ "arms_s_per_step": {
+  "warmup": 0.253,
+  "r64_noprobe": 0.241,
+  "r64_probe": 0.2425,
+  "v64": 0.1977,
+  "off_f1p0_a": 0.2408,
+  "off_f1p0_b": 0.239,
+  "off_f0p5": 0.516,
+  "off_f0p0": 0.7704,
+  "cent_off": 0.3997,
+  "on_f1p0_a": 0.2407,
+  "on_f1p0_b": 0.2395,
+  "on_f0p9375": 0.2511,
+  "on_f0p875": 0.2813,
+  "on_f0p75": 0.3668,
+  "on_f0p5": 0.4274,
+  "on_f0p0": 0.6964,
+  "cent_on": 0.406,
+  "v512": 0.2068,
+  "v2048": 0.2478,
+  "r512_probe": 0.2706,
+  "r2048_probe_a": 0.3689,
+  "r2048_probe_b": 0.3682
+ },
+ "prefetch_stats": {
+  "on_f1p0_a": {
+   "obs": 1201,
+   "enq": 0,
+   "allow_run": 0,
+   "allow_hide": 0,
+   "allow_bootstrap": 0,
+   "deny": 0,
+   "take_hit": 0,
+   "take_wait": 0,
+   "take_none": 1201,
+   "wait_s": 0.0,
+   "read_ema_s": null,
+   "cadence_ema_s": 0.006352580495202084,
+   "mode": "gated",
+   "gate_margin": 1.0
+  },
+  "on_f1p0_b": {
+   "obs": 1201,
+   "enq": 0,
+   "allow_run": 0,
+   "allow_hide": 0,
+   "allow_bootstrap": 0,
+   "deny": 0,
+   "take_hit": 0,
+   "take_wait": 0,
+   "take_none": 1201,
+   "wait_s": 0.0,
+   "read_ema_s": null,
+   "cadence_ema_s": 0.0063575351590704765,
+   "mode": "gated",
+   "gate_margin": 1.0
+  },
+  "on_f0p9375": {
+   "obs": 1201,
+   "enq": 1,
+   "allow_run": 0,
+   "allow_hide": 0,
+   "allow_bootstrap": 3,
+   "deny": 557,
+   "take_hit": 1,
+   "take_wait": 0,
+   "take_none": 1200,
+   "wait_s": 0.0,
+   "read_ema_s": 0.11820844099997885,
+   "cadence_ema_s": 0.010294178796825584,
+   "mode": "gated",
+   "gate_margin": 1.0
+  },
+  "on_f0p875": {
+   "obs": 1201,
+   "enq": 1,
+   "allow_run": 0,
+   "allow_hide": 6,
+   "allow_bootstrap": 1,
+   "deny": 834,
+   "take_hit": 1,
+   "take_wait": 0,
+   "take_none": 1200,
+   "wait_s": 0.0,
+   "read_ema_s": 0.1198355769997761,
+   "cadence_ema_s": 0.010522445534270886,
+   "mode": "gated",
+   "gate_margin": 1.0
+  },
+  "on_f0p75": {
+   "obs": 1201,
+   "enq": 3,
+   "allow_run": 0,
+   "allow_hide": 8,
+   "allow_bootstrap": 1,
+   "deny": 992,
+   "take_hit": 1,
+   "take_wait": 2,
+   "take_none": 1198,
+   "wait_s": 0.01048456000035003,
+   "read_ema_s": 0.08989596891010024,
+   "cadence_ema_s": 0.012617282041437602,
+   "mode": "gated",
+   "gate_margin": 1.0
+  },
+  "on_f0p5": {
+   "obs": 1201,
+   "enq": 520,
+   "allow_run": 0,
+   "allow_hide": 521,
+   "allow_bootstrap": 1,
+   "deny": 559,
+   "take_hit": 1,
+   "take_wait": 519,
+   "take_none": 681,
+   "wait_s": 4.454576823998195,
+   "read_ema_s": 0.019308864488102682,
+   "cadence_ema_s": 0.010317605686351075,
+   "mode": "gated",
+   "gate_margin": 1.0
+  },
+  "on_f0p0": {
+   "obs": 1201,
+   "enq": 1121,
+   "allow_run": 1121,
+   "allow_hide": 0,
+   "allow_bootstrap": 0,
+   "deny": 0,
+   "take_hit": 1,
+   "take_wait": 1120,
+   "take_none": 80,
+   "wait_s": 11.031867948006038,
+   "read_ema_s": 0.017511525749971855,
+   "cadence_ema_s": 0.018107492414602865,
+   "mode": "gated",
+   "gate_margin": 1.0
+  },
+  "cent_on": {
+   "obs": 1201,
+   "enq": 4,
+   "allow_run": 0,
+   "allow_hide": 7,
+   "allow_bootstrap": 1,
+   "deny": 993,
+   "take_hit": 1,
+   "take_wait": 3,
+   "take_none": 1197,
+   "wait_s": 0.017558402999839018,
+   "read_ema_s": 0.06811926423815066,
+   "cadence_ema_s": 0.014043918269197622,
+   "mode": "gated",
+   "gate_margin": 1.0
+  }
+ },
+ "floors": {
+  "on_f1_spread": 0.0012,
+  "off_f1_spread": 0.0018
+ },
+ "residue_ms": {
+  "64": 44.1,
+  "512": 63.9,
+  "2048": 120.8
+ },
+ "probe_medians": {
+  "r64": {
+   "n": 861,
+   "submit_ms_med": 0.033,
+   "dev_ms_per_gb_med": 17.67,
+   "alloc_retries_span": [
+    0,
+    0
+   ]
+  },
+  "r512": {
+   "n": 861,
+   "submit_ms_med": 0.034,
+   "dev_ms_per_gb_med": 17.67,
+   "alloc_retries_span": [
+    0,
+    0
+   ]
+  },
+  "r2048_a": {
+   "n": 861,
+   "submit_ms_med": 0.035,
+   "dev_ms_per_gb_med": 17.66,
+   "alloc_retries_span": [
+    0,
+    0
+   ]
+  },
+  "r2048_b": {
+   "n": 861,
+   "submit_ms_med": 0.034,
+   "dev_ms_per_gb_med": 17.66,
+   "alloc_retries_span": [
+    0,
+    0
+   ]
+  }
+ },
+ "verdicts": {
+  "K1": {
+   "on_f0p9375_vs_floor_pct": 4.6,
+   "pass": true
+  },
+  "K2": {
+   "on_vs_off_interior_pct": {
+    "0p5": -17.2
+   },
+   "f0p5_penalty_removal_pct": 32.2,
+   "pass": true
+  },
+  "K3": {
+   "cent_on": 0.4060089321965083,
+   "cent_off": 0.39968025579536376,
+   "f1_inert_pct": 0.06,
+   "pass": false
+  },
+  "K4": {
+   "on_vs_off_f0_pct": -9.6,
+   "pass": true
+  },
+  "G2": {
+   "fusedoff_f1_vs_ramstore_pct": -0.45,
+   "pass": true
+  },
+  "R3": {
+   "residue_2048_ms": 120.8,
+   "pass": true
+  },
+  "R4": {
+   "probe_overhead_pct": 0.63,
+   "pass": true
+  },
+  "R5": {
+   "submit_ratio_2048v64": 1.05,
+   "dev_per_gb_ratio_2048v64": 1.0,
+   "branch": "H-D"
+  }
+ },
+ "verdict_line": "G2=PASS K1=PASS K2=PASS K3=FAIL K4=PASS R3=PASS R4=PASS R5=H-D"
+}
