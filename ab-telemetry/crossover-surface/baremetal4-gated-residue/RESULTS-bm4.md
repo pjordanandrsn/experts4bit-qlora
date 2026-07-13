@@ -20,13 +20,13 @@ ramcode shredded. Floors n=2: ON spread 0.0012, OFF 0.0018.
 | 0.75 | — | 0.3668 | | | +7.5% |
 | 0.5 | 0.5160 | 0.4274 | **−17.2%** | +13.1% | +23.9% |
 | 0.0 (all-flash) | 0.7704 | 0.6964 | **−9.6%** | −6.9% | +41.9% |
-| centroid 3-tier | 0.3997 | 0.4060 | **+1.6%** | +9.2% | +6.8% |
+| centroid 3-tier | 0.3997 | 0.4060 | **+1.6%** | +10.4% | +6.8% |
 
 - **K1 PASS** — ON at flash share 1/16 lands **+4.6%** over the ON floor (bar ≤5%;
   v2 measured +6.6%). The flat region exists.
 - **K2 PASS** — ON ≤ OFF at every measured interior point, and at f=0.5 the lane
   **removes 32.2% of the OFF flash penalty** (bar ≥25%; v2 *added* 24%).
-- **K3 FAIL (small)** — centroid ON 0.4060 vs OFF 0.3997 = **+1.6%** (v2: +9.2%).
+- **K3 FAIL (small)** — centroid ON 0.4060 vs OFF 0.3997 = **+1.6%** (v2: +10.4%).
   The f=1.0 inertness sub-check passed (+0.06%).
 - **K4 PASS** — all-flash ON −9.6% (the run rule preserved and slightly improved
   the v3 rebuild's −6.9% win).
@@ -69,7 +69,7 @@ underestimates the true wall-window to the next flash block — windows read too
 small, useful reads get denied, and the lane pays observe overhead without
 serving) and the same deny-starvation as above (centroid read-EMA stuck at
 68 ms). A per-tier or per-gap-composition window estimate is the natural next
-increment. Either way the v3 gate cut the centroid regression from +9.2% to
+increment. Either way the v3 gate cut the centroid regression from +10.4% to
 +1.6%.
 
 ### Product posture (unchanged, sharpened)
