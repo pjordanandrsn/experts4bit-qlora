@@ -78,6 +78,43 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 TRAIN_ATTENTION=0 OUT=./out \
   python -m experts4bit_qlora.train
 ```
 
+### Load a real model in 4-bit
+
+The Quickstart above uses synthetic tensors. To quantize a **real** fused-MoE checkpoint, use the
+streaming loader — it builds the model on `meta` and 4-bit-quantizes the fused experts on the way to
+the GPU. Do **not** load these models with stock `from_pretrained`: bitsandbytes' 4-bit walker only
+replaces `nn.Linear`, so it silently leaves the experts in full precision and OOMs (see
+[The problem](#the-problem)).
+
+```bash
+# CLI — stream-load + generate (add ADAPTER=./out/adapter_best.pt to serve a fine-tune):
+MODEL=Qwen/Qwen3-30B-A3B QUANT_TYPE=nf4 python -m experts4bit_qlora.infer
+```
+
+```python
+import torch
+from experts4bit_qlora import load_moe_4bit_streaming, verify_moe_4bit
+
+model, config = load_moe_4bit_streaming(
+    "Qwen/Qwen3-30B-A3B", "cuda", torch.bfloat16, r=8, alpha=16, quant_type="nf4",
+)
+model.to("cuda")                      # skip when offload=True
+verify_moe_4bit(model, strict=True)   # optional: assert the fused experts are actually 4-bit
+```
+
+`Qwen/Qwen3-30B-A3B` in `nf4` is ~20 GB resident — it **fits a 24 GB card** (e.g. L4/A5000) with no
+offload, ~4–5 tok/s decode. On a ≤12 GB card add `OFFLOAD_EXPERTS=1` (`offload=True`), which streams
+the frozen experts from pinned CPU RAM one layer at a time; sizes and grids are in the
+[support matrix](docs/support_matrix.md).
+
+> **Troubleshooting — OOM loading in 4-bit?** If you used
+> `AutoModelForCausalLM.from_pretrained(..., quantization_config=BitsAndBytesConfig(load_in_4bit=True))`
+> and ran out of memory, that path quantized only the `nn.Linear` layers and skipped the fused
+> experts ([bitsandbytes#1849](https://github.com/bitsandbytes-foundation/bitsandbytes/issues/1849))
+> — they are still in bf16. Switch to `load_moe_4bit_streaming` (above), then call
+> `verify_moe_4bit(model, strict=True)`: it raises and lists any expert stack still left in high
+> precision, so you can confirm the fix.
+
 ## Storage modes: the support matrix
 
 One knob selects the frozen experts' storage: `quant_type=` in code, `QUANT_TYPE=` in the
