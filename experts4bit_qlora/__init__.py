@@ -65,6 +65,10 @@ from .offload import (  # noqa: E402
     reset_offload_stats,
 )
 
+# verify_moe_4bit only touches the resolved Experts4bit/ExpertsNbit classes (core deps), so it is
+# safe to import eagerly. The streaming loader is NOT — see __getattr__ below.
+from .verify import verify_moe_4bit  # noqa: E402
+
 __all__ = [
     "Experts4bit",
     "ExpertsNbit",
@@ -78,5 +82,26 @@ __all__ = [
     "offload_stats_report",
     "report_offload_environment",
     "reset_offload_stats",
+    "verify_moe_4bit",
+    # Provided lazily by __getattr__ below (importing them pulls in the [train] extra).
+    "load_moe_4bit_streaming",
+    "load_olmoe_4bit_streaming",
 ]
+
+
+# `load_moe_4bit_streaming` / `load_olmoe_4bit_streaming` live in `.loader`, which imports
+# transformers + accelerate + safetensors + huggingface_hub (the `[train]` extra) at module top.
+# Exposing them lazily (PEP 562) keeps `import experts4bit_qlora` working on a core-only install —
+# you pay that heavy import only when you actually reach for the streaming loader.
+_LAZY_LOADER_EXPORTS = ("load_moe_4bit_streaming", "load_olmoe_4bit_streaming")
+
+
+def __getattr__(name):
+    if name in _LAZY_LOADER_EXPORTS:
+        from . import loader
+
+        return getattr(loader, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __version__ = "0.2.0"
