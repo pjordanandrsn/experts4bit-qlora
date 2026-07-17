@@ -63,3 +63,32 @@ def test_bit_parity_with_transformers(shape, dtype):
     ours = dequantize_mxfp4(blocks, scales, dtype=dtype)
     assert not torch.isnan(ref).any(), "test scale range should not overflow"
     assert torch.equal(ref, ours)
+
+
+# --- real-bytes identity gate: OpenAI's actual gpt-oss-20b released weights ---
+import glob
+import os
+
+_SHARD = sorted(glob.glob(os.path.expanduser(
+    os.environ.get("GPTOSS20B_SHARD_GLOB",
+                   "~/hf-cache/models--openai--gpt-oss-20b/snapshots/*/model-00000-of-00002.safetensors")
+)))
+
+
+@pytest.mark.skipif(not (_HAS_REF and _SHARD), reason="gpt-oss-20b shard 0 not cached (set GPTOSS20B_SHARD_GLOB)")
+@pytest.mark.parametrize("proj", ["gate_up_proj", "down_proj"])
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32])
+def test_real_gptoss20b_bytes(proj, dtype):
+    """Dequant of the EXACT released MXFP4 bytes == transformers reference, bit-for-bit.
+
+    The strongest form of the identity gate: not synthetic shapes but OpenAI's
+    shipped layer-0 expert tensors. Requires the first shard cached locally.
+    """
+    from safetensors import safe_open
+
+    with safe_open(_SHARD[0], framework="pt") as f:
+        b = f.get_tensor(f"model.layers.0.mlp.experts.{proj}_blocks")
+        s = f.get_tensor(f"model.layers.0.mlp.experts.{proj}_scales")
+    ref = convert_moe_packed_tensors(b, s, dtype=dtype)
+    ours = dequantize_mxfp4(b, s, dtype=dtype)
+    assert torch.equal(ref, ours)
