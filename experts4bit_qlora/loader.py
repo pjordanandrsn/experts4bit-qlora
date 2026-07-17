@@ -25,7 +25,9 @@ from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
 from . import Experts4bit, ExpertsNbit, normalize_quant_type
+from .gptoss import GptOssExperts4bit
 from .lora import ExpertsLoRA
+from .mxfp4 import dequantize_mxfp4
 from .offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
 
@@ -36,6 +38,7 @@ SUPPORTED_ARCHITECTURES = {
     "olmoe": "mlp.experts",
     "qwen3_moe": "mlp.experts",
     "qwen3_5_moe": "mlp.experts",
+    "gpt_oss": "mlp.experts",  # GPT-OSS: on-disk MXFP4 blocks/scales + per-proj biases (see gptoss.py)
     "gemma4": "experts",  # multimodal top-level config
     "gemma4_text": "experts",  # the text tower (what a text-only QLoRA loads)
     "granitemoe": "block_sparse_moe.experts",  # IBM Granite MoE (granite-3.0-*-a*m, PowerMoE-3b)
@@ -119,7 +122,12 @@ def load_moe_4bit_streaming(
     lm_config = getattr(config, "text_config", None) or config
     ckpt_prefix = "model.language_model." if lm_config is not config else ""
     act_name = getattr(lm_config, "hidden_activation", None) or getattr(lm_config, "hidden_act", "silu")
-    activation = ACT2FN[act_name]
+    try:
+        activation = ACT2FN[act_name]
+    except KeyError:
+        # gpt_oss uses its own clamped GLU inside GptOssExperts4bit; the generic
+        # activation is unused on that path, so a missing ACT2FN entry is fine.
+        activation = None
 
     with init_empty_weights():
         model = AutoModelForCausalLM.from_config(lm_config, dtype=dtype)
@@ -173,6 +181,31 @@ def load_moe_4bit_streaming(
     n_moe = 0
     for i in range(n_layers):
         epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
+        if f"{epfx}gate_up_proj_blocks" in weight_map:
+            # GPT-OSS: experts on disk as MXFP4 (blocks/scales) + per-projection biases.
+            # Dequantize the exact released bytes, then build a faithful NF4 expert
+            # (biases + clamped GLU) — see gptoss.py. Built bare (no ExpertsLoRA):
+            # GPT-OSS-aware training LoRA is a separate change.
+            if offload:
+                raise NotImplementedError("gpt_oss + expert offload is not yet supported")
+            gate_up = dequantize_mxfp4(get(f"{epfx}gate_up_proj_blocks"), get(f"{epfx}gate_up_proj_scales"), dtype=dtype)
+            down = dequantize_mxfp4(get(f"{epfx}down_proj_blocks"), get(f"{epfx}down_proj_scales"), dtype=dtype)
+            gu_bias = get(f"{epfx}gate_up_proj_bias").to(dtype)
+            dn_bias = get(f"{epfx}down_proj_bias").to(dtype)
+            expert_keys.update({
+                f"{epfx}{k}" for k in (
+                    "gate_up_proj_blocks", "gate_up_proj_scales", "gate_up_proj_bias",
+                    "down_proj_blocks", "down_proj_scales", "down_proj_bias",
+                )
+            })
+            n_moe += 1
+            experts = GptOssExperts4bit.from_gptoss(
+                gate_up, gu_bias, down, dn_bias, quant_type=quant_type, compute_dtype=dtype
+            ).to(device)
+            parent, leaf = epfx.rstrip(".").rsplit(".", 1)
+            setattr(model.get_submodule(parent), leaf, experts)
+            del gate_up, down
+            continue
         if f"{epfx}gate_up_proj" in weight_map:
             # Already fused on disk (Gemma-4; GraniteMoe after the legacy rename above):
             # [num_experts, 2*inter, hidden] / [num_experts, hidden, inter].
