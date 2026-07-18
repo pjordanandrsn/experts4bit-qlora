@@ -42,8 +42,10 @@ def test_forward_parity_real_bytes(quant_type, max_rel_l2):
     cfg = GptOssConfig(num_local_experts=E, hidden_size=H, intermediate_size=twoI // 2)
     ref = GptOssExperts(cfg).to(torch.bfloat16).eval()
     with torch.no_grad():
-        ref.gate_up_proj.copy_(gu); ref.gate_up_proj_bias.copy_(gub)
-        ref.down_proj.copy_(dn); ref.down_proj_bias.copy_(dnb)
+        ref.gate_up_proj.copy_(gu)
+        ref.gate_up_proj_bias.copy_(gub)
+        ref.down_proj.copy_(dn)
+        ref.down_proj_bias.copy_(dnb)
 
     ours = GptOssExperts4bit.from_gptoss(gu, gub, dn, dnb, quant_type=quant_type, compute_dtype=torch.bfloat16).eval()
 

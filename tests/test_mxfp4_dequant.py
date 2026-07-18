@@ -1,4 +1,7 @@
 """MXFP4 dequant: self-contained golden + transformers bit-parity (identity gate)."""
+import glob
+import os
+
 import pytest
 import torch
 
@@ -66,9 +69,6 @@ def test_bit_parity_with_transformers(shape, dtype):
 
 
 # --- real-bytes identity gate: OpenAI's actual gpt-oss-20b released weights ---
-import glob
-import os
-
 _SHARD = sorted(glob.glob(os.path.expanduser(
     os.environ.get("GPTOSS20B_SHARD_GLOB",
                    "~/hf-cache/models--openai--gpt-oss-20b/snapshots/*/model-00000-of-00002.safetensors")
