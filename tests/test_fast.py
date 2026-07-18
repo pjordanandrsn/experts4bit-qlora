@@ -20,10 +20,10 @@ from experts4bit_qlora import (  # noqa: E402
 )
 
 
-def _make_experts(E=4, H=128, I=64, k=2, tokens=16, seed=0, has_gate=True):
+def _make_experts(E=4, H=128, inter=64, k=2, tokens=16, seed=0, has_gate=True):
     torch.manual_seed(seed)
-    gate_up = torch.randn(E, 2 * I if has_gate else I, H, dtype=torch.float32)
-    down = torch.randn(E, H, I, dtype=torch.float32)
+    gate_up = torch.randn(E, 2 * inter if has_gate else inter, H, dtype=torch.float32)
+    down = torch.randn(E, H, inter, dtype=torch.float32)
     mod = Experts4bit.from_float(
         gate_up_proj=gate_up.cuda(),
         down_proj=down.cuda(),
