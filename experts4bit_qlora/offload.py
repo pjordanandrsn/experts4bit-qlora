@@ -448,9 +448,15 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
     if existing is not None:
         return existing
     base = getattr(experts_lora, "base", None)
+    if base is None and all(hasattr(experts_lora, n) for n in _ExpertOffload._names()):
+        # Bare experts module with no LoRA wrapper (e.g. GptOssExperts4bit on the
+        # inference/probe/kernel path): it holds the packed tensors directly, so it is
+        # its own offload base and the stage/evict hooks register on it.
+        base = experts_lora
     if base is None or not all(hasattr(base, n) for n in _ExpertOffload._names()):
         raise TypeError(
-            "enable_expert_offload expects an ExpertsLoRA wrapping an Experts4bit base "
+            "enable_expert_offload expects an ExpertsLoRA wrapping an Experts4bit base, or a bare "
+            "experts module holding the packed tensors "
             f"(gate_up_proj/down_proj/gate_up_absmax/down_absmax); got {type(experts_lora).__name__}"
         )
     handle = _ExpertOffload(base, device, pin=pin)
