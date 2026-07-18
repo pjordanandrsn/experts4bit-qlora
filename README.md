@@ -54,6 +54,7 @@ pip install "experts4bit-qlora[train]"  # + the streaming MoE trainer (transform
 ```
 
 Runs on a **stock** `pip install bitsandbytes` today — see "Relationship to bitsandbytes" below.
+`pip install e4b`, `pip install experts4bit`, and `pip install expertsnbit` are equivalent aliases of this package.
 
 ## Quickstart
 
