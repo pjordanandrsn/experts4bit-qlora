@@ -51,6 +51,20 @@ real sparse-MoE on reasonable hardware.
 ```bash
 pip install experts4bit-qlora           # primitive + adapters + benchmarks (torch + bitsandbytes)
 pip install "experts4bit-qlora[train]"  # + the streaming MoE trainer (transformers>=5.0, datasets, ...)
+pip install "experts4bit-qlora[fast]"   # + the fused grouped-GEMM inference path (grouped-nf4-gemm)
+```
+
+With `[fast]`, `enable_fast(model)` routes frozen-expert inference through
+[grouped-nf4-gemm](https://pypi.org/project/grouped-nf4-gemm/)'s single-launch
+fused kernel (NF4 decoded in-register inside the GEMM, fp32 accumulation) —
+measured **3.65×** over the reference per-expert loop at bs=1 decode on OLMoE
+geometry (A2000). Inference-only: training forwards fall back to the reference
+recompute path automatically, and modules with custom activations or
+non-nf4/64 storage are skipped rather than mis-activated.
+
+```python
+from experts4bit_qlora import enable_fast, disable_fast
+enable_fast(model)    # returns the number of expert modules patched
 ```
 
 Runs on a **stock** `pip install bitsandbytes` today — see "Relationship to bitsandbytes" below.

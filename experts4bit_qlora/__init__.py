@@ -67,6 +67,7 @@ from .offload import (  # noqa: E402
 
 # verify_moe_4bit only touches the resolved Experts4bit/ExpertsNbit classes (core deps), so it is
 # safe to import eagerly. The streaming loader is NOT — see __getattr__ below.
+from .fast import disable_fast, enable_fast, fast_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
 __all__ = [
@@ -75,7 +76,10 @@ __all__ = [
     "ExpertsLoRA",
     "LoRALinear",
     "add_attention_lora",
+    "disable_fast",
     "enable_expert_offload",
+    "enable_fast",
+    "fast_available",
     "enable_inference_prefetch",
     "normalize_quant_type",
     "offload_model_experts",

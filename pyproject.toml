@@ -19,6 +19,11 @@ dependencies = [
 # The Experts4bit primitive, ExpertsLoRA adapters, and the benchmarks need only torch + bitsandbytes.
 # The end-to-end OLMoE streaming trainer additionally needs transformers>=5.0 (fused expert layout).
 [project.optional-dependencies]
+# The fused single-launch grouped GEMM (dequant-inside-the-GEMM, fp32 accum) —
+# enables experts4bit_qlora.enable_fast() for inference. Import stays optional.
+fast = [
+    "grouped-nf4-gemm>=0.1.1",
+]
 train = [
     "transformers>=5.0",
     "datasets>=2.14",
