@@ -186,8 +186,6 @@ def load_moe_4bit_streaming(
             # Dequantize the exact released bytes, then build a faithful NF4 expert
             # (biases + clamped GLU) — see gptoss.py. Built bare (no ExpertsLoRA):
             # GPT-OSS-aware training LoRA is a separate change.
-            if offload:
-                raise NotImplementedError("gpt_oss + expert offload is not yet supported")
             gate_up = dequantize_mxfp4(get(f"{epfx}gate_up_proj_blocks"), get(f"{epfx}gate_up_proj_scales"), dtype=dtype)
             down = dequantize_mxfp4(get(f"{epfx}down_proj_blocks"), get(f"{epfx}down_proj_scales"), dtype=dtype)
             gu_bias = get(f"{epfx}gate_up_proj_bias").to(dtype)
@@ -202,6 +200,11 @@ def load_moe_4bit_streaming(
             experts = GptOssExperts4bit.from_gptoss(
                 gate_up, gu_bias, down, dn_bias, quant_type=quant_type, compute_dtype=dtype
             ).to(device)
+            if offload:
+                # Bare-module offload: packed experts stream from (pinned) CPU one layer at a
+                # time; the small biases stay resident. Lets gpt-oss-20b (~11 GB NF4) load and
+                # run on a 12 GB card.
+                offload_handles.append(enable_expert_offload(experts, device, pin=pin))
             parent, leaf = epfx.rstrip(".").rsplit(".", 1)
             setattr(model.get_submodule(parent), leaf, experts)
             del gate_up, down
