@@ -175,3 +175,18 @@ def test_enable_idempotent_and_disable_twice():
     assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 0  # already on
     assert disable_hot_residency(mod) == 1
     assert disable_hot_residency(mod) == 0
+
+
+def test_reenable_with_new_hot_sets_retunes():
+    mod, hs, ti, tw = _make(seed=19)
+    with torch.no_grad():
+        ref = mod(hs, ti, tw)
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 1
+    # same set -> idempotent no-op; different set -> partition rebuilt in place
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 0
+    assert enable_hot_residency(mod, [torch.tensor([4, 5, 6])], device="cuda") == 1
+    assert mod._hot_residency.hot_ids.tolist() == [4, 5, 6]
+    with torch.no_grad():
+        got = mod(hs, ti, tw)
+    assert _b_rel(got, ref) < 1.5e-2
+    assert disable_hot_residency(mod) == 1

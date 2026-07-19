@@ -219,7 +219,13 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
                 print(f"[hot_residency] skip {type(mod).__name__}: [fast] enabled — disable it first")
             continue
         if hasattr(mod, "_hot_residency"):
-            continue  # already enabled; idempotent
+            new_ids = torch.as_tensor(hot_sets[i], dtype=torch.long).unique()
+            if torch.equal(new_ids, mod._hot_residency.hot_ids):
+                continue  # same partition; idempotent no-op
+            # re-tune: rebuild the partition in place (saved forward unchanged)
+            mod._hot_residency = _HotResidency(mod, hot_sets[i], device)
+            patched += 1
+            continue
         state = _HotResidency(mod, hot_sets[i], device)
         mod._e4b_hot_ref = mod.forward
         mod._hot_residency = state
