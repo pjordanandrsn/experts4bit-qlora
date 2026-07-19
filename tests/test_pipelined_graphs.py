@@ -15,6 +15,18 @@ import torch
 pytest.importorskip("nf4_grouped")
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 
+@pytest.fixture(autouse=True)
+def _no_triton_interpreter():
+    """Runtime (order-proof) guard: the address-gather is compiled-only — raw
+    device/UVA pointers segfault the host-side Triton interpreter. When an
+    interpreter-contract suite has set TRITON_INTERPRET=1 in this process
+    (it does so at import), these tests skip; run them in separate pytest
+    invocations to execute both."""
+    import os
+    if os.environ.get("TRITON_INTERPRET") == "1":
+        pytest.skip("Triton interpreter mode active (raw-pointer gather is compiled-only)")
+
+
 from experts4bit_qlora import Experts4bit  # noqa: E402
 from experts4bit_qlora.pipelined import (  # noqa: E402
     disable_pipelined_residency,

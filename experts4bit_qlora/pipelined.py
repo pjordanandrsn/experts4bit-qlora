@@ -123,6 +123,13 @@ class _PipelinedResidency:
     tensors are owned here and never reallocated)."""
 
     def __init__(self, mod, hot_ids, device, k_slots: int):
+        import os
+        if os.environ.get("TRITON_INTERPRET") == "1":
+            raise RuntimeError(
+                "pipelined residency cannot run under the Triton interpreter "
+                "(TRITON_INTERPRET=1): the address-gather dereferences raw device/UVA "
+                "pointers, which the host-side interpreter segfaults on. Run "
+                "interpreter-mode suites in their own process.")
         if k_slots < 1:
             raise ValueError(f"k_slots must be >= 1, got {k_slots}")
         self.mod = mod
@@ -207,6 +214,16 @@ class _PipelinedResidency:
         self.a_buf = None  # lazy: dtype follows live compute_dtype
         self.want_buf = torch.zeros(k, dtype=torch.long, device=self.device)
 
+        # traffic accounting (device scalars, accumulated with enqueued tensor
+        # ops — never read in the loop; .traffic() syncs once at report time).
+        # hot_d2d_bytes measures the ACCEPTED re-copy inefficiency: hot rows are
+        # copied a short distance (resident stack -> slot) instead of computed
+        # in place. Harmless at HBM bandwidth (~5 us/expert), worth watching on
+        # small-bandwidth cards (~45 us/expert on GDDR6) — if a small-hardware
+        # profile shows this term, the known fix is an in-place hot GEMM path.
+        self.hot_d2d_bytes = torch.zeros((), dtype=torch.long, device=self.device)
+        self.cold_pcie_bytes = torch.zeros((), dtype=torch.long, device=self.device)
+
         # prime the slots with a valid row (expert 0) so a skipped slot can
         # never feed the GEMM uninitialized bytes (any *valid* stale row is
         # harmless: its lane weight is exactly the router weight it earns,
@@ -230,15 +247,31 @@ class _PipelinedResidency:
         pw = pred_ids.reshape(-1)
         if pw.numel() != self.k:
             return
-        self.hint_buf = getattr(self, "hint_buf", None)
-        if self.hint_buf is None:
-            self.hint_buf = torch.zeros(self.k, dtype=torch.long, device=self.device)
-        self.hint_buf.copy_(pw.to(device=self.device, dtype=torch.long))
-        src = self.src_of_expert.index_select(0, self.hint_buf)
+        self._fetch(pw.to(device=self.device, dtype=torch.long))
+        # bytes a hint moves are counted at the fetch site like any other
+        # traffic; a perfect hint just shifts them earlier (the forward's own
+        # fetch then skips and counts zero), a wrong hint shows up as the
+        # extra traffic it really is.
+
+    def _fetch(self, want):
+        """The one fetch site: copy want_buf, dispatch the address-gather, count
+        traffic, advance ``have``. All enqueued; nothing reads back."""
+        self.want_buf.copy_(want)
+        src = self.src_of_expert.index_select(0, self.want_buf)
+        miss = src != self.have
+        hot = self.is_hot.index_select(0, self.want_buf)
+        self.hot_d2d_bytes += (miss & hot).sum() * self.row_bytes
+        self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
         kern = _gather_kernel()
         grid = (self.k, -(-self.row_words // 2048))
         kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
         self.have.copy_(src)
+
+    def traffic(self) -> dict:
+        """Report accumulated fetch traffic. SYNCHRONIZES (two .item() reads) —
+        call outside any timed loop."""
+        return {"hot_d2d_bytes": int(self.hot_d2d_bytes.item()),
+                "cold_pcie_bytes": int(self.cold_pcie_bytes.item())}
 
     # ---- the per-token step: fixed, id-independent enqueues only ---------
     def step(self, x_row, want, cd):
@@ -247,12 +280,7 @@ class _PipelinedResidency:
         from nf4_grouped import gemm_4bit_grouped
 
         k = self.k
-        self.want_buf.copy_(want)
-        src = self.src_of_expert.index_select(0, self.want_buf)
-        kern = _gather_kernel()
-        grid = (k, -(-self.row_words // 2048))
-        kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
-        self.have.copy_(src)
+        self._fetch(want)
         if self.a_buf is None or self.a_buf.dtype != cd:
             self.a_buf = torch.empty(k, x_row.shape[-1], dtype=cd, device=self.device)
         self.a_buf.copy_(x_row.expand(k, -1))
@@ -296,12 +324,7 @@ class _GptOssPipelined(_PipelinedResidency):
         x = hidden_states.to(device=self.device, dtype=cd)
         want = router_indices.reshape(-1).to(device=self.device, dtype=torch.long)
         k = self.k
-        self.want_buf.copy_(want)
-        src = self.src_of_expert.index_select(0, self.want_buf)
-        kern = _gather_kernel()
-        grid = (k, -(-self.row_words // 2048))
-        kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
-        self.have.copy_(src)
+        self._fetch(want)
         if self.a_buf is None or self.a_buf.dtype != cd:
             self.a_buf = torch.empty(k, x.shape[-1], dtype=cd, device=self.device)
         self.a_buf.copy_(x.expand(k, -1))
