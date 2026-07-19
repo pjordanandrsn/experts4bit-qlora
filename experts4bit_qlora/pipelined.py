@@ -220,6 +220,26 @@ class _PipelinedResidency:
         kern[grid](self.slots64, src0, self.have, self.row_words, BLOCK=2048, num_warps=4)
         self.have.copy_(src0)
 
+    # ---- lead-time routing (flag-shaped: nothing calls this unless the
+    # harness opts in). Issue the gather for PREDICTED ids early so the copy
+    # overlaps upstream compute; the forward's own gather then corrects any
+    # mispredicted slot via the have-skip discipline — predicted hits cost
+    # nothing, misses re-fetch. Correctness is invariant: the GEMM only ever
+    # sees rows the (real-id) gather placed. Mechanism only — untuned. ------
+    def hint(self, pred_ids):
+        pw = pred_ids.reshape(-1)
+        if pw.numel() != self.k:
+            return
+        self.hint_buf = getattr(self, "hint_buf", None)
+        if self.hint_buf is None:
+            self.hint_buf = torch.zeros(self.k, dtype=torch.long, device=self.device)
+        self.hint_buf.copy_(pw.to(device=self.device, dtype=torch.long))
+        src = self.src_of_expert.index_select(0, self.hint_buf)
+        kern = _gather_kernel()
+        grid = (self.k, -(-self.row_words // 2048))
+        kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
+        self.have.copy_(src)
+
     # ---- the per-token step: fixed, id-independent enqueues only ---------
     def step(self, x_row, want, cd):
         """x_row [1,H] (device, cd), want [k] long (device). Returns dn [k, n2]
