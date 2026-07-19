@@ -188,7 +188,7 @@ def test_mutual_exclusion_with_fast_both_orders():
 def test_enable_idempotent_and_disable_twice():
     mod, hs, ti, tw = _make(seed=18)
     assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 1
-    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 0  # already on
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 1  # rebuild-refresh
     assert disable_hot_residency(mod) == 1
     assert disable_hot_residency(mod) == 0
 
@@ -198,11 +198,22 @@ def test_reenable_with_new_hot_sets_retunes():
     with torch.no_grad():
         ref = mod(hs, ti, tw)
     assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 1
-    # same set -> idempotent no-op; different set -> partition rebuilt in place
-    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 0
+    # re-enable always rebuilds from current weights (refresh, never stale)
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 1
     assert enable_hot_residency(mod, [torch.tensor([4, 5, 6])], device="cuda") == 1
     assert mod._hot_residency.hot_ids.tolist() == [4, 5, 6]
     with torch.no_grad():
         got = mod(hs, ti, tw)
     assert _b_rel(got, ref) < 1.5e-2
     assert disable_hot_residency(mod) == 1
+
+
+def test_expertslora_base_refused():
+    from experts4bit_qlora.lora import ExpertsLoRA
+    import torch.nn as nn
+    base, hs, ti, tw = _make(seed=22)
+    wrapped = ExpertsLoRA(base)                      # streaming-loader shape: base is never .forward()-ed
+    model = nn.Module(); model.moe = wrapped
+    with pytest.raises(NotImplementedError, match="ExpertsLoRA"):
+        enable_hot_residency(model, [torch.tensor([0, 1])], device="cuda")
+    assert not hasattr(base, "_hot_residency")       # dead base was NOT patched

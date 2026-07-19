@@ -191,14 +191,43 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     """Partition every eligible ``ExpertsNbit`` under ``model`` into a resident
     GPU hot-stack + a streamed CPU cold-stack, in MoE-layer order.
 
-    ``hot_sets`` is a sequence with one entry per MoE layer (module order): a
-    1-D array/list of hot expert ids for that layer. Returns the number of
-    modules converted. Modules that override ``forward`` (custom-activation
-    experts, e.g. gpt-oss) or have ineligible storage are skipped."""
+    ``hot_sets`` must carry exactly one entry per targeted ``ExpertsNbit`` module
+    in module order (a 1-D array/list of hot expert ids each); a wrong length
+    raises. Re-enabling rebuilds the partition from the module's *current*
+    weights (never a stale cache). Modules that override ``forward``
+    (custom-activation experts, e.g. gpt-oss), have ineligible storage, are
+    ``[fast]``-enabled, or are an ``ExpertsLoRA`` base (the streaming-loader
+    path — not yet supported) are skipped; ids outside ``[0, num_experts)`` raise.
+
+    Memory model: on a fully-resident module the hot (GPU) and cold (CPU) stacks
+    are *added* — the module keeps its original packed weights so the reference
+    fallback still works, so VRAM is not reduced in that configuration. The VRAM
+    win is realized when the base experts are offloaded (streaming loader): the
+    resident stack is then the only GPU copy. Standalone Experts4bit is the
+    correctness-supported path today."""
     from experts4bit_qlora import Experts4bit, ExpertsNbit
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
-    mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)] if hasattr(model, "modules") else [model]
+    if hasattr(model, "modules"):
+        # ExpertsLoRA.forward bypasses base.forward (it calls base._project), so the
+        # frozen base is NEVER dispatched — patching it is dead code that only
+        # duplicates weights. Exclude any Experts4bit that is an ExpertsLoRA.base.
+        try:
+            from experts4bit_qlora.lora import ExpertsLoRA
+            wrapped = {id(m.base) for m in model.modules()
+                       if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
+        except ImportError:
+            wrapped = set()
+        all_nbit = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+        mods = [m for m in all_nbit if id(m) not in wrapped]
+        if wrapped and not mods:
+            raise NotImplementedError(
+                "every ExpertsNbit here is an ExpertsLoRA.base (the streaming-loader / "
+                "offload path). ExpertsLoRA.forward bypasses base.forward, so residency "
+                "must hook the wrapper + its offload homes — a separate increment. "
+                "enable_hot_residency currently supports standalone Experts4bit modules.")
+    else:
+        mods = [model]
     if len(hot_sets) != len(mods):
         raise ValueError(
             f"hot_sets has {len(hot_sets)} entries but the model has {len(mods)} "
@@ -222,10 +251,8 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
                 print(f"[hot_residency] skip {type(mod).__name__}: [fast] enabled — disable it first")
             continue
         if hasattr(mod, "_hot_residency"):
-            new_ids = torch.as_tensor(hot_sets[i], dtype=torch.long).unique()
-            if torch.equal(new_ids, mod._hot_residency.hot_ids):
-                continue  # same partition; idempotent no-op
-            # re-tune: rebuild the partition in place (saved forward unchanged)
+            # rebuild every time — the base weights are frozen NF4, but a caller may
+            # have reloaded a checkpoint; a cached partition must never go stale.
             mod._hot_residency = _HotResidency(mod, hot_sets[i], device)
             patched += 1
             continue
