@@ -213,7 +213,8 @@ def test_expertslora_base_refused():
     import torch.nn as nn
     base, hs, ti, tw = _make(seed=22)
     wrapped = ExpertsLoRA(base)                      # streaming-loader shape: base is never .forward()-ed
-    model = nn.Module(); model.moe = wrapped
+    model = nn.Module()
+    model.moe = wrapped
     with pytest.raises(NotImplementedError, match="ExpertsLoRA"):
         enable_hot_residency(model, [torch.tensor([0, 1])], device="cuda")
     assert not hasattr(base, "_hot_residency")       # dead base was NOT patched
