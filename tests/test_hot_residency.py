@@ -136,19 +136,35 @@ def test_out_of_range_hot_id_raises():
         enable_hot_residency(mod, [torch.tensor([0, 8])], device="cuda")  # E=8 -> max valid 7
 
 
-def test_compute_dtype_guard_falls_back():
+def test_compute_dtype_guard_reads_live_not_snapshot():
     mod, hs, ti, tw = _make(seed=16)
     with torch.no_grad():
         ref = mod(hs, ti, tw)
     enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda")
-    mod._hot_residency.compute_dtype = torch.float32     # unsupported epilogue dtype
-    mod.compute_dtype = torch.float32
+    mod.compute_dtype = torch.float32                    # changed AFTER enable
     with torch.no_grad():
-        got = mod(hs, ti, tw)                            # must route to reference, not the kernel
-    # fp32-compute reference vs the bf16-compute ref baseline: scale-relative noise
+        got = mod(hs, ti, tw)                            # live-read must trigger the fallback
+    assert got.device == hs.device                        # output on the input's device
     assert _b_rel(got, ref) < 1.5e-2, _b_rel(got, ref)
     mod.compute_dtype = torch.bfloat16
     disable_hot_residency(mod)
+
+
+def test_output_on_input_device():
+    mod, hs, ti, tw = _make(seed=20)
+    enable_hot_residency(mod, [torch.tensor([0, 1, 2, 3])], device="cuda")
+    with torch.no_grad():
+        got = mod(hs, ti, tw)
+    assert got.device == hs.device and got.dtype == hs.dtype
+    disable_hot_residency(mod)
+
+
+def test_longer_hot_sets_raises():
+    import torch.nn as nn
+    m1, *_ = _make(seed=21)
+    seq = nn.Sequential(m1)                              # 1 module
+    with pytest.raises(ValueError, match="hot_sets has 2"):
+        enable_hot_residency(seq, [torch.tensor([0]), torch.tensor([1])], device="cuda")
 
 
 def test_mutual_exclusion_with_fast_both_orders():

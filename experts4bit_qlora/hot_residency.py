@@ -121,7 +121,9 @@ class _HotResidency:
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
         input_dtype = hidden_states.dtype
-        cd = self.compute_dtype if self.compute_dtype is not None else input_dtype
+        input_dev = hidden_states.device
+        # read compute_dtype LIVE off the module (a later change must be honored)
+        cd = self.mod.compute_dtype if self.mod.compute_dtype is not None else input_dtype
         dev = self.device
         x = hidden_states.to(device=dev, dtype=cd)
         top_k_weights = top_k_weights.to(dev)
@@ -161,7 +163,7 @@ class _HotResidency:
             w = top_k_weights[row_token.index_select(0, cr), row_slot.index_select(0, cr)].to(torch.float32)
             out.index_add_(0, row_token.index_select(0, cr), dn.to(torch.float32) * w[:, None])
 
-        return out.to(input_dtype)
+        return out.to(device=input_dev, dtype=input_dtype)
 
 
 def hot_residency_available() -> bool:
@@ -197,12 +199,13 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)] if hasattr(model, "modules") else [model]
-    if len(hot_sets) < len(mods):
+    if len(hot_sets) != len(mods):
         raise ValueError(
             f"hot_sets has {len(hot_sets)} entries but the model has {len(mods)} "
-            f"ExpertsNbit modules — one entry per MoE layer in module order is "
-            f"required (skipped layers still consume their entry, so alignment "
-            f"never silently shifts)")
+            f"ExpertsNbit modules — exactly one entry per MoE layer in module "
+            f"order is required (skipped layers still consume their entry, so "
+            f"alignment never silently shifts and trailing entries are never "
+            f"dropped)")
     patched = 0
     for i, mod in enumerate(mods):  # hot_sets[i] belongs to mods[i], patched or not
         if type(mod).forward not in stock_forwards and not hasattr(mod, "_e4b_hot_ref"):
@@ -232,7 +235,7 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
 
         def _fwd(hidden, top_k_index, top_k_weights, _m=mod):
             st = _m._hot_residency
-            cd = st.compute_dtype if st.compute_dtype is not None else hidden.dtype
+            cd = _m.compute_dtype if _m.compute_dtype is not None else hidden.dtype
             if cd not in (torch.bfloat16, torch.float16):
                 return _m._e4b_hot_ref(hidden, top_k_index, top_k_weights)
             if torch.is_grad_enabled() and (
