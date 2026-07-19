@@ -69,6 +69,7 @@ from .offload import (  # noqa: E402
 # safe to import eagerly. The streaming loader is NOT — see __getattr__ below.
 from .fast import disable_fast, enable_fast, fast_available  # noqa: E402
 from .hot_residency import disable_hot_residency, enable_hot_residency, hot_residency_available  # noqa: E402
+from .pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
 __all__ = [
@@ -79,11 +80,14 @@ __all__ = [
     "add_attention_lora",
     "disable_fast",
     "disable_hot_residency",
+    "disable_pipelined_residency",
     "enable_expert_offload",
     "enable_fast",
     "enable_hot_residency",
+    "enable_pipelined_residency",
     "fast_available",
     "hot_residency_available",
+    "pipelined_available",
     "enable_inference_prefetch",
     "normalize_quant_type",
     "offload_model_experts",

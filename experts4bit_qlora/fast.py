@@ -150,6 +150,10 @@ def enable_fast(model, verbose: bool = False) -> int:
             if verbose:
                 print(f"[e4b.fast] skip {type(mod).__name__}: hot_residency enabled — disable it first")
             continue
+        if hasattr(mod, "_e4b_pipe_ref"):
+            if verbose:
+                print(f"[e4b.fast] skip {type(mod).__name__}: pipelined residency enabled — disable it first")
+            continue
         if hasattr(mod, "_e4b_fast_ref"):
             continue  # already enabled; idempotent
         mod._e4b_fast_ref = mod.forward

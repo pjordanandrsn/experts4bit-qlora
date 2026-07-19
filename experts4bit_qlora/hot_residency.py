@@ -250,6 +250,10 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
             if verbose:
                 print(f"[hot_residency] skip {type(mod).__name__}: [fast] enabled — disable it first")
             continue
+        if hasattr(mod, "_e4b_pipe_ref"):
+            if verbose:
+                print(f"[hot_residency] skip {type(mod).__name__}: pipelined residency enabled — disable it first")
+            continue
         if hasattr(mod, "_hot_residency"):
             # rebuild every time — the base weights are frozen NF4, but a caller may
             # have reloaded a checkpoint; a cached partition must never go stale.
