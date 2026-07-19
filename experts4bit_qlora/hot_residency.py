@@ -99,8 +99,10 @@ class _HotResidency:
         self.c_dn_p = dn_p.index_select(0, ci).contiguous().cpu()
         self.c_dn_a = dn_a.index_select(0, ci).contiguous().cpu()
         try:
-            self.c_gu_p = self.c_gu_p.pin_memory(); self.c_gu_a = self.c_gu_a.pin_memory()
-            self.c_dn_p = self.c_dn_p.pin_memory(); self.c_dn_a = self.c_dn_a.pin_memory()
+            self.c_gu_p = self.c_gu_p.pin_memory()
+            self.c_gu_a = self.c_gu_a.pin_memory()
+            self.c_dn_p = self.c_dn_p.pin_memory()
+            self.c_dn_a = self.c_dn_a.pin_memory()
         except (RuntimeError, AssertionError):
             pass  # pageable fallback is correct, just synchronous H2D
 
@@ -115,7 +117,6 @@ class _HotResidency:
         self.g2c_cpu = g2c  # cold local ids resolved on CPU (stack is on CPU)
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
-        mod = self.mod
         input_dtype = hidden_states.dtype
         cd = self.compute_dtype if self.compute_dtype is not None else input_dtype
         x = hidden_states.to(cd)

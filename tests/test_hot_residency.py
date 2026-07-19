@@ -74,7 +74,6 @@ def test_all_hot_equals_all_cold():
 
 def test_expert_with_no_tokens_and_uneven_split():
     # route only to a mix that leaves some hot and some cold experts unused
-    mod, hs, tw = None, None, None
     mod, hs, ti, tw = _make(E=8, k=2, tokens=16, seed=5)
     ti = torch.stack([torch.zeros(16, dtype=torch.long),           # all hit expert 0 (hot)
                       torch.full((16,), 5, dtype=torch.long)], 1).cuda()  # and expert 5 (cold)
