@@ -245,3 +245,23 @@ def test_gptoss_epilogue_matches_reference():
             got = mod(hs, idx, sc)
         assert _b_rel(got, ref) < 1.5e-2, (hot, _b_rel(got, ref))
         disable_pipelined_residency(mod)
+
+
+def test_arena_allocation_reused_across_reenables():
+    # the pinned allocation persists across disable/enable (one pinning per
+    # ladder), while content is refilled every enable (covered by
+    # test_reenable_refreshes_from_current_weights)
+    mod = _make(seed=21)
+    enable_pipelined_residency(mod, [torch.tensor([0, 1])], device="cuda", k_slots=3)
+    p1 = mod._pipelined.arena.data_ptr()
+    disable_pipelined_residency(mod)
+    enable_pipelined_residency(mod, [torch.arange(4)], device="cuda", k_slots=3)
+    p2 = mod._pipelined.arena.data_ptr()
+    hs, ti, tw = _route(8, 3, seed=22)
+    with torch.no_grad():
+        got = mod(hs, ti, tw)
+    disable_pipelined_residency(mod)
+    with torch.no_grad():
+        ref = mod(hs, ti, tw)
+    assert p1 == p2, "arena allocation was rebuilt — ladder would re-pin every rung"
+    assert _b_rel(got, ref) < 1.5e-2

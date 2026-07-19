@@ -161,13 +161,28 @@ class _PipelinedResidency:
         # --- RAMStore arena: pinned [E, row_bytes], filled segment-wise ---
         # (cross-device copy_ moves each GPU segment straight into the pinned
         # rows; the arena is the UVA-addressable cold source thereafter)
-        arena = torch.zeros(E, row_bytes, dtype=torch.uint8)
-        try:
-            arena = arena.pin_memory()
-            self.pinned = arena.is_pinned()
-        except (RuntimeError, AssertionError):
-            self.pinned = False  # pageable fallback: correct, but UVA reads
-            # from pageable memory are not guaranteed — enable() refuses below
+        #
+        # The pinned ALLOCATION is reusable across re-enables of the same
+        # module (layout signature checked); pinning tens of GB is the
+        # expensive part of enable(), so a K-ladder costs one pinning, not
+        # one per rung. The CONTENT is still refilled from the module's
+        # current weights on every enable (the copy_ block below always
+        # runs) — the always-refresh invariant is untouched; only the
+        # allocation is cached.
+        cached = getattr(mod, "_e4b_arena_cache", None)
+        sig = (E, row_bytes, tuple(off))
+        arena = None
+        if cached is not None and cached[0] == sig:
+            arena = cached[1]
+            self.pinned = bool(cached[2])
+        if arena is None:
+            arena = torch.zeros(E, row_bytes, dtype=torch.uint8)
+            try:
+                arena = arena.pin_memory()
+                self.pinned = arena.is_pinned()
+            except (RuntimeError, AssertionError):
+                self.pinned = False  # pageable fallback: correct, but UVA reads
+                # from pageable memory are not guaranteed — enable() refuses below
         a_f32 = arena.view(torch.float32)
         gu_p = mod.gate_up_proj.view(E, -1)
         gu_a = mod.gate_up_absmax.view(E, -1).float()
@@ -178,6 +193,7 @@ class _PipelinedResidency:
         arena[:, off[2]:off[2] + seg[2]].copy_(dn_p.view(torch.uint8) if dn_p.dtype != torch.uint8 else dn_p)
         a_f32[:, off[3] // 4: off[3] // 4 + seg[3] // 4].copy_(dn_a)
         self.arena = arena
+        mod._e4b_arena_cache = (sig, arena, self.pinned)
 
         # --- hot stack: same row-block layout, resident on device ---------
         if hot_ids.numel():
