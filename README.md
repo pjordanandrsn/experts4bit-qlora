@@ -67,6 +67,24 @@ from experts4bit_qlora import enable_fast, disable_fast
 enable_fast(model)    # returns the number of expert modules patched
 ```
 
+**Hot-expert residency** (`enable_hot_residency`) is the constrained-card path:
+it pins each MoE layer's *hottest* experts in VRAM (fused kernel, zero
+transfer) and streams only the cold tail from pinned host RAM per token —
+finer-grained than the whole-layer residency GGUF runtimes place at, and it
+exploits the fact that MoE routing is near-uniform globally but concentrates
+per layer (on gpt-oss-120b a per-layer top-16 — 12% of experts — carries ~30%
+of that layer's hits *out-of-sample*, so ~12% of the expert VRAM handles ~30%
+of the traffic at zero cost). It wins where the host CPU is weak and VRAM is
+small; on a strong-CPU server, computing cold experts on the host is faster.
+The partition is math-identical to the reference forward (both stacks decode
+the same NF4 values through the same kernel; correctness-gated in the suite).
+
+```python
+from experts4bit_qlora import enable_hot_residency
+# hot_sets[i] = hot expert ids for the i-th MoE layer, from a routing histogram
+enable_hot_residency(model, hot_sets, device="cuda")
+```
+
 Runs on a **stock** `pip install bitsandbytes` today — see "Relationship to bitsandbytes" below.
 `pip install e4b`, `pip install experts4bit`, and `pip install expertsnbit` are equivalent aliases of this package.
 
