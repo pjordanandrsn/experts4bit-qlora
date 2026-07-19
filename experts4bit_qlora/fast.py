@@ -68,11 +68,11 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     if torch.is_grad_enabled() and (
         hidden_states.requires_grad or any(p.requires_grad for p in mod.parameters())
     ):
-        return mod._e4b_reference_forward(hidden_states, top_k_index, top_k_weights)
+        return mod._e4b_fast_ref(hidden_states, top_k_index, top_k_weights)
 
     compute_dtype = mod.compute_dtype if mod.compute_dtype is not None else hidden_states.dtype
     if compute_dtype not in (torch.bfloat16, torch.float16):
-        return mod._e4b_reference_forward(hidden_states, top_k_index, top_k_weights)
+        return mod._e4b_fast_ref(hidden_states, top_k_index, top_k_weights)
 
     from nf4_grouped import gemm_4bit_grouped
 
@@ -146,8 +146,13 @@ def enable_fast(model, verbose: bool = False) -> int:
             if verbose:
                 print(f"[e4b.fast] skip {type(mod).__name__}: {reason}")
             continue
-        if not hasattr(mod, "_e4b_reference_forward"):
-            mod._e4b_reference_forward = mod.forward
+        if hasattr(mod, "_hot_residency"):
+            if verbose:
+                print(f"[e4b.fast] skip {type(mod).__name__}: hot_residency enabled — disable it first")
+            continue
+        if hasattr(mod, "_e4b_fast_ref"):
+            continue  # already enabled; idempotent
+        mod._e4b_fast_ref = mod.forward
         mod.forward = fused_experts_forward.__get__(mod)
         patched += 1
     return patched
@@ -158,8 +163,8 @@ def disable_fast(model) -> int:
     mods = model.modules() if hasattr(model, "modules") else [model]
     restored = 0
     for mod in mods:
-        if hasattr(mod, "_e4b_reference_forward"):
-            mod.forward = mod._e4b_reference_forward
-            del mod._e4b_reference_forward
+        if hasattr(mod, "_e4b_fast_ref"):
+            mod.forward = mod._e4b_fast_ref
+            del mod._e4b_fast_ref
             restored += 1
     return restored

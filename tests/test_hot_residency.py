@@ -94,3 +94,84 @@ def test_training_falls_back():
     out.sum().backward()
     assert x.grad is not None and torch.isfinite(x.grad).all()
     disable_hot_residency(mod)
+
+
+# ---- protection tests for the review-found failure modes ----
+
+def test_hot_sets_alignment_survives_skipped_module():
+    # two modules; make the FIRST ineligible (blocksize) — the SECOND must still
+    # receive hot_sets[1], not hot_sets[0] (alignment is by module order)
+    import torch.nn as nn
+    m1, *_ = _make(seed=11)
+    m2, hs, ti, tw = _make(seed=12)
+    seq = nn.Sequential(m1, m2)
+    m1.blocksize = 128  # ineligible
+    with torch.no_grad():
+        ref = m2(hs, ti, tw)
+    n = enable_hot_residency(seq, [torch.tensor([0]), torch.tensor([0, 1, 2, 3])], device="cuda")
+    assert n == 1
+    assert not hasattr(m1, "_hot_residency")
+    assert m2._hot_residency.hot_ids.numel() == 4  # got ITS entry, not m1's 1-id set
+    with torch.no_grad():
+        got = m2(hs, ti, tw)
+    assert _b_rel(got, ref) < 1.5e-2
+    disable_hot_residency(seq)
+    m1.blocksize = 64
+
+
+def test_short_hot_sets_raises():
+    import torch.nn as nn
+    m1, *_ = _make(seed=13)
+    m2, *_ = _make(seed=14)
+    seq = nn.Sequential(m1, m2)
+    with pytest.raises(ValueError, match="hot_sets has 1"):
+        enable_hot_residency(seq, [torch.tensor([0])], device="cuda")
+
+
+def test_out_of_range_hot_id_raises():
+    mod, *_ = _make(seed=15)
+    with pytest.raises(ValueError, match="hot ids must lie"):
+        enable_hot_residency(mod, [torch.tensor([-1, 2])], device="cuda")
+    with pytest.raises(ValueError, match="hot ids must lie"):
+        enable_hot_residency(mod, [torch.tensor([0, 8])], device="cuda")  # E=8 -> max valid 7
+
+
+def test_compute_dtype_guard_falls_back():
+    mod, hs, ti, tw = _make(seed=16)
+    with torch.no_grad():
+        ref = mod(hs, ti, tw)
+    enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda")
+    mod._hot_residency.compute_dtype = torch.float32     # unsupported epilogue dtype
+    mod.compute_dtype = torch.float32
+    with torch.no_grad():
+        got = mod(hs, ti, tw)                            # must route to reference, not the kernel
+    # fp32-compute reference vs the bf16-compute ref baseline: scale-relative noise
+    assert _b_rel(got, ref) < 1.5e-2, _b_rel(got, ref)
+    mod.compute_dtype = torch.bfloat16
+    disable_hot_residency(mod)
+
+
+def test_mutual_exclusion_with_fast_both_orders():
+    from experts4bit_qlora import disable_fast, enable_fast
+    mod, hs, ti, tw = _make(seed=17)
+    with torch.no_grad():
+        ref = mod(hs, ti, tw)
+    # fast first -> hot refuses; disable fast -> hot proceeds
+    assert enable_fast(mod) == 1
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 0
+    assert disable_fast(mod) == 1
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 1
+    # hot active -> fast refuses; full unwind restores the stock forward exactly
+    assert enable_fast(mod) == 0
+    assert disable_hot_residency(mod) == 1
+    with torch.no_grad():
+        back = mod(hs, ti, tw)
+    torch.testing.assert_close(back.float(), ref.float(), rtol=0, atol=0)
+
+
+def test_enable_idempotent_and_disable_twice():
+    mod, hs, ti, tw = _make(seed=18)
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 1
+    assert enable_hot_residency(mod, [torch.tensor([0, 1])], device="cuda") == 0  # already on
+    assert disable_hot_residency(mod) == 1
+    assert disable_hot_residency(mod) == 0

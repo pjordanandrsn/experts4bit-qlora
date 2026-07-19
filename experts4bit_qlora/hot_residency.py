@@ -69,6 +69,9 @@ class _HotResidency:
         self.device = torch.device(device)
         E = mod.num_experts
         hot_ids = torch.as_tensor(hot_ids, dtype=torch.long).unique()
+        if hot_ids.numel() and (hot_ids.min() < 0 or hot_ids.max() >= E):
+            raise ValueError(f"hot ids must lie in [0, {E}); got range "
+                             f"[{int(hot_ids.min())}, {int(hot_ids.max())}]")
         cold_ids = torch.tensor([e for e in range(E) if e not in set(hot_ids.tolist())],
                                 dtype=torch.long)
         self.hot_ids, self.cold_ids = hot_ids, cold_ids
@@ -119,10 +122,11 @@ class _HotResidency:
     def forward(self, hidden_states, top_k_index, top_k_weights):
         input_dtype = hidden_states.dtype
         cd = self.compute_dtype if self.compute_dtype is not None else input_dtype
-        x = hidden_states.to(cd)
+        dev = self.device
+        x = hidden_states.to(device=dev, dtype=cd)
+        top_k_weights = top_k_weights.to(dev)
         T, H = x.shape
         k = top_k_index.shape[1]
-        dev = self.device
 
         flat = top_k_index.reshape(-1).to(dev)                 # [T*k] global expert per assignment
         row_token = torch.arange(T * k, device=dev) // k
@@ -193,9 +197,15 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)] if hasattr(model, "modules") else [model]
-    n = 0
-    for mod in mods:
-        if type(mod).forward not in stock_forwards:
+    if len(hot_sets) < len(mods):
+        raise ValueError(
+            f"hot_sets has {len(hot_sets)} entries but the model has {len(mods)} "
+            f"ExpertsNbit modules — one entry per MoE layer in module order is "
+            f"required (skipped layers still consume their entry, so alignment "
+            f"never silently shifts)")
+    patched = 0
+    for i, mod in enumerate(mods):  # hot_sets[i] belongs to mods[i], patched or not
+        if type(mod).forward not in stock_forwards and not hasattr(mod, "_e4b_hot_ref"):
             if verbose:
                 print(f"[hot_residency] skip {type(mod).__name__}: custom forward")
             continue
@@ -204,23 +214,30 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
             if verbose:
                 print(f"[hot_residency] skip {type(mod).__name__}: {reason}")
             continue
-        if n >= len(hot_sets):
-            break
-        state = _HotResidency(mod, hot_sets[n], device)
-        if not hasattr(mod, "_e4b_reference_forward"):
-            mod._e4b_reference_forward = mod.forward
+        if hasattr(mod, "_e4b_fast_ref"):
+            if verbose:
+                print(f"[hot_residency] skip {type(mod).__name__}: [fast] enabled — disable it first")
+            continue
+        if hasattr(mod, "_hot_residency"):
+            continue  # already enabled; idempotent
+        state = _HotResidency(mod, hot_sets[i], device)
+        mod._e4b_hot_ref = mod.forward
         mod._hot_residency = state
 
         def _fwd(hidden, top_k_index, top_k_weights, _m=mod):
+            st = _m._hot_residency
+            cd = st.compute_dtype if st.compute_dtype is not None else hidden.dtype
+            if cd not in (torch.bfloat16, torch.float16):
+                return _m._e4b_hot_ref(hidden, top_k_index, top_k_weights)
             if torch.is_grad_enabled() and (
                 hidden.requires_grad or any(p.requires_grad for p in _m.parameters())
             ):
-                return _m._e4b_reference_forward(hidden, top_k_index, top_k_weights)
-            return _m._hot_residency.forward(hidden, top_k_index, top_k_weights)
+                return _m._e4b_hot_ref(hidden, top_k_index, top_k_weights)
+            return st.forward(hidden, top_k_index, top_k_weights)
 
         mod.forward = _fwd
-        n += 1
-    return n
+        patched += 1
+    return patched
 
 
 def disable_hot_residency(model) -> int:
@@ -228,8 +245,8 @@ def disable_hot_residency(model) -> int:
     mods = model.modules() if hasattr(model, "modules") else [model]
     restored = 0
     for mod in mods:
-        if hasattr(mod, "_e4b_reference_forward") and hasattr(mod, "_hot_residency"):
-            mod.forward = mod._e4b_reference_forward
-            del mod._e4b_reference_forward, mod._hot_residency
+        if hasattr(mod, "_e4b_hot_ref") and hasattr(mod, "_hot_residency"):
+            mod.forward = mod._e4b_hot_ref
+            del mod._e4b_hot_ref, mod._hot_residency
             restored += 1
     return restored
