@@ -13,7 +13,9 @@ transfer cost.
 Regime: this wins where the host CPU is weak and VRAM is small but the link is
 not the sole bottleneck (edge boxes, small discrete GPUs). On a strong-CPU
 server, computing the cold experts on the host (a GGUF runtime's path) is
-faster — that is a different instrument, not this one.
+faster — that instrument is :mod:`.cold_engine` (``enable_cold_engine``),
+which shares this partition and replaces the streaming cold branch with
+host-side compute.
 
 The math is identical to the reference ``ExpertsNbit`` forward: the hot and
 cold experts are the same NF4 values, merely partitioned by residence, and
@@ -84,6 +86,10 @@ class _HotResidency:
     """Per-module state: a resident GPU hot-stack + a pinned-CPU cold-stack, and
     the global<->local id maps needed to dispatch each routed expert."""
 
+    # Subclasses that never H2D-stream the cold weights (the cold engine computes
+    # them on the host) set this False and keep the cold stacks pageable.
+    _PIN_COLD = True
+
     def __init__(self, mod, hot_ids, device):
         self.mod = mod
         self.device = torch.device(device)
@@ -135,13 +141,14 @@ class _HotResidency:
         self.c_gu_a = gu_a.index_select(0, ci).contiguous().cpu()
         self.c_dn_p = dn_p.index_select(0, ci).contiguous().cpu()
         self.c_dn_a = dn_a.index_select(0, ci).contiguous().cpu()
-        try:
-            self.c_gu_p = self.c_gu_p.pin_memory()
-            self.c_gu_a = self.c_gu_a.pin_memory()
-            self.c_dn_p = self.c_dn_p.pin_memory()
-            self.c_dn_a = self.c_dn_a.pin_memory()
-        except (RuntimeError, AssertionError):
-            pass  # pageable fallback is correct, just synchronous H2D
+        if self._PIN_COLD:
+            try:
+                self.c_gu_p = self.c_gu_p.pin_memory()
+                self.c_gu_a = self.c_gu_a.pin_memory()
+                self.c_dn_p = self.c_dn_p.pin_memory()
+                self.c_dn_a = self.c_dn_a.pin_memory()
+            except (RuntimeError, AssertionError):
+                pass  # pageable fallback is correct, just synchronous H2D
 
         # global expert id -> (is_hot, local index within its stack)
         g2h = torch.full((E,), -1, dtype=torch.long)
@@ -186,28 +193,34 @@ class _HotResidency:
         # --- COLD: stream ONLY the routed cold experts from pinned host RAM ---
         cr = (~hot_row).nonzero(as_tuple=False).view(-1)
         if cr.numel():
-            cold_glob = flat.index_select(0, cr).cpu()
-            cold_local_full = self.g2c_cpu.index_select(0, cold_glob)     # local id in the full cold stack
-            routed, compact = torch.unique(cold_local_full, return_inverse=True)  # only the ones used now
-            # gather + stream the routed cold experts' NF4 to the GPU
-            gu_p = self.c_gu_p.index_select(0, routed).to(dev, non_blocking=True)
-            gu_a = self.c_gu_a.index_select(0, routed).to(dev, non_blocking=True)
-            dn_p = self.c_dn_p.index_select(0, routed).to(dev, non_blocking=True)
-            dn_a = self.c_dn_a.index_select(0, routed).to(dev, non_blocking=True)
-            xr = x.index_select(0, row_token.index_select(0, cr))
-            # bias sub-stack aligned to the streamed `routed` subset (compact indexes into
-            # it); `routed` is a CPU index, the bias stacks are device-resident.
-            gptoss = None
-            if self.gptoss:
-                r_dev = routed.to(dev)
-                gptoss = (self.c_gu_b.index_select(0, r_dev), self.c_dn_b.index_select(0, r_dev),
-                          self.alpha, self.limit)
-            dn = _fused_over_stack(xr, compact.to(dev), gu_p, gu_a, dn_p, dn_a,
-                                   self.shapes, self.has_gate, self.act_fn, gptoss=gptoss)
-            w = top_k_weights[row_token.index_select(0, cr), row_slot.index_select(0, cr)].to(torch.float32)
-            out.index_add_(0, row_token.index_select(0, cr), dn.to(torch.float32) * w[:, None])
+            self._cold_contrib(x, flat, row_token, row_slot, cr, top_k_weights, out, dev)
 
         return out.to(device=input_dev, dtype=input_dtype)
+
+    def _cold_contrib(self, x, flat, row_token, row_slot, cr, top_k_weights, out, dev):
+        """Accumulate the routed cold experts' contributions into ``out`` (fp32,
+        on ``dev``). This class streams the routed NF4 to the device and runs the
+        fused kernel; the cold engine overrides it to compute on the host."""
+        cold_glob = flat.index_select(0, cr).cpu()
+        cold_local_full = self.g2c_cpu.index_select(0, cold_glob)     # local id in the full cold stack
+        routed, compact = torch.unique(cold_local_full, return_inverse=True)  # only the ones used now
+        # gather + stream the routed cold experts' NF4 to the GPU
+        gu_p = self.c_gu_p.index_select(0, routed).to(dev, non_blocking=True)
+        gu_a = self.c_gu_a.index_select(0, routed).to(dev, non_blocking=True)
+        dn_p = self.c_dn_p.index_select(0, routed).to(dev, non_blocking=True)
+        dn_a = self.c_dn_a.index_select(0, routed).to(dev, non_blocking=True)
+        xr = x.index_select(0, row_token.index_select(0, cr))
+        # bias sub-stack aligned to the streamed `routed` subset (compact indexes into
+        # it); `routed` is a CPU index, the bias stacks are device-resident.
+        gptoss = None
+        if self.gptoss:
+            r_dev = routed.to(dev)
+            gptoss = (self.c_gu_b.index_select(0, r_dev), self.c_dn_b.index_select(0, r_dev),
+                      self.alpha, self.limit)
+        dn = _fused_over_stack(xr, compact.to(dev), gu_p, gu_a, dn_p, dn_a,
+                               self.shapes, self.has_gate, self.act_fn, gptoss=gptoss)
+        w = top_k_weights[row_token.index_select(0, cr), row_slot.index_select(0, cr)].to(torch.float32)
+        out.index_add_(0, row_token.index_select(0, cr), dn.to(torch.float32) * w[:, None])
 
 
 def hot_residency_available() -> bool:
@@ -313,6 +326,10 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
         if hasattr(mod, "_e4b_fast_ref"):
             if verbose:
                 print(f"[hot_residency] skip {type(mod).__name__}: [fast] enabled — disable it first")
+            continue
+        if hasattr(mod, "_e4b_cold_ref"):
+            if verbose:
+                print(f"[hot_residency] skip {type(mod).__name__}: cold engine enabled — disable it first")
             continue
         if hasattr(mod, "_e4b_pipe_ref"):
             if verbose:

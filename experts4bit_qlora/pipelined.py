@@ -408,7 +408,7 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
 
     patched = 0
     for i, mod in enumerate(mods):
-        if hasattr(mod, "_e4b_fast_ref") or hasattr(mod, "_e4b_hot_ref"):
+        if hasattr(mod, "_e4b_fast_ref") or hasattr(mod, "_e4b_hot_ref") or hasattr(mod, "_e4b_cold_ref"):
             if verbose:
                 print(f"[pipelined] skip {type(mod).__name__}: another forward patch is active")
             continue

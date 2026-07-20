@@ -98,6 +98,25 @@ from experts4bit_qlora import enable_hot_residency
 enable_hot_residency(model, hot_sets, device="cuda")
 ```
 
+**Cold engine** (`enable_cold_engine`) is the other side of that regime law:
+the same hot partition stays resident on the GPU, but the cold tail is
+**computed on the host** from the CPU-resident NF4 — per-token traffic is
+activation-sized, never weight-sized (the `--n-cpu-moe` regime at expert
+rather than layer granularity, for the strong-CPU hosts where the hybrid A/B
+receipts put CPU compute ~an order over PCIe streaming). The host decode is
+bit-exact against bitsandbytes' CPU `dequantize_4bit` and backend-selected
+around its AVX2 cliff: `dequant="auto"` takes bnb's AVX-512 kernel only where
+`avx512f` is present and otherwise a pure-torch decode (on AVX2-only hosts
+bnb silently falls back below even naive torch — grouped-nf4-gemm
+`bench/cold-engine/` receipts). An all-cold configuration (`hot_sets` of
+empties, `device="cpu"`) is a pure-host MoE and needs neither CUDA nor
+`[fast]`.
+
+```python
+from experts4bit_qlora import enable_cold_engine
+enable_cold_engine(model, hot_sets, device="cuda", dequant="auto")
+```
+
 Runs on a **stock** `pip install bitsandbytes` today — see "Relationship to bitsandbytes" below.
 `pip install e4b`, `pip install experts4bit`, and `pip install expertsnbit` are equivalent aliases of this package.
 
