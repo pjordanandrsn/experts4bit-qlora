@@ -67,17 +67,30 @@ from experts4bit_qlora import enable_fast, disable_fast
 enable_fast(model)    # returns the number of expert modules patched
 ```
 
-**Hot-expert residency** (`enable_hot_residency`) is the constrained-card path:
-it pins each MoE layer's *hottest* experts in VRAM (fused kernel, zero
-transfer) and streams only the cold tail from pinned host RAM per token —
-finer-grained than the whole-layer residency GGUF runtimes place at, and it
-exploits the fact that MoE routing is near-uniform globally but concentrates
-per layer (on gpt-oss-120b a per-layer top-16 — 12% of experts — carries ~30%
-of that layer's hits *out-of-sample*, so ~12% of the expert VRAM handles ~30%
-of the traffic at zero cost). It wins where the host CPU is weak and VRAM is
-small; on a strong-CPU server, computing cold experts on the host is faster.
-The partition is math-identical to the reference forward (both stacks decode
-the same NF4 values through the same kernel; correctness-gated in the suite).
+**Hot-expert residency** (`enable_hot_residency`, needs `[fast]` — it runs on
+the fused kernel and raises at enable time with an install hint when the
+kernel is missing) is the constrained-card path: it pins each MoE layer's
+*hottest* experts in VRAM (fused kernel, zero transfer) and streams only the
+cold tail from pinned host RAM per token — finer-grained than the whole-layer
+residency GGUF runtimes place at. gpt-oss experts (clamped-GLU epilogue +
+per-expert biases) are supported alongside the standard SwiGLU architectures.
+
+**Pick the hot sets from a routing histogram, not by index** — measured
+2026-07-20 (`bench/RESULTS-informed-hotsets.md`), the decode gain tracks
+routing coverage on every architecture tried: gpt-oss-20b K=4 informed
+**+56%** / K=8 **+120%** over the all-cold floor (naive ids `0..K-1`: ±0%),
+Gemma-4-26B K=8 **+44%** (informed top-8 is 6% of 128 experts yet covers
+half of all routed selections), OLMoE +19%.
+`HOT_MODE=informed bench/bench_gptoss_hybrid.py` is the calibrate-then-pin
+reference driver. Two regime laws from the same receipts
+(`bench/RESULTS-gptoss-hybrid-ab.md`): the hybrid wins where the host CPU is
+weak and VRAM is small — on a strong-CPU server, llama.cpp-style CPU compute
+of the cold experts is ~an order faster than PCIe streaming — and on
+multi-socket hosts **pin the process affinity** (`taskset` was worth 6.9× on
+our cold-stream decode and 3.2× on llama.cpp's CPU-MoE in the same
+measurements). The partition is math-identical to the reference forward
+(both stacks decode the same NF4 values through the same kernel;
+correctness-gated in the suite).
 
 ```python
 from experts4bit_qlora import enable_hot_residency
@@ -322,8 +335,15 @@ experts stored either **per-expert** or already-**fused** on disk:
   `input_linear`/`output_linear` spellings (the loader applies the same renames transformers'
   own converter does); handled and structurally tested. The 1b/3b checkpoints fit a 12 GB card
   without offload.
+- **gpt-oss** (gpt-oss-20b / 120b) — experts shipped as MXFP4 blocks/scales with per-expert
+  biases and a clamped-GLU epilogue; the loader dequantizes the exact released bytes
+  (bit-identical) and builds a faithful NF4 expert (`GptOssExperts4bit`, built bare — the
+  generic `ExpertsLoRA` assumes standard SwiGLU). Loads, offloads, and serves through
+  hot-expert residency; run end-to-end on real 20b weights
+  (`bench/RESULTS-gptoss-hybrid-ab.md`).
 
-All four are covered by `tests/test_loader_architectures.py`. Real Qwen3/Gemma weights (26–35B)
+The SwiGLU four are covered by `tests/test_loader_architectures.py`; gpt-oss by
+`tests/test_hot_residency_gptoss.py` and the bench receipts. Real Qwen3/Gemma weights (26–35B)
 need a ≥24 GB card — or the expert-offload path above — to fit 12 GB. Unsupported architectures
 **fail fast with a clear error**; PRs for more welcome.
 
@@ -430,6 +450,29 @@ The LoRA-placement ablation (which of experts / attention / router to train) and
 analysis are written up in [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md). Short version: on Alpaca
 the placements are largely **redundant**, attention-only is the efficiency pick, and training the
 router **hurts**.
+
+## The package family — how the pieces fit
+
+Two packages, one seam:
+
+- **`experts4bit-qlora`** (this repo; aliases `e4b`, `experts4bit`, `expertsnbit`)
+  owns everything *around* the expert GEMM: the fused-stack 4-bit primitives and
+  per-expert LoRA, the streaming loaders (five architectures above), expert
+  offload, QLoRA training, HTTP serving, and hot-expert residency. It runs
+  complete on stock bitsandbytes — every feature has a reference path.
+- **[`grouped-nf4-gemm`](https://pypi.org/project/grouped-nf4-gemm/)** owns the
+  expert GEMM itself: a single-launch grouped kernel that decodes NF4
+  in-register inside the mainloop with fp32 accumulation, replacing the
+  dequant-then-GEMM round trip. `pip install "experts4bit-qlora[fast]"` is the
+  seam — `enable_fast()` routes frozen-expert inference through it (3.65× at
+  bs=1 decode on the dev card), and `enable_hot_residency()` runs its hot and
+  cold stacks on the same kernel. The kernel repo carries its own registered
+  claims and receipts (fidelity ordering, energy-per-token, 26→170 SM
+  robustness).
+
+Division of labor in one line: **the kernel makes one expert-stack matmul
+cheap; this package decides which bytes are where** (quantized how, resident
+where, streamed when, trained with what adapters).
 
 ## Relationship to bitsandbytes
 
