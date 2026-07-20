@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "expertsmxfp4"
+version = "0.1.0"
+description = "Alias of experts4bit-qlora — ExpertsMxfp4-family serving/QLoRA lives in the experts4bit + grouped-nf4-gemm packages."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Jordan Anderson", email = "paul.jordan.anderson@gmail.com" }]
+dependencies = ["experts4bit-qlora>=0.6.0", "grouped-nf4-gemm>=0.2.0"]
+
+[tool.setuptools]
+py-modules = []

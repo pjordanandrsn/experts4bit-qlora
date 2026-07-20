@@ -1,0 +1,33 @@
+name: aliases
+
+# Publishes the alias/stub packages under aliases/* via trusted publishing.
+# Each alias name needs a (pending) trusted publisher on PyPI pointing at:
+# owner pjordanandrsn, repo experts4bit-qlora, workflow aliases.yml (no environment).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish-aliases:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build all alias stubs
+        run: |
+          python -m pip install --quiet build
+          mkdir -p dist
+          for d in aliases/*/; do
+            python -m build --outdir dist "$d"
+          done
+          ls -la dist/
+      - name: Publish (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
