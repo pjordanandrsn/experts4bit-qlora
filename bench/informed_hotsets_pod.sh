@@ -38,9 +38,9 @@ $PY -m pip install -q sentencepiece protobuf 2>&1 | tail -1
 $PY -c "import transformers, bitsandbytes as b, nf4_grouped; print('versions tf', transformers.__version__, 'bnb', b.__version__, '| nf4_grouped OK')" \
   | tee /root/ab-out/versions.txt || { echo "DEPS-FAIL"; echo "AB-FATAL"; exit 0; }
 
-run_ours() { # $1 model-id  $2 hot_k  $3 hot_mode  $4 out-tag  $5 extra-prefix (e.g. "taskset -c 0-3")
+run_ours() { # $1 model-id  $2 hot_k  $3 hot_mode  $4 out-tag  $5 extra-prefix  $6 bench-tokens
   echo "== OURS $4 $(date -u +%FT%TZ) =="
-  MODEL="$1" HOT_K="$2" HOT_MODE="$3" BENCH_TOKENS=128 OUT="/root/ab-out/$4.json" \
+  MODEL="$1" HOT_K="$2" HOT_MODE="$3" BENCH_TOKENS="${6:-128}" OUT="/root/ab-out/$4.json" \
     timeout 4500 $5 "$PY" bench/bench_gptoss_hybrid.py 2>&1 | tail -8 || echo "OURS $4 FAILED"
 }
 
@@ -95,8 +95,9 @@ done
 if [ -s /root/hf/token ]; then
   cd /root/e4b
   # same-box pair: naive first, then informed (the published Gemma comparison)
-  run_ours google/gemma-4-26B-A4B 8 naive    gemma_k8_naive ""
-  run_ours google/gemma-4-26B-A4B 8 informed gemma_k8_informed ""
+  # 64 tokens matches the archived gemma receipts (bench_tokens=64)
+  run_ours google/gemma-4-26B-A4B 8 naive    gemma_k8_naive "" 64
+  run_ours google/gemma-4-26B-A4B 8 informed gemma_k8_informed "" 64
 fi
 
 "$PY" - <<'PYS' | tee /root/ab-out/SUMMARY.txt
