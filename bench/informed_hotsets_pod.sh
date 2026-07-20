@@ -32,7 +32,8 @@ git clone --depth 1 -b feat/hot-residency-gptoss https://github.com/pjordanandrs
   || { echo "CLONE-FAIL"; echo "AB-FATAL"; exit 0; }
 cd /root/e4b
 git rev-parse HEAD | tee /root/ab-out/e4b_sha.txt
-$PY -m pip install -q ".[train,fast]" 2>&1 | tail -2
+$PY -m pip install -q ".[train,fast]" 2>&1 | tail -2 \
+  || { echo "PIP-INSTALL-FAIL"; echo "AB-FATAL"; exit 0; }
 $PY -m pip install -q sentencepiece protobuf 2>&1 | tail -1
 $PY -c "import transformers, bitsandbytes as b, nf4_grouped; print('versions tf', transformers.__version__, 'bnb', b.__version__, '| nf4_grouped OK')" \
   | tee /root/ab-out/versions.txt || { echo "DEPS-FAIL"; echo "AB-FATAL"; exit 0; }
@@ -93,6 +94,8 @@ for i in $(seq 1 60); do
 done
 if [ -s /root/hf/token ]; then
   cd /root/e4b
+  # same-box pair: naive first, then informed (the published Gemma comparison)
+  run_ours google/gemma-4-26B-A4B 8 naive    gemma_k8_naive ""
   run_ours google/gemma-4-26B-A4B 8 informed gemma_k8_informed ""
 fi
 
