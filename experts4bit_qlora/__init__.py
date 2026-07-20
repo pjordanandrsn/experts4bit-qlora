@@ -68,6 +68,7 @@ from .offload import (  # noqa: E402
 # verify_moe_4bit only touches the resolved Experts4bit/ExpertsNbit classes (core deps), so it is
 # safe to import eagerly. The streaming loader is NOT — see __getattr__ below.
 from .fast import disable_fast, enable_fast, fast_available  # noqa: E402
+from .cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
 from .hot_residency import disable_hot_residency, enable_hot_residency, hot_residency_available  # noqa: E402
 from .pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
@@ -78,9 +79,12 @@ __all__ = [
     "ExpertsLoRA",
     "LoRALinear",
     "add_attention_lora",
+    "cold_engine_available",
+    "disable_cold_engine",
     "disable_fast",
     "disable_hot_residency",
     "disable_pipelined_residency",
+    "enable_cold_engine",
     "enable_expert_offload",
     "enable_fast",
     "enable_hot_residency",
@@ -116,4 +120,4 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
