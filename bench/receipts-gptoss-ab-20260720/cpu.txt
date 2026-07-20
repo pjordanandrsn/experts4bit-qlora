@@ -1,0 +1,4 @@
+CPU(s):                                  64
+Model name:                              AMD EPYC 7532 32-Core Processor
+Thread(s) per core:                      2
+Core(s) per socket:                      32

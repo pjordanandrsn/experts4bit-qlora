@@ -251,6 +251,16 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     win is realized when the base experts are offloaded (streaming loader): the
     resident stack is then the only GPU copy. Standalone Experts4bit is the
     correctness-supported path today."""
+    # The hot/cold forward runs on the fused grouped-GEMM kernel — fail here,
+    # not mid-decode inside _fused_over_stack (2026-07-20 pod A/B: a [train]-only
+    # install crashed on the first forward after a full model load).
+    try:
+        from nf4_grouped import gemm_4bit_grouped  # noqa: F401
+    except ImportError as e:
+        raise ImportError(
+            "enable_hot_residency runs on the fused grouped-GEMM kernel "
+            "(module nf4_grouped); install it with: pip install 'experts4bit-qlora[fast]'"
+        ) from e
     from experts4bit_qlora import Experts4bit, ExpertsNbit
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}

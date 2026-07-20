@@ -1,0 +1,1 @@
+/root/hf/hub/models--ggml-org--gpt-oss-20b-GGUF/snapshots/c9a07b972b8979719fd97b8ff2c10dc79ebf5d26/gpt-oss-20b-MXFP4.gguf

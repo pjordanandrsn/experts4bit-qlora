@@ -1,0 +1,38 @@
+[
+ [
+  "ours hot_k=0",
+  1.124,
+  5.171,
+  true
+ ],
+ [
+  "ours hot_k=4",
+  1.211,
+  6.46,
+  true
+ ],
+ [
+  "ours hot_k=8",
+  1.331,
+  7.788,
+  true
+ ],
+ [
+  "llama n-cpu-moe=0",
+  265.66,
+  null,
+  null
+ ],
+ [
+  "llama n-cpu-moe=12",
+  20.07,
+  null,
+  null
+ ],
+ [
+  "llama n-cpu-moe=24",
+  11.8,
+  null,
+  null
+ ]
+]
