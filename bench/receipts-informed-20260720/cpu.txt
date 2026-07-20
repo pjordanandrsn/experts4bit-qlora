@@ -1,0 +1,4 @@
+CPU(s):                               96
+Model name:                           Intel(R) Xeon(R) Gold 6342 CPU @ 2.80GHz
+Thread(s) per core:                   2
+Core(s) per socket:                   24

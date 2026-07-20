@@ -1,0 +1,2 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 24112 MiB):
+  Device 0: NVIDIA RTX A5000, compute capability 8.6, VMM: yes, VRAM: 24112 MiB

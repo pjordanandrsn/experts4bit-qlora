@@ -1,0 +1,14 @@
+{
+ "model": "google/gemma-4-26B-A4B",
+ "arm": "ours-hybrid-nf4",
+ "hot_k": 8,
+ "hot_mode": "informed",
+ "n_moe": 30,
+ "patched": 30,
+ "decode_toks": 0.951,
+ "prefill_s": 7.435,
+ "peak_gb": 7.186,
+ "bench_tokens": 64,
+ "coherent": true,
+ "cal_coverage": 0.497
+}

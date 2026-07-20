@@ -1,0 +1,8 @@
+cell                          decode_tok/s  peak_gb  coverage  coherent
+ours_gptoss_k0                0.515         5.164    None      True
+ours_gptoss_k0_t4             3.548         5.164    None      True
+ours_gptoss_k4_informed       0.805         6.465    0.429     True
+ours_gptoss_k4_naive          0.514         6.451    None      True
+ours_gptoss_k8_informed       1.135         7.753    0.6673    True
+llama_ncmoe24                 6.14         
+llama_ncmoe24_t4              19.41        
