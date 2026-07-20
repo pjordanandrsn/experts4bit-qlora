@@ -131,7 +131,8 @@ def test_partial_skip_mixed_launch():
     _launch(slots, src, have)
     torch.cuda.synchronize()
     have.copy_(src)
-    host[0].fill_(200); host[1].fill_(201)
+    host[0].fill_(200)
+    host[1].fill_(201)
     src2 = torch.stack([src[0], _addrs(host, [3])[0]])   # slot0 same, slot1 new
     _launch(slots, src2, have)
     torch.cuda.synchronize()

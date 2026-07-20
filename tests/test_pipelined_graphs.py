@@ -71,7 +71,9 @@ def test_graph_replay_matches_eager(hot):
     s.wait_stream(torch.cuda.current_stream())
     with torch.cuda.stream(s), torch.no_grad():
         for hs, ti, tw in routes[:3]:
-            x_st.copy_(hs); i_st.copy_(ti); w_st.copy_(tw)
+            x_st.copy_(hs)
+            i_st.copy_(ti)
+            w_st.copy_(tw)
             mod(x_st, i_st, w_st)
     torch.cuda.current_stream().wait_stream(s)
     torch.cuda.synchronize()
@@ -87,7 +89,9 @@ def test_graph_replay_matches_eager(hot):
     # replay across churning routes; compare to eager on a fresh identical module
     got = []
     for hs, ti, tw in routes[3:]:
-        x_st.copy_(hs); i_st.copy_(ti); w_st.copy_(tw)
+        x_st.copy_(hs)
+        i_st.copy_(ti)
+        w_st.copy_(tw)
         g.replay()
         got.append(out_st.clone())
     torch.cuda.synchronize()

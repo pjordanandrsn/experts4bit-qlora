@@ -224,10 +224,10 @@ def test_gptoss_epilogue_matches_reference():
     from experts4bit_qlora.gptoss import GptOssExperts4bit
 
     torch.manual_seed(0)
-    E, H, I, k = 8, 128, 64, 4
-    gate_up_dense = torch.randn(E, H, 2 * I) * 0.1
-    gate_up_bias = torch.randn(E, 2 * I) * 0.1
-    down_dense = torch.randn(E, I, H) * 0.1
+    E, H, inter, k = 8, 128, 64, 4
+    gate_up_dense = torch.randn(E, H, 2 * inter) * 0.1
+    gate_up_bias = torch.randn(E, 2 * inter) * 0.1
+    down_dense = torch.randn(E, inter, H) * 0.1
     down_bias = torch.randn(E, H) * 0.1
     mod = GptOssExperts4bit.from_gptoss(gate_up_dense.cuda(), gate_up_bias.cuda(),
                                         down_dense.cuda(), down_bias.cuda(),

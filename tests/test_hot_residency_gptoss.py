@@ -76,6 +76,7 @@ def test_gptoss_mixed_split_and_bias_matters():
         assert _b_rel(got, ref) < 1.5e-2, _b_rel(got, ref)
         disable_hot_residency(mod)
         # bias is load-bearing: null it and the reference itself must move
-        mod.gate_up_bias.zero_(); mod.down_bias.zero_()
+        mod.gate_up_bias.zero_()
+        mod.down_bias.zero_()
         ref0 = mod(x, idx, w)
     assert _b_rel(ref0, ref) > 1e-3, "biases had no effect — bias path suspect"
