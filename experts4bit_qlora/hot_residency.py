@@ -34,11 +34,21 @@ from typing import Sequence
 import torch
 
 
-def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate, act_fn):
+def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
+                      act_fn, gptoss=None):
     """Down-projection outputs for each (token,slot) row, computed on the device
     the packed stack lives on. ``local_ids`` index into the G-expert stack
     (``gu_p`` is ``[G, n1, k1//2]`` etc.). Returns ``[R, H]`` in the input row
-    order (unweighted; the caller applies router scores and scatters)."""
+    order (unweighted; the caller applies router scores and scatters).
+
+    ``gptoss``, when given, is ``(gu_bias, dn_bias, alpha, limit)`` where the
+    bias stacks are aligned to the SAME local indexing as ``gu_p``/``dn_p``.
+    It selects the gpt-oss expert epilogue — per-expert biases + the clamped
+    GLU ``(up+1)*(gate*sigmoid(alpha*gate))`` — instead of the plain
+    ``act_fn(gate)*up``. gpt-oss weights are de-interleaved to a contiguous
+    ``[gate; up]`` layout at load (``gptoss.py``), so ``chunk(2)`` is the
+    correct split here (NOT ``[...::2]``). Mirrors ``_GptOssForwardMixin.forward``
+    exactly (the correctness oracle)."""
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
@@ -49,12 +59,22 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     sizes = counts.tolist()
     eids = uniq.tolist()
     gu = gemm_4bit_grouped(x_sorted, gu_p, gu_a, sizes, eids)
-    if has_gate:
+    if gptoss is not None:
+        gu_bias, dn_bias, alpha, limit = gptoss
+        gu = gu + gu_bias.index_select(0, sorted_ids).to(gu.dtype)  # per-expert bias by local id
+        gate, up = gu.chunk(2, dim=-1)                              # de-interleaved at load
+        gate = gate.clamp(max=limit)
+        up = up.clamp(min=-limit, max=limit)
+        h = (up + 1) * (gate * torch.sigmoid(gate * alpha))
+        dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
+        dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
+    elif has_gate:
         gate, up = gu.chunk(2, dim=-1)
         h = act_fn(gate) * up
+        dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
     else:
         h = act_fn(gu)
-    dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
+        dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
     out = torch.empty_like(dn)
     out.index_copy_(0, order, dn)  # unsort back to caller's row order
     return out
@@ -82,6 +102,14 @@ class _HotResidency:
         self.act_fn = mod.act_fn
         self.compute_dtype = mod.compute_dtype
 
+        # gpt-oss epilogue: per-expert biases (de-interleaved to contiguous
+        # [gate;up] at load) + clamped GLU. Biases are tiny — keep the hot AND
+        # cold sub-stacks resident on the compute device, aligned to the same
+        # local id order as the packed hot/cold stacks below.
+        self.gptoss = getattr(mod, "alpha", None) is not None and hasattr(mod, "gate_up_bias")
+        if self.gptoss:
+            self.alpha, self.limit = float(mod.alpha), float(mod.limit)
+
         # per-expert flattened packed storage -> [E, n, k/2] / [E, n, k/64]
         gu_p = mod.gate_up_proj.view(E, n1, k1 // 2)
         gu_a = mod.gate_up_absmax.view(E, n1, k1 // 64).float()
@@ -96,6 +124,12 @@ class _HotResidency:
         self.h_gu_a = gu_a.index_select(0, hi).contiguous().to(self.device)
         self.h_dn_p = dn_p.index_select(0, hi).contiguous().to(self.device)
         self.h_dn_a = dn_a.index_select(0, hi).contiguous().to(self.device)
+        if self.gptoss:
+            gub, dnb = mod.gate_up_bias, mod.down_bias           # [E, 2I] / [E, H], contiguous
+            self.h_gu_b = gub.index_select(0, hi).contiguous().to(self.device)
+            self.h_dn_b = dnb.index_select(0, hi).contiguous().to(self.device)
+            self.c_gu_b = gub.index_select(0, ci).contiguous().to(self.device)
+            self.c_dn_b = dnb.index_select(0, ci).contiguous().to(self.device)
         # COLD: pinned host RAM, streamed per token (only the routed subset)
         self.c_gu_p = gu_p.index_select(0, ci).contiguous().cpu()
         self.c_gu_a = gu_a.index_select(0, ci).contiguous().cpu()
@@ -141,8 +175,11 @@ class _HotResidency:
         if hr.numel():
             local = self.g2h[flat.index_select(0, hr)]
             xr = x.index_select(0, row_token.index_select(0, hr))
+            gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
+                      if self.gptoss else None)
             dn = _fused_over_stack(xr, local, self.h_gu_p, self.h_gu_a, self.h_dn_p,
-                                   self.h_dn_a, self.shapes, self.has_gate, self.act_fn)
+                                   self.h_dn_a, self.shapes, self.has_gate, self.act_fn,
+                                   gptoss=gptoss)
             w = top_k_weights[row_token.index_select(0, hr), row_slot.index_select(0, hr)].to(torch.float32)
             out.index_add_(0, row_token.index_select(0, hr), dn.to(torch.float32) * w[:, None])
 
@@ -158,8 +195,15 @@ class _HotResidency:
             dn_p = self.c_dn_p.index_select(0, routed).to(dev, non_blocking=True)
             dn_a = self.c_dn_a.index_select(0, routed).to(dev, non_blocking=True)
             xr = x.index_select(0, row_token.index_select(0, cr))
+            # bias sub-stack aligned to the streamed `routed` subset (compact indexes into
+            # it); `routed` is a CPU index, the bias stacks are device-resident.
+            gptoss = None
+            if self.gptoss:
+                r_dev = routed.to(dev)
+                gptoss = (self.c_gu_b.index_select(0, r_dev), self.c_dn_b.index_select(0, r_dev),
+                          self.alpha, self.limit)
             dn = _fused_over_stack(xr, compact.to(dev), gu_p, gu_a, dn_p, dn_a,
-                                   self.shapes, self.has_gate, self.act_fn)
+                                   self.shapes, self.has_gate, self.act_fn, gptoss=gptoss)
             w = top_k_weights[row_token.index_select(0, cr), row_slot.index_select(0, cr)].to(torch.float32)
             out.index_add_(0, row_token.index_select(0, cr), dn.to(torch.float32) * w[:, None])
 
@@ -194,10 +238,12 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     ``hot_sets`` must carry exactly one entry per targeted ``ExpertsNbit`` module
     in module order (a 1-D array/list of hot expert ids each); a wrong length
     raises. Re-enabling rebuilds the partition from the module's *current*
-    weights (never a stale cache). Modules that override ``forward``
-    (custom-activation experts, e.g. gpt-oss), have ineligible storage, are
-    ``[fast]``-enabled, or are an ``ExpertsLoRA`` base (the streaming-loader
-    path — not yet supported) are skipped; ids outside ``[0, num_experts)`` raise.
+    weights (never a stale cache). **gpt-oss experts (custom clamped-GLU +
+    per-expert biases) ARE supported** — the hot path reproduces their
+    epilogue. Modules with OTHER custom ``forward`` overrides, ineligible
+    storage, ``[fast]``-enabled, or an ``ExpertsLoRA`` base (the
+    streaming-loader path — not yet supported) are skipped; ids outside
+    ``[0, num_experts)`` raise.
 
     Memory model: on a fully-resident module the hot (GPU) and cold (CPU) stacks
     are *added* — the module keeps its original packed weights so the reference
@@ -208,6 +254,14 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     from experts4bit_qlora import Experts4bit, ExpertsNbit
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
+    # gpt-oss experts override forward (clamped-GLU + biases); the hot path now
+    # reproduces that epilogue (_fused_over_stack gptoss branch), so treat their
+    # forwards as supported rather than skipping them as "custom".
+    try:
+        from experts4bit_qlora.gptoss import GptOssExperts4bit, GptOssExpertsNbit
+        stock_forwards |= {GptOssExperts4bit.forward, GptOssExpertsNbit.forward}
+    except ImportError:
+        pass
     if hasattr(model, "modules"):
         # ExpertsLoRA.forward bypasses base.forward (it calls base._project), so the
         # frozen base is NEVER dispatched — patching it is dead code that only
