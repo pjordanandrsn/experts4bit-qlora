@@ -40,8 +40,11 @@ git clone --depth 1 -b feat/hot-residency-gptoss https://github.com/pjordanandrs
   || { echo "CLONE-FAIL"; echo "AB-FATAL"; exit 0; }
 cd /root/e4b
 git rev-parse HEAD | tee /root/ab-out/e4b_sha.txt
-$PY -m pip install -q ".[train,fast]" 2>&1 | tail -2   # [fast]: hot_residency runs on nf4_grouped
-$PY -c "import torch, transformers, bitsandbytes as b; print('versions torch', torch.__version__, 'tf', transformers.__version__, 'bnb', b.__version__)" \
+# [fast]: hot_residency runs on nf4_grouped; pipefail makes the tail-piped
+# install exit-checkable (Bugbot finding on PR #27)
+$PY -m pip install -q ".[train,fast]" 2>&1 | tail -2 \
+  || { echo "PIP-INSTALL-FAIL"; echo "AB-FATAL"; exit 0; }
+$PY -c "import torch, transformers, bitsandbytes as b, nf4_grouped; print('versions torch', torch.__version__, 'tf', transformers.__version__, 'bnb', b.__version__, '| nf4_grouped OK')" \
   | tee /root/ab-out/versions.txt || { echo "DEPS-FAIL"; echo "AB-FATAL"; exit 0; }
 
 # --- ours cells: fresh process per K (clean VRAM), K=0 = all-cold streamed ---

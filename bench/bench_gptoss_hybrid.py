@@ -163,12 +163,14 @@ def main():
                prefill_s=round(t_prefill, 3), peak_gb=round(peak, 3),
                bench_tokens=BENCH_TOKENS, coherent=bool(text.strip()),
                cal_coverage=round(cal_coverage, 4) if cal_coverage is not None else None)
+    # gate BEFORE any artifact leaves the process: a failed run must not drop a
+    # RESULT line or an OUT json that a pod summary could glob as success
+    # (Bugbot finding on PR #27).
+    assert n == n_moe and toks > 0 and text.strip(), "hybrid decode gate FAILED"
     print("RESULT " + json.dumps(rec), flush=True)
     if OUT:
         json.dump(rec, open(OUT, "w"), indent=1)
-    # gate: gpt-oss served through the hybrid path, produced a rate, stayed coherent
-    assert n == n_moe and toks > 0 and text.strip(), "hybrid gpt-oss decode gate FAILED"
-    log("GATE OK — gpt-oss decodes through the hot/cold hybrid engine")
+    log("GATE OK — model decodes through the hot/cold hybrid engine")
 
 
 if __name__ == "__main__":
