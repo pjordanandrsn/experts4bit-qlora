@@ -21,6 +21,10 @@ HOT_K = int(os.environ.get("HOT_K", "4"))            # experts/layer kept GPU-re
 BENCH_TOKENS = int(os.environ.get("BENCH_TOKENS", "64"))
 PROMPT = os.environ.get("PROMPT", "Explain mixture-of-experts routing in two sentences:")
 OUT = os.environ.get("OUT", "")
+# "naive" pins expert ids 0..K-1; "informed" first runs the same greedy decode
+# uncounted with routing hooks, then pins each layer's K most-selected experts
+# (an oracle upper bound: calibration == the served workload, greedy-identical).
+HOT_MODE = os.environ.get("HOT_MODE", "naive")
 
 
 def log(m):
@@ -81,7 +85,49 @@ def main():
         log(f"unwrapped {unwrapped} ExpertsLoRA wrappers -> standalone 4-bit experts")
 
     n_moe = sum(1 for m in model.modules() if isinstance(m, ExpertsNbit))
-    hot_sets = [torch.arange(HOT_K) for _ in range(n_moe)]
+
+    tok = AutoTokenizer.from_pretrained(MODEL)
+    cal_coverage = None
+    if HOT_MODE == "informed" and HOT_K > 0:
+        # Count expert selections during one uncounted greedy pass of the SAME
+        # workload (deterministic), then pin each layer's top-K. The hook grabs
+        # the first integer tensor argument — the routing-index arg name varies
+        # by arch (top_k_index / router_indices) but it is always the only int
+        # tensor the experts module receives.
+        mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+        counts = [torch.zeros(int(m.gate_up_proj.shape[0]), dtype=torch.long) for m in mods]
+
+        def _mk_hook(slot):
+            def _hook(_mod, args, kwargs):
+                idx = next(
+                    (a for a in list(args) + list(kwargs.values())
+                     if isinstance(a, torch.Tensor) and not a.is_floating_point()),
+                    None,
+                )
+                if idx is not None:
+                    counts[slot] += torch.bincount(
+                        idx.reshape(-1).long().cpu(), minlength=counts[slot].numel()
+                    )
+            return _hook
+
+        handles = [m.register_forward_pre_hook(_mk_hook(i), with_kwargs=True)
+                   for i, m in enumerate(mods)]
+        log(f"calibration pass ({BENCH_TOKENS} tokens, routing hooks on {len(mods)} layers) ...")
+        timed_decode(model, tok, PROMPT, BENCH_TOKENS)
+        for h in handles:
+            h.remove()
+        hot_sets, cov_informed, cov_naive = [], [], []
+        for c in counts:
+            hot_sets.append(torch.topk(c, HOT_K).indices.sort().values)
+            total = max(int(c.sum()), 1)
+            cov_informed.append(float(c[hot_sets[-1]].sum()) / total)
+            cov_naive.append(float(c[:HOT_K].sum()) / total)
+        cal_coverage = sum(cov_informed) / len(cov_informed)
+        log(f"informed top-{HOT_K} covers {cal_coverage:.1%} of routed selections "
+            f"(naive ids 0..{HOT_K - 1}: {sum(cov_naive) / len(cov_naive):.1%})")
+    else:
+        hot_sets = [torch.arange(HOT_K) for _ in range(n_moe)]
+
     n = enable_hot_residency(model, hot_sets, device=DEVICE)
     log(f"hybrid enabled: {n}/{n_moe} MoE layers, HOT_K={HOT_K} resident/layer")
     if n != n_moe:
@@ -108,15 +154,15 @@ def main():
     model.eval(); model.config.use_cache = True
     torch.cuda.reset_peak_memory_stats()
 
-    tok = AutoTokenizer.from_pretrained(MODEL)
     text, t_prefill, toks = timed_decode(model, tok, PROMPT, BENCH_TOKENS)
     peak = torch.cuda.max_memory_allocated() / 1e9
     log(f"DECODE {toks:.2f} tok/s | prefill {t_prefill:.2f}s | peak {peak:.2f} GB | patched {n}/{n_moe}")
     log(f"sample: {text[:160]!r}")
-    rec = dict(model=MODEL, arm="ours-hybrid-nf4", hot_k=HOT_K, n_moe=n_moe,
-               patched=n, decode_toks=round(toks, 3), prefill_s=round(t_prefill, 3),
-               peak_gb=round(peak, 3), bench_tokens=BENCH_TOKENS,
-               coherent=bool(text.strip()))
+    rec = dict(model=MODEL, arm="ours-hybrid-nf4", hot_k=HOT_K, hot_mode=HOT_MODE,
+               n_moe=n_moe, patched=n, decode_toks=round(toks, 3),
+               prefill_s=round(t_prefill, 3), peak_gb=round(peak, 3),
+               bench_tokens=BENCH_TOKENS, coherent=bool(text.strip()),
+               cal_coverage=round(cal_coverage, 4) if cal_coverage is not None else None)
     print("RESULT " + json.dumps(rec), flush=True)
     if OUT:
         json.dump(rec, open(OUT, "w"), indent=1)
