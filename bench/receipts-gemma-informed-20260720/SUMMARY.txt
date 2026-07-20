@@ -1,0 +1,3 @@
+cell                        decode_tok/s   peak_gb  coherent  patched
+gemma hot_k=8               0.951          7.186    True      30/30
+gemma hot_k=8               0.661          7.204    True      30/30

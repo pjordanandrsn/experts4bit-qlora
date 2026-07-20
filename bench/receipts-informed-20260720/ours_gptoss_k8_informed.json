@@ -1,0 +1,14 @@
+{
+ "model": "openai/gpt-oss-20b",
+ "arm": "ours-hybrid-nf4",
+ "hot_k": 8,
+ "hot_mode": "informed",
+ "n_moe": 24,
+ "patched": 24,
+ "decode_toks": 1.135,
+ "prefill_s": 5.494,
+ "peak_gb": 7.753,
+ "bench_tokens": 128,
+ "coherent": true,
+ "cal_coverage": 0.6673
+}

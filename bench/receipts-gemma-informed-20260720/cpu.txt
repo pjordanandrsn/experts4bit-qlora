@@ -1,0 +1,4 @@
+CPU(s):                               128
+Model name:                           AMD EPYC 9354 32-Core Processor
+Thread(s) per core:                   2
+Core(s) per socket:                   32
