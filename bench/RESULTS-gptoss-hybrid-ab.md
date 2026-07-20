@@ -65,3 +65,33 @@ the offload+hot compose increment lands; that attempt OOM'd on the dev box
   `[train]`-only install doesn't pull it. Fixed twice over: the pod driver
   installs `.[train,fast]`, and `enable_hot_residency` now fails at enable
   time with an actionable message instead of mid-decode (this commit).
+
+---
+
+# Addendum: Gemma-4-26B-A4B hybrid gate — 2026-07-20 (same day)
+
+First hybrid receipts on **real gated Gemma-4 weights** (HF token landed
+2026-07-20; the 49 GB download + 26B streaming NF4 load ran in ~16 min
+end-to-end on the pod). Box: RunPod SECURE RTX A5000 24 GB (driver
+580.159.04), e4b @ `cfc65a1`. Receipts: `bench/receipts-gemma-gate-20260720/`.
+
+| cell | decode tok/s | prefill s | peak GPU GB | patched |
+|---|---|---|---|---|
+| gemma hybrid `HOT_K=8` | 0.652 | 11.16 | 7.20 | 30/30, coherent |
+| gemma hybrid `HOT_K=0` (all-cold) | 0.652 | 10.15 | 6.41 | 30/30, coherent |
+
+- **Gate passed on both cells** — the generic (non-gpt-oss) architecture path
+  now runs end-to-end through hot-residency on a real fused-on-disk
+  checkpoint, closing the loop the A2000 attempts couldn't (VRAM knife-edge
+  beside a ~3.4 GB co-tenant, receipts `gemma_hybrid_gate.attempt*-oom.log`
+  on the dev box).
+- **K=8 ≈ K=0 exactly** (0.652 both): with E=128 experts/layer and k=8
+  routing, 8 resident experts are ~6 % of the pool — cold-streaming dominates
+  the decode fully, unlike gpt-oss (E=32, where K=8 = 25 % resident moved
+  decode +18 % over K=0). Routing-informed hot sets (pick the measured-hot
+  experts, not ids 0..K-1) are the increment that would separate the curve.
+- The gate required unwrapping the loader's `ExpertsLoRA` training adapters
+  to their standalone 4-bit base (`cfc65a1`) — residency refuses wrapped
+  experts by design; gpt-oss passed earlier only because its loader builds
+  bare experts. Validated first on OLMoE-1B-7B on the A2000 (free): 16/16
+  layers, 3.45 tok/s, coherent.
