@@ -1,0 +1,7 @@
+cell                        decode_tok/s   peak_gb  coherent
+ours hot_k=0                1.124          5.171    True
+ours hot_k=4                1.211          6.46     True
+ours hot_k=8                1.331          7.788    True
+llama n-cpu-moe=0           265.66         None     None
+llama n-cpu-moe=12          20.07          None     None
+llama n-cpu-moe=24          11.8           None     None
