@@ -65,6 +65,21 @@ def main():
     model.to(DEVICE)
     log(f"loaded in {time.time()-t0:.0f}s")
 
+    # The generic loader wraps experts in ExpertsLoRA (training adapters), and
+    # residency gates on STANDALONE experts — unwrap to the 4-bit base for this
+    # inference-only driver (gpt-oss loads bare, so this is a no-op there).
+    # 2026-07-20 pod receipt: Gemma-4 via the streaming loader hit the
+    # ExpertsLoRA NotImplementedError in enable_hot_residency without this.
+    from experts4bit_qlora.lora import ExpertsLoRA
+    unwrapped = 0
+    for m in list(model.modules()):
+        for cn, child in list(m.named_children()):
+            if isinstance(child, ExpertsLoRA):
+                setattr(m, cn, child.base)
+                unwrapped += 1
+    if unwrapped:
+        log(f"unwrapped {unwrapped} ExpertsLoRA wrappers -> standalone 4-bit experts")
+
     n_moe = sum(1 for m in model.modules() if isinstance(m, ExpertsNbit))
     hot_sets = [torch.arange(HOT_K) for _ in range(n_moe)]
     n = enable_hot_residency(model, hot_sets, device=DEVICE)

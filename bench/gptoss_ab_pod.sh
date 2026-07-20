@@ -6,7 +6,9 @@
 # the mini watcher tears the pod down on "AB-DONE" / "AB-FATAL" / deadline.
 # Every cell is timeout-guarded and failure-tolerant: one bad cell never kills
 # the run; missing cells show up as absent JSONs in the summary.
-set -u
+# pipefail: cells pipe through `tail`, which otherwise eats the bench's exit
+# code so `|| echo FAILED` never fires (burned on the 2026-07-20 gemma run).
+set -u -o pipefail
 mkdir -p /root/ab-out
 echo "== AB start $(date -u +%FT%TZ) =="
 export DEBIAN_FRONTEND=noninteractive
