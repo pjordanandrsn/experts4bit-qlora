@@ -174,8 +174,10 @@ def test_generate_404_on_unknown_adapter(client):
     assert client.post("/generate", json={"prompt": "hi", "adapter": "nope"}).status_code == 404
 
 
-def test_default_bind_is_localhost():
-    # B1: LAN exposure must be opt-in, not the default.
+def test_default_bind_is_localhost(monkeypatch):
+    # B1: LAN exposure must be opt-in, not the default. Clear E4B_HOST so a
+    # runner that exports it (container/LAN setups) can't false-fail this.
+    monkeypatch.delenv("E4B_HOST", raising=False)
     assert ServeConfig().host == "127.0.0.1"
     assert ServeConfig.from_env().host == "127.0.0.1"
 

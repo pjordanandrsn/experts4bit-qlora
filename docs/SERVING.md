@@ -43,3 +43,8 @@ GPU neighbors can use the headroom.
 the A2000 numbers were measured with). One deployment note that costs 3.6× if missed: the
 container needs `ulimits: memlock: -1` — without it the pinned-RAM homes silently fall back to
 pageable and offloaded decode drops from 1.44 to ~0.4 tok/s.
+
+Bind note (0.6.3+): the compose sets `E4B_HOST=0.0.0.0` **inside** the container (a
+container-loopback bind is unreachable through the port map — the container's network namespace
+is the isolation boundary) and publishes on the **host loopback** (`127.0.0.1:8777:8777`) by
+default. To reach it from the LAN, widen the host publish to `8777:8777` and set `E4B_TOKEN`.
