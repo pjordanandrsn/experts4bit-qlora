@@ -25,6 +25,12 @@ OUT = os.environ.get("OUT", "")
 # uncounted with routing hooks, then pins each layer's K most-selected experts
 # (an oracle upper bound: calibration == the served workload, greedy-identical).
 HOT_MODE = os.environ.get("HOT_MODE", "naive")
+# ENGINE selects the residency implementation: "hot" = the v0 _HotResidency
+# (added/duplicated stacks), "pipelined" = enable_pipelined_residency (one
+# pinned arena + address-dispatched gather + device-id GEMV — the composite
+# path). K_SLOTS is the model's routed top-k, required by the pipelined engine.
+ENGINE = os.environ.get("ENGINE", "hot")
+K_SLOTS = int(os.environ["K_SLOTS"]) if os.environ.get("K_SLOTS") else None
 
 
 def log(m):
@@ -128,8 +134,17 @@ def main():
     else:
         hot_sets = [torch.arange(HOT_K) for _ in range(n_moe)]
 
-    n = enable_hot_residency(model, hot_sets, device=DEVICE)
-    log(f"hybrid enabled: {n}/{n_moe} MoE layers, HOT_K={HOT_K} resident/layer")
+    if ENGINE == "pipelined":
+        from experts4bit_qlora import enable_pipelined_residency
+        if K_SLOTS is None:
+            raise ValueError("ENGINE=pipelined needs K_SLOTS (the model's routed top-k)")
+        n = enable_pipelined_residency(model, hot_sets, device=DEVICE, k_slots=K_SLOTS)
+        marker_attr = "_e4b_pipe_ref"
+    else:
+        n = enable_hot_residency(model, hot_sets, device=DEVICE)
+        marker_attr = "_hot_residency"
+    log(f"{ENGINE} enabled: {n}/{n_moe} MoE layers, HOT_K={HOT_K} resident/layer"
+        + (f", k_slots={K_SLOTS}" if ENGINE == "pipelined" else ""))
     if n != n_moe:
         log("WARNING: not every MoE layer patched — gpt-oss eligibility?")
 
@@ -139,15 +154,18 @@ def main():
     # for grad/non-bf16). Free them so resident = hot-K experts + non-expert only.
     # DRIVER-LEVEL + inference-only; the library will formalize this (the base-free
     # / offload-compose increment) later.
+    # (pipelined copies the packed weights into its own pinned arena at enable;
+    # hot-residency builds hot+cold stacks — either way the module's original
+    # packed weights are dead in bf16 no_grad inference, so free them.)
     freed = 0
     for m in model.modules():
-        if isinstance(m, ExpertsNbit) and hasattr(m, "_hot_residency"):
+        if isinstance(m, ExpertsNbit) and hasattr(m, marker_attr):
             for nm in ("gate_up_proj", "down_proj"):
                 p = getattr(m, nm)
                 freed += p.numel()
                 p.data = torch.empty(0, dtype=p.dtype, device=p.device)
     torch.cuda.empty_cache()
-    log(f"freed base expert weights ({freed/1e9:.2f} G-elems) — hybrid is now VRAM-lean")
+    log(f"freed base expert weights ({freed/1e9:.2f} G-elems) — {ENGINE} is now VRAM-lean")
 
     for p in model.parameters():
         p.requires_grad_(False)
@@ -158,10 +176,11 @@ def main():
     peak = torch.cuda.max_memory_allocated() / 1e9
     log(f"DECODE {toks:.2f} tok/s | prefill {t_prefill:.2f}s | peak {peak:.2f} GB | patched {n}/{n_moe}")
     log(f"sample: {text[:160]!r}")
-    rec = dict(model=MODEL, arm="ours-hybrid-nf4", hot_k=HOT_K, hot_mode=HOT_MODE,
-               n_moe=n_moe, patched=n, decode_toks=round(toks, 3),
-               prefill_s=round(t_prefill, 3), peak_gb=round(peak, 3),
-               bench_tokens=BENCH_TOKENS, coherent=bool(text.strip()),
+    rec = dict(model=MODEL, arm=f"ours-{ENGINE}-nf4", engine=ENGINE, hot_k=HOT_K,
+               hot_mode=HOT_MODE, k_slots=K_SLOTS, n_moe=n_moe, patched=n,
+               decode_toks=round(toks, 3), prefill_s=round(t_prefill, 3),
+               peak_gb=round(peak, 3), bench_tokens=BENCH_TOKENS,
+               coherent=bool(text.strip()),
                cal_coverage=round(cal_coverage, 4) if cal_coverage is not None else None)
     # gate BEFORE any artifact leaves the process: a failed run must not drop a
     # RESULT line or an OUT json that a pod summary could glob as success
