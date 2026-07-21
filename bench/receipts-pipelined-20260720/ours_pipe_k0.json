@@ -1,0 +1,16 @@
+{
+ "model": "openai/gpt-oss-20b",
+ "arm": "ours-pipelined-nf4",
+ "engine": "pipelined",
+ "hot_k": 0,
+ "hot_mode": "naive",
+ "k_slots": 4,
+ "n_moe": 24,
+ "patched": 24,
+ "decode_toks": 17.079,
+ "prefill_s": 0.737,
+ "peak_gb": 15.745,
+ "bench_tokens": 128,
+ "coherent": true,
+ "cal_coverage": null
+}

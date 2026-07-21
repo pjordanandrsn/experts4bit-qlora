@@ -1,0 +1,4 @@
+cell                            decode_tok/s  peak_gb  coverage
+ours_pipe_informed_k8           17.613        18.433   0.689
+ours_pipe_k0                    17.079        15.745   None
+ours_pipe_naive_k8              14.673        18.433   None
