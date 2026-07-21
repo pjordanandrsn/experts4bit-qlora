@@ -1,0 +1,7 @@
+CPU(s):                               128
+Model name:                           AMD EPYC 9354 32-Core Processor
+Thread(s) per core:                   2
+Core(s) per socket:                   32
+NUMA node(s):                         2
+NUMA node0 CPU(s):                    0-31,64-95
+NUMA node1 CPU(s):                    32-63,96-127

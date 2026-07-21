@@ -2,10 +2,11 @@
 
 > **Engine note.** These ours-arm cells ran the **v0 `hot_residency`** path
 > (~2% of the transfer floor on this box). The **pipelined engine**
-> (`enable_pipelined_residency`) supersedes it for decode; a pipelined re-run
-> on this box class is queued (C2). Read these as the v0 capability floor, not
-> the stack's current best — the informed-hot-set + NUMA-pinning results
-> (`RESULTS-informed-hotsets.md`) already show the dial moving well past this.
+> (`enable_pipelined_residency`) supersedes it for decode; the composite
+> re-run landed — **`RESULTS-pipelined-composite.md`** (pipelined + informed +
+> NUMA-pinned, gpt-oss-20b: informed K=8 **17.61 tok/s**, +20% over naive at
+> equal VRAM, same-box L40S). Read the cells below as the v0 capability floor,
+> not the stack's current best.
 
 The hot/cold hybrid engine's first same-box comparison against llama.cpp's
 CPU-MoE mode, on the model the hybrid was built for. Driver: `bench/gptoss_ab_pod.sh`
