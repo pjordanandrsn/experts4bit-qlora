@@ -47,7 +47,10 @@ jobs:
         run: |
           cp scripts/wheel_smoke.py /tmp/
           cd /tmp && ./venv/bin/python wheel_smoke.py
-      - name: README link check (tag mapped to main pre-release)
+      - name: README link check (tag mapped to this tree pre-release)
+        # map to the PR head / pushed SHA, not main — a PR that ADDS a
+        # README-linked file must validate against its own tree (Bugbot).
         run: |
           TAG=$(python -c "import tomllib; print('v'+tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          python scripts/check_readme_links.py --map-ref "$TAG" main
+          REF="${{ github.event.pull_request.head.sha || github.sha }}"
+          python scripts/check_readme_links.py --map-ref "$TAG" "$REF"
