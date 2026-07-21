@@ -18,6 +18,17 @@ def main() -> int:
     targets = re.findall(r"\]\(([^)]+)\)", text)
     rel = [t for t in targets if not t.startswith(("http://", "https://", "#"))]
     assert not rel, f"relative links present (dead on PyPI): {rel}"
+    # ref-consistency: every self-repo blob/tree link must pin the CURRENT
+    # version's tag — otherwise a version bump can ship a long_description
+    # still pointing at the previous release (Bugbot finding, gnf4 PR #5).
+    try:
+        import tomllib
+        want = "v" + tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+        refs = set(re.findall(r"https://github\.com/[^/]+/[^/]+/(?:blob|tree)/([^/]+)/", text))
+        stale = refs - {want, "main"}
+        assert not stale, f"README pins ref(s) {sorted(stale)} but project.version wants {want}"
+    except FileNotFoundError:
+        pass
     gh = [t for t in targets if t.startswith("https://github.com/")]
     if ref_map:
         gh = [t.replace(f"/{ref_map[0]}/", f"/{ref_map[1]}/") for t in gh]
