@@ -154,18 +154,25 @@ def main():
     # for grad/non-bf16). Free them so resident = hot-K experts + non-expert only.
     # DRIVER-LEVEL + inference-only; the library will formalize this (the base-free
     # / offload-compose increment) later.
-    # (pipelined copies the packed weights into its own pinned arena at enable;
-    # hot-residency builds hot+cold stacks — either way the module's original
-    # packed weights are dead in bf16 no_grad inference, so free them.)
+    # hot-residency builds hot+cold stacks and never reads the module's packed
+    # weights in bf16 no_grad decode, so freeing them is the VRAM win. The
+    # PIPELINED engine, though, falls back to the base reference forward for
+    # prefill (T>1) — which reads packed[expert_idx] — so freeing the base
+    # crashes the prompt pass (measured: IndexError on a size-0 tensor). Skip
+    # the free for pipelined; a truly VRAM-lean prefill is the library's
+    # offload+hot compose increment, not a driver hack.
     freed = 0
-    for m in model.modules():
-        if isinstance(m, ExpertsNbit) and hasattr(m, marker_attr):
-            for nm in ("gate_up_proj", "down_proj"):
-                p = getattr(m, nm)
-                freed += p.numel()
-                p.data = torch.empty(0, dtype=p.dtype, device=p.device)
-    torch.cuda.empty_cache()
-    log(f"freed base expert weights ({freed/1e9:.2f} G-elems) — {ENGINE} is now VRAM-lean")
+    if ENGINE != "pipelined":
+        for m in model.modules():
+            if isinstance(m, ExpertsNbit) and hasattr(m, marker_attr):
+                for nm in ("gate_up_proj", "down_proj"):
+                    p = getattr(m, nm)
+                    freed += p.numel()
+                    p.data = torch.empty(0, dtype=p.dtype, device=p.device)
+        torch.cuda.empty_cache()
+        log(f"freed base expert weights ({freed/1e9:.2f} G-elems) — {ENGINE} is now VRAM-lean")
+    else:
+        log("pipelined: base kept resident (prefill fallback reads it; peak_gb is NOT the lean figure)")
 
     for p in model.parameters():
         p.requires_grad_(False)
