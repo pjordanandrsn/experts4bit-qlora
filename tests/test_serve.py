@@ -174,6 +174,29 @@ def test_generate_404_on_unknown_adapter(client):
     assert client.post("/generate", json={"prompt": "hi", "adapter": "nope"}).status_code == 404
 
 
+def test_default_bind_is_localhost(monkeypatch):
+    # B1: LAN exposure must be opt-in, not the default. Clear E4B_HOST so a
+    # runner that exports it (container/LAN setups) can't false-fail this.
+    monkeypatch.delenv("E4B_HOST", raising=False)
+    assert ServeConfig().host == "127.0.0.1"
+    assert ServeConfig.from_env().host == "127.0.0.1"
+
+
+def test_token_gate_when_set():
+    # E4B_TOKEN set -> generation routes require the bearer header; /health open.
+    cfg = ServeConfig(max_input_tokens=8, max_new_tokens=64, queue_max=1, token="s3cret")
+    eng = FakeEngine(cfg)
+    with TestClient(create_app(cfg, engine=eng)) as c:
+        assert c.get("/health").status_code == 200  # health stays unauthenticated
+        assert c.post("/generate", json={"prompt": "hi", "adapter": "base"}).status_code == 401
+        assert c.post("/generate", json={"prompt": "hi", "adapter": "base"},
+                      headers={"Authorization": "Bearer wrong"}).status_code == 401
+        ok = c.post("/generate", json={"prompt": "hi", "adapter": "base"},
+                    headers={"Authorization": "Bearer s3cret"})
+        assert ok.status_code == 200, ok.text
+    eng.shutdown()
+
+
 def test_generate_413_on_long_prompt(client):
     r = client.post("/generate", json={"prompt": "w " * 50})
     assert r.status_code == 413

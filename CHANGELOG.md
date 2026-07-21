@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.3 — 2026-07-21
+- **Behavior change — serve binds to `127.0.0.1` by default** (was `0.0.0.0`).
+  LAN exposure is now opt-in: set `E4B_HOST=0.0.0.0` to restore the old
+  default. Migration: one env var. Rationale: a localhost tool for the
+  machine's owner should not be reachable from the network unless asked.
+- Optional bearer auth: set `E4B_TOKEN` and the generation routes require
+  `Authorization: Bearer <token>` (off by default; `/health` stays open).
+- README: first-screen "It dials" bullet (informed hot sets +57-120% at
+  identical VRAM); engine-tier tags on the v0 offload-path decode figures;
+  the serving posture paragraph. Length pass — the storage-modes matrix,
+  serving/Docker, benchmarks, and the bitsandbytes essay moved to `docs/`
+  with anchor-preserving stubs.
+- `[fast]` pins `grouped-nf4-gemm>=0.2.1`.
+
 ## 0.6.2 — 2026-07-21
 - `enable_hot_residency` deprecated at call (superseded by
   `enable_pipelined_residency` — same capability, K is config; kept through

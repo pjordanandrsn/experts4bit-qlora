@@ -22,6 +22,14 @@ services:
       # name=path pairs; paths are in-container (the ./adapters volume below).
       # Example: E4B_ADAPTERS=alpaca=/adapters/adapter_best.pt
       - E4B_ADAPTERS=${E4B_ADAPTERS:-}
+      # Bind 0.0.0.0 INSIDE the container — the app default is 127.0.0.1 (0.6.3+),
+      # and a container-loopback bind is unreachable through the port map. The
+      # container network namespace is the isolation boundary; the host-side
+      # publish below (127.0.0.1 by default) is what actually gates reachability.
+      - E4B_HOST=0.0.0.0
+      # Set to require "Authorization: Bearer <token>" on generation routes.
+      # Strongly recommended before you widen the host publish beyond loopback.
+      - E4B_TOKEN=${E4B_TOKEN:-}
       - E4B_PORT=8777
       - E4B_QUEUE_MAX=2
       - E4B_MAX_INPUT_TOKENS=2048
@@ -30,7 +38,9 @@ services:
       # One JSON line per generation (tokens, peak VRAM, wall, versions) -> ./receipts on the host.
       - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
     ports:
-      - "8777:8777"
+      # Host-loopback only by default (secure like the app's 127.0.0.1 default).
+      # To reach it from the LAN: change to "8777:8777" AND set E4B_TOKEN above.
+      - "127.0.0.1:8777:8777"
     volumes:
       - ../../hf-cache:/root/.cache/huggingface
       - ../../adapters:/adapters:ro
