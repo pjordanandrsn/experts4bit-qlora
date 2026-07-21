@@ -248,6 +248,13 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     """Partition every eligible ``ExpertsNbit`` under ``model`` into a resident
     GPU hot-stack + a streamed CPU cold-stack, in MoE-layer order.
 
+    .. deprecated:: 0.6.2
+        Superseded by :func:`enable_pipelined_residency` — same capability
+        (hot-resident + streamed cold, gpt-oss included) with K as config
+        (an empty hot set is pure streaming, all experts is fully resident,
+        one code path). This v0 engine is kept through 0.6 so the stamped v0
+        receipts stay reproducible; removal in 0.7.
+
     ``hot_sets`` must carry exactly one entry per targeted ``ExpertsNbit`` module
     in module order (a 1-D array/list of hot expert ids each); a wrong length
     raises. Re-enabling rebuilds the partition from the module's *current*
@@ -264,6 +271,12 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     win is realized when the base experts are offloaded (streaming loader): the
     resident stack is then the only GPU copy. Standalone Experts4bit is the
     correctness-supported path today."""
+    import warnings
+    warnings.warn(
+        "enable_hot_residency is superseded by enable_pipelined_residency "
+        "(same capability; K is config); kept through 0.6 to reproduce the "
+        "v0 receipts; removal in 0.7",
+        DeprecationWarning, stacklevel=2)
     # The hot/cold forward runs on the fused grouped-GEMM kernel — fail here,
     # not mid-decode inside _fused_over_stack (2026-07-20 pod A/B: a [train]-only
     # install crashed on the first forward after a full model load).

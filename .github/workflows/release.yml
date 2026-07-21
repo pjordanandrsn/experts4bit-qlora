@@ -23,5 +23,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip build
           python -m build
+      - name: built-artifact smoke (blocks publish)
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install --quiet dist/*.whl \
+            torch --extra-index-url https://download.pytorch.org/whl/cpu
+          cp scripts/wheel_smoke.py /tmp/
+          cd /tmp && ./venv/bin/python wheel_smoke.py
+      - name: README link check (real tag URLs)
+        run: python scripts/check_readme_links.py
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
