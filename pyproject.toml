@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.6.2"
+version = "0.6.3"
 description = "QLoRA fine-tuning of fused 4-bit Mixture-of-Experts on a single small GPU, on stock bitsandbytes."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -22,7 +22,7 @@ dependencies = [
 # The fused single-launch grouped GEMM (dequant-inside-the-GEMM, fp32 accum) —
 # enables experts4bit_qlora.enable_fast() for inference. Import stays optional.
 fast = [
-    "grouped-nf4-gemm>=0.1.1",
+    "grouped-nf4-gemm>=0.2.1",
 ]
 train = [
     "transformers>=5.0",

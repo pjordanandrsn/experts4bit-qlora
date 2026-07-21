@@ -31,7 +31,9 @@ Env-configured like :mod:`.train` / :mod:`.infer`::
 Variables: ``MODEL``, ``R``/``ALPHA`` (must match the adapters), ``QUANT_TYPE``,
 ``OFFLOAD_EXPERTS`` (default **1** here), ``OFFLOAD_PIN``, ``PREFETCH``, ``E4B_ADAPTERS``
 (``name=path`` pairs, comma-separated; ``base`` = the un-tuned base model is always available),
-``E4B_HOST`` / ``E4B_PORT`` (default 0.0.0.0:8777), ``E4B_QUEUE_MAX`` (default 2 waiting),
+``E4B_HOST`` / ``E4B_PORT`` (default 127.0.0.1:8777 — localhost; set ``E4B_HOST=0.0.0.0`` to expose on
+the LAN), ``E4B_TOKEN`` (when set, generation routes require ``Authorization: Bearer <token>``),
+``E4B_QUEUE_MAX`` (default 2 waiting),
 ``E4B_MAX_INPUT_TOKENS`` (default 2048 -> 413), ``E4B_MAX_NEW_TOKENS`` (cap, default 256),
 ``E4B_REQUEST_TIMEOUT_S`` (default 600; partial text with ``stopped:"timeout"``),
 ``E4B_EMPTY_CACHE`` (default 1: release allocator blocks to the driver when idle),
@@ -79,8 +81,9 @@ class ServeConfig:
     pin: bool = True
     prefetch: bool = True
     adapters: Dict[str, str] = field(default_factory=dict)  # name -> path
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"  # localhost by default; LAN exposure is opt-in (E4B_HOST=0.0.0.0)
     port: int = 8777
+    token: str = ""  # E4B_TOKEN: when set, require "Authorization: Bearer <token>" on generate routes
     queue_max: int = 2  # requests allowed to WAIT behind the running one
     max_input_tokens: int = 2048
     max_new_tokens: int = 256  # hard cap; requests are clamped, not rejected
@@ -102,8 +105,9 @@ class ServeConfig:
             pin=os.environ.get("OFFLOAD_PIN", "1") == "1",
             prefetch=os.environ.get("PREFETCH", "1") == "1",
             adapters=parse_adapter_spec(os.environ.get("E4B_ADAPTERS", "")),
-            host=os.environ.get("E4B_HOST", "0.0.0.0"),
+            host=os.environ.get("E4B_HOST", "127.0.0.1"),
             port=int(os.environ.get("E4B_PORT", "8777")),
+            token=os.environ.get("E4B_TOKEN", ""),
             queue_max=int(os.environ.get("E4B_QUEUE_MAX", "2")),
             max_input_tokens=int(os.environ.get("E4B_MAX_INPUT_TOKENS", "2048")),
             max_new_tokens=int(os.environ.get("E4B_MAX_NEW_TOKENS", "256")),
@@ -506,12 +510,19 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
     """App factory. ``engine`` injection exists for tests (a fake with the same surface)."""
     from contextlib import asynccontextmanager
 
-    from fastapi import FastAPI, HTTPException
+    from fastapi import Depends, FastAPI, Header, HTTPException
     from fastapi.responses import StreamingResponse
     from pydantic import BaseModel
 
     cfg = cfg or ServeConfig.from_env()
     engine = engine or Engine(cfg)
+
+    def _auth(authorization: Optional[str] = Header(None)):
+        # Off by default (localhost tool). When E4B_TOKEN is set, the generation
+        # routes require "Authorization: Bearer <token>"; /health stays open so
+        # monitors can poll it unauthenticated.
+        if cfg.token and authorization != f"Bearer {cfg.token}":
+            raise HTTPException(401, "missing or invalid bearer token (set 'Authorization: Bearer <E4B_TOKEN>')")
 
     @asynccontextmanager
     async def lifespan(app):
@@ -626,7 +637,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             "uptime_s": round(time.time() - engine.started_at, 1),
         }
 
-    @app.post("/generate")
+    @app.post("/generate", dependencies=[Depends(_auth)])
     async def generate(req: GenerateRequest):
         max_new = _check(req.adapter, req.prompt, req.max_new_tokens)
         job = _job_kwargs(req.prompt, req.adapter, max_new, req.temperature, req.top_p, req.repetition_penalty, req.seed)
@@ -647,7 +658,7 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             ],
         }
 
-    @app.post("/v1/completions")
+    @app.post("/v1/completions", dependencies=[Depends(_auth)])
     async def v1_completions(req: CompletionRequest):
         max_new = _check(req.model, req.prompt, req.max_tokens)
         job = _job_kwargs(req.prompt, req.model, max_new, req.temperature, req.top_p, 1.3, req.seed)
@@ -690,7 +701,9 @@ def main() -> None:
     import uvicorn
 
     cfg = ServeConfig.from_env()
-    log(f"serve: listening on {cfg.host}:{cfg.port} (docs at /docs)")
+    exposure = "localhost" if cfg.host in ("127.0.0.1", "localhost", "::1") else f"LAN ({cfg.host})"
+    auth = "token-gated" if cfg.token else "no auth"
+    log(f"serve: listening on {cfg.host}:{cfg.port} [{exposure}, {auth}] (docs at /docs)")
     uvicorn.run(create_app(cfg), host=cfg.host, port=cfg.port, log_level="info")
 
 
