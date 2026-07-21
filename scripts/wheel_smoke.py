@@ -18,8 +18,18 @@ from experts4bit_qlora import (  # the "Which door?" surface
     enable_hot_residency, enable_pipelined_residency, verify_moe_4bit,
 )
 
+_SURFACE = (
+    Experts4bit, ExpertsLoRA, ExpertsNbit,
+    cold_engine_available, disable_cold_engine, disable_fast,
+    disable_hot_residency, disable_pipelined_residency,
+    enable_cold_engine, enable_expert_offload, enable_fast,
+    enable_hot_residency, enable_pipelined_residency, verify_moe_4bit,
+)
+
+
 def main() -> int:
     print("version:", e4b.__version__)
+    print(f"surface: {len(_SURFACE)} public names importable")
     import importlib.resources as ir
     assert ir.files("experts4bit_qlora").joinpath("py.typed").is_file(), "py.typed missing from wheel"
     print("py.typed ships")
