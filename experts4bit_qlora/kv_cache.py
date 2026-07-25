@@ -195,7 +195,9 @@ class NF4KVCache:
             # bounce through a staging buffer. Dequant then runs on device, from
             # bytes identical to what the resident path holds.
             p = p.to(self._device, non_blocking=True)
-            a = a.to(self._device, non_blocking=True)
+            a = None if a is None else a.to(self._device, non_blocking=True)
+        if a is None:                                   # "rawh": nothing to dequant
+            return p.transpose(0, 1).unsqueeze(0).contiguous()
         _, dequant_kv_ref = _kv_ops()
         x = dequant_kv_ref(p, a, d, dtype=dtype)                  # [T, H, D]
         return x.transpose(0, 1).unsqueeze(0).contiguous()        # [1, H, T, D]
@@ -214,10 +216,17 @@ class NF4KVCache:
             return got
         cap = self.max_context
         if slot[0] == "raw":
+            # TOKEN-MAJOR [cap, H, D], not the [1, H, cap, D] the resident path
+            # uses. A prefix view of the latter slices dim 2, which is NOT
+            # contiguous -- and ``is_pinned()`` still returns True for it, so the
+            # only symptom is that the DMA falls off a cliff: measured
+            # 0.09 GB/s against 0.95 on the same device, and a 17x cliff on the
+            # full cache at 8K. Matching the packed store's token-major axis
+            # makes the prefix contiguous and the copy a real DMA.
             x = slot[1]
-            buf = torch.empty((x.shape[0], x.shape[1], cap, x.shape[3]),
-                              dtype=x.dtype).pin_memory()
-            got = ("raw", buf)
+            got = ("rawh",
+                   torch.empty((cap, x.shape[1], x.shape[3]),
+                               dtype=x.dtype).pin_memory(), None, x.shape[3])
         else:
             _, p, a, d = slot
             got = ("nf4",
@@ -244,8 +253,8 @@ class NF4KVCache:
                 f"max_context={self.max_context}. Size it for the longest "
                 f"context this cache will see; it is not grown on demand.")
         if slot[0] == "raw":
-            arena[1][:, :, used:used + n].copy_(slot[1])
-            return ("raw", arena[1][:, :, :used + n])
+            arena[1][used:used + n].copy_(slot[1][0].transpose(0, 1))  # -> [n,H,D]
+            return ("rawh", arena[1][:used + n], None, arena[3])
         arena[1][used:used + n].copy_(slot[1])
         arena[2][used:used + n].copy_(slot[2])
         return ("nf4", arena[1][:used + n], arena[2][:used + n], slot[3])
@@ -263,17 +272,14 @@ class NF4KVCache:
                 arena = self._arena.get((kind, li))
                 if arena is None or slot[1].is_cuda:
                     continue
-                if slot[0] == "raw":
-                    n = slot[1].shape[2]
-                    if slot[1].data_ptr() != arena[1].data_ptr():
-                        arena[1][:, :, :n].copy_(slot[1])
-                    store[li] = ("raw", arena[1][:, :, :n])
-                else:
-                    n = slot[1].shape[0]
-                    if slot[1].data_ptr() != arena[1].data_ptr():
-                        arena[1][:n].copy_(slot[1])
+                # Both host kinds are token-major, so one path serves both.
+                n = slot[1].shape[0]
+                if slot[1].data_ptr() != arena[1].data_ptr():
+                    arena[1][:n].copy_(slot[1])
+                    if slot[2] is not None:
                         arena[2][:n].copy_(slot[2])
-                    store[li] = ("nf4", arena[1][:n], arena[2][:n], slot[3])
+                store[li] = (slot[0], arena[1][:n],
+                             None if slot[2] is None else arena[2][:n], slot[3])
 
     @staticmethod
     def _cat(slot_a, slot_b_tensor, quantize: bool, cache: "NF4KVCache"):
@@ -395,7 +401,7 @@ class NF4KVCache:
         if p.shape[0] <= sink + recent:
             return slot
         return (kind, torch.cat([p[:sink], p[-recent:]], 0),
-                torch.cat([a[:sink], a[-recent:]], 0), d)
+                None if a is None else torch.cat([a[:sink], a[-recent:]], 0), d)
 
     def evict(self) -> None:
         """Drop the middle of the cache, keeping sinks + recent. Call BETWEEN
@@ -416,7 +422,7 @@ class NF4KVCache:
             return ("raw", slot[1].index_select(2, idx).contiguous())
         kind, p, a, d = slot
         return (kind, p.index_select(0, idx).contiguous(),
-                a.index_select(0, idx).contiguous(), d)
+                None if a is None else a.index_select(0, idx).contiguous(), d)
 
     def evict_index(self, keep) -> None:
         """Retain an arbitrary set of token slots. Call BETWEEN forwards.
@@ -544,7 +550,9 @@ class NF4KVCache:
                     if slot[1].is_cuda:
                         total += slot[1].numel() * slot[1].element_size()
                 elif slot[1].is_cuda:
-                    total += slot[1].numel() + slot[2].numel() * 4
+                    total += (slot[1].numel() * slot[1].element_size()
+                              if slot[2] is None
+                              else slot[1].numel() + slot[2].numel() * 4)
         return total
 
     def memory_bytes(self, fp16: bool = False) -> int:
@@ -559,8 +567,12 @@ class NF4KVCache:
                     t = slot[1]
                     total += t.numel() * (2 if fp16 else t.element_size())
                 else:
-                    _, p, a, d = slot                 # "nf4" and "nf4pc" alike
+                    _, p, a, d = slot     # "nf4"/"nf4pc" packed, or "rawh"
                     n_tok, n_head = p.shape[0], p.shape[1]
-                    total += (n_tok * n_head * d * 2 if fp16
-                              else p.numel() + a.numel() * 4)
+                    if fp16:
+                        total += n_tok * n_head * d * 2
+                    elif a is None:               # host-resident, unquantized
+                        total += p.numel() * p.element_size()
+                    else:
+                        total += p.numel() + a.numel() * 4
         return total
