@@ -79,22 +79,27 @@ is NOT greedy-identical at any setting — see ``docs/`` for the exactness tier.
 2026-07-25 against transformers' own bf16 ``DynamicCache`` on OLMoE-1B-7B with
 4-bit weights resident):
 
-=======  ==========  =============  =============  ==============
-context  bf16 cache  NF4 resident   NF4 streamed   KV bytes (NF4)
-=======  ==========  =============  =============  ==============
-4096     206.6 ms    234.0 (1.13x)  254.4 (1.23x)  152 MB vs 541
-16384    257.9 ms    320.7 (1.24x)  591.3 (2.29x)  605 MB vs 2152
-=======  ==========  =============  =============  ==============
+OLMoE-1B-7B, 4-bit weights resident, greedy decode, measured on an A100 -- a
+QUIET card, which matters: the same arms on a shared A2000 carry ~12% run-to-run
+variance and produced two physically impossible rows before that was understood.
+
+=======  ==========  ==============  ==============  ==============
+context  bf16 cache  NF4 resident    NF4 streamed    KV bytes (NF4)
+=======  ==========  ==============  ==============  ==============
+4096      82.5 ms     91.9 (1.114x)   98.4 (1.19x)   152 MB vs 541
+32768     89.6 ms    103.6 (1.156x)  154.2 (1.72x)   1209 MB vs 4299
+=======  ==========  ==============  ==============  ==============
 
 An earlier version of this table read 1.89x/2.55x. That was ``dequant_kv_ref``
 -- a function whose own docstring calls it a test oracle -- sitting in the
-decode path; a fused kernel doing the same arithmetic bit-identically is 12.6x
+decode path; a fused kernel doing the same arithmetic bit-identically is ~26x
 faster and brought the same measurement to the numbers above (finding #18).
 
 **The cost still rises with context** -- this dial exists FOR long context and
-gets more expensive exactly there -- but the slope is now shallow for the
-resident path (1.13x -> 1.24x) and steep for the streamed one (1.23x -> 2.29x),
-because with the dequant gone the PCIe transfer is what is left. Greedy output diverges from bf16 at the FIRST
+gets more expensive exactly there -- but the resident slope is now SHALLOW:
+0.042 across an 8x context increase. The streamed slope is steep (1.19x ->
+1.72x), because with the dequant gone the PCIe transfer is what is left, and
+that is what ``prefetch()`` addresses. Greedy output diverges from bf16 at the FIRST
 generated token, which is what "lossy" means in practice.
 
 Part of that ratio is Python and code-path overhead rather than dequant
@@ -138,8 +143,11 @@ def _dequant_fn():
 
     `dequant_kv_ref` says "test oracle" in its own docstring and is written like
     one -- seven full-size intermediates for a two-byte result -- and it was
-    sitting in the decode hot path. Measured 12.6x apart at [4096,16,128], and
-    bit-identical, so this is a swap and not a trade.
+    sitting in the decode hot path. Measured **26x** apart at [4096,16,128]
+    (8.4 -> 220.3 GB/s, amortized), and bit-identical, so this is a swap and not
+    a trade. An earlier figure of 12.6x came from timing single calls with a
+    synchronize on both sides, which is ~48% overhead on the fused arm against
+    ~7% on the reference -- the instrument flattered the slower path.
     """
     try:
         from nf4_kv import dequant_kv_fused
@@ -444,8 +452,19 @@ class NF4KVCache:
         Under host residence the copy and the dequant serialize on the default
         stream, so a step costs ``compute + transfer``. Issuing the NEXT layer's
         copy while THIS layer's dequant runs makes it ``max(compute, transfer)``.
-        Measured at 32K the per-layer dequant is 10.3 ms against a 3.05 ms
-        transfer, so there is room to hide all of it.
+
+        **OFF BY DEFAULT, and worth turning on only above a context threshold.**
+        Measured end-to-end on an A100, prefetched/streamed by prompt length:
+
+            2048   1.064   costs 6%
+            4096   0.943   \
+            8192   0.885    > wins, deepening
+            16384  0.872   /
+
+        The crossover sits near 4096 and is device-dependent -- it moved with the
+        card in every measurement taken, and three earlier registered attempts to
+        model WHY were falsified. Treat these as two facts (loses short, wins
+        long) rather than a law, and measure your own shape before enabling it.
 
         Bounded at one layer in flight, deliberately: the point of host
         residence is that the cache is not on the device, and an unbounded
