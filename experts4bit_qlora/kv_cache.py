@@ -79,16 +79,22 @@ is NOT greedy-identical at any setting — see ``docs/`` for the exactness tier.
 2026-07-25 against transformers' own bf16 ``DynamicCache`` on OLMoE-1B-7B with
 4-bit weights resident):
 
-=======  ==========  ============  ==============  ==============
-context  bf16 cache  NF4 resident  NF4 streamed    KV bytes (NF4)
-=======  ==========  ============  ==============  ==============
-4096     143.6 ms    271.0 (1.89x) 312.2 (2.17x)   152 MB vs 541
-16384    237.3 ms    605.6 (2.55x) 741.9 (3.13x)   605 MB vs 2152
-=======  ==========  ============  ==============  ==============
+=======  ==========  =============  =============  ==============
+context  bf16 cache  NF4 resident   NF4 streamed   KV bytes (NF4)
+=======  ==========  =============  =============  ==============
+4096     206.6 ms    234.0 (1.13x)  254.4 (1.23x)  152 MB vs 541
+16384    257.9 ms    320.7 (1.24x)  591.3 (2.29x)  605 MB vs 2152
+=======  ==========  =============  =============  ==============
 
-**And the cost rises with context, which is the worst direction** — this dial
-exists FOR long context and gets more expensive exactly there. Expect worse than
-2.6x beyond 16K, not better. Greedy output diverges from bf16 at the FIRST
+An earlier version of this table read 1.89x/2.55x. That was ``dequant_kv_ref``
+-- a function whose own docstring calls it a test oracle -- sitting in the
+decode path; a fused kernel doing the same arithmetic bit-identically is 12.6x
+faster and brought the same measurement to the numbers above (finding #18).
+
+**The cost still rises with context** -- this dial exists FOR long context and
+gets more expensive exactly there -- but the slope is now shallow for the
+resident path (1.13x -> 1.24x) and steep for the streamed one (1.23x -> 2.29x),
+because with the dequant gone the PCIe transfer is what is left. Greedy output diverges from bf16 at the FIRST
 generated token, which is what "lossy" means in practice.
 
 Part of that ratio is Python and code-path overhead rather than dequant
@@ -125,6 +131,22 @@ def _kv_ops():
     from nf4_kv import dequant_kv_ref, quantize_kv
 
     return quantize_kv, dequant_kv_ref
+
+
+def _dequant_fn():
+    """Fused dequant when the kernel is present, the oracle otherwise.
+
+    `dequant_kv_ref` says "test oracle" in its own docstring and is written like
+    one -- seven full-size intermediates for a two-byte result -- and it was
+    sitting in the decode hot path. Measured 12.6x apart at [4096,16,128], and
+    bit-identical, so this is a swap and not a trade.
+    """
+    try:
+        from nf4_kv import dequant_kv_fused
+        return dequant_kv_fused
+    except ImportError:                      # older grouped-nf4-gemm
+        from nf4_kv import dequant_kv_ref
+        return dequant_kv_ref
 
 
 class NF4KVCache:
@@ -287,8 +309,7 @@ class NF4KVCache:
             a = None if a is None else a.to(self._device, non_blocking=True)
         if a is None:                                   # "rawh": nothing to dequant
             return p                                              # [T, H, D]
-        _, dequant_kv_ref = _kv_ops()
-        return dequant_kv_ref(p, a, d, dtype=dtype)               # [T, H, D]
+        return _dequant_fn()(p, a, d, dtype=dtype)                # [T, H, D]
 
     # ---- arena-backed append (both residences) ---------------------------
     def _arena_for(self, key, slot, needed: int, cur=None):
