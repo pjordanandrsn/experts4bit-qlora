@@ -71,6 +71,7 @@ from .fast import disable_fast, enable_fast, fast_available  # noqa: E402
 from .cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
 from .hot_residency import disable_hot_residency, enable_hot_residency, hot_residency_available  # noqa: E402
 from .pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
+from .kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
 __all__ = [
@@ -86,6 +87,8 @@ __all__ = [
     "disable_pipelined_residency",
     "enable_cold_engine",
     "enable_expert_offload",
+    "NF4KVCache",
+    "kv_nf4_available",
     "enable_fast",
     "enable_hot_residency",
     "enable_pipelined_residency",
