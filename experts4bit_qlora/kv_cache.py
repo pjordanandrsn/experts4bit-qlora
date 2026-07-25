@@ -75,6 +75,27 @@ So the useful operating point is the knee: **values-only** is 1.56x off the
 cache for +0.2% perplexity, while the remaining 2x costs six times more. This
 is NOT greedy-identical at any setting — see ``docs/`` for the exactness tier.
 
+**The trade is memory for LATENCY, not memory for free** (finding #17, measured
+2026-07-25 against transformers' own bf16 ``DynamicCache`` on OLMoE-1B-7B with
+4-bit weights resident):
+
+=======  ==========  ============  ==============  ==============
+context  bf16 cache  NF4 resident  NF4 streamed    KV bytes (NF4)
+=======  ==========  ============  ==============  ==============
+4096     143.6 ms    271.0 (1.89x) 312.2 (2.17x)   152 MB vs 541
+16384    237.3 ms    605.6 (2.55x) 741.9 (3.13x)   605 MB vs 2152
+=======  ==========  ============  ==============  ==============
+
+**And the cost rises with context, which is the worst direction** — this dial
+exists FOR long context and gets more expensive exactly there. Expect worse than
+2.6x beyond 16K, not better. Greedy output diverges from bf16 at the FIRST
+generated token, which is what "lossy" means in practice.
+
+Part of that ratio is Python and code-path overhead rather than dequant
+arithmetic (different cache objects, different paths), so it bounds the dequant's
+cost from above. Reach for this module when it decides **what fits**; do not
+reach for it expecting free.
+
 Usage::
 
     from experts4bit_qlora import NF4KVCache, kv_nf4_available
