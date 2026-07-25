@@ -161,3 +161,70 @@ def test_mask_sizes_counts_tokens_about_to_be_written():
     # generate() passes a bare int query length, not a position tensor
     assert c.get_mask_sizes(1, 0) == (17, 0)
     assert c.get_mask_sizes([0, 1, 2], 0) == (19, 0)
+
+
+@kv
+def test_eviction_keeps_sinks_plus_recent_and_reports_held_length():
+    """Sparsity is the other axis: quantization shrinks each token, eviction
+    removes tokens. get_seq_length must report what is HELD, not what was seen,
+    or the attention mask describes a cache that does not exist."""
+    for kw in (dict(quantize_keys=False, quantize_values=False),
+               dict(quantize_keys=True, quantize_values=True)):
+        c = NF4KVCache(keep_sink=4, keep_recent=64, **kw)
+        for lo in range(0, 256, 64):
+            k, v = _kv(64, 4, 128, 1), _kv(64, 4, 128, 2)
+            got, _ = c.update(k, v, 0)
+        assert c.get_seq_length(0) == 68, kw          # 4 sinks + 64 recent
+        assert got.shape[2] == 68, kw                 # returned view agrees
+
+
+@kv
+def test_eviction_actually_frees_memory():
+    """The point of the exercise: bytes must fall, and compose with NF4."""
+    def bytes_for(**kw):
+        c = NF4KVCache(**kw)
+        for _ in range(8):
+            c.update(_kv(128, 4, 128, 1), _kv(128, 4, 128, 2), 0)
+        return c.memory_bytes()
+    full16 = bytes_for(quantize_keys=False, quantize_values=False)
+    full4 = bytes_for(quantize_keys=True, quantize_values=True)
+    evict16 = bytes_for(quantize_keys=False, quantize_values=False,
+                        keep_sink=4, keep_recent=256)
+    evict4 = bytes_for(quantize_keys=True, quantize_values=True,
+                       keep_sink=4, keep_recent=256)
+    assert full16 / full4 == pytest.approx(3.56, abs=0.05)      # quantization
+    assert full16 / evict16 == pytest.approx(1024 / 260, abs=0.1)  # eviction
+    # the claim that matters: the two axes multiply
+    assert full16 / evict4 > 13.0, full16 / evict4
+
+
+@kv
+def test_chunked_prefill_matches_single_forward():
+    """The invariant that a single-forward test cannot express: feeding a
+    sequence in chunks must give the same logits as feeding it whole. This is
+    the accumulating path — decode and chunked prefill both live here — and it
+    is where get_query_offset's value actually matters. Without it the suite
+    can be green on four architectures while the multi-call path is broken."""
+    from transformers import AutoModelForCausalLM, DynamicCache
+    # fp32: bf16 picks different matmul kernels for a 64-row chunk than for a
+    # 256-row batch, which alone costs ~1.5e-2 even for transformers' OWN cache.
+    # fp32 removes that confound so the assertion is about the cache, not the
+    # numerics.
+    m = AutoModelForCausalLM.from_pretrained(
+        "HuggingFaceTB/SmolLM2-135M", dtype=torch.float32).cuda().eval()
+    ids = (torch.arange(256, device="cuda") % 20000).unsqueeze(0)
+
+    def chunked(cache):
+        with torch.no_grad():
+            return torch.cat([m(ids[:, lo:lo + 64], past_key_values=cache,
+                                use_cache=True).logits.float()
+                              for lo in range(0, 256, 64)], dim=1)
+
+    with torch.no_grad():
+        whole = m(ids, use_cache=False).logits.float()
+    mine = chunked(NF4KVCache(quantize_keys=False, quantize_values=False))
+    rel = ((mine - whole).norm() / whole.norm()).item()
+    assert rel < 1e-4, f"chunked prefill diverged from single forward: {rel:.3e}"
+    # and it must track transformers' own cache under the identical protocol
+    theirs = chunked(DynamicCache())
+    assert ((mine - theirs).norm() / theirs.norm()).item() < 1e-6

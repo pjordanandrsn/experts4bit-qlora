@@ -89,7 +89,8 @@ class NF4KVCache:
     """
 
     def __init__(self, quantize_keys: bool = True, quantize_values: bool = True,
-                 key_scaling: str = "per_token", group: int = 64):
+                 key_scaling: str = "per_token", group: int = 64,
+                 keep_sink: int = 0, keep_recent: Optional[int] = None):
         # Separate switches because the error is NOT symmetric, and the
         # asymmetry favours keeping KEYS in bf16: measured +0.083 ppl for
         # K-only vs +0.013 for V-only. A caller tuning fidelity should reach
@@ -116,6 +117,16 @@ class NF4KVCache:
         # is at most `group - 1` tokens, which is why it does not show up in the
         # footprint in any meaningful way.
         self._ktail: dict[int, torch.Tensor] = {}
+        # Token-axis sparsity: retain the first `keep_sink` tokens plus the most
+        # recent `keep_recent`, dropping the middle. This is the second,
+        # independent axis of KV reduction -- quantization shrinks each token,
+        # eviction removes tokens -- and unlike the rejected low-rank and
+        # per-channel schemes it does not group across tokens, so it composes
+        # with NF4 multiplicatively instead of competing for the same
+        # information. Slicing the packed store along tokens is exactly the
+        # access pattern the kernels' contiguity guard was written to preserve.
+        self.keep_sink = keep_sink
+        self.keep_recent = keep_recent
         self._k: dict[int, Any] = {}
         self._v: dict[int, Any] = {}
         self._seen: dict[int, int] = {}
@@ -207,7 +218,11 @@ class NF4KVCache:
                                            self.quantize_keys, self)
         self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
                                        self.quantize_values, self)
-        self._seen[layer_idx] = self._seen.get(layer_idx, 0) + key_states.shape[2]
+        self._evict(layer_idx)
+        # length reads back from the store rather than a counter, so it cannot
+        # drift from what eviction actually left behind
+        vs = self._v[layer_idx]
+        self._seen[layer_idx] = (vs[1].shape[2] if vs[0] == "raw" else vs[1].shape[0])
         self.layer_modes[layer_idx] = (
             f"K={'nf4pc' if per_channel else self._k[layer_idx][0]},"
             f"V={self._v[layer_idx][0]}")
@@ -216,16 +231,54 @@ class NF4KVCache:
         return keys, self._load(self._v[layer_idx], dtype)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
+        """Tokens actually HELD, not tokens ever seen. Under eviction these
+        differ, and the mask must describe the cache that exists."""
         return self._seen.get(layer_idx, 0)
+
+    @staticmethod
+    def _evict_slot(slot, sink: int, recent: int):
+        """Keep [:sink] + [-recent:] along the token axis."""
+        if slot[0] == "raw":
+            x = slot[1]
+            if x.shape[2] <= sink + recent:
+                return slot
+            return ("raw", torch.cat([x[:, :, :sink], x[:, :, -recent:]], dim=2))
+        kind, p, a, d = slot
+        if p.shape[0] <= sink + recent:
+            return slot
+        return (kind, torch.cat([p[:sink], p[-recent:]], 0),
+                torch.cat([a[:sink], a[-recent:]], 0), d)
+
+    def _evict(self, layer_idx: int) -> None:
+        if self.keep_recent is None:
+            return
+        for store in (self._k, self._v):
+            slot = store.get(layer_idx)
+            if slot is not None:
+                store[layer_idx] = self._evict_slot(slot, self.keep_sink,
+                                                    self.keep_recent)
 
     def get_max_cache_shape(self) -> Optional[int]:
         return None                      # grows without a preset bound
 
     def get_query_offset(self, layer_idx: int = 0) -> int:
-        """Offset of this step's queries into the cache. Always 0 here: this
-        cache never pre-allocates or slides, so queries start at the front of
-        what has been seen. (transformers' mask builder requires it.)"""
-        return 0
+        """Where this step's queries sit relative to the cache — i.e. the
+        number of tokens already held.
+
+        This returned 0 originally, on the reasoning that a cache which never
+        pre-allocates has queries "at the front". That reasoning was wrong: the
+        offset positions the query rows against the kv axis when the causal
+        mask is built, so with a non-empty cache a 0 offset masks chunk N's
+        queries as though they were the first tokens of the sequence. Feeding
+        1024 tokens in 128-token chunks scored ppl 330 against 5.97 for the
+        same cache in one shot.
+
+        It hid because every single-forward test starts from an empty cache,
+        where 0 is the correct answer — so four architectures' worth of control
+        arms matched their fp16 reference EXACTLY and still said nothing about
+        the accumulating path. See test_chunked_prefill_matches_single_forward.
+        """
+        return self.get_seq_length(layer_idx)
 
     def get_mask_sizes(self, cache_position, layer_idx: int = 0):
         """(kv_length, kv_offset) — the shape transformers' mask builder wants.
