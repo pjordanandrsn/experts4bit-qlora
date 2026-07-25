@@ -520,3 +520,35 @@ def test_prefetch_is_optional_and_droppable():
     # and loading without any prefetch still works
     got = c._load_layer(0, "k", torch.bfloat16)
     assert got.shape[2] == 36
+
+
+@kv
+def test_prefetch_in_decode_order_not_just_batch_order():
+    """The order a real decode actually uses, which the first prefetch test did
+    not: prefetch(i) fires from a pre-hook BEFORE update(i) appends this step's
+    token, so anything staged is short by exactly the rows appended since.
+
+    Using a staged slot as though it were the whole layer silently drops the
+    newest token from attention — no crash, just wrong output. The earlier test
+    completed every update before any prefetch and so could never see it; E1c
+    caught it on a real model after this suite was green.
+    """
+    for kw in (dict(quantize_keys=True, quantize_values=True),
+               dict(quantize_keys=False, quantize_values=False)):
+        ref = NF4KVCache(**kw)
+        pre = NF4KVCache(residence="host", max_context=256, **kw)
+        prompt = _kv(64, 4, 128, 5)
+        for li in range(4):
+            ref.update(prompt, prompt, li)
+            pre.update(prompt, prompt, li)
+        for step in range(8):                    # decode, one token at a time
+            tk = _kv(1, 4, 128, 100 + step)
+            tv = _kv(1, 4, 128, 200 + step)
+            for li in range(4):
+                want_k, want_v = ref.update(tk, tv, li)
+                pre.prefetch(li)                 # staged BEFORE the append
+                got_k, got_v = pre.update(tk, tv, li)
+                assert got_k.shape == want_k.shape, (kw, step, li, "shape")
+                assert torch.equal(got_k, want_k), (kw, step, li, "keys")
+                assert torch.equal(got_v, want_v), (kw, step, li, "values")
+        assert pre.held_length(0) == 72

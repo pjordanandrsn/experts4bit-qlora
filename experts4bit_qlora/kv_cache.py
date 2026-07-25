@@ -321,10 +321,22 @@ class NF4KVCache:
                 f"context this cache will see; it is not grown on demand.")
         arena = self._arena_for(key, slot, used + n, cur)
         if slot[0] == "raw":
-            arena[1][used:used + n].copy_(slot[1][0].transpose(0, 1))  # -> [n,H,D]
+            arena[1][used:used + n].copy_(slot[1][0].transpose(0, 1),
+                                          non_blocking=True)     # -> [n,H,D]
             return ("rawh", arena[1][:used + n], None, arena[3])
-        arena[1][used:used + n].copy_(slot[1])
-        arena[2][used:used + n].copy_(slot[2])
+        # non_blocking is LOAD-BEARING, not a micro-optimization: a copy_ into a
+        # CPU destination BLOCKS the host until the DMA lands, and a decode step
+        # does one of these per layer per tensor. Measured on OLMoE at 4K, the
+        # 32 syncs/step cost 56 ms against a 24 ms transfer -- the streamed arm
+        # ran at 1.87 GB/s on a 6.20 GB/s link. Same failure `host_gather.py`
+        # records for the expert path (B3, ~94 syncs/token).
+        #
+        # Safe because every consumer reads the arena back through a copy issued
+        # on a CUDA stream, never on the host: the H2D in _load is ordered after
+        # this D2H on the default stream, and prefetch's side stream is made to
+        # wait on the default stream for exactly this reason.
+        arena[1][used:used + n].copy_(slot[1], non_blocking=True)
+        arena[2][used:used + n].copy_(slot[2], non_blocking=True)
         return ("nf4", arena[1][:used + n], arena[2][:used + n], slot[3])
 
     def _append(self, key, layer_idx, store, x, quantize):
@@ -387,6 +399,10 @@ class NF4KVCache:
         if layer_idx in self._inflight:
             return
         stream = self._side_stream()
+        # The append writes the arena asynchronously on the default stream, so
+        # the side stream must not read those bytes before they land. Without
+        # this the prefetch races the write and reads whatever was there.
+        stream.wait_stream(torch.cuda.current_stream())
         staged = {}
         for kind, store in (("k", self._k), ("v", self._v)):
             slot = store.get(layer_idx)
@@ -430,12 +446,36 @@ class NF4KVCache:
     def _load_layer(self, layer_idx: int, kind: str, dtype) -> torch.Tensor:
         """Load one layer, consuming a prefetched copy if one is ready.
 
-        Falls through to the synchronous path when nothing was prefetched, so
-        prefetching stays an optimization the caller may skip."""
-        slot = self._take_inflight(layer_idx, kind)
-        if slot is None:
-            slot = (self._k if kind == "k" else self._v)[layer_idx]
-        return self._load(slot, dtype)
+        **A staged copy is HISTORY, not the whole layer.** Decode interleaves as
+        ``prefetch(i) -> update(i) appends -> update loads``, so anything staged
+        by a pre-hook is captured *before* this step's token exists and is short
+        by exactly the rows appended since. Using it as-is drops the newest token
+        from attention — which is not a crash, just quietly wrong output, and it
+        is what E1c caught after the unit suite passed 25/25 by only ever
+        prefetching *after* all updates had completed.
+
+        So the staged history is combined with whatever arrived after it. The
+        tail is normally one token, already on the device, so this costs a
+        concatenation and no extra transfer.
+        """
+        cur = (self._k if kind == "k" else self._v)[layer_idx]
+        staged = self._take_inflight(layer_idx, kind)
+        if staged is None:
+            return self._load(cur, dtype)
+        n_staged, n_cur = staged[1].shape[0], cur[1].shape[0]
+        if n_staged == n_cur:
+            return self._load(staged, dtype)
+        if n_staged > n_cur:
+            # the cache shrank under it (eviction); the staged bytes describe a
+            # cache that no longer exists, so drop them rather than reconcile
+            return self._load(cur, dtype)
+        tail = (cur[0], cur[1][n_staged:],
+                None if cur[2] is None else cur[2][n_staged:], cur[3])
+        views = []
+        for s in (staged, tail):
+            x = self._load_thd(s, dtype)
+            views.append(x if x.dim() == 4 else x.transpose(0, 1).unsqueeze(0))
+        return torch.cat(views, dim=2)
 
     def _materialize(self, layer_idx: int, kind: str, dtype) -> torch.Tensor:
         """Assemble one layer from its resident head and its streamed tail."""
