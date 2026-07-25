@@ -26,15 +26,30 @@ resident NF4 cache already fits every case measured (#14).
 
 What this deliberately does NOT do: fuse the dequant into the attention matmuls.
 ``grouped-nf4-gemm``'s ``nf4_kv`` kernels do that, never materializing even one
-layer. Their v1 cost 2.5-3x attention latency, which is why this module did not
-wire them in; that is **no longer the reason**. Finding #12 traced the cost to
-dequant running per QUERY head and restructured the grid over kv heads, and the
-result is **0.82x fp16 SDPA** at GQA 16:1 / 32K -- faster than the fp16 path it
-replaces. But at GQA 4:1 the same kernel is 4.59x *slower*, because there is
-little redundancy to remove, so the win is regime-dependent and the kernels stay
-decode-only. Wiring them in is therefore still a per-architecture decision, on
-the strength of the regime rather than on a flat latency penalty. This module is
-the memory dial.
+layer, and they stay unwired.
+
+**Corrected 2026-07-25.** An earlier version of this docstring said the fused
+kernel is "0.82x fp16 SDPA -- faster than the fp16 path it replaces", on the
+strength of finding #12. That was wrong, and wrong in this module's favour.
+#12's fp16 baseline materialized a 16x replicated cache; `enable_gqa=True` has
+been available since torch 2.5 and broadcasts kv heads inside the kernel
+instead. Measured on one device at T=32768 / H_kv=4 / H_q=64, bf16:
+
+  bf16 SDPA, repeat_interleave  6.205 ms   <- what #12 compared against
+  bf16 SDPA, enable_gqa=True    0.324 ms   <- 72% of the card's ~288 GB/s
+  fused nf4 kernel              3.760 ms   <- 1.7% of it
+
+Both baselines are numerically correct (each 2.34e-3 from an fp32 reference), so
+this is a baseline error and not a shortcut. The fused kernel is roughly **11.6x
+SLOWER** than bf16 SDPA invoked properly, not 0.82x.
+
+**Read the consequence for THIS module, which is larger.** The shipped path --
+dequantize a layer, hand it to stock attention -- measures 10.750 ms at that
+shape against a bf16 cache's 0.324 ms. NF4 KV buys 3.56x memory at roughly 2%
+perplexity AND a large decode-latency cost that has never been measured
+end-to-end, because every latency comparison in docs/context-budgets.md is
+between NF4 configurations rather than against an unquantized cache. Treat this
+module as a **capacity** feature -- it decides what fits -- and not as free.
 
 Fidelity is measured at model level, not inferred from a fixture. Teacher-forced
 on OLMoE-1B-7B over 1024 tokens of wikitext (4-bit weights held constant, so the
