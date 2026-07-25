@@ -17,11 +17,24 @@ layer** when that layer runs. Peak VRAM is then
 1.65 GB + 62 MB against 5.88 GB, i.e. essentially the full saving with stock
 attention doing the maths.
 
+Where the cache LIVES is a second dial: ``residence="host"`` keeps the packed
+store in pinned host memory and streams one layer's slice per forward, so GPU
+residency is one layer instead of the whole cache. Byte-identical to the
+resident path, and its transfer cost is the measured ``bytes / link`` (see
+grouped-nf4-gemm finding #15). It is a batch-regime feature -- at batch 1 the
+resident NF4 cache already fits every case measured (#14).
+
 What this deliberately does NOT do: fuse the dequant into the attention matmuls.
-``grouped-nf4-gemm``'s ``nf4_kv`` kernels do that (never materializing even one
-layer), but they are a decode-only path and cost 2.5-3x attention latency in
-their v1, so wiring them in is a per-architecture performance decision, not the
-default. This module is the memory dial.
+``grouped-nf4-gemm``'s ``nf4_kv`` kernels do that, never materializing even one
+layer. Their v1 cost 2.5-3x attention latency, which is why this module did not
+wire them in; that is **no longer the reason**. Finding #12 traced the cost to
+dequant running per QUERY head and restructured the grid over kv heads, and the
+result is **0.82x fp16 SDPA** at GQA 16:1 / 32K -- faster than the fp16 path it
+replaces. But at GQA 4:1 the same kernel is 4.59x *slower*, because there is
+little redundancy to remove, so the win is regime-dependent and the kernels stay
+decode-only. Wiring them in is therefore still a per-architecture decision, on
+the strength of the regime rather than on a flat latency penalty. This module is
+the memory dial.
 
 Fidelity is measured at model level, not inferred from a fixture. Teacher-forced
 on OLMoE-1B-7B over 1024 tokens of wikitext (4-bit weights held constant, so the
