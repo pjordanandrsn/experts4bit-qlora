@@ -419,3 +419,62 @@ def test_resident_arena_grows_without_acquiring_a_bound():
     assert torch.equal(c._load(c._k[0], torch.bfloat16),
                        ref._load(ref._k[0], torch.bfloat16))
     assert c.memory_bytes() == ref.memory_bytes()
+
+
+@kv
+def test_split_residency_is_byte_identical_at_every_fraction():
+    """A1c, the gate: a wrong cache can be arbitrarily fast.
+
+    Residence is a dial, so every point on it — including both endpoints —
+    must return exactly what a fully-resident cache returns. Chunks are ragged
+    and deliberately straddle the boundary, because the head/tail split is
+    crossed mid-chunk exactly once per layer and that is where an off-by-one
+    lives.
+    """
+    chunks = [_kv(30, 4, 128, i) for i in range(8)]          # 240 tokens, ragged
+    ref = NF4KVCache()
+    for x in chunks:
+        rk, rv = ref.update(x, x, 0)
+    for r in (0, 32, 64, 128, 240):
+        c = NF4KVCache(residence="host", max_context=512, resident_tokens=r)
+        for x in chunks:
+            gk, gv = c.update(x, x, 0)
+        assert c.held_length(0) == 240, (r, c.held_length(0))
+        assert c.get_seq_length(0) == 240, r
+        assert torch.equal(gk, rk), f"keys diverged at resident_tokens={r}"
+        assert torch.equal(gv, rv), f"values diverged at resident_tokens={r}"
+        assert c.memory_bytes() == ref.memory_bytes(), r
+
+
+@kv
+def test_split_residency_trades_vram_for_bandwidth_linearly():
+    """A1d in miniature: what is resident should be exactly what was asked for,
+    and the streamed remainder exactly the rest. If these drift, the ceiling
+    `link/((1-f)*KV)` is not what the caller thinks they bought."""
+    T = 256
+    x = _kv(T, 4, 128, 1)
+    full = NF4KVCache(residence="host", max_context=T)
+    full.update(x, x, 0)
+    assert full.device_bytes() == 0
+    total = full.memory_bytes()
+    for r in (64, 128, 192):
+        c = NF4KVCache(residence="host", max_context=T, resident_tokens=r)
+        c.update(x, x, 0)
+        assert c.memory_bytes() == total, r
+        # resident share must track r/T to within one token's worth
+        frac = c.device_bytes() / total
+        assert abs(frac - r / T) < 1.5 / T, (r, frac, r / T)
+
+
+@kv
+def test_split_residency_refuses_eviction_rather_than_corrupting():
+    """The keep-set would straddle two stores with independent numbering.
+    Silently renumbering across them is the bookkeeping class of bug that made
+    #11 look like a quality result, so it refuses."""
+    c = NF4KVCache(residence="host", max_context=256, resident_tokens=64,
+                   keep_sink=4, keep_recent=32)
+    c.update(_kv(128, 4, 128, 1), _kv(128, 4, 128, 2), 0)
+    with pytest.raises(NotImplementedError, match="resident_tokens"):
+        c.evict()
+    with pytest.raises(NotImplementedError, match="resident_tokens"):
+        c.evict_index(torch.arange(8, device="cuda"))

@@ -104,7 +104,8 @@ class NF4KVCache:
     def __init__(self, quantize_keys: bool = True, quantize_values: bool = True,
                  key_scaling: str = "per_token", group: int = 64,
                  keep_sink: int = 0, keep_recent: Optional[int] = None,
-                 residence: str = "gpu", max_context: Optional[int] = None):
+                 residence: str = "gpu", max_context: Optional[int] = None,
+                 resident_tokens: int = 0):
         # Separate switches because the error is NOT symmetric, and the
         # asymmetry favours keeping KEYS in bf16: measured +0.083 ppl for
         # K-only vs +0.013 for V-only. A caller tuning fidelity should reach
@@ -180,6 +181,23 @@ class NF4KVCache:
         self.max_context = max_context
         self._arena: dict[tuple[str, int], Any] = {}
         self._device: Optional[torch.device] = None
+        # Residence is a DIAL, not a switch. Binary gpu/host leaves whatever
+        # VRAM is spare completely unused, which is the wrong shape: attention
+        # reads the whole cache every step, so any token held on the device is
+        # a token not crossing the bus, and the streamed ceiling improves
+        # linearly -- link/((1-f) * KV) instead of link/KV.
+        #
+        # The OLDEST tokens are the ones kept. They are positionally stable, so
+        # the head fills once and is then immutable, and nothing reshuffles as
+        # the cache grows. Keeping the newest instead would mean migrating
+        # tokens host-ward on every step for no benefit: attention needs all of
+        # them either way, so WHICH are resident does not matter to quality,
+        # only to how much churn the choice costs.
+        if resident_tokens and residence != "host":
+            raise ValueError("resident_tokens only applies to residence='host'")
+        self.resident_tokens = resident_tokens
+        self._khead: dict[int, Any] = {}
+        self._vhead: dict[int, Any] = {}
 
     # ---- storage helpers -------------------------------------------------
     def _store(self, x: torch.Tensor, quantize: bool):
@@ -305,6 +323,42 @@ class NF4KVCache:
         # concatenating path: rare, and not worth a second arena layout.
         return self._cat(cur, x, quantize, self)
 
+    def _split_append(self, kind: str, layer_idx: int, x: torch.Tensor,
+                      quantize: bool) -> None:
+        """Route one append across the resident/streamed boundary.
+
+        Tokens ``[0, resident_tokens)`` land in a DEVICE store and stay there;
+        everything after streams. The boundary is crossed at most once per
+        layer, so the split costs one extra concatenation on one chunk and
+        nothing thereafter.
+        """
+        head_store = self._khead if kind == "k" else self._vhead
+        tail_store = self._k if kind == "k" else self._v
+        held = self._seen.get(layer_idx, 0)
+        n = x.shape[2]
+        r = self.resident_tokens
+        # how much of this chunk belongs to the resident head
+        to_head = max(0, min(held + n, r) - held)
+        if to_head:
+            head_store[layer_idx] = self._cat(head_store.get(layer_idx),
+                                              x[:, :, :to_head], quantize, self)
+        if to_head < n:
+            tail_used = max(0, held - r)
+            tail_store[layer_idx] = self._arena_append(
+                (kind, layer_idx), self._store(x[:, :, to_head:], quantize),
+                tail_used, tail_store.get(layer_idx))
+
+    def _materialize(self, layer_idx: int, kind: str, dtype) -> torch.Tensor:
+        """Assemble one layer from its resident head and its streamed tail."""
+        head_store = self._khead if kind == "k" else self._vhead
+        tail_store = self._k if kind == "k" else self._v
+        head = head_store.get(layer_idx)
+        tail = tail_store.get(layer_idx)
+        parts = [self._load(s, dtype) for s in (head, tail) if s is not None]
+        if not parts:
+            raise KeyError(f"layer {layer_idx} has neither head nor tail")
+        return parts[0] if len(parts) == 1 else torch.cat(parts, dim=2)
+
     def _drop_arenas(self) -> None:
         """Release the backing buffers after an eviction.
 
@@ -397,20 +451,29 @@ class NF4KVCache:
         # a fidelity change.
         if per_channel:
             self._store_perchannel(layer_idx, key_states)
+        elif self.resident_tokens:
+            self._split_append("k", layer_idx, key_states, self.quantize_keys)
         else:
             self._k[layer_idx] = self._append(("k", layer_idx), layer_idx,
                                               self._k, key_states,
                                               self.quantize_keys)
-        self._v[layer_idx] = self._append(("v", layer_idx), layer_idx, self._v,
-                                          value_states, self.quantize_values)
+        if self.resident_tokens:
+            self._split_append("v", layer_idx, value_states, self.quantize_values)
+        else:
+            self._v[layer_idx] = self._append(("v", layer_idx), layer_idx, self._v,
+                                              value_states, self.quantize_values)
         # held reads back from the store so it cannot drift from reality;
         # true counts every token ever appended, including evicted ones
-        vs = self._v[layer_idx]
-        self._seen[layer_idx] = (vs[1].shape[2] if vs[0] == "raw" else vs[1].shape[0])
+        self._seen[layer_idx] = (self._rows(self._v.get(layer_idx))
+                                 + self._rows(self._vhead.get(layer_idx)))
         self._true[layer_idx] = self._true.get(layer_idx, 0) + key_states.shape[2]
         self.layer_modes[layer_idx] = (
             f"K={'nf4pc' if per_channel else self._k[layer_idx][0]},"
-            f"V={self._v[layer_idx][0]}")
+            f"V={self._v[layer_idx][0]}") if not self.resident_tokens else (
+            f"split@{self.resident_tokens}")
+        if self.resident_tokens:
+            return (self._materialize(layer_idx, "k", dtype),
+                    self._materialize(layer_idx, "v", dtype))
         keys = (self._load_keys(layer_idx, dtype) if per_channel
                 else self._load(self._k[layer_idx], dtype))
         return keys, self._load(self._v[layer_idx], dtype)
@@ -444,6 +507,13 @@ class NF4KVCache:
     def evict(self) -> None:
         """Drop the middle of the cache, keeping sinks + recent. Call BETWEEN
         forwards — never during one, see __init__."""
+        if self.resident_tokens:
+            raise NotImplementedError(
+                "eviction is not supported with resident_tokens: the keep-set "
+                "would straddle the resident/streamed boundary, and silently "
+                "renumbering tokens across two stores is exactly the "
+                "bookkeeping error that made #11 look like a quality result. "
+                "Evict with a single residence, or split without evicting.")
         if self.keep_recent is None:
             return
         for store in (self._k, self._v):
@@ -486,6 +556,13 @@ class NF4KVCache:
         exist. Sink+recent has the same problem and predates the guard; see
         ``key_scaling`` in ``__init__`` for why that path is off by default.
         """
+        if self.resident_tokens:
+            raise NotImplementedError(
+                "eviction is not supported with resident_tokens: the keep-set "
+                "would straddle the resident/streamed boundary, and silently "
+                "renumbering tokens across two stores is exactly the "
+                "bookkeeping error that made #11 look like a quality result. "
+                "Evict with a single residence, or split without evicting.")
         if self.key_scaling == "per_channel" and self.quantize_keys:
             raise NotImplementedError(
                 "evict_index does not support key_scaling='per_channel': the "
@@ -508,7 +585,14 @@ class NF4KVCache:
         for li in list(self._seen):
             vs = self._v.get(li)
             if vs is not None:
-                self._seen[li] = (vs[1].shape[2] if vs[0] == "raw" else vs[1].shape[0])
+                n = (vs[1].shape[2] if vs[0] == "raw" else vs[1].shape[0])
+                self._seen[li] = n + self._rows(self._vhead.get(li))
+
+    @staticmethod
+    def _rows(slot) -> int:
+        if slot is None:
+            return 0
+        return slot[1].shape[2] if slot[0] == "raw" else slot[1].shape[0]
 
     def get_max_cache_shape(self) -> Optional[int]:
         return None                      # grows without a preset bound
@@ -580,7 +664,7 @@ class NF4KVCache:
         for t in self._ktail.values():
             if t.is_cuda:
                 total += t.numel() * 2
-        for store in (self._k, self._v):
+        for store in (self._k, self._v, self._khead, self._vhead):
             for slot in store.values():
                 if slot[0] == "raw":
                     if slot[1].is_cuda:
@@ -597,7 +681,7 @@ class NF4KVCache:
         total = 0
         for t in self._ktail.values():                # bf16 tail, < group tokens
             total += t.numel() * 2
-        for store in (self._k, self._v):
+        for store in (self._k, self._v, self._khead, self._vhead):
             for slot in store.values():
                 if slot[0] == "raw":
                     t = slot[1]
