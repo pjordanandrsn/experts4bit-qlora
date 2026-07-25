@@ -374,3 +374,48 @@ def test_host_residence_matches_resident_through_a_real_model():
         streamed = chunked(NF4KVCache(residence="host", max_context=256, **kw))
         assert torch.equal(resident, streamed), (
             kw, (resident - streamed).abs().max().item())
+
+
+@kv
+def test_resident_append_is_amortized_not_quadratic():
+    """This class always claimed appends are O(new tokens). QUANTIZATION was --
+    history is never re-packed, which `test_append_does_not_requantize_history`
+    pins -- but the COPY was not: `torch.cat` reallocated and re-copied the whole
+    packed store every step, so a 1000-token generation at 32K moved ~1.8 TB
+    through device memory where ~3.5 GB suffices.
+
+    The observable signature of an arena is storage stability: the packed
+    buffer's address must survive many appends and move only on a doubling,
+    rather than changing on every single one.
+    """
+    c = NF4KVCache()
+    c.update(_kv(64, 4, 128, 1), _kv(64, 4, 128, 2), 0)
+    ptrs = []
+    for i in range(64):
+        c.update(_kv(1, 4, 128, 100 + i), _kv(1, 4, 128, 200 + i), 0)
+        ptrs.append(c._k[0][1].data_ptr())
+    assert c.get_seq_length(0) == 128
+    assert len(set(ptrs)) == 1, (
+        f"{len(set(ptrs))} distinct buffers over 64 appends — the store is "
+        f"still being reallocated per step")
+
+
+@kv
+def test_resident_arena_grows_without_acquiring_a_bound():
+    """The resident path must stay unbounded — `get_max_cache_shape()` is None
+    and this fix must not quietly change that — so its arena doubles instead of
+    being sized once like the host one. Crossing a doubling must preserve every
+    byte, and must match a single-shot store exactly (per-token blockwise
+    quantization makes that an equality, not a tolerance)."""
+    chunks = [_kv(100, 4, 128, i) for i in range(6)]        # 600 tokens: 256->512->1024
+    c = NF4KVCache()
+    for x in chunks:
+        c.update(x, x, 0)
+    whole = torch.cat(chunks, dim=2)
+    ref = NF4KVCache()
+    ref.update(whole, whole, 0)
+    assert c.get_seq_length(0) == 600
+    assert c.get_max_cache_shape() is None
+    assert torch.equal(c._load(c._k[0], torch.bfloat16),
+                       ref._load(ref._k[0], torch.bfloat16))
+    assert c.memory_bytes() == ref.memory_bytes()

@@ -215,19 +215,33 @@ class NF4KVCache:
         x = dequant_kv_ref(p, a, d, dtype=dtype)                  # [T, H, D]
         return x.transpose(0, 1).unsqueeze(0).contiguous()        # [1, H, T, D]
 
-    # ---- host residence --------------------------------------------------
-    def _arena_for(self, key, slot):
-        """Pinned host buffers for one layer's K or V, allocated on first write.
+    # ---- arena-backed append (both residences) ---------------------------
+    def _arena_for(self, key, slot, needed: int, cur=None):
+        """Backing buffer for one layer's K or V, holding ``needed`` rows.
 
-        Sized to ``max_context`` rows and written at an offset. The alternative
-        -- growing by ``torch.cat`` -- is O(T^2) host memcpy over a prefill, and
-        pinning each new chunk instead costs one page-locking syscall per layer
-        per step. The arena pays both costs once.
+        **Host**: pinned, sized once to ``max_context``, never grown. Growing by
+        ``torch.cat`` would be O(T^2) host memcpy over a prefill, and pinning
+        each new chunk instead costs a page-locking syscall per layer per step.
+
+        **Device**: grown geometrically, because the resident path has no
+        declared bound (``get_max_cache_shape`` returns None) and must not
+        acquire one. Doubling makes appends amortized O(new tokens) -- which is
+        what this class always claimed and did not do: ``torch.cat`` reallocates
+        and re-copies the whole packed store on every step, so a 1000-token
+        generation at 32K moved ~1.8 TB through device memory where ~3.5 GB
+        suffices.
+
+        When a buffer is (re)allocated, ``cur``'s rows are carried into it, so
+        this doubles as the rebuild path after an eviction has replaced the slot
+        with a tensor that is no longer a view.
         """
         got = self._arena.get(key)
-        if got is not None:
+        if got is not None and got[1].shape[0] >= needed:
             return got
-        cap = self.max_context
+        if self.residence == "host":
+            cap = self.max_context
+        else:
+            cap = max(256, 1 << (needed - 1).bit_length())   # next power of two
         if slot[0] == "raw":
             # TOKEN-MAJOR [cap, H, D], not the [1, H, cap, D] the resident path
             # uses. A prefix view of the latter slices dim 2, which is NOT
@@ -242,29 +256,35 @@ class NF4KVCache:
                                dtype=x.dtype).pin_memory(), None, x.shape[3])
         else:
             _, p, a, d = slot
-            got = ("nf4",
-                   torch.empty((cap,) + tuple(p.shape[1:]), dtype=p.dtype).pin_memory(),
-                   torch.empty((cap,) + tuple(a.shape[1:]), dtype=a.dtype).pin_memory(),
-                   d)
+            mk = ((lambda t, shp: torch.empty(shp, dtype=t.dtype).pin_memory())
+                  if self.residence == "host"
+                  else (lambda t, shp: torch.empty(shp, dtype=t.dtype, device=t.device)))
+            got = ("nf4", mk(p, (cap,) + tuple(p.shape[1:])),
+                   mk(a, (cap,) + tuple(a.shape[1:])), d)
+        if cur is not None:                     # carry existing rows into the new buffer
+            n = cur[1].shape[0]
+            got[1][:n].copy_(cur[1])
+            if cur[2] is not None and got[2] is not None:
+                got[2][:n].copy_(cur[2])
         self._arena[key] = got
         return got
 
-    def _host_append(self, key, slot, used):
-        """Copy a freshly quantized device-side slot into the arena at ``used``
-        and return a VIEW of the occupied prefix.
+    def _arena_append(self, key, slot, used, cur=None):
+        """Write a freshly stored slot into the arena at ``used``, return a VIEW
+        of the occupied prefix.
 
-        Returning a view is what keeps every other method residence-agnostic:
-        the slot's row count still IS the held length, so ``_resync_held``,
-        ``memory_bytes``, ``_evict_slot`` and ``_index_slot`` need no host
-        branch at all.
+        Returning a view is what keeps every other method residence- and
+        backing-agnostic: the slot's row count still IS the held length, so
+        ``_resync_held``, ``memory_bytes``, ``_evict_slot`` and ``_index_slot``
+        need no special case at all.
         """
-        arena = self._arena_for(key, slot)
         n = slot[1].shape[2] if slot[0] == "raw" else slot[1].shape[0]
-        if used + n > self.max_context:
+        if self.residence == "host" and used + n > self.max_context:
             raise ValueError(
                 f"KV arena overflow: {used}+{n} tokens exceeds "
                 f"max_context={self.max_context}. Size it for the longest "
                 f"context this cache will see; it is not grown on demand.")
+        arena = self._arena_for(key, slot, used + n, cur)
         if slot[0] == "raw":
             arena[1][used:used + n].copy_(slot[1][0].transpose(0, 1))  # -> [n,H,D]
             return ("rawh", arena[1][:used + n], None, arena[3])
@@ -272,33 +292,45 @@ class NF4KVCache:
         arena[2][used:used + n].copy_(slot[2])
         return ("nf4", arena[1][:used + n], arena[2][:used + n], slot[3])
 
-    def _host_recompact(self) -> None:
-        """Realign the arena after an eviction.
+    def _append(self, key, layer_idx, store, x, quantize):
+        """One append, arena-backed wherever the layout allows it."""
+        cur = store.get(layer_idx)
+        used = self._seen.get(layer_idx, 0)
+        if self.residence == "host":
+            return self._arena_append(key, self._store(x, quantize), used, cur)
+        new = self._store(x, quantize)
+        if new[0] == "nf4" and (cur is None or cur[0] == "nf4"):
+            return self._arena_append(key, new, used, cur)
+        # bf16 fallback layers and mixed raw/packed histories keep the old
+        # concatenating path: rare, and not worth a second arena layout.
+        return self._cat(cur, x, quantize, self)
 
-        Eviction builds a fresh tensor of the retained rows, which is no longer
-        a view into the arena -- so the next append would write at an offset the
-        data no longer occupies. Writing the survivors back to the front and
-        re-viewing restores the invariant that the slot IS the arena prefix.
+    def _drop_arenas(self) -> None:
+        """Release the backing buffers after an eviction.
+
+        Eviction builds a fresh tensor of the survivors, which is no longer a
+        view into the arena -- so the next append would write at an offset the
+        data no longer occupies, silently corrupting the cache. Dropping the
+        buffer makes the next append rebuild from the current slot (that is what
+        ``_arena_for``'s ``cur`` argument is for), which recompacts lazily and
+        costs one copy of what survived rather than one per evicted layer.
         """
-        for kind, store in (("k", self._k), ("v", self._v)):
-            for li, slot in list(store.items()):
-                arena = self._arena.get((kind, li))
-                if arena is None or slot[1].is_cuda:
-                    continue
-                # Both host kinds are token-major, so one path serves both.
-                n = slot[1].shape[0]
-                if slot[1].data_ptr() != arena[1].data_ptr():
-                    arena[1][:n].copy_(slot[1])
-                    if slot[2] is not None:
-                        arena[2][:n].copy_(slot[2])
-                store[li] = (slot[0], arena[1][:n],
-                             None if slot[2] is None else arena[2][:n], slot[3])
+        self._arena.clear()
 
     @staticmethod
     def _cat(slot_a, slot_b_tensor, quantize: bool, cache: "NF4KVCache"):
-        """Append new tokens. Packed slots concatenate along the token axis with
-        no dequantization of the existing cache — appending must stay O(new
-        tokens), or a 32K cache would be re-quantized on every step."""
+        """Fallback append for bf16 layers and mixed raw/packed histories.
+
+        Packed slots concatenate along the token axis with no dequantization of
+        the existing cache, so the QUANTIZATION stays O(new tokens) — a 32K
+        cache is never re-packed on a step. The COPY does not: ``torch.cat``
+        reallocates and re-copies the whole store. Measured at 32K that is
+        ~54 us per append per tensor, which matches the store's bytes over
+        device bandwidth and is the same additive law the PCIe path obeys. It is
+        small against ~570 us of per-call overhead at these shapes, but it
+        accumulates quadratically over a generation, which is why the packed
+        path now goes through :meth:`_arena_append` and this is only the
+        fallback."""
         if slot_a is None:
             return cache._store(slot_b_tensor, quantize)
         new = cache._store(slot_b_tensor, quantize)
@@ -353,31 +385,24 @@ class NF4KVCache:
         per_channel = (self.key_scaling == "per_channel" and self.quantize_keys
                        and key_states.is_cuda and key_states.shape[0] == 1
                        and key_states.shape[-1] % 64 == 0)
-        if self.residence == "host":
-            if per_channel:
-                raise NotImplementedError(
-                    "residence='host' does not support key_scaling='per_channel': "
-                    "its bf16 tail is appended per step and flushed a group at a "
-                    "time, which the fixed-offset arena has no representation "
-                    "for. per_token keys (the default) stream fine.")
-            used = self._seen.get(layer_idx, 0)
-            # Quantize on the GPU, THEN move the packed bytes host-side -- doing
-            # it the other way round would produce different bytes from the
-            # resident path and quietly turn a residence change into a fidelity
-            # change.
-            self._k[layer_idx] = self._host_append(
-                ("k", layer_idx), self._store(key_states, self.quantize_keys), used)
-            self._v[layer_idx] = self._host_append(
-                ("v", layer_idx), self._store(value_states, self.quantize_values), used)
-        elif per_channel:
+        if self.residence == "host" and per_channel:
+            raise NotImplementedError(
+                "residence='host' does not support key_scaling='per_channel': "
+                "its bf16 tail is appended per step and flushed a group at a "
+                "time, which the fixed-offset arena has no representation for. "
+                "per_token keys (the default) stream fine.")
+        # Under host residence, quantization still runs on the GPU and only the
+        # packed bytes move host-side -- the other order would produce different
+        # bytes from the resident path and quietly turn a residence change into
+        # a fidelity change.
+        if per_channel:
             self._store_perchannel(layer_idx, key_states)
-            self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
-                                           self.quantize_values, self)
         else:
-            self._k[layer_idx] = self._cat(self._k.get(layer_idx), key_states,
-                                           self.quantize_keys, self)
-            self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
-                                           self.quantize_values, self)
+            self._k[layer_idx] = self._append(("k", layer_idx), layer_idx,
+                                              self._k, key_states,
+                                              self.quantize_keys)
+        self._v[layer_idx] = self._append(("v", layer_idx), layer_idx, self._v,
+                                          value_states, self.quantize_values)
         # held reads back from the store so it cannot drift from reality;
         # true counts every token ever appended, including evicted ones
         vs = self._v[layer_idx]
@@ -424,8 +449,7 @@ class NF4KVCache:
         for store in (self._k, self._v):
             for li, slot in list(store.items()):
                 store[li] = self._evict_slot(slot, self.keep_sink, self.keep_recent)
-        if self.residence == "host":
-            self._host_recompact()
+        self._drop_arenas()
         self._resync_held()
 
     @staticmethod
@@ -476,8 +500,7 @@ class NF4KVCache:
                 slot = store.get(li)
                 if slot is not None:
                     store[li] = self._index_slot(slot, idx)
-        if self.residence == "host":
-            self._host_recompact()
+        self._drop_arenas()
         self._resync_held()
 
     def _resync_held(self) -> None:
