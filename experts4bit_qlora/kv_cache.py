@@ -202,6 +202,10 @@ class NF4KVCache:
         # caller asks for one layer at a time and _take_inflight consumes it.
         self._stream = None
         self._inflight: dict[int, Any] = {}
+        # One event per layer, recorded after that layer's append. The prefetch
+        # stream waits on THIS layer's write, not on everything the default
+        # stream happens to have queued -- see prefetch().
+        self._append_done: dict[int, Any] = {}
 
     # ---- storage helpers -------------------------------------------------
     def _store(self, x: torch.Tensor, quantize: bool):
@@ -399,10 +403,20 @@ class NF4KVCache:
         if layer_idx in self._inflight:
             return
         stream = self._side_stream()
-        # The append writes the arena asynchronously on the default stream, so
-        # the side stream must not read those bytes before they land. Without
-        # this the prefetch races the write and reads whatever was there.
-        stream.wait_stream(torch.cuda.current_stream())
+        # The append writes the arena asynchronously, so the side stream must
+        # not read those bytes before they land -- but the ONLY write it can
+        # race is this layer's own append. Waiting on that layer's event is the
+        # narrow version; wait_stream(current) is a whole-stream barrier that
+        # also waits on the compute we are trying to overlap with, which is
+        # what made the first prefetch net-negative (E1).
+        #
+        # In decode this event is from the PREVIOUS step and has long since
+        # completed, so the wait costs nothing and the copy starts immediately.
+        ev_done = self._append_done.get(layer_idx)
+        if ev_done is not None:
+            stream.wait_event(ev_done)
+        else:
+            stream.wait_stream(torch.cuda.current_stream())
         staged = {}
         for kind, store in (("k", self._k), ("v", self._v)):
             slot = store.get(layer_idx)
@@ -502,6 +516,7 @@ class NF4KVCache:
         transfer already in flight would land bytes describing the pre-eviction
         cache -- the same class of contradiction as evicting mid-forward."""
         self._inflight.clear()
+        self._append_done.clear()
 
     def _drop_arenas(self) -> None:
         """Release the backing buffers after an eviction.
@@ -608,6 +623,10 @@ class NF4KVCache:
                                               value_states, self.quantize_values)
         # held reads back from the store so it cannot drift from reality;
         # true counts every token ever appended, including evicted ones
+        if self.residence == "host" and self._device is not None:
+            ev = torch.cuda.Event()
+            ev.record(torch.cuda.current_stream())
+            self._append_done[layer_idx] = ev
         self._seen[layer_idx] = (self._rows(self._v.get(layer_idx))
                                  + self._rows(self._vhead.get(layer_idx)))
         self._true[layer_idx] = self._true.get(layer_idx, 0) + key_states.shape[2]
