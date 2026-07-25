@@ -174,8 +174,12 @@ def test_eviction_keeps_sinks_plus_recent_and_reports_held_length():
         for lo in range(0, 256, 64):
             k, v = _kv(64, 4, 128, 1), _kv(64, 4, 128, 2)
             got, _ = c.update(k, v, 0)
-        assert c.get_seq_length(0) == 68, kw          # 4 sinks + 64 recent
-        assert got.shape[2] == 68, kw                 # returned view agrees
+            c.evict()                                  # between forwards, never during
+        assert c.held_length(0) == 68, kw              # 4 sinks + 64 recent HELD
+        assert c.get_seq_length(0) == 256, kw          # but 256 tokens SEEN
+        # the mask must describe the cache that exists, positions the true stream
+        assert c.get_mask_sizes(1, 0) == (69, 0), kw
+        assert c.get_query_offset(0) == 68, kw
 
 
 @kv
@@ -185,6 +189,7 @@ def test_eviction_actually_frees_memory():
         c = NF4KVCache(**kw)
         for _ in range(8):
             c.update(_kv(128, 4, 128, 1), _kv(128, 4, 128, 2), 0)
+            c.evict()
         return c.memory_bytes()
     full16 = bytes_for(quantize_keys=False, quantize_values=False)
     full4 = bytes_for(quantize_keys=True, quantize_values=True)
@@ -228,3 +233,40 @@ def test_chunked_prefill_matches_single_forward():
     # and it must track transformers' own cache under the identical protocol
     theirs = chunked(DynamicCache())
     assert ((mine - theirs).norm() / theirs.norm()).item() < 1e-6
+
+
+@kv
+def test_evict_index_keeps_an_arbitrary_set_and_matches_evict_on_its_special_case():
+    """The general keep-set. Recency is a prefix plus a suffix; an
+    importance-based policy keeps neither, so the store has to survive an
+    arbitrary gather along the token axis."""
+    for kw in (dict(quantize_keys=False, quantize_values=False),
+               dict(quantize_keys=True, quantize_values=True)):
+        k, v = _kv(64, 4, 128, 1), _kv(64, 4, 128, 2)
+        c = NF4KVCache(**kw)
+        c.update(k, v, 0)
+        want = torch.tensor([0, 1, 2, 3, 17, 40, 41, 63], device="cuda")
+        ref_k = c._load(c._k[0], torch.bfloat16)[:, :, want]      # what we asked to keep
+        c.evict_index(want)
+        assert c.held_length(0) == 8, kw
+        assert c.get_seq_length(0) == 64, kw                      # SEEN is untouched
+        got_k = c._load(c._k[0], torch.bfloat16)
+        assert torch.equal(got_k, ref_k), kw                      # exactly those rows
+        # and the sink+recent case must agree with the special-cased evict()
+        a, b = NF4KVCache(keep_sink=4, keep_recent=8, **kw), NF4KVCache(**kw)
+        a.update(k, v, 0); b.update(k, v, 0)
+        a.evict()
+        b.evict_index(torch.cat([torch.arange(4), torch.arange(56, 64)]).cuda())
+        assert torch.equal(a._load(a._k[0], torch.bfloat16),
+                           b._load(b._k[0], torch.bfloat16)), kw
+        assert a.memory_bytes() == b.memory_bytes(), kw
+
+
+@kv
+def test_evict_index_refuses_per_channel_keys():
+    """Per-channel absmax is grouped over RUNS of tokens; an arbitrary keep-set
+    would leave scales describing groups that no longer exist. Refuse loudly."""
+    c = NF4KVCache(key_scaling="per_channel")
+    c.update(_kv(128, 4, 128, 1), _kv(128, 4, 128, 2), 0)
+    with pytest.raises(NotImplementedError, match="per_channel"):
+        c.evict_index(torch.arange(8, device="cuda"))

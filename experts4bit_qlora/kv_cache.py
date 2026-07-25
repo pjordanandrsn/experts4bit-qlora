@@ -125,8 +125,18 @@ class NF4KVCache:
         # with NF4 multiplicatively instead of competing for the same
         # information. Slicing the packed store along tokens is exactly the
         # access pattern the kernels' contiguity guard was written to preserve.
+        # Eviction is EXPLICIT (call evict() between forwards), not automatic
+        # inside update(). transformers builds the attention mask before the
+        # layers run, so a cache that shrinks mid-forward contradicts the mask
+        # it was already measured for -- concretely, trimming 640 to 516 during
+        # the forward raises a shape error, and silently would be worse.
         self.keep_sink = keep_sink
         self.keep_recent = keep_recent
+        # Tokens ever seen, tracked separately from tokens HELD. Positions must
+        # follow the true count or evicted-cache RoPE goes wrong: new keys would
+        # be rotated for position `held` while retained keys carry rotations
+        # from their original positions, corrupting every relative distance.
+        self._true: dict[int, int] = {}
         self._k: dict[int, Any] = {}
         self._v: dict[int, Any] = {}
         self._seen: dict[int, int] = {}
@@ -218,11 +228,11 @@ class NF4KVCache:
                                            self.quantize_keys, self)
         self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
                                        self.quantize_values, self)
-        self._evict(layer_idx)
-        # length reads back from the store rather than a counter, so it cannot
-        # drift from what eviction actually left behind
+        # held reads back from the store so it cannot drift from reality;
+        # true counts every token ever appended, including evicted ones
         vs = self._v[layer_idx]
         self._seen[layer_idx] = (vs[1].shape[2] if vs[0] == "raw" else vs[1].shape[0])
+        self._true[layer_idx] = self._true.get(layer_idx, 0) + key_states.shape[2]
         self.layer_modes[layer_idx] = (
             f"K={'nf4pc' if per_channel else self._k[layer_idx][0]},"
             f"V={self._v[layer_idx][0]}")
@@ -231,8 +241,15 @@ class NF4KVCache:
         return keys, self._load(self._v[layer_idx], dtype)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
-        """Tokens actually HELD, not tokens ever seen. Under eviction these
-        differ, and the mask must describe the cache that exists."""
+        """Tokens ever SEEN. transformers derives ``cache_position`` from this,
+        and positions must be absolute so RoPE stays consistent between newly
+        written keys and retained ones. The mask, which needs the tokens
+        actually HELD, reads :meth:`get_query_offset` / :meth:`get_mask_sizes`
+        instead — the two diverge exactly when eviction is on."""
+        return self._true.get(layer_idx, self._seen.get(layer_idx, 0))
+
+    def held_length(self, layer_idx: int = 0) -> int:
+        """Tokens actually in the cache — what the mask must describe."""
         return self._seen.get(layer_idx, 0)
 
     @staticmethod
@@ -249,14 +266,72 @@ class NF4KVCache:
         return (kind, torch.cat([p[:sink], p[-recent:]], 0),
                 torch.cat([a[:sink], a[-recent:]], 0), d)
 
-    def _evict(self, layer_idx: int) -> None:
+    def evict(self) -> None:
+        """Drop the middle of the cache, keeping sinks + recent. Call BETWEEN
+        forwards — never during one, see __init__."""
         if self.keep_recent is None:
             return
         for store in (self._k, self._v):
-            slot = store.get(layer_idx)
-            if slot is not None:
-                store[layer_idx] = self._evict_slot(slot, self.keep_sink,
-                                                    self.keep_recent)
+            for li, slot in list(store.items()):
+                store[li] = self._evict_slot(slot, self.keep_sink, self.keep_recent)
+        self._resync_held()
+
+    @staticmethod
+    def _index_slot(slot, idx: torch.Tensor):
+        """Keep an arbitrary set of token slots, in the given order."""
+        if slot[0] == "raw":
+            return ("raw", slot[1].index_select(2, idx).contiguous())
+        kind, p, a, d = slot
+        return (kind, p.index_select(0, idx).contiguous(),
+                a.index_select(0, idx).contiguous(), d)
+
+    def evict_index(self, keep) -> None:
+        """Retain an arbitrary set of token slots. Call BETWEEN forwards.
+
+        ``keep`` is either a 1-D index tensor applied to every layer, or a
+        mapping ``layer_idx -> 1-D index tensor``; indices address the CURRENT
+        held axis, so a policy that just ran a forward can select straight from
+        what it observed. Ascending order is expected — the token axis carries
+        no positions of its own (RoPE is already baked into the stored keys, and
+        ``get_seq_length`` counts what was SEEN), so reordering here would only
+        scramble the relationship between the cache and the scores a caller
+        holds alongside it.
+
+        :meth:`evict` is the sink+recent special case. This is the general one,
+        which is what an importance-based policy needs: H2O-style selection by
+        accumulated attention keeps a set that is neither a prefix nor a suffix.
+        Mechanism only — no policy lives here, deliberately, because the one
+        policy measured so far (recency) lost to quantization by 28x at matched
+        bytes and this class should not imply otherwise.
+
+        Per-channel keys are refused rather than silently mishandled: their
+        absmax is grouped over *runs* of ``group`` tokens, so dropping tokens
+        out of the middle would leave scales describing groups that no longer
+        exist. Sink+recent has the same problem and predates the guard; see
+        ``key_scaling`` in ``__init__`` for why that path is off by default.
+        """
+        if self.key_scaling == "per_channel" and self.quantize_keys:
+            raise NotImplementedError(
+                "evict_index does not support key_scaling='per_channel': the "
+                "key absmax is grouped over runs of tokens, so an arbitrary "
+                "keep-set would leave scales that describe groups which no "
+                "longer exist. Use per_token keys (the default) for eviction.")
+        per_layer = hasattr(keep, "keys")            # mapping vs a single index tensor
+        for li in list(self._v):
+            idx = (keep[li] if per_layer else keep)
+            idx = idx.to(device=self._v[li][1].device, dtype=torch.long)
+            for store in (self._k, self._v):
+                slot = store.get(li)
+                if slot is not None:
+                    store[li] = self._index_slot(slot, idx)
+        self._resync_held()
+
+    def _resync_held(self) -> None:
+        """Re-read held length from the store so it cannot drift from reality."""
+        for li in list(self._seen):
+            vs = self._v.get(li)
+            if vs is not None:
+                self._seen[li] = (vs[1].shape[2] if vs[0] == "raw" else vs[1].shape[0])
 
     def get_max_cache_shape(self) -> Optional[int]:
         return None                      # grows without a preset bound
@@ -278,7 +353,7 @@ class NF4KVCache:
         arms matched their fp16 reference EXACTLY and still said nothing about
         the accumulating path. See test_chunked_prefill_matches_single_forward.
         """
-        return self.get_seq_length(layer_idx)
+        return self.held_length(layer_idx)
 
     def get_mask_sizes(self, cache_position, layer_idx: int = 0):
         """(kv_length, kv_offset) — the shape transformers' mask builder wants.
@@ -303,7 +378,7 @@ class NF4KVCache:
             q_len = len(cache_position)
         else:
             q_len = int(cache_position)
-        return q_len + self.get_seq_length(layer_idx), 0
+        return q_len + self.held_length(layer_idx), 0
 
     @property
     def is_compileable(self) -> bool:
