@@ -102,15 +102,23 @@ def test_fused_matches_reference(n_tok):
 def test_training_and_grad_fall_back_exactly():
     mod = _build()
     hs, idx, wts = _inputs(12)
+
+    # The baseline must be taken in the SAME mode as the comparison. eval() lets
+    # single-row experts route through bnb's fused GEMV while train() uses the
+    # dequantize path — different kernels, so an eval baseline differs from a
+    # training fallback by kernel rounding alone and says nothing about fusion.
+    mod.train()
     with torch.no_grad():
-        ref_eval = mod(hs, idx, wts)
+        ref_train = mod(hs, idx, wts)
+
+    mod.eval()
     enable_fast(mod)
 
     # training=True, no_grad: the reentrant-checkpoint initial-forward shape.
     mod.train()
     with torch.no_grad():
         got = mod(hs, idx, wts)
-    assert torch.equal(got, ref_eval), "training forward did not fall back bit-for-bit"
+    assert torch.equal(got, ref_train), "training forward did not fall back bit-for-bit"
 
     # grad enabled: the kernel has no backward.
     mod.eval()
