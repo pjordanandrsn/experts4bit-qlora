@@ -90,7 +90,8 @@ class NF4KVCache:
 
     def __init__(self, quantize_keys: bool = True, quantize_values: bool = True,
                  key_scaling: str = "per_token", group: int = 64,
-                 keep_sink: int = 0, keep_recent: Optional[int] = None):
+                 keep_sink: int = 0, keep_recent: Optional[int] = None,
+                 residence: str = "gpu", max_context: Optional[int] = None):
         # Separate switches because the error is NOT symmetric, and the
         # asymmetry favours keeping KEYS in bf16: measured +0.083 ppl for
         # K-only vs +0.013 for V-only. A caller tuning fidelity should reach
@@ -141,6 +142,31 @@ class NF4KVCache:
         self._v: dict[int, Any] = {}
         self._seen: dict[int, int] = {}
         self.layer_modes: dict[int, str] = {}
+        # Third axis, after quantization (shrink each token) and eviction (drop
+        # tokens): move the cache OFF the GPU entirely and stream one layer's
+        # slice back per forward. GPU residency becomes one layer instead of the
+        # whole cache -- for a 94-layer model that is ~47x less VRAM at the cost
+        # of KV(context) bytes of PCIe traffic per decode step, which does NOT
+        # amortize over batch the way streamed weights do (see
+        # grouped-nf4-gemm docs/context-budgets.md finding #14 for when that
+        # trade is worth taking; at batch 1 it usually is not).
+        #
+        # This is a RESIDENCE change, not a fidelity one: the same bytes are
+        # produced, just held somewhere else. Quantization still runs on the
+        # GPU, so the packed bytes are bit-identical to the resident path and
+        # the property suite asserts exactly that.
+        if residence not in ("gpu", "host"):
+            raise ValueError("residence must be 'gpu' or 'host'")
+        if residence == "host" and not max_context:
+            raise ValueError(
+                "residence='host' needs max_context: the pinned arena is sized "
+                "up front because appending by cat would make prefill O(T^2) in "
+                "host memcpy, and pinning a fresh chunk per step would cost an "
+                "mlock syscall per layer per token.")
+        self.residence = residence
+        self.max_context = max_context
+        self._arena: dict[tuple[str, int], Any] = {}
+        self._device: Optional[torch.device] = None
 
     # ---- storage helpers -------------------------------------------------
     def _store(self, x: torch.Tensor, quantize: bool):
@@ -157,12 +183,97 @@ class NF4KVCache:
         return ("nf4", p, a, d)
 
     def _load(self, slot, dtype) -> torch.Tensor:
+        """Materialize one layer. Under host residence this is the STREAM: the
+        packed slice crosses PCIe here, and nowhere else."""
         if slot[0] == "raw":
-            return slot[1]
+            x = slot[1]
+            return x if x.is_cuda or self._device is None else x.to(
+                self._device, non_blocking=True)
         _, p, a, d = slot
+        if not p.is_cuda and self._device is not None:
+            # Pinned prefix views, so this is a real async DMA rather than a
+            # bounce through a staging buffer. Dequant then runs on device, from
+            # bytes identical to what the resident path holds.
+            p = p.to(self._device, non_blocking=True)
+            a = a.to(self._device, non_blocking=True)
         _, dequant_kv_ref = _kv_ops()
         x = dequant_kv_ref(p, a, d, dtype=dtype)                  # [T, H, D]
         return x.transpose(0, 1).unsqueeze(0).contiguous()        # [1, H, T, D]
+
+    # ---- host residence --------------------------------------------------
+    def _arena_for(self, key, slot):
+        """Pinned host buffers for one layer's K or V, allocated on first write.
+
+        Sized to ``max_context`` rows and written at an offset. The alternative
+        -- growing by ``torch.cat`` -- is O(T^2) host memcpy over a prefill, and
+        pinning each new chunk instead costs one page-locking syscall per layer
+        per step. The arena pays both costs once.
+        """
+        got = self._arena.get(key)
+        if got is not None:
+            return got
+        cap = self.max_context
+        if slot[0] == "raw":
+            x = slot[1]
+            buf = torch.empty((x.shape[0], x.shape[1], cap, x.shape[3]),
+                              dtype=x.dtype).pin_memory()
+            got = ("raw", buf)
+        else:
+            _, p, a, d = slot
+            got = ("nf4",
+                   torch.empty((cap,) + tuple(p.shape[1:]), dtype=p.dtype).pin_memory(),
+                   torch.empty((cap,) + tuple(a.shape[1:]), dtype=a.dtype).pin_memory(),
+                   d)
+        self._arena[key] = got
+        return got
+
+    def _host_append(self, key, slot, used):
+        """Copy a freshly quantized device-side slot into the arena at ``used``
+        and return a VIEW of the occupied prefix.
+
+        Returning a view is what keeps every other method residence-agnostic:
+        the slot's row count still IS the held length, so ``_resync_held``,
+        ``memory_bytes``, ``_evict_slot`` and ``_index_slot`` need no host
+        branch at all.
+        """
+        arena = self._arena_for(key, slot)
+        n = slot[1].shape[2] if slot[0] == "raw" else slot[1].shape[0]
+        if used + n > self.max_context:
+            raise ValueError(
+                f"KV arena overflow: {used}+{n} tokens exceeds "
+                f"max_context={self.max_context}. Size it for the longest "
+                f"context this cache will see; it is not grown on demand.")
+        if slot[0] == "raw":
+            arena[1][:, :, used:used + n].copy_(slot[1])
+            return ("raw", arena[1][:, :, :used + n])
+        arena[1][used:used + n].copy_(slot[1])
+        arena[2][used:used + n].copy_(slot[2])
+        return ("nf4", arena[1][:used + n], arena[2][:used + n], slot[3])
+
+    def _host_recompact(self) -> None:
+        """Realign the arena after an eviction.
+
+        Eviction builds a fresh tensor of the retained rows, which is no longer
+        a view into the arena -- so the next append would write at an offset the
+        data no longer occupies. Writing the survivors back to the front and
+        re-viewing restores the invariant that the slot IS the arena prefix.
+        """
+        for kind, store in (("k", self._k), ("v", self._v)):
+            for li, slot in list(store.items()):
+                arena = self._arena.get((kind, li))
+                if arena is None or slot[1].is_cuda:
+                    continue
+                if slot[0] == "raw":
+                    n = slot[1].shape[2]
+                    if slot[1].data_ptr() != arena[1].data_ptr():
+                        arena[1][:, :, :n].copy_(slot[1])
+                    store[li] = ("raw", arena[1][:, :, :n])
+                else:
+                    n = slot[1].shape[0]
+                    if slot[1].data_ptr() != arena[1].data_ptr():
+                        arena[1][:n].copy_(slot[1])
+                        arena[2][:n].copy_(slot[2])
+                    store[li] = ("nf4", arena[1][:n], arena[2][:n], slot[3])
 
     @staticmethod
     def _cat(slot_a, slot_b_tensor, quantize: bool, cache: "NF4KVCache"):
@@ -218,16 +329,36 @@ class NF4KVCache:
                layer_idx: int, cache_kwargs: Optional[dict] = None):
         """Append this step's K/V and return the FULL cache for this layer."""
         dtype = key_states.dtype
+        if self._device is None and key_states.is_cuda:
+            self._device = key_states.device
         per_channel = (self.key_scaling == "per_channel" and self.quantize_keys
                        and key_states.is_cuda and key_states.shape[0] == 1
                        and key_states.shape[-1] % 64 == 0)
-        if per_channel:
+        if self.residence == "host":
+            if per_channel:
+                raise NotImplementedError(
+                    "residence='host' does not support key_scaling='per_channel': "
+                    "its bf16 tail is appended per step and flushed a group at a "
+                    "time, which the fixed-offset arena has no representation "
+                    "for. per_token keys (the default) stream fine.")
+            used = self._seen.get(layer_idx, 0)
+            # Quantize on the GPU, THEN move the packed bytes host-side -- doing
+            # it the other way round would produce different bytes from the
+            # resident path and quietly turn a residence change into a fidelity
+            # change.
+            self._k[layer_idx] = self._host_append(
+                ("k", layer_idx), self._store(key_states, self.quantize_keys), used)
+            self._v[layer_idx] = self._host_append(
+                ("v", layer_idx), self._store(value_states, self.quantize_values), used)
+        elif per_channel:
             self._store_perchannel(layer_idx, key_states)
+            self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
+                                           self.quantize_values, self)
         else:
             self._k[layer_idx] = self._cat(self._k.get(layer_idx), key_states,
                                            self.quantize_keys, self)
-        self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
-                                       self.quantize_values, self)
+            self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
+                                           self.quantize_values, self)
         # held reads back from the store so it cannot drift from reality;
         # true counts every token ever appended, including evicted ones
         vs = self._v[layer_idx]
@@ -274,6 +405,8 @@ class NF4KVCache:
         for store in (self._k, self._v):
             for li, slot in list(store.items()):
                 store[li] = self._evict_slot(slot, self.keep_sink, self.keep_recent)
+        if self.residence == "host":
+            self._host_recompact()
         self._resync_held()
 
     @staticmethod
@@ -324,6 +457,8 @@ class NF4KVCache:
                 slot = store.get(li)
                 if slot is not None:
                     store[li] = self._index_slot(slot, idx)
+        if self.residence == "host":
+            self._host_recompact()
         self._resync_held()
 
     def _resync_held(self) -> None:
@@ -388,6 +523,30 @@ class NF4KVCache:
         return len(self._seen)
 
     # ---- the budget number ----------------------------------------------
+    def device_bytes(self) -> int:
+        """Bytes of the cache resident on the GPU.
+
+        Equals :meth:`memory_bytes` under ``residence='gpu'``. Under
+        ``'host'`` it is 0 for the stored cache -- the whole point -- and the
+        real GPU cost is the transient one-layer slice materialized inside
+        :meth:`_load`, which lives and dies within a single layer's forward and
+        so is an activation, not cache residency. Reported separately from
+        ``memory_bytes`` because conflating "how big is the cache" with "how
+        much VRAM does it hold" is exactly the confusion streaming introduces.
+        """
+        total = 0
+        for t in self._ktail.values():
+            if t.is_cuda:
+                total += t.numel() * 2
+        for store in (self._k, self._v):
+            for slot in store.values():
+                if slot[0] == "raw":
+                    if slot[1].is_cuda:
+                        total += slot[1].numel() * slot[1].element_size()
+                elif slot[1].is_cuda:
+                    total += slot[1].numel() + slot[2].numel() * 4
+        return total
+
     def memory_bytes(self, fp16: bool = False) -> int:
         """Bytes actually held. ``fp16=True`` reports what bf16 storage of the
         same tokens would have cost — the comparison the context budget uses."""

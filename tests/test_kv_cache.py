@@ -270,3 +270,107 @@ def test_evict_index_refuses_per_channel_keys():
     c.update(_kv(128, 4, 128, 1), _kv(128, 4, 128, 2), 0)
     with pytest.raises(NotImplementedError, match="per_channel"):
         c.evict_index(torch.arange(8, device="cuda"))
+
+
+@kv
+def test_host_residence_is_byte_identical_to_resident():
+    """Streaming must change WHERE the bytes live, not WHAT they are.
+
+    Quantization runs on the GPU in both paths and only the packed result moves
+    host-side, so this is exact equality -- not a tolerance. If it ever needs a
+    tolerance, something quantized on the wrong device and a residence change
+    quietly became a fidelity change.
+    """
+    for kw in (dict(quantize_keys=False, quantize_values=False),
+               dict(quantize_keys=True, quantize_values=True),
+               dict(quantize_keys=False, quantize_values=True)):
+        gpu = NF4KVCache(**kw)
+        host = NF4KVCache(residence="host", max_context=512, **kw)
+        for lo in range(0, 256, 64):
+            k, v = _kv(64, 4, 128, lo + 1), _kv(64, 4, 128, lo + 2)
+            gk, gv = gpu.update(k, v, 0)
+            hk, hv = host.update(k, v, 0)
+            assert hk.is_cuda and hv.is_cuda, "streamed layer must land on device"
+            assert torch.equal(gk, hk), (kw, lo, "keys diverged")
+            assert torch.equal(gv, hv), (kw, lo, "values diverged")
+        assert host.held_length(0) == gpu.held_length(0) == 256, kw
+        assert host.memory_bytes() == gpu.memory_bytes(), kw   # same cache size
+        assert gpu.device_bytes() == gpu.memory_bytes(), kw
+        assert host.device_bytes() == 0, kw                    # ...none of it resident
+
+
+@kv
+def test_host_residence_holds_no_vram_and_survives_eviction():
+    """The capacity claim, and the arena invariant that eviction can break.
+
+    Eviction builds a fresh tensor of the survivors, which is no longer a view
+    into the pinned arena -- so without recompaction the next append writes at
+    an offset the data no longer occupies and the cache silently corrupts.
+    """
+    for kw in (dict(quantize_keys=True, quantize_values=True),
+               dict(quantize_keys=False, quantize_values=False)):
+        gpu = NF4KVCache(keep_sink=4, keep_recent=64, **kw)
+        host = NF4KVCache(keep_sink=4, keep_recent=64, residence="host",
+                          max_context=512, **kw)
+        for lo in range(0, 256, 64):
+            k, v = _kv(64, 4, 128, lo + 1), _kv(64, 4, 128, lo + 2)
+            gk, _ = gpu.update(k, v, 0)
+            hk, _ = host.update(k, v, 0)
+            assert torch.equal(gk, hk), (kw, lo)      # matches across evictions
+            gpu.evict(); host.evict()
+        assert host.held_length(0) == gpu.held_length(0) == 68, kw
+        assert host.get_seq_length(0) == 256, kw
+        assert host.device_bytes() == 0, kw
+        assert host.memory_bytes() == gpu.memory_bytes(), kw
+        # and the arbitrary keep-set path recompacts too
+        want = torch.tensor([0, 1, 2, 3, 30, 60, 67], device="cuda")
+        gpu.evict_index(want); host.evict_index(want)
+        assert torch.equal(gpu._load(gpu._k[0], torch.bfloat16),
+                           host._load(host._k[0], torch.bfloat16)), kw
+        k, v = _kv(32, 4, 128, 9), _kv(32, 4, 128, 10)
+        assert torch.equal(gpu.update(k, v, 0)[0], host.update(k, v, 0)[0]), kw
+
+
+@kv
+def test_host_residence_refuses_what_it_cannot_represent():
+    """Two loud failures beat two silent ones: an unsized arena, and an
+    overflow. Growing on demand is not offered -- that is the O(T^2) cat this
+    design exists to avoid."""
+    with pytest.raises(ValueError, match="max_context"):
+        NF4KVCache(residence="host")
+    with pytest.raises(ValueError, match="residence"):
+        NF4KVCache(residence="disk")
+    c = NF4KVCache(residence="host", max_context=64)
+    c.update(_kv(64, 4, 128, 1), _kv(64, 4, 128, 2), 0)
+    with pytest.raises(ValueError, match="arena overflow"):
+        c.update(_kv(8, 4, 128, 3), _kv(8, 4, 128, 4), 0)
+
+
+@kv
+def test_host_residence_matches_resident_through_a_real_model():
+    """The end-to-end gate: LOGITS, not cache objects.
+
+    The unit tests above compare what the cache hands back. This compares what
+    the MODEL computes from it, across chunked prefill -- the accumulating path
+    where get_query_offset lives and where a residence bug (a stale arena view,
+    a slice that stopped being pinned, a copy landing on the wrong stream) would
+    actually surface. fp32 so the comparison is about residence, not about bf16
+    picking different kernels for different chunk shapes.
+    """
+    from transformers import AutoModelForCausalLM
+    m = AutoModelForCausalLM.from_pretrained(
+        "HuggingFaceTB/SmolLM2-135M", dtype=torch.float32).cuda().eval()
+    ids = (torch.arange(256, device="cuda") % 20000).unsqueeze(0)
+
+    def chunked(cache):
+        with torch.no_grad():
+            return torch.cat([m(ids[:, lo:lo + 64], past_key_values=cache,
+                                use_cache=True).logits
+                              for lo in range(0, 256, 64)], dim=1)
+
+    for kw in (dict(quantize_keys=True, quantize_values=True),
+               dict(quantize_keys=False, quantize_values=False)):
+        resident = chunked(NF4KVCache(**kw))
+        streamed = chunked(NF4KVCache(residence="host", max_context=256, **kw))
+        assert torch.equal(resident, streamed), (
+            kw, (resident - streamed).abs().max().item())
