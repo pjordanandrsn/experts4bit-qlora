@@ -88,7 +88,8 @@ class NF4KVCache:
     exactly what was quantized.
     """
 
-    def __init__(self, quantize_keys: bool = True, quantize_values: bool = True):
+    def __init__(self, quantize_keys: bool = True, quantize_values: bool = True,
+                 key_scaling: str = "per_token", group: int = 64):
         # Separate switches because the error is NOT symmetric, and the
         # asymmetry favours keeping KEYS in bf16: measured +0.083 ppl for
         # K-only vs +0.013 for V-only. A caller tuning fidelity should reach
@@ -96,6 +97,25 @@ class NF4KVCache:
         # the full 3.56x.
         self.quantize_keys = quantize_keys
         self.quantize_values = quantize_values
+        if key_scaling not in ("per_token", "per_channel"):
+            raise ValueError("key_scaling must be 'per_token' or 'per_channel'")
+        # "per_channel" gives every channel its own scale, grouped over `group`
+        # tokens. Costs exactly the same bytes (both store one fp32 scale per 64
+        # quantized values), but MEASURED WORSE on OLMoE: +0.275 ppl against
+        # per-token's +0.083, degrading monotonically as the group grows,
+        # because key magnitude varies strongly across tokens and one loud token
+        # then spoils the 63 sharing its group. Kept because it is correct, free
+        # in bytes, and may land differently on an architecture that does not
+        # rotate its keys -- not because it is recommended here. Default off.
+        self.key_scaling = key_scaling
+        self.group = group
+        # Decode hands us one token per step, but per-channel scaling needs a
+        # GROUP of tokens before its scales are meaningful — quantizing a lone
+        # token per-channel would store one fp32 per value, worse than bf16. So
+        # keys accumulate in a bf16 tail and flush a group at a time. The tail
+        # is at most `group - 1` tokens, which is why it does not show up in the
+        # footprint in any meaningful way.
+        self._ktail: dict[int, torch.Tensor] = {}
         self._k: dict[int, Any] = {}
         self._v: dict[int, Any] = {}
         self._seen: dict[int, int] = {}
@@ -138,20 +158,62 @@ class NF4KVCache:
         return ("nf4", torch.cat([slot_a[1], new[1]], 0),
                 torch.cat([slot_a[2], new[2]], 0), slot_a[3])
 
+    def _store_perchannel(self, layer_idx: int, new_keys: torch.Tensor):
+        """Append keys, flushing full groups into per-channel-scaled slots."""
+        from nf4_kv import quantize_kv_perchannel
+
+        tail = self._ktail.get(layer_idx)
+        tail = new_keys if tail is None else torch.cat([tail, new_keys], dim=2)
+        n_full = (tail.shape[2] // self.group) * self.group
+        if n_full:
+            flush = tail[:, :, :n_full]                      # [1, H, n_full, D]
+            p, a = quantize_kv_perchannel(
+                flush[0].transpose(0, 1).contiguous(), self.group)
+            prev = self._k.get(layer_idx)
+            if prev is None:
+                self._k[layer_idx] = ("nf4pc", p, a, flush.shape[-1])
+            else:
+                self._k[layer_idx] = ("nf4pc", torch.cat([prev[1], p], 0),
+                                      torch.cat([prev[2], a], 0), prev[3])
+            tail = tail[:, :, n_full:]
+        self._ktail[layer_idx] = tail
+
+    def _load_keys(self, layer_idx: int, dtype) -> torch.Tensor:
+        from nf4_kv import dequant_kv_ref
+
+        parts = []
+        slot = self._k.get(layer_idx)
+        if slot is not None:
+            x = dequant_kv_ref(slot[1], slot[2], slot[3], dtype=dtype,
+                               token_group=self.group)
+            parts.append(x.transpose(0, 1).unsqueeze(0).contiguous())
+        tail = self._ktail.get(layer_idx)
+        if tail is not None and tail.shape[2]:
+            parts.append(tail)
+        return parts[0] if len(parts) == 1 else torch.cat(parts, dim=2)
+
     # ---- transformers Cache protocol ------------------------------------
     def update(self, key_states: torch.Tensor, value_states: torch.Tensor,
                layer_idx: int, cache_kwargs: Optional[dict] = None):
         """Append this step's K/V and return the FULL cache for this layer."""
         dtype = key_states.dtype
-        self._k[layer_idx] = self._cat(self._k.get(layer_idx), key_states,
-                                       self.quantize_keys, self)
+        per_channel = (self.key_scaling == "per_channel" and self.quantize_keys
+                       and key_states.is_cuda and key_states.shape[0] == 1
+                       and key_states.shape[-1] % 64 == 0)
+        if per_channel:
+            self._store_perchannel(layer_idx, key_states)
+        else:
+            self._k[layer_idx] = self._cat(self._k.get(layer_idx), key_states,
+                                           self.quantize_keys, self)
         self._v[layer_idx] = self._cat(self._v.get(layer_idx), value_states,
                                        self.quantize_values, self)
         self._seen[layer_idx] = self._seen.get(layer_idx, 0) + key_states.shape[2]
         self.layer_modes[layer_idx] = (
-            f"K={self._k[layer_idx][0]},V={self._v[layer_idx][0]}")
-        return (self._load(self._k[layer_idx], dtype),
-                self._load(self._v[layer_idx], dtype))
+            f"K={'nf4pc' if per_channel else self._k[layer_idx][0]},"
+            f"V={self._v[layer_idx][0]}")
+        keys = (self._load_keys(layer_idx, dtype) if per_channel
+                else self._load(self._k[layer_idx], dtype))
+        return keys, self._load(self._v[layer_idx], dtype)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         return self._seen.get(layer_idx, 0)
@@ -181,13 +243,15 @@ class NF4KVCache:
         """Bytes actually held. ``fp16=True`` reports what bf16 storage of the
         same tokens would have cost — the comparison the context budget uses."""
         total = 0
+        for t in self._ktail.values():                # bf16 tail, < group tokens
+            total += t.numel() * 2
         for store in (self._k, self._v):
             for slot in store.values():
                 if slot[0] == "raw":
                     t = slot[1]
                     total += t.numel() * (2 if fp16 else t.element_size())
                 else:
-                    _, p, a, d = slot
+                    _, p, a, d = slot                 # "nf4" and "nf4pc" alike
                     n_tok, n_head = p.shape[0], p.shape[1]
                     total += (n_tok * n_head * d * 2 if fp16
                               else p.numel() + a.numel() * 4)

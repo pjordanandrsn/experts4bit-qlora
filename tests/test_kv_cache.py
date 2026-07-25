@@ -113,3 +113,33 @@ def test_real_generate_runs_through_the_cache():
     print("  nf4:", tok.decode(got[0][ids.shape[1]:], skip_special_tokens=True))
     print(f"  cache {cache.memory_bytes()/1024:.1f} KB vs bf16 "
           f"{cache.memory_bytes(fp16=True)/1024:.1f} KB ({saved:.2f}x)")
+
+
+@kv
+def test_per_channel_keys_roundtrip_and_tail_flushes():
+    """Per-channel keys must survive an incremental append pattern identical to
+    decode: the residual tail holds < group tokens in bf16 and flushes a group
+    at a time, so the reconstructed cache must match a single-shot store."""
+    c = NF4KVCache(key_scaling="per_channel", group=64)
+    v = _kv(200, 4, 128, 9)
+    k = _kv(200, 4, 128, 8)
+    # feed in ragged chunks the way generation would
+    got = None
+    for lo, hi in ((0, 130), (130, 131), (131, 199), (199, 200)):
+        got, _ = c.update(k[:, :, lo:hi], v[:, :, lo:hi], 0)
+    assert got.shape == k.shape
+    assert c.get_seq_length(0) == 200
+    rel = ((got.float() - k.float()).norm() / k.float().norm()).item()
+    assert rel < 0.11, f"per-channel round-trip {rel:.4f}"
+    # 200 tokens = 3 full groups (192) quantized + 8 in the bf16 tail
+    assert c._ktail[0].shape[2] == 8
+    assert c._k[0][1].shape[0] == 192
+
+
+@kv
+def test_per_channel_costs_the_same_as_per_token():
+    """The claim that motivates using it: identical bytes, different fidelity."""
+    k, v = _kv(256, 4, 128, 1), _kv(256, 4, 128, 2)
+    a = NF4KVCache(); a.update(k, v, 0)
+    b = NF4KVCache(key_scaling="per_channel", group=64); b.update(k, v, 0)
+    assert b.memory_bytes() == a.memory_bytes()
