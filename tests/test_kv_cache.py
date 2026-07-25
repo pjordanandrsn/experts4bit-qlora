@@ -478,3 +478,45 @@ def test_split_residency_refuses_eviction_rather_than_corrupting():
         c.evict()
     with pytest.raises(NotImplementedError, match="resident_tokens"):
         c.evict_index(torch.arange(8, device="cuda"))
+
+
+@kv
+def test_prefetch_changes_timing_not_values():
+    """B1's correctness precondition. Prefetch moves the copy to a side stream;
+    if the compute stream does not order itself after that copy, the dequant
+    reads a partially-written buffer — which is a race, so it fails
+    intermittently rather than loudly. Run enough layers and repeats that a
+    missing event-wait has room to show."""
+    for kw in (dict(quantize_keys=True, quantize_values=True),
+               dict(quantize_keys=False, quantize_values=False)):
+        ref = NF4KVCache(**kw)
+        pre = NF4KVCache(residence="host", max_context=256, **kw)
+        x = _kv(128, 4, 128, 7)
+        want = [ref.update(x, x, li) for li in range(8)]
+        for li in range(8):
+            pre.update(x, x, li)
+        for _ in range(6):                       # repeats: a race is not a constant
+            for li in range(8):
+                pre.prefetch(li)
+                got_k = pre._load_layer(li, "k", torch.bfloat16)
+                got_v = pre._load_layer(li, "v", torch.bfloat16)
+                assert torch.equal(got_k, want[li][0]), (kw, li, "keys")
+                assert torch.equal(got_v, want[li][1]), (kw, li, "values")
+
+
+@kv
+def test_prefetch_is_optional_and_droppable():
+    """It must be skippable (the load falls through to a synchronous copy) and
+    it must be dropped on eviction — bytes in flight describe the pre-eviction
+    cache, which is the same contradiction as evicting mid-forward."""
+    c = NF4KVCache(residence="host", max_context=256, keep_sink=4, keep_recent=32)
+    x = _kv(128, 4, 128, 3)
+    c.update(x, x, 0)
+    c.prefetch(0)
+    assert 0 in c._inflight
+    c.evict()
+    assert not c._inflight, "a staged copy survived an eviction"
+    assert c.held_length(0) == 36
+    # and loading without any prefetch still works
+    got = c._load_layer(0, "k", torch.bfloat16)
+    assert got.shape[2] == 36

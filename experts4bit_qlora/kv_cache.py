@@ -198,6 +198,10 @@ class NF4KVCache:
         self.resident_tokens = resident_tokens
         self._khead: dict[int, Any] = {}
         self._vhead: dict[int, Any] = {}
+        # Prefetch state. Bounded at one layer in flight by construction: the
+        # caller asks for one layer at a time and _take_inflight consumes it.
+        self._stream = None
+        self._inflight: dict[int, Any] = {}
 
     # ---- storage helpers -------------------------------------------------
     def _store(self, x: torch.Tensor, quantize: bool):
@@ -214,8 +218,22 @@ class NF4KVCache:
         return ("nf4", p, a, d)
 
     def _load(self, slot, dtype) -> torch.Tensor:
-        """Materialize one layer. Under host residence this is the STREAM: the
-        packed slice crosses PCIe here, and nowhere else."""
+        """Materialize one layer as ``[1, H, T, D]``. Under host residence this
+        is the STREAM: the packed slice crosses PCIe here, and nowhere else."""
+        x = self._load_thd(slot, dtype)
+        if x.dim() == 4:                                # already [1, H, T, D]
+            return x
+        return x.transpose(0, 1).unsqueeze(0).contiguous()
+
+    def _load_thd(self, slot, dtype):
+        """The same load, stopping at ``[T, H, D]`` before re-orientation.
+
+        Split assembly needs this. Calling :meth:`_load` per half and then
+        concatenating pays a full-size ``.contiguous()`` for EACH half and then
+        a second full-size copy in the ``cat`` — three allocations and three
+        passes where one cat over transposed views does it in one. Measured at
+        32K that difference was ~60 ms/step, against the ~156 ms the split saves.
+        """
         if slot[0] == "raw":
             x = slot[1]
             return x if x.is_cuda or self._device is None else x.to(
@@ -228,10 +246,9 @@ class NF4KVCache:
             p = p.to(self._device, non_blocking=True)
             a = None if a is None else a.to(self._device, non_blocking=True)
         if a is None:                                   # "rawh": nothing to dequant
-            return p.transpose(0, 1).unsqueeze(0).contiguous()
+            return p                                              # [T, H, D]
         _, dequant_kv_ref = _kv_ops()
-        x = dequant_kv_ref(p, a, d, dtype=dtype)                  # [T, H, D]
-        return x.transpose(0, 1).unsqueeze(0).contiguous()        # [1, H, T, D]
+        return dequant_kv_ref(p, a, d, dtype=dtype)               # [T, H, D]
 
     # ---- arena-backed append (both residences) ---------------------------
     def _arena_for(self, key, slot, needed: int, cur=None):
@@ -348,16 +365,103 @@ class NF4KVCache:
                 (kind, layer_idx), self._store(x[:, :, to_head:], quantize),
                 tail_used, tail_store.get(layer_idx))
 
+    def prefetch(self, layer_idx: int, dtype=torch.bfloat16) -> None:
+        """Start layer ``layer_idx``'s H2D copy on a side stream.
+
+        Under host residence the copy and the dequant serialize on the default
+        stream, so a step costs ``compute + transfer``. Issuing the NEXT layer's
+        copy while THIS layer's dequant runs makes it ``max(compute, transfer)``.
+        Measured at 32K the per-layer dequant is 10.3 ms against a 3.05 ms
+        transfer, so there is room to hide all of it.
+
+        Bounded at one layer in flight, deliberately: the point of host
+        residence is that the cache is not on the device, and an unbounded
+        prefetch queue walks that back one layer at a time.
+
+        Call before the layer runs; :meth:`_load` consumes whatever is ready and
+        falls through to a synchronous copy when nothing was prefetched, so this
+        is an optimization the caller may skip entirely.
+        """
+        if self.residence != "host" or self._device is None:
+            return
+        if layer_idx in self._inflight:
+            return
+        stream = self._side_stream()
+        staged = {}
+        for kind, store in (("k", self._k), ("v", self._v)):
+            slot = store.get(layer_idx)
+            if slot is None or slot[1].is_cuda:
+                continue
+            with torch.cuda.stream(stream):
+                p = slot[1].to(self._device, non_blocking=True)
+                a = (None if slot[2] is None
+                     else slot[2].to(self._device, non_blocking=True))
+            staged[kind] = (slot[0], p, a, slot[3])
+        if staged:
+            ev = torch.cuda.Event()
+            ev.record(stream)
+            self._inflight[layer_idx] = (staged, ev)
+
+    def _side_stream(self):
+        if self._stream is None:
+            self._stream = torch.cuda.Stream(device=self._device)
+        return self._stream
+
+    def _take_inflight(self, layer_idx: int, kind: str):
+        """Claim a prefetched slot, if one landed. Waits on the copy's event
+        rather than synchronizing the device: the compute stream simply orders
+        itself after the transfer."""
+        got = self._inflight.get(layer_idx)
+        if got is None:
+            return None
+        staged, ev = got
+        slot = staged.pop(kind, None)
+        if slot is not None:
+            torch.cuda.current_stream().wait_event(ev)
+            # the staged tensors were allocated on the side stream; tell the
+            # allocator the compute stream is now using them
+            slot[1].record_stream(torch.cuda.current_stream())
+            if slot[2] is not None:
+                slot[2].record_stream(torch.cuda.current_stream())
+        if not staged:
+            self._inflight.pop(layer_idx, None)
+        return slot
+
+    def _load_layer(self, layer_idx: int, kind: str, dtype) -> torch.Tensor:
+        """Load one layer, consuming a prefetched copy if one is ready.
+
+        Falls through to the synchronous path when nothing was prefetched, so
+        prefetching stays an optimization the caller may skip."""
+        slot = self._take_inflight(layer_idx, kind)
+        if slot is None:
+            slot = (self._k if kind == "k" else self._v)[layer_idx]
+        return self._load(slot, dtype)
+
     def _materialize(self, layer_idx: int, kind: str, dtype) -> torch.Tensor:
         """Assemble one layer from its resident head and its streamed tail."""
         head_store = self._khead if kind == "k" else self._vhead
         tail_store = self._k if kind == "k" else self._v
         head = head_store.get(layer_idx)
-        tail = tail_store.get(layer_idx)
-        parts = [self._load(s, dtype) for s in (head, tail) if s is not None]
-        if not parts:
+        tail = self._take_inflight(layer_idx, kind) or tail_store.get(layer_idx)
+        slots = [s for s in (head, tail) if s is not None]
+        if not slots:
             raise KeyError(f"layer {layer_idx} has neither head nor tail")
-        return parts[0] if len(parts) == 1 else torch.cat(parts, dim=2)
+        if len(slots) == 1:
+            return self._load(slots[0], dtype)
+        # cat over TRANSPOSED VIEWS: it writes the contiguous result in one
+        # pass, where materializing each half first pays two extra full-size
+        # allocations and copies before this one.
+        views = []
+        for s in slots:
+            x = self._load_thd(s, dtype)
+            views.append(x if x.dim() == 4 else x.transpose(0, 1).unsqueeze(0))
+        return torch.cat(views, dim=2)
+
+    def _drop_inflight(self) -> None:
+        """Discard staged copies. An eviction changes what the slots mean, so a
+        transfer already in flight would land bytes describing the pre-eviction
+        cache -- the same class of contradiction as evicting mid-forward."""
+        self._inflight.clear()
 
     def _drop_arenas(self) -> None:
         """Release the backing buffers after an eviction.
@@ -475,8 +579,8 @@ class NF4KVCache:
             return (self._materialize(layer_idx, "k", dtype),
                     self._materialize(layer_idx, "v", dtype))
         keys = (self._load_keys(layer_idx, dtype) if per_channel
-                else self._load(self._k[layer_idx], dtype))
-        return keys, self._load(self._v[layer_idx], dtype)
+                else self._load_layer(layer_idx, "k", dtype))
+        return keys, self._load_layer(layer_idx, "v", dtype)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         """Tokens ever SEEN. transformers derives ``cache_position`` from this,
@@ -519,6 +623,7 @@ class NF4KVCache:
         for store in (self._k, self._v):
             for li, slot in list(store.items()):
                 store[li] = self._evict_slot(slot, self.keep_sink, self.keep_recent)
+        self._drop_inflight()
         self._drop_arenas()
         self._resync_held()
 
@@ -577,6 +682,7 @@ class NF4KVCache:
                 slot = store.get(li)
                 if slot is not None:
                     store[li] = self._index_slot(slot, idx)
+        self._drop_inflight()
         self._drop_arenas()
         self._resync_held()
 
