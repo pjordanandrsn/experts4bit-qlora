@@ -143,3 +143,21 @@ def test_per_channel_costs_the_same_as_per_token():
     a = NF4KVCache(); a.update(k, v, 0)
     b = NF4KVCache(key_scaling="per_channel", group=64); b.update(k, v, 0)
     assert b.memory_bytes() == a.memory_bytes()
+
+
+@kv
+def test_mask_sizes_counts_tokens_about_to_be_written():
+    """transformers builds the attention mask BEFORE the layers run, so
+    kv_length must include this step's queries. Returning only the stored
+    length gives a zero-width mask on the first forward — which blows up any
+    model using an explicit additive mask (gpt-oss, via its attention sinks)
+    while models tolerating a None mask hide it."""
+    c = NF4KVCache()
+    pos = torch.arange(16, device="cuda")
+    assert c.get_mask_sizes(pos, 0) == (16, 0)          # empty cache, 16 new
+    c.update(_kv(16, 4, 128, 1), _kv(16, 4, 128, 2), 0)
+    nxt = torch.arange(16, 17, device="cuda")
+    assert c.get_mask_sizes(nxt, 0) == (17, 0)          # 16 stored + 1 new
+    # generate() passes a bare int query length, not a position tensor
+    assert c.get_mask_sizes(1, 0) == (17, 0)
+    assert c.get_mask_sizes([0, 1, 2], 0) == (19, 0)

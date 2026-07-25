@@ -228,8 +228,29 @@ class NF4KVCache:
         return 0
 
     def get_mask_sizes(self, cache_position, layer_idx: int = 0):
-        """(kv_length, kv_offset) — the shape transformers' mask builder wants."""
-        return self.get_seq_length(layer_idx), 0
+        """(kv_length, kv_offset) — the shape transformers' mask builder wants.
+
+        kv_length must count the tokens about to be written, not just those
+        already stored: the mask is built BEFORE the layers run, so at that
+        moment ``get_seq_length`` is still the PREVIOUS length (0 on the first
+        forward). Returning it alone yields a zero-width mask.
+
+        This surfaced only on gpt-oss, which uses eager attention with an
+        explicit additive mask because of its attention sinks; OLMoE's path
+        tolerates a None mask and hid the bug entirely. Hence the rule: a cache
+        cannot be called correct against one architecture's attention path.
+        """
+        # cache_position is not always a tensor: transformers' generate path
+        # passes a bare int (observed: 5 on a 5-token prompt against an empty
+        # cache, so it is the QUERY LENGTH, not a position — a position would
+        # have been 0..4). Handle tensor, sequence, and scalar alike.
+        if hasattr(cache_position, "shape"):
+            q_len = int(cache_position.shape[0])
+        elif hasattr(cache_position, "__len__"):
+            q_len = len(cache_position)
+        else:
+            q_len = int(cache_position)
+        return q_len + self.get_seq_length(layer_idx), 0
 
     @property
     def is_compileable(self) -> bool:
