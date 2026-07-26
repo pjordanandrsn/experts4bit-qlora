@@ -1,0 +1,1 @@
+NVIDIA L40S, 46068 MiB (RunPod SECURE, machine vuau6mpe4t2s; driver version not captured on-pod)
