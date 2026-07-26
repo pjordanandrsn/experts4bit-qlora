@@ -85,7 +85,7 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
 
     # token->expert sort: one (token, slot) row per assignment, grouped by expert
     flat = top_k_index.reshape(-1)
-    order = torch.argsort(flat)                      # [tokens*k], expert-grouped
+    order = torch.argsort(flat, stable=True)                      # [tokens*k], expert-grouped
     token_rows = order // k                          # source token per row
     top_pos = order - token_rows * k                 # which top-k slot it was
     counts = torch.bincount(flat, minlength=E)       # tokens per expert
@@ -117,9 +117,8 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     )
 
     w = top_k_weights[token_rows, top_pos].to(torch.float32)
-    out = torch.zeros(tokens, hidden, dtype=torch.float32, device=hidden_states.device)
-    out.index_add_(0, token_rows, down.to(torch.float32) * w[:, None])
-    return out.to(input_dtype)
+    return _scatter_combine(down, w, order, token_rows, tokens, k, hidden,
+                            hidden_states.device, input_dtype)
 
 
 def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
@@ -168,7 +167,7 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
     E = base.num_experts
 
     flat = top_k_index.reshape(-1)
-    order = torch.argsort(flat)
+    order = torch.argsort(flat, stable=True)
     token_rows = order // k
     top_pos = order - token_rows * k
     counts = torch.bincount(flat, minlength=E)
@@ -214,9 +213,29 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
         off += n
 
     w = top_k_weights[token_rows, top_pos].to(torch.float32)
-    out = torch.zeros(tokens, hidden, dtype=torch.float32, device=hidden_states.device)
-    out.index_add_(0, token_rows, down.to(torch.float32) * w[:, None])
-    return out.to(input_dtype)
+    return _scatter_combine(down, w, order, token_rows, tokens, k, hidden,
+                            hidden_states.device, input_dtype)
+
+
+def _scatter_combine(down, w, order, token_rows, tokens, k, hidden, device, out_dtype):
+    """Weighted combine of the expert-sorted rows back into token order.
+
+    ``index_add_`` is the obvious way to do this and is what this path used
+    first. On CUDA it accumulates with atomics, so the summation ORDER varies
+    run to run and the result is nondeterministic: measured as a 1.2e-2 %
+    perplexity spread across repeats on OLMoE, against a bit-stable 0.0 % for
+    the reference path. A stable sort alone does not fix it — the atomics do it
+    on their own.
+
+    ``order`` is a permutation, so every destination index is written exactly
+    once: scattering by assignment is deterministic, and the per-token reduction
+    then becomes a fixed-axis ``sum`` rather than an atomic accumulation. Costs
+    one ``[tokens*k, hidden]`` fp32 buffer, which at decode (tokens=1) is
+    negligible.
+    """
+    buf = torch.zeros(tokens * k, hidden, dtype=torch.float32, device=device)
+    buf[order] = down.to(torch.float32) * w[:, None]
+    return buf.view(tokens, k, hidden).sum(1).to(out_dtype)
 
 
 def enable_fast(model, verbose: bool = False) -> int:
