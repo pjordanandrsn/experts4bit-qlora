@@ -15,7 +15,11 @@ jobs:
           python-version: "3.11"
       - name: Install (CPU torch — GPU loader tests auto-skip on a CPU runner)
         run: |
-          python -m pip install --upgrade pip ruff
+          # ruff is PINNED: 0.16.0 (2026-07-22..26 window) introduced TRY004 /
+          # unused-noqa findings that fail 295 pre-existing sites on untouched
+          # code — a floating gate moving under a frozen tree is not a gate.
+          # Adopt newer ruff deliberately, with its findings, as its own change.
+          python -m pip install --upgrade pip "ruff==0.15.22"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[test]"
       - name: Lint
