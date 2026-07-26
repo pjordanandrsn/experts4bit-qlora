@@ -10,10 +10,18 @@ active experts and reads only packed bytes.
 
 Inference-only by design: the fused kernel has no backward, so any forward
 that requires grad (QLoRA training) silently uses the reference path — the
-recompute-backward training semantics are untouched. The two paths dequantize
-the *same* NF4 values; the fused path accumulates in fp32, which measured
-*more* accurate than the reference's bf16 materialization on every cell of
-the kernel's stamped property suite.
+recompute-backward training semantics are untouched.
+
+Accuracy, measured rather than asserted. The two paths dequantize the *same*
+NF4 values and the fused path accumulates in fp32, which measured *more*
+accurate than the reference's bf16 materialization on every cell of the
+kernel's stamped **per-op** property suite. **That does not survive
+composition**: through 16 layers of OLMoE-1B-7B the fused path is consistently
+*worse*, costing **+0.023% perplexity** (7.45645 vs the reference's 7.45474 on
+24 independent 2048-token chunks). A per-op accuracy result is not a
+model-level one, and this docstring previously implied it was. For scale, the
+NF4 KV cache costs ~2.1% — about 92x more. Deeper models compound further;
+94 layers is unmeasured.
 
 Usage::
 
