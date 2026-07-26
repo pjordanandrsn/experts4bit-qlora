@@ -46,6 +46,34 @@ Why this is correct (and why the hook goes on ``ExpertsLoRA``, not ``ExpertsNbit
 
 The tiny NF4 ``code`` buffer and the trainable LoRA adapters stay GPU-resident throughout.
 
+Choosing a staging policy for inference — read this before reaching for prefetch:
+
+Two policies exist and they are **mutually exclusive**. Measured on Qwen3-235B-A22B
+(E=128, top_k=8, 94 layers) over a 22.5 GB/s pinned link:
+
+===========================  ==========  =========================================
+policy                       s/token     what it does
+===========================  ==========  =========================================
+bulk (default)                    5.57    copies a layer's WHOLE expert stack
+bulk + prefetch                   5.14    same bytes, overlapped with compute
+``enable_routed_staging``         0.93    copies only the experts that routed
+routed + ``enable_fast``          0.71    ...and fuses the per-expert loop
+===========================  ==========  =========================================
+
+**Routed staging is the recommended policy for streamed inference** and is worth
+**5.95x**. The reason is that bulk staging moves ``E/top_k`` = **16x** the bytes the
+routing actually needs, so overlapping that traffic (prefetch, worth 1.11x) is
+optimizing the wrong term. Routed staging is **bit-identical** to bulk — verified
+on the real 235B and at flagship per-layer shape — so it is a pure win where it
+applies.
+
+It is off by default because it changes what crosses the link, and because it
+**cannot be combined with prefetch**: layer ``L+1``'s routing is decided by a router
+reading layer ``L``'s output, so there is nothing to prefetch. That exclusion is
+structural, not a tuning preference, and :func:`enable_routed_staging` raises
+rather than silently degrading. Prefill and training fall back to bulk
+automatically.
+
 Inference (``no_grad``) prefetch — :func:`enable_inference_prefetch`:
 
 At decode there is no backward and no gradient-checkpoint recompute, so the staging schedule is
