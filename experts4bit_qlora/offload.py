@@ -791,12 +791,41 @@ def enable_expert_cache(handles, slots=None, top_k=8):
 
     row_bytes = sum(h0.home[n].numel() // h0.base.num_experts * h0.home[n].element_size()
                     for n in h0._param_names + h0._buffer_names)
-    slots = slots or (len(handles) * top_k)
-    pool = _ExpertPool(slots, row_bytes, h0.device)
+
+    # ONE POOL PER LAYER, not one shared pool.
+    #
+    # A single pool sized at `layers * top_k` is exactly one token's working set,
+    # and a decode step touches every one of those rows in layer order. Global
+    # LRU then evicts layer 0's entries to make room for layer 93's, one token
+    # before layer 0 needs them again — a perfect thrash. Measured on the 235B:
+    # **6 hits out of 34,719** (0.02%), while costing 7.98 GB and 1.11x the time.
+    #
+    # Partitioning per layer removes the interference entirely: layer L's rows
+    # only ever compete with layer L's, so a `top_k`-sized partition holds
+    # exactly the previous token's working set for that layer — which is what
+    # finding #32's 0.4513 reuse figure was measured over.
+    per_layer = slots if slots else top_k
+    pools = []
     for i, h in enumerate(handles):
+        pool = _ExpertPool(per_layer, row_bytes, h0.device)
         h._pool = pool
         h._pool_layer = i
-    return pool
+        pools.append(pool)
+    return _PoolGroup(pools, row_bytes)
+
+
+class _PoolGroup:
+    """The per-layer pools, with one aggregate view for reporting."""
+
+    def __init__(self, pools, row_bytes):
+        self.pools = pools
+        self.row_bytes = row_bytes
+        self.slots = sum(p.slots for p in pools)
+
+    def stats(self):
+        h = sum(p.hits for p in self.pools)
+        m = sum(p.misses for p in self.pools)
+        return h, m, h + m, (h / (h + m) if (h + m) else float("nan"))
 
 
 def enable_speculative_staging(model, distance: int = 2, k: int = 8,
