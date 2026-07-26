@@ -204,6 +204,11 @@ class _ExpertOffload:
         # one in forward order, and the CUDA event marking this handle's in-flight prefetch copy.
         self._prefetch_next = None
         self.ready_event = None
+        # Routed-only staging (see enable_routed_staging): copy just the experts a
+        # forward actually routes to instead of the layer's whole stack. Off by
+        # default — it changes what crosses the link, so it is opt-in.
+        self._routed_only = False
+        self._routed_max = None      # above this many routed experts, bulk is cheaper
         # Offload only the tensors this base actually carries: passthrough (bf16/fp16) schemes
         # register their absmax buffers as None — those stay None throughout (never swapped for a
         # placeholder), so `base.gate_up_absmax is None` remains a valid passthrough test while
@@ -373,6 +378,70 @@ class _ExpertOffload:
         self._copy_home_to_device("sync")
         cls._resident = self
 
+    def _copy_routed_to_device(self, ids) -> None:
+        """Copy ONLY the rows in ``ids`` from the pinned homes to a full-shaped device tensor.
+
+        The destination keeps the home's full ``[E, ...]`` shape even though only a
+        few rows are filled, so **every consumer indexes by the original expert id
+        and nothing downstream changes** — ``ExpertsLoRA.forward`` walks
+        ``expert_hit``, and the grouped kernel is handed explicit ``expert_ids``;
+        both touch exactly the routed rows. The unrouted rows hold uninitialized
+        memory and are never read. Compacting instead would save device memory but
+        would require remapping ids at every indexing site, which is a much larger
+        blast radius for a bounded win (one layer is resident at a time).
+        """
+        stats = _stats() if _stats_enabled() else None
+        if stats is not None:
+            stream = torch.cuda.current_stream(self.device)
+            start = torch.cuda.Event(enable_timing=True)
+            start.record(stream)
+
+        b = self.base
+        E = b.num_experts
+        nbytes = 0
+        for n in self._param_names + self._buffer_names:
+            h = self.home[n]
+            dev = torch.empty(h.shape, dtype=h.dtype, device=self.device)
+            hv, dv = h.view(E, -1), dev.view(E, -1)
+            for e in ids:
+                dv[e].copy_(hv[e], non_blocking=True)
+            nbytes += len(ids) * hv.shape[1] * h.element_size()
+            if n in self._param_names:
+                b._parameters[n].data = dev
+            else:
+                b._buffers[n] = dev
+        # Not the arena path: routed staging allocates per tensor, so drop any arena
+        # device handles the previous staging policy left behind.
+        self._staged_dev = None
+
+        if stats is not None:
+            end = torch.cuda.Event(enable_timing=True)
+            end.record(stream)
+            stats.record_copy(start, end, nbytes,
+                              len(ids) * (len(self._param_names) + len(self._buffer_names)),
+                              "routed")
+        self.staged = True
+
+    def stage_routed(self, ids) -> None:
+        """Single-slot stage of just the routed experts.
+
+        Deliberately synchronous and **incompatible with next-layer prefetch**:
+        which experts a layer needs is decided by the router from the *previous*
+        layer's output, so it is not knowable early enough to prefetch. Routed-only
+        trades that overlap (measured worth 1.11x) for 16x fewer bytes.
+        """
+        if self.staged:
+            self._consume_ready_event()
+            return
+        cls = type(self)
+        for h in list(cls._staged_now):
+            if h is not self:
+                h.evict()
+        if cls._resident is not None and cls._resident is not self:
+            cls._resident.evict()
+        self._copy_routed_to_device(ids)
+        cls._resident = self
+
     def stage_for_inference(self) -> None:
         """Two-resident staging for ``no_grad`` forwards with prefetch links installed: make this
         layer's experts usable on the compute stream, then start the *next* layer's H2D copy on the
@@ -468,7 +537,19 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
         # and so does a no_grad forward of a module still in train() mode: reentrant gradient
         # checkpointing (use_reentrant=True) runs the *initial* training forward under
         # torch.no_grad(), which the grad-mode test alone would misread as inference.
-        if handle._prefetch_next is not None and not torch.is_grad_enabled() and not module.training:
+        inference = not torch.is_grad_enabled() and not module.training
+        # Routed-only staging. args[1] is this layer's top_k_index — the router
+        # already ran in the parent block, so the routing IS known here. Gated to
+        # inference for the same reason prefetch is: a checkpoint recompute must
+        # re-stage identically, and the conservative bulk path always does.
+        if handle._routed_only and inference and len(args) > 1 and torch.is_tensor(args[1]):
+            ids = torch.unique(args[1]).tolist()
+            # Above the crossover essentially every expert routes (prefill), where
+            # one bulk copy beats E strided ones. Fall through to the normal path.
+            if len(ids) <= handle._routed_max:
+                handle.stage_routed(ids)
+                return
+        if handle._prefetch_next is not None and inference:
             handle.stage_for_inference()
         else:
             handle.stage()
@@ -476,6 +557,46 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
     experts_lora.register_forward_pre_hook(_stage_pre_hook)
     experts_lora.register_forward_hook(lambda module, args, output: handle.evict())
     return handle
+
+
+def enable_routed_staging(handles, max_fraction: float = 0.5) -> list[_ExpertOffload]:
+    """Stage only the experts a forward routes to, instead of the whole layer stack.
+
+    The offload pre-hook copies a layer's entire expert tensor — all ``E`` of them —
+    while a decode step routes to ``top_k``. On Qwen3-235B (E=128, top_k=8) that is
+    **16x the bytes the routing needs**, which measured as a 5.14 s/token step where
+    routed-only bytes imply 0.37 s at the same link. This makes the copy follow the
+    router.
+
+    **Mutually exclusive with inference prefetch, and not by preference.** Which
+    experts layer L+1 needs is decided by a router reading layer L's output, so it
+    cannot be known in time to prefetch. Routed-only gives up that overlap (measured
+    1.11x) to move 16x less. Calling this on prefetch-linked handles raises.
+
+    ``max_fraction`` is the crossover: when a forward routes to more than this share
+    of the experts — prefill, where nearly all of them light up — the bulk copy is
+    cheaper than ``E`` strided ones and the pre-hook falls back to it automatically.
+
+    Inference only (``no_grad`` **and** ``eval``). Training and checkpoint recomputes
+    keep the bulk single-slot path, so gradient semantics are untouched.
+    """
+    handles = list(handles)
+    linked = [h for h in handles if h._prefetch_next is not None]
+    if linked:
+        raise RuntimeError(
+            f"routed-only staging is incompatible with inference prefetch "
+            f"({len(linked)} handles are prefetch-linked). The next layer's routing "
+            f"is not known until this layer's output exists, so there is nothing to "
+            f"prefetch. Load with prefetch=False, or call disable_inference_prefetch "
+            f"first."
+        )
+    for h in handles:
+        n_exp = getattr(h.base, "num_experts", None)
+        if not n_exp:
+            continue
+        h._routed_only = True
+        h._routed_max = max(1, int(n_exp * max_fraction))
+    return handles
 
 
 def enable_inference_prefetch(handles) -> list[_ExpertOffload]:

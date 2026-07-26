@@ -59,6 +59,7 @@ from .lora import ExpertsLoRA, LoRALinear, add_attention_lora  # noqa: E402
 from .offload import (  # noqa: E402
     enable_expert_offload,
     enable_inference_prefetch,
+    enable_routed_staging,
     offload_model_experts,
     offload_stats_report,
     report_offload_environment,
@@ -96,6 +97,7 @@ __all__ = [
     "hot_residency_available",
     "pipelined_available",
     "enable_inference_prefetch",
+    "enable_routed_staging",
     "normalize_quant_type",
     "offload_model_experts",
     "offload_stats_report",
