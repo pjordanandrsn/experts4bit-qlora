@@ -1,0 +1,7 @@
+[01:26:24] cell naive start
+[01:27:19] cell naive rc=0 DECODE 17.28 tok/s | prefill 0.66s | peak 18.43 GB | patched 24/24
+[01:27:19] cell informed start
+[01:28:22] cell informed rc=0 DECODE 19.40 tok/s | prefill 0.40s | peak 18.43 GB | patched 24/24
+[01:28:22] cell k0 start
+[01:29:14] cell k0 rc=0 DECODE 17.40 tok/s | prefill 0.64s | peak 15.75 GB | patched 24/24
+[01:29:14] ALLDONE

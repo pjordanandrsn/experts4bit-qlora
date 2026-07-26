@@ -56,3 +56,39 @@ One L40S pod (`rzxl99wg64w2r1`), ~$0.4, torn down on evidence-complete and
 (A5000) crashed them on the free-base bug (fixed: skip free under pipelined,
 `bench/bench_gptoss_hybrid.py`); the hot + llama comparators from that pod are
 in `RESULTS-informed-hotsets.md` / `RESULTS-gptoss-hybrid-ab.md`.
+
+## Addendum: replicated 2026-07-25 — bnb 0.50.0, second L40S host
+
+Independent re-run of all three cells, same recipe (ENGINE=pipelined,
+K_SLOTS=4, 128-token greedy, `taskset -c 0-3`, gpt-oss-20b), e4b @ the same
+tip (`dc20c71`), on a fresh RunPod SECURE L40S pod — the **first composite
+run on the released bitsandbytes 0.50.0** (the 2026-07-20 cells ran bnb
+0.49.2). Receipts in `bench/receipts-pipelined-20260725/`.
+
+| cell | 2026-07-25 | 2026-07-20 | reading |
+|---|---|---|---|
+| pipelined informed K=8 | **19.40** tok/s, 18.43 GB, cov 68.9 % | 17.61 tok/s, 18.43 GB, cov 68.9 % | +10 %, **peak and coverage identical** |
+| pipelined naive K=8 | 17.28 tok/s, 18.43 GB | 14.67 tok/s, 18.43 GB | +18 %, **peak identical** |
+| pipelined K=0 (pure stream) | 17.40 tok/s, 15.75 GB | 17.08 tok/s, 15.75 GB | +2 %, **peak identical** |
+
+- **The informed-hot-set law replicates:** informed K=8 over naive K=8 at
+  identical VRAM reads **+12.3 %** here vs +20 % in the original cells — same
+  direction, same ballpark, and the calibration coverage is **identical to
+  the tenth (68.9 %)**, deterministic greedy histogram on the same workload).
+- **Every peak-VRAM figure is byte-identical** (18.43 / 18.43 / 15.75 GB) —
+  expected for identical weights + engine on the same GPU model, but worth
+  stating: bnb 0.50.0 did not move the memory contract.
+- The absolute-speed shift (+2 % to +18 %) is **same-GPU-model,
+  different-host** run context (different CPU instance, different contention)
+  plus the bnb 0.49.2→0.50.0 drift; the two biggest deltas land on the
+  *naive-cold-tail* cells, consistent with the cold-stream path being the
+  host-sensitive one. No re-adjudication of the original numbers: the law is
+  a same-box ratio, and it holds on both boxes.
+
+Ops: two L40S pods, ≈$1.37 total — pod #1 was deleted mid-provision by its
+own 45-minute teardown backstop (ops error, no data lost), pod #2
+(`pem4ar8lka1fak`) ran all three cells and was torn down on
+evidence-complete, 404-verified. Provisioning notes for the next runner:
+the gpt-oss loader reads `original/model.safetensors` (include `original/`
+in HF snapshots), `HF_HUB_ENABLE_HF_TRANSFER=1` pulls 13.8 GB in ~15 s, and
+`HF_HUB_OFFLINE=1` turns any cache miss into a fast loud failure.
