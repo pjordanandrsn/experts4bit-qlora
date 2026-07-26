@@ -209,6 +209,11 @@ class _ExpertOffload:
         # default — it changes what crosses the link, so it is opt-in.
         self._routed_only = False
         self._routed_max = None      # above this many routed experts, bulk is cheaper
+        # Which staging path last ran, and how many bytes it moved. The module's
+        # own tensors cannot answer this after the fact — the post-hook evicts them
+        # to 0-element placeholders as soon as the forward returns.
+        self._last_stage_policy = None
+        self._last_stage_nbytes = 0
         # Offload only the tensors this base actually carries: passthrough (bf16/fp16) schemes
         # register their absmax buffers as None — those stay None throughout (never swapped for a
         # placeholder), so `base.gate_up_absmax is None` remains a valid passthrough test while
@@ -336,6 +341,8 @@ class _ExpertOffload:
             end = torch.cuda.Event(enable_timing=True)
             end.record(stream)
             stats.record_copy(start, end, self._stage_nbytes, self._stage_ncopies, policy)
+        self._last_stage_policy = policy
+        self._last_stage_nbytes = self._stage_nbytes
         self.staged = True
 
     def _consume_ready_event(self) -> None:
@@ -420,6 +427,8 @@ class _ExpertOffload:
             stats.record_copy(start, end, nbytes,
                               len(ids) * (len(self._param_names) + len(self._buffer_names)),
                               "routed")
+        self._last_stage_policy = "routed"
+        self._last_stage_nbytes = nbytes
         self.staged = True
 
     def stage_routed(self, ids) -> None:

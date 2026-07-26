@@ -76,21 +76,27 @@ def test_routed_output_is_bit_identical_to_bulk():
 
 
 def test_routed_copies_less():
-    """Only the routed rows should cross the link."""
+    """Only the routed rows cross the link — asserted on bytes, not on a proxy.
+
+    Note the module's own tensors are useless here: the post-hook evicts them to
+    0-element placeholders the instant the forward returns, so a test that reads
+    `routed.base.gate_up_proj` afterwards compares against a placeholder and
+    passes no matter which path ran.
+    """
     routed = _build()
     h = enable_expert_offload(routed, DEVICE)
     enable_routed_staging([h])
     hs, idx, wts = _inputs(n_experts_used=3)
     used = int(torch.unique(idx).numel())
-    assert used <= 3
     with torch.no_grad():
         routed(hs, idx, wts)
-    # Rows outside the routed set are allocated but never written, so the staged
-    # tensor cannot equal the full home copy.
-    full = h.home["gate_up_proj"].to(DEVICE)
-    assert not torch.equal(routed.base.gate_up_proj, full), (
-        "every row matched the home copy — the bulk path ran, not the routed one"
+    assert h._last_stage_policy == "routed"
+    expected = h._stage_nbytes * used / N_EXP
+    assert h._last_stage_nbytes == pytest.approx(expected, rel=0.01), (
+        f"moved {h._last_stage_nbytes} bytes for {used}/{N_EXP} experts; "
+        f"routing implies ~{expected:.0f}"
     )
+    assert h._last_stage_nbytes < h._stage_nbytes / 4
 
 
 def test_falls_back_to_bulk_above_crossover():
@@ -102,8 +108,8 @@ def test_falls_back_to_bulk_above_crossover():
     assert int(torch.unique(idx).numel()) > h._routed_max
     with torch.no_grad():
         out = routed(hs, idx, wts)
-    full = h.home["gate_up_proj"].to(DEVICE)
-    assert torch.equal(routed.base.gate_up_proj, full), "expected the bulk fallback"
+    assert h._last_stage_policy != "routed", "expected the bulk fallback above the crossover"
+    assert h._last_stage_nbytes == h._stage_nbytes
     assert out.isfinite().all()
 
 
@@ -126,14 +132,20 @@ def test_training_falls_back_to_bulk():
     routed.train()
     with torch.no_grad():
         routed(hs, idx, wts)
-    full = h.home["gate_up_proj"].to(DEVICE)
-    assert torch.equal(routed.base.gate_up_proj, full), (
+    assert h._last_stage_policy != "routed", (
         "train()-mode forward took the routed path; a checkpoint recompute could "
         "then read a row the initial forward never staged"
     )
+    assert h._last_stage_nbytes == h._stage_nbytes
 
+    # A grad-enabled forward must also take the bulk path. Deliberately NOT
+    # completing a backward here: offload.py documents that non-checkpointed
+    # offload training is unsupported (the re-dequant would read an evicted
+    # placeholder), so calling .backward() would assert against a configuration
+    # the package refuses by design rather than against routed staging.
     routed.eval()
     hs_g = hs.clone().requires_grad_(True)
     out = routed(hs_g, idx, wts)
-    out.sum().backward()
-    assert hs_g.grad is not None
+    assert out.requires_grad
+    assert h._last_stage_policy != "routed", "grad-enabled forward took the routed path"
+    assert h._last_stage_nbytes == h._stage_nbytes
