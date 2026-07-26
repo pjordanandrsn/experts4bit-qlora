@@ -74,7 +74,8 @@ run on the released bitsandbytes 0.50.0** (the 2026-07-20 cells ran bnb
 - **The informed-hot-set law replicates:** informed K=8 over naive K=8 at
   identical VRAM reads **+12.3 %** here vs +20 % in the original cells — same
   direction, same ballpark, and the calibration coverage is **identical to
-  the tenth (68.9 %)**, deterministic greedy histogram on the same workload).
+  the tenth (68.9 %)** — the deterministic greedy histogram on the same
+  workload reproduces exactly.
 - **Every peak-VRAM figure is byte-identical** (18.43 / 18.43 / 15.75 GB) —
   expected for identical weights + engine on the same GPU model, but worth
   stating: bnb 0.50.0 did not move the memory contract.
