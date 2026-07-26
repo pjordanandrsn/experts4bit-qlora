@@ -154,11 +154,17 @@ def test_training_falls_back_to_bulk():
 def test_composes_with_the_grouped_kernel():
     """Routed staging and the grouped kernel fix DIFFERENT halves of the step.
 
-    Routed staging removes 16x surplus bytes; the grouped kernel removes the
-    per-expert Python loop (measured 4.40 -> 2.17 ms/layer on Qwen3-235B shapes,
-    2.03x). They must compose: nothing excludes them, but the grouped kernel is
-    handed a destination in which only the routed rows were written, so this
-    checks it reads exactly the rows it was given `expert_ids` for.
+    Two gates, and the second is the strong one:
+
+    1. vs bulk+reference, `rel < 2e-2` — the kernel boundary is documented as
+       inexact (fp32 accumulation vs a bf16 materialization), so equality is the
+       wrong ask here.
+    2. **bulk+grouped == routed+grouped, BIT-EXACTLY.** Staging is held constant
+       in the kernel and routed staging is bit-identical, so the kernel receives
+       byte-identical inputs and must return byte-identical outputs. The original
+       version of this test asserted only (1), which could not have caught a
+       staging-dependent difference under the kernel — the exact gap that left
+       finding #23's divergence unexplained.
     """
     from experts4bit_qlora import enable_fast, fast_available
 
@@ -167,22 +173,33 @@ def test_composes_with_the_grouped_kernel():
 
     hs, idx, wts = _inputs()
 
-    bulk = _build()
-    enable_expert_offload(bulk, DEVICE)
+    ref_bulk = _build()
+    enable_expert_offload(ref_bulk, DEVICE)
     with torch.no_grad():
-        want = bulk(hs, idx, wts)
+        want = ref_bulk(hs, idx, wts)
 
-    both = _build()
-    h = enable_expert_offload(both, DEVICE)
-    enable_routed_staging([h])
-    assert enable_fast(both) == 1
+    bulk_g = _build()
+    enable_expert_offload(bulk_g, DEVICE)
+    assert enable_fast(bulk_g) == 1
     with torch.no_grad():
-        got = both(hs, idx, wts)
+        got_bulk = bulk_g(hs, idx, wts)
+
+    routed_g = _build()
+    h = enable_expert_offload(routed_g, DEVICE)
+    enable_routed_staging([h])
+    assert enable_fast(routed_g) == 1
+    with torch.no_grad():
+        got_routed = routed_g(hs, idx, wts)
 
     assert h._last_stage_policy == "routed", "routed staging stopped firing under [fast]"
-    rel = ((got.float() - want.float()).norm()
+
+    rel = ((got_routed.float() - want.float()).norm()
            / want.float().norm().clamp_min(1e-12)).item()
-    assert rel < 2e-2, (
-        f"routed staging + grouped kernel disagree with bulk+reference "
-        f"(rel {rel:.3e}) — the kernel read a row that was never staged"
+    assert rel < 2e-2, f"pair disagrees with bulk+reference (rel {rel:.3e})"
+
+    assert torch.equal(got_bulk, got_routed), (
+        "bulk+grouped != routed+grouped with the kernel held constant. Routed "
+        "staging is bit-identical, so the kernel saw identical bytes and must "
+        "return identical results — this means it consumed something staging "
+        "changed."
     )
