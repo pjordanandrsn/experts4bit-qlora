@@ -242,6 +242,11 @@ class _ExpertOffload:
         # to 0-element placeholders as soon as the forward returns.
         self._last_stage_policy = None
         self._last_stage_nbytes = 0
+        # Speculative prefetch state (see prefetch_speculative / enable_speculative_staging).
+        self._spec_dev = None
+        self._spec_ids = None
+        self._spec_event = None
+        self._spec_hits = self._spec_misses = self._spec_total = 0
         # Offload only the tensors this base actually carries: passthrough (bf16/fp16) schemes
         # register their absmax buffers as None — those stay None throughout (never swapped for a
         # placeholder), so `base.gate_up_absmax is None` remains a valid passthrough test while
@@ -413,6 +418,55 @@ class _ExpertOffload:
         self._copy_home_to_device("sync")
         cls._resident = self
 
+    def _alloc_dest(self):
+        """Full-shaped device tensors, only some rows of which will be written."""
+        return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,
+                               device=self.device)
+                for n in self._param_names + self._buffer_names}
+
+    def _copy_rows_into(self, dest, ids) -> int:
+        """Copy just rows ``ids`` from the pinned homes into ``dest``. Returns bytes."""
+        E = self.base.num_experts
+        nbytes = 0
+        for n in self._param_names + self._buffer_names:
+            h = self.home[n]
+            hv, dv = h.view(E, -1), dest[n].view(E, -1)
+            for e in ids:
+                dv[e].copy_(hv[e], non_blocking=True)
+            nbytes += len(ids) * hv.shape[1] * h.element_size()
+        return nbytes
+
+    def _bind(self, dest) -> None:
+        b = self.base
+        for n in self._param_names:
+            b._parameters[n].data = dest[n]
+        for n in self._buffer_names:
+            b._buffers[n] = dest[n]
+        self._staged_dev = None
+        self.staged = True
+
+    def prefetch_speculative(self, pred_ids) -> None:
+        """Stage PREDICTED experts on the side stream, before the true set exists.
+
+        Correctness does not depend on the prediction: the destination keeps the
+        full ``[E, ...]`` shape, and :meth:`stage_routed` copies whatever the
+        router actually asked for and did not find here. A wrong guess costs
+        bandwidth, never an answer.
+        """
+        if self.staged or self._spec_dev is not None:
+            return
+        dest = self._alloc_dest()
+        stream = _prefetch_stream(self.device)
+        stream.wait_stream(torch.cuda.current_stream(self.device))
+        with torch.cuda.stream(stream):
+            self._copy_rows_into(dest, pred_ids)
+            for d in dest.values():
+                d.record_stream(torch.cuda.current_stream(self.device))
+        self._spec_event = torch.cuda.Event()
+        self._spec_event.record(stream)
+        self._spec_ids = set(int(e) for e in pred_ids)
+        self._spec_dev = dest
+
     def _copy_routed_to_device(self, ids) -> None:
         """Copy ONLY the rows in ``ids`` from the pinned homes to a full-shaped device tensor.
 
@@ -476,7 +530,23 @@ class _ExpertOffload:
                 h.evict()
         if cls._resident is not None and cls._resident is not self:
             cls._resident.evict()
-        self._copy_routed_to_device(ids)
+        if self._spec_dev is not None:
+            # A speculative prefetch is in flight or complete. Order the compute
+            # stream after it, then fill only what the router asked for and the
+            # guess missed. Every true row is present afterwards either way.
+            torch.cuda.current_stream(self.device).wait_event(self._spec_event)
+            missing = [e for e in ids if int(e) not in self._spec_ids]
+            self._spec_hits += len(ids) - len(missing)
+            self._spec_total += len(ids)
+            if missing:
+                self._spec_misses += len(missing)
+                self._copy_rows_into(self._spec_dev, missing)
+            self._bind(self._spec_dev)
+            self._last_stage_policy = "speculative"
+            self._spec_dev = None
+            self._spec_ids = None
+        else:
+            self._copy_routed_to_device(ids)
         cls._resident = self
 
     def stage_for_inference(self) -> None:
@@ -522,6 +592,12 @@ class _ExpertOffload:
         keep each tensor's home dtype (uint8 packed / float32 absmax / bf16-fp16 passthrough). Safe
         even for a still-in-flight prefetch: the dropped tensors were allocated on the side stream,
         so their reuse is stream-ordered after the pending copy."""
+        if self._spec_dev is not None and not self.staged:
+            # A speculative prefetch for THIS handle is in flight for a layer that
+            # has not run yet. Evicting would silently discard it and the guess
+            # would be paid for twice. The buffer is small (one layer) and bounded
+            # by the lookahead distance.
+            return
         b = self.base
         for n in self._param_names:
             b._parameters[n].data = _placeholder(self.device, self.home[n].dtype)
@@ -594,6 +670,78 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
     experts_lora.register_forward_pre_hook(_stage_pre_hook)
     experts_lora.register_forward_hook(lambda module, args, output: handle.evict())
     return handle
+
+
+def enable_speculative_staging(model, distance: int = 2, k: int = 8,
+                               max_fraction: float = 0.5):
+    """Prefetch each MoE layer's experts using its routing PREDICTED `distance`
+    layers early, correcting misses synchronously.
+
+    Routed staging is synchronous because layer L+1's routing is produced by a
+    router reading layer L's output. But that routing is *predictable*: applying
+    layer i's own router to layer (i-d)'s output recovers, of the true top-8,
+    0.909 at d=1 and **0.847 at d=2** on Qwen3-30B-A3B (finding #32) — because
+    routing is set by what the experts wrote to the residual, and one or two
+    intervening layers change it only slightly.
+
+    So this predicts, prefetches on the side stream during the intervening
+    layers' compute, and stages whatever the router actually asked for and the
+    guess missed. **Correctness does not depend on the prediction**: the
+    destination keeps its full ``[E, ...]`` shape and every truly-routed row is
+    present before the forward runs, so the result is bit-identical to routed
+    staging no matter how bad the guess is. A wrong guess costs bandwidth only.
+
+    `k` is deliberately the model's own top_k rather than a superset. #32's
+    arithmetic: staging K experts costs ``K/top_k x`` routed staging's bytes, and
+    a streamed decode step is transfer-bound, so K=16 measured *slower* than not
+    speculating at all. The win comes from hiding compute, not from covering more
+    of the distribution.
+
+    Inference only, and mutually exclusive with `enable_inference_prefetch` for
+    the same reason routed staging is.
+    """
+    layers = model.model.layers
+    handles, hooked = [], 0
+    for i, ly in enumerate(layers):
+        h = getattr(getattr(ly, "mlp", None), "_offload", None)
+        if h is None:
+            for m in ly.modules():
+                h = getattr(m, "_offload", None)
+                if h is not None:
+                    break
+        if h is None:
+            continue
+        handles.append(h)
+        h._routed_only = True
+        h._routed_max = max(1, int(getattr(h.base, "num_experts", k * 2) * max_fraction))
+        src = i - distance
+        if src < 0:
+            continue                      # first `distance` layers stay synchronous
+
+        def make(target_layer, handle):
+            def hook(mod, args, out):
+                if torch.is_grad_enabled() or mod.training:
+                    return
+                hs = (out[0] if isinstance(out, tuple) else out)[:, -1:, :]
+                tl = layers[target_layer]
+                gate = tl.mlp.gate
+                x = tl.post_attention_layernorm(hs)
+                logits = torch.nn.functional.linear(x.to(gate.weight.dtype), gate.weight)
+                pred = logits.float().view(-1, logits.shape[-1]).topk(k, -1).indices
+                handle.prefetch_speculative(pred.view(-1).unique().tolist())
+            return hook
+
+        layers[src].register_forward_hook(make(i, h))
+        hooked += 1
+    return handles, hooked
+
+
+def speculative_stats(handles):
+    """(hits, misses, total, hit_rate) over every speculatively-staged layer."""
+    hi = sum(h._spec_hits for h in handles)
+    mi = sum(h._spec_misses for h in handles)
+    to = sum(h._spec_total for h in handles)
+    return hi, mi, to, (hi / to if to else float("nan"))
 
 
 def enable_routed_staging(handles, max_fraction: float = 0.5) -> list[_ExpertOffload]:
