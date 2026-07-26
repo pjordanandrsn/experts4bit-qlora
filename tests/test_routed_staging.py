@@ -149,3 +149,40 @@ def test_training_falls_back_to_bulk():
     assert out.requires_grad
     assert h._last_stage_policy != "routed", "grad-enabled forward took the routed path"
     assert h._last_stage_nbytes == h._stage_nbytes
+
+
+def test_composes_with_the_grouped_kernel():
+    """Routed staging and the grouped kernel fix DIFFERENT halves of the step.
+
+    Routed staging removes 16x surplus bytes; the grouped kernel removes the
+    per-expert Python loop (measured 4.40 -> 2.17 ms/layer on Qwen3-235B shapes,
+    2.03x). They must compose: nothing excludes them, but the grouped kernel is
+    handed a destination in which only the routed rows were written, so this
+    checks it reads exactly the rows it was given `expert_ids` for.
+    """
+    from experts4bit_qlora import enable_fast, fast_available
+
+    if not fast_available():
+        pytest.skip("grouped kernel unavailable")
+
+    hs, idx, wts = _inputs()
+
+    bulk = _build()
+    enable_expert_offload(bulk, DEVICE)
+    with torch.no_grad():
+        want = bulk(hs, idx, wts)
+
+    both = _build()
+    h = enable_expert_offload(both, DEVICE)
+    enable_routed_staging([h])
+    assert enable_fast(both) == 1
+    with torch.no_grad():
+        got = both(hs, idx, wts)
+
+    assert h._last_stage_policy == "routed", "routed staging stopped firing under [fast]"
+    rel = ((got.float() - want.float()).norm()
+           / want.float().norm().clamp_min(1e-12)).item()
+    assert rel < 2e-2, (
+        f"routed staging + grouped kernel disagree with bulk+reference "
+        f"(rel {rel:.3e}) — the kernel read a row that was never staged"
+    )
