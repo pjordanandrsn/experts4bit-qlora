@@ -415,6 +415,7 @@ class _ExpertOffload:
                 h.evict()
         if cls._resident is not None and cls._resident is not self:
             cls._resident.evict()  # single-slot: free the prior layer before staging this one
+        self._release_speculation()
         self._copy_home_to_device("sync")
         cls._resident = self
 
@@ -466,6 +467,14 @@ class _ExpertOffload:
         self._spec_event.record(stream)
         self._spec_ids = set(int(e) for e in pred_ids)
         self._spec_dev = dest
+
+    def _release_speculation(self) -> None:
+        """Drop an unconsumed speculative buffer. Any staging path that does not
+        go through the speculative branch must call this, or the evict guard
+        pins the buffer for the rest of the run."""
+        self._spec_dev = None
+        self._spec_ids = None
+        self._spec_event = None
 
     def _copy_routed_to_device(self, ids) -> None:
         """Copy ONLY the rows in ``ids`` from the pinned homes to a full-shaped device tensor.
@@ -546,6 +555,7 @@ class _ExpertOffload:
             self._spec_dev = None
             self._spec_ids = None
         else:
+            self._release_speculation()
             self._copy_routed_to_device(ids)
         cls._resident = self
 
@@ -722,7 +732,14 @@ def enable_speculative_staging(model, distance: int = 2, k: int = 8,
             def hook(mod, args, out):
                 if torch.is_grad_enabled() or mod.training:
                     return
-                hs = (out[0] if isinstance(out, tuple) else out)[:, -1:, :]
+                o = out[0] if isinstance(out, tuple) else out
+                if o.shape[1] > 1:
+                    # Prefill: the target layer will route nearly every expert and
+                    # take the bulk fallback, so a top-k guess is both useless and
+                    # unconsumed. Prefetching here allocates a buffer nothing
+                    # claims.
+                    return
+                hs = o[:, -1:, :]
                 tl = layers[target_layer]
                 gate = tl.mlp.gate
                 x = tl.post_attention_layernorm(hs)
