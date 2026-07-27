@@ -913,6 +913,110 @@ def speculative_stats(handles):
     return hi, mi, to, (hi / to if to else float("nan"))
 
 
+def offload_handles(model):
+    """The offload handles for ``model``, which the loader does not return.
+
+    ``load_moe_4bit_streaming`` returns ``(model, config)``, but
+    :func:`enable_routed_staging` needs the handles. They are stashed on each
+    layer's MoE module as ``_offload``; before this existed, reproducing the
+    published ladder required reaching into that private attribute by hand.
+    """
+    layers = getattr(getattr(model, "model", None), "layers", None)
+    if layers is None:
+        layers = getattr(model, "layers", ())
+    out = []
+    for ly in layers:
+        h = getattr(getattr(ly, "mlp", None), "_offload", None)
+        if h is None:
+            for m in ly.modules():
+                h = getattr(m, "_offload", None)
+                if h is not None:
+                    break
+        if h is not None:
+            out.append(h)
+    return out
+
+
+#: Fidelity presets for :func:`enable_decode_stack`. The default is the one that
+#: does not change your numbers.
+FIDELITY = ("identical", "fast")
+
+
+def enable_decode_stack(model, handles=None, fidelity: str = "identical", *,
+                        distance: int = 2, k: int = 8,
+                        expert_cache: bool = False, verbose: bool = False):
+    """Turn on the offload decode stack at a chosen fidelity.
+
+    **The choice this exists to make explicit:** some accelerations move *which*
+    bytes are copied or *when*, and cannot change the arithmetic. One — the fused
+    grouped-NF4 kernel — is a genuinely different computation. Mixing them behind
+    one switch means a user who needs reproducible logits cannot tell which they
+    are getting.
+
+    ``fidelity="identical"`` (**default**)
+        Routed staging + speculative staging (+ the expert cache if asked).
+        Every one of these is **bit-identical** to the unaccelerated path —
+        ``max|Δlogit| = 0`` across 94 layers on Qwen3-235B-A22B. They change
+        which bytes cross the link and when, never what is computed.
+
+    ``fidelity="fast"``
+        The above **plus** :func:`~experts4bit_qlora.enable_fast`, the fused
+        grouped-NF4 GEMM. **Not bit-identical**: a different computation, priced
+        at **+0.023 % perplexity**, measured at ``max|Δlogit| = 3.75e-01`` on
+        Qwen3-235B-A22B.
+
+    Measured on Qwen3-235B-A22B, 2×A100-SXM (finding #49): bulk **5.7974 s/token**
+    → routed **0.9223 (6.29×)** → +fast **0.6800 (8.53×)** → +speculative
+    **0.5764 (10.06×)**.
+
+    .. note::
+       That ladder is **cumulative**, so the ``"identical"`` combination —
+       routed + speculative *without* the kernel — is **not separately
+       measured**. It is bit-identical and at least the 6.29× routed staging
+       gives on its own; the exact figure is unmeasured and deliberately not
+       quoted here. Quote the ladder as a band (~9–10×) rather than a point:
+       only within-run ratios transfer between machines.
+
+    Returns a dict of what was actually enabled, so a caller can assert on it
+    rather than trust that a flag took effect.
+    """
+    if fidelity not in FIDELITY:
+        raise ValueError(
+            f"fidelity={fidelity!r} is not one of {FIDELITY}. "
+            "'identical' keeps the numbers bit-identical; 'fast' adds the fused "
+            "kernel, which is a different computation (+0.023% perplexity)."
+        )
+    if handles is None:
+        handles = offload_handles(model)
+    if not handles:
+        raise RuntimeError(
+            "no offload handles found — was the model loaded with offload=True? "
+            "Without offload there is nothing to stage, and this stack is a no-op."
+        )
+
+    enabled = {"fidelity": fidelity, "handles": len(handles)}
+    enable_routed_staging(handles)
+    enabled["routed_staging"] = True
+
+    if expert_cache:
+        enable_expert_cache(handles, top_k=k)
+        enabled["expert_cache"] = True
+
+    _, hooked = enable_speculative_staging(model, distance=distance, k=k)
+    enabled["speculative_layers"] = hooked
+
+    if fidelity == "fast":
+        from .fast import enable_fast          # local: keeps offload import-light
+
+        enabled["fast_modules"] = enable_fast(model, verbose=verbose)
+    else:
+        enabled["fast_modules"] = 0
+
+    if verbose:
+        print(f"[e4b] decode stack ({fidelity}): {enabled}")
+    return enabled
+
+
 def enable_routed_staging(handles, max_fraction: float = 0.5) -> list[_ExpertOffload]:
     """Stage only the experts a forward routes to, instead of the whole layer stack.
 
