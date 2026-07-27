@@ -123,6 +123,8 @@ class ExpertsLoRA(nn.Module):
 
         self.r = r
         self.scaling = alpha / r
+        # None = undecided; see _delegate_to_base(). Invalidated on train()/load.
+        self._delegate_ok = None
 
         num_experts = base.num_experts
         gate_up_out, hidden = base._gate_up_shape  # [2*intermediate (or intermediate), hidden]
@@ -136,6 +138,66 @@ class ExpertsLoRA(nn.Module):
         # A ~ small random, B = 0  =>  the initial LoRA delta is exactly zero.
         nn.init.normal_(self.gate_up_lora_A, std=1.0 / r)
         nn.init.normal_(self.down_lora_A, std=1.0 / r)
+
+    def _delegate_to_base(self) -> bool:
+        """Whether this forward can hand the whole expert computation to ``self.base``.
+
+        Why this exists: the accelerators (``[fast]``'s grouped NF4 kernel,
+        ``enable_pipelined_residency``'s routed-gather engine) attach to the
+        ``ExpertsNbit`` base by rebinding *its* ``forward``. This class never calls
+        ``self.base(...)`` — it re-implements the expert math inline so it can inject the
+        low-rank delta **before** the SwiGLU nonlinearity (see :meth:`forward`). So the
+        engines' patched forwards sit on a method nothing invokes, and every accelerator is
+        silently dead on the streaming-loader path.
+
+        The delta cannot simply be added after the fact — ``act(Wx + BAx) != act(Wx) + d``
+        for any cheap ``d`` — so composing in general needs a kernel that takes A/B. But
+        there is an exactly-decidable special case: **when the adapter contributes nothing,
+        this module's output is bit-identical to the base's.** ``B`` is zero-initialised
+        (see ``__init__``), so an untrained adapter — the base-model inference and
+        benchmarking case — has ``_lora() == 0`` identically, not approximately.
+
+        Only delegate under no-grad eval (training must keep the fused delta path) and only
+        when an engine is actually attached, so the check costs nothing in the default case.
+        """
+        if torch.is_grad_enabled() or self.training:
+            return False
+        base = self.base
+        # An engine is attached iff something rebound the base's forward.
+        if getattr(base, "_e4b_fast_ref", None) is None and getattr(base, "_e4b_pipe_ref", None) is None:
+            return False
+        return self._adapter_is_zero()
+
+    def _adapter_is_zero(self) -> bool:
+        """Whether the adapter contributes identically nothing.
+
+        Deliberately separate from :meth:`_delegate_to_base`, which additionally
+        requires no-grad eval and an attached engine. Those are properties of the
+        *call site*, not of the adapter — and `enable_fast` needs to ask the data
+        question at patch time, which happens with grad enabled. Conflating the two
+        made `enable_fast` warn that every patch was unreachable on an untrained
+        adapter whose patches then ran fine.
+
+        One device sync, cached; invalidated on train()/load_state_dict.
+        """
+        cached = self._delegate_ok
+        if cached is None:
+            cached = bool(
+                self.r == 0
+                or (not self.gate_up_lora_B.any().item() and not self.down_lora_B.any().item())
+            )
+            self._delegate_ok = cached
+        return cached
+
+    def _load_from_state_dict(self, *args, **kwargs):
+        # A trained adapter arriving after a delegating forward would otherwise keep the
+        # stale "adapter is zero" verdict and silently drop the LoRA. Invalidate on load.
+        self._delegate_ok = None
+        return super()._load_from_state_dict(*args, **kwargs)
+
+    def train(self, mode: bool = True):
+        self._delegate_ok = None
+        return super().train(mode)
 
     def _lora(self, x: torch.Tensor, A: torch.Tensor, B: torch.Tensor) -> torch.Tensor:
         # x: [n, in]; A: [r, in]; B: [out, r]  ->  [n, out]. Adapters may deliberately sit in a
@@ -217,6 +279,12 @@ class ExpertsLoRA(nn.Module):
         input_dtype = hidden_states.dtype
         compute_dtype = base.compute_dtype if base.compute_dtype is not None else hidden_states.dtype
         hidden_states = hidden_states.to(compute_dtype)
+
+        # Hand off to the base when the adapter provably contributes nothing, so an
+        # attached accelerator ([fast] grouped kernel / pipelined routed gather) is
+        # actually reached instead of sitting on a forward nobody calls.
+        if self._delegate_to_base():
+            return base(hidden_states, top_k_index, top_k_weights).to(input_dtype)
 
         use_infer_gemv = self._use_infer_gemv(hidden_states)
         # Decode fast-path: a single token routes to exactly its top_k experts, so the expert-mask
