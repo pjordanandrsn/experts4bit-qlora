@@ -112,11 +112,25 @@ def _stats_enabled() -> bool:
     return os.environ.get("E4B_OFFLOAD_STATS", "0") == "1"
 
 
-def _arena_enabled() -> bool:
-    """Copy-consolidation (``E4B_OFFLOAD_ARENA=1``, default off): pack a layer's four homes into one
-    contiguous pinned arena per dtype so staging is 1-2 ``copy_``s instead of 4. Correctness is
-    identical (same bytes land in the same per-tensor views); only the number of H2D copies changes."""
-    return os.environ.get("E4B_OFFLOAD_ARENA", "0") == "1"
+def _arena_enabled():
+    """Copy-consolidation (``E4B_OFFLOAD_ARENA``, default off). Correctness is identical either way
+    (the same bytes land in the same per-tensor views); only the number of H2D copies changes.
+
+    ``1`` / ``name``
+        One contiguous pinned arena per dtype, **name-major** — all experts of
+        ``gate_up_proj``, then all of ``down_proj``. Bulk staging becomes 1-2 ``copy_``s.
+        It does **NOT** coalesce the ROUTED path: ``home[n]`` stays a strided view, so
+        ``_copy_rows_into`` still issues one copy per (routed expert x tensor).
+
+    ``expert``
+        **Expert-major** — expert ``e``'s slabs for every name of a dtype sit contiguously,
+        so a routed stage is one copy per (expert, dtype). This is the routed-path
+        coalescer (``PREREG-expert-major-coalescer``); ``1``/``name`` is not.
+    """
+    v = os.environ.get("E4B_OFFLOAD_ARENA", "0").strip().lower()
+    if v == "expert":
+        return "expert"
+    return "name" if v in ("1", "name", "true", "yes") else False
 
 
 class _OffloadStats:
@@ -274,6 +288,11 @@ class _ExpertOffload:
             base, self._param_names + self._buffer_names, pin, _arena_enabled()
         )
         self._staged_dev = None  # arena mode: the device-side arena tensors kept alive while staged
+        #: Expert-major arena (PREREG-expert-major-coalescer): one copy per
+        #: (expert, dtype) on the routed path instead of one per (expert, tensor).
+        self._expert_major = _arena_enabled() == "expert"
+        self._dest_bufs = None            # device-side arenas, expert-major only
+        self._stage_ncopies_routed = 0    # instrumented: the gate is that this FALLS
         # True iff every home landed in pinned memory (so staging's non_blocking H2D is real); False
         # when pin=False or pin_memory fell back to pageable. Surfaced by the loader's summary log.
         self.pinned = all(_is_pinned(t) for t in self.home.values())
@@ -336,6 +355,9 @@ class _ExpertOffload:
         by_dtype: dict = {}
         for n in names:  # preserve _names() order within each dtype group
             by_dtype.setdefault(srcs[n].dtype, []).append(n)
+
+        if arena == "expert":
+            return cls._build_homes_expert_major(srcs, by_dtype, base, pin)
         home, arena_cpu, layout = {}, {}, {}
         for dt, ns in by_dtype.items():
             total = sum(srcs[n].numel() for n in ns)
@@ -348,6 +370,53 @@ class _ExpertOffload:
                 layout[n] = (dt, off, off + k, tuple(srcs[n].shape))
                 off += k
             arena_cpu[dt] = buf
+        return home, arena_cpu, layout
+
+    @classmethod
+    def _build_homes_expert_major(cls, srcs, by_dtype, base, pin: bool):
+        """Expert-major arena: per dtype, expert `e`'s slabs for every name of
+        that dtype sit contiguously, so a routed stage is ONE copy per
+        (expert, dtype) instead of one per (expert, tensor).
+
+        The stock arena is NAME-major -- all experts of `gate_up_proj`, then all
+        of `down_proj` -- so `home[n]` stays a strided view and the per-row loop
+        survives it. That is why enabling the arena does not coalesce the routed
+        path (PREREG-expert-major-coalescer), and why this exists.
+
+        `home[n]` keeps its ORIGINAL SHAPE via `as_strided`: element (e, ...) is
+        at `e*block + off_n + ...`, so the leading stride is the per-expert block
+        and the trailing strides are the slab's own contiguous strides. Callers
+        and the state-dict hook see an ordinary [E, ...] tensor.
+        """
+        E = int(base.num_experts)
+        home, arena_cpu, layout = {}, {}, {}
+        for dt, ns in by_dtype.items():
+            per = {}
+            for n in ns:
+                numel = srcs[n].numel()
+                assert numel % E == 0, f"{n}: numel {numel} not divisible by E={E}"
+                per[n] = numel // E
+            block = sum(per.values())
+            buf = cls._to_home(torch.empty(block * E, dtype=dt), pin)
+            off = 0
+            for n in ns:
+                k, shape = per[n], tuple(srcs[n].shape)
+                assert shape[0] == E, f"{n}: leading dim {shape[0]} != E={E}"
+                flat = srcs[n].reshape(E, k)
+                for e in range(E):                       # build-time only
+                    s = e * block + off
+                    buf[s : s + k].copy_(flat[e])
+                # trailing strides are the slab's own; leading stride is the block
+                tail, acc = [], 1
+                for d in reversed(shape[1:]):
+                    tail.append(acc)
+                    acc *= d
+                strides = (block, *reversed(tail))
+                home[n] = buf.as_strided(shape, strides, storage_offset=off)
+                layout[n] = (dt, off, off + k, shape)    # off/k are PER-EXPERT here
+                off += k
+            arena_cpu[dt] = buf
+            layout[("__block__", dt)] = block
         return home, arena_cpu, layout
 
     def _copy_home_to_device(self, policy: str = "sync") -> None:
@@ -365,12 +434,33 @@ class _ExpertOffload:
         b = self.base
         if self._arena_layout is not None:
             dev = {dt: a.to(self.device, non_blocking=True) for dt, a in self._arena_cpu.items()}
-            for n in self._param_names:
-                dt, s, e, shape = self._arena_layout[n]
-                b._parameters[n].data = dev[dt][s:e].view(shape)
-            for n in self._buffer_names:
-                dt, s, e, shape = self._arena_layout[n]
-                b._buffers[n] = dev[dt][s:e].view(shape)
+            # Expert-major stores name n's slabs one per expert, stride = block --
+            # so the name-major `dev[dt][s:e].view(shape)` would read the WRONG
+            # bytes here. Same arena, same one-copy-per-dtype cost; only the view
+            # differs.
+            if self._expert_major:
+                blocks = {k[1]: v for k, v in self._arena_layout.items()
+                          if isinstance(k, tuple) and k[0] == "__block__"}
+
+                def _view(n):
+                    dt, off, _stop, shape = self._arena_layout[n]
+                    tail, acc = [], 1
+                    for d in reversed(shape[1:]):
+                        tail.append(acc)
+                        acc *= d
+                    return dev[dt].as_strided(shape, (blocks[dt], *reversed(tail)),
+                                              storage_offset=off)
+                for n in self._param_names:
+                    b._parameters[n].data = _view(n)
+                for n in self._buffer_names:
+                    b._buffers[n] = _view(n)
+            else:
+                for n in self._param_names:
+                    dt, s, e, shape = self._arena_layout[n]
+                    b._parameters[n].data = dev[dt][s:e].view(shape)
+                for n in self._buffer_names:
+                    dt, s, e, shape = self._arena_layout[n]
+                    b._buffers[n] = dev[dt][s:e].view(shape)
             self._staged_dev = dev  # keep the device arenas alive (the param views also reference them)
         else:
             for n in self._param_names:
@@ -428,10 +518,33 @@ class _ExpertOffload:
         cls._resident = self
 
     def _alloc_dest(self):
-        """Full-shaped device tensors, only some rows of which will be written."""
+        """Full-shaped device tensors, only some rows of which will be written.
+
+        Under the expert-major arena the DEVICE side must mirror the host layout,
+        or a single contiguous per-expert copy lands in the wrong places. The
+        returned views keep their ordinary [E, ...] shapes either way.
+        """
+        names = self._param_names + self._buffer_names
+        if self._arena_layout is not None and self._expert_major:
+            dest, self._dest_bufs = {}, {}
+            blocks = {k[1]: v for k, v in self._arena_layout.items()
+                      if isinstance(k, tuple) and k[0] == "__block__"}
+            E = int(self.base.num_experts)
+            for dt, block in blocks.items():
+                self._dest_bufs[dt] = torch.empty(block * E, dtype=dt,
+                                                  device=self.device)
+            for n in names:
+                dt, off, stop, shape = self._arena_layout[n]
+                tail, acc = [], 1
+                for d in reversed(shape[1:]):
+                    tail.append(acc)
+                    acc *= d
+                dest[n] = self._dest_bufs[dt].as_strided(
+                    shape, (blocks[dt], *reversed(tail)), storage_offset=off)
+            return dest
         return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,
                                device=self.device)
-                for n in self._param_names + self._buffer_names}
+                for n in names}
 
     def _copy_rows_into(self, dest, ids) -> int:
         """Copy rows ``ids`` into ``dest`` — from the device pool when cached,
@@ -441,6 +554,24 @@ class _ExpertOffload:
         E = self.base.num_experts
         names = self._param_names + self._buffer_names
         pool = getattr(self, "_pool", None)
+
+        if self._arena_layout is not None and self._expert_major and pool is None:
+            # ONE copy per (expert, dtype). The per-row loop below issues one per
+            # (expert, tensor) -- ~32 copies of ~2.7 MB per layer at 235B shapes,
+            # measured at 0.59x the pinned ceiling (#52).
+            blocks = {k[1]: v for k, v in self._arena_layout.items()
+                      if isinstance(k, tuple) and k[0] == "__block__"}
+            nbytes = 0
+            for e in ids:
+                e = int(e)
+                for dt, block in blocks.items():
+                    s = e * block
+                    src = self._arena_cpu[dt][s : s + block]
+                    self._dest_bufs[dt][s : s + block].copy_(src, non_blocking=True)
+                    nbytes += block * src.element_size()
+                    self._stage_ncopies_routed += 1
+            return nbytes
+
         views = {n: (self.home[n].view(E, -1), dest[n].view(E, -1)) for n in names}
         nbytes = 0
         for e in ids:
@@ -454,6 +585,7 @@ class _ExpertOffload:
                 hv, dv = views[n]
                 dv[e].copy_(hv[e], non_blocking=True)
                 nbytes += hv.shape[1] * self.home[n].element_size()
+                self._stage_ncopies_routed += 1
             if pool is not None:
                 pool.put((self._pool_layer, e), {n: views[n][1][e] for n in names})
         return nbytes
