@@ -14,7 +14,9 @@ import json
 import os
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("bitsandbytes")
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # bf16 on the GPU (faithful to real checkpoints); fp32 on CPU. The training test recomputes each

@@ -8,7 +8,9 @@ rather than fail, and a real generate() must run through it.
 from __future__ import annotations
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("bitsandbytes")
 
 from experts4bit_qlora import NF4KVCache, kv_nf4_available
 

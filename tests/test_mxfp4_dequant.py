@@ -3,7 +3,9 @@ import glob
 import os
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("bitsandbytes")
 
 from experts4bit_qlora.mxfp4 import FP4_VALUES, dequantize_mxfp4
 
