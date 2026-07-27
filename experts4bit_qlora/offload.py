@@ -969,13 +969,25 @@ def enable_decode_stack(model, handles=None, fidelity: str = "identical", *,
     → routed **0.9223 (6.29×)** → +fast **0.6800 (8.53×)** → +speculative
     **0.5764 (10.06×)**.
 
+    That ladder is **cumulative**, so it does not contain the ``"identical"``
+    combination. Measured separately on the same model
+    (``PREREG-identical-preset``, registered prediction 7.0-8.0x):
+
+        routed + speculative, no kernel -> **0.8336 s/token = 7.24x**,
+        speculation hit rate 0.901, and **every rung bit-identical**
+        (``max|dlogit| = 0.000e+00`` against bulk *and* against the rung below).
+
+    So the fidelity choice costs **roughly 1.3-1.4x** and buys exactly
+    reproducible logits. That is deliberately a band: 7.24x and 10.06x come from
+    **different runs** with different bulk baselines (6.037 vs 5.801 s/token
+    implied), so their ratio is a cross-run figure and the note below applies to
+    it as much as to anything else here. The two configurations have never been
+    measured in one run, so no within-run number for this cost exists yet.
+
     .. note::
-       That ladder is **cumulative**, so the ``"identical"`` combination —
-       routed + speculative *without* the kernel — is **not separately
-       measured**. It is bit-identical and at least the 6.29× routed staging
-       gives on its own; the exact figure is unmeasured and deliberately not
-       quoted here. Quote the ladder as a band (~9–10×) rather than a point:
-       only within-run ratios transfer between machines.
+       Quote either figure as a **band**, not a point: the same ladder has
+       measured 9.19x, 10.21x and 10.06x on three machines. Only within-run
+       ratios transfer -- absolute step times do not.
 
     Returns a dict of what was actually enabled, so a caller can assert on it
     rather than trust that a flag took effect.
