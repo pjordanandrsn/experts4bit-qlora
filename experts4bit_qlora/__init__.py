@@ -56,7 +56,9 @@ else:
 # adopted: the canonical scheme names and their accepted aliases are this package's contract.
 from ._vendor.experts import normalize_quant_type  # noqa: E402
 from .lora import ExpertsLoRA, LoRALinear, add_attention_lora  # noqa: E402
-from .offload import (  # noqa: E402
+from .offload import (
+    enable_decode_stack,
+    offload_handles,  # noqa: E402
     enable_expert_offload,
     enable_inference_prefetch,
     enable_expert_cache,
@@ -101,6 +103,8 @@ __all__ = [
     "pipelined_available",
     "enable_inference_prefetch",
     "enable_expert_cache",
+    "enable_decode_stack",
+    "offload_handles",
     "enable_routed_staging",
     "enable_speculative_staging",
     "speculative_stats",
