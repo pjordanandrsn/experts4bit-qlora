@@ -101,6 +101,8 @@ from __future__ import annotations
 
 import os
 
+import time
+
 import torch
 
 
@@ -124,6 +126,10 @@ class _OffloadStats:
     would perturb the very overlap being measured)."""
 
     def __init__(self):
+        #: Wall-clock start of the measurement window. `reset_offload_stats()`
+        #: drops the object, so the next stage recreates it and restarts the
+        #: clock -- which is what makes a wall-based rate well defined.
+        self.t0 = time.perf_counter()
         self.copies = []  # (start_evt, end_evt, nbytes, ncopies, policy)
         self.stalls = []  # (wait_marker_evt, copy_end_evt) — reduced to stall(+)/slack(-) at report
         self.cold_misses = 0
@@ -977,8 +983,20 @@ def offload_stats_report(log=None) -> "dict | None":
     """Reduce the accumulated per-copy stats to a summary (``E4B_OFFLOAD_STATS=1``). Returns ``None``
     when stats are off or nothing was staged. Synchronizes once here (never in the hot path) to make
     the retained CUDA events readable, then reports, per policy: GB moved, copy count, mean per-copy
-    ms, implied GB/s; plus total prefetch stall vs slack ms and the cold-miss count. ``implied GB/s``
-    against the pinned ceiling (see :func:`report_offload_environment`) is the A-workstream number."""
+    ms, GB/s; plus total prefetch stall vs slack ms and the cold-miss count.
+
+    Two rates are reported and they are not interchangeable:
+
+    ``gbps``
+        bytes over **wall** time across the measured region. This is the one to
+        compare against :func:`report_offload_environment`'s pinned ceiling.
+
+    ``gbps_copy_window``
+        bytes over the summed per-stage staging window. Kept for diagnosis only.
+        It does **not** bound the transfer: measured at 22.83 GB/s on a link
+        independently probed at 12.65-18.46 GB/s (finding #52), i.e. faster than
+        the hardware can move bytes. It was the reported ``gbps`` until that run
+        caught it. Never quote it as transfer efficiency."""
     stats = _STATS
     if stats is None or not stats.copies:
         return None
@@ -1002,16 +1020,29 @@ def offload_stats_report(log=None) -> "dict | None":
         else:
             slack_ms += -d
 
-    report = {"by_policy": {}, "stall_ms": stall_ms, "slack_ms": slack_ms, "cold_misses": stats.cold_misses}
+    wall_s = max(time.perf_counter() - stats.t0, 0.0)
+    report = {"by_policy": {}, "stall_ms": stall_ms, "slack_ms": slack_ms,
+              "cold_misses": stats.cold_misses, "wall_s": wall_s}
     for policy, a in sorted(by_policy.items()):
         gb = a["bytes"] / 1e9
-        gbps = gb / (a["ms"] / 1e3) if a["ms"] > 0 else 0.0
+        # `gbps` is bytes over WALL time -- the rate the link actually sustained
+        # across the measured region. This is the number to compare against
+        # `report_offload_environment`'s ceiling.
+        gbps = gb / wall_s if wall_s > 0 else 0.0
+        # The old definition, kept for diagnosis under an honest name: bytes over
+        # the summed per-stage copy WINDOW. It does NOT bound the transfer --
+        # observed at 22.83 GB/s on a link measured at 12.65-18.46 (finding #52),
+        # i.e. faster than the machine can move bytes. Never quote it as transfer
+        # efficiency; it exists to show how much of the step sits inside the
+        # staging brackets.
+        gbps_win = gb / (a["ms"] / 1e3) if a["ms"] > 0 else 0.0
         report["by_policy"][policy] = {
             "gb": gb,
             "stages": a["stages"],
             "copies": a["copies"],
             "mean_stage_ms": a["ms"] / a["stages"],
             "gbps": gbps,
+            "gbps_copy_window": gbps_win,
         }
 
     if log is not None:
