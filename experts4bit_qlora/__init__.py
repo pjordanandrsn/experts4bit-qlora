@@ -59,6 +59,10 @@ from .lora import ExpertsLoRA, LoRALinear, add_attention_lora  # noqa: E402
 from .offload import (  # noqa: E402
     enable_expert_offload,
     enable_inference_prefetch,
+    enable_expert_cache,
+    enable_routed_staging,
+    enable_speculative_staging,
+    speculative_stats,
     offload_model_experts,
     offload_stats_report,
     report_offload_environment,
@@ -71,6 +75,7 @@ from .fast import disable_fast, enable_fast, fast_available  # noqa: E402
 from .cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
 from .hot_residency import disable_hot_residency, enable_hot_residency, hot_residency_available  # noqa: E402
 from .pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
+from .kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
 __all__ = [
@@ -86,6 +91,8 @@ __all__ = [
     "disable_pipelined_residency",
     "enable_cold_engine",
     "enable_expert_offload",
+    "NF4KVCache",
+    "kv_nf4_available",
     "enable_fast",
     "enable_hot_residency",
     "enable_pipelined_residency",
@@ -93,6 +100,10 @@ __all__ = [
     "hot_residency_available",
     "pipelined_available",
     "enable_inference_prefetch",
+    "enable_expert_cache",
+    "enable_routed_staging",
+    "enable_speculative_staging",
+    "speculative_stats",
     "normalize_quant_type",
     "offload_model_experts",
     "offload_stats_report",

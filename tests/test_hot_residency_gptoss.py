@@ -3,7 +3,9 @@ GptOssExperts4bit forward (clamped-GLU + per-expert biases) at every hot/cold
 split. gpt-oss was previously SKIPPED by enable_hot_residency (custom forward);
 this proves it is now supported. CUDA + nf4_grouped required."""
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("bitsandbytes")
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 

@@ -1,0 +1,939 @@
+"""Optional 4-bit KV cache — ``pip install "experts4bit-qlora[fast]"``.
+
+The residency engines budget weights; this budgets *context*. Measured KV cost
+(grouped-nf4-gemm ``docs/context-budgets.md``): Qwen3-235B spends **188.0
+KB/token**, so the stamped "235B on <=16 GB" figure — 15.2 GB at seq-512 — covers
+roughly 5K tokens of context and nothing longer. Storing K/V as NF4 instead of
+bf16 cuts that to 52.8 KB/token (3.56x; the fp32 blockwise absmax is the missing
+0.44x), taking the 32K case from 5.88 GB to 1.65 GB.
+
+Design, and why it is a cache object rather than an attention patch. Every
+architecture's attention differs in ways that have nothing to do with storage
+(Qwen3 QK-norm, gpt-oss attention sinks, Gemma-4's per-layer-type geometry), so
+patching forwards would multiply arch-specific surface for a storage change.
+Instead this stores the cache packed and hands back a dequantized view of **one
+layer** when that layer runs. Peak VRAM is then
+``packed_total + one_layer_bf16`` — for 94-layer Qwen3-235B at 32K that is
+1.65 GB + 62 MB against 5.88 GB, i.e. essentially the full saving with stock
+attention doing the maths.
+
+Where the cache LIVES is a second dial: ``residence="host"`` keeps the packed
+store in pinned host memory and streams one layer's slice per forward, so GPU
+residency is one layer instead of the whole cache. Byte-identical to the
+resident path, and its transfer cost is the measured ``bytes / link`` (see
+grouped-nf4-gemm finding #15). It is a batch-regime feature -- at batch 1 the
+resident NF4 cache already fits every case measured (#14).
+
+What this deliberately does NOT do: fuse the dequant into the attention matmuls.
+``grouped-nf4-gemm``'s ``nf4_kv`` kernels do that, never materializing even one
+layer, and they stay unwired.
+
+**Corrected 2026-07-25.** An earlier version of this docstring said the fused
+kernel is "0.82x fp16 SDPA -- faster than the fp16 path it replaces", on the
+strength of finding #12. That was wrong, and wrong in this module's favour.
+#12's fp16 baseline materialized a 16x replicated cache; `enable_gqa=True` has
+been available since torch 2.5 and broadcasts kv heads inside the kernel
+instead. Measured on one device at T=32768 / H_kv=4 / H_q=64, bf16:
+
+  bf16 SDPA, repeat_interleave  6.205 ms   <- what #12 compared against
+  bf16 SDPA, enable_gqa=True    0.324 ms   <- 72% of the card's ~288 GB/s
+  fused nf4 kernel              3.760 ms   <- 1.7% of it
+
+Both baselines are numerically correct (each 2.34e-3 from an fp32 reference), so
+this is a baseline error and not a shortcut. The fused kernel is roughly **11.6x
+SLOWER** than bf16 SDPA invoked properly, not 0.82x.
+
+**Read the consequence for THIS module, which is larger.** The shipped path --
+dequantize a layer, hand it to stock attention -- measures 10.750 ms at that
+shape against a bf16 cache's 0.324 ms. NF4 KV buys 3.56x memory at roughly 2%
+perplexity AND a large decode-latency cost that has never been measured
+end-to-end, because every latency comparison in docs/context-budgets.md is
+between NF4 configurations rather than against an unquantized cache. Treat this
+module as a **capacity** feature -- it decides what fits -- and not as free.
+
+Fidelity is measured at model level, not inferred from a fixture. Teacher-forced
+on OLMoE-1B-7B over 1024 tokens of wikitext (4-bit weights held constant, so the
+cache is the only variable):
+
+===================  =======  ==============
+config               ppl      argmax agree
+===================  =======  ==============
+fp16 cache            5.978   100%
+K4 V4  (3.56x)        6.102   93.2%
+K4 V16 (keys only)    6.061   94.6%
+K16 V4 (values only)  5.991   97.3%
+===================  =======  ==============
+
+**Keys are the sensitive tensor.** Quantizing K alone costs +0.083 ppl; V alone
+costs +0.013 — a ~6x asymmetry the other way round. Real keys carry per-channel
+outliers that blow up a 64-element block's shared absmax; values do not. An
+earlier iid fixture said the opposite (V-dominant) precisely because Gaussian
+noise has no outliers to expose, which is why this table, not that fixture, is
+what the dials below are set from.
+
+So the useful operating point is the knee: **values-only** is 1.56x off the
+cache for +0.2% perplexity, while the remaining 2x costs six times more. This
+is NOT greedy-identical at any setting — see ``docs/`` for the exactness tier.
+
+**The trade is memory for LATENCY, not memory for free** (finding #17, measured
+2026-07-25 against transformers' own bf16 ``DynamicCache`` on OLMoE-1B-7B with
+4-bit weights resident):
+
+OLMoE-1B-7B, 4-bit weights resident, greedy decode, measured on an A100 -- a
+QUIET card, which matters: the same arms on a shared A2000 carry ~12% run-to-run
+variance and produced two physically impossible rows before that was understood.
+
+=======  ==========  ==============  ==============  ==============
+context  bf16 cache  NF4 resident    NF4 streamed    KV bytes (NF4)
+=======  ==========  ==============  ==============  ==============
+4096      82.5 ms     91.9 (1.114x)   98.4 (1.19x)   152 MB vs 541
+32768     89.6 ms    103.6 (1.156x)  154.2 (1.72x)   1209 MB vs 4299
+=======  ==========  ==============  ==============  ==============
+
+An earlier version of this table read 1.89x/2.55x. That was ``dequant_kv_ref``
+-- a function whose own docstring calls it a test oracle -- sitting in the
+decode path; a fused kernel doing the same arithmetic bit-identically is ~26x
+faster and brought the same measurement to the numbers above (finding #18).
+
+**The cost still rises with context** -- this dial exists FOR long context and
+gets more expensive exactly there -- but the resident slope is now SHALLOW:
+0.042 across an 8x context increase. The streamed slope is steep (1.19x ->
+1.72x), because with the dequant gone the PCIe transfer is what is left, and
+that is what ``prefetch()`` addresses. Greedy output diverges from bf16 at the FIRST
+generated token, which is what "lossy" means in practice.
+
+Part of that ratio is Python and code-path overhead rather than dequant
+arithmetic (different cache objects, different paths), so it bounds the dequant's
+cost from above. Reach for this module when it decides **what fits**; do not
+reach for it expecting free.
+
+Usage::
+
+    from experts4bit_qlora import NF4KVCache, kv_nf4_available
+    assert kv_nf4_available()
+    cache = NF4KVCache()
+    out = model.generate(**inputs, past_key_values=cache, use_cache=True)
+    print(cache.memory_bytes(), "bytes of KV")     # vs cache.memory_bytes(fp16=True)
+"""
+from __future__ import annotations
+
+from typing import Any, Optional
+
+import torch
+
+
+def kv_nf4_available() -> bool:
+    """True iff the packing/dequant primitives are importable and CUDA is up."""
+    try:
+        import nf4_grouped  # noqa: F401
+        from nf4_kv import dequant_kv_ref, quantize_kv  # noqa: F401
+    except Exception:
+        return False
+    return torch.cuda.is_available()
+
+
+def _kv_ops():
+    from nf4_kv import dequant_kv_ref, quantize_kv
+
+    return quantize_kv, dequant_kv_ref
+
+
+def _dequant_fn():
+    """Fused dequant when the kernel is present, the oracle otherwise.
+
+    `dequant_kv_ref` says "test oracle" in its own docstring and is written like
+    one -- seven full-size intermediates for a two-byte result -- and it was
+    sitting in the decode hot path. Measured **26x** apart at [4096,16,128]
+    (8.4 -> 220.3 GB/s, amortized), and bit-identical, so this is a swap and not
+    a trade. An earlier figure of 12.6x came from timing single calls with a
+    synchronize on both sides, which is ~48% overhead on the fused arm against
+    ~7% on the reference -- the instrument flattered the slower path.
+    """
+    try:
+        from nf4_kv import dequant_kv_fused
+        return dequant_kv_fused
+    except ImportError:                      # older grouped-nf4-gemm
+        from nf4_kv import dequant_kv_ref
+        return dequant_kv_ref
+
+
+class NF4KVCache:
+    """A ``transformers``-compatible cache that stores keys/values as NF4.
+
+    Implements the ``update``/``get_seq_length`` protocol the generation loop
+    uses. Layers whose ``head_dim`` the 64-element quant blocksize cannot tile
+    fall back to bf16 storage for that layer rather than failing the run — the
+    per-layer decision is recorded in :attr:`layer_modes` so a caller can see
+    exactly what was quantized.
+    """
+
+    def __init__(self, quantize_keys: bool = True, quantize_values: bool = True,
+                 key_scaling: str = "per_token", group: int = 64,
+                 keep_sink: int = 0, keep_recent: Optional[int] = None,
+                 residence: str = "gpu", max_context: Optional[int] = None,
+                 resident_tokens: int = 0):
+        # Separate switches because the error is NOT symmetric, and the
+        # asymmetry favours keeping KEYS in bf16: measured +0.083 ppl for
+        # K-only vs +0.013 for V-only. A caller tuning fidelity should reach
+        # for quantize_keys=False first (1.56x, near-free) before paying for
+        # the full 3.56x.
+        self.quantize_keys = quantize_keys
+        self.quantize_values = quantize_values
+        if key_scaling not in ("per_token", "per_channel"):
+            raise ValueError("key_scaling must be 'per_token' or 'per_channel'")
+        # "per_channel" gives every channel its own scale, grouped over `group`
+        # tokens. Costs exactly the same bytes (both store one fp32 scale per 64
+        # quantized values), but MEASURED WORSE on OLMoE: +0.275 ppl against
+        # per-token's +0.083, degrading monotonically as the group grows,
+        # because key magnitude varies strongly across tokens and one loud token
+        # then spoils the 63 sharing its group. Kept because it is correct, free
+        # in bytes, and may land differently on an architecture that does not
+        # rotate its keys -- not because it is recommended here. Default off.
+        self.key_scaling = key_scaling
+        self.group = group
+        # Decode hands us one token per step, but per-channel scaling needs a
+        # GROUP of tokens before its scales are meaningful — quantizing a lone
+        # token per-channel would store one fp32 per value, worse than bf16. So
+        # keys accumulate in a bf16 tail and flush a group at a time. The tail
+        # is at most `group - 1` tokens, which is why it does not show up in the
+        # footprint in any meaningful way.
+        self._ktail: dict[int, torch.Tensor] = {}
+        # Token-axis sparsity: retain the first `keep_sink` tokens plus the most
+        # recent `keep_recent`, dropping the middle. This is the second,
+        # independent axis of KV reduction -- quantization shrinks each token,
+        # eviction removes tokens -- and unlike the rejected low-rank and
+        # per-channel schemes it does not group across tokens, so it composes
+        # with NF4 multiplicatively instead of competing for the same
+        # information. Slicing the packed store along tokens is exactly the
+        # access pattern the kernels' contiguity guard was written to preserve.
+        # Eviction is EXPLICIT (call evict() between forwards), not automatic
+        # inside update(). transformers builds the attention mask before the
+        # layers run, so a cache that shrinks mid-forward contradicts the mask
+        # it was already measured for -- concretely, trimming 640 to 516 during
+        # the forward raises a shape error, and silently would be worse.
+        self.keep_sink = keep_sink
+        self.keep_recent = keep_recent
+        # Tokens ever seen, tracked separately from tokens HELD. Positions must
+        # follow the true count or evicted-cache RoPE goes wrong: new keys would
+        # be rotated for position `held` while retained keys carry rotations
+        # from their original positions, corrupting every relative distance.
+        self._true: dict[int, int] = {}
+        self._k: dict[int, Any] = {}
+        self._v: dict[int, Any] = {}
+        self._seen: dict[int, int] = {}
+        self.layer_modes: dict[int, str] = {}
+        # Third axis, after quantization (shrink each token) and eviction (drop
+        # tokens): move the cache OFF the GPU entirely and stream one layer's
+        # slice back per forward. GPU residency becomes one layer instead of the
+        # whole cache -- for a 94-layer model that is ~47x less VRAM at the cost
+        # of KV(context) bytes of PCIe traffic per decode step, which does NOT
+        # amortize over batch the way streamed weights do (see
+        # grouped-nf4-gemm docs/context-budgets.md finding #14 for when that
+        # trade is worth taking; at batch 1 it usually is not).
+        #
+        # This is a RESIDENCE change, not a fidelity one: the same bytes are
+        # produced, just held somewhere else. Quantization still runs on the
+        # GPU, so the packed bytes are bit-identical to the resident path and
+        # the property suite asserts exactly that.
+        if residence not in ("gpu", "host"):
+            raise ValueError("residence must be 'gpu' or 'host'")
+        if residence == "host" and not max_context:
+            raise ValueError(
+                "residence='host' needs max_context: the pinned arena is sized "
+                "up front because appending by cat would make prefill O(T^2) in "
+                "host memcpy, and pinning a fresh chunk per step would cost an "
+                "mlock syscall per layer per token.")
+        self.residence = residence
+        self.max_context = max_context
+        self._arena: dict[tuple[str, int], Any] = {}
+        self._device: Optional[torch.device] = None
+        # Residence is a DIAL, not a switch. Binary gpu/host leaves whatever
+        # VRAM is spare completely unused, which is the wrong shape: attention
+        # reads the whole cache every step, so any token held on the device is
+        # a token not crossing the bus, and the streamed ceiling improves
+        # linearly -- link/((1-f) * KV) instead of link/KV.
+        #
+        # The OLDEST tokens are the ones kept. They are positionally stable, so
+        # the head fills once and is then immutable, and nothing reshuffles as
+        # the cache grows. Keeping the newest instead would mean migrating
+        # tokens host-ward on every step for no benefit: attention needs all of
+        # them either way, so WHICH are resident does not matter to quality,
+        # only to how much churn the choice costs.
+        if resident_tokens and residence != "host":
+            raise ValueError("resident_tokens only applies to residence='host'")
+        self.resident_tokens = resident_tokens
+        self._khead: dict[int, Any] = {}
+        self._vhead: dict[int, Any] = {}
+        # Prefetch state. Bounded at one layer in flight by construction: the
+        # caller asks for one layer at a time and _take_inflight consumes it.
+        self._stream = None
+        self._inflight: dict[int, Any] = {}
+        # One event per layer, recorded after that layer's append. The prefetch
+        # stream waits on THIS layer's write, not on everything the default
+        # stream happens to have queued -- see prefetch().
+        self._append_done: dict[int, Any] = {}
+
+    # ---- storage helpers -------------------------------------------------
+    def _store(self, x: torch.Tensor, quantize: bool):
+        """``x [B, H, T, D]`` -> packed tuple, or the raw tensor if not eligible."""
+        from nf4_grouped import BLOCKSIZE
+
+        if not quantize or x.shape[-1] % BLOCKSIZE != 0 or not x.is_cuda:
+            return ("raw", x)
+        quantize_kv, _ = _kv_ops()
+        b, h, t, d = x.shape
+        if b != 1:
+            return ("raw", x)          # batch>1 not in the v1 layout
+        p, a = quantize_kv(x[0].transpose(0, 1).contiguous())     # [T, H, D]
+        return ("nf4", p, a, d)
+
+    def _load(self, slot, dtype) -> torch.Tensor:
+        """Materialize one layer as ``[1, H, T, D]``. Under host residence this
+        is the STREAM: the packed slice crosses PCIe here, and nowhere else."""
+        x = self._load_thd(slot, dtype)
+        if x.dim() == 4:                                # already [1, H, T, D]
+            return x
+        return x.transpose(0, 1).unsqueeze(0).contiguous()
+
+    def _load_thd(self, slot, dtype):
+        """The same load, stopping at ``[T, H, D]`` before re-orientation.
+
+        Split assembly needs this. Calling :meth:`_load` per half and then
+        concatenating pays a full-size ``.contiguous()`` for EACH half and then
+        a second full-size copy in the ``cat`` — three allocations and three
+        passes where one cat over transposed views does it in one. Measured at
+        32K that difference was ~60 ms/step, against the ~156 ms the split saves.
+        """
+        if slot[0] == "raw":
+            x = slot[1]
+            return x if x.is_cuda or self._device is None else x.to(
+                self._device, non_blocking=True)
+        _, p, a, d = slot
+        if not p.is_cuda and self._device is not None:
+            # Pinned prefix views, so this is a real async DMA rather than a
+            # bounce through a staging buffer. Dequant then runs on device, from
+            # bytes identical to what the resident path holds.
+            p = p.to(self._device, non_blocking=True)
+            a = None if a is None else a.to(self._device, non_blocking=True)
+        if a is None:                                   # "rawh": nothing to dequant
+            return p                                              # [T, H, D]
+        return _dequant_fn()(p, a, d, dtype=dtype)                # [T, H, D]
+
+    # ---- arena-backed append (both residences) ---------------------------
+    def _arena_for(self, key, slot, needed: int, cur=None):
+        """Backing buffer for one layer's K or V, holding ``needed`` rows.
+
+        **Host**: pinned, sized once to ``max_context``, never grown. Growing by
+        ``torch.cat`` would be O(T^2) host memcpy over a prefill, and pinning
+        each new chunk instead costs a page-locking syscall per layer per step.
+
+        **Device**: grown geometrically, because the resident path has no
+        declared bound (``get_max_cache_shape`` returns None) and must not
+        acquire one. Doubling makes appends amortized O(new tokens) -- which is
+        what this class always claimed and did not do: ``torch.cat`` reallocates
+        and re-copies the whole packed store on every step, so a 1000-token
+        generation at 32K moved ~1.8 TB through device memory where ~3.5 GB
+        suffices.
+
+        When a buffer is (re)allocated, ``cur``'s rows are carried into it, so
+        this doubles as the rebuild path after an eviction has replaced the slot
+        with a tensor that is no longer a view.
+        """
+        got = self._arena.get(key)
+        if got is not None and got[1].shape[0] >= needed:
+            return got
+        if self.residence == "host":
+            cap = self.max_context
+        else:
+            cap = max(256, 1 << (needed - 1).bit_length())   # next power of two
+        if slot[0] == "raw":
+            # TOKEN-MAJOR [cap, H, D], not the [1, H, cap, D] the resident path
+            # uses. A prefix view of the latter slices dim 2, which is NOT
+            # contiguous -- and ``is_pinned()`` still returns True for it, so the
+            # only symptom is that the DMA falls off a cliff: measured
+            # 0.09 GB/s against 0.95 on the same device, and a 17x cliff on the
+            # full cache at 8K. Matching the packed store's token-major axis
+            # makes the prefix contiguous and the copy a real DMA.
+            x = slot[1]
+            got = ("rawh",
+                   torch.empty((cap, x.shape[1], x.shape[3]),
+                               dtype=x.dtype).pin_memory(), None, x.shape[3])
+        else:
+            _, p, a, d = slot
+            mk = ((lambda t, shp: torch.empty(shp, dtype=t.dtype).pin_memory())
+                  if self.residence == "host"
+                  else (lambda t, shp: torch.empty(shp, dtype=t.dtype, device=t.device)))
+            got = ("nf4", mk(p, (cap,) + tuple(p.shape[1:])),
+                   mk(a, (cap,) + tuple(a.shape[1:])), d)
+        if cur is not None:                     # carry existing rows into the new buffer
+            n = cur[1].shape[0]
+            got[1][:n].copy_(cur[1])
+            if cur[2] is not None and got[2] is not None:
+                got[2][:n].copy_(cur[2])
+        self._arena[key] = got
+        return got
+
+    def _arena_append(self, key, slot, used, cur=None):
+        """Write a freshly stored slot into the arena at ``used``, return a VIEW
+        of the occupied prefix.
+
+        Returning a view is what keeps every other method residence- and
+        backing-agnostic: the slot's row count still IS the held length, so
+        ``_resync_held``, ``memory_bytes``, ``_evict_slot`` and ``_index_slot``
+        need no special case at all.
+        """
+        n = slot[1].shape[2] if slot[0] == "raw" else slot[1].shape[0]
+        if self.residence == "host" and used + n > self.max_context:
+            raise ValueError(
+                f"KV arena overflow: {used}+{n} tokens exceeds "
+                f"max_context={self.max_context}. Size it for the longest "
+                f"context this cache will see; it is not grown on demand.")
+        arena = self._arena_for(key, slot, used + n, cur)
+        if slot[0] == "raw":
+            arena[1][used:used + n].copy_(slot[1][0].transpose(0, 1),
+                                          non_blocking=True)     # -> [n,H,D]
+            return ("rawh", arena[1][:used + n], None, arena[3])
+        # non_blocking is LOAD-BEARING, not a micro-optimization: a copy_ into a
+        # CPU destination BLOCKS the host until the DMA lands, and a decode step
+        # does one of these per layer per tensor. Measured on OLMoE at 4K, the
+        # 32 syncs/step cost 56 ms against a 24 ms transfer -- the streamed arm
+        # ran at 1.87 GB/s on a 6.20 GB/s link. Same failure `host_gather.py`
+        # records for the expert path (B3, ~94 syncs/token).
+        #
+        # Safe because every consumer reads the arena back through a copy issued
+        # on a CUDA stream, never on the host: the H2D in _load is ordered after
+        # this D2H on the default stream, and prefetch's side stream is made to
+        # wait on the default stream for exactly this reason.
+        arena[1][used:used + n].copy_(slot[1], non_blocking=True)
+        arena[2][used:used + n].copy_(slot[2], non_blocking=True)
+        return ("nf4", arena[1][:used + n], arena[2][:used + n], slot[3])
+
+    def _append(self, key, layer_idx, store, x, quantize):
+        """One append, arena-backed wherever the layout allows it."""
+        cur = store.get(layer_idx)
+        used = self._seen.get(layer_idx, 0)
+        if self.residence == "host":
+            return self._arena_append(key, self._store(x, quantize), used, cur)
+        new = self._store(x, quantize)
+        if new[0] == "nf4" and (cur is None or cur[0] == "nf4"):
+            return self._arena_append(key, new, used, cur)
+        # bf16 fallback layers and mixed raw/packed histories keep the old
+        # concatenating path: rare, and not worth a second arena layout.
+        return self._cat(cur, x, quantize, self)
+
+    def _split_append(self, kind: str, layer_idx: int, x: torch.Tensor,
+                      quantize: bool) -> None:
+        """Route one append across the resident/streamed boundary.
+
+        Tokens ``[0, resident_tokens)`` land in a DEVICE store and stay there;
+        everything after streams. The boundary is crossed at most once per
+        layer, so the split costs one extra concatenation on one chunk and
+        nothing thereafter.
+        """
+        head_store = self._khead if kind == "k" else self._vhead
+        tail_store = self._k if kind == "k" else self._v
+        held = self._seen.get(layer_idx, 0)
+        n = x.shape[2]
+        r = self.resident_tokens
+        # how much of this chunk belongs to the resident head
+        to_head = max(0, min(held + n, r) - held)
+        if to_head:
+            head_store[layer_idx] = self._cat(head_store.get(layer_idx),
+                                              x[:, :, :to_head], quantize, self)
+        if to_head < n:
+            tail_used = max(0, held - r)
+            tail_store[layer_idx] = self._arena_append(
+                (kind, layer_idx), self._store(x[:, :, to_head:], quantize),
+                tail_used, tail_store.get(layer_idx))
+
+    def prefetch(self, layer_idx: int, dtype=torch.bfloat16) -> None:
+        """Start layer ``layer_idx``'s H2D copy on a side stream.
+
+        Under host residence the copy and the dequant serialize on the default
+        stream, so a step costs ``compute + transfer``. Issuing the NEXT layer's
+        copy while THIS layer's dequant runs makes it ``max(compute, transfer)``.
+
+        **OFF BY DEFAULT, and worth turning on only above a context threshold.**
+        Measured end-to-end on an A100, prefetched/streamed by prompt length:
+
+            2048   1.064   costs 6%
+            4096   0.943   \
+            8192   0.885    > wins, deepening
+            16384  0.872   /
+
+        The crossover sits near 4096 and is device-dependent -- it moved with the
+        card in every measurement taken, and three earlier registered attempts to
+        model WHY were falsified. Treat these as two facts (loses short, wins
+        long) rather than a law, and measure your own shape before enabling it.
+
+        Bounded at one layer in flight, deliberately: the point of host
+        residence is that the cache is not on the device, and an unbounded
+        prefetch queue walks that back one layer at a time.
+
+        Call before the layer runs; :meth:`_load` consumes whatever is ready and
+        falls through to a synchronous copy when nothing was prefetched, so this
+        is an optimization the caller may skip entirely.
+        """
+        if self.residence != "host" or self._device is None:
+            return
+        if layer_idx in self._inflight:
+            return
+        stream = self._side_stream()
+        # The append writes the arena asynchronously, so the side stream must
+        # not read those bytes before they land -- but the ONLY write it can
+        # race is this layer's own append. Waiting on that layer's event is the
+        # narrow version; wait_stream(current) is a whole-stream barrier that
+        # also waits on the compute we are trying to overlap with, which is
+        # what made the first prefetch net-negative (E1).
+        #
+        # In decode this event is from the PREVIOUS step and has long since
+        # completed, so the wait costs nothing and the copy starts immediately.
+        ev_done = self._append_done.get(layer_idx)
+        if ev_done is not None:
+            stream.wait_event(ev_done)
+        else:
+            stream.wait_stream(torch.cuda.current_stream())
+        staged = {}
+        for kind, store in (("k", self._k), ("v", self._v)):
+            slot = store.get(layer_idx)
+            if slot is None or slot[1].is_cuda:
+                continue
+            with torch.cuda.stream(stream):
+                p = slot[1].to(self._device, non_blocking=True)
+                a = (None if slot[2] is None
+                     else slot[2].to(self._device, non_blocking=True))
+            staged[kind] = (slot[0], p, a, slot[3])
+        if staged:
+            ev = torch.cuda.Event()
+            ev.record(stream)
+            self._inflight[layer_idx] = (staged, ev)
+
+    def _side_stream(self):
+        if self._stream is None:
+            self._stream = torch.cuda.Stream(device=self._device)
+        return self._stream
+
+    def _take_inflight(self, layer_idx: int, kind: str):
+        """Claim a prefetched slot, if one landed. Waits on the copy's event
+        rather than synchronizing the device: the compute stream simply orders
+        itself after the transfer."""
+        got = self._inflight.get(layer_idx)
+        if got is None:
+            return None
+        staged, ev = got
+        slot = staged.pop(kind, None)
+        if slot is not None:
+            torch.cuda.current_stream().wait_event(ev)
+            # the staged tensors were allocated on the side stream; tell the
+            # allocator the compute stream is now using them
+            slot[1].record_stream(torch.cuda.current_stream())
+            if slot[2] is not None:
+                slot[2].record_stream(torch.cuda.current_stream())
+        if not staged:
+            self._inflight.pop(layer_idx, None)
+        return slot
+
+    def _load_layer(self, layer_idx: int, kind: str, dtype) -> torch.Tensor:
+        """Load one layer, consuming a prefetched copy if one is ready.
+
+        **A staged copy is HISTORY, not the whole layer.** Decode interleaves as
+        ``prefetch(i) -> update(i) appends -> update loads``, so anything staged
+        by a pre-hook is captured *before* this step's token exists and is short
+        by exactly the rows appended since. Using it as-is drops the newest token
+        from attention — which is not a crash, just quietly wrong output, and it
+        is what E1c caught after the unit suite passed 25/25 by only ever
+        prefetching *after* all updates had completed.
+
+        So the staged history is combined with whatever arrived after it. The
+        tail is normally one token, already on the device, so this costs a
+        concatenation and no extra transfer.
+        """
+        cur = (self._k if kind == "k" else self._v)[layer_idx]
+        staged = self._take_inflight(layer_idx, kind)
+        if staged is None:
+            return self._load(cur, dtype)
+        n_staged, n_cur = staged[1].shape[0], cur[1].shape[0]
+        if n_staged == n_cur:
+            return self._load(staged, dtype)
+        if n_staged > n_cur:
+            # the cache shrank under it (eviction); the staged bytes describe a
+            # cache that no longer exists, so drop them rather than reconcile
+            return self._load(cur, dtype)
+        tail = (cur[0], cur[1][n_staged:],
+                None if cur[2] is None else cur[2][n_staged:], cur[3])
+        views = []
+        for s in (staged, tail):
+            x = self._load_thd(s, dtype)
+            views.append(x if x.dim() == 4 else x.transpose(0, 1).unsqueeze(0))
+        return torch.cat(views, dim=2)
+
+    def _materialize(self, layer_idx: int, kind: str, dtype) -> torch.Tensor:
+        """Assemble one layer from its resident head and its streamed tail."""
+        head_store = self._khead if kind == "k" else self._vhead
+        tail_store = self._k if kind == "k" else self._v
+        head = head_store.get(layer_idx)
+        tail = self._take_inflight(layer_idx, kind) or tail_store.get(layer_idx)
+        slots = [s for s in (head, tail) if s is not None]
+        if not slots:
+            raise KeyError(f"layer {layer_idx} has neither head nor tail")
+        if len(slots) == 1:
+            return self._load(slots[0], dtype)
+        # cat over TRANSPOSED VIEWS: it writes the contiguous result in one
+        # pass, where materializing each half first pays two extra full-size
+        # allocations and copies before this one.
+        views = []
+        for s in slots:
+            x = self._load_thd(s, dtype)
+            views.append(x if x.dim() == 4 else x.transpose(0, 1).unsqueeze(0))
+        return torch.cat(views, dim=2)
+
+    def _drop_inflight(self) -> None:
+        """Discard staged copies. An eviction changes what the slots mean, so a
+        transfer already in flight would land bytes describing the pre-eviction
+        cache -- the same class of contradiction as evicting mid-forward."""
+        self._inflight.clear()
+        self._append_done.clear()
+
+    def _drop_arenas(self) -> None:
+        """Release the backing buffers after an eviction.
+
+        Eviction builds a fresh tensor of the survivors, which is no longer a
+        view into the arena -- so the next append would write at an offset the
+        data no longer occupies, silently corrupting the cache. Dropping the
+        buffer makes the next append rebuild from the current slot (that is what
+        ``_arena_for``'s ``cur`` argument is for), which recompacts lazily and
+        costs one copy of what survived rather than one per evicted layer.
+        """
+        self._arena.clear()
+
+    @staticmethod
+    def _cat(slot_a, slot_b_tensor, quantize: bool, cache: "NF4KVCache"):
+        """Fallback append for bf16 layers and mixed raw/packed histories.
+
+        Packed slots concatenate along the token axis with no dequantization of
+        the existing cache, so the QUANTIZATION stays O(new tokens) — a 32K
+        cache is never re-packed on a step. The COPY does not: ``torch.cat``
+        reallocates and re-copies the whole store. Measured at 32K that is
+        ~54 us per append per tensor, which matches the store's bytes over
+        device bandwidth and is the same additive law the PCIe path obeys. It is
+        small against ~570 us of per-call overhead at these shapes, but it
+        accumulates quadratically over a generation, which is why the packed
+        path now goes through :meth:`_arena_append` and this is only the
+        fallback."""
+        if slot_a is None:
+            return cache._store(slot_b_tensor, quantize)
+        new = cache._store(slot_b_tensor, quantize)
+        if slot_a[0] == "raw" or new[0] == "raw":
+            old = slot_a[1] if slot_a[0] == "raw" else cache._load(slot_a, slot_b_tensor.dtype)
+            nw = new[1] if new[0] == "raw" else cache._load(new, slot_b_tensor.dtype)
+            return ("raw", torch.cat([old, nw], dim=2))
+        return ("nf4", torch.cat([slot_a[1], new[1]], 0),
+                torch.cat([slot_a[2], new[2]], 0), slot_a[3])
+
+    def _store_perchannel(self, layer_idx: int, new_keys: torch.Tensor):
+        """Append keys, flushing full groups into per-channel-scaled slots."""
+        from nf4_kv import quantize_kv_perchannel
+
+        tail = self._ktail.get(layer_idx)
+        tail = new_keys if tail is None else torch.cat([tail, new_keys], dim=2)
+        n_full = (tail.shape[2] // self.group) * self.group
+        if n_full:
+            flush = tail[:, :, :n_full]                      # [1, H, n_full, D]
+            p, a = quantize_kv_perchannel(
+                flush[0].transpose(0, 1).contiguous(), self.group)
+            prev = self._k.get(layer_idx)
+            if prev is None:
+                self._k[layer_idx] = ("nf4pc", p, a, flush.shape[-1])
+            else:
+                self._k[layer_idx] = ("nf4pc", torch.cat([prev[1], p], 0),
+                                      torch.cat([prev[2], a], 0), prev[3])
+            tail = tail[:, :, n_full:]
+        self._ktail[layer_idx] = tail
+
+    def _load_keys(self, layer_idx: int, dtype) -> torch.Tensor:
+        from nf4_kv import dequant_kv_ref
+
+        parts = []
+        slot = self._k.get(layer_idx)
+        if slot is not None:
+            x = dequant_kv_ref(slot[1], slot[2], slot[3], dtype=dtype,
+                               token_group=self.group)
+            parts.append(x.transpose(0, 1).unsqueeze(0).contiguous())
+        tail = self._ktail.get(layer_idx)
+        if tail is not None and tail.shape[2]:
+            parts.append(tail)
+        return parts[0] if len(parts) == 1 else torch.cat(parts, dim=2)
+
+    # ---- transformers Cache protocol ------------------------------------
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor,
+               layer_idx: int, cache_kwargs: Optional[dict] = None):
+        """Append this step's K/V and return the FULL cache for this layer."""
+        dtype = key_states.dtype
+        if self._device is None and key_states.is_cuda:
+            self._device = key_states.device
+        per_channel = (self.key_scaling == "per_channel" and self.quantize_keys
+                       and key_states.is_cuda and key_states.shape[0] == 1
+                       and key_states.shape[-1] % 64 == 0)
+        if self.residence == "host" and per_channel:
+            raise NotImplementedError(
+                "residence='host' does not support key_scaling='per_channel': "
+                "its bf16 tail is appended per step and flushed a group at a "
+                "time, which the fixed-offset arena has no representation for. "
+                "per_token keys (the default) stream fine.")
+        # Under host residence, quantization still runs on the GPU and only the
+        # packed bytes move host-side -- the other order would produce different
+        # bytes from the resident path and quietly turn a residence change into
+        # a fidelity change.
+        if per_channel:
+            self._store_perchannel(layer_idx, key_states)
+        elif self.resident_tokens:
+            self._split_append("k", layer_idx, key_states, self.quantize_keys)
+        else:
+            self._k[layer_idx] = self._append(("k", layer_idx), layer_idx,
+                                              self._k, key_states,
+                                              self.quantize_keys)
+        if self.resident_tokens:
+            self._split_append("v", layer_idx, value_states, self.quantize_values)
+        else:
+            self._v[layer_idx] = self._append(("v", layer_idx), layer_idx, self._v,
+                                              value_states, self.quantize_values)
+        # held reads back from the store so it cannot drift from reality;
+        # true counts every token ever appended, including evicted ones
+        if self.residence == "host" and self._device is not None:
+            ev = torch.cuda.Event()
+            ev.record(torch.cuda.current_stream())
+            self._append_done[layer_idx] = ev
+        self._seen[layer_idx] = (self._rows(self._v.get(layer_idx))
+                                 + self._rows(self._vhead.get(layer_idx)))
+        self._true[layer_idx] = self._true.get(layer_idx, 0) + key_states.shape[2]
+        self.layer_modes[layer_idx] = (
+            f"K={'nf4pc' if per_channel else self._k[layer_idx][0]},"
+            f"V={self._v[layer_idx][0]}") if not self.resident_tokens else (
+            f"split@{self.resident_tokens}")
+        if self.resident_tokens:
+            return (self._materialize(layer_idx, "k", dtype),
+                    self._materialize(layer_idx, "v", dtype))
+        keys = (self._load_keys(layer_idx, dtype) if per_channel
+                else self._load_layer(layer_idx, "k", dtype))
+        return keys, self._load_layer(layer_idx, "v", dtype)
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        """Tokens ever SEEN. transformers derives ``cache_position`` from this,
+        and positions must be absolute so RoPE stays consistent between newly
+        written keys and retained ones. The mask, which needs the tokens
+        actually HELD, reads :meth:`get_query_offset` / :meth:`get_mask_sizes`
+        instead — the two diverge exactly when eviction is on."""
+        return self._true.get(layer_idx, self._seen.get(layer_idx, 0))
+
+    def held_length(self, layer_idx: int = 0) -> int:
+        """Tokens actually in the cache — what the mask must describe."""
+        return self._seen.get(layer_idx, 0)
+
+    @staticmethod
+    def _evict_slot(slot, sink: int, recent: int):
+        """Keep [:sink] + [-recent:] along the token axis."""
+        if slot[0] == "raw":
+            x = slot[1]
+            if x.shape[2] <= sink + recent:
+                return slot
+            return ("raw", torch.cat([x[:, :, :sink], x[:, :, -recent:]], dim=2))
+        kind, p, a, d = slot
+        if p.shape[0] <= sink + recent:
+            return slot
+        return (kind, torch.cat([p[:sink], p[-recent:]], 0),
+                None if a is None else torch.cat([a[:sink], a[-recent:]], 0), d)
+
+    def evict(self) -> None:
+        """Drop the middle of the cache, keeping sinks + recent. Call BETWEEN
+        forwards — never during one, see __init__."""
+        if self.resident_tokens:
+            raise NotImplementedError(
+                "eviction is not supported with resident_tokens: the keep-set "
+                "would straddle the resident/streamed boundary, and silently "
+                "renumbering tokens across two stores is exactly the "
+                "bookkeeping error that made #11 look like a quality result. "
+                "Evict with a single residence, or split without evicting.")
+        if self.keep_recent is None:
+            return
+        for store in (self._k, self._v):
+            for li, slot in list(store.items()):
+                store[li] = self._evict_slot(slot, self.keep_sink, self.keep_recent)
+        self._drop_inflight()
+        self._drop_arenas()
+        self._resync_held()
+
+    @staticmethod
+    def _index_slot(slot, idx: torch.Tensor):
+        """Keep an arbitrary set of token slots, in the given order."""
+        if slot[0] == "raw":
+            return ("raw", slot[1].index_select(2, idx).contiguous())
+        kind, p, a, d = slot
+        return (kind, p.index_select(0, idx).contiguous(),
+                None if a is None else a.index_select(0, idx).contiguous(), d)
+
+    def evict_index(self, keep) -> None:
+        """Retain an arbitrary set of token slots. Call BETWEEN forwards.
+
+        ``keep`` is either a 1-D index tensor applied to every layer, or a
+        mapping ``layer_idx -> 1-D index tensor``; indices address the CURRENT
+        held axis, so a policy that just ran a forward can select straight from
+        what it observed. Ascending order is expected — the token axis carries
+        no positions of its own (RoPE is already baked into the stored keys, and
+        ``get_seq_length`` counts what was SEEN), so reordering here would only
+        scramble the relationship between the cache and the scores a caller
+        holds alongside it.
+
+        :meth:`evict` is the sink+recent special case. This is the general one,
+        which is what an importance-based policy needs: H2O-style selection by
+        accumulated attention keeps a set that is neither a prefix nor a suffix.
+        Mechanism only — no policy lives here, deliberately, because the one
+        policy measured so far (recency) lost to quantization by 28x at matched
+        bytes and this class should not imply otherwise.
+
+        Per-channel keys are refused rather than silently mishandled: their
+        absmax is grouped over *runs* of ``group`` tokens, so dropping tokens
+        out of the middle would leave scales describing groups that no longer
+        exist. Sink+recent has the same problem and predates the guard; see
+        ``key_scaling`` in ``__init__`` for why that path is off by default.
+        """
+        if self.resident_tokens:
+            raise NotImplementedError(
+                "eviction is not supported with resident_tokens: the keep-set "
+                "would straddle the resident/streamed boundary, and silently "
+                "renumbering tokens across two stores is exactly the "
+                "bookkeeping error that made #11 look like a quality result. "
+                "Evict with a single residence, or split without evicting.")
+        if self.key_scaling == "per_channel" and self.quantize_keys:
+            raise NotImplementedError(
+                "evict_index does not support key_scaling='per_channel': the "
+                "key absmax is grouped over runs of tokens, so an arbitrary "
+                "keep-set would leave scales that describe groups which no "
+                "longer exist. Use per_token keys (the default) for eviction.")
+        per_layer = hasattr(keep, "keys")            # mapping vs a single index tensor
+        for li in list(self._v):
+            idx = (keep[li] if per_layer else keep)
+            idx = idx.to(device=self._v[li][1].device, dtype=torch.long)
+            for store in (self._k, self._v):
+                slot = store.get(li)
+                if slot is not None:
+                    store[li] = self._index_slot(slot, idx)
+        self._drop_inflight()
+        self._drop_arenas()
+        self._resync_held()
+
+    def _resync_held(self) -> None:
+        """Re-read held length from the store so it cannot drift from reality."""
+        for li in list(self._seen):
+            vs = self._v.get(li)
+            if vs is not None:
+                n = (vs[1].shape[2] if vs[0] == "raw" else vs[1].shape[0])
+                self._seen[li] = n + self._rows(self._vhead.get(li))
+
+    @staticmethod
+    def _rows(slot) -> int:
+        if slot is None:
+            return 0
+        return slot[1].shape[2] if slot[0] == "raw" else slot[1].shape[0]
+
+    def get_max_cache_shape(self) -> Optional[int]:
+        return None                      # grows without a preset bound
+
+    def get_query_offset(self, layer_idx: int = 0) -> int:
+        """Where this step's queries sit relative to the cache — i.e. the
+        number of tokens already held.
+
+        This returned 0 originally, on the reasoning that a cache which never
+        pre-allocates has queries "at the front". That reasoning was wrong: the
+        offset positions the query rows against the kv axis when the causal
+        mask is built, so with a non-empty cache a 0 offset masks chunk N's
+        queries as though they were the first tokens of the sequence. Feeding
+        1024 tokens in 128-token chunks scored ppl 330 against 5.97 for the
+        same cache in one shot.
+
+        It hid because every single-forward test starts from an empty cache,
+        where 0 is the correct answer — so four architectures' worth of control
+        arms matched their fp16 reference EXACTLY and still said nothing about
+        the accumulating path. See test_chunked_prefill_matches_single_forward.
+        """
+        return self.held_length(layer_idx)
+
+    def get_mask_sizes(self, cache_position, layer_idx: int = 0):
+        """(kv_length, kv_offset) — the shape transformers' mask builder wants.
+
+        kv_length must count the tokens about to be written, not just those
+        already stored: the mask is built BEFORE the layers run, so at that
+        moment ``get_seq_length`` is still the PREVIOUS length (0 on the first
+        forward). Returning it alone yields a zero-width mask.
+
+        This surfaced only on gpt-oss, which uses eager attention with an
+        explicit additive mask because of its attention sinks; OLMoE's path
+        tolerates a None mask and hid the bug entirely. Hence the rule: a cache
+        cannot be called correct against one architecture's attention path.
+        """
+        # cache_position is not always a tensor: transformers' generate path
+        # passes a bare int (observed: 5 on a 5-token prompt against an empty
+        # cache, so it is the QUERY LENGTH, not a position — a position would
+        # have been 0..4). Handle tensor, sequence, and scalar alike.
+        if hasattr(cache_position, "shape"):
+            q_len = int(cache_position.shape[0])
+        elif hasattr(cache_position, "__len__"):
+            q_len = len(cache_position)
+        else:
+            q_len = int(cache_position)
+        return q_len + self.held_length(layer_idx), 0
+
+    @property
+    def is_compileable(self) -> bool:
+        return False                     # ragged growth; do not let compile assume shapes
+
+    def __len__(self) -> int:
+        return len(self._seen)
+
+    # ---- the budget number ----------------------------------------------
+    def device_bytes(self) -> int:
+        """Bytes of the cache resident on the GPU.
+
+        Equals :meth:`memory_bytes` under ``residence='gpu'``. Under
+        ``'host'`` it is 0 for the stored cache -- the whole point -- and the
+        real GPU cost is the transient one-layer slice materialized inside
+        :meth:`_load`, which lives and dies within a single layer's forward and
+        so is an activation, not cache residency. Reported separately from
+        ``memory_bytes`` because conflating "how big is the cache" with "how
+        much VRAM does it hold" is exactly the confusion streaming introduces.
+        """
+        total = 0
+        for t in self._ktail.values():
+            if t.is_cuda:
+                total += t.numel() * 2
+        for store in (self._k, self._v, self._khead, self._vhead):
+            for slot in store.values():
+                if slot[0] == "raw":
+                    if slot[1].is_cuda:
+                        total += slot[1].numel() * slot[1].element_size()
+                elif slot[1].is_cuda:
+                    total += (slot[1].numel() * slot[1].element_size()
+                              if slot[2] is None
+                              else slot[1].numel() + slot[2].numel() * 4)
+        return total
+
+    def memory_bytes(self, fp16: bool = False) -> int:
+        """Bytes actually held. ``fp16=True`` reports what bf16 storage of the
+        same tokens would have cost — the comparison the context budget uses."""
+        total = 0
+        for t in self._ktail.values():                # bf16 tail, < group tokens
+            total += t.numel() * 2
+        for store in (self._k, self._v, self._khead, self._vhead):
+            for slot in store.values():
+                if slot[0] == "raw":
+                    t = slot[1]
+                    total += t.numel() * (2 if fp16 else t.element_size())
+                else:
+                    _, p, a, d = slot     # "nf4"/"nf4pc" packed, or "rawh"
+                    n_tok, n_head = p.shape[0], p.shape[1]
+                    if fp16:
+                        total += n_tok * n_head * d * 2
+                    elif a is None:               # host-resident, unquantized
+                        total += p.numel() * p.element_size()
+                    else:
+                        total += p.numel() + a.numel() * 4
+        return total
