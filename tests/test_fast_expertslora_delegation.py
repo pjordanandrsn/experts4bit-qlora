@@ -137,7 +137,13 @@ def test_delegation_verdict_is_invalidated_by_loading_an_adapter():
     try:
         with torch.no_grad():
             assert mod._delegate_to_base() is True      # caches the verdict
-        sd = {k: v.clone() for k, v in mod.state_dict().items()}
+        # Not every state_dict value is a tensor: bitsandbytes serializes a
+        # Params4bit's quant_state as a nested dict, so a blanket .clone()
+        # raises AttributeError on a REAL 4-bit module. This only shows up on
+        # CUDA — the CPU CI runner never reaches the quantized path, which is
+        # why this test merged having never executed.
+        sd = {k: (v.clone() if hasattr(v, "clone") else v)
+              for k, v in mod.state_dict().items()}
         sd["gate_up_lora_B"] = torch.randn_like(sd["gate_up_lora_B"]) * 0.02
         mod.load_state_dict(sd)
         assert mod._adapter_is_zero() is False, "stale verdict would drop the adapter"
