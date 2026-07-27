@@ -7,7 +7,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
-from experts4bit_qlora.mxfp4 import FP4_VALUES, dequantize_mxfp4
+from experts4bit_qlora.mxfp4 import FP4_VALUES, dequantize_mxfp4  # noqa: E402
 
 
 def test_fp4_grid():

@@ -12,7 +12,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
-from experts4bit_qlora import NF4KVCache, kv_nf4_available
+from experts4bit_qlora import NF4KVCache, kv_nf4_available  # noqa: E402
 
 kv = pytest.mark.skipif(not kv_nf4_available(),
                         reason="needs [fast] (grouped-nf4-gemm) + CUDA")
@@ -91,7 +91,7 @@ def test_asymmetric_switches():
 @kv
 def test_real_generate_runs_through_the_cache():
     """End-to-end: a real model, real generate(), our cache object."""
-    transformers = pytest.importorskip("transformers")
+    pytest.importorskip("transformers")
     from transformers import AutoModelForCausalLM, AutoTokenizer
     name = "HuggingFaceTB/SmolLM2-135M"
     try:
@@ -142,8 +142,10 @@ def test_per_channel_keys_roundtrip_and_tail_flushes():
 def test_per_channel_costs_the_same_as_per_token():
     """The claim that motivates using it: identical bytes, different fidelity."""
     k, v = _kv(256, 4, 128, 1), _kv(256, 4, 128, 2)
-    a = NF4KVCache(); a.update(k, v, 0)
-    b = NF4KVCache(key_scaling="per_channel", group=64); b.update(k, v, 0)
+    a = NF4KVCache()
+    a.update(k, v, 0)
+    b = NF4KVCache(key_scaling="per_channel", group=64)
+    b.update(k, v, 0)
     assert b.memory_bytes() == a.memory_bytes()
 
 
@@ -256,7 +258,8 @@ def test_evict_index_keeps_an_arbitrary_set_and_matches_evict_on_its_special_cas
         assert torch.equal(got_k, ref_k), kw                      # exactly those rows
         # and the sink+recent case must agree with the special-cased evict()
         a, b = NF4KVCache(keep_sink=4, keep_recent=8, **kw), NF4KVCache(**kw)
-        a.update(k, v, 0); b.update(k, v, 0)
+        a.update(k, v, 0)
+        b.update(k, v, 0)
         a.evict()
         b.evict_index(torch.cat([torch.arange(4), torch.arange(56, 64)]).cuda())
         assert torch.equal(a._load(a._k[0], torch.bfloat16),
@@ -319,14 +322,16 @@ def test_host_residence_holds_no_vram_and_survives_eviction():
             gk, _ = gpu.update(k, v, 0)
             hk, _ = host.update(k, v, 0)
             assert torch.equal(gk, hk), (kw, lo)      # matches across evictions
-            gpu.evict(); host.evict()
+            gpu.evict()
+            host.evict()
         assert host.held_length(0) == gpu.held_length(0) == 68, kw
         assert host.get_seq_length(0) == 256, kw
         assert host.device_bytes() == 0, kw
         assert host.memory_bytes() == gpu.memory_bytes(), kw
         # and the arbitrary keep-set path recompacts too
         want = torch.tensor([0, 1, 2, 3, 30, 60, 67], device="cuda")
-        gpu.evict_index(want); host.evict_index(want)
+        gpu.evict_index(want)
+        host.evict_index(want)
         assert torch.equal(gpu._load(gpu._k[0], torch.bfloat16),
                            host._load(host._k[0], torch.bfloat16)), kw
         k, v = _kv(32, 4, 128, 9), _kv(32, 4, 128, 10)
