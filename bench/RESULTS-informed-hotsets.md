@@ -36,7 +36,9 @@ artifact**, not a residency limit. At E=128/k=8, eight informed experts are
 6 % of the pool yet capture **half of all routed selections** — MoE routing
 is skewed enough that small informed hot sets buy large cold-traffic
 reductions, and the decode gain tracks measured coverage across all three
-architectures (E=32/64/128). Peak VRAM is unchanged vs naive at equal K
+architectures (E=32/64/128) **on these hosts, which are all bandwidth-limited**
+— see the 2026-07-28 note at the end of this file: on a fat-link A6000 the
+E=128 arm did NOT replicate and those cells are withdrawn as evidence. Peak VRAM is unchanged vs naive at equal K
 (hot-stack size is K by construction).
 
 Caveat: same-workload calibration is the oracle ceiling. Production hot sets

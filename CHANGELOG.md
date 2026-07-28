@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **`enable_fast()` now reaches the streaming-loader path (PR #36, `c2bf990`).**
+  `ExpertsLoRA` previously inlined the expert math and never called
+  `self.base(...)`, so the `[fast]` fused kernel was patched onto a method that
+  was never invoked — a silent no-op for every model loaded with
+  `load_moe_4bit_streaming`. `ExpertsLoRA` now delegates to its base when the
+  adapter provably contributes nothing (B is zero-init, so an untrained adapter
+  is *identically* zero), guarded so a trained adapter is never silently dropped.
+- **Docs corrections (2026-07-28).** The informed-hot-set decode gain is scoped
+  to the (bandwidth-limited) hosts it was measured on — it does not replicate on
+  a fat-PCIe box. The `memlock` deployment note no longer claims `cudaHostAlloc`
+  is gated by `RLIMIT_MEMLOCK`; that cause is false and the observed slowdown is
+  now marked unattributed. README states that both residency engines require
+  standalone expert modules and refuse/skip `ExpertsLoRA`-wrapped bases.
+
 ## 0.6.3 — 2026-07-21
 - **Behavior change — serve binds to `127.0.0.1` by default** (was `0.0.0.0`).
   LAN exposure is now opt-in: set `E4B_HOST=0.0.0.0` to restore the old

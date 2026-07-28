@@ -75,7 +75,7 @@ non-nf4/64 storage are skipped rather than mis-activated.
 |---|---|---|
 | Train / maximum compatibility (any host, any scheme) | nothing — the reference `ExpertsNbit` forward is the default | supported + convergence-tested |
 | Faster frozen-expert **inference** on CUDA | `enable_fast(model)` (`[fast]`) | supported + benchmarked (3.65× bs=1) |
-| Serve past VRAM: hot experts resident, cold **streamed** | `enable_pipelined_residency(model, hot_sets, k_slots=k)` (`[fast]`) | supported — the current serving engine (K is config: empty set = pure streaming, all experts = fully resident) |
+| Serve past VRAM: hot experts resident, cold **streamed** | `enable_pipelined_residency(model, hot_sets, k_slots=k)` (`[fast]`) | supported on **standalone `Experts4bit`/`ExpertsNbit` modules** — the current serving engine (K is config: empty set = pure streaming, all experts = fully resident). ⚠️ **Raises `NotImplementedError` on `ExpertsLoRA`-wrapped bases**, which is what `load_moe_4bit_streaming` always produces — see the note below. |
 | Same, the v0 engine | `enable_hot_residency(model, hot_sets)` (`[fast]`) | **superseded** by pipelined (kept through 0.6 to reproduce the v0 receipts; removal in 0.7; warns at call) |
 | Hot experts resident, cold **computed on the host CPU** | `enable_cold_engine(model, hot_sets, dequant="auto")` | correct + CPU-complete tests (bit-exact host decode; all-cold runs with no CUDA/`[fast]`); **performance-experimental** — the host decode is a correctness path until the AVX2 kernel lands |
 | Models whose experts exceed VRAM, training or serving | `OFFLOAD_EXPERTS=1` / `load_moe_4bit_streaming(..., offload=True, prefetch=True)` | supported + benchmarked (layer-granular, deterministic) |
@@ -84,6 +84,15 @@ non-nf4/64 storage are skipped rather than mis-activated.
 from experts4bit_qlora import enable_fast, disable_fast
 enable_fast(model)    # returns the number of expert modules patched
 ```
+
+> **Both residency engines require standalone expert modules (2026-07-28).**
+> `enable_pipelined_residency` raises `NotImplementedError` when every `ExpertsNbit`
+> it finds is an `ExpertsLoRA.base`, and `enable_hot_residency` *silently skips* those
+> modules (returning a lower patch count). `load_moe_4bit_streaming` always wraps in
+> `ExpertsLoRA`, so the offload/streaming-loader path — the one a "serve past VRAM"
+> reader is most likely on — does not currently reach either engine. Load bare
+> (`Experts4bit`/`ExpertsNbit` without the LoRA wrapper) to use them. Composing
+> offload with residency is a library increment, not a supported configuration here.
 
 **Hot-expert residency** (`enable_hot_residency` — **superseded by
 `enable_pipelined_residency`**, kept through 0.6 to reproduce the v0 receipts;
@@ -361,8 +370,13 @@ Moved to **[docs/BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-q
 
 ## Provenance & audits
 
-Every measured number above traces to a committed script/test, an exact environment, and a repo
-commit in [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/PROVENANCE.md) — and that file is OpenTimestamps-anchored: `ots verify
+Every measured number above traces to a committed script/test and a named host, with receipts
+under [`bench/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.3/bench) and
+[`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.3/docs) — cited inline at
+each claim. **Scope note (2026-07-28):** [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/PROVENANCE.md)
+is the OpenTimestamps-anchored record for the **v0.2.0** convergence result specifically; the
+0.5.0–0.6.3 additions (fused kernel, hot-set residency, gpt-oss, storage modes) are receipted in
+`bench/` and `docs/`, not in that file. It is OpenTimestamps-anchored: `ots verify
 PROVENANCE.md.ots PROVENANCE.md` checks the on-disk bytes against the calendar proof, the footer
 carries the hash-chain of prior revisions, and superseded proofs are retained in
 [`.ots-history/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.3/.ots-history/). Falsification work lives under [`audits/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.3/audits/) — most

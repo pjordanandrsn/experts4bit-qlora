@@ -51,7 +51,7 @@ Box: RunPod SECURE **L40S** 46 GB, AMD EPYC 9354, e4b @ the
 
 ## Ops
 
-One L40S pod (`rzxl99wg64w2r1`), ~$0.4, torn down on evidence-complete and
+One L40S pod, ~$0.4, torn down on evidence-complete and
 404-verified. It re-ran only the pipelined cells after the first composite pod
 (A5000) crashed them on the free-base bug (fixed: skip free under pipelined,
 `bench/bench_gptoss_hybrid.py`); the hot + llama comparators from that pod are
@@ -88,7 +88,7 @@ run on the released bitsandbytes 0.50.0** (the 2026-07-20 cells ran bnb
 
 Ops: two L40S pods, ≈$1.37 total — pod #1 was deleted mid-provision by its
 own 45-minute teardown backstop (ops error, no data lost), pod #2
-(`pem4ar8lka1fak`) ran all three cells and was torn down on
+the second ran all three cells and was torn down on
 evidence-complete, 404-verified. Provisioning notes for the next runner:
 the gpt-oss loader reads `original/model.safetensors` (include `original/`
 in HF snapshots), `HF_HUB_ENABLE_HF_TRANSFER=1` pulls 13.8 GB in ~15 s, and
