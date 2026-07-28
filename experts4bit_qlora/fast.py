@@ -263,7 +263,13 @@ def enable_fast(model, verbose: bool = False) -> int:
     from experts4bit_qlora.lora import ExpertsLoRA
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
-    mods = list(model.modules() if hasattr(model, "modules") else [model])
+    mods = list(model.modules()) if hasattr(model, "modules") else [model]
+    # A patch on an ExpertsLoRA.base is only ever *reached* when that parent's adapter is a
+    # provable no-op (ExpertsLoRA._delegate_to_base); with a trained adapter the delta has to
+    # be injected pre-activation, so the parent keeps its inline path and this patch is dead.
+    # Track parents so the return value cannot imply work that will not happen.
+    lora_parent = {id(m.base): m for m in mods if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
+    unreachable = []
     patched = 0
 
     wrapped_bases = {id(m.base) for m in mods if isinstance(m, ExpertsLoRA)}
@@ -319,6 +325,21 @@ def enable_fast(model, verbose: bool = False) -> int:
         mod._e4b_fast_ref = mod.forward
         mod.forward = fused_experts_forward.__get__(mod)
         patched += 1
+        parent = lora_parent.get(id(mod))
+        if parent is not None and not parent._adapter_is_zero():
+            unreachable.append(type(mod).__name__)
+    if unreachable:
+        import warnings
+
+        warnings.warn(
+            f"[e4b.fast] {len(unreachable)} of {patched} patched module(s) are ExpertsLoRA "
+            "bases with a non-zero adapter: ExpertsLoRA injects its low-rank delta before the "
+            "activation, so it does not call base.forward and these patches will never run. "
+            "The fused kernel cannot accelerate a trained per-expert adapter today; merge or "
+            "drop the adapter for fused inference.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return patched
 
 

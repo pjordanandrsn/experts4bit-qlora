@@ -1,0 +1,6 @@
+CPU(s) visible in container:        128 (nproc)
+RunPod allocation:                  16 vCPU (API vcpuCount)
+Model name:                         not captured on-pod; host signature (128 CPUs / 1511 GB RAM,
+                                    machine class of vuau6mpe4t2s) matches the AMD EPYC 9354 hosts
+                                    of the 2026-07-20 cells
+All cells run under:                taskset -c 0-3

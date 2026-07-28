@@ -12,6 +12,6 @@ python bench/_upstream/bench_energy.py                   # joules/op: bf16 vs de
 ```
 
 The LoRA-placement ablation (which of experts / attention / router to train) and full energy
-analysis are written up in [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/METHODOLOGY.md). Short version: on Alpaca
+analysis are written up in [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/METHODOLOGY.md). Short version: on Alpaca
 the placements are largely **redundant**, attention-only is the efficiency pick, and training the
 router **hurts**.

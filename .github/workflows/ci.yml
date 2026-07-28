@@ -15,13 +15,11 @@ jobs:
           python-version: "3.11"
       - name: Install (CPU torch — GPU loader tests auto-skip on a CPU runner)
         run: |
-          python -m pip install --upgrade pip
-          # PINNED. Unpinned, a ruff release silently expands its default
-          # rule set and turns this job red without a code change -- which
-          # is exactly what happened: main went from green to 295 errors on
-          # its own, and the job stopped carrying information. Bump this
-          # deliberately, with the fixes, in its own commit.
-          pip install 'ruff==0.15.22'
+          # ruff is PINNED: 0.16.0 (2026-07-22..26 window) introduced TRY004 /
+          # unused-noqa findings that fail 295 pre-existing sites on untouched
+          # code — a floating gate moving under a frozen tree is not a gate.
+          # Adopt newer ruff deliberately, with its findings, as its own change.
+          python -m pip install --upgrade pip "ruff==0.15.22"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[test]"
       - name: Lint

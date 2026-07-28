@@ -46,8 +46,13 @@ services:
       - ../../adapters:/adapters:ro
       - ../../receipts:/receipts
     ulimits:
-      # Required: the offload homes must pin (mlock) ~5 GB for OLMoE. Without this the pin
-      # silently falls back to pageable and decode drops from 1.44 to ~0.4 tok/s.
+      # Set this as cheap insurance. NOTE (corrected 2026-07-28): an earlier version of
+      # this comment said that without it the pin "silently falls back to pageable".
+      # That cause is WRONG -- pin_memory()/cudaHostAlloc is NOT gated by RLIMIT_MEMLOCK
+      # (measured: a 15 GiB arena pinned at 18.7 GB/s under an 8 MiB soft AND hard cap).
+      # The rlimit gates cudaHostRegister, which this path never calls. A 1.44 -> 0.4 tok/s
+      # slowdown was really observed without it, but is NOT attributed -- if decode is slow,
+      # check tensor.is_pinned() rather than blaming this line. See docs/SERVING.md.
       memlock: -1
     restart: unless-stopped
     healthcheck:

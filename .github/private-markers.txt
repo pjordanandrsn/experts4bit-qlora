@@ -1,0 +1,75 @@
+# Private-lane markers — one extended-regex per line, matched case-insensitively
+# against every tracked text file by .github/workflows/private-marker-guard.yml.
+#
+# Each pattern earned its place: on 2026-07-28 an audit found material in the
+# PUBLIC tree that the previous guard (literal "(PRIVATE)" + `^AGENT-`) could
+# not see. The comment above each group names what it would have caught.
+#
+# Add `guard-allow` on a line to exempt a deliberate mention.
+
+# --- DIRECTIVE: the file itself says it must not be published -----------------
+# caught: intel-1984.md "(for the record; do NOT post)";
+#         WATCHLIST.md "UNCOMMITTED, private-fork only until reviewed";
+#         RESULTS-flagship-scale671.md "DRAFT — held for owner review; not
+#         stamped, not committed" (and it was committed).
+do NOT post
+must not reach the public remote
+private-fork only
+private fork only
+not stamped, not committed
+held for owner review
+uncommitted, private
+moves to the public repo at the gate
+
+# --- LANE: names the private sibling, its branches, or its lineage ------------
+# caught: "Code: private fork `mxfp4_pack_ref/...`", "(private-lineage)",
+#         "e4b control @ e62a7a0 (`private`)", private branch names.
+\(PRIVATE\)
+private fork
+private-lineage
+private-only
+e4b-ssdtier
+grouped-nf4-gemm-private
+experts4bit-qlora-private
+
+# --- HOSTPATH: evidence that only exists on the author's machines -------------
+# caught: "~/e4b-evidence/routed-residual/", "~/e4b-outbox/...-DRAFT.md".
+~/e4b-outbox
+~/e4b-evidence
+~/gnf4-lat
+~/\.runpod
+
+# --- OPSEC: engagement choreography aimed at third-party projects -------------
+# caught: ops-log.md "Two-Comment Coordination Operation", "radio silence
+#         resumes", "aftermath rails armed". Reads as manipulation of an
+#         upstream project regardless of intent.
+radio silence
+aftermath rails
+coordination operation
+do not solicit
+not to be solicited
+
+# --- DOSSIER: strategic assessment of a named individual ----------------------
+# caught: intel-1984.md treating a contributor's published error figures as
+#         "candidate FLEET contributions ... usable only once he appears on".
+# Keep this narrow: it targets the framing, not ordinary attribution.
+intel notes —
+candidate FLEET contribution
+FLEET contributions
+
+# --- INFRA: home-network and rented-host identifiers --------------------------
+# caught: "QNAP TVS-h1688X", the UPS model plus a note about which service was
+#         NOT listening; RunPod pod ids in receipts; lab IPs.
+TVS-h1688X
+PhxTec
+10\.0\.0\.[0-9]{1,3}
+192\.168\.[0-9]{1,3}\.[0-9]{1,3}
+
+# --- e4b PRIVATE LANE ---------------------------------------------------------
+# This repo has a private sibling (experts4bit-qlora-private) holding the
+# commercial lean-prefill engine and the routed-staging work. These branch names
+# and the integration branch must never appear in the public tree: naming them
+# discloses the private topology even when no code leaks.
+feat/pipelined-lean-prefill
+perf/routed-staging-overhead
+integration/lean-onto-routed-staging

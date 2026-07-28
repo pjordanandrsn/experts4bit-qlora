@@ -8,7 +8,7 @@ workload with routing hooks, then pin each layer's K most-selected experts —
 an **oracle upper bound** by construction: calibration tokens == served
 tokens, greedy-deterministic). Pod driver: `bench/informed_hotsets_pod.sh`.
 
-## Informed vs naive — decode scales with coverage, on every model tried
+## Informed vs naive — decode scales with coverage on every model tried here (thin-link hosts)
 
 **gpt-oss-20b** (RunPod A5000, dual Xeon Gold 6342; receipts
 `bench/receipts-informed-20260720/`):
@@ -36,7 +36,9 @@ artifact**, not a residency limit. At E=128/k=8, eight informed experts are
 6 % of the pool yet capture **half of all routed selections** — MoE routing
 is skewed enough that small informed hot sets buy large cold-traffic
 reductions, and the decode gain tracks measured coverage across all three
-architectures (E=32/64/128). Peak VRAM is unchanged vs naive at equal K
+architectures (E=32/64/128) **on these hosts, which are all bandwidth-limited**
+— see the 2026-07-28 note at the end of this file: on a fat-link A6000 the
+E=128 arm did NOT replicate and those cells are withdrawn as evidence. Peak VRAM is unchanged vs naive at equal K
 (hot-stack size is K by construction).
 
 Caveat: same-workload calibration is the oracle ceiling. Production hot sets
@@ -76,3 +78,21 @@ evidence).
   same-box pair (L40S). All torn down on evidence-complete, 404-verified.
 - `pipefail` (PR #27's Bugbot fix) did its job: the disk-full Gemma cell
   reported `FAILED` instead of sailing to a fake success.
+
+
+## 2026-07-28 — the gain is a property of the LINK, not only the model
+
+These cells were all taken on bandwidth-limited hosts. Later measurement shows
+the informed-vs-naive advantage **scales with how expensive the avoided
+transfer is**, so it does not generalize to fat-PCIe boxes:
+
+| host / model | informed vs naive |
+|---|---|
+| A2000 (thin link), gpt-oss K=4 | **+40%** |
+| L40S (fat PCIe), gpt-oss K=8 | **≈0%** (informed ≈ pure streaming) |
+| A6000, Qwen3-30B E=128 | did **not** replicate; cells withdrawn as evidence |
+
+A hot expert only pays when the transfer it avoids costs more than the resident
+path's own per-hit overhead. The mechanism itself is sound and measured — hot
+reads run at device speed (18.8 µs/row vs 143.6 µs/row cold) — but the *headline
+percentage* belongs to its host. Quote these numbers with the box attached.

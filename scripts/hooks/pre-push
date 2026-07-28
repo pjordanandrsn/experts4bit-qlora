@@ -1,0 +1,38 @@
+#!/bin/bash
+# Pre-push guard — refuses private-lane material before it leaves the machine.
+#
+# ONE SOURCE OF TRUTH: this hook and .github/workflows/private-marker-guard.yml
+# both scan with .github/private-markers.txt. They used to carry separate
+# hardcoded logic, which meant CI could pass while the hook blocked (or worse,
+# the reverse). If you change the patterns, both move together.
+#
+# Install:  ln -sf ../../scripts/hooks/pre-push .git/hooks/pre-push
+set -euo pipefail
+fail() { echo "PRE-PUSH GUARD: $*" >&2; exit 1; }
+
+PATS=$(mktemp)
+# grep -f treats '#' lines as literal patterns and BLANK lines as match-all —
+# strip both, or the scan matches every line in the repo (observed: 1603 hits).
+grep -vE '^[[:space:]]*(#|$)' .github/private-markers.txt > "$PATS" || true
+n=$(wc -l < "$PATS" | tr -d ' ')
+[ "$n" -ge 20 ] || fail "pattern file collapsed to $n patterns — refusing to run a toothless scan"
+
+while read -r _lref lsha _rref _rsha; do
+  [ "$lsha" = "0000000000000000000000000000000000000000" ] && continue
+
+  if git ls-tree -r --name-only "$lsha" | grep -qE '(^|/)AGENT-'; then
+    fail "tip tree contains AGENT-* planning docs (private-lane denylist)"
+  fi
+
+  hits=$(git grep -n -I -E -i -f "$PATS" "$lsha" \
+           -- . ':!.github/private-markers.txt' \
+                ':!.github/workflows/private-marker-guard.yml' \
+                ':!scripts/hooks/pre-push' 2>/dev/null \
+         | grep -v 'guard-allow' || true)
+  if [ -n "$hits" ]; then
+    echo "$hits" | head -20 >&2
+    fail "private-lane markers in the tip tree (see above; 'guard-allow' to exempt a line)"
+  fi
+done
+rm -f "$PATS"
+exit 0

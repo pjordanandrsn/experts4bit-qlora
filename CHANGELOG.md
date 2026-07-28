@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.6.4 — 2026-07-28
+
+**If you installed `[fast]` on 0.6.3 or earlier, the fused kernel was not
+running.** `enable_fast()` patched `ExpertsNbit.forward`, but `ExpertsLoRA`
+inlines the expert math and never calls `self.base(...)` — and
+`load_moe_4bit_streaming` always wraps in `ExpertsLoRA`. The advertised speedup
+was a silent no-op on the loader this package tells you to use. Upgrade to get
+it; nothing about your code changes.
+
+**This is a behaviour change, not only a fix.** With delegation live, the fused
+path actually executes, and it is a different computation from the reference
+loop — priced at **+0.023% perplexity** (see `docs/METHODOLOGY.md`). If you were
+unknowingly running the reference path, your numbers will move slightly.
+
+- **`enable_fast()` now reaches the streaming-loader path (PR #36, `c2bf990`).**
+  `ExpertsLoRA` previously inlined the expert math and never called
+  `self.base(...)`, so the `[fast]` fused kernel was patched onto a method that
+  was never invoked — a silent no-op for every model loaded with
+  `load_moe_4bit_streaming`. `ExpertsLoRA` now delegates to its base when the
+  adapter provably contributes nothing (B is zero-init, so an untrained adapter
+  is *identically* zero), guarded so a trained adapter is never silently dropped.
+- **Docs corrections (2026-07-28).** The informed-hot-set decode gain is scoped
+  to the (bandwidth-limited) hosts it was measured on — it does not replicate on
+  a fat-PCIe box. The `memlock` deployment note no longer claims `cudaHostAlloc`
+  is gated by `RLIMIT_MEMLOCK`; that cause is false and the observed slowdown is
+  now marked unattributed. README states that both residency engines require
+  standalone expert modules and refuse/skip `ExpertsLoRA`-wrapped bases.
+
 ## 0.6.3 — 2026-07-21
 - **Behavior change — serve binds to `127.0.0.1` by default** (was `0.0.0.0`).
   LAN exposure is now opt-in: set `E4B_HOST=0.0.0.0` to restore the old
@@ -45,7 +73,7 @@
   biases) supported; requires `[fast]`, fails at enable time with an install
   hint.
 - Routing-informed hot sets (#28): calibrate-then-pin reference driver;
-  decode gain tracks routing coverage (gpt-oss +56/+120%, Gemma-4 +44%,
+  decode gain tracks routing coverage on thin-link hosts (gpt-oss +56/+120%, Gemma-4 +44%,
   OLMoE +19%); multi-socket affinity law documented (pin `taskset` before
   any cold-path number).
 - Hybrid-vs-llama same-box A/B receipts + Gemma-4 gated-weights serving gate
