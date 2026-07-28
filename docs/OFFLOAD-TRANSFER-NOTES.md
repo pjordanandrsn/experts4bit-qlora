@@ -1,7 +1,7 @@
 # Offload transfer notes — where the H2D bandwidth goes
 
 *Workstream A of the offload-diagnostics investigation. Measured on the [`PROVENANCE.md`](../PROVENANCE.md)
-host — an RTX A2000 12 GB in a QNAP TVS-h1688X NAS (Xeon W-1250, PCIe 3.0-only platform), the card in
+host — an RTX A2000 12 GB in a NAS-class host (Xeon W-1250, PCIe 3.0-only platform), the card in
 the chassis's sole x8 electrical slot, full production stack live (load ~45, GPU shared with six other
 dev-agent containers — not quiesced). Reproduce with the env flags at the end.*
 

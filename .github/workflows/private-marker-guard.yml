@@ -1,0 +1,87 @@
+name: private-marker-guard
+on: [push, pull_request]
+
+# Refuses private-lane material in the public tree.
+#
+# WIDENED 2026-07-28 after an audit found material this guard was structurally
+# unable to see. The old rules were `^AGENT-` (repo root only) and a literal
+# "(PRIVATE)" grep with a hardcoded per-file exemption. Everything below was
+# public and slipped past both:
+#
+#   * a competitive dossier on a NAMED third-party OSS contributor, whose own
+#     text read "(for the record; do NOT post)"
+#   * an ops log scripting a "Two-Comment Coordination Operation" against an
+#     upstream project, with "radio silence" / "aftermath rails armed"
+#   * docs/WATCHLIST.md ("UNCOMMITTED, private-fork only until reviewed") and
+#     docs/COMPETITIVE.md ("Moves to the public repo at the gate")
+#   * private-fork branch refs, ~/e4b-outbox and ~/e4b-evidence paths, RunPod
+#     pod ids, and the author's NAS/UPS model with a note on which service was
+#     not listening
+#
+# Patterns live in .github/private-markers.txt, one extended-regex per line,
+# each annotated with the incident it would have caught.
+#
+# ALLOWLIST: put `guard-allow` on the same line to exempt a deliberate mention.
+# Prefer rewording over allowlisting. There are no hardcoded file exemptions —
+# the previous version exempted the one file that tripped it.
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: self-test — a check that cannot fail is not a check
+        run: |
+          set -euo pipefail
+          # Positive control. Plant one line per marker class and assert the
+          # scanner flags them. Without this, a typo in the pattern file turns
+          # the real scan below into theatre that always reports "clean".
+          cat > /tmp/canary.md <<'CANARY'
+          this note is (PRIVATE) to the lane
+          for the record; do NOT post
+          UNCOMMITTED, private-fork only until reviewed
+          code lives on the private fork @ deadbeef
+          evidence at ~/e4b-evidence/run1
+          radio silence resumes until the gate
+          box is a QNAP TVS-h1688X on 10.0.0.68
+          CANARY
+          grep -vE '^[[:space:]]*(#|$)' .github/private-markers.txt > /tmp/patterns.txt
+          n=$(grep -c -E -i -f /tmp/patterns.txt /tmp/canary.md || true)
+          np=$(wc -l < /tmp/patterns.txt | tr -d ' ')
+          if [ "${np}" -lt 20 ]; then
+            echo "::error::pattern file collapsed to ${np} patterns — refusing to run a toothless scan"
+            exit 1
+          fi
+          echo "canary matched ${n} lines against ${np} patterns"
+          if [ "${n}" -lt 6 ]; then
+            echo "::error::guard self-test FAILED — matched only ${n}/7 canary lines; the pattern file is broken"
+            exit 1
+          fi
+
+      - name: refuse AGENT-* planning docs at any depth
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)AGENT-'; then
+            echo "::error::AGENT-* planning docs belong on the private fork"
+            exit 1
+          fi
+          echo "no AGENT-* docs"
+
+      - name: refuse private-lane markers in tracked content
+        run: |
+          set -euo pipefail
+          grep -vE '^[[:space:]]*(#|$)' .github/private-markers.txt > /tmp/patterns.txt
+          hits=$(git grep -n -I -E -i -f /tmp/patterns.txt \
+                   -- ':!.github/private-markers.txt' \
+                      ':!.github/workflows/private-marker-guard.yml' \
+                 | grep -v 'guard-allow' || true)
+          if [ -n "${hits}" ]; then
+            echo "::error::private-lane markers found in the public tree:"
+            printf '%s\n' "${hits}" | head -40
+            echo ""
+            echo "Reword it, move it to the private fork, or append 'guard-allow'"
+            echo "on the line if the mention is deliberate and safe."
+            exit 1
+          fi
+          echo "clean"

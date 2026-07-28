@@ -200,7 +200,7 @@ Raising batch 64→4096 cuts energy/token **4.4×** (GPU goes from 29 W underuti
 ## 11. Expert CPU-offload (`OFFLOAD_EXPERTS`) — correctness proven, OLMoE A/B specified
 
 **Test host.** All offload numbers in §11–§12 were measured on an RTX A2000 12 GB installed in a
-QNAP TVS-h1688X NAS (QuTS hero, Intel Xeon W-1250) — a Comet Lake platform, PCIe 3.0 only, with the
+a NAS-class host (Intel Xeon W-1250) — a Comet Lake platform, PCIe 3.0 only, with the
 card in the chassis's x8 electrical slot (the widest it wires; the A2000 is x16-capable and
 negotiates Gen3 x8 under load — at idle ASPM reads gen 1 and upshifts). Measured pinned H2D ceiling:
 **6.16–6.18 GB/s** (256 MB × 20, event-bracketed; pageable 4.5–5.5). Every per-layer transfer figure
