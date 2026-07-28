@@ -8,7 +8,7 @@ workload with routing hooks, then pin each layer's K most-selected experts —
 an **oracle upper bound** by construction: calibration tokens == served
 tokens, greedy-deterministic). Pod driver: `bench/informed_hotsets_pod.sh`.
 
-## Informed vs naive — decode scales with coverage, on every model tried
+## Informed vs naive — decode scales with coverage on every model tried here (thin-link hosts)
 
 **gpt-oss-20b** (RunPod A5000, dual Xeon Gold 6342; receipts
 `bench/receipts-informed-20260720/`):
@@ -76,3 +76,21 @@ evidence).
   same-box pair (L40S). All torn down on evidence-complete, 404-verified.
 - `pipefail` (PR #27's Bugbot fix) did its job: the disk-full Gemma cell
   reported `FAILED` instead of sailing to a fake success.
+
+
+## 2026-07-28 — the gain is a property of the LINK, not only the model
+
+These cells were all taken on bandwidth-limited hosts. Later measurement shows
+the informed-vs-naive advantage **scales with how expensive the avoided
+transfer is**, so it does not generalize to fat-PCIe boxes:
+
+| host / model | informed vs naive |
+|---|---|
+| A2000 (thin link), gpt-oss K=4 | **+40%** |
+| L40S (fat PCIe), gpt-oss K=8 | **≈0%** (informed ≈ pure streaming) |
+| A6000, Qwen3-30B E=128 | did **not** replicate; cells withdrawn as evidence |
+
+A hot expert only pays when the transfer it avoids costs more than the resident
+path's own per-hit overhead. The mechanism itself is sound and measured — hot
+reads run at device speed (18.8 µs/row vs 143.6 µs/row cold) — but the *headline
+percentage* belongs to its host. Quote these numbers with the box attached.

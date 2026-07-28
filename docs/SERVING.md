@@ -40,9 +40,18 @@ The allocator cache is released to the driver between requests (`E4B_EMPTY_CACHE
 GPU neighbors can use the headroom.
 
 [`deploy/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.2/deploy/) has the Dockerfile + compose file (CUDA 12.4 runtime base, the pinned stack
-the A2000 numbers were measured with). One deployment note that costs 3.6× if missed: the
-container needs `ulimits: memlock: -1` — without it the pinned-RAM homes silently fall back to
-pageable and offloaded decode drops from 1.44 to ~0.4 tok/s.
+the A2000 numbers were measured with). One deployment note worth setting: the
+container should carry `ulimits: memlock: -1`, and on the A2000 stack above, omitting it went
+with offloaded decode dropping from 1.44 to ~0.4 tok/s.
+
+**Correction (2026-07-28): the stated *cause* was wrong.** That note used to say the pinned-RAM
+homes "silently fall back to pageable" without the rlimit. They do not — `pin_memory()` /
+`cudaHostAlloc` is **not** gated by `RLIMIT_MEMLOCK`. Measured on a RunPod SECURE A6000 whose
+memlock was capped at **8 MiB soft and hard**: a **15 GiB** pinned arena allocated fine and moved
+at 18.7 GB/s (pinned-class H2D). The rlimit gates `cudaHostRegister` (locking pages you already
+own), which this path never calls. The 3.6× slowdown was real on that host but is **not
+attributed** — set the ulimit as cheap insurance, and do not use it to explain a slow path
+without checking `tensor.is_pinned()` first.
 
 Bind note (0.6.3+): the compose sets `E4B_HOST=0.0.0.0` **inside** the container (a
 container-loopback bind is unreachable through the port map — the container's network namespace

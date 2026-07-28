@@ -97,10 +97,19 @@ per-expert biases) are supported alongside the standard SwiGLU architectures.
 
 **Pick the hot sets from a routing histogram, not by index** — measured
 2026-07-20 (`bench/RESULTS-informed-hotsets.md`), the decode gain tracks
-routing coverage on every architecture tried: gpt-oss-20b K=4 informed
-**+56%** / K=8 **+120%** over the all-cold floor (naive ids `0..K-1`: ±0%),
-Gemma-4-26B K=8 **+44%** (informed top-8 is 6% of 128 experts yet covers
-half of all routed selections), OLMoE +19%.
+routing coverage on every architecture tried **at these link speeds**:
+gpt-oss-20b K=4 informed **+56%** / K=8 **+120%** over the all-cold floor
+(naive ids `0..K-1`: ±0%), Gemma-4-26B K=8 **+44%** (informed top-8 is 6% of
+128 experts yet covers half of all routed selections), OLMoE +19%.
+
+**The size of that gain is a property of the HOST, not just the model
+(2026-07-28).** A hot expert is only worth holding when the transfer it avoids
+costs more than the resident path's own overhead, so the dial pays where the
+bus is the bottleneck and washes out where it is not: **+40%** on a thin-link
+A2000 (gpt-oss, K=4), **≈0%** on a fat-PCIe L40S (same model, informed K=8 ≈
+pure streaming). On an A6000 with a 128-expert model the informed cells did not
+replicate at all and were withdrawn as evidence. Treat the numbers above as
+measured on their hosts — not as a floor you should expect on a fat-link box.
 `HOT_MODE=informed bench/bench_gptoss_hybrid.py` is the calibrate-then-pin
 reference driver. Two regime laws from the same receipts
 (`bench/RESULTS-gptoss-hybrid-ab.md`): the hybrid wins where the host CPU is

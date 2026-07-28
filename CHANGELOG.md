@@ -45,7 +45,7 @@
   biases) supported; requires `[fast]`, fails at enable time with an install
   hint.
 - Routing-informed hot sets (#28): calibrate-then-pin reference driver;
-  decode gain tracks routing coverage (gpt-oss +56/+120%, Gemma-4 +44%,
+  decode gain tracks routing coverage on thin-link hosts (gpt-oss +56/+120%, Gemma-4 +44%,
   OLMoE +19%); multi-socket affinity law documented (pin `taskset` before
   any cold-path number).
 - Hybrid-vs-llama same-box A/B receipts + Gemma-4 gated-weights serving gate
