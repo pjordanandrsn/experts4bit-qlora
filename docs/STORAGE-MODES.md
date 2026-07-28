@@ -78,8 +78,8 @@ during a QLoRA training step with `OFFLOAD_EXPERTS=1`** on the reference A2000: 
 layer's experts resident plus activations/adapters, while the other ~13–15 GB of packed experts
 sit in pinned CPU RAM. It is a *capability* number — fits vs doesn't fit — not a throughput
 claim: the same mechanism costs ~+11 % s/step at OLMoE scale and is PCIe-bound at 26–30B scale
-(0.22–0.43 tok/s decode). Method and grids: [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/METHODOLOGY.md) §11–§12;
-environment and commit pins: [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/PROVENANCE.md).
+(0.22–0.43 tok/s decode). Method and grids: [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/METHODOLOGY.md) §11–§12;
+environment and commit pins: [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/PROVENANCE.md).
 
 ### How to reproduce validation
 
@@ -116,16 +116,16 @@ artifact: fp4 decode is **not** faster than nf4 once sampled. Expert-streaming p
 offload wall **diffuse** (no hot-static pinning justified). Qwen3-30B-A3B is a separate
 scale-transfer probe: nf4 resident fits a 24 GB card, int8 resident is impractical, offload is
 blocked by the pod's RAM cap. Start with
-[`docs/results_summary.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/results_summary.md) and
-[`docs/support_matrix.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/support_matrix.md); details in
-[`OLMOE_EXPERTSNBIT_GRID`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/OLMOE_EXPERTSNBIT_GRID.md),
-[`OLMOE_REPEAT_VALIDATION_PLAN`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/OLMOE_REPEAT_VALIDATION_PLAN.md),
-[`MODE_DECOUPLED_ADAPTERS`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/MODE_DECOUPLED_ADAPTERS.md),
-[`EXPERT_STREAMING_PROFILE`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/EXPERT_STREAMING_PROFILE.md),
-[`QWEN3_30B_EXPERTSNBIT_GRID`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/QWEN3_30B_EXPERTSNBIT_GRID.md); apparatus in
-[`RUNPOD_DISTRIBUTED_VALIDATION`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/RUNPOD_DISTRIBUTED_VALIDATION.md) and
-[`provenance_contract`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/provenance_contract.md). An external review pass —
-[`MEASUREMENT_AUDIT`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.3/docs/MEASUREMENT_AUDIT.md) — recomputed every number, computed the ∅/G
+[`docs/results_summary.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/results_summary.md) and
+[`docs/support_matrix.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/support_matrix.md); details in
+[`OLMOE_EXPERTSNBIT_GRID`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/OLMOE_EXPERTSNBIT_GRID.md),
+[`OLMOE_REPEAT_VALIDATION_PLAN`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/OLMOE_REPEAT_VALIDATION_PLAN.md),
+[`MODE_DECOUPLED_ADAPTERS`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/MODE_DECOUPLED_ADAPTERS.md),
+[`EXPERT_STREAMING_PROFILE`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/EXPERT_STREAMING_PROFILE.md),
+[`QWEN3_30B_EXPERTSNBIT_GRID`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/QWEN3_30B_EXPERTSNBIT_GRID.md); apparatus in
+[`RUNPOD_DISTRIBUTED_VALIDATION`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/RUNPOD_DISTRIBUTED_VALIDATION.md) and
+[`provenance_contract`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/provenance_contract.md). An external review pass —
+[`MEASUREMENT_AUDIT`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/MEASUREMENT_AUDIT.md) — recomputed every number, computed the ∅/G
 quality yardstick that was latent in the bundle, and downgraded the int8-offload "best eval"
 claims to confounded (a precision×placement interaction the bf16 control exposes); read it
 alongside the results.

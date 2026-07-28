@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.6.4 — 2026-07-28
+
+**If you installed `[fast]` on 0.6.3 or earlier, the fused kernel was not
+running.** `enable_fast()` patched `ExpertsNbit.forward`, but `ExpertsLoRA`
+inlines the expert math and never calls `self.base(...)` — and
+`load_moe_4bit_streaming` always wraps in `ExpertsLoRA`. The advertised speedup
+was a silent no-op on the loader this package tells you to use. Upgrade to get
+it; nothing about your code changes.
+
+**This is a behaviour change, not only a fix.** With delegation live, the fused
+path actually executes, and it is a different computation from the reference
+loop — priced at **+0.023% perplexity** (see `docs/METHODOLOGY.md`). If you were
+unknowingly running the reference path, your numbers will move slightly.
 
 - **`enable_fast()` now reaches the streaming-loader path (PR #36, `c2bf990`).**
   `ExpertsLoRA` previously inlined the expert math and never called

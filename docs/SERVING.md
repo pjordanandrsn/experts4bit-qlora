@@ -39,7 +39,7 @@ Guardrails: `E4B_QUEUE_MAX` waiting requests (then 503 + Retry-After), `E4B_MAX_
 The allocator cache is released to the driver between requests (`E4B_EMPTY_CACHE=1`) so bursty
 GPU neighbors can use the headroom.
 
-[`deploy/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.2/deploy/) has the Dockerfile + compose file (CUDA 12.4 runtime base, the pinned stack
+[`deploy/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.4/deploy/) has the Dockerfile + compose file (CUDA 12.4 runtime base, the pinned stack
 the A2000 numbers were measured with). One deployment note worth setting: the
 container should carry `ulimits: memlock: -1`, and on the A2000 stack above, omitting it went
 with offloaded decode dropping from 1.44 to ~0.4 tok/s.
