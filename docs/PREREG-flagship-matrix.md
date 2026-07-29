@@ -59,6 +59,46 @@ proxy real industry data.**
   training quality. The only cross-dataset quantity reported is **relative
   improvement** (eval loss at step 200 ÷ eval loss at step 0) and the B3 costs.
 
+## Amendment 1 (pre-data) — the volume was resized, so the matrix is two-model
+
+The single-model clause above was true when written and is now false: the
+operator resized the network volume **100 GB -> 250 GB** (~177 GB free), which
+removes the constraint that forced one model. The matrix becomes:
+
+- **Models:** Qwen3-30B-A3B (cached) **and** a second 30B-class MoE downloaded
+  into the resized volume. 2 models x 5 datasets x 2 arms (fused vs reference)
+  = **20 cells**.
+- Everything else is unchanged: same config, same 200 steps, same gates
+  B1-B4, same $25 cap.
+
+No band moved. No data existed when this was written -- no matrix cell had
+run, and the datasets had only just been generated. The recurring cost of the
+resize (~$7/mo -> ~$17.50/mo at ~$0.07/GB/month) is the operator's standing
+decision, not a per-run cost of this matrix.
+
+**Second-model selection is fixed HERE, pre-data**, so it cannot be chosen
+after seeing which one flatters the result: the first of
+`google/gemma-4-26b-a4b`, `mistralai/Mixtral-8x7B-v0.1`, `Qwen/Qwen3-30B-A3B-Instruct-2507`
+that (a) downloads cleanly, (b) loads through the streaming NF4 loader, and
+(c) fits the offload path on 24 GB. If none qualifies, the matrix ships
+single-model and says so.
+
+## Datasets, as generated (pre-data)
+
+| dataset | n_train / n_eval | mean chars/example | sha256 |
+|---|---|---|---|
+| clinical | 1200 / 200 | 244.6 | `76fb9036de80` |
+| code | 1200 / 200 | 231.5 | `e0176e044fb1` |
+| finance | 1200 / 200 | 213.9 | `e90914aaedfc` |
+| legal | 1200 / 200 | 449.3 | `379d6e521c7f` |
+| support | 1200 / 200 | 438.7 | `fbc68d228750` |
+
+Hashes registered so a later reader can confirm the cells trained on exactly
+these bytes. One generator defect was found and fixed *before* any data: the
+`code` and `support` generators had too few unique combinations to produce
+1400 disjoint rows and the dedup loop could not terminate. The builder now
+refuses to ship a short dataset rather than hanging or silently truncating.
+
 ## Rules
 
 Bands do not move after data. Every cell ships whether it flatters the fused
