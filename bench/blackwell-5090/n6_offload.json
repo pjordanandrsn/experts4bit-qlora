@@ -1,0 +1,26 @@
+{
+ "offload_true": {
+  "ok": false,
+  "offload": true,
+  "err": "RuntimeError: backward re-dequantization read an offload-evicted expert (0-element placeholder). Offloaded training requires gradient checkpointing (use_reentrant=False) so the recompute re-stages the layer before its backward runs \u2014 non-checkpointed offload training is unsupported; see experts4bit_qlora/offload.py."
+ },
+ "offload_false": {
+  "ok": true,
+  "offload": false,
+  "after_load": {
+   "alloc_gb": 26.4,
+   "peak_gb": 28.889
+  },
+  "train_peak": {
+   "alloc_gb": 23.442,
+   "peak_gb": 27.302
+  },
+  "losses": [
+   2.1341,
+   2.0507,
+   1.3306,
+   1.6167
+  ],
+  "trainable": 576
+ }
+}

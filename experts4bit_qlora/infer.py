@@ -24,6 +24,8 @@ tokens). Kill-switches for A/B: ``E4B_DECODE_FASTPATH=0``, ``E4B_INFER_GEMV=0`` 
 import os
 import time
 
+import sys
+
 import torch
 
 from .loader import load_moe_4bit_streaming
@@ -117,6 +119,11 @@ def timed_decode(model, tok, prompt, n_tokens):
 
 
 def main():
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        from .train import _print_env_help   # same env-var surface
+        _print_env_help("infer")
+        return 0
+
     torch.manual_seed(0)
     gemv = _gemv_4bit_matches_dequant() if os.environ.get("E4B_INFER_GEMV", "1") != "0" else False
     log(

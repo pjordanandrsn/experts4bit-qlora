@@ -18,6 +18,8 @@ Requires (beyond this package): a CUDA GPU, transformers>=5.0, datasets, acceler
 import os
 import time
 
+import sys
+
 import torch
 
 from .loader import load_moe_4bit_streaming
@@ -112,7 +114,53 @@ def eval_loss(model, eval_data):
     return tot / max(n, 1)
 
 
+def _print_env_help(which: str) -> None:
+    """Configuration is env-vars, not flags -- so argv was ignored entirely and
+    `python -m experts4bit_qlora.train --help` fell straight through into a real
+    run: it loaded the model, initialised CUDA and spawned inductor compile
+    workers. Measured on an RTX 5090: ~10 minutes and 6.2 GB of VRAM before the
+    user learns there is no such flag.
+
+    Scope of this fix, stated honestly: it exits before the model load, the
+    CUDA init and the inductor pool -- the expensive part. It does NOT avoid
+    importing torch/bitsandbytes, because the package __init__ eagerly imports
+    .lora/.offload/.fast/.cold_engine. Making --help import-free needs a lazy
+    __init__, which is a wider change than this defect warrants.
+    """
+    import os as _os
+    print(f"usage: python -m experts4bit_qlora.{which}\n")
+    print("Configuration is by ENVIRONMENT VARIABLE (there are no CLI flags).\n")
+    rows = [
+        ("MODEL", "allenai/OLMoE-1B-7B-0924", "HF model id"),
+        ("QUANT_TYPE", "nf4", "nf4/fp4 (4-bit), int8/fp8 (8-bit), bf16/fp16 (passthrough)"),
+        ("SEQ", "192", "sequence length"),
+        ("STEPS", "40", "optimizer steps"),
+        ("GRAD_ACCUM", "4", "gradient accumulation"),
+        ("LR", "2e-4", "learning rate"),
+        ("R / ALPHA", "8 / 16", "LoRA rank / alpha"),
+        ("N_TRAIN", "2000", "training examples"),
+        ("EVAL_EVERY", "50", "eval interval in steps"),
+        ("TRAIN_EXPERTS", "1", "train expert LoRA"),
+        ("TRAIN_ATTENTION", "1", "train attention LoRA"),
+        ("TRAIN_ROUTER", "0", "train the router"),
+        ("OFFLOAD_EXPERTS", "0", "keep experts in pinned CPU RAM"),
+        ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
+        ("DO_GEN", "1", "sample generations during training"),
+        ("SEED", "0", "torch manual seed"),
+        ("OUT", "./experts4bit-lora-out", "adapter output dir"),
+    ]
+    for k, d, h in rows:
+        cur = _os.environ.get(k.split(" /")[0])
+        mark = f"  [set: {cur}]" if cur is not None else ""
+        print(f"  {k:<17} default={d:<26} {h}{mark}")
+    print("\nexample:\n  MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 STEPS=100 \\\n"
+          f"    python -m experts4bit_qlora.{which}")
+
+
 def main():
+    if any(a in ("-h", "--help") for a in sys.argv[1:]):
+        _print_env_help("train")
+        return 0
     torch.manual_seed(int(os.environ.get("SEED", "0")))  # default unchanged; the mode-matrix scripts set it
     log(f"loading {MODEL} via streaming 4-bit loader (CPU-RAM-light)...")
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup

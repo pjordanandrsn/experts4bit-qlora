@@ -1,0 +1,162 @@
+{
+ "stages": {
+  "Qwen3-30B-A3B/load_4bit": {
+   "vram": {
+    "alloc_gb": 20.651,
+    "peak_gb": 21.865,
+    "reserved_gb": 21.993
+   },
+   "config": {
+    "model_type": "qwen3_moe",
+    "num_hidden_layers": 48
+   },
+   "wall_s": 27.6,
+   "ok": true
+  },
+  "Qwen3-30B-A3B/verify_moe_4bit": {
+   "report": "{'quantized': [{'module': 'model.layers.0.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.1.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.2.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.3.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.4.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.5.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.6.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.7.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.8.mlp.experts.ba",
+   "wall_s": 0.0,
+   "ok": true
+  },
+  "Qwen3-30B-A3B/infer_baseline": {
+   "tok_per_s": 3.197,
+   "prefill_s": 2.095,
+   "text": " A mixture-of-experts layer is a neural network component that combines the outputs of multiple specialized sub-models (experts) to make a final prediction, using",
+   "vram": {
+    "alloc_gb": 20.661,
+    "peak_gb": 20.673,
+    "reserved_gb": 21.892
+   },
+   "wall_s": 12.3,
+   "ok": true
+  },
+  "Qwen3-30B-A3B/infer_enable_fast": {
+   "patched_modules": 48,
+   "tok_per_s": 3.335,
+   "prefill_s": 1.709,
+   "text": " A mixture-of-experts layer is a neural network component that combines the outputs of multiple specialized sub-models (experts) to make a final prediction, using",
+   "vram": {
+    "alloc_gb": 20.661,
+    "peak_gb": 20.673,
+    "reserved_gb": 21.892
+   },
+   "wall_s": 11.5,
+   "ok": true
+  },
+  "Qwen3-30B-A3B/generate_coherence": {
+   "text": "Okay, the user is asking for the names of the three primary colors. Let me think... Primary colors are usually considered as red, blue, and yellow in",
+   "wall_s": 5.4,
+   "ok": true
+  },
+  "Qwen3-30B-A3B/qlora_train": {
+   "lora_modules": 192,
+   "trainable_params": 576,
+   "steps": 8,
+   "losses": [
+    2.1341,
+    2.0289,
+    1.3426,
+    1.6174,
+    1.3436,
+    2.88,
+    1.015,
+    1.7597
+   ],
+   "loss_first": 2.1341,
+   "loss_last": 1.7597,
+   "vram": {
+    "alloc_gb": 23.506,
+    "peak_gb": 26.418,
+    "reserved_gb": 28.752
+   },
+   "wall_s": 58.6,
+   "ok": true
+  },
+  "OLMoE-1B-7B-0924/load_4bit": {
+   "vram": {
+    "alloc_gb": 4.833,
+    "peak_gb": 5.786,
+    "reserved_gb": 5.916
+   },
+   "config": {
+    "model_type": "olmoe",
+    "num_hidden_layers": 16
+   },
+   "wall_s": 5.2,
+   "ok": true
+  },
+  "OLMoE-1B-7B-0924/verify_moe_4bit": {
+   "report": "{'quantized': [{'module': 'model.layers.0.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.1.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.2.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.3.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.4.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.5.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.6.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.7.mlp.experts.base', 'quant_type': 'nf4'}, {'module': 'model.layers.8.mlp.experts.ba",
+   "wall_s": 0.0,
+   "ok": true
+  },
+  "OLMoE-1B-7B-0924/infer_baseline": {
+   "tok_per_s": 9.042,
+   "prefill_s": 0.534,
+   "text": "\n\nA mixture-of-experts layer is a layer that combines the predictions of several different models.\n\nExplain what a deep neural network is",
+   "vram": {
+    "alloc_gb": 4.833,
+    "peak_gb": 4.848,
+    "reserved_gb": 5.333
+   },
+   "wall_s": 4.3,
+   "ok": true
+  },
+  "OLMoE-1B-7B-0924/infer_enable_fast": {
+   "patched_modules": 16,
+   "tok_per_s": 6.923,
+   "prefill_s": 0.803,
+   "text": "\n\nA mixture-of-experts layer is a layer that combines the predictions of several different models.\n\nExplain what a deep neural network is",
+   "vram": {
+    "alloc_gb": 4.833,
+    "peak_gb": 4.848,
+    "reserved_gb": 5.333
+   },
+   "wall_s": 5.6,
+   "ok": true
+  },
+  "OLMoE-1B-7B-0924/generate_coherence": {
+   "text": "The primary colors are red, blue and yellow. These can be mixed to make other colors such as orange or green. The secondary color is purple which is made",
+   "wall_s": 1.0,
+   "ok": true
+  },
+  "OLMoE-1B-7B-0924/qlora_train": {
+   "lora_modules": 64,
+   "trainable_params": 192,
+   "steps": 8,
+   "losses": [
+    1.9181,
+    1.147,
+    1.1275,
+    1.4964,
+    1.1371,
+    2.1959,
+    1.1321,
+    1.7885
+   ],
+   "loss_first": 1.9181,
+   "loss_last": 1.7885,
+   "vram": {
+    "alloc_gb": 5.398,
+    "peak_gb": 6.372,
+    "reserved_gb": 6.753
+   },
+   "wall_s": 19.2,
+   "ok": true
+  }
+ },
+ "env": {
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "vram_total_gb": 33.68,
+  "torch": "2.8.0+cu128",
+  "cuda": "12.8",
+  "e4b_dist": "0.6.4",
+  "e4b_attr": "0.6.3",
+  "gnf4_dist": "0.2.3",
+  "fast_available": true
+ }
+}

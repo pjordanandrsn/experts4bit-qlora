@@ -1,0 +1,40 @@
+{
+ "torch": "2.8.0+cu128",
+ "cuda": "12.8",
+ "cap": [
+  12,
+  0
+ ],
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "vram_gb": 33.68,
+ "modules": {
+  "transformers": "5.14.1",
+  "bitsandbytes": "0.50.0",
+  "peft": "0.20.0",
+  "datasets": "5.0.1",
+  "accelerate": "1.14.0",
+  "experts4bit_qlora": "0.6.3",
+  "nf4_grouped": "ok",
+  "mxfp4_grouped": "ok",
+  "nvme_arena": "ok",
+  "nvme_bake_nf4": "ok",
+  "nvme_reader": "ok",
+  "verify_provenance": "ok"
+ },
+ "inputs": {
+  "Qwen/Qwen3-30B-A3B": {
+   "ok": true,
+   "type": "qwen3_moe",
+   "layers": 48,
+   "experts": 128,
+   "top_k": 8
+  },
+  "allenai/OLMoE-1B-7B-0924": {
+   "ok": true,
+   "type": "olmoe",
+   "layers": 16,
+   "experts": 64,
+   "top_k": 8
+  }
+ }
+}

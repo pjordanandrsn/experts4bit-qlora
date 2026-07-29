@@ -1,0 +1,19 @@
+{
+ "after_load": {
+  "alloc_gb": 3.76,
+  "peak_gb": 4.987
+ },
+ "grad_ckpt": "enabled(use_reentrant=False)",
+ "ok": true,
+ "train_peak": {
+  "alloc_gb": 7.335,
+  "peak_gb": 9.133
+ },
+ "losses": [
+  2.1341,
+  2.0088,
+  1.323,
+  1.6276
+ ],
+ "trainable": 576
+}

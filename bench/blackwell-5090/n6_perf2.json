@@ -1,0 +1,68 @@
+{
+ "protocol": {
+  "design": "interleaved A/B per rep, fast toggled in place",
+  "n_tokens": 24,
+  "warmup_each_path": 3,
+  "pairs": 8
+ },
+ "Qwen3-30B-A3B": {
+  "patched_modules": 48,
+  "eager_median": 3.244,
+  "fast_median": 3.312,
+  "ratio_of_medians": 1.021,
+  "median_of_paired_ratios": 1.0057,
+  "paired_ratio_min": 0.9166,
+  "paired_ratio_max": 1.1046,
+  "eager_spread": 1.2242,
+  "raw_eager": [
+   3.221,
+   3.214,
+   2.882,
+   3.319,
+   3.267,
+   3.528,
+   3.431,
+   3.076
+  ],
+  "raw_fast": [
+   3.456,
+   3.475,
+   3.183,
+   3.36,
+   3.265,
+   3.501,
+   3.145,
+   3.072
+  ]
+ },
+ "OLMoE-1B-7B-0924": {
+  "patched_modules": 16,
+  "eager_median": 9.923,
+  "fast_median": 10.33,
+  "ratio_of_medians": 1.0411,
+  "median_of_paired_ratios": 1.0257,
+  "paired_ratio_min": 0.9775,
+  "paired_ratio_max": 1.1047,
+  "eager_spread": 1.2033,
+  "raw_eager": [
+   9.964,
+   9.503,
+   9.878,
+   10.552,
+   10.326,
+   10.416,
+   9.881,
+   8.77
+  ],
+  "raw_fast": [
+   10.253,
+   10.498,
+   10.459,
+   10.315,
+   10.558,
+   10.346,
+   10.005,
+   9.288
+  ]
+ }
+}

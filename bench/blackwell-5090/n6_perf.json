@@ -1,0 +1,89 @@
+{
+ "env": {
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "protocol": {
+   "n_tokens": 24,
+   "warmup_each": 2,
+   "reps": 5,
+   "order": "alternating A/B"
+  }
+ },
+ "Qwen3-30B-A3B": {
+  "patched_modules": 48,
+  "eager_tok_s_first": 3.127,
+  "eager_tok_s_second": 3.43,
+  "fast_tok_s": 3.217,
+  "self_pair_ratio": 1.0042,
+  "eager_drift_ratio": 1.0969,
+  "fast_over_eager": 0.9813,
+  "raw": {
+   "eager1": [
+    3.121,
+    3.031,
+    3.432,
+    3.443,
+    2.937,
+    2.935,
+    3.445,
+    3.267,
+    3.023,
+    3.134
+   ],
+   "fast": [
+    3.217,
+    2.795,
+    3.309,
+    3.161,
+    3.279
+   ],
+   "eager2": [
+    2.954,
+    3.207,
+    3.494,
+    3.495,
+    3.43
+   ]
+  }
+ },
+ "OLMoE-1B-7B-0924": {
+  "patched_modules": 16,
+  "eager_tok_s_first": 9.262,
+  "eager_tok_s_second": 9.518,
+  "fast_tok_s": 10.221,
+  "self_pair_ratio": 0.9767,
+  "eager_drift_ratio": 1.0276,
+  "fast_over_eager": 1.0886,
+  "raw": {
+   "eager1": [
+    9.246,
+    9.497,
+    9.278,
+    8.617,
+    9.541,
+    9.469,
+    9.062,
+    8.527,
+    8.814,
+    9.961
+   ],
+   "fast": [
+    10.474,
+    10.103,
+    10.221,
+    10.492,
+    10.136
+   ],
+   "eager2": [
+    10.551,
+    10.071,
+    8.845,
+    9.518,
+    8.502
+   ]
+  }
+ }
+}
