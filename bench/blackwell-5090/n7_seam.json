@@ -1,0 +1,55 @@
+{
+ "env": {
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "cap": [
+   8,
+   9
+  ],
+  "gnf4": "0.2.3",
+  "e4b": "0.6.4",
+  "fast_available": true
+ },
+ "kernel_calls_fast_off": 0,
+ "kernel_calls_fast_on": 0,
+ "patched_modules": 16,
+ "calls_per_layer_per_forward": 0.0,
+ "sample_shapes": [],
+ "kernel_calls_during_training_step": 0,
+ "kernel_ab": {
+  "geometry": {
+   "E": 64,
+   "n1": 2048,
+   "k1": 2048
+  },
+  "cells": [
+   {
+    "rows_per_expert": 1,
+    "n_active": 8,
+    "fused_ms": 0.162,
+    "dequant_ref_ms": 1.57,
+    "speedup_vs_dequant": 9.673
+   },
+   {
+    "rows_per_expert": 1,
+    "n_active": 64,
+    "fused_ms": 0.586,
+    "dequant_ref_ms": 12.271,
+    "speedup_vs_dequant": 20.94
+   },
+   {
+    "rows_per_expert": 8,
+    "n_active": 64,
+    "fused_ms": 0.777,
+    "dequant_ref_ms": 12.272,
+    "speedup_vs_dequant": 15.793
+   },
+   {
+    "rows_per_expert": 64,
+    "n_active": 64,
+    "fused_ms": 0.948,
+    "dequant_ref_ms": 13.816,
+    "speedup_vs_dequant": 14.581
+   }
+  ]
+ }
+}

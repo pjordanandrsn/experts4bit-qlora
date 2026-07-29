@@ -1,0 +1,33 @@
+{
+ "model_training_after_load": true,
+ "patched": 16,
+ "train_mode": {
+  "kernel_calls": 0,
+  "tok_s": 8.344231291931685
+ },
+ "eval_mode": {
+  "kernel_calls": 288,
+  "tok_s": 33.595687504255224
+ },
+ "eval_mode_paired": {
+  "eager_median": 10.59,
+  "fast_median": 31.284,
+  "ratio": 2.9541,
+  "eager": [
+   10.758,
+   10.422,
+   10.921,
+   11.398,
+   10.414,
+   10.151
+  ],
+  "fast": [
+   31.489,
+   31.986,
+   30.322,
+   31.078,
+   31.541,
+   30.822
+  ]
+ }
+}

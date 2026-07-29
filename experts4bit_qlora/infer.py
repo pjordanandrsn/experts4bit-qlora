@@ -93,6 +93,12 @@ def load_for_inference():
 def timed_decode(model, tok, prompt, n_tokens):
     """Greedy-decode exactly ``n_tokens`` with a manual KV-cache loop, timing prefill and decode
     separately (CUDA-event-free version: sync + wall clock, adequate at per-token milliseconds)."""
+    # eval() is load-bearing, not hygiene: ExpertsLoRA delegates to the patched
+    # base (the [fast] grouped kernel, the pipelined engine) only under eval +
+    # no_grad. The streaming loaders return a model in nn.Module's default TRAIN
+    # mode, so benchmarking without this measured the un-accelerated path --
+    # 8.3 vs 33.6 tok/s on OLMoE-1B-7B / RTX 4090.
+    model.eval()
     ids = tok(prompt, return_tensors="pt").input_ids.to(DEVICE)
 
     torch.cuda.synchronize()

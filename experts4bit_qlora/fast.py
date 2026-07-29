@@ -328,6 +328,25 @@ def enable_fast(model, verbose: bool = False) -> int:
         parent = lora_parent.get(id(mod))
         if parent is not None and not parent._adapter_is_zero():
             unreachable.append(type(mod).__name__)
+    # Training mode is the OTHER way these patches go unreachable, and it is the
+    # silent one: _delegate_to_base() requires `not self.training`, so a model
+    # left in train mode (nn.Module's default, and what the streaming loaders
+    # return) never calls base.forward at all -- even with a zero adapter, where
+    # the check below has nothing to complain about. Measured on an RTX 4090,
+    # OLMoE-1B-7B: 0 kernel invocations and 8.3 tok/s in train mode vs 288
+    # invocations and 33.6 tok/s after model.eval() -- a 2.95x decode difference
+    # that looked like "the fused kernel does nothing".
+    if patched and getattr(model, "training", False):
+        import warnings
+
+        warnings.warn(
+            f"[e4b.fast] model is in TRAINING mode: ExpertsLoRA only hands off to the "
+            f"patched base under eval + no_grad, so all {patched} patch(es) will be "
+            "bypassed and the fused kernel will not run. Call model.eval() before "
+            "inference.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     if unreachable:
         import warnings
 

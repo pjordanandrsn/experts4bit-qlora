@@ -1,0 +1,57 @@
+{
+ "patched": 16,
+ "expert_modules": [
+  {
+   "module": "model.layers.0.mlp.experts.base",
+   "cls": "Experts4bit",
+   "forward_qualname": "main.<locals>.traced_fused",
+   "has_e4b_fast_ref": true,
+   "compute_dtype": "torch.bfloat16",
+   "any_requires_grad": false
+  },
+  {
+   "module": "model.layers.1.mlp.experts.base",
+   "cls": "Experts4bit",
+   "forward_qualname": "main.<locals>.traced_fused",
+   "has_e4b_fast_ref": true,
+   "compute_dtype": "torch.bfloat16",
+   "any_requires_grad": false
+  },
+  {
+   "module": "model.layers.2.mlp.experts.base",
+   "cls": "Experts4bit",
+   "forward_qualname": "main.<locals>.traced_fused",
+   "has_e4b_fast_ref": true,
+   "compute_dtype": "torch.bfloat16",
+   "any_requires_grad": false
+  }
+ ],
+ "n_expert_modules": 16,
+ "parents": [
+  {
+   "parent": "model.layers.0.mlp.experts",
+   "parent_cls": "ExpertsLoRA",
+   "child": "base",
+   "child_cls": "Experts4bit"
+  },
+  {
+   "parent": "model.layers.1.mlp.experts",
+   "parent_cls": "ExpertsLoRA",
+   "child": "base",
+   "child_cls": "Experts4bit"
+  },
+  {
+   "parent": "model.layers.2.mlp.experts",
+   "parent_cls": "ExpertsLoRA",
+   "child": "base",
+   "child_cls": "Experts4bit"
+  }
+ ],
+ "counters_decode": {
+  "gemm": 0,
+  "fused_entry": 0,
+  "fb_grad": 0,
+  "fb_dtype": 0,
+  "reached_kernel": 0
+ }
+}
