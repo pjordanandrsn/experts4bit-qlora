@@ -40,6 +40,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+import types
+
 import torch
 
 
@@ -372,3 +374,134 @@ def disable_fast(model) -> int:
             del mod._e4b_fast_ref
             restored += 1
     return restored
+
+
+def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weights):
+    """Training-capable fused forward for an ``ExpertsLoRA``.
+
+    The inference fast path patches the frozen ``ExpertsNbit`` base, which
+    training can never reach: ``ExpertsLoRA`` must inject its low-rank delta
+    *before* the SwiGLU, and the base kernel was forward-only anyway, so no
+    ``dL/dx`` could flow through it.
+
+    This composes both halves in the grouped layout: the frozen projection goes
+    through ``grouped-nf4-gemm``'s differentiable wrapper (recompute-decode
+    backward, one expert live at a time) and the trainable ``B(Ax)`` delta is
+    added to the SAME pre-activation tensor -- which is the only place it is
+    correct, since ``act(Wx + BAx) != act(Wx) + d``.
+
+    Numerics note: this accumulates in fp32 and scatters exactly like the
+    reference loop, but it sums experts in group-sorted order rather than
+    ascending-expert-id order. That is an ulp-level reordering, the same class
+    of difference ``_forward_decode`` already documents -- which is why this
+    path is OPT-IN via ``enable_fast_train`` rather than a silent default.
+    """
+    from nf4_qlora import fused_grouped_lora
+
+    base = lora_mod.base
+    input_dtype = hidden_states.dtype
+    compute_dtype = base.compute_dtype if base.compute_dtype is not None else input_dtype
+    hidden_states = hidden_states.to(compute_dtype)
+
+    tokens, hidden = hidden_states.shape
+    k = top_k_index.shape[1]
+    n1, k1 = base._gate_up_shape
+    n2, k2 = base._down_shape
+    E = base.num_experts
+
+    flat = top_k_index.reshape(-1)
+    order = torch.argsort(flat, stable=True)
+    token_rows = order // k
+    top_pos = order - token_rows * k
+    counts = torch.bincount(flat, minlength=E)
+    active = torch.nonzero(counts, as_tuple=False).view(-1)
+    sizes = counts[active].tolist()
+    expert_ids = active.to(torch.int32).tolist()
+
+    a_cat = hidden_states.index_select(0, token_rows).contiguous()
+
+    # weights_fn is load-bearing, not optional: under expert offload the views
+    # below are TRANSIENT staged copies. nf4_qlora must not hold them on the
+    # autograd ctx (that pinned all 48 layers and OOMed at 22.41 GB); it calls
+    # this closure in backward instead, re-reading whatever is staged then --
+    # which under gradient checkpointing is this layer, because the recompute
+    # forward re-stages it first.
+    def _gate_up_now():
+        return (base.gate_up_proj.view(E, n1, k1 // 2),
+                base.gate_up_absmax.view(E, n1, k1 // 64).float())
+
+    proj = fused_grouped_lora(
+        a_cat,
+        base.gate_up_proj.view(E, n1, k1 // 2),
+        base.gate_up_absmax.view(E, n1, k1 // 64).float(),
+        sizes, expert_ids,
+        lora_mod.gate_up_lora_A, lora_mod.gate_up_lora_B,
+        weights_fn=_gate_up_now,
+        scaling=lora_mod.scaling,     # alpha/r -- the reference applies it too
+    )
+    if base.has_gate:
+        gate, up = proj.chunk(2, dim=-1)
+        h = base.act_fn(gate) * up
+    else:
+        h = base.act_fn(proj)
+
+    def _down_now():
+        return (base.down_proj.view(E, n2, k2 // 2),
+                base.down_absmax.view(E, n2, k2 // 64).float())
+
+    down = fused_grouped_lora(
+        h.to(compute_dtype).contiguous(),
+        base.down_proj.view(E, n2, k2 // 2),
+        base.down_absmax.view(E, n2, k2 // 64).float(),
+        sizes, expert_ids,
+        lora_mod.down_lora_A, lora_mod.down_lora_B,
+        weights_fn=_down_now,
+        scaling=lora_mod.scaling,
+    )
+
+    w = top_k_weights[token_rows, top_pos].to(torch.float32)
+    return _scatter_combine(down, w, order, token_rows, tokens, k, hidden,
+                            hidden_states.device, input_dtype)
+
+
+def enable_fast_train(model, verbose: bool = False) -> int:
+    """Route ``ExpertsLoRA`` TRAINING through the fused grouped kernel.
+
+    ``enable_fast`` patches the frozen base and is inference-only. This patches
+    the ``ExpertsLoRA`` wrapper -- the module the model actually calls -- so the
+    kernel is reached with gradients enabled.
+
+    Opt-in on purpose: it changes the expert summation ORDER (group-sorted vs
+    ascending expert id), an ulp-level difference that should be a deliberate
+    choice in a training run, not a silent one. Returns the number patched.
+    """
+    try:
+        from nf4_qlora import fused_grouped_lora  # noqa: F401
+    except ImportError:
+        if verbose:
+            print("[e4b.fast] grouped-nf4-gemm has no nf4_qlora: need >= 0.2.4")
+        return 0
+    from experts4bit_qlora.lora import ExpertsLoRA
+
+    patched = 0
+    for mod in model.modules():
+        if isinstance(mod, ExpertsLoRA) and not hasattr(mod, "_e4b_train_ref"):
+            mod._e4b_train_ref = mod.forward
+            mod.forward = types.MethodType(
+                lambda self, hs, tki, tkw: fused_experts_train_forward(self, hs, tki, tkw),
+                mod)
+            patched += 1
+    if verbose:
+        print(f"[e4b.fast] fused TRAINING path on {patched} ExpertsLoRA module(s)")
+    return patched
+
+
+def disable_fast_train(model) -> int:
+    n = 0
+    for mod in model.modules():
+        ref = getattr(mod, "_e4b_train_ref", None)
+        if ref is not None:
+            mod.forward = ref
+            del mod._e4b_train_ref
+            n += 1
+    return n
