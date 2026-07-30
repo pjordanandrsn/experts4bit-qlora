@@ -16,7 +16,7 @@ from torch.utils.checkpoint import checkpoint  # noqa: E402
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E402
 from experts4bit_qlora import enable_expert_offload, offload_model_experts  # noqa: E402
-from experts4bit_qlora.offload import _ExpertOffload  # noqa: E402
+from experts4bit_qlora.offload import _ExpertOffload, _in_backward  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32
@@ -267,3 +267,72 @@ def test_offload_model_experts_walks_all_experts_lora():
     hs, idx, w = _inputs()  # a forward still works: experts stream in per module
     with torch.no_grad():
         m1(hs, idx, w)
+
+
+def test_post_hook_does_not_evict_when_the_recompute_runs_past_the_module():
+    """A gradient-checkpoint recompute that reaches the post-hook must NOT un-stage the layer.
+
+    This module used to assume PyTorch always stops a ``use_reentrant=False`` recompute early --
+    before the post-hook -- so the post-hook could never evict during backward. That is false:
+    whether the recompute gets there depends on where the checkpointed region's last needed tensor
+    is produced. It held for OLMoE / Qwen3-MoE / GraniteMoe and broke on Gemma-4, whose backward
+    then re-dequantized a 0-element placeholder.
+
+    Pinned here with **no model architecture involved**: the region below uses the experts output
+    twice, so the recompute must run past the module and fire the post-hook. Before the fix that
+    eviction landed mid-backward and ``_FrozenLinearRecomputeBackward`` raised.
+    """
+    from torch.utils.checkpoint import checkpoint
+
+    m = _build_experts_lora(seed=0)
+    handle = enable_expert_offload(m, DEVICE, pin=False)
+    hs, idx, w = _inputs()
+    hs = hs.detach().requires_grad_(True)
+
+    fired = []
+    m.register_forward_hook(lambda *_a: fired.append(_in_backward()))
+
+    def region(x):
+        out = m(x, idx, w)
+        return out * out.sum()  # second use: the recompute cannot stop before the module
+
+    y = checkpoint(region, hs, use_reentrant=False)
+    assert fired == [False], f"initial forward should not look like a backward: {fired}"
+    y.sum().backward()  # raised "read an offload-evicted expert" before the fix
+
+    assert True in fired, (
+        "the recompute never reached the post-hook, so this test is not exercising the case it "
+        f"exists for (post-hook fired {len(fired)}x: {fired})"
+    )
+    assert hs.grad is not None and torch.isfinite(hs.grad).all()
+    # One-layer residency is unchanged: nothing re-staged it, so it is still the resident slot.
+    assert handle.staged is True
+    handle.evict()
+    assert m.base.gate_up_proj.numel() == 0  # and an explicit evict still works
+
+
+def test_in_backward_detects_the_engine_and_is_false_outside_it():
+    """Positive/negative control on the detector the post-hook fix depends on.
+
+    If ``_in_backward`` silently returned False everywhere -- a private API vanishing, say -- the
+    fix above would revert to the old behaviour with no test noticing. So pin both directions.
+    """
+    assert _in_backward() is False  # negative control
+
+    seen = []
+
+    class _Probe(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, x):
+            seen.append(("forward", _in_backward()))
+            return x * 2
+
+        @staticmethod
+        def backward(ctx, g):
+            seen.append(("backward", _in_backward()))
+            return g
+
+    x = torch.randn(3, requires_grad=True)
+    _Probe.apply(x).sum().backward()
+    assert seen == [("forward", False), ("backward", True)], seen
+    assert _in_backward() is False  # and it goes back to False afterwards
