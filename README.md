@@ -29,7 +29,7 @@ real sparse-MoE on reasonable hardware.
   it loads at **4.70 GB** and trains in <8 GB. The streaming loader never materializes the bf16
   model in CPU *or* GPU RAM (verified under a 3 GB container RAM cap).
 - **It trains.** QLoRA on the frozen NF4 experts improves a held-out Alpaca eval from
-  **1.4813 → 1.0290** (see [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/METHODOLOGY.md)).
+  **1.4813 → 1.0290** (see [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/METHODOLOGY.md)).
 - **It scales past VRAM (`OFFLOAD_EXPERTS=1`).** The frozen experts stream from pinned CPU RAM
   one layer at a time, so a fused-MoE whose 4-bit experts exceed the card can QLoRA-train on
   12 GB: **Qwen3-30B-A3B peaks at 7.16 GB, Gemma-4-26B-A4B at 8.47 GB** — both OOM *without*
@@ -44,7 +44,7 @@ real sparse-MoE on reasonable hardware.
 - **It dials.** Spare VRAM converts to decode speed continuously — the pipelined engine keeps K
   hot experts/layer resident and streams the cold tail, and picking those K from a routing
   histogram (not by index) bought **+57–120%** decode at *identical* VRAM on gpt-oss-20b
-  (receipts: [`bench/RESULTS-informed-hotsets.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/bench/RESULTS-informed-hotsets.md)).
+  (receipts: [`bench/RESULTS-informed-hotsets.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/bench/RESULTS-informed-hotsets.md)).
   K=0 streams everything; K=all is fully resident; the middle is yours to trade.
 - **Honest caveat — this is a memory technology, not an energy one.** On a GPU that *already*
   fits the model, 4-bit is a **1.2–2.3× energy penalty** (NF4 is storage-only; the GEMM runs in
@@ -211,7 +211,7 @@ verify_moe_4bit(model, strict=True)   # optional: assert the fused experts are a
 `Qwen/Qwen3-30B-A3B` in `nf4` is ~20 GB resident — it **fits a 24 GB card** (e.g. L4/A5000) with no
 offload, ~4–5 tok/s decode. On a ≤12 GB card add `OFFLOAD_EXPERTS=1` (`offload=True`), which streams
 the frozen experts from pinned CPU RAM one layer at a time; sizes and grids are in the
-[support matrix](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/support_matrix.md).
+[support matrix](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/support_matrix.md).
 
 > **Troubleshooting — OOM loading in 4-bit?** If you used
 > `AutoModelForCausalLM.from_pretrained(..., quantization_config=BitsAndBytesConfig(load_in_4bit=True))`
@@ -223,7 +223,7 @@ the frozen experts from pinned CPU RAM one layer at a time; sizes and grids are 
 
 ## Storage modes: the support matrix
 
-Moved to **[docs/STORAGE-MODES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/STORAGE-MODES.md)** — The full storage-mode support matrix (ExpertsNbit vs Experts4bit, compatibility, known limitations, the headline-number reading, reproduction + validation grids).
+Moved to **[docs/STORAGE-MODES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/STORAGE-MODES.md)** — The full storage-mode support matrix (ExpertsNbit vs Experts4bit, compatibility, known limitations, the headline-number reading, reproduction + validation grids).
 
 ## Training + expert offload
 
@@ -245,13 +245,13 @@ the number of experts — on any released bitsandbytes, for every storage scheme
   including the gradient-checkpoint recompute path. Offloaded *training* requires gradient
   checkpointing (the shipped trainer always enables it); the unsupported non-checkpointed
   combination fails loudly rather than mis-training. Details in
-  [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/METHODOLOGY.md) §11.
+  [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/METHODOLOGY.md) §11.
 
 Transfer diagnostics (default off): `E4B_OFFLOAD_STATS=1` prints per-layer H2D bandwidth, prefetch
 stall/slack, and a one-shot PCIe-link + ceiling report; `E4B_OFFLOAD_ARENA=1` consolidates each
 layer's four expert tensors into two per-dtype copies. What they measured on the reference host —
 and why offload is PCIe-bound there — is in
-[`docs/OFFLOAD-TRANSFER-NOTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/OFFLOAD-TRANSFER-NOTES.md).
+[`docs/OFFLOAD-TRANSFER-NOTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/OFFLOAD-TRANSFER-NOTES.md).
 
 ## Scope
 
@@ -306,9 +306,9 @@ What inference mode adds (all `no_grad`-only; training paths are untouched):
   residency is bounded at two layers.
 
 Measured on the RTX A2000 (OLMoE + the r16 adapter, 128 greedy tokens; big models: base model,
-96 tokens; full grids + analysis in [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/METHODOLOGY.md) §12).
+96 tokens; full grids + analysis in [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/METHODOLOGY.md) §12).
 *These are v0 offload-path figures; the pipelined engine supersedes them for decode — see the
-dial and [`bench/RESULTS-informed-hotsets.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/bench/RESULTS-informed-hotsets.md).*
+dial and [`bench/RESULTS-informed-hotsets.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/bench/RESULTS-informed-hotsets.md).*
 
 | model | config | tok/s | peak GPU |
 |---|---|:---:|:---:|
@@ -335,11 +335,11 @@ it for you. Serve with the training run's `QUANT_TYPE`. Kill-switches for A/B:
 
 ## Serving over HTTP (Docker)
 
-Moved to **[docs/SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/SERVING.md)** — The FastAPI serving shim + Docker deployment (endpoints, env knobs, the localhost-by-default / E4B_TOKEN posture).
+Moved to **[docs/SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/SERVING.md)** — The FastAPI serving shim + Docker deployment (endpoints, env knobs, the localhost-by-default / E4B_TOKEN posture).
 
 ## Benchmarks
 
-Moved to **[docs/BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/BENCHMARKS.md)** — The benchmark scripts and how to run them (memory wall, tokens-per-joule, the upstream matmul_4bit comparison).
+Moved to **[docs/BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/BENCHMARKS.md)** — The benchmark scripts and how to run them (memory wall, tokens-per-joule, the upstream matmul_4bit comparison).
 
 ## The package family — how the pieces fit
 
@@ -366,24 +366,24 @@ where, streamed when, trained with what adapters).
 
 ## Relationship to bitsandbytes
 
-Moved to **[docs/BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/BITSANDBYTES.md)** — How ExpertsNbit/Experts4bit relate to bitsandbytes #1965, the vendored-copy shim, and the prior-art credits.
+Moved to **[docs/BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/docs/BITSANDBYTES.md)** — How ExpertsNbit/Experts4bit relate to bitsandbytes #1965, the vendored-copy shim, and the prior-art credits.
 
 ## Provenance & audits
 
 Every measured number above traces to a committed script/test and a named host, with receipts
-under [`bench/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.4/bench) and
-[`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.4/docs) — cited inline at
-each claim. **Scope note (2026-07-28):** [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/PROVENANCE.md)
+under [`bench/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.5/bench) and
+[`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.5/docs) — cited inline at
+each claim. **Scope note (2026-07-28):** [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/PROVENANCE.md)
 is the OpenTimestamps-anchored record for the **v0.2.0** convergence result specifically; the
 0.5.0–0.6.3 additions (fused kernel, hot-set residency, gpt-oss, storage modes) are receipted in
 `bench/` and `docs/`, not in that file. It is OpenTimestamps-anchored: `ots verify
 PROVENANCE.md.ots PROVENANCE.md` checks the on-disk bytes against the calendar proof, the footer
 carries the hash-chain of prior revisions, and superseded proofs are retained in
-[`.ots-history/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.4/.ots-history/). Falsification work lives under [`audits/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.4/audits/) — most
+[`.ots-history/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.5/.ots-history/). Falsification work lives under [`audits/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.5/audits/) — most
 recently the audit of unsloth-zoo's MoE-4bit fix that produced unsloth-zoo#849/#850
-([`audits/unsloth-zoo-4032/REPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/audits/unsloth-zoo-4032/REPORT.md)).
+([`audits/unsloth-zoo-4032/REPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/audits/unsloth-zoo-4032/REPORT.md)).
 
 ## License
 
-MIT (see [LICENSE](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/LICENSE)). `experts4bit_qlora/_vendor/experts.py` is vendored from
+MIT (see [LICENSE](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.5/LICENSE)). `experts4bit_qlora/_vendor/experts.py` is vendored from
 bitsandbytes (also MIT) pending upstream merge.
