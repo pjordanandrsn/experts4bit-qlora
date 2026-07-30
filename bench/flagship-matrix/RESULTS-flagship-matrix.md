@@ -30,35 +30,79 @@ Fixed throughout: `offload=True` + gradient checkpointing (`use_reentrant=False`
 seq 512, r=8, α=16, AdamW lr 1e-4, batch 1, 200 steps. Energy is `nvidia-smi`
 sampled at 200 ms across the timed window, idle baseline subtracted.
 
-| dataset | arm | eval @200 | rel. impr | s/step | tok/s | peak GB | J/step | B1 |
+| dataset | arm | eval @200 | rel. impr | s/step | tok/s | peak GB | J/step | B1 (withdrawn) |
 |---|---|---|---|---|---|---|---|---|
-| clinical | reference | 0.27220 | 0.07267 | 15.206 | 5.6 | 9.132 | 836.39 | 192/192 ✓ |
-| clinical | **fused** | **0.27217** | 0.07254 | **8.544** | 10.1 | **6.891** | **707.83** | 192/192 ✓ |
-| code | reference | 0.17116 | 0.06600 | 15.836 | 5.2 | 9.134 | 888.73 | 192/192 ✓ |
-| code | **fused** | **0.17019** | 0.06574 | **8.813** | 9.3 | **6.890** | **708.01** | 192/192 ✓ |
-| finance | reference | **0.44563** | 0.09375 | 13.879 | 5.3 | 9.126 | 760.13 | 192/192 ✓ |
-| finance | fused | 0.45286 | 0.09530 | **7.880** | 9.4 | **6.889** | **617.48** | 192/192 ✓ |
-| legal | reference | **0.10875** | 0.03790 | 14.564 | 7.1 | 9.142 | 818.06 | 192/192 ✓ |
-| legal | fused | 0.10970 | 0.03802 | **8.322** | 12.4 | **6.898** | **683.72** | 192/192 ✓ |
-| support | reference | **0.16339** | 0.04899 | 15.380 | 8.0 | 9.153 | 850.93 | 192/192 ✓ |
-| support | fused | 0.16473 | 0.04931 | **8.489** | 14.5 | **6.907** | **696.36** | 192/192 ✓ |
+| clinical | reference | 0.27220 | 0.07267 | 15.206 | 5.6 | 9.132 | 836.39 | ⚠️ vacuous |
+| clinical | **fused** | **0.27217** | 0.07254 | **8.544** | 10.1 | **6.891** | **707.83** | ⚠️ vacuous |
+| code | reference | 0.17116 | 0.06600 | 15.836 | 5.2 | 9.134 | 888.73 | ⚠️ vacuous |
+| code | **fused** | **0.17019** | 0.06574 | **8.813** | 9.3 | **6.890** | **708.01** | ⚠️ vacuous |
+| finance | reference | **0.44563** | 0.09375 | 13.879 | 5.3 | 9.126 | 760.13 | ⚠️ vacuous |
+| finance | fused | 0.45286 | 0.09530 | **7.880** | 9.4 | **6.889** | **617.48** | ⚠️ vacuous |
+| legal | reference | **0.10875** | 0.03790 | 14.564 | 7.1 | 9.142 | 818.06 | ⚠️ vacuous |
+| legal | fused | 0.10970 | 0.03802 | **8.322** | 12.4 | **6.898** | **683.72** | ⚠️ vacuous |
+| support | reference | **0.16339** | 0.04899 | 15.380 | 8.0 | 9.153 | 850.93 | ⚠️ vacuous |
+| support | fused | 0.16473 | 0.04931 | **8.489** | 14.5 | **6.907** | **696.36** | ⚠️ vacuous |
 
 ## The registered outcomes
 
-**B1 — bit-exactness (HARD GATE): PASSES 10/10.** 192 frozen expert tensors
-hashed per cell, **0 changed**, in both arms. QLoRA trains adapters only; a
-single changed byte would have voided every number above.
+**B1 — bit-exactness (HARD GATE): ⚠️ WITHDRAWN — the gate was vacuous.**
 
-**B2 — loss parity, fused vs reference: PASSES on all five datasets.** Registered
-band `|Δ final| ≤ 0.05`:
+The receipts report `B1_experts_hashed: 192, B1_experts_changed: 0` for all ten
+cells. **That gate hashed nothing.** The driver read the packed bytes with
+`getattr(module, "gate_up_proj")`, and under `offload=True` — which every cell
+used — that attribute is a **0-element placeholder**: `_ExpertOffload.evict()`
+swaps it at load and the layer is only materialized inside its own forward. So
+the check compared `sha256(b"")` to `sha256(b"")`, 192 times, and could not have
+failed. The 192 counts *tensors*, not bytes.
 
-| dataset | Δ eval | vs band |
-|---|---|---|
-| clinical | 0.00003 | 1600× inside |
-| code | 0.00097 | 51× |
-| legal | 0.00095 | 53× |
-| support | 0.00134 | 37× |
-| **finance** | **0.00723** | **7× inside** — the worst cell |
+This is the identical defect
+[`../fused-train-gate/RESULTS-fused-train-gate.md`](../fused-train-gate/RESULTS-fused-train-gate.md)
+records finding and fixing in **its** driver — read `state_dict()` (offload maps
+each expert to its CPU home), assert **bytes hashed > 0** and **empties skipped
+== 0**, and carry a byte-flip positive control. That fix never reached this
+matrix's driver. Publishing the fix in one document while the other silently
+kept the broken version is exactly the failure the fix was about.
+
+**What this does and does not invalidate.** B1 is a correctness gate, not an
+input to any number in the table: the losses, s/step, VRAM and energy above are
+independent measurements and stand. What is withdrawn is the *assurance* that
+the frozen 4-bit stack was untouched during these ten cells — that was never
+tested here. It is separately evidenced on the same 48-layer code path by the
+fused-train gate, which hashed **16,307,453,952 bytes (16.31 GB)** with **0
+empty tensors skipped** and a positive control that fires
+(`control_detects_flipped_byte: true`). So the claim is *supported elsewhere*,
+just not by this run.
+
+The second model's ten cells run under
+[`../../docs/PREREG-flagship-matrix-model2.md`](../../docs/PREREG-flagship-matrix-model2.md),
+whose C1 registers the corrected form explicitly — `state_dict()`, bytes > 0,
+zero empties, byte-flip control — and whose driver asserts all four before a
+single training step.
+
+**B2 — loss parity, fused vs reference: PASSES on all five datasets** — but the
+table below is **corrected**, because the original reported the wrong quantity.
+
+The prereg registers *two* criteria: **`|Δ final-TRAIN-loss| ≤ 0.05` AND the
+step-wise loss curves' median absolute difference ≤ 0.05**. This document
+originally published a single "Δ eval" column — neither of those — and omitted
+the step-wise band entirely. Eval loss is a *smaller, easier* number here, so the
+original table flattered the result even though it reached the right verdict.
+
+Recomputed from the same committed receipts, on the registered metrics:
+
+| dataset | Δ final **train** | median step-wise \|Δ\| | verdict | (Δ eval, *not* the band) |
+|---|---|---|---|---|
+| clinical | 0.01651 | 0.00515 | PASS | 0.00003 |
+| code | **0.00042** | 0.00539 | PASS | 0.00097 |
+| finance | 0.01160 | **0.01490** | PASS | 0.00723 |
+| legal | 0.00300 | **0.00250** | PASS | 0.00095 |
+| support | 0.00467 | 0.00482 | PASS | 0.00134 |
+
+Worst cell against the band is **finance at 0.01490 median step-wise**, 3.4×
+inside — not the 7× the original "Δ eval" column implied. The verdict is
+unchanged: both registered criteria pass on all five datasets. What changed is
+that it is now adjudicated on the quantities that were actually registered,
+by [`drivers/n17_summarize.py`](drivers/n17_summarize.py) rather than by hand.
 
 **B3 — cost, reported not gated.** The fused arm is **1.75–1.81× faster per
 step**, at **0.754–0.755×** the peak VRAM and **0.797–0.846×** the energy. The
