@@ -199,8 +199,12 @@ def host_fingerprint():
     # would silently put the wrong key in the receipt -- accurate value, wrong
     # name, which is worse than a null because it joins to nothing and looks
     # like it should.
-    out["pod_id"] = (os.environ.get("E4B_POD_ID") or os.environ.get("RUNPOD_POD_ID")
-                     or os.environ.get("HOSTNAME"))
+    # HOSTNAME is deliberately NOT in this chain. In Docker it is the container
+    # id -- the same value as container_host below -- so falling back to it puts
+    # an accurate value under the wrong name, which is the precise failure the
+    # comment above says to avoid. A null pod_id is honest: it means no channel
+    # supplied one, and pod_mapping.txt carries the join instead.
+    out["pod_id"] = os.environ.get("E4B_POD_ID") or os.environ.get("RUNPOD_POD_ID")
     out["container_host"] = socket.gethostname()
     return out
 
