@@ -94,3 +94,50 @@ def test_real_gptoss20b_bytes(proj, dtype):
     ref = convert_moe_packed_tensors(b, s, dtype=dtype)
     ours = dequantize_mxfp4(b, s, dtype=dtype)
     assert torch.equal(ref, ours)
+
+
+# ------------------------------------------------------------ rank handling --
+# `transpose(1, 2)` hardcoded gpt-oss's rank-4 blocks. A single expert's
+# `[rows, G, B]` — the per-expert layout of a DeepSeek-V3-lineage checkpoint
+# like released Kimi K3 — raised IndexError. `transpose(-2, -1)` is equivalent
+# for the rank-4 case and correct for both.
+def test_single_expert_rank3_blocks_dequantize():
+    rows, G, B = 8, 4, 16
+    g = torch.Generator().manual_seed(1689)
+    blocks = torch.randint(0, 256, (rows, G, B), generator=g, dtype=torch.uint8)
+    scales = torch.randint(112, 123, (rows, G), generator=g, dtype=torch.uint8)
+    out = dequantize_mxfp4(blocks, scales, dtype=torch.bfloat16)
+    assert out.shape == (G * B * 2, rows)          # [K, rows] — transposed
+    assert torch.isfinite(out).all()
+
+
+def test_rank3_matches_the_rank4_path_expert_by_expert():
+    """A [E, rows, G, B] call and E separate [rows, G, B] calls must agree."""
+    E, rows, G, B = 3, 8, 4, 16
+    g = torch.Generator().manual_seed(7)
+    blocks = torch.randint(0, 256, (E, rows, G, B), generator=g, dtype=torch.uint8)
+    scales = torch.randint(112, 123, (E, rows, G), generator=g, dtype=torch.uint8)
+    fused = dequantize_mxfp4(blocks, scales, dtype=torch.float32)
+    for e in range(E):
+        one = dequantize_mxfp4(blocks[e], scales[e], dtype=torch.float32)
+        assert torch.equal(one, fused[e])
+
+
+def test_rank2_blocks_raise_a_useful_error():
+    with pytest.raises(ValueError, match="at least one leading row axis"):
+        dequantize_mxfp4(torch.zeros(4, 16, dtype=torch.uint8),
+                         torch.zeros(4, dtype=torch.uint8))
+
+
+def test_kimi_k3_shaped_expert_projection():
+    """Real released-K3 geometry: w1 packed [3072, 1792] uint8 with a
+    [3072, 112] e8m0 scale (group_size 32) -> W^T [3584, 3072]."""
+    R, KH, G = 96, 1792, 112          # R reduced; KH/G/B are the real values
+    B = KH // G
+    g = torch.Generator().manual_seed(30)
+    packed = torch.randint(0, 256, (R, KH), generator=g, dtype=torch.uint8)
+    scale = torch.randint(112, 123, (R, G), generator=g, dtype=torch.uint8)
+    out = dequantize_mxfp4(packed.reshape(R, G, B), scale, dtype=torch.bfloat16)
+    assert out.shape == (KH * 2, R)
+    assert B * 2 == 32               # group_size 32, as K3's config declares
+    assert torch.isfinite(out).all()
