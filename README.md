@@ -46,11 +46,20 @@ real sparse-MoE on reasonable hardware.
   histogram (not by index) bought **+57–120%** decode at *identical* VRAM on gpt-oss-20b
   (receipts: [`bench/RESULTS-informed-hotsets.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.7/bench/RESULTS-informed-hotsets.md)).
   K=0 streams everything; K=all is fully resident; the middle is yours to trade.
-- **Honest caveat — this is a memory technology, not an energy one.** On a GPU that *already*
-  fits the model, 4-bit is a **1.2–2.3× energy penalty** (NF4 is storage-only; the GEMM runs in
-  bf16 either way, plus dequant). The energy win only shows up when memory is the binding
-  constraint — then it's the difference between running and not, and up to **4.4× lower
-  energy/token** from the batch that freed memory unlocks. Numbers and method in the docs.
+- **It is faster and cooler where it counts — but be precise about which comparison.** Two
+  different questions get two different answers, and conflating them is how this page used to
+  undersell itself:
+  - ***4-bit vs bf16*, on a GPU that already fits the model:** a **1.2–2.3× energy penalty**. NF4
+    is storage-only; the GEMM runs in bf16 either way, plus dequant. That penalty is real and this
+    project does not hide it. It inverts when memory is the binding constraint — then it is the
+    difference between running and not, and up to **4.4× lower energy/token** from the batch that
+    freed memory unlocks.
+  - ***fused vs reference*, both 4-bit and both offloaded — the path you actually train on:**
+    **1.75–1.81× faster per step** at **0.754–0.755×** peak VRAM and **0.797–0.846×** energy per
+    step, measured across five datasets on a 30B-class MoE at 200 steps each, with held-out loss
+    unchanged (worst cell Δ0.00723 vs a registered ≤0.05 band). Receipts in
+    [`bench/flagship-matrix/`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/flagship-matrix/RESULTS-flagship-matrix.md)
+    and [`bench/fused-train-gate/`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/fused-train-gate/RESULTS-fused-train-gate.md).
 
 ## Install
 
@@ -240,12 +249,26 @@ the number of experts — on any released bitsandbytes, for every storage scheme
   pinning) and streams one layer to the GPU at a time — GPU-resident only for that layer's
   forward and its gradient-checkpoint recompute, evicted after. Peak GPU drops by roughly
   *(experts footprint − one layer)* at the cost of one PCIe transfer per layer per pass
-  (**+11 % s/step** on the OLMoE A/B). A memory optimization, not a speedup: it changes *what
-  fits*, not how fast. Offloading changes tensor location, not math — unit-test-verified,
+  (**+11 % s/step** on the OLMoE A/B). *Offload on its own* is a capacity feature — it changes
+  *what fits*, not how fast. Offloading changes tensor location, not math — unit-test-verified,
   including the gradient-checkpoint recompute path. Offloaded *training* requires gradient
   checkpointing (the shipped trainer always enables it); the unsupported non-checkpointed
   combination fails loudly rather than mis-training. Details in
   [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.7/docs/METHODOLOGY.md) §11.
+- **`enable_fast_train()` makes the offload path faster, not just smaller** — and this is where the
+  throughput is. Both arms below run `offload=True` + gradient checkpointing; the only difference
+  is whether the differentiable grouped kernel is on. On a 30B-class MoE (Qwen3-30B-A3B, 48 layers,
+  128 experts) across five structurally different datasets, 200 steps each: **1.75–1.81× faster per
+  step**, at **0.754–0.755×** peak VRAM and **0.797–0.846×** the energy per step. Held-out loss is
+  unchanged — the worst of five datasets is Δ0.00723 against a registered ≤0.05 band, which is the
+  point: the fused path *reproduces* the reference rather than trading accuracy for speed.
+  Receipts: [`bench/flagship-matrix/RESULTS-flagship-matrix.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/flagship-matrix/RESULTS-flagship-matrix.md)
+  (five datasets, both arms) and
+  [`bench/fused-train-gate/RESULTS-fused-train-gate.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/fused-train-gate/RESULTS-fused-train-gate.md)
+  (48-layer gate: 1.65×, 0.768× VRAM, with the frozen 4-bit stack verified bit-identical over
+  **16.31 GB hashed** and a byte-flip positive control that fires). Both are single same-process
+  A/B pairs per cell, so the ratios are indicative, not variance-bounded — see each document's own
+  scope section.
 
 Transfer diagnostics (default off): `E4B_OFFLOAD_STATS=1` prints per-layer H2D bandwidth, prefetch
 stall/slack, and a one-shot PCIe-link + ceiling report; `E4B_OFFLOAD_ARENA=1` consolidates each
