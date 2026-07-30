@@ -475,12 +475,22 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
         # Staging is observed by its EFFECT, not by counting hooks: our pre-hook registers after
         # the loader's, so if staging works the base tensors are materialized by the time it runs.
         live = []
+        staged = []
         for mod in hooked:
             h = mod._offload
             name = h._param_names[0]
             mod.register_forward_pre_hook(
                 lambda *_a, _h=h, _n=name: live.append(getattr(_h.base, _n).numel())
             )
+            # Count stage() itself, so a failure can say whether the pre-hook never ran or ran
+            # and something re-evicted afterwards -- those have different fixes.
+            _real = h.stage
+
+            def _counting_stage(_h=h, _real=_real):
+                staged.append(_h)
+                return _real()
+
+            h.stage = _counting_stage
 
         for n, p in model.named_parameters():
             p.requires_grad_("lora" in n)  # only LoRA adapters train
@@ -500,7 +510,18 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
         for _ in range(8):
             opt.zero_grad()
             out = model(input_ids=ids, labels=ids)
-            out.loss.backward()
+            n_fwd_calls, n_fwd_stage = len(live), len(staged)
+            try:
+                out.loss.backward()
+            except RuntimeError as e:  # re-raise carrying the staging counts the message needs
+                raise AssertionError(
+                    f"backward failed under offload for {len(hooked)} offloaded layer(s). "
+                    f"forward: {n_fwd_calls} expert calls / {n_fwd_stage} stage() calls; "
+                    f"backward so far: {len(live) - n_fwd_calls} expert calls / "
+                    f"{len(staged) - n_fwd_stage} stage() calls. If the backward stage() count is "
+                    "0 the pre-hook never ran; if it is non-zero the layer was staged and then "
+                    f"re-evicted before its own backward read it. Original: {e}"
+                ) from e
             for n, p in model.named_parameters():
                 if not p.requires_grad:
                     assert p.grad is None  # frozen params (incl. the offloaded experts) get no grad
