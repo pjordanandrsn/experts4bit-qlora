@@ -91,7 +91,7 @@ def _assign(model, name, tensor):
 
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
-    trust_remote_code=None,
+    trust_remote_code=None, arena=None,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -115,6 +115,16 @@ def load_moe_4bit_streaming(
     # below must only ever see canonical names (an unnormalized alias would silently pick the
     # wrong class).
     quant_type = normalize_quant_type(quant_type)
+    # `arena`: serve experts from a baked NVMe arena instead of reading them out of
+    # the checkpoint. The expert modules are then built on `meta` (shapes only), so
+    # expert storage stops scaling with model size — the difference between needing
+    # 1.446 TB of host RAM for Kimi K3's experts and needing none. Pair with
+    # `nvme_experts.enable_nvme_residency` on the SAME arena to make them reachable;
+    # the model returned here cannot run until you do.
+    arena_index = None
+    if arena is not None:
+        from nvme_arena import load_index
+        arena_index = load_index(arena)
     if prefetch and not offload:
         raise ValueError(
             "prefetch=True requires offload=True: prefetch overlaps the H2D copy of offloaded "
@@ -208,10 +218,36 @@ def load_moe_4bit_streaming(
     n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
     log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to {quant_type} (streaming)...")
     expert_keys = set()
+    meta_expert_prefixes = []      # arena mode: modules whose buffers stay on meta
     offload_handles = []
     n_moe = 0
     for i in range(n_layers):
         epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
+        if arena_index is not None:
+            # Every checkpoint key under the experts submodule is an expert tensor,
+            # so they can be marked read-and-skipped WITHOUT reading them — which is
+            # the whole point: at K3 scale the read is what does not fit.
+            keys = {k for k in weight_map if k.startswith(epfx)}
+            if not keys:
+                continue                                  # dense layer
+            bias = sorted(k for k in keys if k.endswith("_bias"))
+            if bias:
+                raise NotImplementedError(
+                    f"layer {i}: arena serving does not yet carry per-expert biases "
+                    f"({bias[0]!r} and {len(bias) - 1} more). gpt-oss keeps its "
+                    "biases resident alongside the packed stacks; an arena path for "
+                    "them is a separate change. Refusing rather than dropping them, "
+                    "which would silently change the epilogue.")
+            expert_keys.update(keys)
+            n_moe += 1
+            from .nvme_experts import build_meta_experts
+            experts = build_meta_experts(
+                arena_index, n_exp, has_gate=True, activation=activation,
+                compute_dtype=dtype, quant_type=quant_type)
+            parent, leaf = epfx.rstrip(".").rsplit(".", 1)
+            setattr(model.get_submodule(parent), leaf, experts)
+            meta_expert_prefixes.append(epfx)
+            continue
         if f"{epfx}gate_up_proj_blocks" in weight_map:
             # GPT-OSS: experts on disk as MXFP4 (blocks/scales) + per-projection biases.
             # Dequantize the exact released bytes, then build a faithful NF4 expert
@@ -359,9 +395,21 @@ def load_moe_4bit_streaming(
     if model.lm_head.weight.is_meta:
         model.lm_head.weight = model.model.embed_tokens.weight
 
-    stray = [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.is_meta]
+    # This guard exists to catch a silently-incomplete load, so arena mode narrows
+    # it rather than disabling it: expert buffers under a meta expert module are
+    # INTENTIONALLY unmaterialized (they are served from the arena), but anything
+    # else still on meta is the bug this check was written for.
+    named = list(model.named_parameters()) + list(model.named_buffers())
+    stray = [n for n, x in named
+             if x.is_meta and not any(n.startswith(pfx) for pfx in meta_expert_prefixes)]
     if stray:
         raise RuntimeError(f"unmaterialized meta tensors remain: {stray[:8]}")
+    if meta_expert_prefixes:
+        deferred = sum(1 for n, x in named
+                       if x.is_meta and any(n.startswith(p) for p in meta_expert_prefixes))
+        log(f"  experts deferred to the arena: {len(meta_expert_prefixes)} module(s), "
+            f"{deferred} unmaterialized buffer(s) — call "
+            f"nvme_experts.enable_nvme_residency() before running this model")
     return model, config
 
 

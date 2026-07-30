@@ -419,3 +419,104 @@ def test_loaded_model_trains_with_frozen_experts(build, per_expert, tmp_path):
     for n, p in model.named_parameters():
         if n in packed_before:
             assert torch.equal(p.detach(), packed_before[n])  # frozen 4-bit experts unchanged
+
+
+# ------------------------- arena serving: experts on meta -------------------
+def _bake_arena_for(model, arena_path):
+    """Relocate a loaded model's own quantized expert stacks into an NF4 arena."""
+    import struct
+
+    from nvme_arena import bake_expert_tensors
+
+    from experts4bit_qlora import ExpertsNbit
+    from experts4bit_qlora.nvme_experts import NF4_SEGMENTS
+
+    mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+    tensors, dt = {}, {torch.uint8: "U8", torch.float32: "F32"}
+    for lay, mod in enumerate(mods):
+        e = mod.num_experts
+        n1, k1 = mod._gate_up_shape
+        n2, k2 = mod._down_shape
+        stacks = {
+            NF4_SEGMENTS["c_gu_p"]: mod.gate_up_proj.view(e, n1, k1 // 2),
+            NF4_SEGMENTS["c_gu_a"]: mod.gate_up_absmax.view(e, n1, k1 // 64).float(),
+            NF4_SEGMENTS["c_dn_p"]: mod.down_proj.view(e, n2, k2 // 2),
+            NF4_SEGMENTS["c_dn_a"]: mod.down_absmax.view(e, n2, k2 // 64).float(),
+        }
+        for kind, st in stacks.items():
+            for i in range(e):
+                x = st[i].contiguous().cpu()
+                tensors[f"model.layers.{lay}.mlp.experts.{i}.{kind}"] = (
+                    tuple(x.shape), dt[x.dtype], x.numpy().tobytes())
+    hdr, blobs, off = {}, [], 0
+    for name, (shape, dtype, data) in tensors.items():
+        hdr[name] = {"dtype": dtype, "shape": list(shape),
+                     "data_offsets": [off, off + len(data)]}
+        blobs.append(data); off += len(data)
+    hj = json.dumps(hdr).encode()
+    snap = os.path.join(os.path.dirname(arena_path), "arena_snap")
+    os.makedirs(snap, exist_ok=True)
+    with open(os.path.join(snap, "model.safetensors"), "wb") as f:
+        f.write(struct.pack("<Q", len(hj)) + hj + b"".join(blobs))
+    bake_expert_tensors(
+        snap, arena_path,
+        name_template="model.layers.{layer}.mlp.experts.{expert}.{kind}",
+        kinds=tuple(NF4_SEGMENTS.values()), align=4096, log=lambda *a: None)
+    return len(mods)
+
+
+def test_loader_arena_mode_builds_meta_experts(tmp_path):
+    """`arena=` must produce expert modules that hold SHAPES ONLY.
+
+    The non-expert weights still load normally; only the experts are left
+    unmaterialized, which is what lets a checkpoint whose experts exceed host RAM
+    be opened at all. The model is not runnable until `enable_nvme_residency`
+    attaches the arena — asserted here by checking the buffers really are meta.
+    """
+    pytest.importorskip("nvme_arena")
+    from experts4bit_qlora import ExpertsNbit
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    ref, _cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
+    arena_path = str(tmp_path / "experts.arena")
+    n_layers = _bake_arena_for(ref, arena_path)
+    assert n_layers > 0
+
+    model, _cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
+                                          arena=arena_path)
+    mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+    assert len(mods) == n_layers, "arena mode must still build one module per MoE layer"
+    for m in mods:
+        assert m.gate_up_proj.is_meta and m.down_proj.is_meta, "experts materialized"
+        assert m.gate_up_absmax.is_meta and m.down_absmax.is_meta
+    # non-expert weights are real, not meta — the point is that ONLY experts defer
+    assert not model.model.embed_tokens.weight.is_meta
+    for name, buf in model.named_buffers():
+        if "experts" not in name:
+            assert not buf.is_meta, f"non-expert buffer left on meta: {name}"
+
+
+def test_loader_arena_mode_refuses_per_expert_biases(tmp_path, monkeypatch):
+    """gpt-oss keeps per-expert biases beside the packed stacks. Arena serving does
+    not carry them yet, so it must REFUSE rather than drop them — dropping would
+    silently change the epilogue."""
+    pytest.importorskip("nvme_arena")
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    ref, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
+    arena_path = str(tmp_path / "e.arena")
+    _bake_arena_for(ref, arena_path)
+
+    # splice a bias key into the index so the guard sees gpt-oss-shaped input
+    ipath = os.path.join(str(tmp_path), "model.safetensors.index.json")
+    idx = json.load(open(ipath))
+    lay0 = next(k for k in idx["weight_map"] if ".mlp.experts." in k)
+    pfx = lay0.split(".mlp.experts.")[0] + ".mlp.experts."
+    idx["weight_map"][pfx + "gate_up_proj_bias"] = "model.safetensors"
+    json.dump(idx, open(ipath, "w"))
+
+    with pytest.raises(NotImplementedError, match="per-expert biases"):
+        load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
+                                arena=arena_path)

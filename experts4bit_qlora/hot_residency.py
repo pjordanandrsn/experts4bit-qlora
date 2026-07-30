@@ -125,18 +125,49 @@ class _HotResidency:
         # index on the weights' own device (the model is typically CUDA-resident)
         hi = hot_ids.to(gu_p.device)
         ci = cold_ids.to(gu_p.device)
-        # HOT: resident on the GPU (never transferred again)
-        self.h_gu_p = gu_p.index_select(0, hi).contiguous().to(self.device)
-        self.h_gu_a = gu_a.index_select(0, hi).contiguous().to(self.device)
-        self.h_dn_p = dn_p.index_select(0, hi).contiguous().to(self.device)
-        self.h_dn_a = dn_a.index_select(0, hi).contiguous().to(self.device)
+        # HOT: resident on the GPU (never transferred again). Hooked for the same
+        # reason as _build_cold: a subclass may source these from somewhere other
+        # than the module's own [E, ...] buffers, which lets the module itself be
+        # built on `meta` and allocate no expert storage at all.
+        self._build_hot(gu_p, gu_a, dn_p, dn_a, hi)
         if self.gptoss:
             gub, dnb = mod.gate_up_bias, mod.down_bias           # [E, 2I] / [E, H], contiguous
             self.h_gu_b = gub.index_select(0, hi).contiguous().to(self.device)
             self.h_dn_b = dnb.index_select(0, hi).contiguous().to(self.device)
             self.c_gu_b = gub.index_select(0, ci).contiguous().to(self.device)
             self.c_dn_b = dnb.index_select(0, ci).contiguous().to(self.device)
-        # COLD: pinned host RAM, streamed per token (only the routed subset)
+        # COLD: pinned host RAM, streamed per token (only the routed subset).
+        # Factored into a hook so a subclass can back the cold tail with
+        # something other than a fully-materialized host stack — see
+        # `nvme_experts._NvmeResidency`, which serves it from an NVMe arena
+        # because a checkpoint like Kimi K3 has 1.446 TB of experts and no host
+        # holds them. Everything downstream only ever calls
+        # `.index_select(0, routed)` then `.to(dev)` on these four attributes,
+        # so that is the whole contract a replacement must honour.
+        self._build_cold(gu_p, gu_a, dn_p, dn_a, ci)
+
+        # global expert id -> (is_hot, local index within its stack)
+        self._finish_ids(E, hot_ids, cold_ids)
+
+    def _build_hot(self, gu_p, gu_a, dn_p, dn_a, hi):
+        """Materialize the hot partition on the compute device.
+
+        Override to source hot experts from elsewhere (e.g. an NVMe arena). The
+        four ``h_*`` attributes must end up as device tensors shaped
+        ``[len(hot), n, k/2]`` / ``[len(hot), n, k/64]``.
+        """
+        self.h_gu_p = gu_p.index_select(0, hi).contiguous().to(self.device)
+        self.h_gu_a = gu_a.index_select(0, hi).contiguous().to(self.device)
+        self.h_dn_p = dn_p.index_select(0, hi).contiguous().to(self.device)
+        self.h_dn_a = dn_a.index_select(0, hi).contiguous().to(self.device)
+
+    def _build_cold(self, gu_p, gu_a, dn_p, dn_a, ci):
+        """Materialize the cold tail as four (pinned) host stacks.
+
+        Override to serve the cold tail from elsewhere. The contract is narrow:
+        each attribute must support ``.index_select(0, routed)`` returning a
+        tensor that then accepts ``.to(dev, non_blocking=True)``.
+        """
         self.c_gu_p = gu_p.index_select(0, ci).contiguous().cpu()
         self.c_gu_a = gu_a.index_select(0, ci).contiguous().cpu()
         self.c_dn_p = dn_p.index_select(0, ci).contiguous().cpu()
@@ -150,7 +181,7 @@ class _HotResidency:
             except (RuntimeError, AssertionError):
                 pass  # pageable fallback is correct, just synchronous H2D
 
-        # global expert id -> (is_hot, local index within its stack)
+    def _finish_ids(self, E, hot_ids, cold_ids):
         g2h = torch.full((E,), -1, dtype=torch.long)
         g2h[hot_ids] = torch.arange(hot_ids.numel())
         g2c = torch.full((E,), -1, dtype=torch.long)
@@ -243,8 +274,37 @@ def _eligible(mod):
     return None
 
 
+def wrapped_bases(model) -> set:
+    """ids of every ``ExpertsNbit`` that is an ``ExpertsLoRA.base``."""
+    try:
+        from experts4bit_qlora.lora import ExpertsLoRA
+        return {id(m.base) for m in model.modules()
+                if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
+    except ImportError:
+        return set()
+
+
+def target_modules(model) -> list:
+    """The MoE modules a residency patch targets, in dispatch order.
+
+    ``ExpertsLoRA.forward`` bypasses ``base.forward`` (it calls ``base._project``),
+    so a wrapped frozen base is NEVER dispatched — patching it would be dead code
+    that only duplicates weights. Any ``ExpertsNbit`` that is an
+    ``ExpertsLoRA.base`` is therefore excluded.
+
+    Shared so that everything keying off ``hot_sets[i]`` agrees on what ``i``
+    means. Re-deriving this list independently is how a caller ends up stamping
+    per-module state onto the wrong layers when LoRA-wrapped and bare modules are
+    interleaved.
+    """
+    from . import ExpertsNbit
+    wrapped = wrapped_bases(model)
+    return [m for m in model.modules()
+            if isinstance(m, ExpertsNbit) and id(m) not in wrapped]
+
+
 def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
-                         verbose: bool = False) -> int:
+                         verbose: bool = False, state_cls=None) -> int:
     """Partition every eligible ``ExpertsNbit`` under ``model`` into a resident
     GPU hot-stack + a streamed CPU cold-stack, in MoE-layer order.
 
@@ -299,17 +359,8 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     except ImportError:
         pass
     if hasattr(model, "modules"):
-        # ExpertsLoRA.forward bypasses base.forward (it calls base._project), so the
-        # frozen base is NEVER dispatched — patching it is dead code that only
-        # duplicates weights. Exclude any Experts4bit that is an ExpertsLoRA.base.
-        try:
-            from experts4bit_qlora.lora import ExpertsLoRA
-            wrapped = {id(m.base) for m in model.modules()
-                       if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
-        except ImportError:
-            wrapped = set()
-        all_nbit = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
-        mods = [m for m in all_nbit if id(m) not in wrapped]
+        mods = target_modules(model)
+        wrapped = wrapped_bases(model)
         if wrapped and not mods:
             raise NotImplementedError(
                 "every ExpertsNbit here is an ExpertsLoRA.base (the streaming-loader / "
@@ -351,10 +402,10 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
         if hasattr(mod, "_hot_residency"):
             # rebuild every time — the base weights are frozen NF4, but a caller may
             # have reloaded a checkpoint; a cached partition must never go stale.
-            mod._hot_residency = _HotResidency(mod, hot_sets[i], device)
+            mod._hot_residency = (state_cls or _HotResidency)(mod, hot_sets[i], device)
             patched += 1
             continue
-        state = _HotResidency(mod, hot_sets[i], device)
+        state = (state_cls or _HotResidency)(mod, hot_sets[i], device)
         mod._e4b_hot_ref = mod.forward
         mod._hot_residency = state
 
