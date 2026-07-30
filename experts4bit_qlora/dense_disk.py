@@ -158,6 +158,13 @@ class DenseDiskSource:
         if loc is None:
             raise KeyError(f"{name!r} not in {self.path}")
 
+        # Settle `direct` BEFORE computing the window. `staging_for` can flip it to
+        # False — an unaligned staging buffer cannot serve an O_DIRECT read — and a
+        # window computed under the old value would then be read into a buffer that no
+        # longer satisfies the contract, failing with EINVAL that looks like a corrupt
+        # checkpoint. The request covers the largest window any branch below can want,
+        # so the second call is a no-op.
+        buf = self.staging_for(loc.nbytes + 2 * _ALIGN)
         if self.direct:
             lo = (loc.offset // _ALIGN) * _ALIGN
             hi = -(-(loc.offset + loc.nbytes) // _ALIGN) * _ALIGN

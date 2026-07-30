@@ -38,8 +38,8 @@ class Toy(nn.Module):
         self.layers = nn.ModuleList(Block() for _ in range(NL))
 
     def forward(self, x):
-        for l in self.layers:
-            x = l(x)
+        for blk in self.layers:
+            x = blk(x)
         return x
 
 
