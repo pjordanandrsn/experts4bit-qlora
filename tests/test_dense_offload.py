@@ -435,3 +435,23 @@ def test_prefetch_wait_uses_this_layers_stream():
     assert all(d is not None for d in seen), (
         f"bare current_stream() used — device-blind under pipeline parallelism: {seen}")
     assert all(torch.device(d) == hs[1].device for d in seen), seen
+
+
+def test_small_tensors_are_placed_on_the_layers_device():
+    """Found on the first real K3 integration. The sensible way to load a big model
+    is layer weights to CPU, then let this stream them — but the tensors this module
+    DECLINES to manage (1-D norms, biases, small conv kernels) were left wherever
+    they were, so a norm sat on CPU against CUDA activations and the layer died on a
+    device mismatch inside the model's own code, nowhere near here.
+
+    "Leave resident" has to mean resident on the device the layer will run on.
+    """
+    m = _model("cpu")
+    lay = m.layers[0]
+    # simulate the real pattern: everything on CPU, engine device is elsewhere
+    h = _DenseOffload(lay, "cpu", pin=False)
+    assert h.placed == 0, "same device, nothing to move"
+    assert lay.norm.device == torch.device("cpu")
+    assert lay.conv1d.device == torch.device("cpu")
+    # the managed set must be unchanged by the placement pass
+    assert len(h.slots) == 2
