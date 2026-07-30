@@ -101,6 +101,7 @@ class _DenseOffload:
         # (module, attr, is_param, home) — home is a pinned CPU tensor holding the
         # EXACT loaded bytes.
         self.slots: list = []
+        self._sd_keys: list = []
         self.bytes = 0
         for _name, mod in layer.named_modules():
             if _is_expert_module(mod):
@@ -119,9 +120,37 @@ class _DenseOffload:
                         except (RuntimeError, AssertionError):
                             pass          # best-effort; pageable is correct, just sync
                     self.slots.append((mod, attr, is_param, home))
+                    # key relative to the LAYER, for the state_dict hook below
+                    self._sd_keys.append(f"{_name}.{attr}" if _name else attr)
                     self.bytes += nbytes
         self.pinned = all(_is_pinned(h) for _m, _a, _p, h in self.slots) if self.slots else True
+        self._install_state_dict_hook()
         self.evict()                      # start evicted: the GPU copies just went away
+
+    def _install_state_dict_hook(self) -> None:
+        """Keep ``state_dict()`` correct while evicted.
+
+        Between forwards these tensors are 0-element placeholders, so a naive
+        ``state_dict()`` would silently serialize a model with **no attention
+        weights** — a checkpoint that looks fine and is empty. Substitutes the
+        pinned CPU homes by REFERENCE for any placeholder entry, so filtered saves
+        (adapter-only, by key name) stay as cheap as before, and it is a no-op mid
+        forward when the entries are the real device tensors.
+
+        ``load_state_dict`` onto an evicted layer still fails loudly on the shape
+        mismatch; that was never supported and is unchanged.
+        """
+        def hook(module, state_dict, prefix, local_metadata):
+            for key, (_mod, _attr, _is_param, home) in zip(self._sd_keys, self.slots):
+                full = prefix + key
+                t = state_dict.get(full)
+                if t is not None and t.numel() == 0:
+                    state_dict[full] = home
+
+        register = getattr(self.layer, "register_state_dict_post_hook", None)
+        if register is None:      # older torch: same (mod, sd, prefix, meta) shape
+            register = self.layer._register_state_dict_hook
+        self._state_dict_hook_handle = register(hook)
 
     # ------------------------------------------------------------------ copy --
     def _copy_home_to_device(self, policy: str = "sync") -> None:
@@ -144,11 +173,21 @@ class _DenseOffload:
         dest = self._staged_dev
         if dest is None:
             return
+        # record_stream is not optional when the copy ran on the PREFETCH stream:
+        # the caching allocator ties a block to the stream it was allocated on, so
+        # without this it can hand the block to a later side-stream allocation
+        # while the compute stream is still reading it — stale weights, no error.
+        # `_ExpertOffload` does the same at its own bind sites.
+        mark = self.device.type == "cuda"
+        cur = torch.cuda.current_stream(self.device) if mark else None
         for i, (mod, attr, is_param, _home) in enumerate(self.slots):
+            t = dest[i]
+            if mark:
+                t.record_stream(cur)
             if is_param:
-                mod._parameters[attr].data = dest[i]
+                mod._parameters[attr].data = t
             else:
-                mod._buffers[attr] = dest[i]
+                mod._buffers[attr] = t
         self._staged_dev = None
 
     def _consume_ready_event(self) -> None:
@@ -167,16 +206,32 @@ class _DenseOffload:
     # ----------------------------------------------------------------- stage --
     def stage(self) -> None:
         """Single-slot synchronous staging — the conservative path, and the only
-        one used when grad is enabled (training, checkpoint recompute)."""
+        one used when grad is enabled (training, checkpoint recompute).
+
+        Two things here are load-bearing and were absent in the first version:
+
+        * It sweeps **every** handle in ``_staged_now``, not just ``_resident``.
+          A grad-enabled forward that follows an inference forward would otherwise
+          inherit that forward's two residents and quietly exceed the single-slot
+          bound this method is supposed to enforce.
+        * It goes through :meth:`_consume_ready_event`, never ``_bind`` directly.
+          A layer can arrive here already ``staged`` from a PREFETCH whose copy is
+          still in flight on the side stream; binding without waiting on the event
+          hands compute a partially-written weight.
+        """
         cls = type(self)
-        if self.staged and self._staged_dev is None:
+        if self.staged and self._staged_dev is None and self.ready_event is None:
             return
+        for h in list(cls._staged_now):
+            if h is not self:
+                h.evict()
         if cls._resident is not None and cls._resident is not self:
             cls._resident.evict()
         if not self.staged:
             self._copy_home_to_device("sync")
-        self._bind()
+        self._consume_ready_event()
         cls._resident = self
+        cls._staged_now.add(self)
 
     def stage_for_inference(self) -> None:
         """Two-resident staging: make this layer usable now, then start the NEXT
@@ -308,9 +363,13 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
                 lambda m, grad_output, _h=h: _h.stage())
         handles.append(h)
 
-    if prefetch and len(handles) > 1:
-        for h, nxt in zip(handles, handles[1:] + handles[:1]):
-            h._prefetch_next = nxt
+    # Assigned UNCONDITIONALLY, so a later call with prefetch=False actually turns
+    # prefetch off. Setting them only under `prefetch` left a second idempotent
+    # call's links from the first call in place, and the hooks kept taking the
+    # two-resident path while the caller had asked for the synchronous one.
+    link = prefetch and len(handles) > 1
+    for h, nxt in zip(handles, handles[1:] + handles[:1]):
+        h._prefetch_next = nxt if link else None
 
     total = sum(h.bytes for h in handles)
     unpinned = [i for i, h in enumerate(handles) if not h.pinned]

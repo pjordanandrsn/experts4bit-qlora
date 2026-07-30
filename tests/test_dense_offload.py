@@ -247,3 +247,94 @@ def test_idempotent_enable():
     assert [id(x) for x in a] == [id(x) for x in b], "second call rebuilt handles"
     # a second handle would have captured the 0-element placeholders as its homes
     assert all(h.bytes > 0 for h in b)
+
+
+# ---------------- regressions for the five Bugbot findings on #45 -------------
+def test_state_dict_while_evicted_carries_real_weights():
+    """FINDING 5, and the one with destructive consequences: saving a checkpoint
+    while layers are evicted would serialize 0-element placeholders — a file that
+    looks fine and has no attention weights in it."""
+    m = _model("cpu")
+    want = {n: p.detach().clone() for n, p in m.named_parameters()}
+    enable_dense_offload(m, "cpu", pin=False)
+    assert m.layers[0].q_proj.weight.numel() == 0, "must be evicted for this test"
+    sd = m.state_dict()
+    for n, t in want.items():
+        assert n in sd, n
+        assert sd[n].numel() == t.numel(), (n, sd[n].shape, t.shape)
+        assert torch.equal(sd[n].cpu(), t.cpu()), n
+
+
+def test_prefetch_false_actually_disables_prefetch():
+    """FINDING 3: links were assigned only under `prefetch=True`, so a second call
+    with prefetch=False left the first call's circular links in place."""
+    m = _model("cpu")
+    a = enable_dense_offload(m, "cpu", pin=False, prefetch=True)
+    assert all(h._prefetch_next is not None for h in a)
+    b = enable_dense_offload(m, "cpu", pin=False, prefetch=False)
+    assert b is not None and [id(x) for x in a] == [id(x) for x in b]
+    assert all(h._prefetch_next is None for h in b), \
+        "stale prefetch links survived a prefetch=False call"
+
+
+def test_stage_sweeps_every_staged_handle():
+    """FINDING 4: stage() evicted only `_resident`, so a grad-enabled forward after
+    an inference forward inherited that forward's TWO residents and silently broke
+    the single-slot bound stage() exists to enforce."""
+    m = _model("cpu")
+    hs = enable_dense_offload(m, "cpu", pin=False, prefetch=True)
+    hs[0].stage()
+    hs[1].stage()
+    _DenseOffload._staged_now.add(hs[2])      # simulate a leftover prefetch
+    hs[2].staged = True
+    hs[3].stage()
+    assert sum(1 for h in hs if h.staged) == 1, [h.staged for h in hs]
+    assert _DenseOffload._staged_now == {hs[3]}, _DenseOffload._staged_now
+
+
+@cuda
+def test_stage_waits_for_an_inflight_prefetch():
+    """FINDING 1 (High): a layer can reach stage() already `staged` from a prefetch
+    whose copy is still in flight. Binding without consuming the ready event hands
+    compute a partially-written weight. Checked by asserting the event is consumed
+    and the values are right."""
+    m = _model("cuda")
+    want = {n: p.detach().clone() for n, p in m.named_parameters()}
+    hs = enable_dense_offload(m, "cuda", pin=True, prefetch=True)
+    hs[0].stage_for_inference()               # also prefetches hs[1]
+    assert hs[1].staged and hs[1].ready_event is not None, "no prefetch in flight"
+    hs[1].stage()                             # the dangerous transition
+    assert hs[1].ready_event is None, "stage() bound without consuming the event"
+    for n, p in m.layers[1].named_parameters():
+        assert torch.equal(p, want[f"layers.1.{n}"]), n
+
+
+@cuda
+def test_bound_tensors_are_record_streamed():
+    """FINDING 2 (High): tensors allocated on the prefetch stream and consumed on
+    the compute stream must be record_stream'd, or the allocator can reuse the
+    block while compute still reads it. Unobservable directly, so this asserts the
+    marking happens and that a churned allocator still yields correct weights."""
+    m = _model("cuda")
+    want = {n: p.detach().clone() for n, p in m.named_parameters()}
+    hs = enable_dense_offload(m, "cuda", pin=True, prefetch=True)
+    marked = []
+    real = torch.Tensor.record_stream
+
+    def spy(self, s):
+        marked.append(tuple(self.shape))
+        return real(self, s)
+
+    torch.Tensor.record_stream = spy
+    try:
+        hs[0].stage_for_inference()
+        hs[1].stage_for_inference()
+    finally:
+        torch.Tensor.record_stream = real
+    assert marked, "no tensor was record_stream'd on bind"
+    # churn the allocator hard, then confirm the still-bound weights are intact
+    junk = [torch.empty(1 << 20, device="cuda") for _ in range(64)]
+    del junk
+    for n, p in m.layers[1].named_parameters():
+        if p.numel():
+            assert torch.equal(p, want[f"layers.1.{n}"]), n
