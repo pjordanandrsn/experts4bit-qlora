@@ -5,6 +5,7 @@ side onto a cheap card is to quantize it, which changes the model. So the tests 
 matter here are equality tests, not shape tests.
 """
 import json
+import os
 
 import pytest
 import torch
@@ -286,5 +287,50 @@ def test_stats_report_slack(tmp_path):
         if st["direct"]:
             assert st["slack_bytes"] > 0, "aligned reads must report their slack"
         assert json.dumps(st)
+    finally:
+        src.close()
+
+
+def test_disabling_direct_drops_the_o_direct_descriptors(tmp_path, monkeypatch):
+    """Turning O_DIRECT off mid-run must also close the fds opened under it.
+
+    This is the bug that made `test_source_reads_are_bit_exact[3-True]` fail on CI
+    with `OSError: [Errno 22] Invalid argument`. `_alloc_staging` correctly noticed
+    an unaligned staging buffer and correctly set `direct = False` -- but the
+    descriptors already in `_fds` had been opened WITH `O_DIRECT`, and that flag
+    lives on the open file description, not on the read call. `fetch` then computed
+    an unaligned window (which is right for a buffered read) and issued it against a
+    still-direct fd, which is EINVAL.
+
+    Runs everywhere: it drives the transition directly rather than needing a
+    filesystem that reports an unaligned pinned buffer, and macOS has no O_DIRECT at
+    all so the original failure can only ever reproduce on Linux CI.
+    """
+    m = _model()
+    snap = _snapshot(tmp_path, m, shards=3)
+    src = DenseDiskSource(str(snap), direct=False)   # buffered fds, safe to reopen
+    try:
+        first = next(iter(src.tensors))
+        src.fetch(first)
+        assert src._fds, "expected a cached descriptor after a fetch"
+
+        # Pretend those descriptors were opened O_DIRECT and the buffer came back
+        # unaligned -- the exact state CI hit.
+        src.direct = True
+        before = dict(src._fds)
+        src._disable_direct("test-induced")
+
+        assert src.direct is False
+        assert not src._fds, (
+            "descriptors opened under O_DIRECT survived the fallback; the next "
+            "unaligned read against them is EINVAL")
+        for fd in before.values():
+            with pytest.raises(OSError):
+                os.fstat(fd)          # closed, not merely forgotten
+
+        # and the source still works afterwards, reopening buffered
+        sd = m.state_dict()
+        for k in list(sd)[:3]:
+            assert torch.equal(src.fetch(k), sd[k]), k
     finally:
         src.close()

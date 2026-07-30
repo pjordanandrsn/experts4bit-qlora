@@ -110,6 +110,35 @@ class DenseDiskSource:
             self._alloc_staging(staging_bytes)
 
     # ------------------------------------------------------------------ read --
+    def _disable_direct(self, why: str) -> None:
+        """Turn O_DIRECT off *and drop the descriptors opened under it*.
+
+        Flipping ``self.direct`` alone is not enough, and the gap is not
+        theoretical -- it is the EINVAL that made this module's own bit-exactness
+        test fail. Once ``direct`` is False, ``fetch`` computes an UNALIGNED
+        window (``lo = loc.offset``, ``skew = 0``) because a buffered read has no
+        alignment requirement. But descriptors already cached in ``_fds`` were
+        opened WITH ``O_DIRECT``, and that flag lives on the open file
+        description, not on the read call. Issuing an unaligned ``preadv``
+        against one is exactly ``EINVAL`` -- which surfaces as "Invalid argument"
+        on a perfectly good checkpoint.
+
+        So close them here. The next ``_fd`` reopens buffered, matching the
+        windows now being computed.
+        """
+        if not self.direct:
+            return
+        self.direct = False
+        for fd in self._fds.values():
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        n_dropped = len(self._fds)
+        self._fds.clear()
+        log(f"  dense_disk: {why}; reopening buffered "
+            f"(dropped {n_dropped} O_DIRECT descriptor(s))")
+
     def _fd(self, path: str) -> int:
         fd = self._fds.get(path)
         if fd is None:
@@ -122,7 +151,7 @@ class DenseDiskSource:
                 if not (self.direct and hasattr(os, "O_DIRECT")):
                     raise
                 # some filesystems (tmpfs, certain network mounts) reject O_DIRECT
-                self.direct = False
+                self._disable_direct(f"{path} rejected O_DIRECT")
                 fd = os.open(path, os.O_RDONLY)
             self._fds[path] = fd
         return fd
@@ -140,8 +169,9 @@ class DenseDiskSource:
         # like a corrupt checkpoint rather than a buffer problem.
         self._staging_ok = (buf.data_ptr() % _ALIGN) == 0
         if self.direct and not self._staging_ok:
-            log("  dense_disk: staging buffer not 4096-aligned; using buffered reads")
-            self.direct = False
+            # Must go through _disable_direct: descriptors already opened with
+            # O_DIRECT cannot serve the unaligned windows fetch() will now compute.
+            self._disable_direct("staging buffer not 4096-aligned")
 
     def staging_for(self, nbytes: int) -> torch.Tensor:
         if self._staging is None or self._staging.numel() < nbytes + _ALIGN:
