@@ -53,6 +53,7 @@ import re
 
 import torch
 
+from .dense_disk import DiskHome
 from .offload import _is_pinned, _placeholder, _prefetch_stream, _stats, _stats_enabled
 
 # Default floor for what is worth moving. Below this a copy costs a launch and
@@ -99,7 +100,16 @@ class _DenseOffload:
         return cls._staged_now.setdefault(dev, set())
 
     def __init__(self, layer, device, *, pin: bool = True,
-                 min_bytes: int = MIN_BYTES):
+                 min_bytes: int = MIN_BYTES, source=None, key_prefix: str = "",
+                 verify: bool = False):
+        """``source``: a :class:`~experts4bit_qlora.dense_disk.DenseDiskSource`. When
+        given, a tensor whose checkpoint key is present there gets a
+        :class:`DiskHome` instead of a pinned host copy — same bytes, read on demand,
+        so the host-RAM floor drops from the whole dense side of the model to one
+        staging buffer. ``key_prefix`` + the layer-relative key must equal the
+        checkpoint key. ``verify=True`` compares every disk home against the loaded
+        tensor bit-for-bit at construction; cheap on a truncated model and the right
+        gate to run once per checkpoint."""
         self.layer = layer
         self.device = torch.device(device)
         self.pin = pin
@@ -113,6 +123,9 @@ class _DenseOffload:
         self._sd_keys: list = []
         self.bytes = 0
         self.placed = 0        # small tensors moved onto self.device
+        self.host_bytes = 0    # homes held in host RAM
+        self.disk_bytes = 0    # homes served from a DenseDiskSource
+        self.verified = 0      # disk homes checked bit-for-bit at construction
         for _name, mod in layer.named_modules():
             if _is_expert_module(mod):
                 continue
@@ -139,17 +152,42 @@ class _DenseOffload:
                                 store[attr] = moved
                             self.placed += 1
                         continue
-                    home = t.detach().to("cpu")
-                    if pin:
-                        try:
-                            home = home.pin_memory()
-                        except (RuntimeError, AssertionError):
-                            pass          # best-effort; pageable is correct, just sync
+                    key = f"{_name}.{attr}" if _name else attr
+                    home = None
+                    if source is not None:
+                        full = key_prefix + key
+                        loc = source.tensors.get(full)
+                        if loc is not None:
+                            if tuple(loc.shape) != tuple(t.shape) or loc.dtype != t.dtype:
+                                raise ValueError(
+                                    f"dense_disk: {full} is {tuple(loc.shape)}/"
+                                    f"{loc.dtype} on disk but {tuple(t.shape)}/"
+                                    f"{t.dtype} in the model — refusing to serve it")
+                            home = DiskHome(source, full)
+                            if verify and not torch.equal(home.view_now(),
+                                                          t.detach().to("cpu")):
+                                raise ValueError(
+                                    f"dense_disk: {full} on disk differs from the "
+                                    f"loaded tensor; the source is not this model's "
+                                    f"checkpoint")
+                            self.disk_bytes += nbytes
+                            self.verified += int(verify)
+                    if home is None:
+                        home = t.detach().to("cpu")
+                        if pin:
+                            try:
+                                home = home.pin_memory()
+                            except (RuntimeError, AssertionError):
+                                pass      # best-effort; pageable is correct, just sync
+                        self.host_bytes += nbytes
                     self.slots.append((mod, attr, is_param, home))
                     # key relative to the LAYER, for the state_dict hook below
-                    self._sd_keys.append(f"{_name}.{attr}" if _name else attr)
+                    self._sd_keys.append(key)
                     self.bytes += nbytes
-        self.pinned = all(_is_pinned(h) for _m, _a, _p, h in self.slots) if self.slots else True
+        # A DiskHome is not a tensor and is never "pinned" in this sense; report on
+        # the host-resident homes only, so `all_pinned` keeps meaning what it says.
+        _ram = [h for _m, _a, _p, h in self.slots if isinstance(h, torch.Tensor)]
+        self.pinned = all(_is_pinned(h) for h in _ram) if _ram else True
         self._install_state_dict_hook()
         self.evict()                      # start evicted: the GPU copies just went away
 
@@ -171,7 +209,13 @@ class _DenseOffload:
                 full = prefix + key
                 t = state_dict.get(full)
                 if t is not None and t.numel() == 0:
-                    state_dict[full] = home
+                    # A disk home must be MATERIALIZED. Its view aliases the source's
+                    # shared staging buffer, which the next fetch overwrites — saving
+                    # the view would serialize whatever layer happened to be staged
+                    # last, which is the same class of silent-empty-checkpoint bug
+                    # this hook exists to prevent.
+                    state_dict[full] = (home.materialize()
+                                        if isinstance(home, DiskHome) else home)
 
         register = getattr(self.layer, "register_state_dict_post_hook", None)
         if register is None:      # older torch: same (mod, sd, prefix, meta) shape
@@ -185,8 +229,23 @@ class _DenseOffload:
         if start is not None:
             start.record()
         for i, (_mod, _attr, _is_param, home) in enumerate(self.slots):
-            d = torch.empty_like(home, device=self.device)
-            d.copy_(home, non_blocking=_is_pinned(home))
+            if isinstance(home, DiskHome):
+                # Read into the source's shared staging buffer, then copy
+                # SYNCHRONOUSLY. The next fetch overwrites those bytes, so an async
+                # copy would race a later read into the same buffer — stale weights,
+                # no error, exactly the failure mode `record_stream` exists to stop on
+                # the other path. Synchronous is also what makes ONE staging buffer
+                # sufficient under prefetch: by the time the next layer is read, this
+                # layer's copy has already landed.
+                #
+                # The overlap given up is small: a layer is ~1.2 GB, which is a few
+                # hundred ms of disk against ~60 ms of PCIe, so the read dominates.
+                src = home.view_now()
+                d = torch.empty(src.shape, dtype=src.dtype, device=self.device)
+                d.copy_(src)
+            else:
+                d = torch.empty_like(home, device=self.device)
+                d.copy_(home, non_blocking=_is_pinned(home))
             dest[i] = d
         if start is not None:
             end = torch.cuda.Event(enable_timing=True)
@@ -365,6 +424,7 @@ def _layer_device(layer) -> "torch.device":
 
 def enable_dense_offload(model, device=None, *, pin: bool = True,
                          min_bytes: int = MIN_BYTES, prefetch: bool = True,
+                         source=None, key_prefix: str = "", verify: bool = False,
                          log=None) -> list:
     """Pin every decoder layer's dense weights on the host and stream them per layer.
 
@@ -397,7 +457,14 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
             # merely wasteful. An explicit `device` still overrides, for the
             # single-card case and for tests.
             dev = device if device is not None else _layer_device(layer)
-            h = _DenseOffload(layer, dev, pin=pin, min_bytes=min_bytes)
+            # The checkpoint key is `key_prefix` + this layer's module path + the
+            # layer-relative key. `decoder_layers` already gives the module path, and
+            # the caller supplies whatever sits above the module it handed us (e.g.
+            # "language_model.model." when called on `model.language_model.model`).
+            h = _DenseOffload(layer, dev, pin=pin, min_bytes=min_bytes,
+                              source=source,
+                              key_prefix=f"{key_prefix}{_name}." if source else "",
+                              verify=verify)
             layer._dense_offload = h
 
             def _pre(module, args, _h=h):
@@ -458,10 +525,17 @@ def dense_offload_report(handles) -> dict:
     """What is pinned, and what a token costs at a given link rate."""
     total = sum(h.bytes for h in handles)
     per_layer = total / len(handles) if handles else 0
+    host = sum(h.host_bytes for h in handles)
+    disk = sum(h.disk_bytes for h in handles)
     return {
         "layers": len(handles),
         "tensors": sum(len(h.slots) for h in handles),
-        "host_bytes": total,
+        # `host_bytes` is what is actually RESIDENT on the host. Disk-served homes
+        # are counted separately: reporting them as host bytes would hide the very
+        # thing the disk path exists to remove.
+        "host_bytes": host,
+        "disk_bytes": disk,
+        "verified_bit_exact": sum(h.verified for h in handles),
         "per_layer_bytes": int(per_layer),
         "all_pinned": all(h.pinned for h in handles),
         "staged_now": sum(len(v) for v in _DenseOffload._staged_now.values()),
