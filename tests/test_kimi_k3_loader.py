@@ -11,6 +11,12 @@ import os
 import pytest
 import torch
 
+# `experts4bit_qlora.loader` transitively imports bitsandbytes, so on a machine
+# without it this module raised at COLLECTION time and vanished from the run --
+# reading as "nothing to test" rather than "not verified". conftest's collection
+# guard flags exactly that. Declare the dependency so it reports SKIPPED.
+pytest.importorskip("bitsandbytes")
+
 from experts4bit_qlora.loader import (
     K3_PER_EXPERT_MXFP4, MULTIMODAL_CKPT_PREFIX, SUPPORTED_ARCHITECTURES,
 )
