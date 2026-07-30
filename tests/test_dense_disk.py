@@ -334,3 +334,45 @@ def test_disabling_direct_drops_the_o_direct_descriptors(tmp_path, monkeypatch):
             assert torch.equal(src.fetch(k), sd[k]), k
     finally:
         src.close()
+
+
+# ------------------------------------------------------------- reporting ---
+def test_the_report_does_not_call_disk_bytes_pinned(tmp_path):
+    """A report about residency must not describe the disk path as host-resident.
+
+    Three separate lies, all found by reading a real Kimi K3 run's own log:
+      * the log said "108.76 GB pinned on the host" while host_bytes was 0,
+      * `all_pinned` was True by vacuous `all()` over zero host-resident handles,
+      * `seconds_per_token_at_19GBs` costed disk bytes at a PCIe rate and said
+        5.7 s/token for a run that measured 91.8.
+    """
+    m = _model()
+    src = DenseDiskSource(str(_snapshot(tmp_path, m)))
+    lines = []
+    try:
+        hs = enable_dense_offload(m, "cpu", pin=False, prefetch=False, source=src,
+                                  log=lines.append)
+        rep = dense_offload_report(hs)
+        assert rep["host_bytes"] == 0 and rep["disk_bytes"] > 0, rep
+        assert rep["host_resident_layers"] == 0, rep
+        assert rep["seconds_per_token_at_19GBs"] == 0.0, (
+            "disk bytes must not be costed at the host->device PCIe rate")
+        assert rep["disk_bytes_per_token"] == rep["disk_bytes"]
+        blob = " ".join(lines)
+        assert "pinned on the host" not in blob, blob
+        assert "served from disk" in blob and "0 resident" in blob, blob
+    finally:
+        src.close()
+
+
+def test_the_report_still_says_pinned_when_it_really_is(tmp_path):
+    """The host path is unchanged: same key, same meaning, and the PCIe estimate
+    still applies because those bytes really do ride PCIe from pinned RAM."""
+    m = _model()
+    lines = []
+    hs = enable_dense_offload(m, "cpu", pin=False, prefetch=False, log=lines.append)
+    rep = dense_offload_report(hs)
+    assert rep["host_bytes"] > 0 and rep["disk_bytes"] == 0, rep
+    assert rep["host_resident_layers"] == len(hs)
+    assert rep["seconds_per_token_at_19GBs"] > 0
+    assert "pinned on the host" in " ".join(lines)
