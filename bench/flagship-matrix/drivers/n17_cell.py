@@ -149,12 +149,25 @@ def host_fingerprint():
     fields = ("uuid,pci.bus_id,pcie.link.gen.current,pcie.link.gen.max,"
               "pcie.link.width.current,pcie.link.width.max,power.limit,"
               "clocks.max.sm,clocks.max.mem,vbios_version,driver_version")
+    want = fields.split(",")
     out = {}
     try:
-        raw = subprocess.run(
+        r = subprocess.run(
             ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=15).stdout.strip().split("\n")[0]
-        out = dict(zip(fields.split(","), [v.strip() for v in raw.split(",")]))
+            capture_output=True, text=True, timeout=15)
+        raw = r.stdout.strip().split("\n")[0] if r.stdout.strip() else ""
+        cols = [v.strip() for v in raw.split(",")] if raw else []
+        # Check the exit status AND the column count. Parsing stdout blindly lets a
+        # failed or truncated nvidia-smi produce a PARTIAL host map with no error
+        # key -- a fingerprint that is missing PCIe and power fields but looks
+        # complete, which is worse than no fingerprint because it reads as evidence.
+        if r.returncode != 0:
+            out["nvidia_smi_error"] = f"exit {r.returncode}: {r.stderr.strip()[:200]}"
+        elif len(cols) != len(want):
+            out["nvidia_smi_error"] = (
+                f"expected {len(want)} columns, got {len(cols)}: {raw[:200]}")
+        else:
+            out = dict(zip(want, cols))
     except Exception as e:
         out["nvidia_smi_error"] = f"{type(e).__name__}: {e}"
     try:
@@ -165,7 +178,12 @@ def host_fingerprint():
                     break
         out["cpu_threads"] = os.cpu_count()
         with open("/proc/meminfo") as fh:
-            out["host_mem_gb"] = round(int(fh.readline().split()[1]) / 1e6, 1)
+            # MemTotal is in KiB. Dividing by 1e6 gave a number that matched
+            # neither GB nor GiB and disagreed with `free -g` (263.8 vs 251),
+            # which defeats the point: this field exists to be cross-checked
+            # against a known host spec. Record GiB, and say so in the name.
+            kib = int(fh.readline().split()[1])
+            out["host_mem_gib"] = round(kib / 1048576, 1)
     except Exception as e:
         out["host_error"] = f"{type(e).__name__}: {e}"
     # Two DIFFERENT identifiers, recorded under honest names.
