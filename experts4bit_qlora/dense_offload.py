@@ -86,8 +86,17 @@ class _DenseOffload:
     when every byte is needed every token.
     """
 
-    _staged_now: set = set()
-    _resident = None
+    # Keyed BY DEVICE. Pipeline parallelism puts layers on different GPUs, and a
+    # single global slot would let a stage() on cuda:1 evict a layer on cuda:0 that
+    # is still mid-pipeline. `_ExpertOffload` sidesteps this by refusing multi-device
+    # outright (enable_inference_prefetch raises); this module is meant FOR the
+    # multi-card case, so it tracks residency per device instead.
+    _staged_now: dict = {}          # device -> set of handles
+    _resident: dict = {}            # device -> handle
+
+    @classmethod
+    def _now(cls, dev) -> set:
+        return cls._staged_now.setdefault(dev, set())
 
     def __init__(self, layer, device, *, pin: bool = True,
                  min_bytes: int = MIN_BYTES):
@@ -178,7 +187,9 @@ class _DenseOffload:
         # without this it can hand the block to a later side-stream allocation
         # while the compute stream is still reading it — stale weights, no error.
         # `_ExpertOffload` does the same at its own bind sites.
-        mark = self.device.type == "cuda"
+        # `and self.slots`: no point querying a stream we will not mark anything on,
+        # and it keeps _bind callable for a handle that selected no tensors.
+        mark = self.device.type == "cuda" and bool(self.slots)
         cur = torch.cuda.current_stream(self.device) if mark else None
         for i, (mod, attr, is_param, _home) in enumerate(self.slots):
             t = dest[i]
@@ -220,18 +231,26 @@ class _DenseOffload:
           hands compute a partially-written weight.
         """
         cls = type(self)
-        if self.staged and self._staged_dev is None and self.ready_event is None:
-            return
-        for h in list(cls._staged_now):
+        # Sweep BEFORE the already-bound early return. Otherwise a grad-enabled
+        # stage() on a layer that inference left bound no-ops, and the sibling that
+        # inference PREFETCHED stays resident — the single-slot bound this method
+        # exists to restore is never restored. (Bugbot, PR #46.)
+        now = cls._now(self.device)
+        for h in list(now):
             if h is not self:
                 h.evict()
-        if cls._resident is not None and cls._resident is not self:
-            cls._resident.evict()
+        res = cls._resident.get(self.device)
+        if res is not None and res is not self:
+            res.evict()
+        if self.staged and self._staged_dev is None and self.ready_event is None:
+            cls._resident[self.device] = self
+            now.add(self)
+            return
         if not self.staged:
             self._copy_home_to_device("sync")
         self._consume_ready_event()
-        cls._resident = self
-        cls._staged_now.add(self)
+        cls._resident[self.device] = self
+        now.add(self)
 
     def stage_for_inference(self) -> None:
         """Two-resident staging: make this layer usable now, then start the NEXT
@@ -244,16 +263,17 @@ class _DenseOffload:
         if not self.staged:
             if _stats_enabled():
                 _stats().cold_misses += 1
-            for h in list(cls._staged_now):
+            for h in list(cls._now(self.device)):
                 if h is not self:
                     h.evict()
-            if cls._resident is not None and cls._resident is not self:
-                cls._resident.evict()
+            res = cls._resident.get(self.device)
+            if res is not None and res is not self:
+                res.evict()
             self._copy_home_to_device("cold_miss")
             self._bind()
         else:
             self._consume_ready_event()
-        cls._staged_now.add(self)
+        cls._now(self.device).add(self)
 
         nxt = self._prefetch_next
         if nxt is not None and nxt is not self and not nxt.staged:
@@ -263,7 +283,7 @@ class _DenseOffload:
             evt = torch.cuda.Event(enable_timing=True) if _stats_enabled() else torch.cuda.Event()
             evt.record(stream)
             nxt.ready_event = evt
-            cls._staged_now.add(nxt)
+            cls._now(nxt.device).add(nxt)
 
     def evict(self) -> None:
         """Point every slot back at a shared 0-element placeholder, dropping the
@@ -280,9 +300,9 @@ class _DenseOffload:
         self._staged_dev = None
         self.staged = False
         self.ready_event = None
-        cls._staged_now.discard(self)
-        if cls._resident is self:
-            cls._resident = None
+        cls._now(self.device).discard(self)
+        if cls._resident.get(self.device) is self:
+            cls._resident.pop(self.device, None)
 
     # ----------------------------------------------------------------- info --
     def home_bytes(self) -> int:
@@ -305,6 +325,22 @@ def decoder_layers(model):
     return out
 
 
+def _layer_device(layer) -> "torch.device":
+    """The device a layer's own weights live on — CUDA preferred.
+
+    Resolved per layer so a pipelined model works: `device_map`-style sharding puts
+    layers on different cards, and staging them all to one would put a layer's
+    weights on a different device from its inputs.
+    """
+    for t in list(layer.parameters()) + list(layer.buffers()):
+        if t is not None and not t.is_meta and t.device.type == "cuda":
+            return t.device
+    for t in list(layer.parameters()) + list(layer.buffers()):
+        if t is not None and not t.is_meta:
+            return t.device
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def enable_dense_offload(model, device=None, *, pin: bool = True,
                          min_bytes: int = MIN_BYTES, prefetch: bool = True,
                          log=None) -> list:
@@ -324,9 +360,6 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     evicted afterwards, because backward still needs the weights. So a training
     step is correct but saves nothing; this module is for inference.
     """
-    if device is None:
-        device = next((p.device for p in model.parameters()
-                       if p.device.type == "cuda"), None) or "cuda"
     layers = decoder_layers(model)
     if not layers:
         raise ValueError(
@@ -336,7 +369,13 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     for _name, layer in layers:
         h = getattr(layer, "_dense_offload", None)
         if h is None:
-            h = _DenseOffload(layer, device, pin=pin, min_bytes=min_bytes)
+            # device=None resolves PER LAYER. A pipelined model has its layers on
+            # different GPUs, and one global device would stage every layer's
+            # weights onto card 0 — wrong device for the layer's own inputs, not
+            # merely wasteful. An explicit `device` still overrides, for the
+            # single-card case and for tests.
+            dev = device if device is not None else _layer_device(layer)
+            h = _DenseOffload(layer, dev, pin=pin, min_bytes=min_bytes)
             layer._dense_offload = h
 
             def _pre(module, args, _h=h):
@@ -367,9 +406,18 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     # prefetch off. Setting them only under `prefetch` left a second idempotent
     # call's links from the first call in place, and the hooks kept taking the
     # two-resident path while the caller had asked for the synchronous one.
-    link = prefetch and len(handles) > 1
-    for h, nxt in zip(handles, handles[1:] + handles[:1]):
-        h._prefetch_next = nxt if link else None
+    # Chains are PER DEVICE. A cross-device prefetch link would start a copy onto
+    # the wrong card, and the side stream belongs to one device anyway.
+    for h in handles:
+        h._prefetch_next = None
+    if prefetch:
+        by_dev: dict = {}
+        for h in handles:
+            by_dev.setdefault(h.device, []).append(h)
+        for chain in by_dev.values():
+            if len(chain) > 1:
+                for h, nxt in zip(chain, chain[1:] + chain[:1]):
+                    h._prefetch_next = nxt
 
     total = sum(h.bytes for h in handles)
     unpinned = [i for i, h in enumerate(handles) if not h.pinned]
@@ -394,7 +442,7 @@ def dense_offload_report(handles) -> dict:
         "host_bytes": total,
         "per_layer_bytes": int(per_layer),
         "all_pinned": all(h.pinned for h in handles),
-        "staged_now": len(_DenseOffload._staged_now),
+        "staged_now": sum(len(v) for v in _DenseOffload._staged_now.values()),
         # s/token at the measured 19 GB/s host->device rate, weights only
         "seconds_per_token_at_19GBs": round(total / 19e9, 3),
     }

@@ -57,10 +57,10 @@ class Toy(nn.Module):
 @pytest.fixture(autouse=True)
 def _clean_class_state():
     _DenseOffload._staged_now.clear()
-    _DenseOffload._resident = None
+    _DenseOffload._resident.clear()
     yield
     _DenseOffload._staged_now.clear()
-    _DenseOffload._resident = None
+    _DenseOffload._resident.clear()
 
 
 def _model(device, seed=11):
@@ -285,11 +285,11 @@ def test_stage_sweeps_every_staged_handle():
     hs = enable_dense_offload(m, "cpu", pin=False, prefetch=True)
     hs[0].stage()
     hs[1].stage()
-    _DenseOffload._staged_now.add(hs[2])      # simulate a leftover prefetch
+    _DenseOffload._now(hs[2].device).add(hs[2])   # simulate a leftover prefetch
     hs[2].staged = True
     hs[3].stage()
     assert sum(1 for h in hs if h.staged) == 1, [h.staged for h in hs]
-    assert _DenseOffload._staged_now == {hs[3]}, _DenseOffload._staged_now
+    assert _DenseOffload._now(hs[3].device) == {hs[3]}
 
 
 @cuda
@@ -338,3 +338,68 @@ def test_bound_tensors_are_record_streamed():
     for n, p in m.layers[1].named_parameters():
         if p.numel():
             assert torch.equal(p, want[f"layers.1.{n}"]), n
+
+
+def test_residency_is_tracked_per_device_not_globally():
+    """FINDING 6 (mine, not Bugbot's): with one global `_resident` slot, a stage()
+    on cuda:1 evicts a layer on cuda:0 that is still mid-pipeline — and the 3x A40
+    pipeline is the configuration this module was written for. `_ExpertOffload`
+    sidesteps this by REFUSING multi-device; this module has to support it.
+
+    Exercises the BOOKKEEPING only: handles are built with no slots (nothing to
+    transport) and given distinct device keys, so the assertions are about which
+    device's residency each operation touches. The transport itself needs two real
+    GPUs and is not covered here.
+    """
+    m = _model("cpu")
+    big = 1 << 40                       # selects nothing, so no tensors move
+    a = _DenseOffload(m.layers[0], "cpu", pin=False, min_bytes=big)
+    b = _DenseOffload(m.layers[1], "cpu", pin=False, min_bytes=big)
+    assert a.slots == [] and b.slots == []
+    b.device = torch.device("cuda", 1)  # pretend b lives on another card
+
+    a.stage()
+    b.stage()
+    assert a.staged, "staging a handle on another device evicted this one"
+    assert _DenseOffload._resident.get(a.device) is a
+    assert _DenseOffload._resident.get(b.device) is b
+    assert _DenseOffload._now(a.device) == {a}
+    assert _DenseOffload._now(b.device) == {b}
+    b.evict()
+    assert a.staged and _DenseOffload._resident.get(a.device) is a
+
+
+def test_prefetch_chains_do_not_cross_devices():
+    """A cross-device prefetch link would start a copy onto the wrong card."""
+    m = _model("cpu")
+    hs = enable_dense_offload(m, "cpu", pin=False, prefetch=True)
+    hs[2].device = torch.device("cuda", 1)
+    hs[3].device = torch.device("cuda", 1)
+    hs2 = enable_dense_offload(m, "cpu", pin=False, prefetch=True)
+    assert hs2 is not None
+    for h in hs:
+        if h._prefetch_next is not None:
+            assert h._prefetch_next.device == h.device, (
+                f"prefetch link crosses {h.device} -> {h._prefetch_next.device}")
+
+
+def test_layer_device_is_resolved_per_layer():
+    """device=None must follow each layer's own weights, not one global guess."""
+    from experts4bit_qlora.dense_offload import _layer_device
+    m = _model("cpu")
+    assert _layer_device(m.layers[0]) == torch.device("cpu")
+
+
+@cuda
+def test_stage_sweeps_even_when_this_layer_is_already_bound():
+    """Bugbot on #46, a follow-on from the #45 fix: the early return sat BEFORE the
+    sweep, so a grad-enabled stage() on a layer that inference had left bound
+    no-op'd and the layer inference had PREFETCHED stayed resident."""
+    m = _model("cuda")
+    hs = enable_dense_offload(m, "cuda", pin=True, prefetch=True)
+    hs[0].stage_for_inference()                 # binds 0, prefetches 1
+    assert hs[1].staged, "no prefetched sibling to leak"
+    assert hs[0].staged and hs[0]._staged_dev is None, "layer 0 should be bound"
+    hs[0].stage()                               # the no-op path
+    assert not hs[1].staged, "prefetched sibling survived a single-slot stage()"
+    assert sum(1 for h in hs if h.staged) == 1, [h.staged for h in hs]
