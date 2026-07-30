@@ -201,7 +201,17 @@ def main():
     ev1 = eval_loss(model, ev)
     h_after, bytes_after, empties_after = expert_hashes(model)
     assert bytes_after == bytes_before, f"C1 hashed {bytes_after} B after vs {bytes_before} before"
+    assert empties_after == 0, f"C1 saw {empties_after} empty expert tensors after training"
     changed = [k for k in h_before if h_before[k] != h_after.get(k)]
+    # C1 is a HARD GATE, so it has to be able to FAIL THE CELL. Recording
+    # C1_bit_exact=false in the receipt and exiting 0 is not a gate: the runner
+    # sees a non-empty receipt, counts the cell complete, and skips it on resume.
+    # The prereg says a C1 failure voids every performance number -- so refuse to
+    # write one.
+    assert not changed, (
+        f"C1 FAILED — {len(changed)} frozen expert tensor(s) CHANGED during training: "
+        f"{changed[:5]}. Per the prereg this voids every performance number for this "
+        "cell; refusing to write a receipt.")
     mean_w = statistics.mean(ps.samples) if ps.samples else None
     net_w = (mean_w - idle_w) if mean_w else None
 

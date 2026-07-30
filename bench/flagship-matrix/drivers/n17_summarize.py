@@ -15,6 +15,7 @@ seeing the numbers -- which is why the prereg says so in those words.
 Usage: n17_summarize.py <cells-dir>
 """
 import json
+import statistics
 import os
 import sys
 
@@ -60,15 +61,30 @@ def main():
               "or energy claim.\n")
 
     # ---- C2: loss parity ---------------------------------------------------
-    print(f"C2 — loss parity, registered band |delta final eval| <= {C2_BAND}")
+    # BOTH registered criteria, on the metrics the prereg actually names:
+    #   "|delta final-TRAIN-loss| <= 0.05 AND the step-wise loss curves' median
+    #    absolute difference <= 0.05"
+    # An earlier version of this script adjudicated on eval_loss_final, which is
+    # neither of those -- the same mistake RESULTS-flagship-matrix.md made when
+    # it published a "Delta eval" column for B2 and omitted the step-wise band.
+    # Eval loss is still printed, clearly labelled as NOT the registered band.
+    print(f"C2 — loss parity: |delta final TRAIN| <= {C2_BAND} AND median step-wise |delta| <= {C2_BAND}")
     for ds in DATASETS:
         r, f = C.get((ds, "reference")), C.get((ds, "fused"))
         if not (r and f):
             print(f"  {ds:9s} (missing)")
             continue
-        d = abs(f["eval_loss_final"] - r["eval_loss_final"])
-        print(f"  {ds:9s} delta={d:.5f}  {'PASS' if d <= C2_BAND else 'FAIL'}"
-              f"  ({C2_BAND/d:.0f}x inside)" if d else f"  {ds:9s} delta=0")
+        d_train = abs(f["loss_last"] - r["loss_last"])
+        n = min(len(r.get("losses") or []), len(f.get("losses") or []))
+        if n:
+            med = statistics.median(abs(a - b) for a, b in zip(r["losses"][:n], f["losses"][:n]))
+        else:
+            med = None
+        d_eval = abs(f["eval_loss_final"] - r["eval_loss_final"])
+        ok = d_train <= C2_BAND and (med is not None and med <= C2_BAND)
+        med_s = f"{med:.5f}" if med is not None else "n/a (no per-step losses)"
+        print(f"  {ds:9s} train={d_train:.5f}  median_step={med_s}  "
+              f"{'PASS' if ok else 'FAIL'}   [eval={d_eval:.5f}, not the band]")
 
     # ---- C3: cost, reported not gated -------------------------------------
     print("\nC3 — cost (reported, not gated)")

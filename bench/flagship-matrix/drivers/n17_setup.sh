@@ -56,9 +56,34 @@ from nf4_qlora import fused_grouped_lora  # noqa: F401
 ok("nf4_qlora.fused_grouped_lora importable", True)
 
 # PR #43: the post-hook must not evict inside a backward, or every gemma4 cell
-# dies in its first backward. Assert the FIX is present, not just the package.
+# dies in its first backward. Assert the FIX WORKS, not merely that it imports.
+#
+# `_in_backward()` is False outside a backward -- but it is ALSO False forever if
+# torch._C._current_graph_task_id is missing, because offload.py deliberately
+# degrades to the pre-fix behaviour rather than crashing. So checking only the
+# False branch passes whether the detector works or not: a negative control with
+# no positive control, which is the exact vacuity this campaign keeps finding.
+# Drive a real backward and require it to flip.
 from experts4bit_qlora.offload import _in_backward
-ok("offload fix present (_in_backward)", _in_backward() is False)
+seen = []
+
+
+class _Probe(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x):
+        seen.append(("forward", _in_backward()))
+        return x * 2
+
+    @staticmethod
+    def backward(ctx, g):
+        seen.append(("backward", _in_backward()))
+        return g
+
+
+_Probe.apply(torch.randn(4, requires_grad=True)).sum().backward()
+ok("offload fix LIVE (_in_backward flips inside a real backward)",
+   seen == [("forward", False), ("backward", True)] and _in_backward() is False,
+   str(seen))
 
 # A real quantize call -- imports succeeding is not the same as bnb working.
 from bitsandbytes.functional import quantize_4bit, dequantize_4bit

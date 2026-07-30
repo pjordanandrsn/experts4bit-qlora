@@ -79,16 +79,30 @@ whose C1 registers the corrected form explicitly — `state_dict()`, bytes > 0,
 zero empties, byte-flip control — and whose driver asserts all four before a
 single training step.
 
-**B2 — loss parity, fused vs reference: PASSES on all five datasets.** Registered
-band `|Δ final| ≤ 0.05`:
+**B2 — loss parity, fused vs reference: PASSES on all five datasets** — but the
+table below is **corrected**, because the original reported the wrong quantity.
 
-| dataset | Δ eval | vs band |
-|---|---|---|
-| clinical | 0.00003 | 1600× inside |
-| code | 0.00097 | 51× |
-| legal | 0.00095 | 53× |
-| support | 0.00134 | 37× |
-| **finance** | **0.00723** | **7× inside** — the worst cell |
+The prereg registers *two* criteria: **`|Δ final-TRAIN-loss| ≤ 0.05` AND the
+step-wise loss curves' median absolute difference ≤ 0.05**. This document
+originally published a single "Δ eval" column — neither of those — and omitted
+the step-wise band entirely. Eval loss is a *smaller, easier* number here, so the
+original table flattered the result even though it reached the right verdict.
+
+Recomputed from the same committed receipts, on the registered metrics:
+
+| dataset | Δ final **train** | median step-wise \|Δ\| | verdict | (Δ eval, *not* the band) |
+|---|---|---|---|---|
+| clinical | 0.01651 | 0.00515 | PASS | 0.00003 |
+| code | **0.00042** | 0.00539 | PASS | 0.00097 |
+| finance | 0.01160 | **0.01490** | PASS | 0.00723 |
+| legal | 0.00300 | **0.00250** | PASS | 0.00095 |
+| support | 0.00467 | 0.00482 | PASS | 0.00134 |
+
+Worst cell against the band is **finance at 0.01490 median step-wise**, 3.4×
+inside — not the 7× the original "Δ eval" column implied. The verdict is
+unchanged: both registered criteria pass on all five datasets. What changed is
+that it is now adjudicated on the quantities that were actually registered,
+by [`drivers/n17_summarize.py`](drivers/n17_summarize.py) rather than by hand.
 
 **B3 — cost, reported not gated.** The fused arm is **1.75–1.81× faster per
 step**, at **0.754–0.755×** the peak VRAM and **0.797–0.846×** the energy. The
