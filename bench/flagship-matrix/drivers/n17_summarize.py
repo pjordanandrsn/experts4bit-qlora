@@ -120,19 +120,30 @@ def main():
 
     # ---- C5: cross-model transfer -----------------------------------------
     print("\nC5 — cross-model transfer (qualitative reproduction, NOT numeric match)")
-    if ratios["s_per_step"]:
+    n_ds = len(ratios["s_per_step"])
+    if n_ds:
+        # "Flat across datasets" is VACUOUS at n=1: max-min is 0, so the check
+        # passes for free and reports a property that was never tested. Any
+        # criterion whose subject is variation across a set needs the set.
+        flat = (None if n_ds < 2 else
+                (max(ratios["peak_vram_gb"]) - min(ratios["peak_vram_gb"])) < 0.02)
         checks = [
             ("fused faster per step", all(x > 1.0 for x in ratios["s_per_step"])),
             ("peak VRAM ratio below 1.0", all(x < 1.0 for x in ratios["peak_vram_gb"])),
-            ("VRAM ratio flat across datasets",
-             (max(ratios["peak_vram_gb"]) - min(ratios["peak_vram_gb"])) < 0.02),
+            (f"VRAM ratio flat across datasets (n={n_ds})", flat),
             ("energy ratio below 1.0",
              bool(ratios["joules_per_step"]) and all(x < 1.0 for x in ratios["joules_per_step"])),
         ]
         for label, ok in checks:
-            print(f"  [{'YES' if ok else 'NO '}] {label}")
-        print(f"  => topology {'REPRODUCES' if all(o for _, o in checks) else 'PARTIALLY reproduces'} "
-              "on the second model")
+            mark = "n/a" if ok is None else ("YES" if ok else "NO ")
+            print(f"  [{mark}] {label}" + ("  <- needs >= 2 datasets" if ok is None else ""))
+        if n_ds < len(DATASETS):
+            print(f"  PARTIAL: {n_ds}/{len(DATASETS)} datasets in hand — not a C5 verdict yet.")
+        decided = [o for _, o in checks if o is not None]
+        verdict = ("REPRODUCES" if decided and all(decided)
+                   else "PARTIALLY reproduces" if any(decided) else "UNDECIDED")
+        print(f"  => topology {verdict} on the second model "
+              f"({len(decided)}/{len(checks)} criteria decidable)")
         print("  NB: the first ten cells measured 1.75-1.81x speed / 0.754-0.755x vram / "
               "0.797-0.846x energy. A different ratio here is NOT a failure -- C5 registers a "
               "direction check, and a different architecture has no obligation to match.")
