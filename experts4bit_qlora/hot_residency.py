@@ -136,7 +136,26 @@ class _HotResidency:
             self.h_dn_b = dnb.index_select(0, hi).contiguous().to(self.device)
             self.c_gu_b = gub.index_select(0, ci).contiguous().to(self.device)
             self.c_dn_b = dnb.index_select(0, ci).contiguous().to(self.device)
-        # COLD: pinned host RAM, streamed per token (only the routed subset)
+        # COLD: pinned host RAM, streamed per token (only the routed subset).
+        # Factored into a hook so a subclass can back the cold tail with
+        # something other than a fully-materialized host stack — see
+        # `nvme_experts._NvmeResidency`, which serves it from an NVMe arena
+        # because a checkpoint like Kimi K3 has 1.446 TB of experts and no host
+        # holds them. Everything downstream only ever calls
+        # `.index_select(0, routed)` then `.to(dev)` on these four attributes,
+        # so that is the whole contract a replacement must honour.
+        self._build_cold(gu_p, gu_a, dn_p, dn_a, ci)
+
+        # global expert id -> (is_hot, local index within its stack)
+        self._finish_ids(E, hot_ids, cold_ids)
+
+    def _build_cold(self, gu_p, gu_a, dn_p, dn_a, ci):
+        """Materialize the cold tail as four (pinned) host stacks.
+
+        Override to serve the cold tail from elsewhere. The contract is narrow:
+        each attribute must support ``.index_select(0, routed)`` returning a
+        tensor that then accepts ``.to(dev, non_blocking=True)``.
+        """
         self.c_gu_p = gu_p.index_select(0, ci).contiguous().cpu()
         self.c_gu_a = gu_a.index_select(0, ci).contiguous().cpu()
         self.c_dn_p = dn_p.index_select(0, ci).contiguous().cpu()
@@ -150,7 +169,7 @@ class _HotResidency:
             except (RuntimeError, AssertionError):
                 pass  # pageable fallback is correct, just synchronous H2D
 
-        # global expert id -> (is_hot, local index within its stack)
+    def _finish_ids(self, E, hot_ids, cold_ids):
         g2h = torch.full((E,), -1, dtype=torch.long)
         g2h[hot_ids] = torch.arange(hot_ids.numel())
         g2c = torch.full((E,), -1, dtype=torch.long)
@@ -244,7 +263,7 @@ def _eligible(mod):
 
 
 def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
-                         verbose: bool = False) -> int:
+                         verbose: bool = False, state_cls=None) -> int:
     """Partition every eligible ``ExpertsNbit`` under ``model`` into a resident
     GPU hot-stack + a streamed CPU cold-stack, in MoE-layer order.
 
@@ -351,10 +370,10 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
         if hasattr(mod, "_hot_residency"):
             # rebuild every time — the base weights are frozen NF4, but a caller may
             # have reloaded a checkpoint; a cached partition must never go stale.
-            mod._hot_residency = _HotResidency(mod, hot_sets[i], device)
+            mod._hot_residency = (state_cls or _HotResidency)(mod, hot_sets[i], device)
             patched += 1
             continue
-        state = _HotResidency(mod, hot_sets[i], device)
+        state = (state_cls or _HotResidency)(mod, hot_sets[i], device)
         mod._e4b_hot_ref = mod.forward
         mod._hot_residency = state
 
