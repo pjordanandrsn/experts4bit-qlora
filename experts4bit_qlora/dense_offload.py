@@ -112,6 +112,7 @@ class _DenseOffload:
         self.slots: list = []
         self._sd_keys: list = []
         self.bytes = 0
+        self.placed = 0        # small tensors moved onto self.device
         for _name, mod in layer.named_modules():
             if _is_expert_module(mod):
                 continue
@@ -121,7 +122,23 @@ class _DenseOffload:
                         continue          # meta = served from the arena, not ours
                     nbytes = t.numel() * t.element_size()
                     if t.dim() < 2 or nbytes < min_bytes:
-                        continue          # norms, biases, conv kernels: leave resident
+                        # norms, biases, conv kernels: too small to be worth moving
+                        # per layer. But "leave resident" has to mean resident ON
+                        # THIS DEVICE — if the caller staged the layer's weights to
+                        # CPU (the sensible way to avoid a full-dense VRAM peak),
+                        # leaving these behind puts a 1-D norm on CPU against CUDA
+                        # activations and the layer dies on a device mismatch deep
+                        # in the model's own code. Found on the first real K3
+                        # integration, not by reasoning.
+                        if t.device != self.device:
+                            moved = t.to(self.device)
+                            if is_param:
+                                store[attr] = torch.nn.Parameter(
+                                    moved, requires_grad=t.requires_grad)
+                            else:
+                                store[attr] = moved
+                            self.placed += 1
+                        continue
                     home = t.detach().to("cpu")
                     if pin:
                         try:
