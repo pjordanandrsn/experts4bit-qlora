@@ -205,3 +205,73 @@ def test_forward_matches_fully_resident(arena):
         f"NVMe-backed forward diverges from fully-resident "
         f"(max abs diff {(got.float() - ref.float()).abs().max().item():.3e})")
     assert st["misses"] > 0, "test never exercised a disk read"
+
+
+# ------------------- zero expert RAM: the module holds only shapes -----------
+def _meta_module():
+    """Same geometry as `_module()` but on `meta`: expert buffers are unallocated.
+    This is the shape a K3-scale load must take — 1.446 TB of experts cannot be
+    materialized, so nothing may index the module's own [E, ...] storage."""
+    m = Experts4bit(num_experts=E, hidden_dim=H, intermediate_dim=I,
+                    has_gate=True, activation=torch.nn.functional.silu,
+                    quant_type="nf4", compute_dtype=torch.bfloat16, device="meta")
+    assert m.gate_up_proj.is_meta, "expert buffers must not be allocated"
+    return m
+
+
+def test_meta_module_allocates_no_expert_storage(arena):
+    """Guard the premise: a meta module's expert buffers have no backing storage.
+
+    `is_meta` is the real signal — a meta storage still REPORTS its nominal size
+    (`untyped_storage().nbytes()` returns the would-be byte count), so that number
+    is not a memory measurement and must not be used as one.
+    """
+    m = _meta_module()
+    for name in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax"):
+        buf = getattr(m, name)
+        assert buf.is_meta, f"{name} is materialized"
+        assert buf.device.type == "meta", f"{name} on {buf.device}"
+    # and the shapes are still real, which is all the engine needs from it
+    assert m._gate_up_shape == (2 * I, H) and m._down_shape == (H, I)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel needs CUDA")
+def test_forward_from_meta_module_matches_materialized(arena):
+    """The K3-shaped claim: with the module on `meta` and BOTH partitions served
+    from the arena, the forward must equal a fully-materialized reference.
+
+    If this holds, expert storage is no longer a function of model size — only
+    the hot set and the routed working set are.
+    """
+    from experts4bit_qlora.hot_residency import _HotResidency, hot_residency_available
+    if not hot_residency_available():
+        pytest.skip("grouped-nf4-gemm [fast] kernel unavailable")
+    import triton.language as _tl
+    if not hasattr(_tl, "gather"):
+        import triton
+        pytest.skip(f"needs triton>=3.4 for tl.gather; box has {triton.__version__}")
+    from experts4bit_qlora.nvme_experts import _NvmeResidency
+
+    mod, path, index = arena
+    hot = torch.tensor([0, 1])
+    g = torch.Generator().manual_seed(7)
+    x = (torch.randn(5, H, generator=g, dtype=torch.float32) * 0.1).to(
+        "cuda", torch.bfloat16)
+    top_idx = torch.tensor([[2, 3], [4, 5], [0, 6], [7, 1], [3, 7]], device="cuda")
+    top_w = torch.full((5, 2), 0.5, device="cuda", dtype=torch.bfloat16)
+
+    ref = _HotResidency(mod.to("cuda"), hot, "cuda").forward(x, top_idx, top_w)
+
+    meta = _meta_module()                      # zero expert bytes
+    with ColdTier(path, hot_rows=6, pinned=True, index=index) as tier:
+        meta._e4b_cold_tier = tier
+        meta._e4b_arena_layer = LAYER
+        st = _NvmeResidency(meta, hot, "cuda")
+        # hot came from the arena, not from the (meta) module
+        assert st.h_gu_p.shape[0] == 2 and not st.h_gu_p.is_meta
+        got = st.forward(x, top_idx, top_w)
+        stats = tier.stats()
+    assert torch.equal(got, ref), (
+        "meta-module NVMe forward diverges from the materialized reference "
+        f"(max abs diff {(got.float() - ref.float()).abs().max().item():.3e})")
+    assert stats["misses"] > 0, "never read from disk"

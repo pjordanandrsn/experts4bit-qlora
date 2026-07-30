@@ -106,6 +106,43 @@ class _NvmeResidency(_HotResidency):
 
     _PIN_COLD = False           # nothing to pin: the tier owns its pinned arena
 
+    def _build_hot(self, gu_p, gu_a, dn_p, dn_a, hi):
+        """Read the hot partition from the arena instead of from ``mod``.
+
+        This is what lets the module itself be built on ``meta``: nothing ever
+        indexes its ``[E, ...]`` expert buffers, so they need not be allocated.
+        For Kimi K3 that is the difference between 1.446 TB of expert storage and
+        none — the hot experts land on the GPU, the cold tail stays on NVMe, and
+        the module holds only shapes.
+
+        Hot rows transit the tier in chunks of at most ``hot_rows`` so a hot set
+        larger than the pinned arena still works. Once copied to the device they
+        are never requested again, so LFU reclaims their slots naturally.
+        """
+        from nvme_residency import segment_tensor
+
+        tier = self.mod._e4b_cold_tier
+        index = tier.reader.index
+        layer = int(getattr(self.mod, "_e4b_arena_layer", 0))
+        ids = [int(e) for e in self.hot_ids.tolist()]
+        chunk = max(1, min(len(ids) or 1, tier.hot_rows))
+        for attr, suffix in (("h_gu_p", NF4_SEGMENTS["c_gu_p"]),
+                             ("h_gu_a", NF4_SEGMENTS["c_gu_a"]),
+                             ("h_dn_p", NF4_SEGMENTS["c_dn_p"]),
+                             ("h_dn_a", NF4_SEGMENTS["c_dn_a"])):
+            if not ids:
+                # An all-cold layer: keep an empty tensor of the right rank so the
+                # fused path's shape algebra still holds.
+                geo = next(g for g in index["segments"] if g["suffix"] == suffix)
+                shp = (0,) + tuple(geo["shape_per_expert"])
+                dt = torch.float32 if geo["dtype"] == "F32" else torch.uint8
+                setattr(self, attr, torch.empty(shp, dtype=dt, device=self.device))
+                continue
+            parts = [segment_tensor(tier, index, layer, ids[i:i + chunk], suffix)
+                     for i in range(0, len(ids), chunk)]
+            stacked = parts[0] if len(parts) == 1 else torch.cat(parts, dim=0)
+            setattr(self, attr, stacked.contiguous().to(self.device))
+
     def _build_cold(self, gu_p, gu_a, dn_p, dn_a, ci):
         tier = self.mod._e4b_cold_tier
         index = tier.reader.index

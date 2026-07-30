@@ -125,11 +125,11 @@ class _HotResidency:
         # index on the weights' own device (the model is typically CUDA-resident)
         hi = hot_ids.to(gu_p.device)
         ci = cold_ids.to(gu_p.device)
-        # HOT: resident on the GPU (never transferred again)
-        self.h_gu_p = gu_p.index_select(0, hi).contiguous().to(self.device)
-        self.h_gu_a = gu_a.index_select(0, hi).contiguous().to(self.device)
-        self.h_dn_p = dn_p.index_select(0, hi).contiguous().to(self.device)
-        self.h_dn_a = dn_a.index_select(0, hi).contiguous().to(self.device)
+        # HOT: resident on the GPU (never transferred again). Hooked for the same
+        # reason as _build_cold: a subclass may source these from somewhere other
+        # than the module's own [E, ...] buffers, which lets the module itself be
+        # built on `meta` and allocate no expert storage at all.
+        self._build_hot(gu_p, gu_a, dn_p, dn_a, hi)
         if self.gptoss:
             gub, dnb = mod.gate_up_bias, mod.down_bias           # [E, 2I] / [E, H], contiguous
             self.h_gu_b = gub.index_select(0, hi).contiguous().to(self.device)
@@ -148,6 +148,18 @@ class _HotResidency:
 
         # global expert id -> (is_hot, local index within its stack)
         self._finish_ids(E, hot_ids, cold_ids)
+
+    def _build_hot(self, gu_p, gu_a, dn_p, dn_a, hi):
+        """Materialize the hot partition on the compute device.
+
+        Override to source hot experts from elsewhere (e.g. an NVMe arena). The
+        four ``h_*`` attributes must end up as device tensors shaped
+        ``[len(hot), n, k/2]`` / ``[len(hot), n, k/64]``.
+        """
+        self.h_gu_p = gu_p.index_select(0, hi).contiguous().to(self.device)
+        self.h_gu_a = gu_a.index_select(0, hi).contiguous().to(self.device)
+        self.h_dn_p = dn_p.index_select(0, hi).contiguous().to(self.device)
+        self.h_dn_a = dn_a.index_select(0, hi).contiguous().to(self.device)
 
     def _build_cold(self, gu_p, gu_a, dn_p, dn_a, ci):
         """Materialize the cold tail as four (pinned) host stacks.
