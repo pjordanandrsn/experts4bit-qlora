@@ -274,3 +274,70 @@ def test_forward_from_meta_module_matches_materialized(arena):
         "meta-module NVMe forward diverges from the materialized reference "
         f"(max abs diff {(got.float() - ref.float()).abs().max().item():.3e})")
     assert stats["misses"] > 0, "never read from disk"
+
+
+# --------------- geometry from the arena, not from the config ---------------
+def test_expert_geometry_recovered_from_the_arena(arena):
+    """The arena is the authority on expert shape. For a LATENT MoE (Kimi K3) the
+    expert input width is the latent (3584), not hidden_size (7168) — reading the
+    config would size every expert twice too wide."""
+    from experts4bit_qlora.nvme_experts import expert_geometry_from_arena
+    _mod, _path, index = arena
+    assert expert_geometry_from_arena(index) == (I, H)
+
+
+def test_inconsistent_arena_geometry_is_rejected():
+    """gate_up and down over-determine (I, H); a mismatch must raise rather than
+    silently pick one and build wrongly-shaped experts."""
+    from experts4bit_qlora.nvme_experts import expert_geometry_from_arena
+    bad = {"segments": [
+        {"suffix": "nf4.gate_up_blocks", "shape_per_expert": [2 * I, H // 2]},
+        {"suffix": "nf4.down_blocks", "shape_per_expert": [H, (I // 2) + 8]},
+    ]}
+    with pytest.raises(ValueError, match="inconsistent"):
+        expert_geometry_from_arena(bad)
+    with pytest.raises(KeyError, match="arena lacks"):
+        expert_geometry_from_arena({"segments": []})
+
+
+def test_build_meta_experts_matches_the_real_module_shapes(arena):
+    """A shapes-only module must be interchangeable with the materialized one as
+    far as the engine's shape algebra is concerned."""
+    from experts4bit_qlora.nvme_experts import build_meta_experts
+    mod, _path, index = arena
+    meta = build_meta_experts(index, E, compute_dtype=torch.bfloat16)
+    assert meta._gate_up_shape == mod._gate_up_shape
+    assert meta._down_shape == mod._down_shape
+    assert meta.num_experts == mod.num_experts
+    assert meta.gate_up_proj.is_meta and meta.down_proj.is_meta
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel needs CUDA")
+def test_end_to_end_shapes_only_module_forward(arena):
+    """The assembled path: geometry from the arena, module from shapes alone, both
+    partitions served from disk, answer identical to the materialized reference."""
+    from experts4bit_qlora.hot_residency import _HotResidency, hot_residency_available
+    if not hot_residency_available():
+        pytest.skip("grouped-nf4-gemm [fast] kernel unavailable")
+    import triton.language as _tl
+    if not hasattr(_tl, "gather"):
+        import triton
+        pytest.skip(f"needs triton>=3.4 for tl.gather; box has {triton.__version__}")
+    from experts4bit_qlora.nvme_experts import _NvmeResidency, build_meta_experts
+
+    mod, path, index = arena
+    hot = torch.tensor([0, 1])
+    g = torch.Generator().manual_seed(7)
+    x = (torch.randn(5, H, generator=g, dtype=torch.float32) * 0.1).to(
+        "cuda", torch.bfloat16)
+    top_idx = torch.tensor([[2, 3], [4, 5], [0, 6], [7, 1], [3, 7]], device="cuda")
+    top_w = torch.full((5, 2), 0.5, device="cuda", dtype=torch.bfloat16)
+    ref = _HotResidency(mod.to("cuda"), hot, "cuda").forward(x, top_idx, top_w)
+
+    meta = build_meta_experts(index, E, compute_dtype=torch.bfloat16)
+    with ColdTier(path, hot_rows=6, pinned=True, index=index) as tier:
+        meta._e4b_cold_tier = tier
+        meta._e4b_arena_layer = LAYER
+        got = _NvmeResidency(meta, hot, "cuda").forward(x, top_idx, top_w)
+        assert tier.stats()["misses"] > 0
+    assert torch.equal(got, ref), "assembled shapes-only path diverges"

@@ -156,6 +156,59 @@ class _NvmeResidency(_HotResidency):
         return self._tier.stats()
 
 
+def expert_geometry_from_arena(index: dict) -> tuple:
+    """Recover ``(intermediate_dim, hidden_dim)`` from an NF4 arena's index.
+
+    Geometry comes from the ARENA, not from the model config, and that is
+    deliberate. For a plain MoE the expert input width equals ``hidden_size``, but
+    for a **latent** MoE it does not: Kimi K3's experts sit behind
+    ``routed_expert_{down,up}_proj`` and operate on a 3584-wide latent, while
+    ``hidden_size`` is 7168. Reading the config would size every expert twice too
+    wide. The bake already recorded the true per-expert shapes, so use those.
+
+    ``nf4.gate_up_blocks`` is ``[2*I, H/2]`` and ``nf4.down_blocks`` is
+    ``[H, I/2]``; the pair over-determines (I, H), so they are cross-checked
+    rather than trusted individually.
+    """
+    def seg(suffix):
+        g = next((s for s in index["segments"] if s["suffix"] == suffix), None)
+        if g is None:
+            raise KeyError(f"arena lacks {suffix!r}; segments: "
+                           f"{[s['suffix'] for s in index['segments']]}")
+        return tuple(g["shape_per_expert"])
+
+    two_i, half_h = seg("nf4.gate_up_blocks")
+    h_rows, half_i = seg("nf4.down_blocks")
+    intermediate, hidden = two_i // 2, half_h * 2
+    if two_i % 2 or intermediate != half_i * 2 or hidden != h_rows:
+        raise ValueError(
+            f"arena expert geometry is inconsistent: gate_up {(two_i, half_h)} "
+            f"implies (I={intermediate}, H={hidden}) but down {(h_rows, half_i)} "
+            f"implies (I={half_i * 2}, H={h_rows})")
+    return intermediate, hidden
+
+
+def build_meta_experts(index: dict, num_experts: int, *, has_gate: bool = True,
+                       activation=None, compute_dtype=None, quant_type: str = "nf4"):
+    """An expert module carrying SHAPES ONLY — no expert storage anywhere.
+
+    Built on ``meta``, so the ``[E, ...]`` packed buffers are never allocated.
+    Both partitions are later served from the arena by :class:`_NvmeResidency`,
+    which is what makes expert storage independent of model size: K3's 1.446 TB
+    of experts would otherwise have to exist somewhere just to be indexed.
+
+    Pair with :func:`enable_nvme_residency` on the same arena.
+    """
+    from . import Experts4bit, ExpertsNbit
+    intermediate, hidden = expert_geometry_from_arena(index)
+    cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
+    return cls(num_experts=num_experts, hidden_dim=hidden,
+               intermediate_dim=intermediate, has_gate=has_gate,
+               activation=activation or torch.nn.functional.silu,
+               compute_dtype=compute_dtype or torch.bfloat16,
+               quant_type=quant_type, device="meta")
+
+
 def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
                           *, hot_rows: int, device: str = "cuda",
                           pinned: bool = True, qd: int = 4,
