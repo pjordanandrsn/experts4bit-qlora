@@ -252,13 +252,25 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
         f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
         f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
 
-    # Stamp each module with its arena layer BEFORE construction: _build_cold
-    # runs inside _HotResidency.__init__ and needs it.
-    from . import ExpertsNbit
-    mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+    # Stamp each module with its arena layer BEFORE construction: _build_cold and
+    # _build_hot both run inside _HotResidency.__init__ and need it.
+    #
+    # Use the SHARED selection, not an independent walk: enable_hot_residency
+    # excludes any ExpertsNbit that is an ExpertsLoRA.base, so a plain
+    # `isinstance` sweep yields a different list AND a different order whenever
+    # wrapped and bare modules are interleaved — silently stamping real MoE layers
+    # with the wrong arena layer, or leaving them unstamped. Everything keying off
+    # hot_sets[i] must agree on what i means.
+    from .hot_residency import target_modules
+    mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(hot_sets)))
     if len(lay) < len(hot_sets):
         raise ValueError(f"layers has {len(lay)} entries for {len(hot_sets)} hot_sets")
+    if len(mods) < len(hot_sets):
+        raise ValueError(
+            f"hot_sets has {len(hot_sets)} entries but the model exposes "
+            f"{len(mods)} targetable MoE module(s) — refusing to stamp a partial "
+            f"set, which would serve some layers from the wrong arena rows")
     for i, m in enumerate(mods[:len(hot_sets)]):
         m._e4b_cold_tier = tier
         m._e4b_arena_layer = lay[i]

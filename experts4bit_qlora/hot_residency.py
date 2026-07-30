@@ -274,6 +274,35 @@ def _eligible(mod):
     return None
 
 
+def wrapped_bases(model) -> set:
+    """ids of every ``ExpertsNbit`` that is an ``ExpertsLoRA.base``."""
+    try:
+        from experts4bit_qlora.lora import ExpertsLoRA
+        return {id(m.base) for m in model.modules()
+                if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
+    except ImportError:
+        return set()
+
+
+def target_modules(model) -> list:
+    """The MoE modules a residency patch targets, in dispatch order.
+
+    ``ExpertsLoRA.forward`` bypasses ``base.forward`` (it calls ``base._project``),
+    so a wrapped frozen base is NEVER dispatched — patching it would be dead code
+    that only duplicates weights. Any ``ExpertsNbit`` that is an
+    ``ExpertsLoRA.base`` is therefore excluded.
+
+    Shared so that everything keying off ``hot_sets[i]`` agrees on what ``i``
+    means. Re-deriving this list independently is how a caller ends up stamping
+    per-module state onto the wrong layers when LoRA-wrapped and bare modules are
+    interleaved.
+    """
+    from . import ExpertsNbit
+    wrapped = wrapped_bases(model)
+    return [m for m in model.modules()
+            if isinstance(m, ExpertsNbit) and id(m) not in wrapped]
+
+
 def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
                          verbose: bool = False, state_cls=None) -> int:
     """Partition every eligible ``ExpertsNbit`` under ``model`` into a resident
@@ -330,17 +359,8 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     except ImportError:
         pass
     if hasattr(model, "modules"):
-        # ExpertsLoRA.forward bypasses base.forward (it calls base._project), so the
-        # frozen base is NEVER dispatched — patching it is dead code that only
-        # duplicates weights. Exclude any Experts4bit that is an ExpertsLoRA.base.
-        try:
-            from experts4bit_qlora.lora import ExpertsLoRA
-            wrapped = {id(m.base) for m in model.modules()
-                       if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
-        except ImportError:
-            wrapped = set()
-        all_nbit = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
-        mods = [m for m in all_nbit if id(m) not in wrapped]
+        mods = target_modules(model)
+        wrapped = wrapped_bases(model)
         if wrapped and not mods:
             raise NotImplementedError(
                 "every ExpertsNbit here is an ExpertsLoRA.base (the streaming-loader / "

@@ -283,7 +283,7 @@ def test_expert_geometry_recovered_from_the_arena(arena):
     config would size every expert twice too wide."""
     from experts4bit_qlora.nvme_experts import expert_geometry_from_arena
     _mod, _path, index = arena
-    assert expert_geometry_from_arena(index) == (I, H)
+    assert expert_geometry_from_arena(index) == (INTER, H)
 
 
 def test_inconsistent_arena_geometry_is_rejected():
@@ -291,8 +291,8 @@ def test_inconsistent_arena_geometry_is_rejected():
     silently pick one and build wrongly-shaped experts."""
     from experts4bit_qlora.nvme_experts import expert_geometry_from_arena
     bad = {"segments": [
-        {"suffix": "nf4.gate_up_blocks", "shape_per_expert": [2 * I, H // 2]},
-        {"suffix": "nf4.down_blocks", "shape_per_expert": [H, (I // 2) + 8]},
+        {"suffix": "nf4.gate_up_blocks", "shape_per_expert": [2 * INTER, H // 2]},
+        {"suffix": "nf4.down_blocks", "shape_per_expert": [H, (INTER // 2) + 8]},
     ]}
     with pytest.raises(ValueError, match="inconsistent"):
         expert_geometry_from_arena(bad)
@@ -341,3 +341,51 @@ def test_end_to_end_shapes_only_module_forward(arena):
         got = _NvmeResidency(meta, hot, "cuda").forward(x, top_idx, top_w)
         assert tier.stats()["misses"] > 0
     assert torch.equal(got, ref), "assembled shapes-only path diverges"
+
+
+# ----------------- Bugbot #42: module selection must be SHARED ---------------
+def test_target_modules_excludes_lora_bases_and_keeps_order(arena):
+    """Regression: `enable_nvme_residency` used to walk modules itself, which
+    disagreed with `enable_hot_residency` whenever LoRA-wrapped and bare modules
+    were interleaved — stamping real MoE layers with the wrong arena layer index.
+    Both must now derive the target list from one implementation.
+    """
+    from experts4bit_qlora.lora import ExpertsLoRA
+    from experts4bit_qlora.hot_residency import target_modules
+    mod, _path, index = arena
+
+    class Net(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            # interleaved on purpose: bare, wrapped, bare
+            self.a = _meta_module()
+            self.b = ExpertsLoRA(_module(), r=4, alpha=8, dtype=torch.bfloat16)
+            self.c = _meta_module()
+
+    net = Net()
+    targets = target_modules(net)
+    naive = [m for m in net.modules() if isinstance(m, type(mod))]
+    # the naive sweep sees the wrapped BASE too, so the lists differ in length...
+    assert len(naive) > len(targets), (len(naive), len(targets))
+    # ...and no target is a wrapped base
+    bases = {id(m.base) for m in net.modules()
+             if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
+    assert all(id(t) not in bases for t in targets)
+    # order is module-declaration order, so hot_sets[i] maps predictably
+    assert targets[0] is net.a and targets[-1] is net.c
+
+
+def test_enable_nvme_residency_refuses_a_partial_stamp(arena):
+    """More hot_sets than targetable modules must raise, not stamp a prefix and
+    serve the remaining layers from whatever rows happen to be there."""
+    from experts4bit_qlora.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    with pytest.raises(ValueError, match="targetable MoE module"):
+        enable_nvme_residency(One(), path, [torch.tensor([0]), torch.tensor([1])],
+                              hot_rows=4, device="cpu")
