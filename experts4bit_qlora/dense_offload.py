@@ -509,11 +509,20 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
                     h._prefetch_next = nxt
 
     total = sum(h.bytes for h in handles)
-    unpinned = [i for i, h in enumerate(handles) if not h.pinned]
+    host = sum(h.host_bytes for h in handles)
+    disk = sum(h.disk_bytes for h in handles)
+    # Only host-resident homes can fail to pin. Counting disk homes here reported
+    # every layer as unpinned-capable and, worse, called disk bytes "pinned".
+    unpinned = [i for i, h in enumerate(handles) if h.host_bytes and not h.pinned]
     if log is not None:
+        where = []
+        if host:
+            where.append(f"{host / 1e9:.2f} GB pinned on the host")
+        if disk:
+            where.append(f"{disk / 1e9:.2f} GB served from disk (0 resident)")
         log(f"  dense offload: {len(handles)} layers, "
             f"{sum(len(h.slots) for h in handles)} tensors, "
-            f"{total / 1e9:.2f} GB pinned on the host "
+            f"{' + '.join(where) or 'nothing managed'} "
             f"({total / len(handles) / 1e6:.0f} MB/layer)")
         if unpinned:
             log(f"  WARNING: {len(unpinned)} layer(s) could not pin their homes; "
@@ -537,8 +546,16 @@ def dense_offload_report(handles) -> dict:
         "disk_bytes": disk,
         "verified_bit_exact": sum(h.verified for h in handles),
         "per_layer_bytes": int(per_layer),
-        "all_pinned": all(h.pinned for h in handles),
+        # Pinning is a property of HOST-resident homes. Asking it of a disk-served
+        # handle is a category error, and `all(...)` over an empty set of them
+        # answered True -- reporting "all_pinned" about a path that pins nothing.
+        "host_resident_layers": sum(1 for h in handles if h.host_bytes),
+        "all_pinned": all(h.pinned for h in handles if h.host_bytes),
         "staged_now": sum(len(v) for v in _DenseOffload._staged_now.values()),
-        # s/token at the measured 19 GB/s host->device rate, weights only
-        "seconds_per_token_at_19GBs": round(total / 19e9, 3),
+        # s/token at the measured 19 GB/s host->device rate -- HOST bytes only. Disk
+        # homes do not ride PCIe from pinned RAM; they are bounded by the device the
+        # checkpoint sits on, which is one to two orders of magnitude slower. Costing
+        # them at a PCIe rate said 5.7 s/token for a Kimi K3 run that measured 91.8.
+        "seconds_per_token_at_19GBs": round(host / 19e9, 3),
+        "disk_bytes_per_token": disk,
     }
