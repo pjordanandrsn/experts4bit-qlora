@@ -403,3 +403,35 @@ def test_stage_sweeps_even_when_this_layer_is_already_bound():
     hs[0].stage()                               # the no-op path
     assert not hs[1].staged, "prefetched sibling survived a single-slot stage()"
     assert sum(1 for h in hs if h.staged) == 1, [h.staged for h in hs]
+
+
+@cuda
+def test_prefetch_wait_uses_this_layers_stream():
+    """Bugbot on #46 (High): `_consume_ready_event` used a bare
+    `torch.cuda.current_stream()`, so under pipeline parallelism the thread's
+    current device — whatever ran last — decides which stream waits. The wrong
+    stream waiting means this layer's compute runs against an in-flight copy.
+
+    Asserts the lookup is device-qualified. One GPU cannot exhibit the divergence,
+    so the call itself is what is checked."""
+    m = _model("cuda")
+    hs = enable_dense_offload(m, "cuda", pin=True, prefetch=True)
+    hs[0].stage_for_inference()                  # prefetches hs[1]
+    assert hs[1].ready_event is not None, "no prefetch to wait on"
+
+    seen = []
+    real = torch.cuda.current_stream
+
+    def spy(device=None):
+        seen.append(device)
+        return real(device)
+
+    torch.cuda.current_stream = spy
+    try:
+        hs[1]._consume_ready_event()
+    finally:
+        torch.cuda.current_stream = real
+    assert seen, "current_stream was never consulted"
+    assert all(d is not None for d in seen), (
+        f"bare current_stream() used — device-blind under pipeline parallelism: {seen}")
+    assert all(torch.device(d) == hs[1].device for d in seen), seen

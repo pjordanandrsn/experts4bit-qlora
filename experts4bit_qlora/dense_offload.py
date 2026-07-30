@@ -204,13 +204,18 @@ class _DenseOffload:
     def _consume_ready_event(self) -> None:
         evt = self.ready_event
         if evt is not None:
+            # current_stream(SELF.DEVICE), not the thread's current device. Under
+            # pipeline parallelism the thread's current device is whatever ran last,
+            # so a bare current_stream() makes the WRONG stream wait and this layer's
+            # compute proceeds against an in-flight copy. (Bugbot, PR #46.)
+            compute = torch.cuda.current_stream(self.device)
             if _stats_enabled():
                 wait = torch.cuda.Event(enable_timing=True)
-                wait.record()
-                torch.cuda.current_stream().wait_event(evt)
+                wait.record(compute)
+                compute.wait_event(evt)
                 _stats().record_stall(wait, evt)
             else:
-                torch.cuda.current_stream().wait_event(evt)
+                compute.wait_event(evt)
             self.ready_event = None
         self._bind()
 
