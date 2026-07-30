@@ -421,6 +421,105 @@ def test_loaded_model_trains_with_frozen_experts(build, per_expert, tmp_path):
             assert torch.equal(p.detach(), packed_before[n])  # frozen 4-bit experts unchanged
 
 
+@pytest.mark.parametrize(
+    "build,per_expert",
+    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
+    ids=["olmoe", "qwen3_moe", "gemma4", "granitemoe"],
+)
+def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
+    """The same training path as above, but with ``offload=True`` -- the matrix's actual fixture.
+
+    Every rented-pod training run this project reports uses ``offload=True`` + gradient
+    checkpointing, and until now **no test enabled offload**. That intersection is exactly
+    where the autograd-pins-staged-experts bug lived: two earlier fixes for it were inert and
+    both passed the suite, because the suite never staged an offloaded expert through a
+    backward. This closes it per architecture, so a loader change that breaks staging for one
+    model family fails here instead of on a billed GPU.
+
+    Asserts the stage pre-hook is not merely registered but **fires** (a patch count is not a
+    call count), that gradients flow to the adapters and never to the frozen experts, and that
+    the packed bytes are bit-identical afterwards -- read from the CPU homes, since under
+    offload the module's registered tensors are 0-element placeholders.
+    """
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+    from experts4bit_qlora.lora import add_attention_lora
+    from experts4bit_qlora.offload import _ExpertOffload
+
+    _ExpertOffload._resident = None  # class-level single-slot; isolate this test
+    _ExpertOffload._staged_now = set()
+    try:
+        torch.manual_seed(0)
+        _write_ckpt(build(), str(tmp_path), per_expert=per_expert)
+        try:
+            model, cfg = load_moe_4bit_streaming(
+                str(tmp_path), DEVICE, DTYPE, r=4, alpha=8, offload=True, pin=False
+            )
+        except _QUANTIZE_UNAVAILABLE as e:
+            pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+        add_attention_lora(model, 4, 8, DTYPE)
+
+        # The loader hangs the handle on the module it hooked; the packed bytes now live in
+        # handle.home (CPU) and the module holds 0-element placeholders while evicted.
+        hooked = [m for m in model.modules() if getattr(m, "_offload", None) is not None]
+        assert hooked, "offload=True attached no handles -- the loader offloaded no experts"
+        packed_before = {}
+        for li, mod in enumerate(hooked):
+            h = mod._offload
+            for name in h._param_names + h._buffer_names:
+                t = h.home[name]
+                assert t.numel() > 0, f"layer {li} {name}: home is empty -- nothing to compare"
+                assert getattr(h.base, name).numel() == 0, f"layer {li} {name}: not evicted after load"
+                packed_before[(li, name)] = t.detach().clone()
+        assert packed_before
+
+        # Staging is observed by its EFFECT, not by counting hooks: our pre-hook registers after
+        # the loader's, so if staging works the base tensors are materialized by the time it runs.
+        live = []
+        for mod in hooked:
+            h = mod._offload
+            name = h._param_names[0]
+            mod.register_forward_pre_hook(
+                lambda *_a, _h=h, _n=name: live.append(getattr(_h.base, _n).numel())
+            )
+
+        for n, p in model.named_parameters():
+            p.requires_grad_("lora" in n)  # only LoRA adapters train
+        trainable = [p for p in model.parameters() if p.requires_grad]
+        assert trainable
+        lora0 = trainable[0].detach().clone()
+
+        model.config.use_cache = False
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        model.enable_input_require_grads()
+        model.train()
+        opt = torch.optim.Adam(trainable, lr=3e-3)
+
+        torch.manual_seed(1)
+        ids = torch.randint(0, cfg.vocab_size, (2, 16), device=DEVICE)
+        losses = []
+        for _ in range(8):
+            opt.zero_grad()
+            out = model(input_ids=ids, labels=ids)
+            out.loss.backward()
+            for n, p in model.named_parameters():
+                if not p.requires_grad:
+                    assert p.grad is None  # frozen params (incl. the offloaded experts) get no grad
+            opt.step()
+            losses.append(out.loss.item())
+
+        assert len(live) >= len(hooked), f"expert modules ran {len(live)}x for {len(hooked)} layers"
+        assert all(n > 0 for n in live), "experts were NOT staged: still 0-element inside the forward"
+        assert all(x == x for x in losses)  # no NaN
+        assert losses[-1] < losses[0]  # the adapters learned through the staged experts
+        assert not torch.equal(trainable[0].detach(), lora0)
+        for (li, name), before in packed_before.items():
+            now = hooked[li]._offload.home[name]
+            assert torch.equal(now.detach(), before), f"layer {li} {name} changed under offload"
+    finally:
+        _ExpertOffload._resident = None
+        _ExpertOffload._staged_now = set()
+
+
 # ------------------------- arena serving: experts on meta -------------------
 def _bake_arena_for(model, arena_path):
     """Relocate a loaded model's own quantized expert stacks into an NF4 arena."""
