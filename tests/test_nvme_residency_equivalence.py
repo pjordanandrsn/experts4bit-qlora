@@ -16,9 +16,7 @@ RAM. That keeps the provenance claim intact end to end: any divergence below is 
 bug in the tiering, not an artifact of a re-quantization step.
 """
 import json
-import os
 import struct
-import sys
 
 import pytest
 import torch
@@ -34,7 +32,7 @@ from experts4bit_qlora.nvme_experts import NF4_SEGMENTS, _TieredStack  # noqa: E
 
 # NF4 blocks must tile each expert exactly, so BOTH in_features dims
 # (gate_up's hidden, down's intermediate) must be multiples of blocksize 64.
-E, I, H = 8, 64, 128         # experts, intermediate, hidden
+E, INTER, H = 8, 64, 128         # experts, intermediate, hidden
 LAYER = 0
 KINDS = tuple(NF4_SEGMENTS.values())
 
@@ -54,8 +52,8 @@ def _st_bytes(tensors: dict) -> bytes:
 def _module():
     """A real Experts4bit built from deterministic bf16 weights."""
     g = torch.Generator().manual_seed(1689)
-    gate_up = torch.randn(E, 2 * I, H, generator=g, dtype=torch.float32) * 0.05
-    down = torch.randn(E, H, I, generator=g, dtype=torch.float32) * 0.05
+    gate_up = torch.randn(E, 2 * INTER, H, generator=g, dtype=torch.float32) * 0.05
+    down = torch.randn(E, H, INTER, generator=g, dtype=torch.float32) * 0.05
     return Experts4bit.from_float(gate_up.to(torch.bfloat16), down.to(torch.bfloat16),
                                   has_gate=True, activation=torch.nn.functional.silu,
                                   quant_type="nf4", compute_dtype=torch.bfloat16)
@@ -149,7 +147,8 @@ def test_wrong_arena_names_the_missing_segment(arena, tmp_path):
         t = gu_p[e].contiguous().cpu()
         tensors[f"model.layers.0.mlp.experts.{e}.other.blocks"] = (
             tuple(t.shape), "U8", t.numpy().tobytes())
-    snap = tmp_path / "snap2"; snap.mkdir()
+    snap = tmp_path / "snap2"
+    snap.mkdir()
     (snap / "model.safetensors").write_bytes(_st_bytes(tensors))
     p2 = str(tmp_path / "b.arena")
     bake_expert_tensors(str(snap), p2,
@@ -212,7 +211,7 @@ def _meta_module():
     """Same geometry as `_module()` but on `meta`: expert buffers are unallocated.
     This is the shape a K3-scale load must take — 1.446 TB of experts cannot be
     materialized, so nothing may index the module's own [E, ...] storage."""
-    m = Experts4bit(num_experts=E, hidden_dim=H, intermediate_dim=I,
+    m = Experts4bit(num_experts=E, hidden_dim=H, intermediate_dim=INTER,
                     has_gate=True, activation=torch.nn.functional.silu,
                     quant_type="nf4", compute_dtype=torch.bfloat16, device="meta")
     assert m.gate_up_proj.is_meta, "expert buffers must not be allocated"
@@ -232,7 +231,7 @@ def test_meta_module_allocates_no_expert_storage(arena):
         assert buf.is_meta, f"{name} is materialized"
         assert buf.device.type == "meta", f"{name} on {buf.device}"
     # and the shapes are still real, which is all the engine needs from it
-    assert m._gate_up_shape == (2 * I, H) and m._down_shape == (H, I)
+    assert m._gate_up_shape == (2 * INTER, H) and m._down_shape == (H, INTER)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel needs CUDA")
