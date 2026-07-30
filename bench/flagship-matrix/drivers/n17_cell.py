@@ -22,6 +22,7 @@ actually the reference path.
 import argparse
 import gc
 import os
+import socket
 import hashlib
 import json
 import statistics
@@ -167,7 +168,22 @@ def host_fingerprint():
             out["host_mem_gb"] = round(int(fh.readline().split()[1]) / 1e6, 1)
     except Exception as e:
         out["host_error"] = f"{type(e).__name__}: {e}"
-    out["pod_id"] = os.environ.get("RUNPOD_POD_ID") or os.environ.get("HOSTNAME")
+    # Two DIFFERENT identifiers, recorded under honest names.
+    #
+    # `pod_id` is the RunPod id (l4c2838z20o6va) and is what external telemetry
+    # and the bill cap key on -- but the container has NO way to learn it: this
+    # image sets no RUNPOD_* env var at all, and HOSTNAME is unset in a
+    # non-interactive shell, so it is usually None and the CONTROLLER has to
+    # supply it. E4B_POD_ID is that channel.
+    #
+    # `container_host` is socket.gethostname(), which always answers but returns
+    # the container id (8abe61ba69f8), NOT the pod id. Recording it as `pod_id`
+    # would silently put the wrong key in the receipt -- accurate value, wrong
+    # name, which is worse than a null because it joins to nothing and looks
+    # like it should.
+    out["pod_id"] = (os.environ.get("E4B_POD_ID") or os.environ.get("RUNPOD_POD_ID")
+                     or os.environ.get("HOSTNAME"))
+    out["container_host"] = socket.gethostname()
     return out
 
 
