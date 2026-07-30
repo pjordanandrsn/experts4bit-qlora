@@ -12,9 +12,10 @@ domains, and what does it cost in time, memory and energy.
   a second would need a ~50 GB download into ~30 GB of free space, so this
   matrix is **single-model by constraint, not by choice** — stated here so no
   reader infers a cross-model claim.
-- **Card:** RTX 4090 (24 GB, sm_89) at US-IL-1, where the volume lives. The
-  5090 wedged on three consecutive creates today; sm_86 requires dropping the
-  volume, which this phase cannot do. **Single-architecture by availability.**
+- **Card:** a 24 GB Ada-class GPU (sm_89) in the datacenter that hosts the
+  model cache. A 32 GB Blackwell card failed to provision on three consecutive
+  attempts, and reaching sm_86 would have meant giving up the cached model this
+  phase needs. **Single-architecture by availability, not by choice.**
 - **Config, fixed for every cell:** `offload=True` + gradient checkpointing
   (`use_reentrant=False`), seq 512, r=8, α=16, AdamW lr 1e-4, batch 1.
   Offload is mandatory: measured 27.30 GB unoffloaded vs 9.13 GB offloaded on
@@ -62,8 +63,8 @@ proxy real industry data.**
 ## Amendment 1 (pre-data) — the volume was resized, so the matrix is two-model
 
 The single-model clause above was true when written and is now false: the
-operator resized the network volume **100 GB -> 250 GB** (~177 GB free), which
-removes the constraint that forced one model. The matrix becomes:
+backing volume was enlarged (~177 GB free), which removes the constraint that
+forced one model. The matrix becomes:
 
 - **Models:** Qwen3-30B-A3B (cached) **and** a second 30B-class MoE downloaded
   into the resized volume. 2 models x 5 datasets x 2 arms (fused vs reference)
@@ -72,9 +73,8 @@ removes the constraint that forced one model. The matrix becomes:
   B1-B4, same $25 cap.
 
 No band moved. No data existed when this was written -- no matrix cell had
-run, and the datasets had only just been generated. The recurring cost of the
-resize (~$7/mo -> ~$17.50/mo at ~$0.07/GB/month) is the operator's standing
-decision, not a per-run cost of this matrix.
+run, and the datasets had only just been generated. The storage enlargement is
+a standing infrastructure decision, not a per-run cost of this matrix.
 
 **Second-model selection is fixed HERE, pre-data**, so it cannot be chosen
 after seeing which one flatters the result: the first of

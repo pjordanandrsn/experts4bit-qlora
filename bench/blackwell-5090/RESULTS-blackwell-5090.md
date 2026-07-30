@@ -1,9 +1,10 @@
 # Blackwell (sm_120) run: both cached MoE models train and infer; two defects found and fixed
 ### 2026-07-29 · RTX 5090 (33.7 GB, sm_120, driver 570.195.03) · torch 2.8.0+cu128 · transformers 5.14.1 · bitsandbytes 0.50.0 · e4b 0.6.4 · grouped-nf4-gemm **0.2.3 (ship candidate)**
 
-Rented pod in US-IL-1 (the datacenter holding the `qlora-workspace` volume;
-**no 4090 stock in that DC at run time**, on-demand or spot — the 5090 was the
-only GPU class available there, and the volume is datacenter-locked).
+Rented GPU in the datacenter that hosts the model-cache volume. **No 24 GB Ada
+card was available there at run time**, on-demand or spot — the 32 GB Blackwell
+was the only class on offer, and the cache volume is datacenter-locked, so
+moving regions was not an option.
 
 ## What ran, and what it shows
 
@@ -117,5 +118,5 @@ the expert GEMM directly.
 - Loss curves here are **not** convergence evidence: 4–8 steps at batch 1,
   non-monotonic. They show the training path executes end to end.
 
-**Cost:** ~$2 of the standing $35 job cap. Pod 404-verified at teardown, zero
-pods live, volume `qlora-workspace` (100 GB) intact.
+**Teardown:** the rented GPU was 404-verified after evidence was pulled, with
+zero instances left running and the cache volume intact.
