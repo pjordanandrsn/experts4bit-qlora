@@ -452,7 +452,8 @@ def _bake_arena_for(model, arena_path):
     for name, (shape, dtype, data) in tensors.items():
         hdr[name] = {"dtype": dtype, "shape": list(shape),
                      "data_offsets": [off, off + len(data)]}
-        blobs.append(data); off += len(data)
+        blobs.append(data)
+        off += len(data)
     hj = json.dumps(hdr).encode()
     snap = os.path.join(os.path.dirname(arena_path), "arena_snap")
     os.makedirs(snap, exist_ok=True)
