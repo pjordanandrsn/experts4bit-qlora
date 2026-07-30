@@ -475,7 +475,7 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
         # Staging is observed by its EFFECT, not by counting hooks: our pre-hook registers after
         # the loader's, so if staging works the base tensors are materialized by the time it runs.
         live = []
-        staged = []
+        staged, evicted = [], []
         for mod in hooked:
             h = mod._offload
             name = h._param_names[0]
@@ -484,13 +484,17 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
             )
             # Count stage() itself, so a failure can say whether the pre-hook never ran or ran
             # and something re-evicted afterwards -- those have different fixes.
-            _real = h.stage
+            _real_stage, _real_evict = h.stage, h.evict
 
-            def _counting_stage(_h=h, _real=_real):
+            def _counting_stage(_h=h, _r=_real_stage):
                 staged.append(_h)
-                return _real()
+                return _r()
 
-            h.stage = _counting_stage
+            def _counting_evict(_h=h, _r=_real_evict):
+                evicted.append(_h)
+                return _r()
+
+            h.stage, h.evict = _counting_stage, _counting_evict
 
         for n, p in model.named_parameters():
             p.requires_grad_("lora" in n)  # only LoRA adapters train
@@ -510,17 +514,18 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
         for _ in range(8):
             opt.zero_grad()
             out = model(input_ids=ids, labels=ids)
-            n_fwd_calls, n_fwd_stage = len(live), len(staged)
+            n_call, n_stage, n_evict = len(live), len(staged), len(evicted)
             try:
                 out.loss.backward()
             except RuntimeError as e:  # re-raise carrying the staging counts the message needs
                 raise AssertionError(
                     f"backward failed under offload for {len(hooked)} offloaded layer(s). "
-                    f"forward: {n_fwd_calls} expert calls / {n_fwd_stage} stage() calls; "
-                    f"backward so far: {len(live) - n_fwd_calls} expert calls / "
-                    f"{len(staged) - n_fwd_stage} stage() calls. If the backward stage() count is "
-                    "0 the pre-hook never ran; if it is non-zero the layer was staged and then "
-                    f"re-evicted before its own backward read it. Original: {e}"
+                    f"forward: {n_call} calls / {n_stage} stage / {n_evict} evict; "
+                    f"backward so far: {len(live) - n_call} calls / {len(staged) - n_stage} stage "
+                    f"/ {len(evicted) - n_evict} evict. A backward stage of 0 means the pre-hook "
+                    "never ran; stage>0 with evict>0 means the checkpoint recompute ran PAST the "
+                    "expert module, firing the evict POST-hook, so the layer was un-staged before "
+                    f"its own backward read it. Original: {e}"
                 ) from e
             for n, p in model.named_parameters():
                 if not p.requires_grad:
