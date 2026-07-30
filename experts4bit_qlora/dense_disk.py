@@ -52,6 +52,13 @@ _DTYPES: dict[str, torch.dtype] = {
 
 _ALIGN = 4096          # O_DIRECT wants offset, length and buffer all aligned to this
 
+# Linux caps a single read at 0x7FFFF000 (~2.1 GB) no matter how much you ask for, so
+# a tensor bigger than that comes back SHORT rather than erroring. K3 hits this on
+# embed_tokens and lm_head at 2.35 GB each. Read in aligned chunks and loop; the chunk
+# size is a module constant so a test can shrink it and exercise the loop on a tensor
+# small enough to live in a repo.
+_MAX_READ = 1 << 30    # 1 GiB, a multiple of _ALIGN
+
 
 class _Located:
     """Where one tensor's bytes live, and what shape to read them back as."""
@@ -164,9 +171,23 @@ class DenseDiskSource:
         # O_DIRECT contract hold (offset aligned, length aligned, address aligned)
         skew = (-buf.data_ptr()) % _ALIGN if self.direct else 0
         window = buf[skew:skew + span]
-        got = os.preadv(self._fd(loc.path), [memoryview(window.numpy())], lo)
-        if got < pad + loc.nbytes:
-            raise IOError(f"short read for {name}: {got} of {span} bytes at {lo}")
+        fd = self._fd(loc.path)
+        mv = memoryview(window.numpy())
+        # Only the bytes this tensor needs are guaranteed to exist: for the LAST
+        # tensor in a file the aligned window runs past EOF, so a read of the full
+        # span legitimately comes back short. Demanding the whole span turned that
+        # normal case into an error.
+        need = pad + loc.nbytes
+        got = 0
+        while got < need:
+            # every partial read stays aligned: `got` advances by a multiple of
+            # _ALIGN, so offset, length and buffer address all remain aligned, which
+            # O_DIRECT requires of each individual call and not merely of the whole
+            n = os.preadv(fd, [mv[got:got + min(_MAX_READ, span - got)]], lo + got)
+            if n <= 0:
+                raise IOError(f"short read for {name}: {got} of {span} bytes at {lo} "
+                              f"(read returned {n})")
+            got += n
         self.reads += 1
         self.read_bytes += span
         self.slack_bytes += span - loc.nbytes

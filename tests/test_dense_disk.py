@@ -105,6 +105,31 @@ def test_unaligned_tensors_are_read_correctly(tmp_path):
         src.close()
 
 
+@pytest.mark.parametrize("direct", [True, False])
+def test_reads_larger_than_one_syscall(tmp_path, monkeypatch, direct):
+    """Linux caps a single read at ~2.1 GB regardless of what you ask for, so a bigger
+    tensor comes back SHORT instead of erroring. K3 hits this on embed_tokens and
+    lm_head (2.35 GB each) and it slipped through every test here, because test
+    tensors are small — found only on real data.
+
+    Shrinking _MAX_READ exercises the same loop on a tensor that fits in a repo.
+    """
+    from experts4bit_qlora import dense_disk
+
+    monkeypatch.setattr(dense_disk, "_MAX_READ", 8192)   # aligned, forces many passes
+    big = {"big": torch.randn(400, 512), "after": torch.randn(8, 8)}
+    out = tmp_path / "big"
+    out.mkdir()
+    save_file(big, str(out / "m.safetensors"), metadata={"format": "pt"})
+    src = dense_disk.DenseDiskSource(str(out), direct=direct)
+    try:
+        assert src.tensors["big"].nbytes > 8192 * 4, "tensor must span several passes"
+        for k, want in big.items():
+            assert torch.equal(src.fetch(k), want), k
+    finally:
+        src.close()
+
+
 def test_fetch_aliases_staging_so_views_do_not_outlive_it(tmp_path):
     """Document the sharp edge the offload path has to respect.
 
