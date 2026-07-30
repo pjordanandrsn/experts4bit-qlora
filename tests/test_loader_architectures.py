@@ -520,6 +520,73 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
         _ExpertOffload._staged_now = set()
 
 
+@pytest.mark.parametrize(
+    "build,per_expert",
+    [(_olmoe, True), (_qwen3_moe, True), (_gemma4, False), (_granitemoe, False)],
+    ids=["olmoe", "qwen3_moe", "gemma4", "granitemoe"],
+)
+def test_gradient_checkpointing_recomputes_the_expert_layer(build, per_expert, tmp_path):
+    """Gradient checkpointing must RECOMPUTE the expert module, not merely be enabled on it.
+
+    ``gradient_checkpointing_enable()`` setting a flag on every submodule is a *blind* metric for
+    the property offloaded training depends on: that each expert layer's forward RUNS AGAIN during
+    backward, so the offload pre-hook re-stages its 4-bit weights before the re-dequantization
+    reads them. A model can report the flag set on 100 % of its modules and still never route the
+    expert layer through ``_gradient_checkpointing_func``.
+
+    So count the recompute instead of reading the flag: hook every ``ExpertsLoRA``, run one
+    forward, then one backward, and require the module to be called again during the backward.
+    Offload is deliberately OFF here -- this isolates the recompute question from staging, and
+    keeps the failure a clean count rather than a crash inside the backward.
+    """
+    from experts4bit_qlora import ExpertsLoRA
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+    from experts4bit_qlora.lora import add_attention_lora
+
+    torch.manual_seed(0)
+    _write_ckpt(build(), str(tmp_path), per_expert=per_expert)
+    try:
+        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    add_attention_lora(model, 4, 8, DTYPE)
+    for n, p in model.named_parameters():
+        p.requires_grad_("lora" in n)
+
+    expert_mods = [m for m in model.modules() if isinstance(m, ExpertsLoRA)]
+    assert expert_mods
+    calls = []
+    for mod in expert_mods:
+        mod.register_forward_pre_hook(lambda *_a: calls.append(1))
+
+    model.config.use_cache = False
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    model.enable_input_require_grads()
+    model.train()
+
+    # Positive control on the instrument: the flag reads set on the modules that carry it, which
+    # is the measurement this test exists to distrust. If it were ever False the count below
+    # would be trivially explained, so pin it.
+    flagged = [m for m in model.modules() if getattr(m, "gradient_checkpointing", False)]
+    assert flagged, "gradient_checkpointing flag set nowhere -- the count below would be vacuous"
+
+    torch.manual_seed(1)
+    ids = torch.randint(0, cfg.vocab_size, (2, 16), device=DEVICE)
+    out = model(input_ids=ids, labels=ids)
+    n_forward = len(calls)
+    assert n_forward >= len(expert_mods), f"{n_forward} expert calls for {len(expert_mods)} layers"
+    out.loss.backward()
+    n_recompute = len(calls) - n_forward
+
+    assert n_recompute > 0, (
+        f"gradient checkpointing did NOT recompute any expert layer: {n_forward} calls in the "
+        f"forward, {n_recompute} in the backward, across {len(expert_mods)} ExpertsLoRA modules "
+        f"with the flag set on {len(flagged)}. Offloaded training is unsupported for this "
+        "architecture until the expert layer is inside the checkpointed region -- the offload "
+        "pre-hook only re-stages the 4-bit weights when the layer forward runs again."
+    )
+
+
 # ------------------------- arena serving: experts on meta -------------------
 def _bake_arena_for(model, arena_path):
     """Relocate a loaded model's own quantized expert stacks into an NF4 arena."""
