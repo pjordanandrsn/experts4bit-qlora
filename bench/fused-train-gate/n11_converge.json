@@ -1,0 +1,81 @@
+{
+ "model": "Qwen/Qwen3-30B-A3B",
+ "steps": 24,
+ "note": "band NOT modified; this classifies the residual",
+ "reference": {
+  "losses": [
+   5.621658,
+   2.824302,
+   1.534871,
+   0.933936,
+   0.586945,
+   0.493909,
+   0.349165,
+   0.551803,
+   0.073838,
+   0.028515,
+   0.006901,
+   0.003966,
+   0.00125,
+   0.000275,
+   0.000224,
+   0.000858,
+   0.000159,
+   9.9e-05,
+   7.2e-05,
+   6.8e-05,
+   5.8e-05,
+   5e-05,
+   4.2e-05,
+   3.6e-05
+  ],
+  "s_per_step": 9.833
+ },
+ "fused": {
+  "losses": [
+   5.590467,
+   2.515054,
+   1.418691,
+   0.80439,
+   0.586042,
+   0.468384,
+   0.34689,
+   0.266063,
+   0.052996,
+   0.009929,
+   0.00119,
+   0.000424,
+   0.000194,
+   0.000121,
+   9e-05,
+   6.2e-05,
+   5.8e-05,
+   5.1e-05,
+   4.2e-05,
+   3.6e-05,
+   3.4e-05,
+   3e-05,
+   2.7e-05,
+   2.5e-05
+  ],
+  "s_per_step": 6.533
+ },
+ "floor": {
+  "reference_step0": 5.621658,
+  "fused_step0": 5.590467,
+  "abs_delta": 0.031191,
+  "interpretation": "step-0 forward: B=0 so the LoRA delta is identically zero; this delta is pure kernel/summation order",
+  "rel_delta": 0.005548
+ },
+ "analysis": {
+  "median_all": 0.00098,
+  "median_first_quarter": 0.07369,
+  "median_last_quarter": 2e-05,
+  "max_delta": 0.30925,
+  "final_delta": 1e-05,
+  "loss_scale_last_quarter": 5e-05,
+  "trend_ratio_last_over_first": 0.0003,
+  "rel_delta_last_quarter": 0.4,
+  "verdict": "CONVERGING -- delta shrinks as training settles; consistent with bounded summation-order noise, not a compounding bug"
+ }
+}

@@ -1,0 +1,2 @@
+{"ts": "2026-07-30T00:12:42+0000", "adapter": "base", "input_tokens": 30, "output_tokens": 32, "peak_vram_gb": 4.455, "wall_s": 35.1, "tok_per_s": 0.912, "stopped": "length", "e4b_version": "0.6.4", "torch": "2.8.0+cu128"}
+{"ts": "2026-07-30T00:13:05+0000", "adapter": "base", "input_tokens": 5, "output_tokens": 24, "peak_vram_gb": 4.451, "wall_s": 22.8, "tok_per_s": 1.051, "stopped": "length", "e4b_version": "0.6.4", "torch": "2.8.0+cu128"}

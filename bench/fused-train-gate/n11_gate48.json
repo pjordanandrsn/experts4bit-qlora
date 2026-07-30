@@ -1,0 +1,74 @@
+{
+ "model": "Qwen/Qwen3-30B-A3B",
+ "steps": 6,
+ "env": {
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "cap": [
+   8,
+   9
+  ],
+  "vram_total_gb": 25.26,
+  "gnf4": "0.2.4",
+  "e4b": "0.6.4"
+ },
+ "reference": {
+  "arm": "reference",
+  "layers": 48,
+  "n_patched": 0,
+  "kernel_calls": 0,
+  "tensors_hashed": 192,
+  "bytes_hashed": 16307453952,
+  "empty_skipped": 0,
+  "changed": 0,
+  "changed_sample": [],
+  "B1_bit_exact": true,
+  "control_detects_flipped_byte": true,
+  "train_peak_gb": 9.09,
+  "s_per_step": 9.396,
+  "losses": [
+   5.62166,
+   2.8243,
+   1.53487,
+   0.93394,
+   0.58695,
+   0.49391
+  ]
+ },
+ "fused": {
+  "arm": "fused",
+  "layers": 48,
+  "n_patched": 48,
+  "kernel_calls": 1152,
+  "tensors_hashed": 192,
+  "bytes_hashed": 16307453952,
+  "empty_skipped": 0,
+  "changed": 0,
+  "changed_sample": [],
+  "B1_bit_exact": true,
+  "control_detects_flipped_byte": true,
+  "train_peak_gb": 6.87,
+  "s_per_step": 6.414,
+  "losses": [
+   5.59047,
+   2.5175,
+   1.43006,
+   0.8099,
+   0.59159,
+   0.45623
+  ]
+ },
+ "gate": {
+  "G1_fused_trains_48_layers": true,
+  "G2_B1_bit_exact_fused": true,
+  "G2_B1_bit_exact_ref": true,
+  "G2_control_live": true,
+  "G3_kernel_called": true,
+  "G3_kernel_silent_ref": true,
+  "G4_peak_ratio": 0.756,
+  "G4_no_oom_no_scaling": true,
+  "G5_final_delta": 0.03768,
+  "G5_median_delta": 0.07124,
+  "G5_parity_within_0.05": false,
+  "GATE": "FAIL"
+ }
+}
