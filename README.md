@@ -23,7 +23,13 @@ promise is in [the support matrix](#storage-modes-the-support-matrix). This pack
 primitive with a **streaming loader** and **per-expert LoRA**, so you can actually *fine-tune* a
 real sparse-MoE on reasonable hardware.
 
-## What it buys you (measured on an RTX A2000 12 GB — in a NAS's PCIe 3.0 x8 slot; see METHODOLOGY "Test host")
+## What it buys you
+
+> **Two hosts appear below and they are not interchangeable.** The fit/train/serve
+> figures are an RTX A2000 12 GB in a NAS's PCIe 3.0 x8 slot (METHODOLOGY "Test
+> host"); the fused-vs-reference cost ratios are RTX 4090s. Host matters more than
+> it looks: the same config on two different 4090s moved **8.6 % in s/step** and
+> **3.4× in idle power**, and only the within-pair *ratio* survived that.
 
 - **It fits at all.** Full bf16 OLMoE-1B-7B is ~13.9 GB — it **OOMs** on a 12 GB card. In 4-bit
   it loads at **4.70 GB** and trains in <8 GB. The streaming loader never materializes the bf16
@@ -55,9 +61,12 @@ real sparse-MoE on reasonable hardware.
     difference between running and not, and up to **4.4× lower energy/token** from the batch that
     freed memory unlocks.
   - ***fused vs reference*, both 4-bit and both offloaded — the path you actually train on:**
-    **1.75–1.81× faster per step** at **0.754–0.755×** peak VRAM and **0.797–0.846×** energy per
-    step, measured across five datasets on a 30B-class MoE at 200 steps each, with held-out loss
-    unchanged (worst cell Δ0.00723 vs a registered ≤0.05 band). Receipts in
+    **1.52–1.81× faster per step** at **0.75–0.81×** peak VRAM and **0.86–0.92×** energy per
+    step, across **two** 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets
+    each, 200 steps per cell, with loss parity holding on both registered criteria
+    (`|Δ final-**train**-loss| ≤ 0.05` **and** median step-wise `|Δ| ≤ 0.05`; worst cell
+    0.03653). The second model reproduces the *direction* of every cost result at lower
+    magnitude, which is what its protocol registered — not a numeric match. Receipts in
     [`bench/flagship-matrix/`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/flagship-matrix/RESULTS-flagship-matrix.md)
     and [`bench/fused-train-gate/`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/fused-train-gate/RESULTS-fused-train-gate.md).
 
@@ -78,20 +87,74 @@ recompute path automatically, and modules with custom activations or
 non-nf4/64 storage are skipped rather than mis-activated.
 
 
-### Which door? (all six, one line each)
+### Which door? Start from what does not fit
 
-| You want | Call | Status |
-|---|---|---|
-| Train / maximum compatibility (any host, any scheme) | nothing — the reference `ExpertsNbit` forward is the default | supported + convergence-tested |
-| Faster frozen-expert **inference** on CUDA | `enable_fast(model)` (`[fast]`) | supported + benchmarked (3.65× bs=1) |
-| Serve past VRAM: hot experts resident, cold **streamed** | `enable_pipelined_residency(model, hot_sets, k_slots=k)` (`[fast]`) | supported on **standalone `Experts4bit`/`ExpertsNbit` modules** — the current serving engine (K is config: empty set = pure streaming, all experts = fully resident). ⚠️ **Raises `NotImplementedError` on `ExpertsLoRA`-wrapped bases**, which is what `load_moe_4bit_streaming` always produces — see the note below. |
-| Same, the v0 engine | `enable_hot_residency(model, hot_sets)` (`[fast]`) | **superseded** by pipelined (kept through 0.6 to reproduce the v0 receipts; removal in 0.7; warns at call) |
-| Hot experts resident, cold **computed on the host CPU** | `enable_cold_engine(model, hot_sets, dequant="auto")` | correct + CPU-complete tests (bit-exact host decode; all-cold runs with no CUDA/`[fast]`); **performance-experimental** — the host decode is a correctness path until the AVX2 kernel lands |
-| Models whose experts exceed VRAM, training or serving | `OFFLOAD_EXPERTS=1` / `load_moe_4bit_streaming(..., offload=True, prefetch=True)` | supported + benchmarked (layer-granular, deterministic) |
+Every mode below exists because something ran out: VRAM, host RAM, or disk. Find
+your constraint, not your model.
+
+**Nothing fits — I just want to train a fused-MoE at all.**
+`load_moe_4bit_streaming(model_id, ...)` and train. The reference `ExpertsNbit`
+forward is the default and needs no flag, works on any host and any storage
+scheme, and is the convergence-tested path.
+
+**It trains, but each step is slow.**
+`enable_fast_train(model)` (needs `[fast]`). Routes the *differentiable* expert
+path through the fused grouped kernel. **1.52–1.81× faster per step at ~0.75–0.81×
+peak VRAM and ~0.86–0.92× energy**, measured on two 30B-class MoEs across five
+datasets each, with held-out loss unchanged. Opt-in on purpose: it changes the
+expert summation order (group-sorted vs ascending expert id), an ulp-level
+difference that should be a deliberate choice in a training run, not a default.
+**Returns the number of modules patched — check it.** A zero means
+`grouped-nf4-gemm` is missing and you are silently on the reference path.
+
+**The experts do not fit in VRAM.**
+`load_moe_4bit_streaming(..., offload=True)` or `OFFLOAD_EXPERTS=1`. Frozen
+experts live in pinned CPU RAM and stream one layer at a time. This is what makes
+a 30B-class MoE trainable on a 24 GB card. Requires gradient checkpointing
+(`use_reentrant=False`), which the shipped trainer always enables; the
+unsupported non-checkpointed combination fails loudly rather than mis-training.
+
+**The experts do not fit in host RAM either.**
+`enable_nvme_residency(...)` — serves the cold expert tail from an NVMe arena
+instead of RAM. For models where even the pinned host copy is too large.
+
+**The DENSE side does not fit.**
+`enable_dense_offload(model, "cuda")` keeps the non-expert weights in pinned host
+RAM; `DenseDiskSource(path)` serves them from the checkpoint's own safetensors
+when host RAM cannot hold them either — 114.4 GB for a K3-class model. **Nothing
+is transformed**: the bytes handed to the GPU are the bytes in the checkpoint. The
+alternative way to fit a 114 GB dense side on a small card is to quantize it,
+which changes the model.
+
+**I am serving, not training, and want it faster.**
+`enable_fast(model)` (needs `[fast]`) — 3.65× at bs=1 decode on OLMoE geometry.
+Inference only; for training use `enable_fast_train`.
+
+**I am serving and have some spare VRAM to trade.**
+`enable_pipelined_residency(model, hot_sets, k_slots=k)` (needs `[fast]`). Keeps
+K hot experts per layer resident and streams the cold tail; K=0 is pure
+streaming, K=all is fully resident, the middle is the dial. **Pick the hot sets
+from a routing histogram, not by index** — that choice is worth +57–120% at
+identical VRAM, and the size of the gain is a property of your *host* (see below).
+⚠️ Requires standalone `Experts4bit`/`ExpertsNbit` modules and raises
+`NotImplementedError` on the `ExpertsLoRA` wrapper that `load_moe_4bit_streaming`
+always produces.
+
+**My GPU is small but my CPU is strong.**
+`enable_cold_engine(model, hot_sets, dequant="auto")` computes the cold experts on
+the host instead of streaming them. Bit-exact host decode and CPU-complete tests;
+**performance-experimental** until the AVX2 kernel lands.
+
+**Deprecated:** `enable_hot_residency` is superseded by
+`enable_pipelined_residency` (same capability, K is config). It still ships in
+0.7.0 — an earlier note promised removal *in* 0.7 and that was wrong — and warns
+at call. It is kept only so the v0 receipts stay reproducible; do not build on it.
 
 ```python
-from experts4bit_qlora import enable_fast, disable_fast
-enable_fast(model)    # returns the number of expert modules patched
+from experts4bit_qlora import enable_fast, enable_fast_train
+
+n = enable_fast(model)        # inference; returns modules patched
+n = enable_fast_train(model)  # training; assert n > 0 or you are on the reference path
 ```
 
 > **Both residency engines require standalone expert modules (2026-07-28).**
@@ -104,8 +167,9 @@ enable_fast(model)    # returns the number of expert modules patched
 > offload with residency is a library increment, not a supported configuration here.
 
 **Hot-expert residency** (`enable_hot_residency` — **superseded by
-`enable_pipelined_residency`**, kept through 0.6 to reproduce the v0 receipts;
-removal in 0.7; needs `[fast]` — it runs on
+`enable_pipelined_residency`**, kept so the v0 receipts stay reproducible. An
+earlier note here promised removal *in* 0.7; 0.7.0 shipped with it still present,
+so that promise was wrong and is withdrawn rather than quietly edited. Needs `[fast]` — it runs on
 the fused kernel and raises at enable time with an install hint when the
 kernel is missing) is the constrained-card path: it pins each MoE layer's
 *hottest* experts in VRAM (fused kernel, zero transfer) and streams only the
