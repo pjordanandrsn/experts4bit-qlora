@@ -7,10 +7,19 @@ enclosing :class:`~experts4bit_qlora.lora.ExpertsLoRA` copies that layer's exper
 before its experts forward, and a forward *post*-hook drops the GPU copy right after. Because
 training uses gradient checkpointing (``use_reentrant=False``), each decoder layer's forward is
 recomputed in the backward pass — the *same* pre-hook re-stages the experts for the recompute.
-(PyTorch stops that recompute *early*, as soon as the saved tensors are regenerated, so the evict
-post-hook does **not** fire on the recompute; eviction during backward is instead driven by a
-single-resident-slot policy — staging a layer first evicts the previously-staged one.) So only
-**one layer's** experts are GPU-resident at any instant, in forward and backward alike.
+The post-hook **does not evict during a backward** (see ``_evict_post_hook``); eviction there is
+driven by a single-resident-slot policy — staging a layer first evicts the previously-staged one.
+So only **one layer's** experts are GPU-resident at any instant, in forward and backward alike.
+
+    This module previously asserted that PyTorch stops the recompute *early*, as soon as the saved
+    tensors are regenerated, so the post-hook could never fire on a recompute. **That is false.**
+    Whether the recompute reaches the post-hook depends on where the checkpointed region's last
+    needed tensor is produced — an architecture detail. Measured on a 2-layer Gemma-4 under
+    ``offload=True`` + ``use_reentrant=False``: forward 2 calls / 2 stage / 2 evict, backward
+    1 call / 1 stage / **1 evict**, then the re-dequant read a 0-element placeholder. OLMoE,
+    Qwen3-MoE and GraniteMoe stop early and never exposed it, which is why the assumption survived.
+    ``tests/test_offload.py`` now pins the behaviour with a pure-torch region that uses the module's
+    output twice, forcing the recompute past it, with no model architecture involved.
 
 This lets a fused-MoE whose 4-bit experts exceed VRAM (Qwen3-30B-A3B ~15 GB, Gemma-4-26B-A4B
 ~13 GB) QLoRA-train on a 12 GB card, at the cost of one host->device expert transfer per layer per
@@ -30,7 +39,8 @@ Why this is correct (and why the hook goes on ``ExpertsLoRA``, not ``ExpertsNbit
   always enables.** Under checkpointing, each decoder layer's forward is recomputed in backward;
   the pre-hook re-stages that layer's experts for the recompute, and the recompute Function's
   backward (the re-dequant) runs *within that layer's backward segment* — while the layer is still
-  the single GPU-resident one, before the next layer to recompute stages and evicts it. So the
+  the single GPU-resident one, because nothing evicts it in between: the next layer to recompute
+  has not staged yet, and the post-hook is a no-op inside a backward. So the
   backward re-dequant always reads a staged weight. (Without checkpointing, the post-hook would
   evict a layer right after its initial forward and the plain backward's re-dequant would read the
   evicted placeholder — so **non-checkpointed offload training is unsupported**. It cannot corrupt
@@ -183,6 +193,28 @@ def _is_pinned(t: torch.Tensor) -> bool:
     where ``is_pinned`` is unavailable/raises without CUDA."""
     try:
         return bool(t.is_pinned())
+    except Exception:
+        return False
+
+
+# Probed once: ``-1`` outside a backward, a task id >= 0 inside one (including inside a
+# gradient-checkpoint recompute, which the autograd engine drives). Private API, so it is probed
+# rather than assumed; if a build lacks it, ``_in_backward`` reports False and eviction reverts to
+# the unconditional pre-fix behaviour rather than crashing.
+_GRAPH_TASK_ID = getattr(torch._C, "_current_graph_task_id", None)
+if _GRAPH_TASK_ID is not None:
+    try:
+        _GRAPH_TASK_ID = None if _GRAPH_TASK_ID() != -1 else _GRAPH_TASK_ID
+    except Exception:
+        _GRAPH_TASK_ID = None
+
+
+def _in_backward() -> bool:
+    """Whether the caller is running inside a backward pass (or a recompute the engine drives)."""
+    if _GRAPH_TASK_ID is None:
+        return False
+    try:
+        return _GRAPH_TASK_ID() != -1
     except Exception:
         return False
 
@@ -687,8 +719,22 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
         else:
             handle.stage()
 
+    def _evict_post_hook(module, args, output):
+        # NOT during a backward. A gradient-checkpoint recompute re-runs this layer's forward, and
+        # whether PyTorch stops that recompute *before* reaching this post-hook depends on where
+        # the region's last saved tensor is produced -- an architecture detail, not a guarantee.
+        # When the recompute runs past this module the post-hook fires and un-stages the layer
+        # before its OWN backward segment re-dequantizes it, which is a 0-element placeholder read.
+        # Measured on Gemma-4 (2 layers: forward 2 calls/2 stage/2 evict, backward 1/1/1 then the
+        # placeholder read); OLMoE, Qwen3-MoE and GraniteMoe happen to stop early and never saw it.
+        # Inside a backward the single-resident-slot policy already evicts -- staging the next
+        # layer to recompute evicts this one -- so skipping here keeps one-layer residency intact.
+        if _in_backward():
+            return
+        handle.evict()
+
     experts_lora.register_forward_pre_hook(_stage_pre_hook)
-    experts_lora.register_forward_hook(lambda module, args, output: handle.evict())
+    experts_lora.register_forward_hook(_evict_post_hook)
     return handle
 
 
