@@ -16,10 +16,14 @@ committed pre-data as `b08747f`, amended pre-data as `b33c553`) registered
 
 The prereg's own rule governs this document: *"If a cell OOMs or the pod dies, the
 shortfall is stated and the cell is reported missing rather than silently
-dropped."* The fused arm and the second model were not run — the second model was
-never downloaded, and the fused path's own correctness gate had to settle first
-(it did, on separate hardware:
-[`../fused-train-gate/RESULTS-fused-train-gate.md`](../fused-train-gate/RESULTS-fused-train-gate.md)).
+dropped."* **Why the fused arm is missing, precisely:** it was attempted first as a
+short probe and **hit CUDA OOM on the 24 GB card** (`Tried to allocate 96.00 MiB`
+with 51.69 MiB free). The matrix driver was then launched `ARMS=reference` and ran
+to completion as configured — `aggregated 5 cells, 5 scored`. That OOM is what
+produced the backward-pass fix (stash a closure rather than the packed weights, so
+the single-resident-layer offload policy survives autograd), verified afterward on
+separate hardware:
+[`../fused-train-gate/RESULTS-fused-train-gate.md`](../fused-train-gate/RESULTS-fused-train-gate.md).
 No cell failed. Ten registered cells simply do not exist, and no claim below
 draws on them.
 
