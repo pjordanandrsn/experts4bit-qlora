@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.7.0 — 2026-07-30
+
+**If you train Gemma-4-class models with `offload=True`, 0.6.x could not do it
+at all** — the first backward raised `backward re-dequantization read an
+offload-evicted expert`. The evict *post*-hook fired during the
+gradient-checkpoint recompute and un-staged the layer before its own backward
+re-dequantized it. `offload.py` documented the opposite as an invariant
+("PyTorch stops that recompute early, so the evict post-hook does **not** fire");
+whether the recompute reaches the post-hook depends on where the checkpointed
+region's last needed tensor is produced, which is an architecture detail. OLMoE,
+Qwen3-MoE and GraniteMoe stop early, which is why the wrong premise survived.
+The post-hook is now a no-op inside a backward; residency is unchanged, because
+the single-resident-slot policy already evicts there.
+
+**Two new ways to fit a model that does not fit.** `nvme_experts` serves the
+cold expert tail from NVMe, and `dense_offload` + `dense_disk` serve the
+*dense* side — the 114.4 GB of non-expert weights that pinned host RAM cannot
+hold for a K3-class model — straight from the checkpoint's own safetensors,
+byte for byte. Nothing is transformed: the alternative way to fit a 114 GB dense
+side on a small card is to quantize it, which changes the model.
+
+Also: the flagship matrix's **B1 bit-exactness gate is withdrawn** — it hashed
+`getattr(module, "gate_up_proj")`, which under `offload=True` is a 0-element
+placeholder, so it compared `sha256(b"")` with itself and could not fail. The
+performance numbers are independent measurements and stand; the assurance that
+the frozen stack was untouched during those ten cells does not, and is
+separately evidenced by the fused-train gate (16.31 GB hashed, byte-flip control
+fires). Its B2 table is corrected too: it reported "Δ eval" where the protocol
+registers `|Δ final-**train**-loss|` *and* median step-wise `|Δ|`. Both still
+pass; the worst cell is 3.4× inside the band, not the 7× the eval column implied.
+
+The README and `METHODOLOGY.md` §11 no longer end on "a memory optimization, not
+a speedup" without saying what the fused path measured: **1.75–1.81× faster per
+step at 0.754–0.755× peak VRAM and 0.797–0.846× energy**, both arms offloaded.
+
+## 0.6.7 — 2026-07-30
+
+**`e4b serve` could not load Kimi K3 at all.** Four blockers, each hidden behind
+the last: no `trust_remote_code` anywhere in the package (so `AutoConfig` raised
+before the architecture gate, with an opaque message), `kimi_k3` missing from
+`SUPPORTED_ARCHITECTURES`, a multimodal prefix that is per-family rather than
+universal, and per-expert MXFP4. `trust_remote_code` is a new argument plus
+`E4B_TRUST_REMOTE_CODE=1` and **defaults to OFF** — executing
+checkpoint-supplied code is the caller's decision, never a default.
+
+## 0.6.6 — 2026-07-29
+
+**Per-expert MXFP4 layouts load.** `dequantize_mxfp4` ended in
+`out.transpose(1, 2)`, hardcoding gpt-oss's rank-4 `[E, rows, G, B]` blocks, so a
+single expert projection `[rows, G, B]` raised `IndexError: Dimension out of
+range` instead of returning `[K, rows]`. That is the layout every
+DeepSeek-V3-lineage checkpoint ships per expert. `transpose(-2, -1)` is
+equivalent for the rank-4 case and correct for both.
+
+## 0.6.5 — 2026-07-29
+
+**Training could never reach the fused kernel, and `enable_fast` reported
+success anyway.** Two distinct problems, both fixed here:
+
+- `enable_fast()` patched all expert modules and returned a non-zero count while
+  the kernel was invoked **zero** times in train mode. `ExpertsLoRA` hands off to
+  the patched base only via `_delegate_to_base()`, which requires
+  `not self.training` — and the streaming loaders return a model in `nn.Module`'s
+  default train mode. Measured on an RTX 4090: 0 kernel calls / 8.34 tok/s
+  against 288 calls / 33.6 tok/s. **A patch count is not a call count.**
+- `enable_fast_train()` is new, and is the differentiable path: it patches the
+  `ExpertsLoRA` **wrapper** — the module the model actually calls — and composes
+  the frozen projection with the trainable `B(Ax)` delta at the pre-activation
+  point, the only correct place, since `act(Wx + BAx) != act(Wx) + d`. Opt-in on
+  purpose: it changes the expert summation order (group-sorted vs ascending
+  expert id), which should be a deliberate choice in a training run.
+
+Requires `grouped-nf4-gemm>=0.2.4`. `--help` no longer loads a model.
+
 ## 0.6.4 — 2026-07-28
 
 **If you installed `[fast]` on 0.6.3 or earlier, the fused kernel was not
