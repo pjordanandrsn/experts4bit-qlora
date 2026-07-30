@@ -42,7 +42,20 @@ SUPPORTED_ARCHITECTURES = {
     "gemma4": "experts",  # multimodal top-level config
     "gemma4_text": "experts",  # the text tower (what a text-only QLoRA loads)
     "granitemoe": "block_sparse_moe.experts",  # IBM Granite MoE (granite-3.0-*-a*m, PowerMoE-3b)
+    # Kimi K3 (`KimiK3ForConditionalGeneration`, DeepSeek-V3 lineage): per-expert
+    # MXFP4 under `block_sparse_moe.experts.{e}.w{1,3,2}` — see K3_PER_EXPERT_MXFP4.
+    "kimi_k3": "block_sparse_moe.experts",
 }
+# model_type -> checkpoint prefix for the text tower of a MULTIMODAL config. Gemma-4
+# nests the language model as `model.language_model.`; Kimi K3 reverses the order
+# (`language_model.model.`), so the prefix cannot be derived from the presence of
+# `text_config` alone — it is per-family.
+MULTIMODAL_CKPT_PREFIX = {"kimi_k3": "language_model.model."}
+# model_type -> (gate, up, down) on-disk projection spellings for per-expert MXFP4
+# checkpoints, plus the packed/scale suffixes. K3: w1=gate, w3=up, w2=down —
+# confirmed by SHAPES, not convention (w1/w3 are [inter, latent]; w2 is
+# [latent, inter]).
+K3_PER_EXPERT_MXFP4 = {"kimi_k3": (("w1", "w3", "w2"), "weight_packed", "weight_scale")}
 SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 
 # model_type -> ((legacy on-disk spelling, name in the transformers>=5 module tree), ...).
@@ -77,7 +90,8 @@ def _assign(model, name, tensor):
 
 
 def load_moe_4bit_streaming(
-    model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4"
+    model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
+    trust_remote_code=None,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -106,7 +120,14 @@ def load_moe_4bit_streaming(
             "prefetch=True requires offload=True: prefetch overlaps the H2D copy of offloaded "
             "experts; without offload there is nothing to prefetch."
         )
-    config = AutoConfig.from_pretrained(model_id)
+    # Architectures that live in the checkpoint's own repo (Kimi K3's Kimi-Linear
+    # attention + SiTU activation are not in any released transformers) cannot be
+    # read at all without this, and AutoConfig raises BEFORE the architecture gate
+    # below, so the failure is opaque: "The repository ... contains custom code".
+    # Opt-in only — executing repo code is the caller's decision, never a default.
+    if trust_remote_code is None:
+        trust_remote_code = os.environ.get("E4B_TRUST_REMOTE_CODE", "0") == "1"
+    config = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code)
     model_type = getattr(config, "model_type", None)
     if model_type not in SUPPORTED_ARCHITECTURES:
         raise NotImplementedError(
@@ -120,17 +141,27 @@ def load_moe_4bit_streaming(
     # Build + size the text tower from that sub-config, and strip the prefix so keys match the text
     # CausalLM we build (dropping the vision weights we don't need for a text-only QLoRA).
     lm_config = getattr(config, "text_config", None) or config
-    ckpt_prefix = "model.language_model." if lm_config is not config else ""
+    ckpt_prefix = ""
+    if lm_config is not config:
+        ckpt_prefix = MULTIMODAL_CKPT_PREFIX.get(model_type, "model.language_model.")
     act_name = getattr(lm_config, "hidden_activation", None) or getattr(lm_config, "hidden_act", "silu")
     try:
         activation = ACT2FN[act_name]
     except KeyError:
         # gpt_oss uses its own clamped GLU inside GptOssExperts4bit; the generic
         # activation is unused on that path, so a missing ACT2FN entry is fine.
+        # Kimi K3 declares hidden_act="situ", defined only in the checkpoint's own
+        # modeling code -- surface it rather than silently substituting SiLU, which
+        # would load a model that runs but is quietly WRONG.
         activation = None
+        if act_name not in ("silu", None) and model_type not in ("gpt_oss",):
+            log(f"  NOTE: activation {act_name!r} is not in transformers' ACT2FN; "
+                f"the fused-expert GLU will use the module default. Verify numerics "
+                f"before trusting outputs from this checkpoint.")
 
     with init_empty_weights():
-        model = AutoModelForCausalLM.from_config(lm_config, dtype=dtype)
+        model = AutoModelForCausalLM.from_config(
+            lm_config, dtype=dtype, trust_remote_code=trust_remote_code)
 
     snap = (
         model_id
@@ -215,6 +246,41 @@ def load_moe_4bit_streaming(
             gate_up = get(f"{epfx}gate_up_proj").to(dtype)
             down = get(f"{epfx}down_proj").to(dtype)
             expert_keys.update({f"{epfx}gate_up_proj", f"{epfx}down_proj"})
+        elif model_type in K3_PER_EXPERT_MXFP4 and \
+                f"{epfx}0.{K3_PER_EXPERT_MXFP4[model_type][0][0]}.{K3_PER_EXPERT_MXFP4[model_type][1]}" in weight_map:
+            # Per-expert MXFP4 on disk (Kimi K3): each projection is a packed uint8
+            # `[rows, K//2]` plus an e8m0 `[rows, K//32]` scale, two fp4 nibbles per
+            # byte. Same numeric format gpt-oss uses, different NAMING and shape rank
+            # -- so it reuses `dequantize_mxfp4` unchanged.
+            #
+            # `dequantize_mxfp4` returns the TRANSPOSE of the stored matrix
+            # (`[K, rows]`, the layout GptOssExperts wants), but `from_float` below
+            # expects gate_up `[2*inter, hidden]` / down `[hidden, inter]` in STORED
+            # orientation -- hence the `.T`. Getting this wrong yields a model that
+            # loads with plausible shapes and computes garbage.
+            (p_gate, p_up, p_down), packed_kind, scale_kind = K3_PER_EXPERT_MXFP4[model_type]
+
+            def _mxfp4_expert(e, proj):
+                blocks = get(f"{epfx}{e}.{proj}.{packed_kind}")
+                scales = get(f"{epfx}{e}.{proj}.{scale_kind}")
+                rows, kh = blocks.shape
+                groups = scales.shape[1]
+                w = dequantize_mxfp4(
+                    blocks.reshape(rows, groups, kh // groups), scales, dtype=dtype)
+                return w.T.contiguous()          # [K, rows] -> stored [rows, K]
+
+            gate_up_rows, down_rows = [], []
+            for e in range(n_exp):
+                gate_up_rows.append(torch.cat(
+                    [_mxfp4_expert(e, p_gate), _mxfp4_expert(e, p_up)], dim=0))
+                down_rows.append(_mxfp4_expert(e, p_down))
+                expert_keys.update({
+                    f"{epfx}{e}.{proj}.{kind}"
+                    for proj in (p_gate, p_up, p_down)
+                    for kind in (packed_kind, scale_kind)
+                })
+            gate_up = torch.stack(gate_up_rows).to(dtype)
+            down = torch.stack(down_rows).to(dtype)
         elif f"{epfx}0.gate_proj.weight" in weight_map:
             # Per-expert Linears on disk (OLMoE, Qwen3): fuse gate_up[e] = cat([gate, up]).
             gate_up_rows, down_rows = [], []
