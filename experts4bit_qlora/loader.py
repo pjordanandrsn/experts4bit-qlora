@@ -77,16 +77,63 @@ LEGACY_KEY_RENAMES = {
 }
 
 
+def _fit(name, tensor, want):
+    """Reconcile a checkpoint tensor with the shape the built module declares.
+
+    This loader used to place whatever the shard held, unchecked — and `_assign`
+    REPLACES the meta parameter, so a wrong-shaped tensor silently becomes the model's
+    shape. That is the failure mode with no symptom: nothing raises at load, and the
+    disagreement surfaces (if at all) as a broadcast that happens to work.
+
+    Kimi K3 makes it concrete. Its 69 KDA layers ship ``A_log`` per-head — 96 values —
+    ZERO-PADDED to 128 lanes, while the released modeling code builds ``(96,)`` and
+    never slices. vLLM's ``a_log_weight_loader`` narrows to the head count and the
+    discarded tail is exact zeros, so narrowing is the reference behaviour rather than
+    a guess about intent.
+
+    Permit exactly that shape of disagreement: 1-D, LONGER than the parameter, and
+    provably zero past its end. Everything else raises. A blanket narrow would
+    reintroduce the silent wrongness this check exists to catch, because the padding is
+    not inert if used: ``-exp(0) = -1`` would give 32 phantom heads a full-strength
+    decay.
+
+    Dtype is deliberately NOT coerced. The checkpoint's dtype is the authority (K3
+    keeps ``A_log``/``dt_bias``/``o_norm`` in fp32 under a bf16 model), and quietly
+    casting weights is the thing this package exists not to do.
+    """
+    if want is None or tuple(tensor.shape) == tuple(want.shape):
+        return tensor, False
+    if (tensor.dim() == want.dim() == 1 and tensor.numel() > want.numel()
+            and bool((tensor[want.numel():] == 0).all())):
+        return tensor[:want.numel()].clone(), True
+    raise ValueError(
+        f"{name}: checkpoint holds {tuple(tensor.shape)} but the model declares "
+        f"{tuple(want.shape)}. Only 1-D trailing padding that is provably zero is "
+        "narrowed; this is not that, so placing it would give the model the "
+        "checkpoint's shape and no error until much later. Fix the config, the key "
+        "mapping, or the checkpoint."
+    )
+
+
 def _assign(model, name, tensor):
-    """Place a real (GPU) tensor into a meta-initialized module by dotted name."""
+    """Place a real (GPU) tensor into a meta-initialized module by dotted name.
+
+    Returns True if the tensor was narrowed to fit — see :func:`_fit`.
+    """
     *path, attr = name.split(".")
     mod = model.get_submodule(".".join(path)) if path else model
     if attr in mod._parameters:
+        tensor, cut = _fit(name, tensor, mod._parameters[attr])
         mod._parameters[attr] = torch.nn.Parameter(tensor, requires_grad=False)
-    elif attr in mod._buffers:
+        return cut
+    if attr in mod._buffers:
+        tensor, cut = _fit(name, tensor, mod._buffers[attr])
         mod._buffers[attr] = tensor
-    else:
-        setattr(mod, attr, tensor)
+        return cut
+    # No declared parameter or buffer to check against: nothing to compare, and
+    # nothing the model already believes about the shape to contradict.
+    setattr(mod, attr, tensor)
+    return False
 
 
 def load_moe_4bit_streaming(
@@ -379,9 +426,17 @@ def load_moe_4bit_streaming(
             report_offload_environment(device, log)
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
+    narrowed = []
     for name in weight_map:
         if name not in expert_keys:
-            _assign(model, name, get(name))
+            if _assign(model, name, get(name)):
+                narrowed.append(name)
+    if narrowed:
+        # Loud on purpose: this is a checkpoint/modeling-code disagreement that the
+        # loader worked around, not a routine step. K3 hits it 69 times (A_log).
+        log(f"  narrowed {len(narrowed)} zero-padded tensor(s) to the shape the model "
+            f"declares, e.g. {narrowed[0]} — the discarded tail was verified zero "
+            f"(see loader._fit)")
 
     # Non-persistent buffers (rotary inv_freq) aren't in the checkpoint — recompute every rotary module
     # the model has (some architectures, e.g. Gemma, use more than one). Generic; no per-model import.
