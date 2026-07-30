@@ -41,8 +41,14 @@ def dequantize_mxfp4(
     """Dequantize an MXFP4 fused-expert projection to a dense ``dtype`` tensor.
 
     Args:
-        blocks: uint8 ``[..., G, B]`` — two fp4 nibbles per byte (low nibble first).
-        scales: ``[..., G]`` e8m0 exponents (bias 127); ``blocks.shape[:-1] == scales.shape``.
+        blocks: uint8 ``[..., rows, G, B]`` — two fp4 nibbles per byte (low
+            nibble first). Rank >= 3: gpt-oss fused stacks are
+            ``[E, rows, G, B]``; a single expert projection is ``[rows, G, B]``
+            (what a DeepSeek-V3-lineage checkpoint such as Kimi K3 ships
+            per expert, from a flat ``[rows, K//2]`` reshaped to
+            ``[rows, G, B]``).
+        scales: ``[..., rows, G]`` e8m0 exponents (bias 127);
+            ``blocks.shape[:-1] == scales.shape``.
         dtype: output dtype (bf16 or fp32).
 
     Returns:
@@ -53,6 +59,13 @@ def dequantize_mxfp4(
     if blocks.shape[:-1] != scales.shape:
         raise ValueError(
             f"blocks.shape[:-1]={tuple(blocks.shape[:-1])} != scales.shape={tuple(scales.shape)}"
+        )
+    if blocks.ndim < 3:
+        raise ValueError(
+            f"blocks must be [..., rows, G, B] with at least one leading row "
+            f"axis; got {tuple(blocks.shape)}. A single expert projection is "
+            f"[rows, G, B] (reshape a flat [rows, K//2] with "
+            f"`.reshape(rows, G, B)`); gpt-oss fused stacks are [E, rows, G, B]."
         )
     blocks = blocks.to(torch.uint8)
     exp = scales.to(torch.int32) - 127  # e8m0 bias
@@ -71,4 +84,9 @@ def dequantize_mxfp4(
     torch.ldexp(out, exp.reshape(rows, 1), out=out)  # * 2**exp, per-block scale
 
     out = out.reshape(*prefix, G, B * 2).view(*prefix, G * B * 2)
-    return out.transpose(1, 2).contiguous()
+    # Transpose the trailing (rows, K) pair. `transpose(1, 2)` was equivalent
+    # for gpt-oss's rank-4 `[E, rows, G, B]` blocks (rank-3 result) but hard-
+    # coded that rank, so a SINGLE expert's `[rows, G, B]` — the shape a
+    # DeepSeek-V3-lineage checkpoint like Kimi K3 ships per expert — raised
+    # IndexError instead of returning its `[K, rows]`.
+    return out.transpose(-2, -1).contiguous()
