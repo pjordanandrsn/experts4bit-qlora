@@ -21,6 +21,8 @@ actually the reference path.
 """
 import argparse
 import gc
+import os
+import socket
 import hashlib
 import json
 import statistics
@@ -130,6 +132,79 @@ def eval_loss(model, data, limit=48):
     return tot / max(n, 1)
 
 
+def host_fingerprint():
+    """Everything needed to attribute host-to-host drift later.
+
+    Two RTX 4090 pods running byte-identical configs differed by 8.6 % s/step,
+    3.4x idle power and 58 % mean power. The cause could not be established
+    because the receipts recorded only `gpu` and `cap` -- and by the time the
+    discrepancy surfaced the first pod had been deleted. `gpu: "RTX 4090"` is not
+    a host fingerprint: PCIe width (one pod was gen4 **x8** of a x16 max), CPU,
+    power limit and clock ceilings all move throughput on a transfer-bound
+    workload and none were captured.
+
+    Cheap, taken once per cell, and it turns "hosts differ somehow" into an
+    attributable difference.
+    """
+    fields = ("uuid,pci.bus_id,pcie.link.gen.current,pcie.link.gen.max,"
+              "pcie.link.width.current,pcie.link.width.max,power.limit,"
+              "clocks.max.sm,clocks.max.mem,vbios_version,driver_version")
+    want = fields.split(",")
+    out = {}
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=15)
+        raw = r.stdout.strip().split("\n")[0] if r.stdout.strip() else ""
+        cols = [v.strip() for v in raw.split(",")] if raw else []
+        # Check the exit status AND the column count. Parsing stdout blindly lets a
+        # failed or truncated nvidia-smi produce a PARTIAL host map with no error
+        # key -- a fingerprint that is missing PCIe and power fields but looks
+        # complete, which is worse than no fingerprint because it reads as evidence.
+        if r.returncode != 0:
+            out["nvidia_smi_error"] = f"exit {r.returncode}: {r.stderr.strip()[:200]}"
+        elif len(cols) != len(want):
+            out["nvidia_smi_error"] = (
+                f"expected {len(want)} columns, got {len(cols)}: {raw[:200]}")
+        else:
+            out = dict(zip(want, cols))
+    except Exception as e:
+        out["nvidia_smi_error"] = f"{type(e).__name__}: {e}"
+    try:
+        with open("/proc/cpuinfo") as fh:
+            for ln in fh:
+                if ln.startswith("model name"):
+                    out["cpu"] = ln.split(":", 1)[1].strip()
+                    break
+        out["cpu_threads"] = os.cpu_count()
+        with open("/proc/meminfo") as fh:
+            # MemTotal is in KiB. Dividing by 1e6 gave a number that matched
+            # neither GB nor GiB and disagreed with `free -g` (263.8 vs 251),
+            # which defeats the point: this field exists to be cross-checked
+            # against a known host spec. Record GiB, and say so in the name.
+            kib = int(fh.readline().split()[1])
+            out["host_mem_gib"] = round(kib / 1048576, 1)
+    except Exception as e:
+        out["host_error"] = f"{type(e).__name__}: {e}"
+    # Two DIFFERENT identifiers, recorded under honest names.
+    #
+    # `pod_id` is the RunPod id (l4c2838z20o6va) and is what external telemetry
+    # and the bill cap key on -- but the container has NO way to learn it: this
+    # image sets no RUNPOD_* env var at all, and HOSTNAME is unset in a
+    # non-interactive shell, so it is usually None and the CONTROLLER has to
+    # supply it. E4B_POD_ID is that channel.
+    #
+    # `container_host` is socket.gethostname(), which always answers but returns
+    # the container id (8abe61ba69f8), NOT the pod id. Recording it as `pod_id`
+    # would silently put the wrong key in the receipt -- accurate value, wrong
+    # name, which is worse than a null because it joins to nothing and looks
+    # like it should.
+    out["pod_id"] = (os.environ.get("E4B_POD_ID") or os.environ.get("RUNPOD_POD_ID")
+                     or os.environ.get("HOSTNAME"))
+    out["container_host"] = socket.gethostname()
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
@@ -221,6 +296,7 @@ def main():
         "gnf4": md.version("grouped-nf4-gemm"), "e4b": md.version("experts4bit-qlora"),
         "e4b_commit": __import__("os").environ.get("E4B_COMMIT"),
         "gpu": torch.cuda.get_device_name(0),
+        "host": host_fingerprint(),
         "cap": list(torch.cuda.get_device_capability()),
         "fused_modules": n_fused,
         "C1_tensors_hashed": len(h_before),
