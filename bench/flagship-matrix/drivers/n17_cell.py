@@ -21,6 +21,7 @@ actually the reference path.
 """
 import argparse
 import gc
+import os
 import hashlib
 import json
 import statistics
@@ -130,6 +131,46 @@ def eval_loss(model, data, limit=48):
     return tot / max(n, 1)
 
 
+def host_fingerprint():
+    """Everything needed to attribute host-to-host drift later.
+
+    Two RTX 4090 pods running byte-identical configs differed by 8.6 % s/step,
+    3.4x idle power and 58 % mean power. The cause could not be established
+    because the receipts recorded only `gpu` and `cap` -- and by the time the
+    discrepancy surfaced the first pod had been deleted. `gpu: "RTX 4090"` is not
+    a host fingerprint: PCIe width (one pod was gen4 **x8** of a x16 max), CPU,
+    power limit and clock ceilings all move throughput on a transfer-bound
+    workload and none were captured.
+
+    Cheap, taken once per cell, and it turns "hosts differ somehow" into an
+    attributable difference.
+    """
+    fields = ("uuid,pci.bus_id,pcie.link.gen.current,pcie.link.gen.max,"
+              "pcie.link.width.current,pcie.link.width.max,power.limit,"
+              "clocks.max.sm,clocks.max.mem,vbios_version,driver_version")
+    out = {}
+    try:
+        raw = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=15).stdout.strip().split("\n")[0]
+        out = dict(zip(fields.split(","), [v.strip() for v in raw.split(",")]))
+    except Exception as e:
+        out["nvidia_smi_error"] = f"{type(e).__name__}: {e}"
+    try:
+        with open("/proc/cpuinfo") as fh:
+            for ln in fh:
+                if ln.startswith("model name"):
+                    out["cpu"] = ln.split(":", 1)[1].strip()
+                    break
+        out["cpu_threads"] = os.cpu_count()
+        with open("/proc/meminfo") as fh:
+            out["host_mem_gb"] = round(int(fh.readline().split()[1]) / 1e6, 1)
+    except Exception as e:
+        out["host_error"] = f"{type(e).__name__}: {e}"
+    out["pod_id"] = os.environ.get("RUNPOD_POD_ID") or os.environ.get("HOSTNAME")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
@@ -221,6 +262,7 @@ def main():
         "gnf4": md.version("grouped-nf4-gemm"), "e4b": md.version("experts4bit-qlora"),
         "e4b_commit": __import__("os").environ.get("E4B_COMMIT"),
         "gpu": torch.cuda.get_device_name(0),
+        "host": host_fingerprint(),
         "cap": list(torch.cuda.get_device_capability()),
         "fused_modules": n_fused,
         "C1_tensors_hashed": len(h_before),
