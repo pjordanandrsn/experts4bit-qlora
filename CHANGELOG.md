@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.7.1 — 2026-07-30
+
+**0.7.0's headline features were not importable from the top level.**
+`enable_fast_train` — the differentiable fused training path that both flagship
+matrices measure, twenty cells of evidence, the thing the front page leads with —
+was absent from `__init__.py` entirely, as were `enable_dense_offload`,
+`DenseDiskSource` / `DiskHome` / `disk_homes_for`, and `enable_nvme_residency`.
+The modules shipped; the names did not. `from experts4bit_qlora import
+enable_fast_train` raised `ImportError` on 0.7.0. `__all__` goes 33 → 43, and a
+check now asserts every symbol the README tells you to call is actually exported.
+
+**The README described a package two releases old.** Its "Which door? (all six,
+one line each)" table listed six execution modes when there were ten, and told a
+*training* reader to call nothing — which stopped being the whole answer in
+0.6.5. It is now a decision procedure keyed on what ran out (VRAM, host RAM, or
+disk), with every mode's entry point, when to pick it, and what it requires.
+
+Three factual corrections in the same pass: a cost figure still quoted the *eval*
+delta against a band the protocol registers on **train** loss and median
+step-wise; the "measured on an RTX A2000" section header sat above numbers from
+two different hosts; and a note promising `enable_hot_residency` would be removed
+*in* 0.7 was falsified by 0.7.0 shipping with it still exported — withdrawn
+explicitly rather than quietly edited, since someone may have planned around it.
+
+Also in this release: the second flagship-matrix model completed all ten
+registered cells under a pre-stamped protocol
+(`bench/flagship-matrix-model2/`), with C1 hashing 12.85 GB per cell against the
+first matrix's withdrawn gate that hashed zero — and a C4 winner that **flips
+sign** when the same cell is re-run on a second host, reported beside the
+registered verdict rather than in place of it.
+
+No code behaviour changed beyond the exports.
+
 ## 0.7.0 — 2026-07-30
 
 **If you train Gemma-4-class models with `offload=True`, 0.6.x could not do it
