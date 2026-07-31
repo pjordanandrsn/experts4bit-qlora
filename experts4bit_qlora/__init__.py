@@ -162,4 +162,4 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
