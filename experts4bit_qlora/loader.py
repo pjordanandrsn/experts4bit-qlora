@@ -339,10 +339,11 @@ def load_moe_4bit_streaming(
             raw_map = dict.fromkeys(f.keys(), "model.safetensors")
     rewrite = CKPT_KEY_REWRITERS.get(model_type)
     if rewrite is not None:
-        # This checkpoint ships in the model's OWN reference spelling and transformers
-        # has no `_checkpoint_conversion_mapping` for it, so nothing renames it on the
-        # way in. Rewrite every key here — including adding the `model.` prefix, which
-        # the ckpt_prefix branch below cannot express (it only ever strips).
+        # This checkpoint ships in the model's OWN reference spelling. transformers can
+        # convert it — via the central `conversion_mapping.py`, not a class attribute —
+        # but only inside `from_pretrained`, which this streaming loader never calls.
+        # So rewrite every key here, including adding the `model.` prefix, which the
+        # ckpt_prefix branch below cannot express (it only ever strips).
         weight_map, orig_key, dropped = {}, {}, []
         for k, f in raw_map.items():
             new = rewrite(k)

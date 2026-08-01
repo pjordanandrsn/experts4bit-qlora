@@ -44,9 +44,15 @@ DEFAULT_SWIGLU_LIMIT = 10.0
 # --------------------------------------------------------------------------- keys
 #
 # DeepSeek publishes the V4 checkpoints in their own *reference* spelling — the one
-# `inference/generate.py` reads — and transformers ships NO `_checkpoint_conversion_mapping`
-# for `deepseek_v4`, so nothing converts it on the way in. This loader reads shards
-# directly, so it has to do the rename itself.
+# `inference/generate.py` reads. transformers DOES convert it, but the mapping lives
+# centrally in `transformers/conversion_mapping.py` (keyed `"deepseek_v4"`) rather than as
+# a `_checkpoint_conversion_mapping` attribute on the model class, and it only runs inside
+# `from_pretrained`. This loader streams shards directly and never enters that path, so it
+# still needs its own rename.
+#
+# Cross-checked against upstream's table: it agrees on every rule below, including the two
+# that are not guessable. Independent agreement is the reason to trust this, since a
+# plausible-but-wrong mapping loads with correct shapes and computes nonsense.
 #
 # Three things here are not guessable and were read off the built module tree rather
 # than assumed:
