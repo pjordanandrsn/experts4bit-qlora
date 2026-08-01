@@ -81,7 +81,8 @@ def test_fast_train_keeps_the_clamps():
     from experts4bit_qlora import disable_fast_train, enable_fast_train
     mod, x, idx, w = _v4_lora(seed=2, limit=LIMIT)
     unclamped, *_ = _v4_lora(seed=2, limit=0.0)
-    mod.train(); unclamped.train()
+    mod.train()
+    unclamped.train()
     ref = mod(x, idx, w)
     ref_noclamp = unclamped(x, idx, w)
     assert _b_rel(ref, ref_noclamp) > 10 * TOL, "clamp barely binds"
