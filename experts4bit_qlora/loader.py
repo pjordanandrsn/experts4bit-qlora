@@ -28,7 +28,7 @@ from transformers.activations import ACT2FN
 from . import Experts4bit, ExpertsNbit, normalize_quant_type
 from .deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
 from .deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
-from .fp8_blocks import Fp8BlockLinear, convert_to_fp8_blocks
+from .fp8_blocks import convert_to_fp8_blocks
 from .gptoss import GptOssExperts4bit
 from .lora import ExpertsLoRA
 from .mxfp4 import dequantize_mxfp4

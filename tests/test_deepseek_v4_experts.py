@@ -27,7 +27,10 @@ def _weights(seed=0, scale=0.35):
     LOSSLESS. Otherwise every comparison below carries ~0.4% of bf16 rounding and
     the tolerances would have to be loose enough to hide a real structural bug."""
     g = torch.Generator().manual_seed(seed)
-    bf = lambda t: t.bfloat16().float()
+
+    def bf(t):
+        return t.bfloat16().float()
+
     gate_up = bf(torch.randn(E, 2 * INTER, H, generator=g) * scale)   # [E, 2I, H]
     down = bf(torch.randn(E, H, INTER, generator=g) * scale)          # [E, H, I]
     x = bf(torch.randn(TOKENS, H, generator=g) * 1.5)

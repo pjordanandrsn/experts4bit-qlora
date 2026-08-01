@@ -30,7 +30,10 @@ E, H, INTER, K, TOKENS = 4, 128, 64, 2, 6
 
 def _stacks(seed=0, scale=1.2):
     g = torch.Generator().manual_seed(seed)
-    bf = lambda t: t.bfloat16().float()
+
+    def bf(t):
+        return t.bfloat16().float()
+
     return (bf(torch.randn(E, 2 * INTER, H, generator=g) * scale),
             bf(torch.randn(E, H, INTER, generator=g) * scale))
 

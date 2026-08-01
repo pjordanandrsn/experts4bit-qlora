@@ -23,7 +23,7 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[test]"
       - name: Lint
-        run: ruff check experts4bit_qlora tests scripts
+        run: ruff check experts4bit_qlora tests scripts tools
       - name: Test
         run: pytest tests/ -q
 
