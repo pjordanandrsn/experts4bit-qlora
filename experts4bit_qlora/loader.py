@@ -623,9 +623,16 @@ def load_moe_4bit_streaming(
     if meta_expert_prefixes:
         deferred = sum(1 for n, x in named
                        if x.is_meta and any(n.startswith(p) for p in meta_expert_prefixes))
+        # Name the enabler that matches THIS arena. The two are not interchangeable:
+        # pointing the NF4 tier at an MXFP4 bake reads the wrong segments, so a caller
+        # following the log gets a failure or a silent non-binding rather than a model.
+        _nf4_arena = any("nf4." in str(seg)
+                         for seg in (arena_index.get("segments") or ()))
+        _enabler = ("enable_nvme_residency" if _nf4_arena
+                    else "enable_mxfp4_nvme_residency")
         log(f"  experts deferred to the arena: {len(meta_expert_prefixes)} module(s), "
             f"{deferred} unmaterialized buffer(s) — call "
-            f"nvme_experts.enable_nvme_residency() before running this model")
+            f"nvme_experts.{_enabler}() before running this model")
     return model, config
 
 

@@ -246,6 +246,14 @@ class _HotResidency:
             dn = _fused_over_stack(xr, local, self.h_gu_p, self.h_gu_a, self.h_dn_p,
                                    self.h_dn_a, self.shapes, self.has_gate, self.act_fn,
                                    gptoss=gptoss, clamp_limit=self.clamp_limit)
+            # Router weight AFTER the down projection. Stock `ExpertsNbit.forward` and
+            # gpt-oss both do this, so those are exact; V4's reference applies it to the
+            # gated activation BEFORE w2. That reordering is exact too, not an
+            # approximation: w2 is a bias-free linear map (`_project` is `F.linear(x, W)`
+            # with no bias), so `w2(h * s) == s * w2(h)` for the scalar router weight.
+            # The only difference is where a rounding lands, and bf16 error is relative,
+            # so neither order is nearer the truth. Applying it here instead keeps ONE
+            # code path for all three epilogues and lets the down GEMM stay batched.
             w = top_k_weights[row_token.index_select(0, hr), row_slot.index_select(0, hr)].to(torch.float32)
             out.index_add_(0, row_token.index_select(0, hr), dn.to(torch.float32) * w[:, None])
 
