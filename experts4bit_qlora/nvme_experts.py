@@ -170,8 +170,14 @@ def expert_geometry_from_arena(index: dict) -> tuple:
     ``[H, I/2]``; the pair over-determines (I, H), so they are cross-checked
     rather than trusted individually.
     """
-    suffixes = [s["suffix"] for s in index["segments"]]
-    if not any(x.startswith("nf4.") for x in suffixes):
+    segs = index.get("segments") or []
+    suffixes = [s["suffix"] for s in segs]
+    # Detect the MXFP4 arena POSITIVELY. "no nf4.* suffixes" is not evidence of one --
+    # an empty or malformed segment list satisfies it too, and routing that to the MXFP4
+    # reader replaces this function's own precise error ("arena lacks nf4.gate_up_blocks")
+    # with a confusing one from two layers down ("expected 4 fused or 6 split, got 0").
+    # A real MXFP4 arena has exactly 4 (fused) or 6 (split w1/w3) projection segments.
+    if len(segs) in (4, 6) and not any(x.startswith("nf4.") for x in suffixes):
         # A NATIVE MXFP4 arena (relocation bake) rather than a quantize-bake. Its
         # segments carry the checkpoint's own projection names, so the NF4 suffixes
         # are simply absent; the geometry is still recoverable, just from the packed

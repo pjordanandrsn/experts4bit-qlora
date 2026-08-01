@@ -45,7 +45,12 @@ class _LayerProbe:
 
     def __init__(self, layer_id, module):
         self.layer_id = layer_id
-        base = module.base
+        # BARE expert modules are the norm for the families with a custom epilogue --
+        # gpt-oss and DeepSeek-V4 are both built without an ExpertsLoRA wrapper, because
+        # the generic adapter re-implements the expert math with a plain SwiGLU. Those are
+        # exactly the models whose routing you most want to profile, so `base` has to fall
+        # back to the module itself rather than assuming a wrapper.
+        base = getattr(module, "base", module)
         self.num_experts = base.num_experts
         self.storage_mode = base.quant_type
         # Per-expert share of one staging copy, in bytes (packed slices + absmax slices) — the
@@ -93,13 +98,21 @@ def attach(model) -> bool:
     global _STATE
     if not enabled():
         return False
+    from ._vendor.experts import ExpertsNbit
     from .lora import ExpertsLoRA
 
     out_path = os.environ[_ENV]
+    # A wrapped base is never dispatched (ExpertsLoRA calls base._project, not base.forward),
+    # so hooking both would double-count and mis-number the layers. Probe the module that
+    # actually receives the call: the wrapper when there is one, the bare stack otherwise.
+    wrapped = {id(m.base) for m in model.modules()
+               if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
     probes = []
     layer_id = 0
     for module in model.modules():
-        if not isinstance(module, ExpertsLoRA):
+        dispatched = (isinstance(module, ExpertsLoRA)
+                      or (isinstance(module, ExpertsNbit) and id(module) not in wrapped))
+        if not dispatched:
             continue
         probe = _LayerProbe(layer_id, module)
         probes.append(probe)
@@ -207,3 +220,74 @@ def flush() -> None:
                 }, sort_keys=True) + "\n")
     print(f"[expert-profile] wrote {out_path}", flush=True)
     _STATE = None
+
+
+def hot_sets_from_profile(path: str, hot_per_layer: int, *, key: str = "tokens_routed"):
+    """Turn a profile into per-layer hot sets: the ``hot_per_layer`` most-routed experts.
+
+    This is the difference between a residency dial that works and one that does not.
+    Pinning experts BY INDEX is close to worthless -- measured on DeepSeek-V4-Flash
+    (256 experts, top-6), doubling VRAM that way bought 7%, because a routed expert lands
+    in a 16-wide index-ordered set about 6% of the time. Frequency is wildly non-uniform,
+    so choosing by it is what turns VRAM into speed.
+
+    Args:
+        path: JSONL written by :func:`flush` (``E4B_EXPERT_PROFILE``).
+        hot_per_layer: how many experts to keep resident per layer.
+        key: ``tokens_routed`` (token-slots, the transfer-weighted quantity) or ``hits``
+            (forwards that touched the expert at all). ``tokens_routed`` is the right
+            default: it is proportional to the reads a hot set actually removes.
+
+    Returns:
+        ``list[list[int]]`` indexed by ``layer_id``, each inner list the chosen expert ids
+        ordered most-routed first. Layers with no routing rows yield an empty list rather
+        than an arbitrary pick -- silently pinning experts 0..H-1 for an unprofiled layer
+        would reintroduce exactly the by-index behaviour this function exists to replace.
+    """
+    n_experts, counts = {}, {}
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if row.get("row") == "layer":
+                n_experts[row["layer_id"]] = row["num_experts"]
+            elif row.get("row") == "expert":
+                counts.setdefault(row["layer_id"], {})[row["expert_id"]] = row.get(key, 0)
+    if not n_experts:
+        raise ValueError(
+            f"{path}: no layer rows -- the profile is empty. Most likely the model's expert "
+            "modules were never dispatched, or E4B_EXPERT_PROFILE was unset at attach time.")
+
+    out = []
+    for layer_id in range(max(n_experts) + 1):
+        c = counts.get(layer_id, {})
+        # cold experts are omitted from the JSONL by design, so absence means zero
+        ranked = sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))
+        out.append([e for e, n in ranked[:hot_per_layer] if n > 0])
+    return out
+
+
+def coverage_from_profile(path: str, hot_sets, *, key: str = "tokens_routed") -> float:
+    """Fraction of routed token-slots that ``hot_sets`` would have served from VRAM.
+
+    The honest predictor of what a hot set buys, computable without re-running the model.
+    A by-index set on a 256-expert top-6 layer scores near ``hot_per_layer / num_experts``;
+    a frequency-ranked one scores far higher, and the gap is the whole point.
+    """
+    total = hit = 0
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if row.get("row") != "expert":
+                continue
+            n = row.get(key, 0)
+            total += n
+            lid = row["layer_id"]
+            if lid < len(hot_sets) and row["expert_id"] in hot_sets[lid]:
+                hit += n
+    return (hit / total) if total else 0.0
