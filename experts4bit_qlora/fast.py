@@ -317,7 +317,11 @@ def enable_fast(model, verbose: bool = False) -> int:
                 print(f"[e4b.fast] skip {type(mod).__name__}: wrapped by a patched "
                       "ExpertsLoRA (its forward is never called)")
             continue
-        if type(mod).forward not in stock_forwards:
+        # Same rule as the wrapper loop above: a custom forward is fine when it is only
+        # a custom ACTIVATION, because `fused_experts_forward` now calls `_epilogue`.
+        # Without this a BARE V4 module was skipped while the LoRA-wrapped one was fused.
+        if (type(mod).forward not in stock_forwards
+                and not hasattr(mod, "_apply_gate")):
             if verbose:
                 print(f"[e4b.fast] skip {type(mod).__name__}: custom forward")
             continue

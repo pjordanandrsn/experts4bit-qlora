@@ -57,6 +57,36 @@ def test_fast_patches_v4_inside_lora():
     disable_fast(mod)
 
 
+def _v4_bare(limit=LIMIT, seed=0, w_scale=0.35, x_scale=1.5):
+    from experts4bit_qlora.deepseek_v4 import _DeepseekV4ForwardMixin
+    g = torch.Generator().manual_seed(seed)
+    mod = _DeepseekV4ForwardMixin.from_deepseek_v4(
+        torch.randn(E, 2 * INTER, H, generator=g) * w_scale,
+        torch.randn(E, H, INTER, generator=g) * w_scale,
+        limit=limit, quant_type="nf4", compute_dtype=torch.bfloat16).cuda().eval()
+    x = (torch.randn(TOKENS, H, generator=g) * x_scale).to(torch.bfloat16).cuda()
+    logits = torch.randn(TOKENS, E, generator=g)
+    val, idx = torch.topk(logits, K, dim=-1)
+    return mod, x, idx.cuda(), torch.softmax(val, dim=-1).to(torch.bfloat16).cuda()
+
+
+def test_fast_patches_bare_v4_and_keeps_the_clamps():
+    """The bare loop had the same gap as the wrapper loop, the other way round: it checked
+    `stock_forwards` and nothing else, so a BARE V4 module was skipped while the
+    LoRA-wrapped one was fused. Both now accept a custom ACTIVATION via `_apply_gate`."""
+    mod, x, idx, w = _v4_bare(seed=6, limit=LIMIT)
+    unclamped, *_ = _v4_bare(seed=6, limit=0.0)
+    with torch.no_grad():
+        ref = mod(x, idx, w)
+        ref_noclamp = unclamped(x, idx, w)
+        assert _b_rel(ref, ref_noclamp) > 10 * TOL, "clamp barely binds"
+        assert enable_fast(mod) == 1, "bare V4 skipped as a custom forward"
+        got = mod(x, idx, w)
+    assert _b_rel(got, ref) < TOL, _b_rel(got, ref)
+    assert _b_rel(got, ref_noclamp) > 10 * TOL, "fused bare path served UNCLAMPED SwiGLU"
+    disable_fast(mod)
+
+
 def test_fast_keeps_the_clamps():
     """The discriminating test. A fused path that assumed plain SwiGLU would still match
     an UNCLAMPED reference, so assert against BOTH: close to clamped, far from unclamped."""
