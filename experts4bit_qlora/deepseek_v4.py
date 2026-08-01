@@ -169,6 +169,25 @@ class _DeepseekV4ForwardMixin:
         obj.limit = float(limit)
         return obj
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        """V4's epilogue, in ONE place: clamped SwiGLU over a clean-concat gate_up.
+
+        Named to match the hook ``ExpertsLoRA`` looks for (and the method transformers'
+        own ``DeepseekV4Experts`` carries), so the trainable adapter reproduces this
+        instead of assuming a plain SwiGLU. Without it the adapter optimises a function
+        the frozen base does not compute -- silently, since the loss still falls.
+
+        Returns **fp32**: the reference computes the whole GLU in fp32 and only casts
+        back before the down projection, so callers cast when they are ready rather than
+        losing precision here.
+        """
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate, up = gate.float(), up.float()
+        if self.limit > 0:
+            gate = gate.clamp(max=self.limit)        # one-sided, by design
+            up = up.clamp(min=-self.limit, max=self.limit)
+        return F.silu(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -190,12 +209,7 @@ class _DeepseekV4ForwardMixin:
             gate_up = self._project(
                 self.gate_up_proj, self.gate_up_absmax, self._gate_up_shape, e, cur, cd
             )
-            gate, up = gate_up.chunk(2, dim=-1)
-            gate, up = gate.float(), up.float()          # reference computes the GLU in fp32
-            if self.limit > 0:
-                gate = gate.clamp(max=self.limit)        # one-sided, by design
-                up = up.clamp(min=-self.limit, max=self.limit)
-            gated = F.silu(gate) * up
+            gated = self._apply_gate(gate_up)            # fp32, per the reference
             gated = gated * router_scores[tok, pos, None].float()   # before w2, as the reference does
             h = self._project(
                 self.down_proj, self.down_absmax, self._down_shape, e, gated.to(cd), cd

@@ -520,18 +520,19 @@ def load_moe_4bit_streaming(
             continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
         n_moe += 1
         if model_type == "deepseek_v4":
-            # V4's epilogue is a CLAMPED SwiGLU. `ExpertsLoRA` does not call
-            # `self.base(...)` — it re-implements the expert math inline so it can inject
-            # the low-rank delta before the nonlinearity (see `lora._delegate_to_base`),
-            # and that inline path is a plain SwiGLU. Wrapping this base would therefore
-            # drop the clamps on every forward that matters, with nothing raised. So V4 is
-            # built BARE, exactly as gpt-oss is above, and a V4-aware training adapter is a
-            # separate change rather than a silent wrong answer here.
-            experts = DeepseekV4Experts4bit.from_deepseek_v4(
+            # V4's epilogue is a CLAMPED SwiGLU, and `ExpertsLoRA` re-implements the expert
+            # math inline (to inject the delta before the nonlinearity) rather than calling
+            # `base.forward`. It used to hardcode a plain SwiGLU there, so wrapping V4 would
+            # have dropped the clamps on every training forward with nothing raised — which
+            # is why this was built bare. The adapter now takes the epilogue from the base's
+            # `_apply_gate` (see `lora._epilogue`), so wrapping is faithful and V4 is
+            # trainable like any other supported architecture.
+            base = DeepseekV4Experts4bit.from_deepseek_v4(
                 gate_up, down,
                 limit=float(getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT)),
                 quant_type=quant_type, compute_dtype=dtype,
-            ).to(device)
+            )
+            experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         else:
             # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
             # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as

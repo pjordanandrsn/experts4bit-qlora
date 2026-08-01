@@ -376,6 +376,19 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
         f"{index['n_experts_per_layer']} row_stride={index['row_stride']} "
         f"k_slots={k_slots} hot_rows={hot_rows}")
 
+    # An ExpertsLoRA is a TRAINING target, not a frozen stack: binding the engine over it
+    # would replace the adapter's forward outright, silently discarding the delta. And under
+    # the arena loader its base buffers are on `meta`, so the adapter could not run anyway.
+    # Refuse rather than pick one of those two wrong answers.
+    from .lora import ExpertsLoRA
+    wrapped = [i for i, m in enumerate(mods) if isinstance(m, ExpertsLoRA)]
+    if wrapped:
+        raise RuntimeError(
+            f"{len(wrapped)} of {len(mods)} expert modules are ExpertsLoRA-wrapped "
+            f"(first at index {wrapped[0]}). The NVMe engine serves FROZEN experts and "
+            "would bypass the adapter entirely. Load without `arena=` to train, or drop "
+            "the adapters to serve.")
+
     engines = []
     for i, mod in enumerate(mods):
         lim = limit if limit is not None else getattr(mod, "limit", None)
