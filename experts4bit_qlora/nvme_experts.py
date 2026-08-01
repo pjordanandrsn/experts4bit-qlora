@@ -157,7 +157,7 @@ class _NvmeResidency(_HotResidency):
 
 
 def expert_geometry_from_arena(index: dict) -> tuple:
-    """Recover ``(intermediate_dim, hidden_dim)`` from an NF4 arena's index.
+    """Recover ``(intermediate_dim, hidden_dim)`` from an arena's index.
 
     Geometry comes from the ARENA, not from the model config, and that is
     deliberate. For a plain MoE the expert input width equals ``hidden_size``, but
@@ -170,6 +170,24 @@ def expert_geometry_from_arena(index: dict) -> tuple:
     ``[H, I/2]``; the pair over-determines (I, H), so they are cross-checked
     rather than trusted individually.
     """
+    suffixes = [s["suffix"] for s in index["segments"]]
+    if not any(x.startswith("nf4.") for x in suffixes):
+        # A NATIVE MXFP4 arena (relocation bake) rather than a quantize-bake. Its
+        # segments carry the checkpoint's own projection names, so the NF4 suffixes
+        # are simply absent; the geometry is still recoverable, just from the packed
+        # shapes. Defer to the engine's own reader so there is one definition of how
+        # an MXFP4 arena is measured rather than a second, drifting copy here.
+        from mxfp4_residency import engine_segment_map, fuse_gate_up_segments
+        _groups, geo = engine_segment_map(fuse_gate_up_segments(index))
+        _E, n1, half1, _nb1, n2, half2, _nb2 = geo
+        intermediate, hidden = n1 // 2, half1 * 2
+        if n1 % 2 or hidden != n2 or intermediate != half2 * 2:
+            raise ValueError(
+                f"mxfp4 arena geometry is inconsistent: gate_up {(n1, half1)} "
+                f"implies (I={intermediate}, H={hidden}) but down {(n2, half2)} "
+                f"implies (I={half2 * 2}, H={n2})")
+        return intermediate, hidden
+
     def seg(suffix):
         g = next((s for s in index["segments"] if s["suffix"] == suffix), None)
         if g is None:
@@ -189,7 +207,8 @@ def expert_geometry_from_arena(index: dict) -> tuple:
 
 
 def build_meta_experts(index: dict, num_experts: int, *, has_gate: bool = True,
-                       activation=None, compute_dtype=None, quant_type: str = "nf4"):
+                       activation=None, compute_dtype=None, quant_type: str = "nf4",
+                       cls=None):
     """An expert module carrying SHAPES ONLY — no expert storage anywhere.
 
     Built on ``meta``, so the ``[E, ...]`` packed buffers are never allocated.
@@ -201,7 +220,13 @@ def build_meta_experts(index: dict, num_experts: int, *, has_gate: bool = True,
     """
     from . import Experts4bit, ExpertsNbit
     intermediate, hidden = expert_geometry_from_arena(index)
-    cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
+    # `cls` lets a caller keep an architecture-specific EPILOGUE on the arena path.
+    # Without it the arena branch would build a plain-SwiGLU `Experts4bit` even for a
+    # model whose experts clamp (DeepSeek-V4) or use gpt-oss's GLU — the storage would
+    # be right and the arithmetic quietly wrong, which is the whole failure class the
+    # resident path already guards against.
+    if cls is None:
+        cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
     return cls(num_experts=num_experts, hidden_dim=hidden,
                intermediate_dim=intermediate, has_gate=has_gate,
                activation=activation or torch.nn.functional.silu,
@@ -278,4 +303,118 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
     n = enable_hot_residency(model, hot_sets, device=device, verbose=verbose,
                              state_cls=_NvmeResidency)
     log(f"  nvme residency active on {n} module(s)")
+    return n
+
+
+def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
+                                hot_rows: int, limit=None, device: str = "cuda",
+                                qd: int = 4, layers: Sequence[int] | None = None,
+                                engine_cls=None, hot_sets: Sequence | None = None) -> int:
+    """Serve each MoE layer's experts from a **native MXFP4** arena.
+
+    The counterpart to :func:`enable_nvme_residency`, which serves an NF4 arena.
+    The difference is provenance, not just format: an NF4 arena is baked by
+    re-quantizing, while ``nvme_arena.bake_expert_tensors`` relocates the released
+    bytes verbatim — so this path computes on the checkpoint's own expert weights.
+    It is also smaller (DeepSeek-V4-Flash: ~140 GiB against ~156 GB) and bakes far
+    faster, since nothing is quantized.
+
+    Unlike the NF4 lane, ``grouped-nf4-gemm``'s MXFP4 engines are standalone
+    per-layer objects rather than ``nn.Module`` patches, so this binds one engine
+    per MoE module. ``tier`` and ``store`` are shared across every layer — one
+    pinned host buffer and one set of device slots, not one per layer, which is
+    the difference between a few hundred MB and tens of GB at real depth.
+
+    Args:
+        k_slots: the model's routed top-k; it sizes the device slot store.
+        hot_sets: per-module expert ids to keep RESIDENT in VRAM, never read again.
+            This is the cost/speed dial: ``None`` (the default) is pure streaming —
+            minimum VRAM, every routed expert fetched — while a hot set of H experts
+            costs ``H * row_stride`` of VRAM per layer and removes those experts from
+            the read path. It is a Sequence so a caller can size H per layer from a
+            routing histogram rather than uniformly.
+        hot_rows: pinned-DRAM rows the shared tier may hold. Same hard floor as
+            :func:`enable_nvme_residency` — at least the number of DISTINCT cold
+            experts one fetch can want.
+        limit: the clamped-GLU bound. Defaults to each module's own ``.limit``
+            (DeepSeek-V4 carries ``swiglu_limit`` there), so a mixed model cannot
+            silently get one layer's bound applied to another's.
+        engine_cls: the engine, which owns the EPILOGUE. Defaults to
+            ``Mxfp4NvmeResidencyV4``. Passing the wrong one loads correct bytes
+            and computes a different activation, so it is explicit rather than
+            inferred.
+
+    Returns the number of modules bound.
+    """
+    try:
+        from nvme_arena import load_index
+        from mxfp4_residency import Mxfp4NvmeResidencyV4
+    except ImportError as exc:                       # pragma: no cover
+        raise ImportError(
+            "MXFP4 NVMe residency needs grouped-nf4-gemm's mxfp4_residency / "
+            "nvme_arena on the import path") from exc
+    from .hot_residency import target_modules
+
+    engine_cls = engine_cls or Mxfp4NvmeResidencyV4
+    index = load_index(arena_path)
+    mods = target_modules(model)
+    if not mods:
+        raise RuntimeError(
+            "no targetable MoE modules found — an ExpertsLoRA-wrapped base is "
+            "never dispatched, so there would be nothing for the engine to serve")
+    lay = list(layers) if layers is not None else list(range(len(mods)))
+    if len(lay) < len(mods):
+        raise ValueError(f"layers has {len(lay)} entries for {len(mods)} modules")
+
+    log(f"  mxfp4 nvme residency: arena {arena_path} rows={index['n_layers']}x"
+        f"{index['n_experts_per_layer']} row_stride={index['row_stride']} "
+        f"k_slots={k_slots} hot_rows={hot_rows}")
+
+    engines = []
+    for i, mod in enumerate(mods):
+        lim = limit if limit is not None else getattr(mod, "limit", None)
+        if lim is None:
+            raise ValueError(
+                f"module {i} carries no `.limit` and none was passed — the "
+                "clamped-GLU bound is not guessable, and a wrong one is silent")
+        hot = () if hot_sets is None else hot_sets[i]
+        eng = engine_cls(arena_path, lay[i], k_slots=k_slots, hot_rows=hot_rows,
+                         hot_ids=hot, limit=float(lim), device=device, index=index, qd=qd,
+                         tier=engines[0].tier if engines else None,
+                         store=engines[0].store if engines else None)
+        engines.append(eng)
+
+        mod._e4b_mxfp4_engine = eng
+        mod._e4b_mxfp4_ref = mod.forward
+
+        def _fwd(hidden, top_k_index, top_k_weights, _m=mod, _e=eng):
+            # Same guard the v0 residency patch uses, and deliberately NOT
+            # `_m.training`: a model left in train mode still runs plenty of
+            # no-grad eval forwards, and gating on the mode sends those to a
+            # reference path whose buffers are on `meta` under the arena loader —
+            # i.e. NaNs, not a slow answer. The real condition is whether autograd
+            # actually needs a graph.
+            cd = _m.compute_dtype if _m.compute_dtype is not None else hidden.dtype
+            if cd not in (torch.bfloat16, torch.float16):
+                return _m._e4b_mxfp4_ref(hidden, top_k_index, top_k_weights)
+            if torch.is_grad_enabled() and (
+                hidden.requires_grad or any(p.requires_grad for p in _m.parameters())
+            ):
+                return _m._e4b_mxfp4_ref(hidden, top_k_index, top_k_weights)
+            return _e.forward(hidden, top_k_index, top_k_weights)
+
+        mod.forward = _fwd
+
+    log(f"  mxfp4 nvme residency active on {len(engines)} module(s)")
+    return len(engines)
+
+
+def disable_mxfp4_nvme_residency(model) -> int:
+    """Restore the saved forwards; the engines and their shared tier are dropped."""
+    n = 0
+    for mod in model.modules():
+        if hasattr(mod, "_e4b_mxfp4_ref"):
+            mod.forward = mod._e4b_mxfp4_ref
+            del mod._e4b_mxfp4_ref, mod._e4b_mxfp4_engine
+            n += 1
     return n
