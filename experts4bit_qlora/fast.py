@@ -32,9 +32,11 @@ Usage::
 
 Eligibility (checked per module, ineligible modules are left untouched):
 NF4 4-bit storage, blocksize 64, K divisible by 64 on both projections, CUDA
-storage, and the module still uses the stock ``ExpertsNbit`` forward
-(subclasses that override ``forward`` — e.g. the gpt-oss clamped-activation
-experts — are skipped rather than silently mis-activated).
+storage, and an epilogue this path can reproduce. A subclass that overrides
+``forward`` is skipped rather than silently mis-activated — unless it exposes
+``_apply_gate`` (DeepSeek-V4's clamped SwiGLU), which the fused paths call, so
+they cannot drift from the reference. gpt-oss stays skipped: its forward also
+adds per-expert biases, which no fused path here applies.
 """
 from __future__ import annotations
 
@@ -85,6 +87,7 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
         return mod._e4b_fast_ref(hidden_states, top_k_index, top_k_weights)
 
     from nf4_grouped import gemm_4bit_grouped
+    from .lora import _epilogue
 
     input_dtype = hidden_states.dtype
     tokens, hidden = hidden_states.shape
@@ -112,11 +115,11 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
         sizes,
         expert_ids,
     )
-    if mod.has_gate:
-        gate, up_h = up.chunk(2, dim=-1)
-        h = mod.act_fn(gate) * up_h
-    else:
-        h = mod.act_fn(up)
+    # The base's OWN epilogue, not an assumed SwiGLU: `_epilogue` is the same hook
+    # `ExpertsLoRA.forward` uses, so the fused and reference paths cannot drift apart.
+    # DeepSeek-V4 loads INSIDE an ExpertsLoRA, and a plain `act_fn(gate) * up` here
+    # silently drops its clamps while the frozen base still applies them.
+    h = _epilogue(mod, up)
 
     down = gemm_4bit_grouped(
         h.to(compute_dtype).contiguous(),
@@ -167,6 +170,7 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
         return mod._e4b_fast_ref(hidden_states, top_k_index, top_k_weights)
 
     from nf4_grouped import gemm_4bit_grouped
+    from .lora import _epilogue
 
     input_dtype = hidden_states.dtype
     hidden_states = hidden_states.to(compute_dtype)
@@ -202,11 +206,11 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
             a_cat[off:off + n], mod.gate_up_lora_A[e], mod.gate_up_lora_B[e])
         off += n
 
-    if base.has_gate:
-        gate, up_h = up.chunk(2, dim=-1)
-        h = base.act_fn(gate) * up_h
-    else:
-        h = base.act_fn(up)
+    # The base's OWN epilogue, not an assumed SwiGLU: `_epilogue` is the same hook
+    # `ExpertsLoRA.forward` uses, so the fused and reference paths cannot drift apart.
+    # DeepSeek-V4 loads INSIDE an ExpertsLoRA, and a plain `act_fn(gate) * up` here
+    # silently drops its clamps while the frozen base still applies them.
+    h = _epilogue(base, up)
     h = h.contiguous()
 
     down = gemm_4bit_grouped(
@@ -286,6 +290,18 @@ def enable_fast(model, verbose: bool = False) -> int:
         if reason is not None:
             if verbose:
                 print(f"[e4b.fast] skip {type(mod).__name__}: {reason}")
+            continue
+        # A base whose forward this path cannot reproduce must be SKIPPED, not fused.
+        # `_epilogue` covers a custom *activation* (V4's clamps) via `_apply_gate`; it
+        # cannot cover gpt-oss, whose forward also adds per-expert biases the grouped
+        # path never applies. The bare-module loop below already makes this check --
+        # the wrapper loop only checked the WRAPPER's forward, so a custom base reached
+        # the kernel whenever it was LoRA-wrapped, which is how V4 loads.
+        if (type(mod.base).forward not in stock_forwards
+                and not hasattr(mod.base, "_apply_gate")):
+            if verbose:
+                print(f"[e4b.fast] skip {type(mod).__name__}: base "
+                      f"{type(mod.base).__name__} has a custom forward")
             continue
         if hasattr(mod, "_e4b_fast_ref"):
             continue  # already enabled; idempotent
@@ -401,6 +417,7 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     path is OPT-IN via ``enable_fast_train`` rather than a silent default.
     """
     from nf4_qlora import fused_grouped_lora
+    from .lora import _epilogue
 
     base = lora_mod.base
     input_dtype = hidden_states.dtype
@@ -443,11 +460,11 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
         weights_fn=_gate_up_now,
         scaling=lora_mod.scaling,     # alpha/r -- the reference applies it too
     )
-    if base.has_gate:
-        gate, up = proj.chunk(2, dim=-1)
-        h = base.act_fn(gate) * up
-    else:
-        h = base.act_fn(proj)
+    # The base's OWN epilogue, not an assumed SwiGLU: `_epilogue` is the same hook
+    # `ExpertsLoRA.forward` uses, so the fused and reference paths cannot drift apart.
+    # DeepSeek-V4 loads INSIDE an ExpertsLoRA, and a plain `act_fn(gate) * up` here
+    # silently drops its clamps while the frozen base still applies them.
+    h = _epilogue(base, proj)
 
     def _down_now():
         return (base.down_proj.view(E, n2, k2 // 2),
@@ -485,11 +502,21 @@ def enable_fast_train(model, verbose: bool = False) -> int:
         if verbose:
             print("[e4b.fast] grouped-nf4-gemm has no nf4_qlora: need >= 0.2.4")
         return 0
+    from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.lora import ExpertsLoRA
 
+    stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     patched = 0
     for mod in model.modules():
         if isinstance(mod, ExpertsLoRA) and not hasattr(mod, "_e4b_train_ref"):
+            # Same bargain as `enable_fast`; this loop had no eligibility gate at all,
+            # so every ExpertsLoRA was fused regardless of what its base computes.
+            if (type(mod.base).forward not in stock_forwards
+                    and not hasattr(mod.base, "_apply_gate")):
+                if verbose:
+                    print(f"[e4b.fast] skip {type(mod).__name__}: base "
+                          f"{type(mod.base).__name__} has a custom forward")
+                continue
             mod._e4b_train_ref = mod.forward
             mod.forward = types.MethodType(
                 lambda self, hs, tki, tkw: fused_experts_train_forward(self, hs, tki, tkw),
