@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.9.0 — 2026-08-01
+
+**The trainer ran at batch size 1.** Its inner loop put one variable-length row through each
+forward. A fused-MoE step's cost is largely *fixed per active expert* — the reference path
+dequantizes each routed expert once, the fused path launches one grouped GEMM per expert
+group — so a forward carrying 100 tokens paid nearly what one carrying 2000 does. On OLMoE
+(16 layers x 64 experts, top-8) a single ~100-token row was dequantizing ~128 experts.
+
+Rows are now packed until a **token budget** is reached. Measured on an RTX A2000
+(OLMoE-1B-7B, SEQ=192, alpaca, 15 steps x grad_accum 4):
+
+| `TOKEN_BUDGET` | s/step | tok/s | peak GPU |
+|---|---:|---:|---:|
+| 0 (one row per forward) | 17.8 | **22** | 5.23 GB |
+| 1024 | 22.2 | **144** | 5.88 GB |
+| 2048 | 22.8 | **248** | 6.67 GB |
+
+**11.3x throughput for +1.4 GB.** Steps get 28% *slower* — each carries ~15x more data — so
+tok/s is the metric this moves and s/step reads like a regression. `TOKEN_BUDGET=0` restores
+the one-row path the v0.2.0 convergence receipts were measured on.
+
+**The ceiling is VRAM, and it is not knowable in advance.** 4096 OOMs on a 12 GB card — but
+only sometimes, on an unlucky batch of long rows; it sustained 353 tok/s for six steps first.
+A static default cannot be right for both a 12 GB card running OLMoE and a 30B model on the
+offload path, so an OOM now **halves the budget and retries the step** rather than killing
+the run, down to a floor of 256. Verified: a run at 4096 that previously died now backs off
+to 2048 at step 7 and finishes.
+
+Padded batching, not sequence packing: pad positions carry label `-100` and attention `0`,
+so no row can see another's tokens and no padding contributes loss — correct without
+touching the model. Rows are drawn length-sorted within a bucket to bound padding waste, and
+the budget counts the *padded* cost (`rows * width`), which is the work the GPU actually does.
+
+Not claimed: better optimization. The batched arms reach a lower eval loss at equal `STEPS`
+(-0.351 vs -0.181) purely because they see ~15x more tokens per step. Loss-per-token parity
+is unmeasured.
+
 ## 0.8.0 — 2026-08-01
 
 **DeepSeek-V4 (Flash / Pro) loads, serves and trains.** Full V4-Flash — 43 layers
