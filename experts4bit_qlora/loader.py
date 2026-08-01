@@ -16,6 +16,7 @@ transformers>=5.0.
 
 import json
 import os
+import struct
 
 from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
@@ -25,6 +26,9 @@ from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
 from . import Experts4bit, ExpertsNbit, normalize_quant_type
+from .deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
+from .deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
+from .fp8_blocks import Fp8BlockLinear, convert_to_fp8_blocks
 from .gptoss import GptOssExperts4bit
 from .lora import ExpertsLoRA
 from .mxfp4 import dequantize_mxfp4
@@ -45,6 +49,10 @@ SUPPORTED_ARCHITECTURES = {
     # Kimi K3 (`KimiK3ForConditionalGeneration`, DeepSeek-V3 lineage): per-expert
     # MXFP4 under `block_sparse_moe.experts.{e}.w{1,3,2}` — see K3_PER_EXPERT_MXFP4.
     "kimi_k3": "block_sparse_moe.experts",
+    # DeepSeek-V4 (Flash/Pro): per-expert MXFP4 under `mlp.experts.{e}.w{1,3,2}`, same
+    # lineage as K3 but with honest dtype labels and a `weight`/`scale` suffix pair.
+    # Its DENSE half is block-scaled FP8, not bf16 — see DEEPSEEK_V4_FP8_DENSE.
+    "deepseek_v4": "mlp.experts",
 }
 # model_type -> checkpoint prefix for the text tower of a MULTIMODAL config. Gemma-4
 # nests the language model as `model.language_model.`; Kimi K3 reverses the order
@@ -55,7 +63,21 @@ MULTIMODAL_CKPT_PREFIX = {"kimi_k3": "language_model.model."}
 # checkpoints, plus the packed/scale suffixes. K3: w1=gate, w3=up, w2=down —
 # confirmed by SHAPES, not convention (w1/w3 are [inter, latent]; w2 is
 # [latent, inter]).
-K3_PER_EXPERT_MXFP4 = {"kimi_k3": (("w1", "w3", "w2"), "weight_packed", "weight_scale")}
+K3_PER_EXPERT_MXFP4 = {
+    "kimi_k3": (("w1", "w3", "w2"), "weight_packed", "weight_scale"),
+    # V4 keeps K3's w1/w3/w2 spelling and shapes but names the tensors `weight`/`scale`
+    # and labels their dtypes honestly (`I8` / `F8_E8M0` rather than K3's `U8`/`U8`).
+    # `dequantize_mxfp4` reinterprets both, so the same branch reads them unchanged.
+    "deepseek_v4": (("w1", "w3", "w2"), "weight", "scale"),
+}
+# model_type -> the checkpoint is published in a NON-transformers spelling and every key
+# must be rewritten before it can be matched against the module tree. Unlike
+# MULTIMODAL_CKPT_PREFIX (which strips a prefix), these checkpoints need a full rename —
+# including ADDING the `model.` prefix, which a prefix-strip cannot express.
+CKPT_KEY_REWRITERS = {"deepseek_v4": rename_deepseek_v4_key}
+# model_type -> the non-expert ("dense") weights are block-scaled FP8 rather than bf16,
+# and each `X.weight` carries a companion `X.scale`. Those pairs become Fp8BlockLinear.
+DEEPSEEK_V4_FP8_DENSE = {"deepseek_v4"}
 SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 
 # model_type -> ((legacy on-disk spelling, name in the transformers>=5 module tree), ...).
@@ -134,6 +156,78 @@ def _assign(model, name, tensor):
     # nothing the model already believes about the shape to contradict.
     setattr(mod, attr, tensor)
     return False
+
+
+class _RawShardReader:
+    """Read a safetensors tensor as raw ``uint8``, bypassing torch's dtype table.
+
+    ``safe_open(...).get_tensor`` materializes through that table, so a shard declaring a
+    dtype this torch build does not have cannot be read *at all* — it raises
+    ``AttributeError`` from inside ``torch.__getattr__``, not from safetensors. DeepSeek-V4
+    hits this immediately: its MXFP4 expert scales and its FP8 dense scales are both
+    labelled ``F8_E8M0``, which torch only grew in 2.7.
+
+    The bytes were never the problem, only the label. And both consumers want the biased
+    exponent *byte* anyway — ``dequantize_mxfp4`` feeds it to ``ldexp``, ``Fp8BlockLinear``
+    normalizes it to ``uint8`` on construction — so reading it as ``uint8`` here is the
+    more direct path, not a workaround for old torch.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        with open(path, "rb") as f:
+            n = struct.unpack("<Q", f.read(8))[0]
+            self.header = json.loads(f.read(n))
+        self.header.pop("__metadata__", None)
+        self.base = 8 + n
+
+    def u8(self, key):
+        meta = self.header[key]
+        a, b = meta["data_offsets"]
+        with open(self.path, "rb") as f:
+            f.seek(self.base + a)
+            buf = bytearray(f.read(b - a))
+        return torch.frombuffer(buf, dtype=torch.uint8).reshape(meta["shape"])
+
+
+def _install_fp8_block_linears(model, weight_map, get, expert_keys, dtype, device):
+    """Swap every dense ``nn.Linear`` whose checkpoint weight is block-scaled FP8.
+
+    DeepSeek-V4 keeps its non-expert half in ``float8_e4m3fn`` with one ``e8m0`` scale per
+    ``[128, 128]`` tile. Those weights have no home in a bf16 ``nn.Linear`` and their
+    ``.scale`` companions have no module at all, so `_assign` cannot place either; the pair
+    becomes an :class:`Fp8BlockLinear`, which keeps the FP8 bytes resident and decodes on
+    use (~1 byte/param instead of 2 — the difference between fitting a 12 GB card and not).
+
+    Pairing is by **sibling presence**, never by the ``.scale`` suffix. V4's
+    hyper-connections ship a standalone parameter literally *named* ``scale``
+    (``attn_hc.scale``, ``ffn_hc.scale``, ``hc_head.hc_scale``) with no ``weight`` beside
+    it. Keying off the suffix would swallow those three per layer and leave the HC modules
+    silently unloaded — caught by the reverse arm of ``test_deepseek_v4_keys``.
+
+    Returns the set of checkpoint keys it consumed.
+    """
+    consumed = set()
+    for name in list(weight_map):
+        if not name.endswith(".weight") or name in expert_keys:
+            continue
+        stem = name[: -len(".weight")]
+        scale_key = stem + ".scale"
+        if scale_key not in weight_map or scale_key in expert_keys:
+            continue
+        w = get(name)
+        if w.dtype not in (torch.float8_e4m3fn, torch.uint8, torch.int8):
+            continue                       # a `.scale` sibling that is not FP8 storage
+        target = model.get_submodule(stem)
+        # Convert IN PLACE rather than substituting an Fp8BlockLinear. V4's
+        # `self_attn.o_a_proj` is a `DeepseekV4GroupedLinear` — an `nn.Linear` SUBCLASS
+        # whose forward is block-diagonal — so swapping in a real Linear quietly turns a
+        # grouped projection into a dense one. Rebinding the weight keeps whatever
+        # forward the module already has.
+        convert_to_fp8_blocks(target, w, get(scale_key), compute_dtype=dtype)
+        target.to(device)
+        consumed |= {name, scale_key}
+    return consumed
 
 
 def load_moe_4bit_streaming(
@@ -243,7 +337,31 @@ def load_moe_4bit_streaming(
             )
         with safe_open(single_path, framework="pt", device="cpu") as f:
             raw_map = dict.fromkeys(f.keys(), "model.safetensors")
-    if ckpt_prefix:
+    rewrite = CKPT_KEY_REWRITERS.get(model_type)
+    if rewrite is not None:
+        # This checkpoint ships in the model's OWN reference spelling and transformers
+        # has no `_checkpoint_conversion_mapping` for it, so nothing renames it on the
+        # way in. Rewrite every key here — including adding the `model.` prefix, which
+        # the ckpt_prefix branch below cannot express (it only ever strips).
+        weight_map, orig_key, dropped = {}, {}, []
+        for k, f in raw_map.items():
+            new = rewrite(k)
+            if new is None:
+                dropped.append(k)     # no module to receive it (V4: the MTP block)
+                continue
+            weight_map[new] = f
+            orig_key[new] = k
+        if dropped:
+            log(f"  skipped {len(dropped)} checkpoint tensor(s) the text model does not "
+                f"build, e.g. {dropped[0]}")
+        if not weight_map:
+            raise RuntimeError(
+                f"{model_id!r}: the {model_type!r} key rewriter mapped every one of "
+                f"{len(raw_map)} checkpoint tensors to nothing. That is a rewriter/"
+                "checkpoint mismatch, not an empty checkpoint — refusing rather than "
+                "proceeding to build a model with no weights."
+            )
+    elif ckpt_prefix:
         weight_map = {"model." + k[len(ckpt_prefix) :]: f for k, f in raw_map.items() if k.startswith(ckpt_prefix)}
         orig_key = {"model." + k[len(ckpt_prefix) :]: k for k in raw_map if k.startswith(ckpt_prefix)}
     else:
@@ -258,8 +376,21 @@ def load_moe_4bit_streaming(
             orig_key[renamed] = orig_key.pop(key)
     handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in set(weight_map.values())}
 
+    raw_readers = {}
+
     def get(name):
-        return handles[weight_map[name]].get_tensor(orig_key[name])
+        fn = weight_map[name]
+        try:
+            return handles[fn].get_tensor(orig_key[name])
+        except AttributeError:
+            # The shard declares a dtype this torch build has no name for (see
+            # _RawShardReader). Fall back to the bytes. Deliberately narrow: only this
+            # one failure mode reaches here, and anything else still raises.
+            if fn not in raw_readers:
+                raw_readers[fn] = _RawShardReader(os.path.join(snap, fn))
+                log(f"  {fn}: holds a dtype this torch ({torch.__version__}) cannot "
+                    f"name; reading those tensors as raw uint8")
+            return raw_readers[fn].u8(orig_key[name]).to(device)
 
     n_layers = lm_config.num_hidden_layers
     n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
@@ -288,9 +419,16 @@ def load_moe_4bit_streaming(
             expert_keys.update(keys)
             n_moe += 1
             from .nvme_experts import build_meta_experts
+            v4 = model_type == "deepseek_v4"
             experts = build_meta_experts(
                 arena_index, n_exp, has_gate=True, activation=activation,
-                compute_dtype=dtype, quant_type=quant_type)
+                compute_dtype=dtype, quant_type=quant_type,
+                cls=DeepseekV4Experts4bit if v4 else None)
+            if v4:
+                # The epilogue has to survive the arena path too — see the bare-build
+                # note on the resident branch below.
+                experts.limit = float(
+                    getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT))
             parent, leaf = epfx.rstrip(".").rsplit(".", 1)
             setattr(model.get_submodule(parent), leaf, experts)
             meta_expert_prefixes.append(epfx)
@@ -381,14 +519,28 @@ def load_moe_4bit_streaming(
         else:
             continue  # dense layer (no experts here — e.g. Qwen3 mlp_only_layers, or a dense Gemma-4 layer)
         n_moe += 1
-        # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
-        # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
-        # they did before the ExpertsNbit fold.
-        base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
-        base = base_cls.from_float(
-            gate_up, down, has_gate=True, activation=activation, quant_type=quant_type, compute_dtype=dtype
-        )
-        experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
+        if model_type == "deepseek_v4":
+            # V4's epilogue is a CLAMPED SwiGLU. `ExpertsLoRA` does not call
+            # `self.base(...)` — it re-implements the expert math inline so it can inject
+            # the low-rank delta before the nonlinearity (see `lora._delegate_to_base`),
+            # and that inline path is a plain SwiGLU. Wrapping this base would therefore
+            # drop the clamps on every forward that matters, with nothing raised. So V4 is
+            # built BARE, exactly as gpt-oss is above, and a V4-aware training adapter is a
+            # separate change rather than a silent wrong answer here.
+            experts = DeepseekV4Experts4bit.from_deepseek_v4(
+                gate_up, down,
+                limit=float(getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT)),
+                quant_type=quant_type, compute_dtype=dtype,
+            ).to(device)
+        else:
+            # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
+            # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
+            # they did before the ExpertsNbit fold.
+            base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
+            base = base_cls.from_float(
+                gate_up, down, has_gate=True, activation=activation, quant_type=quant_type, compute_dtype=dtype
+            )
+            experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:
             # Move this layer's packed experts to (pinned) CPU now, before the next layer is built,
             # so the GPU never holds more than one layer's experts at a time during load.
@@ -424,6 +576,13 @@ def load_moe_4bit_streaming(
             log("  offload arena ON (E4B_OFFLOAD_ARENA): experts staged as consolidated per-dtype copies")
         if _stats_enabled():  # A2: name the PCIe bus + H2D ceiling these per-layer figures ride
             report_offload_environment(device, log)
+
+    if model_type in DEEPSEEK_V4_FP8_DENSE:
+        fp8_keys = _install_fp8_block_linears(
+            model, weight_map, get, expert_keys, dtype, device)
+        expert_keys |= fp8_keys          # placed as modules; not for the `_assign` pass
+        log(f"  installed {len(fp8_keys) // 2} block-scaled FP8 linear(s) "
+            f"(dense side stays FP8-resident, decoded on use)")
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     narrowed = []
