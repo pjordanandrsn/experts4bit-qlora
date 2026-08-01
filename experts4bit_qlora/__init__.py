@@ -91,9 +91,16 @@ from .dense_offload import dense_offload_report, enable_dense_offload  # noqa: E
 from .dense_disk import DenseDiskSource, DiskHome, disk_homes_for  # noqa: E402
 from .nvme_experts import (  # noqa: E402
     build_meta_experts,
+    disable_mxfp4_nvme_residency,
+    enable_mxfp4_nvme_residency,
     enable_nvme_residency,
     expert_geometry_from_arena,
 )
+# 0.8.0: the hot-set dial. The README tells you to rank a routing histogram rather than
+# take experts by index (+37.1% at identical VRAM on V4-Flash), so the two functions that
+# do it have to be importable from the top level -- 0.7.1 shipped precisely to fix the
+# class of bug where the front page names a symbol that raises ImportError.
+from .expert_profile import coverage_from_profile, hot_sets_from_profile  # noqa: E402
 from .kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
@@ -138,8 +145,12 @@ __all__ = [
     "DiskHome",
     "disk_homes_for",
     "enable_nvme_residency",
+    "enable_mxfp4_nvme_residency",
+    "disable_mxfp4_nvme_residency",
     "build_meta_experts",
     "expert_geometry_from_arena",
+    "hot_sets_from_profile",
+    "coverage_from_profile",
     "verify_moe_4bit",
     # Provided lazily by __getattr__ below (importing them pulls in the [train] extra).
     "load_moe_4bit_streaming",
@@ -162,4 +173,4 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"

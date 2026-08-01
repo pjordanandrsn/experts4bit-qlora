@@ -99,6 +99,35 @@ def _infer_gemv_enabled() -> bool:
     return os.environ.get("E4B_INFER_GEMV", "1") != "0"
 
 
+def _epilogue(base, proj):
+    """The base's own activation, not an assumed SwiGLU.
+
+    This adapter cannot call ``base.forward`` -- it re-implements the expert math so the
+    low-rank delta lands BEFORE the nonlinearity -- which means it also owns the choice of
+    nonlinearity, and that choice was hardcoded to ``act_fn(gate) * up``. For any
+    architecture whose experts clamp or gate differently that is silently wrong: the model
+    trains, the loss falls, and it is optimising a function the frozen base does not
+    compute. DeepSeek-V4 is exactly that case (clamped SwiGLU), which is why its experts
+    were built bare rather than wrapped.
+
+    So the base supplies the epilogue via ``_apply_gate`` when it has one. Resolved with
+    ``getattr`` rather than by adding the method to the vendored primitive, because
+    ``Experts4bit`` resolves to UPSTREAM bitsandbytes whenever that is installed -- a
+    method added to the vendored mirror would simply not be there half the time.
+    """
+    hook = getattr(base, "_apply_gate", None)
+    if hook is not None:
+        out = hook(proj)
+        # a hook may compute in fp32 (V4 does, following its reference) but the adapter's
+        # next step is a projection in compute_dtype, so normalise here rather than
+        # letting an fp32 activation meet a bf16 weight
+        return out if out.dtype == proj.dtype else out.to(proj.dtype)
+    if base.has_gate:
+        gate, up = proj.chunk(2, dim=-1)
+        return base.act_fn(gate) * up
+    return base.act_fn(proj)
+
+
 class ExpertsLoRA(nn.Module):
     """Per-expert LoRA adapters over a frozen :class:`Experts4bit` base.
 
@@ -327,11 +356,7 @@ class ExpertsLoRA(nn.Module):
                 use_gemv,
             ) + self._lora(x, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
 
-            if base.has_gate:
-                gate, up = proj.chunk(2, dim=-1)
-                current_hidden = base.act_fn(gate) * up
-            else:
-                current_hidden = base.act_fn(proj)
+            current_hidden = _epilogue(base, proj)
 
             current_hidden = self._base_project(
                 base.down_proj,
@@ -389,11 +414,7 @@ class ExpertsLoRA(nn.Module):
                 use_infer_gemv,
             ) + self._lora(hidden_states, self.gate_up_lora_A[expert_idx], self.gate_up_lora_B[expert_idx])
 
-            if base.has_gate:
-                gate, up = proj.chunk(2, dim=-1)
-                current_hidden = base.act_fn(gate) * up
-            else:
-                current_hidden = base.act_fn(proj)
+            current_hidden = _epilogue(base, proj)
 
             current_hidden = self._base_project(
                 base.down_proj,

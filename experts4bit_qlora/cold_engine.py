@@ -49,6 +49,8 @@ from typing import Sequence
 
 import torch
 
+from .lora import _epilogue
+
 from .hot_residency import _HotResidency, _eligible
 
 
@@ -176,12 +178,12 @@ class _ColdEngine(_HotResidency):
                 up = up.clamp(min=-self.limit, max=self.limit)
                 h = (up + 1) * (gate * torch.sigmoid(gate * self.alpha))
                 dn = h @ w_dn.T + self.cc_dn_b[e_local]
-            elif self.has_gate:
-                gate, up = gu.chunk(2, dim=-1)
-                h = self.act_fn(gate) * up
-                dn = h @ w_dn.T
             else:
-                dn = self.act_fn(gu) @ w_dn.T
+                # The module's OWN epilogue. gpt-oss keeps the branch above (biases);
+                # a custom ACTIVATION is handled here, which is what lets V4's clamps
+                # survive host compute. This path is already fp32 throughout, so V4's
+                # fp32 GLU needs no special casing.
+                dn = _epilogue(self.mod, gu) @ w_dn.T
             dn_sorted.narrow(0, start, cnt).copy_(dn)
             start += cnt
 
@@ -237,6 +239,12 @@ def enable_cold_engine(model, hot_sets: Sequence, device: str = "cuda",
     try:
         from experts4bit_qlora.gptoss import GptOssExperts4bit, GptOssExpertsNbit
         stock_forwards |= {GptOssExperts4bit.forward, GptOssExpertsNbit.forward}
+        # V4 overrides `forward` only for its clamped SwiGLU, which `_epilogue` now
+        # reproduces on the host path — so allowlist it rather than skipping it as a
+        # custom forward and leaving the strong-CPU regime unavailable to V4.
+        from experts4bit_qlora.deepseek_v4 import (
+            DeepseekV4Experts4bit, DeepseekV4ExpertsNbit)
+        stock_forwards |= {DeepseekV4Experts4bit.forward, DeepseekV4ExpertsNbit.forward}
     except ImportError:
         pass
     if hasattr(model, "modules"):
@@ -274,7 +282,8 @@ def enable_cold_engine(model, hot_sets: Sequence, device: str = "cuda",
                 print(f"[cold_engine] skip {type(mod).__name__}: {reason}")
             continue
         for ref, name in (("_e4b_fast_ref", "[fast]"), ("_e4b_hot_ref", "hot residency"),
-                          ("_e4b_pipe_ref", "pipelined residency")):
+                          ("_e4b_pipe_ref", "pipelined residency"),
+                          ("_e4b_mxfp4_ref", "mxfp4 NVMe residency")):
             if hasattr(mod, ref):
                 if verbose:
                     print(f"[cold_engine] skip {type(mod).__name__}: {name} enabled — disable it first")

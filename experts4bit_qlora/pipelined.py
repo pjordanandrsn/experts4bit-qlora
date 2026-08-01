@@ -300,12 +300,14 @@ class _PipelinedResidency:
         if self.a_buf is None or self.a_buf.dtype != cd:
             self.a_buf = torch.empty(k, x_row.shape[-1], dtype=cd, device=self.device)
         self.a_buf.copy_(x_row.expand(k, -1))
+        from .lora import _epilogue
+
         gu = gemm_4bit_grouped(self.a_buf, self.gu_p_v, self.gu_a_v, self.sizes, self.slot_eids)
-        if self.has_gate:
-            gate, up = gu.chunk(2, dim=-1)
-            h = self.act_fn(gate) * up
-        else:
-            h = self.act_fn(gu)
+        # The module's OWN epilogue (`_epilogue` -> `base._apply_gate` when it has one),
+        # not an assumed SwiGLU. gpt-oss needs the subclass below because it also adds
+        # per-expert biases; a custom ACTIVATION alone is handled right here, which is
+        # what lets DeepSeek-V4 run on this engine instead of only on the deprecated one.
+        h = _epilogue(self.mod, gu)
         dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.slot_eids)
         return dn
 
@@ -403,12 +405,20 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
         stock_forwards.add(GptOssExperts4bit.forward)
         from experts4bit_qlora.gptoss import GptOssExpertsNbit
         stock_forwards.add(GptOssExpertsNbit.forward)
+        # V4 overrides `forward` for its CLAMPED SwiGLU and nothing else -- no biases --
+        # and `_PipelinedResidency.step` now reproduces that through `_apply_gate`. Without
+        # this it was skipped as "custom forward", so V4 residency worked only on
+        # `enable_hot_residency`, the engine this one deprecates.
+        from experts4bit_qlora.deepseek_v4 import (
+            DeepseekV4Experts4bit, DeepseekV4ExpertsNbit)
+        stock_forwards |= {DeepseekV4Experts4bit.forward, DeepseekV4ExpertsNbit.forward}
     except ImportError:
         pass
 
     patched = 0
     for i, mod in enumerate(mods):
-        if hasattr(mod, "_e4b_fast_ref") or hasattr(mod, "_e4b_hot_ref") or hasattr(mod, "_e4b_cold_ref"):
+        if (hasattr(mod, "_e4b_fast_ref") or hasattr(mod, "_e4b_hot_ref")
+                or hasattr(mod, "_e4b_cold_ref") or hasattr(mod, "_e4b_mxfp4_ref")):
             if verbose:
                 print(f"[pipelined] skip {type(mod).__name__}: another forward patch is active")
             continue

@@ -37,7 +37,7 @@ import torch
 
 
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
-                      act_fn, gptoss=None):
+                      act_fn, gptoss=None, clamp_limit=None):
     """Down-projection outputs for each (token,slot) row, computed on the device
     the packed stack lives on. ``local_ids`` index into the G-expert stack
     (``gu_p`` is ``[G, n1, k1//2]`` etc.). Returns ``[R, H]`` in the input row
@@ -50,7 +50,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     ``act_fn(gate)*up``. gpt-oss weights are de-interleaved to a contiguous
     ``[gate; up]`` layout at load (``gptoss.py``), so ``chunk(2)`` is the
     correct split here (NOT ``[...::2]``). Mirrors ``_GptOssForwardMixin.forward``
-    exactly (the correctness oracle)."""
+    exactly (the correctness oracle).
+
+    ``clamp_limit``, when given, selects the DeepSeek-V4 epilogue: no biases, but
+    ``gate.clamp(max=L)`` / ``up.clamp(-L, L)`` before the ordinary ``act_fn(gate)*up``,
+    evaluated in **fp32** and cast back for the down GEMM. It is mutually exclusive with
+    ``gptoss`` — same clamps, different combination — and mirrors
+    ``_DeepseekV4ForwardMixin.forward`` in both structure and precision. Threading it
+    matters: an expert module whose forward is allowlisted for patching but whose
+    epilogue this function does not reproduce gets silently served plain SwiGLU."""
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
@@ -72,7 +80,21 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
     elif has_gate:
         gate, up = gu.chunk(2, dim=-1)
-        h = act_fn(gate) * up
+        if clamp_limit is not None:
+            # fp32, then back to compute dtype for the down GEMM — mirroring
+            # `_DeepseekV4ForwardMixin._apply_gate` + its `gated.to(cd)`. The other two
+            # branches deliberately stay in compute dtype because THEIR references do
+            # (stock `ExpertsNbit.forward` and `_GptOssForwardMixin.forward` both run the
+            # epilogue at `cd`); V4's reference is the one that promotes, so reproducing
+            # its epilogue means reproducing the precision too. Clamping is exactly where
+            # that bites: at the limit the clamped operand is a constant and all the
+            # remaining signal is in the other one.
+            gate, up = gate.float(), up.float()
+            gate = gate.clamp(max=clamp_limit)                      # one-sided, by design
+            up = up.clamp(min=-clamp_limit, max=clamp_limit)
+            h = (act_fn(gate) * up).to(gu.dtype)
+        else:
+            h = act_fn(gate) * up
         dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
     else:
         h = act_fn(gu)
@@ -115,6 +137,12 @@ class _HotResidency:
         self.gptoss = getattr(mod, "alpha", None) is not None and hasattr(mod, "gate_up_bias")
         if self.gptoss:
             self.alpha, self.limit = float(mod.alpha), float(mod.limit)
+        # DeepSeek-V4 shares gpt-oss's CLAMPS but not its GLU, and carries no biases:
+        # `limit` without `alpha`/`gate_up_bias` is exactly that family. Left None for
+        # the stock SwiGLU modules, which have no `limit` at all.
+        _lim = getattr(mod, "limit", None)
+        self.clamp_limit = (float(_lim) if _lim and not self.gptoss and _lim > 0
+                            else None)
 
         # per-expert flattened packed storage -> [E, n, k/2] / [E, n, k/64]
         gu_p = mod.gate_up_proj.view(E, n1, k1 // 2)
@@ -217,7 +245,15 @@ class _HotResidency:
                       if self.gptoss else None)
             dn = _fused_over_stack(xr, local, self.h_gu_p, self.h_gu_a, self.h_dn_p,
                                    self.h_dn_a, self.shapes, self.has_gate, self.act_fn,
-                                   gptoss=gptoss)
+                                   gptoss=gptoss, clamp_limit=self.clamp_limit)
+            # Router weight AFTER the down projection. Stock `ExpertsNbit.forward` and
+            # gpt-oss both do this, so those are exact; V4's reference applies it to the
+            # gated activation BEFORE w2. That reordering is exact too, not an
+            # approximation: w2 is a bias-free linear map (`_project` is `F.linear(x, W)`
+            # with no bias), so `w2(h * s) == s * w2(h)` for the scalar router weight.
+            # The only difference is where a rounding lands, and bf16 error is relative,
+            # so neither order is nearer the truth. Applying it here instead keeps ONE
+            # code path for all three epilogues and lets the down GEMM stay batched.
             w = top_k_weights[row_token.index_select(0, hr), row_slot.index_select(0, hr)].to(torch.float32)
             out.index_add_(0, row_token.index_select(0, hr), dn.to(torch.float32) * w[:, None])
 
@@ -249,7 +285,8 @@ class _HotResidency:
             gptoss = (self.c_gu_b.index_select(0, r_dev), self.c_dn_b.index_select(0, r_dev),
                       self.alpha, self.limit)
         dn = _fused_over_stack(xr, compact.to(dev), gu_p, gu_a, dn_p, dn_a,
-                               self.shapes, self.has_gate, self.act_fn, gptoss=gptoss)
+                               self.shapes, self.has_gate, self.act_fn, gptoss=gptoss,
+                               clamp_limit=self.clamp_limit)
         w = top_k_weights[row_token.index_select(0, cr), row_slot.index_select(0, cr)].to(torch.float32)
         out.index_add_(0, row_token.index_select(0, cr), dn.to(torch.float32) * w[:, None])
 
@@ -356,6 +393,12 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     try:
         from experts4bit_qlora.gptoss import GptOssExperts4bit, GptOssExpertsNbit
         stock_forwards |= {GptOssExperts4bit.forward, GptOssExpertsNbit.forward}
+        # Same bargain for DeepSeek-V4: allowlisted ONLY because _fused_over_stack
+        # reproduces its clamped epilogue via `clamp_limit`. Allowlisting a forward
+        # the fused path does not reproduce is worse than skipping it.
+        from experts4bit_qlora.deepseek_v4 import (
+            DeepseekV4Experts4bit, DeepseekV4ExpertsNbit)
+        stock_forwards |= {DeepseekV4Experts4bit.forward, DeepseekV4ExpertsNbit.forward}
     except ImportError:
         pass
     if hasattr(model, "modules"):
@@ -398,6 +441,10 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
         if hasattr(mod, "_e4b_pipe_ref"):
             if verbose:
                 print(f"[hot_residency] skip {type(mod).__name__}: pipelined residency enabled — disable it first")
+            continue
+        if hasattr(mod, "_e4b_mxfp4_ref"):
+            if verbose:
+                print(f"[hot_residency] skip {type(mod).__name__}: mxfp4 NVMe residency enabled — disable it first")
             continue
         if hasattr(mod, "_hot_residency"):
             # rebuild every time — the base weights are frozen NF4, but a caller may

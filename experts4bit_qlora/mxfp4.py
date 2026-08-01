@@ -67,7 +67,20 @@ def dequantize_mxfp4(
             f"[rows, G, B] (reshape a flat [rows, K//2] with "
             f"`.reshape(rows, G, B)`); gpt-oss fused stacks are [E, rows, G, B]."
         )
-    blocks = blocks.to(torch.uint8)
+    # REINTERPRET the storage bytes; do not convert values. gpt-oss ships both
+    # tensors as safetensors `U8`, so a plain `.to()` was right by accident.
+    # DeepSeek-V4 ships the SAME numeric format with honest dtype labels —
+    # blocks as `I8`, scales as `F8_E8M0` — and on those a value-cast is wrong:
+    # `.to(torch.int32)` of an e8m0 scale yields the VALUE (2**-5 -> 0), not the
+    # exponent byte (122), so every block would be scaled by 2**-127 instead of
+    # 2**-5. torch < 2.7 has no `float8_e8m0fnu` and fails loudly at safetensors
+    # read; torch >= 2.7 materializes the dtype and the error goes SILENT, which
+    # is the failure mode this package exists not to have. int8 blocks happen to
+    # survive `.to(uint8)` (it wraps mod 256), but `.view` states the intent.
+    if blocks.dtype != torch.uint8:
+        blocks = blocks.view(torch.uint8)
+    if scales.dtype != torch.uint8:
+        scales = scales.view(torch.uint8)
     exp = scales.to(torch.int32) - 127  # e8m0 bias
     lut = torch.tensor(FP4_VALUES, dtype=dtype, device=blocks.device)
 
