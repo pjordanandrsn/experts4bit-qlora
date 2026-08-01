@@ -32,6 +32,21 @@ DTYPE = torch.bfloat16
 SEQ = int(os.environ.get("SEQ", "192"))
 STEPS = int(os.environ.get("STEPS", "40"))
 GRAD_ACCUM = int(os.environ.get("GRAD_ACCUM", "4"))
+# Tokens per forward. A fused-MoE step's cost is largely FIXED per active expert, so one
+# row per forward -- what this trainer did -- pays that tax per example.
+#
+# Measured, OLMoE-1B-7B on an RTX A2000, SEQ=192, alpaca, 15 steps x grad_accum 4:
+#
+#   TOKEN_BUDGET |  s/step | tok/s | peak GPU
+#              0 |   17.8  |    22 | 5.23 GB     <- one row per forward
+#           1024 |   22.2  |   144 | 5.88 GB
+#           2048 |   22.8  |   248 | 6.67 GB     <- default
+#           4096 |     --  |  OOM  |   --        <- on a 12 GB card
+#
+# 11.3x the throughput for +1.4 GB. Steps get SLOWER (each carries ~15x more data); the
+# metric this moves is tok/s, not s/step. The ceiling is VRAM: raise it until you OOM,
+# then back off. 0 restores the one-row path the v0.2.0 convergence receipts used.
+TOKEN_BUDGET = int(os.environ.get("TOKEN_BUDGET", "2048"))
 LR = float(os.environ.get("LR", "2e-4"))
 R, ALPHA = int(os.environ.get("R", "8")), int(os.environ.get("ALPHA", "16"))
 N_TRAIN = int(os.environ.get("N_TRAIN", "2000"))
@@ -98,6 +113,64 @@ def encode_alpaca(tokenizer, split):
     return ds.filter(lambda ex: any(t != -100 for t in ex["labels"]))
 
 
+def _pad_batch(rows, pad_id, device):
+    """Right-pad a list of encoded examples into one forward.
+
+    Labels pad with -100 and the attention mask zeroes the padding, so the padded
+    positions contribute neither loss nor attention. That is what makes this safe to do
+    without touching the model: no example can see another's tokens.
+    """
+    width = max(len(r["input_ids"]) for r in rows)
+    ids, lbl, att = [], [], []
+    for r in rows:
+        n = len(r["input_ids"])
+        ids.append(r["input_ids"] + [pad_id] * (width - n))
+        lbl.append(list(r["labels"]) + [-100] * (width - n))
+        att.append([1] * n + [0] * (width - n))
+    t = lambda x: torch.tensor(x, device=device)  # noqa: E731
+    return t(ids), t(lbl), t(att)
+
+
+def _token_budget_batches(data, budget, pad_id, device, bucket=64):
+    """Yield micro-batches sized by TOKEN COUNT, not row count.
+
+    A fused-MoE step pays a cost that is fixed per active expert -- the reference path
+    dequantizes each routed expert once, the fused path launches one grouped GEMM per
+    expert group -- so a step that carries 150 tokens pays nearly what a step carrying
+    4000 does. Batching one row at a time (what this trainer did) pays that tax per
+    example. Budgeting by tokens amortizes it.
+
+    The budget is measured as the PADDED cost, ``rows * width``, not the sum of true
+    lengths: that is the work the GPU actually does, and it stops one long row from
+    silently blowing up a batch that looked affordable. Rows are drawn from a
+    length-sorted bucket so a batch's rows are similar lengths and padding waste stays
+    small; ``bucket`` rows are buffered and sorted at a time, which keeps the stream
+    order shuffled between buckets rather than globally sorted by length.
+    """
+    buf, rows, width = [], [], 0
+    it = iter(data)
+    while True:
+        if not buf:
+            for _ in range(bucket):
+                try:
+                    buf.append(next(it))
+                except StopIteration:
+                    break
+            if not buf:
+                break
+            buf.sort(key=lambda r: len(r["input_ids"]))
+        r = buf.pop(0)
+        w = max(width, len(r["input_ids"]))
+        if rows and (len(rows) + 1) * w > budget:
+            yield _pad_batch(rows, pad_id, device)
+            rows, width = [], 0
+            w = len(r["input_ids"])
+        rows.append(r)
+        width = w
+    if rows:
+        yield _pad_batch(rows, pad_id, device)
+
+
 @torch.no_grad()
 def eval_loss(model, eval_data):
     """Mean response-only loss over a fixed held-out set (clean before/after signal)."""
@@ -136,6 +209,7 @@ def _print_env_help(which: str) -> None:
         ("SEQ", "192", "sequence length"),
         ("STEPS", "40", "optimizer steps"),
         ("GRAD_ACCUM", "4", "gradient accumulation"),
+        ("TOKEN_BUDGET", "2048", "tokens per forward (0 = one row per forward)"),
         ("LR", "2e-4", "learning rate"),
         ("R / ALPHA", "8 / 16", "LoRA rank / alpha"),
         ("N_TRAIN", "2000", "training examples"),
@@ -166,6 +240,9 @@ def main():
     from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
     tok = AutoTokenizer.from_pretrained(MODEL)
+    # Pad id for the batcher. Padded positions get label -100 and attention 0, so the
+    # choice is inert -- eos is the conventional fallback when a model ships no pad token.
+    _PAD_ID = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
     model, _ = load_moe_4bit_streaming(
         MODEL, DEVICE, DTYPE, R, ALPHA, offload=OFFLOAD_EXPERTS, pin=OFFLOAD_PIN, quant_type=QUANT_TYPE
     )
@@ -232,7 +309,17 @@ def main():
     log(
         f"training: {STEPS} steps x grad_accum {GRAD_ACCUM} (seq<= {SEQ}), lr={LR}, cosine+warmup, eval every {EVAL_EVERY}"
     )
-    it, t0, ema, best = iter(data), time.time(), None, float("inf")
+    def _batch_stream():
+        if TOKEN_BUDGET <= 0:      # 0 restores the historical one-row-per-forward path,
+            for ex in data:        # which is what the v0.2.0 convergence receipts used
+                yield (torch.tensor([ex["input_ids"]], device=DEVICE),
+                       torch.tensor([ex["labels"]], device=DEVICE),
+                       torch.ones(1, len(ex["input_ids"]), dtype=torch.long, device=DEVICE))
+        else:
+            yield from _token_budget_batches(data, TOKEN_BUDGET, _PAD_ID, DEVICE)
+
+    it, t0, ema, best = _batch_stream(), time.time(), None, float("inf")
+    tok_seen = 0
     from .offload import offload_stats_report, reset_offload_stats
 
     reset_offload_stats()  # measure the training loop only (drop load/BEFORE-eval transfers)
@@ -241,22 +328,23 @@ def main():
         loss_acc = 0.0
         for _ in range(GRAD_ACCUM):
             try:
-                ex = next(it)
+                ids, lbl, att = next(it)
             except StopIteration:
-                it = iter(data)
-                ex = next(it)
-            ids = torch.tensor([ex["input_ids"]], device=DEVICE)
-            lbl = torch.tensor([ex["labels"]], device=DEVICE)
-            out = model(input_ids=ids, labels=lbl)
+                it = _batch_stream()
+                ids, lbl, att = next(it)
+            out = model(input_ids=ids, labels=lbl, attention_mask=att)
             (out.loss / GRAD_ACCUM).backward()
             loss_acc += out.loss.item() / GRAD_ACCUM
+            tok_seen += int(att.sum())
         torch.nn.utils.clip_grad_norm_(trainable, 1.0)
         opt.step()
         sched.step()
         ema = loss_acc if ema is None else 0.9 * ema + 0.1 * loss_acc
         if (step + 1) % 10 == 0 or step == 0:
             log(
-                f"  step {step + 1}/{STEPS}  loss {loss_acc:.3f}  ema {ema:.3f}  ({(time.time() - t0) / (step + 1):.1f}s/step)"
+                f"  step {step + 1}/{STEPS}  loss {loss_acc:.3f}  ema {ema:.3f}  "
+                f"({(time.time() - t0) / (step + 1):.1f}s/step, "
+                f"{tok_seen / max(time.time() - t0, 1e-9):.0f} tok/s)"
             )
         if (step + 1) % EVAL_EVERY == 0:
             el = eval_loss(model, eval_data)
