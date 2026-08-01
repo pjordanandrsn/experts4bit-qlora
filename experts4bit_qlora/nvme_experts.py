@@ -389,6 +389,34 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
             "would bypass the adapter entirely. Load without `arena=` to train, or drop "
             "the adapters to serve.")
 
+    # Exactly one entry per MoE module, like `enable_hot_residency`. Without this a short
+    # list raises IndexError somewhere down the loop and a LONG one is worse than an error:
+    # trailing layers silently keep `()` while every earlier layer takes its neighbour's
+    # set. That is precisely the failure `hot_sets_from_profile` cannot survive — an
+    # informed hot set applied to the wrong layer is a uniform random draw, which the
+    # +37.1% measurement showed is worth nothing (`docs/RESIDENCY-ENGINES.md`). It would
+    # cost VRAM and read as "informed hot sets don't help here".
+    if hot_sets is not None and len(hot_sets) != len(mods):
+        raise ValueError(
+            f"hot_sets has {len(hot_sets)} entries but the model has {len(mods)} expert "
+            f"modules — exactly one entry per MoE layer in module order is required, so "
+            f"alignment never silently shifts. Pass `()` for layers that should hold "
+            f"nothing resident.")
+
+    # The four other engines all replace `mod.forward`, and each already refuses the other
+    # three; the NVMe engine was added without joining that set in either direction. Patching
+    # over a live engine would strand its state and make `disable_*` restore a PATCHED
+    # forward, leaving the module permanently wrapped.
+    for ref, name in (("_e4b_fast_ref", "[fast]"), ("_e4b_hot_ref", "hot residency"),
+                      ("_e4b_pipe_ref", "pipelined residency"),
+                      ("_e4b_cold_ref", "cold engine")):
+        busy = [i for i, m in enumerate(mods) if hasattr(m, ref)]
+        if busy:
+            raise RuntimeError(
+                f"{len(busy)} of {len(mods)} expert modules already have {name} enabled "
+                f"(first at index {busy[0]}). The engines are mutually exclusive — "
+                f"disable it before enabling mxfp4 NVMe residency.")
+
     engines = []
     for i, mod in enumerate(mods):
         lim = limit if limit is not None else getattr(mod, "limit", None)
@@ -404,7 +432,12 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
         engines.append(eng)
 
         mod._e4b_mxfp4_engine = eng
-        mod._e4b_mxfp4_ref = mod.forward
+        # Re-enabling (new hot_sets, reloaded checkpoint) must keep the PRISTINE forward:
+        # capturing `mod.forward` a second time would save the previous `_fwd`, and then
+        # `disable_mxfp4_nvme_residency` would "restore" a closure over the OLD engine —
+        # the module stays patched forever, one disable short of every enable.
+        if not hasattr(mod, "_e4b_mxfp4_ref"):
+            mod._e4b_mxfp4_ref = mod.forward
 
         def _fwd(hidden, top_k_index, top_k_weights, _m=mod, _e=eng):
             # Same guard the v0 residency patch uses, and deliberately NOT

@@ -389,3 +389,100 @@ def test_enable_nvme_residency_refuses_a_partial_stamp(arena):
     with pytest.raises(ValueError, match="targetable MoE module"):
         enable_nvme_residency(One(), path, [torch.tensor([0]), torch.tensor([1])],
                               hot_rows=4, device="cpu")
+
+
+# ---- Bugbot: enable_mxfp4_nvme_residency guards (the MXFP4 lane had NO coverage) ----
+# The NF4 lane above is guarded and tested; its MXFP4 counterpart shipped with neither,
+# which is how both bugs below got in. These need no arena reads and no CUDA — every guard
+# fires before an engine is built — so a stub engine makes them CPU tests.
+class _StubEngine:
+    """Accepts the real call signature and does nothing. `tier`/`store` are read back
+    off `engines[0]` to be shared across layers, so they must exist."""
+    def __init__(self, *a, **k):
+        self.tier = None
+        self.store = None
+
+    def forward(self, hidden, top_k_index, top_k_weights):   # pragma: no cover
+        return hidden
+
+
+def _two_layer_net():
+    class Net(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+            self.b = _meta_module()
+    return Net()
+
+
+@pytest.mark.parametrize("n_sets", [1, 3, 0])
+def test_mxfp4_hot_sets_length_must_match(arena, n_sets):
+    """A SHORT list raises IndexError deep in the loop; a LONG one is worse — it silently
+    applies each layer's set to the wrong layer, and an informed hot set on the wrong layer
+    is a uniform random draw (the by-index row of the V4 table: 4.4 GiB of VRAM for +0%).
+    Both must be refused up front, like the NF4 lane and `enable_hot_residency`."""
+    pytest.importorskip("mxfp4_residency")
+    from experts4bit_qlora.nvme_experts import enable_mxfp4_nvme_residency
+    _mod, path, _index = arena
+    with pytest.raises(ValueError, match="exactly one entry per MoE layer"):
+        enable_mxfp4_nvme_residency(
+            _two_layer_net(), path, k_slots=2, hot_rows=4, limit=10.0, device="cpu",
+            engine_cls=_StubEngine, hot_sets=[()] * n_sets)
+
+
+@pytest.mark.parametrize("ref,name", [
+    ("_e4b_hot_ref", "hot residency"), ("_e4b_pipe_ref", "pipelined residency"),
+    ("_e4b_cold_ref", "cold engine"), ("_e4b_fast_ref", r"\[fast\]"),
+])
+def test_mxfp4_refuses_to_patch_over_another_engine(arena, ref, name):
+    """All five engines replace `mod.forward`. Patching over a live one strands its state
+    and makes the OTHER engine's `disable_*` restore a forward that is still patched."""
+    pytest.importorskip("mxfp4_residency")
+    from experts4bit_qlora.nvme_experts import enable_mxfp4_nvme_residency
+    _mod, path, _index = arena
+    net = _two_layer_net()
+    setattr(net.b, ref, net.b.forward)          # pretend that engine is enabled
+    with pytest.raises(RuntimeError, match=name):
+        enable_mxfp4_nvme_residency(net, path, k_slots=2, hot_rows=4, limit=10.0,
+                                    device="cpu", engine_cls=_StubEngine)
+
+
+def test_mxfp4_reenable_then_disable_fully_restores(arena):
+    """Re-enabling (new hot_sets, reloaded checkpoint) must not re-capture the ALREADY
+    PATCHED forward as the restore point — otherwise one disable leaves the module wrapped
+    around a stale engine forever, and it looks fine until the arena is closed."""
+    pytest.importorskip("mxfp4_residency")
+    from experts4bit_qlora.nvme_experts import (
+        disable_mxfp4_nvme_residency, enable_mxfp4_nvme_residency)
+    _mod, path, _index = arena
+    net = _two_layer_net()
+    pristine = [net.a.forward, net.b.forward]
+
+    for hot in ([(), ()], [(0,), (1,)]):        # enable, then re-enable with new hot sets
+        assert enable_mxfp4_nvme_residency(
+            net, path, k_slots=2, hot_rows=4, limit=10.0, device="cpu",
+            engine_cls=_StubEngine, hot_sets=hot) == 2
+
+    assert disable_mxfp4_nvme_residency(net) == 2
+    for mod, orig in zip((net.a, net.b), pristine):
+        assert mod.forward == orig, "restored a PATCHED forward, not the original"
+        assert not hasattr(mod, "_e4b_mxfp4_ref")
+        assert not hasattr(mod, "_e4b_mxfp4_engine")
+
+
+@pytest.mark.parametrize("enabler,mod_name,kwargs", [
+    ("hot_residency", "enable_hot_residency", {}),
+    ("pipelined", "enable_pipelined_residency", {"k_slots": 2}),
+    ("cold_engine", "enable_cold_engine", {}),
+])
+def test_other_engines_refuse_a_module_the_mxfp4_engine_owns(arena, enabler, mod_name, kwargs):
+    """The other direction of the same matrix: every engine already refused the other
+    three, but none knew about `_e4b_mxfp4_ref`, so they would patch straight over it."""
+    pytest.importorskip("nf4_grouped")
+    import importlib
+    enable = getattr(importlib.import_module(f"experts4bit_qlora.{enabler}"), mod_name)
+    net = _two_layer_net()
+    for m in (net.a, net.b):
+        m._e4b_mxfp4_ref = m.forward            # the mxfp4 engine owns these
+    patched = enable(net, [torch.tensor([0]), torch.tensor([0])], device="cpu", **kwargs)
+    assert patched == 0, f"{mod_name} patched over a module the mxfp4 engine owns"

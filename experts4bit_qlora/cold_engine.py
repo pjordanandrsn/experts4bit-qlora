@@ -274,7 +274,8 @@ def enable_cold_engine(model, hot_sets: Sequence, device: str = "cuda",
                 print(f"[cold_engine] skip {type(mod).__name__}: {reason}")
             continue
         for ref, name in (("_e4b_fast_ref", "[fast]"), ("_e4b_hot_ref", "hot residency"),
-                          ("_e4b_pipe_ref", "pipelined residency")):
+                          ("_e4b_pipe_ref", "pipelined residency"),
+                          ("_e4b_mxfp4_ref", "mxfp4 NVMe residency")):
             if hasattr(mod, ref):
                 if verbose:
                     print(f"[cold_engine] skip {type(mod).__name__}: {name} enabled — disable it first")
