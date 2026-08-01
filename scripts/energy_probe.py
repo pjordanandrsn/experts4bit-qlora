@@ -4,9 +4,21 @@
 Why this exists: a GPU-only energy measurement silently flatters whichever engine does
 its work on the CPU. Comparing experts4bit (GPU-heavy, experts streamed from NVMe) against
 llama.cpp (`-ot exps=CPU`, tens of cores busy) on GPU watts alone is not a comparison, it
-is a category error. A RunPod container blocks `/sys/class/powercap`, which is why this
-reads the RAPL MSRs directly instead -- that path works anywhere `/dev/cpu/*/msr` exists
-and the process is root.
+is a category error.
+
+**THIS NEEDS BARE METAL.** Measured 2026-08-01 on both RunPod and a Vast *datacenter*
+host: containers block BOTH RAPL interfaces. `/dev/cpu/*/msr` is absent, and
+`/sys/class/powercap/` is the nastier one -- it LISTS `intel-rapl`, `intel-rapl:0`,
+`intel-rapl:0:0`, so a glance says RAPL is available, but they are dangling symlinks and
+`intel-rapl:0/energy_uj` does not exist. Resolve the leaf file, never trust the listing.
+`capsh --print` explains it: root in-container but `!cap_sys_rawio`, `!cap_sys_admin`,
+`!cap_perfmon`. There is no container workaround; rent a bare-metal host.
+
+Both interfaces are supported because which one exists is not predictable: a QNAP
+Xeon W-1250 has `/dev/cpu/0/msr` and NO powercap, while a typical distro server has
+powercap and often no `msr` module loaded. Trying only one is how a paid hour gets wasted.
+On AMD the powercap driver still registers under the name `intel-rapl` -- that is kernel
+naming, not a bug.
 
 Two things that make naive RAPL readings wrong, both handled here:
 
@@ -94,8 +106,57 @@ def _rdmsr(cpu: int, reg: int) -> int:
         return struct.unpack("<Q", f.read(8))[0]
 
 
-class CpuEnergy:
-    """Wrap-safe RAPL package-energy accumulator."""
+class PowercapEnergy:
+    """Wrap-safe package energy from `/sys/class/powercap` (microjoules).
+
+    Preferred when present: it needs no `msr` module and no vendor-specific register
+    numbers. Each domain wraps at its own `max_energy_range_uj`, which is read per domain
+    rather than assumed -- the 32-bit MSR constant does NOT apply here.
+    """
+
+    backend = "powercap"
+
+    def __init__(self):
+        self.vendor = _vendor()
+        self.domains = []
+        base = "/sys/class/powercap"
+        for entry in sorted(os.listdir(base)):
+            # package domains only: "intel-rapl:0", not subzones "intel-rapl:0:0"
+            if not re.fullmatch(r"intel-rapl:\d+", entry):
+                continue
+            path = os.path.join(base, entry, "energy_uj")
+            rng = os.path.join(base, entry, "max_energy_range_uj")
+            try:
+                cur = int(open(path).read().strip())
+                mx = int(open(rng).read().strip())
+            except OSError:
+                continue          # dangling symlink (containers) -- not a usable domain
+            self.domains.append({"path": path, "wrap": mx + 1, "last": cur})
+        if not self.domains:
+            raise OSError(f"{base}: no readable package domains")
+        self.pkgs = {i: i for i in range(len(self.domains))}
+        self.joules_per_tick = 1e-6
+        self.ticks = 0
+
+    def poll(self):
+        for d in self.domains:
+            try:
+                cur = int(open(d["path"]).read().strip())
+            except OSError:
+                continue
+            prev = d["last"]
+            self.ticks += (cur - prev) if cur >= prev else (cur + d["wrap"] - prev)
+            d["last"] = cur
+
+    @property
+    def joules(self) -> float:
+        return self.ticks * self.joules_per_tick
+
+
+class MsrEnergy:
+    """Wrap-safe RAPL package-energy accumulator, read straight from the MSRs."""
+
+    backend = "msr"
 
     def __init__(self):
         self.vendor = _vendor()
@@ -120,6 +181,22 @@ class CpuEnergy:
     @property
     def joules(self) -> float:
         return self.ticks * self.joules_per_tick
+
+
+def open_cpu_energy():
+    """Powercap first, MSR second; raise with BOTH reasons if neither works.
+
+    Reporting only the second failure would hide the usual container symptom (powercap
+    present-but-dangling) behind a confusing "no such file: /dev/cpu/0/msr".
+    """
+    errs = []
+    for cls in (PowercapEnergy, MsrEnergy):
+        try:
+            return cls()
+        except (OSError, PermissionError) as e:
+            errs.append(f"{cls.backend}: {e}")
+    raise OSError("no readable CPU energy interface -- " + " | ".join(errs)
+                  + ". Containers block both (see module docstring); this needs bare metal.")
 
 
 class _GpuReader:
@@ -207,10 +284,10 @@ def main():
     args = ap.parse_args()
 
     try:
-        cpu = CpuEnergy()
+        cpu = open_cpu_energy()
     except (OSError, PermissionError) as e:
-        print(f"CPU energy unavailable ({e}). Need root and /dev/cpu/*/msr "
-              f"(modprobe msr). Reporting GPU only.", file=sys.stderr)
+        print(f"CPU energy unavailable -- {e}\nReporting GPU only, which is NOT a fair "
+              f"comparison for any CPU-heavy engine.", file=sys.stderr)
         cpu = None
 
     s = Sampler(cpu, args.interval)
@@ -232,6 +309,7 @@ def main():
 
     res = {
         "label": args.label, "rc": rc, "wall_s": round(wall, 2),
+        "cpu_backend": cpu.backend if cpu else None,
         "cpu_vendor": cpu.vendor if cpu else None,
         "cpu_packages": len(cpu.pkgs) if cpu else 0,
         "cpu_joules": round(cpu.joules, 1) if cpu else None,
