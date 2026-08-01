@@ -1,0 +1,6 @@
+pod=l4c2838z20o6va captured=2026-07-30T20:13:02Z
+name, uuid, pci.bus_id, pcie.link.gen.current, pcie.link.gen.max, pcie.link.width.current, pcie.link.width.max, power.limit [W], clocks.max.sm [MHz], clocks.max.memory [MHz], vbios_version
+NVIDIA GeForce RTX 4090, GPU-887ee5a8-20c6-ff36-2ed6-a20fff26d61f, 00000000:C4:00.0, 4, 4, 8, 16, 450.00 W, 3105 MHz, 10501 MHz, 95.02.3C.C0.0B
+cpu=AMD EPYC 7642 48-Core Processor
+cores=96 mem_gb=251
+driver=580.159.04

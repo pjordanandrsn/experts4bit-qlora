@@ -73,10 +73,34 @@ from .offload import (  # noqa: E402
 
 # verify_moe_4bit only touches the resolved Experts4bit/ExpertsNbit classes (core deps), so it is
 # safe to import eagerly. The streaming loader is NOT — see __getattr__ below.
-from .fast import disable_fast, enable_fast, fast_available  # noqa: E402
+from .fast import (  # noqa: E402
+    disable_fast,
+    disable_fast_train,
+    enable_fast,
+    enable_fast_train,
+    fast_available,
+)
 from .cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
 from .hot_residency import disable_hot_residency, enable_hot_residency, hot_residency_available  # noqa: E402
 from .pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
+# 0.7.0 surfaces: serving a model whose DENSE side, not just its experts, exceeds
+# what the host can hold. Imported lazily-tolerant -- dense_disk needs nothing
+# exotic, but keeping the top-level import total means a broken optional dep
+# cannot make `import experts4bit_qlora` fail.
+from .dense_offload import dense_offload_report, enable_dense_offload  # noqa: E402
+from .dense_disk import DenseDiskSource, DiskHome, disk_homes_for  # noqa: E402
+from .nvme_experts import (  # noqa: E402
+    build_meta_experts,
+    disable_mxfp4_nvme_residency,
+    enable_mxfp4_nvme_residency,
+    enable_nvme_residency,
+    expert_geometry_from_arena,
+)
+# 0.8.0: the hot-set dial. The README tells you to rank a routing histogram rather than
+# take experts by index (+37.1% at identical VRAM on V4-Flash), so the two functions that
+# do it have to be importable from the top level -- 0.7.1 shipped precisely to fix the
+# class of bug where the front page names a symbol that raises ImportError.
+from .expert_profile import coverage_from_profile, hot_sets_from_profile  # noqa: E402
 from .kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
@@ -113,6 +137,20 @@ __all__ = [
     "offload_stats_report",
     "report_offload_environment",
     "reset_offload_stats",
+    "enable_fast_train",
+    "disable_fast_train",
+    "enable_dense_offload",
+    "dense_offload_report",
+    "DenseDiskSource",
+    "DiskHome",
+    "disk_homes_for",
+    "enable_nvme_residency",
+    "enable_mxfp4_nvme_residency",
+    "disable_mxfp4_nvme_residency",
+    "build_meta_experts",
+    "expert_geometry_from_arena",
+    "hot_sets_from_profile",
+    "coverage_from_profile",
     "verify_moe_4bit",
     # Provided lazily by __getattr__ below (importing them pulls in the [train] extra).
     "load_moe_4bit_streaming",

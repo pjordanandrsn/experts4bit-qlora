@@ -1,0 +1,6 @@
+# pod_id <-> container_host <-> gpu_uuid mapping
+# The container cannot learn its RunPod pod id (no RUNPOD_* env on this
+# image), so receipts carry container_host while telemetry keys on pod_id.
+# This file is the join. Captured while both were observable -- pod A was
+# deleted before anyone thought to write its mapping down.
+pod_id=l4c2838z20o6va container_host=8abe61ba69f8 gpu_uuid=GPU-887ee5a8-20c6-ff36-2ed6-a20fff26d61f captured=2026-07-30T20:51:22Z
