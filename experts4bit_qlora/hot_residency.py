@@ -53,11 +53,12 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     exactly (the correctness oracle).
 
     ``clamp_limit``, when given, selects the DeepSeek-V4 epilogue: no biases, but
-    ``gate.clamp(max=L)`` / ``up.clamp(-L, L)`` before the ordinary ``act_fn(gate)*up``.
-    It is mutually exclusive with ``gptoss`` — same clamps, different combination —
-    and mirrors ``_DeepseekV4ForwardMixin.forward``. Threading it matters: an expert
-    module whose forward is allowlisted for patching but whose epilogue this function
-    does not reproduce gets silently served plain SwiGLU."""
+    ``gate.clamp(max=L)`` / ``up.clamp(-L, L)`` before the ordinary ``act_fn(gate)*up``,
+    evaluated in **fp32** and cast back for the down GEMM. It is mutually exclusive with
+    ``gptoss`` — same clamps, different combination — and mirrors
+    ``_DeepseekV4ForwardMixin.forward`` in both structure and precision. Threading it
+    matters: an expert module whose forward is allowlisted for patching but whose
+    epilogue this function does not reproduce gets silently served plain SwiGLU."""
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
@@ -80,9 +81,20 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     elif has_gate:
         gate, up = gu.chunk(2, dim=-1)
         if clamp_limit is not None:
+            # fp32, then back to compute dtype for the down GEMM — mirroring
+            # `_DeepseekV4ForwardMixin._apply_gate` + its `gated.to(cd)`. The other two
+            # branches deliberately stay in compute dtype because THEIR references do
+            # (stock `ExpertsNbit.forward` and `_GptOssForwardMixin.forward` both run the
+            # epilogue at `cd`); V4's reference is the one that promotes, so reproducing
+            # its epilogue means reproducing the precision too. Clamping is exactly where
+            # that bites: at the limit the clamped operand is a constant and all the
+            # remaining signal is in the other one.
+            gate, up = gate.float(), up.float()
             gate = gate.clamp(max=clamp_limit)                      # one-sided, by design
             up = up.clamp(min=-clamp_limit, max=clamp_limit)
-        h = act_fn(gate) * up
+            h = (act_fn(gate) * up).to(gu.dtype)
+        else:
+            h = act_fn(gate) * up
         dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
     else:
         h = act_fn(gu)
