@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.8.0 — 2026-08-01
+
+**DeepSeek-V4 (Flash / Pro) loads, serves and trains.** Full V4-Flash — 43 layers
+x 256 experts, 284B params — loads in ~10 s at **8.74 GiB peak VRAM** and
+generates, with 147 GB of experts served from an on-disk arena. The dense side
+measured 8.28 GiB against 8.40 predicted from the shard headers alone. See
+`docs/DEEPSEEK-V4.md`.
+
+V4 needed three things the package did not have. Its experts are per-expert
+MXFP4 with an epilogue that is gpt-oss's *clamps* over SwiGLU's *combination*,
+so neither existing class was correct. Its dense half is block-scaled FP8 rather
+than bf16 — `fp8_blocks` serves it at ~1 byte/param instead of 2, which is 8.4
+GiB resident against ~14, i.e. whether it fits a 12 GB card. And the published
+checkpoint ships in DeepSeek's own `inference/` spelling; transformers converts
+that via its central `conversion_mapping.py`, but only inside `from_pretrained`,
+which the streaming loader never enters.
+
+**Two fixes to existing code that V4 exposed.**
+
+`mxfp4` was *value-casting* scale bytes rather than reinterpreting them. That was
+right by accident for gpt-oss, which ships both blocks and scales as `U8`, and
+silently catastrophic for any checkpoint labelling scales `F8_E8M0`:
+`.to(torch.int32)` yields the value (`2**-5` -> 0), not the exponent byte, so
+every block would be scaled by `2**-127`. torch < 2.7 fails loudly at the read;
+torch >= 2.7 materializes the dtype and the error goes silent.
+
+`ExpertsLoRA` hardcoded `act_fn(gate) * up`. Since the adapter re-implements the
+expert math inline — to inject the delta before the nonlinearity — it also owns
+the choice of nonlinearity, so wrapping **any** clamped-expert architecture
+trained a function the frozen base does not compute, with the loss still falling.
+The base now supplies its epilogue via `_apply_gate`. This is why gpt-oss and V4
+were built bare; V4 is now trainable.
+
+**Hot sets are worth choosing properly.** `expert_profile` only probed
+`ExpertsLoRA`, so it found *zero* layers on gpt-oss and V4 — exactly the models
+worth profiling. It now probes whichever module is dispatched, and
+`hot_sets_from_profile` / `coverage_from_profile` turn a routing histogram into a
+hot set. Measured on full V4-Flash: frequency-ranked hot sets are **+37.1%** over
+index-ordered at identical VRAM, and index-ordered is statistically
+indistinguishable from pure streaming — 4.4 GiB spent for nothing.
+
+**Also:** `scripts/energy_probe.py` (CPU RAPL via powercap or MSR, plus GPU) for
+honest J/token, which needs bare metal — containers block both interfaces.
+`tools/make_v4_fixtures.py` regenerates the real-bytes test fixtures, so those
+tests are coverage instead of permanent skips. README consolidated 412 -> 194
+lines, with the long-form material moved to `docs/RESIDENCY-ENGINES.md`,
+`docs/INFERENCE.md` and `docs/DEEPSEEK-V4.md`.
+
 ## 0.7.0 — 2026-07-30
 
 **If you train Gemma-4-class models with `offload=True`, 0.6.x could not do it
