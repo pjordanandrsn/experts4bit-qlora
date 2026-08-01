@@ -47,6 +47,8 @@ GRAD_ACCUM = int(os.environ.get("GRAD_ACCUM", "4"))
 # metric this moves is tok/s, not s/step. The ceiling is VRAM: raise it until you OOM,
 # then back off. 0 restores the one-row path the v0.2.0 convergence receipts used.
 TOKEN_BUDGET = int(os.environ.get("TOKEN_BUDGET", "2048"))
+# Backoff floor. Below this the budget is not the problem and the OOM is real.
+_MIN_TOKEN_BUDGET = 256
 LR = float(os.environ.get("LR", "2e-4"))
 R, ALPHA = int(os.environ.get("R", "8")), int(os.environ.get("ALPHA", "16"))
 N_TRAIN = int(os.environ.get("N_TRAIN", "2000"))
@@ -309,51 +311,70 @@ def main():
     log(
         f"training: {STEPS} steps x grad_accum {GRAD_ACCUM} (seq<= {SEQ}), lr={LR}, cosine+warmup, eval every {EVAL_EVERY}"
     )
-    def _batch_stream():
-        if TOKEN_BUDGET <= 0:      # 0 restores the historical one-row-per-forward path,
+    def _batch_stream(budget):
+        if budget <= 0:            # 0 restores the historical one-row-per-forward path,
             for ex in data:        # which is what the v0.2.0 convergence receipts used
                 yield (torch.tensor([ex["input_ids"]], device=DEVICE),
                        torch.tensor([ex["labels"]], device=DEVICE),
                        torch.ones(1, len(ex["input_ids"]), dtype=torch.long, device=DEVICE))
         else:
-            yield from _token_budget_batches(data, TOKEN_BUDGET, _PAD_ID, DEVICE)
+            yield from _token_budget_batches(data, budget, _PAD_ID, DEVICE)
 
-    it, t0, ema, best = _batch_stream(), time.time(), None, float("inf")
+    budget = TOKEN_BUDGET
+    it, t0, ema, best = _batch_stream(budget), time.time(), None, float("inf")
     tok_seen = 0
     from .offload import offload_stats_report, reset_offload_stats
 
     reset_offload_stats()  # measure the training loop only (drop load/BEFORE-eval transfers)
-    for step in range(STEPS):
+    step = 0
+    while step < STEPS:
         opt.zero_grad()
         loss_acc = 0.0
-        for _ in range(GRAD_ACCUM):
-            try:
-                ids, lbl, att = next(it)
-            except StopIteration:
-                it = _batch_stream()
-                ids, lbl, att = next(it)
-            out = model(input_ids=ids, labels=lbl, attention_mask=att)
-            (out.loss / GRAD_ACCUM).backward()
-            loss_acc += out.loss.item() / GRAD_ACCUM
-            tok_seen += int(att.sum())
+        try:
+            for _ in range(GRAD_ACCUM):
+                try:
+                    ids, lbl, att = next(it)
+                except StopIteration:
+                    it = _batch_stream(budget)
+                    ids, lbl, att = next(it)
+                out = model(input_ids=ids, labels=lbl, attention_mask=att)
+                (out.loss / GRAD_ACCUM).backward()
+                loss_acc += out.loss.item() / GRAD_ACCUM
+                tok_seen += int(att.sum())
+        except torch.cuda.OutOfMemoryError:
+            # The token budget's ceiling is VRAM, and the right value is host- AND
+            # model-specific -- 2048 fits OLMoE on a 12 GB card, a 30B offloaded model is
+            # a different profile entirely. Dying on a default is a bad way to learn that,
+            # so back off and keep training. The whole step is discarded (a partial
+            # backward has already accumulated some grads) and retried at half the budget.
+            if budget <= _MIN_TOKEN_BUDGET:
+                raise
+            opt.zero_grad(set_to_none=True)
+            torch.cuda.empty_cache()
+            budget = max(budget // 2, _MIN_TOKEN_BUDGET)
+            it = _batch_stream(budget)
+            log(f"  [oom] step {step + 1}: halving TOKEN_BUDGET -> {budget} and retrying "
+                f"(set TOKEN_BUDGET explicitly to skip this search)")
+            continue
+        step += 1
         torch.nn.utils.clip_grad_norm_(trainable, 1.0)
         opt.step()
         sched.step()
         ema = loss_acc if ema is None else 0.9 * ema + 0.1 * loss_acc
-        if (step + 1) % 10 == 0 or step == 0:
+        if step % 10 == 0 or step == 1:
             log(
-                f"  step {step + 1}/{STEPS}  loss {loss_acc:.3f}  ema {ema:.3f}  "
-                f"({(time.time() - t0) / (step + 1):.1f}s/step, "
+                f"  step {step}/{STEPS}  loss {loss_acc:.3f}  ema {ema:.3f}  "
+                f"({(time.time() - t0) / step:.1f}s/step, "
                 f"{tok_seen / max(time.time() - t0, 1e-9):.0f} tok/s)"
             )
-        if (step + 1) % EVAL_EVERY == 0:
+        if step % EVAL_EVERY == 0:
             el = eval_loss(model, eval_data)
             marker = ""
             if el < best:
                 best = el
                 save_adapter(model, OUT, "best")
                 marker = "  *new best -> saved"
-            log(f"  [eval] step {step + 1}: held-out loss {el:.4f} (best {best:.4f}){marker}")
+            log(f"  [eval] step {step}: held-out loss {el:.4f} (best {best:.4f}){marker}")
             model.train()
     log(
         f"training done in {time.time() - t0:.0f}s "
