@@ -117,8 +117,12 @@ def phase_generate(a) -> int:
                  "content": "You are answering factual knowledge questions. "
                             "Answer concisely with just the factual answer."},
                 {"role": "user", "content": p["question"]}]
-        ids = tok.apply_chat_template(msgs, add_generation_prompt=True,
-                                      return_tensors="pt").to(dev)
+        # return_dict=True then index: apply_chat_template hands back a BatchEncoding on
+        # current transformers, and passing that straight to generate() dies inside
+        # generate() with a bare AttributeError that names neither the cause nor this call.
+        enc = tok.apply_chat_template(msgs, add_generation_prompt=True,
+                                      return_tensors="pt", return_dict=True)
+        ids = enc["input_ids"].to(dev)
         with torch.no_grad():
             gen = model.generate(ids, max_new_tokens=48, do_sample=False,
                                  pad_token_id=tok.eos_token_id)

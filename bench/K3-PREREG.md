@@ -92,3 +92,45 @@ saying so now is the point of registering it.
 Fused-MoE NF4/FP4 on this stack, one model, one local judge, one phrasing. Registers **no
 performance claim**. MXFP4 paths remain unmeasured (gpt-oss is absent from the offline
 cache on this host).
+
+---
+
+## Amendment 1 — model and hardware (2026-08-03)
+
+**Registered before any accuracy number exists.** Verified at the time of writing: zero IKP
+answer files had been produced. Every local generation attempt died on a harness bug
+(`apply_chat_template` returns a `BatchEncoding`, which `generate()` rejects with a bare
+`AttributeError`), so nothing was generated, nothing was judged, nothing was scored. This
+amendment is therefore pre-data, not a reaction to a result.
+
+**Trigger.** The local A2000 is held by the judge drain, which is wanted work. Rather than
+preempt it, the operator directed renting a GPU — which also lifts the VRAM ceiling that
+forced the original model choice.
+
+**Changes:**
+
+1. **Primary model: `ibm-granite/granite-3.0-1b-a400m-instruct` → `openai/gpt-oss-20b`.**
+   - At 1.3B, granite was expected to trip the floor kill switch: the honest outcome would
+     most likely have been "under-powered, no inference". 21B total sits inside IKP's
+     sensitive band and is comparable to Quesma's 27B.
+   - gpt-oss ships **MXFP4 natively**, which turns the two rows K2 had to declare
+     `not_measured` into measurable ones and supplies the **requant-tax** point the
+     directive explicitly asked for.
+   - It remains a **fused-MoE** model, which is the whole domain of this repo's claims. A
+     dense model of convenient size would not exercise the path under test at all.
+2. **Reference for the gpt-oss rows: the dequant-to-bf16 path of the same shipped bytes.**
+   There is no bf16 original of gpt-oss, and no table cell may imply one exists.
+3. **KL x-axis becomes:** dequant-bf16 (0 by construction), native MXFP4, MXFP4→NF4 requant.
+4. **granite is demoted to an optional secondary** low-power datapoint. Its KL is already
+   published (1.407598e-01, commit `dec5798`) and stands regardless.
+
+**Unchanged — every part of the restraint.** Still roughly three points, so still **no r**,
+and still no "reproduced" or "refuted" language against r = −0.981. The kill switch and the
+5% tier floor carry over verbatim, now applied to the dequant-bf16 reference. The judge is
+still the verbatim IKP prompt served locally, so absolute accuracies are still not
+comparable to the Gemini-judged published numbers.
+
+**Worth recording:** that harness bug is exactly the kind that would have been dangerous if
+it had failed quietly instead of loudly. Empty answers score as uniformly wrong, which is
+indistinguishable from catastrophic quantization damage — a clean, publishable-looking
+result that would have been an artifact of my own code.
