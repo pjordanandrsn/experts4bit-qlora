@@ -39,8 +39,19 @@ Guardrails: `E4B_QUEUE_MAX` waiting requests (then 503 + Retry-After), `E4B_MAX_
 The allocator cache is released to the driver between requests (`E4B_EMPTY_CACHE=1`) so bursty
 GPU neighbors can use the headroom.
 
-[`deploy/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.6.4/deploy/) has the Dockerfile + compose file (CUDA 12.4 runtime base, the pinned stack
-the A2000 numbers were measured with). One deployment note worth setting: the
+[`deploy/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.9.1/deploy/) has the Dockerfile + compose file (CUDA 12.4 runtime base, the pinned stack
+the A2000 numbers were measured with).
+
+**The Python inside the image must be a real 3.11, not Ubuntu's.** Ubuntu 22.04's
+`python3.11` apt package is 3.11.0rc1 (Aug 2022), which predates
+`sys.get_int_max_str_digits` — torch 2.6's dynamo polyfills decorate it at import, so the
+first `import torch._dynamo` (reached through `transformers.integrations.moe` when loading
+any MoE model) half-registers, fails, and every later import dies with the misleading
+`Duplicate dispatch rule for <built-in function intern>` while the serve healthcheck keeps
+passing. The Dockerfile installs 3.11 from deadsnakes and asserts the fixed interpreter at
+build time; if you build your own image, keep both.
+
+One deployment note worth setting: the
 container should carry `ulimits: memlock: -1`, and on the A2000 stack above, omitting it went
 with offloaded decode dropping from 1.44 to ~0.4 tok/s.
 
