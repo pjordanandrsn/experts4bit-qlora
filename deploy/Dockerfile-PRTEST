@@ -42,10 +42,6 @@ WORKDIR /app
 COPY deploy/requirements.txt /app/deploy/requirements.txt
 RUN python3.11 -m pip install --no-cache-dir -r /app/deploy/requirements.txt
 
-# grouped-nf4-gemm: the [fast] fused grouped-GEMM path (deploy overlay; the extra is
-# skipped by the --no-deps install below)
-RUN python3.11 -m pip install --no-cache-dir grouped-nf4-gemm==0.6.0
-
 COPY . /app
 # Non-editable: this build backend has no PEP-660 editable hook (pip: "build backend is
 # missing the 'build_editable' hook"), and editability is meaningless in a baked image.

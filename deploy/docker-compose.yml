@@ -10,9 +10,14 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     container_name: e4b-serve
-    runtime: nvidia
+    cpu_shares: 256
+    # Docker's registered NVIDIA runtime name varies by host (stock: "nvidia"; QNAP Container
+    # Station: "nvidia-runtime") — override in a .env file next to this compose file.
+    runtime: ${E4B_GPU_RUNTIME:-nvidia}
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
       - MODEL=allenai/OLMoE-1B-7B-0924
       - R=8
       - ALPHA=16
@@ -22,14 +27,7 @@ services:
       # name=path pairs; paths are in-container (the ./adapters volume below).
       # Example: E4B_ADAPTERS=alpaca=/adapters/adapter_best.pt
       - E4B_ADAPTERS=${E4B_ADAPTERS:-}
-      # Bind 0.0.0.0 INSIDE the container — the app default is 127.0.0.1 (0.6.3+),
-      # and a container-loopback bind is unreachable through the port map. The
-      # container network namespace is the isolation boundary; the host-side
-      # publish below (127.0.0.1 by default) is what actually gates reachability.
       - E4B_HOST=0.0.0.0
-      # Set to require "Authorization: Bearer <token>" on generation routes.
-      # Strongly recommended before you widen the host publish beyond loopback.
-      - E4B_TOKEN=${E4B_TOKEN:-}
       - E4B_PORT=8777
       - E4B_QUEUE_MAX=2
       - E4B_MAX_INPUT_TOKENS=2048
@@ -38,21 +36,14 @@ services:
       # One JSON line per generation (tokens, peak VRAM, wall, versions) -> ./receipts on the host.
       - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
     ports:
-      # Host-loopback only by default (secure like the app's 127.0.0.1 default).
-      # To reach it from the LAN: change to "8777:8777" AND set E4B_TOKEN above.
-      - "127.0.0.1:8777:8777"
+      - "8777:8777"
     volumes:
       - ../../hf-cache:/root/.cache/huggingface
       - ../../adapters:/adapters:ro
       - ../../receipts:/receipts
     ulimits:
-      # Set this as cheap insurance. NOTE (corrected 2026-07-28): an earlier version of
-      # this comment said that without it the pin "silently falls back to pageable".
-      # That cause is WRONG -- pin_memory()/cudaHostAlloc is NOT gated by RLIMIT_MEMLOCK
-      # (measured: a 15 GiB arena pinned at 18.7 GB/s under an 8 MiB soft AND hard cap).
-      # The rlimit gates cudaHostRegister, which this path never calls. A 1.44 -> 0.4 tok/s
-      # slowdown was really observed without it, but is NOT attributed -- if decode is slow,
-      # check tensor.is_pinned() rather than blaming this line. See docs/SERVING.md.
+      # Required: the offload homes must pin (mlock) ~5 GB for OLMoE. Without this the pin
+      # silently falls back to pageable and decode drops from 1.44 to ~0.4 tok/s.
       memlock: -1
     restart: unless-stopped
     healthcheck:
@@ -61,4 +52,100 @@ services:
       timeout: 5s
       retries: 3
       # First boot = 14 GB download + streaming NF4 load + warmup; don't flap before it's done.
+      start_period: 900s
+
+  # Optional second endpoint: a big-MoE "capability" model — offload-only on a 12 GB card
+  # (~4.4 GB GPU @ ~0.22 tok/s decode: batch-quality jobs, not chat). One base model per
+  # process/container by design. Opt in with: docker compose --profile qwen up -d
+  e4b-serve-qwen:
+    profiles: ["qwen"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: e4b-serve-qwen
+    cpu_shares: 256
+    runtime: ${E4B_GPU_RUNTIME:-nvidia}
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - MODEL=Qwen/Qwen3-30B-A3B
+      - R=8
+      - ALPHA=16
+      - QUANT_TYPE=nf4
+      - OFFLOAD_EXPERTS=1
+      - PREFETCH=1
+      - E4B_HOST=0.0.0.0
+      - E4B_PORT=8781
+      - E4B_QUEUE_MAX=2
+      - E4B_MAX_INPUT_TOKENS=2048
+      # Measured 2026-08-01: 0.375-0.38 tok/s, so 1024 new tokens is ~45 min of wall.
+      # The cap is a CLAMP in serve._check() (min(request, cap)) — a request asking for
+      # more is silently shortened, not rejected. At 192 the LRD judge panel spent its
+      # whole budget reasoning and was cut before emitting its JSON verdict, so every
+      # grade got regex-scraped out of prose. Raised to 1024 for that.
+      - E4B_MAX_NEW_TOKENS=1024
+      # Must exceed 1024/0.375 = 2731 s or the server truncates at ~680 tokens with
+      # stopped="timeout" and the new cap is unreachable. 3600 s = ~30% headroom.
+      - E4B_REQUEST_TIMEOUT_S=3600
+      - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
+    ports:
+      - "8781:8781"
+    volumes:
+      - ../../hf-cache:/root/.cache/huggingface
+      - ../../receipts:/receipts
+    ulimits:
+      memlock: -1  # ~15 GB of 4-bit experts must pin (see the note on the primary service)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8781/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # First boot = ~60 GB download + streaming NF4 quantize of a 30B — give it a full hour.
+      start_period: 3600s
+
+  # Optional featherweight endpoint: Granite-3.0-1B-A400M (needs the loader's granitemoe
+  # support — build from a branch that includes it). Fast for its size (~4.3 tok/s @ ~0.4 GB
+  # peak on an A2000): the "cheap local text jobs" tier. Opt in: docker compose --profile granite up -d
+  e4b-serve-granite:
+    profiles: ["granite"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: e4b-serve-granite
+    cpu_shares: 256
+    runtime: ${E4B_GPU_RUNTIME:-nvidia}
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - MODEL=ibm-granite/granite-3.0-1b-a400m-instruct
+      - R=8
+      - ALPHA=16
+      - QUANT_TYPE=nf4
+      - OFFLOAD_EXPERTS=1
+      - PREFETCH=1
+      - E4B_HOST=0.0.0.0
+      - E4B_PORT=8783
+      - E4B_QUEUE_MAX=2
+      - E4B_MAX_INPUT_TOKENS=2048
+      - E4B_MAX_NEW_TOKENS=256
+      - E4B_REQUEST_TIMEOUT_S=600
+      - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
+    ports:
+      - "8783:8783"
+    volumes:
+      - ../../hf-cache:/root/.cache/huggingface
+      - ../../adapters:/adapters:ro
+      - ../../receipts:/receipts
+    ulimits:
+      memlock: -1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8783/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # ~2.6 GB download + a small streaming load; generous anyway.
       start_period: 900s
