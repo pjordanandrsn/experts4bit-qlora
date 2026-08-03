@@ -44,6 +44,13 @@ RUN python3.11 -m pip install --no-cache-dir -r /app/deploy/requirements.txt
 
 # grouped-nf4-gemm: the [fast] fused grouped-GEMM path (deploy overlay; the extra is
 # skipped by the --no-deps install below)
+# triton (the [fast] path's JIT) compiles a small C shim at import and needs a C
+# compiler in the RUNTIME image — without one the serve process crash-loops at boot
+# ("Failed to find C compiler"). Placed after the big pip layers so cache holds.
+RUN DEBIAN_FRONTEND=noninteractive apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc python3.11-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # --no-deps is LOAD-BEARING: without it pip resolves gnf4's deps and pulls a newer
 # torch from PyPI (built for CUDA 13) OVER the pinned 2.6.0+cu124 — the container
 # then fails CUDA init on any 12.x driver ("driver too old, found 12090").
