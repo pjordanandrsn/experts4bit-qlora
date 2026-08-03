@@ -84,7 +84,7 @@ def main() -> int:
     ap.add_argument("--model", default="allenai/OLMoE-1B-7B-0924")
     ap.add_argument("--k0-receipt", required=True)
     ap.add_argument("--rows", default="nvme,bf16nf4",
-                    help="comma list: nvme,hot,bf16nf4")
+                    help="comma list: nvme,hot,bf16nf4,bf16fp4")
     ap.add_argument("--max-len", type=int, default=320)
     ap.add_argument("--limit", type=int, default=0, help="debug: first N prompts only")
     ap.add_argument("--out", required=True)
@@ -124,6 +124,78 @@ def main() -> int:
         rows.append(r)
         del base, nf4
         torch.cuda.empty_cache() if dev == "cuda" else None
+
+    # ---------------------------------------------------------------- row: FP4 vs bf16
+    # A second real quantization, so the K3 prereg has more than one nonzero x-value.
+    # Measured BEFORE any accuracy is scored: the x-axis is fixed before the y-axis exists.
+    if "bf16fp4" in want:
+        t0 = time.time()
+        from transformers import AutoModelForCausalLM
+        base = AutoModelForCausalLM.from_pretrained(
+            a.model, torch_dtype=torch.bfloat16, trust_remote_code=True).to(dev).eval()
+        fp4, _ = load_moe_4bit_streaming(a.model, dev, torch.bfloat16, 8, 16,
+                                         offload=False, prefetch=False, quant_type="fp4")
+        fp4.eval()
+        r = score_pair(lambda i: teacher_forced_logits(base, i),
+                       lambda i: teacher_forced_logits(fp4, i), tok, a.max_len, dev)
+        r.update({
+            "row": "our FP4 quantization of a bf16 base",
+            "reference": f"the bf16 base ({a.model}, torch_dtype=bfloat16)",
+            "test": "experts4bit FP4 (load_moe_4bit_streaming, quant_type=fp4)",
+            "expectation": "> 0 — a real quantization; same reference as the NF4 row so "
+                           "the two are directly comparable",
+            "wall_s": round(time.time() - t0, 1),
+        })
+        rows.append(r)
+        del base, fp4
+        torch.cuda.empty_cache() if dev == "cuda" else None
+
+    # --------------------------------------- row: VRAM-resident vs host-streamed (hot)
+    if "hot" in want:
+        t0 = time.time()
+        # enable_hot_residency is deprecated since 0.6.2; enable_pipelined_residency is
+        # the supported path and takes k_slots (the model's routed top-k) explicitly.
+        from experts4bit_qlora.hot_residency import (hot_residency_available,
+                                                     target_modules)
+        from experts4bit_qlora.pipelined import enable_pipelined_residency
+        if not hot_residency_available():
+            rows.append({
+                "row": "tier transition: VRAM-resident vs host-streamed",
+                "skipped": "hot residency unavailable (needs nf4_grouped + CUDA)",
+            })
+        else:
+            resident, _ = load_moe_4bit_streaming(a.model, dev, torch.bfloat16, 8, 16,
+                                                  offload=False, prefetch=False,
+                                                  quant_type="nf4")
+            resident.eval()
+            split, _ = load_moe_4bit_streaming(a.model, dev, torch.bfloat16, 8, 16,
+                                               offload=False, prefetch=False,
+                                               quant_type="nf4")
+            split.eval()
+            # Pin half of each layer's experts in VRAM; the rest stream from host DRAM.
+            # A partial split is the point — an all-hot set would exercise nothing, and a
+            # 0-length set would be pure streaming (already covered by the nvme row).
+            cfg = split.config
+            n_exp = getattr(cfg, "num_local_experts", None) or cfg.num_experts
+            k_slots = getattr(cfg, "num_experts_per_tok", None) or cfg.num_experts_per_token
+            n_layers = len(target_modules(split))
+            hot_sets = [list(range(n_exp // 2)) for _ in range(n_layers)]
+            n_patched = enable_pipelined_residency(split, hot_sets, device=dev,
+                                                   k_slots=int(k_slots))
+            r = score_pair(lambda i: teacher_forced_logits(resident, i),
+                           lambda i: teacher_forced_logits(split, i), tok, a.max_len, dev)
+            r.update({
+                "row": "tier transition: VRAM-resident vs host-streamed",
+                "reference": "all experts VRAM-resident, same model, same run",
+                "test": f"hot residency: {n_exp // 2}/{n_exp} experts pinned in VRAM, "
+                        f"remainder streamed from host DRAM ({n_patched} layers patched)",
+                "expectation": "exactly 0.000 — CONFIRMATORY; where a weight lives must "
+                               "not change the arithmetic performed on it",
+                "wall_s": round(time.time() - t0, 1),
+            })
+            rows.append(r)
+            del resident, split
+            torch.cuda.empty_cache() if dev == "cuda" else None
 
     # ------------------------------------------- row: DRAM-resident vs NVMe-streamed
     if "nvme" in want:
@@ -173,6 +245,9 @@ def main() -> int:
         json.dump(receipt, f, indent=1)
     for r in rows:
         print(f"\n== {r['row']}")
+        if "skipped" in r:
+            print(f"   SKIPPED   : {r['skipped']}")
+            continue
         print(f"   reference : {r['reference']}")
         print(f"   test      : {r['test']}")
         print(f"   expected  : {r['expectation']}")
