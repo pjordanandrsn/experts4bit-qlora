@@ -1,0 +1,110 @@
+{
+ "metric_version": "kl-fidelity/1.0.0",
+ "k0_gate": {
+  "receipt": "/root/k0_receipt.json",
+  "all_passed": true
+ },
+ "torch": "2.8.0+cu128",
+ "gpu": "NVIDIA A100-SXM4-80GB",
+ "model": "openai/gpt-oss-20b",
+ "reference_note": "dequant-to-bf16 of the SAME shipped MXFP4 bytes (Mxfp4Config(dequantize=True)) \u2014 there is no bf16 original of gpt-oss",
+ "prompt_set": {
+  "sha256": "eaa7792260b3f10dc2a55c9d214a09fe68332799d9ec999708e2e828c011e02d",
+  "n": 200,
+  "strata": {
+   "general": 72,
+   "technical": 55,
+   "code": 55,
+   "longctx": 18
+  },
+  "max_len": 320
+ },
+ "rows": [
+  {
+   "metric_version": "kl-fidelity/1.0.0",
+   "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+   "aggregation": "token-weighted",
+   "vocab_size": 201088,
+   "truncation": "none (full vocabulary)",
+   "n_prompts": 200,
+   "n_tokens_scored": 5757,
+   "kl_mean": 0.0015394148531161988,
+   "kl_median": 0.0005495016223161151,
+   "kl_p95": 0.005309843426439687,
+   "kl_max_per_token": 0.09909605176645692,
+   "top1_agreement": 0.9838457529963522,
+   "exactly_zero": false,
+   "per_stratum": {
+    "general": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 72,
+     "n_tokens_scored": 700,
+     "kl_mean": 0.0015513530901885713,
+     "kl_median": 0.0003726806870057099,
+     "kl_p95": 0.005785427741683195,
+     "kl_max_per_token": 0.04945136908610982,
+     "top1_agreement": 0.9942857142857143,
+     "exactly_zero": false
+    },
+    "technical": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 636,
+     "kl_mean": 0.0010522244706114754,
+     "kl_median": 0.0003521259520720926,
+     "kl_p95": 0.00293818538371064,
+     "kl_max_per_token": 0.04718167240503039,
+     "top1_agreement": 0.9889937106918238,
+     "exactly_zero": false
+    },
+    "code": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 1489,
+     "kl_mean": 0.0008957352649876505,
+     "kl_median": 0.0001351941398959805,
+     "kl_p95": 0.002306664833203263,
+     "kl_max_per_token": 0.07108057815007976,
+     "top1_agreement": 0.9919408999328408,
+     "exactly_zero": false
+    },
+    "longctx": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 18,
+     "n_tokens_scored": 2932,
+     "kl_mean": 0.0019691335516311215,
+     "kl_median": 0.001050594663469418,
+     "kl_p95": 0.006998237086241211,
+     "kl_max_per_token": 0.09909605176645692,
+     "top1_agreement": 0.9761255115961801,
+     "exactly_zero": false
+    }
+   },
+   "tokens_min": 5,
+   "tokens_max": 196,
+   "tokens_total": 5757,
+   "row": "native MXFP4 computed on the shipped bytes",
+   "reference": "dequant-to-bf16 of the SAME shipped MXFP4 bytes (Mxfp4Config(dequantize=True)) \u2014 there is no bf16 original of gpt-oss",
+   "test": "native MXFP4 (transformers, no dequant)",
+   "expectation": "measure \u2014 this is the format the model actually ships in",
+   "wall_s": 65.9
+  }
+ ],
+ "not_measured": {}
+}
