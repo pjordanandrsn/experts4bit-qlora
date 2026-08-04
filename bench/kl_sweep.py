@@ -51,18 +51,13 @@ def load_partial_nf4(model_id: str, k: int, n_layers: int):
     Skip-list matching is substring-based in transformers, so "model.layers.4" would also
     match "model.layers.40". Safe here because granite has 24 layers; assert it.
     """
-    from transformers import AutoModelForCausalLM, BitsAndBytesConfig
-    assert n_layers < 100, "substring skip-list is ambiguous past 100 layers"
-    skip = [f"model.layers.{i}" for i in range(k, n_layers)]
-    if k == 0:
-        return AutoModelForCausalLM.from_pretrained(
-            model_id, dtype=torch.bfloat16, device_map="auto").eval()
-    cfg = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                             bnb_4bit_compute_dtype=torch.bfloat16,
-                             llm_int8_skip_modules=skip or None)
-    return AutoModelForCausalLM.from_pretrained(
-        model_id, quantization_config=cfg, dtype=torch.bfloat16,
-        device_map="auto").eval()
+    # Via e4b's own loader (quantize_layers, PR #63). bitsandbytes cannot do this at all:
+    # granite's experts are fused 3D tensors and Linear4bit rejects them outright.
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+    m, _ = load_moe_4bit_streaming(model_id, "cuda", torch.bfloat16, 8, 16,
+                                   offload=False, prefetch=False, quant_type="nf4",
+                                   quantize_layers=set(range(k)))
+    return m.eval()
 
 
 def main() -> int:
