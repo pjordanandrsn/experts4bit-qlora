@@ -1,0 +1,120 @@
+{
+ "metric_version": "kl-fidelity/1.0.0",
+ "k0_gate": {
+  "receipt": "bench/receipts-kl-fidelity-20260803/k0-controls.json",
+  "all_passed": true,
+  "torch_at_control": "2.11.0+cu128"
+ },
+ "torch": "2.11.0+cu128",
+ "device": "cuda",
+ "model": "ibm-granite/granite-3.0-1b-a400m-instruct",
+ "prompt_set": {
+  "sha256": "eaa7792260b3f10dc2a55c9d214a09fe68332799d9ec999708e2e828c011e02d",
+  "n": 200,
+  "strata": {
+   "general": 72,
+   "technical": 55,
+   "code": 55,
+   "longctx": 18
+  },
+  "max_len": 320
+ },
+ "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
+ "rows": [
+  {
+   "metric_version": "kl-fidelity/1.0.0",
+   "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+   "aggregation": "token-weighted",
+   "vocab_size": 49155,
+   "truncation": "none (full vocabulary)",
+   "n_prompts": 200,
+   "n_tokens_scored": 6813,
+   "kl_mean": 0.0031606502410259953,
+   "kl_median": 0.0016324232413419018,
+   "kl_p95": 0.01018882741615686,
+   "kl_max_per_token": 0.3452975446485536,
+   "top1_agreement": 0.971818582122413,
+   "exactly_zero": false,
+   "per_stratum": {
+    "general": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 72,
+     "n_tokens_scored": 886,
+     "kl_mean": 0.0037674865550522993,
+     "kl_median": 0.0018133045891056132,
+     "kl_p95": 0.01327347748144017,
+     "kl_max_per_token": 0.11758026571356613,
+     "top1_agreement": 0.9672686230248307,
+     "exactly_zero": false
+    },
+    "technical": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 752,
+     "kl_mean": 0.004415598109320576,
+     "kl_median": 0.0017964145173182417,
+     "kl_p95": 0.014273762876549946,
+     "kl_max_per_token": 0.3452975446485536,
+     "top1_agreement": 0.9654255319148937,
+     "exactly_zero": false
+    },
+    "code": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 1640,
+     "kl_mean": 0.002495905576672462,
+     "kl_median": 0.0007274072864184734,
+     "kl_p95": 0.008951303388944004,
+     "kl_max_per_token": 0.0895535312138608,
+     "top1_agreement": 0.9804878048780488,
+     "exactly_zero": false
+    },
+    "longctx": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 18,
+     "n_tokens_scored": 3535,
+     "kl_mean": 0.003049986444238149,
+     "kl_median": 0.0018755347106268715,
+     "kl_p95": 0.009378814920474456,
+     "kl_max_per_token": 0.13955249638659867,
+     "top1_agreement": 0.9702970297029703,
+     "exactly_zero": false
+    }
+   },
+   "tokens_min": 6,
+   "tokens_max": 257,
+   "tokens_total": 6813,
+   "row": "residency engine KERNEL vs reference decode path (not a tier transition)",
+   "reference": "no engine: ExpertsLoRA per-expert GEMV decode path, all experts VRAM-resident",
+   "test": "hot residency: 16/32 experts pinned in VRAM, remainder streamed from host DRAM (24 layers patched)",
+   "scoring": "decode-shaped teacher forcing (one token per forward, KV cache) on BOTH sides \u2014 not the prefill scorer the other rows use; this engine only engages at T==1",
+   "expectation": "NONZERO, and it is the KERNEL that is being measured, not weight location. This comparison varies two things at once \u2014 where the expert lives AND which GEMM computes it (grouped 4-bit over a gathered slot store vs per-expert GEMV). It was originally written as the tier-transition row; it cannot test that claim. With the kernel held fixed (reference moved onto the engine at hot_set=ALL) location alone measures exactly 0.000 \u2014 see granite-hot.json. Retained because the kernel cost is a real, separately useful number.",
+   "amendment": "Row previously scored with the prefill scorer and could not run at all (enable_pipelined_residency refused ExpertsLoRA bases). After that was fixed, a 3-prompt pilot showed the prefill scorer engages the engine zero times; the scorer was changed to decode-shaped and the 0.000 expectation withdrawn BEFORE this full run. Disclosed because the method changed after seeing pilot data.",
+   "engine_cold_pcie_bytes": 544485113856,
+   "engine_hot_d2d_bytes": 512164823040,
+   "witness": "nonzero cold_pcie_bytes proves the split engine executed; without it a 0.000 here is indistinguishable from a no-op",
+   "wall_s": 1176.2,
+   "supersedes": "was the tier-transition row; superseded by granite-hot.json"
+  }
+ ],
+ "not_measured": {
+  "native MXFP4 vs dequant-to-bf16 of the same shipped bytes": "gpt-oss not in the offline hf-cache on this host; needs a download. Reference would be the DEQUANT path of the shipped bytes \u2014 there is no bf16 original.",
+  "MXFP4 -> NF4 requant (the 'requant tax')": "same blocker; reference would be dequant-to-bf16 of the shipped MXFP4."
+ }
+}

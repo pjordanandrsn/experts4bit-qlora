@@ -1,0 +1,120 @@
+{
+ "metric_version": "kl-fidelity/1.0.0",
+ "k0_gate": {
+  "receipt": "bench/receipts-kl-fidelity-20260803/k0-controls.json",
+  "all_passed": true,
+  "torch_at_control": "2.11.0+cu128"
+ },
+ "torch": "2.11.0+cu128",
+ "device": "cuda",
+ "model": "ibm-granite/granite-3.0-1b-a400m-instruct",
+ "prompt_set": {
+  "sha256": "eaa7792260b3f10dc2a55c9d214a09fe68332799d9ec999708e2e828c011e02d",
+  "n": 200,
+  "strata": {
+   "general": 72,
+   "technical": 55,
+   "code": 55,
+   "longctx": 18
+  },
+  "max_len": 320
+ },
+ "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
+ "rows": [
+  {
+   "metric_version": "kl-fidelity/1.0.0",
+   "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+   "aggregation": "token-weighted",
+   "vocab_size": 49155,
+   "truncation": "none (full vocabulary)",
+   "n_prompts": 200,
+   "n_tokens_scored": 6813,
+   "kl_mean": 0.0,
+   "kl_median": 0.0,
+   "kl_p95": 0.0,
+   "kl_max_per_token": 0.0,
+   "top1_agreement": 1.0,
+   "exactly_zero": true,
+   "per_stratum": {
+    "general": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 72,
+     "n_tokens_scored": 886,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    },
+    "technical": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 752,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    },
+    "code": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 1640,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    },
+    "longctx": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 18,
+     "n_tokens_scored": 3535,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    }
+   },
+   "tokens_min": 6,
+   "tokens_max": 257,
+   "tokens_total": 6813,
+   "row": "tier transition: VRAM-resident vs host-streamed",
+   "reference": "pipelined engine, hot_set = ALL 32 experts (nothing streamed), same model, same run",
+   "test": "pipelined engine, hot_set = 16/32 experts pinned in VRAM, remainder streamed from host DRAM (24 layers patched)",
+   "scoring": "decode-shaped teacher forcing (one token per forward, KV cache) on BOTH sides \u2014 not the prefill scorer the other rows use; this engine only engages at T==1",
+   "expectation": "exactly 0.000 \u2014 CONFIRMATORY; where a weight lives must not change the arithmetic performed on it. Same bytes, same GEMM, reached via a different source address: the engine holds the kernel fixed and takes K as data, so only location varies between these two sides.",
+   "amendment": "Twice-amended, both disclosed. (1) The row could not run at all \u2014 enable_pipelined_residency refused ExpertsLoRA bases, which is every model load_moe_4bit_streaming returns. (2) It then scored with the prefill scorer, which engages this decode-only engine zero times and would have reported a flawless 0.000 that measured nothing; scoring is now decode-shaped. A third change was considered and REJECTED on evidence: the 0.000 expectation was briefly withdrawn after the original reference side (a model with NO engine) measured 3.16e-3. That comparison varied weight location AND compute kernel together, so it could not test the row's claim. With the reference moved onto the engine at hot_set=ALL, the kernel is held fixed, and the registered 0.000 is met exactly \u2014 see granite-hot-kernel-vs-reference.json for the 3.16e-3, which is the KERNEL's cost and is a separate finding.",
+   "engine_cold_pcie_bytes": 544485113856,
+   "engine_hot_d2d_bytes": 512164823040,
+   "engine_cold_pcie_bytes_reference": 0,
+   "witness": "the ASYMMETRY is the measurement: the test side must stream (nonzero cold bytes \u2014 otherwise nothing was tiered and the engine may not even have run) and the reference side must not (zero \u2014 otherwise it is not all-resident and both sides are the same experiment). A 0.000 is only meaningful with both.",
+   "wall_s": 529.8
+  }
+ ],
+ "not_measured": {
+  "native MXFP4 vs dequant-to-bf16 of the same shipped bytes": "gpt-oss not in the offline hf-cache on this host; needs a download. Reference would be the DEQUANT path of the shipped bytes \u2014 there is no bf16 original.",
+  "MXFP4 -> NF4 requant (the 'requant tax')": "same blocker; reference would be dequant-to-bf16 of the shipped MXFP4."
+ }
+}

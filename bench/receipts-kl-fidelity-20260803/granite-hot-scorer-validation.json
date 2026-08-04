@@ -1,0 +1,38 @@
+{
+ "metric_version": "kl-fidelity/1.0.0",
+ "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+ "aggregation": "token-weighted",
+ "vocab_size": 49155,
+ "truncation": "none (full vocabulary)",
+ "n_prompts": 20,
+ "n_tokens_scored": 226,
+ "kl_mean": 0.004288445778118171,
+ "kl_median": 0.0015672621402325674,
+ "kl_p95": 0.017775729033042476,
+ "kl_max_per_token": 0.07910376367203575,
+ "top1_agreement": 0.9823008849557522,
+ "exactly_zero": false,
+ "control": "decode scorer vs prefill scorer, same model, no residency engine",
+ "expected": "ORIGINAL PREDICTION, FALSIFIED: '<< the 6.4e-3 the hot row attributes to the engine; identical conditioning, so this is kernel/accumulation noise only'. Measured 4.29e-3 \u2014 the same order as the row's headline, not far below it.",
+ "model": "ibm-granite/granite-3.0-1b-a400m-instruct",
+ "n_prompts_used": 20,
+ "verdict": "expectation falsified; scorer nonetheless validated by the control below",
+ "followup": {
+  "question": "is this the decode scorer mis-conditioning, or real model behaviour?",
+  "decisive_test": "KL at position 0, where prefill and decode are the identical computation (one token, empty cache) \u2014 divergence there is a path difference, not accumulation",
+  "pos0_kl": {
+   "e4b_defaults": 0.02122569,
+   "e4b_decode_fastpath_off": 0.02122569,
+   "e4b_fastpath_and_infer_gemv_off": 0.01009253,
+   "vanilla_hf_bf16_no_experts4bit": 0.007502697
+  },
+  "mean_kl": {
+   "e4b_defaults": 0.02101421,
+   "e4b_decode_fastpath_off": 0.02101421,
+   "e4b_fastpath_and_infer_gemv_off": 0.0160094,
+   "vanilla_hf_bf16_no_experts4bit": 0.004236889
+  },
+  "conclusion": "The vanilla-HF control shows the same effect at the same order with no experts4bit code in the path, so prefill vs cached decode is a genuine bf16 difference in the model/transformers, NOT the scorer mis-conditioning. fp32 compute does not collapse it either. The scorer is sound. Separately: the 4-bit inference GEMV route roughly doubles the gap (1.01e-2 -> 2.12e-2), which is a real observation about that route and is NOT investigated here.",
+  "impact_on_hot_row": "None. Both sides of the hot row are decode-scored, so this gap is common-mode and cancels. It does mean that row's absolute KL is not comparable to the prefill-scored rows \u2014 which the row itself states."
+ }
+}

@@ -344,14 +344,23 @@ def test_end_to_end_shapes_only_module_forward(arena):
 
 
 # ----------------- Bugbot #42: module selection must be SHARED ---------------
-def test_target_modules_excludes_lora_bases_and_keeps_order(arena):
+def test_target_modules_includes_lora_bases_and_keeps_order(arena):
     """Regression: `enable_nvme_residency` used to walk modules itself, which
     disagreed with `enable_hot_residency` whenever LoRA-wrapped and bare modules
     were interleaved — stamping real MoE layers with the wrong arena layer index.
-    Both must now derive the target list from one implementation.
+    Both must derive the target list from one implementation.
+
+    That shared list now INCLUDES ExpertsLoRA bases. It excluded them originally
+    because `ExpertsLoRA.forward` never calls `base.forward`, making a patch dead
+    code — but `ExpertsLoRA._delegate_to_base` does hand the forward to the base
+    once an engine is attached and the adapter is provably zero, and excluding
+    them left the pipelined engine unreachable for every model the streaming
+    loader returns. Membership means "targetable and index-bearing"; an engine
+    that is not delegated to (v0 hot residency, the NVMe engines) skips wrapped
+    bases itself, consuming the entry so `hot_sets[i]` keeps its meaning.
     """
     from experts4bit_qlora.lora import ExpertsLoRA
-    from experts4bit_qlora.hot_residency import target_modules
+    from experts4bit_qlora.hot_residency import target_modules, wrapped_bases
     mod, _path, index = arena
 
     class Net(torch.nn.Module):
@@ -365,14 +374,14 @@ def test_target_modules_excludes_lora_bases_and_keeps_order(arena):
     net = Net()
     targets = target_modules(net)
     naive = [m for m in net.modules() if isinstance(m, type(mod))]
-    # the naive sweep sees the wrapped BASE too, so the lists differ in length...
-    assert len(naive) > len(targets), (len(naive), len(targets))
-    # ...and no target is a wrapped base
-    bases = {id(m.base) for m in net.modules()
-             if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
-    assert all(id(t) not in bases for t in targets)
-    # order is module-declaration order, so hot_sets[i] maps predictably
+    # one shared enumeration: it now agrees with the naive sweep on membership...
+    assert len(naive) == len(targets), (len(naive), len(targets))
+    bases = wrapped_bases(net)
+    assert bases, "fixture no longer has a wrapped base — the test would be vacuous"
+    assert any(id(t) in bases for t in targets), "wrapped base must be targetable"
+    # ...and the ordering guarantee is what hot_sets[i] actually rides on
     assert targets[0] is net.a and targets[-1] is net.c
+    assert targets[1] is net.b.base
 
 
 def test_enable_nvme_residency_refuses_a_partial_stamp(arena):

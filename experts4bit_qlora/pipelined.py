@@ -371,6 +371,13 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
     reference path). K (the hot count) is data: pass a 0-length set for pure
     streaming, all experts for fully resident — same code path.
 
+    ``ExpertsLoRA``-wrapped bases — the experts of every model
+    ``load_moe_4bit_streaming`` returns — are targeted as well: the wrapper
+    delegates the whole forward to the patched base under eval + ``no_grad``
+    with a provably-zero adapter (``ExpertsLoRA._delegate_to_base``). Outside
+    those conditions the patch installs but can never run, and this warns
+    rather than returning a count that implies work.
+
     Mutually exclusive with the v0 hot-residency and the [fast] patch on the
     same module (disable those first). Grad-enabled forwards, T>1 (prefill),
     and non-bf16/fp16 compute run the saved reference forward.
@@ -381,20 +388,28 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
     if k_slots is None:
         raise ValueError("k_slots (the model's routed top-k) is required")
     if hasattr(model, "modules"):
+        from experts4bit_qlora.hot_residency import target_modules
+        mods = target_modules(model)
+        # An `ExpertsLoRA.base` IS a valid target. This used to raise
+        # NotImplementedError, which made the engine unreachable for every model
+        # `load_moe_4bit_streaming` returns (its experts are always wrapped) — i.e.
+        # for the path most callers take. `ExpertsLoRA.forward` calls `self.base(...)`
+        # — reaching the patch installed below — whenever `_delegate_to_base()` holds:
+        # eval mode, no_grad, and an adapter that provably contributes nothing.
+        #
+        # Those conditions are why the wrapper is mapped here rather than assumed
+        # away: when they do NOT hold the patch installs and never runs, so the
+        # warnings at the end of this function tell the caller instead of letting a
+        # healthy-looking return value imply work that will not happen.
         try:
             from experts4bit_qlora.lora import ExpertsLoRA
-            wrapped = {id(m.base) for m in model.modules()
-                       if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
+            lora_parent = {id(m.base): m for m in model.modules()
+                           if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
         except ImportError:
-            wrapped = set()
-        all_nbit = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
-        mods = [m for m in all_nbit if id(m) not in wrapped]
-        if wrapped and not mods:
-            raise NotImplementedError(
-                "every ExpertsNbit here is an ExpertsLoRA.base (the streaming-loader/offload "
-                "path); pipelined residency supports standalone Experts4bit modules")
+            lora_parent = {}
     else:
         mods = [model]
+        lora_parent = {}
     if len(hot_sets) != len(mods):
         raise ValueError(
             f"hot_sets has {len(hot_sets)} entries but the model has {len(mods)} "
@@ -416,6 +431,8 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
         pass
 
     patched = 0
+    unreachable = []      # patched, but the parent adapter will not delegate to it
+    wrapped_patched = 0   # patched modules that are reached via an ExpertsLoRA wrapper
     for i, mod in enumerate(mods):
         if (hasattr(mod, "_e4b_fast_ref") or hasattr(mod, "_e4b_hot_ref")
                 or hasattr(mod, "_e4b_cold_ref") or hasattr(mod, "_e4b_mxfp4_ref")):
@@ -431,6 +448,14 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
             if verbose:
                 print(f"[pipelined] skip {type(mod).__name__}: {reason}")
             continue
+        parent = lora_parent.get(id(mod))
+        if parent is not None:
+            wrapped_patched += 1
+            # The data question only — `_delegate_to_base` additionally requires
+            # eval + no_grad, which are properties of the call site, not of the
+            # adapter, and are warned about separately below.
+            if not parent._adapter_is_zero():
+                unreachable.append(type(mod).__name__)
         cls = _GptOssPipelined if isinstance(mod, GptOssExperts4bit) else _PipelinedResidency
         state = cls(mod, hot_sets[i], device, k_slots)
         if not state.pinned:
@@ -458,6 +483,35 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
 
         mod.forward = _fwd
         patched += 1
+
+    # Two ways a patch on an ExpertsLoRA base installs and then never runs. Both are
+    # silent, and both are worst precisely where this engine gets measured: a residency
+    # split that never executes trivially reproduces the unsplit reference, so a DEAD
+    # patch scores a perfect zero divergence and reads as a PASS. Say so instead of
+    # returning a count that implies work.
+    if wrapped_patched and getattr(model, "training", False):
+        import warnings
+
+        warnings.warn(
+            f"[pipelined] model is in TRAINING mode: ExpertsLoRA only hands off to the "
+            f"patched base under eval + no_grad, so {wrapped_patched} patch(es) on wrapped "
+            "bases will be bypassed and the residency engine will not run. Call "
+            "model.eval() before inference.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    if unreachable:
+        import warnings
+
+        warnings.warn(
+            f"[pipelined] {len(unreachable)} of {patched} patched module(s) are ExpertsLoRA "
+            "bases with a non-zero adapter: ExpertsLoRA injects its low-rank delta before the "
+            "activation, so it does not call base.forward and these patches will never run. "
+            "The engine cannot serve a trained per-expert adapter today; merge or drop the "
+            "adapter for residency inference.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return patched
 
 
