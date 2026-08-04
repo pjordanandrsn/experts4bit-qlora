@@ -130,9 +130,16 @@ def phase_generate(a) -> int:
         # return_dict=True then index: apply_chat_template hands back a BatchEncoding on
         # current transformers, and passing that straight to generate() dies inside
         # generate() with a bare AttributeError that names neither the cause nor this call.
-        enc = tok.apply_chat_template(msgs, add_generation_prompt=True,
-                                      return_tensors="pt", return_dict=True)
-        ids = enc["input_ids"].to(dev)
+        if getattr(tok, "chat_template", None):
+            enc = tok.apply_chat_template(msgs, add_generation_prompt=True,
+                                          return_tensors="pt", return_dict=True)
+            ids = enc["input_ids"].to(dev)
+        else:
+            # BASE models (e.g. OLMoE-1B-7B-0924) ship no chat template, and
+            # apply_chat_template then raises. Fall back to a plain completion prompt —
+            # the same prompt for every path, so cross-path comparison stays valid.
+            ids = tok(f"Question: {p['question']}\nAnswer:",
+                      return_tensors="pt")["input_ids"].to(dev)
         with torch.no_grad():
             gen = model.generate(ids, max_new_tokens=48, do_sample=False,
                                  pad_token_id=tok.eos_token_id)

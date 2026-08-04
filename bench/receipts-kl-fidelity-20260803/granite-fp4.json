@@ -1,0 +1,114 @@
+{
+ "metric_version": "kl-fidelity/1.0.0",
+ "k0_gate": {
+  "receipt": "/root/k0.json",
+  "all_passed": true,
+  "torch_at_control": "2.8.0+cu128"
+ },
+ "torch": "2.8.0+cu128",
+ "device": "cuda",
+ "model": "ibm-granite/granite-3.0-1b-a400m-instruct",
+ "prompt_set": {
+  "sha256": "eaa7792260b3f10dc2a55c9d214a09fe68332799d9ec999708e2e828c011e02d",
+  "n": 200,
+  "strata": {
+   "general": 72,
+   "technical": 55,
+   "code": 55,
+   "longctx": 18
+  },
+  "max_len": 320
+ },
+ "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
+ "rows": [
+  {
+   "metric_version": "kl-fidelity/1.0.0",
+   "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+   "aggregation": "token-weighted",
+   "vocab_size": 49155,
+   "truncation": "none (full vocabulary)",
+   "n_prompts": 200,
+   "n_tokens_scored": 6813,
+   "kl_mean": 0.21269524173952017,
+   "kl_median": 0.07728903774168261,
+   "kl_p95": 0.64980987446648,
+   "kl_max_per_token": 14.576592179198046,
+   "top1_agreement": 0.8209305739028329,
+   "exactly_zero": false,
+   "per_stratum": {
+    "general": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 72,
+     "n_tokens_scored": 886,
+     "kl_mean": 0.3881828599881943,
+     "kl_median": 0.09622404822044915,
+     "kl_p95": 2.8030471355702633,
+     "kl_max_per_token": 3.9018416306723527,
+     "top1_agreement": 0.7573363431151241,
+     "exactly_zero": false
+    },
+    "technical": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 752,
+     "kl_mean": 0.4070344808972727,
+     "kl_median": 0.09595536868361759,
+     "kl_p95": 2.8159125170664616,
+     "kl_max_per_token": 14.576592179198046,
+     "top1_agreement": 0.7726063829787234,
+     "exactly_zero": false
+    },
+    "code": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 1640,
+     "kl_mean": 0.21317017366683866,
+     "kl_median": 0.042593982498998775,
+     "kl_p95": 0.6578240769779595,
+     "kl_max_per_token": 5.366457598534473,
+     "top1_agreement": 0.8689024390243902,
+     "exactly_zero": false
+    },
+    "longctx": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 18,
+     "n_tokens_scored": 3535,
+     "kl_mean": 0.1271495483941856,
+     "kl_median": 0.08036071595150647,
+     "kl_p95": 0.3321248639459887,
+     "kl_max_per_token": 7.162252968778187,
+     "top1_agreement": 0.8248939179632249,
+     "exactly_zero": false
+    }
+   },
+   "tokens_min": 6,
+   "tokens_max": 257,
+   "tokens_total": 6813,
+   "row": "our FP4 quantization of a bf16 base",
+   "reference": "the bf16 base (ibm-granite/granite-3.0-1b-a400m-instruct, torch_dtype=bfloat16)",
+   "test": "experts4bit FP4 (load_moe_4bit_streaming, quant_type=fp4)",
+   "expectation": "> 0 \u2014 a real quantization; same reference as the NF4 row so the two are directly comparable",
+   "wall_s": 122.6
+  }
+ ],
+ "not_measured": {
+  "native MXFP4 vs dequant-to-bf16 of the same shipped bytes": "gpt-oss not in the offline hf-cache on this host; needs a download. Reference would be the DEQUANT path of the shipped bytes \u2014 there is no bf16 original.",
+  "MXFP4 -> NF4 requant (the 'requant tax')": "same blocker; reference would be dequant-to-bf16 of the shipped MXFP4."
+ }
+}
