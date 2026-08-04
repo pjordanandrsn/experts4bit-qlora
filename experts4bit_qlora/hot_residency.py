@@ -349,9 +349,49 @@ def target_modules(model) -> list:
     means. Re-deriving this list independently is how a caller ends up stamping
     per-module state onto the wrong layers when LoRA-wrapped and bare modules are
     interleaved.
+
+    To PATCH these modules, use this list. To OBSERVE them — a forward hook, a
+    routing histogram for an informed hot set — use :func:`dispatched_modules`
+    instead: a wrapped base here is not called until an engine is attached, so
+    hooks on it silently never fire.
     """
     from . import ExpertsNbit
     return [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+
+
+def dispatched_modules(model) -> list:
+    """The modules actually CALLED, aligned one-to-one with :func:`target_modules`.
+
+    :func:`target_modules` is the list to **patch** — an engine installs its forward
+    on the frozen ``ExpertsNbit`` base. It is the wrong list to **observe**: a wrapped
+    base is only ever called once an engine is attached and
+    ``ExpertsLoRA._delegate_to_base`` hands the forward down, so a
+    ``register_forward_pre_hook`` on one fires zero times until that happens.
+
+    The edge is sharp because the usual reason to hook these modules is to build a
+    routing histogram for an INFORMED hot set — and that calibration pass necessarily
+    runs *before* the engine is enabled. Hooking the bases yields all-zero counts;
+    ``topk`` of an all-zero tensor returns ``0..K-1``; and the "informed" hot set
+    silently becomes the by-index set the whole mechanism exists to beat. It fails as
+    a plausible null result, not as an error — measured 2026-08-04 on granite, where
+    it reported informed and index as indistinguishable because they were the same
+    set. Guard a calibration pass by asserting it counted something.
+
+    Returns the wrapper where one exists and the bare module otherwise, in
+    ``target_modules`` order — so the list you hook and the list you patch agree on
+    what ``hot_sets[i]`` means.
+
+    >>> mods = target_modules(model)                     # what an engine patches
+    >>> hooks = dispatched_modules(model)                # what to hook to observe
+    >>> assert len(mods) == len(hooks)
+    """
+    try:
+        from experts4bit_qlora.lora import ExpertsLoRA
+        wrappers = {id(m.base): m for m in model.modules()
+                    if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
+    except ImportError:
+        wrappers = {}
+    return [wrappers.get(id(m), m) for m in target_modules(model)]
 
 
 def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",

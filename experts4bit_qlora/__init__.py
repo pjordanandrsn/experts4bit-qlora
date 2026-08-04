@@ -81,7 +81,12 @@ from .fast import (  # noqa: E402
     fast_available,
 )
 from .cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
-from .hot_residency import disable_hot_residency, enable_hot_residency, hot_residency_available  # noqa: E402
+from .hot_residency import (  # noqa: E402
+    disable_hot_residency,
+    dispatched_modules,
+    enable_hot_residency,
+    hot_residency_available,
+)
 from .pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
 # 0.7.0 surfaces: serving a model whose DENSE side, not just its experts, exceeds
 # what the host can hold. Imported lazily-tolerant -- dense_disk needs nothing
@@ -149,6 +154,7 @@ __all__ = [
     "disable_mxfp4_nvme_residency",
     "build_meta_experts",
     "expert_geometry_from_arena",
+    "dispatched_modules",
     "hot_sets_from_profile",
     "coverage_from_profile",
     "verify_moe_4bit",
