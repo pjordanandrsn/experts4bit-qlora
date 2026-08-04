@@ -134,3 +134,41 @@ comparable to the Gemini-judged published numbers.
 it had failed quietly instead of loudly. Empty answers score as uniformly wrong, which is
 indistinguishable from catastrophic quantization damage — a clean, publishable-looking
 result that would have been an artifact of my own code.
+
+---
+
+## Amendment 2 — the int8 anchor, and what it does not establish (2026-08-04)
+
+**This amendment is POST-DATA and must be read as such.** Amendment 1 was written before any
+accuracy number existed. This one is not: it was added after the gpt-oss and granite runs
+had been scored, to document an extra path and — more importantly — to withdraw an
+overstatement I made about it. Recording the distinction because a prereg that quietly
+accretes post-hoc amendments is worth nothing.
+
+**What was added.** A fourth granite path, `int8` (bitsandbytes `load_in_8bit`), measured at
+**KL 8.09e-03** and scored at **24.0%** against the bf16 reference's 23.2% — paired McNemar
+18 vs 28, **p = 0.18**, i.e. no detectable loss. It was introduced to break a confound: the
+earlier comparison (gpt-oss 21B at low KL vs granite 1.3B at high KL) varied model size and
+KL together, so neither could be credited with the churn-to-loss reversal.
+
+**The overstatement, withdrawn.** I described this as holding the model fixed and varying
+only the amount of perturbation. That is not what it does. bitsandbytes cannot quantize
+granite's **fused 3D MoE expert tensors** `[n_experts, out, in]` at all — the same
+limitation that made the partial-quant sweep fail outright with
+`assert module.weight.shape[1] == 1` (see `bench/kl_sweep.py`). So the int8 path can only
+have quantized the **non-expert Linears**, leaving the experts in bf16.
+
+Consequences, stated precisely:
+
+- **Still valid:** the `(KL, accuracy)` pair itself. Both axes were measured, not assumed,
+  and the threshold argument concerns KL magnitude versus measured accuracy — it never
+  depended on the mechanism that produced the perturbation.
+- **Withdrawn:** that this is "the same weights perturbed more gently." It perturbs a
+  *different set* of weights. Model size is held fixed, which the cross-model comparison did
+  not manage, so the confound is **narrowed, not eliminated**.
+- **Therefore:** the churn-to-loss threshold remains **bounded** to roughly
+  `2.2e-02 … 1.41e-01` and is **not located**, with one endpoint now carrying this caveat.
+
+Locating it needs a dial that perturbs the *same* weights by a tunable amount. That is what
+`quantize_layers` (merged in #63) provides, and the sweep it unblocks — not this anchor —
+is what would retire the caveat.
