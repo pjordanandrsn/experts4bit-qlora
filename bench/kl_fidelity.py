@@ -155,6 +155,36 @@ def teacher_forced_logits(model, input_ids: torch.Tensor, attention_mask=None):
     return (out.logits if hasattr(out, "logits") else out)[0]
 
 
+def decode_teacher_forced_logits(model, input_ids: torch.Tensor):
+    """Same teacher forcing, one token per forward, carrying a KV cache.
+
+    Identical conditioning to :func:`teacher_forced_logits` — position ``i`` is scored
+    having seen tokens ``0..i`` and nothing later — and the same ``[T, vocab]`` result.
+    The difference is the SHAPE OF THE FORWARD, and for some serving paths that is the
+    whole measurement: the pipelined residency engine (and the [fast] decode path) only
+    engage at ``T == 1`` and hand a multi-token prefill straight back to the reference
+    forward. Scored with the prefill function, such a path reports a perfect 0.000 that
+    means "the engine never ran", not "the engine is faithful".
+
+    Not a drop-in replacement for the prefill scorer: it is ~T times more forwards, and
+    it is NOT numerically identical to it (different kernels, different accumulation).
+    So a row must use ONE of the two on BOTH sides of its comparison, and say which.
+    """
+    if input_ids.dim() == 1:
+        input_ids = input_ids.unsqueeze(0)
+    if input_ids.shape[0] != 1:
+        raise ValueError("decode_teacher_forced_logits expects batch=1 (no padding)")
+    steps, past = [], None
+    with torch.no_grad():
+        for i in range(input_ids.shape[1]):
+            out = model(input_ids=input_ids[:, i:i + 1],
+                        past_key_values=past, use_cache=True)
+            past = out.past_key_values if hasattr(out, "past_key_values") else out[1]
+            logits = out.logits if hasattr(out, "logits") else out[0]
+            steps.append(logits[0, -1])
+    return torch.stack(steps)
+
+
 # ----------------------------------------------------------------- prompt set (K1)
 
 
