@@ -7,6 +7,17 @@ separately on the same box (bench/gptoss_ab_pod.sh); this file is the ours side
 and the dev-box gate that gpt-oss decodes end-to-end through the hot path.
 
   MODEL=openai/gpt-oss-20b HOT_K=4 BENCH_TOKENS=64 python bench/bench_gptoss_hybrid.py
+
+ON WRAPPED MODELS. gpt-oss loads bare, but anything through the generic streaming
+loader (Gemma-4, granite, OLMoE) arrives as `ExpertsLoRA(Experts4bit(...))`. This
+driver used to strip those wrappers unconditionally because both residency engines
+refused them. `ENGINE=pipelined` no longer needs that: it targets the bases and is
+reached through `ExpertsLoRA._delegate_to_base`. The unwrap is kept only for
+`ENGINE=hot`, the deprecated v0 engine, which is genuinely not delegated to.
+
+The calibration pass hooks `dispatched_modules()`, not `target_modules()` — on the
+wrapped path those differ, and hooking the wrong one yields all-zero counts that turn
+`HOT_MODE=informed` into `naive` without erroring. There is now a guard for it.
 """
 import json
 import os
@@ -60,6 +71,7 @@ def timed_decode(model, tok, prompt, n_tokens):
 def main():
     from transformers import AutoTokenizer
     from experts4bit_qlora import enable_hot_residency
+    from experts4bit_qlora.hot_residency import dispatched_modules, target_modules
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     torch.manual_seed(0)
@@ -75,22 +87,44 @@ def main():
     model.to(DEVICE)
     log(f"loaded in {time.time()-t0:.0f}s")
 
-    # The generic loader wraps experts in ExpertsLoRA (training adapters), and
-    # residency gates on STANDALONE experts — unwrap to the 4-bit base for this
-    # inference-only driver (gpt-oss loads bare, so this is a no-op there).
-    # 2026-07-20 pod receipt: Gemma-4 via the streaming loader hit the
-    # ExpertsLoRA NotImplementedError in enable_hot_residency without this.
-    from experts4bit_qlora.lora import ExpertsLoRA
-    unwrapped = 0
-    for m in list(model.modules()):
-        for cn, child in list(m.named_children()):
-            if isinstance(child, ExpertsLoRA):
-                setattr(m, cn, child.base)
-                unwrapped += 1
-    if unwrapped:
-        log(f"unwrapped {unwrapped} ExpertsLoRA wrappers -> standalone 4-bit experts")
+    # Serving mode BEFORE the engine is attached, not after. `ExpertsLoRA` only hands
+    # the forward to a patched base under eval + no_grad, so enabling residency on a
+    # train-mode model patches something that cannot be reached and
+    # `enable_pipelined_residency` (rightly) warns about it. Nothing here trains.
+    for p in model.parameters():
+        p.requires_grad_(False)
+    model.eval()
+    model.config.use_cache = True
 
-    n_moe = sum(1 for m in model.modules() if isinstance(m, ExpertsNbit))
+    # ENGINE="pipelined" no longer needs the wrappers removed: it targets
+    # `ExpertsLoRA` bases directly and is reached through
+    # `ExpertsLoRA._delegate_to_base`, which hands the whole forward down when the
+    # adapter provably contributes nothing (B is zero-initialised, so an untrained
+    # one is identically zero — exactly this driver's case). Measured on granite,
+    # delegating costs nothing against the unwrapped tree (-2.0/+1.6/+1.6%, never
+    # significant): bench/receipts-hotsets-granite-20260804/.
+    #
+    # The v0 "hot" engine DOES still need it. `_delegate_to_base` keys off
+    # `_e4b_fast_ref`/`_e4b_pipe_ref` and never looks for `_e4b_hot_ref`, so a v0
+    # patch on a wrapped base would sit on a forward nothing calls —
+    # `enable_hot_residency` refuses outright rather than pretend. Keeping the
+    # unwrap for that path preserves the stamped v0 receipts; dropping it wholesale
+    # would break this driver's DEFAULT engine.
+    # (gpt-oss loads bare, so either way this is a no-op on the primary model.)
+    if ENGINE != "pipelined":
+        from experts4bit_qlora.lora import ExpertsLoRA
+        unwrapped = 0
+        for m in list(model.modules()):
+            for cn, child in list(m.named_children()):
+                if isinstance(child, ExpertsLoRA):
+                    setattr(m, cn, child.base)
+                    unwrapped += 1
+        if unwrapped:
+            log(f"unwrapped {unwrapped} ExpertsLoRA wrappers -> standalone 4-bit experts "
+                f"(ENGINE={ENGINE!r} is not reached through the wrapper)")
+
+    # The list the engines target, and the one `hot_sets[i]` indexes.
+    n_moe = len(target_modules(model))
 
     tok = AutoTokenizer.from_pretrained(MODEL)
     cal_coverage = None
@@ -100,8 +134,19 @@ def main():
         # the first integer tensor argument — the routing-index arg name varies
         # by arch (top_k_index / router_indices) but it is always the only int
         # tensor the experts module receives.
-        mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
+        # TWO aligned lists, and the distinction is load-bearing. `target_modules`
+        # gives what an engine PATCHES (the frozen bases) — the right thing to size
+        # `counts` from and the thing `hot_sets[i]` indexes. `dispatched_modules`
+        # gives what is CALLED, which on the wrapped path is the ExpertsLoRA and NOT
+        # the base: no engine is attached yet at calibration time, so the wrapper does
+        # not delegate and pre-hooks on the bases would fire zero times. The counts
+        # would all be zero, `topk` of zeros returns 0..K-1, and "informed" would
+        # silently become the naive by-index set this mode exists to beat — a null
+        # that looks exactly like a real one. The helper guarantees the two lists
+        # agree index-for-index.
+        mods = target_modules(model)
         counts = [torch.zeros(int(m.gate_up_proj.shape[0]), dtype=torch.long) for m in mods]
+        hook_targets = dispatched_modules(model)
 
         def _mk_hook(slot):
             def _hook(_mod, args, kwargs):
@@ -117,11 +162,22 @@ def main():
             return _hook
 
         handles = [m.register_forward_pre_hook(_mk_hook(i), with_kwargs=True)
-                   for i, m in enumerate(mods)]
-        log(f"calibration pass ({BENCH_TOKENS} tokens, routing hooks on {len(mods)} layers) ...")
+                   for i, m in enumerate(hook_targets)]
+        n_wrapped = sum(1 for a, b in zip(hook_targets, mods) if a is not b)
+        log(f"calibration pass ({BENCH_TOKENS} tokens, routing hooks on {len(mods)} layers"
+            f"{f', {n_wrapped} via ExpertsLoRA wrapper' if n_wrapped else ''}) ...")
         timed_decode(model, tok, PROMPT, BENCH_TOKENS)
         for h in handles:
             h.remove()
+        # HOT_MODE=informed is worthless if this pass saw nothing, and its failure is
+        # self-consistent rather than loud: zero counts -> topk returns 0..K-1 ->
+        # `informed` IS `naive` -> the arm reports the two as equivalent, which is
+        # indistinguishable from the real finding. Refuse instead.
+        if sum(int(c.sum()) for c in counts) == 0:
+            raise RuntimeError(
+                "HOT_MODE=informed: calibration counted ZERO routed selections, so the "
+                "'informed' hot set would silently be the naive one. The hooks landed on "
+                "modules nothing dispatched — use dispatched_modules(), not target_modules().")
         hot_sets, cov_informed, cov_naive = [], [], []
         for c in counts:
             hot_sets.append(torch.topk(c, HOT_K).indices.sort().values)
@@ -174,9 +230,8 @@ def main():
     else:
         log("pipelined: base kept resident (prefill fallback reads it; peak_gb is NOT the lean figure)")
 
-    for p in model.parameters():
-        p.requires_grad_(False)
-    model.eval(); model.config.use_cache = True
+    # eval()/requires_grad_ already applied before the engine was attached, which is
+    # where they have to happen for the wrapped path to delegate at all.
     torch.cuda.reset_peak_memory_stats()
 
     text, t_prefill, toks = timed_decode(model, tok, PROMPT, BENCH_TOKENS)
