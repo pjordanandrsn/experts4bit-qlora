@@ -43,7 +43,7 @@ def _no_triton_interpreter():
 
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
-from experts4bit_qlora.hot_residency import target_modules  # noqa: E402
+from experts4bit_qlora.hot_residency import target_modules, wrapped_bases  # noqa: E402
 from experts4bit_qlora.pipelined import (  # noqa: E402
     disable_pipelined_residency,
     enable_pipelined_residency,
@@ -184,3 +184,131 @@ def test_v0_hot_residency_still_refuses_wrapped_bases():
     mod = _wrapped()
     with pytest.raises(NotImplementedError, match="enable_pipelined_residency"):
         enable_hot_residency(mod, [torch.tensor(HOT, dtype=torch.long)], device="cuda")
+
+
+# ---------------------------------------------------------------------------
+# The loader path itself.
+#
+# Everything above builds `ExpertsLoRA(Experts4bit(...))` by hand. That is the
+# right unit for the delegation rules, but it is not the shape the failure was
+# reported on: `load_moe_4bit_streaming` is what produces wrapped bases in the
+# field, and it is the only way the fidelity bench builds a model. A hand-built
+# wrapper can keep passing while the loader grows a detail that breaks the
+# composition -- an extra nn.Module layer between the block and the base, an
+# expert module built on `meta`, a compute_dtype the engine falls back on -- and
+# nothing here would notice.
+# ---------------------------------------------------------------------------
+
+def _loader_model(tmp_path):
+    """A real `load_moe_4bit_streaming` model from the tiny 2-layer OLMoE fixture.
+
+    `_olmoe`/`_write_ckpt` come from the loader suite rather than being copied:
+    a second checkpoint writer would drift from the real one exactly where it
+    matters (`_write_ckpt`'s dtype and shared-storage handling are both
+    load-bearing and both were bug fixes), and a fixture that no longer matches
+    the loader's expected on-disk layout fails as "the engine broke".
+
+    pytest's default (prepend) import mode puts `tests/` on `sys.path` -- there
+    is no `tests/__init__.py` -- so the sibling module imports by bare name.
+    Imported inside the function so an import-mode change costs these two tests
+    rather than the whole module at collection time.
+    """
+    from test_loader_architectures import _olmoe, _write_ckpt
+
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=False)
+    model, cfg = load_moe_4bit_streaming(str(tmp_path), "cuda", torch.bfloat16, r=4, alpha=8)
+    model.config.use_cache = False
+    return model.eval(), cfg
+
+
+def _decode(model, cfg):
+    """One DECODE-shaped forward (B=1, T=1).
+
+    Load-bearing: the patched forward hands back to the reference whenever
+    `hidden.shape[0] != 1`, so a prefill-shaped forward -- which is what the
+    other loader tests run -- exercises the engine not at all and would assert
+    zero traffic no matter what.
+    """
+    with torch.no_grad():
+        model(input_ids=torch.randint(0, cfg.vocab_size, (1, 1), device="cuda"))
+
+
+def test_streaming_loader_model_can_enable_residency(tmp_path):
+    """The reported failure, end to end.
+
+    `enable_pipelined_residency` raised NotImplementedError ("every ExpertsNbit
+    here is an ExpertsLoRA.base") for every model this loader returns, so the
+    engine was unreachable from the only path that builds one at model scale.
+    """
+    model, cfg = _loader_model(tmp_path)
+    mods = target_modules(model)
+    assert mods, "the loader model exposes no residency targets at all"
+    # Every target is a wrapped base: this model is precisely the all-wrapped
+    # case the old guard singled out, not a mixture that would dodge it.
+    assert {id(m) for m in mods} == wrapped_bases(model)
+
+    hot = [torch.arange(m.num_experts, dtype=torch.long) for m in mods]
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        n = enable_pipelined_residency(model, hot, device="cuda",
+                                       k_slots=cfg.num_experts_per_tok)
+    try:
+        assert n == len(mods)
+        # eval + an untrained (identically zero) adapter is the delegating case,
+        # so neither unreachability warning belongs here. If one fires, the
+        # loader is handing back something the engine cannot actually serve.
+        assert not [r for r in rec if "[pipelined]" in str(r.message)], \
+            [str(r.message) for r in rec]
+    finally:
+        assert disable_pipelined_residency(model) == n
+
+
+def test_loader_hot_sets_land_on_the_layer_target_modules_named(tmp_path):
+    """`hot_sets[i]` must mean the i-th module of `target_modules(model)`.
+
+    This is the reason `enable_pipelined_residency` shares that enumeration
+    instead of re-deriving one: the two lists agreeing is what keeps per-layer
+    residency state off the wrong layer. Nothing checks it on a real model --
+    the hand-built fixtures above have exactly one MoE module, where every
+    ordering is the same ordering.
+    """
+    model, cfg = _loader_model(tmp_path)
+    mods = target_modules(model)
+    assert len(mods) >= 2, "fixture needs two MoE layers or the two sets cannot differ"
+
+    # Opposite extremes, so the check cannot depend on which experts the router
+    # happens to pick: a fully-streamed layer can only ever move COLD bytes and a
+    # fully-resident one can only ever move HOT bytes. Swap the two entries and
+    # both assertions below fail. Giving both layers the same set would prove
+    # nothing -- a mis-indexed stamp would be indistinguishable from a correct one.
+    streamed, resident = mods[0], mods[-1]
+    hot = [torch.empty(0, dtype=torch.long) for _ in mods]
+    hot[-1] = torch.arange(resident.num_experts, dtype=torch.long)
+
+    n = enable_pipelined_residency(model, hot, device="cuda",
+                                   k_slots=cfg.num_experts_per_tok)
+    try:
+        assert n == len(mods)
+        # The stamp itself, before any forward: cheapest and most direct.
+        assert streamed._pipelined.hot_ids.numel() == 0
+        assert resident._pipelined.hot_ids.tolist() == list(range(resident.num_experts))
+
+        _decode(model, cfg)
+
+        # Traffic > 0 is guaranteed, not routing-dependent: `_prime()` seeds every
+        # slot with expert 0's row, and top-k picks k DISTINCT experts, so at most
+        # one routed id can be a have-skip and the rest must miss.
+        s, r = streamed._pipelined.traffic(), resident._pipelined.traffic()
+        assert s["cold_pcie_bytes"] > 0, \
+            f"engine never ran on the streamed layer through the loader's wrapper ({s})"
+        assert s["hot_d2d_bytes"] == 0, \
+            f"a layer given an EMPTY hot set moved hot bytes — hot_sets is misindexed ({s})"
+        assert r["hot_d2d_bytes"] > 0, \
+            f"engine never ran on the resident layer through the loader's wrapper ({r})"
+        assert r["cold_pcie_bytes"] == 0, \
+            f"a FULLY-resident layer streamed from the cold arena — hot_sets is misindexed ({r})"
+    finally:
+        disable_pipelined_residency(model)
