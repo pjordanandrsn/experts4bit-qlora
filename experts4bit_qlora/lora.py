@@ -150,6 +150,16 @@ class ExpertsLoRA(nn.Module):
         for p in self.base.parameters():
             p.requires_grad_(False)
 
+        if r < 1:
+            raise ValueError(
+                f"ExpertsLoRA needs rank r >= 1, got r={r}. r=0 reached `alpha / r` and "
+                "died with a bare ZeroDivisionError, which reads as a bug in the caller "
+                "rather than as an unsupported argument. If the intent is 'no adapter' — "
+                "base-model inference or benchmarking — keep an ordinary rank and leave "
+                "the adapter untrained: `B` is zero-initialised, so the delta is "
+                "identically zero and `_delegate_to_base()` hands the whole forward to "
+                "the frozen base, and to any accelerator attached to it."
+            )
         self.r = r
         self.scaling = alpha / r
         # None = undecided; see _delegate_to_base(). Invalidated on train()/load.

@@ -133,3 +133,23 @@ def test_full_state_dict_roundtrip_from_offloaded_model():
     with torch.no_grad():
         got = dst(hs, idx, wts)
     torch.testing.assert_close(got, ref)  # the save carried the real experts, not placeholders
+
+
+# ---------------------------------------------------------------------------------------------------
+# 4) Rank guard: r=0 is rejected with an actionable message, not a ZeroDivisionError.
+# ---------------------------------------------------------------------------------------------------
+def test_rank_zero_is_rejected_with_an_actionable_error():
+    """`r=0` is the obvious way to ask for "no adapter", and it used to die on
+    `alpha / r` (ZeroDivisionError) deep inside __init__ — an error that reads as a
+    caller bug rather than an unsupported argument. It must name the supported way to
+    get a zero delta instead: an ordinary rank, left untrained (B is zero-init)."""
+    torch.manual_seed(0)
+    gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
+    down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
+    try:
+        base = Experts4bit.from_float(gate_up, down, quant_type="nf4",
+                                      compute_dtype=torch.float32)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    with pytest.raises(ValueError, match="r >= 1"):
+        ExpertsLoRA(base, r=0, alpha=16, dtype=torch.float32)

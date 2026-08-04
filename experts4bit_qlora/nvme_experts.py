@@ -286,12 +286,13 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
     # Stamp each module with its arena layer BEFORE construction: _build_cold and
     # _build_hot both run inside _HotResidency.__init__ and need it.
     #
-    # Use the SHARED selection, not an independent walk: enable_hot_residency
-    # excludes any ExpertsNbit that is an ExpertsLoRA.base, so a plain
-    # `isinstance` sweep yields a different list AND a different order whenever
-    # wrapped and bare modules are interleaved — silently stamping real MoE layers
-    # with the wrong arena layer, or leaving them unstamped. Everything keying off
-    # hot_sets[i] must agree on what i means.
+    # Use the SHARED selection, not an independent walk: a plain `isinstance` sweep
+    # yields a different list AND a different order whenever wrapped and bare modules
+    # are interleaved — silently stamping real MoE layers with the wrong arena layer,
+    # or leaving them unstamped. Everything keying off hot_sets[i] must agree on what
+    # i means. `target_modules` includes ExpertsLoRA bases; `enable_hot_residency`
+    # below skips them (they consume their entry, so the indices stamped here stay
+    # aligned) and raises outright if every module is wrapped.
     from .hot_residency import target_modules
     mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(hot_sets)))
@@ -380,8 +381,16 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
     # would replace the adapter's forward outright, silently discarding the delta. And under
     # the arena loader its base buffers are on `meta`, so the adapter could not run anyway.
     # Refuse rather than pick one of those two wrong answers.
-    from .lora import ExpertsLoRA
-    wrapped = [i for i, m in enumerate(mods) if isinstance(m, ExpertsLoRA)]
+    # Test membership, not type: `target_modules` returns `ExpertsNbit` instances, and
+    # `ExpertsLoRA` is NOT an `ExpertsNbit` subclass — so `isinstance(m, ExpertsLoRA)`
+    # over this list was never true and this refusal could not fire. It went unnoticed
+    # while `target_modules` filtered wrapped bases out on its own; now that it returns
+    # them (the pipelined engine reaches them through the wrapper, this one does not),
+    # the check has to actually work or a wrapped base gets a dead patch and the engine
+    # reports success while serving nothing.
+    from .hot_residency import wrapped_bases
+    _wrapped_ids = wrapped_bases(model)
+    wrapped = [i for i, m in enumerate(mods) if id(m) in _wrapped_ids]
     if wrapped:
         raise RuntimeError(
             f"{len(wrapped)} of {len(mods)} expert modules are ExpertsLoRA-wrapped "

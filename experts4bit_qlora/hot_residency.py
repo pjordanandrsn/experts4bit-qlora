@@ -324,10 +324,26 @@ def wrapped_bases(model) -> set:
 def target_modules(model) -> list:
     """The MoE modules a residency patch targets, in dispatch order.
 
-    ``ExpertsLoRA.forward`` bypasses ``base.forward`` (it calls ``base._project``),
-    so a wrapped frozen base is NEVER dispatched — patching it would be dead code
-    that only duplicates weights. Any ``ExpertsNbit`` that is an
-    ``ExpertsLoRA.base`` is therefore excluded.
+    Every ``ExpertsNbit`` under ``model``, **including** those that are an
+    ``ExpertsLoRA.base``. A wrapped base used to be excluded here, on the
+    grounds that ``ExpertsLoRA.forward`` re-implements the expert math inline
+    (to inject the low-rank delta before the nonlinearity) and so never calls
+    ``base.forward`` — making a patch on it dead code. That is no longer true:
+    ``ExpertsLoRA._delegate_to_base`` hands the whole forward to the base when
+    an engine is attached and the adapter provably contributes nothing (``B``
+    is zero-initialised, so an untrained adapter is *identically* zero), which
+    is exactly the base-model inference and benchmarking case.
+
+    Excluding them made this function return ``[]`` for every model from
+    ``load_moe_4bit_streaming`` — whose experts are always ``ExpertsLoRA`` —
+    so the loader path, the one most callers take, could not enable residency
+    at all.
+
+    Being in this list means "targetable, and index-bearing", not "reachable by
+    every engine". An engine that does not participate in that delegation — the
+    v0 :func:`enable_hot_residency`, whose ``_e4b_hot_ref`` marker
+    ``_delegate_to_base`` does not look for — must still skip wrapped bases
+    itself, consuming their ``hot_sets`` entry like any other skip.
 
     Shared so that everything keying off ``hot_sets[i]`` agrees on what ``i``
     means. Re-deriving this list independently is how a caller ends up stamping
@@ -335,9 +351,7 @@ def target_modules(model) -> list:
     interleaved.
     """
     from . import ExpertsNbit
-    wrapped = wrapped_bases(model)
-    return [m for m in model.modules()
-            if isinstance(m, ExpertsNbit) and id(m) not in wrapped]
+    return [m for m in model.modules() if isinstance(m, ExpertsNbit)]
 
 
 def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
@@ -403,15 +417,23 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
         pass
     if hasattr(model, "modules"):
         mods = target_modules(model)
+        # `target_modules` includes ExpertsLoRA bases, because the pipelined engine
+        # reaches them through `ExpertsLoRA._delegate_to_base`. This v0 engine does
+        # NOT: that predicate keys off `_e4b_fast_ref` / `_e4b_pipe_ref` and never
+        # looks for `_e4b_hot_ref`, so a patch installed here would sit on a forward
+        # nothing calls. Wrapped bases stay in `mods` — so `hot_sets[i]` keeps the
+        # same meaning it has for every other engine — and are skipped per-module in
+        # the loop below, consuming their entry like any other ineligible layer.
         wrapped = wrapped_bases(model)
-        if wrapped and not mods:
+        if wrapped and not [m for m in mods if id(m) not in wrapped]:
             raise NotImplementedError(
                 "every ExpertsNbit here is an ExpertsLoRA.base (the streaming-loader / "
-                "offload path). ExpertsLoRA.forward bypasses base.forward, so residency "
-                "must hook the wrapper + its offload homes — a separate increment. "
-                "enable_hot_residency currently supports standalone Experts4bit modules.")
+                "offload path). ExpertsLoRA.forward bypasses base.forward, and this "
+                "deprecated v0 engine is not among the ones it delegates to. Use "
+                "enable_pipelined_residency, which is reached through the wrapper.")
     else:
         mods = [model]
+        wrapped = set()
     if len(hot_sets) != len(mods):
         raise ValueError(
             f"hot_sets has {len(hot_sets)} entries but the model has {len(mods)} "
@@ -421,6 +443,12 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
             f"dropped)")
     patched = 0
     for i, mod in enumerate(mods):  # hot_sets[i] belongs to mods[i], patched or not
+        if id(mod) in wrapped:
+            if verbose:
+                print(f"[hot_residency] skip {type(mod).__name__}: ExpertsLoRA base — "
+                      "this v0 engine is not reached through the wrapper "
+                      "(use enable_pipelined_residency)")
+            continue
         if type(mod).forward not in stock_forwards and not hasattr(mod, "_e4b_hot_ref"):
             if verbose:
                 print(f"[hot_residency] skip {type(mod).__name__}: custom forward")
