@@ -713,3 +713,47 @@ def test_loader_arena_mode_refuses_per_expert_biases(tmp_path, monkeypatch):
     with pytest.raises(NotImplementedError, match="per-expert biases"):
         load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
                                 arena=arena_path)
+
+
+@pytest.mark.parametrize("keep", [{0}, {0, 1}])
+def test_quantize_layers_restricts_which_layers_are_quantized(keep, tmp_path):
+    """`quantize_layers` leaves the excluded MoE layers in the base dtype.
+
+    Asserted structurally rather than by output error: a numeric check could pass simply
+    because a tiny random model is insensitive to quantization, which would make the test
+    green while the subset logic did nothing.
+    """
+    from experts4bit_qlora import ExpertsNbit
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    model = _olmoe()
+    n_layers = model.config.num_hidden_layers
+    assert n_layers > max(keep) + 1, "fixture must have a layer outside `keep` to skip"
+    _write_ckpt(model, tmp_path, per_expert=False)
+
+    m, _ = load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8,
+                                   quantize_layers=keep)
+    quantized = {
+        i for i in range(n_layers)
+        if any(isinstance(sub, ExpertsNbit)
+               for sub in m.model.layers[i].mlp.modules())
+    }
+    assert quantized == keep, f"expected only {sorted(keep)} quantized, got {sorted(quantized)}"
+
+
+def test_quantize_layers_default_quantizes_every_layer(tmp_path):
+    """Default (None) is unchanged behaviour — the regression this feature could cause."""
+    from experts4bit_qlora import ExpertsNbit
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    model = _olmoe()
+    n_layers = model.config.num_hidden_layers
+    _write_ckpt(model, tmp_path, per_expert=False)
+
+    m, _ = load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8)
+    quantized = {
+        i for i in range(n_layers)
+        if any(isinstance(sub, ExpertsNbit)
+               for sub in m.model.layers[i].mlp.modules())
+    }
+    assert quantized == set(range(n_layers))
