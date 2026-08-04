@@ -232,7 +232,7 @@ def _install_fp8_block_linears(model, weight_map, get, expert_keys, dtype, devic
 
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
-    trust_remote_code=None, arena=None,
+    trust_remote_code=None, arena=None, quantize_layers=None,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -402,6 +402,10 @@ def load_moe_4bit_streaming(
     n_moe = 0
     for i in range(n_layers):
         epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
+        if quantize_layers is not None and i not in quantize_layers:
+            # Deliberately left in the base dtype. Same effect as the dense-layer
+            # `continue` below: the original module stays in place, unquantized.
+            continue
         if arena_index is not None:
             # Every checkpoint key under the experts submodule is an expert tensor,
             # so they can be marked read-and-skipped WITHOUT reading them — which is
