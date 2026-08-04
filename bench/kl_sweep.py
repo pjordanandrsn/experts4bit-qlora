@@ -45,6 +45,30 @@ from kl_paths import _gate_on_k0, score_pair  # noqa: E402
 SWEEP_TIERS = ("T1", "T2", "T3")
 
 
+def parse_layers(spec: str, n_layers: int) -> set:
+    """"first:8" | "last:8" | "mid:8" | "stride:8" | "0,3,7".
+
+    Fixing the COUNT and moving the window is what separates "KL magnitude explains the
+    damage" from "which layers you hit explains it". The k-sweep varies how many; this
+    varies which, at the same how-many.
+    """
+    if ":" not in spec:
+        return {int(x) for x in spec.split(",") if x != ""}
+    kind, n = spec.split(":")
+    n = int(n)
+    if kind == "first":
+        return set(range(n))
+    if kind == "last":
+        return set(range(n_layers - n, n_layers))
+    if kind == "mid":
+        lo = (n_layers - n) // 2
+        return set(range(lo, lo + n))
+    if kind == "stride":                      # spread evenly across depth
+        step = n_layers / n
+        return {int(i * step) for i in range(n)}
+    raise SystemExit(f"unknown layer spec {spec!r}")
+
+
 def load_partial_nf4(model_id: str, k: int, n_layers: int):
     """Quantize layers [0, k) to NF4; keep [k, n_layers) in bf16.
 
@@ -56,7 +80,7 @@ def load_partial_nf4(model_id: str, k: int, n_layers: int):
     from experts4bit_qlora.loader import load_moe_4bit_streaming
     m, _ = load_moe_4bit_streaming(model_id, "cuda", torch.bfloat16, 8, 16,
                                    offload=False, prefetch=False, quant_type="nf4",
-                                   quantize_layers=set(range(k)))
+                                   quantize_layers=k if isinstance(k, set) else set(range(k)))
     return m.eval()
 
 
@@ -64,7 +88,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="ibm-granite/granite-3.0-1b-a400m-instruct")
     ap.add_argument("--k0-receipt", required=True)
-    ap.add_argument("--k", type=int, required=True, help="how many layers to quantize")
+    ap.add_argument("--k", type=int, help="how many layers (from the start)")
+    ap.add_argument("--layers", help="which layers: first:N | last:N | mid:N | stride:N | 0,3,7")
     ap.add_argument("--probes", default="/root/ikp_clean.json")
     ap.add_argument("--max-len", type=int, default=320)
     ap.add_argument("--out-prefix", required=True)
@@ -79,16 +104,19 @@ def main() -> int:
     # ---- x first: KL of this partial quantization against the bf16 base
     base = AutoModelForCausalLM.from_pretrained(
         a.model, dtype=torch.bfloat16).to(dev).eval()
-    part = load_partial_nf4(a.model, a.k, n_layers)
+    sel = parse_layers(a.layers, n_layers) if a.layers else set(range(a.k))
+    part = load_partial_nf4(a.model, sel, n_layers)
     t0 = time.time()
     r = score_pair(lambda i: teacher_forced_logits(base, i),
                    lambda i: teacher_forced_logits(part, i), tok, a.max_len, dev)
-    r.update({"row": f"partial NF4: first {a.k}/{n_layers} layers quantized",
+    r.update({"row": f"partial NF4: {len(sel)}/{n_layers} layers ({a.layers or 'first:%d' % a.k})",
               "reference": f"the bf16 base ({a.model})",
-              "test": f"NF4 on layers [0,{a.k}), bf16 on [{a.k},{n_layers})",
-              "k": a.k, "n_layers": n_layers, "wall_s": round(time.time() - t0, 1)})
+              "test": f"NF4 on layers {sorted(sel)}, bf16 elsewhere",
+              "k": len(sel), "layers": sorted(sel), "spec": a.layers or f"first:{a.k}",
+              "n_layers": n_layers, "wall_s": round(time.time() - t0, 1)})
     json.dump(r, open(f"{a.out_prefix}_kl.json", "w"), indent=1)
-    print(f"  k={a.k}  KL={r['kl_mean']:.6e}  top1={r['top1_agreement']:.4f}", flush=True)
+    print(f"  {a.layers or 'first:%d' % a.k}  KL={r['kl_mean']:.6e}  "
+          f"top1={r['top1_agreement']:.4f}", flush=True)
     del base
     torch.cuda.empty_cache()
 
@@ -111,10 +139,10 @@ def main() -> int:
         out.append({"id": p["id"], "tier": p["tier"], "question": p["question"],
                     "gold": p["answer"], "response": t, "refusal": is_refusal(t)})
         if len(out) % 100 == 0:
-            json.dump({"path": f"k{a.k}", "answers": out}, open(ans_f, "w"))
+            json.dump({"path": a.layers or f"first:{a.k}", "answers": out}, open(ans_f, "w"))
             print(f"    {len(out)}/{len(probes)}", flush=True)
-    json.dump({"path": f"k{a.k}", "answers": out}, open(ans_f, "w"))
-    print(f"  k={a.k} generated {len(out)} -> {ans_f}")
+    json.dump({"path": a.layers or f"first:{a.k}", "answers": out}, open(ans_f, "w"))
+    print(f"  generated {len(out)} -> {ans_f}")
     return 0
 
 
