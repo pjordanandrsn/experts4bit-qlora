@@ -33,6 +33,8 @@ TIERS = ["T1", "T2", "T3", "T4", "T5", "T6", "T7"]
 KILL_SWITCH_OVERALL = 0.10   # bf16 below this => under-powered, no KL<->accuracy inference
 TIER_FLOOR = 0.05            # tier below this => excluded from directional statements
 
+_judge_local_fn = None       # set by --judge-local
+
 
 def load_probes(path: str) -> list[dict]:
     raw = open(path, "rb").read()
@@ -95,7 +97,15 @@ def phase_generate(a) -> int:
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     tok = AutoTokenizer.from_pretrained(a.model)
 
-    if a.path == "bf16":
+    if a.path == "dqbf16":
+        # The reference path: shipped MXFP4 bytes dequantized to bf16.
+        from kl_gptoss import load_dequant_bf16
+        model = load_dequant_bf16(a.model, dev)
+    elif a.path == "mxfp4":
+        # Guarded: refuses if transformers silently dequantized instead of running native.
+        from kl_gptoss import load_native_mxfp4
+        model = load_native_mxfp4(a.model, dev)
+    elif a.path == "bf16":
         from transformers import AutoModelForCausalLM
         model = AutoModelForCausalLM.from_pretrained(
             a.model, torch_dtype=torch.bfloat16, trust_remote_code=True).to(dev).eval()
@@ -150,9 +160,35 @@ def _judge_http(url: str, model: str, prompt: str, timeout: int = 120) -> str:
         return json.load(r)["choices"][0]["message"]["content"]
 
 
+def _judge_local(model_id: str):
+    """In-process judge. IKP's own scorer defaults to a small local model
+    (create_ollama_judge("qwen3:4b")), so judging locally is the method's design, not a
+    deviation from it. Absolute accuracies still are not comparable to the published
+    Gemini-judged numbers — only across our own paths, which is the comparison we need."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    tk = AutoTokenizer.from_pretrained(model_id)
+    md = AutoModelForCausalLM.from_pretrained(
+        model_id, dtype=torch.bfloat16, device_map="auto").eval()
+
+    def call(prompt: str) -> str:
+        enc = tk.apply_chat_template([{"role": "user", "content": prompt}],
+                                     add_generation_prompt=True, return_tensors="pt",
+                                     return_dict=True)
+        ids = enc["input_ids"].to(md.device)
+        with torch.no_grad():
+            out = md.generate(ids, max_new_tokens=6, do_sample=False,
+                              pad_token_id=tk.eos_token_id)
+        return tk.decode(out[0][ids.shape[-1]:], skip_special_tokens=True)
+    return call
+
+
 def phase_judge(a) -> int:
     d = json.load(open(a.answers))
     answers = d["answers"]
+    global _judge_local_fn
+    if a.judge_local:
+        _judge_local_fn = _judge_local(a.judge_local)
     verdicts = {}
     if os.path.exists(a.out) and a.resume:
         verdicts = json.load(open(a.out))["verdicts"]
@@ -167,8 +203,9 @@ def phase_judge(a) -> int:
             verdicts[ans["id"]] = {"correct": False, "excluded": True}
             n_skip += 1
             continue
-        raw = _judge_http(a.judge_url, a.judge_model,
-                          judge_prompt(ans["question"], ans["gold"], ans["response"]))
+        p = judge_prompt(ans["question"], ans["gold"], ans["response"])
+        raw = (_judge_local_fn(p) if _judge_local_fn
+               else _judge_http(a.judge_url, a.judge_model, p))
         verdicts[ans["id"]] = {"correct": parse_verdict(raw), "excluded": False,
                                "raw": raw.strip()[:40]}
         if len(verdicts) % 50 == 0:
@@ -214,7 +251,10 @@ def phase_score(a) -> int:
                           "se": _wilson_se(c, n)} for t, (c, n) in per_tier.items()},
         }
 
-    ref = paths.get("bf16")
+    # The reference is the KL==0 path, identified by its KL rather than by a name — for
+    # gpt-oss it is the dequant path, and calling it "bf16" would imply an original that
+    # does not exist.
+    ref = paths.get("bf16") or next((p for p in paths.values() if p["kl_mean"] == 0), None)
     report = {"paths": paths, "prereg": "bench/K3-PREREG.md"}
     if ref is None:
         report["verdict"] = "no bf16 reference scored — cannot apply the kill switch"
@@ -251,10 +291,11 @@ def main() -> int:
     ap.add_argument("--phase", required=True, choices=["generate", "judge", "score"])
     ap.add_argument("--probes", default="ikp_clean.json")
     ap.add_argument("--model", default="ibm-granite/granite-3.0-1b-a400m-instruct")
-    ap.add_argument("--path", choices=["bf16", "nf4", "fp4"])
+    ap.add_argument("--path", choices=["bf16", "nf4", "fp4", "dqbf16", "mxfp4"])
     ap.add_argument("--answers")
     ap.add_argument("--judge-url", default="http://127.0.0.1:8781/v1/chat/completions")
     ap.add_argument("--judge-model", default="qwen")
+    ap.add_argument("--judge-local", help="HF model id to judge with in-process")
     ap.add_argument("--score", nargs="*", default=[],
                     help="name:answers.json:verdicts.json:kl_mean")
     ap.add_argument("--resume", action="store_true")
