@@ -1,0 +1,207 @@
+{
+ "model": "ibm-granite/granite-3.0-1b-a400m-instruct",
+ "device": "cuda",
+ "n_experts": 32,
+ "top_k": 8,
+ "hot_k": 8,
+ "layers": 24,
+ "n_tokens": 128,
+ "reps": 11,
+ "coverage": {
+  "informed": 0.496875,
+  "index": 0.2451967592592593,
+  "uniform": 0.25
+ },
+ "tok_s": {
+  "stream": {
+   "median": 28.663777140165347,
+   "min": 26.790799873209625,
+   "max": 29.491861694846133,
+   "all": [
+    29.1328564416865,
+    28.536048605652272,
+    28.1674480509604,
+    27.681212301704335,
+    29.211288497642812,
+    29.47218770469431,
+    26.790799873209625,
+    28.627229548271544,
+    29.120017530451836,
+    28.663777140165347,
+    29.491861694846133
+   ]
+  },
+  "index": {
+   "median": 29.86125040596314,
+   "min": 26.71164749143442,
+   "max": 30.196083936725287,
+   "all": [
+    29.988182932129586,
+    28.908109285142714,
+    29.86125040596314,
+    30.196083936725287,
+    27.717866906553564,
+    29.422470767610776,
+    30.00464943572107,
+    26.71164749143442,
+    30.10943468478498,
+    30.05631130239558,
+    28.540070111691335
+   ]
+  },
+  "informed": {
+   "median": 29.5560994867398,
+   "min": 28.50580306907693,
+   "max": 30.99715687149051,
+   "all": [
+    28.78386909401442,
+    29.388261980142662,
+    30.224126205765334,
+    28.802166357858596,
+    29.5560994867398,
+    30.97838740823331,
+    30.99715687149051,
+    29.392979476851078,
+    28.50580306907693,
+    29.996302471859412,
+    29.799962643953304
+   ]
+  },
+  "unwrapped": {
+   "median": 30.02840307247087,
+   "min": 24.050329508262156,
+   "max": 30.99138982642265,
+   "all": [
+    30.02840307247087,
+    30.99138982642265,
+    30.149591520817346,
+    30.12561879684587,
+    24.050329508262156,
+    29.152466101566528,
+    29.37245846627521,
+    30.154851332572335,
+    29.04930744571005,
+    27.533071451550477,
+    30.288394651238928
+   ]
+  }
+ },
+ "bytes_per_token": {
+  "stream": {
+   "cold": 153868032.0,
+   "hot_d2d": 0.0
+  },
+  "index": {
+   "cold": 116798976.0,
+   "hot_d2d": 37069056.0
+  },
+  "informed": {
+   "cold": 82418688.0,
+   "hot_d2d": 71449344.0
+  }
+ },
+ "total_gather_bytes_per_token": {
+  "stream": 153868032.0,
+  "index": 153868032.0,
+  "informed": 153868032.0
+ },
+ "comparisons": {
+  "index->informed": {
+   "delta_pct": -1.0218959858506236,
+   "p": 0.7179816667337767,
+   "verdict": "not distinguishable from noise"
+  },
+  "stream->index": {
+   "delta_pct": 4.17765341930399,
+   "p": 0.08183746008958784,
+   "verdict": "not distinguishable from noise"
+  },
+  "stream->informed": {
+   "delta_pct": 3.113066160858748,
+   "p": 0.011468073022237561,
+   "verdict": "significant"
+  },
+  "informed->unwrapped": {
+   "delta_pct": 1.5979902420580423,
+   "p": 0.9738081566288518,
+   "verdict": "not distinguishable from noise"
+  }
+ },
+ "note": "Coverage predicts reads, not speed. Compare the total_gather column across configs before reading any timing difference: if it is flat, a hot set is relocating bytes (PCIe -> device-to-device), not removing them, and cannot pay regardless of coverage.",
+ "replication": {
+  "runs": [
+   {
+    "run": 1,
+    "driver": "pre-commit scratch (same logic)",
+    "index->informed": {
+     "delta_pct": 0.7,
+     "p": 0.922
+    },
+    "stream->index": {
+     "delta_pct": 1.9,
+     "p": 0.14
+    },
+    "stream->informed": {
+     "delta_pct": 2.6,
+     "p": 0.279
+    },
+    "informed->unwrapped": {
+     "delta_pct": -2.0,
+     "p": 0.818
+    }
+   },
+   {
+    "run": 2,
+    "driver": "bench/bench_hotsets_ab.py",
+    "index->informed": {
+     "delta_pct": 1.4,
+     "p": 0.818
+    },
+    "stream->index": {
+     "delta_pct": -0.5,
+     "p": 0.533
+    },
+    "stream->informed": {
+     "delta_pct": 0.8,
+     "p": 0.974
+    },
+    "informed->unwrapped": {
+     "delta_pct": 1.6,
+     "p": 0.279
+    }
+   },
+   {
+    "run": 3,
+    "driver": "bench/bench_hotsets_ab.py",
+    "is_this_receipt": true,
+    "index->informed": {
+     "delta_pct": -1.0,
+     "p": 0.718
+    },
+    "stream->index": {
+     "delta_pct": 4.2,
+     "p": 0.082
+    },
+    "stream->informed": {
+     "delta_pct": 3.1,
+     "p": 0.011
+    },
+    "informed->unwrapped": {
+     "delta_pct": 1.6,
+     "p": 0.974
+    }
+   }
+  ],
+  "n_runs": 3,
+  "each": "11 interleaved reps, 128 decode tokens",
+  "headline_index_to_informed_pct": [
+   0.7,
+   1.4,
+   -1.0
+  ],
+  "warning": "THIS RECEIPT'S OWN RUN reports stream->informed at p=0.011. Do not quote it alone. It is one of 4 comparisons x 3 runs of the identical configuration on the identical host, and that same comparison scored p=0.279 and p=0.974 in the other two runs. It is a multiple-comparisons artifact, not a finding.",
+  "conclusion": "Across all three runs no comparison replicates, and index->informed \u2014 the question this driver exists to answer \u2014 straddles zero in SIGN (+0.7, +1.4, -1.0 %). On granite-1b/A2000 an informed hot set buys nothing measurable, despite working exactly as designed upstream of the timing: coverage 49.7% vs 24.5% against a 25.0% uniform baseline, and a 46% cut in cold PCIe traffic.",
+  "mechanism": "total_gather_bytes_per_token is INVARIANT across stream/index/informed. The hot set does not remove copied bytes, it relocates them from PCIe to device-to-device, because every routed expert is copied into a slot whether or not it was already resident. Independently, ~27 tok/s x ~154 MB/tok is ~4.2 GB/s, far below the link ceiling \u2014 so reads were never the bottleneck here either. Two sufficient reasons; neither is a defect in the hot-set logic.",
+  "contrast": "docs/RESIDENCY-ENGINES.md measures +40% for informed sets on gpt-oss-20b on a thin-link A2000 \u2014 the same class of card as this run. Holding the host roughly fixed and varying the model from 20B to 1.3B takes the gain to zero, which points at the compute-to-transfer ratio rather than the link alone."
+ }
+}
