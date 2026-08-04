@@ -1,0 +1,114 @@
+{
+ "metric_version": "kl-fidelity/1.0.0",
+ "k0_gate": {
+  "receipt": "/root/k0.json",
+  "all_passed": true,
+  "torch_at_control": "2.8.0+cu128"
+ },
+ "torch": "2.8.0+cu128",
+ "device": "cuda",
+ "model": "ibm-granite/granite-3.0-1b-a400m-instruct",
+ "prompt_set": {
+  "sha256": "eaa7792260b3f10dc2a55c9d214a09fe68332799d9ec999708e2e828c011e02d",
+  "n": 200,
+  "strata": {
+   "general": 72,
+   "technical": 55,
+   "code": 55,
+   "longctx": 18
+  },
+  "max_len": 320
+ },
+ "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
+ "rows": [
+  {
+   "metric_version": "kl-fidelity/1.0.0",
+   "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+   "aggregation": "token-weighted",
+   "vocab_size": 49155,
+   "truncation": "none (full vocabulary)",
+   "n_prompts": 200,
+   "n_tokens_scored": 6813,
+   "kl_mean": 0.008092651274095877,
+   "kl_median": 0.0034703360842917846,
+   "kl_p95": 0.026185847719210665,
+   "kl_max_per_token": 1.0969820334674698,
+   "top1_agreement": 0.9641861147805666,
+   "exactly_zero": false,
+   "per_stratum": {
+    "general": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 72,
+     "n_tokens_scored": 886,
+     "kl_mean": 0.01469534374176262,
+     "kl_median": 0.006622903507648239,
+     "kl_p95": 0.05083692633394987,
+     "kl_max_per_token": 0.4768132937168687,
+     "top1_agreement": 0.9627539503386005,
+     "exactly_zero": false
+    },
+    "technical": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 752,
+     "kl_mean": 0.009030157878276546,
+     "kl_median": 0.003855530702000786,
+     "kl_p95": 0.02929681403975125,
+     "kl_max_per_token": 0.34602789104148546,
+     "top1_agreement": 0.9667553191489362,
+     "exactly_zero": false
+    },
+    "code": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 1640,
+     "kl_mean": 0.008284775388134553,
+     "kl_median": 0.0016640297835612584,
+     "kl_p95": 0.02392786495376994,
+     "kl_max_per_token": 1.0969820334674698,
+     "top1_agreement": 0.9682926829268292,
+     "exactly_zero": false
+    },
+    "longctx": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 49155,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 18,
+     "n_tokens_scored": 3535,
+     "kl_mean": 0.006149207415617792,
+     "kl_median": 0.003753271106703669,
+     "kl_p95": 0.01821597809048437,
+     "kl_max_per_token": 0.43695771198212724,
+     "top1_agreement": 0.9620933521923621,
+     "exactly_zero": false
+    }
+   },
+   "tokens_min": 6,
+   "tokens_max": 257,
+   "tokens_total": 6813,
+   "row": "int8 (bitsandbytes) of a bf16 base \u2014 low-KL anchor",
+   "reference": "the bf16 base (ibm-granite/granite-3.0-1b-a400m-instruct, torch_dtype=bfloat16)",
+   "test": "bitsandbytes load_in_8bit (NOT an experts4bit path)",
+   "expectation": "> 0 but far below the 4-bit rows \u2014 supplies the small-KL end of a within-model sweep",
+   "wall_s": 40.9
+  }
+ ],
+ "not_measured": {
+  "native MXFP4 vs dequant-to-bf16 of the same shipped bytes": "gpt-oss not in the offline hf-cache on this host; needs a download. Reference would be the DEQUANT path of the shipped bytes \u2014 there is no bf16 original.",
+  "MXFP4 -> NF4 requant (the 'requant tax')": "same blocker; reference would be dequant-to-bf16 of the shipped MXFP4."
+ }
+}

@@ -30,7 +30,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kl_fidelity import (KLAccumulator, METRIC_VERSION,  # noqa: E402
-                         teacher_forced_logits)
+                         decode_teacher_forced_logits, teacher_forced_logits)
 from kl_prompts import PROMPTS, digest as prompt_digest, strata_counts  # noqa: E402
 
 
@@ -150,6 +150,32 @@ def main() -> int:
         del base, fp4
         torch.cuda.empty_cache() if dev == "cuda" else None
 
+    # --------------------------------------------------------------- row: int8 vs bf16
+    # A deliberately LOW-KL point on the same model, to break the size-vs-KL confound:
+    # comparing gpt-oss (small KL, 21B) with granite (large KL, 1.3B) varied both at once.
+    # Not an experts4bit path — bitsandbytes int8, declared as such wherever quoted.
+    if "bf16int8" in want:
+        t0 = time.time()
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+        base = AutoModelForCausalLM.from_pretrained(
+            a.model, torch_dtype=torch.bfloat16, trust_remote_code=True).to(dev).eval()
+        i8 = AutoModelForCausalLM.from_pretrained(
+            a.model, quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            torch_dtype=torch.bfloat16, device_map="auto").eval()
+        r = score_pair(lambda i: teacher_forced_logits(base, i),
+                       lambda i: teacher_forced_logits(i8, i), tok, a.max_len, dev)
+        r.update({
+            "row": "int8 (bitsandbytes) of a bf16 base — low-KL anchor",
+            "reference": f"the bf16 base ({a.model}, torch_dtype=bfloat16)",
+            "test": "bitsandbytes load_in_8bit (NOT an experts4bit path)",
+            "expectation": "> 0 but far below the 4-bit rows — supplies the small-KL end "
+                           "of a within-model sweep",
+            "wall_s": round(time.time() - t0, 1),
+        })
+        rows.append(r)
+        del base, i8
+        torch.cuda.empty_cache() if dev == "cuda" else None
+
     # --------------------------------------- row: VRAM-resident vs host-streamed (hot)
     if "hot" in want:
         t0 = time.time()
@@ -172,25 +198,109 @@ def main() -> int:
                                                offload=False, prefetch=False,
                                                quant_type="nf4")
             split.eval()
-            # Pin half of each layer's experts in VRAM; the rest stream from host DRAM.
-            # A partial split is the point — an all-hot set would exercise nothing, and a
-            # 0-length set would be pure streaming (already covered by the nvme row).
             cfg = split.config
             n_exp = getattr(cfg, "num_local_experts", None) or cfg.num_experts
             k_slots = getattr(cfg, "num_experts_per_tok", None) or cfg.num_experts_per_token
             n_layers = len(target_modules(split))
-            hot_sets = [list(range(n_exp // 2)) for _ in range(n_layers)]
-            n_patched = enable_pipelined_residency(split, hot_sets, device=dev,
-                                                   k_slots=int(k_slots))
-            r = score_pair(lambda i: teacher_forced_logits(resident, i),
-                           lambda i: teacher_forced_logits(split, i), tok, a.max_len, dev)
+
+            # BOTH sides run the engine; only the HOT SET differs. That is the whole
+            # design of this row, and the original version got it wrong: it compared a
+            # model with no engine against the engine with half its experts streamed,
+            # which varies two things at once — where the weight lives (the variable the
+            # row names) and which kernel computes it (grouped 4-bit GEMM over a gathered
+            # slot store vs ExpertsLoRA's per-expert GEMV decode path). Measured, that
+            # conflated comparison gives 3.16e-3, and attributing it to residency would
+            # have been wrong: with the kernel held fixed the answer is exactly 0.000.
+            #
+            # K is data, not a code path — enable_pipelined_residency's own docstring:
+            # "pass a 0-length set for pure streaming, all experts for fully resident —
+            # same code path" — so all-hot vs half-hot is free to construct and is the
+            # clean experiment.
+            n_ref = enable_pipelined_residency(
+                resident, [list(range(n_exp)) for _ in range(n_layers)],
+                device=dev, k_slots=int(k_slots))
+            n_patched = enable_pipelined_residency(
+                split, [list(range(n_exp // 2)) for _ in range(n_layers)],
+                device=dev, k_slots=int(k_slots))
+            if n_patched != n_layers or n_ref != n_layers:
+                raise RuntimeError(
+                    f"pipelined residency patched {n_patched}/{n_ref} of {n_layers} MoE "
+                    "layers — an unpatched layer is silently identical to the reference")
+            # DECODE-shaped scoring, and this row is the only one that uses it. The
+            # engine serves T==1 forwards and hands a multi-token prefill straight back
+            # to the reference path (see enable_pipelined_residency's docstring), so the
+            # prefill scorer every other row uses would engage it exactly zero times and
+            # report a flawless 0.000 that measures nothing. Both sides of the comparison
+            # use the same scorer, so the pair stays apples-to-apples; the cost is that
+            # this row's absolute KL is not directly comparable to the prefill rows'.
+            r = score_pair(lambda i: decode_teacher_forced_logits(resident, i),
+                           lambda i: decode_teacher_forced_logits(split, i),
+                           tok, a.max_len, dev)
+            # PROOF OF EXECUTION, and it is not optional here. This row's expectation is
+            # exactly 0.000, so an engine that never ran satisfies it perfectly: the
+            # unsplit reference IS what a dead patch returns. `enable_pipelined_residency`
+            # reaches these modules through `ExpertsLoRA._delegate_to_base`, which is
+            # conditional (eval + no_grad + zero adapter), so "patched" is not "ran".
+            # The engine's own device-side fetch counters settle it.
+            def _traffic(model):
+                t = [m._pipelined.traffic() for m in target_modules(model)
+                     if hasattr(m, "_pipelined")]
+                return (sum(x["cold_pcie_bytes"] for x in t),
+                        sum(x["hot_d2d_bytes"] for x in t))
+
+            cold_ref, _ = _traffic(resident)
+            cold, hot_d2d = _traffic(split)
+            # The ASYMMETRY is the tier transition. Both numbers are load-bearing: the
+            # test side must stream (or nothing was tiered) and the reference side must
+            # not (or it was not actually all-resident, and the two sides are the same
+            # experiment). Checking only one of them lets a 0.000 mean "nothing moved".
+            if cold == 0:
+                raise RuntimeError(
+                    "pipelined residency moved zero cold-tier bytes: the engine never ran "
+                    "(the wrapper did not delegate), so this row would report a 0.000 that "
+                    "measures nothing. Check model.eval() and that the adapter is untrained.")
+            if cold_ref != 0:
+                raise RuntimeError(
+                    f"the all-resident reference streamed {cold_ref} cold bytes — it is not "
+                    "fully resident, so this row is not isolating weight location")
             r.update({
                 "row": "tier transition: VRAM-resident vs host-streamed",
-                "reference": "all experts VRAM-resident, same model, same run",
-                "test": f"hot residency: {n_exp // 2}/{n_exp} experts pinned in VRAM, "
-                        f"remainder streamed from host DRAM ({n_patched} layers patched)",
+                "reference": f"pipelined engine, hot_set = ALL {n_exp} experts "
+                             f"(nothing streamed), same model, same run",
+                "test": f"pipelined engine, hot_set = {n_exp // 2}/{n_exp} experts pinned "
+                        f"in VRAM, remainder streamed from host DRAM "
+                        f"({n_patched} layers patched)",
+                "scoring": "decode-shaped teacher forcing (one token per forward, KV "
+                           "cache) on BOTH sides — not the prefill scorer the other rows "
+                           "use; this engine only engages at T==1",
                 "expectation": "exactly 0.000 — CONFIRMATORY; where a weight lives must "
-                               "not change the arithmetic performed on it",
+                               "not change the arithmetic performed on it. Same bytes, "
+                               "same GEMM, reached via a different source address: the "
+                               "engine holds the kernel fixed and takes K as data, so "
+                               "only location varies between these two sides.",
+                "amendment": "Twice-amended, both disclosed. (1) The row could not run at "
+                             "all — enable_pipelined_residency refused ExpertsLoRA bases, "
+                             "which is every model load_moe_4bit_streaming returns. (2) It "
+                             "then scored with the prefill scorer, which engages this "
+                             "decode-only engine zero times and would have reported a "
+                             "flawless 0.000 that measured nothing; scoring is now "
+                             "decode-shaped. A third change was considered and REJECTED on "
+                             "evidence: the 0.000 expectation was briefly withdrawn after "
+                             "the original reference side (a model with NO engine) measured "
+                             "3.16e-3. That comparison varied weight location AND compute "
+                             "kernel together, so it could not test the row's claim. With "
+                             "the reference moved onto the engine at hot_set=ALL, the "
+                             "kernel is held fixed, and the registered 0.000 is met exactly "
+                             "— see granite-hot-kernel-vs-reference.json for the 3.16e-3, "
+                             "which is the KERNEL's cost and is a separate finding.",
+                "engine_cold_pcie_bytes": cold,
+                "engine_hot_d2d_bytes": hot_d2d,
+                "engine_cold_pcie_bytes_reference": cold_ref,
+                "witness": "the ASYMMETRY is the measurement: the test side must stream "
+                           "(nonzero cold bytes — otherwise nothing was tiered and the "
+                           "engine may not even have run) and the reference side must not "
+                           "(zero — otherwise it is not all-resident and both sides are "
+                           "the same experiment). A 0.000 is only meaningful with both.",
                 "wall_s": round(time.time() - t0, 1),
             })
             rows.append(r)

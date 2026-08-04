@@ -105,6 +105,15 @@ def phase_generate(a) -> int:
         # Guarded: refuses if transformers silently dequantized instead of running native.
         from kl_gptoss import load_native_mxfp4
         model = load_native_mxfp4(a.model, dev)
+    elif a.path == "int8":
+        # A LOW-KL point on the SAME model. The whole purpose: granite already spans
+        # 0 -> 2.13e-01, so adding a small-KL path lets the size-vs-KL confound be broken
+        # within one model instead of across two of different sizes.
+        # NOTE: bitsandbytes int8 is not an experts4bit path — declared, not hidden.
+        from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+        model = AutoModelForCausalLM.from_pretrained(
+            a.model, quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            dtype=torch.bfloat16, device_map="auto").eval()
     elif a.path == "bf16":
         from transformers import AutoModelForCausalLM
         model = AutoModelForCausalLM.from_pretrained(
@@ -298,7 +307,7 @@ def main() -> int:
     ap.add_argument("--phase", required=True, choices=["generate", "judge", "score"])
     ap.add_argument("--probes", default="ikp_clean.json")
     ap.add_argument("--model", default="ibm-granite/granite-3.0-1b-a400m-instruct")
-    ap.add_argument("--path", choices=["bf16", "nf4", "fp4", "dqbf16", "mxfp4"])
+    ap.add_argument("--path", choices=["bf16", "nf4", "fp4", "dqbf16", "mxfp4", "int8"])
     ap.add_argument("--answers")
     ap.add_argument("--judge-url", default="http://127.0.0.1:8781/v1/chat/completions")
     ap.add_argument("--judge-model", default="qwen")
