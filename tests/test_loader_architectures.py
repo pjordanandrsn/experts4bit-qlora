@@ -715,7 +715,9 @@ def test_loader_arena_mode_refuses_per_expert_biases(tmp_path, monkeypatch):
                                 arena=arena_path)
 
 
-@pytest.mark.parametrize("keep", [{0}, {0, 1}])
+# The tiny fixture has 2 layers, so {0} is the only subset that leaves one to skip;
+# {0, 1} would be the whole model and would test nothing (CI caught exactly that).
+@pytest.mark.parametrize("keep", [{0}])
 def test_quantize_layers_restricts_which_layers_are_quantized(keep, tmp_path):
     """`quantize_layers` leaves the excluded MoE layers in the base dtype.
 
