@@ -1,0 +1,129 @@
+{
+ "change": "in-place hot GEMM: hot experts read from their resident row instead of being copied into a k-slot store",
+ "model": "allenai/OLMoE-1B-7B-0924",
+ "device": "RTX A2000 12GB (thin link, GDDR6)",
+ "method": "bench/bench_hotsets_ab.py, REPS=7 interleaved x N_TOK=96, old tree = git archive HEAD, new tree = the change; runs back to back on the same box",
+ "hot_k": 8,
+ "n_experts": 64,
+ "top_k": 8,
+ "layers": 16,
+ "coverage": {
+  "informed": 0.4359199438202248,
+  "index": 0.14791081460674158,
+  "uniform": 0.125
+ },
+ "old_vs_new": {
+  "stream": {
+   "old_tok_s_median": 11.771248719212611,
+   "new_tok_s_median": 11.781700064369446,
+   "delta_pct": 0.08878705569933394,
+   "p": 0.22479909925003924,
+   "old_tok_s_all": [
+    11.716716393571707,
+    11.799651502034086,
+    11.77264705780881,
+    11.771248719212611,
+    11.724513812148421,
+    11.701400521460153,
+    11.782629886775279
+   ],
+   "new_tok_s_all": [
+    11.813761202189816,
+    11.786998257739407,
+    11.782096177662481,
+    11.738467211147658,
+    11.781700064369446,
+    11.743055291052524,
+    11.77817724166426
+   ],
+   "gather_mb_per_token": {
+    "old": 418.369536,
+    "new": 418.369536
+   },
+   "hot_d2d_mb_per_token": {
+    "old": 0.0,
+    "new": 0.0
+   }
+  },
+  "index": {
+   "old_tok_s_median": 13.28830199416679,
+   "new_tok_s_median": 13.37473030691583,
+   "delta_pct": 0.650409004754547,
+   "p": 0.025347318677468266,
+   "old_tok_s_all": [
+    13.301231278289256,
+    13.29424948438761,
+    13.304129263107074,
+    13.28830199416679,
+    13.28033458064917,
+    13.281683797423879,
+    13.28275197575456
+   ],
+   "new_tok_s_all": [
+    13.409318671794926,
+    13.37994308393669,
+    13.37889211288898,
+    13.374705428303741,
+    13.37473030691583,
+    13.314189709087337,
+    13.24751019349437
+   ],
+   "gather_mb_per_token": {
+    "old": 418.369536,
+    "new": 356.917248
+   },
+   "hot_d2d_mb_per_token": {
+    "old": 58.871808,
+    "new": 0.0
+   }
+  },
+  "informed": {
+   "old_tok_s_median": 16.507396415317974,
+   "new_tok_s_median": 16.826516993686628,
+   "delta_pct": 1.9331975215214887,
+   "p": 0.025347318677468266,
+   "old_tok_s_all": [
+    16.634185569201094,
+    16.46541792735948,
+    16.562118930827324,
+    16.470250336826535,
+    16.507396415317974,
+    16.52939830715505,
+    16.481323367965874
+   ],
+   "new_tok_s_all": [
+    16.88231120094441,
+    16.847900665245174,
+    16.838172288455745,
+    16.826516993686628,
+    15.638814558877447,
+    16.802642598912804,
+    16.697001517584336
+   ],
+   "gather_mb_per_token": {
+    "old": 418.369536,
+    "new": 263.540736
+   },
+   "hot_d2d_mb_per_token": {
+    "old": 150.110208,
+    "new": 0.0
+   }
+  }
+ },
+ "within_engine_informed_vs_index": {
+  "old": {
+   "delta_pct": 24.225024555916022,
+   "p": 0.001745118699528905,
+   "verdict": "significant"
+  },
+  "new": {
+   "delta_pct": 25.808271326308112,
+   "p": 0.001745118699528905,
+   "verdict": "significant"
+  }
+ },
+ "headline": "+1.9% (p=0.025) at the informed hot set, +0.7% at index, +0.1% (n.s.) at pure streaming. The gain scales with hot-set coverage, which is what it should do: the change removes exactly the re-copy a hot hit used to pay.",
+ "the_correction": "A byte count motivated this change and OVERSTATED it. On granite the hot re-copy was 48.5% of all gather traffic, which read as a large lever. It is not: that copy runs at HBM bandwidth (~5 us/expert, as pipelined.py's own comment predicted), while the PCIe cold reads are what bind. Removing 37% of gather BYTES bought 1.9% of TIME because they were the cheap bytes. Bytes are not time -- the same lesson the informed-hot-set null taught on granite, in the opposite direction.",
+ "regression_found_and_fixed": "First measurement showed -0.7% (p=0.013) on the PURE-STREAMING config: with an empty hot set there is nothing to gain, but the new per-fetch row dispatch ran anyway. Guarded on n_hot, after which streaming is +0.1% (p=0.225, i.e. unchanged). The change is now non-negative on every config measured.",
+ "why_olmoe_not_gpt_oss": "gpt-oss-20b does not fit the A2000 under this engine (it keeps the base resident), and two rented boxes failed to provision. OLMoE is the better test bed anyway: it is the same thin-link card docs/RESIDENCY-ENGINES.md measured, and reads demonstrably BIND on it -- informed hot sets are +24.2% (p=0.002) here, replicating that doc's +19%. granite, by contrast, showed no informed-vs-index effect at all, so it could not have resolved this."
+}

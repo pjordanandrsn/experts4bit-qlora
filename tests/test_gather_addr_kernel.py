@@ -164,12 +164,22 @@ def test_engine_traffic_counters_hand_counted():
             mod(hs, ti, tw)
 
     # prime left every slot holding expert 0 (have == addr(0)).
-    go([0, 1, 5])   # slot0 skip; slot1 hot miss; slot2 cold miss
+    go([0, 1, 5])   # slots 0,1 are HOT -> read in place, no copy; slot2 cold miss
     go([0, 1, 5])   # all match -> zero new traffic
     go([2, 3, 6])   # three cold misses (2,3 are cold: hot set is {0,1})
     t = st.traffic()
-    assert t["hot_d2d_bytes"] == 1 * rb, t
+    # hot_d2d is 0 BY CONSTRUCTION since the in-place hot path: a hot expert is
+    # read from its resident row in the shared store, so no row is ever copied
+    # for it. This assertion is the regression witness -- if it moves off zero, a
+    # hot lane is being gathered into a slot again. The cold accounting is
+    # unchanged (4 misses), which is what shows the change is a re-copy removal
+    # and not a change to what gets streamed.
+    assert t["hot_d2d_bytes"] == 0, t
     assert t["cold_pcie_bytes"] == 4 * rb, t
+    # The final call routed 2,3,6 — all cold against hot set {0,1} — so every lane
+    # must name a gathered slot. (The hot-lane side of the dispatch is asserted in
+    # tests/test_pipelined.py, where the routing is held hot on purpose.)
+    assert bool((st.row_idx >= st.n_hot).all()), st.row_idx
     disable_pipelined_residency(mod)
 
 
