@@ -874,6 +874,18 @@ class _PoolGroup:
         self.row_bytes = row_bytes
         self.slots = sum(p.slots for p in pools)
 
+    @property
+    def resident(self) -> int:
+        """How many (layer, expert) rows are currently held, across all pools.
+
+        The aggregate counterpart to :attr:`slots`, so "did the pool stay inside its
+        budget" is answerable without reaching into a pool's private ``_map``. A test
+        that did exactly that broke silently when the group grew between the caller
+        and the per-pool residency map, and reported an ``AttributeError`` rather than
+        the budget violation it was written to catch.
+        """
+        return sum(len(p._map) for p in self.pools)
+
     def stats(self):
         h = sum(p.hits for p in self.pools)
         m = sum(p.misses for p in self.pools)

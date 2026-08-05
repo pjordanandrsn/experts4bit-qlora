@@ -270,12 +270,6 @@ def enable_fast(model, verbose: bool = False) -> int:
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     mods = list(model.modules()) if hasattr(model, "modules") else [model]
-    # A patch on an ExpertsLoRA.base is only ever *reached* when that parent's adapter is a
-    # provable no-op (ExpertsLoRA._delegate_to_base); with a trained adapter the delta has to
-    # be injected pre-activation, so the parent keeps its inline path and this patch is dead.
-    # Track parents so the return value cannot imply work that will not happen.
-    lora_parent = {id(m.base): m for m in mods if isinstance(m, ExpertsLoRA) and hasattr(m, "base")}
-    unreachable = []
     patched = 0
 
     wrapped_bases = {id(m.base) for m in mods if isinstance(m, ExpertsLoRA)}
@@ -351,40 +345,43 @@ def enable_fast(model, verbose: bool = False) -> int:
         mod._e4b_fast_ref = mod.forward
         mod.forward = fused_experts_forward.__get__(mod)
         patched += 1
-        parent = lora_parent.get(id(mod))
-        if parent is not None and not parent._adapter_is_zero():
-            unreachable.append(type(mod).__name__)
-    # Training mode is the OTHER way these patches go unreachable, and it is the
-    # silent one: _delegate_to_base() requires `not self.training`, so a model
-    # left in train mode (nn.Module's default, and what the streaming loaders
-    # return) never calls base.forward at all -- even with a zero adapter, where
-    # the check below has nothing to complain about. Measured on an RTX 4090,
-    # OLMoE-1B-7B: 0 kernel invocations and 8.3 tok/s in train mode vs 288
-    # invocations and 33.6 tok/s after model.eval() -- a 2.95x decode difference
-    # that looked like "the fused kernel does nothing".
+    # Train mode still costs you the kernel, but NOT for the reason this warning used
+    # to give. The old text said "ExpertsLoRA only hands off to the patched base under
+    # eval + no_grad", which described the era when `enable_fast` patched the BASE and
+    # a wrapped base was reached only via `ExpertsLoRA._delegate_to_base`. The wrapper
+    # loop above changed that: an `ExpertsLoRA` gets `fused_experts_lora_forward` on
+    # ITSELF and its base is skipped. The conclusion survives anyway, because that
+    # forward short-circuits to the reference path under `mod.training` (see its own
+    # body) to preserve the summation order a reentrant-checkpoint recompute will
+    # reproduce.
+    #
+    # Counting gemm_4bit_grouped itself on an A2000, wrapped module, all four states:
+    #
+    #   mode   adapter   fused kernel calls
+    #   eval   zero      2
+    #   eval   trained   2      <- reachable; a trained adapter does NOT kill it
+    #   train  zero      0
+    #   train  trained   0      <- the case this warns about
+    #
+    # Count the KERNEL, not the wrapper: once patched the wrapper is always invoked,
+    # so counting calls to it reports 1 in every cell above and says nothing.
     if patched and getattr(model, "training", False):
         import warnings
 
         warnings.warn(
-            f"[e4b.fast] model is in TRAINING mode: ExpertsLoRA only hands off to the "
-            f"patched base under eval + no_grad, so all {patched} patch(es) will be "
-            "bypassed and the fused kernel will not run. Call model.eval() before "
+            f"[e4b.fast] model is in TRAINING mode: fused_experts_lora_forward falls back "
+            f"to the reference path while `training` is set, so all {patched} patch(es) "
+            "will be bypassed and the fused kernel will not run. Call model.eval() before "
             "inference.",
             RuntimeWarning,
             stacklevel=2,
         )
-    if unreachable:
-        import warnings
-
-        warnings.warn(
-            f"[e4b.fast] {len(unreachable)} of {patched} patched module(s) are ExpertsLoRA "
-            "bases with a non-zero adapter: ExpertsLoRA injects its low-rank delta before the "
-            "activation, so it does not call base.forward and these patches will never run. "
-            "The fused kernel cannot accelerate a trained per-expert adapter today; merge or "
-            "drop the adapter for fused inference.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+    # The non-zero-adapter warning that used to sit here is GONE, on both counts.
+    # Obsolete: eval + a trained adapter fuses fine (row 2 above) — the wrapper's fused
+    # forward applies the low-rank delta on the expert-sorted rows rather than skipping
+    # it. And DEAD CODE besides: `unreachable` was only appended in the bare-module
+    # loop, which `continue`s on every wrapped base, while `lora_parent` was keyed BY
+    # wrapped bases — so the lookup could never hit and the warning could never fire.
     return patched
 
 
