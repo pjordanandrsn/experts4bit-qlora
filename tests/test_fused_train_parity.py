@@ -162,9 +162,17 @@ def _enable_fused_train(mod):
         pytest.skip("enable_fast_train declined this module (ineligible base)")
 
 
+def _enable_batched_train(mod):
+    from experts4bit_qlora import enable_batched_train
+    assert enable_batched_train(mod) == 1, "batched path declined an eligible module"
+
+
 # name -> callable that patches a freshly built module in place. Add an entry to
 # put a new training path under the contract; nothing else needs to change.
-CANDIDATES = {"enable_fast_train": _enable_fused_train}
+CANDIDATES = {
+    "enable_fast_train": _enable_fused_train,        # grouped-nf4-gemm kernel lane
+    "enable_batched_train": _enable_batched_train,   # kernel-free lane
+}
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="fused training path is CUDA-only")
