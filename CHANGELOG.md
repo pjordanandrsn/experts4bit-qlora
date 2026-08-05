@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+**Untied output heads on multimodal checkpoints were silently tied to `embed_tokens`**
+(#37). `load_moe_4bit_streaming` builds the text tower by keeping only keys under the
+multimodal prefix (`model.language_model.` for Gemma-4, `language_model.model.` for Kimi
+K3). `lm_head.weight` sits *outside* that prefix, so the filter dropped it — and the
+meta-tie fallback then assigned the embedding matrix as the output head unconditionally.
+Correct for a genuinely tied checkpoint (Gemma-4 ships no head on disk); for a
+`tie_word_embeddings: false` checkpoint carrying a real head it meant every logit was
+computed through the wrong matrix, with nothing raised: plausibly-shaped generations,
+initial train loss at `ln(vocab)`, and a LoRA that "converges" by learning to steer hidden
+states into `embed_tokens` — then collapses when the adapter is served on a stack that
+maps `lm_head` correctly. The symptom is quant-invariant, so it reads as a quantization
+fidelity problem, and an A/B against a tied model passes because the fallback is right
+there.
+
+The loader now recovers the head from outside the prefix (logging where it found it) and
+gates the tie on `tie_word_embeddings`: untied config with no head that reached the model
+raises instead of tying. The multimodal test previously covered only the tied path; the
+untied load and the refusal are now both tested.
+
 ## 0.10.0 — 2026-08-05
 
 **The residency engine was unreachable for every model the streaming loader produces.**

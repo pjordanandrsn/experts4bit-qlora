@@ -365,6 +365,23 @@ def load_moe_4bit_streaming(
     elif ckpt_prefix:
         weight_map = {"model." + k[len(ckpt_prefix) :]: f for k, f in raw_map.items() if k.startswith(ckpt_prefix)}
         orig_key = {"model." + k[len(ckpt_prefix) :]: k for k in raw_map if k.startswith(ckpt_prefix)}
+        # The output head does NOT carry the text-tower prefix — Gemma-4 keeps it at top level
+        # (`lm_head.weight`), K3 one level up from its own (`language_model.lm_head.weight`) — so
+        # the filter above drops it along with the vision weights. For a tied checkpoint that is
+        # right (there is no head on disk); for an UNTIED one the tie fallback further down would
+        # then install embed_tokens as the output head with no error and plausible-shaped logits.
+        # Recover it here so the ordinary `_assign` pass places the real head.
+        heads = [k for k in raw_map if k.endswith("lm_head.weight") and not k.startswith(ckpt_prefix)]
+        if len(heads) == 1:
+            weight_map["lm_head.weight"] = raw_map[heads[0]]
+            orig_key["lm_head.weight"] = heads[0]
+            log(f"  untied output head recovered from {heads[0]!r} (outside the "
+                f"{ckpt_prefix!r} text-tower prefix, which would otherwise drop it)")
+        elif len(heads) > 1:
+            # Ambiguous rather than absent: picking one would be a guess about which tower's
+            # head this text model wants. Say so here; the tie gate below decides the outcome.
+            log(f"  NOTE: {len(heads)} candidate output heads outside {ckpt_prefix!r} "
+                f"({heads[:3]}) — none assigned automatically")
     else:
         weight_map, orig_key = raw_map, {k: k for k in raw_map}
     # Normalize legacy tensor spellings (see LEGACY_KEY_RENAMES) so the expert-fusing loop and the
@@ -611,9 +628,24 @@ def load_moe_4bit_streaming(
         if type(module).__name__.endswith("RotaryEmbedding"):
             parent = model.get_submodule(name.rsplit(".", 1)[0]) if "." in name else model
             setattr(parent, name.rsplit(".", 1)[-1], type(module)(lm_config).to(device))
-    # Tie lm_head if the checkpoint relied on weight tying.
+    # Tie lm_head if the checkpoint relied on weight tying — and ONLY then. This used to be
+    # unconditional, which is correct for a tied checkpoint (Gemma-4 ships no `lm_head.weight`)
+    # and silently wrong for an untied one whose head never reached the model: every forward
+    # then computes logits through the embedding matrix. Nothing raises, generations are
+    # plausibly shaped, initial train loss sits at ln(vocab), and LoRA "converges" by learning
+    # to steer hidden states into embed_tokens — then collapses when the adapter is served on a
+    # stack that maps lm_head correctly. Gate on the config and fail loud instead.
     if model.lm_head.weight.is_meta:
-        model.lm_head.weight = model.model.embed_tokens.weight
+        if getattr(lm_config, "tie_word_embeddings", True):
+            model.lm_head.weight = model.model.embed_tokens.weight
+        else:
+            raise RuntimeError(
+                f"{model_id!r}: config declares tie_word_embeddings=False, but no "
+                "'lm_head.weight' reached the model — refusing to tie the output head to "
+                "embed_tokens, which would load and generate without ever erroring. The head "
+                "is in the checkpoint under a spelling this loader did not map; check the "
+                "index against the multimodal prefix filter and the per-family key rewriters."
+            )
 
     # This guard exists to catch a silently-incomplete load, so arena mode narrows
     # it rather than disabling it: expert buffers under a meta expert module are
