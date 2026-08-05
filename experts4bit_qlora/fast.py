@@ -8,9 +8,25 @@ decode the reference loop pays ~3 kernel launches per active expert plus a
 full bf16 weight materialization; the fused path is one launch over all
 active experts and reads only packed bytes.
 
-Inference-only by design: the fused kernel has no backward, so any forward
-that requires grad (QLoRA training) silently uses the reference path — the
-recompute-backward training semantics are untouched.
+``enable_fast`` is inference-only by design: ``gemm_4bit_grouped`` has no
+backward, so any forward that requires grad (QLoRA training) silently uses the
+reference path — the recompute-backward training semantics are untouched.
+
+**That is a statement about ``enable_fast``, not about this module.** Training
+has its own fused entry point here: ``enable_fast_train`` (see below) routes the
+``ExpertsLoRA`` *training* forward through ``nf4_qlora.fused_grouped_lora``,
+whose backward recomputes one decoded expert at a time, and the expert LoRA
+delta trains through it. This paragraph used to read "inference-only by design"
+with no such qualifier, describing the whole module; it was written before that
+path existed and was then quoted back at the maintainers as evidence the package
+had no training accelerator (issue #38). If you add another entry point, say so
+here — a reader who trusts a stale module header does not go looking further
+down the file.
+
+Note that ``enable_fast_train`` needs ``grouped-nf4-gemm >= 0.2.4`` for the
+``nf4_qlora`` module, and returns ``0`` when it is missing. Pass ``verbose=True``
+to be told which, and assert the return is non-zero: a silent ``0`` is
+indistinguishable from "there is no fast training path".
 
 Accuracy, measured rather than asserted. The two paths dequantize the *same*
 NF4 values and the fused path accumulates in fp32, which measured *more*
