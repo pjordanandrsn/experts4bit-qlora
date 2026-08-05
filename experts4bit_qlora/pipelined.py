@@ -195,11 +195,31 @@ class _PipelinedResidency:
         self.arena = arena
         mod._e4b_arena_cache = (sig, arena, self.pinned)
 
-        # --- hot stack: same row-block layout, resident on device ---------
-        if hot_ids.numel():
-            self.hot_stack = arena.index_select(0, hot_ids).to(self.device)
-        else:
-            self.hot_stack = torch.empty(0, row_bytes, dtype=torch.uint8, device=self.device)
+        # --- ONE device store: [hot rows | k slots], same row-block layout --
+        # The hot stack and the slot store used to be separate allocations, which
+        # forced every routed expert through a slot: a hot hit still paid a full
+        # device-to-device row copy (resident stack -> slot) before the GEMM could
+        # read it. Measured on granite/A2000, that re-copy was 48.5% of ALL gather
+        # traffic and the total bytes moved were INVARIANT across hot-set sizes —
+        # a hot set relocated traffic from PCIe to d2d rather than removing it
+        # (bench/receipts-hotsets-granite-20260804/).
+        #
+        # Sharing one allocation lets the GEMM address a hot row IN PLACE: the row
+        # index it reads is data, so a hot expert points at its resident row and
+        # only a cold one is gathered into a slot. `sizes` stays a host constant
+        # and there is still exactly one GEMM launch, so the fixed-shape,
+        # zero-host-sync decode contract is untouched.
+        k = self.k
+        n_hot = int(hot_ids.numel())
+        self.n_hot = n_hot
+        store = torch.empty(n_hot + k, row_bytes, dtype=torch.uint8, device=self.device)
+        if n_hot:
+            store[:n_hot].copy_(arena.index_select(0, hot_ids).to(self.device))
+        self.store = store
+        self.hot_stack = store[:n_hot]          # view — hot rows, never copied again
+        slots = store[n_hot:]                   # view — cold landing rows
+        self.slots = slots
+        self.slots64 = slots.view(torch.int64)
 
         # --- the residency filter: absolute source address per expert -----
         is_hot = torch.zeros(E, dtype=torch.bool, device=self.device)
@@ -210,22 +230,25 @@ class _PipelinedResidency:
         hot_addr = self.hot_stack.data_ptr() + h_row * row_bytes
         self.src_of_expert = torch.where(is_hot, hot_addr, host_addr)  # [E] int64
         self.is_hot = is_hot
+        self.h_row = h_row                      # [E] -> row within the hot segment
 
-        # --- k-slot store + GEMM views (as_strided into the same bytes) ---
-        k = self.k
-        slots = torch.empty(k, row_bytes, dtype=torch.uint8, device=self.device)
-        self.slots = slots
-        self.slots64 = slots.view(torch.int64)
-        s_f32 = slots.view(torch.float32)
-        self.gu_p_v = torch.as_strided(slots, (k, n1, k1 // 2), (row_bytes, k1 // 2, 1), off[0])
-        self.gu_a_v = torch.as_strided(s_f32, (k, n1, k1 // 64), (row_bytes // 4, k1 // 64, 1), off[1] // 4)
-        self.dn_p_v = torch.as_strided(slots, (k, n2, k2 // 2), (row_bytes, k2 // 2, 1), off[2])
-        self.dn_a_v = torch.as_strided(s_f32, (k, n2, k2 // 64), (row_bytes // 4, k2 // 64, 1), off[3] // 4)
+        # --- GEMM views span the WHOLE store, so a row index may name either
+        # a resident hot row or a gathered slot ------------------------------
+        rows = n_hot + k
+        s_f32 = store.view(torch.float32)
+        self.gu_p_v = torch.as_strided(store, (rows, n1, k1 // 2), (row_bytes, k1 // 2, 1), off[0])
+        self.gu_a_v = torch.as_strided(s_f32, (rows, n1, k1 // 64), (row_bytes // 4, k1 // 64, 1), off[1] // 4)
+        self.dn_p_v = torch.as_strided(store, (rows, n2, k2 // 2), (row_bytes, k2 // 2, 1), off[2])
+        self.dn_a_v = torch.as_strided(s_f32, (rows, n2, k2 // 64), (row_bytes // 4, k2 // 64, 1), off[3] // 4)
 
         # persistent step state: fixed sizes list (Python constant — only
-        # sum()/max() ever touch it), device slot ids, have table, input buf
+        # sum()/max() ever touch it), row-index dispatch, have table, input buf
         self.sizes = [1] * k
-        self.slot_eids = torch.arange(k, dtype=torch.int32, device=self.device)
+        # Row the GEMM reads for each of the k routed slots. Recomputed device-side
+        # every fetch; initialised to the slot rows so it is valid before one runs.
+        self.slot_rows = n_hot + torch.arange(k, dtype=torch.long, device=self.device)
+        self.row_idx_buf = self.slot_rows.clone()
+        self.row_idx = self.row_idx_buf.to(torch.int32)
         self.have = torch.full((k,), -1, dtype=torch.long, device=self.device)
         self.a_buf = None  # lazy: dtype follows live compute_dtype
         self.want_buf = torch.zeros(k, dtype=torch.long, device=self.device)
@@ -270,18 +293,38 @@ class _PipelinedResidency:
         # extra traffic it really is.
 
     def _fetch(self, want):
-        """The one fetch site: copy want_buf, dispatch the address-gather, count
-        traffic, advance ``have``. All enqueued; nothing reads back."""
+        """The one fetch site: copy want_buf, resolve each routed slot to the row
+        the GEMM will read, gather ONLY the cold ones, count traffic, advance
+        ``have``. All enqueued; nothing reads back."""
         self.want_buf.copy_(want)
         src = self.src_of_expert.index_select(0, self.want_buf)
-        miss = src != self.have
         hot = self.is_hot.index_select(0, self.want_buf)
+
+        # A hot expert is read where it already lives, so it needs no slot and no
+        # copy. Forcing its src to the slot's current `have` makes the gather's own
+        # skip test fail for that lane — the kernel is untouched, and the decision
+        # stays device-side (a host-visible branch here would break the zero-sync
+        # decode contract that tests/test_pipelined.py enforces).
+        src_eff = torch.where(hot, self.have, src)
+        miss = src_eff != self.have
+        # hot_d2d is now 0 by construction and kept as a REGRESSION WITNESS: if it
+        # ever moves again, a hot row is being copied instead of read in place.
         self.hot_d2d_bytes += (miss & hot).sum() * self.row_bytes
         self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
+
         kern = _gather_kernel()
         grid = (self.k, -(-self.row_words // 2048))
-        kern[grid](self.slots64, src, self.have, self.row_words, BLOCK=2048, num_warps=4)
-        self.have.copy_(src)
+        kern[grid](self.slots64, src_eff, self.have, self.row_words, BLOCK=2048, num_warps=4)
+        self.have.copy_(src_eff)
+        # hot lane -> its resident row; cold lane -> the slot just gathered into.
+        # With an EMPTY hot set every lane is cold, so the dispatch is the constant
+        # slot_rows and recomputing it is pure overhead on the pure-streaming
+        # config -- measured at -0.7% (p=0.013) on OLMoE/A2000 before this guard,
+        # which is a real regression on the one config that cannot benefit.
+        if self.n_hot:
+            torch.where(hot, self.h_row.index_select(0, self.want_buf), self.slot_rows,
+                        out=self.row_idx_buf)
+            self.row_idx = self.row_idx_buf.to(torch.int32)
 
     def traffic(self) -> dict:
         """Report accumulated fetch traffic. SYNCHRONIZES (two .item() reads) —
@@ -302,13 +345,13 @@ class _PipelinedResidency:
         self.a_buf.copy_(x_row.expand(k, -1))
         from .lora import _epilogue
 
-        gu = gemm_4bit_grouped(self.a_buf, self.gu_p_v, self.gu_a_v, self.sizes, self.slot_eids)
+        gu = gemm_4bit_grouped(self.a_buf, self.gu_p_v, self.gu_a_v, self.sizes, self.row_idx)
         # The module's OWN epilogue (`_epilogue` -> `base._apply_gate` when it has one),
         # not an assumed SwiGLU. gpt-oss needs the subclass below because it also adds
         # per-expert biases; a custom ACTIVATION alone is handled right here, which is
         # what lets DeepSeek-V4 run on this engine instead of only on the deprecated one.
         h = _epilogue(self.mod, gu)
-        dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.slot_eids)
+        dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.row_idx)
         return dn
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
@@ -346,13 +389,13 @@ class _GptOssPipelined(_PipelinedResidency):
         if self.a_buf is None or self.a_buf.dtype != cd:
             self.a_buf = torch.empty(k, x.shape[-1], dtype=cd, device=self.device)
         self.a_buf.copy_(x.expand(k, -1))
-        gu = gemm_4bit_grouped(self.a_buf, self.gu_p_v, self.gu_a_v, self.sizes, self.slot_eids)
+        gu = gemm_4bit_grouped(self.a_buf, self.gu_p_v, self.gu_a_v, self.sizes, self.row_idx)
         gu = gu + self.gate_up_bias.index_select(0, self.want_buf)
         gate, up = gu.chunk(2, dim=-1)
         gate = gate.clamp(max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
         h = (up + 1) * (gate * torch.sigmoid(gate * self.alpha))
-        dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.slot_eids)
+        dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.row_idx)
         dn = dn.to(torch.float32) + self.down_bias.index_select(0, self.want_buf).to(torch.float32)
         w = router_scores.reshape(-1).to(device=self.device, dtype=torch.float32)
         out = (dn * w[:, None]).sum(0, keepdim=True)

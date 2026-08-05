@@ -265,3 +265,61 @@ def test_arena_allocation_reused_across_reenables():
         ref = mod(hs, ti, tw)
     assert p1 == p2, "arena allocation was rebuilt — ladder would re-pin every rung"
     assert _b_rel(got, ref) < 1.5e-2
+
+
+def test_hot_experts_are_read_in_place_and_move_no_bytes():
+    """The in-place hot path: a routed HOT expert is read from its resident row in
+    the shared store, so no row is copied for it.
+
+    Before this, hot and cold rows both landed in a k-slot store, so a hot hit still
+    paid a full device-to-device row copy. Measured on granite/A2000 that re-copy was
+    48.5% of all gather traffic, and total bytes moved were INVARIANT across hot-set
+    sizes — a hot set relocated traffic (PCIe -> d2d) rather than removing it, which
+    is why coverage did not convert to speed there.
+
+    A fully-resident layer must therefore move NOTHING, and the arithmetic must not
+    change: same weights, same GEMM, reached by row index instead of by copy.
+    """
+    mod = _make()
+    hs, ti, tw = _route(8, 3, seed=11)
+    with torch.no_grad():
+        ref = mod(hs, ti, tw)
+
+    enable_pipelined_residency(mod, [torch.arange(8)], device="cuda", k_slots=3)
+    try:
+        st = mod._pipelined
+        with torch.no_grad():
+            got = mod(hs, ti, tw)
+        t = st.traffic()
+        assert t == {"hot_d2d_bytes": 0, "cold_pcie_bytes": 0}, \
+            f"a fully-resident layer moved bytes — nothing should be copied ({t})"
+        assert bool((st.row_idx < st.n_hot).all()), \
+            f"a lane was served from a slot on an all-hot layer ({st.row_idx})"
+        assert _b_rel(got, ref) < 1.5e-2, _b_rel(got, ref)
+    finally:
+        disable_pipelined_residency(mod)
+
+
+def test_mixed_split_gathers_only_the_cold_lanes():
+    """Cold lanes still stream; hot lanes cost nothing. The exact byte count is the
+    point — an off-by-one in the row dispatch would show up as an extra gathered row
+    rather than as a wrong answer, because a stale slot still holds a VALID expert."""
+    mod = _make()
+    st_hot = [0, 1, 2, 3]
+    enable_pipelined_residency(mod, [torch.tensor(st_hot)], device="cuda", k_slots=3)
+    try:
+        st = mod._pipelined
+        hs = torch.randn(1, 128, dtype=torch.bfloat16, device="cuda")
+        # two hot (1, 3) and one cold (6); _prime seeded every slot with expert 0
+        ti = torch.tensor([[1, 3, 6]], device="cuda")
+        tw = torch.full((1, 3), 1 / 3, dtype=torch.bfloat16, device="cuda")
+        with torch.no_grad():
+            mod(hs, ti, tw)
+        t = st.traffic()
+        assert t["hot_d2d_bytes"] == 0, t
+        assert t["cold_pcie_bytes"] == st.row_bytes, \
+            f"expected exactly one cold row gathered, got {t['cold_pcie_bytes'] / st.row_bytes}"
+        assert int(st.row_idx[0]) < st.n_hot and int(st.row_idx[1]) < st.n_hot
+        assert int(st.row_idx[2]) >= st.n_hot
+    finally:
+        disable_pipelined_residency(mod)

@@ -114,8 +114,18 @@ def test_zero_adapter_delegates_and_the_engine_actually_runs():
         assert moved["cold_pcie_bytes"] > 0, (
             "no cold-tier traffic: the pipelined engine never ran through the "
             f"ExpertsLoRA wrapper ({moved})")
-        assert moved["hot_d2d_bytes"] > 0, (
-            f"no hot-stack traffic: the resident tier was never read ({moved})")
+        # The resident tier is no longer witnessed by BYTES: since the in-place hot
+        # path a hot expert is read from its row in the shared store and nothing is
+        # copied for it, so hot_d2d is 0 whether it was read or never touched. The
+        # row dispatch is the direct witness instead, and a sharper one — it names
+        # which row the GEMM actually read for each routed lane.
+        assert moved["hot_d2d_bytes"] == 0, (
+            f"a hot lane was copied into a slot instead of read in place ({moved})")
+        # ROUTE = [2, 5] against HOT = [0,1,2,3]: lane 0 is hot, lane 1 is cold.
+        assert int(st.row_idx[0]) < st.n_hot, (
+            f"hot expert {ROUTE[0]} was not served from the resident rows ({st.row_idx})")
+        assert int(st.row_idx[1]) >= st.n_hot, (
+            f"cold expert {ROUTE[1]} was not served from a gathered slot ({st.row_idx})")
 
         rel = (ref - got).abs().max() / got.abs().max().clamp_min(1e-3)
         assert rel < 1.5e-2, f"residency changed the arithmetic: rel={rel}"
@@ -306,9 +316,18 @@ def test_loader_hot_sets_land_on_the_layer_target_modules_named(tmp_path):
             f"engine never ran on the streamed layer through the loader's wrapper ({s})"
         assert s["hot_d2d_bytes"] == 0, \
             f"a layer given an EMPTY hot set moved hot bytes — hot_sets is misindexed ({s})"
-        assert r["hot_d2d_bytes"] > 0, \
-            f"engine never ran on the resident layer through the loader's wrapper ({r})"
         assert r["cold_pcie_bytes"] == 0, \
             f"a FULLY-resident layer streamed from the cold arena — hot_sets is misindexed ({r})"
+        # The fully-resident layer moves NO bytes of either kind since the in-place
+        # hot path, so traffic can no longer witness that it ran — zero is also what
+        # a dead engine reports. The row dispatch can: every lane on the resident
+        # layer must name a row in the hot segment, and every lane on the streamed
+        # layer must name a gathered slot. That is a strictly sharper statement of
+        # the property this test exists for (hot_sets landing on the named layer).
+        rs, rr = streamed._pipelined, resident._pipelined
+        assert bool((rr.row_idx < rr.n_hot).all()), \
+            f"resident layer served a lane from a slot — engine idle or misindexed ({rr.row_idx})"
+        assert bool((rs.row_idx >= rs.n_hot).all()), \
+            f"streamed layer served a lane from the hot segment ({rs.row_idx})"
     finally:
         disable_pipelined_residency(model)
