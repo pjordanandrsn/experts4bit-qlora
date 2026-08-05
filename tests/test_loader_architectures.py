@@ -72,13 +72,14 @@ def _qwen3_moe():
     )
 
 
-def _gemma4():
+def _gemma4(tie_word_embeddings=True):
     pytest.importorskip("transformers.models.gemma4", reason="this transformers has no gemma4")
     from transformers.models.gemma4.configuration_gemma4 import Gemma4TextConfig
     from transformers.models.gemma4.modeling_gemma4 import Gemma4ForCausalLM
 
     return Gemma4ForCausalLM(
         Gemma4TextConfig(
+            tie_word_embeddings=tie_word_embeddings,
             hidden_size=64,
             intermediate_size=128,
             num_hidden_layers=2,
@@ -303,6 +304,81 @@ def test_loader_handles_multimodal_gemma4_checkpoint(tmp_path):
             raise
     cos = torch.nn.functional.cosine_similarity(got.flatten(0, 1).float(), want.flatten(0, 1).float(), dim=-1)
     assert cos.mean() > 0.9  # same function as the text tower, within NF4-on-experts error
+
+
+def _write_multimodal_gemma4(ref, tmp_path, with_head=True):
+    """Write `ref` the way a multimodal Gemma-4 checkpoint stores it: the text tower under
+    `model.language_model.*`, a vision tensor alongside — and the output head at TOP level,
+    outside the text-tower prefix, which is where an untied multimodal checkpoint keeps it."""
+    from safetensors.torch import save_file
+    from transformers.models.gemma4.configuration_gemma4 import Gemma4Config
+
+    sd = {}
+    for k, v in ref.state_dict().items():
+        if k == "lm_head.weight":
+            if with_head:
+                sd["lm_head.weight"] = v
+            continue
+        sd["model.language_model." + k[len("model.") :]] = v
+    sd["model.vision_tower.patch_embedding.weight"] = torch.randn(8, 8)  # must be ignored
+    sd = {k: v.to(torch.bfloat16).contiguous().clone() for k, v in sd.items()}
+    save_file(sd, os.path.join(tmp_path, "model.safetensors"))
+    json.dump(
+        {"weight_map": {k: "model.safetensors" for k in sd}},
+        open(os.path.join(tmp_path, "model.safetensors.index.json"), "w"),
+    )
+    Gemma4Config(text_config=ref.config.to_dict()).save_pretrained(tmp_path)
+
+
+def test_multimodal_untied_lm_head_is_loaded_not_tied(tmp_path):
+    """An UNTIED multimodal checkpoint must get its real output head — the regression path.
+
+    The text-tower prefix filter drops every key that does not start with
+    `model.language_model.`, and `lm_head.weight` sits at top level, so it used to be dropped
+    and the tie fallback then assigned embed_tokens as the head unconditionally. Nothing raised:
+    the model loaded, generated plausibly-shaped tokens, and computed every logit through the
+    wrong matrix. Assert the head is a DISTINCT tensor carrying the checkpoint's own values."""
+    pytest.importorskip("transformers.models.gemma4", reason="this transformers has no gemma4")
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    ref = _gemma4(tie_word_embeddings=False).to(DEVICE, dtype=torch.bfloat16).eval()
+    ref.config.use_cache = False
+    assert ref.lm_head.weight.data_ptr() != ref.model.embed_tokens.weight.data_ptr()
+    _write_multimodal_gemma4(ref, tmp_path, with_head=True)
+
+    try:
+        model, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+
+    assert not model.lm_head.weight.is_meta
+    # The bug, stated as the test would have caught it: the head is not the embedding matrix...
+    assert model.lm_head.weight.data_ptr() != model.model.embed_tokens.weight.data_ptr()
+    assert model.lm_head.weight.shape == ref.lm_head.weight.shape
+    # ...and it is the checkpoint's head, bit-for-bit (non-expert weights are not quantized).
+    assert torch.equal(model.lm_head.weight.to(ref.lm_head.weight.dtype).cpu(),
+                       ref.lm_head.weight.cpu())
+
+
+def test_multimodal_untied_lm_head_missing_raises(tmp_path):
+    """Untied config + no head anywhere in the checkpoint = refuse, loudly.
+
+    Silently tying here is the failure mode issue #37 describes: no error, plausible outputs,
+    and a LoRA that "converges" by steering hidden states into embed_tokens, then collapses on
+    an inference stack that maps lm_head correctly. A load-time raise is the cheap end of that."""
+    pytest.importorskip("transformers.models.gemma4", reason="this transformers has no gemma4")
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    ref = _gemma4(tie_word_embeddings=False).to(DEVICE, dtype=torch.bfloat16).eval()
+    _write_multimodal_gemma4(ref, tmp_path, with_head=False)
+
+    try:
+        with pytest.raises(RuntimeError, match="tie_word_embeddings=False"):
+            load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
+    except _QUANTIZE_UNAVAILABLE as e:
+        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
 
 
 def test_loader_handles_legacy_granitemoe_checkpoint(tmp_path):
