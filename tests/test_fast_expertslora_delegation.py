@@ -115,18 +115,82 @@ def test_trained_adapter_is_never_delegated_away():
         disable_fast(mod.base)
 
 
-def test_enable_fast_warns_when_the_patch_is_unreachable():
+def _count_kernel():
+    """Count gemm_4bit_grouped, NOT the patched forward.
+
+    Once patched, the wrapper's forward is invoked on every call whether or not it
+    fuses — `fused_experts_lora_forward` short-circuits to the reference path under
+    `training`. Counting the wrapper therefore reports "it ran" in cases where the
+    kernel never executed, which is how this file previously drew the wrong
+    conclusion about train mode."""
+    import nf4_grouped
+    calls = {"n": 0}
+    real = nf4_grouped.gemm_4bit_grouped
+
+    def counting(*a, **kw):
+        calls["n"] += 1
+        return real(*a, **kw)
+
+    nf4_grouped.gemm_4bit_grouped = counting
+    return calls, (lambda: setattr(nf4_grouped, "gemm_4bit_grouped", real))
+
+
+def test_a_trained_adapter_still_fuses_through_the_wrapper():
+    """Regression for a warning that outlived its design.
+
+    `enable_fast` used to patch the BASE, which a trained adapter made unreachable —
+    `_delegate_to_base` requires a provably-zero adapter — so it warned "these patches
+    will never run". It now patches the WRAPPER, whose fused forward applies the
+    low-rank delta on the expert-sorted rows, so a trained adapter fuses like any
+    other. The warning was removed; this pins the behaviour that replaced it."""
     mod = _wrapped()
     with torch.no_grad():
         mod.gate_up_lora_B.normal_(std=0.02)
     mod._delegate_ok = None
     assert mod._adapter_is_zero() is False
+
+    x, idx, w = _route(mod)
+    with torch.no_grad():
+        ref = mod(x, idx, w).float().cpu()
+
+    calls, restore = _count_kernel()
+    try:
+        assert enable_fast(mod) == 1
+        assert hasattr(mod, "_e4b_fast_ref"), "the WRAPPER should be patched"
+        assert not hasattr(mod.base, "_e4b_fast_ref"), "the base should be skipped"
+        with torch.no_grad():
+            got = mod(x, idx, w).float().cpu()
+        assert calls["n"] > 0, "fused kernel never ran with a trained adapter"
+        rel = (ref - got).abs().max() / got.abs().max().clamp_min(1e-3)
+        assert rel < 5e-2, f"fused output diverged from the reference: {rel}"
+    finally:
+        restore()
+        disable_fast(mod)
+
+
+def test_train_mode_warns_and_the_kernel_really_does_not_run():
+    """The surviving warning, asserted on the KERNEL rather than on the wrapper.
+
+    `fused_experts_lora_forward` returns the reference path while `training` is set,
+    to preserve the summation order a reentrant-checkpoint recompute reproduces. So
+    the fused kernel genuinely does not execute, and the warning is earned."""
+    mod = _wrapped().train()
     with warnings.catch_warnings(record=True) as rec:
         warnings.simplefilter("always")
-        enable_fast(mod)                        # walk the wrapper, find the base
-    disable_fast(mod.base)
-    assert any("never run" in str(r.message) for r in rec), \
-        "enable_fast reported a patch count without warning it is unreachable"
+        enable_fast(mod)
+    assert any("TRAINING mode" in str(r.message) for r in rec), \
+        "no warning that train mode bypasses the fused path"
+
+    calls, restore = _count_kernel()
+    try:
+        x, idx, w = _route(mod)
+        with torch.no_grad():
+            mod(x, idx, w)
+        assert calls["n"] == 0, \
+            f"the warning says the kernel is bypassed in train mode, but it ran ({calls['n']}x)"
+    finally:
+        restore()
+        disable_fast(mod)
 
 
 def test_delegation_verdict_is_invalidated_by_loading_an_adapter():

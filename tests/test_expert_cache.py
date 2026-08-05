@@ -110,4 +110,9 @@ def test_cache_evicts_and_stays_correct_under_pressure():
         for _ in range(3):
             got = cached(hs, idx, wts)
     assert torch.equal(got, want), "eviction produced wrong bytes"
-    assert len(pool._map) <= 2, "pool exceeded its slot budget"
+    # Ask the group for its own aggregate rather than a pool's private `_map`:
+    # `enable_expert_cache` returns a _PoolGroup, which holds the per-layer pools and
+    # never had a `_map` of its own, so this assertion had been raising AttributeError
+    # instead of checking the budget it was written for.
+    assert pool.resident <= pool.slots, \
+        f"pool exceeded its slot budget: {pool.resident} resident in {pool.slots} slots"
