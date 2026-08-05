@@ -1,5 +1,84 @@
 # Changelog
 
+## 0.10.0 — 2026-08-05
+
+**The residency engine was unreachable for every model the streaming loader produces.**
+`enable_pipelined_residency` raised `NotImplementedError` the moment every `ExpertsNbit`
+under the model was an `ExpertsLoRA.base` — which is every model
+`load_moe_4bit_streaming` returns, i.e. the path most callers take. The composition it
+needed already existed and went unused: `ExpertsLoRA._delegate_to_base` hands the whole
+forward to the base when an engine is attached and the adapter provably contributes
+nothing (`B` is zero-initialised, so an untrained adapter is *identically* zero), and it
+already checked for this engine's own `_e4b_pipe_ref` marker. Only the patch site was
+missing.
+
+`target_modules()` now includes `ExpertsLoRA` bases. Membership means "targetable and
+index-bearing", not "reachable by every engine" — the deprecated v0 `enable_hot_residency`
+is not delegated to and still skips them, consuming its `hot_sets` entry. `ExpertsLoRA(r=0)`
+raises a `ValueError` naming the supported way to get a zero delta, instead of dying on
+`alpha / r` with a bare `ZeroDivisionError`.
+
+Two silent-failure modes were fixed alongside it. `enable_mxfp4_nvme_residency` refused
+wrapped bases via `isinstance(m, ExpertsLoRA)` over a list that only ever held
+`ExpertsNbit`, so the check could never fire. And `enable_pipelined_residency` now WARNS
+when a patch installs but cannot run (train mode, or a non-zero adapter) rather than
+returning a count that implies work — a residency split that never executes reproduces the
+unsplit reference exactly, so a dead patch scores a perfect zero and reads as a pass.
+
+**`dispatched_modules()`** (new, exported) closes the footgun the above created. Hook what
+is CALLED, not what is patched: a wrapped base is not called until an engine is attached,
+so a `register_forward_pre_hook` on one fires zero times. The usual reason to hook these
+modules is to build a routing histogram for an informed hot set — and that calibration pass
+runs before the engine exists, by construction. Zero counts make `topk` return `0..K-1`, so
+"informed" silently becomes the by-index set it exists to beat. It fails as a plausible
+null, not as an error; it did exactly that once before the helper existed.
+
+**Hot experts are now read in place.** The hot stack and the k-slot store were separate
+allocations, so a hot hit still paid a device-to-device row copy before the GEMM could read
+it. One shared `[n_hot + k, row_bytes]` store lets the GEMM address a resident row directly.
+`sizes` stays the host constant `[1]*k`, still one GEMM launch, and the hot/cold decision
+stays device-side — the fixed-shape, zero-host-sync decode loop is untouched. OLMoE-1B-7B on
+an A2000, 7 interleaved reps x 96 tokens:
+
+| hot set | before | after | delta | p | gather MB/tok |
+|---|---:|---:|---:|---:|---|
+| none (pure stream) | 11.77 | 11.78 | +0.1% | 0.225 | 418.4 -> 418.4 |
+| by index | 13.29 | 13.37 | +0.7% | 0.025 | 418.4 -> 356.9 |
+| informed | 16.51 | **16.83** | **+1.9%** | 0.025 | 418.4 -> **263.5** |
+
+**The byte count that motivated that change overstated it, and the correction is the more
+useful result.** The re-copy was 48.5% of all gather traffic on granite, which read as a
+large lever. It is not: that copy runs at HBM bandwidth (~5 us/expert), while the PCIe cold
+reads are what bind — so removing 37% of gather BYTES bought 1.9% of TIME. They were the
+cheap bytes. A first version also cost -0.7% (p=0.013) on pure streaming, where an empty hot
+set has nothing to gain but the new per-fetch row dispatch ran anyway; guarded on `n_hot`,
+after which the change is non-negative on every config measured.
+
+**Informed hot sets are a property of the model, not just the host.**
+`docs/RESIDENCY-ENGINES.md` attributed the size of the gain to the host. Holding the host
+fixed at one A2000: OLMoE-1B-7B gains **+24.2% (p=0.002)** from an informed hot set over a
+by-index one, and granite-3.0-1b-a400m gains **nothing** (+0.7%/+1.4%/-1.0% across three
+runs, never significant) — despite coverage working exactly as designed there (49.7% of
+routed slots vs 24.5%, a real 2.0x skew, and a 46% cut in cold traffic). Reads have to bind
+before coverage converts, and on a 1.3B model at ~4.2 GB/s they do not.
+`bench/bench_hotsets_ab.py` measures this per (model, host) instead of assuming it.
+
+**`quantize_layers`** (loader, #63) restricts 4-bit quantization to a subset of MoE layers,
+reusing the loop's existing skip semantics so no new code path appears; `None` preserves
+current behaviour bit-for-bit. Motivation is measurement rather than serving: the
+KL-vs-knowledge work bounded the churn-to-destruction transition to somewhere in
+2.2e-02 .. 1.41e-01 KL but could not locate it, because no quantization scheme lands in that
+gap.
+
+**KL-from-reference fidelity instrument** (`bench/kl_fidelity.py`, `bench/kl_paths.py`,
+`bench/kl_ikp.py`, `bench/kl_sweep.py`) with K0 control receipts gating every measurement,
+a committed 200-prompt set, and a path table where every row names its reference. Its
+tier-transition row — 544 GB streamed from host DRAM against an all-resident reference,
+**KL exactly 0.000 over 6,813 tokens, top-1 1.000000** — is the row this release's residency
+fix unblocked. That row now carries a mandatory execution witness: its expectation is 0.000,
+and an engine that never ran satisfies it perfectly, so the test side must stream nonzero
+cold bytes and the reference side must stream none.
+
 ## 0.9.0 — 2026-08-01
 
 **The trainer ran at batch size 1.** Its inner loop put one variable-length row through each
