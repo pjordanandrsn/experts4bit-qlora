@@ -206,3 +206,29 @@ def test_dgrad_backward_matches_the_loop_backward():
     rel = ((kern.float() - loop.float()).norm() / loop.float().norm()).item()
     assert rel < 1.5e-2, f"dgrad backward diverged from the loop: {rel:.3e}"
     assert rel > 0.0, "identical to the loop — the opt-in did not reach the kernel"
+
+
+def test_reenable_with_a_different_dgrad_setting_says_so():
+    """Re-enabling with a different `dgrad` used to be a silent no-op.
+
+    `enable_fast_train` skips modules it has already patched, so the natural move
+    after upgrading grouped-nf4-gemm — call it again with dgrad=True — returned 0
+    patched and left the decode-loop backward running, saying nothing. Re-patching
+    in place would capture our own forward as the reference, so the fix is to be
+    loud about it rather than to silently succeed or silently do nothing.
+    """
+    from experts4bit_qlora import disable_fast_train, enable_fast_train
+
+    mod, *_ = _v4_lora(seed=6, limit=LIMIT)
+    mod.train()
+    if enable_fast_train(mod, dgrad=False) == 0:
+        pytest.skip("enable_fast_train declined this module")
+    with pytest.warns(RuntimeWarning, match="disable_fast_train first"):
+        assert enable_fast_train(mod, dgrad=True) == 0
+    assert mod._e4b_dgrad is False, "flag changed without re-patching"
+    # Same setting twice is not a mismatch and must stay quiet.
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert enable_fast_train(mod, dgrad=False) == 0
+    disable_fast_train(mod)

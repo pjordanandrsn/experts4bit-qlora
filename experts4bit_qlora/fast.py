@@ -579,7 +579,22 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     patched = 0
     for mod in model.modules():
-        if isinstance(mod, ExpertsLoRA) and not hasattr(mod, "_e4b_train_ref"):
+        if isinstance(mod, ExpertsLoRA) and hasattr(mod, "_e4b_train_ref"):
+            # Already patched. The loop below would skip it silently, so a second
+            # call asking for a DIFFERENT backward — the natural thing to do after
+            # upgrading grouped-nf4-gemm — would return 0 patched and leave the
+            # decode loop running, with nothing said. Re-patching in place would
+            # capture our own forward as the reference, so say what to do instead.
+            if getattr(mod, "_e4b_dgrad", False) != dgrad:
+                import warnings
+                warnings.warn(
+                    f"[e4b.fast] enable_fast_train(dgrad={dgrad}) on a module already "
+                    f"patched with dgrad={getattr(mod, '_e4b_dgrad', False)}: the "
+                    "existing patch is kept and the flag is NOT applied. Call "
+                    "disable_fast_train first to change the backward.",
+                    RuntimeWarning, stacklevel=2)
+            continue
+        if isinstance(mod, ExpertsLoRA):
             # The kernel-free batched path patches the same forward. Patching over it
             # would capture ITS forward as this one's reference, so a later
             # disable_batched_train could not unwind and disable_fast_train would
