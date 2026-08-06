@@ -102,6 +102,25 @@ and the dgrad lane does it at **2.87x** the reference's real-data step rate. The
 visible before any optimizer step; consistent with the truth-arm finding that each lane is
 its own valid bf16 rounding.
 
+## sm_120 (Blackwell) verification — [receipt](sm120_pro4500_sweep.json)
+
+Every number above is sm_86. Verified on an RTX PRO 4500 Blackwell (`capability (12, 0)`
+— same arch as the RTX 5090 the #38 contributor runs; B200/B300 are sm_100, a different
+one): gnf4's kernel tests at the `v0.7.0` tag **66 passed**
+([log](sm120_gnf4_tests.log)), e4b's parity contract + batched + V4 suites at `v0.11.0`
+**29 passed** ([log](sm120_e4b_tests.log)), and the full tile sweep:
+
+| shape | dgrad (default cfg) | oracle loop | speedup | fwd ceiling | relerr |
+|---|---|---|---|---|---|
+| gate_up E=256 | 0.83 ms | 55.7 ms | **67x** | 0.91 ms | 3.21e-03 |
+| down E=256 | 0.48 ms | 48.9 ms | **103x** | 0.57 ms | 2.61e-03 |
+
+`_DGRAD_DEFAULT` (tuned on sm_86) **holds on sm_120** — the swept best on both shapes is
+within timing noise of the default, and every config produced identical output. The
+speedup over the Python loop is far larger than on sm_86 (67–103x vs 10–26x): the faster
+the card, the more the loop's launch overhead dominates, which is the whole thesis of the
+kernel. dgrad again runs at ~0.9x of the forward kernel's time.
+
 ## Cost
 
 Two pods, ~30 min total: A5000 $0.27/hr + A6000 $0.33/hr ≈ **$0.30 all-in**. Both
