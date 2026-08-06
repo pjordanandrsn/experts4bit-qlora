@@ -80,6 +80,11 @@ from .fast import (  # noqa: E402
     enable_fast_train,
     fast_available,
 )
+from .batched import (  # noqa: E402
+    batched_train_available,
+    disable_batched_train,
+    enable_batched_train,
+)
 from .cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
 from .hot_residency import (  # noqa: E402
     disable_hot_residency,
@@ -143,6 +148,9 @@ __all__ = [
     "report_offload_environment",
     "reset_offload_stats",
     "enable_fast_train",
+    "enable_batched_train",
+    "disable_batched_train",
+    "batched_train_available",
     "disable_fast_train",
     "enable_dense_offload",
     "dense_offload_report",
