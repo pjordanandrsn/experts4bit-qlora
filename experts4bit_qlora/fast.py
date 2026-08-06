@@ -546,9 +546,11 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     the first, because it is a second numerics change: the loop decodes with the
     same oracle the reference uses and is EXACT, the kernel accumulates fp32 in a
     different order and lands near 2.9e-3 -- inside the bf16 budget, not zero.
-    Layer-composed fidelity is unmeasured; this repo has seen a per-op-better path
-    cost +0.023% perplexity through 16 layers, so gate a real run on your own
-    parity check.
+    Layer-composed fidelity is MEASURED (bench/dgrad-gate/): at 48 layers on
+    Qwen3-30B-A3B, dgrad=True adds nothing to this lane's composed gradient error
+    (4.97e-2 -> 4.99e-2 mean vs the reference) and is the fastest option at
+    real width (2.52x, vs 1.72x without). The error this lane carries is the
+    FORWARD fusion's, present with or without this flag.
 
     Requested but unsupported (``grouped-nf4-gemm`` older than 0.7.0) it is turned
     OFF with a warning rather than raising from inside a forward.
