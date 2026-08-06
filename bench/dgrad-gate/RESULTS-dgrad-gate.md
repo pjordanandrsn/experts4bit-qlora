@@ -82,6 +82,26 @@ fastest real-scale option at 2.52x. The README guidance shipped on 2026-08-06 mo
 ("VRAM to spare → `enable_batched_train`") was wrong at the scale people actually train,
 and was corrected in the same PR that adds this file.
 
+## Real-data trajectory gate (same day, [receipt](traj_20step_alpaca_a6000.json), driver [`traj_gate.py`](traj_gate.py))
+
+The complementary instrument to step-0 gradient parity: 20 optimizer steps on Alpaca
+(the dataset METHODOLOGY's own eval uses), held-out slice the optimizer never sees, one
+load, adapter restore between arms. Band: train median |Δ| ≤ 0.05, per the fused-train
+gate. Qwen3-30B-A3B, 48 layers, A6000:
+
+| arm | s/step | eval before → after | Δeval vs ref | train med Δ | verdict |
+|---|---|---|---|---|---|
+| reference | 9.91 | 2.5550 → 1.6097 | — | — | — |
+| `fast_train_dgrad` | **3.46** | 2.5437 → 1.5913 | −0.0185 | 0.0159 | **PASS** |
+| `batched` | 9.04 | 2.5533 → 1.5872 | −0.0225 | 0.0169 | **PASS** |
+
+Both accelerated lanes train equivalently on real text — held-out eval lands marginally
+*better* than the reference (within noise), train-loss deltas sit at a third of the band —
+and the dgrad lane does it at **2.87x** the reference's real-data step rate. The
+`eval before` spread (±0.011) is the forward-path rounding difference between lanes,
+visible before any optimizer step; consistent with the truth-arm finding that each lane is
+its own valid bf16 rounding.
+
 ## Cost
 
 Two pods, ~30 min total: A5000 $0.27/hr + A6000 $0.33/hr ≈ **$0.30 all-in**. Both
