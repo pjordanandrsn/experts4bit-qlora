@@ -54,7 +54,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
 # --no-deps is LOAD-BEARING: without it pip resolves gnf4's deps and pulls a newer
 # torch from PyPI (built for CUDA 13) OVER the pinned 2.6.0+cu124 — the container
 # then fails CUDA init on any 12.x driver ("driver too old, found 12090").
-RUN python3.11 -m pip install --no-cache-dir --no-deps grouped-nf4-gemm==0.6.0
+RUN python3.11 -m pip install --no-cache-dir --no-deps grouped-nf4-gemm==0.7.1
 
 COPY . /app
 # Non-editable: this build backend has no PEP-660 editable hook (pip: "build backend is
