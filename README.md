@@ -341,15 +341,15 @@ Moved to **[docs/BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-q
 ## Provenance & audits
 
 Every measured number above traces to a committed script/test and a named host, with receipts
-under [`bench/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.10.0/bench) and
-[`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.10.0/docs) — cited inline at
+under [`bench/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.11.0/bench) and
+[`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.11.0/docs) — cited inline at
 each claim. **Scope note (2026-07-28):** [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.11.0/PROVENANCE.md)
 is the OpenTimestamps-anchored record for the **v0.2.0** convergence result specifically; the
 0.5.0–0.6.3 additions (fused kernel, hot-set residency, gpt-oss, storage modes) are receipted in
 `bench/` and `docs/`, not in that file. It is OpenTimestamps-anchored: `ots verify
 PROVENANCE.md.ots PROVENANCE.md` checks the on-disk bytes against the calendar proof, the footer
 carries the hash-chain of prior revisions, and superseded proofs are retained in
-[`.ots-history/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.10.0/.ots-history/). Falsification work lives under [`audits/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.10.0/audits/) — most
+[`.ots-history/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.11.0/.ots-history/). Falsification work lives under [`audits/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.11.0/audits/) — most
 recently the audit of unsloth-zoo's MoE-4bit fix that produced unsloth-zoo#849/#850
 ([`audits/unsloth-zoo-4032/REPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.11.0/audits/unsloth-zoo-4032/REPORT.md)).
 
