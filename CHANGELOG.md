@@ -1,6 +1,59 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 — 2026-08-06
+
+**`enable_batched_train` — a kernel-free batched training path.** Training
+without `grouped-nf4-gemm` fell back to `ExpertsLoRA.forward`'s per-expert Python
+loop: ~10k sync-gated iterations per forward at 256 experts over 40 layers, with
+the GPU idle through most of it. That extra has to build and is arch-gated, so it
+is not a rare configuration.
+
+Experts are frozen, so the decoded stack is a constant w.r.t. autograd — and it
+comes out of ONE `dequantize_4bit` call, because `_quantize_stack` uses
+`compress_statistics=False` and the constructor refuses straddling shapes, making
+the flattened absmax an exact concatenation. Verified **bit-identical** to the
+per-expert loop and pinned as a test, since a future double-quant would break it
+silently. Measured 32x against the per-expert decode at E=256.
+
+One training step, E=256, 512 tokens, top_k 8, hidden 512, RTX A2000:
+
+| path | step | vs loop | peak |
+|---|---|---|---|
+| reference per-expert loop | 601.2 ms | 1.00x | 59 MB |
+| `enable_fast_train` | 132.6 ms | 4.53x | 108 MB |
+| `enable_batched_train` | 25.0 ms | 24.01x | 417 MB |
+
+Faster than the kernel lane it was written to fall back *from* — and it spends
+peak memory to get there, materializing a stack where the kernel lane holds one
+expert. At production width that trade is ~1.6 GB per layer against a few MB, so
+**the kernel lane stays the answer under offload or VRAM pressure**. The two are
+mutually exclusive and each refuses to patch over the other.
+
+The approach is [@jiwoon-ahn](https://github.com/jiwoon-ahn)'s, from #38. Two
+differences from the design proposed there: the backward re-decodes rather than
+letting autograd save the stack, so gradient checkpointing is an option rather
+than a precondition; and the LoRA delta is a padded double-`bmm`, so expert-LoRA
+trains and the package default `TRAIN_EXPERTS=1` works.
+
+**`enable_fast_train(..., dgrad=True)`** routes the fused lane's *backward*
+through `grouped-nf4-gemm >= 0.7.0`'s single-launch dgrad kernel instead of its
+per-expert decode loop, which measured 78-84% of a training step. A second opt-in
+rather than part of the first, because it is a second numerics change: the loop is
+exact, the kernel lands near 2.9e-3. Requested against an older kernel package it
+turns off with a warning rather than raising from inside a forward.
+
+**A parity contract for training paths** (`tests/test_fused_train_parity.py`).
+Gradient *values* through the `ExpertsLoRA` composition were unverified —
+`enable_fast_train` was covered by a forward comparison plus
+`grad is not None`. A backward wrong by a constant factor still trains and still
+descends, and nothing raises. Both lanes now satisfy one contract: forward,
+`dL/dx`, and `dL/d` every LoRA parameter against the reference. Tolerances are
+measured, not fitted, and a control proves the contract rejects a 1% scaling
+error that forward parity alone passes.
+
+**Fixed: `fast.py`'s module header described the whole module as inference-only.**
+The paragraph predated `enable_fast_train`, which lives in the same file. It was
+quoted back at us in #38 as evidence the package had no training accelerator.
 
 **Untied output heads on multimodal checkpoints were silently tied to `embed_tokens`**
 (#37). `load_moe_4bit_streaming` builds the text tower by keeping only keys under the
