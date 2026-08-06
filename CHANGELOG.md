@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.11.1 — 2026-08-06
+
+Docs-and-tests patch. The PyPI page for 0.11.0 froze training-path guidance that
+same-day measurement falsified; this ships the corrected long_description plus the
+receipts and one new test. No functional code changes.
+
+- **The 24x was a toy-shape artifact, and the guidance is corrected.** 0.11.0's README
+  recommended `enable_batched_train` for "VRAM to spare" on an A2000 microbench (hidden
+  512) where it measures 24x. At Qwen3-30B-A3B/48-layer width it is **1.05x at the
+  highest peak memory of any lane**, while `enable_fast_train(dgrad=True)` is fastest at
+  **2.52x**. The README now defaults to the latter and positions `enable_batched_train`
+  as the no-extras fallback it actually is. `batched.py`'s docstring — which predicted a
+  bigger card "should narrow this" — carries the measured reversal.
+- **The dgrad fidelity caveat is retired by measurement** (`bench/dgrad-gate/`, published
+  wheels, 16 + 48 layers): dgrad adds nothing to composed gradient error; an fp32-truth
+  arm shows every lane — the reference loop included — on the composed bf16 noise floor
+  (vs-reference divergence is rounding *similarity*, not accuracy); a 20-step real-data
+  trajectory gate passes at a third of its band, with dgrad at **2.87x** the reference's
+  real-data step rate; sm_120 (RTX PRO 4500 Blackwell) runs all 95 release-tag tests
+  clean with the sm_86-tuned tile default holding.
+- **New test:** DeepSeek-V4's clamped SwiGLU pinned through the batched path
+  (`test_batched_train.py`) — the one epilogue composition nothing covered.
+- **Credit** for the `enable_batched_train` approach (@jiwoon-ahn, #38) now appears in
+  the README, not only the docstring/CHANGELOG.
+
 ## 0.11.0 — 2026-08-06
 
 **`enable_batched_train` — a kernel-free batched training path.** Training
