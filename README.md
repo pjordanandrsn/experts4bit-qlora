@@ -85,7 +85,8 @@ not your model. Reasoning, caveats and requirements for each: **[docs/CHOOSING.m
 | what ran out | call | needs |
 |---|---|---|
 | nothing — just train a fused-MoE | `load_moe_4bit_streaming(...)` | `[train]` |
-| each step is slow | `enable_fast_train(model)` | `[fast]` |
+| each step is slow, VRAM to spare | `enable_batched_train(model)` | — |
+| each step is slow, VRAM is tight | `enable_fast_train(model)` | `[fast]` |
 | the experts do not fit VRAM | `load_moe_4bit_streaming(..., offload=True)` | — |
 | the experts do not fit host RAM | `enable_nvme_residency(...)` | `[fast]` + arena |
 | ...and they are native MXFP4 | `enable_mxfp4_nvme_residency(...)` | `[fast]` + arena |
@@ -96,11 +97,51 @@ not your model. Reasoning, caveats and requirements for each: **[docs/CHOOSING.m
 | small GPU, strong CPU | `enable_cold_engine(model, hot_sets, dequant="auto")` | — |
 
 ```python
-from experts4bit_qlora import enable_fast, enable_fast_train
+from experts4bit_qlora import enable_fast, enable_batched_train, enable_fast_train
 
-n = enable_fast(model)        # inference; returns modules patched
-n = enable_fast_train(model)  # training; assert n > 0 or you are on the reference path
+n = enable_fast(model)           # inference; returns modules patched
+n = enable_batched_train(model)  # training, no extras; assert n > 0
+n = enable_fast_train(model)     # training via [fast]; assert n > 0 or you are on the loop
 ```
+
+**Assert the return.** `0` and "silently still on the per-expert loop" look identical from
+the caller's side, and the loop is what these exist to escape: ~10k sync-gated iterations
+per forward at 256 experts over 40 layers.
+
+#### Which training path?
+
+Both replace that loop. They differ in what they spend. One step, E=256, 512 tokens,
+top_k 8, hidden 512, inter 768, RTX A2000:
+
+| | step | vs loop | peak |
+|---|---|---|---|
+| reference per-expert loop | 601.2 ms | 1.00x | 59 MB |
+| `enable_fast_train(model)` | 132.6 ms | 4.53x | 108 MB |
+| `enable_fast_train(model, dgrad=True)` | ~26 ms | ~23x | ~134 MB |
+| `enable_batched_train(model)` | 25.0 ms | 24.01x | 417 MB |
+
+`enable_batched_train` needs no extras — pure torch plus the bitsandbytes this package
+already requires — and buys its speed with peak memory, materializing a decoded expert
+stack where the `[fast]` lane holds one expert at a time. Here that is 417 MB against 108;
+at production width (256 experts, hidden 2048) the same trade is ~1.6 GB per layer against
+a few MB. **Under offload, or when VRAM is the binding constraint, take the `[fast]` lane.**
+Take the batched one otherwise, or when `grouped-nf4-gemm` will not build for your arch.
+
+They are mutually exclusive and each refuses to patch over the other; call the matching
+`disable_*` to switch.
+
+`dgrad=True` (needs `grouped-nf4-gemm >= 0.7.0`) additionally routes the `[fast]` lane's
+*backward* through a single-launch dgrad kernel instead of its per-expert decode loop,
+which measured 78–84% of a training step. It materializes nothing, so it closes most of the
+speed gap without the memory. Requested against an older kernel package it turns off with a
+warning rather than raising.
+
+> **Numerics.** Both paths sum experts in group-sorted rather than ascending-expert-id
+> order (ulp-level), and `dgrad=True` adds a second change: the decode loop it replaces is
+> *exact*, the kernel lands near 2.9e-3 — inside the bf16 budget, not zero. Layer-composed
+> fidelity of `dgrad=True` is **unmeasured**; a path that measured better per-op has cost
+> +0.023% perplexity through 16 layers here before. Gate a real run on your own parity
+> check.
 
 **Picking the hot sets is the single largest lever**, and by-index is not a choice:
 frequency-ranked sets beat index-ordered ones by **+37.1%** at identical VRAM on
