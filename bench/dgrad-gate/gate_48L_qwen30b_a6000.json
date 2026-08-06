@@ -1,0 +1,114 @@
+{
+ "model": "Qwen/Qwen3-30B-A3B",
+ "steps": 8,
+ "seq": 512,
+ "layers": 48,
+ "trainable_params": 314572800,
+ "offload": false,
+ "env": {
+  "gpu": "NVIDIA RTX A6000",
+  "cap": [
+   8,
+   6
+  ],
+  "vram_total_gb": 47.53,
+  "torch": "2.8.0+cu128",
+  "e4b": "0.11.0",
+  "gnf4_has_dgrad": true
+ },
+ "frozen_tensors_hashed": 192,
+ "frozen_bytes_hashed": 16307453952,
+ "control_detects_flipped_byte": true,
+ "arms": {
+  "reference": {
+   "arm": "reference",
+   "n_patched": 0,
+   "losses": [
+    13.045049667358398,
+    12.715713500976562,
+    12.388864517211914,
+    12.359670639038086,
+    12.410109519958496,
+    12.234728813171387,
+    12.27259635925293,
+    12.20716667175293
+   ],
+   "s_per_step": 12.781,
+   "train_peak_gb": 23.13,
+   "frozen_changed": 0,
+   "frozen_changed_sample": []
+  },
+  "fast_train": {
+   "arm": "fast_train",
+   "n_patched": 48,
+   "losses": [
+    13.044889450073242,
+    12.709895133972168,
+    12.390464782714844,
+    12.35854721069336,
+    12.410639762878418,
+    12.236523628234863,
+    12.27486515045166,
+    12.207667350769043
+   ],
+   "s_per_step": 7.42,
+   "train_peak_gb": 24.31,
+   "frozen_changed": 0,
+   "frozen_changed_sample": [],
+   "grad_rel_worst": 0.203525651115841,
+   "grad_rel_mean": 0.0497272144278705,
+   "grad_tensors_compared": 192,
+   "grad_rel_worst_tensor": "model.layers.8.mlp.experts.gate_up_lora_B",
+   "loss_median_abs_delta": 0.0016002655029296875,
+   "loss_max_abs_delta": 0.005818367004394531
+  },
+  "fast_train_dgrad": {
+   "arm": "fast_train_dgrad",
+   "n_patched": 48,
+   "losses": [
+    13.044889450073242,
+    12.716306686401367,
+    12.385293960571289,
+    12.357220649719238,
+    12.4130859375,
+    12.23403263092041,
+    12.272772789001465,
+    12.206071853637695
+   ],
+   "s_per_step": 5.075,
+   "train_peak_gb": 25.51,
+   "frozen_changed": 0,
+   "frozen_changed_sample": [],
+   "grad_rel_worst": 0.20344431550249564,
+   "grad_rel_mean": 0.049860349977912145,
+   "grad_tensors_compared": 192,
+   "grad_rel_worst_tensor": "model.layers.8.mlp.experts.gate_up_lora_B",
+   "loss_median_abs_delta": 0.001094818115234375,
+   "loss_max_abs_delta": 0.003570556640625
+  },
+  "batched": {
+   "arm": "batched",
+   "n_patched": 48,
+   "losses": [
+    13.045049667358398,
+    12.717389106750488,
+    12.390436172485352,
+    12.362523078918457,
+    12.40876293182373,
+    12.231305122375488,
+    12.270109176635742,
+    12.206372261047363
+   ],
+   "s_per_step": 12.219,
+   "train_peak_gb": 26.71,
+   "frozen_changed": 0,
+   "frozen_changed_sample": [],
+   "grad_rel_worst": 0.030161512985509023,
+   "grad_rel_mean": 0.0037862952831916176,
+   "grad_tensors_compared": 192,
+   "grad_rel_worst_tensor": "model.layers.2.mlp.experts.gate_up_lora_B",
+   "loss_median_abs_delta": 0.0016756057739257812,
+   "loss_max_abs_delta": 0.0034236907958984375
+  }
+ }
+}
