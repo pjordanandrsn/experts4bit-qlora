@@ -47,7 +47,9 @@ services:
       memlock: -1
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8777/health"]
+      # 200-with-error-body is how a failed model load presents: curl -f alone
+      # called that healthy for 2.6 days (2026-08-06). Require ok|busy in the body.
+      test: ["CMD-SHELL", 'curl -fsS http://localhost:8777/health | grep -qE "\"status\":\"(ok|busy|ready)\""']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -98,7 +100,9 @@ services:
       memlock: -1  # ~15 GB of 4-bit experts must pin (see the note on the primary service)
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8781/health"]
+      # 200-with-error-body is how a failed model load presents: curl -f alone
+      # called that healthy for 2.6 days (2026-08-06). Require ok|busy in the body.
+      test: ["CMD-SHELL", 'curl -fsS http://localhost:8781/health | grep -qE "\"status\":\"(ok|busy|ready)\""']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -143,7 +147,9 @@ services:
       memlock: -1
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8783/health"]
+      # 200-with-error-body is how a failed model load presents: curl -f alone
+      # called that healthy for 2.6 days (2026-08-06). Require ok|busy in the body.
+      test: ["CMD-SHELL", 'curl -fsS http://localhost:8783/health | grep -qE "\"status\":\"(ok|busy|ready)\""']
       interval: 30s
       timeout: 5s
       retries: 3
