@@ -120,7 +120,12 @@ top_k 8, hidden 512, inter 768, RTX A2000:
 | `enable_fast_train(model, dgrad=True)` | ~26 ms | ~23x | ~134 MB |
 | `enable_batched_train(model)` | 25.0 ms | 24.01x | 417 MB |
 
-`enable_batched_train` needs no extras — pure torch plus the bitsandbytes this package
+`enable_batched_train` exists because [@jiwoon-ahn](https://github.com/jiwoon-ahn) proposed
+the approach in [#38](https://github.com/pjordanandrsn/experts4bit-qlora/issues/38) — batch
+the frozen expert projections with a single whole-stack dequant, sort token/expert pairs,
+run the groups as `bmm`s — with measurements and a working implementation.
+
+It needs no extras — pure torch plus the bitsandbytes this package
 already requires — and buys its speed with peak memory, materializing a decoded expert
 stack where the `[fast]` lane holds one expert at a time. Here that is 417 MB against 108;
 at production width (256 experts, hidden 2048) the same trade is ~1.6 GB per layer against
