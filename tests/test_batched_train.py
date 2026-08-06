@@ -230,3 +230,38 @@ def test_empty_batch_matches_the_reference():
     got = mod(hs, idx, wts)
     assert got.shape == ref.shape == (0, HID)
     assert torch.equal(got, ref)
+
+
+def test_batched_path_keeps_the_v4_clamps():
+    """DeepSeek-V4's clamped SwiGLU through the BATCHED path.
+
+    test_fast_v4.py pins the clamps for both fused paths; nothing pinned them for
+    batched_experts_train_forward. It reaches the epilogue via the same `_epilogue`
+    hook, so it SHOULD be right — but "should via shared hook" is how the fused
+    training path shipped with no eligibility gate at all, and an unclamped SwiGLU
+    here trains a function the frozen base does not compute.
+    """
+    if not torch.cuda.is_available():
+        pytest.skip("V4 fixture is CUDA-only")
+    import pathlib
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).parent))
+    from test_fast_v4 import LIMIT, TOL, _b_rel, _v4_lora
+
+    mod, x, idx, w = _v4_lora(seed=7, limit=LIMIT)
+    unclamped, *_ = _v4_lora(seed=7, limit=0.0)
+    mod.train()
+    unclamped.train()
+    ref = mod(x, idx, w)
+    ref_noclamp = unclamped(x, idx, w)
+    assert _b_rel(ref, ref_noclamp) > 10 * TOL, "clamp barely binds — fixture invalid"
+
+    assert enable_batched_train(mod) == 1, "batched path declined the V4 module"
+    got = mod(x, idx, w)
+    assert got.requires_grad, "batched training path must stay differentiable"
+    assert _b_rel(got, ref) < TOL, f"diverged from the clamped reference: {_b_rel(got, ref)}"
+    assert _b_rel(got, ref_noclamp) > 10 * TOL, "batched path served UNCLAMPED SwiGLU"
+    got.float().sum().backward()
+    assert mod.gate_up_lora_A.grad is not None
+    disable_batched_train(mod)
