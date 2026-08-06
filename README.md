@@ -142,17 +142,17 @@ through a single-launch dgrad kernel instead of its per-expert decode loop, whic
 78–84% of a training step. It materializes nothing. Requested against an older kernel
 package it turns off with a warning rather than raising.
 
-> **Numerics, measured at composed scale.** Both paths sum experts in group-sorted rather
-> than ascending-expert-id order. `dgrad=True` adds **no composed gradient error over the
-> lane it extends**: 4.97e-2 → 4.99e-2 mean at 48 layers. The real characterization is
-> between lanes: the `[fast]` lane's composed gradient error vs the reference loop is
-> ~5e-2 at 48 layers where the kernel-free lane's is ~4e-3 — 13x looser, and ~10x what
-> per-module parity suggests. Loss trajectories for every lane sit at ≤0.002 median |Δ|,
-> far inside the 0.05 band the
+> **Numerics, measured at composed scale against fp32 truth.** Both paths sum experts in
+> group-sorted rather than ascending-expert-id order. `dgrad=True` adds **no composed
+> gradient error over the lane it extends** (4.97e-2 → 4.99e-2 mean vs the reference at
+> 48 layers). More importantly, an fp32-compute truth arm over the same NF4 bytes shows
+> **every lane sits on the composed bf16 noise floor** — ~3.4e-2 at 16 layers, ~5.2e-2 at
+> 48, *including the reference loop itself* — with the `[fast]` lane landing closest to
+> truth at 16 layers (2.95e-2 vs the reference's 3.41e-2). Divergence *between* lanes is
+> two valid bf16 roundings drifting apart, not one lane being looser. Loss trajectories
+> for every lane sit at ≤0.003 median |Δ|, far inside the 0.05 band the
 > [fused-train gate](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.11.0/bench/fused-train-gate/RESULTS-fused-train-gate.md)
-> registered. Whether that 5e-2 is *worse than* the reference or merely *different from*
-> it (both being bf16 roundings) is an open question — per-module, the fused path measured
-> closer to fp32 truth than the reference did.
+> registered.
 
 **Picking the hot sets is the single largest lever**, and by-index is not a choice:
 frequency-ranked sets beat index-ordered ones by **+37.1%** at identical VRAM on

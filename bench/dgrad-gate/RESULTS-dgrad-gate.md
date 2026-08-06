@@ -53,10 +53,25 @@ Note the scale against the single-module parity contract
 All loss trajectories sit at ≤0.0020 median |Δ|, far inside the 0.05 band the fused-train
 gate registered, so nothing here indicts any lane for training use.
 
-Open question this does NOT answer: composed error is measured against the bf16
-*reference loop*, not against fp32 truth. Per-module, the fused path measured *closer* to
-truth than the reference; whether the composed 5e-2 is "worse than reference" or merely
-"different from reference, equally far from truth" needs an fp32-compute truth arm.
+**ANSWERED by the truth-arm rerun (same day):** a fifth arm — the reference loop with
+`compute_dtype=fp32` over the same NF4 bytes — scored every bf16 arm against fp32 truth
+([16L receipt](gate_16L_olmoe_truth_a6000.json), [48L receipt](gate_48L_qwen30b_truth_a6000.json)):
+
+| arm | vs bf16 reference | vs fp32 truth (16L) | vs fp32 truth (48L) |
+|---|---|---|---|
+| reference loop | — | 3.41e-02 | 5.18e-02 |
+| `fast_train` | 5.05e-02 | **2.95e-02** | 5.13e-02 |
+| `fast_train_dgrad` | 5.04e-02 | **2.93e-02** | 5.13e-02 |
+| `batched` | 3.71e-03 | 3.41e-02 | 5.18e-02 |
+
+**The "13x looser" framing was a metric artifact.** Against truth, the fused lane is
+*closer* than the reference at 16 layers and equal within 1% at 48. The vs-reference
+metric measures how *similarly an arm rounds to the reference*: the batched path's tiny
+vs-reference number reflects that it shares the reference's dequantize-then-matmul
+structure — same rounding, not more accuracy — while the fused kernel's fp32-in-register
+accumulation rounds differently and lands at least as close to truth. The composed bf16
+noise floor is ~3.4e-2 at 16 layers and ~5.2e-2 at 48, and every lane sits on it.
+No lane is looser than any other in the sense that matters.
 
 **3. The 24x was a toy-shape artifact — the speed ranking inverts at scale.** At the
 A2000 microbench shape (hidden 512), `batched` wins at 24x. At 48-layer/30B width it is
