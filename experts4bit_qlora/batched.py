@@ -18,18 +18,31 @@ reference per-expert loop        601.2      1.00x          59
 this module                       25.0     24.01x         417
 ===========================  ==========  =========  ==========
 
-**Do not read that as "the kernel lane is obsolete."** What it costs is memory:
-this path materializes the whole dequantized expert stack (transiently, once per
-direction), the kernel lane never materializes more than one expert. 417 MB
-against 108 MB here, and the ratio is a property of the stack, so at production
-width — 256 experts, hidden 2048 — the same trade is ~1.6 GB per layer against a
-few MB. Under offload, or on a card where VRAM is the binding constraint, the
-kernel lane is the one that runs at all. Speed is what this buys; memory is what
-it spends.
+**The table above is a MICROBENCH, and its ranking does not survive real width.**
+A prior revision of this docstring predicted a bigger card "should narrow this";
+measured, it did not narrow — it reversed. Qwen3-30B-A3B (48 layers, hidden 2048)
+on an A6000, one training step, from the published wheels
+(``bench/dgrad-gate/RESULTS-dgrad-gate.md``):
 
-Also one GPU and one shape. The A2000 is small and launch overhead dominates it;
-a card where the matmuls themselves are the cost should narrow this. Larger
-hidden sizes are unmeasured here.
+===================================  ==========  =========  ==========
+path                                   s/step      vs loop    peak GB
+===================================  ==========  =========  ==========
+reference per-expert loop               12.781      1.00x      23.13
+``enable_fast_train``                    7.420      1.72x      24.31
+``enable_fast_train(dgrad=True)``        5.075      2.52x      25.51
+this module                             12.219      1.05x      26.71
+===================================  ==========  =========  ==========
+
+At toy width the per-expert Python loop is the cost and batching anything wins;
+at real width the matmuls dominate, and the whole-stack dequant this path pays on
+every forward AND backward stops being amortizable — while also costing the most
+peak memory of any lane. What survives at scale is the one thing the kernel lane
+cannot offer: **no extras**. Reach for this module when ``grouped-nf4-gemm`` will
+not build for your arch; default to ``enable_fast_train(dgrad=True)`` otherwise.
+
+One consolation result: this path's composed gradient error against the reference
+is ~4e-3 at 48 layers where the fused lane's is ~5e-2 — the tightest of the
+accelerated lanes, if fidelity-to-the-reference ever matters more than speed.
 
 **Why batching a frozen expert stack needs no kernel.** The experts are frozen,
 so the dequantized stack is a constant with respect to autograd — there is no

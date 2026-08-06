@@ -85,8 +85,8 @@ not your model. Reasoning, caveats and requirements for each: **[docs/CHOOSING.m
 | what ran out | call | needs |
 |---|---|---|
 | nothing — just train a fused-MoE | `load_moe_4bit_streaming(...)` | `[train]` |
-| each step is slow, VRAM to spare | `enable_batched_train(model)` | — |
-| each step is slow, VRAM is tight | `enable_fast_train(model)` | `[fast]` |
+| each step is slow | `enable_fast_train(model, dgrad=True)` | `[fast]` ≥ 0.7.0 |
+| …and `[fast]` will not build | `enable_batched_train(model)` | — |
 | the experts do not fit VRAM | `load_moe_4bit_streaming(..., offload=True)` | — |
 | the experts do not fit host RAM | `enable_nvme_residency(...)` | `[fast]` + arena |
 | ...and they are native MXFP4 | `enable_mxfp4_nvme_residency(...)` | `[fast]` + arena |
@@ -110,43 +110,49 @@ per forward at 256 experts over 40 layers.
 
 #### Which training path?
 
-Both replace that loop. They differ in what they spend. One step, E=256, 512 tokens,
-top_k 8, hidden 512, inter 768, RTX A2000:
+Both replace that loop, and **the answer depends on scale** — a microbench and a real
+model rank them oppositely. Measured at both, one training step each
+([receipts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/dgrad-gate/RESULTS-dgrad-gate.md)):
 
-| | step | vs loop | peak |
-|---|---|---|---|
-| reference per-expert loop | 601.2 ms | 1.00x | 59 MB |
-| `enable_fast_train(model)` | 132.6 ms | 4.53x | 108 MB |
-| `enable_fast_train(model, dgrad=True)` | ~26 ms | ~23x | ~134 MB |
-| `enable_batched_train(model)` | 25.0 ms | 24.01x | 417 MB |
+| | A2000 microbench (hidden 512, E=256) | Qwen3-30B-A3B, 48 layers, A6000 |
+|---|---|---|
+| `enable_fast_train(model)` | 4.53x | 1.72x |
+| `enable_fast_train(model, dgrad=True)` | ~23x | **2.52x — fastest** |
+| `enable_batched_train(model)` | **24.01x** | 1.05x — no speedup, highest peak |
+
+At toy width the per-expert Python loop is the cost, and batching anything wins. At real
+width the matmuls dominate, and `enable_batched_train`'s whole-stack dequant — paid on
+every forward *and* backward — stops being amortizable, while the `[fast]` kernels read
+packed bytes and keep their edge. **Default to `enable_fast_train(model, dgrad=True)`.**
+Reach for `enable_batched_train` when `grouped-nf4-gemm` will not build for your arch —
+it needs no extras (pure torch plus the bitsandbytes this package already requires) — and
+know that its whole-stack materialization also costs the most peak memory of any lane
+(26.7 GB vs the reference's 23.1 GB on the 30B fixture).
 
 `enable_batched_train` exists because [@jiwoon-ahn](https://github.com/jiwoon-ahn) proposed
 the approach in [#38](https://github.com/pjordanandrsn/experts4bit-qlora/issues/38) — batch
 the frozen expert projections with a single whole-stack dequant, sort token/expert pairs,
 run the groups as `bmm`s — with measurements and a working implementation.
 
-It needs no extras — pure torch plus the bitsandbytes this package
-already requires — and buys its speed with peak memory, materializing a decoded expert
-stack where the `[fast]` lane holds one expert at a time. Here that is 417 MB against 108;
-at production width (256 experts, hidden 2048) the same trade is ~1.6 GB per layer against
-a few MB. **Under offload, or when VRAM is the binding constraint, take the `[fast]` lane.**
-Take the batched one otherwise, or when `grouped-nf4-gemm` will not build for your arch.
-
 They are mutually exclusive and each refuses to patch over the other; call the matching
 `disable_*` to switch.
 
-`dgrad=True` (needs `grouped-nf4-gemm >= 0.7.0`) additionally routes the `[fast]` lane's
-*backward* through a single-launch dgrad kernel instead of its per-expert decode loop,
-which measured 78–84% of a training step. It materializes nothing, so it closes most of the
-speed gap without the memory. Requested against an older kernel package it turns off with a
-warning rather than raising.
+`dgrad=True` (needs `grouped-nf4-gemm >= 0.7.0`) routes the `[fast]` lane's *backward*
+through a single-launch dgrad kernel instead of its per-expert decode loop, which measured
+78–84% of a training step. It materializes nothing. Requested against an older kernel
+package it turns off with a warning rather than raising.
 
-> **Numerics.** Both paths sum experts in group-sorted rather than ascending-expert-id
-> order (ulp-level), and `dgrad=True` adds a second change: the decode loop it replaces is
-> *exact*, the kernel lands near 2.9e-3 — inside the bf16 budget, not zero. Layer-composed
-> fidelity of `dgrad=True` is **unmeasured**; a path that measured better per-op has cost
-> +0.023% perplexity through 16 layers here before. Gate a real run on your own parity
-> check.
+> **Numerics, measured at composed scale.** Both paths sum experts in group-sorted rather
+> than ascending-expert-id order. `dgrad=True` adds **no composed gradient error over the
+> lane it extends**: 4.97e-2 → 4.99e-2 mean at 48 layers. The real characterization is
+> between lanes: the `[fast]` lane's composed gradient error vs the reference loop is
+> ~5e-2 at 48 layers where the kernel-free lane's is ~4e-3 — 13x looser, and ~10x what
+> per-module parity suggests. Loss trajectories for every lane sit at ≤0.002 median |Δ|,
+> far inside the 0.05 band the
+> [fused-train gate](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.11.0/bench/fused-train-gate/RESULTS-fused-train-gate.md)
+> registered. Whether that 5e-2 is *worse than* the reference or merely *different from*
+> it (both being bf16 roundings) is an open question — per-module, the fused path measured
+> closer to fp32 truth than the reference did.
 
 **Picking the hot sets is the single largest lever**, and by-index is not a choice:
 frequency-ranked sets beat index-ordered ones by **+37.1%** at identical VRAM on
