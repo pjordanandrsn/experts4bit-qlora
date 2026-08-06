@@ -143,3 +143,66 @@ def test_gptoss_inside_lora_is_still_skipped():
     if pytest.importorskip("nf4_qlora"):
         from experts4bit_qlora import enable_fast_train
         assert enable_fast_train(mod) == 0, "fused TRAINING path fused gpt-oss"
+
+
+# --- dgrad opt-in (grouped-nf4-gemm >= 0.7.0) --------------------------------
+
+def test_dgrad_flag_is_declined_not_raised_when_unsupported(monkeypatch):
+    """An older grouped-nf4-gemm has no `dgrad_kernel` argument. Passing it anyway
+    would raise from inside a training forward -- worse than not accelerating -- so
+    the flag is checked at enable time and turned off with a warning."""
+    import experts4bit_qlora.fast as fastmod
+    from experts4bit_qlora import enable_fast_train
+
+    monkeypatch.setattr(fastmod, "_dgrad_supported", lambda: False)
+    mod, x, idx, w = _v4_lora(seed=3, limit=LIMIT)
+    mod.train()
+    with pytest.warns(RuntimeWarning, match="dgrad=True ignored"):
+        n = enable_fast_train(mod, dgrad=True)
+    if n == 0:
+        pytest.skip("enable_fast_train declined this module")
+    assert getattr(mod, "_e4b_dgrad") is False
+    assert fastmod._dgrad_kwarg(mod) == {}, "would still pass the unknown kwarg"
+
+
+def test_dgrad_kwarg_is_only_sent_when_opted_in():
+    """The call must be byte-identical to before when dgrad is off — an empty
+    kwargs dict, not `dgrad_kernel=False`, so older kernels keep working."""
+    import experts4bit_qlora.fast as fastmod
+    from experts4bit_qlora import disable_fast_train, enable_fast_train
+
+    mod, *_ = _v4_lora(seed=4, limit=LIMIT)
+    mod.train()
+    if enable_fast_train(mod) == 0:
+        pytest.skip("enable_fast_train declined this module")
+    assert fastmod._dgrad_kwarg(mod) == {}
+    disable_fast_train(mod)
+    assert not hasattr(mod, "_e4b_dgrad"), "disable left state a later enable inherits"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused training path is CUDA-only")
+def test_dgrad_backward_matches_the_loop_backward():
+    """Opted in, the gradient must still agree with the per-expert decode loop
+    within the bf16 budget — and not be identical, or the opt-in did nothing."""
+    pytest.importorskip("nf4_qlora")
+    import experts4bit_qlora.fast as fastmod
+    from experts4bit_qlora import disable_fast_train, enable_fast_train
+
+    if not fastmod._dgrad_supported():
+        pytest.skip("installed grouped-nf4-gemm predates dgrad_kernel (< 0.7.0)")
+
+    def run(dgrad):
+        mod, x, idx, w = _v4_lora(seed=5, limit=LIMIT)
+        mod.train()
+        x = x.clone().requires_grad_(True)
+        if enable_fast_train(mod, dgrad=dgrad) == 0:
+            pytest.skip("enable_fast_train declined this module")
+        mod(x, idx, w).float().sum().backward()
+        g = x.grad.detach().clone()
+        disable_fast_train(mod)
+        return g
+
+    loop, kern = run(False), run(True)
+    rel = ((kern.float() - loop.float()).norm() / loop.float().norm()).item()
+    assert rel < 1.5e-2, f"dgrad backward diverged from the loop: {rel:.3e}"
+    assert rel > 0.0, "identical to the loop — the opt-in did not reach the kernel"

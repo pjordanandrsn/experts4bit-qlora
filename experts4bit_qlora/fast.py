@@ -413,6 +413,33 @@ def disable_fast(model) -> int:
     return restored
 
 
+def _dgrad_supported() -> bool:
+    """Whether the installed ``grouped-nf4-gemm`` takes the ``dgrad_kernel`` flag.
+
+    Checked rather than assumed: the flag landed in 0.7.0, and this package's
+    ``[fast]`` extra admits older ones. Passing an unknown kwarg would raise from
+    inside a training forward, which is a worse failure than not accelerating.
+    """
+    import inspect
+
+    try:
+        from nf4_qlora import fused_grouped_lora
+    except ImportError:
+        return False
+    try:
+        return "dgrad_kernel" in inspect.signature(fused_grouped_lora).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _dgrad_kwarg(lora_mod) -> dict:
+    """``{"dgrad_kernel": True}`` only when this module opted in AND the installed
+    kernel package understands it. Empty dict otherwise, so the call is unchanged."""
+    if getattr(lora_mod, "_e4b_dgrad", False):
+        return {"dgrad_kernel": True}
+    return {}
+
+
 def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weights):
     """Training-capable fused forward for an ``ExpertsLoRA``.
 
@@ -476,6 +503,7 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
         lora_mod.gate_up_lora_A, lora_mod.gate_up_lora_B,
         weights_fn=_gate_up_now,
         scaling=lora_mod.scaling,     # alpha/r -- the reference applies it too
+        **_dgrad_kwarg(lora_mod),
     )
     # The base's OWN epilogue, not an assumed SwiGLU: `_epilogue` is the same hook
     # `ExpertsLoRA.forward` uses, so the fused and reference paths cannot drift apart.
@@ -495,6 +523,7 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
         lora_mod.down_lora_A, lora_mod.down_lora_B,
         weights_fn=_down_now,
         scaling=lora_mod.scaling,
+        **_dgrad_kwarg(lora_mod),
     )
 
     w = top_k_weights[token_rows, top_pos].to(torch.float32)
@@ -502,12 +531,27 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
                             hidden_states.device, input_dtype)
 
 
-def enable_fast_train(model, verbose: bool = False) -> int:
+def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     """Route ``ExpertsLoRA`` TRAINING through the fused grouped kernel.
 
     ``enable_fast`` patches the frozen base and is inference-only. This patches
     the ``ExpertsLoRA`` wrapper -- the module the model actually calls -- so the
     kernel is reached with gradients enabled.
+
+    ``dgrad=True`` additionally routes the BACKWARD through
+    ``grouped-nf4-gemm``'s single-launch dgrad kernel (>= 0.7.0) instead of its
+    per-expert decode loop. Measured on an A2000: the loop is 78-84% of a training
+    step, and the kernel cuts the two grad_x loops from 117.3 ms to 9.2 ms per
+    layer at E=256 while materializing nothing. A second opt-in rather than part of
+    the first, because it is a second numerics change: the loop decodes with the
+    same oracle the reference uses and is EXACT, the kernel accumulates fp32 in a
+    different order and lands near 2.9e-3 -- inside the bf16 budget, not zero.
+    Layer-composed fidelity is unmeasured; this repo has seen a per-op-better path
+    cost +0.023% perplexity through 16 layers, so gate a real run on your own
+    parity check.
+
+    Requested but unsupported (``grouped-nf4-gemm`` older than 0.7.0) it is turned
+    OFF with a warning rather than raising from inside a forward.
 
     Opt-in on purpose: it changes the expert summation ORDER (group-sorted vs
     ascending expert id), an ulp-level difference that should be a deliberate
@@ -521,6 +565,16 @@ def enable_fast_train(model, verbose: bool = False) -> int:
         return 0
     from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.lora import ExpertsLoRA
+
+    if dgrad and not _dgrad_supported():
+        import warnings
+        warnings.warn(
+            "[e4b.fast] dgrad=True ignored: the installed grouped-nf4-gemm has no "
+            "`dgrad_kernel` argument (it landed in 0.7.0). Upgrade with "
+            "`pip install -U 'grouped-nf4-gemm>=0.7.0'`; the fused training path "
+            "still runs, with its per-expert decode backward.",
+            RuntimeWarning, stacklevel=2)
+        dgrad = False
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     patched = 0
@@ -545,12 +599,14 @@ def enable_fast_train(model, verbose: bool = False) -> int:
                           f"{type(mod.base).__name__} has a custom forward")
                 continue
             mod._e4b_train_ref = mod.forward
+            mod._e4b_dgrad = dgrad
             mod.forward = types.MethodType(
                 lambda self, hs, tki, tkw: fused_experts_train_forward(self, hs, tki, tkw),
                 mod)
             patched += 1
     if verbose:
-        print(f"[e4b.fast] fused TRAINING path on {patched} ExpertsLoRA module(s)")
+        print(f"[e4b.fast] fused TRAINING path on {patched} ExpertsLoRA module(s)"
+              + (" (dgrad kernel backward)" if dgrad else ""))
     return patched
 
 
@@ -561,5 +617,8 @@ def disable_fast_train(model) -> int:
         if ref is not None:
             mod.forward = ref
             del mod._e4b_train_ref
+            # Leave nothing behind that a later enable would silently inherit.
+            if hasattr(mod, "_e4b_dgrad"):
+                del mod._e4b_dgrad
             n += 1
     return n
