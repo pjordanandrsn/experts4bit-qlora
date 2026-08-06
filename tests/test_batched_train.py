@@ -176,3 +176,57 @@ def test_does_not_stack_on_the_fused_training_patch():
     assert enable_batched_train(mod) == 0, "batched path wrapped the fused patch"
     assert disable_fast_train(mod) == 1
     assert enable_batched_train(mod) == 1, "should patch once the lane is free"
+
+
+def test_does_not_stack_in_the_reverse_order_either():
+    """The mirror of the above, which the first version of this guard missed.
+
+    batched-then-fused left the module unrecoverable: the fused patch captured the
+    BATCHED forward as its reference, `disable_batched_train` restored from underneath
+    it, and `disable_fast_train` then reinstated the batched forward — with no
+    `_e4b_batched_ref` left to undo it. Both directions must refuse.
+    """
+    pytest.importorskip("nf4_qlora", reason="needs grouped-nf4-gemm >= 0.2.4")
+    if not torch.cuda.is_available():
+        pytest.skip("fused training path is CUDA-only")
+    from experts4bit_qlora import disable_fast_train, enable_fast_train
+
+    mod = _build()
+    reference = mod.forward
+    assert enable_batched_train(mod) == 1
+    assert enable_fast_train(mod) == 0, "fused path patched over the batched one"
+    assert disable_batched_train(mod) == 1
+    assert mod.forward == reference, "did not get the true reference forward back"
+    assert not hasattr(mod, "_e4b_train_ref")
+    assert disable_fast_train(mod) == 0
+
+
+def test_refuses_to_unpatch_from_under_a_stacked_patch():
+    """Belt to the braces above: even if something patches over this path, unwinding
+    out of order must not leave the module on a forward nothing can remove."""
+    mod = _build()
+    reference = mod.forward
+    assert enable_batched_train(mod) == 1
+    mod._e4b_train_ref = mod.forward          # simulate an outer patch
+    mod.forward = lambda *a, **kw: None
+    with pytest.warns(RuntimeWarning, match="disable_fast_train first"):
+        assert disable_batched_train(mod) == 0
+    # Unwind properly and the reference is still recoverable.
+    mod.forward = mod._e4b_train_ref
+    del mod._e4b_train_ref
+    assert disable_batched_train(mod) == 1
+    assert mod.forward == reference
+
+
+def test_empty_batch_matches_the_reference():
+    """No token routed anywhere: `sizes.max()` raises on the empty tensor where the
+    reference returns its zero accumulator. Route it to the reference instead."""
+    mod = _build()
+    hs = torch.zeros(0, HID, dtype=torch.bfloat16, device=DEVICE)
+    idx = torch.zeros(0, TOP_K, dtype=torch.long, device=DEVICE)
+    wts = torch.zeros(0, TOP_K, dtype=torch.bfloat16, device=DEVICE)
+    ref = mod(hs, idx, wts)
+    assert enable_batched_train(mod) == 1
+    got = mod(hs, idx, wts)
+    assert got.shape == ref.shape == (0, HID)
+    assert torch.equal(got, ref)

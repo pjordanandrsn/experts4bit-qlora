@@ -510,6 +510,16 @@ def enable_fast_train(model, verbose: bool = False) -> int:
     patched = 0
     for mod in model.modules():
         if isinstance(mod, ExpertsLoRA) and not hasattr(mod, "_e4b_train_ref"):
+            # The kernel-free batched path patches the same forward. Patching over it
+            # would capture ITS forward as this one's reference, so a later
+            # disable_batched_train could not unwind and disable_fast_train would
+            # reinstate the batched path. `enable_batched_train` refuses the mirror
+            # case; this is the other half of that guard.
+            if hasattr(mod, "_e4b_batched_ref"):
+                if verbose:
+                    print("[e4b.fast] skip: enable_batched_train already patched this "
+                          "module; call disable_batched_train first")
+                continue
             # Same bargain as `enable_fast`; this loop had no eligibility gate at all,
             # so every ExpertsLoRA was fused regardless of what its base computes.
             if (type(mod.base).forward not in stock_forwards

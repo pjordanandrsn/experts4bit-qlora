@@ -186,6 +186,10 @@ def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights
     active = torch.nonzero(counts, as_tuple=False).view(-1)
     sizes = counts[active]
     n_grp = int(active.numel())
+    if n_grp == 0:
+        # No token routed anywhere — an empty batch. `sizes.max()` would raise on the
+        # empty tensor, where the reference simply returns its zero accumulator.
+        return reference(hidden_states, top_k_index, top_k_weights)
     widest = int(sizes.max())
     total = int(sizes.sum())
     if n_grp * widest > _PAD_WASTE_LIMIT * total:
@@ -285,12 +289,32 @@ def enable_batched_train(model, verbose: bool = False) -> int:
 
 
 def disable_batched_train(model) -> int:
-    """Restore the reference forward. Returns the number restored."""
+    """Restore the reference forward. Returns the number restored.
+
+    Refuses to unpatch a module something else has patched ON TOP of, and says so.
+    ``enable_fast_train`` predates this module and does not know to skip a
+    batched-patched module, so ``enable_batched_train`` then ``enable_fast_train``
+    stacks: the fused patch captures THIS path's forward as its reference. Restoring
+    from underneath that would hand the module back the true reference while the layer
+    above still holds ours, and a later ``disable_fast_train`` would reinstate exactly
+    the forward this call was meant to remove — leaving the module on a path with no
+    ``_e4b_batched_ref`` to undo it. Unwind the outer patch first.
+    """
+    import warnings
+
     n = 0
     for mod in model.modules():
         ref = getattr(mod, "_e4b_batched_ref", None)
-        if ref is not None:
-            mod.forward = ref
-            del mod._e4b_batched_ref
-            n += 1
+        if ref is None:
+            continue
+        if hasattr(mod, "_e4b_train_ref"):
+            warnings.warn(
+                "[e4b.batched] not restoring: enable_fast_train patched over this "
+                "module, so its reference is this path's forward. Call "
+                "disable_fast_train first, then disable_batched_train.",
+                RuntimeWarning, stacklevel=2)
+            continue
+        mod.forward = ref
+        del mod._e4b_batched_ref
+        n += 1
     return n
