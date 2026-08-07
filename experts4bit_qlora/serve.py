@@ -41,6 +41,25 @@ the LAN), ``E4B_TOKEN`` (when set, generation routes require ``Authorization: Be
 ``E4B_RECEIPTS_PATH`` (append a one-line JSON receipt per generation — token counts,
 peak VRAM, wall time, versions; empty/unset = off).
 
+Residency (spare VRAM -> decode speed), off by default::
+
+    E4B_EXPERT_PROFILE=/tmp/prof.jsonl python -m experts4bit_qlora.serve   # 1. profile a real workload
+    E4B_RESIDENCY=pipelined E4B_HOT_PROFILE=/tmp/prof.jsonl E4B_HOT_PER_LAYER=8 \
+      python -m experts4bit_qlora.serve                                     # 2. serve with hot experts resident
+
+``E4B_RESIDENCY=pipelined`` keeps the ``E4B_HOT_PER_LAYER`` most-routed experts of each
+layer in VRAM and streams the cold tail through the pipelined engine. The hot sets are
+**frequency-ranked from a profile, never by index** — an index-ordered set on a
+256-expert top-6 layer serves ~6% of routed slots, so there is deliberately no by-index
+fallback: without a profile this raises rather than serving a dial that does nothing.
+``E4B_K_SLOTS`` overrides the routed top-k if the config lacks ``num_experts_per_tok``.
+``/health`` reports the module count and the profile's predicted coverage.
+
+**Residency and trained adapters are mutually exclusive.** The engine patches the frozen
+base, and ``ExpertsLoRA`` only delegates to it while the adapter is provably zero — so
+activating a trained adapter turns residency off *silently*. Serving ``base`` (the judge
+/ evaluation case) is what this is for; a swap to a non-zero adapter logs a warning.
+
 Endpoints: ``POST /generate`` (JSON or SSE), ``GET /health``, and OpenAI-compatible
 ``/v1/completions`` + ``/v1/models`` (``model`` selects the adapter). There is deliberately no
 ``/v1/chat/completions``: OLMoE-1B-7B has no chat template and the shipped fine-tunes are
@@ -93,6 +112,14 @@ class ServeConfig:
     warmup_tokens: int = 8
     device: str = "cuda"
     receipts_path: str = ""  # "" = receipts off
+    # Residency: trade spare VRAM for decode speed. "" = off (stream every expert),
+    # "pipelined" = enable_pipelined_residency. Hot sets come from a PROFILE, never by
+    # index — a by-index set on a 256-expert top-6 layer serves ~6% of routed slots, so
+    # the dial only works when it is frequency-ranked (see hot_sets_from_profile).
+    residency: str = ""
+    hot_profile: str = ""      # JSONL from E4B_EXPERT_PROFILE
+    hot_per_layer: int = 0     # experts kept resident per layer; K is the dial
+    k_slots: int = 0           # routed top-k; 0 = read it off the model config
 
     @classmethod
     def from_env(cls) -> "ServeConfig":
@@ -116,6 +143,10 @@ class ServeConfig:
             vram_fraction=float(os.environ.get("E4B_VRAM_FRACTION", "0")),
             warmup_tokens=int(os.environ.get("E4B_WARMUP_TOKENS", "8")),
             receipts_path=os.environ.get("E4B_RECEIPTS_PATH", ""),
+            residency=os.environ.get("E4B_RESIDENCY", ""),
+            hot_profile=os.environ.get("E4B_HOT_PROFILE", ""),
+            hot_per_layer=int(os.environ.get("E4B_HOT_PER_LAYER", "0")),
+            k_slots=int(os.environ.get("E4B_K_SLOTS", "0")),
         )
 
 
@@ -248,6 +279,8 @@ class Engine:
         self.registry: Dict[str, Dict[str, torch.Tensor]] = {}
         self.active_adapter: Optional[str] = None
         self.pinned_offload: Optional[bool] = None
+        self.residency_n: int = 0
+        self.residency_coverage: Optional[float] = None
         self.started_at = time.time()
         self._lora_params: Dict[str, torch.nn.Parameter] = {}
         self._pending = 0  # running + queued; mutated only on the event loop thread
@@ -296,7 +329,7 @@ class Engine:
             f"{', '.join(files) or '(none)'} + base"
         )
         self.tokenizer = AutoTokenizer.from_pretrained(cfg.model)
-        model, _ = load_moe_4bit_streaming(
+        model, model_cfg = load_moe_4bit_streaming(
             cfg.model,
             cfg.device,
             torch.bfloat16,
@@ -328,6 +361,10 @@ class Engine:
 
         handles = [m._offload for m in model.modules() if isinstance(m, ExpertsLoRA) and hasattr(m, "_offload")]
         self.pinned_offload = all(h.pinned for h in handles) if handles else None
+
+        # After eval()/requires_grad_(False) (the delegation preconditions), before warmup.
+        lm_cfg = getattr(model_cfg, "text_config", None) or model_cfg
+        self._enable_residency(model, lm_cfg)
         self.model = model
 
         if cfg.warmup_tokens > 0:
@@ -370,6 +407,65 @@ class Engine:
         resolving to the result dict."""
         return self._loop.run_in_executor(self._worker, lambda: self._generate_once(streamer=streamer, **job_kwargs))
 
+    def _enable_residency(self, model, lm_config) -> None:
+        """Attach the pipelined residency engine after load, before warmup.
+
+        Ordering is load-bearing: the engine patches the frozen ``ExpertsNbit`` bases and
+        ``ExpertsLoRA`` only delegates to them under eval + no-grad + a provably-zero
+        adapter, so this must run after ``model.eval()`` / ``requires_grad_(False)`` and
+        before the warmup generation (which should exercise the patched path, not the
+        reference one).
+        """
+        cfg = self.cfg
+        if not cfg.residency:
+            return
+        if cfg.residency != "pipelined":
+            raise ValueError(
+                f"E4B_RESIDENCY={cfg.residency!r} is not supported; use 'pipelined' or unset it")
+        if not cfg.hot_profile or cfg.hot_per_layer <= 0:
+            # Refusing beats defaulting. Serving a by-index hot set would look like the
+            # feature working while buying ~nothing: on a 256-expert top-6 layer an
+            # index-ordered set of 16 catches a routed expert ~6% of the time.
+            raise ValueError(
+                "E4B_RESIDENCY needs BOTH E4B_HOT_PROFILE (a JSONL from E4B_EXPERT_PROFILE) "
+                "and E4B_HOT_PER_LAYER>0. Hot sets must be frequency-ranked; this path "
+                "deliberately has no by-index fallback.")
+        if not os.path.isfile(cfg.hot_profile):
+            raise FileNotFoundError(f"E4B_HOT_PROFILE: no file at {cfg.hot_profile}")
+
+        from .expert_profile import coverage_from_profile, hot_sets_from_profile
+        from .hot_residency import target_modules
+        from .pipelined import enable_pipelined_residency
+
+        k = cfg.k_slots or int(getattr(lm_config, "num_experts_per_tok", 0) or 0)
+        if k <= 0:
+            raise ValueError(
+                "routed top-k unknown: set E4B_K_SLOTS (the model config has no "
+                "num_experts_per_tok). It sizes the slot store — a forward with a "
+                "different k silently falls back to the reference path.")
+
+        hot_sets = hot_sets_from_profile(cfg.hot_profile, cfg.hot_per_layer)
+        n_targets = len(target_modules(model))
+        if len(hot_sets) != n_targets:
+            # The engine takes one entry per targeted module IN MODULE ORDER; a profile
+            # from a different model (or one missing trailing layers) would silently
+            # shift every set onto the wrong layer.
+            raise ValueError(
+                f"hot_sets has {len(hot_sets)} entries but the model has {n_targets} "
+                f"targetable expert modules — profile/model mismatch. Re-profile "
+                f"{cfg.model} rather than padding.")
+
+        cov = coverage_from_profile(cfg.hot_profile, hot_sets)
+        n = enable_pipelined_residency(model, hot_sets, device=cfg.device, k_slots=k)
+        if n <= 0:
+            raise RuntimeError(
+                "enable_pipelined_residency patched 0 modules — residency was requested "
+                "and is not running. Refusing to serve a silently-unaccelerated model.")
+        self.residency_n = n
+        self.residency_coverage = cov
+        log(f"serve: pipelined residency on {n} module(s) | hot={cfg.hot_per_layer}/layer "
+            f"k_slots={k} | profile coverage {cov:.1%} of routed token-slots")
+
     def _swap_adapter(self, name: str) -> float:
         """Copy an adapter's tensors over the live LoRA parameters (worker thread only). The
         copies are enqueued on the compute stream, so a following generate is ordered after them;
@@ -384,6 +480,29 @@ class Engine:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         self.active_adapter = name
+
+        # ``copy_`` onto the live LoRA params fires NEITHER of ExpertsLoRA's cache
+        # invalidations (train() / load_state_dict), so ``_delegate_ok`` keeps the
+        # PREVIOUS adapter's verdict. With residency enabled that is not a perf bug but a
+        # correctness one: a stale "adapter is zero" keeps delegating to the patched base
+        # and serves BASE outputs under the new adapter's name (caught by Bugbot on the
+        # PR that added this method; reproduced before fixing). Invalidate first, so the
+        # warning below also reads truth rather than the same stale cache.
+        from .lora import ExpertsLoRA
+        wrapped = [m for m in self.model.modules() if isinstance(m, ExpertsLoRA)]
+        for m in wrapped:
+            m._delegate_ok = None
+
+        if self.residency_n:
+            # The engine patches the frozen base; ExpertsLoRA only delegates to it while
+            # the adapter is provably zero. A trained adapter therefore turns residency
+            # OFF silently — same speed as never enabling it, no error, and the /health
+            # counters would still read "residency: 48 modules". Say it once per swap.
+            nonzero = sum(1 for m in wrapped if not m._adapter_is_zero())
+            if nonzero:
+                log(f"serve: WARNING adapter {name!r} is non-zero on {nonzero} expert "
+                    f"module(s) — pipelined residency cannot run under it (the wrapper "
+                    f"stops delegating), so decode falls back to the streaming path.")
         return (time.perf_counter() - t0) * 1000.0
 
     def _generate_once(
@@ -634,6 +753,16 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             "queue_depth": engine.queue_depth,
             "gpu": _gpu_stats(),
             "offload": {"enabled": cfg.offload, "pinned": engine.pinned_offload},
+            # Observable on purpose: "did the residency dial actually engage" is not
+            # answerable from tok/s alone, and a patched-but-never-running engine is the
+            # failure this reports (see _swap_adapter's non-zero-adapter warning).
+            "residency": {
+                "mode": cfg.residency or None,
+                "modules": engine.residency_n,
+                "hot_per_layer": cfg.hot_per_layer or None,
+                "profile_coverage": (round(engine.residency_coverage, 4)
+                                     if engine.residency_coverage is not None else None),
+            },
             "uptime_s": round(time.time() - engine.started_at, 1),
         }
 

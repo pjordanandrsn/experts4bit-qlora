@@ -218,6 +218,13 @@ def test_reenable_with_a_different_dgrad_setting_says_so():
     loud about it rather than to silently succeed or silently do nothing.
     """
     from experts4bit_qlora import disable_fast_train, enable_fast_train
+    from experts4bit_qlora.fast import _dgrad_supported
+
+    if not _dgrad_supported():
+        # With an older grouped-nf4-gemm, dgrad=True is coerced off (with its own
+        # warning) before the patch loop, so a dgrad MISMATCH cannot be constructed
+        # at all — the scenario under test requires the capability to exist.
+        pytest.skip("installed grouped-nf4-gemm predates dgrad_kernel (< 0.7.0)")
 
     mod, *_ = _v4_lora(seed=6, limit=LIMIT)
     mod.train()
