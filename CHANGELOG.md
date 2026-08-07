@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 — 2026-08-06
 
 **`serve` grows a residency dial** — the missing piece between 0.10.0's
 residency-reachability fix and the deployment that needed it: `python -m
