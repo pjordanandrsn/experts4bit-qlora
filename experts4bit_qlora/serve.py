@@ -480,14 +480,25 @@ class Engine:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         self.active_adapter = name
+
+        # ``copy_`` onto the live LoRA params fires NEITHER of ExpertsLoRA's cache
+        # invalidations (train() / load_state_dict), so ``_delegate_ok`` keeps the
+        # PREVIOUS adapter's verdict. With residency enabled that is not a perf bug but a
+        # correctness one: a stale "adapter is zero" keeps delegating to the patched base
+        # and serves BASE outputs under the new adapter's name (caught by Bugbot on the
+        # PR that added this method; reproduced before fixing). Invalidate first, so the
+        # warning below also reads truth rather than the same stale cache.
+        from .lora import ExpertsLoRA
+        wrapped = [m for m in self.model.modules() if isinstance(m, ExpertsLoRA)]
+        for m in wrapped:
+            m._delegate_ok = None
+
         if self.residency_n:
             # The engine patches the frozen base; ExpertsLoRA only delegates to it while
             # the adapter is provably zero. A trained adapter therefore turns residency
             # OFF silently — same speed as never enabling it, no error, and the /health
             # counters would still read "residency: 48 modules". Say it once per swap.
-            from .lora import ExpertsLoRA
-            nonzero = sum(1 for m in self.model.modules()
-                          if isinstance(m, ExpertsLoRA) and not m._adapter_is_zero())
+            nonzero = sum(1 for m in wrapped if not m._adapter_is_zero())
             if nonzero:
                 log(f"serve: WARNING adapter {name!r} is non-zero on {nonzero} expert "
                     f"module(s) — pipelined residency cannot run under it (the wrapper "

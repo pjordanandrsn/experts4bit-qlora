@@ -217,7 +217,11 @@ class ExpertsLoRA(nn.Module):
         made `enable_fast` warn that every patch was unreachable on an untrained
         adapter whose patches then ran fine.
 
-        One device sync, cached; invalidated on train()/load_state_dict.
+        One device sync, cached; invalidated on train()/load_state_dict. A caller
+        that mutates the adapter any OTHER way — ``param.data.copy_`` is the live
+        example (serve's adapter swap) — must reset ``_delegate_ok = None`` itself,
+        or this returns the previous adapter's verdict: under an attached engine a
+        stale True keeps delegating and serves the BASE weights as the new adapter.
         """
         cached = self._delegate_ok
         if cached is None:

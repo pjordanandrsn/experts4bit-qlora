@@ -177,3 +177,36 @@ def test_env_surface_round_trips(monkeypatch):
 def test_residency_defaults_are_off():
     cfg = ServeConfig()
     assert cfg.residency == "" and cfg.hot_per_layer == 0 and cfg.k_slots == 0
+
+
+def test_adapter_swap_invalidates_the_delegation_cache():
+    """Bugbot's finding on the PR that added the swap guard, reproduced then fixed.
+
+    ``copy_`` onto the live LoRA params fires neither of ExpertsLoRA's invalidations
+    (train()/load_state_dict), so ``_delegate_ok`` kept the PREVIOUS adapter's verdict.
+    With residency attached, a stale True keeps delegating to the patched base — BASE
+    outputs served under the new adapter's name — and the swap warning read the same
+    stale cache, so it stayed silent about exactly the state it existed to report.
+    """
+    from experts4bit_qlora import ExpertsLoRA, ExpertsNbit
+
+    gu = torch.randn(4, 2 * 32, 16)
+    dn = torch.randn(4, 16, 32)
+    base = ExpertsNbit.from_float(gu, dn, quant_type="bf16", compute_dtype=torch.float32)
+    mod = ExpertsLoRA(base, r=4, alpha=8, dtype=torch.float32).eval()
+    assert mod._adapter_is_zero()                      # caches True (B is zero-init)
+
+    # serve's swap pattern: raw copy_ over the live params — no train(), no load_state_dict
+    with torch.no_grad():
+        mod.gate_up_lora_B.data.copy_(torch.randn_like(mod.gate_up_lora_B))
+    assert mod._adapter_is_zero(), "precondition: the cache IS stale (bug reproduces)"
+
+    # what _swap_adapter now does before consulting it
+    mod._delegate_ok = None
+    assert not mod._adapter_is_zero(), "invalidation must surface the non-zero adapter"
+
+    # and swapping back to a zero adapter re-decides fresh in the other direction
+    with torch.no_grad():
+        mod.gate_up_lora_B.data.zero_()
+    mod._delegate_ok = None
+    assert mod._adapter_is_zero()
