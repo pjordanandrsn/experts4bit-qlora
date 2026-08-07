@@ -91,6 +91,10 @@ services:
       # stopped="timeout" and the new cap is unreachable. 3600 s = ~30% headroom.
       - E4B_REQUEST_TIMEOUT_S=3600
       - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
+      # Phase-1 of the residency rollout: profile REAL judge traffic. The JSONL is
+      # written once per clean container stop (atexit; the nightly reap provides it).
+      # Snapshot it before flipping E4B_RESIDENCY — each run overwrites the file.
+      - E4B_EXPERT_PROFILE=/receipts/qwen-expert-profile.jsonl
     ports:
       - "8781:8781"
     volumes:
