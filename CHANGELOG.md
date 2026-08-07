@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+**`serve` grows a residency dial** — the missing piece between 0.10.0's
+residency-reachability fix and the deployment that needed it: `python -m
+experts4bit_qlora.serve` could only stream every expert, which is why the judge
+deployment decodes at 0.38 tok/s with VRAM sitting idle.
+
+`E4B_RESIDENCY=pipelined` + `E4B_HOT_PROFILE=<jsonl>` + `E4B_HOT_PER_LAYER=<K>` attaches
+`enable_pipelined_residency` after load (post-`eval()`, pre-warmup — the ordering the
+wrapper's delegation preconditions require). Hot sets are **frequency-ranked from a
+profile, never by index** — an index-ordered set on a 256-expert top-6 layer serves ~6%
+of routed slots, so there is deliberately no by-index fallback; without a profile it
+raises. `E4B_K_SLOTS` overrides the routed top-k when the config lacks
+`num_experts_per_tok`. `/health` gains a `residency` block (mode, patched-module count,
+profile-predicted coverage).
+
+Every quiet failure mode refuses or warns instead: unknown mode, missing/most-wrong
+profile (a set-count/module-count mismatch would silently shift every hot set one layer),
+an engine that patches 0 modules ("residency on" in the logs, streaming in reality), and
+— the subtle one — **activating a trained adapter turns residency off silently** (the
+wrapper only delegates while the adapter is provably zero), so `_swap_adapter` warns when
+that happens. Serving `base` (the judge/eval case) is what the dial is for.
+
+Also: `test_reenable_with_a_different_dgrad_setting_says_so` gains a capability skip —
+against a pre-0.7.0 grouped-nf4-gemm the dgrad mismatch it tests cannot be constructed
+(the flag is coerced off first, with its own warning), which surfaced as a spurious
+failure on any box with an old wheel installed.
+
 ## 0.11.1 — 2026-08-06
 
 Docs-and-tests patch. The PyPI page for 0.11.0 froze training-path guidance that
