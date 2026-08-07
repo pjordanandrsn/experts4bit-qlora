@@ -41,6 +41,10 @@ the LAN), ``E4B_TOKEN`` (when set, generation routes require ``Authorization: Be
 ``E4B_RECEIPTS_PATH`` (append a one-line JSON receipt per generation — token counts,
 peak VRAM, wall time, versions; empty/unset = off).
 
+``E4B_EXPERT_PROFILE=<path>`` attaches the routing profiler (no-op when unset): the
+aggregated JSONL is written once at clean shutdown, and is exactly the input the
+residency dial below consumes. Profile with residency OFF, on real traffic.
+
 Residency (spare VRAM -> decode speed), off by default::
 
     E4B_EXPERT_PROFILE=/tmp/prof.jsonl python -m experts4bit_qlora.serve   # 1. profile a real workload
@@ -361,6 +365,15 @@ class Engine:
 
         handles = [m._offload for m in model.modules() if isinstance(m, ExpertsLoRA) and hasattr(m, "_offload")]
         self.pinned_offload = all(h.pinned for h in handles) if handles else None
+
+        # Routing profiler — no-op unless E4B_EXPERT_PROFILE names an output path. train.py
+        # has attached it since the feature existed; serve never did, so profiling a SERVING
+        # workload (the input `hot_sets_from_profile` needs for the residency dial below)
+        # silently wrote nothing. Attach before residency: the probes hook the wrapper's
+        # forward, which still runs when it delegates to the patched base. The JSONL lands
+        # once, at clean process exit (atexit) — docker stop's SIGTERM is enough.
+        from . import expert_profile
+        expert_profile.attach(model)
 
         # After eval()/requires_grad_(False) (the delegation preconditions), before warmup.
         lm_cfg = getattr(model_cfg, "text_config", None) or model_cfg

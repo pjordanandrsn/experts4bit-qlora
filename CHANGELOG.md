@@ -16,6 +16,11 @@ raises. `E4B_K_SLOTS` overrides the routed top-k when the config lacks
 `num_experts_per_tok`. `/health` gains a `residency` block (mode, patched-module count,
 profile-predicted coverage).
 
+`E4B_EXPERT_PROFILE` now works under serve: the routing profiler was only ever attached
+by `train.py`, so profiling a *serving* workload — the input the residency dial consumes —
+silently wrote nothing. serve attaches it at load (no-op unless set); the JSONL lands once
+at clean shutdown.
+
 Every quiet failure mode refuses or warns instead: unknown mode, missing/most-wrong
 profile (a set-count/module-count mismatch would silently shift every hot set one layer),
 an engine that patches 0 modules ("residency on" in the logs, streaming in reality), and
