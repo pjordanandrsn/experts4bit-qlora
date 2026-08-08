@@ -458,16 +458,6 @@ class Engine:
                 "different k silently falls back to the reference path.")
 
         hot_sets = hot_sets_from_profile(cfg.hot_profile, cfg.hot_per_layer)
-        n_targets = len(target_modules(model))
-        if len(hot_sets) != n_targets:
-            # The engine takes one entry per targeted module IN MODULE ORDER; a profile
-            # from a different model (or one missing trailing layers) would silently
-            # shift every set onto the wrong layer.
-            raise ValueError(
-                f"hot_sets has {len(hot_sets)} entries but the model has {n_targets} "
-                f"targetable expert modules — profile/model mismatch. Re-profile "
-                f"{cfg.model} rather than padding.")
-
         if cfg.offload:
             # Residency and offload are mutually exclusive BY CONSTRUCTION: offload moves the
             # 4-bit expert weights into pinned CPU RAM and leaves 0-element placeholders on the
@@ -485,6 +475,16 @@ class Engine:
                 "those tensors, so the combination cannot work — residency already provides the "
                 "hot-resident/cold-streamed split that offload is doing. Set OFFLOAD_EXPERTS=0 "
                 "and size E4B_HOT_PER_LAYER to the VRAM you actually have.")
+        n_targets = len(target_modules(model))
+        if len(hot_sets) != n_targets:
+            # The engine takes one entry per targeted module IN MODULE ORDER; a profile
+            # from a different model (or one missing trailing layers) would silently
+            # shift every set onto the wrong layer.
+            raise ValueError(
+                f"hot_sets has {len(hot_sets)} entries but the model has {n_targets} "
+                f"targetable expert modules — profile/model mismatch. Re-profile "
+                f"{cfg.model} rather than padding.")
+
         cov = coverage_from_profile(cfg.hot_profile, hot_sets)
         n = enable_pipelined_residency(model, hot_sets, device=cfg.device, k_slots=k)
         if n <= 0:

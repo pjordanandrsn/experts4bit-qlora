@@ -29,6 +29,10 @@ def _engine(**kw):
     from experts4bit_qlora.serve import Engine
 
     eng = Engine.__new__(Engine)
+    # Residency requires offload OFF (they are mutually exclusive — see the guard in
+    # _enable_residency). These tests exercise OTHER failure modes, so they must start from
+    # the valid combination; tests about the guard itself pass offload=True explicitly.
+    kw.setdefault("offload", False)
     eng.cfg = ServeConfig(**kw)
     eng.residency_n = 0
     eng.residency_coverage = None
@@ -229,19 +233,17 @@ def test_offload_plus_residency_is_refused(tmp_path):
         eng._enable_residency(object(), _Cfg())
 
 
-def test_residency_allowed_when_offload_is_off(tmp_path, monkeypatch):
-    """The mirror of the guard: with offload off, the same config proceeds past it.
+def test_residency_allowed_when_offload_is_off(tmp_path):
+    """The mirror of the guard: with offload off, the same config proceeds PAST it.
 
-    Without this, the guard above is satisfied by a function that always raises.
+    Without this, a guard that always raised would satisfy the test above. The dummy model
+    makes a later stage fail; all that is asserted here is that the failure is not the
+    offload guard.
     """
     p = tmp_path / "prof.jsonl"
     _profile(p)
     eng = _engine(residency="pipelined", hot_profile=str(p), hot_per_layer=4, offload=False)
-    import experts4bit_qlora.serve as srv
-    monkeypatch.setattr(srv, "target_modules", lambda m: [object(), object()], raising=False)
     try:
         eng._enable_residency(object(), _Cfg())
-    except ValueError as e:
+    except Exception as e:
         assert "OFFLOAD_EXPERTS=0" not in str(e), "offload guard fired with offload disabled"
-    except Exception:
-        pass  # any later stage may fail on the dummy model; the guard is what is under test
