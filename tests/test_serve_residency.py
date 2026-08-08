@@ -210,3 +210,38 @@ def test_adapter_swap_invalidates_the_delegation_cache():
         mod.gate_up_lora_B.data.zero_()
     mod._delegate_ok = None
     assert mod._adapter_is_zero()
+
+
+def test_offload_plus_residency_is_refused(tmp_path):
+    """Residency + offload cannot coexist, and the refusal must say so in those words.
+
+    Offload parks the 4-bit experts in pinned CPU RAM and leaves 0-element placeholders on
+    the module; the residency arena is built by copying exactly those tensors. Enabling both
+    used to die inside the engine as "size of tensor a (N) must match tensor b (0)" — a shape
+    error naming neither feature, which cost a full debugging session (2026-08-08) and made
+    the dial look broken when it was merely misconfigured. serve defaults OFFLOAD_EXPERTS=1,
+    so this is the DEFAULT combination for anyone turning residency on.
+    """
+    p = tmp_path / "prof.jsonl"
+    _profile(p)
+    eng = _engine(residency="pipelined", hot_profile=str(p), hot_per_layer=4, offload=True)
+    with pytest.raises(ValueError, match="OFFLOAD_EXPERTS=0"):
+        eng._enable_residency(object(), _Cfg())
+
+
+def test_residency_allowed_when_offload_is_off(tmp_path, monkeypatch):
+    """The mirror of the guard: with offload off, the same config proceeds past it.
+
+    Without this, the guard above is satisfied by a function that always raises.
+    """
+    p = tmp_path / "prof.jsonl"
+    _profile(p)
+    eng = _engine(residency="pipelined", hot_profile=str(p), hot_per_layer=4, offload=False)
+    import experts4bit_qlora.serve as srv
+    monkeypatch.setattr(srv, "target_modules", lambda m: [object(), object()], raising=False)
+    try:
+        eng._enable_residency(object(), _Cfg())
+    except ValueError as e:
+        assert "OFFLOAD_EXPERTS=0" not in str(e), "offload guard fired with offload disabled"
+    except Exception:
+        pass  # any later stage may fail on the dummy model; the guard is what is under test
