@@ -381,8 +381,8 @@ class _GptOssPipelined(_PipelinedResidency):
     ``(up+1)*(gate*sigmoid(gate*alpha))`` with per-expert biases indexed by
     the routed global ids (device index_select — enqueued, never read)."""
 
-    def __init__(self, mod, hot_ids, device, k_slots):
-        super().__init__(mod, hot_ids, device, k_slots)
+    def __init__(self, mod, hot_ids, device, k_slots, homes=None):
+        super().__init__(mod, hot_ids, device, k_slots, homes=homes)
         self.gate_up_bias = mod.gate_up_bias.to(self.device)
         self.down_bias = mod.down_bias.to(self.device)
         self.alpha = float(mod.alpha)

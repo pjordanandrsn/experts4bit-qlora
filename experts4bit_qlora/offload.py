@@ -697,6 +697,20 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
     experts_lora._offload = handle
 
     def _stage_pre_hook(module, args):
+        # PIPELINED RESIDENCY TAKEOVER: when the engine owns this module it serves DECODE
+        # from its own hot stack + pinned arena, so staging the whole layer per token would
+        # re-introduce exactly the traffic it removes. But the engine refuses prefill (T>1),
+        # grad-enabled and non-bf16/fp16 forwards and falls back to the reference forward,
+        # which reads the module's tensors — 0-element placeholders while offloaded. So the
+        # takeover is CONDITIONAL: skip staging only for the calls the engine will handle.
+        if getattr(handle, "_superseded", False):
+            try:
+                hid = args[0] if args else None
+                decode = hid is not None and hid.shape[0] == 1 and not torch.is_grad_enabled()
+            except Exception:
+                decode = False
+            if decode:
+                return
         # Prefetch policy only at inference (no autograd tape, deterministic layer order). Any
         # grad-enabled forward — training, checkpoint recompute — takes the single-slot sync path,
         # and so does a no_grad forward of a module still in train() mode: reentrant gradient

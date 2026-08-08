@@ -476,23 +476,6 @@ class Engine:
                 "different k silently falls back to the reference path.")
 
         hot_sets = hot_sets_from_profile(cfg.hot_profile, cfg.hot_per_layer)
-        if cfg.offload:
-            # Residency and offload are mutually exclusive BY CONSTRUCTION: offload moves the
-            # 4-bit expert weights into pinned CPU RAM and leaves 0-element placeholders on the
-            # module, while _PipelinedResidency fills its arena by copying those very tensors.
-            # Enabling both made the arena copy read from nothing and died deep in the engine
-            # as "The size of tensor a (N) must match the size of tensor b (0)" — a shape error
-            # that names neither offload nor residency. Reproduced 2026-08-08 on granite
-            # (gate_up numel 16777216 with offload off vs 0 with it on) and on Qwen3-30B-A3B
-            # via this server, whose default OFFLOAD_EXPERTS=1 made the dial unusable.
-            # Residency IS an offload mechanism (hot resident + cold streamed from its own
-            # pinned arena), so the fix is to pick one, not to order them.
-            raise ValueError(
-                "E4B_RESIDENCY=pipelined requires OFFLOAD_EXPERTS=0. Offload leaves 0-element "
-                "expert placeholders on the module and the residency arena is built by copying "
-                "those tensors, so the combination cannot work — residency already provides the "
-                "hot-resident/cold-streamed split that offload is doing. Set OFFLOAD_EXPERTS=0 "
-                "and size E4B_HOT_PER_LAYER to the VRAM you actually have.")
         n_targets = len(target_modules(model))
         if len(hot_sets) != n_targets:
             # The engine takes one entry per targeted module IN MODULE ORDER; a profile
