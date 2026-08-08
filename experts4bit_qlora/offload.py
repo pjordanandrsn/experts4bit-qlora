@@ -704,12 +704,19 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
         # which reads the module's tensors — 0-element placeholders while offloaded. So the
         # takeover is CONDITIONAL: skip staging only for the calls the engine will handle.
         if getattr(handle, "_superseded", False):
+            # Ask the ENGINE whether it will serve this exact call — never re-derive the
+            # condition here. Bugbot caught the first cut skipping staging for any T=1 no-grad
+            # forward while the engine additionally rejects a routed top-k != k_slots and
+            # non-bf16/fp16 compute; those calls fell through to the reference forward and read
+            # 0-element placeholders. Anything the engine will NOT serve still gets staged.
             try:
-                hid = args[0] if args else None
-                decode = hid is not None and hid.shape[0] == 1 and not torch.is_grad_enabled()
+                base = handle.base
+                st = getattr(base, "_pipelined", None)
+                served = (st is not None and len(args) >= 2
+                          and st.will_serve(base, args[0], args[1]))
             except Exception:
-                decode = False
-            if decode:
+                served = False          # unsure -> stage; a redundant stage is merely slow
+            if served:
                 return
         # Prefetch policy only at inference (no autograd tape, deterministic layer order). Any
         # grad-enabled forward — training, checkpoint recompute — takes the single-slot sync path,

@@ -365,6 +365,26 @@ class _PipelinedResidency:
         dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.row_idx)
         return dn
 
+    def will_serve(self, mod, hidden, idx) -> bool:
+        """Will the engine serve this call, or does it fall back to the reference forward?
+
+        ONE definition, used by both ``_fwd`` (to route) and offload's stage pre-hook (to
+        decide whether the layer still needs staging). Bugbot caught these drifting apart on
+        the first cut: the hook skipped staging for any T=1 no-grad call, but the engine ALSO
+        rejects a routed top-k that does not match ``k_slots`` and non-bf16/fp16 compute —
+        so those calls fell back to the reference forward and read 0-element placeholders.
+        """
+        cd = mod.compute_dtype if mod.compute_dtype is not None else hidden.dtype
+        if hidden.shape[0] != 1 or idx.numel() != self.k:
+            return False
+        if cd not in (torch.bfloat16, torch.float16):
+            return False
+        if torch.is_grad_enabled() and (
+            hidden.requires_grad or any(p.requires_grad for p in mod.parameters())
+        ):
+            return False
+        return True
+
     def forward(self, hidden_states, top_k_index, top_k_weights):
         cd = self.mod.compute_dtype if self.mod.compute_dtype is not None else hidden_states.dtype
         in_dtype, in_dev = hidden_states.dtype, hidden_states.device
@@ -525,7 +545,12 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
         # offload's per-forward stage/evict active would re-stage the whole layer every
         # token — the exact traffic the engine exists to remove.
         homes = None
-        handle = getattr(parent, "_offload", None) if parent is not None else None
+        # `_offload` lives on the ExpertsLoRA wrapper for wrapped bases, but a BARE offloaded
+        # module (e.g. GptOssExperts4bit straight from the loader) carries it itself — check
+        # both or those modules silently copy 0-element placeholders into the arena.
+        handle = getattr(mod, "_offload", None)
+        if handle is None and parent is not None:
+            handle = getattr(parent, "_offload", None)
         if handle is not None and getattr(handle, "home", None):
             homes = handle.home
             offloaded_taken_over.append(handle)
@@ -544,13 +569,7 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
 
         def _fwd(hidden, idx, wts, _m=mod):
             st = _m._pipelined
-            cd = _m.compute_dtype if _m.compute_dtype is not None else hidden.dtype
-            if (hidden.shape[0] != 1 or idx.numel() != st.k
-                    or cd not in (torch.bfloat16, torch.float16)):
-                return _m._e4b_pipe_ref(hidden, idx, wts)
-            if torch.is_grad_enabled() and (
-                hidden.requires_grad or any(p.requires_grad for p in _m.parameters())
-            ):
+            if not st.will_serve(_m, hidden, idx):
                 return _m._e4b_pipe_ref(hidden, idx, wts)
             return st.forward(hidden, idx, wts)
 
