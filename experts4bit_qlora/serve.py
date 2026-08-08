@@ -45,17 +45,35 @@ peak VRAM, wall time, versions; empty/unset = off).
 aggregated JSONL is written once at clean shutdown, and is exactly the input the
 residency dial below consumes. Profile with residency OFF, on real traffic.
 
-Residency (spare VRAM -> decode speed), off by default::
+Residency (the pipelined/GEMM engine -> decode speed), off by default::
 
     E4B_EXPERT_PROFILE=/tmp/prof.jsonl python -m experts4bit_qlora.serve   # 1. profile a real workload
     E4B_RESIDENCY=pipelined E4B_HOT_PROFILE=/tmp/prof.jsonl E4B_HOT_PER_LAYER=8 \
       python -m experts4bit_qlora.serve                                     # 2. serve with hot experts resident
 
 ``E4B_RESIDENCY=pipelined`` keeps the ``E4B_HOT_PER_LAYER`` most-routed experts of each
-layer in VRAM and streams the cold tail through the pipelined engine. The hot sets are
-**frequency-ranked from a profile, never by index** — an index-ordered set on a
-256-expert top-6 layer serves ~6% of routed slots, so there is deliberately no by-index
-fallback: without a profile this raises rather than serving a dial that does nothing.
+layer in VRAM and streams the cold tail through the pipelined engine.
+
+**Where the speed actually comes from — measured, 2026-08-08.** It is the ENGINE, not the
+hot set. Swapping the reference streaming forward for the pipelined/GEMM path is worth
+2.15-3.51x with ZERO experts pinned; raising K on top of that was flat-to-slightly-negative
+on every model tested and only costs VRAM::
+
+                        K=0 ref   K=-1 engine,0hot   K=8           K=32
+    granite-3.0-1b      7.23      25.38  3.51x       24.95 3.45x   23.47 3.25x
+    OLMoE-1B-7B         9.97      27.32  2.74x       25.01 2.51x   30.68 3.08x
+    Qwen3-30B-A3B       3.29       7.08  2.15x        7.12 2.16x    6.54 1.99x
+
+(A100, ``offload=False``, 64 new tokens; each figure the median of repeated runs in fresh
+processes — the FIRST generate() in a process is measurably fast, and quoting it once
+produced a "+16%" that did not replicate.) So set ``E4B_HOT_PER_LAYER`` to the smallest
+value that satisfies the profile gate and spend the VRAM elsewhere unless your own
+measurement says otherwise.
+
+The hot sets are **frequency-ranked from a profile, never by index** — an index-ordered set
+on a 256-expert top-6 layer serves ~6% of routed slots, so there is deliberately no
+by-index fallback: without a profile this raises rather than serving a dial that does
+nothing.
 ``E4B_K_SLOTS`` overrides the routed top-k if the config lacks ``num_experts_per_tok``.
 ``/health`` reports the module count and the profile's predicted coverage.
 
@@ -458,23 +476,6 @@ class Engine:
                 "different k silently falls back to the reference path.")
 
         hot_sets = hot_sets_from_profile(cfg.hot_profile, cfg.hot_per_layer)
-        if cfg.offload:
-            # Residency and offload are mutually exclusive BY CONSTRUCTION: offload moves the
-            # 4-bit expert weights into pinned CPU RAM and leaves 0-element placeholders on the
-            # module, while _PipelinedResidency fills its arena by copying those very tensors.
-            # Enabling both made the arena copy read from nothing and died deep in the engine
-            # as "The size of tensor a (N) must match the size of tensor b (0)" — a shape error
-            # that names neither offload nor residency. Reproduced 2026-08-08 on granite
-            # (gate_up numel 16777216 with offload off vs 0 with it on) and on Qwen3-30B-A3B
-            # via this server, whose default OFFLOAD_EXPERTS=1 made the dial unusable.
-            # Residency IS an offload mechanism (hot resident + cold streamed from its own
-            # pinned arena), so the fix is to pick one, not to order them.
-            raise ValueError(
-                "E4B_RESIDENCY=pipelined requires OFFLOAD_EXPERTS=0. Offload leaves 0-element "
-                "expert placeholders on the module and the residency arena is built by copying "
-                "those tensors, so the combination cannot work — residency already provides the "
-                "hot-resident/cold-streamed split that offload is doing. Set OFFLOAD_EXPERTS=0 "
-                "and size E4B_HOT_PER_LAYER to the VRAM you actually have.")
         n_targets = len(target_modules(model))
         if len(hot_sets) != n_targets:
             # The engine takes one entry per targeted module IN MODULE ORDER; a profile

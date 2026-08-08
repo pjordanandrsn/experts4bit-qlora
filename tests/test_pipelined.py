@@ -323,3 +323,38 @@ def test_mixed_split_gathers_only_the_cold_lanes():
         assert int(st.row_idx[2]) >= st.n_hot
     finally:
         disable_pipelined_residency(mod)
+
+
+def test_will_serve_is_the_single_source_of_truth():
+    """The staging hook and the forward router must agree on what the engine serves.
+
+    Bugbot (PR #87) caught these drifting: the offload takeover skipped staging for ANY
+    T=1 no-grad call, while `_fwd` additionally falls back when the routed top-k does not
+    match `k_slots` or compute dtype is not bf16/fp16. Those calls then hit the reference
+    forward and read 0-element offload placeholders. Both sides now call `will_serve`, so
+    this pins the cases that must return False — a T=1 no-grad call is NOT sufficient.
+    """
+    import torch
+    from experts4bit_qlora.pipelined import _PipelinedResidency
+
+    class _Mod:
+        compute_dtype = torch.bfloat16
+        def parameters(self):
+            return iter(())
+
+    st = _PipelinedResidency.__new__(_PipelinedResidency)
+    st.k = 4
+    mod = _Mod()
+    hid = torch.zeros(1, 8, dtype=torch.bfloat16)
+
+    assert st.will_serve(mod, hid, torch.zeros(4, dtype=torch.long)) is True
+    # routed top-k mismatch -> reference forward -> the layer still needs staging
+    assert st.will_serve(mod, hid, torch.zeros(6, dtype=torch.long)) is False
+    # prefill
+    assert st.will_serve(mod, torch.zeros(8, 8, dtype=torch.bfloat16),
+                         torch.zeros(4, dtype=torch.long)) is False
+    # unsupported compute dtype
+    mod32 = _Mod()
+    mod32.compute_dtype = torch.float32
+    assert st.will_serve(mod32, torch.zeros(1, 8),
+                         torch.zeros(4, dtype=torch.long)) is False
