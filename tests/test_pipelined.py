@@ -354,5 +354,7 @@ def test_will_serve_is_the_single_source_of_truth():
     assert st.will_serve(mod, torch.zeros(8, 8, dtype=torch.bfloat16),
                          torch.zeros(4, dtype=torch.long)) is False
     # unsupported compute dtype
-    mod32 = _Mod(); mod32.compute_dtype = torch.float32
-    assert st.will_serve(mod32, torch.zeros(1, 8), torch.zeros(4, dtype=torch.long)) is False
+    mod32 = _Mod()
+    mod32.compute_dtype = torch.float32
+    assert st.will_serve(mod32, torch.zeros(1, 8),
+                         torch.zeros(4, dtype=torch.long)) is False
