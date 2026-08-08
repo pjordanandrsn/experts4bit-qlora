@@ -697,6 +697,27 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
     experts_lora._offload = handle
 
     def _stage_pre_hook(module, args):
+        # PIPELINED RESIDENCY TAKEOVER: when the engine owns this module it serves DECODE
+        # from its own hot stack + pinned arena, so staging the whole layer per token would
+        # re-introduce exactly the traffic it removes. But the engine refuses prefill (T>1),
+        # grad-enabled and non-bf16/fp16 forwards and falls back to the reference forward,
+        # which reads the module's tensors — 0-element placeholders while offloaded. So the
+        # takeover is CONDITIONAL: skip staging only for the calls the engine will handle.
+        if getattr(handle, "_superseded", False):
+            # Ask the ENGINE whether it will serve this exact call — never re-derive the
+            # condition here. Bugbot caught the first cut skipping staging for any T=1 no-grad
+            # forward while the engine additionally rejects a routed top-k != k_slots and
+            # non-bf16/fp16 compute; those calls fell through to the reference forward and read
+            # 0-element placeholders. Anything the engine will NOT serve still gets staged.
+            try:
+                base = handle.base
+                st = getattr(base, "_pipelined", None)
+                served = (st is not None and len(args) >= 2
+                          and st.will_serve(base, args[0], args[1]))
+            except Exception:
+                served = False          # unsure -> stage; a redundant stage is merely slow
+            if served:
+                return
         # Prefetch policy only at inference (no autograd tape, deterministic layer order). Any
         # grad-enabled forward — training, checkpoint recompute — takes the single-slot sync path,
         # and so does a no_grad forward of a module still in train() mode: reentrant gradient

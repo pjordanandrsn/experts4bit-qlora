@@ -122,7 +122,7 @@ class _PipelinedResidency:
     address table bakes ``data_ptr()``s — the arena, hot stack, and slot
     tensors are owned here and never reallocated)."""
 
-    def __init__(self, mod, hot_ids, device, k_slots: int):
+    def __init__(self, mod, hot_ids, device, k_slots: int, homes=None):
         import os
         if os.environ.get("TRITON_INTERPRET") == "1":
             raise RuntimeError(
@@ -184,10 +184,21 @@ class _PipelinedResidency:
                 self.pinned = False  # pageable fallback: correct, but UVA reads
                 # from pageable memory are not guaranteed — enable() refuses below
         a_f32 = arena.view(torch.float32)
-        gu_p = mod.gate_up_proj.view(E, -1)
-        gu_a = mod.gate_up_absmax.view(E, -1).float()
-        dn_p = mod.down_proj.view(E, -1)
-        dn_a = mod.down_absmax.view(E, -1).float()
+        # Source the arena from the OFFLOAD HOMES when the module is offloaded. Under
+        # offload the base's expert tensors are 0-element GPU placeholders and the real
+        # (pinned, correctly shaped) weights live in handle.home — copying the placeholders
+        # produced "size of tensor a (N) must match tensor b (0)" and made residency and
+        # offload mutually exclusive, which is backwards: residency IS an offload mechanism,
+        # so it should TAKE OVER from the staging hooks, not refuse to coexist with them.
+        # This is what lets a model larger than VRAM use the dial at all (Qwen3-30B NF4
+        # needs 19.84 GiB resident vs a 12 GB A2000).
+        src = homes if homes is not None else {
+            "gate_up_proj": mod.gate_up_proj, "gate_up_absmax": mod.gate_up_absmax,
+            "down_proj": mod.down_proj, "down_absmax": mod.down_absmax}
+        gu_p = src["gate_up_proj"].view(E, -1)
+        gu_a = src["gate_up_absmax"].view(E, -1).float()
+        dn_p = src["down_proj"].view(E, -1)
+        dn_a = src["down_absmax"].view(E, -1).float()
         arena[:, off[0]:off[0] + seg[0]].copy_(gu_p.view(torch.uint8) if gu_p.dtype != torch.uint8 else gu_p)
         a_f32[:, off[1] // 4: off[1] // 4 + seg[1] // 4].copy_(gu_a)
         arena[:, off[2]:off[2] + seg[2]].copy_(dn_p.view(torch.uint8) if dn_p.dtype != torch.uint8 else dn_p)
@@ -354,6 +365,26 @@ class _PipelinedResidency:
         dn = gemm_4bit_grouped(h.contiguous(), self.dn_p_v, self.dn_a_v, self.sizes, self.row_idx)
         return dn
 
+    def will_serve(self, mod, hidden, idx) -> bool:
+        """Will the engine serve this call, or does it fall back to the reference forward?
+
+        ONE definition, used by both ``_fwd`` (to route) and offload's stage pre-hook (to
+        decide whether the layer still needs staging). Bugbot caught these drifting apart on
+        the first cut: the hook skipped staging for any T=1 no-grad call, but the engine ALSO
+        rejects a routed top-k that does not match ``k_slots`` and non-bf16/fp16 compute —
+        so those calls fell back to the reference forward and read 0-element placeholders.
+        """
+        cd = mod.compute_dtype if mod.compute_dtype is not None else hidden.dtype
+        if hidden.shape[0] != 1 or idx.numel() != self.k:
+            return False
+        if cd not in (torch.bfloat16, torch.float16):
+            return False
+        if torch.is_grad_enabled() and (
+            hidden.requires_grad or any(p.requires_grad for p in mod.parameters())
+        ):
+            return False
+        return True
+
     def forward(self, hidden_states, top_k_index, top_k_weights):
         cd = self.mod.compute_dtype if self.mod.compute_dtype is not None else hidden_states.dtype
         in_dtype, in_dev = hidden_states.dtype, hidden_states.device
@@ -370,8 +401,8 @@ class _GptOssPipelined(_PipelinedResidency):
     ``(up+1)*(gate*sigmoid(gate*alpha))`` with per-expert biases indexed by
     the routed global ids (device index_select — enqueued, never read)."""
 
-    def __init__(self, mod, hot_ids, device, k_slots):
-        super().__init__(mod, hot_ids, device, k_slots)
+    def __init__(self, mod, hot_ids, device, k_slots, homes=None):
+        super().__init__(mod, hot_ids, device, k_slots, homes=homes)
         self.gate_up_bias = mod.gate_up_bias.to(self.device)
         self.down_bias = mod.down_bias.to(self.device)
         self.alpha = float(mod.alpha)
@@ -413,6 +444,13 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
     it sizes the slot store; a forward with a different k falls back to the
     reference path). K (the hot count) is data: pass a 0-length set for pure
     streaming, all experts for fully resident — same code path.
+
+    **The engine, not K, is what buys the speed.** Measured 2026-08-08 on an A100
+    (``offload=False``, 64 new tokens, medians over fresh processes): empty hot sets already
+    give 3.51x on granite-3.0-1b, 2.74x on OLMoE-1B-7B and 2.15x on Qwen3-30B-A3B against the
+    reference forward, and raising K on top was flat-to-slightly-negative on all three while
+    costing VRAM (Qwen: +0.77 GiB at K=8, +3.7 GiB at K=32). Empty hot sets are therefore a
+    perfectly good production configuration, not a degenerate one.
 
     ``ExpertsLoRA``-wrapped bases — the experts of every model
     ``load_moe_4bit_streaming`` returns — are targeted as well: the wrapper
@@ -458,6 +496,7 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
             f"hot_sets has {len(hot_sets)} entries but the model has {len(mods)} "
             f"ExpertsNbit modules — exactly one entry per MoE layer in module order")
 
+    offloaded_taken_over = []   # handles whose staging the engine supersedes
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     try:
         stock_forwards.add(GptOssExperts4bit.forward)
@@ -499,8 +538,24 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
             # adapter, and are warned about separately below.
             if not parent._adapter_is_zero():
                 unreachable.append(type(mod).__name__)
+        # If this module is OFFLOADED, its expert tensors are 0-element placeholders and the
+        # real pinned weights are in handle.home. Hand those to the engine as the arena
+        # source, then take the staging hooks OUT of the loop: the engine now owns expert
+        # movement (hot resident + cold gathered from its own pinned arena), so leaving
+        # offload's per-forward stage/evict active would re-stage the whole layer every
+        # token — the exact traffic the engine exists to remove.
+        homes = None
+        # `_offload` lives on the ExpertsLoRA wrapper for wrapped bases, but a BARE offloaded
+        # module (e.g. GptOssExperts4bit straight from the loader) carries it itself — check
+        # both or those modules silently copy 0-element placeholders into the arena.
+        handle = getattr(mod, "_offload", None)
+        if handle is None and parent is not None:
+            handle = getattr(parent, "_offload", None)
+        if handle is not None and getattr(handle, "home", None):
+            homes = handle.home
+            offloaded_taken_over.append(handle)
         cls = _GptOssPipelined if isinstance(mod, GptOssExperts4bit) else _PipelinedResidency
-        state = cls(mod, hot_sets[i], device, k_slots)
+        state = cls(mod, hot_sets[i], device, k_slots, homes=homes)
         if not state.pinned:
             raise RuntimeError(
                 "pipelined residency requires pinned host memory (UVA-addressable) for the cold "
@@ -514,13 +569,7 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
 
         def _fwd(hidden, idx, wts, _m=mod):
             st = _m._pipelined
-            cd = _m.compute_dtype if _m.compute_dtype is not None else hidden.dtype
-            if (hidden.shape[0] != 1 or idx.numel() != st.k
-                    or cd not in (torch.bfloat16, torch.float16)):
-                return _m._e4b_pipe_ref(hidden, idx, wts)
-            if torch.is_grad_enabled() and (
-                hidden.requires_grad or any(p.requires_grad for p in _m.parameters())
-            ):
+            if not st.will_serve(_m, hidden, idx):
                 return _m._e4b_pipe_ref(hidden, idx, wts)
             return st.forward(hidden, idx, wts)
 
@@ -555,16 +604,30 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
             RuntimeWarning,
             stacklevel=2,
         )
+
+    # Take over expert movement from offload for the calls this engine serves (decode).
+    # Conditional by design — see the takeover block in offload._stage_pre_hook: prefill,
+    # grad and odd-dtype forwards still fall back to the reference path and still need the
+    # layer staged, so this flag suppresses staging ONLY where the engine is authoritative.
+    for _h in offloaded_taken_over:
+        _h._superseded = True
     return patched
 
 
 def disable_pipelined_residency(model) -> int:
     """Undo :func:`enable_pipelined_residency`; returns modules restored."""
-    mods = model.modules() if hasattr(model, "modules") else [model]
+    mods = list(model.modules()) if hasattr(model, "modules") else [model]
     restored = 0
     for mod in mods:
         if hasattr(mod, "_e4b_pipe_ref") and hasattr(mod, "_pipelined"):
             mod.forward = mod._e4b_pipe_ref
             del mod._e4b_pipe_ref, mod._pipelined
             restored += 1
+    # Hand expert movement BACK to offload. Leaving _superseded set would make the staging
+    # hooks skip decode forever while nothing serves them — the module's tensors are
+    # placeholders, so that reads as a shape error long after residency was turned off.
+    for m in mods:
+        h = getattr(m, "_offload", None)
+        if h is not None and getattr(h, "_superseded", False):
+            h._superseded = False
     return restored

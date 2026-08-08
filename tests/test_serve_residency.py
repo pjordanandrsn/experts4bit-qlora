@@ -14,6 +14,7 @@ Every one of those is a green-looking failure, which is the class this file exis
 No CUDA and no model load: these exercise the decision logic directly.
 """
 
+import inspect
 import json
 
 import pytest
@@ -29,6 +30,10 @@ def _engine(**kw):
     from experts4bit_qlora.serve import Engine
 
     eng = Engine.__new__(Engine)
+    # Residency requires offload OFF (they are mutually exclusive — see the guard in
+    # _enable_residency). These tests exercise OTHER failure modes, so they must start from
+    # the valid combination; tests about the guard itself pass offload=True explicitly.
+    kw.setdefault("offload", False)
     eng.cfg = ServeConfig(**kw)
     eng.residency_n = 0
     eng.residency_coverage = None
@@ -210,3 +215,35 @@ def test_adapter_swap_invalidates_the_delegation_cache():
         mod.gate_up_lora_B.data.zero_()
     mod._delegate_ok = None
     assert mod._adapter_is_zero()
+
+
+def test_residency_allowed_when_offload_is_off(tmp_path):
+    """The mirror of the guard: with offload off, the same config proceeds PAST it.
+
+    Without this, a guard that always raised would satisfy the test above. The dummy model
+    makes a later stage fail; all that is asserted here is that the failure is not the
+    offload guard.
+    """
+    p = tmp_path / "prof.jsonl"
+    _profile(p)
+    eng = _engine(residency="pipelined", hot_profile=str(p), hot_per_layer=4, offload=False)
+    try:
+        eng._enable_residency(object(), _Cfg())
+    except Exception as e:
+        assert "OFFLOAD_EXPERTS=0" not in str(e), "offload guard fired with offload disabled"
+
+
+def test_residency_allowed_with_offload_when_homes_exist():
+    """Residency + offload now COMPOSE — the guard must not fire on that pairing.
+
+    Offload parks the experts in pinned CPU homes and leaves 0-element placeholders on the
+    module; the engine now sources its arena from those homes and takes over staging for the
+    decode forwards it serves. That combination is the whole point on a card too small to
+    hold the model (Qwen3-30B: 20.59 GiB resident vs 4.45 GiB offloaded, same ~13 tok/s), so
+    a blanket refusal would forbid the configuration this feature exists for.
+    """
+    import experts4bit_qlora.serve as srv
+    src = inspect.getsource(srv.Engine._enable_residency)
+    assert "OFFLOAD_EXPERTS=0" not in src, (
+        "the hard offload refusal is still in _enable_residency; residency now composes "
+        "with offload by sourcing the arena from handle.home")
