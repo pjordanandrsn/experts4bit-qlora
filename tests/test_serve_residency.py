@@ -74,10 +74,33 @@ def test_refuses_a_by_index_hot_set(tmp_path):
     with pytest.raises(ValueError, match="frequency-ranked"):
         eng._enable_residency(object(), _Cfg())
 
+    # The profile is mandatory at EVERY K, including 0: it is what proves a hot set would
+    # have been frequency-ranked had one been asked for.
+    eng = _engine(residency="pipelined", hot_per_layer=0)
+    with pytest.raises(ValueError, match="frequency-ranked"):
+        eng._enable_residency(object(), _Cfg())
+
+
+def test_zero_hot_per_layer_is_accepted(tmp_path):
+    """K=0 is pure streaming, NOT the by-index failure above — there is no hot set at all.
+    The engine documents a 0-length set as a production configuration, and it measured
+    flat-to-better than K=8 on every model while giving back the VRAM. The old ``<= 0``
+    gate forced deployments to pin experts they had measured as worthless purely to get
+    past this check."""
     prof = tmp_path / "p.jsonl"
     _profile(prof)
-    eng = _engine(residency="pipelined", hot_profile=str(prof))   # profile but no K
-    with pytest.raises(ValueError, match="E4B_HOT_PER_LAYER"):
+    eng = _engine(residency="pipelined", hot_profile=str(prof), hot_per_layer=0)
+    # Reaching the model-inspection step is the proof it got through the gate: the stub
+    # has no .modules(). A gate rejection would surface as ValueError, not AttributeError.
+    with pytest.raises(AttributeError):
+        eng._enable_residency(object(), _Cfg())
+
+
+def test_negative_hot_per_layer_is_still_refused(tmp_path):
+    prof = tmp_path / "p.jsonl"
+    _profile(prof)
+    eng = _engine(residency="pipelined", hot_profile=str(prof), hot_per_layer=-1)
+    with pytest.raises(ValueError, match="frequency-ranked"):
         eng._enable_residency(object(), _Cfg())
 
 
