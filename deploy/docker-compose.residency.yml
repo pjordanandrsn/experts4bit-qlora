@@ -1,0 +1,7 @@
+services:
+  e4b-serve-qwen:
+    environment:
+      - E4B_RESIDENCY=pipelined
+      - E4B_HOT_PROFILE=/receipts/qwen-expert-profile.jsonl
+      - E4B_HOT_PER_LAYER=0
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
