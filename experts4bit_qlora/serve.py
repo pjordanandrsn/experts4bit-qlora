@@ -66,9 +66,29 @@ on every model tested and only costs VRAM::
 
 (A100, ``offload=False``, 64 new tokens; each figure the median of repeated runs in fresh
 processes — the FIRST generate() in a process is measurably fast, and quoting it once
-produced a "+16%" that did not replicate.) So set ``E4B_HOT_PER_LAYER`` to the smallest
-value that satisfies the profile gate and spend the VRAM elsewhere unless your own
-measurement says otherwise.
+produced a "+16%" that did not replicate.)
+
+That table is ``offload=False``. The offload path is where K *should* pay: the cold tier is
+pinned host RAM across PCIe, so a frequency-ranked hot set would remove transfers rather
+than duplicate copies already in VRAM. It does not. Measured 2026-08-08 on the QNAP judge
+(A2000 12 GB, Qwen3-30B-A3B, ``offload=True``, identical prompt, byte-identical output,
+steady state, n=5-6 each)::
+
+    K=8   23.4 s   5.81 GB   coverage 52.3% of routed token-slots
+    K=0   23.3 s   4.79 GB   coverage 0%
+
+No difference detectable at this sample size, so ``E4B_HOT_PER_LAYER=0`` is the better
+config on both paths: same speed, 1.02 GB cheaper. The profile is still required at K=0 —
+it is what proves a hot set would have been frequency-ranked.
+
+**Interleave, and re-measure the first arm.** A first pass here had K=8 ~18% ahead on
+apparently disjoint ranges (19.0 s vs 23.3 s). Re-deploying K=8 reproduced the K=0 number
+(23.4 s), and a second K=0 deploy gave 23.8 s: every window after the first landed at
+23-24 s regardless of K. Single-shot timings on this box carry ~±3 s of spread and drift
+between windows for reasons not established here — the one fast window was the first after
+a ~3 h idle, and it was *not* thermal throttling, since later runs got faster as the card
+climbed to 80 C. Treat any residency delta under ~20% as unresolved until the first arm is
+measured again at the end.
 
 The hot sets are **frequency-ranked from a profile, never by index** — an index-ordered set
 on a 256-expert top-6 layer serves ~6% of routed slots, so there is deliberately no
@@ -453,14 +473,24 @@ class Engine:
         if cfg.residency != "pipelined":
             raise ValueError(
                 f"E4B_RESIDENCY={cfg.residency!r} is not supported; use 'pipelined' or unset it")
-        if not cfg.hot_profile or cfg.hot_per_layer <= 0:
+        if not cfg.hot_profile or cfg.hot_per_layer < 0:
             # Refusing beats defaulting. Serving a by-index hot set would look like the
             # feature working while buying ~nothing: on a 256-expert top-6 layer an
             # index-ordered set of 16 catches a routed expert ~6% of the time.
+            #
+            # K==0 is NOT that failure and is allowed. It is pure streaming with no hot
+            # set at all, which is what the measurements above actually favour and what
+            # enable_pipelined_residency documents as a production configuration ("K is
+            # data: pass a 0-length set for pure streaming"). The old `<= 0` gate forced
+            # every deployment to pin experts it had measured as worthless, purely to get
+            # past this line. The profile stays mandatory at every K: it is what proves a
+            # hot set would have been frequency-ranked, and it sizes the per-module count
+            # check below.
             raise ValueError(
-                "E4B_RESIDENCY needs BOTH E4B_HOT_PROFILE (a JSONL from E4B_EXPERT_PROFILE) "
-                "and E4B_HOT_PER_LAYER>0. Hot sets must be frequency-ranked; this path "
-                "deliberately has no by-index fallback.")
+                "E4B_RESIDENCY needs E4B_HOT_PROFILE (a JSONL from E4B_EXPERT_PROFILE) "
+                "and E4B_HOT_PER_LAYER>=0, where 0 means pure streaming with no resident "
+                "experts. Hot sets must be frequency-ranked; this path deliberately has "
+                "no by-index fallback.")
         if not os.path.isfile(cfg.hot_profile):
             raise FileNotFoundError(f"E4B_HOT_PROFILE: no file at {cfg.hot_profile}")
 
@@ -790,7 +820,9 @@ def create_app(cfg: Optional[ServeConfig] = None, engine: Optional[Engine] = Non
             "residency": {
                 "mode": cfg.residency or None,
                 "modules": engine.residency_n,
-                "hot_per_layer": cfg.hot_per_layer or None,
+                # `or None` would report K=0 as "unset" — the one value that is both a
+                # valid production config and indistinguishable from not-configured.
+                "hot_per_layer": cfg.hot_per_layer if cfg.residency else None,
                 "profile_coverage": (round(engine.residency_coverage, 4)
                                      if engine.residency_coverage is not None else None),
             },
