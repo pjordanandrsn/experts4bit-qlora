@@ -62,15 +62,32 @@ import torch
 
 from .hot_residency import _eligible
 
+# Triton must be bound at MODULE scope, not inside _gather_kernel(). Triton's
+# JIT re-resolves the kernel's names against the decorated function's
+# ``__globals__`` and does not capture enclosing-scope bindings (verified
+# False on triton 3.2.0), so a function-local ``tl`` leaves ``BLOCK:
+# tl.constexpr`` unresolvable and raises NameError('tl is not defined') at
+# first compile. Newer tritons resolve nonlocals and mask the bug, which is
+# how the identical source compiled on one box and failed on another.
+# Optional dep: the module must still import without it — pipelined_available()
+# is the gate, and nothing dereferences these until a kernel actually launches.
+try:
+    import triton
+    import triton.language as tl
+except ImportError:  # pragma: no cover - exercised only on triton-less hosts
+    triton = None
+    tl = None
+
 
 def _align8(n: int) -> int:
     return (n + 7) & ~7
 
 
 def pipelined_available() -> bool:
+    if triton is None:
+        return False
     try:
         from nf4_grouped import gemm_4bit_grouped  # noqa: F401
-        import triton  # noqa: F401
     except ImportError:
         return False
     return torch.cuda.is_available()
@@ -89,8 +106,10 @@ _KERNEL = None
 def _gather_kernel():
     global _KERNEL
     if _KERNEL is None:
-        import triton
-        import triton.language as tl
+        if triton is None:  # pipelined_available() is the caller-side gate
+            raise RuntimeError(
+                "pipelined residency requires triton; import failed at module "
+                "load. Gate on pipelined_available() before building the engine.")
 
         @triton.jit
         def _gather_rows_addr(
