@@ -74,12 +74,23 @@ def _assign(model: torch.nn.Module, name: str, tensor: torch.Tensor) -> None:
     mod._parameters[leaf] = torch.nn.Parameter(tensor, requires_grad=False)
 
 
+def _text_layer_count(model: torch.nn.Module) -> int:
+    """The model's OWN text-tower depth. Derived, never taken on trust: a
+    caller-supplied count that undershoots would let upper layers stay on meta
+    while the coverage check passed (Bugbot #92)."""
+    try:
+        return len(model.get_submodule("model.language_model.layers"))
+    except AttributeError as e:
+        raise GlimmerKeymapError(
+            "model has no model.language_model.layers — not a Glimmer tree") from e
+
+
 def load_glimmer_text_tower(
     gguf_path: str,
     model: torch.nn.Module,
     *,
     qk_scale_factor: float,
-    num_layers: int,
+    num_layers: int | None = None,
     dtype: torch.dtype = torch.bfloat16,
     strict: bool = True,
 ) -> dict:
@@ -91,6 +102,11 @@ def load_glimmer_text_tower(
     With ``strict`` (the default) any unfilled promised parameter raises.
     """
     dequantize_ggml, read_header, read_tensor_bytes = _kquant_lane()
+    depth = _text_layer_count(model)
+    if num_layers is not None and num_layers != depth:
+        raise GlimmerKeymapError(
+            f"num_layers={num_layers} disagrees with the model's own depth "
+            f"({depth}) — refusing to validate coverage against a wrong count")
     header = read_header(gguf_path)
 
     assigned, dropped = 0, 0
@@ -106,14 +122,21 @@ def load_glimmer_text_tower(
         _assign(model, param_name, out.to(dtype))
         assigned += 1
 
-    promised = expected_param_names(num_layers)
+    # Coverage is checked against the MODEL, not against what we promised: every
+    # text-tower parameter must be materialized. That is strictly stronger than
+    # walking `promised` (which can only ever find holes it already knew about)
+    # and it is derived from the tree, so no caller argument can weaken it.
+    promised = expected_param_names(depth)
     unfilled = sorted(
-        n for n in promised
-        if getattr(model.get_submodule(n.rpartition(".")[0]),
-                   n.rpartition(".")[2]).is_meta)
+        n for n, t in model.named_parameters()
+        if t.is_meta and (n.startswith("model.language_model.") or n == "lm_head.weight"))
+    missing_promised = sorted(promised - {n for n, _ in model.named_parameters()})
+    if missing_promised:
+        raise GlimmerKeymapError(
+            f"keymap promises parameters the model lacks: {missing_promised[:3]}")
     if strict and unfilled:
         raise GlimmerKeymapError(
-            f"{len(unfilled)} promised parameters still unfilled after load, "
+            f"{len(unfilled)} text-tower parameters still unfilled after load, "
             f"e.g. {unfilled[:3]} — the GGUF is incomplete or the keymap drifted")
     return {"assigned": assigned, "dropped": dropped,
             "text_only": True, "unfilled": unfilled}
