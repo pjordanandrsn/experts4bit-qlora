@@ -132,8 +132,7 @@ def test_full_load_fills_every_promised_param(tmp_path):
     cfg, path, written = _try_setup(tmp_path)
     model = _build_meta_model(cfg)
     report = load_glimmer_text_tower(
-        str(path), model, qk_scale_factor=QK, num_layers=N_LAYERS,
-        dtype=torch.float32)
+        str(path), model, qk_scale_factor=QK, dtype=torch.float32)
     assert report["unfilled"] == []
     assert report["dropped"] == 2 * N_LAYERS          # the qk-norm scalars
     assert report["assigned"] == 3 + 12 * N_LAYERS
@@ -149,7 +148,7 @@ def test_norm_arithmetic_and_untied_head(tmp_path):
     cfg, path, written = _try_setup(tmp_path)
     model = _build_meta_model(cfg)
     load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
-                            num_layers=N_LAYERS, dtype=torch.float32)
+                            dtype=torch.float32)
     sd = dict(model.named_parameters())
     # Centered norm: model param == gguf - 1
     got = sd["model.language_model.layers.0.input_layernorm.weight"].float()
@@ -171,7 +170,7 @@ def test_missing_tensor_is_refused_not_absorbed(tmp_path):
     model = _build_meta_model(cfg)
     with pytest.raises(GlimmerKeymapError, match="unfilled"):
         load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
-                                num_layers=N_LAYERS, dtype=torch.float32)
+                                dtype=torch.float32)
 
 
 def test_learned_qk_norm_raises(tmp_path):
@@ -179,4 +178,14 @@ def test_learned_qk_norm_raises(tmp_path):
     model = _build_meta_model(cfg)
     with pytest.raises(GlimmerKeymapError, match="learned qk-norm"):
         load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
-                                num_layers=N_LAYERS, dtype=torch.float32)
+                                dtype=torch.float32)
+
+
+def test_wrong_num_layers_is_refused(tmp_path):
+    """A caller-supplied depth that disagrees with the model must raise, not
+    quietly narrow the coverage check (Bugbot #92)."""
+    cfg, path, _ = _try_setup(tmp_path)
+    model = _build_meta_model(cfg)
+    with pytest.raises(GlimmerKeymapError, match="disagrees with the model"):
+        load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
+                                num_layers=N_LAYERS - 1, dtype=torch.float32)
