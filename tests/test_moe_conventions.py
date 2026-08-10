@@ -17,7 +17,10 @@ torch = pytest.importorskip("torch")
 
 from experts4bit_qlora.moe_conventions import (  # noqa: E402
     CONVENTIONS,
+    JAMBA,
+    LFM2_MOE,
     MIXTRAL,
+    PHIMOE,
     QWEN2_MOE,
     MoEConventionError,
     convention_for,
@@ -49,8 +52,8 @@ def test_gate_precedes_up_in_upstream_spec(conv):
     """The converter lists the gate source FIRST and concatenates on the
     intermediate axis — that is what makes the gate the first block."""
     block = _spec_block(_conversion_src(), conv.name)
-    gate_tok = "gate_proj" if conv is QWEN2_MOE else "w1"
-    up_tok = "up_proj" if conv is QWEN2_MOE else "w3"
+    w_spelled = "w1" in conv.roles
+    gate_tok, up_tok = ("w1", "w3") if w_spelled else ("gate_proj", "up_proj")
     gi, ui = block.find(gate_tok), block.find(up_tok)
     assert gi != -1 and ui != -1, f"{conv.name}: gate/up tokens vanished from the spec"
     assert gi < ui, f"{conv.name}: upstream now lists up BEFORE gate — re-adjudicate"
@@ -141,3 +144,32 @@ def test_every_declared_model_type_is_actually_aliased_upstream():
                 continue
             assert re.search(rf'"{re.escape(mt)}":\s*"{conv.name}"', src), \
                 f"{mt} no longer aliases to {conv.name} upstream — re-adjudicate"
+
+
+def test_new_conventions_containers_and_roles():
+    """The two axes of variation: container and projection spelling."""
+    assert PHIMOE.match("block_sparse_moe.experts.2.w1.weight") == (2, "gate")
+    assert JAMBA.match("feed_forward.experts.2.gate_proj.weight") == (2, "gate")
+    assert JAMBA.match("feed_forward.experts.2.up_proj.weight") == (2, "up")
+    assert LFM2_MOE.match("feed_forward.experts.2.w3.weight") == (2, "up")
+    # Containers must not cross-match.
+    assert JAMBA.match("mlp.experts.0.gate_proj.weight") is None
+    assert QWEN2_MOE.match("feed_forward.experts.0.gate_proj.weight") is None
+    assert LFM2_MOE.match("block_sparse_moe.experts.0.w1.weight") is None
+    # feed_forward families fuse into feed_forward, not mlp.
+    gu, dn = JAMBA.fused_names(3)
+    assert gu == "model.layers.3.feed_forward.experts.gate_up_proj"
+    assert dn == "model.layers.3.feed_forward.experts.down_proj"
+
+
+def test_granitemoe_is_deliberately_absent():
+    """granitemoe ships ALREADY-FUSED and needs renames, not a fusion; applying
+    an expert fusion to it would be wrong. It lives in loader.LEGACY_KEY_RENAMES."""
+    from experts4bit_qlora.moe_conventions import _BY_MODEL_TYPE
+    for mt in ("granitemoe", "granitemoehybrid", "granitemoeshared"):
+        assert mt not in _BY_MODEL_TYPE
+    src = _conversion_src()
+    block = _spec_block(src, "granitemoe")
+    assert "WeightConverter" not in block, \
+        "granitemoe gained a fusion upstream — it may now need a convention"
+    assert "input_linear" in block and "output_linear" in block
