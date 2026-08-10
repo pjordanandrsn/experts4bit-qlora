@@ -210,5 +210,5 @@ def test_computed_buffers_are_materialized(tmp_path):
     load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
                             dtype=torch.float32, device="cpu")
     metas = [n for n, b in model.named_buffers()
-             if b.is_meta and n.startswith("model.language_model.")]
+             if b.is_meta and n.startswith("model.language_model")]
     assert not metas, f"computed buffers left on meta: {metas[:4]}"

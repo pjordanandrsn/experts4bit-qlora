@@ -88,30 +88,47 @@ def _text_layer_count(model: torch.nn.Module) -> int:
 def _materialize_computed_buffers(model: torch.nn.Module, device) -> list[str]:
     """Re-create buffers that are COMPUTED, never shipped.
 
-    Rotary ``inv_freq`` is derived from the config at __init__ — no checkpoint
-    of any format carries it — so on a model built under ``torch.device("meta")``
-    it stays meta and the first forward dies with "Cannot copy out of meta
-    tensor". Weight loading cannot fix that: there is no weight to load. Rebuild
-    such buffers through the module's OWN initializer (``rope_init_fn``), which
-    is what transformers itself calls, rather than guessing the formula here.
+    Rotary ``inv_freq`` is derived from the config in the module's __init__ —
+    no checkpoint of any format carries it — so on a model built under
+    ``torch.device("meta")`` it stays meta and the first forward dies with
+    "Cannot copy out of meta tensor". Weight loading cannot fix that: there is
+    no weight to load.
 
-    Returns the names rebuilt (for the load report).
+    Rebuilt through the SAME call the constructor makes
+    (``ROPE_INIT_FUNCTIONS[rope_type]``, or the module's own
+    ``compute_default_rope_parameters``) rather than the deprecated ``device=``
+    ctor kwarg or a reimplemented formula, so a rope-scaling config keeps
+    whatever scaling it declares.
+
+    Text tower only: the vision half is a separate mmproj file this loader does
+    not own (``text_only=True``) and its rotary is a different implementation.
     """
     rebuilt = []
     for name, mod in model.named_modules():
+        if not (name.startswith("model.language_model") or name == "model"):
+            continue
         inv = getattr(mod, "inv_freq", None)
         if inv is None or not inv.is_meta:
             continue
-        init_fn = getattr(mod, "rope_init_fn", None)
         cfg = getattr(mod, "config", None)
+        rope_type = getattr(mod, "rope_type", "default")
+        init_fn = None
+        if rope_type != "default":
+            try:
+                from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+                init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            except Exception:
+                init_fn = None
+        if init_fn is None:
+            init_fn = getattr(mod, "compute_default_rope_parameters", None)
         if init_fn is None or cfg is None:
             raise GlimmerKeymapError(
-                f"{name}.inv_freq is on meta and the module exposes no "
-                f"rope_init_fn to rebuild it from")
+                f"{name}.inv_freq is on meta and the module exposes no rope "
+                f"initializer to rebuild it from")
         fresh, attn_scale = init_fn(cfg, device)
         mod.register_buffer("inv_freq", fresh, persistent=False)
-        if hasattr(mod, "original_inv_freq"):
-            mod.original_inv_freq = fresh
+        if getattr(mod, "original_inv_freq", None) is not None:
+            mod.register_buffer("original_inv_freq", fresh.clone(), persistent=False)
         if attn_scale is not None and hasattr(mod, "attention_scaling"):
             mod.attention_scaling = attn_scale
         rebuilt.append(f"{name}.inv_freq")
