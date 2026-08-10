@@ -151,6 +151,19 @@ LFM2_MOE = MoEConvention(
     model_types=frozenset({"lfm2_moe"}),
 )
 
+#: Dense models are the degenerate case: no experts at all. Giving them a
+#: convention whose expert pattern can never match lets the same planner serve
+#: every open-weight causal LM — the non-expert path (look the key up in the
+#: real module tree, raise if it is not there) was never MoE-specific. Verified
+#: end-to-end on Mistral-7B, Qwen3-8B and Phi-4.
+DENSE = MoEConvention(
+    name="dense",
+    expert_re=re.compile(r"(?!)"),      # matches nothing, by construction
+    roles={},
+    fused_prefix="mlp.experts",         # unused; no expert key can reach it
+    model_types=frozenset(),            # selected explicitly, never by lookup
+)
+
 CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
@@ -160,7 +173,7 @@ class MoEConventionError(ValueError):
     partial or mis-ordered stack computes wrong numbers without raising."""
 
 
-def convention_for(model_type: str) -> MoEConvention:
+def convention_for(model_type: str, *, dense_ok: bool = False) -> MoEConvention:
     """The storage convention for a model_type, or raise.
 
     Raising on an unknown type is deliberate. Guessing a convention is exactly
@@ -169,6 +182,12 @@ def convention_for(model_type: str) -> MoEConvention:
     try:
         return _BY_MODEL_TYPE[model_type]
     except KeyError:
+        if dense_ok:
+            # The caller has asserted this architecture has no experts. The
+            # planner still validates every key against the real tree, so a
+            # model that DOES have experts fails loudly on its expert keys
+            # rather than loading them as mystery passthroughs.
+            return DENSE
         raise MoEConventionError(
             f"no adjudicated MoE convention for model_type {model_type!r}. Add "
             f"one only after reading its converter spec in transformers' "

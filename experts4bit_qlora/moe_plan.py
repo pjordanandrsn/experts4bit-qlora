@@ -75,6 +75,7 @@ def plan_moe_checkpoint(
     model_type: str,
     *,
     ignore_param_patterns=(r"\.rotary_emb\.", r"\.inv_freq$"),
+    dense_ok: bool = False,
 ) -> MoELoadPlan:
     """Build and validate a load plan. Raises rather than returning a partial one.
 
@@ -88,8 +89,14 @@ def plan_moe_checkpoint(
     ``ignore_param_patterns`` names parameters no checkpoint ships because they
     are computed at build time (rotary ``inv_freq``). They are excluded from the
     "everything must be claimed" check — and only those.
+
+    ``dense_ok`` admits architectures with no experts (plain Llama/Mistral/Qwen
+    /Phi-style models) instead of raising on an unknown model_type. It is opt-in
+    because silently treating an unrecognised MoE as dense would load its expert
+    tensors as mystery passthroughs — with ``dense_ok`` the expert keys simply
+    fail to resolve against the tree and the plan raises, which is the point.
     """
-    conv = convention_for(model_type)
+    conv = convention_for(model_type, dense_ok=dense_ok)
     tree = set(model.state_dict())
     ignore_re = [re.compile(p) for p in ignore_param_patterns]
     ignored = tuple(sorted(n for n in tree if any(r.search(n) for r in ignore_re)))
