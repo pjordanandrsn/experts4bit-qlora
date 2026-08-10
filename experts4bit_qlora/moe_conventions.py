@@ -74,6 +74,16 @@ class MoEConvention:
     roles: dict
     fused_prefix: str
     model_types: frozenset = field(default_factory=frozenset)
+    # Substring rewrites upstream applies to NON-expert keys before matching
+    # them against the module tree, in order. Taken verbatim from the
+    # convention's WeightRenaming entries; empty for families whose non-expert
+    # spelling already matches (qwen2_moe, jamba, lfm2_moe).
+    renames: tuple = ()
+
+    def rename(self, key: str) -> str:
+        for src, dst in self.renames:
+            key = key.replace(src, dst)
+        return key
 
     def match(self, layer_suffix: str):
         """-> (expert_index, role) or None."""
@@ -112,6 +122,7 @@ MIXTRAL = MoEConvention(
     roles={"w1": "gate", "w3": "up", "w2": "down"},
     fused_prefix="mlp.experts",
     model_types=frozenset({"mixtral", "minimax", "minimax_m2"}),
+    renames=((".block_sparse_moe.", ".mlp."),),
 )
 
 PHIMOE = MoEConvention(
@@ -120,6 +131,7 @@ PHIMOE = MoEConvention(
     roles={"w1": "gate", "w3": "up", "w2": "down"},
     fused_prefix="mlp.experts",
     model_types=frozenset({"phimoe"}),
+    renames=((".block_sparse_moe.", ".mlp."), (".gate.weight", ".router.weight")),
 )
 
 JAMBA = MoEConvention(
