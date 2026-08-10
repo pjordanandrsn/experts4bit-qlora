@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.13.0 — 2026-08-10
+
+**Muse Glimmer (Meta) and GLM-5 (Zhipu) checkpoint support.**
+
+- **`glimmer.py` + `glimmer_load.py`** — serve Muse-Glimmer-30B from a released
+  GGUF text tower. Glimmer is DENSE (Gemma-3 lineage), so it uses the dense lanes,
+  not the expert path. Weights are decoded through grouped-nf4-gemm's k-quant lane
+  (**needs gnf4 >= 0.8.0**; the import is capability-gated, so older installs get an
+  actionable message rather than an AttributeError). The load streams each tensor to
+  the target device as it decodes — peak host RAM is one tensor, not the ~60 GB a
+  dequantized 30B would need — and ends with a coverage reconciliation: every
+  text-tower parameter must be materialized or it raises.
+- **`glm5.py`** — GLM-5 (`glm_moe_dsa`) checkpoint keymap and expert fusion.
+  DeepSeek-V3 lineage, so it reuses the existing MLA/per-expert machinery; the new
+  surface is DSA's lightning indexer.
+
+Every mapping in both was adjudicated against the real released checkpoint AND the
+instantiated transformers module tree, then reverse-armed (every model parameter must
+be claimed by some checkpoint key — the direction that catches a silently dropped
+weight). The traps that arithmetic alone gets wrong, now asserted:
+
+- Glimmer's head is **untied** and must never be aliased to the embedding.
+- Its four per-layer norms are centered (`x*(1+w)`) with the `+1` baked into the GGUF
+  bytes, so the parameter is `gguf - 1.0` — while the FINAL norm is used as-is.
+- Its `attn_q/k_norm` are uniform vectors equal to `config.qk_scale_factor` and 1.0,
+  absorbed by a parameter-free norm; dropped only after asserting that identity, so a
+  genuinely learned qk-norm fails loudly.
+- GLM-5's checkpoint carries **one more layer than the model builds** (an MTP head);
+  it is skipped explicitly, and MTP markers on a built layer raise.
+- GLM-5's experts are per-expert on disk and fused in the tree, with gate/up
+  concatenated as **blocks** — the interleave convention would mis-activate with every
+  shape agreeing.
+- Rotary `inv_freq` is computed, never shipped; it is rebuilt through the module's own
+  rope initializer instead of being left on `meta`.
+
+Validated end-to-end on an A100 80GB: the 30B loaded from Meta's released
+`kquant-dynamic` GGUF (19.65 GB) in 205 s — 627 tensors assigned, 104 dropped,
+0 unfilled — and generated correct text at 13.8 tok/s, 55.8 GB VRAM.
+
 ## 0.12.0 — 2026-08-06
 
 **`serve` grows a residency dial** — the missing piece between 0.10.0's
