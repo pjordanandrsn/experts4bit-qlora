@@ -135,3 +135,34 @@ def test_unknown_model_type_refuses():
     t, keys = _toy()
     with pytest.raises(MoEConventionError, match="cannot be inferred from shapes"):
         plan_moe_checkpoint(keys, t, "brand_new_moe")
+
+
+DENSE_FAMILIES = [
+    ("mistralai/Mistral-7B-Instruct-v0.3", "mistral"),
+    ("Qwen/Qwen3-8B", "qwen3"),
+    ("microsoft/Phi-4", "phi3"),
+]
+
+
+@pytest.mark.parametrize("repo,model_type", DENSE_FAMILIES, ids=[f[1] for f in DENSE_FAMILIES])
+def test_dense_open_weight_models_plan_completely(repo, model_type):
+    """The non-expert path was never MoE-specific: with `dense_ok` the same
+    planner serves plain open-weight causal LMs, with the same guarantees."""
+    keys = _keys(repo)
+    model, _ = _model(repo, 2)
+    kept = [k for k in keys
+            if not (m := re.match(r"^model\.layers\.(\d+)\.", k)) or int(m.group(1)) < 2]
+    plan = plan_moe_checkpoint(kept, model, model_type, dense_ok=True)
+    assert plan.convention == "dense"
+    assert plan.n_expert_stacks == 0, "a dense model must plan no expert stacks"
+    assert len(plan.passthrough) == len(kept)
+    print("\n  " + plan.summary())
+
+
+def test_dense_ok_still_refuses_a_real_moe():
+    """dense_ok is opt-in precisely because mislabelling an MoE as dense would
+    load its expert tensors as mystery passthroughs. The tree lookup catches
+    it: fused stacks exist, per-expert keys do not resolve."""
+    t, keys = _toy()
+    with pytest.raises(MoEConventionError, match="do not map"):
+        plan_moe_checkpoint(keys, t, "actually_an_moe", dense_ok=True)
