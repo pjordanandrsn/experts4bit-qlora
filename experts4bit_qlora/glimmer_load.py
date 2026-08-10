@@ -85,6 +85,39 @@ def _text_layer_count(model: torch.nn.Module) -> int:
             "model has no model.language_model.layers — not a Glimmer tree") from e
 
 
+def _materialize_computed_buffers(model: torch.nn.Module, device) -> list[str]:
+    """Re-create buffers that are COMPUTED, never shipped.
+
+    Rotary ``inv_freq`` is derived from the config at __init__ — no checkpoint
+    of any format carries it — so on a model built under ``torch.device("meta")``
+    it stays meta and the first forward dies with "Cannot copy out of meta
+    tensor". Weight loading cannot fix that: there is no weight to load. Rebuild
+    such buffers through the module's OWN initializer (``rope_init_fn``), which
+    is what transformers itself calls, rather than guessing the formula here.
+
+    Returns the names rebuilt (for the load report).
+    """
+    rebuilt = []
+    for name, mod in model.named_modules():
+        inv = getattr(mod, "inv_freq", None)
+        if inv is None or not inv.is_meta:
+            continue
+        init_fn = getattr(mod, "rope_init_fn", None)
+        cfg = getattr(mod, "config", None)
+        if init_fn is None or cfg is None:
+            raise GlimmerKeymapError(
+                f"{name}.inv_freq is on meta and the module exposes no "
+                f"rope_init_fn to rebuild it from")
+        fresh, attn_scale = init_fn(cfg, device)
+        mod.register_buffer("inv_freq", fresh, persistent=False)
+        if hasattr(mod, "original_inv_freq"):
+            mod.original_inv_freq = fresh
+        if attn_scale is not None and hasattr(mod, "attention_scaling"):
+            mod.attention_scaling = attn_scale
+        rebuilt.append(f"{name}.inv_freq")
+    return rebuilt
+
+
 def load_glimmer_text_tower(
     gguf_path: str,
     model: torch.nn.Module,
@@ -134,6 +167,8 @@ def load_glimmer_text_tower(
     # text-tower parameter must be materialized. That is strictly stronger than
     # walking `promised` (which can only ever find holes it already knew about)
     # and it is derived from the tree, so no caller argument can weaken it.
+    _materialize_computed_buffers(model, device)
+
     promised = expected_param_names(depth)
     unfilled = sorted(
         n for n, t in model.named_parameters()

@@ -200,3 +200,15 @@ def test_device_argument_places_weights(tmp_path):
                             dtype=torch.float32, device="cpu")
     sd = dict(model.named_parameters())
     assert sd["lm_head.weight"].device.type == "cpu"
+
+
+def test_computed_buffers_are_materialized(tmp_path):
+    """Rotary inv_freq is computed, never shipped — it must not be left on meta
+    or the first forward dies with "Cannot copy out of meta tensor"."""
+    cfg, path, _ = _try_setup(tmp_path)
+    model = _build_meta_model(cfg)
+    load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
+                            dtype=torch.float32, device="cpu")
+    metas = [n for n, b in model.named_buffers()
+             if b.is_meta and n.startswith("model.language_model.")]
+    assert not metas, f"computed buffers left on meta: {metas[:4]}"
