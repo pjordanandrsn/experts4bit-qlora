@@ -189,3 +189,14 @@ def test_wrong_num_layers_is_refused(tmp_path):
     with pytest.raises(GlimmerKeymapError, match="disagrees with the model"):
         load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
                                 num_layers=N_LAYERS - 1, dtype=torch.float32)
+
+
+def test_device_argument_places_weights(tmp_path):
+    """Weights land on the requested device as they decode (streaming keeps
+    peak host RAM at one tensor for a 30B-scale load)."""
+    cfg, path, _ = _try_setup(tmp_path)
+    model = _build_meta_model(cfg)
+    load_glimmer_text_tower(str(path), model, qk_scale_factor=QK,
+                            dtype=torch.float32, device="cpu")
+    sd = dict(model.named_parameters())
+    assert sd["lm_head.weight"].device.type == "cpu"

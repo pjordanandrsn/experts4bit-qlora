@@ -92,6 +92,7 @@ def load_glimmer_text_tower(
     qk_scale_factor: float,
     num_layers: int | None = None,
     dtype: torch.dtype = torch.bfloat16,
+    device: str | torch.device = "cpu",
     strict: bool = True,
 ) -> dict:
     """Fill `model`'s text-tower parameters from the GGUF at `gguf_path`.
@@ -100,6 +101,8 @@ def load_glimmer_text_tower(
     under ``torch.device("meta")``. Returns a report dict:
     ``{"assigned": n, "dropped": n, "text_only": True, "unfilled": [...]}``.
     With ``strict`` (the default) any unfilled promised parameter raises.
+    ``device`` is where weights land as they are decoded (see the streaming
+    note below) — pass ``"cuda"`` to fill a card directly.
     """
     dequantize_ggml, read_header, read_tensor_bytes = _kquant_lane()
     depth = _text_layer_count(model)
@@ -119,8 +122,13 @@ def load_glimmer_text_tower(
         if out is None:                      # validated drop (qk-norm scalars)
             dropped += 1
             continue
-        _assign(model, param_name, out.to(dtype))
+        # Move each tensor to its final home as it is decoded. Peak host RAM
+        # is then ONE tensor, not the whole dequantized model: a 30B at bf16 is
+        # ~60 GB, which would otherwise demand a big-RAM host even when the
+        # target card could hold it. Streaming makes a single 80 GB GPU enough.
+        _assign(model, param_name, out.to(dtype).to(device))
         assigned += 1
+        del out, decoded, raw
 
     # Coverage is checked against the MODEL, not against what we promised: every
     # text-tower parameter must be materialized. That is strictly stronger than
