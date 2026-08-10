@@ -12,14 +12,31 @@ Two conventions are implemented here. Both fuse per-expert checkpoint tensors
 into the stacked tensors transformers >= 5 builds, and both put the **gate
 block first**; they differ only in the on-disk spelling:
 
-``QWEN2_MOE`` — source ``mlp.experts.{e}.{gate,up,down}_proj.weight``
-    Covers 22 model_types as of transformers 5.15, including deepseek_v2/v3/v32,
-    every GLM MoE (glm4_moe, glm4_moe_lite, glm4v_moe, glm_moe_dsa), olmoe,
-    qwen3_moe, qwen3_next, dots1, ernie4_5_moe, hunyuan_v1_moe, longcat_flash,
-    exaone_moe, cohere2_moe, flex_olmo, afmoe, mellum, solar_open.
+All of them vary on only two axes — the CONTAINER the experts live under, and
+how the projections are SPELLED:
 
-``MIXTRAL`` — source ``block_sparse_moe.experts.{e}.w{1,3,2}.weight``
-    Covers mixtral, minimax, minimax_m2. ``w1``=gate, ``w3``=up, ``w2``=down.
+===============  =================  ======================  ==================
+convention       container          projection spelling     model_types
+===============  =================  ======================  ==================
+``QWEN2_MOE``    ``mlp``            ``{gate,up,down}_proj``  22
+``MIXTRAL``      ``block_sparse_moe``  ``w1``/``w3``/``w2``  3
+``PHIMOE``       ``block_sparse_moe``  ``w1``/``w3``/``w2``  1
+``JAMBA``        ``feed_forward``   ``{gate,up,down}_proj``  1
+``LFM2_MOE``     ``feed_forward``   ``w1``/``w3``/``w2``     1
+===============  =================  ======================  ==================
+
+``QWEN2_MOE`` alone covers deepseek_v2/v3/v32, every GLM MoE (glm4_moe,
+glm4_moe_lite, glm4v_moe, glm_moe_dsa), olmoe, qwen3_moe, qwen3_next, dots1,
+ernie4_5_moe, hunyuan_v1_moe, longcat_flash, exaone_moe, cohere2_moe,
+flex_olmo, afmoe, mellum and solar_open.
+
+``w1``=gate, ``w3``=up, ``w2``=down in every ``w``-spelled family — pinned to
+upstream, never inferred.
+
+Deliberately NOT here: ``granitemoe`` (and its granitemoehybrid /
+granitemoeshared aliases) ships ALREADY-FUSED on disk and needs pure renames,
+not a fusion — that lives in :mod:`experts4bit_qlora.loader`'s
+``LEGACY_KEY_RENAMES``. A fusion applied to it would be wrong.
 
 **Why the orientation is the whole point.** In both conventions the gate and up
 tensors are SHAPE-IDENTICAL, so no amount of shape inspection can tell them
@@ -97,7 +114,32 @@ MIXTRAL = MoEConvention(
     model_types=frozenset({"mixtral", "minimax", "minimax_m2"}),
 )
 
-CONVENTIONS = (QWEN2_MOE, MIXTRAL)
+PHIMOE = MoEConvention(
+    name="phimoe",
+    expert_re=re.compile(r"^block_sparse_moe\.experts\.(\d+)\.(w1|w2|w3)\.weight$"),
+    roles={"w1": "gate", "w3": "up", "w2": "down"},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"phimoe"}),
+)
+
+JAMBA = MoEConvention(
+    name="jamba",
+    expert_re=re.compile(
+        r"^feed_forward\.experts\.(\d+)\.(gate_proj|up_proj|down_proj)\.weight$"),
+    roles={"gate_proj": "gate", "up_proj": "up", "down_proj": "down"},
+    fused_prefix="feed_forward.experts",
+    model_types=frozenset({"jamba"}),
+)
+
+LFM2_MOE = MoEConvention(
+    name="lfm2_moe",
+    expert_re=re.compile(r"^feed_forward\.experts\.(\d+)\.(w1|w2|w3)\.weight$"),
+    roles={"w1": "gate", "w3": "up", "w2": "down"},
+    fused_prefix="feed_forward.experts",
+    model_types=frozenset({"lfm2_moe"}),
+)
+
+CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 
