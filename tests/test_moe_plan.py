@@ -464,3 +464,35 @@ def test_vl_prefix_expert_fusion_targets_inherit_the_checkpoint_prefix():
     # a plain model keeps the default prefix (backward compatible)
     gu0, _ = MIXTRAL.fused_names(3)
     assert gu0 == "model.layers.3.mlp.experts.gate_up_proj"
+
+
+def test_executor_stacks_match_the_quantizer_input_contract():
+    """The quantized-fusion bridge (#21/#27) feeds the generic executor's fused
+    stacks straight into ExpertsNbit.from_float. That only works if the shapes
+    the executor produces are exactly the shapes from_float documents:
+    gate_up_proj [E, 2*inter, hidden] when gated, up_proj [E, inter, hidden]
+    when not, and down_proj [E, hidden, inter] either way. Pin it on CPU so a
+    change to fuse_experts/stack_experts can't silently break the bridge before
+    anyone runs it on a GPU. (The nf4 quantize + forward-parity half needs CUDA.)"""
+    from experts4bit_qlora.moe_conventions import fuse_experts, stack_experts
+    E, inter, hidden = 4, 8, 16
+    g = [torch.randn(inter, hidden) for _ in range(E)]
+    u = [torch.randn(inter, hidden) for _ in range(E)]
+    d = [torch.randn(hidden, inter) for _ in range(E)]
+
+    # gated -> from_float(has_gate=True) wants [E, 2*inter, hidden]
+    gate_up, down = fuse_experts(g, u, d)
+    assert tuple(gate_up.shape) == (E, 2 * inter, hidden)
+    assert tuple(down.shape) == (E, hidden, inter)
+
+    # non-gated -> from_float(has_gate=False) wants [E, inter, hidden]
+    up_proj, down2 = stack_experts(u, d)
+    assert tuple(up_proj.shape) == (E, inter, hidden)
+    assert tuple(down2.shape) == (E, hidden, inter)
+
+    # ExpertsNbit.from_float must accept exactly these as its first two args.
+    from experts4bit_qlora import ExpertsNbit
+    import inspect
+    params = list(inspect.signature(ExpertsNbit.from_float).parameters)
+    assert params[:3] == ["gate_up_proj", "down_proj", "has_gate"], (
+        "from_float's contract moved — the bridge feeds these positionally")
