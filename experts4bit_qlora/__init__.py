@@ -188,3 +188,5 @@ def __getattr__(name):
 
 
 __version__ = "0.14.0"
+
+from .speculative import speculative_greedy_decode  # noqa: E402,F401
