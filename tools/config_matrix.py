@@ -91,14 +91,25 @@ def _hot_sets(geo, frac):
 INFER_CONFIGS = [
     ("baseline", lambda b, g: None, None),
     ("fast", lambda b, g: (E.enable_fast(b), E.disable_fast)[1], "fast"),
+    # hot_residency is deprecated in favour of pipelined_residency (same
+    # capability, K is config). Both are measured: the deprecated one is what
+    # existing callers still run, so its numbers stay comparable until removal.
     ("hot_residency_all_hot",
      lambda b, g: (E.enable_hot_residency(b, _hot_sets(g, 1.0)),
                    E.disable_hot_residency)[1], "hot"),
     ("hot_residency_half",
      lambda b, g: (E.enable_hot_residency(b, _hot_sets(g, 0.5)),
                    E.disable_hot_residency)[1], "hot"),
+    # k_slots is the model's routed top-k and is REQUIRED — it is g[3], not a
+    # default. Omitting it raised rather than guessing, which is the right call:
+    # a wrong slot count silently changes what stays resident.
     ("pipelined_residency_half",
-     lambda b, g: (E.enable_pipelined_residency(b, _hot_sets(g, 0.5)),
+     lambda b, g: (E.enable_pipelined_residency(b, _hot_sets(g, 0.5),
+                                                k_slots=g[3]),
+                   E.disable_pipelined_residency)[1], "hot"),
+    ("pipelined_residency_all_hot",
+     lambda b, g: (E.enable_pipelined_residency(b, _hot_sets(g, 1.0),
+                                                k_slots=g[3]),
                    E.disable_pipelined_residency)[1], "hot"),
     ("cold_engine_half",
      lambda b, g: (E.enable_cold_engine(b, _hot_sets(g, 0.5)),
@@ -140,6 +151,11 @@ def run_infer(geo, dtype, device, quant_type, blocksize, emit):
                 torch.cuda.empty_cache()
                 torch.cuda.reset_peak_memory_stats()
             base = build(geo, dtype, quant_type, blocksize, device)
+            # eval() BEFORE the timing loop. The fused path deliberately falls
+            # back to the reference implementation while `training` is set, so
+            # a matrix that timed a training-mode module would benchmark the
+            # reference path and label it "fast" — measured this the hard way.
+            base.eval()
             teardown = setup(base, geo)
             for label, T in (("decode", 1), ("prefill", 512)):
                 hs, idx, w = inputs(geo, T, dtype, device)
