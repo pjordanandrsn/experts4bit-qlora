@@ -51,14 +51,14 @@ def dequantize_compressed_int(
 
     lead = packed.shape[:-2]
     p = packed.reshape(-1, out_f, packed.shape[-1])
-    n = p.shape[0]
-    unpacked = torch.empty((n, out_f, in_f), dtype=torch.int32, device=p.device)
     mask = (1 << num_bits) - 1
     per_word = 32 // num_bits
-    for e in range(in_f):
-        word = e // per_word
-        off = (e % per_word) * num_bits
-        unpacked[:, :, e] = (p[:, :, word] >> off) & mask
+    # Vectorized: extract every field in one shift/mask over a broadcast offset
+    # axis, rather than looping over in_features. The loop version was correct
+    # but ran the unpack element-by-element in Python — minutes per large tensor.
+    offs = (torch.arange(per_word, device=p.device, dtype=torch.int32) * num_bits)
+    fields = (p.unsqueeze(-1) >> offs) & mask         # [n, out, words, per_word]
+    unpacked = fields.reshape(p.shape[0], out_f, -1)[:, :, :in_f]
     signed = unpacked - (1 << (num_bits - 1))         # symmetric recentre
 
     sc = scale.reshape(-1, out_f, scale.shape[-1]).to(torch.float32)
