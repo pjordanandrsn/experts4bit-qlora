@@ -177,20 +177,15 @@ def _split_block_scales(checkpoint_keys):
             stem = k[: -len(AWQ_QWEIGHT_SUFFIX)]
             qz, sc = stem + AWQ_QZEROS_SUFFIX, stem + AWQ_SCALES_SUFFIX
             if qz in keys and sc in keys:
-                if stem + GPTQ_GIDX_SUFFIX in keys:
-                    # GPTQ, not AWQ. Same key names, DIFFERENT bit order (and a
-                    # g_idx column permutation when desc_act). Decoding it with
-                    # the AWQ order yields a correctly-shaped tensor of
-                    # scrambled weights that loads clean and computes garbage,
-                    # so refuse rather than guess. Measured: this branch would
-                    # otherwise claim all 18624 expert tensors of
-                    # Qwen3-30B-A3B-GPTQ-Int4.
-                    raise MoEConventionError(
-                        f"{k}: this is a GPTQ checkpoint (a {stem}g_idx sibling "
-                        f"is present). GPTQ shares AWQ's qweight/qzeros/scales "
-                        f"names but uses a different bit order, so the AWQ "
-                        f"decoder would silently produce scrambled weights. "
-                        f"GPTQ is not yet adjudicated — refusing to load it.")
+                gidx = stem + GPTQ_GIDX_SUFFIX
+                if gidx in keys:
+                    # GPTQ: same names as AWQ, different bit order + g_idx.
+                    # Verified bit-exact against gptqmodel's dequantize_weight,
+                    # including the desc_act (permuted g_idx) case.
+                    base = stem + "weight"
+                    dequant[base] = ("gptq", k, sc, (qz, gidx))
+                    consumed.update((k, qz, sc, gidx))
+                    continue
                 base = stem + "weight"
                 dequant[base] = ("awq", k, sc, qz)
                 consumed.update((k, qz, sc))
@@ -228,7 +223,7 @@ def _split_block_scales(checkpoint_keys):
     # Synthesized bases (MXFP4, compressed-tensors) are not literal checkpoint
     # keys; add them so the convention has a key to map to the dense target.
     for base, (kind, _p, _s, _x) in dequant.items():
-        if kind in ("mxfp4", "compressed_int", "nvfp4", "awq"):
+        if kind in ("mxfp4", "compressed_int", "nvfp4", "awq", "gptq"):
             weights.append(base)
     return weights, dequant
 

@@ -30,6 +30,7 @@ import torch
 
 from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
 from .awq import dequantize_awq
+from .gptq import dequantize_gptq
 from .compressed_int import dequantize_compressed_int
 from .nvfp4 import dequantize_nvfp4
 from .mxfp4 import dequantize_mxfp4
@@ -149,6 +150,12 @@ def execute_moe_plan(
                 # compressed-tensors pack-quantized: packed + scale + shape.
                 shape = read_tensor(extra_key)
                 t = dequantize_compressed_int(primary, scale, shape, dtype=dtype)
+            elif kind == "gptq":
+                # GPTQ: qweight + scales + (qzeros, g_idx). g_idx indexes rows,
+                # so desc_act and plain group order share one path.
+                qz_key, gidx_key = extra_key
+                t = dequantize_gptq(primary, read_tensor(qz_key), scale,
+                                    read_tensor(gidx_key), dtype=dtype)
             elif kind == "awq":
                 # AWQ/GPTQ-style: qweight + scales + qzeros (asymmetric).
                 qzeros = read_tensor(extra_key)
@@ -250,4 +257,5 @@ def execute_moe_plan(
             "compressed_int_dequantized": sum(1 for v in plan.scales.values() if v[0]=="compressed_int"),
             "nvfp4_dequantized": sum(1 for v in plan.scales.values() if v[0]=="nvfp4"),
             "awq_dequantized": sum(1 for v in plan.scales.values() if v[0]=="awq"),
+            "gptq_dequantized": sum(1 for v in plan.scales.values() if v[0]=="gptq"),
             "rebuilt_buffers": len(rebuilt), "still_meta": still_meta}

@@ -680,19 +680,43 @@ def test_awq_triple_is_recognized_and_uses_the_asymmetric_decoder():
                        dequantize_awq(qw, qz, sc, dtype=torch.float32))
 
 
-def test_gptq_is_refused_not_silently_decoded_as_awq():
-    """GPTQ ships the SAME qweight/qzeros/scales names as AWQ but a different
-    bit order (plus g_idx act-order). Before this guard the AWQ branch claimed
-    every GPTQ tensor — measured: all 18624 experts of Qwen3-30B-A3B-GPTQ-Int4 —
-    and would have produced correctly-shaped SCRAMBLED weights that load clean.
-    The g_idx sibling is the name-level tell; refuse rather than guess."""
+def test_gptq_and_awq_are_told_apart_by_g_idx():
+    """GPTQ ships the SAME qweight/qzeros/scales names as AWQ but packs along a
+    different axis, in a different bit order, with a +1 zero offset and a g_idx
+    row permutation. Decoding either as the other gives correctly-shaped
+    SCRAMBLED weights that load clean — measured: the AWQ branch once claimed
+    all 18624 experts of Qwen3-30B-A3B-GPTQ-Int4. The g_idx sibling is the
+    name-level discriminator."""
     from experts4bit_qlora.moe_plan import _split_block_scales
 
-    gptq = ["m.qweight", "m.qzeros", "m.scales", "m.g_idx"]
-    with pytest.raises(MoEConventionError, match="GPTQ"):
-        _split_block_scales(gptq)
+    _w, dq = _split_block_scales(["m.qweight", "m.qzeros", "m.scales", "m.g_idx"])
+    assert dq["m.weight"] == ("gptq", "m.qweight", "m.scales",
+                              ("m.qzeros", "m.g_idx"))
 
-    # the same triple WITHOUT g_idx is AWQ and still decodes
-    awq = ["m.qweight", "m.qzeros", "m.scales"]
-    _weights, dq = _split_block_scales(awq)
-    assert dq["m.weight"][0] == "awq"
+    # the same triple WITHOUT g_idx is AWQ
+    _w2, dq2 = _split_block_scales(["m.qweight", "m.qzeros", "m.scales"])
+    assert dq2["m.weight"][0] == "awq"
+
+
+def test_gptq_dequant_matches_gptqmodel_including_desc_act():
+    """Pinned against gptqmodel's dequantize_weight: scales[g_idx] * (w -
+    (zeros+1)[g_idx]), sequential bit order, packed along IN. The desc_act case
+    (a permuted g_idx) must go through the same path."""
+    from experts4bit_qlora.gptq import dequantize_gptq
+    torch.manual_seed(0)
+    BITS, IN, OUT, G = 4, 256, 64, 128
+    PER, groups = 32 // BITS, IN // 128
+    iw = torch.randint(0, 16, (IN, OUT), dtype=torch.int32)
+    iz = torch.randint(0, 16, (groups, OUT), dtype=torch.int32)
+    shifts = torch.arange(0, 32, BITS, dtype=torch.int32)
+    qw = (iw.view(IN // PER, PER, OUT) << shifts.view(1, PER, 1)).sum(1).to(torch.int32)
+    qz = (iz.view(groups, OUT // PER, PER) << shifts.view(1, 1, PER)).sum(-1).to(torch.int32)
+    scales = torch.rand(groups, OUT) * 0.05 + 0.01
+
+    for g_idx in (torch.arange(IN, dtype=torch.int32) // G,          # plain
+                  torch.randperm(groups).repeat_interleave(G).to(torch.int32)):  # desc_act
+        gi = g_idx.long()
+        ref = (scales[gi] * (iw.float() - (iz + 1).float()[gi])).t()
+        got = dequantize_gptq(qw, qz, scales, g_idx, bits=BITS, dtype=torch.float32)
+        assert tuple(got.shape) == (OUT, IN)
+        assert torch.equal(got, ref)
