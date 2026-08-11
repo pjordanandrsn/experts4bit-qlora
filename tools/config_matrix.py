@@ -88,39 +88,45 @@ def _hot_sets(geo, frac):
     return [list(range(int(n_e * frac)))]
 
 
+#: Each setup returns (teardown_or_None, patched_count). The COUNT is the only
+#: reliable evidence a config actually took effect: `enable_*` returns 0 when a
+#: module is ineligible — the fused kernel is NF4-only, so every fp4 cell
+#: patches 0 modules and runs the baseline path. Timing alone cannot tell you
+#: that; a row would read "fast" at baseline speed. Verified: nf4 patches 1 and
+#: changes the output (6.45e-03), fp4 patches 0 and is bit-identical.
 INFER_CONFIGS = [
-    ("baseline", lambda b, g: None, None),
-    ("fast", lambda b, g: (E.enable_fast(b), E.disable_fast)[1], "fast"),
+    ("baseline", lambda b, g: (None, -1), None),
+    ("fast", lambda b, g: (E.disable_fast, E.enable_fast(b)), "fast"),
     # hot_residency is deprecated in favour of pipelined_residency (same
     # capability, K is config). Both are measured: the deprecated one is what
     # existing callers still run, so its numbers stay comparable until removal.
     ("hot_residency_all_hot",
-     lambda b, g: (E.enable_hot_residency(b, _hot_sets(g, 1.0)),
-                   E.disable_hot_residency)[1], "hot"),
+     lambda b, g: (E.disable_hot_residency,
+                   E.enable_hot_residency(b, _hot_sets(g, 1.0))), "hot"),
     ("hot_residency_half",
-     lambda b, g: (E.enable_hot_residency(b, _hot_sets(g, 0.5)),
-                   E.disable_hot_residency)[1], "hot"),
+     lambda b, g: (E.disable_hot_residency,
+                   E.enable_hot_residency(b, _hot_sets(g, 0.5))), "hot"),
     # k_slots is the model's routed top-k and is REQUIRED — it is g[3], not a
     # default. Omitting it raised rather than guessing, which is the right call:
     # a wrong slot count silently changes what stays resident.
     ("pipelined_residency_half",
-     lambda b, g: (E.enable_pipelined_residency(b, _hot_sets(g, 0.5),
-                                                k_slots=g[3]),
-                   E.disable_pipelined_residency)[1], "hot"),
+     lambda b, g: (E.disable_pipelined_residency,
+                   E.enable_pipelined_residency(b, _hot_sets(g, 0.5),
+                                                k_slots=g[3])), "hot"),
     ("pipelined_residency_all_hot",
-     lambda b, g: (E.enable_pipelined_residency(b, _hot_sets(g, 1.0),
-                                                k_slots=g[3]),
-                   E.disable_pipelined_residency)[1], "hot"),
+     lambda b, g: (E.disable_pipelined_residency,
+                   E.enable_pipelined_residency(b, _hot_sets(g, 1.0),
+                                                k_slots=g[3])), "hot"),
     ("cold_engine_half",
-     lambda b, g: (E.enable_cold_engine(b, _hot_sets(g, 0.5)),
-                   E.disable_cold_engine)[1], "cold"),
+     lambda b, g: (E.disable_cold_engine,
+                   E.enable_cold_engine(b, _hot_sets(g, 0.5))), "cold"),
     ("cold_engine_all_cold",
-     lambda b, g: (E.enable_cold_engine(b, _hot_sets(g, 0.0)),
-                   E.disable_cold_engine)[1], "cold"),
+     lambda b, g: (E.disable_cold_engine,
+                   E.enable_cold_engine(b, _hot_sets(g, 0.0))), "cold"),
 ]
 
 TRAIN_CONFIGS = [
-    ("lora_baseline", lambda m: None, None),
+    ("lora_baseline", lambda m: -1, None),
     ("fast_train_dgrad_off", lambda m: E.enable_fast_train(m, dgrad=False), "fast"),
     ("fast_train_dgrad_on", lambda m: E.enable_fast_train(m, dgrad=True), "fast"),
     ("batched_train", lambda m: E.enable_batched_train(m), "batched"),
@@ -156,7 +162,8 @@ def run_infer(geo, dtype, device, quant_type, blocksize, emit):
             # a matrix that timed a training-mode module would benchmark the
             # reference path and label it "fast" — measured this the hard way.
             base.eval()
-            teardown = setup(base, geo)
+            teardown, patched = setup(base, geo)
+            row["patched"] = patched
             for label, T in (("decode", 1), ("prefill", 512)):
                 hs, idx, w = inputs(geo, T, dtype, device)
                 with torch.no_grad():
@@ -170,7 +177,9 @@ def run_infer(geo, dtype, device, quant_type, blocksize, emit):
                 torch.cuda.max_memory_allocated() / 1e9, 3) if device == "cuda" else 0.0
             if callable(teardown):
                 teardown(base)
-            row["status"] = "OK"
+            # A count of 0 means the config never engaged; the numbers above
+            # are the baseline path wearing this row's name.
+            row["status"] = "OK" if patched != 0 else "not-engaged (0 modules patched)"
         except Exception as e:
             row["status"] = f"FAIL {type(e).__name__}: {str(e)[:80]}"
             traceback.print_exc()
@@ -202,7 +211,8 @@ def run_train(geo, dtype, device, quant_type, blocksize, emit, steps=8, T=256):
             # does, and the reason the earlier matrix showed 14/21 rather than
             # 21/21).
             mod = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(device)
-            setup(mod)
+            patched = setup(mod)
+            row["patched"] = patched
             ps = [p for p in mod.parameters() if p.requires_grad]
             opt = torch.optim.AdamW(ps, lr=1e-4)
             hs, idx, w = inputs(geo, T, dtype, device)
@@ -228,7 +238,7 @@ def run_train(geo, dtype, device, quant_type, blocksize, emit, steps=8, T=256):
             row["trainable"] = sum(p.numel() for p in ps)
             row["peak_gb"] = round(
                 torch.cuda.max_memory_allocated() / 1e9, 3) if device == "cuda" else 0.0
-            row["status"] = "OK"
+            row["status"] = "OK" if patched != 0 else "not-engaged (0 modules patched)"
         except Exception as e:
             row["status"] = f"FAIL {type(e).__name__}: {str(e)[:80]}"
             traceback.print_exc()
@@ -240,7 +250,7 @@ def run_train(geo, dtype, device, quant_type, blocksize, emit, steps=8, T=256):
         emit(row)
 
 
-COLS = ["kind", "config", "dtype", "quant", "blocksize", "decode_tok_s",
+COLS = ["kind", "config", "dtype", "quant", "blocksize", "patched", "decode_tok_s",
         "decode_ms", "prefill_tok_s", "train_tok_s", "step_ms", "peak_gb", "status"]
 
 
