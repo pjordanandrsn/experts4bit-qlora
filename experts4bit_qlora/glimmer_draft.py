@@ -93,3 +93,46 @@ def expected_param_names(num_layers: int) -> set[str]:
         for suffix in _PER_LAYER.values():
             names.add(f"layers.{i}.{suffix}")
     return names
+
+
+def load_draft_state_dict(read_tensor, checkpoint_keys, num_layers, *,
+                          source="safetensors"):
+    """Build the drafter's ``{param_name: tensor}`` from a checkpoint.
+
+    ``read_tensor(key) -> Tensor`` is the only I/O, so the same function serves
+    a safetensors shard, a GGUF reader, or a test fixture.
+
+    Both released spellings converge on the same parameter names:
+
+    * ``source="safetensors"`` — the released
+      ``meta-models/Muse-Glimmer-30B-assistant`` already spells its 58 tensors
+      exactly as the module declares them, so this is an identity mapping.
+      VERIFIED against the real checkpoint: its key set equals
+      :func:`expected_param_names` exactly, 58/58, nothing extra or missing.
+    * ``source="gguf"`` — the GGUF drafter uses ``blk.N.*`` names and is
+      translated by :func:`map_draft_key`.
+
+    Coverage is reconciled against :func:`expected_param_names` and any
+    discrepancy RAISES. A drafter is uniquely bad at failing loudly on its own:
+    a dropped weight does not crash, it just lowers the acceptance rate, which
+    looks like "speculative decoding isn't helping much" rather than a bug.
+    """
+    if source not in ("safetensors", "gguf"):
+        raise ValueError(f"unknown drafter source {source!r}")
+    out = {}
+    for key in checkpoint_keys:
+        name = key if source == "safetensors" else map_draft_key(key)
+        if name in out:
+            raise GlimmerDraftKeymapError(
+                f"two checkpoint tensors map to {name!r}")
+        out[name] = read_tensor(key)
+
+    expected = expected_param_names(num_layers)
+    missing, extra = expected - set(out), set(out) - expected
+    if missing or extra:
+        raise GlimmerDraftKeymapError(
+            f"drafter coverage mismatch: {len(missing)} missing "
+            f"(e.g. {sorted(missing)[:3]}), {len(extra)} unexpected "
+            f"(e.g. {sorted(extra)[:3]}). A dropped drafter weight silently "
+            f"lowers the acceptance rate instead of failing, so this raises.")
+    return out
