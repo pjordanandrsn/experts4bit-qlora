@@ -81,6 +81,24 @@ DEEPSEEK_V4_FP8_DENSE = {"deepseek_v4"}
 SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 
 
+def _read_compatible_convention(model_type):
+    """True if this model_type loads through the EXISTING per-expert read path.
+
+    olmoe and qwen3_moe are already supported and are the qwen2_moe convention;
+    every other qwen2_moe-convention model_type stores experts identically
+    (``mlp.experts.{e}.{gate,up,down}_proj.weight``), so the same streaming read
+    handles them with no new code. Validated on a rented A6000: Qwen1.5-MoE-A2.7B
+    (qwen2_moe, not previously listed) loaded, nf4-quantized, and generated.
+
+    Deliberately NARROW: mixtral (w1/w3/w2 spelling), dbrx (flat stacks) and
+    nemotron_h (no gate) need their own read handling and are NOT admitted here."""
+    from .moe_conventions import MoEConventionError, convention_for
+    try:
+        return convention_for(model_type).name == "qwen2_moe"
+    except MoEConventionError:
+        return False
+
+
 def expert_layout_for(model_type):
     """``(expert_submodule_path, has_gate)`` for the quantized loader.
 
@@ -305,11 +323,12 @@ def load_moe_4bit_streaming(
         trust_remote_code = os.environ.get("E4B_TRUST_REMOTE_CODE", "0") == "1"
     config = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code)
     model_type = getattr(config, "model_type", None)
-    if model_type not in SUPPORTED_ARCHITECTURES:
+    if model_type not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(model_type):
         raise NotImplementedError(
             f"Unsupported model_type={model_type!r}. This streaming loader handles SwiGLU fused-MoE "
-            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}. The Experts4bit primitive itself is "
-            "model-agnostic — see the README 'Scope' note to adapt another architecture."
+            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}, plus every model_type on the qwen2_moe "
+            f"convention (same per-expert mlp.experts.N.{{gate,up,down}}_proj read path). The Experts4bit "
+            "primitive itself is model-agnostic — see the README 'Scope' note to adapt another architecture."
         )
     # Source the expert path and gate from the convention when one exists (the
     # broad source of truth), else this loader's own map. Both agree today; this
