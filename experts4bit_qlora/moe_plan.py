@@ -55,6 +55,8 @@ class MoELoadPlan:
     experts: dict = field(default_factory=dict)
     #: layer index -> (gate_up_proj name, down_proj name)
     expert_targets: dict = field(default_factory=dict)
+    #: target param -> source param, for heads a tied checkpoint omits.
+    tied_params: dict = field(default_factory=dict)
     #: model params a checkpoint legitimately never supplies (computed buffers)
     ignored_params: tuple = ()
 
@@ -67,6 +69,30 @@ class MoELoadPlan:
         return (f"{self.model_type} via {self.convention}: "
                 f"{len(self.passthrough)} passthrough + {n_exp_keys} expert tensors "
                 f"-> {self.n_expert_stacks} fused stacks")
+
+
+
+def _tied_targets(model):
+    """Parameters a checkpoint may legitimately omit because the model ties them
+    to another parameter, as ``{target: source}``.
+
+    Gated on ``config.tie_word_embeddings`` being TRUE. That gate is the whole
+    point: transformers exposes ``_tied_weights_keys`` on the CLASS, so it is
+    present even on models whose config declares the head untied. Trusting it
+    unconditionally would silently tie an untied head to the embedding — a real
+    defect this project shipped once before (#37/PR#69), and one that produces a
+    model that loads, runs, and is quietly wrong. Reading the config means an
+    untied head stays required, so its absence still raises.
+    """
+    if not getattr(getattr(model, "config", None), "tie_word_embeddings", False):
+        return {}
+    keys = getattr(model, "_tied_weights_keys", None) or {}
+    if isinstance(keys, dict):
+        return dict(keys)
+    # Older transformers spells it as a bare list of tied target names; the
+    # source is the input embedding by construction.
+    src = "model.embed_tokens.weight"
+    return {k: src for k in keys if k != src}
 
 
 def plan_moe_checkpoint(
@@ -160,6 +186,14 @@ def plan_moe_checkpoint(
     claimed = set(plan.passthrough.values())
     for gu, dn in targets.values():
         claimed.update((gu, dn))
+    # A tied head is supplied by its source, not by a key of its own. Honour
+    # that only when the SOURCE is itself claimed — a tie to a parameter nothing
+    # loaded would propagate skeleton values, not fix them.
+    tied = {t: srcn for t, srcn in _tied_targets(model).items()
+            if t in claimable and t not in claimed and srcn in claimed}
+    plan.tied_params = tied
+    claimed |= set(tied)
+
     unclaimed = sorted(claimable - claimed)
     if unclaimed:
         raise MoEConventionError(

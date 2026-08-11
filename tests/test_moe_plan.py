@@ -16,11 +16,14 @@ import os
 import re
 import urllib.request
 
+from types import SimpleNamespace
+
 import pytest
 
 torch = pytest.importorskip("torch")
 
 from experts4bit_qlora.moe_conventions import MoEConventionError  # noqa: E402
+from experts4bit_qlora.moe_load import execute_moe_plan  # noqa: E402
 from experts4bit_qlora.moe_plan import plan_moe_checkpoint  # noqa: E402
 
 # (repo, model_type, layers to build) — one per convention shape we claim.
@@ -166,3 +169,52 @@ def test_dense_ok_still_refuses_a_real_moe():
     t, keys = _toy()
     with pytest.raises(MoEConventionError, match="do not map"):
         plan_moe_checkpoint(keys, t, "actually_an_moe", dense_ok=True)
+
+
+# --- tied heads -------------------------------------------------------------
+# A checkpoint that ties its head does not ship `lm_head.weight` at all. Before
+# this was handled the planner rejected every such checkpoint, which is most
+# small models. The pair of tests below pins BOTH directions, because the
+# tempting one-line fix ("just excuse lm_head") reintroduces a defect this
+# project already shipped once: an UNTIED head silently tied to the embedding,
+# which loads, runs, and is quietly wrong.
+
+class _TiedHead(torch.nn.Module):
+    def __init__(self, tied: bool):
+        super().__init__()
+        self.config = SimpleNamespace(tie_word_embeddings=tied)
+        self.model = torch.nn.Module()
+        self.model.embed_tokens = torch.nn.Embedding(8, 4)
+        self.lm_head = torch.nn.Linear(4, 8, bias=False)
+        self._tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
+
+def test_tied_head_absent_from_checkpoint_is_supplied_by_its_source():
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(["model.embed_tokens.weight"], m, "llama", dense_ok=True)
+    assert plan.tied_params == {"lm_head.weight": "model.embed_tokens.weight"}
+
+
+def test_untied_head_absent_from_checkpoint_still_raises():
+    """The config, not the class attribute, decides. `_tied_weights_keys` is set
+    on the class either way, so trusting it alone would tie an untied head."""
+    m = _TiedHead(tied=False)
+    with pytest.raises(MoEConventionError, match="no checkpoint key supplies"):
+        plan_moe_checkpoint(["model.embed_tokens.weight"], m, "llama", dense_ok=True)
+
+
+def test_tie_to_an_unloaded_source_is_not_a_free_pass():
+    """Excusing a head because it is tied only makes sense if the SOURCE itself
+    got real values; tying to a skeleton propagates skeleton values."""
+    m = _TiedHead(tied=True)
+    with pytest.raises(MoEConventionError, match="no checkpoint key supplies"):
+        plan_moe_checkpoint([], m, "llama", dense_ok=True)
+
+
+def test_executor_binds_the_same_parameter_object_not_a_copy():
+    """A copied tie reads identically and then diverges under training."""
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(["model.embed_tokens.weight"], m, "llama", dense_ok=True)
+    w = torch.arange(32, dtype=torch.float32).reshape(8, 4)
+    execute_moe_plan(plan, m, lambda k: w, device="cpu", dtype=torch.float32)
+    assert m.lm_head.weight is m.model.embed_tokens.weight

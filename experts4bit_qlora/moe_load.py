@@ -126,6 +126,21 @@ def execute_moe_plan(
         _assign(model, down_name, down_stack)
         fused += 2
 
+    # Heads the checkpoint omits because the model ties them. The plan only
+    # lists a tie whose SOURCE was loaded, so this can never point at a meta
+    # tensor — and doing it here, rather than trusting the model to have tied
+    # itself, is what keeps the planner's exemption honest: the parameter is
+    # excused from needing a key precisely because it gets real values now.
+    for target, source in plan.tied_params.items():
+        src = model.get_parameter(source)
+        parent, _, leaf = target.rpartition(".")
+        mod = model.get_submodule(parent) if parent else model
+        # Bind the SAME Parameter object, not a copy of it. A copy would read
+        # identically and hide the difference at inference time, then diverge
+        # under training: the two halves would take independent gradient steps
+        # and the model would stop being tied at all.
+        mod._parameters[leaf] = src
+
     rebuilt = _materialize_computed_buffers(model, device)
 
     still_meta = sorted(n for n, t in model.state_dict().items() if t.is_meta)
@@ -134,4 +149,5 @@ def execute_moe_plan(
             f"{len(still_meta)} tensors still on meta after load, e.g. "
             f"{still_meta[:4]} — the checkpoint is incomplete or the plan drifted")
     return {"assigned": assigned, "fused_stacks": fused,
+            "tied": len(plan.tied_params),
             "rebuilt_buffers": len(rebuilt), "still_meta": still_meta}

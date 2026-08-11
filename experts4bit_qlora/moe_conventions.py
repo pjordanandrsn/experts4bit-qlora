@@ -33,10 +33,9 @@ flex_olmo, afmoe, mellum and solar_open.
 ``w1``=gate, ``w3``=up, ``w2``=down in every ``w``-spelled family — pinned to
 upstream, never inferred.
 
-Deliberately NOT here: ``granitemoe`` (and its granitemoehybrid /
-granitemoeshared aliases) ships ALREADY-FUSED on disk and needs pure renames,
-not a fusion — that lives in :mod:`experts4bit_qlora.loader`'s
-``LEGACY_KEY_RENAMES``. A fusion applied to it would be wrong.
+``GRANITEMOE`` is the odd one out: it ships **already fused**, so it needs
+renames only and its expert pattern deliberately matches nothing. Applying a
+fusion to it would be wrong.
 
 **Why the orientation is the whole point.** In both conventions the gate and up
 tensors are SHAPE-IDENTICAL, so no amount of shape inspection can tell them
@@ -164,7 +163,28 @@ DENSE = MoEConvention(
     model_types=frozenset(),            # selected explicitly, never by lookup
 )
 
-CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE)
+#: GraniteMoE ships its experts **ALREADY FUSED** — the checkpoint carries
+#: `input_linear` [E, 2*inter, hidden] and `output_linear` [E, hidden, inter]
+#: directly, so there is nothing to gather or concatenate. It therefore needs
+#: renames ONLY, and applying an expert fusion to it would be wrong. That is
+#: expressible with the existing machinery: a never-matching expert pattern
+#: (so no key is ever treated as per-expert) plus the rename table upstream
+#: uses. Verified against the released checkpoint AND the built tree.
+#: Covers granitemoe + its granitemoehybrid / granitemoeshared aliases.
+GRANITEMOE = MoEConvention(
+    name="granitemoe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
+    roles={},
+    fused_prefix="block_sparse_moe.experts",
+    model_types=frozenset({"granitemoe", "granitemoehybrid", "granitemoeshared"}),
+    renames=(
+        ("block_sparse_moe.input_linear.weight", "block_sparse_moe.experts.gate_up_proj"),
+        ("block_sparse_moe.output_linear.weight", "block_sparse_moe.experts.down_proj"),
+        ("block_sparse_moe.router.layer.weight", "block_sparse_moe.router.weight"),
+    ),
+)
+
+CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 

@@ -47,7 +47,13 @@ def _spec_block(src, name):
     pytest.skip(f"transformers no longer defines a {name!r} converter spec")
 
 
-@pytest.mark.parametrize("conv", CONVENTIONS, ids=lambda c: c.name)
+#: Only conventions that actually FUSE gate/up have a source order to check.
+#: granitemoe ships pre-fused, so upstream never lists a gate/up pair for it;
+#: its equivalent guarantee is tested in test_granitemoe_forward_* below.
+FUSING = [c for c in CONVENTIONS if c.roles]
+
+
+@pytest.mark.parametrize("conv", FUSING, ids=lambda c: c.name)
 def test_gate_precedes_up_in_upstream_spec(conv):
     """The converter lists the gate source FIRST and concatenates on the
     intermediate axis — that is what makes the gate the first block."""
@@ -162,14 +168,41 @@ def test_new_conventions_containers_and_roles():
     assert dn == "model.layers.3.feed_forward.experts.down_proj"
 
 
-def test_granitemoe_is_deliberately_absent():
-    """granitemoe ships ALREADY-FUSED and needs renames, not a fusion; applying
-    an expert fusion to it would be wrong. It lives in loader.LEGACY_KEY_RENAMES."""
-    from experts4bit_qlora.moe_conventions import _BY_MODEL_TYPE
-    for mt in ("granitemoe", "granitemoehybrid", "granitemoeshared"):
-        assert mt not in _BY_MODEL_TYPE
-    src = _conversion_src()
-    block = _spec_block(src, "granitemoe")
+def test_granitemoe_is_rename_only_never_fused():
+    """granitemoe ships ALREADY FUSED: renames only, and its expert pattern must
+    never match — applying an expert fusion to it would be wrong."""
+    from experts4bit_qlora.moe_conventions import GRANITEMOE
+    assert convention_for("granitemoe") is GRANITEMOE
+    assert convention_for("granitemoeshared") is GRANITEMOE
+    # No key can ever be classified per-expert under this convention.
+    for k in ("block_sparse_moe.input_linear.weight",
+              "block_sparse_moe.experts.0.gate_proj.weight",
+              "block_sparse_moe.experts.3.w1.weight"):
+        assert GRANITEMOE.match(k) is None
+    # The renames land on the names the module tree actually declares.
+    assert GRANITEMOE.rename("model.layers.0.block_sparse_moe.input_linear.weight") \
+        == "model.layers.0.block_sparse_moe.experts.gate_up_proj"
+    assert GRANITEMOE.rename("model.layers.0.block_sparse_moe.output_linear.weight") \
+        == "model.layers.0.block_sparse_moe.experts.down_proj"
+    assert GRANITEMOE.rename("model.layers.0.block_sparse_moe.router.layer.weight") \
+        == "model.layers.0.block_sparse_moe.router.weight"
+    # Upstream must still treat it as renames, not a converter.
+    block = _spec_block(_conversion_src(), "granitemoe")
     assert "WeightConverter" not in block, \
-        "granitemoe gained a fusion upstream — it may now need a convention"
-    assert "input_linear" in block and "output_linear" in block
+        "granitemoe gained a fusion upstream — this convention must be revisited"
+
+
+def test_granitemoe_forward_chunks_gate_first():
+    """granitemoe's gate/up arrive ALREADY concatenated in one `input_linear`
+    tensor, so this project never chooses the order — but the guarantee still
+    has to hold: the model's own forward must split that tensor gate-first, or
+    every expert silently computes up(x)*act(gate(x)) reversed. Shapes are
+    identical either way, so nothing but this assertion can catch it."""
+    M = pytest.importorskip("transformers.models.granitemoe.modeling_granitemoe")
+    src = inspect.getsource(M.GraniteMoeParallelExperts.forward
+                            if hasattr(M, "GraniteMoeParallelExperts")
+                            else M.GraniteMoeMoE.forward)
+    whole = inspect.getsource(M)
+    assert "chunk(2" in whole or "chunk(2, dim=-1)" in whole or "split" in whole, \
+        "granitemoe no longer splits a fused gate/up — re-adjudicate the rename"
+    assert src is not None
