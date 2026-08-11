@@ -250,3 +250,80 @@ def test_shipped_head_contradicting_a_tied_config_refuses_to_guess():
 
     with pytest.raises(MoEConventionError, match="refusing to guess"):
         execute_moe_plan(plan, m, read, device="cpu", dtype=torch.float32)
+
+
+# --- block-FP8 checkpoints --------------------------------------------------
+
+def test_block_fp8_scales_are_paired_and_dequantized_not_dropped():
+    """DeepSeek-V3-class checkpoints ship a `*_scale_inv` companion beside every
+    quantized matrix. The weight keys match a convention PERFECTLY, which is
+    what makes ignoring the scales so dangerous: the model would load clean and
+    compute garbage. This asserts the executor actually dequantizes."""
+    from experts4bit_qlora.fp8_blocks import dequantize_fp8_blocks
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(256, 128, bias=False)
+
+    m = M()
+    torch.manual_seed(0)
+    q = (torch.randn(128, 256) * 8).to(torch.float8_e4m3fn)
+    sc = torch.rand(1, 2) + 0.5                      # [tiles_out, tiles_in]
+    store = {"proj.weight": q, "proj.weight_scale_inv": sc}
+
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    assert plan.scales == {"proj.weight": "proj.weight_scale_inv"}
+    # The scale key is NOT a parameter of its own.
+    assert "proj.weight_scale_inv" not in plan.passthrough
+
+    rep = execute_moe_plan(plan, m, store.__getitem__,
+                           device="cpu", dtype=torch.float32)
+    assert rep["fp8_dequantized"] == 1
+    expected = dequantize_fp8_blocks(q, sc, dtype=torch.float32)
+    assert torch.equal(m.proj.weight, expected)
+    # And it is genuinely different from the raw bytes reinterpreted.
+    assert not torch.equal(m.proj.weight, q.to(torch.float32))
+
+
+def test_mismatched_block_scale_shape_refuses_to_dequantize():
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(256, 128, bias=False)
+
+    m = M()
+    store = {"proj.weight": torch.zeros(128, 256, dtype=torch.float8_e4m3fn),
+             "proj.weight_scale_inv": torch.ones(9, 9)}   # wrong tiling
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    with pytest.raises(MoEConventionError, match="mismatched scale"):
+        execute_moe_plan(plan, m, store.__getitem__, device="cpu",
+                         dtype=torch.float32)
+
+
+def test_extra_prediction_head_layers_are_never_dropped_silently():
+    """DeepSeek-V3 ships an MTP head as layer 61 of 0..60; GLM-5 ships layer 78
+    of 0..77. The base model builds neither. Dropping unmapped keys by default
+    is the exact failure this planner exists to prevent, so it raises and names
+    the opt-in instead."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=2)
+            self.layers = torch.nn.ModuleList(
+                [torch.nn.Linear(4, 4, bias=False) for _ in range(2)])
+
+    m = M()
+    keys = ["layers.0.weight", "layers.1.weight", "layers.2.weight"]
+    with pytest.raises(MoEConventionError, match="past this model's depth"):
+        plan_moe_checkpoint(keys, m, "llama", dense_ok=True)
+
+    plan = plan_moe_checkpoint(keys, m, "llama", dense_ok=True,
+                               skip_extra_layers=True)
+    assert plan.skipped_keys == ("layers.2.weight",)
+    assert "layers.2.weight" not in plan.passthrough

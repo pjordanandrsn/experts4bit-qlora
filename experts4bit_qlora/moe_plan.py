@@ -57,6 +57,10 @@ class MoELoadPlan:
     expert_targets: dict = field(default_factory=dict)
     #: target param -> source param, for heads a tied checkpoint omits.
     tied_params: dict = field(default_factory=dict)
+    #: weight key -> its block-scale key, for block-FP8 checkpoints.
+    scales: dict = field(default_factory=dict)
+    #: checkpoint keys deliberately not loaded (extra prediction heads).
+    skipped_keys: tuple = ()
     #: model params a checkpoint legitimately never supplies (computed buffers)
     ignored_params: tuple = ()
 
@@ -70,6 +74,68 @@ class MoELoadPlan:
                 f"{len(self.passthrough)} passthrough + {n_exp_keys} expert tensors "
                 f"-> {self.n_expert_stacks} fused stacks")
 
+
+
+
+#: Suffix upstream uses for a block-FP8 weight's companion scale tensor.
+FP8_SCALE_SUFFIX = "_scale_inv"
+
+
+def _split_block_scales(checkpoint_keys):
+    """Partition keys into ``(weights, {weight_key: scale_key})``.
+
+    Block-FP8 checkpoints (DeepSeek-V3 and friends) ship a second tensor beside
+    every quantized matrix holding its per-block scales. Those scale keys are
+    real data, but they are not parameters of their own — the module tree has no
+    slot for them, because the weight they belong to dequantizes into a single
+    dense parameter.
+
+    Left unhandled they are simply unmapped keys, and the planner rightly
+    refuses the checkpoint. Absorbing them silently would be far worse: the
+    weight keys match a convention perfectly, so a loader that ignored the
+    scales would load cleanly and compute garbage. Pairing them here is what
+    lets the executor dequantize instead of guessing.
+
+    A key counts as a scale only when the weight it names is itself present, so
+    a tensor that merely ends in the suffix cannot orphan itself.
+    """
+    keys = set(checkpoint_keys)
+    scales, weights = {}, []
+    for k in checkpoint_keys:
+        if k.endswith(FP8_SCALE_SUFFIX) and k[: -len(FP8_SCALE_SUFFIX)] in keys:
+            scales[k[: -len(FP8_SCALE_SUFFIX)]] = k
+        else:
+            weights.append(k)
+    return weights, scales
+
+
+
+_LAYER_RE = re.compile(r"(?:^|\.)layers\.(\d+)\.")
+
+
+def _extra_head_keys(checkpoint_keys, model):
+    """Keys belonging to layers past the model's declared depth.
+
+    Several MoE releases append a multi-token-prediction head as one more
+    "layer" beyond ``num_hidden_layers``: DeepSeek-V3 ships layer 61 of 0..60,
+    GLM-5 ships layer 78 of 0..77. The base causal-LM does not build those
+    modules, so their keys have no home in the tree.
+
+    They are returned rather than dropped. Dropping unmapped keys by default is
+    exactly the behaviour this planner exists to prevent — it is indistinguishable
+    from dropping keys that matter. The caller has to opt in, and the plan then
+    records what was left behind so a speculative-decoding user can see that the
+    draft head was skipped rather than discovering it missing at run time.
+    """
+    depth = getattr(getattr(model, "config", None), "num_hidden_layers", None)
+    if depth is None:
+        return ()
+    out = []
+    for k in checkpoint_keys:
+        m = _LAYER_RE.search(k)
+        if m and int(m.group(1)) >= depth:
+            out.append(k)
+    return tuple(sorted(out))
 
 
 def _tied_targets(model):
@@ -102,6 +168,7 @@ def plan_moe_checkpoint(
     *,
     ignore_param_patterns=(r"\.rotary_emb\.", r"\.inv_freq$"),
     dense_ok: bool = False,
+    skip_extra_layers: bool = False,
 ) -> MoELoadPlan:
     """Build and validate a load plan. Raises rather than returning a partial one.
 
@@ -123,13 +190,28 @@ def plan_moe_checkpoint(
     fail to resolve against the tree and the plan raises, which is the point.
     """
     conv = convention_for(model_type, dense_ok=dense_ok)
+    checkpoint_keys, block_scales = _split_block_scales(checkpoint_keys)
+    extra = _extra_head_keys(checkpoint_keys, model)
+    if extra and skip_extra_layers:
+        drop = set(extra)
+        checkpoint_keys = [k for k in checkpoint_keys if k not in drop]
+        block_scales = {w: sc for w, sc in block_scales.items() if w not in drop}
+    elif extra:
+        depth = model.config.num_hidden_layers
+        raise MoEConventionError(
+            f"{model_type}: {len(extra)} checkpoint keys live in layers >= "
+            f"{depth}, past this model's depth — e.g. {list(extra[:3])}. That is "
+            f"usually a multi-token-prediction head the base model does not "
+            f"build. Pass skip_extra_layers=True to load without it; they are "
+            f"NOT dropped silently")
     tree = set(model.state_dict())
     ignore_re = [re.compile(p) for p in ignore_param_patterns]
     ignored = tuple(sorted(n for n in tree if any(r.search(n) for r in ignore_re)))
     claimable = tree - set(ignored)
 
     plan = MoELoadPlan(model_type=model_type, convention=conv.name,
-                       ignored_params=ignored)
+                       ignored_params=ignored, scales=block_scales,
+                       skipped_keys=extra if skip_extra_layers else ())
     # layer -> role -> {expert_idx: ckpt key}
     experts = defaultdict(lambda: defaultdict(dict))
     targets = {}

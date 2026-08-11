@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import torch
 
+from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
 from .moe_conventions import MoEConventionError, fuse_experts
 
 
@@ -108,18 +109,38 @@ def execute_moe_plan(
     Returns a report: assigned / fused / rebuilt-buffer counts, plus any
     parameters still on ``meta`` (which raises under ``strict``).
     """
+    def read(key):
+        """Read a checkpoint tensor, dequantizing it if it is block-FP8.
+
+        Doing this in the read path rather than at each call site means every
+        consumer below — passthrough, expert fusion, tied heads — gets dense
+        tensors without knowing the checkpoint was quantized.
+        """
+        t = read_tensor(key)
+        scale_key = plan.scales.get(key)
+        if scale_key is None:
+            return t
+        scale = read_tensor(scale_key)
+        want = fp8_block_scale_shape(tuple(t.shape))
+        if tuple(scale.shape) != tuple(want):
+            raise MoEConventionError(
+                f"{key}: block-scale {scale_key} has shape {tuple(scale.shape)}, "
+                f"but a {tuple(t.shape)} weight implies {tuple(want)} — refusing "
+                f"to dequantize with a mismatched scale")
+        return dequantize_fp8_blocks(t, scale, dtype=dtype)
+
     assigned = 0
     for ckpt_key, param in plan.passthrough.items():
-        _assign(model, param, read_tensor(ckpt_key).to(dtype).to(device))
+        _assign(model, param, read(ckpt_key).to(dtype).to(device))
         assigned += 1
 
     fused = 0
     for layer, roles in plan.experts.items():
         gate_up_name, down_name = plan.expert_targets[layer]
         n = len(roles["gate"])
-        gate = [read_tensor(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
-        up = [read_tensor(roles["up"][e]).to(dtype).to(device) for e in range(n)]
-        down = [read_tensor(roles["down"][e]).to(dtype).to(device) for e in range(n)]
+        gate = [read(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
+        up = [read(roles["up"][e]).to(dtype).to(device) for e in range(n)]
+        down = [read(roles["down"][e]).to(dtype).to(device) for e in range(n)]
         gate_up, down_stack = fuse_experts(gate, up, down)
         del gate, up, down                     # release the per-expert transient
         _assign(model, gate_up_name, gate_up)
@@ -164,5 +185,5 @@ def execute_moe_plan(
             f"{len(still_meta)} tensors still on meta after load, e.g. "
             f"{still_meta[:4]} — the checkpoint is incomplete or the plan drifted")
     return {"assigned": assigned, "fused_stacks": fused,
-            "tied": len(plan.tied_params),
+            "tied": len(plan.tied_params), "fp8_dequantized": len(plan.scales),
             "rebuilt_buffers": len(rebuilt), "still_meta": still_meta}
