@@ -397,3 +397,53 @@ def test_prefused_transpose_places_the_transposed_stack():
     assert tuple(placed.shape) == (2, 3, 4)
     assert torch.equal(placed, src.transpose(-1, -2))
     assert torch.equal(placed, torch.transpose(src, 1, 2))   # == transformers op
+
+
+def test_dim_theta_rotary_buffer_is_rebuilt_from_the_standard_formula():
+    """Vision/audio rotary towers (Qwen3-VL) compute inv_freq from plain
+    dim/theta attributes with no config or rope_type, so the config-driven
+    materializer skips them. The dim/theta fallback must rebuild the exact same
+    tensor the module's own __init__ would, or the first vision forward dies on
+    a meta buffer."""
+    from experts4bit_qlora.moe_load import _materialize_computed_buffers
+
+    class VisionRotary(torch.nn.Module):
+        def __init__(self, dim=36, theta=10000.0):
+            super().__init__()
+            self.dim = dim
+            self.theta = theta
+            self.register_buffer("inv_freq", torch.empty(dim // 2, device="meta"),
+                                 persistent=False)
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.rotary = VisionRotary()
+
+    m = M()
+    rebuilt = _materialize_computed_buffers(m, device="cpu")
+    assert rebuilt == ["rotary.inv_freq"]
+    assert not m.rotary.inv_freq.is_meta
+    expected = 1.0 / (10000.0 ** (torch.arange(0, 36, 2, dtype=torch.float) / 36))
+    assert torch.equal(m.rotary.inv_freq, expected)
+
+
+def test_a_meta_inv_freq_with_no_way_to_rebuild_it_still_raises():
+    """The fallback must not become a silent catch-all: a rotary buffer with
+    neither a config initializer nor dim/theta is a real gap and must raise."""
+    from experts4bit_qlora.moe_load import _materialize_computed_buffers
+    from experts4bit_qlora.moe_conventions import MoEConventionError
+
+    class Mystery(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.register_buffer("inv_freq", torch.empty(4, device="meta"),
+                                 persistent=False)
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.r = Mystery()
+
+    with pytest.raises(MoEConventionError, match="neither a rope initializer"):
+        _materialize_computed_buffers(M(), device="cpu")

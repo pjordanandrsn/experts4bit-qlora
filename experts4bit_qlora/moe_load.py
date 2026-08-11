@@ -78,17 +78,33 @@ def _materialize_computed_buffers(model: torch.nn.Module, device) -> list:
                 init_fn = None
         if init_fn is None:
             init_fn = getattr(mod, "compute_default_rope_parameters", None)
-        if init_fn is None or cfg is None:
-            raise MoEConventionError(
-                f"{name}.inv_freq is on meta and the module exposes no rope "
-                f"initializer to rebuild it from")
-        fresh, attn_scale = init_fn(cfg, device)
-        mod.register_buffer("inv_freq", fresh, persistent=False)
-        if getattr(mod, "original_inv_freq", None) is not None:
-            mod.register_buffer("original_inv_freq", fresh.clone(), persistent=False)
-        if attn_scale is not None and hasattr(mod, "attention_scaling"):
-            mod.attention_scaling = attn_scale
-        rebuilt.append(f"{name}.inv_freq")
+        if init_fn is not None and cfg is not None:
+            fresh, attn_scale = init_fn(cfg, device)
+            mod.register_buffer("inv_freq", fresh, persistent=False)
+            if getattr(mod, "original_inv_freq", None) is not None:
+                mod.register_buffer("original_inv_freq", fresh.clone(),
+                                    persistent=False)
+            if attn_scale is not None and hasattr(mod, "attention_scaling"):
+                mod.attention_scaling = attn_scale
+            rebuilt.append(f"{name}.inv_freq")
+            continue
+        # Vision/audio rotary towers (Qwen3-VL's Qwen3VLMoeVisionRotaryEmbedding)
+        # have no config and no rope_type: their __init__ computes the plain
+        # default inv_freq = 1 / theta**(arange(0, dim, 2)/dim) from `dim` and
+        # `theta`/`base` attributes it kept. Recompute from those exactly —
+        # this is the same formula, not a re-derivation, so a config-driven
+        # rope above is never routed here.
+        dim = getattr(mod, "dim", None)
+        theta = getattr(mod, "theta", getattr(mod, "base", None))
+        if isinstance(dim, int) and isinstance(theta, (int, float)):
+            fresh = 1.0 / (theta ** (
+                torch.arange(0, dim, 2, dtype=torch.float, device=device) / dim))
+            mod.register_buffer("inv_freq", fresh, persistent=False)
+            rebuilt.append(f"{name}.inv_freq")
+            continue
+        raise MoEConventionError(
+            f"{name}.inv_freq is on meta and the module exposes neither a rope "
+            f"initializer (config + rope_type) nor dim/theta to rebuild it from")
     return rebuilt
 
 
