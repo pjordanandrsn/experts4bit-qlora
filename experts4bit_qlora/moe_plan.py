@@ -37,7 +37,10 @@ from dataclasses import dataclass, field
 
 from .moe_conventions import MoEConventionError, convention_for
 
-_LAYER = re.compile(r"^model\.layers\.(\d+)\.(.+)$")
+# Capture the prefix before `layers.N.` so a fused target inherits it. A plain
+# model gives prefix "model."; a multimodal composite gives "language_model.model."
+# (MiniMax-M3-VL) or similar. Non-greedy so the FIRST layers.N wins.
+_LAYER = re.compile(r"^(.*?)layers\.(\d+)\.(.+)$")
 
 
 @dataclass
@@ -254,11 +257,11 @@ def plan_moe_checkpoint(
     for key in checkpoint_keys:
         m = _LAYER.match(key)
         if m:
-            layer, suffix = int(m.group(1)), m.group(2)
+            prefix, layer, suffix = m.group(1), int(m.group(2)), m.group(3)
             hit = conv.match(suffix)
             if hit is not None:
                 idx, role = hit
-                gu, dn = conv.fused_names(layer)
+                gu, dn = conv.fused_names(layer, prefix)
                 target = dn if role == "down" else gu
                 if target not in claimable:
                     unmapped.append((key, f"fused target {target} absent from the model"))

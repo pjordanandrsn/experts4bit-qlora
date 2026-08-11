@@ -107,11 +107,14 @@ class MoEConvention:
             return None
         return int(m.group(1)), self.roles[token]
 
-    def fused_names(self, layer: int) -> tuple[str, str]:
-        """(first_target, down_target) for a layer. The first target is the
-        fused gate_up_proj for gated experts, or a plain up_proj when the
-        convention has no gate (nemotron_h)."""
-        base = f"model.layers.{layer}.{self.fused_prefix}"
+    def fused_names(self, layer: int, prefix: str = "model.") -> tuple[str, str]:
+        """(first_target, down_target) for a layer. ``prefix`` is everything
+        before ``layers.N.`` in the checkpoint key that matched — "model." for a
+        plain model, "language_model.model." for a multimodal composite — so the
+        fused target lands under the SAME prefix as its per-expert sources. The
+        first target is the fused gate_up_proj for gated experts, or a plain
+        up_proj when the convention has no gate (nemotron_h)."""
+        base = f"{prefix}layers.{layer}.{self.fused_prefix}"
         first = "gate_up_proj" if self.gated else "up_proj"
         return f"{base}.{first}", f"{base}.down_proj"
 
@@ -142,7 +145,11 @@ MIXTRAL = MoEConvention(
     expert_re=re.compile(r"^block_sparse_moe\.experts\.(\d+)\.(w1|w2|w3)\.weight$"),
     roles={"w1": "gate", "w3": "up", "w2": "down"},
     fused_prefix="mlp.experts",
-    model_types=frozenset({"mixtral", "minimax", "minimax_m2"}),
+    # minimax_m3_vl is the VL composite: same w1/w3/w2 block_sparse_moe experts,
+    # but its keys carry a `language_model.model.` prefix — handled by the
+    # planner's prefix-aware fused_names (validated against the 23416-key
+    # MiniMax-M3 index: 57 MoE layers, complete 128-expert gate/up/down stacks).
+    model_types=frozenset({"mixtral", "minimax", "minimax_m2", "minimax_m3_vl"}),
     renames=((".block_sparse_moe.", ".mlp."),),
 )
 

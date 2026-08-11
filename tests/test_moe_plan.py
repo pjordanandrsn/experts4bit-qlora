@@ -447,3 +447,20 @@ def test_a_meta_inv_freq_with_no_way_to_rebuild_it_still_raises():
 
     with pytest.raises(MoEConventionError, match="neither a rope initializer"):
         _materialize_computed_buffers(M(), device="cpu")
+
+
+def test_vl_prefix_expert_fusion_targets_inherit_the_checkpoint_prefix():
+    """A multimodal composite (MiniMax-M3-VL) carries its experts under a
+    `language_model.model.` prefix. The planner's prefix-aware fused_names must
+    place the fused target under the SAME prefix, not a hardcoded `model.` — or
+    the target would miss the tree. Mirrors the real minimax_m3_vl key shape."""
+    from experts4bit_qlora.moe_conventions import MIXTRAL
+    pfx = "language_model.model."
+    # MIXTRAL matches the w1/w3/w2 suffix; fused_names carries the prefix.
+    assert MIXTRAL.match("block_sparse_moe.experts.5.w1.weight") == (5, "gate")
+    gu, dn = MIXTRAL.fused_names(3, pfx)
+    assert gu == f"{pfx}layers.3.mlp.experts.gate_up_proj"
+    assert dn == f"{pfx}layers.3.mlp.experts.down_proj"
+    # a plain model keeps the default prefix (backward compatible)
+    gu0, _ = MIXTRAL.fused_names(3)
+    assert gu0 == "model.layers.3.mlp.experts.gate_up_proj"
