@@ -16,11 +16,14 @@ import os
 import re
 import urllib.request
 
+from types import SimpleNamespace
+
 import pytest
 
 torch = pytest.importorskip("torch")
 
 from experts4bit_qlora.moe_conventions import MoEConventionError  # noqa: E402
+from experts4bit_qlora.moe_load import execute_moe_plan  # noqa: E402
 from experts4bit_qlora.moe_plan import plan_moe_checkpoint  # noqa: E402
 
 # (repo, model_type, layers to build) — one per convention shape we claim.
@@ -166,3 +169,281 @@ def test_dense_ok_still_refuses_a_real_moe():
     t, keys = _toy()
     with pytest.raises(MoEConventionError, match="do not map"):
         plan_moe_checkpoint(keys, t, "actually_an_moe", dense_ok=True)
+
+
+# --- tied heads -------------------------------------------------------------
+# A checkpoint that ties its head does not ship `lm_head.weight` at all. Before
+# this was handled the planner rejected every such checkpoint, which is most
+# small models. The pair of tests below pins BOTH directions, because the
+# tempting one-line fix ("just excuse lm_head") reintroduces a defect this
+# project already shipped once: an UNTIED head silently tied to the embedding,
+# which loads, runs, and is quietly wrong.
+
+class _TiedHead(torch.nn.Module):
+    def __init__(self, tied: bool):
+        super().__init__()
+        self.config = SimpleNamespace(tie_word_embeddings=tied)
+        self.model = torch.nn.Module()
+        self.model.embed_tokens = torch.nn.Embedding(8, 4)
+        self.lm_head = torch.nn.Linear(4, 8, bias=False)
+        self._tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
+
+def test_tied_head_absent_from_checkpoint_is_supplied_by_its_source():
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(["model.embed_tokens.weight"], m, "llama", dense_ok=True)
+    assert plan.tied_params == {"lm_head.weight": "model.embed_tokens.weight"}
+
+
+def test_untied_head_absent_from_checkpoint_still_raises():
+    """The config, not the class attribute, decides. `_tied_weights_keys` is set
+    on the class either way, so trusting it alone would tie an untied head."""
+    m = _TiedHead(tied=False)
+    with pytest.raises(MoEConventionError, match="no checkpoint key supplies"):
+        plan_moe_checkpoint(["model.embed_tokens.weight"], m, "llama", dense_ok=True)
+
+
+def test_tie_to_an_unloaded_source_is_not_a_free_pass():
+    """Excusing a head because it is tied only makes sense if the SOURCE itself
+    got real values; tying to a skeleton propagates skeleton values."""
+    m = _TiedHead(tied=True)
+    with pytest.raises(MoEConventionError, match="no checkpoint key supplies"):
+        plan_moe_checkpoint([], m, "llama", dense_ok=True)
+
+
+def test_executor_binds_the_same_parameter_object_not_a_copy():
+    """A copied tie reads identically and then diverges under training."""
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(["model.embed_tokens.weight"], m, "llama", dense_ok=True)
+    w = torch.arange(32, dtype=torch.float32).reshape(8, 4)
+    execute_moe_plan(plan, m, lambda k: w, device="cpu", dtype=torch.float32)
+    assert m.lm_head.weight is m.model.embed_tokens.weight
+
+
+def test_tied_head_that_the_checkpoint_ALSO_ships_is_still_tied():
+    """The subtle half. granite-3.0-3b declares tie_word_embeddings=True AND
+    ships lm_head.weight, bitwise equal to the embedding. Loading the shipped
+    copy instead of tying leaves two separate tensors that read identically, so
+    inference looks perfect and training silently diverges — the halves take
+    independent gradient steps on a weight meant to move as one. It also wastes
+    a full vocab x hidden tensor that from_pretrained shares."""
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(
+        ["model.embed_tokens.weight", "lm_head.weight"], m, "llama", dense_ok=True)
+    assert plan.tied_params == {"lm_head.weight": "model.embed_tokens.weight"}
+    w = torch.arange(32, dtype=torch.float32).reshape(8, 4)
+    execute_moe_plan(plan, m, lambda k: w, device="cpu", dtype=torch.float32)
+    assert m.lm_head.weight is m.model.embed_tokens.weight
+
+
+def test_shipped_head_contradicting_a_tied_config_refuses_to_guess():
+    """If the config says tied but the shipped head DIFFERS, the config and the
+    checkpoint contradict each other. Tying discards weights the publisher
+    shipped; not tying ignores the config. Both are guesses, so refuse."""
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(
+        ["model.embed_tokens.weight", "lm_head.weight"], m, "llama", dense_ok=True)
+
+    def read(key):
+        base = torch.arange(32, dtype=torch.float32).reshape(8, 4)
+        return base + (1.0 if key == "lm_head.weight" else 0.0)
+
+    with pytest.raises(MoEConventionError, match="refusing to guess"):
+        execute_moe_plan(plan, m, read, device="cpu", dtype=torch.float32)
+
+
+# --- block-FP8 checkpoints --------------------------------------------------
+
+def test_block_fp8_scales_are_paired_and_dequantized_not_dropped():
+    """DeepSeek-V3-class checkpoints ship a `*_scale_inv` companion beside every
+    quantized matrix. The weight keys match a convention PERFECTLY, which is
+    what makes ignoring the scales so dangerous: the model would load clean and
+    compute garbage. This asserts the executor actually dequantizes."""
+    from experts4bit_qlora.fp8_blocks import dequantize_fp8_blocks
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(256, 128, bias=False)
+
+    m = M()
+    torch.manual_seed(0)
+    q = (torch.randn(128, 256) * 8).to(torch.float8_e4m3fn)
+    sc = torch.rand(1, 2) + 0.5                      # [tiles_out, tiles_in]
+    store = {"proj.weight": q, "proj.weight_scale_inv": sc}
+
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    assert plan.scales == {"proj.weight": ("fp8", "proj.weight", "proj.weight_scale_inv")}
+    # The scale key is NOT a parameter of its own.
+    assert "proj.weight_scale_inv" not in plan.passthrough
+
+    rep = execute_moe_plan(plan, m, store.__getitem__,
+                           device="cpu", dtype=torch.float32)
+    assert rep["fp8_dequantized"] == 1
+    expected = dequantize_fp8_blocks(q, sc, dtype=torch.float32)
+    assert torch.equal(m.proj.weight, expected)
+    # And it is genuinely different from the raw bytes reinterpreted.
+    assert not torch.equal(m.proj.weight, q.to(torch.float32))
+
+
+def test_mismatched_block_scale_shape_refuses_to_dequantize():
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(256, 128, bias=False)
+
+    m = M()
+    store = {"proj.weight": torch.zeros(128, 256, dtype=torch.float8_e4m3fn),
+             "proj.weight_scale_inv": torch.ones(9, 9)}   # wrong tiling
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    with pytest.raises(MoEConventionError, match="mismatched scale"):
+        execute_moe_plan(plan, m, store.__getitem__, device="cpu",
+                         dtype=torch.float32)
+
+
+def test_extra_prediction_head_layers_are_never_dropped_silently():
+    """DeepSeek-V3 ships an MTP head as layer 61 of 0..60; GLM-5 ships layer 78
+    of 0..77. The base model builds neither. Dropping unmapped keys by default
+    is the exact failure this planner exists to prevent, so it raises and names
+    the opt-in instead."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=2)
+            self.layers = torch.nn.ModuleList(
+                [torch.nn.Linear(4, 4, bias=False) for _ in range(2)])
+
+    m = M()
+    keys = ["layers.0.weight", "layers.1.weight", "layers.2.weight"]
+    with pytest.raises(MoEConventionError, match="past this model's depth"):
+        plan_moe_checkpoint(keys, m, "llama", dense_ok=True)
+
+    plan = plan_moe_checkpoint(keys, m, "llama", dense_ok=True,
+                               skip_extra_layers=True)
+    assert plan.skipped_keys == ("layers.2.weight",)
+    assert "layers.2.weight" not in plan.passthrough
+
+
+def test_mxfp4_blocks_and_scales_pair_to_a_synthesized_base():
+    """gpt-oss ships NO plain `experts.gate_up_proj` — only `_blocks`+`_scales`.
+    The planner must synthesize the base name so the pre-fused stack maps to the
+    tree target, and record the pair for the executor to dequantize. Placing the
+    packed blocks as if dense would be a confidently-wrong load."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            # the dense target the two companions dequantize into
+            self.gate_up_proj = torch.nn.Parameter(
+                torch.zeros(2, 8, 4), requires_grad=False)
+
+    m = M()
+    keys = ["gate_up_proj_blocks", "gate_up_proj_scales"]
+    plan = plan_moe_checkpoint(keys, m, "llama", dense_ok=True)
+    # The base is synthesized and recorded as an mxfp4 pair; the companions are
+    # NOT placed as parameters of their own.
+    assert plan.scales == {
+        "gate_up_proj": ("mxfp4", "gate_up_proj_blocks", "gate_up_proj_scales")}
+    assert "gate_up_proj_blocks" not in plan.passthrough
+    assert "gate_up_proj_scales" not in plan.passthrough
+    assert plan.passthrough.get("gate_up_proj") == "gate_up_proj"
+
+
+def test_a_lone_mxfp4_scales_key_without_blocks_is_not_paired():
+    """A companion only counts when its primary is present — a stray `_scales`
+    must stay a normal (here: unmapped) key, not silently vanish."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.w = torch.nn.Parameter(torch.zeros(2, 2), requires_grad=False)
+
+    m = M()
+    # only a scales key, no matching _blocks
+    with pytest.raises(MoEConventionError):
+        plan_moe_checkpoint(["w", "orphan_scales"], m, "llama", dense_ok=True)
+
+
+def test_prefused_transpose_places_the_transposed_stack():
+    """qwen3_vl_moe ships experts pre-fused as [E, in, out]; the module declares
+    [E, out, in]. The executor must transpose at load, or _assign rejects the
+    mis-shaped tensor. Verified end-to-end: the placed parameter equals the
+    source's last-two-axis transpose (which for a 3-D stack is Transpose(1,2),
+    exactly transformers' converter op)."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.mlp = torch.nn.Module()
+            self.mlp.experts = torch.nn.Module()
+            self.mlp.experts.gate_up_proj = torch.nn.Parameter(
+                torch.zeros(2, 3, 4), requires_grad=False)   # [E, out, in]
+
+    m = M()
+    src = torch.arange(2 * 4 * 3, dtype=torch.float32).reshape(2, 4, 3)  # [E, in, out]
+    store = {"mlp.experts.gate_up_proj": src}
+    plan = plan_moe_checkpoint(list(store), m, "qwen3_vl_moe")
+    assert plan.transforms == {"mlp.experts.gate_up_proj": "transpose_last2"}
+    execute_moe_plan(plan, m, store.__getitem__, device="cpu", dtype=torch.float32)
+    placed = m.mlp.experts.gate_up_proj
+    assert tuple(placed.shape) == (2, 3, 4)
+    assert torch.equal(placed, src.transpose(-1, -2))
+    assert torch.equal(placed, torch.transpose(src, 1, 2))   # == transformers op
+
+
+def test_dim_theta_rotary_buffer_is_rebuilt_from_the_standard_formula():
+    """Vision/audio rotary towers (Qwen3-VL) compute inv_freq from plain
+    dim/theta attributes with no config or rope_type, so the config-driven
+    materializer skips them. The dim/theta fallback must rebuild the exact same
+    tensor the module's own __init__ would, or the first vision forward dies on
+    a meta buffer."""
+    from experts4bit_qlora.moe_load import _materialize_computed_buffers
+
+    class VisionRotary(torch.nn.Module):
+        def __init__(self, dim=36, theta=10000.0):
+            super().__init__()
+            self.dim = dim
+            self.theta = theta
+            self.register_buffer("inv_freq", torch.empty(dim // 2, device="meta"),
+                                 persistent=False)
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.rotary = VisionRotary()
+
+    m = M()
+    rebuilt = _materialize_computed_buffers(m, device="cpu")
+    assert rebuilt == ["rotary.inv_freq"]
+    assert not m.rotary.inv_freq.is_meta
+    expected = 1.0 / (10000.0 ** (torch.arange(0, 36, 2, dtype=torch.float) / 36))
+    assert torch.equal(m.rotary.inv_freq, expected)
+
+
+def test_a_meta_inv_freq_with_no_way_to_rebuild_it_still_raises():
+    """The fallback must not become a silent catch-all: a rotary buffer with
+    neither a config initializer nor dim/theta is a real gap and must raise."""
+    from experts4bit_qlora.moe_load import _materialize_computed_buffers
+    from experts4bit_qlora.moe_conventions import MoEConventionError
+
+    class Mystery(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.register_buffer("inv_freq", torch.empty(4, device="meta"),
+                                 persistent=False)
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.r = Mystery()
+
+    with pytest.raises(MoEConventionError, match="neither a rope initializer"):
+        _materialize_computed_buffers(M(), device="cpu")

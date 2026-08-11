@@ -28,7 +28,9 @@ from __future__ import annotations
 
 import torch
 
-from .moe_conventions import MoEConventionError, fuse_experts
+from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
+from .mxfp4 import dequantize_mxfp4
+from .moe_conventions import MoEConventionError, fuse_experts, stack_experts
 
 
 def _assign(model: torch.nn.Module, name: str, tensor: torch.Tensor) -> None:
@@ -76,17 +78,33 @@ def _materialize_computed_buffers(model: torch.nn.Module, device) -> list:
                 init_fn = None
         if init_fn is None:
             init_fn = getattr(mod, "compute_default_rope_parameters", None)
-        if init_fn is None or cfg is None:
-            raise MoEConventionError(
-                f"{name}.inv_freq is on meta and the module exposes no rope "
-                f"initializer to rebuild it from")
-        fresh, attn_scale = init_fn(cfg, device)
-        mod.register_buffer("inv_freq", fresh, persistent=False)
-        if getattr(mod, "original_inv_freq", None) is not None:
-            mod.register_buffer("original_inv_freq", fresh.clone(), persistent=False)
-        if attn_scale is not None and hasattr(mod, "attention_scaling"):
-            mod.attention_scaling = attn_scale
-        rebuilt.append(f"{name}.inv_freq")
+        if init_fn is not None and cfg is not None:
+            fresh, attn_scale = init_fn(cfg, device)
+            mod.register_buffer("inv_freq", fresh, persistent=False)
+            if getattr(mod, "original_inv_freq", None) is not None:
+                mod.register_buffer("original_inv_freq", fresh.clone(),
+                                    persistent=False)
+            if attn_scale is not None and hasattr(mod, "attention_scaling"):
+                mod.attention_scaling = attn_scale
+            rebuilt.append(f"{name}.inv_freq")
+            continue
+        # Vision/audio rotary towers (Qwen3-VL's Qwen3VLMoeVisionRotaryEmbedding)
+        # have no config and no rope_type: their __init__ computes the plain
+        # default inv_freq = 1 / theta**(arange(0, dim, 2)/dim) from `dim` and
+        # `theta`/`base` attributes it kept. Recompute from those exactly —
+        # this is the same formula, not a re-derivation, so a config-driven
+        # rope above is never routed here.
+        dim = getattr(mod, "dim", None)
+        theta = getattr(mod, "theta", getattr(mod, "base", None))
+        if isinstance(dim, int) and isinstance(theta, (int, float)):
+            fresh = 1.0 / (theta ** (
+                torch.arange(0, dim, 2, dtype=torch.float, device=device) / dim))
+            mod.register_buffer("inv_freq", fresh, persistent=False)
+            rebuilt.append(f"{name}.inv_freq")
+            continue
+        raise MoEConventionError(
+            f"{name}.inv_freq is on meta and the module exposes neither a rope "
+            f"initializer (config + rope_type) nor dim/theta to rebuild it from")
     return rebuilt
 
 
@@ -108,23 +126,101 @@ def execute_moe_plan(
     Returns a report: assigned / fused / rebuilt-buffer counts, plus any
     parameters still on ``meta`` (which raises under ``strict``).
     """
+    def read(key):
+        """Read a checkpoint tensor, dequantizing block-FP8 or MXFP4 in place.
+
+        Doing this in the read path rather than at each call site means every
+        consumer below — passthrough, expert fusion, tied heads — gets dense
+        tensors without knowing the checkpoint was quantized. ``key`` is the
+        MAPPED key: the real weight for FP8, or the synthesized base for MXFP4
+        (whose primary/scale companions live only in the dequant map).
+        """
+        spec = plan.scales.get(key)
+        if spec is None:
+            t = read_tensor(key)
+        else:
+            kind, primary_key, scale_key = spec
+            primary = read_tensor(primary_key)
+            scale = read_tensor(scale_key)
+            if kind == "fp8":
+                want = fp8_block_scale_shape(tuple(primary.shape))
+                if tuple(scale.shape) != tuple(want):
+                    raise MoEConventionError(
+                        f"{key}: block-scale {scale_key} has shape "
+                        f"{tuple(scale.shape)}, but a {tuple(primary.shape)} "
+                        f"weight implies {tuple(want)} — refusing to dequantize "
+                        f"with a mismatched scale")
+                t = dequantize_fp8_blocks(primary, scale, dtype=dtype)
+            elif kind == "mxfp4":
+                # blocks [..., rows, G, B] with scales [..., rows, G]: they must
+                # agree on every axis but the last (the packed byte axis).
+                if tuple(primary.shape[:-1]) != tuple(scale.shape):
+                    raise MoEConventionError(
+                        f"{key}: mxfp4 blocks {tuple(primary.shape)} and scales "
+                        f"{tuple(scale.shape)} disagree (blocks[:-1] must equal "
+                        f"scales) — refusing to dequantize a mismatched pair")
+                t = dequantize_mxfp4(primary, scale, dtype=dtype)
+            else:
+                raise MoEConventionError(f"{key}: unknown dequant kind {kind!r}")
+        # Applied AFTER any dequant: a pre-fused family may store this stack
+        # transposed vs the module. .transpose is a view; make it contiguous so
+        # the parameter owns its storage rather than aliasing the read buffer.
+        if plan.transforms.get(key) == "transpose_last2":
+            t = t.transpose(-1, -2).contiguous()
+        return t
+
     assigned = 0
     for ckpt_key, param in plan.passthrough.items():
-        _assign(model, param, read_tensor(ckpt_key).to(dtype).to(device))
+        _assign(model, param, read(ckpt_key).to(dtype).to(device))
         assigned += 1
 
     fused = 0
     for layer, roles in plan.experts.items():
-        gate_up_name, down_name = plan.expert_targets[layer]
-        n = len(roles["gate"])
-        gate = [read_tensor(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
-        up = [read_tensor(roles["up"][e]).to(dtype).to(device) for e in range(n)]
-        down = [read_tensor(roles["down"][e]).to(dtype).to(device) for e in range(n)]
-        gate_up, down_stack = fuse_experts(gate, up, down)
-        del gate, up, down                     # release the per-expert transient
-        _assign(model, gate_up_name, gate_up)
+        first_name, down_name = plan.expert_targets[layer]
+        n = len(roles["down"])
+        down = [read(roles["down"][e]).to(dtype).to(device) for e in range(n)]
+        up = [read(roles["up"][e]).to(dtype).to(device) for e in range(n)]
+        if "gate" in roles:
+            gate = [read(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
+            first, down_stack = fuse_experts(gate, up, down)
+            del gate
+        else:
+            # Non-gated (nemotron_h): up_proj stacks on its own, no gate to fuse.
+            first, down_stack = stack_experts(up, down)
+        del up, down                           # release the per-expert transient
+        _assign(model, first_name, first)
         _assign(model, down_name, down_stack)
         fused += 2
+
+    # Heads the checkpoint omits because the model ties them. The plan only
+    # lists a tie whose SOURCE was loaded, so this can never point at a meta
+    # tensor — and doing it here, rather than trusting the model to have tied
+    # itself, is what keeps the planner's exemption honest: the parameter is
+    # excused from needing a key precisely because it gets real values now.
+    loaded_from_disk = set(plan.passthrough.values())
+    for target, source in plan.tied_params.items():
+        src = model.get_parameter(source)
+        parent, _, leaf = target.rpartition(".")
+        mod = model.get_submodule(parent) if parent else model
+        if target in loaded_from_disk:
+            # The checkpoint shipped this head AND the config says it is tied.
+            # Normally the two agree and the tie is a no-op on values. If they
+            # disagree, the config and the checkpoint contradict each other and
+            # either answer is a guess: tying discards weights the publisher
+            # shipped, not tying ignores the config. Refuse rather than pick.
+            on_disk = getattr(mod, leaf)
+            if not torch.equal(on_disk.to(src.dtype), src):
+                raise MoEConventionError(
+                    f"{target}: config declares tie_word_embeddings=True, but the "
+                    f"checkpoint ships a {target} that differs from {source} "
+                    f"(max|diff|={float((on_disk.to(src.dtype) - src).abs().max()):.3e}) "
+                    f"— tying would discard shipped weights, not tying would "
+                    f"ignore the config; refusing to guess")
+        # Bind the SAME Parameter object, not a copy of it. A copy would read
+        # identically and hide the difference at inference time, then diverge
+        # under training: the two halves would take independent gradient steps
+        # and the model would stop being tied at all.
+        mod._parameters[leaf] = src
 
     rebuilt = _materialize_computed_buffers(model, device)
 
@@ -134,4 +230,6 @@ def execute_moe_plan(
             f"{len(still_meta)} tensors still on meta after load, e.g. "
             f"{still_meta[:4]} — the checkpoint is incomplete or the plan drifted")
     return {"assigned": assigned, "fused_stacks": fused,
+            "tied": len(plan.tied_params), "fp8_dequantized": sum(1 for v in plan.scales.values() if v[0]=="fp8"),
+            "mxfp4_dequantized": sum(1 for v in plan.scales.values() if v[0]=="mxfp4"),
             "rebuilt_buffers": len(rebuilt), "still_meta": still_meta}

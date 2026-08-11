@@ -55,6 +55,18 @@ class MoELoadPlan:
     experts: dict = field(default_factory=dict)
     #: layer index -> (gate_up_proj name, down_proj name)
     expert_targets: dict = field(default_factory=dict)
+    #: target param -> source param, for heads a tied checkpoint omits.
+    tied_params: dict = field(default_factory=dict)
+    #: mapped key -> (kind, primary_ckpt_key, scale_ckpt_key). The mapped key is
+    #: what the convention/passthrough sees; reading it means dequantizing the
+    #: primary+scale pair. kind is "fp8" (block-FP8, DeepSeek-V3) or "mxfp4"
+    #: (gpt-oss / Kimi-K3 packed fp4). Named ``scales`` for back-compat.
+    scales: dict = field(default_factory=dict)
+    #: mapped-key -> load-time transform name (e.g. "transpose_last2") applied
+    #: after any dequant, for pre-fused families the module stores transposed.
+    transforms: dict = field(default_factory=dict)
+    #: checkpoint keys deliberately not loaded (extra prediction heads).
+    skipped_keys: tuple = ()
     #: model params a checkpoint legitimately never supplies (computed buffers)
     ignored_params: tuple = ()
 
@@ -69,6 +81,119 @@ class MoELoadPlan:
                 f"-> {self.n_expert_stacks} fused stacks")
 
 
+
+
+#: Suffix upstream uses for a block-FP8 weight's companion scale tensor.
+FP8_SCALE_SUFFIX = "_scale_inv"
+#: MXFP4 (gpt-oss lineage) ships a matrix as two tensors: ``X_blocks`` (packed
+#: fp4 nibbles) and ``X_scales`` (e8m0 block exponents). The dense parameter is
+#: ``X`` — neither companion is a parameter of its own.
+MXFP4_BLOCKS_SUFFIX = "_blocks"
+MXFP4_SCALES_SUFFIX = "_scales"
+
+
+def _split_block_scales(checkpoint_keys):
+    """Partition keys into ``(weights, dequant)``.
+
+    A quantized checkpoint ships a matrix as more than one tensor, only one of
+    which corresponds to a module parameter:
+
+    * **block-FP8** (DeepSeek-V3 and friends): ``X`` plus ``X_scale_inv``. The
+      module parameter is ``X``; the scale is extra.
+    * **MXFP4** (gpt-oss / Kimi-K3): ``X_blocks`` plus ``X_scales`` and NO plain
+      ``X``. The module parameter is ``X`` — a name the checkpoint never spells.
+
+    Both are returned as ``dequant[mapped_key] = (kind, primary_key, scale_key)``
+    where ``mapped_key`` is the name that flows through the convention: the real
+    weight key for FP8, and the SYNTHESIZED base ``X`` for MXFP4 (so the pre-fused
+    stack ``experts.gate_up_proj_blocks`` maps to the tree's
+    ``experts.gate_up_proj``). The companions are removed from ``weights`` so
+    nothing tries to place them as parameters.
+
+    Absorbing these silently would be the worst outcome: for FP8 the weight keys
+    match a convention perfectly, so ignoring the scale loads clean and computes
+    garbage; for MXFP4 the packed blocks would be placed as if dense. A companion
+    only counts when its primary is present, so a lone suffix cannot orphan a key.
+    """
+    keys = set(checkpoint_keys)
+    dequant, weights = {}, []
+    consumed = set()
+    for k in checkpoint_keys:
+        if k.endswith(MXFP4_SCALES_SUFFIX):
+            base = k[: -len(MXFP4_SCALES_SUFFIX)]
+            blocks = base + MXFP4_BLOCKS_SUFFIX
+            if blocks in keys:
+                dequant[base] = ("mxfp4", blocks, k)
+                consumed.update((k, blocks))
+                continue
+        if k.endswith(FP8_SCALE_SUFFIX) and k[: -len(FP8_SCALE_SUFFIX)] in keys:
+            base = k[: -len(FP8_SCALE_SUFFIX)]
+            dequant[base] = ("fp8", base, k)
+            consumed.add(k)          # the primary X stays in weights as itself
+    for k in checkpoint_keys:
+        if k in consumed:
+            continue
+        weights.append(k)
+    # The MXFP4 synthesized bases are not in checkpoint_keys; add them so the
+    # convention has a key to map to the dense target.
+    for base, (kind, _p, _s) in dequant.items():
+        if kind == "mxfp4":
+            weights.append(base)
+    return weights, dequant
+
+
+
+_LAYER_RE = re.compile(r"(?:^|\.)layers\.(\d+)\.")
+
+
+def _extra_head_keys(checkpoint_keys, model):
+    """Keys belonging to layers past the model's declared depth.
+
+    Several MoE releases append a multi-token-prediction head as one more
+    "layer" beyond ``num_hidden_layers``: DeepSeek-V3 ships layer 61 of 0..60,
+    GLM-5 ships layer 78 of 0..77. The base causal-LM does not build those
+    modules, so their keys have no home in the tree.
+
+    They are returned rather than dropped. Dropping unmapped keys by default is
+    exactly the behaviour this planner exists to prevent — it is indistinguishable
+    from dropping keys that matter. The caller has to opt in, and the plan then
+    records what was left behind so a speculative-decoding user can see that the
+    draft head was skipped rather than discovering it missing at run time.
+    """
+    depth = getattr(getattr(model, "config", None), "num_hidden_layers", None)
+    if depth is None:
+        return ()
+    out = []
+    for k in checkpoint_keys:
+        m = _LAYER_RE.search(k)
+        if m and int(m.group(1)) >= depth:
+            out.append(k)
+    return tuple(sorted(out))
+
+
+def _tied_targets(model):
+    """Parameters a checkpoint may legitimately omit because the model ties them
+    to another parameter, as ``{target: source}``.
+
+    Gated on ``config.tie_word_embeddings`` being TRUE. That gate is the whole
+    point: transformers exposes ``_tied_weights_keys`` on the CLASS, so it is
+    present even on models whose config declares the head untied. Trusting it
+    unconditionally would silently tie an untied head to the embedding — a real
+    defect this project shipped once before (#37/PR#69), and one that produces a
+    model that loads, runs, and is quietly wrong. Reading the config means an
+    untied head stays required, so its absence still raises.
+    """
+    if not getattr(getattr(model, "config", None), "tie_word_embeddings", False):
+        return {}
+    keys = getattr(model, "_tied_weights_keys", None) or {}
+    if isinstance(keys, dict):
+        return dict(keys)
+    # Older transformers spells it as a bare list of tied target names; the
+    # source is the input embedding by construction.
+    src = "model.embed_tokens.weight"
+    return {k: src for k in keys if k != src}
+
+
 def plan_moe_checkpoint(
     checkpoint_keys,
     model,
@@ -76,6 +201,7 @@ def plan_moe_checkpoint(
     *,
     ignore_param_patterns=(r"\.rotary_emb\.", r"\.inv_freq$"),
     dense_ok: bool = False,
+    skip_extra_layers: bool = False,
 ) -> MoELoadPlan:
     """Build and validate a load plan. Raises rather than returning a partial one.
 
@@ -97,13 +223,29 @@ def plan_moe_checkpoint(
     fail to resolve against the tree and the plan raises, which is the point.
     """
     conv = convention_for(model_type, dense_ok=dense_ok)
+    checkpoint_keys, block_scales = _split_block_scales(checkpoint_keys)
+    extra = _extra_head_keys(checkpoint_keys, model)
+    if extra and skip_extra_layers:
+        drop = set(extra)
+        checkpoint_keys = [k for k in checkpoint_keys if k not in drop]
+        block_scales = {mk: v for mk, v in block_scales.items()
+                        if mk not in drop and v[1] not in drop}
+    elif extra:
+        depth = model.config.num_hidden_layers
+        raise MoEConventionError(
+            f"{model_type}: {len(extra)} checkpoint keys live in layers >= "
+            f"{depth}, past this model's depth — e.g. {list(extra[:3])}. That is "
+            f"usually a multi-token-prediction head the base model does not "
+            f"build. Pass skip_extra_layers=True to load without it; they are "
+            f"NOT dropped silently")
     tree = set(model.state_dict())
     ignore_re = [re.compile(p) for p in ignore_param_patterns]
     ignored = tuple(sorted(n for n in tree if any(r.search(n) for r in ignore_re)))
     claimable = tree - set(ignored)
 
     plan = MoELoadPlan(model_type=model_type, convention=conv.name,
-                       ignored_params=ignored)
+                       ignored_params=ignored, scales=block_scales,
+                       skipped_keys=extra if skip_extra_layers else ())
     # layer -> role -> {expert_idx: ckpt key}
     experts = defaultdict(lambda: defaultdict(dict))
     targets = {}
@@ -127,6 +269,14 @@ def plan_moe_checkpoint(
         renamed = conv.rename(key)
         if renamed in claimable:
             plan.passthrough[key] = renamed
+            if conv.needs_transpose(key):
+                # Pre-fused-but-transposed families (qwen3_vl_moe): the tensor
+                # passes through by NAME, but its last two axes are swapped
+                # relative to the module. Record it (keyed on the checkpoint key
+                # the executor reads) so it transposes at load — placing it as-is
+                # would mis-shape, and _assign would then reject it, which is the
+                # safety net, not the plan.
+                plan.transforms[key] = "transpose_last2"
             continue
         unmapped.append((key, f"no parameter {renamed!r} in the model"))
 
@@ -135,9 +285,13 @@ def plan_moe_checkpoint(
         raise MoEConventionError(
             f"{model_type}: {len(unmapped)} checkpoint keys do not map — {head}")
 
-    # Expert stacks must be complete and consistent, PER LAYER.
+    # Expert stacks must be complete and consistent, PER LAYER. The required
+    # role set is the convention's own — gated families need gate+up+down, a
+    # non-gated one (nemotron_h) needs exactly up+down and must NOT be failed
+    # for a gate it never has.
+    required_roles = set(conv.roles.values())
     for layer, roles in experts.items():
-        missing_roles = {"gate", "up", "down"} - set(roles)
+        missing_roles = required_roles - set(roles)
         if missing_roles:
             raise MoEConventionError(
                 f"layer {layer}: expert stack missing {sorted(missing_roles)} entirely")
@@ -160,6 +314,21 @@ def plan_moe_checkpoint(
     claimed = set(plan.passthrough.values())
     for gu, dn in targets.values():
         claimed.update((gu, dn))
+    # A tied head is supplied by its source, not by a key of its own. Honour
+    # that only when the SOURCE is itself claimed — a tie to a parameter nothing
+    # loaded would propagate skeleton values, not fix them.
+    # NOTE the absence of a `t not in claimed` guard. A checkpoint may declare
+    # tie_word_embeddings=True and ALSO ship lm_head.weight — granite-3.0-3b
+    # does, bitwise equal to the embedding. Skipping the tie there leaves two
+    # separate tensors that read identically, so inference looks perfect while
+    # training silently diverges: the halves take independent gradient steps on
+    # a weight that is supposed to move as one. Tying regardless is also what
+    # from_pretrained does, so this keeps the two loaders in agreement.
+    tied = {t: srcn for t, srcn in _tied_targets(model).items()
+            if t in claimable and srcn in claimed}
+    plan.tied_params = tied
+    claimed |= set(tied)
+
     unclaimed = sorted(claimable - claimed)
     if unclaimed:
         raise MoEConventionError(

@@ -33,10 +33,9 @@ flex_olmo, afmoe, mellum and solar_open.
 ``w1``=gate, ``w3``=up, ``w2``=down in every ``w``-spelled family — pinned to
 upstream, never inferred.
 
-Deliberately NOT here: ``granitemoe`` (and its granitemoehybrid /
-granitemoeshared aliases) ships ALREADY-FUSED on disk and needs pure renames,
-not a fusion — that lives in :mod:`experts4bit_qlora.loader`'s
-``LEGACY_KEY_RENAMES``. A fusion applied to it would be wrong.
+``GRANITEMOE`` is the odd one out: it ships **already fused**, so it needs
+renames only and its expert pattern deliberately matches nothing. Applying a
+fusion to it would be wrong.
 
 **Why the orientation is the whole point.** In both conventions the gate and up
 tensors are SHAPE-IDENTICAL, so no amount of shape inspection can tell them
@@ -79,11 +78,24 @@ class MoEConvention:
     # convention's WeightRenaming entries; empty for families whose non-expert
     # spelling already matches (qwen2_moe, jamba, lfm2_moe).
     renames: tuple = ()
+    # Whether experts are SwiGLU-gated (gate+up fused into gate_up_proj) or
+    # plain up/down (nemotron_h: no gate, up_proj and down_proj stacked
+    # separately). Non-gated conventions declare roles {up, down} only.
+    gated: bool = True
+    # Keys whose SUFFIX matches this get their last two axes transposed at load.
+    # Some pre-fused families (qwen3_vl_moe) ship experts as [E, in, out] and
+    # the module declares [E, out, in]; upstream's converter is a Transpose(1,2)
+    # with nothing else. None means no key is ever transposed. The orientation
+    # is adjudicated against the real checkpoint's shapes, never inferred.
+    transpose_re: "re.Pattern | None" = None
 
     def rename(self, key: str) -> str:
         for src, dst in self.renames:
             key = key.replace(src, dst)
         return key
+
+    def needs_transpose(self, key: str) -> bool:
+        return self.transpose_re is not None and bool(self.transpose_re.search(key))
 
     def match(self, layer_suffix: str):
         """-> (expert_index, role) or None."""
@@ -96,8 +108,12 @@ class MoEConvention:
         return int(m.group(1)), self.roles[token]
 
     def fused_names(self, layer: int) -> tuple[str, str]:
+        """(first_target, down_target) for a layer. The first target is the
+        fused gate_up_proj for gated experts, or a plain up_proj when the
+        convention has no gate (nemotron_h)."""
         base = f"model.layers.{layer}.{self.fused_prefix}"
-        return f"{base}.gate_up_proj", f"{base}.down_proj"
+        first = "gate_up_proj" if self.gated else "up_proj"
+        return f"{base}.{first}", f"{base}.down_proj"
 
 
 QWEN2_MOE = MoEConvention(
@@ -111,6 +127,11 @@ QWEN2_MOE = MoEConvention(
         "deepseek_v2", "deepseek_v3", "deepseek_v32", "dots1", "ernie4_5_moe",
         "exaone_moe", "glm4_moe", "glm4_moe_lite", "glm4v_moe", "glm_moe_dsa",
         "hunyuan_v1_moe", "longcat_flash", "mellum", "solar_open",
+        # Newest releases (adjudicated 2026-08-11 against real indexes AND the
+        # converter API): per-expert gate/up/down + block-FP8, same fusion.
+        # A.X-K2 (SKT, 256 experts) and MiMo-V2-Flash (Xiaomi, 256) — both ship
+        # _scale_inv companions the FP8 path already handles.
+        "axk2", "mimo_v2_flash",
     }),
 )
 
@@ -164,7 +185,148 @@ DENSE = MoEConvention(
     model_types=frozenset(),            # selected explicitly, never by lookup
 )
 
-CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE)
+#: GraniteMoE ships its experts **ALREADY FUSED** — the checkpoint carries
+#: `input_linear` [E, 2*inter, hidden] and `output_linear` [E, hidden, inter]
+#: directly, so there is nothing to gather or concatenate. It therefore needs
+#: renames ONLY, and applying an expert fusion to it would be wrong. That is
+#: expressible with the existing machinery: a never-matching expert pattern
+#: (so no key is ever treated as per-expert) plus the rename table upstream
+#: uses. Verified against the released checkpoint AND the built tree.
+#: Covers granitemoe + its granitemoehybrid / granitemoeshared aliases.
+GRANITEMOE = MoEConvention(
+    name="granitemoe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
+    roles={},
+    fused_prefix="block_sparse_moe.experts",
+    model_types=frozenset({"granitemoe", "granitemoehybrid", "granitemoeshared"}),
+    renames=(
+        ("block_sparse_moe.input_linear.weight", "block_sparse_moe.experts.gate_up_proj"),
+        ("block_sparse_moe.output_linear.weight", "block_sparse_moe.experts.down_proj"),
+        ("block_sparse_moe.router.layer.weight", "block_sparse_moe.router.weight"),
+    ),
+)
+
+#: gpt-oss ships its experts PRE-FUSED (``experts.gate_up_proj`` is one stacked
+#: [E, hidden, 2*inter] tensor, not per-expert) AND MXFP4-quantized on disk as
+#: ``experts.gate_up_proj_blocks`` + ``experts.gate_up_proj_scales``. The planner
+#: pairs those and dequantizes in the read path, so by the time the convention
+#: runs each dense stack is a single synthesized ``experts.gate_up_proj`` key
+#: that passes straight through to the tree. Like GraniteMoE, nothing is ever
+#: per-expert here, so the expert pattern matches nothing; the expert/router
+#: biases pass through unrenamed. The clamped-SwiGLU activation is the model's
+#: OWN forward — a loading convention only places weights.
+GPTOSS = MoEConvention(
+    name="gptoss",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"gpt_oss"}),
+    renames=(),
+)
+
+#: qwen3_vl_moe (and its qwen3_vl_moe_text tower) ship experts PRE-FUSED as a
+#: single stacked tensor, but in [E, in, out] where the module declares
+#: [E, out, in]. Upstream's converter for it is exactly a Transpose(1, 2) on
+#: ``experts.gate_up_proj`` and ``experts.down_proj`` with no other operation —
+#: NOT qwen2_moe's per-expert MergeModulelist. Adjudicated against the released
+#: Qwen3-VL-30B-A3B index: checkpoint gate_up_proj [128, 2048, 1536] and
+#: down_proj [128, 768, 2048]; the built tree wants [128, 1536, 2048] and
+#: [128, 2048, 768] respectively — the last two axes swapped, both projections.
+#: Never per-expert, so the expert pattern matches nothing.
+QWEN3_VL_MOE = MoEConvention(
+    name="qwen3_vl_moe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"qwen3_vl_moe", "qwen3_vl_moe_text"}),
+    renames=(),
+    transpose_re=re.compile(r"mlp\.experts\.(gate_up_proj|down_proj)$"),
+)
+
+#: JetMoE is a DUAL MoE — mixture-of-experts in BOTH the MLP (``mlp.input_linear``
+#: / ``output_linear`` / ``router.layer``) AND the attention block
+#: (``self_attention.experts.*``). The obvious worry is that an MLP-expert
+#: planner fuses the MLP experts and silently drops the attention ones. It does
+#: not, because JetMoE's converter is EMPTY/native: every expert stack ships
+#: PRE-FUSED with the exact name the module declares, so there is nothing to
+#: fuse or reorder — both MoEs pass straight through, and placing a native
+#: tensor makes no orientation choice to get wrong. Adjudicated against the
+#: released jetmoe-8b index: all 266 checkpoint keys map 1:1 (96 of them
+#: attention-expert tensors), and the only tree param the checkpoint omits is
+#: the tied ``lm_head`` — 267/267 covered. Never per-expert; no renames.
+JETMOE = MoEConvention(
+    name="jetmoe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: native, never per-expert
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"jetmoe"}),
+    renames=(),
+)
+
+#: DBRX stores each expert projection as ONE flat ``[E*ffn_hidden, hidden]``
+#: tensor — ``ffn.experts.mlp.w1`` / ``v1`` / ``w2`` — and the transformers
+#: ``DbrxExpertGLU`` module declares them the SAME flat way, so the checkpoint
+#: matches the tree natively (empty converter). Loading is pure passthrough;
+#: nothing is gathered or reshaped. Adjudicated against katuni4ka/tiny-random-dbrx:
+#: 19/19 keys map 1:1, ckpt == tree exactly, logits bit-identical to
+#: from_pretrained. (A community re-layout — v2ray/dbrx-base-fixed — splits the
+#: flat stacks into per-expert ``ffn.experts.mlp_experts.N.w1.weight``; that is
+#: NOT the canonical transformers format and is out of scope for this passthrough.)
+#:
+#: The roles are pinned from ``DbrxExpertGLU.forward`` for the eventual
+#: quantized-fusion path (which would reshape the flat stacks into e4b's
+#: [E, 2*inter, hidden]): ``gate = x @ w1.T``, ``up = x @ v1.T``,
+#: ``down = (act(gate) * up) @ w2`` — so **w1 = gate, v1 = up, w2 = down**,
+#: SwiGLU gate-first. They are NOT used by the passthrough loader (which places
+#: the flat tensors as-is) but are recorded here so the orientation is never
+#: re-guessed. The expert pattern matches nothing: dbrx is never per-expert.
+DBRX = MoEConvention(
+    name="dbrx",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: flat native stacks
+    roles={},                           # passthrough; w1=gate/v1=up/w2=down documented above
+    fused_prefix="ffn.experts.mlp",
+    model_types=frozenset({"dbrx"}),
+    renames=(),
+)
+
+#: qwen3_5_moe ships experts PRE-FUSED with an EMPTY/native converter — unlike
+#: its sibling qwen3_vl_moe, there is no Transpose, so the stacked
+#: ``mlp.experts.gate_up_proj`` [E, 2*inter, hidden] and ``down_proj``
+#: [E, hidden, inter] match the module tree as-is. Pure passthrough, never
+#: per-expert; the per-layer shared_expert passes through too. Adjudicated from
+#: the converter API (empty) + the built tree; awaiting a canonical released
+#: checkpoint to confirm end-to-end (none published in standard form yet), but
+#: native placement makes no orientation choice, so there is nothing to get
+#: wrong once the format is confirmed native.
+QWEN3_5_MOE = MoEConvention(
+    name="qwen3_5_moe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: pre-fused native
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"qwen3_5_moe"}),
+    renames=(),
+)
+
+#: Nemotron-H is a hybrid Mamba/attention model whose MoE lives in a ``mixer``
+#: block and — unlike every gated family here — has NO gate: each expert is a
+#: plain up_proj + down_proj, run as down(act(up(x))). transformers stacks the
+#: per-expert up/down into ``mixer.experts.up_proj`` [E, inter, hidden] and
+#: ``mixer.experts.down_proj`` [E, hidden, inter] with MergeModulelist and no
+#: Concatenate. Declared non-gated so the executor stacks up_proj on its own
+#: instead of fusing a (nonexistent) gate. The per-layer shared_expert passes
+#: through. Adjudicated against the converter (up_proj/down_proj MergeModulelist,
+#: no gate token) and the built tree.
+NEMOTRON_H = MoEConvention(
+    name="nemotron_h",
+    expert_re=re.compile(r"^mixer\.experts\.(\d+)\.(up_proj|down_proj)\.weight$"),
+    roles={"up_proj": "up", "down_proj": "down"},
+    fused_prefix="mixer.experts",
+    model_types=frozenset({"nemotron_h"}),
+    gated=False,
+)
+
+CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
+               QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE, NEMOTRON_H)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 
@@ -222,3 +384,24 @@ def fuse_experts(gate: list, up: list, down: list):
             f"refusing to build a partial expert stack")
     gate_up = torch.stack([torch.cat([gate[e], up[e]], dim=0) for e in range(n)])
     return gate_up, torch.stack(list(down))
+
+
+def stack_experts(up: list, down: list):
+    """Per-expert lists -> ``(up_proj [E, inter, hidden], down_proj
+    [E, hidden, inter])`` for NON-gated MoEs (nemotron_h). Same MergeModulelist
+    stacking as :func:`fuse_experts` but with no gate to concatenate — the
+    module runs a plain ``down(act(up(x)))`` with no SwiGLU gate. Missing
+    experts raise rather than shrinking the stack."""
+    import torch
+
+    n = len(up)
+    if n == 0 or len(down) != n:
+        raise MoEConventionError(
+            f"expert count mismatch: up={len(up)} down={len(down)}")
+    missing = [i for i, t in enumerate(up) if t is None]
+    missing += [i for i, t in enumerate(down) if t is None]
+    if missing:
+        raise MoEConventionError(
+            f"missing expert tensors at indices {sorted(set(missing))[:5]} — "
+            f"refusing to build a partial expert stack")
+    return torch.stack(list(up)), torch.stack(list(down))
