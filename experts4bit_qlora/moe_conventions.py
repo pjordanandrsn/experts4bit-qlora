@@ -133,8 +133,12 @@ QWEN2_MOE = MoEConvention(
         # Newest releases (adjudicated 2026-08-11 against real indexes AND the
         # converter API): per-expert gate/up/down + block-FP8, same fusion.
         # A.X-K2 (SKT, 256 experts) and MiMo-V2-Flash (Xiaomi, 256) — both ship
-        # _scale_inv companions the FP8 path already handles.
-        "axk2", "mimo_v2_flash",
+        # _scale_inv companions the FP8 path already handles. kimi_k2
+        # (Kimi-K2-Instruct, 384 experts) is the same shape at scale: 69120
+        # per-expert keys, balanced 23040/23040/23040, + FP8. Adjudicated from
+        # the released index, not the converter API (which is EMPTY for kimi_k2
+        # in current transformers — a support gap, not a layout signal).
+        "axk2", "mimo_v2_flash", "kimi_k2",
     }),
 )
 

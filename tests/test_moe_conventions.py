@@ -425,6 +425,11 @@ ADJUDICATED_RELEASED = {
     # 128-expert stacks); its converter signature differs from bare mixtral only
     # cosmetically (source-pattern spelling), so the drift check exempts it.
     "minimax_m3_vl": "mixtral",
+    # Kimi-K2-Instruct: per-expert qwen2_moe + block-FP8 at scale. Its converter
+    # is EMPTY in current transformers (incomplete support), so this is
+    # adjudicated purely from the 139644-key released index: 69120 expert keys,
+    # perfectly balanced gate/up/down, 0 unmatched.
+    "kimi_k2": "qwen2_moe",
 }
 
 
