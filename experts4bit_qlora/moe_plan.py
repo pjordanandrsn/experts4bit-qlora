@@ -118,6 +118,10 @@ MODELOPT_INPUT_SCALE_SUFFIX = "input_scale"
 AWQ_QWEIGHT_SUFFIX = "qweight"
 AWQ_QZEROS_SUFFIX = "qzeros"
 AWQ_SCALES_SUFFIX = "scales"
+#: GPTQ ships the SAME qweight/qzeros/scales names as AWQ but packs along a
+#: different axis, in a different bit order, and adds this act-order column
+#: permutation. Its presence is the name-level tell that a triple is GPTQ.
+GPTQ_GIDX_SUFFIX = "g_idx"
 
 
 def _split_block_scales(checkpoint_keys):
@@ -173,6 +177,20 @@ def _split_block_scales(checkpoint_keys):
             stem = k[: -len(AWQ_QWEIGHT_SUFFIX)]
             qz, sc = stem + AWQ_QZEROS_SUFFIX, stem + AWQ_SCALES_SUFFIX
             if qz in keys and sc in keys:
+                if stem + GPTQ_GIDX_SUFFIX in keys:
+                    # GPTQ, not AWQ. Same key names, DIFFERENT bit order (and a
+                    # g_idx column permutation when desc_act). Decoding it with
+                    # the AWQ order yields a correctly-shaped tensor of
+                    # scrambled weights that loads clean and computes garbage,
+                    # so refuse rather than guess. Measured: this branch would
+                    # otherwise claim all 18624 expert tensors of
+                    # Qwen3-30B-A3B-GPTQ-Int4.
+                    raise MoEConventionError(
+                        f"{k}: this is a GPTQ checkpoint (a {stem}g_idx sibling "
+                        f"is present). GPTQ shares AWQ's qweight/qzeros/scales "
+                        f"names but uses a different bit order, so the AWQ "
+                        f"decoder would silently produce scrambled weights. "
+                        f"GPTQ is not yet adjudicated — refusing to load it.")
                 base = stem + "weight"
                 dequant[base] = ("awq", k, sc, qz)
                 consumed.update((k, qz, sc))

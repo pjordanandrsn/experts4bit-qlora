@@ -678,3 +678,21 @@ def test_awq_triple_is_recognized_and_uses_the_asymmetric_decoder():
     assert tuple(m.proj.weight.shape) == (64, 256)
     assert torch.equal(m.proj.weight,
                        dequantize_awq(qw, qz, sc, dtype=torch.float32))
+
+
+def test_gptq_is_refused_not_silently_decoded_as_awq():
+    """GPTQ ships the SAME qweight/qzeros/scales names as AWQ but a different
+    bit order (plus g_idx act-order). Before this guard the AWQ branch claimed
+    every GPTQ tensor — measured: all 18624 experts of Qwen3-30B-A3B-GPTQ-Int4 —
+    and would have produced correctly-shaped SCRAMBLED weights that load clean.
+    The g_idx sibling is the name-level tell; refuse rather than guess."""
+    from experts4bit_qlora.moe_plan import _split_block_scales
+
+    gptq = ["m.qweight", "m.qzeros", "m.scales", "m.g_idx"]
+    with pytest.raises(MoEConventionError, match="GPTQ"):
+        _split_block_scales(gptq)
+
+    # the same triple WITHOUT g_idx is AWQ and still decodes
+    awq = ["m.qweight", "m.qzeros", "m.scales"]
+    _weights, dq = _split_block_scales(awq)
+    assert dq["m.weight"][0] == "awq"
