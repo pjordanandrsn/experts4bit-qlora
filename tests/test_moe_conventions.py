@@ -230,3 +230,113 @@ def test_deepseek_aliases_onto_qwen2_moe_and_v3_needs_fp8_scales():
         assert conv.match(f"mlp.experts.7.{tok}.weight") == (7, role)
     # The FP8 scale companions must NOT be silently absorbed as expert weights.
     assert conv.match("mlp.experts.7.gate_proj.weight_scale_inv") is None
+
+
+# --- coverage drift vs transformers' own converter table --------------------
+# The conventions here alias many model_types onto a few converter specs. That
+# aliasing is only correct as long as transformers agrees those model_types
+# really share the converter. transformers can add a model_type to a converter
+# (a coverage gap we should close) or change a converter out from under an alias
+# (a correctness bug). Both are invisible to every other test, because they
+# happen upstream. These pin the alias sets to transformers' OWN authority —
+# `get_checkpoint_conversion_mapping` — so a drift breaks CI with a message that
+# names exactly which model_type moved.
+
+def _converter_signature(model_type):
+    """A hashable signature of transformers' checkpoint converter for a type,
+    or None if it exposes none. Compares source->target patterns and the op
+    sequence, so two model_types with byte-identical conversion rules compare
+    equal regardless of how they are registered."""
+    gc = pytest.importorskip(
+        "transformers.conversion_mapping").get_checkpoint_conversion_mapping
+    try:
+        spec = gc(model_type)
+    except Exception:
+        return None
+    if not spec:
+        return ()
+    parts = []
+    for w in spec:
+        tgt = str(getattr(w, "target_patterns", None))
+        # A convention governs how the EXPERT stacks are built. A model may add
+        # non-expert renames (ernie/exaone rename a router e_score bias) without
+        # changing that; those must not count as a different convention. Filter
+        # to converters whose target is an expert tensor.
+        if "expert" not in tgt:
+            continue
+        ops = tuple(type(o).__name__ for o in getattr(w, "operations", []) or [])
+        parts.append((str(getattr(w, "source_patterns", None)), tgt, ops))
+    return tuple(sorted(parts))
+
+
+def _types_sharing_converter(root_type):
+    """Every model_type transformers maps to the SAME converter as root_type."""
+    from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES
+    target = _converter_signature(root_type)
+    return {mt for mt in CONFIG_MAPPING_NAMES
+            if _converter_signature(mt) == target}
+
+
+#: Types that transformers maps to a covered EXPERT converter but which e4b
+#: intentionally does not alias into THAT convention — each with the reason it
+#: is not a coverage bug. New entries appearing outside this set mean
+#: transformers shipped a MoE family worth adjudicating.
+_KNOWN_UNCLAIMED = {
+    # Covered by its OWN convention (same expert fusion, different router/attn):
+    "phimoe",
+    # Huge, served through the NVMe arena path, not the in-VRAM planner:
+    "kimi_k25",
+    # OCR / multimodal composites whose text tower is not separately validated;
+    # and pre-release / obscure types not yet checked against a real checkpoint:
+    "deepseek_ocr2", "qwen3_5_moe_text", "axk1", "axk2", "mimo_v2_flash",
+}
+
+
+def _covered_by_any_convention(model_type):
+    try:
+        convention_for(model_type)
+        return True
+    except MoEConventionError:
+        return False
+
+
+@pytest.mark.parametrize("conv_name, root", [("qwen2_moe", "qwen2_moe"),
+                                             ("mixtral", "mixtral")])
+def test_alias_set_matches_transformers_converter_table(conv_name, root):
+    """Two guarantees against upstream drift.
+
+    Correctness (hard): every model_type e4b aliases into this convention must
+    still share this converter in transformers. A stale alias is a wrong load.
+
+    Coverage (tracked): every model_type transformers maps to this converter is
+    either covered by SOME e4b convention or listed in _KNOWN_UNCLAIMED with a
+    reason. A new name here means transformers shipped a MoE family to look at —
+    the test names it rather than letting it fail silently at load time."""
+    from experts4bit_qlora.moe_conventions import MoEConventionError  # noqa: F401
+    conv = next(c for c in CONVENTIONS if c.name == conv_name)
+    ours = set(conv.model_types)
+    theirs = _types_sharing_converter(root)
+
+    stale = ours - theirs
+    assert not stale, (
+        f"{conv_name}: e4b aliases {sorted(stale)} but transformers no longer "
+        f"maps them to this converter — the alias may now be wrong")
+
+    uncovered = {mt for mt in (theirs - ours)
+                 if not _covered_by_any_convention(mt)} - _KNOWN_UNCLAIMED
+    assert not uncovered, (
+        f"{conv_name}: transformers maps {sorted(uncovered)} to this converter "
+        f"and no e4b convention covers them — adjudicate against a real "
+        f"checkpoint and either alias or add to _KNOWN_UNCLAIMED with a reason")
+
+
+def test_prefused_transpose_family_is_not_claimed_as_qwen2_moe():
+    """qwen3_vl_moe ships experts PRE-FUSED with a Transpose(1,2), which is a
+    different checkpoint layout from qwen2_moe's per-expert MergeModulelist.
+    Aliasing it to qwen2_moe would gather+concatenate keys that are already
+    stacked — a confidently-wrong load. It must stay unmapped until it gets its
+    own convention. This pins the boundary so a careless alias trips it."""
+    from experts4bit_qlora.moe_conventions import MoEConventionError
+    assert _converter_signature("qwen3_vl_moe") != _converter_signature("qwen2_moe")
+    with pytest.raises(MoEConventionError):
+        convention_for("qwen3_vl_moe")
