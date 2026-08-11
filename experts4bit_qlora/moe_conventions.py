@@ -119,6 +119,11 @@ QWEN2_MOE = MoEConvention(
         "deepseek_v2", "deepseek_v3", "deepseek_v32", "dots1", "ernie4_5_moe",
         "exaone_moe", "glm4_moe", "glm4_moe_lite", "glm4v_moe", "glm_moe_dsa",
         "hunyuan_v1_moe", "longcat_flash", "mellum", "solar_open",
+        # Newest releases (adjudicated 2026-08-11 against real indexes AND the
+        # converter API): per-expert gate/up/down + block-FP8, same fusion.
+        # A.X-K2 (SKT, 256 experts) and MiMo-V2-Flash (Xiaomi, 256) — both ship
+        # _scale_inv companions the FP8 path already handles.
+        "axk2", "mimo_v2_flash",
     }),
 )
 

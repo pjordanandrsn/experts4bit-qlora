@@ -154,6 +154,15 @@ def test_every_declared_model_type_is_actually_aliased_upstream():
         for mt in sorted(conv.model_types):
             if mt == conv.name:
                 continue
+            # Types adjudicated from a released checkpoint may be NEWER than the
+            # installed transformers' explicit alias list — they resolve through
+            # the converter API but never appear in this source text. For those
+            # the authoritative check is the converter-API pair
+            # (test_alias_set_matches_transformers_converter_table +
+            # test_adjudicated_released_type_resolves_to_its_convention), so this
+            # source-text scan skips them rather than failing on their absence.
+            if mt in ADJUDICATED_RELEASED:
+                continue
             assert re.search(rf'"{re.escape(mt)}":\s*"{conv.name}"', src), \
                 f"{mt} no longer aliases to {conv.name} upstream — re-adjudicate"
 
@@ -397,3 +406,32 @@ def test_dbrx_is_flat_native_passthrough_with_pinned_roles():
         assert DBRX.match(k) is None
     assert DBRX.rename("transformer.blocks.0.ffn.experts.mlp.w1") == \
         "transformer.blocks.0.ffn.experts.mlp.w1"
+
+
+#: Model types adjudicated against a REAL released checkpoint on a given date,
+#: mapped to the convention they must resolve to. This is the durable half of
+#: coverage: the automatic drift test only sees types the installed transformers
+#: enumerates in CONFIG_MAPPING_NAMES, so a family HF has shipped but
+#: transformers has not registered yet is invisible to it. These are pinned by
+#: hand from the checkpoint's own keys + the converter API, so a dropped alias
+#: trips here regardless of the installed transformers version.
+ADJUDICATED_RELEASED = {
+    # per-expert gate/up/down + block-FP8, confirmed on the real index 2026-08-11
+    "axk2": "qwen2_moe",             # skt/A.X-K2, 256 experts
+    "mimo_v2_flash": "qwen2_moe",    # XiaomiMiMo/MiMo-V2-Flash, 256 experts
+}
+
+
+@pytest.mark.parametrize("model_type, expected", sorted(ADJUDICATED_RELEASED.items()))
+def test_adjudicated_released_type_resolves_to_its_convention(model_type, expected):
+    """A type verified against a real checkpoint must keep resolving to the
+    convention it was adjudicated into — even if the installed transformers does
+    not enumerate it, which is exactly when the automatic drift test goes blind."""
+    assert convention_for(model_type).name == expected
+    # When the installed transformers DOES know its converter, it must still
+    # agree with the convention it is aliased to (expert converters only).
+    sig = _converter_signature(model_type)
+    if sig is not None:
+        assert sig == _converter_signature(expected), (
+            f"{model_type}: its converter no longer matches {expected} — "
+            f"re-adjudicate before trusting the alias")
