@@ -58,5 +58,19 @@ def dequantize_gptq(
     # GPTQ stores zero_point - 1; restore it before subtracting.
     z = z + 1
     gi = g_idx.long()
+    # g_idx selects a group per input row. Two failure modes are silent without
+    # these checks: a WRONG-LENGTH g_idx broadcasts into a truncated weight, and
+    # a NEGATIVE entry wraps to the last group via Python indexing, yielding a
+    # full-shaped tensor built from the wrong scales. Both produce plausible
+    # output and no error, so both are rejected here.
+    if gi.numel() != w.shape[0]:
+        raise ValueError(
+            f"g_idx has {gi.numel()} entries but the unpacked weight has "
+            f"{w.shape[0]} input rows — refusing to index a mismatched g_idx")
+    if int(gi.min()) < 0 or int(gi.max()) >= z.shape[0]:
+        raise ValueError(
+            f"g_idx values span [{int(gi.min())}, {int(gi.max())}] but there "
+            f"are only {z.shape[0]} groups — a negative index would silently "
+            f"wrap to the last group and load the wrong scales")
     dense = scales.to(torch.float32)[gi] * (w.to(torch.float32) - z.to(torch.float32)[gi])
     return dense.t().contiguous().to(dtype)          # [in, out] -> [out, in]

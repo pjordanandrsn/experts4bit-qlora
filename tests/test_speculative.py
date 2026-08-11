@@ -84,3 +84,13 @@ def test_k_must_be_positive():
     with pytest.raises(ValueError, match="k must be"):
         speculative_greedy_decode([0], perfect_drafter, target_argmax,
                                   max_new_tokens=4, k=0)
+
+
+def test_empty_prompt_is_rejected_clearly():
+    """The drafter conditions on the last context token, so an empty prompt has
+    nothing to condition on. It used to surface a raw IndexError from inside the
+    loop; found while stress-testing before release."""
+    import pytest
+    with pytest.raises(ValueError, match="at least one token"):
+        speculative_greedy_decode([], perfect_drafter, target_argmax,
+                                  max_new_tokens=3, k=2)

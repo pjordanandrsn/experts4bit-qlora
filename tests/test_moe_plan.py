@@ -780,3 +780,27 @@ def test_a_partial_quant_triple_raises_instead_of_falling_through(keys):
 
     with pytest.raises(MoEConventionError, match="do not map"):
         plan_moe_checkpoint(keys, M(), "llama", dense_ok=True)
+
+
+@pytest.mark.parametrize("g_idx, why", [
+    (torch.full((64,), -1, dtype=torch.int32), "negative"),
+    (torch.full((64,), 5, dtype=torch.int32), "out of range"),
+    (torch.zeros(4, dtype=torch.int32), "wrong length"),
+])
+def test_gptq_rejects_a_g_idx_that_would_load_the_wrong_scales(g_idx, why):
+    """Found by stress-testing before the 0.15.0 cut. A NEGATIVE g_idx is the
+    dangerous one: Python indexing wraps -1 to the LAST group, so a corrupt or
+    misparsed g_idx produced a full-shaped tensor built from the wrong scales,
+    with no error at all. A wrong-length g_idx broadcast into a truncated
+    weight. Both are silent-wrongness; both now raise."""
+    from experts4bit_qlora.gptq import dequantize_gptq
+    qw = torch.zeros(8, 8, dtype=torch.int32)
+    qz = torch.zeros(2, 1, dtype=torch.int32)
+    sc = torch.ones(2, 8)
+    with pytest.raises(ValueError):
+        dequantize_gptq(qw, qz, sc, g_idx, dtype=torch.float32)
+
+    # a valid g_idx over the same tensors still works
+    good = torch.arange(64, dtype=torch.int32) // 32
+    assert tuple(dequantize_gptq(qw, qz, sc, good,
+                                 dtype=torch.float32).shape) == (8, 64)

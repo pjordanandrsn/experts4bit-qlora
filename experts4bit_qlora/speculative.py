@@ -47,6 +47,12 @@ def speculative_greedy_decode(
     """
     if k < 1:
         raise ValueError(f"k must be >= 1, got {k}")
+    if not prompt:
+        # The drafter conditions on the last context token and the verifier
+        # indexes position len(ctx)-1, so an empty prompt has nothing to
+        # condition on. Say so, rather than surfacing an IndexError from inside
+        # the loop.
+        raise ValueError("prompt must contain at least one token")
     out: list[int] = []
     ctx = list(prompt)
     proposed = accepted = rounds = 0
