@@ -281,8 +281,26 @@ DBRX = MoEConvention(
     renames=(),
 )
 
+#: qwen3_5_moe ships experts PRE-FUSED with an EMPTY/native converter — unlike
+#: its sibling qwen3_vl_moe, there is no Transpose, so the stacked
+#: ``mlp.experts.gate_up_proj`` [E, 2*inter, hidden] and ``down_proj``
+#: [E, hidden, inter] match the module tree as-is. Pure passthrough, never
+#: per-expert; the per-layer shared_expert passes through too. Adjudicated from
+#: the converter API (empty) + the built tree; awaiting a canonical released
+#: checkpoint to confirm end-to-end (none published in standard form yet), but
+#: native placement makes no orientation choice, so there is nothing to get
+#: wrong once the format is confirmed native.
+QWEN3_5_MOE = MoEConvention(
+    name="qwen3_5_moe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: pre-fused native
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"qwen3_5_moe"}),
+    renames=(),
+)
+
 CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
-               QWEN3_VL_MOE, JETMOE, DBRX)
+               QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 

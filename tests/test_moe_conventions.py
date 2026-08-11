@@ -435,3 +435,16 @@ def test_adjudicated_released_type_resolves_to_its_convention(model_type, expect
         assert sig == _converter_signature(expected), (
             f"{model_type}: its converter no longer matches {expected} — "
             f"re-adjudicate before trusting the alias")
+
+
+def test_qwen3_5_moe_is_native_prefused_passthrough_no_transpose():
+    """qwen3_5_moe's converter is EMPTY (native) — unlike qwen3_vl_moe it has no
+    Transpose, so the pre-fused stacks match the tree as-is. Never per-expert,
+    nothing transposed. Pinned so it is not confused with its transposed sibling."""
+    from experts4bit_qlora.moe_conventions import QWEN3_5_MOE, QWEN3_VL_MOE
+    assert convention_for("qwen3_5_moe") is QWEN3_5_MOE
+    assert QWEN3_5_MOE is not QWEN3_VL_MOE
+    assert not QWEN3_5_MOE.roles
+    assert QWEN3_5_MOE.transpose_re is None       # native: no transpose (the sibling has one)
+    for k in ("mlp.experts.gate_up_proj", "mlp.experts.0.gate_proj.weight"):
+        assert QWEN3_5_MOE.match(k) is None
