@@ -91,26 +91,42 @@ def fake_checkpoint(model, cfg, is_moe):
     return keys, store
 
 
+#: Adapters are held in fp32 whatever the base weights are. Trained in fp16
+#: they produced NON-FINITE gradients on every architecture — fp16's dynamic
+#: range does not survive the backward without loss scaling. fp32 adapters over
+#: a quantized/low-precision base is also what peft does, so this matches
+#: practice rather than working around it. bf16 keeps its own range and would
+#: train either way; fp32 costs a few MB and removes the failure class.
+ADAPTER_DTYPE = torch.float32
+
+
 def attach_lora(model, rank=4, dtype=torch.float32, device="cpu"):
     """Minimal LoRA on every attention projection — enough to prove gradients
-    flow through a loaded model without pulling in peft."""
+    flow through a loaded model without pulling in peft.
+
+    ``dtype`` is the BASE model's dtype and is deliberately not used for the
+    adapters; the activation is cast into ADAPTER_DTYPE for the adapter branch
+    and back on the way out, so the base path keeps its own precision.
+    """
     n = 0
     for name, mod in model.named_modules():
         if not isinstance(mod, torch.nn.Linear):
             continue
         if ".self_attn." not in name:
             continue
-        a = torch.nn.Parameter(torch.randn(rank, mod.in_features, dtype=dtype,
-                                           device=device) * 0.01)
-        b = torch.nn.Parameter(torch.zeros(mod.out_features, rank, dtype=dtype,
-                                           device=device))
+        a = torch.nn.Parameter(torch.randn(rank, mod.in_features,
+                                           dtype=ADAPTER_DTYPE, device=device) * 0.01)
+        b = torch.nn.Parameter(torch.zeros(mod.out_features, rank,
+                                           dtype=ADAPTER_DTYPE, device=device))
         mod.register_parameter("lora_a", a)
         mod.register_parameter("lora_b", b)
         base_fwd = mod.forward
 
         def fwd(x, _m=mod, _f=base_fwd):
-            return _f(x) + torch.nn.functional.linear(
-                torch.nn.functional.linear(x, _m.lora_a), _m.lora_b)
+            out = _f(x)
+            side = torch.nn.functional.linear(
+                torch.nn.functional.linear(x.to(ADAPTER_DTYPE), _m.lora_a), _m.lora_b)
+            return out + side.to(out.dtype)
         mod.forward = fwd
         n += 1
     return n
