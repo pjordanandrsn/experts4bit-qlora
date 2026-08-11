@@ -29,6 +29,7 @@ from __future__ import annotations
 import torch
 
 from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
+from .awq import dequantize_awq
 from .compressed_int import dequantize_compressed_int
 from .nvfp4 import dequantize_nvfp4
 from .mxfp4 import dequantize_mxfp4
@@ -148,6 +149,10 @@ def execute_moe_plan(
                 # compressed-tensors pack-quantized: packed + scale + shape.
                 shape = read_tensor(extra_key)
                 t = dequantize_compressed_int(primary, scale, shape, dtype=dtype)
+            elif kind == "awq":
+                # AWQ/GPTQ-style: qweight + scales + qzeros (asymmetric).
+                qzeros = read_tensor(extra_key)
+                t = dequantize_awq(primary, qzeros, scale, dtype=dtype)
             elif kind == "nvfp4":
                 # NVFP4: E2M1 packed + per-group scale + per-tensor global scale.
                 gscale = read_tensor(extra_key)
@@ -244,4 +249,5 @@ def execute_moe_plan(
             "mxfp4_dequantized": sum(1 for v in plan.scales.values() if v[0]=="mxfp4"),
             "compressed_int_dequantized": sum(1 for v in plan.scales.values() if v[0]=="compressed_int"),
             "nvfp4_dequantized": sum(1 for v in plan.scales.values() if v[0]=="nvfp4"),
+            "awq_dequantized": sum(1 for v in plan.scales.values() if v[0]=="awq"),
             "rebuilt_buffers": len(rebuilt), "still_meta": still_meta}

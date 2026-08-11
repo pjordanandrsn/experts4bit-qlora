@@ -112,6 +112,12 @@ CT_GLOBAL_SCALE_SUFFIX = "weight_global_scale"
 #: ``input_scale`` is an ACTIVATION scale and is not part of the weight.
 MODELOPT_SCALE2_SUFFIX = "weight_scale_2"
 MODELOPT_INPUT_SCALE_SUFFIX = "input_scale"
+#: AWQ / GPTQ: qweight + qzeros + scales, ASYMMETRIC (zero-point) and packed
+#: along the OUT axis. The module parameter is ``X.weight``, a name these
+#: checkpoints never spell.
+AWQ_QWEIGHT_SUFFIX = "qweight"
+AWQ_QZEROS_SUFFIX = "qzeros"
+AWQ_SCALES_SUFFIX = "scales"
 
 
 def _split_block_scales(checkpoint_keys):
@@ -161,6 +167,16 @@ def _split_block_scales(checkpoint_keys):
                 dequant[base] = ("nvfp4", k, scale, gscale)
                 consumed.update((k, scale, gscale))
                 continue
+        if k.endswith(AWQ_QWEIGHT_SUFFIX):
+            # AWQ: qweight + qzeros + scales -> the dense X.weight. Asymmetric,
+            # and stored in AWQ's interleaved nibble order (see awq.py).
+            stem = k[: -len(AWQ_QWEIGHT_SUFFIX)]
+            qz, sc = stem + AWQ_QZEROS_SUFFIX, stem + AWQ_SCALES_SUFFIX
+            if qz in keys and sc in keys:
+                base = stem + "weight"
+                dequant[base] = ("awq", k, sc, qz)
+                consumed.update((k, qz, sc))
+                continue
         if k.endswith(MODELOPT_SCALE2_SUFFIX):
             # ModelOpt FP4: X.weight (packed uint8) + X.weight_scale (per group)
             # + X.weight_scale_2 (per tensor). Verified bit-exact against
@@ -194,7 +210,7 @@ def _split_block_scales(checkpoint_keys):
     # Synthesized bases (MXFP4, compressed-tensors) are not literal checkpoint
     # keys; add them so the convention has a key to map to the dense target.
     for base, (kind, _p, _s, _x) in dequant.items():
-        if kind in ("mxfp4", "compressed_int", "nvfp4"):
+        if kind in ("mxfp4", "compressed_int", "nvfp4", "awq"):
             weights.append(base)
     return weights, dequant
 

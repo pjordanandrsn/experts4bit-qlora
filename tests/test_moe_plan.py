@@ -641,3 +641,40 @@ def test_modelopt_fp4_is_recognized_and_reuses_the_nvfp4_decoder():
     assert rep["nvfp4_dequantized"] == 1
     assert torch.equal(m.proj.weight,
                        dequantize_nvfp4(packed, scale, scale2, dtype=torch.float32))
+
+
+def test_awq_triple_is_recognized_and_uses_the_asymmetric_decoder():
+    """AWQ is the first ASYMMETRIC format here (a zero-point per group) and its
+    nibbles are interleaved [0,4,1,5,2,6,3,7] — an order no shape inspection
+    reveals, so a from-scratch guess yields right-shaped scrambled weights.
+    Pinned against autoawq's own constant."""
+    from experts4bit_qlora.awq import AWQ_REVERSE_ORDER, dequantize_awq
+    assert AWQ_REVERSE_ORDER == [0, 4, 1, 5, 2, 6, 3, 7]   # verbatim autoawq
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(256, 64, bias=False)   # [out=64, in=256]
+
+    m = M()
+    torch.manual_seed(0)
+    qw = torch.randint(-(2**31), 2**31 - 1, (256, 8), dtype=torch.int32)
+    qz = torch.randint(-(2**31), 2**31 - 1, (2, 8), dtype=torch.int32)
+    sc = (torch.rand(2, 64) * 0.05 + 0.01)
+    store = {"proj.qweight": qw, "proj.qzeros": qz, "proj.scales": sc}
+
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    assert plan.scales["proj.weight"] == (
+        "awq", "proj.qweight", "proj.scales", "proj.qzeros")
+    for companion in ("proj.qweight", "proj.qzeros", "proj.scales"):
+        assert companion not in plan.passthrough      # never placed as-is
+
+    rep = execute_moe_plan(plan, m, store.__getitem__, device="cpu",
+                           dtype=torch.float32)
+    assert rep["awq_dequantized"] == 1
+    # dequant yields [out, in] — the orientation a Linear declares
+    assert tuple(m.proj.weight.shape) == (64, 256)
+    assert torch.equal(m.proj.weight,
+                       dequantize_awq(qw, qz, sc, dtype=torch.float32))
