@@ -720,3 +720,63 @@ def test_gptq_dequant_matches_gptqmodel_including_desc_act():
         got = dequantize_gptq(qw, qz, scales, g_idx, bits=BITS, dtype=torch.float32)
         assert tuple(got.shape) == (OUT, IN)
         assert torch.equal(got, ref)
+
+
+# --- quant-format dispatch matrix -------------------------------------------
+# Seven packed formats now share one recognition path, and several share key
+# NAMES (AWQ/GPTQ: qweight+qzeros+scales; compressed-int/NVFP4:
+# weight_packed+weight_scale). Adding AWQ once made the planner claim every GPTQ
+# tensor. These two tests pin the whole dispatch so an eighth format cannot
+# quietly steal an existing one's keys.
+
+_FORMAT_KEYS = {
+    "fp8": (["m.weight", "m.weight_scale_inv"], "fp8"),
+    "mxfp4": (["m_blocks", "m_scales"], "mxfp4"),
+    "compressed_int": (["m.weight_packed", "m.weight_scale", "m.weight_shape"],
+                       "compressed_int"),
+    "nvfp4": (["m.weight_packed", "m.weight_scale", "m.weight_global_scale"],
+              "nvfp4"),
+    # ModelOpt FP4 is the same E2M1 decoder under different key names
+    "modelopt": (["m.weight", "m.weight_scale", "m.weight_scale_2",
+                  "m.input_scale"], "nvfp4"),
+    "awq": (["m.qweight", "m.qzeros", "m.scales"], "awq"),
+    "gptq": (["m.qweight", "m.qzeros", "m.scales", "m.g_idx"], "gptq"),
+}
+
+
+@pytest.mark.parametrize("fmt", sorted(_FORMAT_KEYS))
+def test_each_quant_format_is_claimed_by_exactly_its_own_decoder(fmt):
+    """No format may be claimed by another's branch, and every companion must be
+    consumed (a leftover companion would later be placed as if it were a dense
+    parameter)."""
+    from experts4bit_qlora.moe_plan import _split_block_scales
+    keys, expected = _FORMAT_KEYS[fmt]
+    weights, dq = _split_block_scales(keys)
+    assert {v[0] for v in dq.values()} == {expected}, f"{fmt} misrouted"
+    companions = ("weight_scale_inv", "_blocks", "_scales", "weight_packed",
+                  "weight_scale", "weight_shape", "weight_global_scale",
+                  "weight_scale_2", "input_scale", "qweight", "qzeros",
+                  "scales", "g_idx")
+    leftover = [w for w in weights if any(w.endswith(c) for c in companions)]
+    assert not leftover, f"{fmt}: unconsumed companions {leftover}"
+
+
+@pytest.mark.parametrize("keys", [
+    ["proj.qweight", "proj.scales"],                       # AWQ missing qzeros
+    ["proj.qweight", "proj.qzeros"],                       # AWQ missing scales
+    ["proj.qweight", "proj.scales", "proj.g_idx"],         # GPTQ missing qzeros
+    ["proj.weight_packed", "proj.weight_scale"],           # ambiguous: no 3rd
+])
+def test_a_partial_quant_triple_raises_instead_of_falling_through(keys):
+    """A missing companion must NOT let the key fall through to a different
+    decoder, and must not vanish: it stays unmapped so the planner's
+    no-unmapped-key invariant raises. Half a quantized matrix is not loadable."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(64, 8, bias=False)
+
+    with pytest.raises(MoEConventionError, match="do not map"):
+        plan_moe_checkpoint(keys, M(), "llama", dense_ok=True)
