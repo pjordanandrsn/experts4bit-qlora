@@ -184,7 +184,25 @@ GRANITEMOE = MoEConvention(
     ),
 )
 
-CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE)
+#: gpt-oss ships its experts PRE-FUSED (``experts.gate_up_proj`` is one stacked
+#: [E, hidden, 2*inter] tensor, not per-expert) AND MXFP4-quantized on disk as
+#: ``experts.gate_up_proj_blocks`` + ``experts.gate_up_proj_scales``. The planner
+#: pairs those and dequantizes in the read path, so by the time the convention
+#: runs each dense stack is a single synthesized ``experts.gate_up_proj`` key
+#: that passes straight through to the tree. Like GraniteMoE, nothing is ever
+#: per-expert here, so the expert pattern matches nothing; the expert/router
+#: biases pass through unrenamed. The clamped-SwiGLU activation is the model's
+#: OWN forward — a loading convention only places weights.
+GPTOSS = MoEConvention(
+    name="gptoss",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"gpt_oss"}),
+    renames=(),
+)
+
+CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 

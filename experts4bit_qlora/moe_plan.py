@@ -57,7 +57,10 @@ class MoELoadPlan:
     expert_targets: dict = field(default_factory=dict)
     #: target param -> source param, for heads a tied checkpoint omits.
     tied_params: dict = field(default_factory=dict)
-    #: weight key -> its block-scale key, for block-FP8 checkpoints.
+    #: mapped key -> (kind, primary_ckpt_key, scale_ckpt_key). The mapped key is
+    #: what the convention/passthrough sees; reading it means dequantizing the
+    #: primary+scale pair. kind is "fp8" (block-FP8, DeepSeek-V3) or "mxfp4"
+    #: (gpt-oss / Kimi-K3 packed fp4). Named ``scales`` for back-compat.
     scales: dict = field(default_factory=dict)
     #: checkpoint keys deliberately not loaded (extra prediction heads).
     skipped_keys: tuple = ()
@@ -79,34 +82,61 @@ class MoELoadPlan:
 
 #: Suffix upstream uses for a block-FP8 weight's companion scale tensor.
 FP8_SCALE_SUFFIX = "_scale_inv"
+#: MXFP4 (gpt-oss lineage) ships a matrix as two tensors: ``X_blocks`` (packed
+#: fp4 nibbles) and ``X_scales`` (e8m0 block exponents). The dense parameter is
+#: ``X`` — neither companion is a parameter of its own.
+MXFP4_BLOCKS_SUFFIX = "_blocks"
+MXFP4_SCALES_SUFFIX = "_scales"
 
 
 def _split_block_scales(checkpoint_keys):
-    """Partition keys into ``(weights, {weight_key: scale_key})``.
+    """Partition keys into ``(weights, dequant)``.
 
-    Block-FP8 checkpoints (DeepSeek-V3 and friends) ship a second tensor beside
-    every quantized matrix holding its per-block scales. Those scale keys are
-    real data, but they are not parameters of their own — the module tree has no
-    slot for them, because the weight they belong to dequantizes into a single
-    dense parameter.
+    A quantized checkpoint ships a matrix as more than one tensor, only one of
+    which corresponds to a module parameter:
 
-    Left unhandled they are simply unmapped keys, and the planner rightly
-    refuses the checkpoint. Absorbing them silently would be far worse: the
-    weight keys match a convention perfectly, so a loader that ignored the
-    scales would load cleanly and compute garbage. Pairing them here is what
-    lets the executor dequantize instead of guessing.
+    * **block-FP8** (DeepSeek-V3 and friends): ``X`` plus ``X_scale_inv``. The
+      module parameter is ``X``; the scale is extra.
+    * **MXFP4** (gpt-oss / Kimi-K3): ``X_blocks`` plus ``X_scales`` and NO plain
+      ``X``. The module parameter is ``X`` — a name the checkpoint never spells.
 
-    A key counts as a scale only when the weight it names is itself present, so
-    a tensor that merely ends in the suffix cannot orphan itself.
+    Both are returned as ``dequant[mapped_key] = (kind, primary_key, scale_key)``
+    where ``mapped_key`` is the name that flows through the convention: the real
+    weight key for FP8, and the SYNTHESIZED base ``X`` for MXFP4 (so the pre-fused
+    stack ``experts.gate_up_proj_blocks`` maps to the tree's
+    ``experts.gate_up_proj``). The companions are removed from ``weights`` so
+    nothing tries to place them as parameters.
+
+    Absorbing these silently would be the worst outcome: for FP8 the weight keys
+    match a convention perfectly, so ignoring the scale loads clean and computes
+    garbage; for MXFP4 the packed blocks would be placed as if dense. A companion
+    only counts when its primary is present, so a lone suffix cannot orphan a key.
     """
     keys = set(checkpoint_keys)
-    scales, weights = {}, []
+    dequant, weights = {}, []
+    consumed = set()
     for k in checkpoint_keys:
+        if k.endswith(MXFP4_SCALES_SUFFIX):
+            base = k[: -len(MXFP4_SCALES_SUFFIX)]
+            blocks = base + MXFP4_BLOCKS_SUFFIX
+            if blocks in keys:
+                dequant[base] = ("mxfp4", blocks, k)
+                consumed.update((k, blocks))
+                continue
         if k.endswith(FP8_SCALE_SUFFIX) and k[: -len(FP8_SCALE_SUFFIX)] in keys:
-            scales[k[: -len(FP8_SCALE_SUFFIX)]] = k
-        else:
-            weights.append(k)
-    return weights, scales
+            base = k[: -len(FP8_SCALE_SUFFIX)]
+            dequant[base] = ("fp8", base, k)
+            consumed.add(k)          # the primary X stays in weights as itself
+    for k in checkpoint_keys:
+        if k in consumed:
+            continue
+        weights.append(k)
+    # The MXFP4 synthesized bases are not in checkpoint_keys; add them so the
+    # convention has a key to map to the dense target.
+    for base, (kind, _p, _s) in dequant.items():
+        if kind == "mxfp4":
+            weights.append(base)
+    return weights, dequant
 
 
 
@@ -195,7 +225,8 @@ def plan_moe_checkpoint(
     if extra and skip_extra_layers:
         drop = set(extra)
         checkpoint_keys = [k for k in checkpoint_keys if k not in drop]
-        block_scales = {w: sc for w, sc in block_scales.items() if w not in drop}
+        block_scales = {mk: v for mk, v in block_scales.items()
+                        if mk not in drop and v[1] not in drop}
     elif extra:
         depth = model.config.num_hidden_layers
         raise MoEConventionError(

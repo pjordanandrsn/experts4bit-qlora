@@ -275,7 +275,7 @@ def test_block_fp8_scales_are_paired_and_dequantized_not_dropped():
     store = {"proj.weight": q, "proj.weight_scale_inv": sc}
 
     plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
-    assert plan.scales == {"proj.weight": "proj.weight_scale_inv"}
+    assert plan.scales == {"proj.weight": ("fp8", "proj.weight", "proj.weight_scale_inv")}
     # The scale key is NOT a parameter of its own.
     assert "proj.weight_scale_inv" not in plan.passthrough
 
@@ -327,3 +327,45 @@ def test_extra_prediction_head_layers_are_never_dropped_silently():
                                skip_extra_layers=True)
     assert plan.skipped_keys == ("layers.2.weight",)
     assert "layers.2.weight" not in plan.passthrough
+
+
+def test_mxfp4_blocks_and_scales_pair_to_a_synthesized_base():
+    """gpt-oss ships NO plain `experts.gate_up_proj` — only `_blocks`+`_scales`.
+    The planner must synthesize the base name so the pre-fused stack maps to the
+    tree target, and record the pair for the executor to dequantize. Placing the
+    packed blocks as if dense would be a confidently-wrong load."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            # the dense target the two companions dequantize into
+            self.gate_up_proj = torch.nn.Parameter(
+                torch.zeros(2, 8, 4), requires_grad=False)
+
+    m = M()
+    keys = ["gate_up_proj_blocks", "gate_up_proj_scales"]
+    plan = plan_moe_checkpoint(keys, m, "llama", dense_ok=True)
+    # The base is synthesized and recorded as an mxfp4 pair; the companions are
+    # NOT placed as parameters of their own.
+    assert plan.scales == {
+        "gate_up_proj": ("mxfp4", "gate_up_proj_blocks", "gate_up_proj_scales")}
+    assert "gate_up_proj_blocks" not in plan.passthrough
+    assert "gate_up_proj_scales" not in plan.passthrough
+    assert plan.passthrough.get("gate_up_proj") == "gate_up_proj"
+
+
+def test_a_lone_mxfp4_scales_key_without_blocks_is_not_paired():
+    """A companion only counts when its primary is present — a stray `_scales`
+    must stay a normal (here: unmapped) key, not silently vanish."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.w = torch.nn.Parameter(torch.zeros(2, 2), requires_grad=False)
+
+    m = M()
+    # only a scales key, no matching _blocks
+    with pytest.raises(MoEConventionError):
+        plan_moe_checkpoint(["w", "orphan_scales"], m, "llama", dense_ok=True)

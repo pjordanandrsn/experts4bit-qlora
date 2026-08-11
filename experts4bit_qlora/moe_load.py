@@ -29,6 +29,7 @@ from __future__ import annotations
 import torch
 
 from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
+from .mxfp4 import dequantize_mxfp4
 from .moe_conventions import MoEConventionError, fuse_experts
 
 
@@ -110,24 +111,39 @@ def execute_moe_plan(
     parameters still on ``meta`` (which raises under ``strict``).
     """
     def read(key):
-        """Read a checkpoint tensor, dequantizing it if it is block-FP8.
+        """Read a checkpoint tensor, dequantizing block-FP8 or MXFP4 in place.
 
         Doing this in the read path rather than at each call site means every
         consumer below — passthrough, expert fusion, tied heads — gets dense
-        tensors without knowing the checkpoint was quantized.
+        tensors without knowing the checkpoint was quantized. ``key`` is the
+        MAPPED key: the real weight for FP8, or the synthesized base for MXFP4
+        (whose primary/scale companions live only in the dequant map).
         """
-        t = read_tensor(key)
-        scale_key = plan.scales.get(key)
-        if scale_key is None:
-            return t
+        spec = plan.scales.get(key)
+        if spec is None:
+            return read_tensor(key)
+        kind, primary_key, scale_key = spec
+        primary = read_tensor(primary_key)
         scale = read_tensor(scale_key)
-        want = fp8_block_scale_shape(tuple(t.shape))
-        if tuple(scale.shape) != tuple(want):
-            raise MoEConventionError(
-                f"{key}: block-scale {scale_key} has shape {tuple(scale.shape)}, "
-                f"but a {tuple(t.shape)} weight implies {tuple(want)} — refusing "
-                f"to dequantize with a mismatched scale")
-        return dequantize_fp8_blocks(t, scale, dtype=dtype)
+        if kind == "fp8":
+            want = fp8_block_scale_shape(tuple(primary.shape))
+            if tuple(scale.shape) != tuple(want):
+                raise MoEConventionError(
+                    f"{key}: block-scale {scale_key} has shape "
+                    f"{tuple(scale.shape)}, but a {tuple(primary.shape)} weight "
+                    f"implies {tuple(want)} — refusing to dequantize with a "
+                    f"mismatched scale")
+            return dequantize_fp8_blocks(primary, scale, dtype=dtype)
+        if kind == "mxfp4":
+            # MXFP4 pairs blocks [..., rows, G, B] with scales [..., rows, G];
+            # they must agree on every axis but the last (the packed byte axis).
+            if tuple(primary.shape[:-1]) != tuple(scale.shape):
+                raise MoEConventionError(
+                    f"{key}: mxfp4 blocks {tuple(primary.shape)} and scales "
+                    f"{tuple(scale.shape)} disagree (blocks[:-1] must equal "
+                    f"scales) — refusing to dequantize a mismatched pair")
+            return dequantize_mxfp4(primary, scale, dtype=dtype)
+        raise MoEConventionError(f"{key}: unknown dequant kind {kind!r}")
 
     assigned = 0
     for ckpt_key, param in plan.passthrough.items():
@@ -185,5 +201,6 @@ def execute_moe_plan(
             f"{len(still_meta)} tensors still on meta after load, e.g. "
             f"{still_meta[:4]} — the checkpoint is incomplete or the plan drifted")
     return {"assigned": assigned, "fused_stacks": fused,
-            "tied": len(plan.tied_params), "fp8_dequantized": len(plan.scales),
+            "tied": len(plan.tied_params), "fp8_dequantized": sum(1 for v in plan.scales.values() if v[0]=="fp8"),
+            "mxfp4_dequantized": sum(1 for v in plan.scales.values() if v[0]=="mxfp4"),
             "rebuilt_buffers": len(rebuilt), "still_meta": still_meta}

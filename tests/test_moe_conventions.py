@@ -145,6 +145,12 @@ def test_every_declared_model_type_is_actually_aliased_upstream():
     otherwise we would apply the wrong fusion to it."""
     src = _conversion_src()
     for conv in CONVENTIONS:
+        # A convention that never fuses (granitemoe, gptoss: pre-fused on disk)
+        # cannot misapply a fusion, so the upstream-alias requirement does not
+        # apply — its correctness is pinned by its own dedicated test. This
+        # check exists to catch a FUSING convention drifting off its converter.
+        if not conv.roles:
+            continue
         for mt in sorted(conv.model_types):
             if mt == conv.name:
                 continue
@@ -340,3 +346,18 @@ def test_prefused_transpose_family_is_not_claimed_as_qwen2_moe():
     assert _converter_signature("qwen3_vl_moe") != _converter_signature("qwen2_moe")
     with pytest.raises(MoEConventionError):
         convention_for("qwen3_vl_moe")
+
+
+def test_gptoss_is_prefused_mxfp4_passthrough_never_per_expert():
+    """gpt-oss ships experts PRE-FUSED and MXFP4-quantized. The convention must
+    never treat a key as per-expert (the planner pairs blocks+scales and
+    dequantizes upstream of it); everything reaches it as a passthrough."""
+    from experts4bit_qlora.moe_conventions import GPTOSS
+    assert convention_for("gpt_oss") is GPTOSS
+    assert not GPTOSS.roles                      # never fuses
+    for k in ("mlp.experts.gate_up_proj_blocks", "mlp.experts.0.gate_proj.weight",
+              "mlp.experts.down_proj"):
+        assert GPTOSS.match(k) is None
+    # No renames: the synthesized base name already equals the tree target.
+    assert GPTOSS.rename("model.layers.0.mlp.experts.gate_up_proj") == \
+        "model.layers.0.mlp.experts.gate_up_proj"
