@@ -332,8 +332,23 @@ NEMOTRON_H = MoEConvention(
     gated=False,
 )
 
+#: A.X-K1 (SKT): a DeepSeek-V3 MoE whose released checkpoint ships experts
+#: PRE-FUSED (mlp.experts.gate_up_proj [E, 2*inter, hidden] matching the tree,
+#: no transpose), so the expert surface is plain native passthrough. Its two
+#: non-expert quirks — a layer-conditional post_mlp_layernorm and an unshipped
+#: e_score_correction_bias buffer — need per-layer knowledge and live in the
+#: dedicated keymap :mod:`experts4bit_qlora.axk1`. Never per-expert.
+AXK1 = MoEConvention(
+    name="axk1",
+    expert_re=re.compile(r"(?!)"),
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"axk1"}),
+    renames=(),
+)
+
 CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
-               QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE, NEMOTRON_H)
+               QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE, NEMOTRON_H, AXK1)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 

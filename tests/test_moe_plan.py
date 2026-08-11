@@ -496,3 +496,35 @@ def test_executor_stacks_match_the_quantizer_input_contract():
     params = list(inspect.signature(ExpertsNbit.from_float).parameters)
     assert params[:3] == ["gate_up_proj", "down_proj", "has_gate"], (
         "from_float's contract moved — the bridge feeds these positionally")
+
+
+def test_axk1_keymap_drops_dense_post_mlp_norm_but_renames_moe_layers():
+    """A.X-K1 stores post_mlp_layernorm at the layer level. The MoE mlp declares
+    it (rename to mlp.post_mlp_layernorm); the dense mlp does not (drop it —
+    transformers treats it as an unexpected key). The split is
+    layer_idx >= first_k_dense_replace."""
+    from experts4bit_qlora.axk1 import rewrite_axk1_keys
+    keys = [
+        "model.layers.0.post_mlp_layernorm.weight",   # dense (fkd=1): drop
+        "model.layers.1.post_mlp_layernorm.weight",   # MoE: rename
+        "model.layers.1.mlp.experts.gate_up_proj",    # untouched
+        "model.layers.0.input_layernorm.weight",      # untouched
+    ]
+    out, dropped = rewrite_axk1_keys(keys, first_k_dense_replace=1)
+    assert dropped == ["model.layers.0.post_mlp_layernorm.weight"]
+    assert "model.layers.1.mlp.post_mlp_layernorm.weight" in out
+    assert "model.layers.1.post_mlp_layernorm.weight" not in out
+    assert "model.layers.1.mlp.experts.gate_up_proj" in out
+    assert "model.layers.0.input_layernorm.weight" in out
+
+
+def test_axk1_is_native_prefused_and_ignores_the_unshipped_router_buffer():
+    from experts4bit_qlora.moe_conventions import convention_for, AXK1
+    from experts4bit_qlora.axk1 import AXK1_IGNORE_PARAM_PATTERNS
+    assert convention_for("axk1") is AXK1
+    assert not AXK1.roles                                 # native, never per-expert
+    assert AXK1.match("mlp.experts.gate_up_proj") is None
+    # the e_score buffer the checkpoint never ships is excluded, not "missing"
+    import re
+    assert any(re.search(p, "model.layers.5.mlp.gate.e_score_correction_bias")
+               for p in AXK1_IGNORE_PARAM_PATTERNS)
