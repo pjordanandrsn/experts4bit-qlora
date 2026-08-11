@@ -206,3 +206,27 @@ def test_granitemoe_forward_chunks_gate_first():
     assert "chunk(2" in whole or "chunk(2, dim=-1)" in whole or "split" in whole, \
         "granitemoe no longer splits a fused gate/up — re-adjudicate the rename"
     assert src is not None
+
+
+def test_deepseek_aliases_onto_qwen2_moe_and_v3_needs_fp8_scales():
+    """The deepseek_v2/v3 entries alias onto the qwen2_moe convention. That is an
+    assertion about upstream's converter table, so it is worth stating what it
+    does and does not buy.
+
+    Adjudicated against the released indexes: DeepSeek-V2-Lite's 4992 expert
+    keys ALL match, in a balanced 1664/1664/1664 gate/up/down split — the alias
+    is structurally right for a bf16 deepseek.
+
+    DeepSeek-V3 is a different story and the reason this is pinned. It ships
+    block-FP8, so every expert weight has a companion `weight_scale_inv` tensor
+    — exactly one unmatched key per matched key. Those scales are real data the
+    convention has no role for, so V3 is NOT loadable through this path even
+    though its weight keys match perfectly. A run that silently dropped them
+    would produce a model that loads and is numerically garbage.
+    """
+    conv = convention_for("deepseek_v2")
+    assert conv is convention_for("deepseek_v3") is convention_for("qwen2_moe")
+    for role, tok in (("gate", "gate_proj"), ("up", "up_proj"), ("down", "down_proj")):
+        assert conv.match(f"mlp.experts.7.{tok}.weight") == (7, role)
+    # The FP8 scale companions must NOT be silently absorbed as expert weights.
+    assert conv.match("mlp.experts.7.gate_proj.weight_scale_inv") is None
