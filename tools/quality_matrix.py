@@ -105,14 +105,20 @@ def load_quant(repo, quant_type, config=None, n_experts=64, top_k=8):
         repo, device=DEV, dtype=torch.bfloat16, r=8, alpha=16,
         quant_type=quant_type, trust_remote_code=True)
     model.eval()          # BEFORE enabling: the fused path self-bypasses in train mode
+    # hot_sets is PER MoE LAYER — exactly one entry per ExpertsNbit module in
+    # module order, not one entry total. The synthetic config matrix ran a
+    # single bare module, so a one-entry list worked there and hid this; a real
+    # 16-layer model raises. Count the layers from the model itself.
+    n_layers = len(E.dispatched_modules(model)) or sum(
+        1 for _ in model.modules() if type(_).__name__ == "ExpertsLoRA")
+    all_hot = [list(range(n_experts))] * n_layers
     patched = -1
     if config == "fast":
         patched = E.enable_fast(model)
     elif config == "pipelined":
-        patched = E.enable_pipelined_residency(
-            model, [list(range(n_experts))], k_slots=top_k)
+        patched = E.enable_pipelined_residency(model, all_hot, k_slots=top_k)
     elif config == "hot":
-        patched = E.enable_hot_residency(model, [list(range(n_experts))])
+        patched = E.enable_hot_residency(model, all_hot)
     return model, patched
 
 
