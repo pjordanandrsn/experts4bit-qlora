@@ -189,8 +189,15 @@ def plan_moe_checkpoint(
     # A tied head is supplied by its source, not by a key of its own. Honour
     # that only when the SOURCE is itself claimed — a tie to a parameter nothing
     # loaded would propagate skeleton values, not fix them.
+    # NOTE the absence of a `t not in claimed` guard. A checkpoint may declare
+    # tie_word_embeddings=True and ALSO ship lm_head.weight — granite-3.0-3b
+    # does, bitwise equal to the embedding. Skipping the tie there leaves two
+    # separate tensors that read identically, so inference looks perfect while
+    # training silently diverges: the halves take independent gradient steps on
+    # a weight that is supposed to move as one. Tying regardless is also what
+    # from_pretrained does, so this keeps the two loaders in agreement.
     tied = {t: srcn for t, srcn in _tied_targets(model).items()
-            if t in claimable and t not in claimed and srcn in claimed}
+            if t in claimable and srcn in claimed}
     plan.tied_params = tied
     claimed |= set(tied)
 

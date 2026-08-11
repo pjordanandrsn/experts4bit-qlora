@@ -218,3 +218,35 @@ def test_executor_binds_the_same_parameter_object_not_a_copy():
     w = torch.arange(32, dtype=torch.float32).reshape(8, 4)
     execute_moe_plan(plan, m, lambda k: w, device="cpu", dtype=torch.float32)
     assert m.lm_head.weight is m.model.embed_tokens.weight
+
+
+def test_tied_head_that_the_checkpoint_ALSO_ships_is_still_tied():
+    """The subtle half. granite-3.0-3b declares tie_word_embeddings=True AND
+    ships lm_head.weight, bitwise equal to the embedding. Loading the shipped
+    copy instead of tying leaves two separate tensors that read identically, so
+    inference looks perfect and training silently diverges — the halves take
+    independent gradient steps on a weight meant to move as one. It also wastes
+    a full vocab x hidden tensor that from_pretrained shares."""
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(
+        ["model.embed_tokens.weight", "lm_head.weight"], m, "llama", dense_ok=True)
+    assert plan.tied_params == {"lm_head.weight": "model.embed_tokens.weight"}
+    w = torch.arange(32, dtype=torch.float32).reshape(8, 4)
+    execute_moe_plan(plan, m, lambda k: w, device="cpu", dtype=torch.float32)
+    assert m.lm_head.weight is m.model.embed_tokens.weight
+
+
+def test_shipped_head_contradicting_a_tied_config_refuses_to_guess():
+    """If the config says tied but the shipped head DIFFERS, the config and the
+    checkpoint contradict each other. Tying discards weights the publisher
+    shipped; not tying ignores the config. Both are guesses, so refuse."""
+    m = _TiedHead(tied=True)
+    plan = plan_moe_checkpoint(
+        ["model.embed_tokens.weight", "lm_head.weight"], m, "llama", dense_ok=True)
+
+    def read(key):
+        base = torch.arange(32, dtype=torch.float32).reshape(8, 4)
+        return base + (1.0 if key == "lm_head.weight" else 0.0)
+
+    with pytest.raises(MoEConventionError, match="refusing to guess"):
+        execute_moe_plan(plan, m, read, device="cpu", dtype=torch.float32)

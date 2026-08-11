@@ -131,10 +131,25 @@ def execute_moe_plan(
     # tensor — and doing it here, rather than trusting the model to have tied
     # itself, is what keeps the planner's exemption honest: the parameter is
     # excused from needing a key precisely because it gets real values now.
+    loaded_from_disk = set(plan.passthrough.values())
     for target, source in plan.tied_params.items():
         src = model.get_parameter(source)
         parent, _, leaf = target.rpartition(".")
         mod = model.get_submodule(parent) if parent else model
+        if target in loaded_from_disk:
+            # The checkpoint shipped this head AND the config says it is tied.
+            # Normally the two agree and the tie is a no-op on values. If they
+            # disagree, the config and the checkpoint contradict each other and
+            # either answer is a guess: tying discards weights the publisher
+            # shipped, not tying ignores the config. Refuse rather than pick.
+            on_disk = getattr(mod, leaf)
+            if not torch.equal(on_disk.to(src.dtype), src):
+                raise MoEConventionError(
+                    f"{target}: config declares tie_word_embeddings=True, but the "
+                    f"checkpoint ships a {target} that differs from {source} "
+                    f"(max|diff|={float((on_disk.to(src.dtype) - src).abs().max()):.3e}) "
+                    f"— tying would discard shipped weights, not tying would "
+                    f"ignore the config; refusing to guess")
         # Bind the SAME Parameter object, not a copy of it. A copy would read
         # identically and hide the difference at inference time, then diverge
         # under training: the two halves would take independent gradient steps
