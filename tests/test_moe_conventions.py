@@ -365,3 +365,19 @@ def test_gptoss_is_prefused_mxfp4_passthrough_never_per_expert():
     # No renames: the synthesized base name already equals the tree target.
     assert GPTOSS.rename("model.layers.0.mlp.experts.gate_up_proj") == \
         "model.layers.0.mlp.experts.gate_up_proj"
+
+
+def test_jetmoe_dual_moe_is_native_passthrough_never_drops_attention_experts():
+    """JetMoE is MoE in both MLP and attention. Because its converter is native
+    (pre-fused, no conversion), both pass straight through — the planner never
+    fuses or drops. Pinned so a future 'optimization' that treats it as
+    per-expert trips here."""
+    from experts4bit_qlora.moe_conventions import JETMOE
+    assert convention_for("jetmoe") is JETMOE
+    assert not JETMOE.roles                         # never per-expert
+    for k in ("mlp.input_linear.weight", "self_attention.experts.input_linear.weight",
+              "mlp.experts.0.gate_proj.weight"):
+        assert JETMOE.match(k) is None
+    assert JETMOE.transpose_re is None              # nothing transposed
+    assert JETMOE.rename("self_attention.experts.input_linear.weight") == \
+        "self_attention.experts.input_linear.weight"

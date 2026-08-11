@@ -230,8 +230,28 @@ QWEN3_VL_MOE = MoEConvention(
     transpose_re=re.compile(r"mlp\.experts\.(gate_up_proj|down_proj)$"),
 )
 
+#: JetMoE is a DUAL MoE — mixture-of-experts in BOTH the MLP (``mlp.input_linear``
+#: / ``output_linear`` / ``router.layer``) AND the attention block
+#: (``self_attention.experts.*``). The obvious worry is that an MLP-expert
+#: planner fuses the MLP experts and silently drops the attention ones. It does
+#: not, because JetMoE's converter is EMPTY/native: every expert stack ships
+#: PRE-FUSED with the exact name the module declares, so there is nothing to
+#: fuse or reorder — both MoEs pass straight through, and placing a native
+#: tensor makes no orientation choice to get wrong. Adjudicated against the
+#: released jetmoe-8b index: all 266 checkpoint keys map 1:1 (96 of them
+#: attention-expert tensors), and the only tree param the checkpoint omits is
+#: the tied ``lm_head`` — 267/267 covered. Never per-expert; no renames.
+JETMOE = MoEConvention(
+    name="jetmoe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: native, never per-expert
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"jetmoe"}),
+    renames=(),
+)
+
 CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
-               QWEN3_VL_MOE)
+               QWEN3_VL_MOE, JETMOE)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 
