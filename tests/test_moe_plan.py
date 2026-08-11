@@ -602,3 +602,42 @@ def test_nvfp4_triple_is_distinguished_from_int4_and_dequantized():
     assert rep["nvfp4_dequantized"] == 1
     expected = dequantize_nvfp4(packed, scale, gscale, dtype=torch.float32)
     assert torch.equal(m.proj.weight, expected)
+
+
+def test_modelopt_fp4_is_recognized_and_reuses_the_nvfp4_decoder():
+    """NVIDIA ModelOpt FP4 (nvidia/DeepSeek-R1-FP4, Llama-FP4) is the SAME E2M1
+    as compressed-tensors nvfp4 but spells its keys differently: the packed
+    bytes sit under the ordinary `weight` name, with weight_scale (per group)
+    and weight_scale_2 (per tensor). input_scale is an ACTIVATION scale and must
+    not be mistaken for part of the weight. Verified bit-exact against
+    modelopt's own NVFP4QTensor.dequantize, so it reuses that decoder."""
+    from experts4bit_qlora.nvfp4 import dequantize_nvfp4
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(128, 8, bias=False)
+
+    m = M()
+    torch.manual_seed(0)
+    nib = torch.randint(0, 16, (8, 128), dtype=torch.uint8)
+    packed = (nib[:, 0::2] | (nib[:, 1::2] << 4)).contiguous()
+    scale = (torch.rand(8, 128 // 16) + 0.5)
+    scale2 = torch.tensor(0.0123)
+    store = {"proj.weight": packed, "proj.weight_scale": scale,
+             "proj.weight_scale_2": scale2,
+             "proj.input_scale": torch.tensor(1.5)}      # activation: ignored
+
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    assert plan.scales["proj.weight"] == (
+        "nvfp4", "proj.weight", "proj.weight_scale", "proj.weight_scale_2")
+    # the activation scale is consumed, never placed as a parameter
+    assert "proj.input_scale" not in plan.passthrough
+
+    rep = execute_moe_plan(plan, m, store.__getitem__, device="cpu",
+                           dtype=torch.float32)
+    assert rep["nvfp4_dequantized"] == 1
+    assert torch.equal(m.proj.weight,
+                       dequantize_nvfp4(packed, scale, scale2, dtype=torch.float32))

@@ -106,6 +106,12 @@ CT_SHAPE_SUFFIX = "weight_shape"
 #: weight_scale, but E2M1 fp4 with a per-tensor global scale instead of an int
 #: weight_shape. The companion that tells the two apart.
 CT_GLOBAL_SCALE_SUFFIX = "weight_global_scale"
+#: NVIDIA ModelOpt FP4 (nvidia/DeepSeek-R1-FP4, Llama-FP4, ...): the SAME E2M1
+#: fp4 as nvfp4, but the packed bytes live under the ordinary ``weight`` name
+#: with a per-group ``weight_scale`` and a per-tensor ``weight_scale_2``.
+#: ``input_scale`` is an ACTIVATION scale and is not part of the weight.
+MODELOPT_SCALE2_SUFFIX = "weight_scale_2"
+MODELOPT_INPUT_SCALE_SUFFIX = "input_scale"
 
 
 def _split_block_scales(checkpoint_keys):
@@ -154,6 +160,21 @@ def _split_block_scales(checkpoint_keys):
             if scale in keys and gscale in keys:
                 dequant[base] = ("nvfp4", k, scale, gscale)
                 consumed.update((k, scale, gscale))
+                continue
+        if k.endswith(MODELOPT_SCALE2_SUFFIX):
+            # ModelOpt FP4: X.weight (packed uint8) + X.weight_scale (per group)
+            # + X.weight_scale_2 (per tensor). Verified bit-exact against
+            # modelopt's own NVFP4QTensor.dequantize, so it reuses that decoder;
+            # only the key spelling differs from compressed-tensors nvfp4.
+            stem = k[: -len(MODELOPT_SCALE2_SUFFIX)]
+            base, scale = stem + "weight", stem + CT_SCALE_SUFFIX
+            if base in keys and scale in keys:
+                dequant[base] = ("nvfp4", base, scale, k)
+                consumed.update((k, scale))          # base stays as its own key
+                # the activation scale is not a weight; drop it if present
+                inp = stem + MODELOPT_INPUT_SCALE_SUFFIX
+                if inp in keys:
+                    consumed.add(inp)
                 continue
         if k.endswith(MXFP4_SCALES_SUFFIX):
             base = k[: -len(MXFP4_SCALES_SUFFIX)]
