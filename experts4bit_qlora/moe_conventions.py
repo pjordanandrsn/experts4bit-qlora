@@ -78,11 +78,20 @@ class MoEConvention:
     # convention's WeightRenaming entries; empty for families whose non-expert
     # spelling already matches (qwen2_moe, jamba, lfm2_moe).
     renames: tuple = ()
+    # Keys whose SUFFIX matches this get their last two axes transposed at load.
+    # Some pre-fused families (qwen3_vl_moe) ship experts as [E, in, out] and
+    # the module declares [E, out, in]; upstream's converter is a Transpose(1,2)
+    # with nothing else. None means no key is ever transposed. The orientation
+    # is adjudicated against the real checkpoint's shapes, never inferred.
+    transpose_re: "re.Pattern | None" = None
 
     def rename(self, key: str) -> str:
         for src, dst in self.renames:
             key = key.replace(src, dst)
         return key
+
+    def needs_transpose(self, key: str) -> bool:
+        return self.transpose_re is not None and bool(self.transpose_re.search(key))
 
     def match(self, layer_suffix: str):
         """-> (expert_index, role) or None."""
@@ -202,7 +211,27 @@ GPTOSS = MoEConvention(
     renames=(),
 )
 
-CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS)
+#: qwen3_vl_moe (and its qwen3_vl_moe_text tower) ship experts PRE-FUSED as a
+#: single stacked tensor, but in [E, in, out] where the module declares
+#: [E, out, in]. Upstream's converter for it is exactly a Transpose(1, 2) on
+#: ``experts.gate_up_proj`` and ``experts.down_proj`` with no other operation —
+#: NOT qwen2_moe's per-expert MergeModulelist. Adjudicated against the released
+#: Qwen3-VL-30B-A3B index: checkpoint gate_up_proj [128, 2048, 1536] and
+#: down_proj [128, 768, 2048]; the built tree wants [128, 1536, 2048] and
+#: [128, 2048, 768] respectively — the last two axes swapped, both projections.
+#: Never per-expert, so the expert pattern matches nothing.
+QWEN3_VL_MOE = MoEConvention(
+    name="qwen3_vl_moe",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
+    roles={},
+    fused_prefix="mlp.experts",
+    model_types=frozenset({"qwen3_vl_moe", "qwen3_vl_moe_text"}),
+    renames=(),
+    transpose_re=re.compile(r"mlp\.experts\.(gate_up_proj|down_proj)$"),
+)
+
+CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
+               QWEN3_VL_MOE)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 

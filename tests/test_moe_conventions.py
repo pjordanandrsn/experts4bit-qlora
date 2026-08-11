@@ -336,16 +336,20 @@ def test_alias_set_matches_transformers_converter_table(conv_name, root):
         f"checkpoint and either alias or add to _KNOWN_UNCLAIMED with a reason")
 
 
-def test_prefused_transpose_family_is_not_claimed_as_qwen2_moe():
-    """qwen3_vl_moe ships experts PRE-FUSED with a Transpose(1,2), which is a
-    different checkpoint layout from qwen2_moe's per-expert MergeModulelist.
-    Aliasing it to qwen2_moe would gather+concatenate keys that are already
-    stacked — a confidently-wrong load. It must stay unmapped until it gets its
-    own convention. This pins the boundary so a careless alias trips it."""
-    from experts4bit_qlora.moe_conventions import MoEConventionError
+def test_prefused_transpose_family_has_its_own_convention_not_qwen2_moe():
+    """qwen3_vl_moe ships experts PRE-FUSED with a Transpose(1,2), a different
+    checkpoint layout from qwen2_moe's per-expert MergeModulelist. It gets its
+    OWN convention (QWEN3_VL_MOE, transpose-only) — it must never resolve to
+    qwen2_moe, which would gather keys that are already stacked."""
+    from experts4bit_qlora.moe_conventions import QWEN2_MOE, QWEN3_VL_MOE
     assert _converter_signature("qwen3_vl_moe") != _converter_signature("qwen2_moe")
-    with pytest.raises(MoEConventionError):
-        convention_for("qwen3_vl_moe")
+    assert convention_for("qwen3_vl_moe") is QWEN3_VL_MOE
+    assert convention_for("qwen3_vl_moe") is not QWEN2_MOE
+    # transpose-only: never per-expert, and it marks the two pre-fused stacks.
+    assert not QWEN3_VL_MOE.roles
+    assert QWEN3_VL_MOE.needs_transpose("x.mlp.experts.gate_up_proj")
+    assert QWEN3_VL_MOE.needs_transpose("x.mlp.experts.down_proj")
+    assert not QWEN3_VL_MOE.needs_transpose("x.mlp.experts.gate_up_proj_bias")
 
 
 def test_gptoss_is_prefused_mxfp4_passthrough_never_per_expert():

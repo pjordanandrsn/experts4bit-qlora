@@ -62,6 +62,9 @@ class MoELoadPlan:
     #: primary+scale pair. kind is "fp8" (block-FP8, DeepSeek-V3) or "mxfp4"
     #: (gpt-oss / Kimi-K3 packed fp4). Named ``scales`` for back-compat.
     scales: dict = field(default_factory=dict)
+    #: mapped-key -> load-time transform name (e.g. "transpose_last2") applied
+    #: after any dequant, for pre-fused families the module stores transposed.
+    transforms: dict = field(default_factory=dict)
     #: checkpoint keys deliberately not loaded (extra prediction heads).
     skipped_keys: tuple = ()
     #: model params a checkpoint legitimately never supplies (computed buffers)
@@ -266,6 +269,14 @@ def plan_moe_checkpoint(
         renamed = conv.rename(key)
         if renamed in claimable:
             plan.passthrough[key] = renamed
+            if conv.needs_transpose(key):
+                # Pre-fused-but-transposed families (qwen3_vl_moe): the tensor
+                # passes through by NAME, but its last two axes are swapped
+                # relative to the module. Record it (keyed on the checkpoint key
+                # the executor reads) so it transposes at load — placing it as-is
+                # would mis-shape, and _assign would then reject it, which is the
+                # safety net, not the plan.
+                plan.transforms[key] = "transpose_last2"
             continue
         unmapped.append((key, f"no parameter {renamed!r} in the model"))
 

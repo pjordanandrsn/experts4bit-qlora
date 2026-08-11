@@ -369,3 +369,31 @@ def test_a_lone_mxfp4_scales_key_without_blocks_is_not_paired():
     # only a scales key, no matching _blocks
     with pytest.raises(MoEConventionError):
         plan_moe_checkpoint(["w", "orphan_scales"], m, "llama", dense_ok=True)
+
+
+def test_prefused_transpose_places_the_transposed_stack():
+    """qwen3_vl_moe ships experts pre-fused as [E, in, out]; the module declares
+    [E, out, in]. The executor must transpose at load, or _assign rejects the
+    mis-shaped tensor. Verified end-to-end: the placed parameter equals the
+    source's last-two-axis transpose (which for a 3-D stack is Transpose(1,2),
+    exactly transformers' converter op)."""
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.mlp = torch.nn.Module()
+            self.mlp.experts = torch.nn.Module()
+            self.mlp.experts.gate_up_proj = torch.nn.Parameter(
+                torch.zeros(2, 3, 4), requires_grad=False)   # [E, out, in]
+
+    m = M()
+    src = torch.arange(2 * 4 * 3, dtype=torch.float32).reshape(2, 4, 3)  # [E, in, out]
+    store = {"mlp.experts.gate_up_proj": src}
+    plan = plan_moe_checkpoint(list(store), m, "qwen3_vl_moe")
+    assert plan.transforms == {"mlp.experts.gate_up_proj": "transpose_last2"}
+    execute_moe_plan(plan, m, store.__getitem__, device="cpu", dtype=torch.float32)
+    placed = m.mlp.experts.gate_up_proj
+    assert tuple(placed.shape) == (2, 3, 4)
+    assert torch.equal(placed, src.transpose(-1, -2))
+    assert torch.equal(placed, torch.transpose(src, 1, 2))   # == transformers op

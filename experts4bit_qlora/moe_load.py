@@ -121,29 +121,37 @@ def execute_moe_plan(
         """
         spec = plan.scales.get(key)
         if spec is None:
-            return read_tensor(key)
-        kind, primary_key, scale_key = spec
-        primary = read_tensor(primary_key)
-        scale = read_tensor(scale_key)
-        if kind == "fp8":
-            want = fp8_block_scale_shape(tuple(primary.shape))
-            if tuple(scale.shape) != tuple(want):
-                raise MoEConventionError(
-                    f"{key}: block-scale {scale_key} has shape "
-                    f"{tuple(scale.shape)}, but a {tuple(primary.shape)} weight "
-                    f"implies {tuple(want)} — refusing to dequantize with a "
-                    f"mismatched scale")
-            return dequantize_fp8_blocks(primary, scale, dtype=dtype)
-        if kind == "mxfp4":
-            # MXFP4 pairs blocks [..., rows, G, B] with scales [..., rows, G];
-            # they must agree on every axis but the last (the packed byte axis).
-            if tuple(primary.shape[:-1]) != tuple(scale.shape):
-                raise MoEConventionError(
-                    f"{key}: mxfp4 blocks {tuple(primary.shape)} and scales "
-                    f"{tuple(scale.shape)} disagree (blocks[:-1] must equal "
-                    f"scales) — refusing to dequantize a mismatched pair")
-            return dequantize_mxfp4(primary, scale, dtype=dtype)
-        raise MoEConventionError(f"{key}: unknown dequant kind {kind!r}")
+            t = read_tensor(key)
+        else:
+            kind, primary_key, scale_key = spec
+            primary = read_tensor(primary_key)
+            scale = read_tensor(scale_key)
+            if kind == "fp8":
+                want = fp8_block_scale_shape(tuple(primary.shape))
+                if tuple(scale.shape) != tuple(want):
+                    raise MoEConventionError(
+                        f"{key}: block-scale {scale_key} has shape "
+                        f"{tuple(scale.shape)}, but a {tuple(primary.shape)} "
+                        f"weight implies {tuple(want)} — refusing to dequantize "
+                        f"with a mismatched scale")
+                t = dequantize_fp8_blocks(primary, scale, dtype=dtype)
+            elif kind == "mxfp4":
+                # blocks [..., rows, G, B] with scales [..., rows, G]: they must
+                # agree on every axis but the last (the packed byte axis).
+                if tuple(primary.shape[:-1]) != tuple(scale.shape):
+                    raise MoEConventionError(
+                        f"{key}: mxfp4 blocks {tuple(primary.shape)} and scales "
+                        f"{tuple(scale.shape)} disagree (blocks[:-1] must equal "
+                        f"scales) — refusing to dequantize a mismatched pair")
+                t = dequantize_mxfp4(primary, scale, dtype=dtype)
+            else:
+                raise MoEConventionError(f"{key}: unknown dequant kind {kind!r}")
+        # Applied AFTER any dequant: a pre-fused family may store this stack
+        # transposed vs the module. .transpose is a view; make it contiguous so
+        # the parameter owns its storage rather than aliasing the read buffer.
+        if plan.transforms.get(key) == "transpose_last2":
+            t = t.transpose(-1, -2).contiguous()
+        return t
 
     assigned = 0
     for ckpt_key, param in plan.passthrough.items():
