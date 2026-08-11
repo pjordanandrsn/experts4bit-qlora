@@ -80,6 +80,31 @@ CKPT_KEY_REWRITERS = {"deepseek_v4": rename_deepseek_v4_key}
 DEEPSEEK_V4_FP8_DENSE = {"deepseek_v4"}
 SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 
+
+def expert_layout_for(model_type):
+    """``(expert_submodule_path, has_gate)`` for the quantized loader.
+
+    The MoE convention system (:mod:`experts4bit_qlora.moe_conventions`) is the
+    broad, adjudicated source of truth for expert layout — 41 model_types and
+    counting — and its ``fused_prefix`` is exactly the submodule path this loader
+    calls ``expert_rel``. Where a convention exists, defer to it, and take
+    ``has_gate`` from it too (so a non-gated family like nemotron_h is handled
+    correctly rather than assumed SwiGLU). Fall back to this loader's own map for
+    the dedicated-quant specials (gemma4, kimi_k3, deepseek_v4) that predate the
+    convention system and carry MXFP4/FP8 handling a plain convention does not.
+
+    Verified: for every model_type both systems cover, the paths already agree
+    (see tests) — this makes that agreement the mechanism, not a coincidence.
+    """
+    from .moe_conventions import MoEConventionError, convention_for
+    try:
+        conv = convention_for(model_type)
+        return conv.fused_prefix, conv.gated
+    except MoEConventionError:
+        if model_type in SUPPORTED_ARCHITECTURES:
+            return SUPPORTED_ARCHITECTURES[model_type], True
+        raise
+
 # model_type -> ((legacy on-disk spelling, name in the transformers>=5 module tree), ...).
 # GraniteMoe checkpoints on the Hub predate the standardized fused-experts interface: the fused
 # stacks are stored as `block_sparse_moe.input_linear.weight` [num_experts, 2*inter, hidden]
@@ -286,7 +311,10 @@ def load_moe_4bit_streaming(
             f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}. The Experts4bit primitive itself is "
             "model-agnostic — see the README 'Scope' note to adapt another architecture."
         )
-    expert_rel = SUPPORTED_ARCHITECTURES[model_type]
+    # Source the expert path and gate from the convention when one exists (the
+    # broad source of truth), else this loader's own map. Both agree today; this
+    # makes the convention authoritative so a non-gated family loads correctly.
+    expert_rel, has_gate = expert_layout_for(model_type)
     # Multimodal configs (e.g. Gemma-4's `gemma4`) nest the language model under `text_config` and
     # prefix its checkpoint tensors with `model.language_model.` (vision lives under `model.vision_tower.`).
     # Build + size the text tower from that sub-config, and strip the prefix so keys match the text
@@ -561,7 +589,7 @@ def load_moe_4bit_streaming(
             # they did before the ExpertsNbit fold.
             base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
             base = base_cls.from_float(
-                gate_up, down, has_gate=True, activation=activation, quant_type=quant_type, compute_dtype=dtype
+                gate_up, down, has_gate=has_gate, activation=activation, quant_type=quant_type, compute_dtype=dtype
             )
             experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:

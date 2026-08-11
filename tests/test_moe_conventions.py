@@ -483,3 +483,32 @@ def test_stack_experts_stacks_without_concatenating_a_gate():
         assert torch.equal(up_proj[e], up[e])
     with pytest.raises(MoEConventionError, match="missing expert tensors"):
         stack_experts([up[0], None, up[2]], down)
+
+
+def test_loader_expert_paths_agree_with_conventions():
+    """The quantized streaming loader (loader.SUPPORTED_ARCHITECTURES) and the
+    convention system must not disagree about where a family's experts live.
+    Where both cover a model_type, the loader's path must equal the convention's
+    fused_prefix — otherwise the two source-of-truth systems would quantize and
+    plan against different submodules. expert_layout_for() makes the convention
+    authoritative; this pins that the migration stays consistent."""
+    loader = pytest.importorskip("experts4bit_qlora.loader")
+    for mt, path in loader.SUPPORTED_ARCHITECTURES.items():
+        try:
+            conv = convention_for(mt)
+        except MoEConventionError:
+            continue                        # loader-only dedicated-quant special
+        assert conv.fused_prefix == path, (
+            f"{mt}: loader path {path!r} != convention fused_prefix "
+            f"{conv.fused_prefix!r} — the two systems disagree")
+
+
+def test_expert_layout_for_sources_gate_from_the_convention():
+    """has_gate must come from the convention, so a non-gated family (nemotron_h)
+    is not quantized as if it were SwiGLU. Previously the loader hardcoded
+    has_gate=True."""
+    loader = pytest.importorskip("experts4bit_qlora.loader")
+    assert loader.expert_layout_for("olmoe") == ("mlp.experts", True)
+    assert loader.expert_layout_for("nemotron_h") == ("mixer.experts", False)
+    # a dedicated-quant special with no convention still resolves via the map
+    assert loader.expert_layout_for("gemma4") == ("experts", True)
