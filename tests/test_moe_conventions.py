@@ -381,3 +381,19 @@ def test_jetmoe_dual_moe_is_native_passthrough_never_drops_attention_experts():
     assert JETMOE.transpose_re is None              # nothing transposed
     assert JETMOE.rename("self_attention.experts.input_linear.weight") == \
         "self_attention.experts.input_linear.weight"
+
+
+def test_dbrx_is_flat_native_passthrough_with_pinned_roles():
+    """DBRX stores each projection as one flat [E*inter, hidden] tensor that the
+    transformers tree declares identically, so it loads as pure passthrough.
+    The w1/v1/w2 -> gate/up/down roles are pinned from the forward for a future
+    fusion path but unused by the loader; the expert pattern never matches."""
+    from experts4bit_qlora.moe_conventions import DBRX
+    assert convention_for("dbrx") is DBRX
+    assert not DBRX.roles                        # passthrough, never per-expert
+    assert DBRX.transpose_re is None
+    for k in ("ffn.experts.mlp.w1", "ffn.experts.mlp.v1", "ffn.experts.mlp.w2",
+              "ffn.experts.mlp_experts.0.w1.weight"):
+        assert DBRX.match(k) is None
+    assert DBRX.rename("transformer.blocks.0.ffn.experts.mlp.w1") == \
+        "transformer.blocks.0.ffn.experts.mlp.w1"

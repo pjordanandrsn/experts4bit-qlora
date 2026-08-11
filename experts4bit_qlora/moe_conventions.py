@@ -250,8 +250,34 @@ JETMOE = MoEConvention(
     renames=(),
 )
 
+#: DBRX stores each expert projection as ONE flat ``[E*ffn_hidden, hidden]``
+#: tensor — ``ffn.experts.mlp.w1`` / ``v1`` / ``w2`` — and the transformers
+#: ``DbrxExpertGLU`` module declares them the SAME flat way, so the checkpoint
+#: matches the tree natively (empty converter). Loading is pure passthrough;
+#: nothing is gathered or reshaped. Adjudicated against katuni4ka/tiny-random-dbrx:
+#: 19/19 keys map 1:1, ckpt == tree exactly, logits bit-identical to
+#: from_pretrained. (A community re-layout — v2ray/dbrx-base-fixed — splits the
+#: flat stacks into per-expert ``ffn.experts.mlp_experts.N.w1.weight``; that is
+#: NOT the canonical transformers format and is out of scope for this passthrough.)
+#:
+#: The roles are pinned from ``DbrxExpertGLU.forward`` for the eventual
+#: quantized-fusion path (which would reshape the flat stacks into e4b's
+#: [E, 2*inter, hidden]): ``gate = x @ w1.T``, ``up = x @ v1.T``,
+#: ``down = (act(gate) * up) @ w2`` — so **w1 = gate, v1 = up, w2 = down**,
+#: SwiGLU gate-first. They are NOT used by the passthrough loader (which places
+#: the flat tensors as-is) but are recorded here so the orientation is never
+#: re-guessed. The expert pattern matches nothing: dbrx is never per-expert.
+DBRX = MoEConvention(
+    name="dbrx",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: flat native stacks
+    roles={},                           # passthrough; w1=gate/v1=up/w2=down documented above
+    fused_prefix="ffn.experts.mlp",
+    model_types=frozenset({"dbrx"}),
+    renames=(),
+)
+
 CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
-               QWEN3_VL_MOE, JETMOE)
+               QWEN3_VL_MOE, JETMOE, DBRX)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 
