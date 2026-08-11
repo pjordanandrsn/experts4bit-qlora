@@ -78,6 +78,10 @@ class MoEConvention:
     # convention's WeightRenaming entries; empty for families whose non-expert
     # spelling already matches (qwen2_moe, jamba, lfm2_moe).
     renames: tuple = ()
+    # Whether experts are SwiGLU-gated (gate+up fused into gate_up_proj) or
+    # plain up/down (nemotron_h: no gate, up_proj and down_proj stacked
+    # separately). Non-gated conventions declare roles {up, down} only.
+    gated: bool = True
     # Keys whose SUFFIX matches this get their last two axes transposed at load.
     # Some pre-fused families (qwen3_vl_moe) ship experts as [E, in, out] and
     # the module declares [E, out, in]; upstream's converter is a Transpose(1,2)
@@ -104,8 +108,12 @@ class MoEConvention:
         return int(m.group(1)), self.roles[token]
 
     def fused_names(self, layer: int) -> tuple[str, str]:
+        """(first_target, down_target) for a layer. The first target is the
+        fused gate_up_proj for gated experts, or a plain up_proj when the
+        convention has no gate (nemotron_h)."""
         base = f"model.layers.{layer}.{self.fused_prefix}"
-        return f"{base}.gate_up_proj", f"{base}.down_proj"
+        first = "gate_up_proj" if self.gated else "up_proj"
+        return f"{base}.{first}", f"{base}.down_proj"
 
 
 QWEN2_MOE = MoEConvention(
@@ -299,8 +307,26 @@ QWEN3_5_MOE = MoEConvention(
     renames=(),
 )
 
+#: Nemotron-H is a hybrid Mamba/attention model whose MoE lives in a ``mixer``
+#: block and — unlike every gated family here — has NO gate: each expert is a
+#: plain up_proj + down_proj, run as down(act(up(x))). transformers stacks the
+#: per-expert up/down into ``mixer.experts.up_proj`` [E, inter, hidden] and
+#: ``mixer.experts.down_proj`` [E, hidden, inter] with MergeModulelist and no
+#: Concatenate. Declared non-gated so the executor stacks up_proj on its own
+#: instead of fusing a (nonexistent) gate. The per-layer shared_expert passes
+#: through. Adjudicated against the converter (up_proj/down_proj MergeModulelist,
+#: no gate token) and the built tree.
+NEMOTRON_H = MoEConvention(
+    name="nemotron_h",
+    expert_re=re.compile(r"^mixer\.experts\.(\d+)\.(up_proj|down_proj)\.weight$"),
+    roles={"up_proj": "up", "down_proj": "down"},
+    fused_prefix="mixer.experts",
+    model_types=frozenset({"nemotron_h"}),
+    gated=False,
+)
+
 CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
-               QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE)
+               QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE, NEMOTRON_H)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 
@@ -358,3 +384,24 @@ def fuse_experts(gate: list, up: list, down: list):
             f"refusing to build a partial expert stack")
     gate_up = torch.stack([torch.cat([gate[e], up[e]], dim=0) for e in range(n)])
     return gate_up, torch.stack(list(down))
+
+
+def stack_experts(up: list, down: list):
+    """Per-expert lists -> ``(up_proj [E, inter, hidden], down_proj
+    [E, hidden, inter])`` for NON-gated MoEs (nemotron_h). Same MergeModulelist
+    stacking as :func:`fuse_experts` but with no gate to concatenate — the
+    module runs a plain ``down(act(up(x)))`` with no SwiGLU gate. Missing
+    experts raise rather than shrinking the stack."""
+    import torch
+
+    n = len(up)
+    if n == 0 or len(down) != n:
+        raise MoEConventionError(
+            f"expert count mismatch: up={len(up)} down={len(down)}")
+    missing = [i for i, t in enumerate(up) if t is None]
+    missing += [i for i, t in enumerate(down) if t is None]
+    if missing:
+        raise MoEConventionError(
+            f"missing expert tensors at indices {sorted(set(missing))[:5]} — "
+            f"refusing to build a partial expert stack")
+    return torch.stack(list(up)), torch.stack(list(down))

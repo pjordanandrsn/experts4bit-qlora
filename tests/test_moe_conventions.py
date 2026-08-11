@@ -47,10 +47,11 @@ def _spec_block(src, name):
     pytest.skip(f"transformers no longer defines a {name!r} converter spec")
 
 
-#: Only conventions that actually FUSE gate/up have a source order to check.
-#: granitemoe ships pre-fused, so upstream never lists a gate/up pair for it;
-#: its equivalent guarantee is tested in test_granitemoe_forward_* below.
-FUSING = [c for c in CONVENTIONS if c.roles]
+#: Only conventions that fuse a GATE with up have a gate/up source order to
+#: check. granitemoe ships pre-fused (no gate/up pair upstream); nemotron_h is
+#: non-gated (up/down only, its stacking is tested separately). Both are
+#: excluded here and pinned by their own dedicated tests.
+FUSING = [c for c in CONVENTIONS if c.roles and c.gated]
 
 
 @pytest.mark.parametrize("conv", FUSING, ids=lambda c: c.name)
@@ -448,3 +449,37 @@ def test_qwen3_5_moe_is_native_prefused_passthrough_no_transpose():
     assert QWEN3_5_MOE.transpose_re is None       # native: no transpose (the sibling has one)
     for k in ("mlp.experts.gate_up_proj", "mlp.experts.0.gate_proj.weight"):
         assert QWEN3_5_MOE.match(k) is None
+
+
+def test_nemotron_h_is_non_gated_up_down_in_the_mixer_container():
+    """Nemotron-H has NO gate: experts are up_proj + down_proj only, in a mixer
+    block. It must declare roles {up, down}, be non-gated, and target up_proj
+    (not gate_up_proj). A gate token must never match."""
+    from experts4bit_qlora.moe_conventions import NEMOTRON_H
+    assert convention_for("nemotron_h") is NEMOTRON_H
+    assert NEMOTRON_H.gated is False
+    assert set(NEMOTRON_H.roles.values()) == {"up", "down"}
+    assert NEMOTRON_H.match("mixer.experts.3.up_proj.weight") == (3, "up")
+    assert NEMOTRON_H.match("mixer.experts.3.down_proj.weight") == (3, "down")
+    assert NEMOTRON_H.match("mixer.experts.3.gate_proj.weight") is None
+    # shared_expert is passthrough, not a per-expert match
+    assert NEMOTRON_H.match("mixer.shared_experts.up_proj.weight") is None
+    first, down = NEMOTRON_H.fused_names(2)
+    assert first == "model.layers.2.mixer.experts.up_proj"     # NOT gate_up_proj
+    assert down == "model.layers.2.mixer.experts.down_proj"
+
+
+def test_stack_experts_stacks_without_concatenating_a_gate():
+    """The non-gated fusion stacks up and down each on their own — no gate to
+    concatenate, so up_proj keeps [E, inter, hidden] not [E, 2*inter, hidden]."""
+    from experts4bit_qlora.moe_conventions import stack_experts
+    E, inter, hidden = 3, 4, 5
+    up = [torch.full((inter, hidden), float(e)) for e in range(E)]
+    down = [torch.full((hidden, inter), 100.0 + e) for e in range(E)]
+    up_proj, down_proj = stack_experts(up, down)
+    assert up_proj.shape == (E, inter, hidden)      # NOT 2*inter
+    assert down_proj.shape == (E, hidden, inter)
+    for e in range(E):
+        assert torch.equal(up_proj[e], up[e])
+    with pytest.raises(MoEConventionError, match="missing expert tensors"):
+        stack_experts([up[0], None, up[2]], down)

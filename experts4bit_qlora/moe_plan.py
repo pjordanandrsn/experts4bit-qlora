@@ -285,9 +285,13 @@ def plan_moe_checkpoint(
         raise MoEConventionError(
             f"{model_type}: {len(unmapped)} checkpoint keys do not map — {head}")
 
-    # Expert stacks must be complete and consistent, PER LAYER.
+    # Expert stacks must be complete and consistent, PER LAYER. The required
+    # role set is the convention's own — gated families need gate+up+down, a
+    # non-gated one (nemotron_h) needs exactly up+down and must NOT be failed
+    # for a gate it never has.
+    required_roles = set(conv.roles.values())
     for layer, roles in experts.items():
-        missing_roles = {"gate", "up", "down"} - set(roles)
+        missing_roles = required_roles - set(roles)
         if missing_roles:
             raise MoEConventionError(
                 f"layer {layer}: expert stack missing {sorted(missing_roles)} entirely")

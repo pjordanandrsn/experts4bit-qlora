@@ -30,7 +30,7 @@ import torch
 
 from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
 from .mxfp4 import dequantize_mxfp4
-from .moe_conventions import MoEConventionError, fuse_experts
+from .moe_conventions import MoEConventionError, fuse_experts, stack_experts
 
 
 def _assign(model: torch.nn.Module, name: str, tensor: torch.Tensor) -> None:
@@ -176,14 +176,19 @@ def execute_moe_plan(
 
     fused = 0
     for layer, roles in plan.experts.items():
-        gate_up_name, down_name = plan.expert_targets[layer]
-        n = len(roles["gate"])
-        gate = [read(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
-        up = [read(roles["up"][e]).to(dtype).to(device) for e in range(n)]
+        first_name, down_name = plan.expert_targets[layer]
+        n = len(roles["down"])
         down = [read(roles["down"][e]).to(dtype).to(device) for e in range(n)]
-        gate_up, down_stack = fuse_experts(gate, up, down)
-        del gate, up, down                     # release the per-expert transient
-        _assign(model, gate_up_name, gate_up)
+        up = [read(roles["up"][e]).to(dtype).to(device) for e in range(n)]
+        if "gate" in roles:
+            gate = [read(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
+            first, down_stack = fuse_experts(gate, up, down)
+            del gate
+        else:
+            # Non-gated (nemotron_h): up_proj stacks on its own, no gate to fuse.
+            first, down_stack = stack_experts(up, down)
+        del up, down                           # release the per-expert transient
+        _assign(model, first_name, first)
         _assign(model, down_name, down_stack)
         fused += 2
 
