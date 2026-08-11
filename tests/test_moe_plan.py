@@ -567,3 +567,38 @@ def test_compressed_int_triple_is_paired_dequantized_and_synthesized():
     expected = dequantize_compressed_int(packed, scale, shape, dtype=torch.float32)
     assert torch.equal(m.proj.weight, expected)
     assert not torch.equal(m.proj.weight, packed.to(torch.float32))   # really decoded
+
+
+def test_nvfp4_triple_is_distinguished_from_int4_and_dequantized():
+    """NVFP4 and int pack-quantized SHARE weight_packed + weight_scale; only the
+    third companion differs (weight_global_scale vs weight_shape). The planner
+    must route each to the right decoder — an fp4-as-int4 mixup would be a silent
+    wrong load — and the executor must match compressed_tensors' nvfp4 output."""
+    nv = pytest.importorskip("compressed_tensors.compressors.nvfp4.helpers")
+    from experts4bit_qlora.nvfp4 import dequantize_nvfp4
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(64, 8, bias=False)   # [out=8, in=64]
+
+    m = M()
+    torch.manual_seed(0)
+    cb = torch.tensor([0., .5, 1., 1.5, 2., 3., 4., 6.])
+    vals = (cb[torch.randint(0, 8, (8, 64))]
+            * (torch.randint(0, 2, (8, 64)) * 2 - 1)).to(torch.bfloat16)
+    packed = nv.pack_fp4_to_uint8(vals)
+    scale = (torch.rand(8, 64 // 16) + 0.5).to(torch.float32)     # group 16
+    gscale = torch.tensor(0.03125)
+    store = {"proj.weight_packed": packed, "proj.weight_scale": scale,
+             "proj.weight_global_scale": gscale}
+
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    assert plan.scales["proj.weight"][0] == "nvfp4"           # NOT compressed_int
+    rep = execute_moe_plan(plan, m, store.__getitem__, device="cpu",
+                           dtype=torch.float32)
+    assert rep["nvfp4_dequantized"] == 1
+    expected = dequantize_nvfp4(packed, scale, gscale, dtype=torch.float32)
+    assert torch.equal(m.proj.weight, expected)

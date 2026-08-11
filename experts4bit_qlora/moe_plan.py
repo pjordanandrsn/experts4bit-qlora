@@ -102,6 +102,10 @@ MXFP4_SCALES_SUFFIX = "_scales"
 CT_PACKED_SUFFIX = "weight_packed"
 CT_SCALE_SUFFIX = "weight_scale"
 CT_SHAPE_SUFFIX = "weight_shape"
+#: NVFP4 (compressed-tensors nvfp4-pack-quantized): same weight_packed +
+#: weight_scale, but E2M1 fp4 with a per-tensor global scale instead of an int
+#: weight_shape. The companion that tells the two apart.
+CT_GLOBAL_SCALE_SUFFIX = "weight_global_scale"
 
 
 def _split_block_scales(checkpoint_keys):
@@ -136,11 +140,20 @@ def _split_block_scales(checkpoint_keys):
     for k in checkpoint_keys:
         if k.endswith(CT_PACKED_SUFFIX):
             stem = k[: -len(CT_PACKED_SUFFIX)]           # "...up_proj."
-            scale, shape = stem + CT_SCALE_SUFFIX, stem + CT_SHAPE_SUFFIX
+            scale = stem + CT_SCALE_SUFFIX
+            shape = stem + CT_SHAPE_SUFFIX
+            gscale = stem + CT_GLOBAL_SCALE_SUFFIX
+            base = stem + "weight"                       # "...up_proj.weight"
+            # Same weight_packed + weight_scale; the third companion decides:
+            # a weight_shape means int pack-quantized, a weight_global_scale
+            # means NVFP4 (E2M1 with a per-tensor global scale).
             if scale in keys and shape in keys:
-                base = stem + "weight"                   # "...up_proj.weight"
                 dequant[base] = ("compressed_int", k, scale, shape)
                 consumed.update((k, scale, shape))
+                continue
+            if scale in keys and gscale in keys:
+                dequant[base] = ("nvfp4", k, scale, gscale)
+                consumed.update((k, scale, gscale))
                 continue
         if k.endswith(MXFP4_SCALES_SUFFIX):
             base = k[: -len(MXFP4_SCALES_SUFFIX)]
@@ -160,7 +173,7 @@ def _split_block_scales(checkpoint_keys):
     # Synthesized bases (MXFP4, compressed-tensors) are not literal checkpoint
     # keys; add them so the convention has a key to map to the dense target.
     for base, (kind, _p, _s, _x) in dequant.items():
-        if kind in ("mxfp4", "compressed_int"):
+        if kind in ("mxfp4", "compressed_int", "nvfp4"):
             weights.append(base)
     return weights, dequant
 
