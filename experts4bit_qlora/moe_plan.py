@@ -60,10 +60,12 @@ class MoELoadPlan:
     expert_targets: dict = field(default_factory=dict)
     #: target param -> source param, for heads a tied checkpoint omits.
     tied_params: dict = field(default_factory=dict)
-    #: mapped key -> (kind, primary_ckpt_key, scale_ckpt_key). The mapped key is
-    #: what the convention/passthrough sees; reading it means dequantizing the
-    #: primary+scale pair. kind is "fp8" (block-FP8, DeepSeek-V3) or "mxfp4"
-    #: (gpt-oss / Kimi-K3 packed fp4). Named ``scales`` for back-compat.
+    #: mapped key -> (kind, primary_ckpt_key, scale_ckpt_key, extra_ckpt_key).
+    #: The mapped key is what the convention/passthrough sees; reading it means
+    #: dequantizing the tuple. kind is "fp8" (block-FP8, DeepSeek-V3), "mxfp4"
+    #: (gpt-oss / Kimi-K3), or "compressed_int" (llm-compressor pack-quantized,
+    #: Kimi-K2.5) whose extra key is the weight_shape tensor. Named ``scales``
+    #: for back-compat; extra is None for fp8/mxfp4.
     scales: dict = field(default_factory=dict)
     #: mapped-key -> load-time transform name (e.g. "transpose_last2") applied
     #: after any dequant, for pre-fused families the module stores transposed.
@@ -93,6 +95,13 @@ FP8_SCALE_SUFFIX = "_scale_inv"
 #: ``X`` — neither companion is a parameter of its own.
 MXFP4_BLOCKS_SUFFIX = "_blocks"
 MXFP4_SCALES_SUFFIX = "_scales"
+#: compressed-tensors pack-quantized (llm-compressor / vLLM): a matrix ships as
+#: ``X.weight_packed`` (int32 densely-packed low-bit values) + ``X.weight_scale``
+#: (per-group scales) + ``X.weight_shape`` (the logical [out, in]). The module
+#: parameter is ``X.weight`` — a name the checkpoint never spells.
+CT_PACKED_SUFFIX = "weight_packed"
+CT_SCALE_SUFFIX = "weight_scale"
+CT_SHAPE_SUFFIX = "weight_shape"
 
 
 def _split_block_scales(checkpoint_keys):
@@ -105,42 +114,53 @@ def _split_block_scales(checkpoint_keys):
       module parameter is ``X``; the scale is extra.
     * **MXFP4** (gpt-oss / Kimi-K3): ``X_blocks`` plus ``X_scales`` and NO plain
       ``X``. The module parameter is ``X`` — a name the checkpoint never spells.
+    * **compressed-tensors** (Kimi-K2.5 and any llm-compressor pack-quantized
+      release): ``X.weight_packed`` + ``X.weight_scale`` + ``X.weight_shape``,
+      no plain ``X.weight``. The module parameter is ``X.weight``.
 
-    Both are returned as ``dequant[mapped_key] = (kind, primary_key, scale_key)``
-    where ``mapped_key`` is the name that flows through the convention: the real
-    weight key for FP8, and the SYNTHESIZED base ``X`` for MXFP4 (so the pre-fused
-    stack ``experts.gate_up_proj_blocks`` maps to the tree's
-    ``experts.gate_up_proj``). The companions are removed from ``weights`` so
-    nothing tries to place them as parameters.
+    Returned as ``dequant[mapped_key] = (kind, primary_key, scale_key, extra_key)``
+    where ``mapped_key`` is the name that flows through the convention — the real
+    weight key for FP8, a SYNTHESIZED base for MXFP4/compressed-tensors — and
+    ``extra_key`` is the shape tensor for compressed-tensors, ``None`` otherwise.
+    The companions are removed from ``weights`` so nothing tries to place them as
+    parameters.
 
-    Absorbing these silently would be the worst outcome: for FP8 the weight keys
-    match a convention perfectly, so ignoring the scale loads clean and computes
-    garbage; for MXFP4 the packed blocks would be placed as if dense. A companion
-    only counts when its primary is present, so a lone suffix cannot orphan a key.
+    Absorbing these silently would be the worst outcome: the weight keys match a
+    convention perfectly, so ignoring the packing loads clean and computes
+    garbage. A companion only counts when its primary is present, so a lone
+    suffix cannot orphan a key.
     """
     keys = set(checkpoint_keys)
     dequant, weights = {}, []
     consumed = set()
     for k in checkpoint_keys:
+        if k.endswith(CT_PACKED_SUFFIX):
+            stem = k[: -len(CT_PACKED_SUFFIX)]           # "...up_proj."
+            scale, shape = stem + CT_SCALE_SUFFIX, stem + CT_SHAPE_SUFFIX
+            if scale in keys and shape in keys:
+                base = stem + "weight"                   # "...up_proj.weight"
+                dequant[base] = ("compressed_int", k, scale, shape)
+                consumed.update((k, scale, shape))
+                continue
         if k.endswith(MXFP4_SCALES_SUFFIX):
             base = k[: -len(MXFP4_SCALES_SUFFIX)]
             blocks = base + MXFP4_BLOCKS_SUFFIX
             if blocks in keys:
-                dequant[base] = ("mxfp4", blocks, k)
+                dequant[base] = ("mxfp4", blocks, k, None)
                 consumed.update((k, blocks))
                 continue
         if k.endswith(FP8_SCALE_SUFFIX) and k[: -len(FP8_SCALE_SUFFIX)] in keys:
             base = k[: -len(FP8_SCALE_SUFFIX)]
-            dequant[base] = ("fp8", base, k)
+            dequant[base] = ("fp8", base, k, None)
             consumed.add(k)          # the primary X stays in weights as itself
     for k in checkpoint_keys:
         if k in consumed:
             continue
         weights.append(k)
-    # The MXFP4 synthesized bases are not in checkpoint_keys; add them so the
-    # convention has a key to map to the dense target.
-    for base, (kind, _p, _s) in dequant.items():
-        if kind == "mxfp4":
+    # Synthesized bases (MXFP4, compressed-tensors) are not literal checkpoint
+    # keys; add them so the convention has a key to map to the dense target.
+    for base, (kind, _p, _s, _x) in dequant.items():
+        if kind in ("mxfp4", "compressed_int"):
             weights.append(base)
     return weights, dequant
 
@@ -232,7 +252,7 @@ def plan_moe_checkpoint(
         drop = set(extra)
         checkpoint_keys = [k for k in checkpoint_keys if k not in drop]
         block_scales = {mk: v for mk, v in block_scales.items()
-                        if mk not in drop and v[1] not in drop}
+                        if mk not in drop and not (set(v[1:]) & drop)}
     elif extra:
         depth = model.config.num_hidden_layers
         raise MoEConventionError(

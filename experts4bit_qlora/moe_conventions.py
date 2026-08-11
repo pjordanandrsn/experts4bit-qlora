@@ -139,6 +139,10 @@ QWEN2_MOE = MoEConvention(
         # the released index, not the converter API (which is EMPTY for kimi_k2
         # in current transformers — a support gap, not a layout signal).
         "axk2", "mimo_v2_flash", "kimi_k2",
+        # kimi_k25 (Kimi-K2.5): per-expert qwen2_moe layout under a
+        # language_model.model. prefix, weights in compressed-tensors int4
+        # pack-quantized — handled by the read path, not the convention.
+        "kimi_k25",
     }),
 )
 

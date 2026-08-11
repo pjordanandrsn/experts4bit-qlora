@@ -275,7 +275,7 @@ def test_block_fp8_scales_are_paired_and_dequantized_not_dropped():
     store = {"proj.weight": q, "proj.weight_scale_inv": sc}
 
     plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
-    assert plan.scales == {"proj.weight": ("fp8", "proj.weight", "proj.weight_scale_inv")}
+    assert plan.scales == {"proj.weight": ("fp8", "proj.weight", "proj.weight_scale_inv", None)}
     # The scale key is NOT a parameter of its own.
     assert "proj.weight_scale_inv" not in plan.passthrough
 
@@ -349,7 +349,7 @@ def test_mxfp4_blocks_and_scales_pair_to_a_synthesized_base():
     # The base is synthesized and recorded as an mxfp4 pair; the companions are
     # NOT placed as parameters of their own.
     assert plan.scales == {
-        "gate_up_proj": ("mxfp4", "gate_up_proj_blocks", "gate_up_proj_scales")}
+        "gate_up_proj": ("mxfp4", "gate_up_proj_blocks", "gate_up_proj_scales", None)}
     assert "gate_up_proj_blocks" not in plan.passthrough
     assert "gate_up_proj_scales" not in plan.passthrough
     assert plan.passthrough.get("gate_up_proj") == "gate_up_proj"
@@ -528,3 +528,42 @@ def test_axk1_is_native_prefused_and_ignores_the_unshipped_router_buffer():
     import re
     assert any(re.search(p, "model.layers.5.mlp.gate.e_score_correction_bias")
                for p in AXK1_IGNORE_PARAM_PATTERNS)
+
+
+def test_compressed_int_triple_is_paired_dequantized_and_synthesized():
+    """compressed-tensors pack-quantized ships weight_packed + weight_scale +
+    weight_shape and NO plain weight. The planner must synthesize the .weight
+    base, pair all three, and the executor must dequantize it to the exact dense
+    tensor compressed_tensors would — placing the packed int32 as if dense would
+    load clean and compute garbage."""
+    ct = pytest.importorskip("compressed_tensors.compressors.pack_quantized.helpers")
+    from experts4bit_qlora.compressed_int import dequantize_compressed_int
+
+    class M(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False,
+                                          num_hidden_layers=1)
+            self.proj = torch.nn.Linear(64, 8, bias=False)   # [out=8, in=64]
+
+    m = M()
+    torch.manual_seed(0)
+    q = torch.randint(-8, 8, (8, 64), dtype=torch.int8)
+    packed = ct.pack_to_int32(q, 4, packed_dim=1)
+    scale = (torch.rand(8, 64 // 32) * 0.1 + 0.01)          # group_size 32
+    shape = torch.tensor([8, 64])
+    store = {"proj.weight_packed": packed, "proj.weight_scale": scale,
+             "proj.weight_shape": shape}
+
+    plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
+    assert plan.scales == {"proj.weight": (
+        "compressed_int", "proj.weight_packed", "proj.weight_scale",
+        "proj.weight_shape")}
+    assert "proj.weight_packed" not in plan.passthrough      # not placed as-is
+
+    rep = execute_moe_plan(plan, m, store.__getitem__, device="cpu",
+                           dtype=torch.float32)
+    assert rep["compressed_int_dequantized"] == 1
+    expected = dequantize_compressed_int(packed, scale, shape, dtype=torch.float32)
+    assert torch.equal(m.proj.weight, expected)
+    assert not torch.equal(m.proj.weight, packed.to(torch.float32))   # really decoded

@@ -29,6 +29,7 @@ from __future__ import annotations
 import torch
 
 from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
+from .compressed_int import dequantize_compressed_int
 from .mxfp4 import dequantize_mxfp4
 from .moe_conventions import MoEConventionError, fuse_experts, stack_experts
 
@@ -139,10 +140,14 @@ def execute_moe_plan(
         if spec is None:
             t = read_tensor(key)
         else:
-            kind, primary_key, scale_key = spec
+            kind, primary_key, scale_key, extra_key = spec
             primary = read_tensor(primary_key)
             scale = read_tensor(scale_key)
-            if kind == "fp8":
+            if kind == "compressed_int":
+                # compressed-tensors pack-quantized: packed + scale + shape.
+                shape = read_tensor(extra_key)
+                t = dequantize_compressed_int(primary, scale, shape, dtype=dtype)
+            elif kind == "fp8":
                 want = fp8_block_scale_shape(tuple(primary.shape))
                 if tuple(scale.shape) != tuple(want):
                     raise MoEConventionError(
@@ -232,4 +237,5 @@ def execute_moe_plan(
     return {"assigned": assigned, "fused_stacks": fused,
             "tied": len(plan.tied_params), "fp8_dequantized": sum(1 for v in plan.scales.values() if v[0]=="fp8"),
             "mxfp4_dequantized": sum(1 for v in plan.scales.values() if v[0]=="mxfp4"),
+            "compressed_int_dequantized": sum(1 for v in plan.scales.values() if v[0]=="compressed_int"),
             "rebuilt_buffers": len(rebuilt), "still_meta": still_meta}

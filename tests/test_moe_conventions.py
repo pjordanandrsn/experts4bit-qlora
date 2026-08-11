@@ -430,6 +430,9 @@ ADJUDICATED_RELEASED = {
     # adjudicated purely from the 139644-key released index: 69120 expert keys,
     # perfectly balanced gate/up/down, 0 unmatched.
     "kimi_k2": "qwen2_moe",
+    # Kimi-K2.5: per-expert qwen2_moe + compressed-tensors int4, under a
+    # language_model.model. prefix. 69120 triples in the real index, 0 leftover.
+    "kimi_k25": "qwen2_moe",
 }
 
 
