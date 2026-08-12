@@ -440,10 +440,13 @@ class _PipelinedResidency:
         # stays device-side (a host-visible branch here would break the zero-sync
         # decode contract that tests/test_pipelined.py enforces).
         src_eff = torch.where(hot, self.have, src)
-        miss = src_eff != self.have
         # hot_d2d is now 0 by construction and kept as a REGRESSION WITNESS: if it
         # ever moves again, a hot row is being copied instead of read in place.
         if self.count_traffic:
+            # `miss` lives INSIDE the gate: it is an extra elementwise launch per
+            # round and the counters are its only consumer, so computing it while
+            # counting is off is exactly the overhead this flag exists to remove.
+            miss = src_eff != self.have
             self.hot_d2d_bytes += (miss & hot).sum() * self.row_bytes
             self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
 
