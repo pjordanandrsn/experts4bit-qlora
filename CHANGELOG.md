@@ -1,5 +1,72 @@
 # Changelog
 
+## Unreleased
+
+- **Residency reads the offload homes in place** (#104, closes #86 with #87).
+  Under offload the homes already hold every expert in pinned host RAM and the
+  pipelined engine baked a SECOND full-size arena from them — 0.316 GiB per layer
+  twice over on Qwen3-30B-A3B geometry, ~15 GiB duplicated for the one
+  configuration that exists to fit a big model on a small card. The homes cannot
+  be freed (prefill, grad and odd-dtype forwards still fall back to the reference
+  path and need staging), so the engine stops making the copy instead.
+
+  The homes group by tensor and the row layout groups by expert, so an expert is
+  four contiguous runs and the gather issues one launch per segment. The kernel
+  gained a destination offset, a length, and a separate IDENTITY vector — four
+  launches read four addresses but must skip or copy together as one expert.
+  Measured: RSS delta on enable 0.579 → 0.080 GiB per layer, output bit-identical
+  to the copied-arena control.
+
+  Guarded rather than assumed: offload packs homes one buffer per DTYPE with the
+  offset advancing in ELEMENTS, so an odd-numel predecessor leaves the next tensor
+  misaligned — undefined behaviour where the gather casts to `int64*`. Each
+  segment is checked for pinned + contiguous + 8-byte-aligned base and
+  8-byte-divisible length, falling back to the copied arena otherwise.
+  Non-offloaded modules are unaffected.
+
+## 0.15.0 — 2026-08-11
+
+**Five more quantized checkpoint formats, and the DFlash drafter load path.**
+
+- **AWQ** (`awq.py`) — the first ASYMMETRIC format, using autoawq's exact
+  `[0,4,1,5,2,6,3,7]` nibble order. Packed along OUT.
+- **GPTQ** (`gptq.py`) — packed along IN, sequential order, `+1` zero offset.
+  Told apart from AWQ by its `g_idx` sibling; AWQ had been silently claiming all
+  18624 GPTQ tensors, which is a wrong-answer bug, not a load failure. `g_idx` is
+  now range- and length-validated (a negative index would wrap to the last group).
+- **compressed-tensors int4** (`compressed_int.py`) — llm-compressor / vLLM.
+  `num_bits`/`group_size` are DERIVED from shapes because the config often omits
+  them. Vectorized unpack.
+- **NVFP4** (`nvfp4.py`) — E2M1 codebook with two-level scaling; also serves
+  **NVIDIA ModelOpt FP4**, verified against modelopt itself.
+- **DFlash drafter** (`glimmer_draft.py`, `speculative.py`) — drafter load for both
+  released spellings with coverage reconciled, plus a greedy speculative loop that
+  is token-identical to plain greedy.
+
+The dispatch matrix is pinned in BOTH directions, so a format is claimed by exactly
+one decoder.
+
+## 0.14.0 — 2026-08-10
+
+**MoE breadth: the convention system, and every execution config measured.**
+
+- **12 adjudicated conventions** covering 45 `model_type`s, each checked against
+  transformers' own converter table so coverage DRIFT fails a test rather than
+  silently going stale. Gate/up are shape-identical, so orientation can never be
+  inferred — every entry is adjudicated, not guessed.
+- New families: `gpt_oss` (pre-fused MXFP4 through the generic planner),
+  `qwen3_vl_moe` (pre-fused + load-time transpose), `dbrx` and `jetmoe` (flat
+  native stacks, bit-identical passthrough), `qwen3_5_moe` (native passthrough),
+  `nemotron_h` (NON-gated: stack up/down, no gate to fuse), `minimax_m3_vl`
+  (VL-prefixed mixtral), `axk1` (hybrid dense/MoE, layer-conditional keymap).
+- **block-FP8 routing**, and MTP heads are never dropped silently.
+- Tied heads are tied even when the checkpoint also ships the head.
+- Rotary dim/theta buffers are materialized for VL vision towers.
+- **Every execution config measured**, not just dtype: the decode/prefill ranking
+  inverts, gains shrink as experts widen, and `dgrad=True` is the fastest training
+  lane.
+
+
 ## 0.13.0 — 2026-08-10
 
 **Muse Glimmer (Meta) and GLM-5 (Zhipu) checkpoint support.**
