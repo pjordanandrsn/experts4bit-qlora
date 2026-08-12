@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 — 2026-08-12
 
 - **Residency reads the offload homes in place** (#104, closes #86 with #87).
   Under offload the homes already hold every expert in pinned host RAM and the
