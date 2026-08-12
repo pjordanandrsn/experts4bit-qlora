@@ -18,7 +18,11 @@ from pathlib import Path
 
 import pytest
 
-_SRC = Path(__file__).resolve().parent.parent / "experts4bit_qlora" / "offload.py"
+# Resolve module sources from the imported module, not a hardcoded path: these
+# files live under engines/ since the arch/formats/engines split, and a literal
+# path silently turns "assert something about the source" into FileNotFoundError.
+import experts4bit_qlora.engines.offload as _offload_mod
+_SRC = Path(_offload_mod.__file__)
 
 
 def _fn(name):
@@ -74,5 +78,5 @@ def test_handle_recovery_is_public():
 
 @pytest.mark.parametrize("sym", ["enable_decode_stack", "offload_handles"])
 def test_exported(sym):
-    init = (_SRC.parent / "__init__.py").read_text()
+    init = (Path(__import__("experts4bit_qlora").__file__).parent / "__init__.py").read_text()
     assert f'"{sym}"' in init, f"{sym} is not exported from __init__"
