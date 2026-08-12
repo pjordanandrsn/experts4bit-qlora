@@ -80,6 +80,77 @@ def _poison_enabled() -> bool:
     return os.environ.get("E4B_ARENA_POISON", "") == "1"
 
 
+def check_arena_geometry(base, index: dict, arena_layer: int, *, names=None) -> dict:
+    """Confirm ``index`` describes THIS module's experts. Returns ``{name:
+    (shape, dtype)}`` for the offloaded tensors; raises otherwise.
+
+    Deliberately takes an ``index``, not a tier: everything here is answerable
+    from the bake's own metadata, so a caller can validate every module BEFORE
+    opening a ``ColdTier`` — which is what keeps a refusal from having to unwind
+    fds and pinned memory it already allocated.
+
+    The checks, and why each is not covered by the others:
+
+    * **expert count.** The per-expert width below proves each row is the right
+      size, not that there are the right NUMBER of them. Two variants of one
+      architecture differing only in expert count (a 128- and a 256-expert
+      sibling) have identical per-expert geometry. Both directions are bad, and
+      one is silent: with MORE experts than the arena, ``row_offset`` KeyErrors —
+      but only once a high-numbered expert is routed, which can be many steps
+      into a run; with FEWER, every id resolves and expert ``e`` reads another
+      model's expert ``e``. Real bytes, right shapes, wrong weights.
+    * **layer range.** Same late-and-cryptic failure: an out-of-range layer
+      KeyErrors at the first stage of that layer, not at attach.
+    * **dtype and per-expert width.** A mismatch means the arena was not baked
+      from this model, and it is silent otherwise because the byte counts are
+      close enough that the copies would still "work".
+    """
+    from nvme_residency import segment_geometry
+
+    names = tuple(names) if names is not None else (
+        _ArenaExpertOffload._NAMES_PARAM + _ArenaExpertOffload._NAMES_BUFFER)
+
+    n_arena = int(index["n_experts_per_layer"])
+    n_mod = int(getattr(base, "num_experts", -1))
+    if n_mod != n_arena:
+        raise ValueError(
+            f"expert count mismatch: the module has {n_mod} experts per layer "
+            f"but the arena carries {n_arena}. This arena was not baked from "
+            "this model — attaching would map each expert onto a different "
+            "model's row of the same shape.")
+    n_layers = int(index["n_layers"])
+    if not 0 <= int(arena_layer) < n_layers:
+        raise ValueError(
+            f"arena layer {arena_layer} is out of range for an arena with "
+            f"{n_layers} layers. Pass `layers=` explicitly when the model's "
+            "MoE modules are not arena layers 0..N-1.")
+
+    out = {}
+    for n in names:
+        suffix = OFFLOAD_SEGMENTS.get(n)
+        if suffix is None:
+            raise KeyError(
+                f"no arena segment is defined for offload tensor {n!r}; "
+                f"known: {sorted(OFFLOAD_SEGMENTS)}")
+        dt, shape, _off, _ln = segment_geometry(index, suffix)
+        cur = getattr(base, n)
+        per_expert = 1
+        for s in shape:
+            per_expert *= s
+        if cur.dtype != dt:
+            raise TypeError(
+                f"{n}: module holds {cur.dtype} but arena segment {suffix!r} "
+                f"is {dt} — this arena was not baked from this model")
+        if cur.dim() != 2 or cur.shape[1] != per_expert:
+            raise ValueError(
+                f"{n}: module storage is {tuple(cur.shape)} but arena segment "
+                f"{suffix!r} carries {shape} = {per_expert} values per expert. "
+                "Expected [num_experts, per_expert]; the arena does not match "
+                "this model's expert geometry.")
+        out[n] = (cur.shape, dt)
+    return out
+
+
 class _ArenaExpertOffload(_ExpertOffload):
     """An offload handle whose homes are an NVMe arena instead of pinned DRAM.
 
@@ -101,73 +172,13 @@ class _ArenaExpertOffload(_ExpertOffload):
     @classmethod
     def _build_homes(cls, base, names, pin: bool, arena: bool):
         """Homes as ``meta`` tensors, shaped from the MODULE and dtyped from the
-        ARENA — then cross-checked against each other.
-
-        Both halves have to agree or the staging path writes real bytes into the
-        wrong shape. The module knows ``[E, flat_numel]`` per tensor; the arena
-        index knows each segment's per-expert shape and dtype. Their product must
-        match exactly, and a mismatch means this arena was not baked from this
-        model — which is silent otherwise, because the byte counts are close
-        enough that the copies would still "work".
+        ARENA — after :func:`check_arena_geometry` has confirmed the two agree.
         """
-        from nvme_residency import segment_geometry
-
-        tier = base._e4b_cold_tier
-        index = tier.reader.index
-
-        # Expert COUNT, before any per-tensor check. The per-expert width below
-        # only proves each row is the right size, not that there are the right
-        # number of them, and the two failure directions are both bad:
-        #
-        #   module has MORE experts than the arena -> `row_offset` KeyErrors, but
-        #     only once a high-numbered expert is actually routed, which can be
-        #     many steps into a run.
-        #   module has FEWER -> every id resolves, so expert `e` silently reads
-        #     ANOTHER model's expert `e`. Real bytes, right shapes, wrong weights.
-        #
-        # Two variants of one architecture that differ only in expert count (a
-        # 128- and a 256-expert sibling) have identical per-expert geometry, so
-        # nothing else here would separate them.
-        n_arena = int(index["n_experts_per_layer"])
-        n_mod = int(getattr(base, "num_experts", -1))
-        if n_mod != n_arena:
-            raise ValueError(
-                f"expert count mismatch: the module has {n_mod} experts per layer "
-                f"but the arena carries {n_arena}. This arena was not baked from "
-                "this model — attaching would map each expert onto a different "
-                "model's row of the same shape.")
-        n_layers = int(index["n_layers"])
-        arena_layer = int(base._e4b_arena_layer)
-        if not 0 <= arena_layer < n_layers:
-            raise ValueError(
-                f"arena layer {arena_layer} is out of range for an arena with "
-                f"{n_layers} layers. Pass `layers=` explicitly when the model's "
-                "MoE modules are not arena layers 0..N-1.")
-
-        home = {}
-        for n in names:
-            suffix = OFFLOAD_SEGMENTS.get(n)
-            if suffix is None:
-                raise KeyError(
-                    f"no arena segment is defined for offload tensor {n!r}; "
-                    f"known: {sorted(OFFLOAD_SEGMENTS)}")
-            dt, shape, _off, _ln = segment_geometry(index, suffix)
-            cur = getattr(base, n)
-            per_expert = 1
-            for s in shape:
-                per_expert *= s
-            if cur.dtype != dt:
-                raise TypeError(
-                    f"{n}: module holds {cur.dtype} but arena segment {suffix!r} "
-                    f"is {dt} — this arena was not baked from this model")
-            if cur.dim() != 2 or cur.shape[1] != per_expert:
-                raise ValueError(
-                    f"{n}: module storage is {tuple(cur.shape)} but arena segment "
-                    f"{suffix!r} carries {shape} = {per_expert} values per expert. "
-                    "Expected [num_experts, per_expert]; the arena does not match "
-                    "this model's expert geometry.")
-            home[n] = torch.empty(cur.shape, dtype=dt, device="meta")
-        return home, None, None
+        index = base._e4b_cold_tier.reader.index
+        shapes = check_arena_geometry(base, index, int(base._e4b_arena_layer),
+                                      names=names)
+        return {n: torch.empty(shapes[n][0], dtype=shapes[n][1], device="meta")
+                for n in names}, None, None
 
     def __init__(self, base, device, pin: bool = True):
         # Set before super().__init__: it calls evict(), which clears these.
@@ -431,17 +442,36 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
             "module in dispatch order is required, so a layer's rows are never "
             "silently read from its neighbour's arena row")
 
+    # PRE-FLIGHT: validate EVERY module against the arena index before opening
+    # anything. The index is readable on its own — no fds, no pinned buffer — so
+    # every refusal below costs nothing and unwinds nothing.
+    #
+    # This is not just tidiness. Validating inside the attach loop means a module
+    # partway down the list can raise after earlier ones are already hooked and
+    # stamped, and then there is no good move left: closing the tier strands the
+    # modules already using it, and not closing it leaks. The realistic triggers
+    # are exactly the checks here — an out-of-range `layers` entry, a mismatched
+    # arena, a later wrapper that already carries a host-RAM `_offload`.
+    # (Cursor Bugbot, #117: "Partial attach closes live tier".)
+    from nvme_arena import load_index
+
+    index = load_index(arena_path)
+    for i, base in enumerate(mods):
+        check_arena_geometry(base, index, lay[i])
+        existing = getattr(wrapper_of[id(base)], "_offload", None)
+        if existing is not None:
+            raise RuntimeError(
+                f"module {i} already carries a host-RAM offload handle "
+                f"({type(existing).__name__}). `enable_expert_offload` is idempotent "
+                "and returns the existing handle, so the arena one would never be "
+                "installed — enable arena residency before offloading, not after.")
+
     tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=pinned, qd=qd)
     idx = tier.reader.index
     log(f"  nvme TRAIN residency: arena {arena_path} rows={idx['n_layers']}x"
         f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
         f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
 
-    # Every refusal below happens INSIDE the attach loop — the geometry
-    # cross-checks run in `_ArenaExpertOffload.__init__`, which is the first
-    # place the arena and the module meet. The tier is already open by then, so
-    # a raise here would leak its fds and pinned buffer exactly like the
-    # double-enable path would have. Close it and re-raise.
     n = 0
     try:
         for i, base in enumerate(mods):
@@ -452,19 +482,26 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
             wrapper = wrapper_of[id(base)]
             handle = enable_expert_offload(wrapper, device, pin=False,
                                            handle_cls=_ArenaExpertOffload)
-            if not isinstance(handle, _ArenaExpertOffload):
-                raise RuntimeError(
-                    f"module {i} already carries a host-RAM offload handle "
-                    f"({type(handle).__name__}). enable_expert_offload is idempotent "
-                    "and returns the existing handle, so the arena one was never "
-                    "installed — enable arena residency before offloading, not after.")
             # fast.py's weights_fn closures call this at BACKWARD time.
             base._e4b_stage_guard = handle.assert_rows_staged
             base._e4b_arena_offload = handle
             n += 1
     except BaseException:
-        tier.close()
-        raise
+        # Close the tier ONLY if nothing is using it. Past the first successful
+        # attach, earlier modules hold this tier and closing it would hand them a
+        # shut-down reader — a worse failure than leaking, and one the re-enable
+        # guard would then block them from recovering from. Leak it, and say so:
+        # the model is unusable either way and has to be rebuilt.
+        if n == 0:
+            tier.close()
+            raise
+        raise RuntimeError(
+            f"arena attach failed after {n} of {len(mods)} modules were already "
+            f"hooked. Those modules hold this tier, so it is left OPEN rather than "
+            "closed under them — the model is in a partially-attached state and "
+            "must be discarded, not re-enabled. The tier is released when the "
+            "model is."
+        ) from None
 
     log(f"  nvme TRAIN residency active on {n} module(s); "
         f"gradient checkpointing is REQUIRED (backward re-reads staged rows)")

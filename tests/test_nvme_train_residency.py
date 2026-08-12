@@ -88,17 +88,23 @@ def _per_expert_stacks(mod):
             "down_absmax": mod.down_absmax.view(e, n2, k2 // 64)}
 
 
-def _bake(mod, tmp_path, name="m.arena"):
+def _bake(mod, tmp_path, name="m.arena", n_layers=1):
     """Relocate the module's OWN quantized stacks into an arena, per expert, so
-    the arena bytes are the module's bytes and any difference later is tiering."""
+    the arena bytes are the module's bytes and any difference later is tiering.
+
+    ``n_layers`` repeats the same experts across that many arena layers — enough
+    for tests that need a model with several MoE modules, where layer ``i`` must
+    exist for module ``i``.
+    """
     dt = {torch.uint8: "U8", torch.float32: "F32"}
     tensors = {}
     for attr, stack in _per_expert_stacks(mod).items():
         kind = OFFLOAD_SEGMENTS[attr]
-        for e in range(mod.num_experts):
-            t = stack[e].contiguous().cpu()
-            tensors[f"model.layers.{LAYER}.mlp.experts.{e}.{kind}"] = (
-                tuple(t.shape), dt[t.dtype], t.numpy().tobytes())
+        for lay in range(n_layers):
+            for e in range(mod.num_experts):
+                t = stack[e].contiguous().cpu()
+                tensors[f"model.layers.{lay}.mlp.experts.{e}.{kind}"] = (
+                    tuple(t.shape), dt[t.dtype], t.numpy().tobytes())
     snap = tmp_path / f"snap-{name}"
     snap.mkdir()
     (snap / "model.safetensors").write_bytes(_st_bytes(tensors))
@@ -399,36 +405,94 @@ def test_a_second_enable_is_refused_and_leaks_no_tier(arena):
     first_tier.close()
 
 
-def test_a_refused_attach_closes_the_tier_it_opened(tmp_path):
-    """A geometry refusal fires inside the attach loop, after the tier is open.
-    Leaking its fds and pinned buffer on the error path is the same bug as the
-    double-enable leak, one layer down."""
-    other = _module(seed=99, inter=INTER * 2)
-    path, index = _bake(other, tmp_path, name="mismatch.arena")
-    del index
-    mod = _module()
-
+def _model_of(*mods):
     class _Model(torch.nn.Module):
-        def __init__(self, wrapper):
+        def __init__(self, wrappers):
             super().__init__()
-            self.block = wrapper
+            self.blocks = torch.nn.ModuleList(wrappers)
+    return _Model([ExpertsLoRA(m, r=4, alpha=8) for m in mods])
 
-    model = _Model(ExpertsLoRA(mod, r=4, alpha=8))
-    with pytest.raises((ValueError, TypeError)):
+
+def _pool_is_shutdown(tier) -> bool:
+    """Whether ``tier``'s reader was closed, by BEHAVIOUR rather than a flag: a
+    shut-down ThreadPoolExecutor refuses new work.
+
+    Two earlier cuts of this check were vacuous, each confirmed by removing the
+    close and watching the test still pass — a `_closed` attribute that does not
+    exist (`hasattr`-guarded, i.e. `assert True`), then `_fds == []`, which is
+    equally true of a FRESH reader because fds open lazily per worker on the
+    first read.
+    """
+    try:
+        tier.reader._pool.submit(int).result()
+        return False
+    except RuntimeError:
+        return True
+
+
+def test_a_geometry_refusal_opens_no_tier_at_all(tmp_path):
+    """Everything the geometry check needs is in the arena INDEX, which reads
+    without fds or pinned memory. So a mismatched arena must be refused before a
+    ColdTier exists — there is then nothing to leak and nothing to unwind."""
+    other = _module(seed=99, inter=INTER * 2)
+    path, _index = _bake(other, tmp_path, name="mismatch.arena")
+    mod = _module()
+    model = _model_of(mod)
+    with pytest.raises((ValueError, TypeError), match="does not match this model"):
         enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
                                     pinned=False)
-    # Assert an observable that actually DIFFERS between open and closed.
-    # `ArenaReader.close` shuts its thread pool down, and a shut-down pool
-    # refuses new work — so this is behaviour, not an internal flag.
-    #
-    # Two earlier cuts of this assertion were vacuous, both confirmed by removing
-    # `tier.close()` and watching the test still pass: a `_closed` attribute that
-    # does not exist (guarded by `hasattr`, i.e. `assert True`), then `_fds == []`
-    # — which is true of a FRESH reader too, because fds are opened lazily per
-    # worker on the first read and this tier never read anything.
-    tier = mod._e4b_cold_tier                  # stamped before the refusal
-    with pytest.raises(RuntimeError, match="shutdown"):
-        tier.reader._pool.submit(int).result()
+    assert not hasattr(mod, "_e4b_cold_tier"), \
+        "a tier was opened (and stamped) for an arena that was going to be refused"
+
+
+def test_a_failure_before_any_module_attaches_closes_the_tier(arena, monkeypatch):
+    """Past the pre-flight, a failure on the FIRST module leaves a tier nobody is
+    using. That one must be closed."""
+    mod, path, _index = arena
+    model = _model_of(mod)
+    import experts4bit_qlora.nvme_train as nt
+    monkeypatch.setattr(nt, "enable_expert_offload",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError, match="boom"):
+        enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                    pinned=False)
+    assert _pool_is_shutdown(mod._e4b_cold_tier), "tier leaked with nobody holding it"
+
+
+def test_a_partial_attach_leaves_the_tier_open_for_live_modules(tmp_path, monkeypatch):
+    """The regression Bugbot caught in the first fix: closing on ANY failure
+    shut the tier under modules that had already attached and were holding it.
+
+    Closing a live tier is strictly worse than leaking one — the earlier modules
+    get a shut-down reader on their first stage, and the re-enable guard blocks
+    recovery on that model. So past the first success the tier stays OPEN and the
+    error says the model must be discarded.
+    """
+    mod_a, mod_b = _module(), _module(seed=4242)
+    path, _index = _bake(mod_a, tmp_path, name="two-layer.arena", n_layers=2)
+    model = _model_of(mod_a, mod_b)
+
+    import experts4bit_qlora.nvme_train as nt
+    real = nt.enable_expert_offload
+    calls = {"n": 0}
+
+    def _flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("boom on the second module")
+        return real(*a, **k)
+
+    monkeypatch.setattr(nt, "enable_expert_offload", _flaky)
+    with pytest.raises(RuntimeError, match="partially-attached"):
+        enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                    pinned=False)
+    tier = mod_a._e4b_cold_tier
+    assert not _pool_is_shutdown(tier), \
+        "the tier was closed under a module that had already attached to it"
+    # ...and the attached module can still actually use it.
+    mod_a._e4b_arena_offload.stage_routed(ROUTED)
+    assert mod_a._e4b_arena_offload.staged
+    tier.close()
 
 
 def test_a_bare_module_with_no_adapter_is_refused(arena):
