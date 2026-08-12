@@ -8,10 +8,15 @@ replay, and the warmup/capture forwards left their writes in the cache -- and it
 produced a stream that looked fine and diverged on the very first replayed token.
 So every assertion here compares against eager generation.
 """
+import pathlib
+
 import pytest
 import torch
 
-pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+# NOT a module-level pytestmark: the export test below must run on CPU CI, which is
+# where an unreachable-symbol regression would actually be caught. A guard that only
+# runs on a GPU box never runs at all.
+requires_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 
 
 def _tiny():
@@ -22,6 +27,7 @@ def _tiny():
     return m
 
 
+@requires_cuda
 def test_replay_matches_eager_token_for_token():
     from experts4bit_qlora.capture import probe_capture
     model = _tiny()
@@ -33,6 +39,7 @@ def test_replay_matches_eager_token_for_token():
         f"replay diverged from eager:\n  eager   ={rep['eager']}\n  replayed={rep['replayed']}")
 
 
+@requires_cuda
 def test_probe_reports_capture_failure_instead_of_raising():
     """A model that cannot be captured must come back as a report, not an exception —
     the probe exists to build a support matrix, so an unsupported model is data."""
@@ -44,6 +51,7 @@ def test_probe_reports_capture_failure_instead_of_raising():
     assert rep["captured"] or rep["error"], "a failed capture must say why"
 
 
+@requires_cuda
 def test_cache_is_reset_after_capture():
     """Warmup and capture each write into the cache. If those writes survive, the
     first generated token reads polluted slots — which is precisely the bug this
@@ -62,6 +70,7 @@ def test_cache_is_reset_after_capture():
     assert a == b, f"two decoders from one prompt disagree: {a} vs {b}"
 
 
+@requires_cuda
 def test_free_running_tie_is_not_reported_as_a_capture_defect():
     """A tie must be told from a real divergence by measurement, not by judgement.
 
@@ -86,6 +95,7 @@ def test_free_running_tie_is_not_reported_as_a_capture_defect():
     assert rep["divergence"]["verdict"].startswith("tie"), rep["divergence"]
 
 
+@requires_cuda
 def test_reset_allows_a_second_generation():
     """`step()` never rewinds, so a reused decoder runs off the end of the cache.
 
@@ -107,3 +117,20 @@ def test_reset_allows_a_second_generation():
             run.append(int(t))
         runs.append(run)
     assert runs[0] == runs[1] == runs[2], runs
+
+
+@pytest.mark.parametrize("sym", ["capture_decode", "CapturedDecoder", "probe_capture"])
+def test_capture_is_reachable_from_the_package_root(sym):
+    """A symbol users cannot import is a symbol that shipped to nobody.
+
+    0.16.2 published `capture.py` with zero in-repo callers, no top-level export and
+    no mention in the README, so the only route to it was knowing the private module
+    path. 0.7.1 was cut for the same class of bug in the other direction (the front
+    page naming a symbol that raised ImportError). This pins both halves: the name is
+    in `__all__`, and importing it from the package root actually works.
+    """
+    import experts4bit_qlora
+
+    init = (pathlib.Path(experts4bit_qlora.__file__).parent / "__init__.py").read_text()
+    assert f'"{sym}"' in init, f"{sym} is missing from __all__"
+    assert hasattr(experts4bit_qlora, sym), f"{sym} is not importable from the package root"

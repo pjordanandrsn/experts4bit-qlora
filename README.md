@@ -341,6 +341,46 @@ result at OLMoE scale (3.65× over serial) while GEMV is neutral; at 26–30B sc
 from **+46% on Gemma-4** to **−8% on Qwen3-30B**. Measure your model; do not extrapolate
 across shapes. *(v0 offload-path figures — the pipelined engine supersedes them for decode.)*
 
+### CUDA-graph decode capture
+
+Decode issues ~89 kernel launches per layer-step; on OLMoE/3090 that was **288.8 ms of 562.4 ms**
+of host time across 45,501 launches. `capture_decode` replays the whole step as one graph:
+
+```python
+from experts4bit_qlora import capture_decode, probe_capture
+
+report = probe_capture(model, input_ids)          # does this model support it? measured, not assumed
+dec, first = capture_decode(model, input_ids, max_length=len(prompt) + 128)
+tok = first
+for _ in range(127):
+    tok = dec.step(tok)
+dec.reset(input_ids)                              # required between generations
+```
+
+**What it is worth, measured** (16 new tokens, greedy):
+
+| | speedup |
+|---|---|
+| 2-layer fixtures (qwen2_moe, qwen3_moe, granitemoe, hunyuan_v1_moe, glm4_moe, dots1, olmoe) | 4.4–5.6× |
+| OLMoE-1B-7B-0924-Instruct, 3090 | **1.11×** |
+| Qwen3-30B-A3B, A5000 | **1.04×** |
+
+The gain is inversely proportional to real GPU work per step — which is what a *fixed* per-step
+launch cost predicts. Take it for small models and for the zero-host-sync contract it enforces
+(capture throws on a sync inside the region, so a successful capture proves the contract holds).
+Do not expect it to matter at 30B.
+
+Two costs stated plainly. `StaticCache` is allocated to `max_length` **up front**, so a large
+`max_length` buys the fixed shape with memory. And `step()` is greedy argmax with no logits
+processors, no stopping criteria and no streamer — which is exactly why the HTTP server does
+**not** use it: `_generate_once` needs sampling, repetition penalty, stop signals and streaming,
+and reimplementing those on a captured step to gain ~4% would be a bad trade against the risk.
+
+`probe_capture` reports support rather than assuming it, and tells a bf16 argmax tie from a real
+defect by teacher-forcing the same tokens down both paths and comparing logits. Both real-weight
+models above replay **bit-identical** to eager. `qwen3_next` is not capturable — `StaticCache`
+does not cover LinearAttention layers.
+
 ## Serving over HTTP (Docker)
 
 Moved to **[docs/SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.16.2/docs/SERVING.md)** — The FastAPI serving shim + Docker deployment (endpoints, env knobs, the localhost-by-default / E4B_TOKEN posture).
