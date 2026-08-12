@@ -195,6 +195,6 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__version__ = "0.16.2"
+__version__ = "0.16.3"
 
 from .speculative import speculative_greedy_decode  # noqa: E402,F401

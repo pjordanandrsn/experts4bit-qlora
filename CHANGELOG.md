@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.16.3 — 2026-08-12
+
+**Makes 0.16.2's headline feature actually importable, and turns one opaque load
+failure into an accurate refusal.**
+
+- **`capture_decode`, `CapturedDecoder` and `probe_capture` are exported from the
+  package root.** 0.16.2 shipped `capture.py` with no top-level export, no in-repo
+  caller and no README mention, so the only route to it was knowing the private module
+  path — the feature was published unreachable. Documented under Inference with the
+  measured numbers (4.4–5.6x on 2-layer fixtures, **1.11x** on OLMoE-1B-7B, **1.04x**
+  on Qwen3-30B-A3B) and both costs: `StaticCache` is allocated to `max_length` up
+  front, and `step()` is greedy argmax with no logits processors, stopping criteria or
+  streamer.
+
+  Deliberately **not** used by the HTTP server: `_generate_once` needs sampling,
+  repetition penalty, stop signals and streaming, and reimplementing those on a
+  captured step to gain the measured ~4% at 30B is a bad trade against the risk.
+
+- **Identity ("zero-computation") experts are refused with the counts named.**
+  longcat_flash previously died with `AttributeError: ExpertsLoRA has no attribute
+  '10'`, which names neither the architecture nor the limitation. LongCat-Flash
+  allocates `gate_up_proj` over `n_routed_experts + zero_expert_num` (512 + 256 by
+  default) but `down_proj` over the routed count only — its forward sends
+  `expert_idx >= num_routed_experts` through `nn.Identity` scaled by the router weight
+  and never reads those `gate_up` rows, so the surplus experts are ragged on disk by
+  construction. The per-expert reader consumed `0..n_routed-1`, orphaned the rest, and
+  the generic weight walk then called `get_submodule(".../experts.10")` on a path whose
+  leaf was already the fused module.
+
+  Loading only the routed experts is not a fix: the router keeps selecting over the full
+  space, so it would address experts that do not exist. An identity slot belongs in the
+  expert primitive, not the loader.
+
 ## 0.16.2 — 2026-08-12
 
 **CUDA-graph decode capture, and one less allocation per decode step.**
