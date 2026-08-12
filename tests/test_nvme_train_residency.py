@@ -66,10 +66,10 @@ def _st_bytes(tensors: dict) -> bytes:
     return struct.pack("<Q", len(hj)) + hj + b"".join(blobs)
 
 
-def _module(seed=1689, inter=INTER, hidden=H):
+def _module(seed=1689, inter=INTER, hidden=H, n_exp=E):
     g = torch.Generator().manual_seed(seed)
-    gate_up = torch.randn(E, 2 * inter, hidden, generator=g, dtype=torch.float32) * 0.05
-    down = torch.randn(E, hidden, inter, generator=g, dtype=torch.float32) * 0.05
+    gate_up = torch.randn(n_exp, 2 * inter, hidden, generator=g, dtype=torch.float32) * 0.05
+    down = torch.randn(n_exp, hidden, inter, generator=g, dtype=torch.float32) * 0.05
     return Experts4bit.from_float(gate_up.to(torch.bfloat16), down.to(torch.bfloat16),
                                   has_gate=True, activation=torch.nn.functional.silu,
                                   quant_type="nf4", compute_dtype=torch.bfloat16)
@@ -77,13 +77,15 @@ def _module(seed=1689, inter=INTER, hidden=H):
 
 def _per_expert_stacks(mod):
     """The module's four packed tensors, reshaped per expert exactly as the arena
-    segments carry them."""
+    segments carry them. Sized from the MODULE, not the file-level ``E``, so a
+    fixture with a different expert count reshapes correctly."""
+    e = mod.num_experts
     n1, k1 = mod._gate_up_shape
     n2, k2 = mod._down_shape
-    return {"gate_up_proj": mod.gate_up_proj.view(E, n1, k1 // 2),
-            "gate_up_absmax": mod.gate_up_absmax.view(E, n1, k1 // 64),
-            "down_proj": mod.down_proj.view(E, n2, k2 // 2),
-            "down_absmax": mod.down_absmax.view(E, n2, k2 // 64)}
+    return {"gate_up_proj": mod.gate_up_proj.view(e, n1, k1 // 2),
+            "gate_up_absmax": mod.gate_up_absmax.view(e, n1, k1 // 64),
+            "down_proj": mod.down_proj.view(e, n2, k2 // 2),
+            "down_absmax": mod.down_absmax.view(e, n2, k2 // 64)}
 
 
 def _bake(mod, tmp_path, name="m.arena"):
@@ -93,7 +95,7 @@ def _bake(mod, tmp_path, name="m.arena"):
     tensors = {}
     for attr, stack in _per_expert_stacks(mod).items():
         kind = OFFLOAD_SEGMENTS[attr]
-        for e in range(E):
+        for e in range(mod.num_experts):
             t = stack[e].contiguous().cpu()
             tensors[f"model.layers.{LAYER}.mlp.experts.{e}.{kind}"] = (
                 tuple(t.shape), dt[t.dtype], t.numpy().tobytes())
@@ -333,6 +335,100 @@ def test_an_arena_from_another_model_is_refused(tmp_path):
     with ColdTier(path, hot_rows=E, pinned=False, index=index) as tier:
         with pytest.raises(ValueError, match="does not match this model"):
             _arena_handle(mod, tier)
+
+
+def test_an_arena_with_a_different_expert_count_is_refused(tmp_path):
+    """The per-expert width check does NOT cover this, and the silent direction
+    is the dangerous one.
+
+    Two variants of one architecture that differ only in expert count have
+    IDENTICAL per-expert geometry, so every other check passes. If the module has
+    FEWER experts than the arena, every id resolves and expert `e` reads another
+    model's expert `e` — real bytes, right shapes, wrong weights, no error. (The
+    other direction eventually KeyErrors in `row_offset`, but only once a
+    high-numbered expert is routed, which can be many steps into a run.)
+
+    Found by Cursor Bugbot on #117.
+    """
+    wide = _module(n_exp=E * 2)                 # same per-expert shape, 2x experts
+    path, index = _bake(wide, tmp_path, name="wide.arena")
+    narrow = _module()                          # the model we mean to train
+    # The dangerous direction, and the one every other check passes.
+    assert narrow.num_experts < index["n_experts_per_layer"], "test is not testing"
+    assert (narrow.gate_up_proj.shape[1] == wide.gate_up_proj.shape[1]), \
+        "per-expert width must MATCH, or the existing geometry check catches it"
+    with ColdTier(path, hot_rows=4, pinned=False, index=index) as tier:
+        with pytest.raises(ValueError, match="expert count mismatch"):
+            _arena_handle(narrow, tier)
+
+
+def test_an_arena_layer_out_of_range_is_refused(arena):
+    """Same class: `row_offset` would KeyError at the first stage rather than at
+    attach, and only for the layers that are actually routed."""
+    mod, path, index = arena
+    with ColdTier(path, hot_rows=E, pinned=False, index=index) as tier:
+        with pytest.raises(ValueError, match="out of range"):
+            _arena_handle(mod, tier, layer=index["n_layers"] + 5)
+
+
+def test_a_second_enable_is_refused_and_leaks_no_tier(arena):
+    """`enable_expert_offload` is idempotent and keeps the tier it was built
+    with, so a second enable would construct a fresh ColdTier, hand back the OLD
+    handle, and orphan the new tier — while appearing to retune `hot_rows`.
+
+    Found by Cursor Bugbot on #117.
+    """
+    mod, path, _index = arena
+
+    class _Model(torch.nn.Module):
+        def __init__(self, wrapper):
+            super().__init__()
+            self.block = wrapper
+
+    model = _Model(ExpertsLoRA(mod, r=4, alpha=8))
+    assert enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                       pinned=False) == 1
+    first_tier = mod._e4b_cold_tier
+    with pytest.raises(RuntimeError, match="already have arena-backed"):
+        enable_nvme_train_residency(model, path, hot_rows=E * 2, device="cpu",
+                                    pinned=False)
+    # The refusal must happen BEFORE a second tier is opened, so the module still
+    # points at the original and nothing was allocated to be cleaned up.
+    assert mod._e4b_cold_tier is first_tier
+    assert mod._e4b_arena_offload._tier is first_tier
+    first_tier.close()
+
+
+def test_a_refused_attach_closes_the_tier_it_opened(tmp_path):
+    """A geometry refusal fires inside the attach loop, after the tier is open.
+    Leaking its fds and pinned buffer on the error path is the same bug as the
+    double-enable leak, one layer down."""
+    other = _module(seed=99, inter=INTER * 2)
+    path, index = _bake(other, tmp_path, name="mismatch.arena")
+    del index
+    mod = _module()
+
+    class _Model(torch.nn.Module):
+        def __init__(self, wrapper):
+            super().__init__()
+            self.block = wrapper
+
+    model = _Model(ExpertsLoRA(mod, r=4, alpha=8))
+    with pytest.raises((ValueError, TypeError)):
+        enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                    pinned=False)
+    # Assert an observable that actually DIFFERS between open and closed.
+    # `ArenaReader.close` shuts its thread pool down, and a shut-down pool
+    # refuses new work — so this is behaviour, not an internal flag.
+    #
+    # Two earlier cuts of this assertion were vacuous, both confirmed by removing
+    # `tier.close()` and watching the test still pass: a `_closed` attribute that
+    # does not exist (guarded by `hasattr`, i.e. `assert True`), then `_fds == []`
+    # — which is true of a FRESH reader too, because fds are opened lazily per
+    # worker on the first read and this tier never read anything.
+    tier = mod._e4b_cold_tier                  # stamped before the refusal
+    with pytest.raises(RuntimeError, match="shutdown"):
+        tier.reader._pool.submit(int).result()
 
 
 def test_a_bare_module_with_no_adapter_is_refused(arena):

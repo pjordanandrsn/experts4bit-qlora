@@ -114,6 +114,36 @@ class _ArenaExpertOffload(_ExpertOffload):
 
         tier = base._e4b_cold_tier
         index = tier.reader.index
+
+        # Expert COUNT, before any per-tensor check. The per-expert width below
+        # only proves each row is the right size, not that there are the right
+        # number of them, and the two failure directions are both bad:
+        #
+        #   module has MORE experts than the arena -> `row_offset` KeyErrors, but
+        #     only once a high-numbered expert is actually routed, which can be
+        #     many steps into a run.
+        #   module has FEWER -> every id resolves, so expert `e` silently reads
+        #     ANOTHER model's expert `e`. Real bytes, right shapes, wrong weights.
+        #
+        # Two variants of one architecture that differ only in expert count (a
+        # 128- and a 256-expert sibling) have identical per-expert geometry, so
+        # nothing else here would separate them.
+        n_arena = int(index["n_experts_per_layer"])
+        n_mod = int(getattr(base, "num_experts", -1))
+        if n_mod != n_arena:
+            raise ValueError(
+                f"expert count mismatch: the module has {n_mod} experts per layer "
+                f"but the arena carries {n_arena}. This arena was not baked from "
+                "this model — attaching would map each expert onto a different "
+                "model's row of the same shape.")
+        n_layers = int(index["n_layers"])
+        arena_layer = int(base._e4b_arena_layer)
+        if not 0 <= arena_layer < n_layers:
+            raise ValueError(
+                f"arena layer {arena_layer} is out of range for an arena with "
+                f"{n_layers} layers. Pass `layers=` explicitly when the model's "
+                "MoE modules are not arena layers 0..N-1.")
+
         home = {}
         for n in names:
             suffix = OFFLOAD_SEGMENTS.get(n)
@@ -373,6 +403,27 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
 
     _engine_conflicts(mods)
 
+    # Refuse a SECOND enable before opening anything. `enable_expert_offload` is
+    # idempotent and returns the handle built by the first call — whose `_tier`
+    # was captured then. So a naive re-enable would construct a fresh ColdTier
+    # (fds + pinned DRAM), stamp it on the bases, get the OLD handle back, and
+    # leave the new tier orphaned with nothing to close it, while staging kept
+    # reading the old one. The visible symptom is worse than the leak: retuning
+    # `hot_rows` or pointing at a different `arena_path` would appear to work and
+    # change nothing.
+    #
+    # Checked BEFORE the ColdTier is constructed, so the refusal path allocates
+    # nothing it would then have to clean up.
+    already = [i for i, m in enumerate(mods) if hasattr(m, "_e4b_arena_offload")]
+    if already:
+        raise RuntimeError(
+            f"{len(already)} of {len(mods)} expert modules already have arena-backed "
+            f"training residency (first at index {already[0]}). Re-enabling cannot "
+            "retune `hot_rows` or swap `arena_path`: the offload handles are "
+            "idempotent and keep the tier they were built with, so a second call "
+            "would silently change nothing and leak a second pinned tier. Build the "
+            "model fresh with the settings you want.")
+
     lay = list(layers) if layers is not None else list(range(len(mods)))
     if len(lay) < len(mods):
         raise ValueError(
@@ -386,25 +437,34 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
         f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
         f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
 
+    # Every refusal below happens INSIDE the attach loop — the geometry
+    # cross-checks run in `_ArenaExpertOffload.__init__`, which is the first
+    # place the arena and the module meet. The tier is already open by then, so
+    # a raise here would leak its fds and pinned buffer exactly like the
+    # double-enable path would have. Close it and re-raise.
     n = 0
-    for i, base in enumerate(mods):
-        # Stamp BEFORE construction: _build_homes runs inside __init__ and reads
-        # both of these off the base.
-        base._e4b_cold_tier = tier
-        base._e4b_arena_layer = lay[i]
-        wrapper = wrapper_of[id(base)]
-        handle = enable_expert_offload(wrapper, device, pin=False,
-                                       handle_cls=_ArenaExpertOffload)
-        if not isinstance(handle, _ArenaExpertOffload):
-            raise RuntimeError(
-                f"module {i} already carries a host-RAM offload handle "
-                f"({type(handle).__name__}). enable_expert_offload is idempotent "
-                "and returns the existing handle, so the arena one was never "
-                "installed — enable arena residency before offloading, not after.")
-        # fast.py's weights_fn closures call this at BACKWARD time.
-        base._e4b_stage_guard = handle.assert_rows_staged
-        base._e4b_arena_offload = handle
-        n += 1
+    try:
+        for i, base in enumerate(mods):
+            # Stamp BEFORE construction: _build_homes runs inside __init__ and
+            # reads both of these off the base.
+            base._e4b_cold_tier = tier
+            base._e4b_arena_layer = lay[i]
+            wrapper = wrapper_of[id(base)]
+            handle = enable_expert_offload(wrapper, device, pin=False,
+                                           handle_cls=_ArenaExpertOffload)
+            if not isinstance(handle, _ArenaExpertOffload):
+                raise RuntimeError(
+                    f"module {i} already carries a host-RAM offload handle "
+                    f"({type(handle).__name__}). enable_expert_offload is idempotent "
+                    "and returns the existing handle, so the arena one was never "
+                    "installed — enable arena residency before offloading, not after.")
+            # fast.py's weights_fn closures call this at BACKWARD time.
+            base._e4b_stage_guard = handle.assert_rows_staged
+            base._e4b_arena_offload = handle
+            n += 1
+    except BaseException:
+        tier.close()
+        raise
 
     log(f"  nvme TRAIN residency active on {n} module(s); "
         f"gradient checkpointing is REQUIRED (backward re-reads staged rows)")
