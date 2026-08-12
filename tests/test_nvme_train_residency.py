@@ -495,6 +495,64 @@ def test_a_partial_attach_leaves_the_tier_open_for_live_modules(tmp_path, monkey
     tier.close()
 
 
+def test_a_partial_attach_chains_the_real_cause(tmp_path, monkeypatch):
+    """The partial-attach message describes CLEANUP, not the failure. Raising it
+    `from None` would leave the caller with a note about tier lifetime and no idea
+    why the attach died — an OOM, a driver error, a bad handle class.
+
+    Found by Cursor Bugbot on #117.
+    """
+    mod_a, mod_b = _module(), _module(seed=4242)
+    path, _index = _bake(mod_a, tmp_path, name="chain.arena", n_layers=2)
+    model = _model_of(mod_a, mod_b)
+
+    import experts4bit_qlora.nvme_train as nt
+    real, calls = nt.enable_expert_offload, {"n": 0}
+
+    def _flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise MemoryError("CUDA out of memory (the real cause)")
+        return real(*a, **k)
+
+    monkeypatch.setattr(nt, "enable_expert_offload", _flaky)
+    with pytest.raises(RuntimeError, match="partially-attached") as ei:
+        enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                    pinned=False)
+    assert isinstance(ei.value.__cause__, MemoryError), \
+        "the real failure was suppressed; the caller sees only the cleanup note"
+    assert "real cause" in str(ei.value.__cause__)
+    mod_a._e4b_cold_tier.close()
+
+
+@pytest.mark.parametrize("exc", [KeyboardInterrupt, SystemExit])
+def test_a_partial_attach_does_not_swallow_control_flow(tmp_path, monkeypatch, exc):
+    """KeyboardInterrupt and SystemExit are control flow, not attach failures.
+    Wrapping them in a RuntimeError makes the interpreter refuse to exit and reads
+    as a bug in this function — so they pass through untouched, while the tier
+    still stays open for the modules already holding it."""
+    mod_a, mod_b = _module(), _module(seed=4242)
+    path, _index = _bake(mod_a, tmp_path, name=f"ctrlc-{exc.__name__}.arena",
+                         n_layers=2)
+    model = _model_of(mod_a, mod_b)
+
+    import experts4bit_qlora.nvme_train as nt
+    real, calls = nt.enable_expert_offload, {"n": 0}
+
+    def _flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise exc()
+        return real(*a, **k)
+
+    monkeypatch.setattr(nt, "enable_expert_offload", _flaky)
+    with pytest.raises(exc):
+        enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                    pinned=False)
+    assert not _pool_is_shutdown(mod_a._e4b_cold_tier)
+    mod_a._e4b_cold_tier.close()
+
+
 def test_a_bare_module_with_no_adapter_is_refused(arena):
     """Without a LoRA wrapper there is nothing to train, and the caller almost
     certainly wanted the serving path. Say which one."""

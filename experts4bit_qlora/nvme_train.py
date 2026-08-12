@@ -486,7 +486,7 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
             base._e4b_stage_guard = handle.assert_rows_staged
             base._e4b_arena_offload = handle
             n += 1
-    except BaseException:
+    except BaseException as exc:
         # Close the tier ONLY if nothing is using it. Past the first successful
         # attach, earlier modules hold this tier and closing it would hand them a
         # shut-down reader — a worse failure than leaking, and one the re-enable
@@ -495,13 +495,26 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
         if n == 0:
             tier.close()
             raise
+        # Past that point the tier stays open for BOTH exits below. What differs
+        # is how much the caller is told, and neither may cost them the cause:
+        #
+        # * KeyboardInterrupt / SystemExit are control flow, not attach failures.
+        #   Re-raised untouched — turning a Ctrl-C into a RuntimeError makes the
+        #   interpreter refuse to exit and reads as a bug in this function.
+        # * Anything else is chained with `from exc`, never `from None`. The
+        #   partial-attach state is a NOTE about cleanup, not a diagnosis; the
+        #   real failure (an OOM, a bad handle class, a driver error) is what the
+        #   caller actually needs, and suppressing it leaves them with a message
+        #   about tier lifetime and no idea what went wrong.
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
         raise RuntimeError(
             f"arena attach failed after {n} of {len(mods)} modules were already "
             f"hooked. Those modules hold this tier, so it is left OPEN rather than "
             "closed under them — the model is in a partially-attached state and "
             "must be discarded, not re-enabled. The tier is released when the "
-            "model is."
-        ) from None
+            "model is. The failure that caused this is chained below."
+        ) from exc
 
     log(f"  nvme TRAIN residency active on {n} module(s); "
         f"gradient checkpointing is REQUIRED (backward re-reads staged rows)")
