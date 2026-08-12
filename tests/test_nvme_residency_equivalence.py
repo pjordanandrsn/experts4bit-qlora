@@ -434,6 +434,95 @@ def test_the_partial_stamp_refusal_allocates_no_tier(arena, monkeypatch):
                               hot_rows=4, device="cpu")
 
 
+def _pool_is_shutdown(tier) -> bool:
+    """Whether the tier's reader was closed, by behaviour: a shut-down pool
+    refuses new work. Asserted this way rather than via a flag because the
+    obvious `_fds == []` is equally true of a fresh reader — fds open lazily on
+    the first read."""
+    try:
+        tier.reader._pool.submit(int).result()
+        return False
+    except RuntimeError:
+        return True
+
+
+def _capture_tier(monkeypatch, seen):
+    """Record the ColdTier `enable_nvme_residency` builds.
+
+    Patched on `nvme_residency`, NOT on the engine module: the engine imports
+    ColdTier INSIDE the function, so a name bound on the engine is never read.
+    (An earlier cut patched the engine and the capture simply never ran — the
+    test failed with KeyError rather than passing vacuously, which is the good
+    outcome, but the seam still has to be the one the code uses.) The real class
+    is captured before patching so the wrapper does not recurse into itself.
+    """
+    import nvme_residency
+    real = nvme_residency.ColdTier
+
+    def _capture(*a, **k):
+        seen["tier"] = real(*a, **k)
+        return seen["tier"]
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", _capture)
+
+
+def test_a_failure_before_anything_is_patched_closes_the_tier(arena, monkeypatch):
+    """Nobody holds the tier, so it must not be leaked."""
+    import experts4bit_qlora.engines.nvme_experts as ne
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+    seen = {}
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    _capture_tier(monkeypatch, seen)
+    monkeypatch.setattr(ne, "enable_hot_residency",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError, match="boom"):
+        enable_nvme_residency(One(), path, [torch.tensor([0])], hot_rows=4,
+                              device="cpu", pinned=False)
+    assert _pool_is_shutdown(seen["tier"]), "tier leaked with nobody holding it"
+
+
+def test_a_partial_patch_leaves_the_tier_open_for_live_modules(arena, monkeypatch):
+    """The regression Bugbot caught: `enable_hot_residency` patches one module at
+    a time, so a later failure leaves earlier modules serving from this shared
+    tier. Closing it under them is worse than leaking it.
+
+    Identical policy to `nvme_train`'s attach loop, where Bugbot made the same
+    finding first.
+    """
+    import experts4bit_qlora.engines.nvme_experts as ne
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+    seen = {}
+
+    class Two(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a, self.b = _meta_module(), _meta_module()
+
+    def _patch_one_then_fail(model, hot_sets, **k):
+        # Mimic the real thing: mark the first module live, then die.
+        mods = [m for m in model.modules() if hasattr(m, "_e4b_cold_tier")]
+        mods[0]._e4b_hot_ref = mods[0].forward
+        raise MemoryError("CUDA out of memory (the real cause)")
+
+    _capture_tier(monkeypatch, seen)
+    monkeypatch.setattr(ne, "enable_hot_residency", _patch_one_then_fail)
+    with pytest.raises(RuntimeError, match="partially attached") as ei:
+        enable_nvme_residency(Two(), path, [torch.tensor([0]), torch.tensor([1])],
+                              hot_rows=4, device="cpu", pinned=False)
+    assert not _pool_is_shutdown(seen["tier"]), \
+        "the tier was closed under a module already serving from it"
+    assert isinstance(ei.value.__cause__, MemoryError), \
+        "the real failure was suppressed behind the cleanup note"
+    seen["tier"].close()
+
+
 def test_a_short_layers_list_is_refused_before_any_tier(arena, monkeypatch):
     """The sibling refusal on the same path, held to the same rule."""
     import nvme_residency

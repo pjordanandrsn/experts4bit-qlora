@@ -323,12 +323,34 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
 
         n = enable_hot_residency(model, hot_sets, device=device, verbose=verbose,
                                  state_cls=_NvmeResidency)
-    except BaseException:
-        # `enable_hot_residency` has refusals of its own (every module wrapped,
-        # for one). Nothing is serving yet at this point, so the tier is ours to
-        # close rather than leak.
-        tier.close()
-        raise
+    except BaseException as exc:
+        # `enable_hot_residency` patches modules ONE AT A TIME, so "we failed" and
+        # "nothing is live" are different claims. A later-layer failure — OOM, a
+        # bad layers index, an interrupt — leaves earlier modules already patched
+        # and serving from this shared tier, and closing it under them hands them
+        # a shut-down reader. Closing a live tier is strictly worse than leaking
+        # one.
+        #
+        # `_e4b_hot_ref` is set per module as it is patched, so it is an exact
+        # record of what is already live rather than a guess.
+        #
+        # (Cursor Bugbot, #120 — the SAME finding it made on `nvme_train`'s attach
+        # loop earlier, which is why the policy below is identical: close only
+        # when nothing is holding the tier, never convert control flow into an
+        # error, and chain the real cause rather than replacing it.)
+        live = [m for m in mods[:len(hot_sets)] if hasattr(m, "_e4b_hot_ref")]
+        if not live:
+            tier.close()
+            raise
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        raise RuntimeError(
+            f"NVMe residency failed after {len(live)} of {len(hot_sets)} module(s) "
+            "were already patched and are serving from this tier, so it is left "
+            "OPEN rather than closed under them. The model is partially attached "
+            "and must be discarded, not re-enabled; the tier is released with it. "
+            "The failure that caused this is chained below."
+        ) from exc
     log(f"  nvme residency active on {n} module(s)")
     return n
 
