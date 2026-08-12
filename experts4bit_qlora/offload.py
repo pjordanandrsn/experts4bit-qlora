@@ -256,12 +256,23 @@ class _ExpertOffload:
     # whole backward — accumulating to the full footprint offload exists to avoid. So staging a new
     # layer first evicts this previously-staged one: at most one layer is GPU-resident at any instant,
     # in forward AND backward, regardless of whether the post-hook fired.
+    # Always read and written as ``_ExpertOffload._resident``, never ``type(self)._resident``:
+    # assigning through a SUBCLASS would bind a second slot on that subclass, leaving the base
+    # class still pointing at a handle nothing will ever evict. Two layers would then be resident
+    # at once — the exact bound this single-slot policy exists to hold — and only for a model
+    # mixing handle classes (host-RAM + arena-backed), which is the hardest case to notice.
     _resident = None
 
     # Handles staged by the *inference prefetch* policy (class-level, like _resident): at most the
     # computing layer + the prefetched next layer. A training stage() sweeps this set so leftovers
     # from a generate() (the circularly-prefetched first layer) never linger into a train step.
     _staged_now: set = set()
+
+    # Whether routed-only staging may run on a GRAD-ENABLED forward. False here and for every
+    # host-RAM home: their bulk path is a cheap whole-layer copy from pinned DRAM, so the
+    # conservative choice costs little and needs no guard. Overridden by the NVMe-backed handle,
+    # whose bulk path would read the entire layer off the device. See _stage_pre_hook.
+    _routed_in_train = False
 
     def __init__(self, base, device, pin: bool = True):
         self.base = base
@@ -453,11 +464,11 @@ class _ExpertOffload:
         for h in list(cls._staged_now):  # sweep prefetch leftovers (e.g. a train step right after generate)
             if h is not self:
                 h.evict()
-        if cls._resident is not None and cls._resident is not self:
-            cls._resident.evict()  # single-slot: free the prior layer before staging this one
+        if _ExpertOffload._resident is not None and _ExpertOffload._resident is not self:
+            _ExpertOffload._resident.evict()  # single-slot: free the prior layer before staging this one
         self._release_speculation()
         self._copy_home_to_device("sync")
-        cls._resident = self
+        _ExpertOffload._resident = self
 
     def _alloc_dest(self):
         """Full-shaped device tensors, only some rows of which will be written."""
@@ -579,8 +590,8 @@ class _ExpertOffload:
         for h in list(cls._staged_now):
             if h is not self:
                 h.evict()
-        if cls._resident is not None and cls._resident is not self:
-            cls._resident.evict()
+        if _ExpertOffload._resident is not None and _ExpertOffload._resident is not self:
+            _ExpertOffload._resident.evict()
         if self._spec_dev is not None:
             # A speculative prefetch is in flight or complete. Order the compute
             # stream after it, then fill only what the router asked for and the
@@ -599,7 +610,7 @@ class _ExpertOffload:
         else:
             self._release_speculation()
             self._copy_routed_to_device(ids)
-        cls._resident = self
+        _ExpertOffload._resident = self
 
     def stage_for_inference(self) -> None:
         """Two-resident staging for ``no_grad`` forwards with prefetch links installed: make this
@@ -615,8 +626,8 @@ class _ExpertOffload:
             for h in list(cls._staged_now):
                 if h is not self:
                     h.evict()
-            if cls._resident is not None and cls._resident is not self:
-                cls._resident.evict()
+            if _ExpertOffload._resident is not None and _ExpertOffload._resident is not self:
+                _ExpertOffload._resident.evict()
             self._copy_home_to_device("cold_miss")
         else:
             self._consume_ready_event()
@@ -660,13 +671,22 @@ class _ExpertOffload:
         self.ready_event = None
         cls = type(self)
         cls._staged_now.discard(self)
-        if cls._resident is self:
-            cls._resident = None
+        if _ExpertOffload._resident is self:
+            _ExpertOffload._resident = None
 
 
-def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffload:
+def enable_expert_offload(experts_lora, device, pin: bool = True,
+                          handle_cls=None) -> _ExpertOffload:
     """Offload one :class:`ExpertsLoRA`'s frozen 4-bit base to (pinned) CPU RAM and install the
     stream-in/evict hooks.
+
+    ``handle_cls`` selects the residency implementation, defaulting to
+    :class:`_ExpertOffload` (pinned host homes). ``nvme_train`` passes
+    ``_ArenaExpertOffload`` to source the same rows from a baked NVMe arena
+    instead — same hooks, same single-resident-layer discipline, different
+    storage underneath. Parameterised rather than duplicated because the hooks
+    are where the subtle cases live (the backward-recompute eviction rule, the
+    pipelined-engine takeover); a second copy of them would drift.
 
     Registers a forward pre-hook (stage the base onto ``device``) and a forward post-hook (evict it)
     on ``experts_lora`` — the module whose ``__call__`` runs on every forward *and* on the
@@ -693,7 +713,7 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
             "experts module holding the packed tensors "
             f"(gate_up_proj/down_proj/gate_up_absmax/down_absmax); got {type(experts_lora).__name__}"
         )
-    handle = _ExpertOffload(base, device, pin=pin)
+    handle = (handle_cls or _ExpertOffload)(base, device, pin=pin)
     experts_lora._offload = handle
 
     def _stage_pre_hook(module, args):
@@ -728,7 +748,20 @@ def enable_expert_offload(experts_lora, device, pin: bool = True) -> _ExpertOffl
         # already ran in the parent block, so the routing IS known here. Gated to
         # inference for the same reason prefetch is: a checkpoint recompute must
         # re-stage identically, and the conservative bulk path always does.
-        if handle._routed_only and inference and len(args) > 1 and torch.is_tensor(args[1]):
+        #
+        # `_routed_in_train` lifts that gate for a handle whose bulk path is not
+        # actually conservative. An NVMe-backed home has no whole-layer copy worth
+        # making: bulk means reading every expert row off the device, which is the
+        # traffic the tier exists to avoid, and at 896-expert width it is not a
+        # slower correct answer but an unrunnable one. Such a handle takes the
+        # routed path in training too and pays for it with an explicit guard —
+        # `_ArenaExpertOffload` records the ids it staged and
+        # `nvme_train.assert_rows_staged` (called from fast.py's weights_fn, i.e.
+        # AT BACKWARD) refuses to read a row the recompute did not re-stage.
+        # Without that guard a recompute that routed differently — jitter noise,
+        # or preserve_rng_state=False — would read uninitialized rows silently.
+        routed_ok = inference or getattr(handle, "_routed_in_train", False)
+        if handle._routed_only and routed_ok and len(args) > 1 and torch.is_tensor(args[1]):
             ids = torch.unique(args[1]).tolist()
             # Above the crossover essentially every expert routes (prefill), where
             # one bulk copy beats E strided ones. Fall through to the normal path.

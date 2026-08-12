@@ -88,8 +88,9 @@ not your model. Reasoning, caveats and requirements for each: **[docs/CHOOSING.m
 | each step is slow | `enable_fast_train(model, dgrad=True)` | `[fast]` ≥ 0.7.0 |
 | …and `[fast]` will not build | `enable_batched_train(model)` | — |
 | the experts do not fit VRAM | `load_moe_4bit_streaming(..., offload=True)` | — |
-| the experts do not fit host RAM | `enable_nvme_residency(...)` | `[fast]` + arena |
+| the experts do not fit host RAM, **serving** | `enable_nvme_residency(...)` | `[fast]` + arena |
 | ...and they are native MXFP4 | `enable_mxfp4_nvme_residency(...)` | `[fast]` + arena |
+| the experts do not fit host RAM, **training** | `enable_nvme_train_residency(...)` | `[fast]` + arena + grad ckpt |
 | the **dense** side does not fit | `enable_dense_offload(model, "cuda")` | — |
 | ...nor does it fit host RAM | `DenseDiskSource(path)` | — |
 | serving, want it faster | `enable_fast(model)` | `[fast]` |

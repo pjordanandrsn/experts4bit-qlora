@@ -106,6 +106,14 @@ from .nvme_experts import (  # noqa: E402
     enable_nvme_residency,
     expert_geometry_from_arena,
 )
+# The training counterpart of the above: `enable_nvme_residency` serves frozen
+# experts off an arena, this one TRAINS an adapter over them. Kept in its own
+# module because they are opposites at the seam -- one replaces the module's
+# forward, the other exists to leave it alone.
+from .nvme_train import (  # noqa: E402
+    arena_train_stats,
+    enable_nvme_train_residency,
+)
 # 0.8.0: the hot-set dial. The README tells you to rank a routing histogram rather than
 # take experts by index (+37.1% at identical VRAM on V4-Flash), so the two functions that
 # do it have to be importable from the top level -- 0.7.1 shipped precisely to fix the
@@ -165,6 +173,8 @@ __all__ = [
     "enable_nvme_residency",
     "enable_mxfp4_nvme_residency",
     "disable_mxfp4_nvme_residency",
+    "enable_nvme_train_residency",
+    "arena_train_stats",
     "build_meta_experts",
     "expert_geometry_from_arena",
     "dispatched_modules",
