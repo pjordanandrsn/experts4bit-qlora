@@ -41,7 +41,17 @@ serve = [
     "safetensors>=0.4",
     "huggingface_hub>=0.23",
 ]
-test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27"]
+# `grouped-nf4-gemm` is here and NOT only in [fast] because the suite cannot check
+# the arena paths without it. `tests/test_nvme_train_residency.py` and
+# `tests/test_nvme_residency_equivalence.py` both `importorskip("nvme_arena")`, so
+# on a runner that installed only `.[test]` they SKIPPED — 29 + 13 tests reported
+# as coverage that never executed. The arena-backed training path merged with its
+# entire gate having run on one laptop.
+#
+# Pinned >= 0.9.0, not [fast]'s >= 0.2.4: that is the release carrying
+# `nvme_residency.segment_into`, which the training path stages every layer
+# through. An older gnf4 satisfies [fast] and still skips these tests.
+test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.9.0"]
 
 [project.urls]
 Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"

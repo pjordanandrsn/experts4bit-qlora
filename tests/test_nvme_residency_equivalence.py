@@ -400,6 +400,185 @@ def test_enable_nvme_residency_refuses_a_partial_stamp(arena):
                               hot_rows=4, device="cpu")
 
 
+def test_the_partial_stamp_refusal_allocates_no_tier(arena, monkeypatch):
+    """The refusal must fire before a ColdTier exists, asserted the only way that
+    cannot be faked: make constructing one an error.
+
+    Two things went wrong while it did not. On a host with no accelerator
+    `ColdTier` pins its landing buffer and raised "Cannot access accelerator
+    device" FIRST, so a caller who passed too many hot_sets got an allocator
+    error instead of the message naming their mistake — and the test above failed
+    for a reason unrelated to what it checks. On a host that does pin, the
+    refusal leaked the tier: constructed, never closed.
+
+    It went unnoticed because this whole module was `importorskip`ped on CI until
+    `grouped-nf4-gemm` was added to `[test]`. It had only ever run on a laptop,
+    where the failure was misread as a macOS quirk rather than the ordering bug
+    it is.
+    """
+    import nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    def _boom(*_a, **_k):
+        raise AssertionError("a ColdTier was allocated before the refusal fired")
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", _boom)
+    with pytest.raises(ValueError, match="targetable MoE module"):
+        enable_nvme_residency(One(), path, [torch.tensor([0]), torch.tensor([1])],
+                              hot_rows=4, device="cpu")
+
+
+def _pool_is_shutdown(tier) -> bool:
+    """Whether the tier's reader was closed, by behaviour: a shut-down pool
+    refuses new work. Asserted this way rather than via a flag because the
+    obvious `_fds == []` is equally true of a fresh reader — fds open lazily on
+    the first read."""
+    try:
+        tier.reader._pool.submit(int).result()
+        return False
+    except RuntimeError:
+        return True
+
+
+def _capture_tier(monkeypatch, seen):
+    """Record the ColdTier `enable_nvme_residency` builds.
+
+    Patched on `nvme_residency`, NOT on the engine module: the engine imports
+    ColdTier INSIDE the function, so a name bound on the engine is never read.
+    (An earlier cut patched the engine and the capture simply never ran — the
+    test failed with KeyError rather than passing vacuously, which is the good
+    outcome, but the seam still has to be the one the code uses.) The real class
+    is captured before patching so the wrapper does not recurse into itself.
+    """
+    import nvme_residency
+    real = nvme_residency.ColdTier
+
+    def _capture(*a, **k):
+        seen["tier"] = real(*a, **k)
+        return seen["tier"]
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", _capture)
+
+
+def test_a_failure_before_anything_is_patched_closes_the_tier(arena, monkeypatch):
+    """Nobody holds the tier, so it must not be leaked."""
+    import experts4bit_qlora.engines.nvme_experts as ne
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+    seen = {}
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    _capture_tier(monkeypatch, seen)
+    monkeypatch.setattr(ne, "enable_hot_residency",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    with pytest.raises(RuntimeError, match="boom"):
+        enable_nvme_residency(One(), path, [torch.tensor([0])], hot_rows=4,
+                              device="cpu", pinned=False)
+    assert _pool_is_shutdown(seen["tier"]), "tier leaked with nobody holding it"
+
+
+def test_a_partial_patch_leaves_the_tier_open_for_live_modules(arena, monkeypatch):
+    """The regression Bugbot caught: `enable_hot_residency` patches one module at
+    a time, so a later failure leaves earlier modules serving from this shared
+    tier. Closing it under them is worse than leaking it.
+
+    Identical policy to `nvme_train`'s attach loop, where Bugbot made the same
+    finding first.
+    """
+    import experts4bit_qlora.engines.nvme_experts as ne
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+    seen = {}
+
+    class Two(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a, self.b = _meta_module(), _meta_module()
+
+    def _patch_one_then_fail(model, hot_sets, **k):
+        # Mimic the real thing: mark the first module live, then die.
+        mods = [m for m in model.modules() if hasattr(m, "_e4b_cold_tier")]
+        mods[0]._e4b_hot_ref = mods[0].forward
+        raise MemoryError("CUDA out of memory (the real cause)")
+
+    _capture_tier(monkeypatch, seen)
+    monkeypatch.setattr(ne, "enable_hot_residency", _patch_one_then_fail)
+    with pytest.raises(RuntimeError, match="partially attached") as ei:
+        enable_nvme_residency(Two(), path, [torch.tensor([0]), torch.tensor([1])],
+                              hot_rows=4, device="cpu", pinned=False)
+    assert not _pool_is_shutdown(seen["tier"]), \
+        "the tier was closed under a module already serving from it"
+    assert isinstance(ei.value.__cause__, MemoryError), \
+        "the real failure was suppressed behind the cleanup note"
+    seen["tier"].close()
+
+
+def test_a_stale_hot_ref_does_not_pass_for_a_live_holder(arena, monkeypatch):
+    """`_e4b_hot_ref` is STICKY — it survives an earlier enable. Reading it bare
+    answers "has this module ever been patched", not "does it hold the tier this
+    call just built", and that difference is a leak: a stale marker reads as a
+    live holder, the close is skipped, and the new pinned arena is left with
+    nothing serving from it.
+
+    Found by Cursor Bugbot on #120, which also named the fix — `nvme_train` counts
+    what it attached rather than trusting a persistent attribute.
+    """
+    import experts4bit_qlora.engines.nvme_experts as ne
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+    seen = {}
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    model = One()
+    # A marker left over from some EARLIER enable, before this tier existed.
+    model.a._e4b_hot_ref = model.a.forward
+
+    _capture_tier(monkeypatch, seen)
+    monkeypatch.setattr(ne, "enable_hot_residency",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    # The real cause must survive: nothing of THIS call is live, so this is the
+    # plain re-raise path, not the partial-attach wrap.
+    with pytest.raises(RuntimeError, match="boom"):
+        enable_nvme_residency(model, path, [torch.tensor([0])], hot_rows=4,
+                              device="cpu", pinned=False)
+    assert _pool_is_shutdown(seen["tier"]), \
+        "a stale hot-ref was mistaken for a live holder and the new tier leaked"
+
+
+def test_a_short_layers_list_is_refused_before_any_tier(arena, monkeypatch):
+    """The sibling refusal on the same path, held to the same rule."""
+    import nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    def _boom(*_a, **_k):
+        raise AssertionError("a ColdTier was allocated before the refusal fired")
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", _boom)
+    with pytest.raises(ValueError, match="layers has"):
+        enable_nvme_residency(One(), path, [torch.tensor([0])],
+                              hot_rows=4, device="cpu", layers=[])
+
+
 # ---- Bugbot: enable_mxfp4_nvme_residency guards (the MXFP4 lane had NO coverage) ----
 # The NF4 lane above is guarded and tested; its MXFP4 counterpart shipped with neither,
 # which is how both bugs below got in. These need no arena reads and no CUDA — every guard

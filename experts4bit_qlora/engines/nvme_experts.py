@@ -277,14 +277,18 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
             "(nvme_residency/nvme_reader/nvme_arena) on the import path"
         ) from exc
 
-    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=pinned, qd=qd)
-    idx = tier.reader.index
-    log(f"  nvme residency: arena {arena_path} rows={idx['n_layers']}x"
-        f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
-        f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
-
-    # Stamp each module with its arena layer BEFORE construction: _build_cold and
-    # _build_hot both run inside _HotResidency.__init__ and need it.
+    # VALIDATE BEFORE ALLOCATING. Everything below needs only `model` and the
+    # caller's lists, so none of it has any business running after a ColdTier
+    # exists — and running it after had two costs, one of them invisible until
+    # this test finally executed on a runner:
+    #
+    #   * The refusals were UNREACHABLE without an accelerator. `ColdTier`
+    #     pins its landing buffer, so on a CPU-only host it raised "Cannot
+    #     access accelerator device when none is available" first, and a caller
+    #     who passed too many hot_sets got an allocator error instead of the
+    #     message naming their mistake.
+    #   * On a host that DOES pin, a refusal leaked the tier: constructed, never
+    #     closed. Same bug Bugbot caught in `nvme_train`'s attach loop.
     #
     # Use the SHARED selection, not an independent walk: a plain `isinstance` sweep
     # yields a different list AND a different order whenever wrapped and bare modules
@@ -303,12 +307,60 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
             f"hot_sets has {len(hot_sets)} entries but the model exposes "
             f"{len(mods)} targetable MoE module(s) — refusing to stamp a partial "
             f"set, which would serve some layers from the wrong arena rows")
-    for i, m in enumerate(mods[:len(hot_sets)]):
-        m._e4b_cold_tier = tier
-        m._e4b_arena_layer = lay[i]
 
-    n = enable_hot_residency(model, hot_sets, device=device, verbose=verbose,
-                             state_cls=_NvmeResidency)
+    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=pinned, qd=qd)
+    idx = tier.reader.index
+    log(f"  nvme residency: arena {arena_path} rows={idx['n_layers']}x"
+        f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
+        f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
+
+    # Which modules were ALREADY patched before this call. `_e4b_hot_ref` is
+    # sticky — it survives an earlier `enable_hot_residency` or NVMe enable — so
+    # reading it bare answers "has this module ever been patched", not "does this
+    # module hold the tier THIS call just built". Getting that wrong leaks the new
+    # pinned arena: a stale marker reads as a live holder, the close is skipped,
+    # and nothing is actually serving from it. Snapshot first, and count only what
+    # this call added. (Cursor Bugbot, #120: "Sticky hot-ref leaks new ColdTier" —
+    # `nvme_train` avoids it with a call-local attach count, and this is the same
+    # idea where the patching happens inside a callee.)
+    targets = mods[:len(hot_sets)]
+    already = {id(m) for m in targets if hasattr(m, "_e4b_hot_ref")}
+
+    # Stamp each module with its arena layer BEFORE construction: _build_cold and
+    # _build_hot both run inside _HotResidency.__init__ and need it.
+    try:
+        for i, m in enumerate(targets):
+            m._e4b_cold_tier = tier
+            m._e4b_arena_layer = lay[i]
+
+        n = enable_hot_residency(model, hot_sets, device=device, verbose=verbose,
+                                 state_cls=_NvmeResidency)
+    except BaseException as exc:
+        # `enable_hot_residency` patches modules ONE AT A TIME, so "we failed" and
+        # "nothing is live" are different claims. A later-layer failure — OOM, a
+        # bad layers index, an interrupt — leaves earlier modules already patched
+        # and serving from this shared tier, and closing it under them hands them
+        # a shut-down reader. Closing a live tier is strictly worse than leaking
+        # one.
+        #
+        # (Cursor Bugbot, #120 — the SAME finding it made on `nvme_train`'s attach
+        # loop earlier, which is why the policy below is identical: close only
+        # when nothing is holding the tier, never convert control flow into an
+        # error, and chain the real cause rather than replacing it.)
+        live = [m for m in targets
+                if hasattr(m, "_e4b_hot_ref") and id(m) not in already]
+        if not live:
+            tier.close()
+            raise
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        raise RuntimeError(
+            f"NVMe residency failed after {len(live)} of {len(hot_sets)} module(s) "
+            "were already patched and are serving from this tier, so it is left "
+            "OPEN rather than closed under them. The model is partially attached "
+            "and must be discarded, not re-enabled; the tier is released with it. "
+            "The failure that caused this is chained below."
+        ) from exc
     log(f"  nvme residency active on {n} module(s)")
     return n
 
