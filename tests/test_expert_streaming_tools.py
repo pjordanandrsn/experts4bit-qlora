@@ -1,6 +1,6 @@
 """CPU-safe tests for the expert-streaming profile summarizer + manifest (no torch, no GPU).
 
-The profiler module itself (experts4bit_qlora.expert_profile) needs a live offloaded model, so it
+The profiler module itself (experts4bit_qlora.engines.expert_profile) needs a live offloaded model, so it
 is exercised on the pod; here we pin the summarizer's concentration/decision math and the
 profile-job manifest, which are the parts that decide whether hot-static gets built.
 """

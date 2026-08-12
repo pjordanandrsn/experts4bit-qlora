@@ -355,7 +355,7 @@ def target_modules(model) -> list:
     instead: a wrapped base here is not called until an engine is attached, so
     hooks on it silently never fire.
     """
-    from . import ExpertsNbit
+    from .. import ExpertsNbit
     return [m for m in model.modules() if isinstance(m, ExpertsNbit)]
 
 
@@ -445,12 +445,12 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     # reproduces that epilogue (_fused_over_stack gptoss branch), so treat their
     # forwards as supported rather than skipping them as "custom".
     try:
-        from experts4bit_qlora.gptoss import GptOssExperts4bit, GptOssExpertsNbit
+        from experts4bit_qlora.arch.gptoss import GptOssExperts4bit, GptOssExpertsNbit
         stock_forwards |= {GptOssExperts4bit.forward, GptOssExpertsNbit.forward}
         # Same bargain for DeepSeek-V4: allowlisted ONLY because _fused_over_stack
         # reproduces its clamped epilogue via `clamp_limit`. Allowlisting a forward
         # the fused path does not reproduce is worse than skipping it.
-        from experts4bit_qlora.deepseek_v4 import (
+        from experts4bit_qlora.arch.deepseek_v4 import (
             DeepseekV4Experts4bit, DeepseekV4ExpertsNbit)
         stock_forwards |= {DeepseekV4Experts4bit.forward, DeepseekV4ExpertsNbit.forward}
     except ImportError:

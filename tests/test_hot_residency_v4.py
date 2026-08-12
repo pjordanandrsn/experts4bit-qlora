@@ -31,7 +31,7 @@ LIMIT = 2.0
 
 def _make_v4(limit=LIMIT, seed=0, w_scale=0.35, x_scale=1.5):
     """Synthetic V4 expert stack (clean-concat [gate; up], no biases), NF4-quantized."""
-    from experts4bit_qlora.deepseek_v4 import _DeepseekV4ForwardMixin
+    from experts4bit_qlora.arch.deepseek_v4 import _DeepseekV4ForwardMixin
     g = torch.Generator().manual_seed(seed)
     gate_up = torch.randn(E, 2 * INTER, H, generator=g) * w_scale   # [E, 2I, hidden]
     down = torch.randn(E, H, INTER, generator=g) * w_scale          # [E, hidden, I]

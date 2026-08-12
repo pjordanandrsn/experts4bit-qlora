@@ -18,7 +18,7 @@ by tests/test_pipelined.py.
 import pytest
 import torch
 
-from experts4bit_qlora.pipelined import _align8
+from experts4bit_qlora.engines.pipelined import _align8
 
 
 def _layout(E, n1, k1, n2, k2):
@@ -96,8 +96,8 @@ def test_offloaded_module_reads_homes_and_matches_the_arena_bit_for_bit():
         pytest.skip("raw-pointer gather is compiled-only")
 
     from experts4bit_qlora import Experts4bit
-    from experts4bit_qlora.offload import enable_expert_offload
-    from experts4bit_qlora.pipelined import (
+    from experts4bit_qlora.engines.offload import enable_expert_offload
+    from experts4bit_qlora.engines.pipelined import (
         disable_pipelined_residency, enable_pipelined_residency)
 
     E_, H_, INTER_, K_ = 8, 128, 64, 3
@@ -156,8 +156,8 @@ def test_hot_expert_primes_each_segment_from_its_own_offset():
         pytest.skip("raw-pointer gather is compiled-only")
 
     from experts4bit_qlora import Experts4bit
-    from experts4bit_qlora.offload import enable_expert_offload
-    from experts4bit_qlora.pipelined import enable_pipelined_residency
+    from experts4bit_qlora.engines.offload import enable_expert_offload
+    from experts4bit_qlora.engines.pipelined import enable_pipelined_residency
 
     E_, H_, INTER_, K_ = 8, 128, 64, 3
     torch.manual_seed(0)

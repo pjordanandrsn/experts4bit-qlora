@@ -20,7 +20,7 @@ pytest.importorskip("bitsandbytes")
 from experts4bit_qlora.loader import (
     K3_PER_EXPERT_MXFP4, MULTIMODAL_CKPT_PREFIX, SUPPORTED_ARCHITECTURES,
 )
-from experts4bit_qlora.mxfp4 import FP4_VALUES, dequantize_mxfp4
+from experts4bit_qlora.formats.mxfp4 import FP4_VALUES, dequantize_mxfp4
 
 
 def test_kimi_k3_is_registered_under_block_sparse_moe():

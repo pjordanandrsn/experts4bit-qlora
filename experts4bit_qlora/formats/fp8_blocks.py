@@ -1,7 +1,7 @@
 """Block-scaled FP8 (e4m3) dequantization — the DENSE half of a DeepSeek-V4 checkpoint.
 
 MoE checkpoints in this family split their storage two ways. The routed experts are
-4-bit (:mod:`experts4bit_qlora.mxfp4`); *everything else* — attention projections, the
+4-bit (:mod:`experts4bit_qlora.formats.mxfp4`); *everything else* — attention projections, the
 shared expert, the MTP block — ships as ``float8_e4m3fn`` weights carrying one scale per
 ``[128, 128]`` tile of the matrix. DeepSeek-V4-Flash is 140.25 GiB of routed experts and
 8.40 GiB of this, so the dense side is what has to stay resident while the experts stream.

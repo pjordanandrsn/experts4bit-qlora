@@ -29,7 +29,7 @@ def _tiny():
 
 @requires_cuda
 def test_replay_matches_eager_token_for_token():
-    from experts4bit_qlora.capture import probe_capture
+    from experts4bit_qlora.engines.capture import probe_capture
     model = _tiny()
     ids = torch.tensor([[1, 450, 7483, 310, 3444, 338]], device="cuda")
     rep = probe_capture(model, ids, max_new_tokens=12)
@@ -43,7 +43,7 @@ def test_replay_matches_eager_token_for_token():
 def test_probe_reports_capture_failure_instead_of_raising():
     """A model that cannot be captured must come back as a report, not an exception —
     the probe exists to build a support matrix, so an unsupported model is data."""
-    from experts4bit_qlora.capture import probe_capture
+    from experts4bit_qlora.engines.capture import probe_capture
     model = _tiny()
     ids = torch.tensor([[1, 450, 7483]], device="cuda")
     rep = probe_capture(model, ids, max_new_tokens=4)
@@ -56,7 +56,7 @@ def test_cache_is_reset_after_capture():
     """Warmup and capture each write into the cache. If those writes survive, the
     first generated token reads polluted slots — which is precisely the bug this
     guards. Two decoders built from the same prompt must agree."""
-    from experts4bit_qlora.capture import capture_decode
+    from experts4bit_qlora.engines.capture import capture_decode
     model = _tiny()
     ids = torch.tensor([[1, 450, 7483, 310, 3444, 338]], device="cuda")
     try:
@@ -80,7 +80,7 @@ def test_free_running_tie_is_not_reported_as_a_capture_defect():
     pins the classification, because an earlier version of the probe called such a
     tie `verdict="real"` off a 1.7-ulp gap while replay was bit-identical.
     """
-    from experts4bit_qlora.capture import probe_capture
+    from experts4bit_qlora.engines.capture import probe_capture
     model = _tiny()
     ids = torch.tensor([[1, 450, 7483, 310, 3444, 338]], device="cuda")
     rep = probe_capture(model, ids, max_new_tokens=8)
@@ -104,7 +104,7 @@ def test_reset_allows_a_second_generation():
     how the first benchmark of this harness died, after the probe had already
     passed.
     """
-    from experts4bit_qlora.capture import capture_decode
+    from experts4bit_qlora.engines.capture import capture_decode
     model = _tiny()
     ids = torch.tensor([[1, 450, 7483, 310, 3444, 338]], device="cuda")
     dec, _ = capture_decode(model, ids, max_length=ids.shape[-1] + 6)

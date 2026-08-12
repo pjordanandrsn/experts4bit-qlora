@@ -15,7 +15,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.moe_conventions import (  # noqa: E402
+from experts4bit_qlora.arch.moe_conventions import (  # noqa: E402
     CONVENTIONS,
     JAMBA,
     LFM2_MOE,
@@ -131,7 +131,7 @@ def test_fuse_puts_gate_first_and_refuses_partial():
 def test_matches_the_hand_written_glm5_fusion():
     """glm5.py was hand-adjudicated before this module existed; glm_moe_dsa
     aliases to qwen2_moe, so the two must agree bit-for-bit."""
-    from experts4bit_qlora.glm5 import fuse_experts as glm5_fuse
+    from experts4bit_qlora.arch.glm5 import fuse_experts as glm5_fuse
     E, inter, hidden = 4, 3, 6
     g = [torch.randn(inter, hidden) for _ in range(E)]
     u = [torch.randn(inter, hidden) for _ in range(E)]
@@ -187,7 +187,7 @@ def test_new_conventions_containers_and_roles():
 def test_granitemoe_is_rename_only_never_fused():
     """granitemoe ships ALREADY FUSED: renames only, and its expert pattern must
     never match — applying an expert fusion to it would be wrong."""
-    from experts4bit_qlora.moe_conventions import GRANITEMOE
+    from experts4bit_qlora.arch.moe_conventions import GRANITEMOE
     assert convention_for("granitemoe") is GRANITEMOE
     assert convention_for("granitemoeshared") is GRANITEMOE
     # No key can ever be classified per-expert under this convention.
@@ -328,7 +328,7 @@ def test_alias_set_matches_transformers_converter_table(conv_name, root):
     either covered by SOME e4b convention or listed in _KNOWN_UNCLAIMED with a
     reason. A new name here means transformers shipped a MoE family to look at —
     the test names it rather than letting it fail silently at load time."""
-    from experts4bit_qlora.moe_conventions import MoEConventionError  # noqa: F401
+    from experts4bit_qlora.arch.moe_conventions import MoEConventionError  # noqa: F401
     conv = next(c for c in CONVENTIONS if c.name == conv_name)
     ours = set(conv.model_types)
     theirs = _types_sharing_converter(root)
@@ -351,7 +351,7 @@ def test_prefused_transpose_family_has_its_own_convention_not_qwen2_moe():
     checkpoint layout from qwen2_moe's per-expert MergeModulelist. It gets its
     OWN convention (QWEN3_VL_MOE, transpose-only) — it must never resolve to
     qwen2_moe, which would gather keys that are already stacked."""
-    from experts4bit_qlora.moe_conventions import QWEN2_MOE, QWEN3_VL_MOE
+    from experts4bit_qlora.arch.moe_conventions import QWEN2_MOE, QWEN3_VL_MOE
     assert _converter_signature("qwen3_vl_moe") != _converter_signature("qwen2_moe")
     assert convention_for("qwen3_vl_moe") is QWEN3_VL_MOE
     assert convention_for("qwen3_vl_moe") is not QWEN2_MOE
@@ -366,7 +366,7 @@ def test_gptoss_is_prefused_mxfp4_passthrough_never_per_expert():
     """gpt-oss ships experts PRE-FUSED and MXFP4-quantized. The convention must
     never treat a key as per-expert (the planner pairs blocks+scales and
     dequantizes upstream of it); everything reaches it as a passthrough."""
-    from experts4bit_qlora.moe_conventions import GPTOSS
+    from experts4bit_qlora.arch.moe_conventions import GPTOSS
     assert convention_for("gpt_oss") is GPTOSS
     assert not GPTOSS.roles                      # never fuses
     for k in ("mlp.experts.gate_up_proj_blocks", "mlp.experts.0.gate_proj.weight",
@@ -382,7 +382,7 @@ def test_jetmoe_dual_moe_is_native_passthrough_never_drops_attention_experts():
     (pre-fused, no conversion), both pass straight through — the planner never
     fuses or drops. Pinned so a future 'optimization' that treats it as
     per-expert trips here."""
-    from experts4bit_qlora.moe_conventions import JETMOE
+    from experts4bit_qlora.arch.moe_conventions import JETMOE
     assert convention_for("jetmoe") is JETMOE
     assert not JETMOE.roles                         # never per-expert
     for k in ("mlp.input_linear.weight", "self_attention.experts.input_linear.weight",
@@ -398,7 +398,7 @@ def test_dbrx_is_flat_native_passthrough_with_pinned_roles():
     transformers tree declares identically, so it loads as pure passthrough.
     The w1/v1/w2 -> gate/up/down roles are pinned from the forward for a future
     fusion path but unused by the loader; the expert pattern never matches."""
-    from experts4bit_qlora.moe_conventions import DBRX
+    from experts4bit_qlora.arch.moe_conventions import DBRX
     assert convention_for("dbrx") is DBRX
     assert not DBRX.roles                        # passthrough, never per-expert
     assert DBRX.transpose_re is None
@@ -454,7 +454,7 @@ def test_qwen3_5_moe_is_native_prefused_passthrough_no_transpose():
     """qwen3_5_moe's converter is EMPTY (native) — unlike qwen3_vl_moe it has no
     Transpose, so the pre-fused stacks match the tree as-is. Never per-expert,
     nothing transposed. Pinned so it is not confused with its transposed sibling."""
-    from experts4bit_qlora.moe_conventions import QWEN3_5_MOE, QWEN3_VL_MOE
+    from experts4bit_qlora.arch.moe_conventions import QWEN3_5_MOE, QWEN3_VL_MOE
     assert convention_for("qwen3_5_moe") is QWEN3_5_MOE
     assert QWEN3_5_MOE is not QWEN3_VL_MOE
     assert not QWEN3_5_MOE.roles
@@ -467,7 +467,7 @@ def test_nemotron_h_is_non_gated_up_down_in_the_mixer_container():
     """Nemotron-H has NO gate: experts are up_proj + down_proj only, in a mixer
     block. It must declare roles {up, down}, be non-gated, and target up_proj
     (not gate_up_proj). A gate token must never match."""
-    from experts4bit_qlora.moe_conventions import NEMOTRON_H
+    from experts4bit_qlora.arch.moe_conventions import NEMOTRON_H
     assert convention_for("nemotron_h") is NEMOTRON_H
     assert NEMOTRON_H.gated is False
     assert set(NEMOTRON_H.roles.values()) == {"up", "down"}
@@ -484,7 +484,7 @@ def test_nemotron_h_is_non_gated_up_down_in_the_mixer_container():
 def test_stack_experts_stacks_without_concatenating_a_gate():
     """The non-gated fusion stacks up and down each on their own — no gate to
     concatenate, so up_proj keeps [E, inter, hidden] not [E, 2*inter, hidden]."""
-    from experts4bit_qlora.moe_conventions import stack_experts
+    from experts4bit_qlora.arch.moe_conventions import stack_experts
     E, inter, hidden = 3, 4, 5
     up = [torch.full((inter, hidden), float(e)) for e in range(E)]
     down = [torch.full((hidden, inter), 100.0 + e) for e in range(E)]

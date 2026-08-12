@@ -1,6 +1,6 @@
 """Execute a validated MoE/dense load plan against a model built on ``meta``.
 
-:mod:`~experts4bit_qlora.moe_plan` proves the checkpoint and the module tree
+:mod:`~experts4bit_qlora.arch.moe_plan` proves the checkpoint and the module tree
 agree. This module carries out that plan: read each tensor, fuse the per-expert
 ones into the stacks the tree declares, and place everything on the target
 device. Planning first is what makes execution boring — by the time a byte is
@@ -28,12 +28,12 @@ from __future__ import annotations
 
 import torch
 
-from .fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
-from .awq import dequantize_awq
-from .gptq import dequantize_gptq
-from .compressed_int import dequantize_compressed_int
-from .nvfp4 import dequantize_nvfp4
-from .mxfp4 import dequantize_mxfp4
+from ..formats.fp8_blocks import dequantize_fp8_blocks, fp8_block_scale_shape
+from ..formats.awq import dequantize_awq
+from ..formats.gptq import dequantize_gptq
+from ..formats.compressed_int import dequantize_compressed_int
+from ..formats.nvfp4 import dequantize_nvfp4
+from ..formats.mxfp4 import dequantize_mxfp4
 from .moe_conventions import MoEConventionError, fuse_experts, stack_experts
 
 

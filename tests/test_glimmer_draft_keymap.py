@@ -14,7 +14,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.glimmer_draft import (  # noqa: E402
+from experts4bit_qlora.arch.glimmer_draft import (  # noqa: E402
     GlimmerDraftKeymapError,
     expected_param_names,
     map_draft_key,
@@ -104,13 +104,13 @@ def test_norms_are_not_centered_here():
 # --- drafter load ------------------------------------------------------------
 
 def _expected(n):
-    from experts4bit_qlora.glimmer_draft import expected_param_names
+    from experts4bit_qlora.arch.glimmer_draft import expected_param_names
     return expected_param_names(n)
 
 
 def _gguf_names_for(n):
     """The GGUF spelling of every parameter, i.e. map_draft_key's inverse."""
-    from experts4bit_qlora.glimmer_draft import _GLOBAL, _PER_LAYER
+    from experts4bit_qlora.arch.glimmer_draft import _GLOBAL, _PER_LAYER
     names = [g for g in _GLOBAL]
     for i in range(n):
         names += [f"blk.{i}.{g}" for g in _PER_LAYER]
@@ -122,7 +122,7 @@ def test_both_released_spellings_build_the_same_parameter_set():
     (verified 58/58 against meta-models/Muse-Glimmer-30B-assistant), while the
     GGUF one uses blk.N.*. Both must converge on the same parameters."""
     import torch
-    from experts4bit_qlora.glimmer_draft import load_draft_state_dict
+    from experts4bit_qlora.arch.glimmer_draft import load_draft_state_dict
     exp = _expected(2)
     st = load_draft_state_dict(lambda k: torch.zeros(1), sorted(exp), 2,
                                source="safetensors")
@@ -137,7 +137,7 @@ def test_a_missing_drafter_weight_raises_instead_of_degrading_silently():
     'speculation isn't helping' rather than as a bug."""
     import torch
     import pytest
-    from experts4bit_qlora.glimmer_draft import (
+    from experts4bit_qlora.arch.glimmer_draft import (
         GlimmerDraftKeymapError, load_draft_state_dict)
     keys = sorted(_expected(2))
     with pytest.raises(GlimmerDraftKeymapError, match="missing"):
@@ -147,7 +147,7 @@ def test_a_missing_drafter_weight_raises_instead_of_degrading_silently():
 def test_an_unexpected_drafter_tensor_also_raises():
     import torch
     import pytest
-    from experts4bit_qlora.glimmer_draft import (
+    from experts4bit_qlora.arch.glimmer_draft import (
         GlimmerDraftKeymapError, load_draft_state_dict)
     keys = sorted(_expected(2)) + ["layers.0.self_attn.rotary_emb.inv_freq"]
     with pytest.raises(GlimmerDraftKeymapError, match="unexpected"):

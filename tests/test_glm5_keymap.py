@@ -24,7 +24,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.glm5 import (  # noqa: E402
+from experts4bit_qlora.arch.glm5 import (  # noqa: E402
     Glm5KeymapError,
     classify_key,
     expected_param_names,

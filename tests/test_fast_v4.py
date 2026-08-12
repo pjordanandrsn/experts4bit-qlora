@@ -29,7 +29,7 @@ LIMIT = 2.0          # far below the checkpoint's 10.0 so the clamp actually bin
 
 def _v4_lora(limit=LIMIT, seed=0, r=8, w_scale=0.35, x_scale=1.5):
     """A V4 expert stack wrapped exactly as the streaming loader wraps it."""
-    from experts4bit_qlora.deepseek_v4 import _DeepseekV4ForwardMixin
+    from experts4bit_qlora.arch.deepseek_v4 import _DeepseekV4ForwardMixin
     g = torch.Generator().manual_seed(seed)
     gate_up = torch.randn(E, 2 * INTER, H, generator=g) * w_scale
     down = torch.randn(E, H, INTER, generator=g) * w_scale
@@ -58,7 +58,7 @@ def test_fast_patches_v4_inside_lora():
 
 
 def _v4_bare(limit=LIMIT, seed=0, w_scale=0.35, x_scale=1.5):
-    from experts4bit_qlora.deepseek_v4 import _DeepseekV4ForwardMixin
+    from experts4bit_qlora.arch.deepseek_v4 import _DeepseekV4ForwardMixin
     g = torch.Generator().manual_seed(seed)
     mod = _DeepseekV4ForwardMixin.from_deepseek_v4(
         torch.randn(E, 2 * INTER, H, generator=g) * w_scale,
@@ -130,7 +130,7 @@ def test_fast_train_keeps_the_clamps():
 def test_gptoss_inside_lora_is_still_skipped():
     """gpt-oss shares V4's clamps but ALSO carries per-expert biases, which no fused path
     here applies — `_apply_gate` cannot rescue it, so it must be skipped on both paths."""
-    from experts4bit_qlora.gptoss import GptOssExperts4bit
+    from experts4bit_qlora.arch.gptoss import GptOssExperts4bit
     g = torch.Generator().manual_seed(3)
     base = GptOssExperts4bit.from_gptoss(
         torch.randn(E, H, 2 * INTER, generator=g) * 0.1,
@@ -151,7 +151,7 @@ def test_dgrad_flag_is_declined_not_raised_when_unsupported(monkeypatch):
     """An older grouped-nf4-gemm has no `dgrad_kernel` argument. Passing it anyway
     would raise from inside a training forward -- worse than not accelerating -- so
     the flag is checked at enable time and turned off with a warning."""
-    import experts4bit_qlora.fast as fastmod
+    import experts4bit_qlora.engines.fast as fastmod
     from experts4bit_qlora import enable_fast_train
 
     monkeypatch.setattr(fastmod, "_dgrad_supported", lambda: False)
@@ -168,7 +168,7 @@ def test_dgrad_flag_is_declined_not_raised_when_unsupported(monkeypatch):
 def test_dgrad_kwarg_is_only_sent_when_opted_in():
     """The call must be byte-identical to before when dgrad is off — an empty
     kwargs dict, not `dgrad_kernel=False`, so older kernels keep working."""
-    import experts4bit_qlora.fast as fastmod
+    import experts4bit_qlora.engines.fast as fastmod
     from experts4bit_qlora import disable_fast_train, enable_fast_train
 
     mod, *_ = _v4_lora(seed=4, limit=LIMIT)
@@ -185,7 +185,7 @@ def test_dgrad_backward_matches_the_loop_backward():
     """Opted in, the gradient must still agree with the per-expert decode loop
     within the bf16 budget — and not be identical, or the opt-in did nothing."""
     pytest.importorskip("nf4_qlora")
-    import experts4bit_qlora.fast as fastmod
+    import experts4bit_qlora.engines.fast as fastmod
     from experts4bit_qlora import disable_fast_train, enable_fast_train
 
     if not fastmod._dgrad_supported():
@@ -218,7 +218,7 @@ def test_reenable_with_a_different_dgrad_setting_says_so():
     loud about it rather than to silently succeed or silently do nothing.
     """
     from experts4bit_qlora import disable_fast_train, enable_fast_train
-    from experts4bit_qlora.fast import _dgrad_supported
+    from experts4bit_qlora.engines.fast import _dgrad_supported
 
     if not _dgrad_supported():
         # With an older grouped-nf4-gemm, dgrad=True is coerced off (with its own

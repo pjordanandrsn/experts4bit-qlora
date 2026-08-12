@@ -494,9 +494,9 @@ class Engine:
         if not os.path.isfile(cfg.hot_profile):
             raise FileNotFoundError(f"E4B_HOT_PROFILE: no file at {cfg.hot_profile}")
 
-        from .expert_profile import coverage_from_profile, hot_sets_from_profile
-        from .hot_residency import target_modules
-        from .pipelined import enable_pipelined_residency
+        from .engines.expert_profile import coverage_from_profile, hot_sets_from_profile
+        from .engines.hot_residency import target_modules
+        from .engines.pipelined import enable_pipelined_residency
 
         k = cfg.k_slots or int(getattr(lm_config, "num_experts_per_tok", 0) or 0)
         if k <= 0:

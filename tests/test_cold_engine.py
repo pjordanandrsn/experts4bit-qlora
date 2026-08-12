@@ -27,7 +27,7 @@ from experts4bit_qlora import (  # noqa: E402
     enable_fast,
     disable_fast,
 )
-from experts4bit_qlora.cold_engine import (  # noqa: E402
+from experts4bit_qlora.engines.cold_engine import (  # noqa: E402
     _bnb_cpu_dequant_ok,
     _dequant_torch,
 )
@@ -98,7 +98,7 @@ def test_all_cold_matches_reference_bf16():
 
 
 def test_gptoss_epilogue_all_cold():
-    gptoss_mod = pytest.importorskip("experts4bit_qlora.gptoss")
+    gptoss_mod = pytest.importorskip("experts4bit_qlora.arch.gptoss")
     torch.manual_seed(2)
     inter = 128
     gu_dense = torch.randn(E, HID, 2 * inter)   # input-major, interleaved

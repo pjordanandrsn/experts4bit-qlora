@@ -36,7 +36,7 @@ from typing import Iterable
 
 import torch
 
-from .util import log
+from ..util import log
 
 # safetensors dtype tags -> torch, with the itemsize we need for offset math.
 _DTYPES: dict[str, torch.dtype] = {

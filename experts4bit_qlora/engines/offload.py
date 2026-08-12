@@ -1323,7 +1323,7 @@ def offload_model_experts(model, device=None, pin: bool = True) -> list[_ExpertO
             and nothing would be offloaded — every expert would silently stay GPU-resident, which
             is the exact silent-skip failure this package exists to prevent.
     """
-    from .lora import ExpertsLoRA
+    from ..lora import ExpertsLoRA
 
     handles = []
     for module in model.modules():
