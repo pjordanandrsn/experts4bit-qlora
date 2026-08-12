@@ -79,6 +79,17 @@ except ImportError:  # pragma: no cover - exercised only on triton-less hosts
     tl = None
 
 
+def traffic_counting_default() -> bool:
+    """Whether a new engine starts with traffic counting on (``E4B_PIPELINED_TRAFFIC``).
+
+    A module-level function rather than an inline `os.environ` read in `__init__`
+    so the env parsing is testable without a GPU — building an engine needs CUDA
+    and pinned memory, which would have left this path shipped-but-unexercised.
+    """
+    import os
+    return os.environ.get("E4B_PIPELINED_TRAFFIC", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _align8(n: int) -> int:
     return (n + 7) & ~7
 
@@ -362,6 +373,11 @@ class _PipelinedResidency:
         # in place. Harmless at HBM bandwidth (~5 us/expert), worth watching on
         # small-bandwidth cards (~45 us/expert on GDDR6) — if a small-hardware
         # profile shows this term, the known fix is an in-place hot GEMM path.
+        # OFF by default: the two reductions cost 0.118 ms per round against a
+        # 1.39 ms fetch on an A5000 (8.5% of the fetch, ~7% of the decode step) to
+        # produce numbers nothing reads in production. Set E4B_PIPELINED_TRAFFIC=1,
+        # or assign `count_traffic = True` before the first fetch, to measure.
+        self.count_traffic = traffic_counting_default()
         self.hot_d2d_bytes = torch.zeros((), dtype=torch.long, device=self.device)
         self.cold_pcie_bytes = torch.zeros((), dtype=torch.long, device=self.device)
 
@@ -420,8 +436,9 @@ class _PipelinedResidency:
         miss = src_eff != self.have
         # hot_d2d is now 0 by construction and kept as a REGRESSION WITNESS: if it
         # ever moves again, a hot row is being copied instead of read in place.
-        self.hot_d2d_bytes += (miss & hot).sum() * self.row_bytes
-        self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
+        if self.count_traffic:
+            self.hot_d2d_bytes += (miss & hot).sum() * self.row_bytes
+            self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
 
         self._gather(src_eff, [a.index_select(0, self.want_buf) for a in self.seg_addr])
         self.have.copy_(src_eff)
@@ -437,7 +454,19 @@ class _PipelinedResidency:
 
     def traffic(self) -> dict:
         """Report accumulated fetch traffic. SYNCHRONIZES (two .item() reads) —
-        call outside any timed loop."""
+        call outside any timed loop.
+
+        RAISES when counting was off rather than reporting zeros. `hot_d2d_bytes`
+        is a regression witness asserted to be 0, so silent zeros would let that
+        assertion pass while measuring nothing at all — the counters would look
+        perfect precisely because they were never incremented.
+        """
+        if not self.count_traffic:
+            raise RuntimeError(
+                "traffic counting is disabled, so these counters are zero because "
+                "nothing incremented them — not because no traffic moved. Set "
+                "E4B_PIPELINED_TRAFFIC=1 (or `count_traffic = True` on the engine "
+                "before the first fetch) and re-run.")
         return {"hot_d2d_bytes": int(self.hot_d2d_bytes.item()),
                 "cold_pcie_bytes": int(self.cold_pcie_bytes.item())}
 
