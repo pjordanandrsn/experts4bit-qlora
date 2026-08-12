@@ -47,6 +47,36 @@ class CapturedDecoder:
         self.cur_token, self.cache_position = cur_token, cache_position
         self.graph, self.logits = graph, logits
 
+    def reset(self, input_ids: torch.Tensor) -> torch.Tensor:
+        """Re-prefill and rewind to the post-prompt state; returns the first token.
+
+        Required between generations: `step()` advances `cache_position` and never
+        rewinds, so a second run continues past the end of a `max_length`-sized
+        cache and trips `index_copy_(): index out of bounds`. The graph itself is
+        reusable — only the cache and the position need rewinding.
+        """
+        self.cache.reset()
+        n = input_ids.shape[-1]
+        pos = torch.arange(n, device=input_ids.device)
+        with torch.no_grad():
+            out = self.model(input_ids=input_ids, past_key_values=self.cache,
+                             cache_position=pos, use_cache=True)
+        nxt = out.logits[:, -1:].argmax(-1)
+        self.cur_token.copy_(nxt)
+        self.cache_position.fill_(n)
+        return nxt
+
+    def logits_for(self, token: torch.Tensor) -> torch.Tensor:
+        """Replay on `token` and return the raw logits instead of the argmax.
+
+        Same graph, same advance -- only the projection to a token is skipped, so
+        callers can compare distributions rather than argmax winners.
+        """
+        self.cur_token.copy_(token.view(1, 1))
+        self.graph.replay()
+        self.cache_position += 1
+        return self.logits[:, -1].clone()
+
     def step(self, token: torch.Tensor) -> torch.Tensor:
         # Replay FIRST, then advance. `cache_position` already points at the slot
         # this token belongs in; incrementing before the replay would write it one
@@ -140,4 +170,97 @@ def probe_capture(model, input_ids, max_new_tokens: int = 16) -> dict:
     torch.cuda.synchronize()
     report["replayed"] = got
     report["matches_eager"] = (got == report["eager"])
+    if not report["matches_eager"]:
+        # Teacher-forcing FIRST: it is the authoritative test. The logit-gap
+        # heuristic below cannot tell a tie from a defect on its own -- on a
+        # random-weight fixture it called a 1.7-ulp gap "real" while replay was
+        # in fact bit-identical to eager. Gap only adds colour once this decides.
+        tf = _teacher_forced_delta(model, dec, input_ids, report["eager"])
+        report["teacher_forced"] = tf
+        div = _classify_divergence(model, input_ids, report["eager"], got)
+        if tf.get("max_abs_delta") == 0.0 and tf.get("steps"):
+            div["verdict"] = "tie (replay bit-identical to eager under teacher forcing)"
+        report["divergence"] = div
     return report
+
+
+def _teacher_forced_delta(model, dec, input_ids, eager_tokens) -> dict:
+    """Max |logits_replay - logits_eager| when BOTH are fed the same tokens.
+
+    Free-running argmax equality conflates two things: whether replay computes
+    the same function, and whether the model has ties to trip over. Random-weight
+    fixtures are almost all ties, so that test says nothing about capture there.
+    Forcing the same token stream down both paths removes the compounding and
+    isolates the only question capture can answer wrongly -- does the graph
+    compute what eager computes.
+    """
+    out = {"max_abs_delta": None, "steps": 0, "note": None}
+    try:
+        n = input_ids.shape[-1]
+        # The eager reference must decode ONE TOKEN AT A TIME against a cache, not
+        # run the whole sequence in one forward. Full-sequence attention and
+        # single-token attention use different kernels and reduction orders, so
+        # they differ by a few ulp in pure eager -- comparing against the wrong
+        # one attributes that difference to capture.
+        from transformers import StaticCache
+        ref_cache = StaticCache(config=model.config, max_batch_size=1,
+                                max_cache_len=n + len(eager_tokens) + 2,
+                                device=input_ids.device, dtype=model.dtype)
+        ref = []
+        with torch.no_grad():
+            model(input_ids=input_ids, past_key_values=ref_cache,
+                  cache_position=torch.arange(n, device=input_ids.device), use_cache=True)
+            for j, t in enumerate(eager_tokens[:-1]):
+                o = model(input_ids=torch.tensor([[t]], dtype=input_ids.dtype,
+                                                 device=input_ids.device),
+                          past_key_values=ref_cache,
+                          cache_position=torch.tensor([n + j], device=input_ids.device),
+                          use_cache=True)
+                ref.append(o.logits[0, -1].float())
+        dec.reset(input_ids)
+        worst, steps = 0.0, 0
+        for j, t in enumerate(eager_tokens[:-1]):
+            got = dec.logits_for(torch.tensor([[t]], dtype=input_ids.dtype,
+                                              device=input_ids.device))
+            if j < len(ref):
+                worst = max(worst, float((got.float() - ref[j]).abs().max()))
+                steps += 1
+        out["max_abs_delta"], out["steps"] = worst, steps
+    except Exception as e:
+        out["note"] = f"{type(e).__name__}: {e}"[:140]
+    return out
+
+
+def _classify_divergence(model, input_ids, eager, got) -> dict:
+    """Is the first mismatched token a bf16 argmax TIE, or a real defect?
+
+    A mismatch alone does not distinguish them, and guessing is how a genuine
+    off-by-one in this harness once got written off as tie-break noise. So
+    measure: re-run the eager prefix up to the divergence and read the gap
+    between the two competing logits. Ties are a property of the model (random
+    or low-confidence weights), not of capture; a wide gap is a real bug.
+    """
+    i = next((j for j in range(min(len(eager), len(got))) if eager[j] != got[j]), None)
+    out = {"index": i, "eager_token": None, "replay_token": None,
+           "gap": None, "verdict": "unknown"}
+    if i is None:
+        out["verdict"] = "length mismatch only"
+        return out
+    out["eager_token"], out["replay_token"] = eager[i], got[i]
+    try:
+        prefix = torch.cat(
+            [input_ids, torch.tensor([eager[:i]], dtype=input_ids.dtype,
+                                     device=input_ids.device)], dim=-1)
+        with torch.no_grad():
+            logits = model(input_ids=prefix, use_cache=False).logits[0, -1].float()
+        gap = float(abs(logits[eager[i]] - logits[got[i]]))
+        out["gap"] = gap
+        # bf16 carries ~8 mantissa bits; a gap at or below one ulp of the larger
+        # logit means the two tokens are indistinguishable at the model's own
+        # precision and either argmax is defensible.
+        ulp = float(max(abs(logits[eager[i]]), abs(logits[got[i]]))) * 2 ** -8
+        out["ulp"] = ulp
+        out["verdict"] = "tie" if gap <= max(ulp, 1e-6) else "real"
+    except Exception as e:
+        out["verdict"] = f"unclassifiable: {type(e).__name__}: {e}"[:120]
+    return out
