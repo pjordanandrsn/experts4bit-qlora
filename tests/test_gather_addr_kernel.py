@@ -159,6 +159,10 @@ def test_engine_traffic_counters_hand_counted():
                                  compute_dtype=torch.bfloat16, has_gate=True)
     enable_pipelined_residency(mod, [torch.tensor([0, 1])], device="cuda", k_slots=k)
     st = mod._pipelined
+    # Counting is off by default (the two reductions cost ~8.5% of the fetch), and
+    # `traffic()` RAISES rather than reporting zeros when it is off — so this must
+    # opt in before any fetch, or the witness below would be asserting on nothing.
+    st.count_traffic = True
     rb = st.row_bytes
     hs = torch.randn(1, H, dtype=torch.bfloat16, device="cuda")
 
@@ -249,3 +253,38 @@ def test_identity_drives_the_skip_not_the_read_address():
     _launch(slots, src, have, block=16, ident=ident)            # now it must copy
     torch.cuda.synchronize()
     assert (slots == 73).all(), "did not copy from the read address when identity differed"
+
+
+def test_traffic_refuses_when_counting_is_off():
+    """Disabled counters must RAISE, not report zeros.
+
+    `hot_d2d_bytes == 0` is a regression witness. If `traffic()` returned zeros
+    when counting was off, that assertion would pass while measuring nothing —
+    the counters would read perfect precisely because they were never
+    incremented. This is the arm on that failure mode.
+    """
+    pytest.importorskip("nf4_grouped")
+    from experts4bit_qlora import Experts4bit
+    from experts4bit_qlora.pipelined import enable_pipelined_residency
+
+    torch.manual_seed(0)
+    E, H, inter, k = 8, 128, 64, 3
+    mod = Experts4bit.from_float(
+        gate_up_proj=torch.randn(E, 2 * inter, H).cuda(),
+        down_proj=torch.randn(E, H, inter).cuda(),
+        compute_dtype=torch.bfloat16, has_gate=True)
+    enable_pipelined_residency(mod, [torch.tensor([0, 1])], device="cuda", k_slots=k)
+    st = mod._pipelined
+
+    assert st.count_traffic is False, "traffic counting must default OFF"
+    with pytest.raises(RuntimeError, match="traffic counting is disabled"):
+        st.traffic()
+
+    st.count_traffic = True
+    hs = torch.randn(1, H, dtype=torch.bfloat16, device="cuda")
+    ti = torch.tensor([[2, 3, 6]], device="cuda")
+    tw = torch.full((1, k), 1.0 / k, dtype=torch.bfloat16, device="cuda")
+    with torch.no_grad():
+        mod(hs, ti, tw)
+    t = st.traffic()                       # now it reports
+    assert t["cold_pcie_bytes"] > 0, "enabled counters must see the cold misses"
