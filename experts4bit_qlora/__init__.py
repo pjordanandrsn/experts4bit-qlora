@@ -206,8 +206,8 @@ from .engines.speculative import speculative_greedy_decode  # noqa: E402,F401
 # breaking that silently at import time is the worst way to find out. These alias
 # the old dotted names to the new modules so `import experts4bit_qlora.awq` and
 # `from experts4bit_qlora.awq import X` both keep working.
-import sys as _sys
-from importlib import import_module as _import_module
+import sys as _sys  # noqa: E402
+from importlib import import_module as _import_module  # noqa: E402
 
 _MOVED = {
     "awq": "formats.awq",
