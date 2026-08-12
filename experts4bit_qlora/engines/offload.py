@@ -470,6 +470,17 @@ class _ExpertOffload:
         self._copy_home_to_device("sync")
         _ExpertOffload._resident = self
 
+    def _routed_cap(self) -> int:
+        """Routed-expert count above which the pre-hook prefers one bulk copy.
+
+        Reads ``_routed_max`` here, which is what ``enable_routed_staging`` and
+        ``enable_speculative_staging`` set. It exists as a method so a subclass
+        whose bulk path is not a cheap whole-layer DRAM copy can decline the cap
+        entirely — those two helpers write ``_routed_max`` unconditionally, so an
+        attribute alone cannot be defended.
+        """
+        return self._routed_max
+
     def _alloc_dest(self):
         """Full-shaped device tensors, only some rows of which will be written."""
         return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,
@@ -675,6 +686,29 @@ class _ExpertOffload:
             _ExpertOffload._resident = None
 
 
+def _refuse_disk_home(handle, who: str) -> None:
+    """Refuse a DRAM-tuning knob on a handle whose home is a disk arena.
+
+    Both callers set ``_routed_max`` to a fraction of ``E`` — a crossover that is
+    only meaningful for a contiguous DRAM home, where one bulk copy can beat
+    ``E`` strided ones. An arena handle reads one aligned row per expert either
+    way, and its bulk path re-reads the whole layer off the device.
+
+    ``_routed_cap`` already makes the clobber inert, so this refusal is about the
+    caller rather than the bytes: silently ignoring a knob someone deliberately
+    turned is how they conclude it did something. Note ``enable_speculative_staging``
+    takes a MODEL and finds handles itself, so it reaches these without the caller
+    ever naming them.
+    """
+    if getattr(handle, "_routed_in_train", False):
+        raise RuntimeError(
+            f"{who} is a DRAM-residency tuning knob and does not apply to a "
+            f"{type(handle).__name__}, whose experts are served from an NVMe "
+            "arena: it caps routed staging at a fraction of the expert count, "
+            "and this handle's bulk path re-reads the entire layer from disk. "
+            "Routed staging is already unconditional here.")
+
+
 def enable_expert_offload(experts_lora, device, pin: bool = True,
                           handle_cls=None) -> _ExpertOffload:
     """Offload one :class:`ExpertsLoRA`'s frozen 4-bit base to (pinned) CPU RAM and install the
@@ -765,7 +799,11 @@ def enable_expert_offload(experts_lora, device, pin: bool = True,
             ids = torch.unique(args[1]).tolist()
             # Above the crossover essentially every expert routes (prefill), where
             # one bulk copy beats E strided ones. Fall through to the normal path.
-            if len(ids) <= handle._routed_max:
+            # Asked as a METHOD rather than read off `_routed_max`, because that
+            # attribute is PUBLICLY WRITABLE (enable_routed_staging,
+            # enable_speculative_staging) and the crossover it encodes is a
+            # DRAM-home fact. See `_routed_cap`.
+            if len(ids) <= handle._routed_cap():
                 handle.stage_routed(ids)
                 return
         if handle._prefetch_next is not None and inference:
@@ -985,6 +1023,7 @@ def enable_speculative_staging(model, distance: int = 2, k: int = 8,
                     break
         if h is None:
             continue
+        _refuse_disk_home(h, "enable_speculative_staging")
         handles.append(h)
         h._routed_only = True
         h._routed_max = max(1, int(getattr(h.base, "num_experts", k * 2) * max_fraction))
@@ -1173,6 +1212,7 @@ def enable_routed_staging(handles, max_fraction: float = 0.5) -> list[_ExpertOff
             f"first."
         )
     for h in handles:
+        _refuse_disk_home(h, "enable_routed_staging")
         n_exp = getattr(h.base, "num_experts", None)
         if not n_exp:
             continue

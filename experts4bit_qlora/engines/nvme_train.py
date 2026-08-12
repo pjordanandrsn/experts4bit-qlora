@@ -187,11 +187,9 @@ class _ArenaExpertOffload(_ExpertOffload):
         self._staged_ids: frozenset = frozenset()
         super().__init__(base, device, pin=pin)
         # Routed staging is not an optimisation here, it is the design: a bulk
-        # stage means reading the entire layer off the device. `_routed_max` is
-        # the crossover above which a single bulk copy beats N strided ones —
-        # true for a DRAM home, false for a disk one, where each expert row is
-        # its own aligned read either way. So it never fires: routed is weakly
-        # better at every width, and identical at full width.
+        # stage means reading the entire layer off the device. The cap is
+        # declined outright in `_routed_cap` rather than merely initialised wide
+        # — see there for why setting `_routed_max` is not enough.
         self._routed_only = True
         self._routed_max = int(base.num_experts)
         # The homes are meta, so the parent's `all(_is_pinned(...))` is False and
@@ -199,6 +197,27 @@ class _ArenaExpertOffload(_ExpertOffload):
         # the TIER's landing buffer, so that is what decides whether the H2D is
         # genuinely async.
         self.pinned = bool(self._tier.pinned)
+
+    def _routed_cap(self) -> int:
+        """Decline the crossover. There is no width at which bulk beats routed
+        for a disk home, so this returns the full expert count always.
+
+        `_routed_max` alone cannot express that. It is PUBLICLY WRITABLE:
+        ``enable_routed_staging(handles)`` and ``enable_speculative_staging(model)``
+        both assign ``_routed_max = E * max_fraction`` unconditionally, and the
+        latter discovers handles off the model, so it sweeps these up without the
+        caller naming them. With the cap lowered, a training batch routing more
+        than that fraction falls through to the bulk path — which for this handle
+        means re-reading EVERY expert row off NVMe each step, or raising against a
+        routed-sized `hot_rows` budget. Both are silent as configuration and
+        catastrophic as behaviour.
+
+        The crossover ("one bulk copy beats E strided ones") is a fact about a
+        contiguous DRAM home. A disk home issues one aligned read per expert row
+        either way, so routed is weakly better at every width and identical at
+        full width. (Cursor Bugbot, #117: "Routed max clobber breaks arena train".)
+        """
+        return int(self.base.num_experts)
 
     # ------------------------------------------------------------- staging --
     def _copy_rows_into(self, dest, ids) -> int:

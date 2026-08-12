@@ -604,6 +604,46 @@ def test_the_resident_slot_is_shared_across_handle_classes(arena):
         assert not arena_h.staged, "two layers resident at once (arena not evicted)"
 
 
+def test_the_routed_cap_cannot_be_lowered_by_a_public_helper(arena):
+    """`_routed_max` is publicly writable and the crossover it encodes is a
+    DRAM-home fact. Lowering it on an arena handle would send a training batch
+    that routes past the cap down the BULK path — re-reading every expert row off
+    NVMe each step, or raising against a routed-sized `hot_rows`. Silent as
+    configuration, catastrophic as behaviour.
+
+    Found by Cursor Bugbot on #117 (High).
+    """
+    mod, path, index = arena
+    with ColdTier(path, hot_rows=E, pinned=False, index=index) as tier:
+        _w, handle = _arena_handle(mod, tier)
+        assert handle._routed_cap() == E
+        handle._routed_max = 1                 # what the helpers do
+        assert handle._routed_cap() == E, \
+            "the cap was lowered; a wide training batch would take the disk-bulk path"
+
+
+def test_the_dram_tuning_helpers_refuse_an_arena_handle(arena):
+    """...and the clobber is refused rather than merely made inert. Silently
+    ignoring a knob someone deliberately turned is how they conclude it worked.
+    `enable_speculative_staging` matters most: it takes a MODEL and finds handles
+    itself, so it reaches these without the caller naming them."""
+    mod, path, index = arena
+    from experts4bit_qlora.engines.offload import enable_routed_staging
+    with ColdTier(path, hot_rows=E, pinned=False, index=index) as tier:
+        _w, handle = _arena_handle(mod, tier)
+        with pytest.raises(RuntimeError, match="DRAM-residency tuning knob"):
+            enable_routed_staging([handle])
+
+
+def test_the_helpers_still_work_on_a_host_handle(arena):
+    """The refusal must key off the disk home, not fire on everything — these
+    helpers are load-bearing for the inference path they were written for."""
+    from experts4bit_qlora.engines.offload import enable_routed_staging
+    host = enable_expert_offload(ExpertsLoRA(_module(), r=4, alpha=8), "cpu", pin=False)
+    enable_routed_staging([host])
+    assert host._routed_only and 0 < host._routed_max < E
+
+
 def test_host_offload_still_takes_the_conservative_path(arena):
     """The shared pre-hook gained a `_routed_in_train` escape. A host-RAM handle
     must not have taken it: its bulk stage is a cheap whole-layer copy and it has
