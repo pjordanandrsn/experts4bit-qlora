@@ -180,6 +180,46 @@ def _fit(name, tensor, want):
     )
 
 
+def _checkpoint_key_renamings(model_type):
+    """Checkpoint-key -> live-module-key renamings that transformers applies on load.
+
+    This loader walks raw checkpoint keys with ``get_submodule``, so a family whose
+    released key layout differs from its module tree dies on a literal getattr.
+    ernie4_5_moe is the case that surfaced it: both released checkpoints
+    (ERNIE-4.5-21B-A3B and 300B) store ``mlp.moe_statics.e_score_correction_bias``
+    at the MoE-block level, while the module tree carries it under ``mlp.gate.``.
+    Walking the disk name gave ``Ernie4_5_MoeSparseMoeBlock has no attribute
+    'moe_statics'``, which names neither the architecture nor the real problem.
+
+    transformers reconciles the two through a per-``model_type`` table, so this reads
+    that table rather than re-deriving the renamings — a second copy would drift.
+
+    Best-effort by design: the table is transformers-internal, so an import failure or
+    a shape change must degrade to "no renamings" (restoring today's behaviour) rather
+    than break every load. Only unambiguous 1:1, wildcard-free suffix renamings are
+    taken; anything richer is a real conversion, not a rename, and is left alone.
+    """
+    try:
+        from transformers.conversion_mapping import get_checkpoint_conversion_mapping
+        out = []
+        for wr in get_checkpoint_conversion_mapping(model_type) or ():
+            src = getattr(wr, "source_patterns", None) or []
+            dst = getattr(wr, "target_patterns", None) or []
+            if len(src) == 1 and len(dst) == 1 and "*" not in src[0] and "*" not in dst[0]:
+                out.append((src[0], dst[0]))
+        return out
+    except Exception:
+        return []
+
+
+def _rename_checkpoint_key(name, renamings):
+    """Apply the first matching suffix renaming to a checkpoint key."""
+    for src, dst in renamings:
+        if name == src or name.endswith("." + src):
+            return name[: len(name) - len(src)] + dst
+    return name
+
+
 def _assign(model, name, tensor):
     """Place a real (GPU) tensor into a meta-initialized module by dotted name.
 
@@ -680,10 +720,17 @@ def load_moe_4bit_streaming(
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     narrowed = []
+    renamings = _checkpoint_key_renamings(model_type)
+    renamed = 0
     for name in weight_map:
         if name not in expert_keys:
-            if _assign(model, name, get(name)):
-                narrowed.append(name)
+            target = _rename_checkpoint_key(name, renamings)
+            renamed += target != name
+            if _assign(model, target, get(name)):
+                narrowed.append(target)
+    if renamed:
+        log(f"  applied {renamed} transformers checkpoint-key renaming(s) "
+            f"(this checkpoint's layout differs from the module tree)")
     if narrowed:
         # Loud on purpose: this is a checkpoint/modeling-code disagreement that the
         # loader worked around, not a routine step. K3 hits it 69 times (A_log).
