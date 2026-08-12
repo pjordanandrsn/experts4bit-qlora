@@ -50,13 +50,18 @@ def _addrs(store, ids):
     return store.data_ptr() + torch.as_tensor(ids, dtype=torch.long, device="cuda") * rb
 
 
-def _launch(slots, src, have, block=16):
+def _launch(slots, src, have, block=16, ident=None, dst_word_off=0, n_words=None):
+    """Whole-row launch by default: the read address doubles as the lane identity,
+    the segment starts at word 0 and spans the row — i.e. exactly the pre-segmented
+    behaviour. ``ident``/``dst_word_off``/``n_words`` drive one segment instead."""
     rb = slots.shape[1]
     assert rb % 8 == 0
     rw = rb // 8
     kern = _gather_kernel()
-    grid = (slots.shape[0], -(-rw // block))
-    kern[grid](slots.view(torch.int64), src, have, rw, BLOCK=block, num_warps=1)
+    nw = rw if n_words is None else n_words
+    grid = (slots.shape[0], -(-nw // block))
+    kern[grid](slots.view(torch.int64), src, src if ident is None else ident, have,
+               rw, dst_word_off, nw, BLOCK=block, num_warps=1)
 
 
 def test_copies_bytes_exactly_host_and_device_mixed():
@@ -197,3 +202,50 @@ def test_interpreter_mode_refused_loudly(monkeypatch):
     monkeypatch.setenv("TRITON_INTERPRET", "1")
     with pytest.raises(RuntimeError, match="interpreter"):
         enable_pipelined_residency(mod, [torch.tensor([0])], device="cuda", k_slots=2)
+
+
+def test_segment_writes_only_its_slice_of_the_row():
+    """A segmented source writes at a word offset and must not touch its neighbours.
+
+    This is what lets the engine read offload's homes in place (they group by TENSOR)
+    instead of baking a second full-size arena from them: an expert becomes four
+    contiguous runs written into one row. An off-by-one in the offset or the length
+    would corrupt the adjacent segment -- another expert's real bytes, so the GEMM
+    would still run and simply be wrong.
+    """
+    rb = _align8(8 * 16)                      # 16 int64 words
+    host = _mk_store(4, rb, 60, pinned=True)  # row e is filled with byte 60+e
+    slots = torch.full((2, rb), 0xAB, dtype=torch.uint8, device="cuda")
+    have = torch.full((2,), -1, dtype=torch.long, device="cuda")
+
+    seg_off, seg_len = 4, 5                   # words: write [4,9), leave the rest
+    ident = _addrs(host, [1, 2])
+    src = ident + seg_off * 8                 # read the matching slice of the source
+    _launch(slots, src, have, block=16, ident=ident,
+            dst_word_off=seg_off, n_words=seg_len)
+    torch.cuda.synchronize()
+
+    lo, hi = seg_off * 8, (seg_off + seg_len) * 8
+    for lane, e in enumerate((1, 2)):
+        assert (slots[lane, lo:hi] == 60 + e).all(), f"lane {lane} segment wrong"
+    assert (slots[:, :lo] == 0xAB).all(), "wrote before the segment"
+    assert (slots[:, hi:] == 0xAB).all(), "wrote past the segment"
+
+
+def test_identity_drives_the_skip_not_the_read_address():
+    """All segments of one expert must skip or copy together, so the skip test keys on
+    IDENTITY rather than the read address: with a segmented source those differ."""
+    rb = _align8(64)
+    host = _mk_store(4, rb, 70, pinned=True)
+    slots = torch.zeros(2, rb, dtype=torch.uint8, device="cuda")
+    ident = _addrs(host, [1, 2])
+    src = _addrs(host, [3, 3])                # a DIFFERENT but valid read address
+
+    _launch(slots, src, ident.clone(), block=16, ident=ident)   # have == ident -> skip
+    torch.cuda.synchronize()
+    assert (slots == 0).all(), "copied despite identity == have"
+
+    have = torch.full((2,), -1, dtype=torch.long, device="cuda")
+    _launch(slots, src, have, block=16, ident=ident)            # now it must copy
+    torch.cuda.synchronize()
+    assert (slots == 73).all(), "did not copy from the read address when identity differed"

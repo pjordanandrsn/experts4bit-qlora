@@ -114,22 +114,28 @@ def _gather_kernel():
         @triton.jit
         def _gather_rows_addr(
             dst_ptr,        # cuda [k, row_words] int64-viewed slot store
-            src_ptr,        # cuda int64 [k] — absolute row-block address per slot
-            have_ptr,       # cuda int64 [k] — address whose bytes the slot holds
-            row_words,      # int64 words per row-block
+            src_ptr,        # cuda int64 [k] — absolute address to READ per slot
+            id_ptr,         # cuda int64 [k] — identity of the expert wanted per slot
+            have_ptr,       # cuda int64 [k] — identity whose bytes the slot holds
+            row_words,      # int64 words per row-block (the slot stride)
+            dst_word_off,   # int64 word offset of this segment within the row
+            n_words,        # int64 words to copy for this segment
             BLOCK: tl.constexpr,
         ):
             slot = tl.program_id(0)
             chunk = tl.program_id(1)
-            want = tl.load(src_ptr + slot)
-            have = tl.load(have_ptr + slot)
-            if want == have:
+            # The skip test is on IDENTITY, not on the read address: a segmented
+            # source issues one launch per segment from different addresses, and all
+            # of them must skip or copy together. With a whole-row source the caller
+            # passes src as the identity too, which is the old behaviour exactly.
+            if tl.load(id_ptr + slot) == tl.load(have_ptr + slot):
                 return
             offs = chunk * BLOCK + tl.arange(0, BLOCK)
-            mask = offs < row_words
-            src = tl.cast(want, tl.pointer_type(tl.int64))
+            mask = offs < n_words
+            src = tl.cast(tl.load(src_ptr + slot), tl.pointer_type(tl.int64))
             vals = tl.load(src + offs, mask=mask)
-            tl.store(dst_ptr + slot.to(tl.int64) * row_words + offs, vals, mask=mask)
+            tl.store(dst_ptr + slot.to(tl.int64) * row_words + dst_word_off + offs,
+                     vals, mask=mask)
 
         _KERNEL = _gather_rows_addr
     return _KERNEL
@@ -188,42 +194,85 @@ class _PipelinedResidency:
         # current weights on every enable (the copy_ block below always
         # runs) — the always-refresh invariant is untouched; only the
         # allocation is cached.
-        cached = getattr(mod, "_e4b_arena_cache", None)
-        sig = (E, row_bytes, tuple(off))
-        arena = None
-        if cached is not None and cached[0] == sig:
-            arena = cached[1]
-            self.pinned = bool(cached[2])
-        if arena is None:
-            arena = torch.zeros(E, row_bytes, dtype=torch.uint8)
+        # --- Can we read the OFFLOAD HOMES in place instead of copying them? ---
+        # Under offload the homes already hold every expert in pinned host RAM. Baking
+        # a second full-size arena from them doubles host RAM for the one config that
+        # exists to fit a big model on a small card (Qwen3-30B: 15.19 GiB each, so
+        # ~30 GiB). The homes cannot simply be freed -- prefill, grad and odd-dtype
+        # forwards fall back to the reference path and still need staging, and
+        # `disable_pipelined_residency` hands movement back -- so the fix is to stop
+        # making the copy, not to drop the original.
+        #
+        # Same bytes over the same PCIe link either way; only the addressing changes.
+        # The homes group by tensor (all gate_up, then all absmax, ...), so an expert
+        # is four contiguous runs rather than one, and the gather issues one launch
+        # per segment. `.view(E, -1)` below is what proves per-expert contiguity.
+        self.seg_srcs = None
+        if homes is not None and all(int(s) % 8 == 0 for s in seg):
             try:
-                arena = arena.pin_memory()
-                self.pinned = arena.is_pinned()
-            except (RuntimeError, AssertionError):
-                self.pinned = False  # pageable fallback: correct, but UVA reads
-                # from pageable memory are not guaranteed — enable() refuses below
-        a_f32 = arena.view(torch.float32)
-        # Source the arena from the OFFLOAD HOMES when the module is offloaded. Under
-        # offload the base's expert tensors are 0-element GPU placeholders and the real
-        # (pinned, correctly shaped) weights live in handle.home — copying the placeholders
-        # produced "size of tensor a (N) must match tensor b (0)" and made residency and
-        # offload mutually exclusive, which is backwards: residency IS an offload mechanism,
-        # so it should TAKE OVER from the staging hooks, not refuse to coexist with them.
-        # This is what lets a model larger than VRAM use the dial at all (Qwen3-30B NF4
-        # needs 19.84 GiB resident vs a 12 GB A2000).
-        src = homes if homes is not None else {
-            "gate_up_proj": mod.gate_up_proj, "gate_up_absmax": mod.gate_up_absmax,
-            "down_proj": mod.down_proj, "down_absmax": mod.down_absmax}
-        gu_p = src["gate_up_proj"].view(E, -1)
-        gu_a = src["gate_up_absmax"].view(E, -1).float()
-        dn_p = src["down_proj"].view(E, -1)
-        dn_a = src["down_absmax"].view(E, -1).float()
-        arena[:, off[0]:off[0] + seg[0]].copy_(gu_p.view(torch.uint8) if gu_p.dtype != torch.uint8 else gu_p)
-        a_f32[:, off[1] // 4: off[1] // 4 + seg[1] // 4].copy_(gu_a)
-        arena[:, off[2]:off[2] + seg[2]].copy_(dn_p.view(torch.uint8) if dn_p.dtype != torch.uint8 else dn_p)
-        a_f32[:, off[3] // 4: off[3] // 4 + seg[3] // 4].copy_(dn_a)
-        self.arena = arena
-        mod._e4b_arena_cache = (sig, arena, self.pinned)
+                bases, ok = [], True
+                for j, name in enumerate(("gate_up_proj", "gate_up_absmax",
+                                          "down_proj", "down_absmax")):
+                    t = homes[name]
+                    t.view(E, -1)                   # raises if not per-expert contiguous
+                    # The gather reads int64 words, so every address it forms must be
+                    # 8-byte aligned. offload packs the homes into one buffer PER DTYPE
+                    # with the offset advancing in ELEMENTS, so a preceding tensor with
+                    # an odd numel leaves the next one misaligned -- which would be
+                    # undefined behaviour in the kernel, not a fault. Checked, not assumed.
+                    ok = (ok and bool(t.is_pinned()) and t.data_ptr() % 8 == 0
+                          and t.is_contiguous())
+                    bases.append((t.data_ptr(), int(seg[j])))
+                if ok:
+                    self.seg_srcs = [
+                        (torch.arange(E, device=self.device, dtype=torch.long) * stride + base,
+                         off[j] // 8, seg[j] // 8)
+                        for j, (base, stride) in enumerate(bases)]
+                    self.pinned = True
+                    self.arena = None
+                    self._home_keepalive = [homes[n] for n in
+                                            ("gate_up_proj", "gate_up_absmax",
+                                             "down_proj", "down_absmax")]
+            except (RuntimeError, KeyError, AttributeError):
+                self.seg_srcs = None    # any doubt -> fall back to the copied arena
+
+        if self.seg_srcs is None:
+            cached = getattr(mod, "_e4b_arena_cache", None)
+            sig = (E, row_bytes, tuple(off))
+            arena = None
+            if cached is not None and cached[0] == sig:
+                arena = cached[1]
+                self.pinned = bool(cached[2])
+            if arena is None:
+                arena = torch.zeros(E, row_bytes, dtype=torch.uint8)
+                try:
+                    arena = arena.pin_memory()
+                    self.pinned = arena.is_pinned()
+                except (RuntimeError, AssertionError):
+                    self.pinned = False  # pageable fallback: correct, but UVA reads
+                    # from pageable memory are not guaranteed — enable() refuses below
+            a_f32 = arena.view(torch.float32)
+            # Source the arena from the OFFLOAD HOMES when the module is offloaded. Under
+            # offload the base's expert tensors are 0-element GPU placeholders and the real
+            # (pinned, correctly shaped) weights live in handle.home — copying the placeholders
+            # produced "size of tensor a (N) must match tensor b (0)" and made residency and
+            # offload mutually exclusive, which is backwards: residency IS an offload mechanism,
+            # so it should TAKE OVER from the staging hooks, not refuse to coexist with them.
+            # This is what lets a model larger than VRAM use the dial at all (Qwen3-30B NF4
+            # needs 19.84 GiB resident vs a 12 GB A2000).
+            src = homes if homes is not None else {
+                "gate_up_proj": mod.gate_up_proj, "gate_up_absmax": mod.gate_up_absmax,
+                "down_proj": mod.down_proj, "down_absmax": mod.down_absmax}
+            gu_p = src["gate_up_proj"].view(E, -1)
+            gu_a = src["gate_up_absmax"].view(E, -1).float()
+            dn_p = src["down_proj"].view(E, -1)
+            dn_a = src["down_absmax"].view(E, -1).float()
+            arena[:, off[0]:off[0] + seg[0]].copy_(gu_p.view(torch.uint8) if gu_p.dtype != torch.uint8 else gu_p)
+            a_f32[:, off[1] // 4: off[1] // 4 + seg[1] // 4].copy_(gu_a)
+            arena[:, off[2]:off[2] + seg[2]].copy_(dn_p.view(torch.uint8) if dn_p.dtype != torch.uint8 else dn_p)
+            a_f32[:, off[3] // 4: off[3] // 4 + seg[3] // 4].copy_(dn_a)
+            self.arena = arena
+            mod._e4b_arena_cache = (sig, arena, self.pinned)
 
         # --- ONE device store: [hot rows | k slots], same row-block layout --
         # The hot stack and the slot store used to be separate allocations, which
@@ -244,7 +293,19 @@ class _PipelinedResidency:
         self.n_hot = n_hot
         store = torch.empty(n_hot + k, row_bytes, dtype=torch.uint8, device=self.device)
         if n_hot:
-            store[:n_hot].copy_(arena.index_select(0, hot_ids).to(self.device))
+            if self.seg_srcs is None:
+                store[:n_hot].copy_(arena.index_select(0, hot_ids).to(self.device))
+            else:
+                # No row-shaped arena to index: assemble the hot rows from the four
+                # home segments through a small [n_hot, row_bytes] staging buffer.
+                # n_hot rows, once, at enable time -- not the full expert set.
+                stage = torch.zeros(n_hot, row_bytes, dtype=torch.uint8)
+                for j, name in enumerate(("gate_up_proj", "gate_up_absmax",
+                                          "down_proj", "down_absmax")):
+                    src_j = homes[name].view(E, -1).index_select(0, hot_ids)
+                    src_j = src_j.reshape(n_hot, -1).view(torch.uint8)
+                    stage[:, off[j]:off[j] + seg[j]] = src_j
+                store[:n_hot].copy_(stage.to(self.device))
         self.store = store
         self.hot_stack = store[:n_hot]          # view — hot rows, never copied again
         slots = store[n_hot:]                   # view — cold landing rows
@@ -256,9 +317,20 @@ class _PipelinedResidency:
         is_hot[hot_ids.to(self.device)] = True
         h_row = torch.zeros(E, dtype=torch.long, device=self.device)
         h_row[hot_ids.to(self.device)] = torch.arange(hot_ids.numel(), device=self.device)
-        host_addr = self.arena.data_ptr() + torch.arange(E, device=self.device, dtype=torch.long) * row_bytes
         hot_addr = self.hot_stack.data_ptr() + h_row * row_bytes
+        if self.seg_srcs is None:
+            host_addr = self.arena.data_ptr() + torch.arange(E, device=self.device, dtype=torch.long) * row_bytes
+            self.seg_srcs = [(host_addr, 0, self.row_words)]
+        else:
+            host_addr = self.seg_srcs[0][0]     # segment 0's base doubles as the id
+        # `src_of_expert` is the lane IDENTITY, not necessarily an address to read:
+        # with a segmented source each segment has its own address table and this
+        # names WHICH expert a slot holds. Unique per expert either way (segment-0
+        # bases are E distinct addresses), which is all the have-skip test needs.
         self.src_of_expert = torch.where(is_hot, hot_addr, host_addr)  # [E] int64
+        # Per-segment read address, with hot lanes pointed at their resident row so a
+        # mispredicted skip can never read from the wrong place.
+        self.seg_addr = [torch.where(is_hot, hot_addr, a) for (a, _, _) in self.seg_srcs]
         self.is_hot = is_hot
         self.h_row = h_row                      # [E] -> row within the hot segment
 
@@ -300,11 +372,20 @@ class _PipelinedResidency:
         self._prime()
 
     def _prime(self):
-        kern = _gather_kernel()
         src0 = self.src_of_expert[0].expand(self.k).contiguous()
-        grid = (self.k, -(-self.row_words // 2048))
-        kern[grid](self.slots64, src0, self.have, self.row_words, BLOCK=2048, num_warps=4)
+        self._gather(src0, [a[0].expand(self.k).contiguous() for a in self.seg_addr])
         self.have.copy_(src0)
+
+    def _gather(self, ident, seg_src):
+        """One launch per source segment; all skip-or-copy together on ``ident``.
+        The whole-row (copied-arena) case is a single segment, so this is the
+        original single launch unchanged."""
+        kern = _gather_kernel()
+        for (a, dst_w, n_w) in zip(seg_src, [s[1] for s in self.seg_srcs],
+                                   [s[2] for s in self.seg_srcs]):
+            grid = (self.k, -(-n_w // 2048))
+            kern[grid](self.slots64, a, ident, self.have, self.row_words,
+                       dst_w, n_w, BLOCK=2048, num_warps=4)
 
     # ---- lead-time routing (flag-shaped: nothing calls this unless the
     # harness opts in). Issue the gather for PREDICTED ids early so the copy
@@ -342,9 +423,7 @@ class _PipelinedResidency:
         self.hot_d2d_bytes += (miss & hot).sum() * self.row_bytes
         self.cold_pcie_bytes += (miss & ~hot).sum() * self.row_bytes
 
-        kern = _gather_kernel()
-        grid = (self.k, -(-self.row_words // 2048))
-        kern[grid](self.slots64, src_eff, self.have, self.row_words, BLOCK=2048, num_warps=4)
+        self._gather(src_eff, [a.index_select(0, self.want_buf) for a in self.seg_addr])
         self.have.copy_(src_eff)
         # hot lane -> its resident row; cold lane -> the slot just gathered into.
         # With an EMPTY hot set every lane is cold, so the dispatch is the constant
