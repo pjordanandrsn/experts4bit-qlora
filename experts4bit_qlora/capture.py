@@ -136,23 +136,59 @@ def capture_decode(model, input_ids, max_length: int, warmup: int = 3):
     return CapturedDecoder(model, cache, cur_token, cache_position, g, captured.logits), nxt
 
 
+def _eager_greedy(model, input_ids, n_new: int, forced=None):
+    """Incremental eager greedy decode against a StaticCache.
+
+    `generate()` cannot serve as the reference here. It applies stopping criteria
+    and generation-config processors, while the captured path emits exactly
+    `n_new` raw argmax steps -- so an early EOS shows up as a token-stream
+    mismatch that has nothing to do with capture, and a bit-identical
+    teacher-forced delta would then relabel that length difference a "tie".
+    Decoding here by the same rule removes the confound instead of excusing it.
+
+    It must also be INCREMENTAL. Full-sequence attention and single-token
+    attention use different kernels and reduction orders and differ by a few ulp
+    in pure eager; comparing against a one-shot forward charges that to capture.
+
+    With `forced`, teacher-forces those tokens instead of its own argmax and
+    returns the logits produced at each step.
+    """
+    n = input_ids.shape[-1]
+    cache = _static_cache(model, n + n_new + 2)
+    toks, logits = [], []
+    with torch.no_grad():
+        out = model(input_ids=input_ids, past_key_values=cache,
+                    cache_position=torch.arange(n, device=input_ids.device), use_cache=True)
+        nxt = out.logits[:, -1:].argmax(-1)
+        for j in range(n_new):
+            tok = nxt if forced is None else torch.tensor(
+                [[forced[j]]], dtype=input_ids.dtype, device=input_ids.device)
+            toks.append(int(tok))
+            if j == n_new - 1:
+                break
+            out = model(input_ids=tok, past_key_values=cache,
+                        cache_position=torch.tensor([n + j], device=input_ids.device),
+                        use_cache=True)
+            logits.append(out.logits[0, -1].float())
+            nxt = out.logits[:, -1:].argmax(-1)
+    return toks, logits
+
+
 def probe_capture(model, input_ids, max_new_tokens: int = 16) -> dict:
     """Does capture work on THIS model, and does replay match eager?
 
     A captured graph that reads a stale pointer replays without error and returns
     plausible-looking tokens, so 'it ran' is not evidence. The gate is token-stream
-    equality against an eager generate on the same inputs.
+    equality against eager decode driven by the SAME rule -- raw argmax, fixed
+    length, no stopping criteria -- so a mismatch can only mean capture.
     """
     report = {"captured": False, "matches_eager": None, "n_new": max_new_tokens,
               "error": None, "eager": None, "replayed": None}
     n = input_ids.shape[-1]
     try:
-        with torch.no_grad():                      # eager reference, same greedy path
-            ref = model.generate(input_ids=input_ids, max_new_tokens=max_new_tokens,
-                                 do_sample=False, use_cache=True)
-        report["eager"] = ref[0, n:].tolist()
-    except Exception as e:                          # a model that cannot even generate
-        report["error"] = f"eager generate failed: {type(e).__name__}: {e}"
+        report["eager"], _ = _eager_greedy(model, input_ids, max_new_tokens)
+    except Exception as e:                          # a model that cannot even decode
+        report["error"] = f"eager decode failed: {type(e).__name__}: {e}"
         return report
 
     try:
@@ -196,27 +232,7 @@ def _teacher_forced_delta(model, dec, input_ids, eager_tokens) -> dict:
     """
     out = {"max_abs_delta": None, "steps": 0, "note": None}
     try:
-        n = input_ids.shape[-1]
-        # The eager reference must decode ONE TOKEN AT A TIME against a cache, not
-        # run the whole sequence in one forward. Full-sequence attention and
-        # single-token attention use different kernels and reduction orders, so
-        # they differ by a few ulp in pure eager -- comparing against the wrong
-        # one attributes that difference to capture.
-        from transformers import StaticCache
-        ref_cache = StaticCache(config=model.config, max_batch_size=1,
-                                max_cache_len=n + len(eager_tokens) + 2,
-                                device=input_ids.device, dtype=model.dtype)
-        ref = []
-        with torch.no_grad():
-            model(input_ids=input_ids, past_key_values=ref_cache,
-                  cache_position=torch.arange(n, device=input_ids.device), use_cache=True)
-            for j, t in enumerate(eager_tokens[:-1]):
-                o = model(input_ids=torch.tensor([[t]], dtype=input_ids.dtype,
-                                                 device=input_ids.device),
-                          past_key_values=ref_cache,
-                          cache_position=torch.tensor([n + j], device=input_ids.device),
-                          use_cache=True)
-                ref.append(o.logits[0, -1].float())
+        _, ref = _eager_greedy(model, input_ids, len(eager_tokens), forced=eager_tokens)
         dec.reset(input_ids)
         worst, steps = 0.0, 0
         for j, t in enumerate(eager_tokens[:-1]):
