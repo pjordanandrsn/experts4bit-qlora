@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.16.2 — 2026-08-12
+
+**CUDA-graph decode capture, and one less allocation per decode step.**
+
+- **`capture_decode()` / `probe_capture()`** (`experts4bit_qlora.capture`). Wraps one decode
+  step in a `torch.cuda.CUDAGraph` backed by a `StaticCache`, so every step has identical
+  shapes and ONE graph serves the whole generation — a growing KV cache otherwise gives a
+  distinct shape, and a distinct graph, per token. The cost is explicit: the cache is
+  allocated to `max_length` up front. `torch.compile` cannot be used instead; inductor dies
+  on `aot_autograd() does not yet handle input mutations on views with different dtypes`,
+  which is exactly the engine's one-uint8-store-viewed-as-int64-and-float32 row block.
+  Capture also throws on a host sync inside the region, so a successful capture doubles as
+  a check on the zero-sync decode contract.
+
+  Measured, 16 new tokens greedy: **4.4–5.6x** on 2-layer fixtures (qwen2_moe, qwen3_moe,
+  granitemoe, hunyuan_v1_moe, glm4_moe, dots1, olmoe), **1.11x** on OLMoE-1B-7B-0924-Instruct
+  (3090) and **1.04x** on Qwen3-30B-A3B (A5000). The speedup is inversely proportional to
+  real GPU work per step, which is what a fixed per-step launch cost predicts — so this is
+  worth having for small models and for the sync contract, not as a throughput claim at
+  scale. Both real-weight models replay **bit-identical** to eager decode.
+
+  `probe_capture()` reports support rather than assuming it, and distinguishes a bf16 argmax
+  tie from a real defect by measurement: it teacher-forces the same tokens down both paths
+  and compares logits. The reference is eager INCREMENTAL decode against a cache — comparing
+  against one full-sequence forward charges a few ulp of kernel/reduction-order difference to
+  capture. `qwen3_next` is not capturable: `StaticCache` does not cover LinearAttention.
+
+- **Persistent `row_idx` buffer in the pipelined engine** — the per-step device allocation
+  and H2D copy are gone. **-16.4%** host time per decode step.
+
 ## 0.16.1 — 2026-08-12
 
 **Correctness fix for the segmented cold source, plus per-round overhead removed.**
