@@ -60,6 +60,27 @@ def _auth_headers() -> dict:
     return {"Authorization": f"Bearer {tok}"} if tok else {}
 
 
+def _forward_headers(headers: dict, src: str, dst: str) -> dict:
+    """Headers to carry across a redirect — **without** the credential when the
+    destination is not the same origin.
+
+    `urllib.request.urlopen` strips `Authorization` on a cross-host redirect;
+    a hand-rolled `http.client` loop does not, and rebuilding the transport is
+    exactly how that protection gets dropped by accident. GitHub 302s assets to
+    `*.githubusercontent.com` and object storage, so forwarding blindly would
+    hand the Actions token to hosts that have no business seeing it.
+
+    Same origin means same scheme AND same host. A downgrade to http is treated
+    as foreign even on the same host: the token would then cross the wire in
+    clear text. (Cursor Bugbot, gnf4 #47: "Auth header follows cross-host
+    redirects".)
+    """
+    s, d = urllib.parse.urlsplit(src), urllib.parse.urlsplit(dst)
+    if (s.scheme, s.netloc) == (d.scheme, d.netloc) and d.scheme == "https":
+        return headers
+    return {k: v for k, v in headers.items() if k.lower() != "authorization"}
+
+
 class _Session:
     """One keep-alive connection per host, reused across every link.
 
@@ -111,7 +132,8 @@ class _Session:
             self.drop(host)
             raise
         if status in (301, 302, 303, 307, 308) and loc and _depth < 5:
-            return self.head(urllib.parse.urljoin(url, loc), headers, _depth + 1)
+            nxt = urllib.parse.urljoin(url, loc)
+            return self.head(nxt, _forward_headers(headers, url, nxt), _depth + 1)
         return status
 
     def close(self):
