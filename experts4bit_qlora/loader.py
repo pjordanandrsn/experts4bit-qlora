@@ -330,6 +330,30 @@ def load_moe_4bit_streaming(
             f"convention (same per-expert mlp.experts.N.{{gate,up,down}}_proj read path). The Experts4bit "
             "primitive itself is model-agnostic — see the README 'Scope' note to adapt another architecture."
         )
+    # Identity ("zero-computation") experts: the router indexes a space LARGER than the
+    # set of real experts, and the surplus indices route the token through nn.Identity
+    # scaled by its router weight instead of a SwiGLU. LongCat-Flash ships 512 routed +
+    # 256 identity by default. Experts4bit has no identity slot, so a load would build
+    # only the routed experts while the router keeps emitting indices past the end.
+    #
+    # Refusing here rather than at the read: the surplus experts carry gate_up rows the
+    # forward never reads and NO down_proj at all, so the per-expert reader consumes
+    # 0..n_routed-1, leaves the rest orphaned, and the generic weight walk then dies on
+    # `get_submodule(".../experts.10")` with `ExpertsLoRA has no attribute '10'` — which
+    # says nothing about what is actually unsupported.
+    _gate_cfg = getattr(config, "text_config", None) or config   # same unwrap as lm_config below
+    n_zero = int(getattr(_gate_cfg, "zero_expert_num", 0) or 0)
+    if n_zero > 0:
+        n_routed = int(getattr(_gate_cfg, "n_routed_experts", 0) or 0)
+        raise NotImplementedError(
+            f"{model_type!r} uses {n_zero} identity ('zero-computation') experts on top of "
+            f"{n_routed} routed experts. The router selects over all {n_routed + n_zero}, and "
+            "indices at or above the routed count pass the token through unchanged rather "
+            "than through a SwiGLU expert. Experts4bit represents SwiGLU experts only, so "
+            "loading just the routed ones would leave the router addressing experts that do "
+            "not exist. Supporting this needs an identity slot in the expert primitive, not "
+            "a loader change."
+        )
     # Source the expert path and gate from the convention when one exists (the
     # broad source of truth), else this loader's own map. Both agree today; this
     # makes the convention authoritative so a non-gated family loads correctly.
