@@ -400,6 +400,60 @@ def test_enable_nvme_residency_refuses_a_partial_stamp(arena):
                               hot_rows=4, device="cpu")
 
 
+def test_the_partial_stamp_refusal_allocates_no_tier(arena, monkeypatch):
+    """The refusal must fire before a ColdTier exists, asserted the only way that
+    cannot be faked: make constructing one an error.
+
+    Two things went wrong while it did not. On a host with no accelerator
+    `ColdTier` pins its landing buffer and raised "Cannot access accelerator
+    device" FIRST, so a caller who passed too many hot_sets got an allocator
+    error instead of the message naming their mistake — and the test above failed
+    for a reason unrelated to what it checks. On a host that does pin, the
+    refusal leaked the tier: constructed, never closed.
+
+    It went unnoticed because this whole module was `importorskip`ped on CI until
+    `grouped-nf4-gemm` was added to `[test]`. It had only ever run on a laptop,
+    where the failure was misread as a macOS quirk rather than the ordering bug
+    it is.
+    """
+    import nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    def _boom(*_a, **_k):
+        raise AssertionError("a ColdTier was allocated before the refusal fired")
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", _boom)
+    with pytest.raises(ValueError, match="targetable MoE module"):
+        enable_nvme_residency(One(), path, [torch.tensor([0]), torch.tensor([1])],
+                              hot_rows=4, device="cpu")
+
+
+def test_a_short_layers_list_is_refused_before_any_tier(arena, monkeypatch):
+    """The sibling refusal on the same path, held to the same rule."""
+    import nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    def _boom(*_a, **_k):
+        raise AssertionError("a ColdTier was allocated before the refusal fired")
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", _boom)
+    with pytest.raises(ValueError, match="layers has"):
+        enable_nvme_residency(One(), path, [torch.tensor([0])],
+                              hot_rows=4, device="cpu", layers=[])
+
+
 # ---- Bugbot: enable_mxfp4_nvme_residency guards (the MXFP4 lane had NO coverage) ----
 # The NF4 lane above is guarded and tested; its MXFP4 counterpart shipped with neither,
 # which is how both bugs below got in. These need no arena reads and no CUDA — every guard
