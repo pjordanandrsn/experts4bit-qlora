@@ -98,7 +98,7 @@ def attach(model) -> bool:
     global _STATE
     if not enabled():
         return False
-    from ._vendor.experts import ExpertsNbit
+    from .._vendor.experts import ExpertsNbit
     from ..lora import ExpertsLoRA
 
     out_path = os.environ[_ENV]
