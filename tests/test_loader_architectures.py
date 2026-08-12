@@ -734,6 +734,71 @@ def _bake_arena_for(model, arena_path):
     return len(mods)
 
 
+def test_arena_train_mode_is_reachable_end_to_end(tmp_path):
+    """The path a CALLER takes, which is what nothing else here covered.
+
+    `enable_nvme_train_residency` requires ExpertsLoRA-wrapped modules, and the
+    arena loader built bare meta experts — so its own documented usage refused
+    every module with "not ExpertsLoRA-wrapped" and the feature could not be
+    reached at all. 29 CPU tests missed it because every one of them constructs
+    `ExpertsLoRA` by hand: they exercised the mechanism, never the route to it.
+    Found on a rented A5000, which is an expensive place to learn it.
+
+    `arena_train=True` is what asks for the adapter. The base stays on `meta` —
+    that is the whole point — so only the adapter is materialized.
+    """
+    pytest.importorskip("nvme_arena")
+    pytest.importorskip("nvme_residency")
+    from experts4bit_qlora import enable_nvme_train_residency
+    from experts4bit_qlora.lora import ExpertsLoRA
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    ref, _cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
+    arena_path = str(tmp_path / "experts.arena")
+    n_layers = _bake_arena_for(ref, arena_path)
+
+    model, _cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
+                                          arena=arena_path, arena_train=True)
+    loras = [m for m in model.modules() if isinstance(m, ExpertsLoRA)]
+    assert len(loras) == n_layers, "arena_train must wrap every MoE layer's experts"
+    for w in loras:
+        assert w.base.gate_up_proj.is_meta, "the base must stay on meta"
+        assert not w.gate_up_lora_A.is_meta, "the adapter must be real and trainable"
+        assert w.gate_up_lora_A.requires_grad
+
+    # ...and the enabler that could not previously be reached now attaches.
+    n = enable_nvme_train_residency(model, arena_path, hot_rows=8, device=DEVICE,
+                                    pinned=False)
+    assert n == n_layers
+    for w in loras:
+        assert hasattr(w.base, "_e4b_arena_offload")
+    next(iter(loras)).base._e4b_cold_tier.close()
+
+
+def test_arena_serving_mode_stays_unwrapped(tmp_path):
+    """The regression this fix nearly introduced, pinned.
+
+    `r` is a REQUIRED positional, and the documented serving example passes `r=8`
+    before calling `enable_mxfp4_nvme_residency`, which refuses wrapped modules.
+    Wrapping whenever `r` is truthy would have fixed training by breaking serving.
+    The wrap is gated on an explicit `arena_train`; the default must stay bare.
+    """
+    pytest.importorskip("nvme_arena")
+    from experts4bit_qlora.lora import ExpertsLoRA
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    ref, _cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
+    arena_path = str(tmp_path / "experts.arena")
+    _bake_arena_for(ref, arena_path)
+
+    model, _cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=8, alpha=16,
+                                          arena=arena_path)          # no arena_train
+    assert not [m for m in model.modules() if isinstance(m, ExpertsLoRA)], \
+        "serving loads must stay unwrapped even with a nonzero r"
+
+
 def test_loader_arena_mode_builds_meta_experts(tmp_path):
     """`arena=` must produce expert modules that hold SHAPES ONLY.
 

@@ -42,9 +42,19 @@ done here: it changes the kernel contract, and this change does not.
 
 Usage::
 
-    from experts4bit_qlora.nvme_train import enable_nvme_train_residency
+    from experts4bit_qlora import enable_nvme_train_residency, load_moe_4bit_streaming
+
+    # arena_train=True is REQUIRED and is not a convenience. Without it the arena
+    # loader builds bare meta experts (its serving shape) and every module here is
+    # refused as "not ExpertsLoRA-wrapped" — this path was unreachable end to end
+    # until a GPU run tried the documented usage and could not run it.
+    model, cfg = load_moe_4bit_streaming(MODEL, "cuda", torch.bfloat16, r=8, alpha=16,
+                                         quant_type="nf4", arena=arena_path,
+                                         arena_train=True)
     n = enable_nvme_train_residency(model, arena_path, hot_rows=20_000)
-    enable_fast_train(model)          # unchanged
+    model.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs={"use_reentrant": False})   # required
+    enable_fast_train(model)          # unchanged by any of this
 """
 from __future__ import annotations
 

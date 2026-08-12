@@ -315,7 +315,7 @@ def _install_fp8_block_linears(model, weight_map, get, expert_keys, dtype, devic
 
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
-    trust_remote_code=None, arena=None, quantize_layers=None,
+    trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -562,6 +562,33 @@ def load_moe_4bit_streaming(
                 # note on the resident branch below.
                 experts.limit = float(
                     getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT))
+            # Wrap in the adapter ONLY when the caller says they are training.
+            # Without this the arena path is serving-only and silently ignores
+            # r/alpha: it produced bare meta experts, so
+            # `enable_nvme_train_residency` — whose whole purpose is training over
+            # arena-resident experts — refused every module with "not
+            # ExpertsLoRA-wrapped", and its documented usage could not run at all.
+            # Found on an A5000 (2026-08-12); no CPU test caught it because every
+            # fixture constructs `ExpertsLoRA` by hand, so they exercised the
+            # mechanism and never the path a caller actually takes.
+            #
+            # Gated on an EXPLICIT flag, not on `r`, and that distinction is
+            # load-bearing: `r` is a required positional and the documented
+            # SERVING example passes `r=8` before calling
+            # `enable_mxfp4_nvme_residency`, which refuses wrapped modules. Keying
+            # off `r` would have fixed training by breaking serving.
+            #
+            # `.to(device)` is deliberately NOT used here, unlike the resident
+            # branches: the base is on `meta` by design — that is what makes
+            # expert storage independent of model size — and moving a meta tensor
+            # to CUDA raises. Only the adapter, which is real, is moved.
+            if arena_train:
+                experts = ExpertsLoRA(experts, r=r, alpha=alpha, dtype=dtype)
+                for _n in ("gate_up_lora_A", "gate_up_lora_B",
+                           "down_lora_A", "down_lora_B"):
+                    _p = getattr(experts, _n)
+                    setattr(experts, _n, torch.nn.Parameter(
+                        _p.data.to(device), requires_grad=_p.requires_grad))
             parent, leaf = epfx.rstrip(".").rsplit(".", 1)
             setattr(model.get_submodule(parent), leaf, experts)
             meta_expert_prefixes.append(epfx)

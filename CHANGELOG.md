@@ -1,5 +1,77 @@
 # Changelog
 
+## 0.17.0 — 2026-08-12
+
+**Training whose frozen experts live on NVMe — plus the namespace split, and a CI
+gap that had been reporting 42 tests as coverage while running none of them.**
+
+- **`enable_nvme_train_residency(model, arena_path, hot_rows=…)`** — QLoRA on a
+  MoE whose frozen experts exceed **host RAM**. The arena served inference and
+  refused training in as many words (*"Load without `arena=` to train, or drop the
+  adapters to serve"*); that refusal was right, since the serving engines replace
+  the module's forward and would discard the adapter's delta. This moves the
+  **home** instead: `_ArenaExpertOffload` is an offload handle whose homes are
+  `meta` — shape and dtype, no storage — and whose rows come off the arena:
+  disk row → ColdTier pinned slot → `[E, …]` device stack → kernel.
+
+  `enable_fast_train` is untouched. `nf4_qlora`'s `weights_fn` closure already
+  re-reads whatever is staged when backward runs, which is the seam that makes
+  this work at all.
+
+  **Gradient checkpointing is required, and enforced.** The evict hook fires when
+  a forward returns, so the checkpoint recompute is what re-stages a layer for its
+  own backward. Routed staging fills only the routed rows of a full-shaped stack,
+  so a recompute that routed differently would read uninitialized memory —
+  `assert_rows_staged` runs inside the weights_fn closures (i.e. **at backward**)
+  and refuses instead.
+
+  **It does not bound VRAM.** The staged stack keeps its full `[E, …]` shape so
+  every consumer still indexes by global expert id; one layer is device-resident,
+  as with ordinary offload. This lifts the host-RAM ceiling, not the VRAM one.
+
+  Needs `grouped-nf4-gemm >= 0.9.0` for `nvme_residency.segment_into`.
+
+- **Fixes a latent bug in the shared single-resident-layer policy.** The slot was
+  written through `type(self)`, so a subclass bound a *second* slot and left the
+  base class pointing at a handle nothing would evict — two layers resident at
+  once, the exact bound that policy exists to hold. Unreachable with one handle
+  class; reachable the moment there are two.
+
+- **`enable_nvme_residency` validates before allocating now.** It built its
+  `ColdTier` first, which made every refusal unreachable on a host without an
+  accelerator: the tier pins its landing buffer, so a CPU-only machine raised
+  "Cannot access accelerator device" and the caller got an allocator error instead
+  of the message naming their mistake. On a host that does pin, a refusal leaked
+  the tier. The error path also no longer closes a tier that modules are already
+  serving from, and counts what *this call* attached rather than trusting a sticky
+  `_e4b_hot_ref` marker that survives an earlier enable.
+
+- **CI actually runs the arena tests now.** `.[test]` did not install
+  grouped-nf4-gemm, so on the runner `tests/test_nvme_train_residency.py` went
+  from 29 tests to **one skip**, and `tests/test_nvme_residency_equivalence.py`
+  did the same — both reporting as coverage while executing nothing. Adding the
+  dependency took the runner from **577 to 661 passing**, and immediately
+  surfaced the `enable_nvme_residency` bug above, in an engine that shipped
+  months earlier.
+
+- **The README link check stopped calling throttling a dead link**, and no longer
+  forwards `Authorization` across origins. It opened a fresh TLS connection per
+  link and GitHub's edge dropped some of that churn; one run reported 28 of 28
+  links dead on a tree where every path existed. Connection reuse fixed it
+  (measured: a URL that failed four `urlopen` attempts answered 200 three times
+  running under `curl`). 404 and 403 are never retried into a pass.
+
+Also shipping here, from the preceding commits: the `arch/` `formats/` `engines/`
+namespace split (old submodule paths still resolve via aliases in `__init__`), the
+architecture support matrix, transformers checkpoint-key renamings, and the
+gap-heuristic fix.
+
+**Not verified:** none of the arena training path has run on a GPU. No
+forward/backward parity against a reference arm, no timing, no real arena. The
+correctness argument is that arena-staged bytes are bitwise equal to host-staged
+ones, which is established on CPU — everything downstream inherits the existing
+fused-training gates unchanged.
+
 ## 0.16.3 — 2026-08-12
 
 **Makes 0.16.2's headline feature actually importable, and turns one opaque load
