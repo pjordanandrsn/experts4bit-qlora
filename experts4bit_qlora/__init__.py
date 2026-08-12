@@ -111,6 +111,11 @@ from .nvme_experts import (  # noqa: E402
 # do it have to be importable from the top level -- 0.7.1 shipped precisely to fix the
 # class of bug where the front page names a symbol that raises ImportError.
 from .expert_profile import coverage_from_profile, hot_sets_from_profile  # noqa: E402
+# 0.16.2: CUDA-graph decode capture. Exported at the top level for the same reason
+# 0.7.1 was cut -- a symbol users cannot import is a symbol that shipped to nobody.
+# capture.py imports only torch eagerly (transformers is imported inside the
+# functions), so this cannot make `import experts4bit_qlora` fail.
+from .capture import CapturedDecoder, capture_decode, probe_capture  # noqa: E402
 from .kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
@@ -164,6 +169,9 @@ __all__ = [
     "expert_geometry_from_arena",
     "dispatched_modules",
     "hot_sets_from_profile",
+    "capture_decode",
+    "CapturedDecoder",
+    "probe_capture",
     "coverage_from_profile",
     "verify_moe_4bit",
     # Provided lazily by __getattr__ below (importing them pulls in the [train] extra).
