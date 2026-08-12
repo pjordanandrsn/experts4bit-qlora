@@ -30,6 +30,21 @@ def test_the_old_submodule_path_still_imports(old):
     assert mod.__name__.startswith("experts4bit_qlora")
 
 
+@pytest.mark.parametrize("old", LEGACY)
+def test_the_old_name_is_reachable_as_an_ATTRIBUTE_too(old):
+    """`experts4bit_qlora.awq` must resolve without an explicit import of it.
+
+    Registering in `sys.modules` satisfies `import experts4bit_qlora.awq` and nothing
+    else: a real import also binds the submodule on its parent package, and a cache
+    hit skips that step, so attribute access falls through to `__getattr__` and
+    raises. The test above passes over this entirely -- which is how the first
+    version of the alias layer shipped with attribute access broken.
+    """
+    import experts4bit_qlora as pkg
+    assert hasattr(pkg, old), f"experts4bit_qlora.{old} is not bound on the package"
+    assert getattr(pkg, old) is importlib.import_module(f"experts4bit_qlora.{old}")
+
+
 def test_new_paths_and_old_paths_are_the_same_module_object():
     """Arming: two distinct module objects would each pass the test above while
     holding separate copies of any module-level state."""

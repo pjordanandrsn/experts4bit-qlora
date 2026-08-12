@@ -243,11 +243,21 @@ _MOVED = {
 }
 
 def _install_legacy_module_aliases():
+    _self = _sys.modules[__name__]
     for _old, _new in _MOVED.items():
         try:
             _mod = _import_module(f"{__name__}.{_new}")
         except Exception:            # an optional dep missing must not break the package
             continue
+        # BOTH bindings are required, and only one of them is obvious.
+        # `sys.modules` alone satisfies `import experts4bit_qlora.awq` -- the import
+        # machinery finds the cache entry and stops. But a normal import ALSO binds the
+        # submodule as an attribute on its parent package, and a cache hit skips that,
+        # so `experts4bit_qlora.awq` as an ATTRIBUTE would fall through to this module's
+        # `__getattr__` and raise. Testing only via `importlib.import_module` passes
+        # straight over that, which is exactly how it was missed the first time.
         _sys.modules.setdefault(f"{__name__}.{_old}", _mod)
+        if not hasattr(_self, _old):
+            setattr(_self, _old, _mod)
 
 _install_legacy_module_aliases()
