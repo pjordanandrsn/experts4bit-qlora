@@ -51,7 +51,7 @@ pure streaming — 4.4 GiB of VRAM for nothing. Coverage explains it exactly (in
 of routed slots, by-index 3.2%, uniform 3.1%): **an index-ordered hot set is a uniform
 random draw.**
 
-`experts4bit_qlora.expert_profile` builds the histogram (`E4B_EXPERT_PROFILE=out.jsonl`);
+`experts4bit_qlora.engines.expert_profile` builds the histogram (`E4B_EXPERT_PROFILE=out.jsonl`);
 `hot_sets_from_profile(path, H)` ranks by `tokens_routed` and `coverage_from_profile`
 scores a candidate set without re-running the model.
 

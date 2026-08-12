@@ -20,7 +20,7 @@ _RUN = os.environ.get("RUN_GPTOSS_E2E") == "1"
 def test_gptoss20b_offload_load_and_generate():
     from transformers import AutoTokenizer
     from experts4bit_qlora.loader import load_moe_4bit_streaming
-    from experts4bit_qlora.gptoss import GptOssExperts4bit
+    from experts4bit_qlora.arch.gptoss import GptOssExperts4bit
 
     torch.cuda.reset_peak_memory_stats()
     model, cfg = load_moe_4bit_streaming(

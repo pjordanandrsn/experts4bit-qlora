@@ -1,6 +1,6 @@
 """Speculative decoding loop for the DFlash drafter.
 
-The drafter (:mod:`experts4bit_qlora.glimmer_draft`) proposes a short run of
+The drafter (:mod:`experts4bit_qlora.arch.glimmer_draft`) proposes a short run of
 tokens cheaply; the target verifies them in ONE forward and keeps the longest
 prefix it agrees with. Correctness here is exact: greedy speculative decoding
 must produce **the identical token stream** the target would have produced on

@@ -99,7 +99,7 @@ def attach(model) -> bool:
     if not enabled():
         return False
     from ._vendor.experts import ExpertsNbit
-    from .lora import ExpertsLoRA
+    from ..lora import ExpertsLoRA
 
     out_path = os.environ[_ENV]
     # A wrapped base is never dispatched (ExpertsLoRA calls base._project, not base.forward),

@@ -128,7 +128,7 @@ def test_unknown_top_k_is_refused(tmp_path):
 def test_profile_model_mismatch_is_refused(tmp_path, monkeypatch):
     """One set per targeted module, in module order. A 2-layer profile against a 3-module
     model would shift every set onto the wrong layer — and still 'work'."""
-    import experts4bit_qlora.hot_residency as hr
+    import experts4bit_qlora.engines.hot_residency as hr
 
     prof = tmp_path / "p.jsonl"
     _profile(prof, layers=2)
@@ -141,8 +141,8 @@ def test_profile_model_mismatch_is_refused(tmp_path, monkeypatch):
 def test_zero_patched_modules_is_refused(tmp_path, monkeypatch):
     """'Residency requested and not running' must fail loudly: the whole point of the
     deployment knob is that its effect is invisible in anything but tok/s."""
-    import experts4bit_qlora.hot_residency as hr
-    import experts4bit_qlora.pipelined as pl
+    import experts4bit_qlora.engines.hot_residency as hr
+    import experts4bit_qlora.engines.pipelined as pl
 
     prof = tmp_path / "p.jsonl"
     _profile(prof, layers=2)
@@ -154,8 +154,8 @@ def test_zero_patched_modules_is_refused(tmp_path, monkeypatch):
 
 
 def test_happy_path_records_coverage_and_k(tmp_path, monkeypatch):
-    import experts4bit_qlora.hot_residency as hr
-    import experts4bit_qlora.pipelined as pl
+    import experts4bit_qlora.engines.hot_residency as hr
+    import experts4bit_qlora.engines.pipelined as pl
 
     prof = tmp_path / "p.jsonl"
     _profile(prof, layers=2, experts=8)
@@ -179,8 +179,8 @@ def test_happy_path_records_coverage_and_k(tmp_path, monkeypatch):
 
 
 def test_explicit_k_slots_overrides_the_config(tmp_path, monkeypatch):
-    import experts4bit_qlora.hot_residency as hr
-    import experts4bit_qlora.pipelined as pl
+    import experts4bit_qlora.engines.hot_residency as hr
+    import experts4bit_qlora.engines.pipelined as pl
 
     prof = tmp_path / "p.jsonl"
     _profile(prof, layers=2)

@@ -48,7 +48,7 @@ upstream change fails loudly instead of silently swapping halves.
 
 This module owns the EXPERT surface only. Each model's non-expert surface
 (attention flavour, shared experts, router bias, dense-layer prefix, extra
-heads) still needs its own map — see :mod:`experts4bit_qlora.glm5` for a worked
+heads) still needs its own map — see :mod:`experts4bit_qlora.arch.glm5` for a worked
 example that layers a model's quirks on top of the QWEN2_MOE expert
 convention.
 """
@@ -345,7 +345,7 @@ NEMOTRON_H = MoEConvention(
 #: no transpose), so the expert surface is plain native passthrough. Its two
 #: non-expert quirks — a layer-conditional post_mlp_layernorm and an unshipped
 #: e_score_correction_bias buffer — need per-layer knowledge and live in the
-#: dedicated keymap :mod:`experts4bit_qlora.axk1`. Never per-expert.
+#: dedicated keymap :mod:`experts4bit_qlora.arch.axk1`. Never per-expert.
 AXK1 = MoEConvention(
     name="axk1",
     expert_re=re.compile(r"(?!)"),

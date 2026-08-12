@@ -19,7 +19,7 @@ LIMIT = 2.0          # far below the checkpoint's 10.0 so the clamp actually bin
 
 
 def _mk_v4(limit=LIMIT, seed=0, compute_dtype=torch.float32, scale=1.2):
-    from experts4bit_qlora.deepseek_v4 import _DeepseekV4ForwardMixin
+    from experts4bit_qlora.arch.deepseek_v4 import _DeepseekV4ForwardMixin
     torch.manual_seed(seed)
     gate_up = torch.randn(E, 2 * INTER, HID) * scale
     down = torch.randn(E, HID, INTER) * scale

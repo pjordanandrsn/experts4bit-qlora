@@ -21,7 +21,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
-from experts4bit_qlora.hot_residency import (  # noqa: E402
+from experts4bit_qlora.engines.hot_residency import (  # noqa: E402
     dispatched_modules,
     target_modules,
     wrapped_bases,

@@ -49,7 +49,7 @@ from typing import Sequence
 
 import torch
 
-from .lora import _epilogue
+from ..lora import _epilogue
 
 from .hot_residency import _HotResidency, _eligible
 
@@ -237,12 +237,12 @@ def enable_cold_engine(model, hot_sets: Sequence, device: str = "cuda",
 
     stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     try:
-        from experts4bit_qlora.gptoss import GptOssExperts4bit, GptOssExpertsNbit
+        from experts4bit_qlora.arch.gptoss import GptOssExperts4bit, GptOssExpertsNbit
         stock_forwards |= {GptOssExperts4bit.forward, GptOssExpertsNbit.forward}
         # V4 overrides `forward` only for its clamped SwiGLU, which `_epilogue` now
         # reproduces on the host path — so allowlist it rather than skipping it as a
         # custom forward and leaving the strong-CPU regime unavailable to V4.
-        from experts4bit_qlora.deepseek_v4 import (
+        from experts4bit_qlora.arch.deepseek_v4 import (
             DeepseekV4Experts4bit, DeepseekV4ExpertsNbit)
         stock_forwards |= {DeepseekV4Experts4bit.forward, DeepseekV4ExpertsNbit.forward}
     except ImportError:

@@ -22,9 +22,9 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.moe_conventions import MoEConventionError  # noqa: E402
-from experts4bit_qlora.moe_load import execute_moe_plan  # noqa: E402
-from experts4bit_qlora.moe_plan import plan_moe_checkpoint  # noqa: E402
+from experts4bit_qlora.arch.moe_conventions import MoEConventionError  # noqa: E402
+from experts4bit_qlora.arch.moe_load import execute_moe_plan  # noqa: E402
+from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint  # noqa: E402
 
 # (repo, model_type, layers to build) — one per convention shape we claim.
 FAMILIES = [
@@ -259,7 +259,7 @@ def test_block_fp8_scales_are_paired_and_dequantized_not_dropped():
     quantized matrix. The weight keys match a convention PERFECTLY, which is
     what makes ignoring the scales so dangerous: the model would load clean and
     compute garbage. This asserts the executor actually dequantizes."""
-    from experts4bit_qlora.fp8_blocks import dequantize_fp8_blocks
+    from experts4bit_qlora.formats.fp8_blocks import dequantize_fp8_blocks
 
     class M(torch.nn.Module):
         def __init__(self):
@@ -405,7 +405,7 @@ def test_dim_theta_rotary_buffer_is_rebuilt_from_the_standard_formula():
     materializer skips them. The dim/theta fallback must rebuild the exact same
     tensor the module's own __init__ would, or the first vision forward dies on
     a meta buffer."""
-    from experts4bit_qlora.moe_load import _materialize_computed_buffers
+    from experts4bit_qlora.arch.moe_load import _materialize_computed_buffers
 
     class VisionRotary(torch.nn.Module):
         def __init__(self, dim=36, theta=10000.0):
@@ -431,8 +431,8 @@ def test_dim_theta_rotary_buffer_is_rebuilt_from_the_standard_formula():
 def test_a_meta_inv_freq_with_no_way_to_rebuild_it_still_raises():
     """The fallback must not become a silent catch-all: a rotary buffer with
     neither a config initializer nor dim/theta is a real gap and must raise."""
-    from experts4bit_qlora.moe_load import _materialize_computed_buffers
-    from experts4bit_qlora.moe_conventions import MoEConventionError
+    from experts4bit_qlora.arch.moe_load import _materialize_computed_buffers
+    from experts4bit_qlora.arch.moe_conventions import MoEConventionError
 
     class Mystery(torch.nn.Module):
         def __init__(self):
@@ -454,7 +454,7 @@ def test_vl_prefix_expert_fusion_targets_inherit_the_checkpoint_prefix():
     `language_model.model.` prefix. The planner's prefix-aware fused_names must
     place the fused target under the SAME prefix, not a hardcoded `model.` — or
     the target would miss the tree. Mirrors the real minimax_m3_vl key shape."""
-    from experts4bit_qlora.moe_conventions import MIXTRAL
+    from experts4bit_qlora.arch.moe_conventions import MIXTRAL
     pfx = "language_model.model."
     # MIXTRAL matches the w1/w3/w2 suffix; fused_names carries the prefix.
     assert MIXTRAL.match("block_sparse_moe.experts.5.w1.weight") == (5, "gate")
@@ -474,7 +474,7 @@ def test_executor_stacks_match_the_quantizer_input_contract():
     when not, and down_proj [E, hidden, inter] either way. Pin it on CPU so a
     change to fuse_experts/stack_experts can't silently break the bridge before
     anyone runs it on a GPU. (The nf4 quantize + forward-parity half needs CUDA.)"""
-    from experts4bit_qlora.moe_conventions import fuse_experts, stack_experts
+    from experts4bit_qlora.arch.moe_conventions import fuse_experts, stack_experts
     E, inter, hidden = 4, 8, 16
     g = [torch.randn(inter, hidden) for _ in range(E)]
     u = [torch.randn(inter, hidden) for _ in range(E)]
@@ -503,7 +503,7 @@ def test_axk1_keymap_drops_dense_post_mlp_norm_but_renames_moe_layers():
     it (rename to mlp.post_mlp_layernorm); the dense mlp does not (drop it —
     transformers treats it as an unexpected key). The split is
     layer_idx >= first_k_dense_replace."""
-    from experts4bit_qlora.axk1 import rewrite_axk1_keys
+    from experts4bit_qlora.arch.axk1 import rewrite_axk1_keys
     keys = [
         "model.layers.0.post_mlp_layernorm.weight",   # dense (fkd=1): drop
         "model.layers.1.post_mlp_layernorm.weight",   # MoE: rename
@@ -519,8 +519,8 @@ def test_axk1_keymap_drops_dense_post_mlp_norm_but_renames_moe_layers():
 
 
 def test_axk1_is_native_prefused_and_ignores_the_unshipped_router_buffer():
-    from experts4bit_qlora.moe_conventions import convention_for, AXK1
-    from experts4bit_qlora.axk1 import AXK1_IGNORE_PARAM_PATTERNS
+    from experts4bit_qlora.arch.moe_conventions import convention_for, AXK1
+    from experts4bit_qlora.arch.axk1 import AXK1_IGNORE_PARAM_PATTERNS
     assert convention_for("axk1") is AXK1
     assert not AXK1.roles                                 # native, never per-expert
     assert AXK1.match("mlp.experts.gate_up_proj") is None
@@ -537,7 +537,7 @@ def test_compressed_int_triple_is_paired_dequantized_and_synthesized():
     tensor compressed_tensors would — placing the packed int32 as if dense would
     load clean and compute garbage."""
     ct = pytest.importorskip("compressed_tensors.compressors.pack_quantized.helpers")
-    from experts4bit_qlora.compressed_int import dequantize_compressed_int
+    from experts4bit_qlora.formats.compressed_int import dequantize_compressed_int
 
     class M(torch.nn.Module):
         def __init__(self):
@@ -575,7 +575,7 @@ def test_nvfp4_triple_is_distinguished_from_int4_and_dequantized():
     must route each to the right decoder — an fp4-as-int4 mixup would be a silent
     wrong load — and the executor must match compressed_tensors' nvfp4 output."""
     nv = pytest.importorskip("compressed_tensors.compressors.nvfp4.helpers")
-    from experts4bit_qlora.nvfp4 import dequantize_nvfp4
+    from experts4bit_qlora.formats.nvfp4 import dequantize_nvfp4
 
     class M(torch.nn.Module):
         def __init__(self):
@@ -611,7 +611,7 @@ def test_modelopt_fp4_is_recognized_and_reuses_the_nvfp4_decoder():
     and weight_scale_2 (per tensor). input_scale is an ACTIVATION scale and must
     not be mistaken for part of the weight. Verified bit-exact against
     modelopt's own NVFP4QTensor.dequantize, so it reuses that decoder."""
-    from experts4bit_qlora.nvfp4 import dequantize_nvfp4
+    from experts4bit_qlora.formats.nvfp4 import dequantize_nvfp4
 
     class M(torch.nn.Module):
         def __init__(self):
@@ -648,7 +648,7 @@ def test_awq_triple_is_recognized_and_uses_the_asymmetric_decoder():
     nibbles are interleaved [0,4,1,5,2,6,3,7] — an order no shape inspection
     reveals, so a from-scratch guess yields right-shaped scrambled weights.
     Pinned against autoawq's own constant."""
-    from experts4bit_qlora.awq import AWQ_REVERSE_ORDER, dequantize_awq
+    from experts4bit_qlora.formats.awq import AWQ_REVERSE_ORDER, dequantize_awq
     assert AWQ_REVERSE_ORDER == [0, 4, 1, 5, 2, 6, 3, 7]   # verbatim autoawq
 
     class M(torch.nn.Module):
@@ -687,7 +687,7 @@ def test_gptq_and_awq_are_told_apart_by_g_idx():
     SCRAMBLED weights that load clean — measured: the AWQ branch once claimed
     all 18624 experts of Qwen3-30B-A3B-GPTQ-Int4. The g_idx sibling is the
     name-level discriminator."""
-    from experts4bit_qlora.moe_plan import _split_block_scales
+    from experts4bit_qlora.arch.moe_plan import _split_block_scales
 
     _w, dq = _split_block_scales(["m.qweight", "m.qzeros", "m.scales", "m.g_idx"])
     assert dq["m.weight"] == ("gptq", "m.qweight", "m.scales",
@@ -702,7 +702,7 @@ def test_gptq_dequant_matches_gptqmodel_including_desc_act():
     """Pinned against gptqmodel's dequantize_weight: scales[g_idx] * (w -
     (zeros+1)[g_idx]), sequential bit order, packed along IN. The desc_act case
     (a permuted g_idx) must go through the same path."""
-    from experts4bit_qlora.gptq import dequantize_gptq
+    from experts4bit_qlora.formats.gptq import dequantize_gptq
     torch.manual_seed(0)
     BITS, IN, OUT, G = 4, 256, 64, 128
     PER, groups = 32 // BITS, IN // 128
@@ -749,7 +749,7 @@ def test_each_quant_format_is_claimed_by_exactly_its_own_decoder(fmt):
     """No format may be claimed by another's branch, and every companion must be
     consumed (a leftover companion would later be placed as if it were a dense
     parameter)."""
-    from experts4bit_qlora.moe_plan import _split_block_scales
+    from experts4bit_qlora.arch.moe_plan import _split_block_scales
     keys, expected = _FORMAT_KEYS[fmt]
     weights, dq = _split_block_scales(keys)
     assert {v[0] for v in dq.values()} == {expected}, f"{fmt} misrouted"
@@ -793,7 +793,7 @@ def test_gptq_rejects_a_g_idx_that_would_load_the_wrong_scales(g_idx, why):
     misparsed g_idx produced a full-shaped tensor built from the wrong scales,
     with no error at all. A wrong-length g_idx broadcast into a truncated
     weight. Both are silent-wrongness; both now raise."""
-    from experts4bit_qlora.gptq import dequantize_gptq
+    from experts4bit_qlora.formats.gptq import dequantize_gptq
     qw = torch.zeros(8, 8, dtype=torch.int32)
     qz = torch.zeros(2, 1, dtype=torch.int32)
     sc = torch.ones(2, 8)

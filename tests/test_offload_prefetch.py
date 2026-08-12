@@ -14,7 +14,7 @@ pytest.importorskip("bitsandbytes")
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
 from experts4bit_qlora import enable_inference_prefetch, offload_model_experts  # noqa: E402
-from experts4bit_qlora.offload import _ExpertOffload  # noqa: E402
+from experts4bit_qlora.engines.offload import _ExpertOffload  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires a CUDA GPU")

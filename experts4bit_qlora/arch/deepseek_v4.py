@@ -29,7 +29,7 @@ rather than this package's gpt-oss path:
 
 Provenance is the same story as gpt-oss: the loaded experts are NF4, a re-quantization
 of the released MXFP4 bytes; the "exact released bytes" claim lives one step earlier at
-:func:`experts4bit_qlora.mxfp4.dequantize_mxfp4`, which is verified bit-identical to
+:func:`experts4bit_qlora.formats.mxfp4.dequantize_mxfp4`, which is verified bit-identical to
 DeepSeek's own ``inference/convert.py`` decode.
 """
 from __future__ import annotations

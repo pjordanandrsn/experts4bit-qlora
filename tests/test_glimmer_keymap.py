@@ -21,7 +21,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.glimmer import (  # noqa: E402
+from experts4bit_qlora.arch.glimmer import (  # noqa: E402
     GlimmerKeymapError,
     expected_param_names,
     map_gguf_key,

@@ -26,13 +26,13 @@ from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
 from . import Experts4bit, ExpertsNbit, normalize_quant_type
-from .deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
-from .deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
-from .fp8_blocks import convert_to_fp8_blocks
-from .gptoss import GptOssExperts4bit
+from .arch.deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
+from .arch.deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
+from .formats.fp8_blocks import convert_to_fp8_blocks
+from .arch.gptoss import GptOssExperts4bit
 from .lora import ExpertsLoRA
-from .mxfp4 import dequantize_mxfp4
-from .offload import enable_expert_offload, enable_inference_prefetch
+from .formats.mxfp4 import dequantize_mxfp4
+from .engines.offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
 
 # model_type -> experts submodule path relative to `model.layers.{i}`.
@@ -92,7 +92,7 @@ def _read_compatible_convention(model_type):
 
     Deliberately NARROW: mixtral (w1/w3/w2 spelling), dbrx (flat stacks) and
     nemotron_h (no gate) need their own read handling and are NOT admitted here."""
-    from .moe_conventions import MoEConventionError, convention_for
+    from .arch.moe_conventions import MoEConventionError, convention_for
     try:
         return convention_for(model_type).name == "qwen2_moe"
     except MoEConventionError:
@@ -102,7 +102,7 @@ def _read_compatible_convention(model_type):
 def expert_layout_for(model_type):
     """``(expert_submodule_path, has_gate)`` for the quantized loader.
 
-    The MoE convention system (:mod:`experts4bit_qlora.moe_conventions`) is the
+    The MoE convention system (:mod:`experts4bit_qlora.arch.moe_conventions`) is the
     broad, adjudicated source of truth for expert layout — 41 model_types and
     counting — and its ``fused_prefix`` is exactly the submodule path this loader
     calls ``expert_rel``. Where a convention exists, defer to it, and take
@@ -114,7 +114,7 @@ def expert_layout_for(model_type):
     Verified: for every model_type both systems cover, the paths already agree
     (see tests) — this makes that agreement the mechanism, not a coincidence.
     """
-    from .moe_conventions import MoEConventionError, convention_for
+    from .arch.moe_conventions import MoEConventionError, convention_for
     try:
         conv = convention_for(model_type)
         return conv.fused_prefix, conv.gated
@@ -327,12 +327,12 @@ def load_moe_4bit_streaming(
     RAM *immediately after that layer is built* — inside the per-layer loop, never in a post-load
     pass (which would require every layer's experts GPU-resident first, defeating the purpose). A
     forward pre-hook streams a layer's experts back to the GPU just-in-time and a post-hook evicts
-    them, so only one layer's experts are GPU-resident at a time (see :mod:`experts4bit_qlora.offload`).
+    them, so only one layer's experts are GPU-resident at a time (see :mod:`experts4bit_qlora.engines.offload`).
 
     ``prefetch=True`` (with ``offload``) additionally links the layers for inference prefetch: during
     ``no_grad`` forwards each layer starts the next layer's H2D copy on a side stream, overlapping
     transfer with compute at a bounded cost of two layers resident instead of one. Training forwards
-    are unaffected. See :func:`experts4bit_qlora.offload.enable_inference_prefetch`.
+    are unaffected. See :func:`experts4bit_qlora.engines.offload.enable_inference_prefetch`.
     """
     # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
     # fetch, snapshot download, or shard read — and the Experts4bit-vs-ExpertsNbit class dispatch
@@ -551,7 +551,7 @@ def load_moe_4bit_streaming(
                     "which would silently change the epilogue.")
             expert_keys.update(keys)
             n_moe += 1
-            from .nvme_experts import build_meta_experts
+            from .engines.nvme_experts import build_meta_experts
             v4 = model_type == "deepseek_v4"
             experts = build_meta_experts(
                 arena_index, n_exp, has_gate=True, activation=activation,
@@ -704,7 +704,7 @@ def load_moe_4bit_streaming(
             # Handles were appended in layer order above, which is what the circular linking needs.
             enable_inference_prefetch(offload_handles)
             log("  inference prefetch ON: next layer's experts copy on a side stream during no_grad forwards")
-        from .offload import _arena_enabled, _stats_enabled, report_offload_environment
+        from .engines.offload import _arena_enabled, _stats_enabled, report_offload_environment
 
         if _arena_enabled():
             log("  offload arena ON (E4B_OFFLOAD_ARENA): experts staged as consolidated per-dtype copies")

@@ -91,7 +91,7 @@ def test_router_skew_falls_back_to_the_reference():
     """Group sizes come from the router. One hot expert makes the padded block
     G*max(sizes) rows wide however few rows are real, so past the guard the reference
     is used — bad routing must not cost MORE than not having this path at all."""
-    from experts4bit_qlora.batched import _PAD_WASTE_LIMIT
+    from experts4bit_qlora.engines.batched import _PAD_WASTE_LIMIT
 
     mod = _build()
     args = _inputs(n_tok=64, hot_expert=True)

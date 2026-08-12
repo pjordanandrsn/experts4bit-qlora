@@ -9,7 +9,7 @@ import pytest
 torch = pytest.importorskip("torch")
 import torch.nn as nn  # noqa: E402
 
-from experts4bit_qlora.fp8_blocks import convert_to_fp8_blocks  # noqa: E402
+from experts4bit_qlora.formats.fp8_blocks import convert_to_fp8_blocks  # noqa: E402
 from experts4bit_qlora.loader import (  # noqa: E402
     CKPT_KEY_REWRITERS,
     DEEPSEEK_V4_FP8_DENSE,

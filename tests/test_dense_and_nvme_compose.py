@@ -29,9 +29,9 @@ pytest.importorskip("nvme_arena", reason="needs grouped-nf4-gemm N-series module
 from nvme_arena import bake_expert_tensors, load_index  # noqa: E402
 
 from experts4bit_qlora import Experts4bit  # noqa: E402
-from experts4bit_qlora.dense_offload import (  # noqa: E402
+from experts4bit_qlora.engines.dense_offload import (  # noqa: E402
     _DenseOffload, enable_dense_offload)
-from experts4bit_qlora.nvme_experts import NF4_SEGMENTS  # noqa: E402
+from experts4bit_qlora.engines.nvme_experts import NF4_SEGMENTS  # noqa: E402
 
 E, INTER, H = 8, 64, 128          # NF4 blocksize 64 must tile both in_features
 LAYER = 0
@@ -128,7 +128,7 @@ def _meta_experts(model, index):
     mismatch between how I imagined the state arises and how it actually arises is
     exactly what this test should be built on.
     """
-    from experts4bit_qlora.nvme_experts import build_meta_experts
+    from experts4bit_qlora.engines.nvme_experts import build_meta_experts
     for lay in model.layers:
         lay.experts = build_meta_experts(
             index, E, has_gate=True,
@@ -213,7 +213,7 @@ def test_dense_offload_forward_is_unaffected_by_expert_residency(arena):
     turning on neither. The dense path is what this forward exercises; the expert
     path's own equivalence is gated in test_nvme_residency_equivalence.py."""
     _needs_fused()
-    from experts4bit_qlora.nvme_experts import enable_nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
 
     m, path, index = arena
     m = m.cuda().eval()

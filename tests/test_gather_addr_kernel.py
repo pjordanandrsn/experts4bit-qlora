@@ -29,7 +29,7 @@ def _no_triton_interpreter():
         pytest.skip("Triton interpreter mode active (raw-pointer gather is compiled-only)")
 
 
-from experts4bit_qlora.pipelined import _align8, _gather_kernel  # noqa: E402
+from experts4bit_qlora.engines.pipelined import _align8, _gather_kernel  # noqa: E402
 
 
 def _mk_store(E, row_bytes, pattern0, pinned):
@@ -148,7 +148,7 @@ def test_partial_skip_mixed_launch():
 def test_engine_traffic_counters_hand_counted():
     pytest.importorskip("nf4_grouped")
     from experts4bit_qlora import Experts4bit
-    from experts4bit_qlora.pipelined import (
+    from experts4bit_qlora.engines.pipelined import (
         disable_pipelined_residency, enable_pipelined_residency)
 
     torch.manual_seed(0)
@@ -197,7 +197,7 @@ def test_interpreter_mode_refused_loudly(monkeypatch):
     # would segfault the interpreter on a raw device pointer)
     pytest.importorskip("nf4_grouped")
     from experts4bit_qlora import Experts4bit
-    from experts4bit_qlora.pipelined import enable_pipelined_residency
+    from experts4bit_qlora.engines.pipelined import enable_pipelined_residency
 
     torch.manual_seed(0)
     mod = Experts4bit.from_float(gate_up_proj=torch.randn(4, 128, 128).cuda(),
@@ -265,7 +265,7 @@ def test_traffic_refuses_when_counting_is_off():
     """
     pytest.importorskip("nf4_grouped")
     from experts4bit_qlora import Experts4bit
-    from experts4bit_qlora.pipelined import enable_pipelined_residency
+    from experts4bit_qlora.engines.pipelined import enable_pipelined_residency
 
     torch.manual_seed(0)
     E, H, inter, k = 8, 128, 64, 3

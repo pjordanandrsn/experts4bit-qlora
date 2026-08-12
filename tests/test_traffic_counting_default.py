@@ -7,7 +7,7 @@ lives in a module-level function so this can pin it anywhere.
 """
 import pytest
 
-from experts4bit_qlora.pipelined import traffic_counting_default
+from experts4bit_qlora.engines.pipelined import traffic_counting_default
 
 
 @pytest.mark.parametrize("value,expected", [

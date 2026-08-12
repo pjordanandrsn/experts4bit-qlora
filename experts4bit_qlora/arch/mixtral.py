@@ -35,7 +35,7 @@ shape agreeing and nothing raising. Two independent sources pin it:
   each across experts, then ``Concatenate(dim=1)`` — w1's rows land first.
 
 Note this is *block* concatenation (gate block, then up block), NOT the
-interleave GPT-OSS uses. See :mod:`experts4bit_qlora.gptoss` for that one.
+interleave GPT-OSS uses. See :mod:`experts4bit_qlora.arch.gptoss` for that one.
 """
 from __future__ import annotations
 

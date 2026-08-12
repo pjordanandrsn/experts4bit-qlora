@@ -12,7 +12,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.expert_profile import (  # noqa: E402
+from experts4bit_qlora.engines.expert_profile import (  # noqa: E402
     coverage_from_profile,
     hot_sets_from_profile,
 )

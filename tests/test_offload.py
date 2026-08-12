@@ -1,4 +1,4 @@
-"""Unit tests for expert CPU-offloading (:mod:`experts4bit_qlora.offload`).
+"""Unit tests for expert CPU-offloading (:mod:`experts4bit_qlora.engines.offload`).
 
 These run on CPU-only torch (no GPU required): ``Experts4bit.from_float`` and the ``ExpertsLoRA``
 dequantize forward both work on CPU, and offload changes only tensor *location*, not the math — so
@@ -16,7 +16,7 @@ from torch.utils.checkpoint import checkpoint  # noqa: E402
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E402
 from experts4bit_qlora import enable_expert_offload, offload_model_experts  # noqa: E402
-from experts4bit_qlora.offload import _ExpertOffload, _in_backward  # noqa: E402
+from experts4bit_qlora.engines.offload import _ExpertOffload, _in_backward  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.float32

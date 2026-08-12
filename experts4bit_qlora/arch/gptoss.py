@@ -13,7 +13,7 @@ rather than an activation swap:
   (used as ``x @ W``), ``down_proj[e]`` is ``[inter, hidden]``.
 
 :meth:`GptOssExperts4bit.from_gptoss` takes the *dequantized* dense weights (see
-:func:`experts4bit_qlora.mxfp4.dequantize_mxfp4`, verified bit-identical to the
+:func:`experts4bit_qlora.formats.mxfp4.dequantize_mxfp4`, verified bit-identical to the
 released MXFP4 bytes) and applies the two load-time transforms — transpose to
 e4b's ``[E, 2*inter, hidden]`` / ``[E, hidden, inter]`` and de-interleave the
 gate/up rows into gate-block-then-up-block — before NF4-quantizing via

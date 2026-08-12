@@ -19,7 +19,7 @@ import pytest
 import torch
 from torch import nn
 
-from experts4bit_qlora.dense_offload import (  # noqa: E402
+from experts4bit_qlora.engines.dense_offload import (  # noqa: E402
     _DenseOffload, decoder_layers, dense_offload_report, enable_dense_offload)
 
 H, INTER, NL = 512, 1024, 4
@@ -385,7 +385,7 @@ def test_prefetch_chains_do_not_cross_devices():
 
 def test_layer_device_is_resolved_per_layer():
     """device=None must follow each layer's own weights, not one global guess."""
-    from experts4bit_qlora.dense_offload import _layer_device
+    from experts4bit_qlora.engines.dense_offload import _layer_device
     m = _model("cpu")
     assert _layer_device(m.layers[0]) == torch.device("cpu")
 

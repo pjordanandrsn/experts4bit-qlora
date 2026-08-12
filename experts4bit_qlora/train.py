@@ -10,7 +10,7 @@ loader's ``SUPPORTED_MODEL_TYPES``). Configured entirely via env vars, e.g.::
 Set ``OFFLOAD_EXPERTS=1`` to keep the frozen 4-bit experts in (pinned, unless ``OFFLOAD_PIN=0``) CPU
 RAM and stream one layer's experts to the GPU at a time — lowers peak GPU memory (so models whose
 experts exceed VRAM can train) at the cost of a per-layer PCIe transfer. See
-:mod:`experts4bit_qlora.offload` and ``docs/METHODOLOGY.md`` §11.
+:mod:`experts4bit_qlora.engines.offload` and ``docs/METHODOLOGY.md`` §11.
 
 Requires (beyond this package): a CUDA GPU, transformers>=5.0, datasets, accelerate, safetensors.
 """
@@ -323,7 +323,7 @@ def main():
     budget = TOKEN_BUDGET
     it, t0, ema, best = _batch_stream(budget), time.time(), None, float("inf")
     tok_seen = 0
-    from .offload import offload_stats_report, reset_offload_stats
+    from .engines.offload import offload_stats_report, reset_offload_stats
 
     reset_offload_stats()  # measure the training loop only (drop load/BEFORE-eval transfers)
     step = 0
