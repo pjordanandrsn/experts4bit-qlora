@@ -368,7 +368,13 @@ class _PipelinedResidency:
         # every fetch; initialised to the slot rows so it is valid before one runs.
         self.slot_rows = n_hot + torch.arange(k, dtype=torch.long, device=self.device)
         self.row_idx_buf = self.slot_rows.clone()
-        self.row_idx = self.row_idx_buf.to(torch.int32)
+        # PERSISTENT int32 destination. `.to(torch.int32)` allocates and REBINDS a new
+        # tensor on every fetch; host time is what decides whether residency pays at all
+        # (it flips sign across hosts, see the crossover note in enable_pipelined_residency),
+        # so a per-round allocation in the hot path is exactly the wrong cost. A stable
+        # address is also friendlier to graph capture.
+        self.row_idx = torch.empty(k, dtype=torch.int32, device=self.device)
+        self.row_idx.copy_(self.row_idx_buf)
         self.have = torch.full((k,), -1, dtype=torch.long, device=self.device)
         self.a_buf = None  # lazy: dtype follows live compute_dtype
         self.want_buf = torch.zeros(k, dtype=torch.long, device=self.device)
@@ -460,7 +466,7 @@ class _PipelinedResidency:
         if self.n_hot:
             torch.where(hot, self.h_row.index_select(0, self.want_buf), self.slot_rows,
                         out=self.row_idx_buf)
-            self.row_idx = self.row_idx_buf.to(torch.int32)
+            self.row_idx.copy_(self.row_idx_buf)   # into the persistent buffer, no alloc
 
     def traffic(self) -> dict:
         """Report accumulated fetch traffic. SYNCHRONIZES (two .item() reads) —
