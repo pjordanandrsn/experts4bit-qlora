@@ -523,6 +523,42 @@ def test_a_partial_patch_leaves_the_tier_open_for_live_modules(arena, monkeypatc
     seen["tier"].close()
 
 
+def test_a_stale_hot_ref_does_not_pass_for_a_live_holder(arena, monkeypatch):
+    """`_e4b_hot_ref` is STICKY — it survives an earlier enable. Reading it bare
+    answers "has this module ever been patched", not "does it hold the tier this
+    call just built", and that difference is a leak: a stale marker reads as a
+    live holder, the close is skipped, and the new pinned arena is left with
+    nothing serving from it.
+
+    Found by Cursor Bugbot on #120, which also named the fix — `nvme_train` counts
+    what it attached rather than trusting a persistent attribute.
+    """
+    import experts4bit_qlora.engines.nvme_experts as ne
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
+    _mod, path, _index = arena
+    seen = {}
+
+    class One(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.a = _meta_module()
+
+    model = One()
+    # A marker left over from some EARLIER enable, before this tier existed.
+    model.a._e4b_hot_ref = model.a.forward
+
+    _capture_tier(monkeypatch, seen)
+    monkeypatch.setattr(ne, "enable_hot_residency",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    # The real cause must survive: nothing of THIS call is live, so this is the
+    # plain re-raise path, not the partial-attach wrap.
+    with pytest.raises(RuntimeError, match="boom"):
+        enable_nvme_residency(model, path, [torch.tensor([0])], hot_rows=4,
+                              device="cpu", pinned=False)
+    assert _pool_is_shutdown(seen["tier"]), \
+        "a stale hot-ref was mistaken for a live holder and the new tier leaked"
+
+
 def test_a_short_layers_list_is_refused_before_any_tier(arena, monkeypatch):
     """The sibling refusal on the same path, held to the same rule."""
     import nvme_residency

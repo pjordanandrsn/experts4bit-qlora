@@ -314,10 +314,22 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
         f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
         f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
 
+    # Which modules were ALREADY patched before this call. `_e4b_hot_ref` is
+    # sticky — it survives an earlier `enable_hot_residency` or NVMe enable — so
+    # reading it bare answers "has this module ever been patched", not "does this
+    # module hold the tier THIS call just built". Getting that wrong leaks the new
+    # pinned arena: a stale marker reads as a live holder, the close is skipped,
+    # and nothing is actually serving from it. Snapshot first, and count only what
+    # this call added. (Cursor Bugbot, #120: "Sticky hot-ref leaks new ColdTier" —
+    # `nvme_train` avoids it with a call-local attach count, and this is the same
+    # idea where the patching happens inside a callee.)
+    targets = mods[:len(hot_sets)]
+    already = {id(m) for m in targets if hasattr(m, "_e4b_hot_ref")}
+
     # Stamp each module with its arena layer BEFORE construction: _build_cold and
     # _build_hot both run inside _HotResidency.__init__ and need it.
     try:
-        for i, m in enumerate(mods[:len(hot_sets)]):
+        for i, m in enumerate(targets):
             m._e4b_cold_tier = tier
             m._e4b_arena_layer = lay[i]
 
@@ -331,14 +343,12 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
         # a shut-down reader. Closing a live tier is strictly worse than leaking
         # one.
         #
-        # `_e4b_hot_ref` is set per module as it is patched, so it is an exact
-        # record of what is already live rather than a guess.
-        #
         # (Cursor Bugbot, #120 — the SAME finding it made on `nvme_train`'s attach
         # loop earlier, which is why the policy below is identical: close only
         # when nothing is holding the tier, never convert control flow into an
         # error, and chain the real cause rather than replacing it.)
-        live = [m for m in mods[:len(hot_sets)] if hasattr(m, "_e4b_hot_ref")]
+        live = [m for m in targets
+                if hasattr(m, "_e4b_hot_ref") and id(m) not in already]
         if not live:
             tier.close()
             raise
