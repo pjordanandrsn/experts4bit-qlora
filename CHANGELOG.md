@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.16.1 — 2026-08-12
+
+**Correctness fix for the segmented cold source, plus per-round overhead removed.**
+
+- **Prime each segment from its own offset.** `seg_addr` pointed every hot lane at the
+  resident row START for all four segments instead of `hot_row + off[j]`. `_prime` seeds
+  every slot from expert 0 with `have = -1`, so it does NOT take the hot skip — with
+  expert 0 hot on the segmented (offload-homes) path it primed the absmax and down
+  regions with gate_up bytes. Latent in 0.16.0: `_fetch` forces hot lanes to skip and
+  they read the resident row in place, so nothing read those bytes — but that was an
+  undocumented invariant holding up a wrong address table, and nothing tested it.
+- **Traffic counting is now opt-in** (`E4B_PIPELINED_TRAFFIC=1`, or `count_traffic = True`
+  on the engine before the first fetch). The two device reductions cost ~8.9% of the
+  decode step on an A5000 to produce numbers nothing reads in production.
+  `traffic()` RAISES when counting was off rather than reporting zeros, because
+  `hot_d2d_bytes == 0` is a regression witness and several tests use the counters to
+  prove the engine ran at all — silent zeros would let those pass while measuring nothing.
+
 ## 0.16.0 — 2026-08-12
 
 - **Residency reads the offload homes in place** (#104, closes #86 with #87).
