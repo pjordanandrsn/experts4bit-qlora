@@ -19,10 +19,11 @@ pytest.importorskip("torch")
 
 
 def _load(config):
+    import torch
     from experts4bit_qlora.loader import load_moe_4bit_streaming
     import unittest.mock as m
     with m.patch("transformers.AutoConfig.from_pretrained", return_value=config):
-        return load_moe_4bit_streaming("ignored/path", "cpu")
+        return load_moe_4bit_streaming("ignored/path", "cpu", torch.bfloat16, 8, 16)
 
 
 class _Cfg:
@@ -46,9 +47,13 @@ def test_a_model_without_identity_experts_is_not_refused_by_this_gate():
     Arming matters: a refusal that triggers on every MoE would pass the test above while
     breaking every supported model.
     """
-    from experts4bit_qlora.loader import load_moe_4bit_streaming  # noqa: F401
     for cfg in (_Cfg(n_routed_experts=64, zero_expert_num=0), _Cfg(n_routed_experts=64)):
         with pytest.raises(Exception) as e:
             _load(cfg)
-        assert not isinstance(e.value, NotImplementedError) or "identity" not in str(e.value).lower(), (
+        # It must fail LATER (no such checkpoint), never at this gate. Accepting any
+        # exception would make this vacuous -- the first version of this test did
+        # exactly that and passed on a TypeError from a wrong call signature, proving
+        # nothing about the gate at all.
+        assert not isinstance(e.value, NotImplementedError), (
             f"gate fired on a model with no identity experts: {e.value}")
+        assert "identity" not in str(e.value).lower(), e.value
