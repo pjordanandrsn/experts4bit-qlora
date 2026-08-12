@@ -26,9 +26,31 @@ a 30B-class MoE trainable on a 24 GB card. Requires gradient checkpointing
 (`use_reentrant=False`), which the shipped trainer always enables; the
 unsupported non-checkpointed combination fails loudly rather than mis-training.
 
-**The experts do not fit in host RAM either.**
+**The experts do not fit in host RAM either — and I am serving.**
 `enable_nvme_residency(...)` — serves the cold expert tail from an NVMe arena
-instead of RAM. For models where even the pinned host copy is too large.
+instead of RAM. For models where even the pinned host copy is too large. It binds
+over the *frozen* stack and replaces the module's forward, so it refuses an
+adapter-wrapped module rather than silently discarding the delta.
+
+**The experts do not fit in host RAM either — and I am TRAINING.**
+`enable_nvme_train_residency(model, arena_path, hot_rows=...)`. Same arena, other
+side of the seam: the adapter's forward is left exactly alone and only the frozen
+base's *home* moves, from pinned host RAM to the arena. A stage reads just the
+routed rows off the device, so the host-RAM floor becomes `hot_rows × row_stride`
+rather than the whole expert set.
+
+Three things to know before using it:
+
+* **Gradient checkpointing is required**, and this is enforced. The evict hook
+  fires when a forward returns, so the checkpoint recompute is what re-stages a
+  layer for its own backward. Without it the read is refused with a message
+  saying so, rather than returning uninitialized memory.
+* **VRAM is unchanged.** The staged stack keeps its full `[E, ...]` shape so every
+  consumer still indexes by global expert id. One layer is device-resident, same
+  as ordinary offload — this lifts the *host RAM* ceiling, not the VRAM one.
+* **`hot_rows` has a hard floor**: at least the number of unique experts one
+  forward routes, which for a training batch of `T` tokens at top-`k` approaches
+  `min(T*k, num_experts)` — much larger than decode's `k`. Undersizing raises.
 
 **The DENSE side does not fit.**
 `enable_dense_offload(model, "cuda")` keeps the non-expert weights in pinned host
