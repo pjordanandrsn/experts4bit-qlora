@@ -150,11 +150,14 @@ def test_trained_adapter_is_never_delegated_away():
         warnings.simplefilter("ignore")
         _enable(mod)
     try:
+        # BEFORE the forward. Counting is off by default, so enabling it afterwards
+        # would leave the counters at zero whether or not the engine ran — and zero
+        # is exactly what this assertion treats as proof that it did NOT run.
+        mod.base._pipelined.count_traffic = True
         with torch.no_grad():
             after = mod(hs, ti, tw).float().cpu()
         # The LoRA path still owns this forward: the delta lands pre-activation.
         assert torch.equal(before, after), "patching changed a trained-adapter forward"
-        mod.base._pipelined.count_traffic = True
         assert mod.base._pipelined.traffic() == {"hot_d2d_bytes": 0, "cold_pcie_bytes": 0}, \
             "the engine ran despite a non-zero adapter — the delta was dropped"
     finally:

@@ -136,3 +136,50 @@ def test_offloaded_module_reads_homes_and_matches_the_arena_bit_for_bit():
             f"(max abs diff {(got.float() - want.float()).abs().max().item():.3e})")
         disable_pipelined_residency(seg_mod)
         disable_pipelined_residency(arena_mod)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+def test_hot_expert_primes_each_segment_from_its_own_offset():
+    """`_prime` must read each segment at its own offset, including for a HOT expert.
+
+    `_prime` seeds every slot from expert 0 with `have = -1`, so it does NOT take the
+    hot skip. If the hot lane's address were the resident ROW START for all four
+    segments, the primed slots would get gate_up bytes written into the absmax and
+    down regions. Nothing reads those today — `_fetch` forces hot lanes to skip and
+    they read the resident row in place — so this is latent, and it stays latent only
+    while that skip holds. Shipped in 0.16.0 and found by review, not by a test.
+    """
+    pytest.importorskip("triton")
+    pytest.importorskip("nf4_grouped")
+    import os
+    if os.environ.get("TRITON_INTERPRET") == "1":
+        pytest.skip("raw-pointer gather is compiled-only")
+
+    from experts4bit_qlora import Experts4bit
+    from experts4bit_qlora.offload import enable_expert_offload
+    from experts4bit_qlora.pipelined import enable_pipelined_residency
+
+    E_, H_, INTER_, K_ = 8, 128, 64, 3
+    torch.manual_seed(0)
+    mod = Experts4bit.from_float(
+        gate_up_proj=torch.randn(E_, 2 * INTER_, H_).cuda(),
+        down_proj=torch.randn(E_, H_, INTER_).cuda(),
+        compute_dtype=torch.bfloat16, has_gate=True)
+    handle = enable_expert_offload(mod, "cuda", pin=True)
+    # expert 0 HOT: the case that makes _prime read through the hot address
+    enable_pipelined_residency(mod, [torch.tensor([0, 1])], device="cuda", k_slots=K_)
+    st = mod._pipelined
+    assert st.arena is None and st.seg_srcs is not None, "not on the segmented path"
+
+    names = ("gate_up_proj", "gate_up_absmax", "down_proj", "down_absmax")
+    off = [st.seg_srcs[j][1] * 8 for j in range(4)]
+    seg = [st.seg_srcs[j][2] * 8 for j in range(4)]
+    truth = torch.zeros(st.row_bytes, dtype=torch.uint8)
+    for j, n in enumerate(names):
+        flat = handle.home[n].reshape(E_, -1).contiguous().view(torch.uint8).reshape(E_, -1)
+        truth[off[j]:off[j] + seg[j]] = flat[0]
+
+    primed = st.slots[0].cpu()
+    bad = [names[j] for j in range(4)
+           if not torch.equal(primed[off[j]:off[j] + seg[j]], truth[off[j]:off[j] + seg[j]])]
+    assert not bad, f"primed slot holds the wrong bytes for segment(s) {bad}"

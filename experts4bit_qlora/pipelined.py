@@ -340,8 +340,15 @@ class _PipelinedResidency:
         # bases are E distinct addresses), which is all the have-skip test needs.
         self.src_of_expert = torch.where(is_hot, hot_addr, host_addr)  # [E] int64
         # Per-segment read address, with hot lanes pointed at their resident row so a
-        # mispredicted skip can never read from the wrong place.
-        self.seg_addr = [torch.where(is_hot, hot_addr, a) for (a, _, _) in self.seg_srcs]
+        # mispredicted skip can never read from the wrong place. The hot address must
+        # carry the SEGMENT's offset, not just the row start: a hot lane's segment j
+        # lives at `hot_row + off[j]`, and pointing all four at the row start would
+        # copy gate_up bytes into the absmax and down regions. Today `_fetch` forces
+        # hot lanes to skip so nothing reads these, but `_prime` does NOT skip (have
+        # is -1), so a hot expert 0 would prime every slot from the wrong offsets.
+        # Correct addresses here instead of relying on that skip holding forever.
+        self.seg_addr = [torch.where(is_hot, hot_addr + dst_w * 8, a)
+                         for (a, dst_w, _) in self.seg_srcs]
         self.is_hot = is_hot
         self.h_row = h_row                      # [E] -> row within the hot segment
 
