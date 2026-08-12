@@ -54,8 +54,7 @@ Usage::
     n = enable_nvme_train_residency(model, arena_path, hot_rows=20_000)
     model.gradient_checkpointing_enable(
         gradient_checkpointing_kwargs={"use_reentrant": False})   # required
-    enable_fast_train(model)
-    enable_fast_train(model)          # unchanged
+    enable_fast_train(model)          # unchanged by any of this
 """
 from __future__ import annotations
 
