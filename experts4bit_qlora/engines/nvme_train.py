@@ -54,7 +54,7 @@ from typing import Sequence
 import torch
 
 from .offload import _ExpertOffload, enable_expert_offload
-from .util import log
+from ..util import log
 
 #: Offload tensor name -> the arena segment carrying it. These are the four
 #: tensors ``_ExpertOffload`` homes, and an NF4 quantize-at-bake arena
@@ -390,7 +390,7 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
         ) from exc
 
     from .hot_residency import target_modules
-    from .lora import ExpertsLoRA
+    from ..lora import ExpertsLoRA
 
     mods = target_modules(model)
     if not mods:

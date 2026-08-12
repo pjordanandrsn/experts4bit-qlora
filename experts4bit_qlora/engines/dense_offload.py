@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """Per-layer residency for the NON-expert weights — the other half of a >VRAM MoE.
 
-:mod:`experts4bit_qlora.nvme_experts` removed expert storage from the residency
+:mod:`experts4bit_qlora.engines.nvme_experts` removed expert storage from the residency
 budget entirely. For Kimi K3 that is 1.446 TB of 1.561 TB — 92.6% — but it leaves
 **114.4 GB** of dense weights that must be resident regardless (measured across all
 96 shard headers, 2026-07-30):
@@ -53,7 +53,7 @@ import re
 
 import torch
 
-from .dense_disk import DiskHome
+from ..formats.dense_disk import DiskHome
 from .offload import _is_pinned, _placeholder, _prefetch_stream, _stats, _stats_enabled
 
 # Default floor for what is worth moving. Below this a copy costs a launch and
@@ -81,7 +81,7 @@ def _is_expert_module(mod) -> bool:
 class _DenseOffload:
     """One decoder layer's dense weights, pinned on the host, streamed per forward.
 
-    Deliberately a sibling of :class:`~experts4bit_qlora.offload._ExpertOffload`
+    Deliberately a sibling of :class:`~experts4bit_qlora.engines.offload._ExpertOffload`
     rather than a generalization of it: that class is built around four fixed
     expert tensor names and a routed-subset fast path, neither of which applies
     when every byte is needed every token.
@@ -102,7 +102,7 @@ class _DenseOffload:
     def __init__(self, layer, device, *, pin: bool = True,
                  min_bytes: int = MIN_BYTES, source=None, key_prefix: str = "",
                  verify: bool = False):
-        """``source``: a :class:`~experts4bit_qlora.dense_disk.DenseDiskSource`. When
+        """``source``: a :class:`~experts4bit_qlora.formats.dense_disk.DenseDiskSource`. When
         given, a tensor whose checkpoint key is present there gets a
         :class:`DiskHome` instead of a pinned host copy — same bytes, read on demand,
         so the host-RAM floor drops from the whole dense side of the model to one
@@ -429,7 +429,7 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     """Pin every decoder layer's dense weights on the host and stream them per layer.
 
     Returns the handles, also stashed on each layer as ``_dense_offload``. Pair with
-    :func:`experts4bit_qlora.nvme_experts.enable_nvme_residency` (or the resident
+    :func:`experts4bit_qlora.engines.nvme_experts.enable_nvme_residency` (or the resident
     expert offload) — this function deliberately touches NOTHING inside an expert
     module, so the two compose without either knowing about the other.
 

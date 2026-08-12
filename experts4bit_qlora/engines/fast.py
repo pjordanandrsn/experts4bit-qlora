@@ -103,7 +103,7 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
         return mod._e4b_fast_ref(hidden_states, top_k_index, top_k_weights)
 
     from nf4_grouped import gemm_4bit_grouped
-    from .lora import _epilogue
+    from ..lora import _epilogue
 
     input_dtype = hidden_states.dtype
     tokens, hidden = hidden_states.shape
@@ -186,7 +186,7 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
         return mod._e4b_fast_ref(hidden_states, top_k_index, top_k_weights)
 
     from nf4_grouped import gemm_4bit_grouped
-    from .lora import _epilogue
+    from ..lora import _epilogue
 
     input_dtype = hidden_states.dtype
     hidden_states = hidden_states.to(compute_dtype)
@@ -461,7 +461,7 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     path is OPT-IN via ``enable_fast_train`` rather than a silent default.
     """
     from nf4_qlora import fused_grouped_lora
-    from .lora import _epilogue
+    from ..lora import _epilogue
 
     base = lora_mod.base
     input_dtype = hidden_states.dtype

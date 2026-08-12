@@ -22,8 +22,8 @@ import pytest
 torch = pytest.importorskip("torch")
 gguf = pytest.importorskip("gguf")
 
-from experts4bit_qlora.glimmer import GlimmerKeymapError  # noqa: E402
-from experts4bit_qlora.glimmer_load import load_glimmer_text_tower  # noqa: E402
+from experts4bit_qlora.arch.glimmer import GlimmerKeymapError  # noqa: E402
+from experts4bit_qlora.arch.glimmer_load import load_glimmer_text_tower  # noqa: E402
 
 pytest.importorskip("kquant_ref", reason="needs grouped-nf4-gemm k-quant lane")
 

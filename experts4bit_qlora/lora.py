@@ -256,7 +256,7 @@ class ExpertsLoRA(nn.Module):
 
         Inference-only (``no_grad``): with no backward, nothing ever re-reads the packed weight
         after the forward, so this is safe **under offload too** (the eviction hazard
-        :mod:`experts4bit_qlora.offload` guards against is a *backward* construct). The win is
+        :mod:`experts4bit_qlora.engines.offload` guards against is a *backward* construct). The win is
         memory traffic: the GEMV reads the packed 4-bit weight directly instead of materializing
         the full dequantized expert for a 1-row matmul. Gated on the decode-shape correctness probe
         (:func:`_gemv_4bit_matches_dequant`) for this module's exact configuration; multi-row

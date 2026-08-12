@@ -403,6 +403,7 @@ Moved to **[docs/BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlo
 | [SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.16.3/docs/SERVING.md) | the FastAPI shim and Docker deployment |
 | [BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.16.3/docs/BENCHMARKS.md) | the benchmark scripts and how to run them |
 | [BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.16.3/docs/BITSANDBYTES.md) | relationship to bitsandbytes, prior art |
+- **[docs/ARCHITECTURE_SUPPORT.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.16.3/docs/ARCHITECTURE_SUPPORT.md)** — which architectures load, run and capture, with the evidence bundle and the fixture-vs-real-checkpoint caveat.
 
 ## The package family — how the pieces fit
 

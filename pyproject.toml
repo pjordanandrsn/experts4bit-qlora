@@ -58,4 +58,4 @@ line-length = 119
 testpaths = ["tests"]
 
 [tool.setuptools.package-data]
-experts4bit_qlora = ["py.typed"]
+experts4bit_qlora = ["py.typed", "README-LAYOUT.md"]

@@ -28,7 +28,7 @@ def _no_triton_interpreter():
 
 
 from experts4bit_qlora import Experts4bit  # noqa: E402
-from experts4bit_qlora.pipelined import (  # noqa: E402
+from experts4bit_qlora.engines.pipelined import (  # noqa: E402
     disable_pipelined_residency,
     enable_pipelined_residency,
 )

@@ -9,9 +9,9 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.moe_conventions import MoEConventionError  # noqa: E402
-from experts4bit_qlora.moe_load import execute_moe_plan  # noqa: E402
-from experts4bit_qlora.moe_plan import plan_moe_checkpoint  # noqa: E402
+from experts4bit_qlora.arch.moe_conventions import MoEConventionError  # noqa: E402
+from experts4bit_qlora.arch.moe_load import execute_moe_plan  # noqa: E402
+from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint  # noqa: E402
 
 
 def _tiny_moe():

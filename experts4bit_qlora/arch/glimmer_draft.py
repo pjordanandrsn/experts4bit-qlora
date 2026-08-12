@@ -3,7 +3,7 @@
 The drafter is the speculative-decoding companion to Muse-Glimmer-30B: it
 proposes a block of tokens that the target verifies in one pass. It is a
 SEPARATE architecture, not a small Glimmer, and this module exists because
-reusing :mod:`experts4bit_qlora.glimmer`'s map would be silently wrong in two
+reusing :mod:`experts4bit_qlora.arch.glimmer`'s map would be silently wrong in two
 different ways.
 
 Shape (adjudicated against the released `dflash-kquant.gguf` header AND the

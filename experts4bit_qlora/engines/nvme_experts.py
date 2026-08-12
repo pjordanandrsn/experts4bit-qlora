@@ -27,7 +27,7 @@ of the arena, and its manifest records it as ``bake_mode``.
 
 Usage::
 
-    from experts4bit_qlora.nvme_experts import enable_nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
     n = enable_nvme_residency(model, arena_path, hot_sets, hot_rows=20_000)
 """
 from __future__ import annotations
@@ -37,7 +37,7 @@ from typing import Sequence
 import torch
 
 from .hot_residency import _HotResidency, enable_hot_residency
-from .util import log
+from ..util import log
 
 # Segment suffixes written by grouped-nf4-gemm's NF4 quantize-at-bake, mapped to
 # the four cold attributes they replace. Geometry (per-expert shape + dtype) is
@@ -224,7 +224,7 @@ def build_meta_experts(index: dict, num_experts: int, *, has_gate: bool = True,
 
     Pair with :func:`enable_nvme_residency` on the same arena.
     """
-    from . import Experts4bit, ExpertsNbit
+    from .. import Experts4bit, ExpertsNbit
     intermediate, hidden = expert_geometry_from_arena(index)
     # `cls` lets a caller keep an architecture-specific EPILOGUE on the arena path.
     # Without it the arena branch would build a plain-SwiGLU `Experts4bit` even for a

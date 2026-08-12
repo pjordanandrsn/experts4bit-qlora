@@ -38,8 +38,8 @@ pytest.importorskip("nvme_residency").segment_into
 
 from experts4bit_qlora import Experts4bit  # noqa: E402
 from experts4bit_qlora.lora import ExpertsLoRA  # noqa: E402
-from experts4bit_qlora.offload import _ExpertOffload, enable_expert_offload  # noqa: E402
-from experts4bit_qlora.nvme_train import (  # noqa: E402
+from experts4bit_qlora.engines.offload import _ExpertOffload, enable_expert_offload  # noqa: E402
+from experts4bit_qlora.engines.nvme_train import (  # noqa: E402
     OFFLOAD_SEGMENTS,
     _ArenaExpertOffload,
     arena_train_stats,
@@ -450,7 +450,7 @@ def test_a_failure_before_any_module_attaches_closes_the_tier(arena, monkeypatch
     using. That one must be closed."""
     mod, path, _index = arena
     model = _model_of(mod)
-    import experts4bit_qlora.nvme_train as nt
+    import experts4bit_qlora.engines.nvme_train as nt
     monkeypatch.setattr(nt, "enable_expert_offload",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     with pytest.raises(RuntimeError, match="boom"):
@@ -472,7 +472,7 @@ def test_a_partial_attach_leaves_the_tier_open_for_live_modules(tmp_path, monkey
     path, _index = _bake(mod_a, tmp_path, name="two-layer.arena", n_layers=2)
     model = _model_of(mod_a, mod_b)
 
-    import experts4bit_qlora.nvme_train as nt
+    import experts4bit_qlora.engines.nvme_train as nt
     real = nt.enable_expert_offload
     calls = {"n": 0}
 
@@ -506,7 +506,7 @@ def test_a_partial_attach_chains_the_real_cause(tmp_path, monkeypatch):
     path, _index = _bake(mod_a, tmp_path, name="chain.arena", n_layers=2)
     model = _model_of(mod_a, mod_b)
 
-    import experts4bit_qlora.nvme_train as nt
+    import experts4bit_qlora.engines.nvme_train as nt
     real, calls = nt.enable_expert_offload, {"n": 0}
 
     def _flaky(*a, **k):
@@ -536,7 +536,7 @@ def test_a_partial_attach_does_not_swallow_control_flow(tmp_path, monkeypatch, e
                          n_layers=2)
     model = _model_of(mod_a, mod_b)
 
-    import experts4bit_qlora.nvme_train as nt
+    import experts4bit_qlora.engines.nvme_train as nt
     real, calls = nt.enable_expert_offload, {"n": 0}
 
     def _flaky(*a, **k):

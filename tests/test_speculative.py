@@ -1,5 +1,5 @@
 """Speculative decode must equal plain greedy, exactly — only faster."""
-from experts4bit_qlora.speculative import speculative_greedy_decode
+from experts4bit_qlora.engines.speculative import speculative_greedy_decode
 
 
 # Toy deterministic target: the next token after t is (t + 1) % V. Greedy

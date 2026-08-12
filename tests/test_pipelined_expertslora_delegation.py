@@ -43,8 +43,8 @@ def _no_triton_interpreter():
 
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
-from experts4bit_qlora.hot_residency import target_modules, wrapped_bases  # noqa: E402
-from experts4bit_qlora.pipelined import (  # noqa: E402
+from experts4bit_qlora.engines.hot_residency import target_modules, wrapped_bases  # noqa: E402
+from experts4bit_qlora.engines.pipelined import (  # noqa: E402
     disable_pipelined_residency,
     enable_pipelined_residency,
 )
@@ -195,7 +195,7 @@ def test_v0_hot_residency_still_refuses_wrapped_bases():
     """`target_modules` now includes wrapped bases, but `_delegate_to_base` keys off
     `_e4b_fast_ref`/`_e4b_pipe_ref` and never looks for `_e4b_hot_ref`. The v0 engine
     must keep refusing rather than inherit a reachability it does not have."""
-    from experts4bit_qlora.hot_residency import enable_hot_residency
+    from experts4bit_qlora.engines.hot_residency import enable_hot_residency
     mod = _wrapped()
     with pytest.raises(NotImplementedError, match="enable_pipelined_residency"):
         enable_hot_residency(mod, [torch.tensor(HOT, dtype=torch.long)], device="cuda")

@@ -248,13 +248,14 @@ def _teacher_forced_delta(model, dec, input_ids, eager_tokens) -> dict:
 
 
 def _classify_divergence(model, input_ids, eager, got) -> dict:
-    """Is the first mismatched token a bf16 argmax TIE, or a real defect?
+    """Locate the first mismatched token and describe how close that argmax was.
 
-    A mismatch alone does not distinguish them, and guessing is how a genuine
-    off-by-one in this harness once got written off as tie-break noise. So
-    measure: re-run the eager prefix up to the divergence and read the gap
-    between the two competing logits. Ties are a property of the model (random
-    or low-confidence weights), not of capture; a wide gap is a real bug.
+    Deliberately does NOT decide tie-vs-defect. It used to, off a one-ulp gap
+    threshold, and it was wrong in the direction that matters: it labelled a
+    bit-identical replay "real". The gap and the ulp are useful colour -- they say
+    whether the two tokens were in a photo finish -- but the verdict comes from
+    `_teacher_forced_delta` alone, and stays `undetermined` when that cannot run.
+    A confident wrong answer is worse here than no answer.
     """
     i = next((j for j in range(min(len(eager), len(got))) if eager[j] != got[j]), None)
     out = {"index": i, "eager_token": None, "replay_token": None,
@@ -271,12 +272,14 @@ def _classify_divergence(model, input_ids, eager, got) -> dict:
             logits = model(input_ids=prefix, use_cache=False).logits[0, -1].float()
         gap = float(abs(logits[eager[i]] - logits[got[i]]))
         out["gap"] = gap
-        # bf16 carries ~8 mantissa bits; a gap at or below one ulp of the larger
-        # logit means the two tokens are indistinguishable at the model's own
-        # precision and either argmax is defensible.
-        ulp = float(max(abs(logits[eager[i]]), abs(logits[got[i]]))) * 2 ** -8
-        out["ulp"] = ulp
-        out["verdict"] = "tie" if gap <= max(ulp, 1e-6) else "real"
+        # Reported as CONTEXT, never as a verdict. A one-ulp threshold cannot
+        # separate a tie from a defect: measured here, a 0.0039 gap against a
+        # 0.0023 ulp -- 1.7x, comfortably "real" by any such rule -- sat on a replay
+        # that was bit-identical to eager. The gap says how close the race was, not
+        # who was right. Only `_teacher_forced_delta` can answer that, and when it
+        # cannot run there is no answer to give.
+        out["ulp"] = float(max(abs(logits[eager[i]]), abs(logits[got[i]]))) * 2 ** -8
+        out["verdict"] = "undetermined (teacher-forced comparison is the only verdict)"
     except Exception as e:
         out["verdict"] = f"unclassifiable: {type(e).__name__}: {e}"[:120]
     return out

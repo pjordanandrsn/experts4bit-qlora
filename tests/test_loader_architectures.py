@@ -519,7 +519,7 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
     """
     from experts4bit_qlora.loader import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora
-    from experts4bit_qlora.offload import _ExpertOffload
+    from experts4bit_qlora.engines.offload import _ExpertOffload
 
     _ExpertOffload._resident = None  # class-level single-slot; isolate this test
     _ExpertOffload._staged_now = set()
@@ -697,7 +697,7 @@ def _bake_arena_for(model, arena_path):
     from nvme_arena import bake_expert_tensors
 
     from experts4bit_qlora import ExpertsNbit
-    from experts4bit_qlora.nvme_experts import NF4_SEGMENTS
+    from experts4bit_qlora.engines.nvme_experts import NF4_SEGMENTS
 
     mods = [m for m in model.modules() if isinstance(m, ExpertsNbit)]
     tensors, dt = {}, {torch.uint8: "U8", torch.float32: "F32"}

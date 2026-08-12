@@ -19,7 +19,7 @@ import pytest
 torch = pytest.importorskip("torch")
 import torch.nn.functional as F  # noqa: E402
 
-from experts4bit_qlora.deepseek_v4 import (  # noqa: E402
+from experts4bit_qlora.arch.deepseek_v4 import (  # noqa: E402
     DEFAULT_SWIGLU_LIMIT,
     _DeepseekV4ForwardMixin,
 )

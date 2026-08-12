@@ -11,7 +11,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 
-from experts4bit_qlora.fp8_blocks import (
+from experts4bit_qlora.formats.fp8_blocks import (
     Fp8BlockLinear,
     dequantize_fp8_blocks,
     fp8_block_scale_shape,

@@ -21,7 +21,7 @@ def _no_triton_interpreter():
         pytest.skip("Triton interpreter mode active (raw-pointer gather is compiled-only)")
 
 
-from experts4bit_qlora.pipelined import (  # noqa: E402
+from experts4bit_qlora.engines.pipelined import (  # noqa: E402
     disable_pipelined_residency,
     enable_pipelined_residency,
 )
@@ -32,7 +32,7 @@ LIMIT = 2.0          # far below the checkpoint's 10.0 so the clamp actually bin
 
 def _v4(limit=LIMIT, seed=0, w_scale=0.35, x_scale=1.5):
     """Bare V4 stack (this engine requires standalone modules) + a T=1 decode row."""
-    from experts4bit_qlora.deepseek_v4 import _DeepseekV4ForwardMixin
+    from experts4bit_qlora.arch.deepseek_v4 import _DeepseekV4ForwardMixin
     g = torch.Generator().manual_seed(seed)
     mod = _DeepseekV4ForwardMixin.from_deepseek_v4(
         torch.randn(E, 2 * INTER, H, generator=g) * w_scale,

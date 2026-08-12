@@ -1,6 +1,6 @@
 """Populate a Muse-Glimmer text tower from a released GGUF.
 
-The keymap in :mod:`experts4bit_qlora.glimmer` says WHERE each released tensor
+The keymap in :mod:`experts4bit_qlora.arch.glimmer` says WHERE each released tensor
 goes and WHAT arithmetic it needs; this module does the walk: read the GGUF
 tensor table, decode each tensor's bytes through grouped-nf4-gemm's k-quant
 lane (``kquant_ref`` — computed from the released bytes, never re-quantized),

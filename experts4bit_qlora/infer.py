@@ -148,7 +148,7 @@ def main():
     torch.cuda.reset_peak_memory_stats()
 
     if BENCH_TOKENS > 0:
-        from .offload import offload_stats_report, reset_offload_stats
+        from .engines.offload import offload_stats_report, reset_offload_stats
 
         # Warmup: probes (gemv), allocator pools, prefetch steady state — outside the timed region.
         timed_decode(model, tok, PROMPT, min(8, BENCH_TOKENS))

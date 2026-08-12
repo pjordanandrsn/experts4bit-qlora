@@ -12,8 +12,8 @@ import torch
 from safetensors.torch import save_file
 from torch import nn
 
-from experts4bit_qlora.dense_disk import DenseDiskSource, DiskHome
-from experts4bit_qlora.dense_offload import (
+from experts4bit_qlora.formats.dense_disk import DenseDiskSource, DiskHome
+from experts4bit_qlora.engines.dense_offload import (
     _DenseOffload, dense_offload_report, enable_dense_offload)
 
 # Same dims as test_dense_offload.py, and for the same reason: MIN_BYTES is 1 MiB, so

@@ -18,7 +18,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.mixtral import (  # noqa: E402
+from experts4bit_qlora.arch.mixtral import (  # noqa: E402
     MIXTRAL_CONVENTION_MODEL_TYPES,
     MixtralKeymapError,
     classify_key,

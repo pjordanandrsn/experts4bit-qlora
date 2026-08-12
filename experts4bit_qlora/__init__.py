@@ -56,7 +56,7 @@ else:
 # adopted: the canonical scheme names and their accepted aliases are this package's contract.
 from ._vendor.experts import normalize_quant_type  # noqa: E402
 from .lora import ExpertsLoRA, LoRALinear, add_attention_lora  # noqa: E402
-from .offload import (  # noqa: E402
+from .engines.offload import (  # noqa: E402
     enable_decode_stack,
     offload_handles,
     enable_expert_offload,
@@ -73,33 +73,33 @@ from .offload import (  # noqa: E402
 
 # verify_moe_4bit only touches the resolved Experts4bit/ExpertsNbit classes (core deps), so it is
 # safe to import eagerly. The streaming loader is NOT — see __getattr__ below.
-from .fast import (  # noqa: E402
+from .engines.fast import (  # noqa: E402
     disable_fast,
     disable_fast_train,
     enable_fast,
     enable_fast_train,
     fast_available,
 )
-from .batched import (  # noqa: E402
+from .engines.batched import (  # noqa: E402
     batched_train_available,
     disable_batched_train,
     enable_batched_train,
 )
-from .cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
-from .hot_residency import (  # noqa: E402
+from .engines.cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
+from .engines.hot_residency import (  # noqa: E402
     disable_hot_residency,
     dispatched_modules,
     enable_hot_residency,
     hot_residency_available,
 )
-from .pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
+from .engines.pipelined import disable_pipelined_residency, enable_pipelined_residency, pipelined_available  # noqa: E402
 # 0.7.0 surfaces: serving a model whose DENSE side, not just its experts, exceeds
 # what the host can hold. Imported lazily-tolerant -- dense_disk needs nothing
 # exotic, but keeping the top-level import total means a broken optional dep
 # cannot make `import experts4bit_qlora` fail.
-from .dense_offload import dense_offload_report, enable_dense_offload  # noqa: E402
-from .dense_disk import DenseDiskSource, DiskHome, disk_homes_for  # noqa: E402
-from .nvme_experts import (  # noqa: E402
+from .engines.dense_offload import dense_offload_report, enable_dense_offload  # noqa: E402
+from .formats.dense_disk import DenseDiskSource, DiskHome, disk_homes_for  # noqa: E402
+from .engines.nvme_experts import (  # noqa: E402
     build_meta_experts,
     disable_mxfp4_nvme_residency,
     enable_mxfp4_nvme_residency,
@@ -110,7 +110,7 @@ from .nvme_experts import (  # noqa: E402
 # experts off an arena, this one TRAINS an adapter over them. Kept in its own
 # module because they are opposites at the seam -- one replaces the module's
 # forward, the other exists to leave it alone.
-from .nvme_train import (  # noqa: E402
+from .engines.nvme_train import (  # noqa: E402
     arena_train_stats,
     enable_nvme_train_residency,
 )
@@ -118,13 +118,13 @@ from .nvme_train import (  # noqa: E402
 # take experts by index (+37.1% at identical VRAM on V4-Flash), so the two functions that
 # do it have to be importable from the top level -- 0.7.1 shipped precisely to fix the
 # class of bug where the front page names a symbol that raises ImportError.
-from .expert_profile import coverage_from_profile, hot_sets_from_profile  # noqa: E402
+from .engines.expert_profile import coverage_from_profile, hot_sets_from_profile  # noqa: E402
 # 0.16.2: CUDA-graph decode capture. Exported at the top level for the same reason
 # 0.7.1 was cut -- a symbol users cannot import is a symbol that shipped to nobody.
 # capture.py imports only torch eagerly (transformers is imported inside the
 # functions), so this cannot make `import experts4bit_qlora` fail.
-from .capture import CapturedDecoder, capture_decode, probe_capture  # noqa: E402
-from .kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
+from .engines.capture import CapturedDecoder, capture_decode, probe_capture  # noqa: E402
+from .engines.kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
 
 __all__ = [
@@ -207,4 +207,67 @@ def __getattr__(name):
 
 __version__ = "0.16.3"
 
-from .speculative import speculative_greedy_decode  # noqa: E402,F401
+from .engines.speculative import speculative_greedy_decode  # noqa: E402,F401
+
+# --- import-path compatibility for the 0.16.x layout -------------------------
+# The modules below moved into arch/ formats/ engines/ subpackages. The public API
+# is `__all__` above and did NOT move, so top-level imports are unaffected — but a
+# published package means somebody may already import a submodule by path, and
+# breaking that silently at import time is the worst way to find out. These alias
+# the old dotted names to the new modules so `import experts4bit_qlora.awq` and
+# `from experts4bit_qlora.awq import X` both keep working.
+import sys as _sys  # noqa: E402
+from importlib import import_module as _import_module  # noqa: E402
+
+_MOVED = {
+    "awq": "formats.awq",
+    "axk1": "arch.axk1",
+    "batched": "engines.batched",
+    "capture": "engines.capture",
+    "cold_engine": "engines.cold_engine",
+    "compressed_int": "formats.compressed_int",
+    "deepseek_v4": "arch.deepseek_v4",
+    "dense_disk": "formats.dense_disk",
+    "dense_offload": "engines.dense_offload",
+    "expert_profile": "engines.expert_profile",
+    "fast": "engines.fast",
+    "fp8_blocks": "formats.fp8_blocks",
+    "glimmer": "arch.glimmer",
+    "glimmer_draft": "arch.glimmer_draft",
+    "glimmer_load": "arch.glimmer_load",
+    "glm5": "arch.glm5",
+    "gptoss": "arch.gptoss",
+    "gptq": "formats.gptq",
+    "hot_residency": "engines.hot_residency",
+    "kv_cache": "engines.kv_cache",
+    "mixtral": "arch.mixtral",
+    "moe_conventions": "arch.moe_conventions",
+    "moe_load": "arch.moe_load",
+    "moe_plan": "arch.moe_plan",
+    "mxfp4": "formats.mxfp4",
+    "nvfp4": "formats.nvfp4",
+    "nvme_experts": "engines.nvme_experts",
+    "offload": "engines.offload",
+    "pipelined": "engines.pipelined",
+    "speculative": "engines.speculative",
+}
+
+def _install_legacy_module_aliases():
+    _self = _sys.modules[__name__]
+    for _old, _new in _MOVED.items():
+        try:
+            _mod = _import_module(f"{__name__}.{_new}")
+        except Exception:            # an optional dep missing must not break the package
+            continue
+        # BOTH bindings are required, and only one of them is obvious.
+        # `sys.modules` alone satisfies `import experts4bit_qlora.awq` -- the import
+        # machinery finds the cache entry and stops. But a normal import ALSO binds the
+        # submodule as an attribute on its parent package, and a cache hit skips that,
+        # so `experts4bit_qlora.awq` as an ATTRIBUTE would fall through to this module's
+        # `__getattr__` and raise. Testing only via `importlib.import_module` passes
+        # straight over that, which is exactly how it was missed the first time.
+        _sys.modules.setdefault(f"{__name__}.{_old}", _mod)
+        if not hasattr(_self, _old):
+            setattr(_self, _old, _mod)
+
+_install_legacy_module_aliases()

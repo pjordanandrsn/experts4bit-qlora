@@ -20,7 +20,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-_PKG = Path(__file__).resolve().parent.parent / "experts4bit_qlora"
+# Resolve module sources from the imported module, not a hardcoded path: these
+# files live under engines/ since the arch/formats/engines split, and a literal
+# path silently turns "assert something about the source" into FileNotFoundError.
+import experts4bit_qlora as _e4b_pkg
+_PKG = Path(_e4b_pkg.__file__).parent
 
 
 def _func(path: Path, name: str) -> ast.FunctionDef:
@@ -38,7 +42,7 @@ def test_top_k_index_is_the_second_positional_arg():
     ``hidden_states`` and ``args[1]`` must be ``top_k_index``. Reordering the
     patched forward's parameters silently disables routed staging.
     """
-    fn = _func(_PKG / "fast.py", "fused_experts_lora_forward")
+    fn = _func(_PKG / "engines" / "fast.py", "fused_experts_lora_forward")
     names = [a.arg for a in fn.args.args]
     assert names[:3] == ["mod", "hidden_states", "top_k_index"], (
         f"signature is {names[:3]}; routed staging reads args[1] of the forward "
@@ -50,7 +54,7 @@ def test_top_k_index_is_the_second_positional_arg():
 
 def test_top_k_index_is_not_keyword_only():
     """A keyword-only ``top_k_index`` would never appear in ``args`` at all."""
-    fn = _func(_PKG / "fast.py", "fused_experts_lora_forward")
+    fn = _func(_PKG / "engines" / "fast.py", "fused_experts_lora_forward")
     kwonly = [a.arg for a in fn.args.kwonlyargs]
     assert "top_k_index" not in kwonly, (
         "top_k_index is keyword-only; the pre-hook's `len(args) > 1` test would "
@@ -60,7 +64,7 @@ def test_top_k_index_is_not_keyword_only():
 
 def test_the_hook_still_reads_args_index_1():
     """The other half of the contract, asserted where it is consumed."""
-    src = (_PKG / "offload.py").read_text()
+    src = (_PKG / "engines" / "offload.py").read_text()
     assert "torch.is_tensor(args[1])" in src, (
         "the routed-staging pre-hook no longer reads args[1]. If the contract "
         "moved, update test_top_k_index_is_the_second_positional_arg to match."
@@ -74,7 +78,7 @@ def test_the_two_policies_do_not_guard_against_each_other():
     modules. It must NOT grow a similar skip for the staging attributes: the
     measured 7.04x -> 9.19x rung depends on composing them.
     """
-    fn = _func(_PKG / "fast.py", "enable_fast")
+    fn = _func(_PKG / "engines" / "fast.py", "enable_fast")
     src = ast.unparse(fn)
     for attr in ("_spec_dev", "_spec_ids", "_routed_only"):
         assert attr not in src, (

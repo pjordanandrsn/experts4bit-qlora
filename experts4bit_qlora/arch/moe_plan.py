@@ -1,6 +1,6 @@
 """Generic MoE checkpoint -> module-tree load plan.
 
-:mod:`experts4bit_qlora.moe_conventions` says how a family stores its EXPERTS.
+:mod:`experts4bit_qlora.arch.moe_conventions` says how a family stores its EXPERTS.
 This module turns that into a complete, validated plan for a specific model:
 which checkpoint key feeds which parameter, which per-expert tensors fuse into
 which stack, and — the part that matters — proof that the two sides actually
@@ -26,7 +26,7 @@ Three properties are enforced, each because its absence is a silent bug:
   all three projections, or routing sends tokens into uninitialized memory.
 
 What this module does NOT do is decide expert ORIENTATION — that is settled in
-:mod:`~experts4bit_qlora.moe_conventions` against upstream's own converter
+:mod:`~experts4bit_qlora.arch.moe_conventions` against upstream's own converter
 spec, because gate and up are shape-identical and cannot be told apart here.
 """
 from __future__ import annotations

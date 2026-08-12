@@ -1,6 +1,6 @@
 """Kernel-free batched training path — stock torch + bitsandbytes, no extras.
 
-``enable_fast_train`` (see :mod:`experts4bit_qlora.fast`) needs
+``enable_fast_train`` (see :mod:`experts4bit_qlora.engines.fast`) needs
 ``grouped-nf4-gemm``, which has to build and is arch-gated. Without it that call
 returns ``0`` and training falls back to ``ExpertsLoRA.forward``'s per-expert
 Python loop: at 256 experts over 40 layers that is ~10k sync-gated iterations per
@@ -172,7 +172,7 @@ def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights
     """Batched replacement for ``ExpertsLoRA.forward``. Falls back to the reference
     forward — not to a slower version of itself — whenever the batched shape would be
     wasteful or the storage is not there."""
-    from .lora import _epilogue
+    from ..lora import _epilogue
 
     base = mod.base
     reference = mod._e4b_batched_ref

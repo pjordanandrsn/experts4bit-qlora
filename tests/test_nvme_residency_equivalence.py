@@ -28,7 +28,7 @@ from nvme_arena import bake_expert_tensors, load_index, verify  # noqa: E402
 from nvme_residency import ColdTier  # noqa: E402
 
 from experts4bit_qlora import Experts4bit  # noqa: E402
-from experts4bit_qlora.nvme_experts import NF4_SEGMENTS, _TieredStack  # noqa: E402
+from experts4bit_qlora.engines.nvme_experts import NF4_SEGMENTS, _TieredStack  # noqa: E402
 
 # NF4 blocks must tile each expert exactly, so BOTH in_features dims
 # (gate_up's hidden, down's intermediate) must be multiples of blocksize 64.
@@ -164,7 +164,7 @@ def test_wrong_arena_names_the_missing_segment(arena, tmp_path):
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel needs CUDA")
 def test_forward_matches_fully_resident(arena):
     """End to end: identical partition, identical inputs, cold tail from NVMe."""
-    from experts4bit_qlora.hot_residency import _HotResidency, hot_residency_available
+    from experts4bit_qlora.engines.hot_residency import _HotResidency, hot_residency_available
     if not hot_residency_available():
         pytest.skip("grouped-nf4-gemm [fast] kernel unavailable")
     # `hot_residency_available()` can be True while the kernel still cannot JIT:
@@ -177,7 +177,7 @@ def test_forward_matches_fully_resident(arena):
         import triton
         pytest.skip(f"fused kernel needs triton>=3.4 for tl.gather; "
                     f"this box has {triton.__version__}")
-    from experts4bit_qlora.nvme_experts import _NvmeResidency
+    from experts4bit_qlora.engines.nvme_experts import _NvmeResidency
 
     mod, path, index = arena
     mod = mod.to("cuda")
@@ -242,14 +242,14 @@ def test_forward_from_meta_module_matches_materialized(arena):
     If this holds, expert storage is no longer a function of model size — only
     the hot set and the routed working set are.
     """
-    from experts4bit_qlora.hot_residency import _HotResidency, hot_residency_available
+    from experts4bit_qlora.engines.hot_residency import _HotResidency, hot_residency_available
     if not hot_residency_available():
         pytest.skip("grouped-nf4-gemm [fast] kernel unavailable")
     import triton.language as _tl
     if not hasattr(_tl, "gather"):
         import triton
         pytest.skip(f"needs triton>=3.4 for tl.gather; box has {triton.__version__}")
-    from experts4bit_qlora.nvme_experts import _NvmeResidency
+    from experts4bit_qlora.engines.nvme_experts import _NvmeResidency
 
     mod, path, index = arena
     hot = torch.tensor([0, 1])
@@ -281,7 +281,7 @@ def test_expert_geometry_recovered_from_the_arena(arena):
     """The arena is the authority on expert shape. For a LATENT MoE (Kimi K3) the
     expert input width is the latent (3584), not hidden_size (7168) — reading the
     config would size every expert twice too wide."""
-    from experts4bit_qlora.nvme_experts import expert_geometry_from_arena
+    from experts4bit_qlora.engines.nvme_experts import expert_geometry_from_arena
     _mod, _path, index = arena
     assert expert_geometry_from_arena(index) == (INTER, H)
 
@@ -289,7 +289,7 @@ def test_expert_geometry_recovered_from_the_arena(arena):
 def test_inconsistent_arena_geometry_is_rejected():
     """gate_up and down over-determine (I, H); a mismatch must raise rather than
     silently pick one and build wrongly-shaped experts."""
-    from experts4bit_qlora.nvme_experts import expert_geometry_from_arena
+    from experts4bit_qlora.engines.nvme_experts import expert_geometry_from_arena
     bad = {"segments": [
         {"suffix": "nf4.gate_up_blocks", "shape_per_expert": [2 * INTER, H // 2]},
         {"suffix": "nf4.down_blocks", "shape_per_expert": [H, (INTER // 2) + 8]},
@@ -303,7 +303,7 @@ def test_inconsistent_arena_geometry_is_rejected():
 def test_build_meta_experts_matches_the_real_module_shapes(arena):
     """A shapes-only module must be interchangeable with the materialized one as
     far as the engine's shape algebra is concerned."""
-    from experts4bit_qlora.nvme_experts import build_meta_experts
+    from experts4bit_qlora.engines.nvme_experts import build_meta_experts
     mod, _path, index = arena
     meta = build_meta_experts(index, E, compute_dtype=torch.bfloat16)
     assert meta._gate_up_shape == mod._gate_up_shape
@@ -316,14 +316,14 @@ def test_build_meta_experts_matches_the_real_module_shapes(arena):
 def test_end_to_end_shapes_only_module_forward(arena):
     """The assembled path: geometry from the arena, module from shapes alone, both
     partitions served from disk, answer identical to the materialized reference."""
-    from experts4bit_qlora.hot_residency import _HotResidency, hot_residency_available
+    from experts4bit_qlora.engines.hot_residency import _HotResidency, hot_residency_available
     if not hot_residency_available():
         pytest.skip("grouped-nf4-gemm [fast] kernel unavailable")
     import triton.language as _tl
     if not hasattr(_tl, "gather"):
         import triton
         pytest.skip(f"needs triton>=3.4 for tl.gather; box has {triton.__version__}")
-    from experts4bit_qlora.nvme_experts import _NvmeResidency, build_meta_experts
+    from experts4bit_qlora.engines.nvme_experts import _NvmeResidency, build_meta_experts
 
     mod, path, index = arena
     hot = torch.tensor([0, 1])
@@ -360,7 +360,7 @@ def test_target_modules_includes_lora_bases_and_keeps_order(arena):
     bases itself, consuming the entry so `hot_sets[i]` keeps its meaning.
     """
     from experts4bit_qlora.lora import ExpertsLoRA
-    from experts4bit_qlora.hot_residency import target_modules, wrapped_bases
+    from experts4bit_qlora.engines.hot_residency import target_modules, wrapped_bases
     mod, _path, index = arena
 
     class Net(torch.nn.Module):
@@ -387,7 +387,7 @@ def test_target_modules_includes_lora_bases_and_keeps_order(arena):
 def test_enable_nvme_residency_refuses_a_partial_stamp(arena):
     """More hot_sets than targetable modules must raise, not stamp a prefix and
     serve the remaining layers from whatever rows happen to be there."""
-    from experts4bit_qlora.nvme_experts import enable_nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_nvme_residency
     _mod, path, _index = arena
 
     class One(torch.nn.Module):
@@ -431,7 +431,7 @@ def test_mxfp4_hot_sets_length_must_match(arena, n_sets):
     is a uniform random draw (the by-index row of the V4 table: 4.4 GiB of VRAM for +0%).
     Both must be refused up front, like the NF4 lane and `enable_hot_residency`."""
     pytest.importorskip("mxfp4_residency")
-    from experts4bit_qlora.nvme_experts import enable_mxfp4_nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_mxfp4_nvme_residency
     _mod, path, _index = arena
     with pytest.raises(ValueError, match="exactly one entry per MoE layer"):
         enable_mxfp4_nvme_residency(
@@ -447,7 +447,7 @@ def test_mxfp4_refuses_to_patch_over_another_engine(arena, ref, name):
     """All five engines replace `mod.forward`. Patching over a live one strands its state
     and makes the OTHER engine's `disable_*` restore a forward that is still patched."""
     pytest.importorskip("mxfp4_residency")
-    from experts4bit_qlora.nvme_experts import enable_mxfp4_nvme_residency
+    from experts4bit_qlora.engines.nvme_experts import enable_mxfp4_nvme_residency
     _mod, path, _index = arena
     net = _two_layer_net()
     setattr(net.b, ref, net.b.forward)          # pretend that engine is enabled
@@ -461,7 +461,7 @@ def test_mxfp4_reenable_then_disable_fully_restores(arena):
     PATCHED forward as the restore point — otherwise one disable leaves the module wrapped
     around a stale engine forever, and it looks fine until the arena is closed."""
     pytest.importorskip("mxfp4_residency")
-    from experts4bit_qlora.nvme_experts import (
+    from experts4bit_qlora.engines.nvme_experts import (
         disable_mxfp4_nvme_residency, enable_mxfp4_nvme_residency)
     _mod, path, _index = arena
     net = _two_layer_net()

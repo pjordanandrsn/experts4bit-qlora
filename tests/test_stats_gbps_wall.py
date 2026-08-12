@@ -19,7 +19,11 @@ import ast
 import re
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parent.parent / "experts4bit_qlora" / "offload.py"
+# Resolve module sources from the imported module, not a hardcoded path: these
+# files live under engines/ since the arch/formats/engines split, and a literal
+# path silently turns "assert something about the source" into FileNotFoundError.
+import experts4bit_qlora.engines.offload as _offload_mod
+_SRC = Path(_offload_mod.__file__)
 
 
 def _report_src():
