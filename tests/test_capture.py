@@ -134,3 +134,43 @@ def test_capture_is_reachable_from_the_package_root(sym):
     init = (pathlib.Path(experts4bit_qlora.__file__).parent / "__init__.py").read_text()
     assert f'"{sym}"' in init, f"{sym} is missing from __all__"
     assert hasattr(experts4bit_qlora, sym), f"{sym} is not importable from the package root"
+
+
+def test_the_gap_heuristic_never_renders_a_verdict_on_its_own():
+    """The logit gap is context, not a verdict — and CPU-testable, so CI holds the line.
+
+    This function used to decide tie-vs-defect from `gap <= 1 ulp`. Measured, a 0.0039
+    gap against a 0.0023 ulp — 1.7x, "real" under any such rule — sat on a replay that
+    was bit-identical to eager. So the threshold is wrong in the direction that matters:
+    it manufactures confident false accusations. The verdict now comes only from the
+    teacher-forced comparison, and is `undetermined` when that has not run.
+    """
+    from experts4bit_qlora.capture import _classify_divergence
+
+    class _Out:
+        def __init__(self, logits): self.logits = logits
+
+    class _Model:
+        """Returns a WIDE gap — the case the old heuristic would have called 'real'."""
+        def __call__(self, input_ids=None, use_cache=None, **kw):
+            v = torch.zeros(1, 1, 64)
+            v[0, -1, 7] = 10.0        # eager token: far ahead
+            v[0, -1, 9] = 0.0         # replay token
+            return _Out(v)
+
+    out = _classify_divergence(_Model(), torch.tensor([[1, 2, 3]]), [7, 5], [9, 5])
+    assert out["index"] == 0, out
+    assert out["gap"] is not None and out["gap"] > out["ulp"], out   # heuristic WOULD say "real"
+    assert out["verdict"].startswith("undetermined"), (
+        f"the gap heuristic rendered a verdict on its own: {out}")
+
+
+def test_an_unclassifiable_divergence_says_so_rather_than_guessing():
+    from experts4bit_qlora.capture import _classify_divergence
+
+    class _Boom:
+        def __call__(self, **kw):
+            raise RuntimeError("no forward here")
+
+    out = _classify_divergence(_Boom(), torch.tensor([[1, 2]]), [7], [9])
+    assert out["verdict"].startswith("unclassifiable"), out
