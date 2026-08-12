@@ -126,6 +126,82 @@ def test_no_token_is_not_an_error(monkeypatch):
     assert clc._auth_headers() == {}
 
 
+# ------------------------------------------------ the credential, on redirect --
+
+AUTH = {"Authorization": "Bearer secret-token"}
+
+
+@pytest.mark.parametrize("dst,keeps", [
+    ("https://github.com/other/path", True),              # same origin
+    ("https://objects.githubusercontent.com/x", False),   # GitHub's own asset host
+    ("https://raw.githubusercontent.com/x", False),
+    ("https://evil.example/x", False),
+    ("http://github.com/x", False),                       # downgrade: clear text
+])
+def test_authorization_crosses_only_a_same_origin_redirect(dst, keeps):
+    """`urlopen` strips Authorization on a cross-host redirect; a hand-rolled
+    http.client loop does not, and GitHub 302s assets to *.githubusercontent.com
+    and object storage. Forwarding blindly hands the Actions token to hosts with
+    no business seeing it."""
+    out = clc._forward_headers(AUTH, "https://github.com/a/b", dst)
+    assert ("Authorization" in out) is keeps, dst
+
+
+def test_non_credential_headers_always_survive():
+    hdrs = {**AUTH, "X-Trace": "keep-me"}
+    out = clc._forward_headers(hdrs, "https://github.com/a", "https://elsewhere/x")
+    assert out == {"X-Trace": "keep-me"}
+
+
+def test_the_stripping_is_case_insensitive():
+    """A header dict built elsewhere may not use this module's exact casing, and
+    `authorization` is just as much a credential as `Authorization`."""
+    out = clc._forward_headers({"authorization": "Bearer s"},
+                               "https://github.com/a", "https://elsewhere/x")
+    assert out == {}
+
+
+def test_the_session_actually_strips_it_on_a_real_redirect(monkeypatch):
+    """End-to-end through `_Session.head`, not just the helper. The wiring is
+    where this was wrong, so testing the helper alone would pass while the
+    redirect still leaked."""
+    sent = []
+
+    class _FakeResp:
+        def __init__(self, status, loc):
+            self.status, self._loc = status, loc
+
+        def getheader(self, name):
+            return self._loc if name == "Location" else None
+
+        def read(self):
+            return b""
+
+    class _FakeConn:
+        def __init__(self, host, timeout=None):
+            self.host = host
+
+        def request(self, method, path, headers):
+            sent.append((self.host, dict(headers)))
+
+        def getresponse(self):
+            if len(sent) == 1:
+                return _FakeResp(302, "https://objects.githubusercontent.com/blob")
+            return _FakeResp(200, None)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(clc.http.client, "HTTPSConnection", _FakeConn)
+    s = clc._Session()
+    assert s.head("https://github.com/a/b", dict(AUTH)) == 200
+    assert len(sent) == 2, "the redirect was not followed"
+    assert "Authorization" in sent[0][1], "the first request lost its credential"
+    assert sent[1][0] == "objects.githubusercontent.com"
+    assert "Authorization" not in sent[1][1], \
+        "the Actions token was forwarded to a foreign host"
+
+
 def test_retryable_set_excludes_every_4xx_verdict():
     """A drift guard: adding 404 or 403 to RETRYABLE_STATUS would silently make
     dead links survivable, and no other test in this file would notice if the
