@@ -5,7 +5,9 @@
 **Evidence tier: `measured`.** Pre-registered in [`PREREG-prefetch.md`](PREREG-prefetch.md)
 **before the pod was rented**, including the expected direction and magnitude.
 
-**Outcome: the feature is not shipped.** The code stays on its branch, unmerged.
+**Outcome: the feature is not shipped.** The code stays unmerged on
+[`feat/arena-prefetch`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/feat/arena-prefetch),
+which is where the version that produced these numbers can be read.
 
 ## Why it was tried
 
@@ -42,11 +44,26 @@ Routing is data-dependent and the router runs inside the next layer's own forwar
 correct prefetch must fetch the **whole** layer — 128 rows against ~67 actually routed on
 Qwen3-30B, about **1.9× the bytes**.
 
-The link is **bandwidth-bound, not latency-bound**. Buying overlap with bandwidth loses.
+Reads on this path cost roughly in proportion to bytes, so 1.9× the bytes is a real 1.9×
+cost that overlap has to pay for out of a stall worth ~16%. It does not clear.
 
-That also explains, from the opposite direction, why the `hot_rows` dial works: raising
-`hot_rows` to hold every routed row cuts traffic **5.4×** and helps, while hiding latency at
-1.9× the bytes costs 14%. **Fewer bytes beats better-timed bytes on this path.**
+**A correction, because I first wrote something stronger and it turned out to be false.**
+The original text here said *"the link is bandwidth-bound, not latency-bound"*. It is not.
+Measured afterwards at the arena's own access pattern — real row offsets, scattered, paired
+across interleaved rounds — the device delivers **9.57 GB/s at qd=4**, and the training path
+achieves **2.84 GB/s** at that same queue depth. The link is at **30%** of what it gives,
+and the missing 3.4× is inside the tier's read path, not the storage
+([gnf4#61](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/61)).
+
+So the *result* is unchanged — 1.9× the bytes still costs more than the stall it hides, and
+that is what the pairing measured — but the *reason* is per-byte cost in the reader, not a
+saturated link. The saturation claim was inferred from this experiment's own outcome rather
+than measured, which is the failure mode this file exists to avoid, so it is corrected here
+rather than quietly dropped.
+
+Read the other direction, it is also why the `hot_rows` dial works: raising `hot_rows` to
+hold every routed row cuts traffic **5.4×** and helps, while hiding latency at 1.9× the
+bytes costs 14%. **Fewer bytes beats better-timed bytes on this path.**
 
 ## Scoring the pre-registration
 
