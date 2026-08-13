@@ -112,6 +112,19 @@ At the cap in between — 8.59 GB — Qwen3-30B-A3B is **OOM-killed** on the hos
 side tracks the **dense** model, so the ratio is expert bytes measured against that
 baseline rather than expert bytes alone — Gemma has fewer experts than Qwen3 and a larger
 arena requirement. Expect **~2.5–6.5×**, and measure your own.
+**What it costs in time.** Two architectures, paired protocol with a same-config control
+([receipts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.17.5/bench/host-ram-ceiling/RESULTS-timing.md)):
+
+| | RTX 3090 (Ampere) | L40S (Ada) |
+|---|---|---|
+| **load**, host → arena | **3.39× / 6.76×** faster | **3.12× / 5.87×** faster |
+| **step**, arena vs host | 1.33× / 1.24× slower | **2.25× / 1.71×** slower |
+
+You skip fusing and quantizing every expert at load, and you pay for it per step. **The
+load saving travels across architectures; the step cost does not — it is worse on faster
+cards**, because part of every arena step is an NVMe read and the disk does not care which
+GPU you bought. Quote the step cost with the card attached, or not at all.
+
 Size `hot_rows` from the formula in the docstring, not from another model's value — it has
 a hard floor at the experts one forward routes. Above that floor it is a **dial**: on
 Qwen3-30B, the floor (128) needs 3.89–4.03 GB and reads 14.4 GB/step, while holding every
