@@ -17,7 +17,7 @@ until each arm stops completing brackets both requirements:
 | | host-RAM offload | NVMe arena, `hot_rows=64` |
 |---|---|---|
 | **minimum host RAM to train** | **5.91–6.17 GB** | **2.28–2.42 GB** |
-| pinned expert bytes | 3.62 GB | ~0.2 GB |
+| frozen experts | all 1024 pinned (3.83 GB of homes, per 0.17.0) | ~0.2 GB pinned, 64 hot rows |
 | steady RSS at `trained` | 5.88 GB | 2.34 GB |
 
 **The saving is ~2.5×, not 2.5–3.5×.** 0.17.2's upper bound came from pairing the lowest

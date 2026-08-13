@@ -72,9 +72,13 @@ SIGKILL and prints nothing, so "no output" has to be readable as a result.
 | | host-RAM offload | NVMe arena, `hot_rows=64` |
 |---|---|---|
 | **minimum viable ceiling** | **(5632, 5888] MiB = 5.91–6.17 GB** | **(2176, 2304] MiB = 2.28–2.42 GB** |
-| pinned expert bytes | 3.62 GB (all 1024 experts) | ~0.2 GB (64 hot rows) |
+| frozen expert bytes | pins all 1024 (3.83 GB of pinned homes, measured in 0.17.0) | ~0.2 GB pinned, 64 hot rows |
 | steady RSS at `trained` | 5.88 GB | 2.34 GB |
 | uncapped peak RSS | 16.63 GB | 2.34 GB |
+
+(The arena file is **3.62 GB** of packed expert bytes. That is the arena's size, not
+the host arm's pinned footprint — the 3.83 GB above is the separately measured
+`/dev/zero` mapping total from 0.17.0, and the two are not the same quantity.)
 
 **Ratio of requirements: 2.56×** (bracketed 2.44×–2.71× by the two rungs either side).
 Steady RSS gives 2.51× independently.
