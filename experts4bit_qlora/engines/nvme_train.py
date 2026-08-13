@@ -59,6 +59,8 @@ Usage::
 from __future__ import annotations
 
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Sequence
 
 import torch
@@ -75,6 +77,32 @@ OFFLOAD_SEGMENTS = {
     "gate_up_absmax": "nf4.gate_up_absmax",
     "down_absmax": "nf4.down_absmax",
 }
+
+
+# REFUTED on an L40S: 14.4% SLOWER, range disjoint from the self-pair control.
+# Kept unmerged as the artifact behind bench/host-ram-ceiling/RESULTS-prefetch.md.
+#
+# One worker for every arena handle in the process. Prefetch is advisory work
+# that must never overtake the step it is helping, so a single thread is the
+# point: it serialises fetches in layer order, which is the order they are
+# needed, and it keeps the reader at the queue depth that measured fastest.
+_PREFETCH_POOL = None
+_PREFETCH_LOCK = threading.Lock()
+
+
+def _prefetch_pool():
+    global _PREFETCH_POOL
+    with _PREFETCH_LOCK:
+        if _PREFETCH_POOL is None:
+            _PREFETCH_POOL = ThreadPoolExecutor(max_workers=1,
+                                                thread_name_prefix="e4b-arena-prefetch")
+        return _PREFETCH_POOL
+
+
+def _prefetch_enabled() -> bool:
+    """Opt-in. Off by default: it trades ~1.9x the disk BYTES for overlap, which
+    is a win only when staging is actually stalling the step."""
+    return os.environ.get("E4B_ARENA_PREFETCH", "0") not in ("", "0", "false", "False")
 
 
 def _poison_enabled() -> bool:
@@ -195,6 +223,15 @@ class _ArenaExpertOffload(_ExpertOffload):
         self._tier = base._e4b_cold_tier
         self._arena_layer = int(base._e4b_arena_layer)
         self._staged_ids: frozenset = frozenset()
+        # How many whole layers the tier can hold. Prefetch needs TWO -- the one
+        # being computed and the one being fetched -- so at the routing floor
+        # (exactly one layer) warming the next layer would evict the current
+        # one and turn a hit into a miss plus wasted I/O. Computed here so the
+        # decision costs nothing per stage.
+        _idx = self._tier.reader.index
+        self._prefetch_n_layers = int(_idx.get("n_layers") or 0)
+        _per_layer = int(base.num_experts) or 1
+        self._prefetch_span = int(self._tier.hot_rows) // _per_layer
         super().__init__(base, device, pin=pin)
         # Routed staging is not an optimisation here, it is the design: a bulk
         # stage means reading the entire layer off the device. The cap is
@@ -260,7 +297,54 @@ class _ArenaExpertOffload(_ExpertOffload):
                          dest[n].view(E, *shape), rows=ids, non_blocking=True)
             nbytes += ln * len(ids)
         self._staged_ids = frozenset(ids)
+        self._prefetch_next_layer()
         return nbytes
+
+    # ------------------------------------------------------------ prefetch --
+    def _prefetch_next_layer(self) -> None:
+        """Warm the NEXT layer's rows while this layer computes.
+
+        Staging blocks the step: it runs in a forward pre-hook immediately
+        before the layer computes and ``ColdTier.ensure`` returns only once the
+        rows have landed, so the NVMe read is not overlapped with anything.
+
+        Two facts shape this, and both are constraints rather than choices:
+
+        **The copies above are ``non_blocking=True``.** They are QUEUED, not
+        complete, when this returns, so the pinned slots they read from are not
+        yet free. Reusing one now lets a prefetch overwrite bytes an in-flight
+        DMA is still reading — a corruption that is finite, plausible, and
+        invisible to ``assert_rows_staged``, because the row IDs would be right
+        and only the bytes wrong. The event recorded here is what makes the
+        reuse safe: the worker waits on it, and since the copies are queued
+        ahead of the layer's compute on the same stream, it fires early and
+        leaves the rest of the compute as the window.
+
+        **The next layer's routed IDs are unknowable here.** Routing is
+        data-dependent and its router runs inside its own forward, so this
+        fetches the WHOLE layer — a superset. That costs more bytes than the
+        routed subset and is why this is opt-in.
+        """
+        if not _prefetch_enabled() or self._prefetch_span < 2:
+            return
+        nxt = self._arena_layer + 1
+        if nxt >= self._prefetch_n_layers:
+            return
+        ev = torch.cuda.Event()
+        ev.record()
+        tier, n_exp = self._tier, int(self.base.num_experts)
+
+        def _warm():
+            try:
+                ev.synchronize()          # our H2D has landed; the slots are free
+                tier.ensure(nxt, range(n_exp))
+            except Exception:
+                # Advisory only. A failed prefetch must never fail the step --
+                # the real ensure() will fetch the rows itself and block, which
+                # is exactly the behaviour without this.
+                pass
+
+        _prefetch_pool().submit(_warm)
 
     def _copy_home_to_device(self, policy: str = "sync") -> None:
         """Bulk stage — every expert in the layer, read from the arena.
