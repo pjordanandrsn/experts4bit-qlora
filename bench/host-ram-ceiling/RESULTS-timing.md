@@ -88,6 +88,40 @@ digit from the table above because they take the median over the retained steps 
 rather than the per-run median already stored — same data, and the comparison is
 like-for-like within this check.)
 
+## `hot_rows` is a dial between RAM and disk, and the floor is not the only setting
+
+The sweep above found no resolvable step-time difference across 128 / 384 / 1024, which
+reads as "residency does not matter". It does — the sweep just never sampled far enough.
+
+`hot_rows=128` holds exactly one layer, so every layer evicts the previous and the
+gradient-checkpoint recompute must re-read everything the forward staged. Making the
+recompute *hit* requires holding every routed row across all layers at once — for
+Qwen3-30B at seq 384 that is ~48 × 67 = **~3216 rows**. Measured, counters and cap ladder,
+no timing:
+
+| `hot_rows` | host RAM required | disk read per step | hit rate | evictions |
+|---|---|---|---|---|
+| 128 (routing floor) | **3.89–4.03 GB** | **14.4 GB** | 0.755 | 18,489 |
+| 1024 | — | 10.3 GB | 0.805 | 8,428 |
+| **3216 (all routed rows)** | **11.81–12.88 GB** | **2.65 GB** | 0.955 | 1,126 |
+| host-resident (no arena) | 24.70–25.77 GB | 0 | — | — |
+
+**5.4× less disk traffic for 3.2× the RAM, still 2.0× better than host-resident.** Better
+than a simple "make the recompute hit" would predict, because at that size the rows also
+survive into the *next* step — step 1 reads exactly 1000 rows' worth.
+
+**Guidance:** size to the **routing floor** when host RAM is the binding constraint, and to
+**total routed rows** when I/O is. The two ends differ by 3.2× in RAM and 5.4× in disk, and
+neither is wrong.
+
+This also explains the sweep's null exactly: at 1024 rows the tier holds ~8 of 48 layers,
+so only those layers' recompute hits — a ~17% miss reduction, far below what this harness
+resolves. The sweep sampled 128–1024; the interesting region starts around 3216.
+
+**What this does not say:** the RAM figures are Qwen3-30B on this box, and the routed-row
+total is a property of the model *and* the sequence length — a longer sequence routes more
+experts per forward and moves the upper setting. Compute it, do not copy it.
+
 ## Scoring the pre-registration
 
 | registered | actual | verdict |

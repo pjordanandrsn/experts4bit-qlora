@@ -113,7 +113,10 @@ side tracks the **dense** model, so the ratio is expert bytes measured against t
 baseline rather than expert bytes alone — Gemma has fewer experts than Qwen3 and a larger
 arena requirement. Expect **~2.5–6.5×**, and measure your own.
 Size `hot_rows` from the formula in the docstring, not from another model's value — it has
-a hard floor at the experts one forward routes. And do not size any of this from peak RSS:
+a hard floor at the experts one forward routes. Above that floor it is a **dial**: on
+Qwen3-30B, the floor (128) needs 3.89–4.03 GB and reads 14.4 GB/step, while holding every
+routed row (~3216) needs 11.81–12.88 GB and reads 2.65 GB/step — **5.4× less disk for 3.2×
+the RAM**, still 2× better than host-resident. Pick the end your constraint is on. And do not size any of this from peak RSS:
 it reads 43.69 GB for a host arm that trains under a 25.77 GB cap, because most of that
 peak is reclaimable page cache.
 
