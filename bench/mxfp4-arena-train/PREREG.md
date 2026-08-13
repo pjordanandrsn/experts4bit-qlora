@@ -66,3 +66,44 @@ cap $35; teardown is evidence-first.
 I read the tier's source and its serving figure (V4-Flash generating at 8.74 GiB
 peak from a 147 GB arena) before writing this. P2's band is derived from that
 code's own comment, not guessed.
+
+---
+
+## Amendment 1 (2026-08-13, pre-data for the second attempt)
+
+**Attempt 1 measured nothing.** It is recorded here rather than discarded,
+because three of its four failures were mine and two of them change the design.
+
+- The arena bake raised `TypeError: bake_expert_tensors() missing 1 required
+  keyword-only argument: 'name_template'` — **and the run continued**, because
+  the step was written `... | tail -12 || fail BAKE_FAILED` and the exit status
+  of a pipeline is its last command. Both arms then ran against an arena that
+  did not exist. Fixed in all four banked runners (`set -o pipefail` plus an
+  explicit `${PIPESTATUS[0]}` check).
+- **The STOCK control failed for the wrong reason** — `FineGrainedFP8Config` vs
+  `BitsAndBytesConfig`, i.e. transformers refusing bnb-4bit over an
+  already-quantized checkpoint, because V4's dense half is block-scaled FP8.
+  P1's direction held; its stated mechanism did not. A config rejection is not
+  evidence of a memory ceiling, so the control is respecified: load with **no**
+  quantization config and let it attempt to materialize.
+- **The ARENA arm never started**: `quant_type="mxfp4"` is not an accepted
+  value (`nf4/fp4/int8/fp8/bf16/fp16`). The overlay fixed segment RESOLUTION;
+  the module still has to be MXFP4-SHAPED for the geometry check to match.
+
+**Target excursion, and the reason it reversed.** After attempt 1 I recommended
+switching to gpt-oss-120b as a cheaper proof-of-method, and that was **wrong**.
+`lora.py::_epilogue` defers to the base's `_apply_gate`; `arch/deepseek_v4.py`
+provides one and `arch/gptoss.py` does not. Wrapping gpt-oss in `ExpertsLoRA`
+today would apply plain SwiGLU over a clamped-GLU base — the failure that
+docstring names explicitly: *the model trains, the loss falls, and it is
+optimising a function the frozen base does not compute*. V4 is therefore the
+SAFER first target, not the more expensive one. Target returns to V4-Flash.
+
+**Design added under test (option B).** Under `arena_train=True` with an MXFP4
+arena, the loader builds the meta experts **MXFP4-shaped**, so their declared
+dtype and per-expert width match the arena's segments. The base is on `meta` and
+holds nothing, so this concerns declared shape, not data movement.
+
+**Predictions unchanged** (P1–P4, gates G1–G3), except that P1 is now graded on
+a control that fails on MEMORY rather than on a quantizer-class rejection. The
+pre-amendment stamp is preserved as `PREREG.md.pre-amendment1.ots`.
