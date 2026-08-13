@@ -46,7 +46,9 @@ PY
 [ $? -ne 0 ] && { echo "PREP FAILED: import check"; exit 1; }
 
 MODEL=${E4B_MODEL:-allenai/OLMoE-1B-7B-0924}
-ARENA=/work/arena/olmoe-nf4.arena
+# Not hardcoded: a second model in the same workspace must not overwrite the
+# first one's arena, and cg.py reads the same variable.
+ARENA=${E4B_ARENA:-/work/arena/olmoe-nf4.arena}
 
 echo "--- snapshot + dataset warm ---"
 SNAP=$($V/bin/python - <<PY

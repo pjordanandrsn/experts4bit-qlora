@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.17.4 — 2026-08-13
+
+**Docs-only. The scaling claim 0.17.3 flagged as unmeasured is now measured.**
+
+0.17.3 said the ratio "should widen substantially on larger MoEs — but that is the
+mechanism's prediction, not a measurement". On **Qwen3-30B-A3B**, which has 6144 experts
+against OLMoE's 1024 and **4.50× the expert bytes**, it is **6.40×**. Receipt, raw ledger
+and the pre-registration it is scored against:
+[`bench/host-ram-ceiling/RESULTS-scaling.md`](bench/host-ram-ceiling/RESULTS-scaling.md).
+
+| | expert bytes | host-RAM path | arena path | ratio |
+|---|---|---|---|---|
+| OLMoE-1B-7B | 3.62 GB | 5.91–6.17 GB | 2.28–2.42 GB | 2.56× |
+| **Qwen3-30B-A3B** | **16.31 GB** | **24.70–25.77 GB** | **3.89–4.03 GB** | **6.40×** |
+
+**At an 8.59 GB ceiling Qwen3-30B-A3B is OOM-killed on the host-RAM path and trains to
+completion on the arena.** The host requirement grew **×4.18** against **×4.50** in expert
+bytes — what "pins every expert" predicts — while the arena requirement grew only ×1.66,
+and most of *that* is the larger dense side (48 layers, 151936-token vocab), not the
+expert path.
+
+**A hot row costs 1.58–1.98× the bytes it holds.** Re-running the whole ladder at
+`hot_rows=512` puts the marginal cost at **4.19–5.24 MB per row** against a 2.654 MB
+on-disk row. At `hot_rows=128` the expert path is therefore only ~0.5–0.7 GB of the
+~3.9 GB requirement; the rest is fixed base. The cause of the per-slot overhead is not
+isolated and no mechanism is offered for it.
+
+**`hot_rows` does not travel between models.** `hot_rows=64` — correct for OLMoE — refuses
+on Qwen3 with `request of 97 unique rows exceeds hot_rows=64`. That is the documented
+behaviour working: the docstring already specifies a floor of `min(T*k, num_experts)`,
+which is 128 here. OLMoE has exactly 64 experts per layer, so its value was silently at
+the floor already and looked portable. Size from the formula, not from a previous run.
+
+The pre-registration was committed before the checkpoint was downloaded and **all three of
+its point predictions missed** — host 18–21 GB (actual 24.70–25.77), arena 2.2–3.0 GB
+(actual 3.89–4.03), ratio 7–9× (actual 6.40×). Direction right, magnitudes wrong, because
+both arms were sized from OLMoE's much smaller non-expert baseline. Its stop rule fired at
+4.08 GB and the ratio is reported only after the investigation it demanded.
+
+No code changed; the wheel is byte-identical to 0.17.3 apart from the version.
+
 ## 0.17.3 — 2026-08-13
 
 **Docs-only. The case this feature exists for is now demonstrated instead of asserted.**

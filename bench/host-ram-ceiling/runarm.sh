@@ -24,6 +24,8 @@ DOCKER_CTX="${DOCKER_CTX-qnap}"                           # DOCKER_CTX= for the 
 : "${GPU_RUNTIME:=nvidia-runtime}"                        # `docker info | grep Runtimes`
 : "${LEDGER:=/tmp/e4b-ladder.jsonl}"
 : "${CPUS:=6}"
+: "${E4B_MODEL:=allenai/OLMoE-1B-7B-0924}"
+: "${E4B_ARENA:=/work/arena/olmoe-nf4.arena}"      # a path INSIDE the container
 
 ARM=${1:?arm: host|arena}; CAP=${2:?cap e.g. 5120m, or none}; shift 2
 D="docker"; [ -n "$DOCKER_CTX" ] && D="docker --context $DOCKER_CTX"
@@ -44,11 +46,15 @@ vram () { $D run --rm --runtime="$GPU_RUNTIME" -e NVIDIA_VISIBLE_DEVICES=all \
 
 VRAM_BEFORE=$(vram)
 T0=$(date +%s)
+# ${MEM[@]+...} not "${MEM[@]}": under `set -u`, bash 3.2 -- which is what
+# /bin/bash is on macOS, and therefore what this script's shebang selects --
+# treats expanding an EMPTY array as an unbound variable and aborts. That makes
+# `none` (the uncapped control) the one invocation that cannot run.
 $D run --name "$NAME" --runtime="$GPU_RUNTIME" -e NVIDIA_VISIBLE_DEVICES=all \
-  --cpus="$CPUS" "${MEM[@]}" \
+  --cpus="$CPUS" ${MEM[@]+"${MEM[@]}"} \
   -v "$WORK":/work \
   -e HF_HOME=/work/hf -e HF_HUB_OFFLINE=1 -e HF_DATASETS_OFFLINE=1 \
-  -e E4B_ARENA=/work/arena/olmoe-nf4.arena \
+  -e E4B_ARENA="$E4B_ARENA" -e E4B_MODEL="$E4B_MODEL" \
   "$IMAGE" \
   /work/venv/bin/python /work/bin/cg.py --arm "$ARM" --tag "cap=${CAP}" "$@" \
   >"$LOG" 2>&1
@@ -64,8 +70,12 @@ VERDICT=FAILED
 [ "$RC" = "0" ] && grep -q '"ok": true' "$LOG" && VERDICT=COMPLETED
 [ "$OOM" = "true" ] && VERDICT=OOM_KILLED
 
+# EXTRA is recorded because a run killed by the cap prints nothing, so its
+# parameters would otherwise be unrecoverable -- two failed rows with different
+# --hot values were indistinguishable in the ledger, which makes a per-parameter
+# bracket impossible to compute from the evidence file alone.
 python3 - "$ARM" "$CAP" "$RC" "$EXITC" "$OOM" "$VERDICT" "$((T1-T0))" \
-        "$VRAM_BEFORE" "$VRAM_AFTER" "$STAMP" "$LOG" <<'PY' | tee -a "$LEDGER"
+        "$VRAM_BEFORE" "$VRAM_AFTER" "$STAMP" "$LOG" "$E4B_MODEL" "$*" <<'PY' | tee -a "$LEDGER"
 import json,sys
 a=sys.argv[1:]
 log=a[10]
@@ -79,6 +89,6 @@ for line in open(log,errors="replace"):
         except Exception: pass
 print(json.dumps(dict(arm=a[0],cap_gb=a[1],rc=int(a[2]),container_exit=a[3],oom_killed=a[4],
     verdict=a[5],wall_s=int(a[6]),vram_free_before_mib=a[7],vram_free_after_mib=a[8],
-    stamp=a[9],log=log,last_mark=lastmark,result=res)))
+    stamp=a[9],log=log,model=a[11],extra_args=a[12],last_mark=lastmark,result=res)))
 PY
 echo "### $ARM cap=${CAP} -> $VERDICT (rc=$RC oom=$OOM) log=$LOG"
