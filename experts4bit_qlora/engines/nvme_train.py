@@ -388,7 +388,7 @@ def _engine_conflicts(mods) -> None:
 
 
 def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
-                                device: str = "cuda", qd: int = 4,
+                                device: str = "cuda", qd: int | None = None,
                                 pinned: bool = True,
                                 layers: Sequence[int] | None = None,
                                 verbose: bool = False) -> int:
@@ -404,11 +404,21 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
             free RAM (``nvme_residency.capacity_for_bytes``), never a declared
             figure.
 
-            **Hard floor:** at least the number of unique experts one forward
-            routes, since a stage requests them together and every slot in that
-            request is protected from eviction. For a training batch of ``T``
-            tokens at top-``k`` that approaches ``min(T*k, num_experts)`` — much
-            larger than decode's ``k``. Undersizing raises rather than thrashing.
+            **Hard floor, enforced at attach:** at least ``num_experts``, since a
+            stage requests every expert one forward routed and each protects a
+            slot from eviction. For a training batch of ``T`` tokens at top-``k``
+            the routed set approaches ``min(T*k, num_experts)`` — much larger than
+            decode's ``k``. Measured on Qwen3-30B-A3B at seq 384: median 63 unique
+            experts per forward, **max 97 of 128**. Sizing to the median is the
+            trap, so the floor is ``num_experts`` and undersizing is refused here
+            rather than raising inside ``ColdTier.ensure`` many steps into a run.
+
+            Above the floor it is a **RAM-for-disk dial**, measured on Qwen3-30B:
+            ``128`` rows costs ~4 GB pinned and reads 14.4 GB/step; ``3216`` costs
+            ~12 GB and reads 2.65 GB/step — 3.2x the RAM for 5.4x fewer bytes.
+        qd: in-flight NVMe reads. ``None`` (default) lets ``grouped-nf4-gemm``
+            size it from the host's CPU budget, which is what its measurements
+            support; a fixed value here would override that on every host.
         layers: arena layer index per MoE module, defaulting to ``0..N-1``. Pass
             explicitly when the model's MoE modules are not arena layers in order.
 
@@ -504,6 +514,30 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
     from nvme_arena import load_index
 
     index = load_index(arena_path)
+
+    # The documented hard floor, ENFORCED. One `ensure` requests every expert a
+    # forward routed, and each protects a slot from eviction, so a request wider
+    # than the tier raises inside `ColdTier.ensure` — correct, but minutes into a
+    # run, after the checkpoint has loaded and the arena is open. `num_experts`
+    # is the worst case that request can reach and is known right here, for free.
+    #
+    # Measured on Qwen3-30B-A3B (128 experts, seq 384, top-8): a single forward
+    # routed a MEDIAN of 63 unique experts and a MAX of 97. Sizing to the median
+    # is the trap — one unlucky forward ends the run — which is why the floor is
+    # `num_experts` and not anything observed.
+    floor = max(int(getattr(b, "num_experts", 0)) for b in mods)
+    if hot_rows < floor:
+        raise ValueError(
+            f"hot_rows={hot_rows} is below the hard floor of {floor} (the widest "
+            f"`num_experts` among {len(mods)} MoE modules). One forward can route "
+            f"every expert in a layer, and a stage requests them together, so this "
+            f"raises inside ColdTier.ensure the first time a forward is unlucky — "
+            f"possibly many steps in. At {index['row_stride'] / 1e6:.1f} MB/row the "
+            f"floor costs {floor * index['row_stride'] / 1e9:.1f} GB pinned; size "
+            f"ABOVE it from measured free RAM via "
+            f"`nvme_residency.capacity_for_bytes`, and raise it further to trade "
+            f"host RAM for disk traffic.")
+
     for i, base in enumerate(mods):
         check_arena_geometry(base, index, lay[i])
         existing = getattr(wrapper_of[id(base)], "_offload", None)
@@ -514,7 +548,13 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
                 "and returns the existing handle, so the arena one would never be "
                 "installed — enable arena residency before offloading, not after.")
 
-    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=pinned, qd=qd)
+    # OMIT qd rather than forwarding None. On grouped-nf4-gemm >= the
+    # CPU-scaled default, ColdTier's own default is the right answer; on an
+    # older one (the floor is 0.10.0, which predates it) `qd=None` would reach
+    # `ThreadPoolExecutor(max_workers=None)` and silently open up to 32 reader
+    # threads instead of 4. Not passing the key gets each version's own default.
+    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=pinned,
+                    **({} if qd is None else {"qd": qd}))
     idx = tier.reader.index
     log(f"  nvme TRAIN residency: arena {arena_path} rows={idx['n_layers']}x"
         f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
