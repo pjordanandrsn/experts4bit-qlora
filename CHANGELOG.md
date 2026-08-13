@@ -89,17 +89,41 @@ identical data and bit-identical starting adapters; every arm through
 
 All three pass `bench/fused-train-gate`'s registered 0.05 median-|ΔL| band, 5–8×
 inside it. A precondition run first established the arena's bytes are **bitwise
-identical** to loader-quantized bytes, so the arms differ only in residency. The
-ladder moves the way the tier's additive law predicts — the cost is disk traffic:
-1.64× the reference at the `hot_rows` floor, **1.03× with the arena fully
-pinned**.
+identical** to loader-quantized bytes, so the arms differ only in residency.
 
-**What that does NOT establish.** OLMoE's arena is 3.6 GB and fits everywhere, so
-this shows the mechanism is correct and how the cost scales with residency — not
-a model whose experts exceed host RAM, which is the case the tier exists for. And
-the `s/step` figures are single measurements per arm, not the paired and
-self-paired protocol this repo's perf methodology requires: read them as
-indicative, not as measured ratios. The parity verdicts do not depend on that.
+**Timing re-measured under the paired protocol** (5 scored rounds, every arm timed
+once per round in fixed order so drift hits all arms equally; warmup round
+dropped; optimizer not stepped so routing is identical every round). The
+`s/step` column above was one measurement per arm and is superseded by this:
+
+| arm | s/step (med) | ratio med | ratio min–max |
+|---|---|---|---|
+| host RAM (reference) | 1.910 | 1.000 | — |
+| **`host_self` (control)** | 1.906 | **0.986** | 0.898–1.080 |
+| arena, `hot_rows=64` | 3.207 | **1.679** | 1.490–1.724 |
+| arena, `hot_rows=256` | 2.919 | **1.479** | 1.351–1.542 |
+| arena, `hot_rows=1024` | 1.867 | **0.957** | 0.890–1.051 |
+
+`host_self` is the *same* host-RAM model timed a second time in each round. At
+0.986 the instrument is unbiased, and its 0.898–1.080 spread is the **resolution
+limit** — which is the number that makes the rest readable:
+
+- The two disk-bound arms sit far outside it, so **1.68× at the `hot_rows` floor
+  and 1.48× at 256 are real**, and the ladder moves the way the tier's additive
+  law predicts: the cost is disk traffic.
+- **`hot_rows=1024` is indistinguishable from host RAM.** Its 0.957 sits inside
+  the control's own spread, so the honest claim is *smaller than this harness can
+  resolve* — not the "1.03×" a single measurement suggested.
+
+The warmup round is why this matters: `host` and `host_self` read 3.084 vs 1.901
+in round 0 — the identical model, 62% apart. A one-shot-per-arm run cannot see
+that.
+
+**What this still does NOT establish.** OLMoE's arena is 3.6 GB and fits
+everywhere, so this shows the mechanism is correct and how the cost scales with
+residency — **not** a model whose experts exceed host RAM, which is the case the
+tier exists for. Rented-instance NVMe varies ~7× between pods, so these ratios
+characterise this box and do not travel.
 
 ## 0.16.3 — 2026-08-12
 
