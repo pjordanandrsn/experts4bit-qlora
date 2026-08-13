@@ -76,6 +76,63 @@ OFFLOAD_SEGMENTS = {
     "down_absmax": "nf4.down_absmax",
 }
 
+#: The same four tensors, for an arena of NATIVE MXFP4 bytes. Such an arena
+#: ships SIX per-projection segments (w1/w3/w2 x blocks+scales) because gate and
+#: up are separate tensors on disk. ``mxfp4_residency`` bakes them with both
+#: blocks adjacent and both scales adjacent precisely so a reader can span each
+#: pair as ONE range, and ``fuse_gate_up_segments`` presents that as the
+#: four-segment layout this tier already stages.
+MXFP4_OFFLOAD_SEGMENTS = {
+    "gate_up_proj": "gate_up_blocks",
+    "down_proj": "down_blocks",
+    "gate_up_absmax": "gate_up_scales",
+    "down_absmax": "down_scales",
+}
+
+
+def arena_offload_view(index):
+    """``(index_view, name -> segment suffix)`` for whichever bake this arena is.
+
+    Until now this tier read one shape of arena: the NF4 quantize-at-bake output
+    of ``nvme_bake_nf4``. That excluded every natively-MXFP4 checkpoint from
+    arena-backed TRAINING — gpt-oss and DeepSeek-V4 could *serve* from their own
+    released bytes but had to be re-quantized to NF4 to *train* from disk, which
+    costs a second full bake, ~4x per read (measured 34.9 s/request against
+    8.7 s on the MXFP4 lane), and the byte identity that made the provenance
+    claim worth making in the first place.
+
+    The fix is a view, not a new format. MXFP4 arenas already store their pairs
+    contiguously for the serving engine, so the same four staging reads work
+    once the segment names resolve. Nothing about the training path changes:
+    ``enable_fast_train`` still patches the wrapper, the delta is still added
+    pre-activation, and backward still re-reads whatever is staged.
+
+    Detection is by the segments PRESENT, never by a manifest field — a
+    ``bake_mode`` string can disagree with the bytes, and that failure is silent
+    (right shapes, wrong contents), which is the class of bug this tier's
+    geometry checks exist to catch.
+    """
+    have = {g["suffix"] for g in index.get("segments", ())}
+    if set(OFFLOAD_SEGMENTS.values()) <= have:
+        return index, OFFLOAD_SEGMENTS
+    try:
+        from mxfp4_residency import fuse_gate_up_segments
+    except ImportError as exc:                       # pragma: no cover
+        raise ImportError(
+            "this arena carries no NF4 quantize-at-bake segments, and fusing an "
+            "MXFP4 one needs `mxfp4_residency.fuse_gate_up_segments` from "
+            "grouped-nf4-gemm") from exc
+    fused = fuse_gate_up_segments(index)
+    if set(MXFP4_OFFLOAD_SEGMENTS.values()) <= {
+            g["suffix"] for g in fused.get("segments", ())}:
+        return fused, MXFP4_OFFLOAD_SEGMENTS
+    raise ValueError(
+        "this arena carries neither the four NF4 segments "
+        f"{sorted(OFFLOAD_SEGMENTS.values())} nor an MXFP4 six-segment layout "
+        f"fusing to {sorted(MXFP4_OFFLOAD_SEGMENTS.values())}; it has "
+        f"{sorted(have)}. Bake with `nvme_bake_nf4` (NF4) or with the MXFP4 "
+        "residency kinds (native bytes).")
+
 
 def _poison_enabled() -> bool:
     """``E4B_ARENA_POISON=1``: fill each staged destination before writing the
@@ -146,13 +203,19 @@ def check_arena_geometry(base, index: dict, arena_layer: int, *, names=None) -> 
             f"{n_layers} layers. Pass `layers=` explicitly when the model's "
             "MoE modules are not arena layers 0..N-1.")
 
+    # Resolve NF4-vs-MXFP4 here, from the segments the arena actually has. The
+    # geometry checks below then run identically on either bake — which is the
+    # point: an MXFP4 arena that does not match this model must fail on the same
+    # dtype/width assertions, not slip through a second code path.
+    index, segments = arena_offload_view(index)
+
     out = {}
     for n in names:
-        suffix = OFFLOAD_SEGMENTS.get(n)
+        suffix = segments.get(n)
         if suffix is None:
             raise KeyError(
                 f"no arena segment is defined for offload tensor {n!r}; "
-                f"known: {sorted(OFFLOAD_SEGMENTS)}")
+                f"known: {sorted(segments)}")
         dt, shape, _off, _ln = segment_geometry(index, suffix)
         cur = getattr(base, n)
         per_expert = 1
@@ -266,11 +329,14 @@ class _ArenaExpertOffload(_ExpertOffload):
                 "Disable the cache, or use a host-RAM offload handle.")
 
         ids = [int(e) for e in ids]
-        index = self._tier.reader.index
+        # Same resolution as the attach-time geometry check, from the tier's own
+        # index — an MXFP4 arena is fused to the four-segment view here so the
+        # staging reads below are byte-for-byte the ones the NF4 path makes.
+        index, segments = arena_offload_view(self._tier.reader.index)
         E = int(self.base.num_experts)
         nbytes = 0
         for n in self._param_names + self._buffer_names:
-            suffix = OFFLOAD_SEGMENTS[n]
+            suffix = segments[n]
             _dt, shape, _off, ln = segment_geometry(index, suffix)
             if _poison_enabled():
                 dest[n].fill_(0xA5 if dest[n].dtype == torch.uint8 else float("nan"))
