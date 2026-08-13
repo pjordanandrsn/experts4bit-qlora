@@ -8,6 +8,12 @@ set -uo pipefail
 V=/work/venv
 echo "=============== PREP $(date -u) ==============="
 
+# The original run created these by hand on the host before the container
+# started, so the script never needed them and the omission was invisible until
+# review. On a fresh mount -- which is exactly what the Reproducing section tells
+# you to use -- the bake writes into a directory that does not exist and fails.
+mkdir -p /work/arena /work/hf || exit 1
+
 if [ ! -x $V/bin/python ]; then
   # --system-site-packages keeps the image's CUDA-matched torch. A fresh venv
   # would pull a generic wheel and change what is being measured.

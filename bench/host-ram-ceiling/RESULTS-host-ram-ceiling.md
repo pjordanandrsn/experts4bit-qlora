@@ -139,3 +139,9 @@ instrument set, the marks, the cgroup limits **as read from inside the container
 the resolved package versions. Its first row is a `host/none` run that failed with
 `Failed to find C compiler` — that is the pre-`gcc` image, not a memory result, and it is
 left in place rather than deleted.
+
+These steps were then run against an **empty** mount, because the original arena was baked
+into directories created by hand beforehand and the script inherited that assumption
+(caught in review, fixed). The rebake from scratch produced a byte-identical arena —
+`md5 91e4c5cf1751933bbff0999a655021e8`, 3,623,878,656 bytes both times — so the bake is
+deterministic and the two runs above share an input.
