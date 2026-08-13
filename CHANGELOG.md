@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.17.2 — 2026-08-13
+
+**Docs-only. The published page still lacked the one number the feature is for.**
+
+0.17.0/0.17.1 describe `enable_nvme_train_residency` as lifting the **host-RAM**
+ceiling and never said by how much. The 0.17.0 entry below now carries it —
+**~2.5–3.5×**, as pinned expert bytes (3.83 GB → ~0.2 GB) and steady RSS after
+load (4.94–5.9 GB → 1.42–2.37 GB) — together with the reason the obvious
+instruments give the wrong answer.
+
+`ru_maxrss` is not usable here: it reports 18.6 GB for the host arm on a roomy box
+and 10.8 GB for the *same arm* on a constrained one, because the 13.84 GB bf16
+checkpoint is mmap'd and read in full to fuse and quantize, and those pages are
+clean, file-backed and reclaimable. Peak *anonymous* is not the fix either —
+~1.5 GB for **both** arms, since `smaps_rollup` counts pinned CUDA memory as
+file-backed.
+
+Established by five reproductions across two independently built stacks on one
+pod whose unpinned install resolved to identical ML package versions, plus an
+A/B/A memory-balloon test (18.57 → 10.80 → 18.56, bit-identical losses) that rules
+out drift. No code changed; the wheel is byte-identical to 0.17.1 apart from the
+version.
+
 ## 0.17.1 — 2026-08-12
 
 **Docs-only. The published 0.17.0 page carried a timing number that was never a
