@@ -590,3 +590,37 @@ def disable_mxfp4_nvme_residency(model) -> int:
             del mod._e4b_mxfp4_ref, mod._e4b_mxfp4_engine
             n += 1
     return n
+
+
+def mxfp4_expert_weight(mod, name: str, expert: int, *, dtype=None):
+    """Decode ONE expert's projection from staged MXFP4 bytes.
+
+    This is the unit the MXFP4 forward is built on, and it is separated so it can
+    be pinned against the format's own oracle on CPU: `dequantize_mxfp4` is pure
+    torch, so parity here is checkable without a GPU, a kernel, or a checkpoint.
+
+    The staged buffers are flat ``[E, per_expert]`` because every consumer indexes
+    by global expert id; MXFP4 wants ``[rows, G, B]`` with B=16 bytes per 32-value
+    group. The reshape is derived from the module's own declared geometry rather
+    than passed in, so a mismatch surfaces here instead of as silent nonsense.
+    """
+    import torch as _t
+    from ..formats.mxfp4 import dequantize_mxfp4
+
+    if not getattr(mod, "_e4b_mxfp4_arena", False):
+        raise TypeError(
+            f"{type(mod).__name__} is not an MXFP4-arena module; its bytes are "
+            "NF4 and decoding them as MXFP4 would return nonsense")
+    if name == "gate_up":
+        blocks, scales = mod.gate_up_proj, mod.gate_up_absmax
+        rows, k = mod._gate_up_shape
+    elif name == "down":
+        blocks, scales = mod.down_proj, mod.down_absmax
+        rows, k = mod._down_shape
+    else:
+        raise ValueError(f"name must be 'gate_up' or 'down', got {name!r}")
+
+    groups = k // 32                       # one e8m0 scale per 32 values
+    b = blocks[expert].view(rows, groups, 16)
+    s = scales[expert].view(rows, groups)
+    return dequantize_mxfp4(b, s, dtype=dtype or _t.bfloat16)

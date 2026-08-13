@@ -201,3 +201,77 @@ def test_mxfp4_arena_module_is_flagged_and_refuses_nf4_arithmetic(tmp_path):
     assert getattr(experts, "_e4b_mxfp4_arena", False) is True, (
         "an MXFP4-arena module must be flagged, so no caller can mistake it for "
         "one whose forward is wired")
+
+
+# ------------------------------------------------------- MXFP4 forward parity
+def _stage(mod, index, path):
+    """Put the arena's real bytes into the meta module, as the tier does."""
+    from nvme_residency import ColdTier, segment_geometry, segment_into
+    from experts4bit_qlora.engines.nvme_train import arena_offload_view
+
+    view, segmap = arena_offload_view(index)
+    tier = ColdTier(path, hot_rows=64, pinned=False)
+    ids = list(range(E))
+    for name, suffix in segmap.items():
+        _dt, shape, _off, _ln = segment_geometry(view, suffix)
+        dest = torch.empty(E, int(torch.tensor(shape).prod()),
+                           dtype=getattr(mod, name).dtype)
+        segment_into(tier, view, 0, ids, suffix, dest.view(E, *shape), rows=ids)
+        if name in mod._parameters:
+            mod._parameters[name] = torch.nn.Parameter(dest, requires_grad=False)
+        else:
+            mod._buffers[name] = dest
+    return mod
+
+
+def test_staged_mxfp4_bytes_decode_to_the_source_weights_bit_exactly(tmp_path):
+    """THE parity test, against the format's own oracle rather than another lane.
+
+    The arena is baked from bytes this file writes, so the source of truth is
+    known exactly. `dequantize_mxfp4` is pure torch, which makes this checkable
+    on CPU — no kernel, no GPU, no checkpoint. Bit-exact is the right bar here
+    and not an aspiration: nothing in this path is allowed to change a value.
+    Tiering moves bytes; it does not get to round them.
+    """
+    from experts4bit_qlora.engines.nvme_experts import (
+        build_meta_experts, mxfp4_expert_weight)
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+
+    path, index = _bake_mxfp4(tmp_path)
+    mod = build_meta_experts(index, E, has_gate=True,
+                             compute_dtype=torch.bfloat16, quant_type="nf4")
+    _stage(mod, index, path)
+
+    src = _mxfp4_stacks()
+    for e in range(E):
+        # gate_up is w1 and w3 fused, in that order — the same fusion the arena
+        # presents, so the oracle must be built the same way to compare.
+        gu_b = torch.cat([src["w1.weight"][e], src["w3.weight"][e]], dim=0)
+        gu_s = torch.cat([src["w1.scale"][e], src["w3.scale"][e]], dim=0)
+        want = dequantize_mxfp4(gu_b.view(2 * INTER, H // 32, 16),
+                                gu_s.view(2 * INTER, H // 32),
+                                dtype=torch.bfloat16)
+        got = mxfp4_expert_weight(mod, "gate_up", e)
+        assert torch.equal(got, want), f"expert {e} gate_up decoded differently"
+
+        want_d = dequantize_mxfp4(src["w2.weight"][e].view(H, INTER // 32, 16),
+                                  src["w2.scale"][e].view(H, INTER // 32),
+                                  dtype=torch.bfloat16)
+        assert torch.equal(mxfp4_expert_weight(mod, "down", e), want_d), (
+            f"expert {e} down decoded differently")
+
+
+def test_decoding_an_nf4_module_as_mxfp4_is_refused(tmp_path):
+    """The guard that keeps the helper honest: NF4 bytes decoded as MXFP4 would
+    return plausible-looking nonsense, so the flag is checked, not assumed."""
+    from experts4bit_qlora.engines.nvme_experts import mxfp4_expert_weight
+    from experts4bit_qlora import Experts4bit
+
+    g = torch.Generator().manual_seed(2)
+    nf4 = Experts4bit.from_float(
+        (torch.randn(E, 2 * INTER, H, generator=g) * 0.05).to(torch.bfloat16),
+        (torch.randn(E, H, INTER, generator=g) * 0.05).to(torch.bfloat16),
+        has_gate=True, activation=torch.nn.functional.silu,
+        quant_type="nf4", compute_dtype=torch.bfloat16)
+    with pytest.raises(TypeError):
+        mxfp4_expert_weight(nf4, "gate_up", 0)
