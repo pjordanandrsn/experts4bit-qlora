@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.17.5"
+version = "0.18.0"
 description = "QLoRA fine-tuning of fused 4-bit Mixture-of-Experts on a single small GPU, on stock bitsandbytes."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -22,15 +22,20 @@ dependencies = [
 # The fused single-launch grouped GEMM (dequant-inside-the-GEMM, fp32 accum) —
 # enables experts4bit_qlora.enable_fast() for inference. Import stays optional.
 fast = [
-    # >=0.10.0, and the floor was understated long before this bump:
-    # `enable_nvme_train_residency` imports `segment_into` / `segment_geometry`,
-    # which landed in 0.9.0, so a caller who pinned an older gnf4 got an
-    # ImportError from a documented entry point. 0.10.0 is the honest floor
-    # because it is also where `capacity_for_bytes` stopped over-promising rows
-    # for pinned tiers -- and both `nvme_train` and `nvme_experts` docstrings
-    # tell callers to size `hot_rows` from that helper. On <0.10.0 that advice
-    # hands back roughly twice the rows that fit.
-    "grouped-nf4-gemm>=0.10.0",
+    # >=0.11.0. History, because the floor has been understated twice: 0.9.0 is
+    # where `segment_into` / `segment_geometry` landed, which
+    # `enable_nvme_train_residency` imports; 0.10.0 is where
+    # `capacity_for_bytes` stopped over-promising rows for pinned tiers, and
+    # both docstrings tell callers to size `hot_rows` from that helper, so on
+    # <0.10.0 the advice hands back roughly twice the rows that fit.
+    #
+    # 0.11.0 is the floor now for two reasons. `nvme_train` imports
+    # `widening_casts` to accept a bf16-absmax arena -- defensively, so an older
+    # gnf4 still works, but the capability is simply absent there and its tests
+    # skip. And `qd` now defers to gnf4's CPU-scaled default, which does not
+    # exist below 0.11.0; the key is omitted rather than forwarded so an older
+    # build still gets its own default instead of 32 reader threads.
+    "grouped-nf4-gemm>=0.11.0",
 ]
 train = [
     "transformers>=5.0",
@@ -59,7 +64,7 @@ serve = [
 # Pinned >= 0.9.0, not [fast]'s >= 0.2.4: that is the release carrying
 # `nvme_residency.segment_into`, which the training path stages every layer
 # through. An older gnf4 satisfies [fast] and still skips these tests.
-test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.10.0"]
+test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.11.0"]
 
 [project.urls]
 Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"

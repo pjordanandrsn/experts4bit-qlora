@@ -126,7 +126,12 @@ cards**, because part of every arena step is an NVMe read and the disk does not 
 GPU you bought. Quote the step cost with the card attached, or not at all.
 
 Size `hot_rows` from the formula in the docstring, not from another model's value — it has
-a hard floor at the experts one forward routes. Above that floor it is a **dial**: on
+a hard floor at the experts one forward routes, and **that floor is enforced at attach as of
+0.18.0**: below `num_experts` the call is refused in the pre-flight, before the tier opens,
+rather than raising inside `ColdTier.ensure` many steps into a run. Sizing to the *typical*
+routed count is the trap it closes — measured on Qwen3-30B at seq 384, a forward routes a
+median of 63 unique experts but a **max of 97 of 128**, so a tier sized to the median
+survives most forwards and ends the run on one of them. Above that floor it is a **dial**: on
 Qwen3-30B, the floor (128) needs 3.89–4.03 GB and reads 14.4 GB/step, while holding every
 routed row (~3216) needs 11.81–12.88 GB and reads 2.65 GB/step — **5.4× less disk for 3.2×
 the RAM**, still 2× better than host-resident. Pick the end your constraint is on. And do not size any of this from peak RSS:
