@@ -133,7 +133,14 @@ decides whether the job starts.
 **Does not:** this is one model on one box. The host requirement scales with **total**
 expert bytes while the arena requirement is set by `hot_rows` and stays roughly flat, so
 the ratio should widen substantially on larger MoEs — but that is the mechanism's
-prediction, not a measurement, and nothing here measures it. NVMe throughput varies ~7×
+prediction, not a measurement, and nothing here measures it.
+
+> **Measured 2026-08-13 — see [`RESULTS-scaling.md`](RESULTS-scaling.md).** On
+> Qwen3-30B-A3B (4.50× the expert bytes) the ratio is **6.40×**: host **24.70–25.77 GB**,
+> arena **3.89–4.03 GB**. The host requirement grew ×4.18 against ×4.50 in expert bytes;
+> the arena requirement grew ×1.66, and most of that is the larger dense side rather than
+> the expert path. The prediction above held in direction; the point predictions
+> registered alongside it did not. NVMe throughput varies ~7×
 between rented pods; these are wall-clock-irrelevant pass/fail results, so that variance
 does not affect the thresholds, but it would affect step time. **This box is a correctness
 testbed and no timing claim is made from it.**
