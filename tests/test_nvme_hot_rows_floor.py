@@ -17,7 +17,6 @@ because grouped-nf4-gemm now sizes it from the host's CPU budget.
 import inspect
 
 import pytest
-import torch
 
 pytest.importorskip("nvme_arena", reason="needs grouped-nf4-gemm N-series modules")
 pytest.importorskip("nvme_residency")
