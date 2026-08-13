@@ -24,10 +24,26 @@ def main(path, ref="host", ctrl="host_self"):
     good = [r for r in rows if r.get("ok") and r.get("scored")]
     if not good:
         print("no scored rows yet"); return 1
+    # A ledger holds MORE THAN ONE MODEL, with round numbers restarting per model
+    # (the published timing-3090/timing-l40s files each carry OLMoE and Qwen3).
+    # Keying by (round, label) alone let the second model overwrite the first's
+    # host/host_self rows, so the paired ratios silently mixed models and could
+    # not reproduce the receipt (Bugbot, PR #130). Analyse one model at a time.
+    models = list(dict.fromkeys(r.get("model", "?") for r in good))
+    if len(models) > 1:
+        rc = 0
+        for mdl in models:
+            print("=" * 72)
+            rc |= _one(mdl, [r for r in good if r.get("model") == mdl], ref, ctrl)
+        return rc
+    return _one(models[0], good, ref, ctrl)
+
+
+def _one(model, good, ref, ctrl):
     rounds = sorted({r["round"] for r in good})
     labels = [l for l in dict.fromkeys(r["label"] for r in good)]
     by = {(r["round"], r["label"]): r for r in good}
-    print(f"model {good[0]['model']}   gpu {good[0]['gpu']}   cores {good[0]['nproc']}")
+    print(f"model {model}   gpu {good[0]['gpu']}   cores {good[0]['nproc']}")
     print(f"scored rounds {rounds} (round 0 dropped as warmup)\n")
 
     print(f"{'label':11} {'t_load s (per round)':30} {'step s median (per round)':30}")
