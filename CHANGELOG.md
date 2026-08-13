@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.17.5 — 2026-08-13
+
+**Docs-only. A third model corrects what two models got wrong, and the arena's cost in
+TIME is measured for the first time.**
+
+### The arena requirement is not flat
+
+0.17.4 said the host requirement scales with expert bytes "while the arena requirement is
+set by `hot_rows` and stays roughly flat". The host half holds. **The flat half is wrong.**
+Gemma-4-26B-A4B — now bakeable, see below — lands between the other two and breaks it:
+
+| | expert bytes | arena req | host req | ratio | ⇒ dense baseline |
+|---|---|---|---|---|---|
+| OLMoE-1B-7B | 3.62 GB | 2.28–2.42 GB | 5.91–6.17 GB | 2.56× | ~2.19 GB |
+| **Gemma-4-26B-A4B** | **12.85 GB** | **5.10–5.37 GB** | **19.33–20.40 GB** | **3.80×** | **~4.94 GB** |
+| Qwen3-30B-A3B | 16.31 GB | 3.89–4.03 GB | 24.70–25.77 GB | 6.40× | ~3.69 GB |
+
+Gemma has **fewer** expert bytes than Qwen3 and a **larger** arena requirement, because its
+dense side is bigger — a dense MLP in every layer plus a 262144-token vocabulary. The ratio
+is expert bytes measured **against the dense baseline**, not expert bytes alone. Two points
+were consistent with "flat"; three are not.
+
+### What the arena costs in time
+
+First timing measurement in this line, on two architectures because
+[no timing claim ships on one machine](bench/host-ram-ceiling/RESULTS-timing.md):
+
+| | RTX 3090 (Ampere) | L40S (Ada) | travels? |
+|---|---|---|---|
+| **load**, host/arena | 3.39× / 6.76× | 3.12× / 5.87× | **yes** |
+| **step**, arena/host | 1.331 / 1.238 | **2.248 / 1.708** | **no** |
+
+**The load saving travels; the step cost does not, and it is worse on faster hardware.**
+Going 3090 → L40S the host arm's step time nearly halves while the arena arm improves only
+1.2–1.4×, because part of every arena step is an NVMe read and the disk does not care which
+GPU you bought. **Quote the step cost with the card attached, or not at all.**
+
+**Size `hot_rows` to the routing floor, not to free RAM.** Sweeping 128 / 384 / 1024 on
+Qwen3 produced no resolvable step-time difference, while 1024 cost resolvably more load
+time and ~8× the pinned RAM. `hot_rows` also does not travel between models: it has a hard
+floor at the experts one forward routes (OLMoE 89% of a layer, Qwen3 52%, Gemma-4 50%).
+
+Both receipts carry their pre-registrations, including a mis-specified gate that was
+amended before any re-run, and a `hot_rows` U-shape that one round suggested and three
+rounds withdrew.
+
 ## 0.17.4 — 2026-08-13
 
 **Docs-only. The scaling claim 0.17.3 flagged as unmeasured is now measured.**

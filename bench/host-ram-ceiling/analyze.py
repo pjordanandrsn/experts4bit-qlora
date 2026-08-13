@@ -32,9 +32,10 @@ def main(path, ref="host", ctrl="host_self"):
 
     print(f"{'label':11} {'t_load s (per round)':30} {'step s median (per round)':30}")
     for lab in labels:
-        L = [by[(r, lab)]["t_load_s"] for r in rounds if (r, lab) in by]
-        S = [by[(r, lab)]["step_s_median"] for r in rounds if (r, lab) in by]
-        print(f"  {lab:9} {str([round(x,2) for x in L]):30} {str([round(x,4) for x in S]):30}")
+        loads = [by[(r, lab)]["t_load_s"] for r in rounds if (r, lab) in by]
+        steps = [by[(r, lab)]["step_s_median"] for r in rounds if (r, lab) in by]
+        print(f"  {lab:9} {str([round(x, 2) for x in loads]):30} "
+              f"{str([round(x, 4) for x in steps]):30}")
 
     def paired(lab, field):
         out = []
@@ -53,17 +54,34 @@ def main(path, ref="host", ctrl="host_self"):
         rl, rs = paired(lab, "t_load_s"), paired(lab, "step_s_median")
         if lab == ctrl:
             ctrl_load, ctrl_step = rl, rs
-        f = lambda v: f"{med(v):.3f} [{min(v):.3f}-{max(v):.3f}]" if v else "n/a"
-        print(f"  {lab:9} {f(rl):>22}   {f(rs):>22}")
+        def fmt(v):
+            return f"{med(v):.3f} [{min(v):.3f}-{max(v):.3f}]" if v else "n/a"
+        print(f"  {lab:9} {fmt(rl):>22}   {fmt(rs):>22}")
 
     if ctrl_step:
         spread = (max(ctrl_step) - min(ctrl_step)) / med(ctrl_step) * 100
         lspread = (max(ctrl_load) - min(ctrl_load)) / med(ctrl_load) * 100
-        print(f"\nCONTROL '{ctrl}': step median {med(ctrl_step):.4f}, spread {spread:.1f}%"
-              f"   |   load median {med(ctrl_load):.4f}, spread {lspread:.1f}%")
-        print("  Registered gate: report a ratio only if the control spread is within +/-8%.")
-        for name, sp in (("step", spread), ("load", lspread)):
-            print(f"  -> {name}: {'RESOLVABLE' if sp <= 8 else 'NOT RESOLVABLE — report indistinguishable'}")
+        print(f"\nCONTROL '{ctrl}': step {med(ctrl_step):.3f} [{min(ctrl_step):.3f}-{max(ctrl_step):.3f}]"
+              f" (spread {spread:.1f}%)   load {med(ctrl_load):.3f}"
+              f" [{min(ctrl_load):.3f}-{max(ctrl_load):.3f}] (spread {lspread:.1f}%)")
+        # AMENDMENT 1: the gate is whether the EFFECT clears the control's range,
+        # not whether the control's spread is under a fixed threshold. The old
+        # rule called a 239% load effect unresolvable because a control moved
+        # 8.4% -- it confused resolution with significance. A wide control now
+        # WIDENS the band an effect must clear rather than voiding the run.
+        print("  Gate (PREREG-timing-AMENDMENT-1): an effect is resolved when its"
+              " per-round range does not overlap the control's.")
+        for lab in labels:
+            if lab in (ref, ctrl):
+                continue
+            for name, eff, ctl in (("load", paired(lab, "t_load_s"), ctrl_load),
+                                   ("step", paired(lab, "step_s_median"), ctrl_step)):
+                if not eff:
+                    continue
+                clear = min(eff) > max(ctl) or max(eff) < min(ctl)
+                print(f"  -> {lab:9} {name:5} {med(eff):.3f} [{min(eff):.3f}-{max(eff):.3f}]"
+                      f"  vs control [{min(ctl):.3f}-{max(ctl):.3f}]: "
+                      f"{'RESOLVED' if clear else 'OVERLAPS — report indistinguishable'}")
     return 0
 
 
