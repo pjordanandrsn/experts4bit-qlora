@@ -66,11 +66,40 @@ namespace split (old submodule paths still resolve via aliases in `__init__`), t
 architecture support matrix, transformers checkpoint-key renamings, and the
 gap-heuristic fix.
 
-**Not verified:** none of the arena training path has run on a GPU. No
-forward/backward parity against a reference arm, no timing, no real arena. The
-correctness argument is that arena-staged bytes are bitwise equal to host-staged
-ones, which is established on CPU — everything downstream inherits the existing
-fused-training gates unchanged.
+- **`arena_train=True` on the loader — without it the above could not be reached
+  at all.** The arena branch built bare `meta` experts (its serving shape) and
+  silently ignored `r`/`alpha`, so `enable_nvme_train_residency` refused every
+  module with *"not ExpertsLoRA-wrapped"* and its own documented usage failed.
+  29 CPU tests missed it because each constructs `ExpertsLoRA` by hand in the
+  fixture — they exercised the mechanism, never the route a caller takes. It is
+  gated on an explicit flag rather than on `r`, because `r` is a required
+  positional and the *serving* example passes `r=8`; keying off it would have
+  fixed training by breaking serving.
+
+**Verified on a GPU** (RTX A5000, sm_86; OLMoE-1B-7B; 12 steps on Alpaca;
+identical data and bit-identical starting adapters; every arm through
+`enable_fast_train`, so only residency differs):
+
+| arm | s/step | peak GB | final loss | med \|ΔL\| |
+|---|---|---|---|---|
+| host RAM (reference) | 1.62 | 2.26 | 0.5839 | — |
+| arena, `hot_rows=64` | 2.65 | 2.03 | 0.6143 | **0.0059** |
+| arena, `hot_rows=256` | 2.41 | 2.04 | 0.6426 | **0.0086** |
+| arena, `hot_rows=1024` | 1.67 | 2.04 | 0.5944 | **0.0099** |
+
+All three pass `bench/fused-train-gate`'s registered 0.05 median-|ΔL| band, 5–8×
+inside it. A precondition run first established the arena's bytes are **bitwise
+identical** to loader-quantized bytes, so the arms differ only in residency. The
+ladder moves the way the tier's additive law predicts — the cost is disk traffic:
+1.64× the reference at the `hot_rows` floor, **1.03× with the arena fully
+pinned**.
+
+**What that does NOT establish.** OLMoE's arena is 3.6 GB and fits everywhere, so
+this shows the mechanism is correct and how the cost scales with residency — not
+a model whose experts exceed host RAM, which is the case the tier exists for. And
+the `s/step` figures are single measurements per arm, not the paired and
+self-paired protocol this repo's perf methodology requires: read them as
+indicative, not as measured ratios. The parity verdicts do not depend on that.
 
 ## 0.16.3 — 2026-08-12
 
