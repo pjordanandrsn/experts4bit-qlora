@@ -123,9 +123,20 @@ def arena_offload_view(index):
             "MXFP4 one needs `mxfp4_residency.fuse_gate_up_segments` from "
             "grouped-nf4-gemm") from exc
     fused = fuse_gate_up_segments(index)
-    if set(MXFP4_OFFLOAD_SEGMENTS.values()) <= {
-            g["suffix"] for g in fused.get("segments", ())}:
-        return fused, MXFP4_OFFLOAD_SEGMENTS
+    segs = fused.get("segments", ())
+    if len(segs) == 4:
+        # Map BY POSITION, not by name. `fuse_gate_up_segments` names a fused
+        # segment by concatenating its sources -- 'w1.weight+w3.weight' on a
+        # DeepSeek-V4 arena, 'w1.weight_packed+w3.weight_packed' on a K3 one --
+        # so the suffixes are checkpoint-dependent and any hardcoded map is
+        # wrong for some real arena. What the fusion DOES guarantee is order:
+        # gate_up blocks, gate_up scales, down blocks, down scales. (An earlier
+        # version of this function read the docstring's role names as literal
+        # suffixes; the CPU spec caught it.)
+        order = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
+        by_pos = {order[0]: segs[0]["suffix"], "gate_up_absmax": segs[1]["suffix"],
+                  order[1]: segs[2]["suffix"], "down_absmax": segs[3]["suffix"]}
+        return fused, by_pos
     raise ValueError(
         "this arena carries neither the four NF4 segments "
         f"{sorted(OFFLOAD_SEGMENTS.values())} nor an MXFP4 six-segment layout "

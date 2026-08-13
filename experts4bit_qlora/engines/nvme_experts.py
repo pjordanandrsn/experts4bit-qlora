@@ -233,11 +233,70 @@ def build_meta_experts(index: dict, num_experts: int, *, has_gate: bool = True,
     # resident path already guards against.
     if cls is None:
         cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
-    return cls(num_experts=num_experts, hidden_dim=hidden,
-               intermediate_dim=intermediate, has_gate=has_gate,
-               activation=activation or torch.nn.functional.silu,
-               compute_dtype=compute_dtype or torch.bfloat16,
-               quant_type=quant_type, device="meta")
+    mod = cls(num_experts=num_experts, hidden_dim=hidden,
+              intermediate_dim=intermediate, has_gate=has_gate,
+              activation=activation or torch.nn.functional.silu,
+              compute_dtype=compute_dtype or torch.bfloat16,
+              quant_type=quant_type, device="meta")
+    _redeclare_for_mxfp4_arena(mod, index)
+    return mod
+
+
+def _redeclare_for_mxfp4_arena(mod, index) -> bool:
+    """Re-declare a meta expert's buffers to an MXFP4 arena's geometry.
+
+    An NF4 module declares `absmax` as fp32 per 64 elements; an MXFP4 arena
+    carries uint8 e8m0 scales per 32. Same blocks width, different scales
+    entirely — so the tier's geometry check (rightly) refuses to stage one into
+    the other, and a natively-MXFP4 checkpoint had no way into arena TRAINING
+    without being re-quantized to NF4 first.
+
+    Nothing is allocated: the base is on `meta`, so this only changes DECLARED
+    dtype and per-expert width, which is exactly what the check compares and
+    what `segment_into` sizes its copies from.
+
+    Shapes are taken from the arena's own fused segments rather than recomputed,
+    for the same reason the segment map is positional: the suffixes are
+    checkpoint-dependent, the ORDER is guaranteed.
+    """
+    from .nvme_train import arena_offload_view, OFFLOAD_SEGMENTS
+    try:
+        view, segmap = arena_offload_view(index)
+    except Exception:
+        return False                      # not an arena this tier can stage
+    if segmap is OFFLOAD_SEGMENTS:
+        return False                      # NF4: leave the module exactly as built
+
+    geo = {g["suffix"]: g for g in view["segments"]}
+    for name, suffix in segmap.items():
+        g = geo[suffix]
+        shape = tuple(g["shape_per_expert"])
+        per_expert = 1
+        for d in shape:
+            per_expert *= d
+        dt = _ST_TO_TORCH_DTYPE(g["dtype"])
+        t = torch.empty(mod.num_experts, per_expert, dtype=dt, device="meta")
+        # These four are a mix of parameters and buffers on the primitive, and a
+        # module rejects a bare Tensor assigned over a Parameter. Re-declare in
+        # kind: frozen storage either way (requires_grad=False), since the base
+        # is never trained -- only the adapter is.
+        if name in mod._parameters:
+            mod._parameters[name] = torch.nn.Parameter(t, requires_grad=False)
+        else:
+            mod._buffers[name] = t
+    # The staging half is what this enables. The COMPUTE half (an MXFP4 fused
+    # kernel behind this module's forward) is not wired here, and a silent wrong
+    # answer is the failure this codebase guards hardest against — so the module
+    # is flagged and its forward refuses rather than running NF4 arithmetic over
+    # MXFP4 bytes.
+    mod._e4b_mxfp4_arena = True
+    return True
+
+
+def _ST_TO_TORCH_DTYPE(name: str):
+    import torch as _t
+    return {"U8": _t.uint8, "I8": _t.int8, "F8_E8M0": _t.uint8,
+            "F32": _t.float32, "BF16": _t.bfloat16}[name]
 
 
 def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
