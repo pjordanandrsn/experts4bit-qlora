@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.17.1 — 2026-08-12
+
+**Docs-only. The published 0.17.0 page carried a timing number that was never a
+measurement.**
+
+0.17.0's release notes reported `s/step` as one measurement per arm, and from
+those single samples claimed the fully-pinned arena cost **1.03×** the host-RAM
+reference. Re-measured under this repo's paired protocol — 5 scored rounds, every
+arm timed once per round in fixed order, warmup dropped, plus a `host_self`
+control that times the *same* host-RAM model twice per round — the control came
+back at **0.986 with a 0.898–1.080 spread**. That spread is the harness's
+resolution limit, and `hot_rows=1024`'s 0.957 sits *inside* it.
+
+So the honest statement is **"indistinguishable from host RAM"**, not 1.03×. The
+disk-bound arms are unaffected and remain real: **1.679×** at the `hot_rows`
+floor, **1.479×** at 256 — both far outside the noise, with the ladder moving as
+the tier's additive law predicts.
+
+The warmup round is the argument for the protocol: `host` and `host_self` read
+3.084 vs 1.901 in round 0 — the identical model, 62% apart. No one-shot-per-arm
+run can see that.
+
+The full table, the control, and what still is **not** established (a model whose
+experts genuinely exceed host RAM) are in the 0.17.0 entry below, now corrected.
+No code changed; the wheel is byte-identical to 0.17.0 apart from the version.
+
 ## 0.17.0 — 2026-08-12
 
 **Training whose frozen experts live on NVMe — plus the namespace split, and a CI
