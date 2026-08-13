@@ -168,7 +168,15 @@ def check_arena_geometry(base, index: dict, arena_layer: int, *, names=None) -> 
                 f"{suffix!r} carries {shape} = {per_expert} values per expert. "
                 "Expected [num_experts, per_expert]; the arena does not match "
                 "this model's expert geometry.")
-        out[n] = (cur.shape, dt)
+        # The MODULE's dtype, not the arena's. This feeds `_build_homes`, and a
+        # home's dtype becomes the staging destination's dtype — so returning
+        # the arena's would allocate a bf16 destination for a bf16 segment,
+        # `segment_into` would take its memcpy path instead of converting, and
+        # the kernel would be handed bf16 absmax where its contract says fp32.
+        # Wrong scales, finite numbers, no error. Where the arena stores a
+        # segment narrower than the module holds it is a STORAGE detail, and it
+        # belongs to `segment_into`, which converts on the way in.
+        out[n] = (cur.shape, cur.dtype)
     return out
 
 

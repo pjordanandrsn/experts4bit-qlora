@@ -115,6 +115,33 @@ def test_staged_absmax_is_bitwise_identical(tmp_path):
     assert checked == 2, f"expected both absmax segments, checked {checked}"
 
 
+def test_homes_keep_the_MODULE_dtype_not_the_arenas(tmp_path):
+    """The route test, and the one that matters most.
+
+    `check_arena_geometry`'s return feeds `_build_homes`, and a home's dtype
+    becomes the staging DESTINATION's dtype. Returning the arena's dtype would
+    allocate a bf16 destination for a bf16 segment — at which point
+    `segment_into` sees matching dtypes, takes its memcpy path, converts
+    nothing, and the kernel is handed bf16 absmax where its contract says fp32.
+    Wrong scales, finite numbers, no error anywhere.
+
+    The earlier tests in this file all passed while that was broken, because
+    they called `segment_into` with a destination THEY allocated as fp32 —
+    testing the mechanism instead of the route.
+    """
+    mod = _module()
+    _p, index = _bake_absmax_as(mod, tmp_path, "homes.arena", torch.bfloat16)
+    geo = check_arena_geometry(mod, index, 0)
+    for attr, kind in OFFLOAD_SEGMENTS.items():
+        _shape, dtype = geo[attr]
+        want = getattr(mod, attr).dtype
+        assert dtype is want, (
+            f"{attr}: geometry reports {dtype} but the module holds {want}; "
+            "a destination built from this would skip the conversion")
+        if "absmax" in kind:
+            assert dtype is torch.float32, f"{attr} must stage as fp32"
+
+
 def test_a_real_dtype_mismatch_is_still_refused(tmp_path):
     """Negative control. The widening must not have turned the dtype check off:
     a u8 segment feeding an fp32 home is still 'not baked from this model'."""
