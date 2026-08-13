@@ -117,6 +117,17 @@ def check_arena_geometry(base, index: dict, arena_layer: int, *, names=None) -> 
     """
     from nvme_residency import segment_geometry
 
+    try:
+        from nvme_residency import widening_casts
+    except ImportError:
+        # gnf4 older than bf16-absmax support. Refusing every mismatch is
+        # exactly the old behaviour, and it is the SAFE direction: such a build
+        # cannot widen in `segment_into` either, so accepting the geometry here
+        # would only move the failure to a staging copy that reinterprets bf16
+        # bytes as fp32 without converting them.
+        def widening_casts():
+            return frozenset()
+
     names = tuple(names) if names is not None else (
         _ArenaExpertOffload._NAMES_PARAM + _ArenaExpertOffload._NAMES_BUFFER)
 
@@ -147,7 +158,7 @@ def check_arena_geometry(base, index: dict, arena_layer: int, *, names=None) -> 
         per_expert = 1
         for s in shape:
             per_expert *= s
-        if cur.dtype != dt:
+        if cur.dtype != dt and (dt, cur.dtype) not in widening_casts():
             raise TypeError(
                 f"{n}: module holds {cur.dtype} but arena segment {suffix!r} "
                 f"is {dt} — this arena was not baked from this model")
@@ -157,7 +168,15 @@ def check_arena_geometry(base, index: dict, arena_layer: int, *, names=None) -> 
                 f"{suffix!r} carries {shape} = {per_expert} values per expert. "
                 "Expected [num_experts, per_expert]; the arena does not match "
                 "this model's expert geometry.")
-        out[n] = (cur.shape, dt)
+        # The MODULE's dtype, not the arena's. This feeds `_build_homes`, and a
+        # home's dtype becomes the staging destination's dtype — so returning
+        # the arena's would allocate a bf16 destination for a bf16 segment,
+        # `segment_into` would take its memcpy path instead of converting, and
+        # the kernel would be handed bf16 absmax where its contract says fp32.
+        # Wrong scales, finite numbers, no error. Where the arena stores a
+        # segment narrower than the module holds it is a STORAGE detail, and it
+        # belongs to `segment_into`, which converts on the way in.
+        out[n] = (cur.shape, cur.dtype)
     return out
 
 
