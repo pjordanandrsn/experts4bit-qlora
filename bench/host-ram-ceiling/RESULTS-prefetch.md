@@ -19,6 +19,16 @@ compute should hide that.
 It does hide it. Measured on the same box, blocked time **~16% → ~4%** and main-thread
 misses **47 → 0–1**. The stall is gone.
 
+> **The ~16% is understated, and both arms understate it equally.** That probe timed
+> `ensure` only on the main thread. Gradient checkpointing re-runs the forward *inside*
+> backward, which PyTorch executes on the autograd thread, so a second set of `ensure`
+> calls — another 47 misses and another ~8.35 GB per step, near-identical to the forward's
+> — was never counted. Profiled per thread afterwards, staging is **29.0% of the step**, not
+> ~16%. The main thread is blocked in `backward()` while that recompute runs, so it is on
+> the critical path too. The arms above are unaffected: the same convention was applied to
+> both, and the decision came from wall-clock step time, not from this metric. Detail in
+> [gnf4#61](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/61).
+
 ## And the step got slower anyway
 
 Four arms, paired within each round, 5 scored rounds × 12 scored steps, `off256_self` being
