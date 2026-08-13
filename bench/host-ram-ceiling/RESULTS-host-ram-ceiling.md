@@ -3,10 +3,15 @@
 ### 2026-08-13 · RTX A2000 12GB, sm_86 · torch 2.8.0+cu128 · **published wheels** e4b 0.17.2 / gnf4 0.9.0 · driver [`runarm.sh`](runarm.sh) + [`cg.py`](cg.py) · raw [`ladder.jsonl`](ladder.jsonl)
 
 **Evidence tier: `measured`.** Both packages installed from PyPI, not a working tree.
-The threshold reported here was **predicted in a published release note before it was
-measured**: 0.17.0's entry said a demonstration "needs a machine capped near the host
-arm's true ~5–6 GB working set". That text shipped to PyPI on 2026-08-12. The host arm's
-measured requirement is **5.91–6.17 GB**.
+The threshold reported here was **written down before it was measured**: 0.17.0's
+changelog entry said a demonstration "needs a machine capped near the host arm's true
+~5–6 GB working set", committed and tagged on 2026-08-12. The host arm's measured
+requirement is **5.91–6.17 GB**.
+
+That prediction is public in the repo at the `v0.17.0` and `v0.17.2` tags — *not* on
+PyPI. The long description is built from `README.md` alone, so nothing in `CHANGELOG.md`
+has ever reached the package page, which is why 0.17.2 failed to deliver what its own
+notes claimed and why the summary above lives in the README this time.
 
 ## Why this exists
 

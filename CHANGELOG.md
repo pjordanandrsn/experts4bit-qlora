@@ -40,6 +40,14 @@ as success. `docker --memory=N --memory-swap=N` sets both limits, verified by re
 from inside. The cap was positive-controlled in both directions before any arm ran (900 MB
 under 512m → killed; the same allocation under 2g → completes).
 
+**0.17.2 did not actually do what it says it did, and this fixes that too.** It was
+titled "put the host-RAM number on the page that serves it" and put the number in
+`CHANGELOG.md` — but the PyPI long description is built from **`README.md` alone**, so
+no changelog text has ever appeared on the package page. The 0.17.2 page contains no
+`3.83`, no `ru_maxrss`, no `steady RSS`. The release was verified by confirming it
+published, not by reading the page it was for. The measured summary now sits in the
+README, where the long description will carry it.
+
 No code changed; the wheel is byte-identical to 0.17.2 apart from the version.
 
 ## 0.17.2 — 2026-08-13
