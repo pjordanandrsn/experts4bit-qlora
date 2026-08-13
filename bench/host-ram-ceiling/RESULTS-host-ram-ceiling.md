@@ -94,6 +94,11 @@ At **5120 MiB (5 GiB)** — same model, same seed, same four steps, same box, sa
 the host path is **OOM-killed (exit 137, `OOMKilled=true`, reproduced twice)** and the
 arena path **trains to completion**. That is the case the tier exists for.
 
+The counts in the table are exactly the rows in `ladder.jsonl`. The pair was reproduced
+once more afterwards — `host@5120m` OOM-killed, `arena@2304m` completed — as the check
+that the drivers still worked after being parameterised for other machines; those two
+runs are deliberately not in the ledger, which records the ladder itself.
+
 ### Peak RSS overstates the host arm by 2.7×; steady RSS does not
 
 The host arm's uncapped peak RSS is **16.63 GB**, of which **15.86 GB is file-backed**. It
