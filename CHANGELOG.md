@@ -145,11 +145,35 @@ The warmup round is why this matters: `host` and `host_self` read 3.084 vs 1.901
 in round 0 — the identical model, 62% apart. A one-shot-per-arm run cannot see
 that.
 
+**How much host RAM this actually saves: ~2.5–3.5×.** The point of the feature is
+the host-RAM ceiling, so here is the measurement, with the caveat that makes it
+readable. Same OLMoE run, RTX A5000:
+
+| | host-RAM offload | arena, `hot_rows=64` |
+|---|---|---|
+| **pinned expert bytes** | **3.83 GB** (all 1024 experts) | **~0.2 GB** (64 hot rows) |
+| steady RSS after load | 4.94–5.9 GB | 1.42–2.37 GB |
+
+**Do not measure this with `ru_maxrss`.** It reports 18.6 GB for the host arm on a
+roomy box and 10.8 GB for the same arm on a constrained one — an A/B/A with a
+memory balloon moved it 18.57 → 10.80 → 18.56 GB with bit-identical losses and an
+unchanged unreclaimable footprint. The checkpoint is 13.84 GB of bf16
+safetensors, mmap'd and read in full to fuse and quantize; those pages are clean,
+file-backed and reclaimable, so the "peak" is page cache the process happened to
+have mapped, not memory it needed. An earlier 8× figure came from comparing that
+inflated host peak against an arena arm that never reads the expert bytes at all.
+
+Peak *anonymous* memory is not the fix either — it is ~1.5 GB for **both** arms,
+because `smaps_rollup` counts pinned CUDA memory as file-backed. Use steady-state
+RSS after load, or peak of anon + `/dev/zero` mappings.
+
 **What this still does NOT establish.** OLMoE's arena is 3.6 GB and fits
 everywhere, so this shows the mechanism is correct and how the cost scales with
 residency — **not** a model whose experts exceed host RAM, which is the case the
-tier exists for. Rented-instance NVMe varies ~7× between pods, so these ratios
-characterise this box and do not travel.
+tier exists for. A demonstration of that needs a machine capped near the host
+arm's true ~5–6 GB working set; attempts at 11–16 GB could not fail the host arm,
+because it never needed 18 GB. Rented-instance NVMe varies ~7× between pods, so
+these ratios characterise this box and do not travel.
 
 ## 0.16.3 — 2026-08-12
 
