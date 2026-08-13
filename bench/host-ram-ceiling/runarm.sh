@@ -15,7 +15,10 @@
 # Overridable; defaults are the box this was measured on. WORK is a path on the
 # DOCKER HOST, which is not necessarily this machine.
 set -uo pipefail
-: "${DOCKER_CTX:=qnap}"                                   # "" for the local daemon
+# `-` not `:=`: an explicitly empty DOCKER_CTX means "the local daemon", and
+# `:=` would treat that as unset and put the remote context back -- silently
+# sending a reader's run to a host they do not have.
+DOCKER_CTX="${DOCKER_CTX-qnap}"                           # DOCKER_CTX= for the local daemon
 : "${WORK:=/share/ZFS530_DATA/e4b-hostram}"               # holds venv/, hf/, arena/, bin/
 : "${IMAGE:=e4b-bench:2.8.0-cu128}"                       # built from ./Dockerfile
 : "${GPU_RUNTIME:=nvidia-runtime}"                        # `docker info | grep Runtimes`
