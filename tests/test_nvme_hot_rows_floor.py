@@ -90,24 +90,62 @@ def test_qd_defaults_to_None_so_gnf4_sizes_it(tmp_path):
     assert sig.parameters["qd"].default is None
 
 
-def test_default_qd_is_not_pinned_to_four(tmp_path, monkeypatch):
-    """Route test, positive-controlled.
+def test_qd_is_OMITTED_not_forwarded_when_the_caller_did_not_set_it(tmp_path,
+                                                                    monkeypatch):
+    """Assert the contract directly: the `qd` key must not reach ColdTier at all.
 
-    Asserting `reader.qd == default_qd()` is VACUOUS on a host where default_qd()
-    happens to be 4 — which is every small CI box, and was this one. So force
-    default_qd to a value nothing would arrive at by accident and check the tier
-    actually took it. Without this, a regression to `qd: int = 4` passes.
+    Two weaker forms were tried and both are wrong. `reader.qd == default_qd()`
+    is VACUOUS wherever default_qd() is already 4 — every small CI box. And
+    monkeypatching `default_qd` to a distinctive value only works on a
+    grouped-nf4-gemm new enough to HAVE it; CI installs 0.10.0 from PyPI, which
+    does not, so that version failed with AttributeError instead of testing
+    anything.
+
+    Spying on the constructor works on every version and tests the actual
+    implementation choice: OMIT the key so each gnf4 applies its own default.
+    Forwarding `qd=None` would open `ThreadPoolExecutor(max_workers=None)` — up
+    to 32 reader threads — on any gnf4 predating the CPU-scaled default.
     """
-    import nvme_reader
+    import nvme_residency
 
-    monkeypatch.setattr(nvme_reader, "default_qd", lambda *a, **k: 11)
+    seen = {}
+    real = nvme_residency.ColdTier
+
+    def spy(*a, **k):
+        seen.update(k)
+        seen["_had_qd"] = "qd" in k
+        return real(*a, **k)
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", spy)
     mod = _module()
     path, _index = _bake(mod, tmp_path, name="qd.arena")
     model = _model_of(mod)
     enable_nvme_train_residency(model, path, hot_rows=E, device="cpu", pinned=False)
-    assert mod._e4b_cold_tier.reader.qd == 11, (
-        "the tier did not take grouped-nf4-gemm's CPU-scaled default — e4b is "
-        "pinning the queue depth again")
+    assert seen, "ColdTier was never constructed — the spy measured nothing"
+    assert seen["_had_qd"] is False, (
+        f"e4b forwarded qd={seen.get('qd')!r} to ColdTier. It must omit the key "
+        "so grouped-nf4-gemm applies its own CPU-scaled default; forwarding None "
+        "to an older gnf4 opens up to 32 reader threads.")
+
+
+def test_explicit_qd_IS_forwarded(tmp_path, monkeypatch):
+    """The mirror of the above: an explicit value must still reach ColdTier."""
+    import nvme_residency
+
+    seen = {}
+    real = nvme_residency.ColdTier
+
+    def spy(*a, **k):
+        seen.update(k)
+        return real(*a, **k)
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", spy)
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="qd3.arena")
+    model = _model_of(mod)
+    enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                pinned=False, qd=5)
+    assert seen.get("qd") == 5
 
 
 def test_explicit_qd_is_still_honoured(tmp_path):
