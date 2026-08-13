@@ -136,11 +136,30 @@ testbed and no timing claim is made from it.**
 ## Reproducing
 
 ```bash
+export WORK=/path/on/the/docker/host   # holds venv/ hf/ arena/ bin/; put it on NVMe
+export DOCKER_CTX=                     # empty for the local daemon; we used a remote one
+mkdir -p "$WORK/bin" && cp cg.py "$WORK/bin/" && cp prep.sh "$WORK/"
+
 docker build -t e4b-bench:2.8.0-cu128 .          # torch runtime + gcc (Triton JITs through it)
 docker run --rm --runtime=nvidia-runtime -e NVIDIA_VISIBLE_DEVICES=all \
-  -v "$PWD":/work -e HF_HOME=/work/hf e4b-bench:2.8.0-cu128 bash /work/prep.sh
+  -v "$WORK":/work -e HF_HOME=/work/hf e4b-bench:2.8.0-cu128 bash /work/prep.sh
+
 ./ladder.sh host  8192m 6144m 5888m 5632m 5120m  # descends until two consecutive failures
 ./ladder.sh arena 4096m 2560m 2304m 2176m 2048m
+```
+
+`runarm.sh` reads `DOCKER_CTX`, `WORK`, `IMAGE`, `GPU_RUNTIME`, `CPUS` and `LEDGER` from
+the environment; the defaults are the box this was measured on. Check `docker info` for
+the runtime name — it is `nvidia-runtime` here, `nvidia` on many installs. **Confirm your
+cap is swap-inclusive before trusting any of it:**
+
+```bash
+docker run --rm --memory=512m --memory-swap=512m python:3.11-slim \
+  python -c "b=bytearray()
+for i in range(90): b += bytearray(10*1024*1024)"   # must exit 137
+docker run --rm --memory=2g --memory-swap=2g python:3.11-slim \
+  python -c "b=bytearray()
+for i in range(90): b += bytearray(10*1024*1024)"   # must exit 0
 ```
 
 `ladder.jsonl` is the raw ledger, one JSON object per run, each carrying the full
