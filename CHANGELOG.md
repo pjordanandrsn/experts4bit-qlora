@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### `hot_rows` below its floor is refused at attach, and `qd` stops being pinned
+
+**The floor is enforced now.** A stage requests every expert one forward routed and each
+protects a slot from eviction, so an undersized tier raises inside `ColdTier.ensure` — but
+only when a forward is finally unlucky. Measured on Qwen3-30B-A3B at seq 384, top-8: a
+forward routes a **median of 63 unique experts and a max of 97 of 128**. A tier sized to
+the median survives most forwards and kills the run on one of them, minutes in, after the
+checkpoint has loaded and the arena is open.
+
+`num_experts` is the worst case that request can reach and is known at attach for free, so
+`enable_nvme_train_residency` now refuses below it in the pre-flight — which opens nothing
+and so has nothing to unwind. The message carries the floor, what it costs in pinned RAM at
+this arena's row size, and where to size it from.
+
+Above the floor it stays a **RAM-for-disk dial**: on Qwen3-30B, 128 rows costs ~4 GB pinned
+and reads 14.4 GB/step; 3216 costs ~12 GB and reads 2.65 GB/step — 3.2× the RAM for 5.4×
+fewer bytes.
+
+**`qd` now defaults to `None`.** It was `qd: int = 4` and was forwarded on every call, so
+`grouped-nf4-gemm`'s CPU-scaled queue-depth default never applied to the training path —
+the exact path its measurement came from. The key is now *omitted* rather than forwarded as
+`None`, because on a `grouped-nf4-gemm` older than that default (the floor is 0.10.0, which
+predates it) `qd=None` would reach `ThreadPoolExecutor(max_workers=None)` and silently open
+up to 32 reader threads instead of 4.
+
 ## 0.17.5 — 2026-08-13
 
 **Docs-only. A third model corrects what two models got wrong, and the arena's cost in
