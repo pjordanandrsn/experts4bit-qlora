@@ -67,7 +67,18 @@ if [ -s "$ARENA" ]; then
   echo "--- arena already baked ---"
 else
   echo "--- baking arena -> $ARENA ---"
-  $V/bin/python -m nvme_bake_nf4 --snapshot "$SNAP" --out "$ARENA" 2>&1 | tail -15
+  # Multimodal wrappers nest the text stack: Gemma-4 puts its experts under
+  # model.language_model.layers while the baker defaults to model.layers.
+  # bake_nf4() takes a prefix= kwarg but the CLI does not expose it, so the
+  # override goes through the API rather than the command line.
+  $V/bin/python -c "
+import os, sys
+from nvme_bake_nf4 import bake_nf4
+kw = {}
+p = os.environ.get(\"E4B_PREFIX\")
+if p: kw[\"prefix\"] = p
+bake_nf4(sys.argv[1], sys.argv[2], **kw)
+" "$SNAP" "$ARENA" 2>&1 | tail -15
   [ ${PIPESTATUS[0]} -ne 0 ] && { echo "PREP FAILED: bake"; exit 1; }
 fi
 ls -l /work/arena/

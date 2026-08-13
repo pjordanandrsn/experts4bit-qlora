@@ -1,4 +1,4 @@
-# The ratio scales with expert bytes — 2.56× on a 7B MoE, 6.40× on a 30B one
+# The ratio is set by expert bytes AGAINST the dense baseline — 2.56×, 3.80×, 6.40×
 
 ### 2026-08-13 · RTX A2000 12GB, sm_86 · torch 2.8.0+cu128 · **published wheels** e4b 0.17.3 / gnf4 0.9.0 · drivers [`runarm.sh`](runarm.sh) + [`cg.py`](cg.py) · raw [`ladder-qwen3-30b.jsonl`](ladder-qwen3-30b.jsonl)
 
@@ -52,6 +52,36 @@ At **8192 MiB (8.59 GB)** — same model, seed, four steps, box and cap — the 
 **OOM-killed (exit 137, `OOMKilled=true`)** and the arena path **trains to completion**.
 On OLMoE that cell needed a 5 GiB cap to separate the arms; here an 8.59 GB machine
 already cannot train the model any other way.
+
+### Scaling — and the correction a third point forced
+
+**Added 2026-08-13: Gemma-4-26B-A4B**, bakeable via the fused-layout support in gnf4#57.
+It sits between the other two in expert bytes and breaks the two-point reading.
+
+| | expert bytes | arena req | host req | ratio | pinned slots | ⇒ baseline |
+|---|---|---|---|---|---|---|
+| OLMoE-1B-7B | 3.62 GB | 2.28–2.42 GB | 5.91–6.17 GB | **2.56×** | 0.23 GB | ~2.19 GB |
+| **Gemma-4-26B-A4B** | **12.85 GB** | **5.10–5.37 GB** | **19.33–20.40 GB** | **3.80×** | 0.43 GB | **~4.94 GB** |
+| Qwen3-30B-A3B | 16.31 GB | 3.89–4.03 GB | 24.70–25.77 GB | **6.40×** | 0.34 GB | ~3.69 GB |
+
+**The two-point version of this document said the arena requirement "stays roughly flat".
+That is wrong, and the third point is what shows it.** The arena requirement went
+2.42 → 5.37 → 4.03 GB, and Gemma's is the *largest* despite having fewer expert bytes than
+Qwen3. Subtracting the pinned slots (`hot_rows × row_stride`) leaves a baseline of
+~2.19 / ~4.94 / ~3.69 GB — Gemma's is the biggest of the three, which is what a dense MLP
+in every layer plus a 262144-token vocabulary buys you.
+
+So the shape is:
+
+    arena ≈ baseline + hot_rows × row_stride        (baseline = the DENSE model)
+    host  ≈ baseline + every expert byte, pinned
+
+and the ratio is **expert bytes measured against the dense baseline**, not expert bytes
+alone. Gemma has 3.5× OLMoE's expert bytes and only 1.5× its ratio, because its baseline
+grew too. Two points could not separate those; three can.
+
+The host side of the original claim survives intact — it tracks total expert bytes
+(×4.18 measured against ×4.50 in bytes between OLMoE and Qwen3).
 
 ### Scaling
 
@@ -141,8 +171,10 @@ reported only after that check.
 expert bytes on the host side while the arena side stays near-flat. Two models, 4.5× apart
 in expert bytes, on published wheels.
 
-**Does not:** two points do not fix a curve; the host arm's 4.18× against 4.50× is
-consistent with linearity but does not establish it. Nothing here measures a model whose
+**Does not:** three points do not fix a curve either. The host arm tracking expert bytes
+is consistent across all three, but the baseline term is estimated by subtraction rather
+than measured directly — a model with no experts at all would measure it cleanly, and
+none was run. Nothing here measures a model whose
 experts exceed host RAM on a *large* machine — Qwen3-30B-A3B still trains uncapped on this
 box at 24.9 GB. Correctness testbed only: **no timing claim is made from this box**, and
 the step times are not comparable across arms or models.
