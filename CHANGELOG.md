@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.17.3 — 2026-08-13
+
+**Docs-only. The case this feature exists for is now demonstrated instead of asserted.**
+
+Every release through 0.17.2 described `enable_nvme_train_residency` as the answer to
+"the experts do not fit host RAM", and every release through 0.17.2 admitted it had
+never shown a model that could not be trained without it. It can now be shown, with a
+number on both sides. Full receipt, raw ledger and drivers:
+[`bench/host-ram-ceiling/`](bench/host-ram-ceiling/RESULTS-host-ram-ceiling.md).
+
+**At a 5 GiB host-RAM ceiling — same model, same seed, same four steps, same box — the
+host-RAM path is OOM-killed and the arena path trains to completion.** Descending the cap
+until each arm stops completing brackets both requirements:
+
+| | host-RAM offload | NVMe arena, `hot_rows=64` |
+|---|---|---|
+| **minimum host RAM to train** | **5.91–6.17 GB** | **2.28–2.42 GB** |
+| frozen experts | all 1024 pinned (3.83 GB of homes, per 0.17.0) | ~0.2 GB pinned, 64 hot rows |
+| steady RSS at `trained` | 5.88 GB | 2.34 GB |
+
+**The saving is ~2.5×, not 2.5–3.5×.** 0.17.2's upper bound came from pairing the lowest
+host sample against the lowest arena sample across *different* runs. Measured as one
+quantity — the smallest ceiling in which four steps complete — it is **2.56×**, bracketed
+2.44×–2.71× by the rungs either side, and steady RSS agrees independently at 2.51×. The
+0.17.2 entry is left as published; this supersedes it.
+
+**Peak RSS overstates the host arm by 2.7× — now shown causally.** That arm peaks at
+16.63 GB uncapped (15.86 GB of it file-backed) and trains fine under a 6.17 GB cap, with
+nothing tuned between the two runs: the kernel reclaims the mmap'd bf16 checkpoint when
+RAM is scarce. The arena arm, having almost no page cache to drop, has a peak RSS that
+*does* predict its threshold. Hence peak-RSS ratio **7.10×** against requirement ratio
+**2.56×** — and hence the earlier 8× figure, which was this artifact.
+
+Why it took a home box rather than a rented one: the cap has to include **swap**. A rented
+container's cgroup is read-only and the kernels seen there had no `memsw` accounting, so
+an over-limit process pages out and survives — a different outcome from fitting, reported
+as success. `docker --memory=N --memory-swap=N` sets both limits, verified by reading them
+from inside. The cap was positive-controlled in both directions before any arm ran (900 MB
+under 512m → killed; the same allocation under 2g → completes).
+
+**0.17.2 did not actually do what it says it did, and this fixes that too.** It was
+titled "put the host-RAM number on the page that serves it" and put the number in
+`CHANGELOG.md` — but the PyPI long description is built from **`README.md` alone**, so
+no changelog text has ever appeared on the package page. The 0.17.2 page contains no
+`3.83`, no `ru_maxrss`, no `steady RSS`. The release was verified by confirming it
+published, not by reading the page it was for. The measured summary now sits in the
+README, where the long description will carry it.
+
+No code changed; the wheel is byte-identical to 0.17.2 apart from the version.
+
 ## 0.17.2 — 2026-08-13
 
 **Docs-only. The published page still lacked the one number the feature is for.**
@@ -195,7 +245,14 @@ everywhere, so this shows the mechanism is correct and how the cost scales with
 residency — **not** a model whose experts exceed host RAM, which is the case the
 tier exists for. A demonstration of that needs a machine capped near the host
 arm's true ~5–6 GB working set; attempts at 11–16 GB could not fail the host arm,
-because it never needed 18 GB. Rented-instance NVMe varies ~7× between pods, so
+because it never needed 18 GB.
+
+> **Superseded 2026-08-13 in 0.17.3 — demonstrated.** The prediction in the
+> paragraph above was published before the measurement and held: the host arm's
+> requirement is **5.91–6.17 GB**. At a 5 GiB cap it is OOM-killed while the arena
+> arm trains. The ratio here, **~2.5–3.5×**, is refined to **2.56×** by measuring
+> one quantity rather than pairing extremes across runs. See
+> [`bench/host-ram-ceiling/`](bench/host-ram-ceiling/RESULTS-host-ram-ceiling.md). Rented-instance NVMe varies ~7× between pods, so
 these ratios characterise this box and do not travel.
 
 ## 0.16.3 — 2026-08-12
