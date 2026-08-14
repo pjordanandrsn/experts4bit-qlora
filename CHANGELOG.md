@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.19.1 — 2026-08-14
+
+### The compacted stack: measured, and closed
+
+`engines/nvme_train.py` has always named a compacted `[R, ...]` staged stack as
+what would fit a big MoE on a small card, and declined it because it splits the
+kernel's expert-id space from the adapter's. Its docstring now carries the
+measurement that closes the question instead of leaving it as future work.
+
+A compacted stack only saves memory when a batch routes to far fewer than `E`
+experts. Counted exactly on DeepSeek-V4-Flash's hash-routed layers — expert
+selection there is a frozen `tid2eid[input_ids]` lookup, so no forward and no
+149 GB download is needed — over real prose: **224 of 256** distinct experts at 128
+tokens, **249** at 256, and **all 256** by 512. Compaction saves 12%, 3%, then
+nothing. At decode it saves **98%**.
+
+And where it pays, it already exists: `_HotResidency._cold_contrib` takes
+`torch.unique(...)` and `index_select`s only the routed rows, and `_TieredStack`
+never materializes an `[E, ...]` tensor. The change has no beneficial home.
+
+Worth naming the quantity that misleads: this is **not** the routing skew informed
+hot sets exploit. Those care which experts are hit *often*; compaction cares which
+are hit *at all*, and heavy frequency-skew still leaves the tail touched.
+
+Scope: hash-routed layers only, 3 of 43 on V4-Flash. The other 40 use the learned
+top-k router and need a real forward.
+
+The probe now ships in the **sdist** (`bench/routing/distinct_experts.py`, via a new
+`MANIFEST.in`) so the table above can be re-run rather than taken on trust. Wheels
+are unaffected — they carry the package only, as `tools/` and `scripts/` always have.
+
 ## 0.19.0 — 2026-08-14
 
 ### The MXFP4 arena forward: projection math, not just staging
