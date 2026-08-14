@@ -132,7 +132,7 @@ services:
       - R=8
       - ALPHA=16
       - QUANT_TYPE=nf4
-      - OFFLOAD_EXPERTS=1
+      - OFFLOAD_EXPERTS=0
       - PREFETCH=1
       - E4B_HOST=0.0.0.0
       - E4B_PORT=8783
@@ -140,6 +140,9 @@ services:
       - E4B_MAX_INPUT_TOKENS=2048
       - E4B_MAX_NEW_TOKENS=256
       - E4B_REQUEST_TIMEOUT_S=600
+      - E4B_RESIDENCY=pipelined
+      - E4B_HOT_PROFILE=/receipts/granite-expert-profile.jsonl
+      - E4B_HOT_PER_LAYER=0
       - E4B_RECEIPTS_PATH=/receipts/runs.jsonl
     ports:
       - "8783:8783"
