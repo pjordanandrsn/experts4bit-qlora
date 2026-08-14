@@ -159,37 +159,17 @@ def stage_arena(steps=3, tokens=1, seqlen=256):
     from nvme_arena import load_index
     index = load_index(ARENA)
     stride = int(index["row_stride"])
-    # MEASURED free RAM, from the CGROUP -- `free`/psutil report the HOST's
-    # memory on a pod (256 cores and 1 TB were visible where the real limits were
-    # 27.2 CPUs and 125 GB). A hot_rows sized off the host figure would OOM
-    # partway through the first step.
-    #
-    # PAGE CACHE IS NOT IN USE. cgroup v2 counts it in `memory.current`, so the
-    # naive `memory.max - memory.current` read **18.3 MB** right after the 138 GiB
-    # arena bake had filled the cache -- capacity_for_bytes then returned ~nothing
-    # and hot_rows fell through to an unvalidated floor. `memory.stat`'s `file`
-    # field is that reclaimable cache; subtract it before calling the remainder
-    # free.
-    mem = {}
-    usable = None
-    try:
-        lim = open("/sys/fs/cgroup/memory.max").read().strip()
-        cur = int(open("/sys/fs/cgroup/memory.current").read().strip())
-        stat = {}
-        for line in open("/sys/fs/cgroup/memory.stat"):
-            k, _, v = line.partition(" ")
-            stat[k] = int(v)
-        cache = stat.get("file", 0)                   # reclaimable page cache
-        mem = {"limit": None if lim == "max" else int(lim), "current": cur,
-               "file_cache": cache, "in_use": cur - cache}
-        if lim != "max":
-            usable = int((int(lim) - (cur - cache)) * 0.6)   # headroom for the run
-    except Exception as exc:
-        mem = {"error": str(exc)}
-    # A sane floor: if the cgroup read produced something implausible, say so in
-    # the receipt rather than sizing a 38 GiB pinned arena off it silently.
+    # MEASURED free RAM for THIS container. `free`/psutil report the HOST (a pod
+    # showed 256 cores and 1 TB against real limits of 27.2 CPUs and 125 GB), and
+    # both cgroup versions count reclaimable page cache as USED -- straight after
+    # the 138 GiB bake that made `limit - current` read 18.3 MB. The helper reads
+    # v2 AND v1 (RunPod pods are v1, which is why the first fix measured nothing)
+    # and adds the cache back.
+    from experts4bit_qlora.util import container_free_bytes
+    measured, mem = container_free_bytes()
+    usable = int(measured * 0.6) if measured else None      # headroom for the run
     if usable is None or usable < int(2e9):
-        mem["rejected"] = f"cgroup usable={usable}; falling back to 24 GB"
+        mem = dict(mem, rejected=f"unusable reading {usable}; falling back to 24 GB")
         usable = int(24e9)
     rec["host_mem"] = mem
     try:
