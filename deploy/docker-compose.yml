@@ -132,7 +132,11 @@ services:
       - R=8
       - ALPHA=16
       - QUANT_TYPE=nf4
-      - OFFLOAD_EXPERTS=0
+      # Offload stays ON. Turning it off bought ~15% (inside the <20% band
+      # serve.py's docstring calls unresolved) and cost 0.83 GB resident on
+      # an 11.9 GB card that SDXL needs ~9 GB of for a 1024 render. The 2.7x
+      # is the ENGINE below, which is free.
+      - OFFLOAD_EXPERTS=1
       - PREFETCH=1
       - E4B_HOST=0.0.0.0
       - E4B_PORT=8783
