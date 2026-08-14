@@ -40,6 +40,31 @@ fitting that on a small card needs a *compacted* stack (``[R, ...]`` plus an id
 remap), which splits the kernel's id space from the adapter's. Deliberately not
 done here: it changes the kernel contract, and this change does not.
 
+**MEASURED 2026-08-14 — and it would not help TRAINING anyway.** A compacted
+stack only saves memory when a batch routes to far fewer than ``E`` experts.
+Counted exactly on DeepSeek-V4-Flash's hash-routed layers (``tid2eid[input_ids]``,
+so no forward is needed) over real prose:
+
+| batch   | tokens | distinct experts | compaction saves |
+|---------|--------|------------------|------------------|
+| 1 x 128 | 128    | 224 / 256        | 12 %             |
+| 1 x 256 | 256    | 249 / 256        | 3 %              |
+| 2 x 256 | 512    | 255 / 256        | 0 %              |
+| 4 x 256 | 1024   | 256 / 256        | 0 %              |
+| decode  | 1      | 6 / 256          | **98 %**         |
+
+At top-6 over 256 experts a few hundred tokens touch essentially every expert, so
+the ``[E, ...]`` shape costs a training batch nothing extra. This is a DIFFERENT
+quantity from the skew informed hot sets exploit: those care which experts are hit
+*often*, this cares which are hit *at all*, and heavy frequency-skew still leaves
+the tail touched.
+
+Where compaction does pay — decode, 98% — the serving path **already does it**:
+``_HotResidency._cold_contrib`` takes ``torch.unique(...)`` and ``index_select``s
+only the routed rows, and ``_TieredStack`` never materializes an ``[E, ...]``
+tensor at all. So there is no version of this change left worth making. Probe:
+``bench/routing/distinct_experts.py``.
+
 Usage::
 
     from experts4bit_qlora import enable_nvme_train_residency, load_moe_4bit_streaming
