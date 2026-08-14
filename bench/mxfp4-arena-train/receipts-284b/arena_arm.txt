@@ -1,0 +1,24 @@
+[receipt] arena_progress.json: {"arm": "ARENA", "vram": {"card_gib": 23.6, "capped_to_gib": null, "note": "card is at or under the claim; no cap needed"}, "usable_bytes_measured": 59997265920, "row_stride": 13369344, "hot_rows": 3072, "arena_layers": 43, "arena_experts": 256}
+[06:11:25]   skipped 1575 checkpoint tensor(s) the text model does not build, e.g. mtp.0.hc_head_base
+[06:11:26]   fusing + quantizing experts (up to 43x256) to nf4 (streaming)...
+[06:11:39]   quantized experts on 43/43 MoE layers (256 experts each)
+[06:11:43]   installed 365 block-scaled FP8 linear(s) (dense side stays FP8-resident, decoded on use)
+[06:11:43]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[06:11:44]   experts deferred to the arena: 43 module(s), 215 unmaterialized buffer(s) — call nvme_experts.enable_mxfp4_nvme_residency() before running this model
+[receipt] arena_progress.json: {"arm": "ARENA", "vram": {"card_gib": 23.6, "capped_to_gib": null, "note": "card is at or under the claim; no cap needed"}, "usable_bytes_measured": 59997265920, "row_stride": 13369344, "hot_rows": 3072, "arena_layers": 43, "arena_experts": 256, "load_seconds": 20.7, "load_peak_gib": 10.63}
+[receipt] stage_arena_crash.json: {"stage": "arena", "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 289, in <module>\n    {\"gates\": stage_gates, \"stock\": stage_stock, \"arena\": stage_arena}[stage]()\n  File \"/root/v4/v4_run.py\", line 196, in stage_arena\n    n = enable_nvme_train_residency(model, ARENA, hot_rows=hot_rows)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_train.py\", line 619, in enable_nvme_train_residency\n    check_arena_geometry(base, index, lay[i])\n  File \"/us
+Traceback (most recent call last):
+  File "/root/v4/v4_run.py", line 289, in <module>
+    {"gates": stage_gates, "stock": stage_stock, "arena": stage_arena}[stage]()
+  File "/root/v4/v4_run.py", line 196, in stage_arena
+    n = enable_nvme_train_residency(model, ARENA, hot_rows=hot_rows)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_train.py", line 619, in enable_nvme_train_residency
+    check_arena_geometry(base, index, lay[i])
+  File "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_train.py", line 230, in check_arena_geometry
+    dt, shape, _off, _ln = segment_geometry(index, suffix)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/nvme_residency.py", line 287, in segment_geometry
+    return (getattr(torch, _ST_TO_TORCH[geo["dtype"]]),
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^
+KeyError: 'F8_E8M0'
