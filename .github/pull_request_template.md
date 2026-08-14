@@ -31,3 +31,6 @@
 - [ ] Enabler return values are asserted (`n = enable_*(...)`; `0` looks identical
       to "silently on the per-expert loop")
 - [ ] No private-lane paths or markers
+- [ ] **`Cursor Bugbot` reads `pass`, not `skipping`** — on this repo `skipping`
+      means Bugbot FOUND something. `gh pr checks` shows no red for it either
+      way, so a run that looks green can be hiding a finding; only `pass` is clean
