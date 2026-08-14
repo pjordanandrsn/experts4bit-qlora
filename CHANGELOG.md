@@ -1,5 +1,78 @@
 # Changelog
 
+## 0.19.0 — 2026-08-14
+
+### The MXFP4 arena forward: projection math, not just staging
+
+Option B (0.18.0) made an MXFP4 arena's bytes *land* correctly; it did not make the
+NF4 arithmetic interpret them, and `_e4b_mxfp4_arena` only flagged the module. This
+wires the compute half.
+
+`_dequantize_expert` is overridden per instance, so the module's **own** forward
+becomes correct — whichever forward that is. Every reference lane funnels through
+`_project` (`ExpertsNbit.forward`, `_DeepseekV4ForwardMixin.forward`, and
+`ExpertsLoRA._base_project`), so the arch's epilogue is applied by the arch's own
+code rather than re-derived. `forward` additionally routes to
+`mxfp4_grouped.gemm_mxfp4_grouped` under CUDA + bf16 + **no autograd graph**: that
+kernel has no `autograd.Function`, so a training step routed there would produce no
+`dL/dx` and silently stop learning.
+
+Graded against the pure-torch oracle (`dequantize_mxfp4` then matmul), never
+another accelerated lane, on **two cards**. Projections 0.000e+00 on an L40S; on a
+3090 the down projection's GEMV branch lands at 3.344e-06, so "the projections are
+exact" was a property of that card and not of the kernel. The asserted bound is
+`< 2e-2`. A control grades the same forward against an *unclamped* oracle and
+requires it to be rejected at ~1.0, so the fixture demonstrably tells the epilogues
+apart. Receipts in `bench/mxfp4-arena-train/`.
+
+### Two silent-wrong-answer surfaces closed
+
+`ExpertsLoRA._use_infer_gemv` would have routed single-row MXFP4 projections through
+bitsandbytes' `gemv_4bit`. Its own probe could never have caught that:
+`_gemv_4bit_matches_dequant` quantizes a synthetic weight and compares bnb against
+bnb, so it never reads the module's buffers.
+
+`enable_fast`/`enable_fast_train` would have patched the NF4 grouped kernel over
+MXFP4 storage — such a base passes every check they had (`quant_type="nf4"` by
+class, `_apply_gate` present) and then dies on a `view(E, n1, k1 // 64)` of a buffer
+holding one scale byte per 32 elements. Both refuse explicitly now.
+
+### The dense FP8 dequantize cost 6x what its docstring claimed
+
+`Fp8BlockLinear` said the transient was "one weight at a time (~67 MB for V4's
+largest)". That counted the bf16 result only; the fp32 route also held an expanded
+fp32 scale, `weight.float()` and the fp32 product — 12-14 bytes per parameter, so
+~403 MB for `wq_b [32768, 1024]`. The aligned path now decodes in `dtype` with a
+broadcast scale, 2 bytes per parameter, and is **bit-exact**: e4m3 -> bf16 is
+lossless and an e8m0 scale is a power of two, so the multiply cannot round. Verified
+including deliberately over/underflowing exponents. Ragged shapes keep the fp32
+route, which the docstring now says rather than denying.
+
+### `util.container_free_bytes()`
+
+`enable_nvme_residency` tells callers to size `hot_rows` from measured free RAM and
+the package gave them no correct way to do it in a container. Reads cgroup **v2 and
+v1** — pods are v1, so a v2-only reader measures nothing there — and counts
+reclaimable page cache as free, because both versions count it as *used*: straight
+after a 138 GiB arena bake the naive read said **18.3 MB**.
+
+### `grouped-nf4-gemm` floor raised to 0.12.0 — hard, not advisory
+
+Below it, `nvme_residency._ST_TO_TORCH` has no entry for `F8_E8M0`, the tag
+DeepSeek-V4 uses for its MXFP4 expert scales, so a real V4 arena cannot be staged
+for training at all. No degraded mode, nothing skips.
+
+### The 284B claim this was built for: NOT established
+
+`bench/mxfp4-arena-train/` registers a prereg with five OTS-stamped amendments and
+reports it either way. **P1 confirmed** (the unquantized control OOMs, twice, on
+memory). **P2 refuted** — no rung of the registered batch ladder fits in 24 GiB.
+P3/P4 ungraded; no training step completed. The expert path itself runs end to end
+against a real 284B checkpoint's own MXFP4 bytes (43/43 modules patched, gates
+green); what stops it is `[E, ...]` staging at 2.12 GiB/layer, which
+`engines/nvme_train.py` already documents as a deliberate trade-off it declines to
+make.
+
 ## 0.18.0 — 2026-08-13
 
 ### Accepts an arena whose absmax is stored bf16
