@@ -1,6 +1,29 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 — 2026-08-13
+
+### Accepts an arena whose absmax is stored bf16
+
+`grouped-nf4-gemm` 0.11.0 can bake absmax as bf16 — 11.1% of a Qwen3-30B row down to 5.6%,
+and bitwise lossless for a bf16 checkpoint, because absmax is `|w|.amax()` over a block and
+is therefore one of the source magnitudes. `check_arena_geometry` refused **any** dtype
+difference between the module's home and the arena segment, which rejected such an arena
+outright.
+
+The relaxation is narrow: only casts in gnf4's exported `widening_casts()` table
+(bf16/fp16 → fp32) are accepted, and this **imports that table** rather than growing a
+second copy that can drift. Every other mismatch still raises — "this arena was not baked
+from this model" is the far more common cause of a dtype difference.
+
+**VRAM and the kernel contract are unchanged.** The staging destination is still the
+module's fp32 home, so the kernel keeps receiving the fp32 absmax it specifies. The
+geometry check returns the *module's* dtype for exactly this reason: returning the arena's
+would allocate a bf16 destination, `segment_into` would take its memcpy path, and the
+kernel would get bf16 absmax where its contract says fp32 — wrong scales, finite numbers,
+no error.
+
+**The `grouped-nf4-gemm` floor is raised to 0.11.0**, which is where `widening_casts` and
+the CPU-scaled queue depth land.
 
 ### `hot_rows` below its floor is refused at attach, and `qd` stops being pinned
 
