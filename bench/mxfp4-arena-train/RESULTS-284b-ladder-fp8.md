@@ -94,3 +94,17 @@ Pod verified gone (`404`), actors cleared, account reconciled by id.
 
 The A5000 reached its endpoint at **150 s** — a third pod that the pre-correction
 120 s wedge threshold would have destroyed.
+
+## What is published here, and what is not
+
+The **pod-side** artifacts are in this directory and are the reproducible part:
+`v4-payload.sh` (install, overlay, gates, download, bake, ladder) and `v4_run.py`
+(the arms and their receipts). Neither references anything outside the pod.
+
+The **operator-side** launcher is deliberately **not** published. It reads the
+RunPod key and SSH private key from the operator's home, drives teardown from a
+specific always-on machine, and mails results through a specific host — publishing
+it would hand a reader a map of where those credentials live for no reproducibility
+gain. What it *does* is described in full above and in the amendments: secure
+on-demand ladder, backstop armed against the live pod id, uptime-based wedge
+detection at 300 s, receipts pulled every 60 s, HOLD/DONE teardown split.
