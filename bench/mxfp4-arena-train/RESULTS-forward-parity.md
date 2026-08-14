@@ -24,37 +24,47 @@ prefill-shaped test.
 
 ## Environment
 
+Run on **two different cards**, deliberately. Everything below replicated except
+one entry, and that entry is the reason not to ship on one machine's evidence.
+
 | | |
 |---|---|
-| card | NVIDIA L40S (secure on-demand) |
+| cards | NVIDIA L40S, then NVIDIA GeForce RTX 3090 (both secure on-demand) |
 | torch | 2.8.0+cu128 (unchanged by the install — checked, not assumed) |
 | triton | 3.4.0 |
 | experts4bit-qlora | 0.18.0 (published wheel) + this branch's 4-file overlay |
 | grouped-nf4-gemm | 0.11.0 (published wheel, unmodified) |
 
 Overlay sha256s are in `overlay_provenance.json`; they match the bytes the CPU
-gate ran, so both legs are about identical code.
+gate ran, so every leg is about identical code. `receipts/` holds the 3090 run
+(the later and broader one: 17 tests, including the training composition).
 
 ## Measured — relative max error
 
-| quantity | tokens | kernel branch | rel max err |
-|---|---|---|---|
-| gate_up kernel vs oracle | 1 | gemv | **0.000e+00** |
-| down kernel vs oracle | 1 | gemv | **0.000e+00** |
-| gate_up kernel vs oracle | 6 | grouped gemm | **0.000e+00** |
-| down kernel vs oracle | 6 | grouped gemm | **0.000e+00** |
-| forward: fused vs reference lane | 1 | gemv | 5.882e-03 |
-| forward: fused vs reference lane | 6 | grouped gemm | 4.367e-03 |
-| forward: reference lane vs source oracle | 1 / 6 | — | **0.000e+00** |
-| CONTROL — fused vs UNCLAMPED oracle | 1 | gemv | 1.000e+00 |
-| CONTROL — fused vs UNCLAMPED oracle | 6 | grouped gemm | 9.991e-01 |
+| quantity | tokens | kernel branch | L40S | RTX 3090 |
+|---|---|---|---|---|
+| gate_up kernel vs oracle | 1 | gemv | 0.000e+00 | 0.000e+00 |
+| down kernel vs oracle | 1 | gemv | 0.000e+00 | **3.344e-06** |
+| gate_up kernel vs oracle | 6 | grouped gemm | 0.000e+00 | 0.000e+00 |
+| down kernel vs oracle | 6 | grouped gemm | 0.000e+00 | 0.000e+00 |
+| forward: fused vs reference lane | 1 | gemv | 5.882e-03 | 5.882e-03 |
+| forward: fused vs reference lane | 6 | grouped gemm | 4.367e-03 | 4.367e-03 |
+| forward: reference lane vs source oracle | 1 / 6 | — | 0.000e+00 | 0.000e+00 |
+| CONTROL — fused vs UNCLAMPED oracle | 1 | gemv | 1.000e+00 | 1.000e+00 |
+| CONTROL — fused vs UNCLAMPED oracle | 6 | grouped gemm | 9.991e-01 | 9.991e-01 |
 
-**The projections are exact on this fixture.** That is a measurement at these
-shapes, not a general guarantee: fp4 code points are dyadic and the fixture's
-exponent range is bounded, so every product is representable and the fp32
-accumulation has nothing to round. The durable claim is the asserted bound,
-`< 2e-2` — the same bar `grouped-nf4-gemm`'s own `test_mxfp4_grouped.py` holds
-this kernel to, arrived at independently here before that file was read.
+**The projections are NOT exact in general — that was a property of the L40S, and
+the second card caught it.** On the 3090 the down projection's GEMV branch lands
+at 3.3e-6 instead of zero. Everything else matches to the digit across both
+cards. The difference is ~4000x inside the asserted bound and changes no verdict,
+but the stronger claim it falsifies is one worth not making: an exact-zero result
+on one card is a fact about that card's kernel scheduling, not evidence that the
+arithmetic is exact.
+
+The durable claim is the asserted bound, `< 2e-2` — the same bar
+`grouped-nf4-gemm`'s own `test_mxfp4_grouped.py` holds this kernel to, arrived at
+independently here before that file was read. It holds on both cards with roughly
+four orders of magnitude of headroom.
 
 **The whole-forward residual (4–6e-3) is two known ordering differences, both
 algebraically identity.** The fused lane applies the router weight *after* the
@@ -101,9 +111,9 @@ for grading a delta.
 
 ## Cost and teardown
 
-Five pods, all secure on-demand, **~$0.11 total** against the $35/job cap.
-Every one verified gone (`GET /v1/pods/<id>` → 404) and the account list
-confirmed empty at `0 pods`, with spend/hr back to the $0.005 idle-volume floor.
+Six pods, all secure on-demand, **~$0.13 total** against the $35/job cap.
+Every one verified gone (`GET /v1/pods/<id>` → 404), reconciled by id against the
+account list, with spend/hr back to the $0.005 idle-volume floor.
 
 Three attempts did not measure anything, and each was infrastructure or harness,
 never the code under test:

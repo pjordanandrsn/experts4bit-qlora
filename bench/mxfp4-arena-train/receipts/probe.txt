@@ -1,6 +1,6 @@
 quantity                                             tokens  branch                    rel max err
 gate_up kernel vs oracle                                  1  gemv (all groups size 1)    0.000e+00
-down kernel vs oracle                                     1  gemv (all groups size 1)    0.000e+00
+down kernel vs oracle                                     1  gemv (all groups size 1)    3.344e-06
 forward fused vs reference                                1  gemv (all groups size 1)    5.882e-03
 forward fused vs source oracle                            1  gemv (all groups size 1)    5.882e-03
 forward reference vs source oracle                        1  gemv (all groups size 1)    0.000e+00

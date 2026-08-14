@@ -107,3 +107,66 @@ holds nothing, so this concerns declared shape, not data movement.
 **Predictions unchanged** (P1–P4, gates G1–G3), except that P1 is now graded on
 a control that fails on MEMORY rather than on a quantizer-class rejection. The
 pre-amendment stamp is preserved as `PREREG.md.pre-amendment1.ots`.
+
+---
+
+## Amendment 2 (2026-08-14, pre-data — the compute half exists now)
+
+Amendment 1 put option B under test as **staging only**, and said so in as many
+words: *"the COMPUTE half (an MXFP4 fused kernel behind this module's forward) is
+not wired here."* It is wired now, and that changes enough about what this
+experiment runs that it gets a stamp before any of it is measured.
+
+**What landed.** `_dequantize_expert` is overridden per instance, so every
+reference lane — `ExpertsNbit.forward`, `_DeepseekV4ForwardMixin.forward`, and
+`ExpertsLoRA._base_project` — decodes MXFP4 through `formats.mxfp4`. The module's
+`forward` additionally routes to `mxfp4_grouped.gemm_mxfp4_grouped` under CUDA +
+bf16 + **no autograd graph**.
+
+**Parity-gated before this stamp**, on an L40S, against the pure-torch oracle
+(`dequantize_mxfp4` then matmul) rather than another accelerated lane:
+projections **0.000e+00**, whole forward **4.4–5.9e-3**, and an
+unclamped-epilogue control at **~1.0** so the fixture demonstrably tells the
+activations apart. Receipts in `receipts/`, write-up in
+`RESULTS-forward-parity.md`.
+
+### The consequence that matters for THIS run
+
+**The training step will not use the fused kernel, and no number from this run
+should be read as if it did.** `gemm_mxfp4_grouped` is raw Triton with no
+`autograd.Function` behind it, so the router deliberately refuses it whenever
+autograd needs a graph — otherwise there is no `dL/dx` and the model below the
+layer silently stops learning. Every ARENA-arm step therefore runs the
+**dequantize-per-expert reference lane**, recomputing each expert in backward.
+That is the cost curve the "NO PREDICTION on s/step" line already declines to
+predict; naming the mechanism here so the absence of a prediction is not mistaken
+for an absence of a known bottleneck.
+
+**`enable_fast_train` must NOT be called for the ARENA arm, and returns 0 if it
+is.** It now refuses an MXFP4-arena base outright: such a base passes every
+eligibility check it had (`quant_type="nf4"` by class, `_apply_gate` present) and
+would then die inside the forward on `gate_up_absmax.view(E, n1, k1 // 64)`,
+because e8m0 scales are one byte per 32 elements, not fp32 per 64. The usage line
+in `nvme_train`'s docstring — which ends `enable_fast_train(model)` — does not
+apply to this arm. A runner that asserts a nonzero return, as the standing
+house rule for that opt-in says to, **will fail on a correct system.**
+
+**P2's arithmetic is unchanged.** MXFP4 storage is ~5.6% smaller per element than
+NF4 (0.53125 vs 0.5625 bytes: same K/2 blocks, one scale byte per 32 against fp32
+absmax per 64), and the staged stacks still keep the full `[E, ...]` shape. The
+4–8 GB band stands as stated; it is not re-derived to fit.
+
+### Added gate
+
+- **G4 — the arm must be on the lane it claims.** Assert, in the imported module
+  and before the run: every patched module has `_e4b_mxfp4_arena` True; the
+  frozen base's `_dequantize_expert` is the MXFP4 override, not the NF4 one; and
+  `enable_fast_train` returns **0**. G1 counts modules patched, which no longer
+  implies which arithmetic they will run — a module can be patched and still
+  refuse the fused lane, which is the correct behaviour under grad and would
+  otherwise be indistinguishable from a dead patch.
+
+**Predictions P1–P4 and gates G1–G3 are otherwise unchanged.** Stop rules
+unchanged: whatever it shows is written up in either direction, no
+retry-until-green, hard cap $35, teardown evidence-first. The pre-amendment-2
+stamp is preserved as `PREREG.md.pre-amendment2.ots`.

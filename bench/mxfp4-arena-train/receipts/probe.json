@@ -1,6 +1,6 @@
 {
  "cuda": true,
- "gpu": "NVIDIA L40S",
+ "gpu": "NVIDIA GeForce RTX 3090",
  "measurements": [
   {
    "quantity": "gate_up kernel vs oracle",
@@ -12,7 +12,7 @@
    "quantity": "down kernel vs oracle",
    "tokens": 1,
    "branch": "gemv (all groups size 1)",
-   "rel_max_err": 0.0
+   "rel_max_err": 3.344392098370008e-06
   },
   {
    "quantity": "forward fused vs reference",
