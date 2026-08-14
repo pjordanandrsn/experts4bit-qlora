@@ -1,0 +1,50 @@
+name: Bug report
+description: Something raises, hangs, OOMs, or returns wrong values.
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: checkboxes
+    id: firstchecks
+    attributes:
+      label: The two things that cause most reports
+      options:
+        - label: "I asserted the enabler's return (`n = enable_fast_train(model, dgrad=True)`; `0` means still on the per-expert loop)"
+        - label: "I know whether `grouped-nf4-gemm` built for my arch (if not, `enable_batched_train` is the no-extras fallback)"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Full traceback, not just the last line.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Model, quant_type, offload/arena settings, and the calls in order.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: GPU + compute capability, driver, torch, e4b and grouped-nf4-gemm versions, host RAM.
+      render: shell
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface
+      options:
+        - loading / quantization placement
+        - expert offload (host RAM)
+        - NVMe arena / residency
+        - training (LoRA over frozen experts)
+        - serving / inference
+        - provenance / verification
+        - not sure
+    validations:
+      required: true
