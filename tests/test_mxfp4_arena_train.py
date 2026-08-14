@@ -187,8 +187,8 @@ def _staged_v4(tmp_path, device="cpu"):
     mod = build_meta_experts(index, E, has_gate=True, compute_dtype=torch.bfloat16,
                              quant_type="nf4", cls=DeepseekV4Experts4bit)
     mod.limit = LIMIT
-    _stage(mod, index, path)
-    return mod.to(device) if device != "cpu" else mod
+    _stage(mod, index, path, device=device)     # never `mod.to()` — see `_stage`
+    return mod
 
 
 def _rel_err(got, want):
@@ -374,8 +374,18 @@ def test_enable_fast_train_refuses_an_mxfp4_arena_base(tmp_path):
 
 
 # ------------------------------------------------------- MXFP4 forward parity
-def _stage(mod, index, path):
-    """Put the arena's real bytes into the meta module, as the tier does."""
+def _stage(mod, index, path, device="cpu"):
+    """Put the arena's real bytes into the meta module, as the tier does.
+
+    Staging lands the tensors ON `device` rather than moving the module
+    afterwards, and that is not a shortcut — `mod.to("cuda")` RAISES here.
+    `build_meta_experts` declares everything on `meta`; staging replaces the four
+    expert tensors with real ones and leaves the rest (the NF4 codebook, which
+    the MXFP4 lane never reads) still meta, and `Module.to` refuses to copy out
+    of a meta tensor. The production path never calls `.to()` either — the tier
+    stages rows into place — so matching it here keeps the test on the same
+    mechanism the engine uses.
+    """
     from nvme_residency import ColdTier, segment_geometry, segment_into
     from experts4bit_qlora.engines.nvme_train import arena_offload_view
 
@@ -386,7 +396,9 @@ def _stage(mod, index, path):
         _dt, shape, _off, _ln = segment_geometry(view, suffix)
         dest = torch.empty(E, int(torch.tensor(shape).prod()),
                            dtype=getattr(mod, name).dtype)
+        # the reader fills host memory; move after the copy, not before
         segment_into(tier, view, 0, ids, suffix, dest.view(E, *shape), rows=ids)
+        dest = dest.to(device)
         if name in mod._parameters:
             mod._parameters[name] = torch.nn.Parameter(dest, requires_grad=False)
         else:

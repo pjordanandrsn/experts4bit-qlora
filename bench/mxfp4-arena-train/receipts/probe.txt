@@ -1,0 +1,15 @@
+quantity                                             tokens  branch                    rel max err
+gate_up kernel vs oracle                                  1  gemv (all groups size 1)    0.000e+00
+down kernel vs oracle                                     1  gemv (all groups size 1)    0.000e+00
+forward fused vs reference                                1  gemv (all groups size 1)    5.882e-03
+forward fused vs source oracle                            1  gemv (all groups size 1)    5.882e-03
+forward reference vs source oracle                        1  gemv (all groups size 1)    0.000e+00
+CONTROL fused vs UNCLAMPED oracle (must be large)         1  gemv (all groups size 1)    1.000e+00
+gate_up kernel vs oracle                                  6  grouped gemm                0.000e+00
+down kernel vs oracle                                     6  grouped gemm                0.000e+00
+forward fused vs reference                                6  grouped gemm                4.367e-03
+forward fused vs source oracle                            6  grouped gemm                4.367e-03
+forward reference vs source oracle                        6  grouped gemm                0.000e+00
+CONTROL fused vs UNCLAMPED oracle (must be large)         6  grouped gemm                9.991e-01
+
+wrote probe.json
