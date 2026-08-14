@@ -273,12 +273,20 @@ class ExpertsLoRA(nn.Module):
           ``[packed, 1]`` layout on bnb<0.50. Gate it to the always-correct dequantize path.
         * ``self.training`` — reentrant gradient checkpointing (``use_reentrant=True``) runs the
           *initial training forward* under ``torch.no_grad()``; requiring eval mode keeps that
-          forward on the same kernels as its grad-enabled recompute."""
+          forward on the same kernels as its grad-enabled recompute.
+        * ``base._e4b_mxfp4_arena`` — the base's bytes are MXFP4, not NF4. This one would not
+          have been caught by the probe below: ``_gemv_4bit_matches_dequant`` quantizes a
+          synthetic weight and compares bnb against bnb, so it never reads this module's
+          buffers and would happily return True while ``gemv_4bit`` decoded e8m0 scales as
+          fp32 absmax. Real bytes, right shapes, wrong numbers — so it is refused by
+          construction rather than left to a probe that cannot see it."""
         if torch.is_grad_enabled() or self.training or not hidden_states.is_cuda or hidden_states.requires_grad:
             return False
         base = self.base
         if getattr(base, "bits", 4) != 4:
             return False  # gemv_4bit is 4-bit only; N-bit schemes decode via the dequantize path
+        if getattr(base, "_e4b_mxfp4_arena", False):
+            return False  # MXFP4 storage: only the base's own dequantize path can read it
         return _infer_gemv_enabled() and _gemv_4bit_matches_dequant(
             base.quant_type, base.blocksize, hidden_states.dtype
         )

@@ -74,6 +74,16 @@ def fast_available() -> bool:
 
 def _eligible(mod) -> Optional[str]:
     """Return None if ``mod`` can take the fast path, else the reason not."""
+    # Checked BEFORE quant_type, because an MXFP4-arena module still reports
+    # `quant_type="nf4"` -- that is the class the loader built, and only its
+    # BUFFERS were re-declared to MXFP4 geometry. So the nf4 test below passes it,
+    # and the `is_cuda` test below rejects it only while it is still on meta. The
+    # kernel here reads fp32 absmax per 64 elements; MXFP4 carries uint8 e8m0 per
+    # 32, so the reshape would either raise mid-forward or, at the sizes where the
+    # element counts happen to divide, compute nonsense.
+    if getattr(mod, "_e4b_mxfp4_arena", False):
+        return ("storage is MXFP4 (arena), which the NF4 grouped kernel cannot read — "
+                "the MXFP4 forward is wired by nvme_experts and needs no patch here")
     if getattr(mod, "bits", None) != 4 or getattr(mod, "quant_type", None) != "nf4":
         return "storage is not nf4-4bit"
     if getattr(mod, "blocksize", None) != 64:
@@ -627,6 +637,16 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
                 if verbose:
                     print(f"[e4b.fast] skip {type(mod).__name__}: base "
                           f"{type(mod.base).__name__} has a custom forward")
+                continue
+            # An MXFP4-arena base passes every check above -- it is `quant_type="nf4"`
+            # by class and carries `_apply_gate` (V4) -- and then dies inside the
+            # forward on `gate_up_absmax.view(E, n1, k1 // 64)`, because e8m0 scales
+            # are one byte per 32 elements, not fp32 per 64. Refuse at patch time,
+            # where the message can say why, rather than at step 1 of a rented run.
+            if getattr(mod.base, "_e4b_mxfp4_arena", False):
+                if verbose:
+                    print(f"[e4b.fast] skip {type(mod).__name__}: base storage is "
+                          "MXFP4 (arena); the NF4 grouped kernel cannot read it")
                 continue
             mod._e4b_train_ref = mod.forward
             mod._e4b_dgrad = dgrad
