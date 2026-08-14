@@ -17,3 +17,4 @@ ablation/*/adapter_*.pt
 hf-cache/
 *.log
 .DS_Store
+CONFIG-PLAYBOOK.local.md

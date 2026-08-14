@@ -26,13 +26,13 @@ from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
 from . import Experts4bit, ExpertsNbit, normalize_quant_type
-from .deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
-from .deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
-from .fp8_blocks import convert_to_fp8_blocks
-from .gptoss import GptOssExperts4bit
+from .arch.deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
+from .arch.deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
+from .formats.fp8_blocks import convert_to_fp8_blocks
+from .arch.gptoss import GptOssExperts4bit
 from .lora import ExpertsLoRA
-from .mxfp4 import dequantize_mxfp4
-from .offload import enable_expert_offload, enable_inference_prefetch
+from .formats.mxfp4 import dequantize_mxfp4
+from .engines.offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
 
 # model_type -> experts submodule path relative to `model.layers.{i}`.
@@ -79,6 +79,49 @@ CKPT_KEY_REWRITERS = {"deepseek_v4": rename_deepseek_v4_key}
 # and each `X.weight` carries a companion `X.scale`. Those pairs become Fp8BlockLinear.
 DEEPSEEK_V4_FP8_DENSE = {"deepseek_v4"}
 SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
+
+
+def _read_compatible_convention(model_type):
+    """True if this model_type loads through the EXISTING per-expert read path.
+
+    olmoe and qwen3_moe are already supported and are the qwen2_moe convention;
+    every other qwen2_moe-convention model_type stores experts identically
+    (``mlp.experts.{e}.{gate,up,down}_proj.weight``), so the same streaming read
+    handles them with no new code. Validated on a rented A6000: Qwen1.5-MoE-A2.7B
+    (qwen2_moe, not previously listed) loaded, nf4-quantized, and generated.
+
+    Deliberately NARROW: mixtral (w1/w3/w2 spelling), dbrx (flat stacks) and
+    nemotron_h (no gate) need their own read handling and are NOT admitted here."""
+    from .arch.moe_conventions import MoEConventionError, convention_for
+    try:
+        return convention_for(model_type).name == "qwen2_moe"
+    except MoEConventionError:
+        return False
+
+
+def expert_layout_for(model_type):
+    """``(expert_submodule_path, has_gate)`` for the quantized loader.
+
+    The MoE convention system (:mod:`experts4bit_qlora.arch.moe_conventions`) is the
+    broad, adjudicated source of truth for expert layout — 41 model_types and
+    counting — and its ``fused_prefix`` is exactly the submodule path this loader
+    calls ``expert_rel``. Where a convention exists, defer to it, and take
+    ``has_gate`` from it too (so a non-gated family like nemotron_h is handled
+    correctly rather than assumed SwiGLU). Fall back to this loader's own map for
+    the dedicated-quant specials (gemma4, kimi_k3, deepseek_v4) that predate the
+    convention system and carry MXFP4/FP8 handling a plain convention does not.
+
+    Verified: for every model_type both systems cover, the paths already agree
+    (see tests) — this makes that agreement the mechanism, not a coincidence.
+    """
+    from .arch.moe_conventions import MoEConventionError, convention_for
+    try:
+        conv = convention_for(model_type)
+        return conv.fused_prefix, conv.gated
+    except MoEConventionError:
+        if model_type in SUPPORTED_ARCHITECTURES:
+            return SUPPORTED_ARCHITECTURES[model_type], True
+        raise
 
 # model_type -> ((legacy on-disk spelling, name in the transformers>=5 module tree), ...).
 # GraniteMoe checkpoints on the Hub predate the standardized fused-experts interface: the fused
@@ -135,6 +178,46 @@ def _fit(name, tensor, want):
         "checkpoint's shape and no error until much later. Fix the config, the key "
         "mapping, or the checkpoint."
     )
+
+
+def _checkpoint_key_renamings(model_type):
+    """Checkpoint-key -> live-module-key renamings that transformers applies on load.
+
+    This loader walks raw checkpoint keys with ``get_submodule``, so a family whose
+    released key layout differs from its module tree dies on a literal getattr.
+    ernie4_5_moe is the case that surfaced it: both released checkpoints
+    (ERNIE-4.5-21B-A3B and 300B) store ``mlp.moe_statics.e_score_correction_bias``
+    at the MoE-block level, while the module tree carries it under ``mlp.gate.``.
+    Walking the disk name gave ``Ernie4_5_MoeSparseMoeBlock has no attribute
+    'moe_statics'``, which names neither the architecture nor the real problem.
+
+    transformers reconciles the two through a per-``model_type`` table, so this reads
+    that table rather than re-deriving the renamings — a second copy would drift.
+
+    Best-effort by design: the table is transformers-internal, so an import failure or
+    a shape change must degrade to "no renamings" (restoring today's behaviour) rather
+    than break every load. Only unambiguous 1:1, wildcard-free suffix renamings are
+    taken; anything richer is a real conversion, not a rename, and is left alone.
+    """
+    try:
+        from transformers.conversion_mapping import get_checkpoint_conversion_mapping
+        out = []
+        for wr in get_checkpoint_conversion_mapping(model_type) or ():
+            src = getattr(wr, "source_patterns", None) or []
+            dst = getattr(wr, "target_patterns", None) or []
+            if len(src) == 1 and len(dst) == 1 and "*" not in src[0] and "*" not in dst[0]:
+                out.append((src[0], dst[0]))
+        return out
+    except Exception:
+        return []
+
+
+def _rename_checkpoint_key(name, renamings):
+    """Apply the first matching suffix renaming to a checkpoint key."""
+    for src, dst in renamings:
+        if name == src or name.endswith("." + src):
+            return name[: len(name) - len(src)] + dst
+    return name
 
 
 def _assign(model, name, tensor):
@@ -232,7 +315,7 @@ def _install_fp8_block_linears(model, weight_map, get, expert_keys, dtype, devic
 
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
-    trust_remote_code=None, arena=None, quantize_layers=None,
+    trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -244,12 +327,12 @@ def load_moe_4bit_streaming(
     RAM *immediately after that layer is built* — inside the per-layer loop, never in a post-load
     pass (which would require every layer's experts GPU-resident first, defeating the purpose). A
     forward pre-hook streams a layer's experts back to the GPU just-in-time and a post-hook evicts
-    them, so only one layer's experts are GPU-resident at a time (see :mod:`experts4bit_qlora.offload`).
+    them, so only one layer's experts are GPU-resident at a time (see :mod:`experts4bit_qlora.engines.offload`).
 
     ``prefetch=True`` (with ``offload``) additionally links the layers for inference prefetch: during
     ``no_grad`` forwards each layer starts the next layer's H2D copy on a side stream, overlapping
     transfer with compute at a bounded cost of two layers resident instead of one. Training forwards
-    are unaffected. See :func:`experts4bit_qlora.offload.enable_inference_prefetch`.
+    are unaffected. See :func:`experts4bit_qlora.engines.offload.enable_inference_prefetch`.
     """
     # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
     # fetch, snapshot download, or shard read — and the Experts4bit-vs-ExpertsNbit class dispatch
@@ -280,13 +363,41 @@ def load_moe_4bit_streaming(
         trust_remote_code = os.environ.get("E4B_TRUST_REMOTE_CODE", "0") == "1"
     config = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code)
     model_type = getattr(config, "model_type", None)
-    if model_type not in SUPPORTED_ARCHITECTURES:
+    if model_type not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(model_type):
         raise NotImplementedError(
             f"Unsupported model_type={model_type!r}. This streaming loader handles SwiGLU fused-MoE "
-            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}. The Experts4bit primitive itself is "
-            "model-agnostic — see the README 'Scope' note to adapt another architecture."
+            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}, plus every model_type on the qwen2_moe "
+            f"convention (same per-expert mlp.experts.N.{{gate,up,down}}_proj read path). The Experts4bit "
+            "primitive itself is model-agnostic — see the README 'Scope' note to adapt another architecture."
         )
-    expert_rel = SUPPORTED_ARCHITECTURES[model_type]
+    # Identity ("zero-computation") experts: the router indexes a space LARGER than the
+    # set of real experts, and the surplus indices route the token through nn.Identity
+    # scaled by its router weight instead of a SwiGLU. LongCat-Flash ships 512 routed +
+    # 256 identity by default. Experts4bit has no identity slot, so a load would build
+    # only the routed experts while the router keeps emitting indices past the end.
+    #
+    # Refusing here rather than at the read: the surplus experts carry gate_up rows the
+    # forward never reads and NO down_proj at all, so the per-expert reader consumes
+    # 0..n_routed-1, leaves the rest orphaned, and the generic weight walk then dies on
+    # `get_submodule(".../experts.10")` with `ExpertsLoRA has no attribute '10'` — which
+    # says nothing about what is actually unsupported.
+    _gate_cfg = getattr(config, "text_config", None) or config   # same unwrap as lm_config below
+    n_zero = int(getattr(_gate_cfg, "zero_expert_num", 0) or 0)
+    if n_zero > 0:
+        n_routed = int(getattr(_gate_cfg, "n_routed_experts", 0) or 0)
+        raise NotImplementedError(
+            f"{model_type!r} uses {n_zero} identity ('zero-computation') experts on top of "
+            f"{n_routed} routed experts. The router selects over all {n_routed + n_zero}, and "
+            "indices at or above the routed count pass the token through unchanged rather "
+            "than through a SwiGLU expert. Experts4bit represents SwiGLU experts only, so "
+            "loading just the routed ones would leave the router addressing experts that do "
+            "not exist. Supporting this needs an identity slot in the expert primitive, not "
+            "a loader change."
+        )
+    # Source the expert path and gate from the convention when one exists (the
+    # broad source of truth), else this loader's own map. Both agree today; this
+    # makes the convention authoritative so a non-gated family loads correctly.
+    expert_rel, has_gate = expert_layout_for(model_type)
     # Multimodal configs (e.g. Gemma-4's `gemma4`) nest the language model under `text_config` and
     # prefix its checkpoint tensors with `model.language_model.` (vision lives under `model.vision_tower.`).
     # Build + size the text tower from that sub-config, and strip the prefix so keys match the text
@@ -440,7 +551,7 @@ def load_moe_4bit_streaming(
                     "which would silently change the epilogue.")
             expert_keys.update(keys)
             n_moe += 1
-            from .nvme_experts import build_meta_experts
+            from .engines.nvme_experts import build_meta_experts
             v4 = model_type == "deepseek_v4"
             experts = build_meta_experts(
                 arena_index, n_exp, has_gate=True, activation=activation,
@@ -451,6 +562,33 @@ def load_moe_4bit_streaming(
                 # note on the resident branch below.
                 experts.limit = float(
                     getattr(lm_config, "swiglu_limit", DEFAULT_SWIGLU_LIMIT))
+            # Wrap in the adapter ONLY when the caller says they are training.
+            # Without this the arena path is serving-only and silently ignores
+            # r/alpha: it produced bare meta experts, so
+            # `enable_nvme_train_residency` — whose whole purpose is training over
+            # arena-resident experts — refused every module with "not
+            # ExpertsLoRA-wrapped", and its documented usage could not run at all.
+            # Found on an A5000 (2026-08-12); no CPU test caught it because every
+            # fixture constructs `ExpertsLoRA` by hand, so they exercised the
+            # mechanism and never the path a caller actually takes.
+            #
+            # Gated on an EXPLICIT flag, not on `r`, and that distinction is
+            # load-bearing: `r` is a required positional and the documented
+            # SERVING example passes `r=8` before calling
+            # `enable_mxfp4_nvme_residency`, which refuses wrapped modules. Keying
+            # off `r` would have fixed training by breaking serving.
+            #
+            # `.to(device)` is deliberately NOT used here, unlike the resident
+            # branches: the base is on `meta` by design — that is what makes
+            # expert storage independent of model size — and moving a meta tensor
+            # to CUDA raises. Only the adapter, which is real, is moved.
+            if arena_train:
+                experts = ExpertsLoRA(experts, r=r, alpha=alpha, dtype=dtype)
+                for _n in ("gate_up_lora_A", "gate_up_lora_B",
+                           "down_lora_A", "down_lora_B"):
+                    _p = getattr(experts, _n)
+                    setattr(experts, _n, torch.nn.Parameter(
+                        _p.data.to(device), requires_grad=_p.requires_grad))
             parent, leaf = epfx.rstrip(".").rsplit(".", 1)
             setattr(model.get_submodule(parent), leaf, experts)
             meta_expert_prefixes.append(epfx)
@@ -561,7 +699,7 @@ def load_moe_4bit_streaming(
             # they did before the ExpertsNbit fold.
             base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
             base = base_cls.from_float(
-                gate_up, down, has_gate=True, activation=activation, quant_type=quant_type, compute_dtype=dtype
+                gate_up, down, has_gate=has_gate, activation=activation, quant_type=quant_type, compute_dtype=dtype
             )
             experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:
@@ -593,7 +731,7 @@ def load_moe_4bit_streaming(
             # Handles were appended in layer order above, which is what the circular linking needs.
             enable_inference_prefetch(offload_handles)
             log("  inference prefetch ON: next layer's experts copy on a side stream during no_grad forwards")
-        from .offload import _arena_enabled, _stats_enabled, report_offload_environment
+        from .engines.offload import _arena_enabled, _stats_enabled, report_offload_environment
 
         if _arena_enabled():
             log("  offload arena ON (E4B_OFFLOAD_ARENA): experts staged as consolidated per-dtype copies")
@@ -609,10 +747,17 @@ def load_moe_4bit_streaming(
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     narrowed = []
+    renamings = _checkpoint_key_renamings(model_type)
+    renamed = 0
     for name in weight_map:
         if name not in expert_keys:
-            if _assign(model, name, get(name)):
-                narrowed.append(name)
+            target = _rename_checkpoint_key(name, renamings)
+            renamed += target != name
+            if _assign(model, target, get(name)):
+                narrowed.append(target)
+    if renamed:
+        log(f"  applied {renamed} transformers checkpoint-key renaming(s) "
+            f"(this checkpoint's layout differs from the module tree)")
     if narrowed:
         # Loud on purpose: this is a checkpoint/modeling-code disagreement that the
         # loader worked around, not a routine step. K3 hits it 69 times (A_log).

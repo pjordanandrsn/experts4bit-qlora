@@ -1,5 +1,688 @@
 # Changelog
 
+## 0.19.1 — 2026-08-14
+
+### The compacted stack: measured, and closed
+
+`engines/nvme_train.py` has always named a compacted `[R, ...]` staged stack as
+what would fit a big MoE on a small card, and declined it because it splits the
+kernel's expert-id space from the adapter's. Its docstring now carries the
+measurement that closes the question instead of leaving it as future work.
+
+A compacted stack only saves memory when a batch routes to far fewer than `E`
+experts. Counted exactly on DeepSeek-V4-Flash's hash-routed layers — expert
+selection there is a frozen `tid2eid[input_ids]` lookup, so no forward and no
+149 GB download is needed — over real prose: **224 of 256** distinct experts at 128
+tokens, **249** at 256, and **all 256** by 512. Compaction saves 12%, 3%, then
+nothing. At decode it saves **98%**.
+
+And where it pays, it already exists: `_HotResidency._cold_contrib` takes
+`torch.unique(...)` and `index_select`s only the routed rows, and `_TieredStack`
+never materializes an `[E, ...]` tensor. The change has no beneficial home.
+
+Worth naming the quantity that misleads: this is **not** the routing skew informed
+hot sets exploit. Those care which experts are hit *often*; compaction cares which
+are hit *at all*, and heavy frequency-skew still leaves the tail touched.
+
+Scope: hash-routed layers only, 3 of 43 on V4-Flash. The other 40 use the learned
+top-k router and need a real forward.
+
+The probe now ships in the **sdist** (`bench/routing/distinct_experts.py`, via a new
+`MANIFEST.in`) so the table above can be re-run rather than taken on trust. Wheels
+are unaffected — they carry the package only, as `tools/` and `scripts/` always have.
+
+## 0.19.0 — 2026-08-14
+
+### The MXFP4 arena forward: projection math, not just staging
+
+Option B (0.18.0) made an MXFP4 arena's bytes *land* correctly; it did not make the
+NF4 arithmetic interpret them, and `_e4b_mxfp4_arena` only flagged the module. This
+wires the compute half.
+
+`_dequantize_expert` is overridden per instance, so the module's **own** forward
+becomes correct — whichever forward that is. Every reference lane funnels through
+`_project` (`ExpertsNbit.forward`, `_DeepseekV4ForwardMixin.forward`, and
+`ExpertsLoRA._base_project`), so the arch's epilogue is applied by the arch's own
+code rather than re-derived. `forward` additionally routes to
+`mxfp4_grouped.gemm_mxfp4_grouped` under CUDA + bf16 + **no autograd graph**: that
+kernel has no `autograd.Function`, so a training step routed there would produce no
+`dL/dx` and silently stop learning.
+
+Graded against the pure-torch oracle (`dequantize_mxfp4` then matmul), never
+another accelerated lane, on **two cards**. Projections 0.000e+00 on an L40S; on a
+3090 the down projection's GEMV branch lands at 3.344e-06, so "the projections are
+exact" was a property of that card and not of the kernel. The asserted bound is
+`< 2e-2`. A control grades the same forward against an *unclamped* oracle and
+requires it to be rejected at ~1.0, so the fixture demonstrably tells the epilogues
+apart. Receipts in `bench/mxfp4-arena-train/`.
+
+### Two silent-wrong-answer surfaces closed
+
+`ExpertsLoRA._use_infer_gemv` would have routed single-row MXFP4 projections through
+bitsandbytes' `gemv_4bit`. Its own probe could never have caught that:
+`_gemv_4bit_matches_dequant` quantizes a synthetic weight and compares bnb against
+bnb, so it never reads the module's buffers.
+
+`enable_fast`/`enable_fast_train` would have patched the NF4 grouped kernel over
+MXFP4 storage — such a base passes every check they had (`quant_type="nf4"` by
+class, `_apply_gate` present) and then dies on a `view(E, n1, k1 // 64)` of a buffer
+holding one scale byte per 32 elements. Both refuse explicitly now.
+
+### The dense FP8 dequantize cost 6x what its docstring claimed
+
+`Fp8BlockLinear` said the transient was "one weight at a time (~67 MB for V4's
+largest)". That counted the bf16 result only; the fp32 route also held an expanded
+fp32 scale, `weight.float()` and the fp32 product — 12-14 bytes per parameter, so
+~403 MB for `wq_b [32768, 1024]`. The aligned path now decodes in `dtype` with a
+broadcast scale, 2 bytes per parameter, and is **bit-exact**: e4m3 -> bf16 is
+lossless and an e8m0 scale is a power of two, so the multiply cannot round. Verified
+including deliberately over/underflowing exponents. Ragged shapes keep the fp32
+route, which the docstring now says rather than denying.
+
+### `util.container_free_bytes()`
+
+`enable_nvme_residency` tells callers to size `hot_rows` from measured free RAM and
+the package gave them no correct way to do it in a container. Reads cgroup **v2 and
+v1** — pods are v1, so a v2-only reader measures nothing there — and counts
+reclaimable page cache as free, because both versions count it as *used*: straight
+after a 138 GiB arena bake the naive read said **18.3 MB**.
+
+### `grouped-nf4-gemm` floor raised to 0.12.0 — hard, not advisory
+
+Below it, `nvme_residency._ST_TO_TORCH` has no entry for `F8_E8M0`, the tag
+DeepSeek-V4 uses for its MXFP4 expert scales, so a real V4 arena cannot be staged
+for training at all. No degraded mode, nothing skips.
+
+### The 284B claim this was built for: NOT established
+
+`bench/mxfp4-arena-train/` registers a prereg with five OTS-stamped amendments and
+reports it either way. **P1 confirmed** (the unquantized control OOMs, twice, on
+memory). **P2 refuted** — no rung of the registered batch ladder fits in 24 GiB.
+P3/P4 ungraded; no training step completed. The expert path itself runs end to end
+against a real 284B checkpoint's own MXFP4 bytes (43/43 modules patched, gates
+green); what stops it is `[E, ...]` staging at 2.12 GiB/layer, which
+`engines/nvme_train.py` already documents as a deliberate trade-off it declines to
+make.
+
+## 0.18.0 — 2026-08-13
+
+### Accepts an arena whose absmax is stored bf16
+
+`grouped-nf4-gemm` 0.11.0 can bake absmax as bf16 — 11.1% of a Qwen3-30B row down to 5.6%,
+and bitwise lossless for a bf16 checkpoint, because absmax is `|w|.amax()` over a block and
+is therefore one of the source magnitudes. `check_arena_geometry` refused **any** dtype
+difference between the module's home and the arena segment, which rejected such an arena
+outright.
+
+The relaxation is narrow: only casts in gnf4's exported `widening_casts()` table
+(bf16/fp16 → fp32) are accepted, and this **imports that table** rather than growing a
+second copy that can drift. Every other mismatch still raises — "this arena was not baked
+from this model" is the far more common cause of a dtype difference.
+
+**VRAM and the kernel contract are unchanged.** The staging destination is still the
+module's fp32 home, so the kernel keeps receiving the fp32 absmax it specifies. The
+geometry check returns the *module's* dtype for exactly this reason: returning the arena's
+would allocate a bf16 destination, `segment_into` would take its memcpy path, and the
+kernel would get bf16 absmax where its contract says fp32 — wrong scales, finite numbers,
+no error.
+
+**The `grouped-nf4-gemm` floor is raised to 0.11.0**, which is where `widening_casts` and
+the CPU-scaled queue depth land.
+
+### `hot_rows` below its floor is refused at attach, and `qd` stops being pinned
+
+**The floor is enforced now.** A stage requests every expert one forward routed and each
+protects a slot from eviction, so an undersized tier raises inside `ColdTier.ensure` — but
+only when a forward is finally unlucky. Measured on Qwen3-30B-A3B at seq 384, top-8: a
+forward routes a **median of 63 unique experts and a max of 97 of 128**. A tier sized to
+the median survives most forwards and kills the run on one of them, minutes in, after the
+checkpoint has loaded and the arena is open.
+
+`num_experts` is the worst case that request can reach and is known at attach for free, so
+`enable_nvme_train_residency` now refuses below it in the pre-flight — which opens nothing
+and so has nothing to unwind. The message carries the floor, what it costs in pinned RAM at
+this arena's row size, and where to size it from.
+
+Above the floor it stays a **RAM-for-disk dial**: on Qwen3-30B, 128 rows costs ~4 GB pinned
+and reads 14.4 GB/step; 3216 costs ~12 GB and reads 2.65 GB/step — 3.2× the RAM for 5.4×
+fewer bytes.
+
+**`qd` now defaults to `None`.** It was `qd: int = 4` and was forwarded on every call, so
+`grouped-nf4-gemm`'s CPU-scaled queue-depth default never applied to the training path —
+the exact path its measurement came from. The key is now *omitted* rather than forwarded as
+`None`, because on a `grouped-nf4-gemm` older than that default (the floor is 0.10.0, which
+predates it) `qd=None` would reach `ThreadPoolExecutor(max_workers=None)` and silently open
+up to 32 reader threads instead of 4.
+
+## 0.17.5 — 2026-08-13
+
+**Docs-only. A third model corrects what two models got wrong, and the arena's cost in
+TIME is measured for the first time.**
+
+### The arena requirement is not flat
+
+0.17.4 said the host requirement scales with expert bytes "while the arena requirement is
+set by `hot_rows` and stays roughly flat". The host half holds. **The flat half is wrong.**
+Gemma-4-26B-A4B — now bakeable, see below — lands between the other two and breaks it:
+
+| | expert bytes | arena req | host req | ratio | ⇒ dense baseline |
+|---|---|---|---|---|---|
+| OLMoE-1B-7B | 3.62 GB | 2.28–2.42 GB | 5.91–6.17 GB | 2.56× | ~2.19 GB |
+| **Gemma-4-26B-A4B** | **12.85 GB** | **5.10–5.37 GB** | **19.33–20.40 GB** | **3.80×** | **~4.94 GB** |
+| Qwen3-30B-A3B | 16.31 GB | 3.89–4.03 GB | 24.70–25.77 GB | 6.40× | ~3.69 GB |
+
+Gemma has **fewer** expert bytes than Qwen3 and a **larger** arena requirement, because its
+dense side is bigger — a dense MLP in every layer plus a 262144-token vocabulary. The ratio
+is expert bytes measured **against the dense baseline**, not expert bytes alone. Two points
+were consistent with "flat"; three are not.
+
+### What the arena costs in time
+
+First timing measurement in this line, on two architectures because
+[no timing claim ships on one machine](bench/host-ram-ceiling/RESULTS-timing.md):
+
+| | RTX 3090 (Ampere) | L40S (Ada) | travels? |
+|---|---|---|---|
+| **load**, host/arena | 3.39× / 6.76× | 3.12× / 5.87× | **yes** |
+| **step**, arena/host | 1.331 / 1.238 | **2.248 / 1.708** | **no** |
+
+**The load saving travels; the step cost does not, and it is worse on faster hardware.**
+Going 3090 → L40S the host arm's step time nearly halves while the arena arm improves only
+1.2–1.4×, because part of every arena step is an NVMe read and the disk does not care which
+GPU you bought. **Quote the step cost with the card attached, or not at all.**
+
+**Size `hot_rows` to the routing floor, not to free RAM.** Sweeping 128 / 384 / 1024 on
+Qwen3 produced no resolvable step-time difference, while 1024 cost resolvably more load
+time and ~8× the pinned RAM. `hot_rows` also does not travel between models: it has a hard
+floor at the experts one forward routes (OLMoE 89% of a layer, Qwen3 52%, Gemma-4 50%).
+
+Both receipts carry their pre-registrations, including a mis-specified gate that was
+amended before any re-run, and a `hot_rows` U-shape that one round suggested and three
+rounds withdrew.
+
+## 0.17.4 — 2026-08-13
+
+**Docs-only. The scaling claim 0.17.3 flagged as unmeasured is now measured.**
+
+0.17.3 said the ratio "should widen substantially on larger MoEs — but that is the
+mechanism's prediction, not a measurement". On **Qwen3-30B-A3B**, which has 6144 experts
+against OLMoE's 1024 and **4.50× the expert bytes**, it is **6.40×**. Receipt, raw ledger
+and the pre-registration it is scored against:
+[`bench/host-ram-ceiling/RESULTS-scaling.md`](bench/host-ram-ceiling/RESULTS-scaling.md).
+
+| | expert bytes | host-RAM path | arena path | ratio |
+|---|---|---|---|---|
+| OLMoE-1B-7B | 3.62 GB | 5.91–6.17 GB | 2.28–2.42 GB | 2.56× |
+| **Qwen3-30B-A3B** | **16.31 GB** | **24.70–25.77 GB** | **3.89–4.03 GB** | **6.40×** |
+
+**At an 8.59 GB ceiling Qwen3-30B-A3B is OOM-killed on the host-RAM path and trains to
+completion on the arena.** The host requirement grew **×4.18** against **×4.50** in expert
+bytes — what "pins every expert" predicts — while the arena requirement grew only ×1.66,
+and most of *that* is the larger dense side (48 layers, 151936-token vocab), not the
+expert path.
+
+**A hot row costs 1.58–1.98× the bytes it holds.** Re-running the whole ladder at
+`hot_rows=512` puts the marginal cost at **4.19–5.24 MB per row** against a 2.654 MB
+on-disk row. At `hot_rows=128` the expert path is therefore only ~0.5–0.7 GB of the
+~3.9 GB requirement; the rest is fixed base. The cause of the per-slot overhead is not
+isolated and no mechanism is offered for it.
+
+**`hot_rows` does not travel between models.** `hot_rows=64` — correct for OLMoE — refuses
+on Qwen3 with `request of 97 unique rows exceeds hot_rows=64`. That is the documented
+behaviour working: the docstring already specifies a floor of `min(T*k, num_experts)`,
+which is 128 here. OLMoE has exactly 64 experts per layer, so its value was silently at
+the floor already and looked portable. Size from the formula, not from a previous run.
+
+The pre-registration was committed before the checkpoint was downloaded and **all three of
+its point predictions missed** — host 18–21 GB (actual 24.70–25.77), arena 2.2–3.0 GB
+(actual 3.89–4.03), ratio 7–9× (actual 6.40×). Direction right, magnitudes wrong, because
+both arms were sized from OLMoE's much smaller non-expert baseline. Its stop rule fired at
+4.08 GB and the ratio is reported only after the investigation it demanded.
+
+No code changed; the wheel is byte-identical to 0.17.3 apart from the version.
+
+## 0.17.3 — 2026-08-13
+
+**Docs-only. The case this feature exists for is now demonstrated instead of asserted.**
+
+Every release through 0.17.2 described `enable_nvme_train_residency` as the answer to
+"the experts do not fit host RAM", and every release through 0.17.2 admitted it had
+never shown a model that could not be trained without it. It can now be shown, with a
+number on both sides. Full receipt, raw ledger and drivers:
+[`bench/host-ram-ceiling/`](bench/host-ram-ceiling/RESULTS-host-ram-ceiling.md).
+
+**At a 5 GiB host-RAM ceiling — same model, same seed, same four steps, same box — the
+host-RAM path is OOM-killed and the arena path trains to completion.** Descending the cap
+until each arm stops completing brackets both requirements:
+
+| | host-RAM offload | NVMe arena, `hot_rows=64` |
+|---|---|---|
+| **minimum host RAM to train** | **5.91–6.17 GB** | **2.28–2.42 GB** |
+| frozen experts | all 1024 pinned (3.83 GB of homes, per 0.17.0) | ~0.2 GB pinned, 64 hot rows |
+| steady RSS at `trained` | 5.88 GB | 2.34 GB |
+
+**The saving is ~2.5×, not 2.5–3.5×.** 0.17.2's upper bound came from pairing the lowest
+host sample against the lowest arena sample across *different* runs. Measured as one
+quantity — the smallest ceiling in which four steps complete — it is **2.56×**, bracketed
+2.44×–2.71× by the rungs either side, and steady RSS agrees independently at 2.51×. The
+0.17.2 entry is left as published; this supersedes it.
+
+**Peak RSS overstates the host arm by 2.7× — now shown causally.** That arm peaks at
+16.63 GB uncapped (15.86 GB of it file-backed) and trains fine under a 6.17 GB cap, with
+nothing tuned between the two runs: the kernel reclaims the mmap'd bf16 checkpoint when
+RAM is scarce. The arena arm, having almost no page cache to drop, has a peak RSS that
+*does* predict its threshold. Hence peak-RSS ratio **7.10×** against requirement ratio
+**2.56×** — and hence the earlier 8× figure, which was this artifact.
+
+Why it took a home box rather than a rented one: the cap has to include **swap**. A rented
+container's cgroup is read-only and the kernels seen there had no `memsw` accounting, so
+an over-limit process pages out and survives — a different outcome from fitting, reported
+as success. `docker --memory=N --memory-swap=N` sets both limits, verified by reading them
+from inside. The cap was positive-controlled in both directions before any arm ran (900 MB
+under 512m → killed; the same allocation under 2g → completes).
+
+**0.17.2 did not actually do what it says it did, and this fixes that too.** It was
+titled "put the host-RAM number on the page that serves it" and put the number in
+`CHANGELOG.md` — but the PyPI long description is built from **`README.md` alone**, so
+no changelog text has ever appeared on the package page. The 0.17.2 page contains no
+`3.83`, no `ru_maxrss`, no `steady RSS`. The release was verified by confirming it
+published, not by reading the page it was for. The measured summary now sits in the
+README, where the long description will carry it.
+
+No code changed; the wheel is byte-identical to 0.17.2 apart from the version.
+
+## 0.17.2 — 2026-08-13
+
+**Docs-only. The published page still lacked the one number the feature is for.**
+
+0.17.0/0.17.1 describe `enable_nvme_train_residency` as lifting the **host-RAM**
+ceiling and never said by how much. The 0.17.0 entry below now carries it —
+**~2.5–3.5×**, as pinned expert bytes (3.83 GB → ~0.2 GB) and steady RSS after
+load (4.94–5.9 GB → 1.42–2.37 GB) — together with the reason the obvious
+instruments give the wrong answer.
+
+`ru_maxrss` is not usable here: it reports 18.6 GB for the host arm on a roomy box
+and 10.8 GB for the *same arm* on a constrained one, because the 13.84 GB bf16
+checkpoint is mmap'd and read in full to fuse and quantize, and those pages are
+clean, file-backed and reclaimable. Peak *anonymous* is not the fix either —
+~1.5 GB for **both** arms, since `smaps_rollup` counts pinned CUDA memory as
+file-backed.
+
+Established by five reproductions across two independently built stacks on one
+pod whose unpinned install resolved to identical ML package versions, plus an
+A/B/A memory-balloon test (18.57 → 10.80 → 18.56, bit-identical losses) that rules
+out drift. No code changed; the wheel is byte-identical to 0.17.1 apart from the
+version.
+
+## 0.17.1 — 2026-08-12
+
+**Docs-only. The published 0.17.0 page carried a timing number that was never a
+measurement.**
+
+0.17.0's release notes reported `s/step` as one measurement per arm, and from
+those single samples claimed the fully-pinned arena cost **1.03×** the host-RAM
+reference. Re-measured under this repo's paired protocol — 5 scored rounds, every
+arm timed once per round in fixed order, warmup dropped, plus a `host_self`
+control that times the *same* host-RAM model twice per round — the control came
+back at **0.986 with a 0.898–1.080 spread**. That spread is the harness's
+resolution limit, and `hot_rows=1024`'s 0.957 sits *inside* it.
+
+So the honest statement is **"indistinguishable from host RAM"**, not 1.03×. The
+disk-bound arms are unaffected and remain real: **1.679×** at the `hot_rows`
+floor, **1.479×** at 256 — both far outside the noise, with the ladder moving as
+the tier's additive law predicts.
+
+The warmup round is the argument for the protocol: `host` and `host_self` read
+3.084 vs 1.901 in round 0 — the identical model, 62% apart. No one-shot-per-arm
+run can see that.
+
+The full table, the control, and what still is **not** established (a model whose
+experts genuinely exceed host RAM) are in the 0.17.0 entry below, now corrected.
+No code changed; the wheel is byte-identical to 0.17.0 apart from the version.
+
+## 0.17.0 — 2026-08-12
+
+**Training whose frozen experts live on NVMe — plus the namespace split, and a CI
+gap that had been reporting 42 tests as coverage while running none of them.**
+
+- **`enable_nvme_train_residency(model, arena_path, hot_rows=…)`** — QLoRA on a
+  MoE whose frozen experts exceed **host RAM**. The arena served inference and
+  refused training in as many words (*"Load without `arena=` to train, or drop the
+  adapters to serve"*); that refusal was right, since the serving engines replace
+  the module's forward and would discard the adapter's delta. This moves the
+  **home** instead: `_ArenaExpertOffload` is an offload handle whose homes are
+  `meta` — shape and dtype, no storage — and whose rows come off the arena:
+  disk row → ColdTier pinned slot → `[E, …]` device stack → kernel.
+
+  `enable_fast_train` is untouched. `nf4_qlora`'s `weights_fn` closure already
+  re-reads whatever is staged when backward runs, which is the seam that makes
+  this work at all.
+
+  **Gradient checkpointing is required, and enforced.** The evict hook fires when
+  a forward returns, so the checkpoint recompute is what re-stages a layer for its
+  own backward. Routed staging fills only the routed rows of a full-shaped stack,
+  so a recompute that routed differently would read uninitialized memory —
+  `assert_rows_staged` runs inside the weights_fn closures (i.e. **at backward**)
+  and refuses instead.
+
+  **It does not bound VRAM.** The staged stack keeps its full `[E, …]` shape so
+  every consumer still indexes by global expert id; one layer is device-resident,
+  as with ordinary offload. This lifts the host-RAM ceiling, not the VRAM one.
+
+  Needs `grouped-nf4-gemm >= 0.9.0` for `nvme_residency.segment_into`.
+
+- **Fixes a latent bug in the shared single-resident-layer policy.** The slot was
+  written through `type(self)`, so a subclass bound a *second* slot and left the
+  base class pointing at a handle nothing would evict — two layers resident at
+  once, the exact bound that policy exists to hold. Unreachable with one handle
+  class; reachable the moment there are two.
+
+- **`enable_nvme_residency` validates before allocating now.** It built its
+  `ColdTier` first, which made every refusal unreachable on a host without an
+  accelerator: the tier pins its landing buffer, so a CPU-only machine raised
+  "Cannot access accelerator device" and the caller got an allocator error instead
+  of the message naming their mistake. On a host that does pin, a refusal leaked
+  the tier. The error path also no longer closes a tier that modules are already
+  serving from, and counts what *this call* attached rather than trusting a sticky
+  `_e4b_hot_ref` marker that survives an earlier enable.
+
+- **CI actually runs the arena tests now.** `.[test]` did not install
+  grouped-nf4-gemm, so on the runner `tests/test_nvme_train_residency.py` went
+  from 29 tests to **one skip**, and `tests/test_nvme_residency_equivalence.py`
+  did the same — both reporting as coverage while executing nothing. Adding the
+  dependency took the runner from **577 to 661 passing**, and immediately
+  surfaced the `enable_nvme_residency` bug above, in an engine that shipped
+  months earlier.
+
+- **The README link check stopped calling throttling a dead link**, and no longer
+  forwards `Authorization` across origins. It opened a fresh TLS connection per
+  link and GitHub's edge dropped some of that churn; one run reported 28 of 28
+  links dead on a tree where every path existed. Connection reuse fixed it
+  (measured: a URL that failed four `urlopen` attempts answered 200 three times
+  running under `curl`). 404 and 403 are never retried into a pass.
+
+Also shipping here, from the preceding commits: the `arch/` `formats/` `engines/`
+namespace split (old submodule paths still resolve via aliases in `__init__`), the
+architecture support matrix, transformers checkpoint-key renamings, and the
+gap-heuristic fix.
+
+- **`arena_train=True` on the loader — without it the above could not be reached
+  at all.** The arena branch built bare `meta` experts (its serving shape) and
+  silently ignored `r`/`alpha`, so `enable_nvme_train_residency` refused every
+  module with *"not ExpertsLoRA-wrapped"* and its own documented usage failed.
+  29 CPU tests missed it because each constructs `ExpertsLoRA` by hand in the
+  fixture — they exercised the mechanism, never the route a caller takes. It is
+  gated on an explicit flag rather than on `r`, because `r` is a required
+  positional and the *serving* example passes `r=8`; keying off it would have
+  fixed training by breaking serving.
+
+**Verified on a GPU** (RTX A5000, sm_86; OLMoE-1B-7B; 12 steps on Alpaca;
+identical data and bit-identical starting adapters; every arm through
+`enable_fast_train`, so only residency differs):
+
+| arm | s/step | peak GB | final loss | med \|ΔL\| |
+|---|---|---|---|---|
+| host RAM (reference) | 1.62 | 2.26 | 0.5839 | — |
+| arena, `hot_rows=64` | 2.65 | 2.03 | 0.6143 | **0.0059** |
+| arena, `hot_rows=256` | 2.41 | 2.04 | 0.6426 | **0.0086** |
+| arena, `hot_rows=1024` | 1.67 | 2.04 | 0.5944 | **0.0099** |
+
+All three pass `bench/fused-train-gate`'s registered 0.05 median-|ΔL| band, 5–8×
+inside it. A precondition run first established the arena's bytes are **bitwise
+identical** to loader-quantized bytes, so the arms differ only in residency.
+
+**Timing re-measured under the paired protocol** (5 scored rounds, every arm timed
+once per round in fixed order so drift hits all arms equally; warmup round
+dropped; optimizer not stepped so routing is identical every round). The
+`s/step` column above was one measurement per arm and is superseded by this:
+
+| arm | s/step (med) | ratio med | ratio min–max |
+|---|---|---|---|
+| host RAM (reference) | 1.910 | 1.000 | — |
+| **`host_self` (control)** | 1.906 | **0.986** | 0.898–1.080 |
+| arena, `hot_rows=64` | 3.207 | **1.679** | 1.490–1.724 |
+| arena, `hot_rows=256` | 2.919 | **1.479** | 1.351–1.542 |
+| arena, `hot_rows=1024` | 1.867 | **0.957** | 0.890–1.051 |
+
+`host_self` is the *same* host-RAM model timed a second time in each round. At
+0.986 the instrument is unbiased, and its 0.898–1.080 spread is the **resolution
+limit** — which is the number that makes the rest readable:
+
+- The two disk-bound arms sit far outside it, so **1.68× at the `hot_rows` floor
+  and 1.48× at 256 are real**, and the ladder moves the way the tier's additive
+  law predicts: the cost is disk traffic.
+- **`hot_rows=1024` is indistinguishable from host RAM.** Its 0.957 sits inside
+  the control's own spread, so the honest claim is *smaller than this harness can
+  resolve* — not the "1.03×" a single measurement suggested.
+
+The warmup round is why this matters: `host` and `host_self` read 3.084 vs 1.901
+in round 0 — the identical model, 62% apart. A one-shot-per-arm run cannot see
+that.
+
+**How much host RAM this actually saves: ~2.5–3.5×.** The point of the feature is
+the host-RAM ceiling, so here is the measurement, with the caveat that makes it
+readable. Same OLMoE run, RTX A5000:
+
+| | host-RAM offload | arena, `hot_rows=64` |
+|---|---|---|
+| **pinned expert bytes** | **3.83 GB** (all 1024 experts) | **~0.2 GB** (64 hot rows) |
+| steady RSS after load | 4.94–5.9 GB | 1.42–2.37 GB |
+
+**Do not measure this with `ru_maxrss`.** It reports 18.6 GB for the host arm on a
+roomy box and 10.8 GB for the same arm on a constrained one — an A/B/A with a
+memory balloon moved it 18.57 → 10.80 → 18.56 GB with bit-identical losses and an
+unchanged unreclaimable footprint. The checkpoint is 13.84 GB of bf16
+safetensors, mmap'd and read in full to fuse and quantize; those pages are clean,
+file-backed and reclaimable, so the "peak" is page cache the process happened to
+have mapped, not memory it needed. An earlier 8× figure came from comparing that
+inflated host peak against an arena arm that never reads the expert bytes at all.
+
+Peak *anonymous* memory is not the fix either — it is ~1.5 GB for **both** arms,
+because `smaps_rollup` counts pinned CUDA memory as file-backed. Use steady-state
+RSS after load, or peak of anon + `/dev/zero` mappings.
+
+**What this still does NOT establish.** OLMoE's arena is 3.6 GB and fits
+everywhere, so this shows the mechanism is correct and how the cost scales with
+residency — **not** a model whose experts exceed host RAM, which is the case the
+tier exists for. A demonstration of that needs a machine capped near the host
+arm's true ~5–6 GB working set; attempts at 11–16 GB could not fail the host arm,
+because it never needed 18 GB.
+
+> **Superseded 2026-08-13 in 0.17.3 — demonstrated.** The prediction in the
+> paragraph above was published before the measurement and held: the host arm's
+> requirement is **5.91–6.17 GB**. At a 5 GiB cap it is OOM-killed while the arena
+> arm trains. The ratio here, **~2.5–3.5×**, is refined to **2.56×** by measuring
+> one quantity rather than pairing extremes across runs. See
+> [`bench/host-ram-ceiling/`](bench/host-ram-ceiling/RESULTS-host-ram-ceiling.md). Rented-instance NVMe varies ~7× between pods, so
+these ratios characterise this box and do not travel.
+
+## 0.16.3 — 2026-08-12
+
+**Makes 0.16.2's headline feature actually importable, and turns one opaque load
+failure into an accurate refusal.**
+
+- **`capture_decode`, `CapturedDecoder` and `probe_capture` are exported from the
+  package root.** 0.16.2 shipped `capture.py` with no top-level export, no in-repo
+  caller and no README mention, so the only route to it was knowing the private module
+  path — the feature was published unreachable. Documented under Inference with the
+  measured numbers (4.4–5.6x on 2-layer fixtures, **1.11x** on OLMoE-1B-7B, **1.04x**
+  on Qwen3-30B-A3B) and both costs: `StaticCache` is allocated to `max_length` up
+  front, and `step()` is greedy argmax with no logits processors, stopping criteria or
+  streamer.
+
+  Deliberately **not** used by the HTTP server: `_generate_once` needs sampling,
+  repetition penalty, stop signals and streaming, and reimplementing those on a
+  captured step to gain the measured ~4% at 30B is a bad trade against the risk.
+
+- **Identity ("zero-computation") experts are refused with the counts named.**
+  longcat_flash previously died with `AttributeError: ExpertsLoRA has no attribute
+  '10'`, which names neither the architecture nor the limitation. LongCat-Flash
+  allocates `gate_up_proj` over `n_routed_experts + zero_expert_num` (512 + 256 by
+  default) but `down_proj` over the routed count only — its forward sends
+  `expert_idx >= num_routed_experts` through `nn.Identity` scaled by the router weight
+  and never reads those `gate_up` rows, so the surplus experts are ragged on disk by
+  construction. The per-expert reader consumed `0..n_routed-1`, orphaned the rest, and
+  the generic weight walk then called `get_submodule(".../experts.10")` on a path whose
+  leaf was already the fused module.
+
+  Loading only the routed experts is not a fix: the router keeps selecting over the full
+  space, so it would address experts that do not exist. An identity slot belongs in the
+  expert primitive, not the loader.
+
+## 0.16.2 — 2026-08-12
+
+**CUDA-graph decode capture, and one less allocation per decode step.**
+
+- **`capture_decode()` / `probe_capture()`** (`experts4bit_qlora.capture`). Wraps one decode
+  step in a `torch.cuda.CUDAGraph` backed by a `StaticCache`, so every step has identical
+  shapes and ONE graph serves the whole generation — a growing KV cache otherwise gives a
+  distinct shape, and a distinct graph, per token. The cost is explicit: the cache is
+  allocated to `max_length` up front. `torch.compile` cannot be used instead; inductor dies
+  on `aot_autograd() does not yet handle input mutations on views with different dtypes`,
+  which is exactly the engine's one-uint8-store-viewed-as-int64-and-float32 row block.
+  Capture also throws on a host sync inside the region, so a successful capture doubles as
+  a check on the zero-sync decode contract.
+
+  Measured, 16 new tokens greedy: **4.4–5.6x** on 2-layer fixtures (qwen2_moe, qwen3_moe,
+  granitemoe, hunyuan_v1_moe, glm4_moe, dots1, olmoe), **1.11x** on OLMoE-1B-7B-0924-Instruct
+  (3090) and **1.04x** on Qwen3-30B-A3B (A5000). The speedup is inversely proportional to
+  real GPU work per step, which is what a fixed per-step launch cost predicts — so this is
+  worth having for small models and for the sync contract, not as a throughput claim at
+  scale. Both real-weight models replay **bit-identical** to eager decode.
+
+  `probe_capture()` reports support rather than assuming it, and distinguishes a bf16 argmax
+  tie from a real defect by measurement: it teacher-forces the same tokens down both paths
+  and compares logits. The reference is eager INCREMENTAL decode against a cache — comparing
+  against one full-sequence forward charges a few ulp of kernel/reduction-order difference to
+  capture. `qwen3_next` is not capturable: `StaticCache` does not cover LinearAttention.
+
+- **Persistent `row_idx` buffer in the pipelined engine** — the per-step device allocation
+  and H2D copy are gone. **-16.4%** host time per decode step.
+
+## 0.16.1 — 2026-08-12
+
+**Correctness fix for the segmented cold source, plus per-round overhead removed.**
+
+- **Prime each segment from its own offset.** `seg_addr` pointed every hot lane at the
+  resident row START for all four segments instead of `hot_row + off[j]`. `_prime` seeds
+  every slot from expert 0 with `have = -1`, so it does NOT take the hot skip — with
+  expert 0 hot on the segmented (offload-homes) path it primed the absmax and down
+  regions with gate_up bytes. Latent in 0.16.0: `_fetch` forces hot lanes to skip and
+  they read the resident row in place, so nothing read those bytes — but that was an
+  undocumented invariant holding up a wrong address table, and nothing tested it.
+- **Traffic counting is now opt-in** (`E4B_PIPELINED_TRAFFIC=1`, or `count_traffic = True`
+  on the engine before the first fetch). The two device reductions cost ~8.9% of the
+  decode step on an A5000 to produce numbers nothing reads in production.
+  `traffic()` RAISES when counting was off rather than reporting zeros, because
+  `hot_d2d_bytes == 0` is a regression witness and several tests use the counters to
+  prove the engine ran at all — silent zeros would let those pass while measuring nothing.
+
+## 0.16.0 — 2026-08-12
+
+- **Residency reads the offload homes in place** (#104, closes #86 with #87).
+  Under offload the homes already hold every expert in pinned host RAM and the
+  pipelined engine baked a SECOND full-size arena from them — 0.316 GiB per layer
+  twice over on Qwen3-30B-A3B geometry, ~15 GiB duplicated for the one
+  configuration that exists to fit a big model on a small card. The homes cannot
+  be freed (prefill, grad and odd-dtype forwards still fall back to the reference
+  path and need staging), so the engine stops making the copy instead.
+
+  The homes group by tensor and the row layout groups by expert, so an expert is
+  four contiguous runs and the gather issues one launch per segment. The kernel
+  gained a destination offset, a length, and a separate IDENTITY vector — four
+  launches read four addresses but must skip or copy together as one expert.
+  Measured: RSS delta on enable 0.579 → 0.080 GiB per layer, output bit-identical
+  to the copied-arena control.
+
+  Guarded rather than assumed: offload packs homes one buffer per DTYPE with the
+  offset advancing in ELEMENTS, so an odd-numel predecessor leaves the next tensor
+  misaligned — undefined behaviour where the gather casts to `int64*`. Each
+  segment is checked for pinned + contiguous + 8-byte-aligned base and
+  8-byte-divisible length, falling back to the copied arena otherwise.
+  Non-offloaded modules are unaffected.
+
+## 0.15.0 — 2026-08-11
+
+**Five more quantized checkpoint formats, and the DFlash drafter load path.**
+
+- **AWQ** (`awq.py`) — the first ASYMMETRIC format, using autoawq's exact
+  `[0,4,1,5,2,6,3,7]` nibble order. Packed along OUT.
+- **GPTQ** (`gptq.py`) — packed along IN, sequential order, `+1` zero offset.
+  Told apart from AWQ by its `g_idx` sibling; AWQ had been silently claiming all
+  18624 GPTQ tensors, which is a wrong-answer bug, not a load failure. `g_idx` is
+  now range- and length-validated (a negative index would wrap to the last group).
+- **compressed-tensors int4** (`compressed_int.py`) — llm-compressor / vLLM.
+  `num_bits`/`group_size` are DERIVED from shapes because the config often omits
+  them. Vectorized unpack.
+- **NVFP4** (`nvfp4.py`) — E2M1 codebook with two-level scaling; also serves
+  **NVIDIA ModelOpt FP4**, verified against modelopt itself.
+- **DFlash drafter** (`glimmer_draft.py`, `speculative.py`) — drafter load for both
+  released spellings with coverage reconciled, plus a greedy speculative loop that
+  is token-identical to plain greedy.
+
+The dispatch matrix is pinned in BOTH directions, so a format is claimed by exactly
+one decoder.
+
+## 0.14.0 — 2026-08-10
+
+**MoE breadth: the convention system, and every execution config measured.**
+
+- **12 adjudicated conventions** covering 45 `model_type`s, each checked against
+  transformers' own converter table so coverage DRIFT fails a test rather than
+  silently going stale. Gate/up are shape-identical, so orientation can never be
+  inferred — every entry is adjudicated, not guessed.
+- New families: `gpt_oss` (pre-fused MXFP4 through the generic planner),
+  `qwen3_vl_moe` (pre-fused + load-time transpose), `dbrx` and `jetmoe` (flat
+  native stacks, bit-identical passthrough), `qwen3_5_moe` (native passthrough),
+  `nemotron_h` (NON-gated: stack up/down, no gate to fuse), `minimax_m3_vl`
+  (VL-prefixed mixtral), `axk1` (hybrid dense/MoE, layer-conditional keymap).
+- **block-FP8 routing**, and MTP heads are never dropped silently.
+- Tied heads are tied even when the checkpoint also ships the head.
+- Rotary dim/theta buffers are materialized for VL vision towers.
+- **Every execution config measured**, not just dtype: the decode/prefill ranking
+  inverts, gains shrink as experts widen, and `dgrad=True` is the fastest training
+  lane.
+
+
+## 0.13.0 — 2026-08-10
+
+**Muse Glimmer (Meta) and GLM-5 (Zhipu) checkpoint support.**
+
+- **`glimmer.py` + `glimmer_load.py`** — serve Muse-Glimmer-30B from a released
+  GGUF text tower. Glimmer is DENSE (Gemma-3 lineage), so it uses the dense lanes,
+  not the expert path. Weights are decoded through grouped-nf4-gemm's k-quant lane
+  (**needs gnf4 >= 0.8.0**; the import is capability-gated, so older installs get an
+  actionable message rather than an AttributeError). The load streams each tensor to
+  the target device as it decodes — peak host RAM is one tensor, not the ~60 GB a
+  dequantized 30B would need — and ends with a coverage reconciliation: every
+  text-tower parameter must be materialized or it raises.
+- **`glm5.py`** — GLM-5 (`glm_moe_dsa`) checkpoint keymap and expert fusion.
+  DeepSeek-V3 lineage, so it reuses the existing MLA/per-expert machinery; the new
+  surface is DSA's lightning indexer.
+
+Every mapping in both was adjudicated against the real released checkpoint AND the
+instantiated transformers module tree, then reverse-armed (every model parameter must
+be claimed by some checkpoint key — the direction that catches a silently dropped
+weight). The traps that arithmetic alone gets wrong, now asserted:
+
+- Glimmer's head is **untied** and must never be aliased to the embedding.
+- Its four per-layer norms are centered (`x*(1+w)`) with the `+1` baked into the GGUF
+  bytes, so the parameter is `gguf - 1.0` — while the FINAL norm is used as-is.
+- Its `attn_q/k_norm` are uniform vectors equal to `config.qk_scale_factor` and 1.0,
+  absorbed by a parameter-free norm; dropped only after asserting that identity, so a
+  genuinely learned qk-norm fails loudly.
+- GLM-5's checkpoint carries **one more layer than the model builds** (an MTP head);
+  it is skipped explicitly, and MTP markers on a built layer raise.
+- GLM-5's experts are per-expert on disk and fused in the tree, with gate/up
+  concatenated as **blocks** — the interleave convention would mis-activate with every
+  shape agreeing.
+- Rotary `inv_freq` is computed, never shipped; it is rebuilt through the module's own
+  rope initializer instead of being left on `meta`.
+
+Validated end-to-end on an A100 80GB: the 30B loaded from Meta's released
+`kquant-dynamic` GGUF (19.65 GB) in 205 s — 627 tensors assigned, 104 dropped,
+0 unfilled — and generated correct text at 13.8 tok/s, 55.8 GB VRAM.
+
 ## 0.12.0 — 2026-08-06
 
 **`serve` grows a residency dial** — the missing piece between 0.10.0's

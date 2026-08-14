@@ -29,7 +29,7 @@ def _no_triton_interpreter():
         pytest.skip("Triton interpreter mode active (raw-pointer gather is compiled-only)")
 
 
-from experts4bit_qlora.pipelined import _align8, _gather_kernel  # noqa: E402
+from experts4bit_qlora.engines.pipelined import _align8, _gather_kernel  # noqa: E402
 
 
 def _mk_store(E, row_bytes, pattern0, pinned):
@@ -50,13 +50,18 @@ def _addrs(store, ids):
     return store.data_ptr() + torch.as_tensor(ids, dtype=torch.long, device="cuda") * rb
 
 
-def _launch(slots, src, have, block=16):
+def _launch(slots, src, have, block=16, ident=None, dst_word_off=0, n_words=None):
+    """Whole-row launch by default: the read address doubles as the lane identity,
+    the segment starts at word 0 and spans the row — i.e. exactly the pre-segmented
+    behaviour. ``ident``/``dst_word_off``/``n_words`` drive one segment instead."""
     rb = slots.shape[1]
     assert rb % 8 == 0
     rw = rb // 8
     kern = _gather_kernel()
-    grid = (slots.shape[0], -(-rw // block))
-    kern[grid](slots.view(torch.int64), src, have, rw, BLOCK=block, num_warps=1)
+    nw = rw if n_words is None else n_words
+    grid = (slots.shape[0], -(-nw // block))
+    kern[grid](slots.view(torch.int64), src, src if ident is None else ident, have,
+               rw, dst_word_off, nw, BLOCK=block, num_warps=1)
 
 
 def test_copies_bytes_exactly_host_and_device_mixed():
@@ -143,7 +148,7 @@ def test_partial_skip_mixed_launch():
 def test_engine_traffic_counters_hand_counted():
     pytest.importorskip("nf4_grouped")
     from experts4bit_qlora import Experts4bit
-    from experts4bit_qlora.pipelined import (
+    from experts4bit_qlora.engines.pipelined import (
         disable_pipelined_residency, enable_pipelined_residency)
 
     torch.manual_seed(0)
@@ -154,6 +159,10 @@ def test_engine_traffic_counters_hand_counted():
                                  compute_dtype=torch.bfloat16, has_gate=True)
     enable_pipelined_residency(mod, [torch.tensor([0, 1])], device="cuda", k_slots=k)
     st = mod._pipelined
+    # Counting is off by default (the two reductions cost ~8.5% of the fetch), and
+    # `traffic()` RAISES rather than reporting zeros when it is off — so this must
+    # opt in before any fetch, or the witness below would be asserting on nothing.
+    st.count_traffic = True
     rb = st.row_bytes
     hs = torch.randn(1, H, dtype=torch.bfloat16, device="cuda")
 
@@ -188,7 +197,7 @@ def test_interpreter_mode_refused_loudly(monkeypatch):
     # would segfault the interpreter on a raw device pointer)
     pytest.importorskip("nf4_grouped")
     from experts4bit_qlora import Experts4bit
-    from experts4bit_qlora.pipelined import enable_pipelined_residency
+    from experts4bit_qlora.engines.pipelined import enable_pipelined_residency
 
     torch.manual_seed(0)
     mod = Experts4bit.from_float(gate_up_proj=torch.randn(4, 128, 128).cuda(),
@@ -197,3 +206,85 @@ def test_interpreter_mode_refused_loudly(monkeypatch):
     monkeypatch.setenv("TRITON_INTERPRET", "1")
     with pytest.raises(RuntimeError, match="interpreter"):
         enable_pipelined_residency(mod, [torch.tensor([0])], device="cuda", k_slots=2)
+
+
+def test_segment_writes_only_its_slice_of_the_row():
+    """A segmented source writes at a word offset and must not touch its neighbours.
+
+    This is what lets the engine read offload's homes in place (they group by TENSOR)
+    instead of baking a second full-size arena from them: an expert becomes four
+    contiguous runs written into one row. An off-by-one in the offset or the length
+    would corrupt the adjacent segment -- another expert's real bytes, so the GEMM
+    would still run and simply be wrong.
+    """
+    rb = _align8(8 * 16)                      # 16 int64 words
+    host = _mk_store(4, rb, 60, pinned=True)  # row e is filled with byte 60+e
+    slots = torch.full((2, rb), 0xAB, dtype=torch.uint8, device="cuda")
+    have = torch.full((2,), -1, dtype=torch.long, device="cuda")
+
+    seg_off, seg_len = 4, 5                   # words: write [4,9), leave the rest
+    ident = _addrs(host, [1, 2])
+    src = ident + seg_off * 8                 # read the matching slice of the source
+    _launch(slots, src, have, block=16, ident=ident,
+            dst_word_off=seg_off, n_words=seg_len)
+    torch.cuda.synchronize()
+
+    lo, hi = seg_off * 8, (seg_off + seg_len) * 8
+    for lane, e in enumerate((1, 2)):
+        assert (slots[lane, lo:hi] == 60 + e).all(), f"lane {lane} segment wrong"
+    assert (slots[:, :lo] == 0xAB).all(), "wrote before the segment"
+    assert (slots[:, hi:] == 0xAB).all(), "wrote past the segment"
+
+
+def test_identity_drives_the_skip_not_the_read_address():
+    """All segments of one expert must skip or copy together, so the skip test keys on
+    IDENTITY rather than the read address: with a segmented source those differ."""
+    rb = _align8(64)
+    host = _mk_store(4, rb, 70, pinned=True)
+    slots = torch.zeros(2, rb, dtype=torch.uint8, device="cuda")
+    ident = _addrs(host, [1, 2])
+    src = _addrs(host, [3, 3])                # a DIFFERENT but valid read address
+
+    _launch(slots, src, ident.clone(), block=16, ident=ident)   # have == ident -> skip
+    torch.cuda.synchronize()
+    assert (slots == 0).all(), "copied despite identity == have"
+
+    have = torch.full((2,), -1, dtype=torch.long, device="cuda")
+    _launch(slots, src, have, block=16, ident=ident)            # now it must copy
+    torch.cuda.synchronize()
+    assert (slots == 73).all(), "did not copy from the read address when identity differed"
+
+
+def test_traffic_refuses_when_counting_is_off():
+    """Disabled counters must RAISE, not report zeros.
+
+    `hot_d2d_bytes == 0` is a regression witness. If `traffic()` returned zeros
+    when counting was off, that assertion would pass while measuring nothing —
+    the counters would read perfect precisely because they were never
+    incremented. This is the arm on that failure mode.
+    """
+    pytest.importorskip("nf4_grouped")
+    from experts4bit_qlora import Experts4bit
+    from experts4bit_qlora.engines.pipelined import enable_pipelined_residency
+
+    torch.manual_seed(0)
+    E, H, inter, k = 8, 128, 64, 3
+    mod = Experts4bit.from_float(
+        gate_up_proj=torch.randn(E, 2 * inter, H).cuda(),
+        down_proj=torch.randn(E, H, inter).cuda(),
+        compute_dtype=torch.bfloat16, has_gate=True)
+    enable_pipelined_residency(mod, [torch.tensor([0, 1])], device="cuda", k_slots=k)
+    st = mod._pipelined
+
+    assert st.count_traffic is False, "traffic counting must default OFF"
+    with pytest.raises(RuntimeError, match="traffic counting is disabled"):
+        st.traffic()
+
+    st.count_traffic = True
+    hs = torch.randn(1, H, dtype=torch.bfloat16, device="cuda")
+    ti = torch.tensor([[2, 3, 6]], device="cuda")
+    tw = torch.full((1, k), 1.0 / k, dtype=torch.bfloat16, device="cuda")
+    with torch.no_grad():
+        mod(hs, ti, tw)
+    t = st.traffic()                       # now it reports
+    assert t["cold_pcie_bytes"] > 0, "enabled counters must see the cold misses"

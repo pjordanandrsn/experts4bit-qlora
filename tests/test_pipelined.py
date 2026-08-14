@@ -28,7 +28,7 @@ def _no_triton_interpreter():
 
 
 from experts4bit_qlora import Experts4bit  # noqa: E402
-from experts4bit_qlora.pipelined import (  # noqa: E402
+from experts4bit_qlora.engines.pipelined import (  # noqa: E402
     disable_pipelined_residency,
     enable_pipelined_residency,
     pipelined_available,
@@ -167,7 +167,7 @@ def test_training_falls_back():
 
 
 def test_mutual_exclusion_all_three_patches():
-    from experts4bit_qlora.fast import disable_fast, enable_fast
+    from experts4bit_qlora.engines.fast import disable_fast, enable_fast
     from experts4bit_qlora import disable_hot_residency, enable_hot_residency
 
     # pipelined active -> fast and v0 refuse
@@ -221,7 +221,7 @@ def test_reenable_refreshes_from_current_weights():
 
 
 def test_gptoss_epilogue_matches_reference():
-    from experts4bit_qlora.gptoss import GptOssExperts4bit
+    from experts4bit_qlora.arch.gptoss import GptOssExperts4bit
 
     torch.manual_seed(0)
     E, H, inter, k = 8, 128, 64, 4
@@ -288,6 +288,7 @@ def test_hot_experts_are_read_in_place_and_move_no_bytes():
     enable_pipelined_residency(mod, [torch.arange(8)], device="cuda", k_slots=3)
     try:
         st = mod._pipelined
+        st.count_traffic = True    # traffic() refuses when counting is off
         with torch.no_grad():
             got = mod(hs, ti, tw)
         t = st.traffic()
@@ -309,6 +310,7 @@ def test_mixed_split_gathers_only_the_cold_lanes():
     enable_pipelined_residency(mod, [torch.tensor(st_hot)], device="cuda", k_slots=3)
     try:
         st = mod._pipelined
+        st.count_traffic = True    # traffic() refuses when counting is off
         hs = torch.randn(1, 128, dtype=torch.bfloat16, device="cuda")
         # two hot (1, 3) and one cold (6); _prime seeded every slot with expert 0
         ti = torch.tensor([[1, 3, 6]], device="cuda")
@@ -335,7 +337,7 @@ def test_will_serve_is_the_single_source_of_truth():
     this pins the cases that must return False — a T=1 no-grad call is NOT sufficient.
     """
     import torch
-    from experts4bit_qlora.pipelined import _PipelinedResidency
+    from experts4bit_qlora.engines.pipelined import _PipelinedResidency
 
     class _Mod:
         compute_dtype = torch.bfloat16

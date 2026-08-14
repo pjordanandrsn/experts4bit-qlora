@@ -31,3 +31,27 @@ def test_help_exits_without_loading_a_model():
         assert "ENVIRONMENT VARIABLE" in r.stdout, f"{mod} --help printed no usage"
         # the tell-tale of the old behaviour: a real run logs the load line
         assert "streaming 4-bit loader" not in r.stdout, f"{mod} --help still loads a model"
+
+
+def test_changelog_documents_the_released_version():
+    """The shipped `__version__` must have its own CHANGELOG section.
+
+    0.14.0 and 0.15.0 both shipped with no entry — the changelog stopped at 0.13.0
+    and nothing complained, so the release notes silently described a two-versions-old
+    package. Unreleased work belongs under `## Unreleased`; bumping `__version__`
+    without giving it a section fails here instead of at publish time.
+    """
+    import pathlib
+    import experts4bit_qlora
+
+    v = experts4bit_qlora.__version__
+    text = (pathlib.Path(__file__).resolve().parents[1] / "CHANGELOG.md").read_text()
+    heads = [ln.strip() for ln in text.splitlines() if ln.startswith("## ")]
+    # Compare the version TOKEN, not a prefix: `startswith("## 0.15.0")` also accepts
+    # "## 0.15.0-notaversion", and a version of "0.1" would match "## 0.15.0".
+    versions = [h.split()[1] for h in heads if len(h.split()) > 1]
+    assert v in versions, (
+        f"__version__ is {v} but CHANGELOG.md has no '## {v}' section. Sections "
+        f"present: {versions[:5]}. Add the release notes, or keep in-flight work under "
+        f"'## Unreleased' until the version is bumped."
+    )

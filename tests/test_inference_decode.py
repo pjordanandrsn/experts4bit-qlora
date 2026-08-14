@@ -157,7 +157,7 @@ def test_infer_gemv_gate_negative_branches(monkeypatch):
 def test_infer_gemv_gate_allowed_under_offload_no_grad(monkeypatch):
     """The offload hazard is a backward construct; under no_grad the gate must NOT veto on
     ``_offload`` (this is the deliberate refinement of the old always-False-under-offload rule —
-    see the invariant note in :mod:`experts4bit_qlora.offload`)."""
+    see the invariant note in :mod:`experts4bit_qlora.engines.offload`)."""
     lora = _build()
     hs, _, _ = _decode_inputs()
     enable_expert_offload(lora, DEVICE, pin=False)

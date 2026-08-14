@@ -43,8 +43,8 @@ def _no_triton_interpreter():
 
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
-from experts4bit_qlora.hot_residency import target_modules, wrapped_bases  # noqa: E402
-from experts4bit_qlora.pipelined import (  # noqa: E402
+from experts4bit_qlora.engines.hot_residency import target_modules, wrapped_bases  # noqa: E402
+from experts4bit_qlora.engines.pipelined import (  # noqa: E402
     disable_pipelined_residency,
     enable_pipelined_residency,
 )
@@ -101,6 +101,7 @@ def test_zero_adapter_delegates_and_the_engine_actually_runs():
     assert _enable(mod) == 1
     try:
         st = mod.base._pipelined
+        st.count_traffic = True   # traffic() refuses when counting is off
         # The engine's own counters, before any forward through the wrapper. `_prime()`
         # populates the slots without touching them, so this is a true zero.
         assert st.traffic() == {"hot_d2d_bytes": 0, "cold_pcie_bytes": 0}
@@ -149,6 +150,10 @@ def test_trained_adapter_is_never_delegated_away():
         warnings.simplefilter("ignore")
         _enable(mod)
     try:
+        # BEFORE the forward. Counting is off by default, so enabling it afterwards
+        # would leave the counters at zero whether or not the engine ran — and zero
+        # is exactly what this assertion treats as proof that it did NOT run.
+        mod.base._pipelined.count_traffic = True
         with torch.no_grad():
             after = mod(hs, ti, tw).float().cpu()
         # The LoRA path still owns this forward: the delta lands pre-activation.
@@ -190,7 +195,7 @@ def test_v0_hot_residency_still_refuses_wrapped_bases():
     """`target_modules` now includes wrapped bases, but `_delegate_to_base` keys off
     `_e4b_fast_ref`/`_e4b_pipe_ref` and never looks for `_e4b_hot_ref`. The v0 engine
     must keep refusing rather than inherit a reachability it does not have."""
-    from experts4bit_qlora.hot_residency import enable_hot_residency
+    from experts4bit_qlora.engines.hot_residency import enable_hot_residency
     mod = _wrapped()
     with pytest.raises(NotImplementedError, match="enable_pipelined_residency"):
         enable_hot_residency(mod, [torch.tensor(HOT, dtype=torch.long)], device="cuda")
@@ -305,6 +310,12 @@ def test_loader_hot_sets_land_on_the_layer_target_modules_named(tmp_path):
         # The stamp itself, before any forward: cheapest and most direct.
         assert streamed._pipelined.hot_ids.numel() == 0
         assert resident._pipelined.hot_ids.tolist() == list(range(resident.num_experts))
+
+        # Opt in BEFORE the decode: counting is off by default, and enabling it
+        # afterwards would read honest zeros (nothing incremented them) as "the
+        # engine never ran" — the very thing this test is trying to detect.
+        streamed._pipelined.count_traffic = True
+        resident._pipelined.count_traffic = True
 
         _decode(model, cfg)
 

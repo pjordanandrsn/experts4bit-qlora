@@ -1,0 +1,15 @@
+{
+ "arm": "ARENA",
+ "vram": {
+  "card_gib": 23.6,
+  "capped_to_gib": null,
+  "note": "card is at or under the claim; no cap needed"
+ },
+ "usable_bytes_measured": 59997265920,
+ "row_stride": 13369344,
+ "hot_rows": 3072,
+ "arena_layers": 43,
+ "arena_experts": 256,
+ "load_seconds": 20.7,
+ "load_peak_gib": 10.63
+}

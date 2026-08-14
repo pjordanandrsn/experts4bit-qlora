@@ -1,6 +1,6 @@
 """Summarize expert-streaming profile JSONL: is the offload transfer wall hot-expert concentrated?
 
-Reads one or more profiles written by ``experts4bit_qlora.expert_profile`` and reports routing
+Reads one or more profiles written by ``experts4bit_qlora.engines.expert_profile`` and reports routing
 concentration, projected pinning budgets, and a build/don't-build decision against the
 pre-registered criterion. Prints observed-in-this-run; no universal claims.
 

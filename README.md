@@ -35,7 +35,7 @@ real sparse-MoE on reasonable hardware.
   it loads at **4.70 GB** and trains in <8 GB. The streaming loader never materializes the bf16
   model in CPU *or* GPU RAM (verified under a 3 GB container RAM cap).
 - **It trains.** QLoRA on the frozen NF4 experts improves a held-out Alpaca eval from
-  **1.4813 → 1.0290** (see [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/METHODOLOGY.md)).
+  **1.4813 → 1.0290** (see [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/METHODOLOGY.md)).
 - **It scales past VRAM (`OFFLOAD_EXPERTS=1`).** The frozen experts stream from pinned CPU RAM
   one layer at a time, so a fused-MoE whose 4-bit experts exceed the card can QLoRA-train on
   12 GB: **Qwen3-30B-A3B peaks at 7.16 GB, Gemma-4-26B-A4B at 8.47 GB** — both OOM *without*
@@ -50,7 +50,7 @@ real sparse-MoE on reasonable hardware.
 - **It dials.** Spare VRAM converts to decode speed continuously — the pipelined engine keeps K
   hot experts/layer resident and streams the cold tail, and picking those K from a routing
   histogram (not by index) bought **+57–120%** decode at *identical* VRAM on gpt-oss-20b
-  (receipts: [`bench/RESULTS-informed-hotsets.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/bench/RESULTS-informed-hotsets.md)).
+  (receipts: [`bench/RESULTS-informed-hotsets.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/bench/RESULTS-informed-hotsets.md)).
   K=0 streams everything; K=all is fully resident; the middle is yours to trade.
 - **It is faster and cooler — but be precise about which comparison.** *4-bit vs bf16 on a
   card that already fits the model* is a **1.2–2.3× energy penalty**: NF4 is storage-only, the
@@ -80,7 +80,7 @@ non-nf4/64 storage are skipped rather than mis-activated.
 ### Which door? Start from what does not fit
 
 Every mode exists because something ran out: VRAM, host RAM, or disk. Find your constraint,
-not your model. Reasoning, caveats and requirements for each: **[docs/CHOOSING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/CHOOSING.md)**.
+not your model. Reasoning, caveats and requirements for each: **[docs/CHOOSING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/CHOOSING.md)**.
 
 | what ran out | call | needs |
 |---|---|---|
@@ -88,13 +88,55 @@ not your model. Reasoning, caveats and requirements for each: **[docs/CHOOSING.m
 | each step is slow | `enable_fast_train(model, dgrad=True)` | `[fast]` ≥ 0.7.0 |
 | …and `[fast]` will not build | `enable_batched_train(model)` | — |
 | the experts do not fit VRAM | `load_moe_4bit_streaming(..., offload=True)` | — |
-| the experts do not fit host RAM | `enable_nvme_residency(...)` | `[fast]` + arena |
+| the experts do not fit host RAM, **serving** | `enable_nvme_residency(...)` | `[fast]` + arena |
 | ...and they are native MXFP4 | `enable_mxfp4_nvme_residency(...)` | `[fast]` + arena |
+| the experts do not fit host RAM, **training** | `enable_nvme_train_residency(...)` | `[fast]` + arena + grad ckpt |
 | the **dense** side does not fit | `enable_dense_offload(model, "cuda")` | — |
 | ...nor does it fit host RAM | `DenseDiskSource(path)` | — |
 | serving, want it faster | `enable_fast(model)` | `[fast]` |
 | serving, spare VRAM to trade | `enable_pipelined_residency(model, hot_sets, k_slots=k)` | `[fast]` |
 | small GPU, strong CPU | `enable_cold_engine(model, hot_sets, dequant="auto")` | — |
+
+**"Does not fit host RAM" is measured, not a slogan**, and **the saving grows with the
+model**. Four steps, one box, the cap descended until each arm stops completing
+([receipts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/bench/host-ram-ceiling/RESULTS-scaling.md)):
+
+| | expert bytes | host-RAM path | arena path | |
+|---|---|---|---|---|
+| OLMoE-1B-7B | 3.62 GB | 5.91–6.17 GB | 2.28–2.42 GB | **2.56×** |
+| Gemma-4-26B-A4B | 12.85 GB | 19.33–20.40 GB | 5.10–5.37 GB | **3.80×** |
+| Qwen3-30B-A3B | 16.31 GB | 24.70–25.77 GB | 3.89–4.03 GB | **6.40×** |
+
+At the cap in between — 8.59 GB — Qwen3-30B-A3B is **OOM-killed** on the host-RAM path and
+**trains to completion** on the arena. The host side tracks total expert bytes; the arena
+side tracks the **dense** model, so the ratio is expert bytes measured against that
+baseline rather than expert bytes alone — Gemma has fewer experts than Qwen3 and a larger
+arena requirement. Expect **~2.5–6.5×**, and measure your own.
+**What it costs in time.** Two architectures, paired protocol with a same-config control
+([receipts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/bench/host-ram-ceiling/RESULTS-timing.md)):
+
+| | RTX 3090 (Ampere) | L40S (Ada) |
+|---|---|---|
+| **load**, host → arena | **3.39× / 6.76×** faster | **3.12× / 5.87×** faster |
+| **step**, arena vs host | 1.33× / 1.24× slower | **2.25× / 1.71×** slower |
+
+You skip fusing and quantizing every expert at load, and you pay for it per step. **The
+load saving travels across architectures; the step cost does not — it is worse on faster
+cards**, because part of every arena step is an NVMe read and the disk does not care which
+GPU you bought. Quote the step cost with the card attached, or not at all.
+
+Size `hot_rows` from the formula in the docstring, not from another model's value — it has
+a hard floor at the experts one forward routes, and **that floor is enforced at attach as of
+0.18.0**: below `num_experts` the call is refused in the pre-flight, before the tier opens,
+rather than raising inside `ColdTier.ensure` many steps into a run. Sizing to the *typical*
+routed count is the trap it closes — measured on Qwen3-30B at seq 384, a forward routes a
+median of 63 unique experts but a **max of 97 of 128**, so a tier sized to the median
+survives most forwards and ends the run on one of them. Above that floor it is a **dial**: on
+Qwen3-30B, the floor (128) needs 3.89–4.03 GB and reads 14.4 GB/step, while holding every
+routed row (~3216) needs 11.81–12.88 GB and reads 2.65 GB/step — **5.4× less disk for 3.2×
+the RAM**, still 2× better than host-resident. Pick the end your constraint is on. And do not size any of this from peak RSS:
+it reads 43.69 GB for a host arm that trains under a 25.77 GB cap, because most of that
+peak is reclaimable page cache.
 
 ```python
 from experts4bit_qlora import enable_fast, enable_batched_train, enable_fast_train
@@ -112,7 +154,7 @@ per forward at 256 experts over 40 layers.
 
 Both replace that loop, and **the answer depends on scale** — a microbench and a real
 model rank them oppositely. Measured at both, one training step each
-([receipts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/bench/dgrad-gate/RESULTS-dgrad-gate.md)):
+([receipts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/bench/dgrad-gate/RESULTS-dgrad-gate.md)):
 
 | | A2000 microbench (hidden 512, E=256) | Qwen3-30B-A3B, 48 layers, A6000 |
 |---|---|---|
@@ -151,7 +193,7 @@ package it turns off with a warning rather than raising.
 > truth at 16 layers (2.95e-2 vs the reference's 3.41e-2). Divergence *between* lanes is
 > two valid bf16 roundings drifting apart, not one lane being looser. Loss trajectories
 > for every lane sit at ≤0.003 median |Δ|, far inside the 0.05 band the
-> [fused-train gate](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/bench/fused-train-gate/RESULTS-fused-train-gate.md)
+> [fused-train gate](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/bench/fused-train-gate/RESULTS-fused-train-gate.md)
 > registered.
 
 **Picking the hot sets is the single largest lever**, and by-index is not a choice:
@@ -160,7 +202,7 @@ DeepSeek-V4-Flash, where index-ordered was statistically indistinguishable from 
 streaming — 4.4 GiB spent for nothing, because an index-ordered set *is* a uniform random
 draw. `expert_profile` builds the histogram, `hot_sets_from_profile` ranks it. The size of
 the gain is a property of your **host** (+40% on a thin-link A2000, ~0% on a fat-PCIe L40S).
-Engines, selection and the host-regime laws: **[docs/RESIDENCY-ENGINES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/RESIDENCY-ENGINES.md)**.
+Engines, selection and the host-regime laws: **[docs/RESIDENCY-ENGINES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/RESIDENCY-ENGINES.md)**.
 
 ⚠️ Both host-RAM residency engines need **standalone** expert modules; `load_moe_4bit_streaming`
 always wraps in `ExpertsLoRA`, which `enable_pipelined_residency` refuses outright.
@@ -221,7 +263,7 @@ verify_moe_4bit(model, strict=True)   # optional: assert the fused experts are a
 `Qwen/Qwen3-30B-A3B` in `nf4` is ~20 GB resident — it **fits a 24 GB card** (e.g. L4/A5000) with no
 offload, ~4–5 tok/s decode. On a ≤12 GB card add `OFFLOAD_EXPERTS=1` (`offload=True`), which streams
 the frozen experts from pinned CPU RAM one layer at a time; sizes and grids are in the
-[support matrix](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/support_matrix.md).
+[support matrix](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/support_matrix.md).
 
 > **Troubleshooting — OOM loading in 4-bit?** If you used
 > `AutoModelForCausalLM.from_pretrained(..., quantization_config=BitsAndBytesConfig(load_in_4bit=True))`
@@ -233,7 +275,7 @@ the frozen experts from pinned CPU RAM one layer at a time; sizes and grids are 
 
 ## Storage modes: the support matrix
 
-Moved to **[docs/STORAGE-MODES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/STORAGE-MODES.md)** — The full storage-mode support matrix (ExpertsNbit vs Experts4bit, compatibility, known limitations, the headline-number reading, reproduction + validation grids).
+Moved to **[docs/STORAGE-MODES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/STORAGE-MODES.md)** — The full storage-mode support matrix (ExpertsNbit vs Experts4bit, compatibility, known limitations, the headline-number reading, reproduction + validation grids).
 
 ## Training + expert offload
 
@@ -255,7 +297,7 @@ the number of experts — on any released bitsandbytes, for every storage scheme
   including the gradient-checkpoint recompute path. Offloaded *training* requires gradient
   checkpointing (the shipped trainer always enables it); the unsupported non-checkpointed
   combination fails loudly rather than mis-training. Details in
-  [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/METHODOLOGY.md) §11.
+  [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/METHODOLOGY.md) §11.
 - **`enable_fast_train()` makes the offload path faster, not just smaller** — and this is
   where the throughput is. Both arms run `offload=True` + gradient checkpointing; the only
   difference is whether the differentiable grouped kernel is on. Across **two** 30B-class MoEs
@@ -275,7 +317,7 @@ Transfer diagnostics (default off): `E4B_OFFLOAD_STATS=1` prints per-layer H2D b
 stall/slack, and a one-shot PCIe-link + ceiling report; `E4B_OFFLOAD_ARENA=1` consolidates each
 layer's four expert tensors into two per-dtype copies. What they measured on the reference host —
 and why offload is PCIe-bound there — is in
-[`docs/OFFLOAD-TRANSFER-NOTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/OFFLOAD-TRANSFER-NOTES.md).
+[`docs/OFFLOAD-TRANSFER-NOTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/OFFLOAD-TRANSFER-NOTES.md).
 
 ## Scope
 
@@ -304,7 +346,7 @@ experts stored either **per-expert** or already-**fused** on disk:
   epilogue, and a **block-scaled FP8** dense half served by `fp8_blocks` at ~1 byte/param.
   Full V4-Flash (43 layers x 256 experts, 284B) loads in ~10 s at **8.74 GiB peak VRAM** and
   generates, with 147 GB of experts served from an on-disk arena. Trainable.
-  See [docs/DEEPSEEK-V4.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/DEEPSEEK-V4.md).
+  See [docs/DEEPSEEK-V4.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/DEEPSEEK-V4.md).
 
 The SwiGLU four are covered by `tests/test_loader_architectures.py`; gpt-oss by
 `tests/test_hot_residency_gptoss.py` and the bench receipts. Real Qwen3/Gemma weights (26–35B)
@@ -324,7 +366,7 @@ OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora.infer       # tim
 
 Inference mode adds a single-token decode fast-path, a fused 4-bit GEMV, and prefetched
 expert offload (layer `L+1` copies on a side stream while `L` computes). Mechanics, the
-kill-switches, and the shape-dependence analysis: **[docs/INFERENCE.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/INFERENCE.md)**.
+kill-switches, and the shape-dependence analysis: **[docs/INFERENCE.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/INFERENCE.md)**.
 
 | model | config | tok/s | peak GPU |
 |---|---|:---:|:---:|
@@ -341,27 +383,68 @@ result at OLMoE scale (3.65× over serial) while GEMV is neutral; at 26–30B sc
 from **+46% on Gemma-4** to **−8% on Qwen3-30B**. Measure your model; do not extrapolate
 across shapes. *(v0 offload-path figures — the pipelined engine supersedes them for decode.)*
 
+### CUDA-graph decode capture
+
+Decode issues ~89 kernel launches per layer-step; on OLMoE/3090 that was **288.8 ms of 562.4 ms**
+of host time across 45,501 launches. `capture_decode` replays the whole step as one graph:
+
+```python
+from experts4bit_qlora import capture_decode, probe_capture
+
+report = probe_capture(model, input_ids)          # does this model support it? measured, not assumed
+dec, first = capture_decode(model, input_ids, max_length=len(prompt) + 128)
+tok = first
+for _ in range(127):
+    tok = dec.step(tok)
+dec.reset(input_ids)                              # required between generations
+```
+
+**What it is worth, measured** (16 new tokens, greedy):
+
+| | speedup |
+|---|---|
+| 2-layer fixtures (qwen2_moe, qwen3_moe, granitemoe, hunyuan_v1_moe, glm4_moe, dots1, olmoe) | 4.4–5.6× |
+| OLMoE-1B-7B-0924-Instruct, 3090 | **1.11×** |
+| Qwen3-30B-A3B, A5000 | **1.04×** |
+
+The gain is inversely proportional to real GPU work per step — which is what a *fixed* per-step
+launch cost predicts. Take it for small models and for the zero-host-sync contract it enforces
+(capture throws on a sync inside the region, so a successful capture proves the contract holds).
+Do not expect it to matter at 30B.
+
+Two costs stated plainly. `StaticCache` is allocated to `max_length` **up front**, so a large
+`max_length` buys the fixed shape with memory. And `step()` is greedy argmax with no logits
+processors, no stopping criteria and no streamer — which is exactly why the HTTP server does
+**not** use it: `_generate_once` needs sampling, repetition penalty, stop signals and streaming,
+and reimplementing those on a captured step to gain ~4% would be a bad trade against the risk.
+
+`probe_capture` reports support rather than assuming it, and tells a bf16 argmax tie from a real
+defect by teacher-forcing the same tokens down both paths and comparing logits. Both real-weight
+models above replay **bit-identical** to eager. `qwen3_next` is not capturable — `StaticCache`
+does not cover LinearAttention layers.
+
 ## Serving over HTTP (Docker)
 
-Moved to **[docs/SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/SERVING.md)** — The FastAPI serving shim + Docker deployment (endpoints, env knobs, the localhost-by-default / E4B_TOKEN posture).
+Moved to **[docs/SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/SERVING.md)** — The FastAPI serving shim + Docker deployment (endpoints, env knobs, the localhost-by-default / E4B_TOKEN posture).
 
 ## Benchmarks
 
-Moved to **[docs/BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/BENCHMARKS.md)** — The benchmark scripts and how to run them (memory wall, tokens-per-joule, the upstream matmul_4bit comparison).
+Moved to **[docs/BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/BENCHMARKS.md)** — The benchmark scripts and how to run them (memory wall, tokens-per-joule, the upstream matmul_4bit comparison).
 
 ## Docs
 
 | | |
 |---|---|
-| [CHOOSING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/CHOOSING.md) | which mode to use, and why — the long form of the table above |
-| [METHODOLOGY.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/METHODOLOGY.md) | hosts, protocols, every measurement's provenance |
-| [STORAGE-MODES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/STORAGE-MODES.md) | the nf4/fp4/int8/fp8/bf16/fp16 support matrix |
-| [RESIDENCY-ENGINES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/RESIDENCY-ENGINES.md) | the four engines, hot-set selection, host-regime laws |
-| [INFERENCE.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/INFERENCE.md) | decode fast-paths, grids, shape-dependence |
-| [DEEPSEEK-V4.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/DEEPSEEK-V4.md) | V4's storage split, epilogue, arena bake, key mapping |
-| [SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/SERVING.md) | the FastAPI shim and Docker deployment |
-| [BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/BENCHMARKS.md) | the benchmark scripts and how to run them |
-| [BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/BITSANDBYTES.md) | relationship to bitsandbytes, prior art |
+| [CHOOSING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/CHOOSING.md) | which mode to use, and why — the long form of the table above |
+| [METHODOLOGY.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/METHODOLOGY.md) | hosts, protocols, every measurement's provenance |
+| [STORAGE-MODES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/STORAGE-MODES.md) | the nf4/fp4/int8/fp8/bf16/fp16 support matrix |
+| [RESIDENCY-ENGINES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/RESIDENCY-ENGINES.md) | the four engines, hot-set selection, host-regime laws |
+| [INFERENCE.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/INFERENCE.md) | decode fast-paths, grids, shape-dependence |
+| [DEEPSEEK-V4.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/DEEPSEEK-V4.md) | V4's storage split, epilogue, arena bake, key mapping |
+| [SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/SERVING.md) | the FastAPI shim and Docker deployment |
+| [BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/BENCHMARKS.md) | the benchmark scripts and how to run them |
+| [BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/BITSANDBYTES.md) | relationship to bitsandbytes, prior art |
+- **[docs/ARCHITECTURE_SUPPORT.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/ARCHITECTURE_SUPPORT.md)** — which architectures load, run and capture, with the evidence bundle and the fixture-vs-real-checkpoint caveat.
 
 ## The package family — how the pieces fit
 
@@ -388,24 +471,24 @@ where, streamed when, trained with what adapters).
 
 ## Relationship to bitsandbytes
 
-Moved to **[docs/BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/docs/BITSANDBYTES.md)** — How ExpertsNbit/Experts4bit relate to bitsandbytes #1965, the vendored-copy shim, and the prior-art credits.
+Moved to **[docs/BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/docs/BITSANDBYTES.md)** — How ExpertsNbit/Experts4bit relate to bitsandbytes #1965, the vendored-copy shim, and the prior-art credits.
 
 ## Provenance & audits
 
 Every measured number above traces to a committed script/test and a named host, with receipts
-under [`bench/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.12.0/bench) and
-[`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.12.0/docs) — cited inline at
-each claim. **Scope note (2026-07-28):** [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/PROVENANCE.md)
+under [`bench/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.19.1/bench) and
+[`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.19.1/docs) — cited inline at
+each claim. **Scope note (2026-07-28):** [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/PROVENANCE.md)
 is the OpenTimestamps-anchored record for the **v0.2.0** convergence result specifically; the
 0.5.0–0.6.3 additions (fused kernel, hot-set residency, gpt-oss, storage modes) are receipted in
 `bench/` and `docs/`, not in that file. It is OpenTimestamps-anchored: `ots verify
 PROVENANCE.md.ots PROVENANCE.md` checks the on-disk bytes against the calendar proof, the footer
 carries the hash-chain of prior revisions, and superseded proofs are retained in
-[`.ots-history/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.12.0/.ots-history/). Falsification work lives under [`audits/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.12.0/audits/) — most
+[`.ots-history/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.19.1/.ots-history/). Falsification work lives under [`audits/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.19.1/audits/) — most
 recently the audit of unsloth-zoo's MoE-4bit fix that produced unsloth-zoo#849/#850
-([`audits/unsloth-zoo-4032/REPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/audits/unsloth-zoo-4032/REPORT.md)).
+([`audits/unsloth-zoo-4032/REPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/audits/unsloth-zoo-4032/REPORT.md)).
 
 ## License
 
-MIT (see [LICENSE](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.12.0/LICENSE)). `experts4bit_qlora/_vendor/experts.py` is vendored from
+MIT (see [LICENSE](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.19.1/LICENSE)). `experts4bit_qlora/_vendor/experts.py` is vendored from
 bitsandbytes (also MIT) pending upstream merge.

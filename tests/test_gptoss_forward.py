@@ -25,8 +25,8 @@ except Exception:
 @pytest.mark.parametrize("quant_type,max_rel_l2", [("bf16", 0.02), ("nf4", 0.12)])
 def test_forward_parity_real_bytes(quant_type, max_rel_l2):
     from safetensors import safe_open
-    from experts4bit_qlora.mxfp4 import dequantize_mxfp4
-    from experts4bit_qlora.gptoss import GptOssExperts4bit
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+    from experts4bit_qlora.arch.gptoss import GptOssExperts4bit
 
     torch.manual_seed(0)
     with safe_open(_SHARD[0], framework="pt") as f:

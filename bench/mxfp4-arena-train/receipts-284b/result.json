@@ -1,0 +1,119 @@
+{
+ "status": "ARENA_FAILED",
+ "note": "arena arm exit 1 (see arm_arena.json / stage_arena_crash.json)",
+ "arena_progress": {
+  "arm": "ARENA",
+  "vram": {
+   "card_gib": 23.6,
+   "capped_to_gib": null,
+   "note": "card is at or under the claim; no cap needed"
+  },
+  "capacity_for_bytes": "unavailable (capacity_for_bytes() missing 1 required positional argument: 'row_stride'); fell back to 4000",
+  "row_stride": 13369344,
+  "hot_rows": 4000,
+  "arena_layers": 43,
+  "arena_experts": 256
+ },
+ "arm_stock": {
+  "arm": "STOCK",
+  "started": 1786687576.3524694,
+  "outcome": "FAILED",
+  "error_type": "OutOfMemoryError",
+  "error": "CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 2.38 MiB is free. Including non-PyTorch memory, this process has 23.55 GiB memory in use. Of the allocated memory 20.74 GiB is allocated by PyTorch, and 2.51 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 124, in stage_stock\n    AutoModelForCausalLM.from_pretrained(\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/auto/auto_factory.py\", line 402, in from_pretrained\n    return model_class.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4348, in from_pretrained\n    loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)\n                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4482, in _load_pretrained_model\n    loading_info, disk_offload_index = convert_and_load_state_dict_in_model(\n                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1714, in convert_and_load_state_dict_in_model\n    realized_value = mapping.convert(\n                     ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1166, in convert\n    collected_tensors = self.materialize_tensors()\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 956, in materialize_tensors\n    tensors = [future.result() for future in tensors if future.result() is not None]\n                                                        ^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 449, in result\n    return self.__get_result()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 401, in __get_result\n    raise self._exception\n  File \"/usr/lib/python3.12/concurrent/futures/thread.py\", line 59, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1243, in _job\n    return _materialize_copy(tensor, device, dtype)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1221, in _materialize_copy\n    tensor = tensor.to(device=device, dtype=dtype)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 2.38 MiB is free. Including non-PyTorch memory, this process has 23.55 GiB memory in use. Of the allocated memory 20.74 GiB is allocated by PyTorch, and 2.51 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n",
+  "failed_on_memory": true
+ },
+ "bake": {
+  "seconds": 76.8,
+  "n_layers": 43,
+  "n_experts_per_layer": 256,
+  "row_stride": 13369344,
+  "segments": [
+   "w1.weight",
+   "w3.weight",
+   "w1.scale",
+   "w3.scale",
+   "w2.weight",
+   "w2.scale"
+  ],
+  "manifest_keys": [
+   "align",
+   "arena_bytes",
+   "bake_mode",
+   "magic",
+   "moe_layers",
+   "n_experts_per_layer",
+   "n_layers",
+   "prefix",
+   "row_bytes",
+   "row_stride",
+   "rows",
+   "segments"
+  ]
+ },
+ "env": {
+  "torch": "2.8.0+cu128",
+  "cuda": true,
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "vram_gib": 23.6,
+  "triton": "3.4.0",
+  "experts4bit-qlora": "0.18.0",
+  "grouped-nf4-gemm": "0.11.0",
+  "transformers": "5.15.0"
+ },
+ "gates_pre": {
+  "e4b_version": "0.18.0",
+  "gnf4_mxfp4_grouped": true,
+  "V4_RESIDENCY_KINDS": [
+   "w1.weight",
+   "w3.weight",
+   "w1.scale",
+   "w3.scale",
+   "w2.weight",
+   "w2.scale"
+  ],
+  "overlay_mxfp4_forward": true,
+  "overlay_mxfp4_dequant": true,
+  "overlay_fused_lane": true,
+  "overlay_arena_view": true,
+  "overlay_fast_refusal": true,
+  "overlay_fast_refusal_reason": "storage is MXFP4 (arena), which the NF4 grouped kernel cannot read \u2014 the MXFP4 forward is wired by nvme_experts and needs no patch here",
+  "overlay_gemv_bail": true,
+  "G2": true
+ },
+ "overlay_provenance": {
+  "e4b_version": "0.18.0",
+  "site_packages": "/usr/local/lib/python3.12/dist-packages",
+  "files": [
+   {
+    "path": "experts4bit_qlora/lora.py",
+    "stock_sha256": "20ba66c870f7b96657a0b99bb0e512e3f076afc953531f5116525369010b8381",
+    "overlay_sha256": "46a6feebd2509498eea1bf1a0835ec28b26231d50e13e2b3035de13a22062a0f",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/lora.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/engines/fast.py",
+    "stock_sha256": "f3152e1f478fed7f0dfe2183059c590ef4806701883d6ef206c47bf2cab8b0ef",
+    "overlay_sha256": "cb00339e513fc0cfd1d215b5c0ce990957f3adfd6bad56c5ac7fbbefba3faae7",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/fast.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/engines/nvme_train.py",
+    "stock_sha256": "9c30eb00b8a2e0ab60788ce1e1a853e0b28ef8cbb3fa911cfddb93aa1edc4170",
+    "overlay_sha256": "e369209d81732ba1260544e9bfc4a1fefffbc3b3cb923405ffe2a1f5b173701a",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_train.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/engines/nvme_experts.py",
+    "stock_sha256": "b9a5c7a3f79d84616a150b87460e88aab2069ba6e5ca001fc0e5a0632070f4e7",
+    "overlay_sha256": "195ae9b76f1dd94dd1b7b095942ed964e7f5012f1bbef11ae0bb2ff2b4da573e",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_experts.py.stock"
+   }
+  ],
+  "overlay_applied": true
+ },
+ "stage_arena_crash": {
+  "stage": "arena",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 266, in <module>\n    {\"gates\": stage_gates, \"stock\": stage_stock, \"arena\": stage_arena}[stage]()\n  File \"/root/v4/v4_run.py\", line 166, in stage_arena\n    model, cfg = load_moe_4bit_streaming(\n                 ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/loader.py\", line 431, in load_moe_4bit_streaming\n    else snapshot_download(\n         ^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_validators.py\", line 88, in _inner_fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/_snapshot_download.py\", line 522, in snapshot_download\n    hf_thread_map(\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/tqdm.py\", line 441, in hf_thread_map\n    results[future_to_index[future]] = future.result()\n                                       ^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 449, in result\n    return self.__get_result()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 401, in __get_result\n    raise self._exception\n  File \"/usr/lib/python3.12/concurrent/futures/thread.py\", line 59, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/_snapshot_download.py\", line 502, in _inner_hf_hub_download\n    hf_hub_download(  # type: ignore\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_validators.py\", line 88, in _inner_fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py\", line 1019, in hf_hub_download\n    return _hf_hub_download_to_cache_dir(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py\", line 1242, in _hf_hub_download_to_cache_dir\n    _download_to_tmp_and_move(\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py\", line 1960, in _download_to_tmp_and_move\n    xet_get(\n  File \"/usr/local/lib/python3.12/dist-packages/huggingface_hub/file_download.py\", line 565, in xet_get\n    with session.new_file_download_group(\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: Task error: File reconstruction error: Internal Writer Error: Background writer channel closed\n"
+ }
+}

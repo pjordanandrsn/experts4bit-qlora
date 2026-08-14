@@ -18,7 +18,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.deepseek_v4 import (  # noqa: E402
+from experts4bit_qlora.arch.deepseek_v4 import (  # noqa: E402
     DEEPSEEK_V4_RENAMES,
     rename_checkpoint_key,
 )

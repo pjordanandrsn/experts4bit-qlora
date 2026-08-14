@@ -15,7 +15,7 @@ from experts4bit_qlora import enable_hot_residency, disable_hot_residency  # noq
 def _make_gptoss(E=8, H=128, inter=64, k=3, tokens=24, seed=0):
     """Synthetic gpt-oss expert stack via from_gptoss (interleaved input-major
     dense + biases + alpha/limit), quantized to NF4. Returns (mod, x, idx, w)."""
-    from experts4bit_qlora.gptoss import GptOssExperts4bit
+    from experts4bit_qlora.arch.gptoss import GptOssExperts4bit
     g = torch.Generator().manual_seed(seed)
     gate_up = torch.randn(E, H, 2 * inter, generator=g) * 0.1   # [E, hidden, 2I] interleaved
     gate_up_bias = torch.randn(E, 2 * inter, generator=g) * 0.05
