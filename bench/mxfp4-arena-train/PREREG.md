@@ -230,3 +230,75 @@ before.
 **Everything else stands**: P1–P4 as written, G1/G3/G4, and the stop rules. A
 refusal, an OOM or a wedge is the result. Hard cap $35. The pre-amendment-3 stamp
 is preserved as `PREREG.md.pre-amendment3.ots`.
+
+---
+
+## Amendment 4 (2026-08-14, pre-data — a registered batch size, because there wasn't one)
+
+The attempt under amendment 3 reached a real training step. G1 patched **43**
+modules, **G4 held** (43/43 MXFP4-flagged, 43/43 on the MXFP4 dequantize
+override, `enable_fast_train` returned 0), the model loaded in 23.9 s at 10.63
+GiB, and the step then **exceeded the 24 GiB cap inside `_epilogue`** on a
+44.39 GiB card that still had 19.75 GiB free.
+
+**That is not yet a verdict on P2, and the reason is a hole in this prereg: no
+batch size was ever registered.** The 8×64 shape was picked in the harness, not
+here. "It exceeded 24 GiB at a shape I chose after the fact" is not a measurement
+of the claim; it is a measurement of my harness. This amendment closes that hole
+before any more data is taken.
+
+### The registered ladder
+
+Run **ascending**, every rung, **each as its own process** — so an OOM at one rung
+costs that rung's receipt and not the ones already measured. The deliverable is
+the **curve**, not the first cell that fits.
+
+| rung | tokens × seqlen | total tokens | role |
+|---|---|---|---|
+| 1 | 1 × 128 | 128 | **PRIMARY** |
+| 2 | 1 × 256 | 256 | |
+| 3 | 2 × 256 | 512 | |
+| 4 | 4 × 256 | 1024 | |
+| 5 | 8 × 64 | 512 | reproduces the shape that exceeded the cap under amendment 3 |
+
+Rung 5 is kept deliberately: it lets the previous observation be reproduced
+**within this run** rather than compared across pods.
+
+**Why 1×128 is the primary, stated plainly:** it is the smallest configuration
+that is still a genuine QLoRA training step, and it is chosen precisely *because*
+a larger shape already exceeded the cap. Picking it after seeing that failure is
+exactly the move that needs declaring rather than hiding, so it is declared. The
+claim it can support is correspondingly narrow.
+
+### P2 restated for this ladder
+
+- **P2a (primary).** At rung 1, peak VRAM **< 24 GiB**. This is the claim
+  "trains on a single 24 GB card" reduced to the shape actually registered.
+- **P2b (the curve).** Peak is reported for every rung that completes, and the
+  **largest rung that fits in 24 GiB is the headline number** — including the
+  case where that is *no rung at all*, which refutes the enablement claim and is
+  written up as such.
+- P2's original 4–8 GB band was about the **staged expert stacks**, not total
+  peak, and the run now reports both so the two are not conflated.
+
+**No prediction is offered on where the ladder breaks.** Naming a rung now would
+be a guess dressed as a hypothesis.
+
+### Also fixed, and not under test
+
+`hot_rows` sizing was wrong twice in the last attempt and both are corrected here:
+
+- **cgroup v2 counts page cache in `memory.current`**, so straight after the
+  138 GiB bake the naive `memory.max − memory.current` read **18.3 MB**. The
+  reclaimable `file` field from `memory.stat` is now subtracted before calling the
+  remainder free, and the raw figures go in the receipt.
+- The floor omitted the `min(…, num_experts)` clamp the tier's own docstring
+  specifies, so it asked for `512 × 6 = 3072` rows where only **256** experts
+  exist per layer — **38.2 GiB** of pinned DRAM instead of 3.2 GiB. Clamped now,
+  and a floor that exceeds measured capacity **refuses** instead of silently
+  taking the floor.
+
+Neither touched VRAM, so neither caused the observed OOM; they are recorded
+because the previous receipt's `hot_rows` must not be read as a measured capacity.
+
+The pre-amendment-4 stamp is preserved as `PREREG.md.pre-amendment4.ots`.

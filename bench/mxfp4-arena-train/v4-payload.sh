@@ -154,10 +154,23 @@ say "bake took $(( $(date +%s) - T0 ))s; arena $(du -sh /root/v4.arena 2>/dev/nu
 # -------------------------------------------------------------------- arms
 # ARENA first. It is the claim; STOCK is its control, and a control that eats the
 # clock before the claim is measured is the wrong order.
-say "=== ARM: ARENA ==="
-"$PY" v4_run.py arena > arena.log 2>&1
-ARENA_RC=$?
-tail -30 arena.log
+# The REGISTERED batch ladder (amendment 4). Ascending, each rung its own
+# process, every rung run whether or not the previous one fit -- the deliverable
+# is the CURVE, not the first green cell. The primary configuration is rung 1.
+# 8x64 is the shape that exceeded the cap last time and is kept so the previous
+# observation is reproduced in the same run rather than compared across pods.
+say "=== ARM: ARENA (registered batch ladder) ==="
+ARENA_RC=1
+for RUNG in "1 128" "1 256" "2 256" "4 256" "8 64"; do
+  set -- $RUNG
+  say "  rung: tokens=$1 seqlen=$2 (total $(( $1 * $2 )) tokens)"
+  "$PY" v4_run.py arena "$1" "$2" 3 > "arena_t$1_s$2.log" 2>&1
+  RC=$?
+  tail -4 "arena_t$1_s$2.log"
+  say "  rung tokens=$1 seqlen=$2 -> exit $RC"
+  # rung 1 is the primary: its exit status is the arm's
+  [ "$1 $2" = "1 128" ] && ARENA_RC=$RC
+done
 
 say "=== ARM: STOCK (run, not asserted) ==="
 "$PY" v4_run.py stock > stock.log 2>&1

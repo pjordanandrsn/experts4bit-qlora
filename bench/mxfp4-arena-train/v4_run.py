@@ -142,14 +142,17 @@ def stage_stock():
 
 
 # --------------------------------------------------------------------- ARENA
-def stage_arena(steps=4, tokens=8, seqlen=64):
+def stage_arena(steps=3, tokens=1, seqlen=256):
+    tag = f"t{tokens}_s{seqlen}"
     from experts4bit_qlora import load_moe_4bit_streaming
     from experts4bit_qlora.engines.fast import enable_fast_train
     from experts4bit_qlora.engines.nvme_train import enable_nvme_train_residency
     from experts4bit_qlora.lora import ExpertsLoRA
     import nvme_residency
 
-    rec = {"arm": "ARENA", "vram": cap_vram()}
+    rec = {"arm": "ARENA", "tokens": tokens, "seqlen": seqlen,
+           "total_tokens": tokens * seqlen, "steps": steps,
+           "vram": cap_vram()}
     torch.cuda.reset_peak_memory_stats()
 
     # hot_rows from MEASURED capacity, never a declared figure.
@@ -160,16 +163,35 @@ def stage_arena(steps=4, tokens=8, seqlen=64):
     # memory on a pod (256 cores and 1 TB were visible where the real limits were
     # 27.2 CPUs and 125 GB). A hot_rows sized off the host figure would OOM
     # partway through the first step.
+    #
+    # PAGE CACHE IS NOT IN USE. cgroup v2 counts it in `memory.current`, so the
+    # naive `memory.max - memory.current` read **18.3 MB** right after the 138 GiB
+    # arena bake had filled the cache -- capacity_for_bytes then returned ~nothing
+    # and hot_rows fell through to an unvalidated floor. `memory.stat`'s `file`
+    # field is that reclaimable cache; subtract it before calling the remainder
+    # free.
+    mem = {}
     usable = None
     try:
         lim = open("/sys/fs/cgroup/memory.max").read().strip()
         cur = int(open("/sys/fs/cgroup/memory.current").read().strip())
+        stat = {}
+        for line in open("/sys/fs/cgroup/memory.stat"):
+            k, _, v = line.partition(" ")
+            stat[k] = int(v)
+        cache = stat.get("file", 0)                   # reclaimable page cache
+        mem = {"limit": None if lim == "max" else int(lim), "current": cur,
+               "file_cache": cache, "in_use": cur - cache}
         if lim != "max":
-            usable = int((int(lim) - cur) * 0.6)      # leave headroom for the run itself
-    except Exception:
-        pass
-    if usable is None:
+            usable = int((int(lim) - (cur - cache)) * 0.6)   # headroom for the run
+    except Exception as exc:
+        mem = {"error": str(exc)}
+    # A sane floor: if the cgroup read produced something implausible, say so in
+    # the receipt rather than sizing a 38 GiB pinned arena off it silently.
+    if usable is None or usable < int(2e9):
+        mem["rejected"] = f"cgroup usable={usable}; falling back to 24 GB"
         usable = int(24e9)
+    rec["host_mem"] = mem
     try:
         # capacity_for_bytes(usable_bytes, row_stride, *, pinned=True) -- TWO
         # positionals. Calling it with one raised, and the fallback silently
@@ -179,11 +201,27 @@ def stage_arena(steps=4, tokens=8, seqlen=64):
         rows = max(1, int(usable // (stride * 2)))
         rec["capacity_for_bytes"] = f"unavailable ({exc}); computed {rows} directly"
     # Hard floor: at least the distinct cold experts one forward can want.
-    hot_rows = max(int(tokens * seqlen * 6), min(rows, 20000))
+    # The FLOOR is a correctness requirement (every distinct cold expert one
+    # forward routes must fit), the capacity is a resource limit. If the floor
+    # exceeds capacity that is a refusal, not a max() -- silently taking the
+    # floor is how 38.2 GiB of pinned DRAM got requested off an 18 MB reading.
+    floor = min(int(tokens * seqlen * 6), int(index["n_experts_per_layer"]))
+    cap = min(rows, 20000)
+    if floor > cap:
+        rec.update(hot_rows_floor=floor, hot_rows_capacity=cap,
+                   outcome="HOT_ROWS_UNSATISFIABLE")
+        emit(f"arm_arena_{tag}.json", rec)
+        raise SystemExit(
+            f"hot_rows floor {floor} exceeds measured capacity {cap}: this host "
+            "cannot hold the rows one forward needs, and taking the floor anyway "
+            "would pin more DRAM than exists")
+    hot_rows = max(floor, cap)
     rec["usable_bytes_measured"] = usable
+    rec["hot_rows_floor"] = floor
+    rec["hot_rows_capacity"] = cap
     rec.update(row_stride=stride, hot_rows=hot_rows,
                arena_layers=index["n_layers"], arena_experts=index["n_experts_per_layer"])
-    emit("arena_progress.json", rec)
+    emit(f"progress_{tag}.json", rec)
 
     t0 = time.time()
     # CKPT, not MODEL_ID. The loader does
@@ -196,7 +234,7 @@ def stage_arena(steps=4, tokens=8, seqlen=64):
         arena=ARENA, arena_train=True, trust_remote_code=True)
     rec["load_seconds"] = round(time.time() - t0, 1)
     rec["load_peak_gib"] = round(torch.cuda.max_memory_allocated() / 2**30, 2)
-    emit("arena_progress.json", rec)
+    emit(f"progress_{tag}.json", rec)
 
     n = enable_nvme_train_residency(model, ARENA, hot_rows=hot_rows)
     rec["G1_modules_patched"] = n
@@ -215,7 +253,7 @@ def stage_arena(steps=4, tokens=8, seqlen=64):
     rec.update(G4_expertslora_modules=len(bases), G4_mxfp4_flagged=flagged,
                G4_mxfp4_dequant_override=overridden, G4_enable_fast_train_returned=fast_n)
     rec["G4"] = bool(bases) and flagged == len(bases) and overridden == len(bases) and fast_n == 0
-    emit("arena_progress.json", rec)
+    emit(f"progress_{tag}.json", rec)
     if not rec["G4"]:
         emit("arm_arena.json", rec | {"outcome": "G4_FAILED"})
         raise SystemExit("G4 FAILED: the arm is not on the lane it claims")
@@ -269,7 +307,7 @@ def stage_arena(steps=4, tokens=8, seqlen=64):
         losses.append(float(loss.detach()))
         rec.update(losses=losses, step_seconds=step_s,
                    peak_gib=round(torch.cuda.max_memory_allocated() / 2**30, 2))
-        emit("arena_progress.json", rec)
+        emit(f"progress_{tag}.json", rec)
 
     after = frozen_digest()
     rec["P3_frozen_bytes_unchanged"] = before == after
@@ -284,17 +322,26 @@ def stage_arena(steps=4, tokens=8, seqlen=64):
         all(map(lambda x: x == x and abs(x) != float("inf"), losses))
         and len(set(losses)) > 1)
     rec["outcome"] = "TRAINED"
-    emit("arm_arena.json", rec)
+    emit(f"arm_arena_{tag}.json", rec)
     return rec
 
 
 if __name__ == "__main__":
     stage = sys.argv[1]
+    # `arena` takes the REGISTERED shape on argv so each rung of the batch ladder
+    # runs as its OWN process: an OOM at one rung then loses that rung's receipt
+    # only, not every rung measured before it.
+    kw = {}
+    if stage == "arena" and len(sys.argv) >= 4:
+        kw = {"tokens": int(sys.argv[2]), "seqlen": int(sys.argv[3])}
+        if len(sys.argv) >= 5:
+            kw["steps"] = int(sys.argv[4])
     try:
-        {"gates": stage_gates, "stock": stage_stock, "arena": stage_arena}[stage]()
+        {"gates": stage_gates, "stock": stage_stock,
+         "arena": stage_arena}[stage](**kw)
     except SystemExit:
         raise
     except BaseException:
-        emit(f"stage_{stage}_crash.json",
+        emit(f"stage_{stage}_{kw.get('tokens', 0)}x{kw.get('seqlen', 0)}_crash.json",
              {"stage": stage, "traceback": traceback.format_exc()[-8000:]})
         raise
