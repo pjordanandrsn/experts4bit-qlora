@@ -192,7 +192,10 @@ def _staged_v4(tmp_path, device="cpu"):
 
 
 def _rel_err(got, want):
-    got, want = got.float(), want.float()
+    # detach first: a metric has no business holding a graph, and without it
+    # measuring a training-path output warns about converting a requires_grad
+    # tensor to a scalar — noise that makes a real warning easy to miss.
+    got, want = got.detach().float(), want.detach().float()
     return float((got - want).abs().max() / want.abs().max().clamp_min(1e-6))
 
 
@@ -349,6 +352,135 @@ def test_the_fixture_would_catch_a_plain_swiglu_over_the_clamped_base(tmp_path):
         f"a plain (unclamped) SwiGLU oracle is only {err:.3e} away from the module — "
         "this fixture cannot distinguish the epilogues, so the parity test above "
         "proves nothing about `_apply_gate`")
+
+
+def _trained_lora(mod, seed=5):
+    """An `ExpertsLoRA` over `mod` whose adapter is NOT the initial one.
+
+    `B` is zero-initialised, so a fresh adapter's delta is identically zero and
+    every assertion about it would pass against a base-only forward. Worse for a
+    gradient test: `dL/dA` is proportional to `B`, so at `B = 0` the `A`
+    gradients are exactly zero and "no gradient reached A" is indistinguishable
+    from a broken graph. Randomise `B` first, then both claims have teeth.
+    """
+    from experts4bit_qlora.lora import ExpertsLoRA
+
+    g = torch.Generator().manual_seed(seed)
+    lora = ExpertsLoRA(mod, r=4, alpha=8)
+    with torch.no_grad():
+        for p in (lora.gate_up_lora_B, lora.down_lora_B):
+            p.copy_(torch.randn(p.shape, generator=g) * 0.05)
+    # `param.data`-style mutation is exactly the case `_adapter_is_zero`'s cache
+    # tells callers to invalidate by hand; a stale True would serve the base.
+    lora._delegate_ok = None
+    return lora
+
+
+def _oracle_forward_lora(gu, dn, lora, x, idx, w, *, with_delta=True):
+    """`ExpertsLoRA.forward`'s computation, written out against dense weights.
+
+    Mirrors THAT forward, not `_DeepseekV4ForwardMixin.forward`: the wrapper
+    applies the router weight AFTER the down projection and reaches the clamps
+    through `_epilogue`. The low-rank term is added to the SAME pre-activation
+    tensor, which is the only place it is correct — `act(Wx + BAx) != act(Wx) + d`
+    for any cheap `d`, and that is the whole reason this adapter re-implements the
+    expert math instead of calling the base.
+
+    `with_delta=False` computes the SAME arithmetic in the SAME order with the
+    low-rank term omitted. That is the control the parity assertion needs: a
+    base-only oracle written the other way round (V4's ordering) differs from this
+    forward by bf16 rounding alone, which is enough to satisfy a naive "the
+    adapter changed something" check and is NOT evidence the adapter ran.
+    """
+    import torch.nn.functional as F
+
+    from experts4bit_qlora.lora import _epilogue
+
+    def delta(v, A, B):
+        if not with_delta:
+            return torch.zeros((), dtype=v.dtype, device=v.device)
+        return (lora.scaling * F.linear(F.linear(v.to(A.dtype), A), B)).to(v.dtype)
+
+    out = torch.zeros(x.shape[0], H, dtype=torch.float32, device=x.device)
+    mask = F.one_hot(idx, num_classes=E).permute(2, 1, 0)
+    for e in range(E):
+        pos, tok = torch.where(mask[e])
+        if tok.numel() == 0:
+            continue
+        xe = x[tok]
+        proj = xe @ gu[e] + delta(xe, lora.gate_up_lora_A[e], lora.gate_up_lora_B[e])
+        h = _epilogue(lora.base, proj)
+        down = h @ dn[e] + delta(h, lora.down_lora_A[e], lora.down_lora_B[e])
+        out.index_add_(0, tok, (down * w[tok, pos, None]).float())
+    return out.to(x.dtype)
+
+
+def test_expertslora_over_an_mxfp4_arena_matches_the_oracle(tmp_path):
+    """The TRAINING composition, which the frozen-forward tests do not cover.
+
+    Everything above grades the frozen base. This grades the module the model
+    actually calls: `ExpertsLoRA` never invokes `base.forward`, it re-implements
+    the expert math so the low-rank delta lands before the nonlinearity — so it
+    reaches the MXFP4 bytes through `_base_project` -> `base._project` ->
+    `_dequantize_expert`, a path no test here had exercised.
+
+    Graded as a RATIO, not an absolute error, and that is not fussiness. The first
+    version of this test asserted `rel_max_err < 2e-2` against the with-delta
+    oracle and **passed with the low-rank term deleted entirely** — caught by
+    mutating `_lora` to return zeros. `_rel_err` normalises by the max, and this
+    fixture's e8m0 exponents span 2**-8..2**7, so the base output's heavy tail
+    sets the denominator and a real adapter delta disappears into it. The ratio
+    is scale-free: whatever the magnitudes, the module must land far closer to the
+    oracle that HAS the delta than to the one that does not.
+    """
+    x, idx, w = _routing()
+    lora = _trained_lora(_staged_v4(tmp_path))
+    gu, dn = _dense_from_source()
+
+    got = lora(x, idx, w)
+    want = _oracle_forward_lora(gu, dn, lora, x, idx, w)
+    without = _oracle_forward_lora(gu, dn, lora, x, idx, w, with_delta=False)
+
+    err_with = _rel_err(got, want)
+    err_without = _rel_err(got, without)
+    assert err_with < 2e-2, (
+        f"ExpertsLoRA over an MXFP4 arena disagrees with its oracle: {err_with:.3e}")
+    assert err_without > 1e-4, (
+        f"the module is indistinguishable from the WITHOUT-delta oracle "
+        f"({err_without:.3e}). Two causes, and both invalidate the parity check "
+        "above: the module never applied the low-rank term, or the adapter is too "
+        "small for this fixture to grade. Check `_trained_lora` randomised B "
+        "before concluding the fixture is at fault.")
+    assert err_with * 10 < err_without, (
+        f"the module is not measurably closer to the WITH-delta oracle "
+        f"({err_with:.3e}) than to the without ({err_without:.3e}) — consistent "
+        "with the low-rank term never reaching the MXFP4 path")
+
+
+def test_the_adapter_trains_and_the_frozen_mxfp4_base_does_not(tmp_path):
+    """A loss must reach all four adapter tensors, and nothing else.
+
+    This is the claim the whole tier exists to support: frozen experts served from
+    the checkpoint's own MXFP4 bytes, a trainable adapter over them. A gradient
+    that reaches `B` but not `A` is the signature of a delta added AFTER the
+    nonlinearity, and a finite non-zero gradient on the frozen storage would mean
+    the base was not frozen at all.
+    """
+    x, idx, w = _routing()
+    lora = _trained_lora(_staged_v4(tmp_path))
+
+    lora(x, idx, w).float().pow(2).mean().backward()
+
+    for name in ("gate_up_lora_A", "gate_up_lora_B", "down_lora_A", "down_lora_B"):
+        g = getattr(lora, name).grad
+        assert g is not None, f"{name} received no gradient"
+        assert torch.isfinite(g).all(), f"{name} gradient is not finite"
+        assert g.abs().max() > 0, f"{name} gradient is identically zero"
+
+    for name in ("gate_up_proj", "gate_up_absmax", "down_proj", "down_absmax"):
+        t = getattr(lora.base, name)
+        assert not t.requires_grad, f"frozen base tensor {name} requires grad"
+        assert getattr(t, "grad", None) is None, f"frozen base tensor {name} got a gradient"
 
 
 def test_enable_fast_train_refuses_an_mxfp4_arena_base(tmp_path):

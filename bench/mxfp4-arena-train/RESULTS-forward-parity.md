@@ -79,6 +79,26 @@ wrong weights. It failed at **rel max err 1.21**, 60x the tolerance, and the
 runner reported `GATE FAILED` with a nonzero exit. A green suite that cannot go
 red is not a gate.
 
+**A second mutation found a test that was already green and already blind.** The
+training-composition tests were added afterwards, passed first try, and were then
+mutated by making `_lora` return zeros — the adapter present but never reaching
+the MXFP4 path. The gradient test caught it; **the forward-parity test did not.**
+`_rel_err` normalises by the max, this fixture's e8m0 exponents span
+2**-8..2**7, and the base output's heavy tail set the denominator, so a real
+adapter delta vanished inside the 2e-2 bar. Its "the adapter is contributing"
+guard was worse: it compared against a base-only oracle written in V4's ordering,
+so it was passing on bf16 ordering noise rather than on the adapter.
+
+Rewritten as a scale-free ratio — the module must land far closer to the oracle
+that HAS the delta than to an identically-ordered one that does not. Measured
+margin on the clean code: `err_without = 6.5e-3` against a `1e-4` bar (65x), with
+`err_with` exactly `0.000e+00`. Both tests now reject the mutation.
+
+The lesson generalises past this file: **a max-normalised relative error is the
+wrong instrument for a small perturbation on a wide-dynamic-range tensor.** It is
+right for the kernel comparison above, where a wrong answer is gross, and wrong
+for grading a delta.
+
 ## Cost and teardown
 
 Five pods, all secure on-demand, **~$0.11 total** against the $35/job cap.
