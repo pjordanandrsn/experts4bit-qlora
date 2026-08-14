@@ -199,13 +199,32 @@ def _rel_err(got, want):
     return float((got - want).abs().max() / want.abs().max().clamp_min(1e-6))
 
 
-def _bake_mxfp4(tmp_path, name="v4.mxarena"):
+#: What a REAL DeepSeek-V4 checkpoint labels its expert tensors. The bytes are
+#: identical to the U8 form; only the safetensors dtype string differs — V4 ships
+#: honest labels (`I8` blocks, `F8_E8M0` scales) where Kimi K3 ships `U8` for
+#: both. Verified against `deepseek-ai/DeepSeek-V4-Flash`'s own shard header:
+#: `w1.weight I8 [2048, 2048]`, `w1.scale F8_E8M0 [2048, 128]`.
+V4_LABELS = {"w1.weight": "I8", "w3.weight": "I8", "w2.weight": "I8",
+             "w1.scale": "F8_E8M0", "w3.scale": "F8_E8M0", "w2.scale": "F8_E8M0"}
+
+
+def _bake_mxfp4(tmp_path, name="v4.mxarena", labels=None):
+    """Bake a fixture arena. `labels` selects the safetensors dtype STRINGS.
+
+    Defaulting to `U8` for everything is what this fixture did originally, and it
+    hid a real defect for a whole rented pod: the training tier's geometry check
+    goes through `nvme_residency.segment_geometry`, whose `_ST_TO_TORCH` table has
+    no `F8_E8M0` entry, so a genuine V4 arena raises `KeyError: 'F8_E8M0'` where
+    this fixture sailed through. Same bytes, different label — pass `V4_LABELS` to
+    exercise the route a real checkpoint takes.
+    """
+    labels = labels or {}
     tensors = {}
     for kind, stack in _mxfp4_stacks().items():
         for e in range(E):
             t = stack[e].contiguous()
             tensors[NAME_TEMPLATE.format(layer=0, expert=e, kind=kind)] = (
-                tuple(t.shape), "U8", t.numpy().tobytes())
+                tuple(t.shape), labels.get(kind, "U8"), t.numpy().tobytes())
     snap = tmp_path / "snap-mxfp4"
     snap.mkdir()
     (snap / "model.safetensors").write_bytes(_st_bytes(tensors))
@@ -298,6 +317,41 @@ def test_geometry_check_rejects_an_nf4_module_against_an_mxfp4_arena(tmp_path):
     with pytest.raises((TypeError, ValueError)) as exc:
         check_arena_geometry(nf4, index, 0)
     assert "arena" in str(exc.value).lower()
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "UPSTREAM GAP, measured on a rented pod 2026-08-14: grouped-nf4-gemm's "
+    "`nvme_residency._ST_TO_TORCH` has no `F8_E8M0` entry, so a REAL DeepSeek-V4 "
+    "arena raises KeyError inside `check_arena_geometry`. Two other gnf4 modules "
+    "already know the dtype (`mxfp4_residency._PACKED_BYTE_DTYPES`, "
+    "`nvme_bake_nf4._MXFP4_BYTE_DTYPES`), so the bake can WRITE such an arena and "
+    "the serving engine can READ it, but the TRAINING tier's geometry check "
+    "cannot. Strict: when gnf4 adds the mapping this fails for passing, which is "
+    "the signal to drop the marker and re-run the 284B leg."))
+def test_a_real_v4_arena_labels_its_scales_f8_e8m0(tmp_path):
+    """The route a real checkpoint takes, which the U8 fixture never exercised.
+
+    DeepSeek-V4 ships honest safetensors labels — `I8` blocks, `F8_E8M0` scales —
+    where Kimi K3 ships `U8` for both. The BYTES are identical; only the label
+    differs. This fixture wrote `U8` for everything, so every staging test passed
+    against a label no DeepSeek-V4 checkpoint uses, and the gap surfaced only
+    after a 149 GB download and a 147 GB bake.
+
+    That is the "test the ROUTE, not the mechanism" failure in its purest form: a
+    hand-built fixture agreed with the code instead of with the world.
+    """
+    _path, index = _bake_mxfp4(tmp_path, name="v4.real-labels", labels=V4_LABELS)
+    scales = [g for g in index["segments"] if "scale" in g["suffix"]]
+    assert scales, "fixture must carry scale segments"
+    assert all(g["dtype"] == "F8_E8M0" for g in scales), (
+        f"fixture did not bake V4's labels: {[(g['suffix'], g['dtype']) for g in scales]}")
+
+    from experts4bit_qlora.engines.nvme_experts import build_meta_experts
+
+    experts = build_meta_experts(index, E, has_gate=True,
+                                 compute_dtype=torch.bfloat16, quant_type="nf4")
+    # This is the call that died on the pod, after ~4 minutes of I/O.
+    check_arena_geometry(experts, index, 0)
 
 
 def test_mxfp4_arena_forward_matches_the_dequantize_then_matmul_oracle(tmp_path):
