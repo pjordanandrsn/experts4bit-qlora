@@ -302,3 +302,49 @@ Neither touched VRAM, so neither caused the observed OOM; they are recorded
 because the previous receipt's `hot_rows` must not be read as a measured capacity.
 
 The pre-amendment-4 stamp is preserved as `PREREG.md.pre-amendment4.ots`.
+
+---
+
+## Amendment 5 (2026-08-14, pre-data — the dense side, and what this does NOT predict)
+
+The amendment-4 ladder refuted P2 at every rung, and located the failure precisely:
+not the expert tier but `formats/fp8_blocks.py::dequantize_fp8_blocks`, batch-
+independently, with 51 MiB free on a 23.5 GiB card. See
+`RESULTS-284b-ladder.md`.
+
+**What changed.** That function's own class docstring claimed a transient of "one
+weight at a time (~67 MB for V4's largest)". It counted the bf16 result only; the
+fp32 route also held an expanded fp32 scale, `weight.float()` and the fp32 product
+— **12–14 bytes per parameter, ~403 MB for `wq_b`**. The aligned path now decodes
+in `dtype` with a broadcast scale, **2 bytes per parameter**.
+
+**It is bit-exact, and that is verified rather than argued.** e4m3 → bf16 is
+lossless (3 mantissa bits into 7) and an e8m0 scale is a power of two, so the
+multiply cannot round. Checked on CPU across typical, wide and deliberately
+over/underflowing exponent ranges, plus ragged shapes, before this stamp.
+
+### P5, and the prediction deliberately NOT made
+
+- **P5 — the transient shrinks.** The dense dequantize holds ~2 bytes per
+  parameter instead of ~12. This is arithmetic plus a bit-exactness test, and it
+  is the only thing claimed here.
+- **NO PREDICTION that the ladder now fits.** At the failure the card held
+  22.88 GiB with 51 MiB free; this change frees a few hundred MB at the peak
+  moment. Whether that clears the rung, or simply moves the OOM to the next
+  allocation, is **reported, not forecast**. Predicting a pass here would be
+  guessing dressed as a hypothesis, and the previous amendment already refused
+  that once.
+
+### Method held constant
+
+The ladder is re-run **unchanged** — same five rungs, same order, same one
+process per rung — so the comparison against `RESULTS-284b-ladder.md` is
+like-for-like and any difference is attributable to this one change.
+
+**Provenance cost grows again, and is stated:** the overlay is now **six files** —
+four e4b engine/adapter files, `experts4bit_qlora/formats/fp8_blocks.py`, and
+gnf4's `nvme_residency.py` from merged main. G2 checks the fp8 half in the
+imported module alongside the other two.
+
+P1 stands confirmed twice and is not re-litigated. P3 and P4 remain ungraded. The
+pre-amendment-5 stamp is preserved as `PREREG.md.pre-amendment5.ots`.
