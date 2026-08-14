@@ -18,3 +18,7 @@ hf-cache/
 *.log
 .DS_Store
 CONFIG-PLAYBOOK.local.md
+
+# Per-host deploy config; see deploy/.env.example. Untracked so a token
+# added here is never published from a public repo.
+deploy/.env
