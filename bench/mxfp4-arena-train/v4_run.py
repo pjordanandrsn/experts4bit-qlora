@@ -99,6 +99,11 @@ def stage_gates():
         # tensors, so read the constant the branch tests rather than the prose
         "overlay_gemv_bail": "_e4b_mxfp4_arena" in
             loramod.ExpertsLoRA._use_infer_gemv.__code__.co_consts,
+        # The gnf4 half of the overlay (PR #75, merged 0f68952). Without it a real
+        # V4 arena cannot be staged at all -- this is precisely what stopped the
+        # previous attempt, one call after the model had loaded.
+        "overlay_gnf4_reads_e8m0":
+            __import__("nvme_residency")._ST_TO_TORCH.get("F8_E8M0") == "uint8",
     }
     # `_reason` is diagnostic text, not a check — keep it out of the verdict
     g["G2"] = all(g[k] for k in list(g)

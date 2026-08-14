@@ -170,3 +170,63 @@ absmax per 64), and the staged stacks still keep the full `[E, ...]` shape. The
 unchanged: whatever it shows is written up in either direction, no
 retry-until-green, hard cap $35, teardown evidence-first. The pre-amendment-2
 stamp is preserved as `PREREG.md.pre-amendment2.ots`.
+
+---
+
+## Amendment 3 (2026-08-14, pre-data — the second attempt, after an upstream fix)
+
+The first attempt under amendment 2 **measured P1 and nothing else**. It is
+recorded in `RESULTS-284b-run.md`; the short version is that everything up to the
+geometry check ran (149 GB downloaded in 128 s, the MXFP4 relocation arena baked
+in 76.8 s, the model loaded in 20.7 s at 10.63 GiB peak on a 23.6 GiB card) and
+then `enable_nvme_train_residency` raised `KeyError: 'F8_E8M0'` inside
+`nvme_residency.segment_geometry`.
+
+**P1 is already CONFIRMED and is not re-litigated by this run.** The STOCK control
+died with a genuine `CUDA out of memory` on the 23.56 GiB card — the memory
+ceiling amendment 1 respecified it to test, not attempt 1's quantizer-class
+rejection. It is run again here only as a same-host control; a second failure adds
+confidence, and a success would refute P1 and become the headline exactly as
+amendment 1 says.
+
+**P2, P3 and P4 have still never been graded.** No training step has run.
+
+### What changed, and the provenance cost
+
+`grouped-nf4-gemm` could bake a DeepSeek-V4 MXFP4 arena and serve from it, but
+`_ST_TO_TORCH` — the table `segment_geometry` and `segment_tensor` both resolve —
+had no entry for `F8_E8M0`, the tag V4 uses for its expert scales. Fixed in
+[grouped-nf4-gemm#75](https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/75),
+merged as `0f68952`, with three tests that fail on the unfixed code with that
+exact `KeyError`.
+
+**The fix is not in any published wheel.** This run therefore applies it as part
+of the same overlay, so the receipt reads **published `experts4bit-qlora` 0.18.0 +
+published `grouped-nf4-gemm` 0.11.0 + a five-file overlay spanning both
+packages** — four e4b files and gnf4's `nvme_residency.py` backported from merged
+main. That is a **weaker provenance claim than the parity leg**, which was
+published wheels plus one file, and it is stated here rather than left for a
+reader to notice. `overlay_provenance.json` records the stock and overlay sha256
+of all five.
+
+**G2 is widened** to check the gnf4 half in the imported module
+(`nvme_residency._ST_TO_TORCH["F8_E8M0"] == "uint8"`), because an overlay that
+takes for e4b and silently misses for gnf4 would fail in exactly the same place as
+before.
+
+### Registered before the fact
+
+- The CPU gate now bakes V4's real labels (`I8` blocks, `F8_E8M0` scales) rather
+  than `U8` for everything. On stock gnf4 that test reproduces the pod's KeyError
+  in 3.6 s; with the overlay it passes. The gate went 12 passed + 1 xfailed →
+  **13 passed**, and that transition is the evidence the fix unblocks the path.
+- Three harness defects from the last attempt are fixed and are **not** part of
+  what is under test: the loader was handed the hub id instead of the local
+  checkpoint path (starting a second 160 GB download onto a full disk),
+  `capacity_for_bytes` was called with one of its two positionals, and the G2 gate
+  grepped a docstring for a marker that lives in code. `hot_rows` is now sized
+  from the **cgroup**, not from `free`.
+
+**Everything else stands**: P1–P4 as written, G1/G3/G4, and the stop rules. A
+refusal, an OOM or a wedge is the result. Hard cap $35. The pre-amendment-3 stamp
+is preserved as `PREREG.md.pre-amendment3.ots`.

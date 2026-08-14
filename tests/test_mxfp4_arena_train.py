@@ -319,15 +319,28 @@ def test_geometry_check_rejects_an_nf4_module_against_an_mxfp4_arena(tmp_path):
     assert "arena" in str(exc.value).lower()
 
 
-@pytest.mark.xfail(strict=True, reason=(
+#: Whether the INSTALLED grouped-nf4-gemm can read V4's scale dtype. Evaluated at
+#: collection so the test below is graded against the gnf4 actually present:
+#: xfail on a stock wheel, REQUIRED TO PASS once the fix is in (published or
+#: overlaid). Without the condition the marker would fail-for-passing the moment
+#: the fix landed, which is a signal, not a result -- and it would make a green
+#: run impossible on the very build the fix is meant to enable.
+try:
+    from nvme_residency import _ST_TO_TORCH as _GNF4_ST_TO_TORCH
+except Exception:                                            # pragma: no cover
+    _GNF4_ST_TO_TORCH = {}
+_E8M0_READABLE = "F8_E8M0" in _GNF4_ST_TO_TORCH
+
+
+@pytest.mark.xfail(not _E8M0_READABLE, strict=True, reason=(
     "UPSTREAM GAP, measured on a rented pod 2026-08-14: grouped-nf4-gemm's "
     "`nvme_residency._ST_TO_TORCH` has no `F8_E8M0` entry, so a REAL DeepSeek-V4 "
     "arena raises KeyError inside `check_arena_geometry`. Two other gnf4 modules "
     "already know the dtype (`mxfp4_residency._PACKED_BYTE_DTYPES`, "
     "`nvme_bake_nf4._MXFP4_BYTE_DTYPES`), so the bake can WRITE such an arena and "
     "the serving engine can READ it, but the TRAINING tier's geometry check "
-    "cannot. Strict: when gnf4 adds the mapping this fails for passing, which is "
-    "the signal to drop the marker and re-run the 284B leg."))
+    "cannot. Conditional + strict: on a gnf4 that HAS the mapping this test must "
+    "pass outright; on one that does not it must fail exactly this way."))
 def test_a_real_v4_arena_labels_its_scales_f8_e8m0(tmp_path):
     """The route a real checkpoint takes, which the U8 fixture never exercised.
 
