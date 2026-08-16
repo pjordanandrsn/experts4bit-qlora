@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/pjordanandrsn/experts4bit-qlora/security/policy
+    about: Do not open a public issue — see SECURITY.md for the private channel.
+  - name: Question, or "will this fit my hardware?"
+    url: https://github.com/pjordanandrsn/experts4bit-qlora/discussions
+    about: Sizing help and usage questions go to Discussions.

@@ -1,0 +1,20 @@
+{
+ "e4b_version": "0.18.0",
+ "gnf4_mxfp4_grouped": true,
+ "V4_RESIDENCY_KINDS": [
+  "w1.weight",
+  "w3.weight",
+  "w1.scale",
+  "w3.scale",
+  "w2.weight",
+  "w2.scale"
+ ],
+ "overlay_mxfp4_forward": true,
+ "overlay_mxfp4_dequant": true,
+ "overlay_fused_lane": true,
+ "overlay_arena_view": true,
+ "overlay_fast_refusal": true,
+ "overlay_fast_refusal_reason": "storage is MXFP4 (arena), which the NF4 grouped kernel cannot read \u2014 the MXFP4 forward is wired by nvme_experts and needs no patch here",
+ "overlay_gemv_bail": true,
+ "G2": true
+}

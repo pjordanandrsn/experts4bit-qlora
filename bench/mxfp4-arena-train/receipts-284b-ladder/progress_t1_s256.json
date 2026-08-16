@@ -1,0 +1,31 @@
+{
+ "arm": "ARENA",
+ "tokens": 1,
+ "seqlen": 256,
+ "total_tokens": 256,
+ "steps": 3,
+ "vram": {
+  "card_gib": 23.5,
+  "capped_to_gib": null,
+  "note": "card is at or under the claim; no cap needed"
+ },
+ "host_mem": {
+  "error": "[Errno 2] No such file or directory: '/sys/fs/cgroup/memory.max'",
+  "rejected": "cgroup usable=None; falling back to 24 GB"
+ },
+ "usable_bytes_measured": 24000000000,
+ "hot_rows_floor": 256,
+ "hot_rows_capacity": 944,
+ "row_stride": 13369344,
+ "hot_rows": 944,
+ "arena_layers": 43,
+ "arena_experts": 256,
+ "load_seconds": 20.4,
+ "load_peak_gib": 10.63,
+ "G1_modules_patched": 43,
+ "G4_expertslora_modules": 43,
+ "G4_mxfp4_flagged": 43,
+ "G4_mxfp4_dequant_override": 43,
+ "G4_enable_fast_train_returned": 0,
+ "G4": true
+}
