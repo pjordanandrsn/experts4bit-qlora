@@ -167,6 +167,38 @@ def test_buses_are_disjoint(arena):
 
 
 @needs_stack
+@needs_stack
+def test_enable_failure_leaves_no_stamps_or_pool(arena):
+    """A vram/dram overlap raises from construction; every stamp must come
+    off and no pool may be left running (the checker can fail: a clean
+    enable right after must succeed)."""
+    mod, path, _ = arena
+    model = _Wrap(_module().to("cuda"))
+    bad = _manifest(vram=[0, 1], dram=[1, 4], nvme=[2, 3, 5, 6, 7])
+    with pytest.raises(ValueError, match="BOTH"):
+        enable_hybrid_tier(model, path, bad, hot_rows=E)
+    for attr in ("_e4b_cold_tier", "_e4b_arena_layer",
+                 "_e4b_hybrid_dram_ids", "_e4b_hybrid_owns_pool"):
+        assert not hasattr(model.experts, attr), attr
+    assert cpu_grouped.pool_start(2) == 2      # pool free to start fresh
+    cpu_grouped.pool_stop()
+    n = enable_hybrid_tier(model, path,
+                           _manifest(vram=[0], dram=[1], nvme=[2, 3, 4, 5, 6, 7]),
+                           hot_rows=E)
+    assert n == 1
+    disable_hybrid_tier(model)
+
+
+@needs_stack
+def test_short_layers_refused(arena):
+    mod, path, _ = arena
+    model = _Wrap(_module().to("cuda"))
+    with pytest.raises(ValueError, match="partial map"):
+        enable_hybrid_tier(model, path,
+                           _manifest(vram=[0], dram=[1], nvme=[2, 3, 4, 5, 6, 7]),
+                           hot_rows=E, layers=[])
+
+
 def test_empty_dram_degrades_to_parent_and_teardown_is_clean(arena):
     mod, path, _ = arena
     model = _Wrap(_module().to("cuda"))
@@ -181,7 +213,8 @@ def test_empty_dram_degrades_to_parent_and_teardown_is_clean(arena):
     assert out.isfinite().all()
     disable_hybrid_tier(model)
     for attr in ("_e4b_hybrid", "_e4b_cold_tier", "_e4b_arena_layer",
-                 "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads"):
+                 "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
+                 "_e4b_hybrid_owns_pool"):
         assert not hasattr(model.experts, attr), attr
     assert cpu_grouped.pool_start(0) >= 1     # pool restartable after stop
     cpu_grouped.pool_stop()

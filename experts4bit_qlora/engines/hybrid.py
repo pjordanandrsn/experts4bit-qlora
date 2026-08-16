@@ -223,19 +223,20 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd)
     mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(mods)))
+    if len(lay) < len(mods):
+        raise ValueError(
+            f"layers has {len(lay)} entries for {len(mods)} MoE module(s) — "
+            f"refusing a partial map, which would stamp modules with the "
+            f"wrong arena layer and silently serve another layer's weights")
     hot_sets = []
     for i, mod in enumerate(mods):
-        li = lay[i] if i < len(lay) else i
+        li = lay[i]
         place = per_layer.get(li, {"vram": [], "dram": [], "nvme": []})
         mod._e4b_cold_tier = tier
         mod._e4b_arena_layer = li
         mod._e4b_hybrid_dram_ids = place["dram"]
         mod._e4b_hybrid_threads = threads
         hot_sets.append(place["vram"])
-    if pool:
-        got = cpu_grouped.pool_start(threads)
-        if verbose:
-            log(f"  hybrid: CPU pool started ({got} pinned workers)")
     try:
         n_nodes = len(list(Path("/sys/devices/system/node").glob("node[0-9]*")))
         if n_nodes > 1:
@@ -245,10 +246,27 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     except OSError:
         pass
 
-    n = enable_hot_residency(model, hot_sets, device=device, verbose=verbose,
-                             state_cls=_HybridTier)
+    try:
+        n = enable_hot_residency(model, hot_sets, device=device,
+                                 verbose=verbose, state_cls=_HybridTier)
+    except Exception:
+        # no half-enabled state left behind: every stamp this call made
+        # comes off before the error propagates (Bugbot)
+        for mod in mods:
+            for attr in ("_e4b_cold_tier", "_e4b_arena_layer",
+                         "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads"):
+                if hasattr(mod, attr):
+                    delattr(mod, attr)
+        raise
+    # pool starts only after enable succeeds, and ownership is recorded so
+    # disable never tears down a pool the caller started themselves (Bugbot)
+    if pool:
+        got = cpu_grouped.pool_start(threads)
+        if verbose:
+            log(f"  hybrid: CPU pool started ({got} pinned workers)")
     for mod in mods:
         setattr(mod, _MARKER, True)
+        mod._e4b_hybrid_owns_pool = bool(pool)
     log(f"  hybrid tier active on {n} module(s): "
         f"vram/dram/nvme masses "
         f"{m['masses']['vram_frac']:.2f}/{m['masses']['dram_frac']:.2f}/"
@@ -262,14 +280,18 @@ def disable_hybrid_tier(model) -> int:
     from .hot_residency import disable_hot_residency
     import cpu_grouped
 
+    owns_pool = False
     n = disable_hot_residency(model)
     for _, mod in model.named_modules():
+        owns_pool = owns_pool or getattr(mod, "_e4b_hybrid_owns_pool", False)
         for attr in (_MARKER, "_e4b_cold_tier", "_e4b_arena_layer",
-                     "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads"):
+                     "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
+                     "_e4b_hybrid_owns_pool"):
             if hasattr(mod, attr):
                 delattr(mod, attr)
-    try:
-        cpu_grouped.pool_stop()
-    except (ImportError, RuntimeError):
-        pass
+    if owns_pool:
+        try:
+            cpu_grouped.pool_stop()
+        except (ImportError, RuntimeError):
+            pass
     return n
