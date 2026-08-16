@@ -1,0 +1,4 @@
+trace_end_ns=73693059304 last_big_copy_ns=68114888384 window_s=5.38
+HtoD: n=  8409 total=   194.694 MB max_single=   131.1 KB
+DtoH: n= 25322 total=    97.637 MB max_single=    65.5 KB
+DtoD: n=  8548 total=     0.256 MB max_single=     0.1 KB

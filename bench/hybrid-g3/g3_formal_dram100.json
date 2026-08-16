@@ -1,0 +1,25 @@
+{
+  "baseline_toks": 0.291824883190941,
+  "hybrid_toks": 6.211462495356359,
+  "prefetch_toks": 1.5684829447361437,
+  "ratio": 21.284896707359252,
+  "prefetch_ratio_vs_hybrid": 0.2525142743611073,
+  "tier_misses_arm_b": 12,
+  "tier_misses_arm_c": 34,
+  "prefetch": {
+    "prefetch_submitted": 990,
+    "prefetch_rows": 35
+  },
+  "L": 94,
+  "E": 128,
+  "masses": {
+    "vram_frac": 0.4482491134751773,
+    "dram_frac": 0.5517508865248227,
+    "nvme_frac": 0.0,
+    "target_gpu_cpu_ratio": 3.186782016735215,
+    "achieved_gpu_cpu_ratio": 0.81241213094999
+  },
+  "manifest_sha": "a57642fbc0ce72dadc49cc333709fd1115ef07593b01d42113b66260870ccb03",
+  "vram_budget_gb": 10.85443115234375,
+  "threads": 40
+}
