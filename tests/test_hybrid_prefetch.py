@@ -197,3 +197,33 @@ def test_free_when_no_nvme_mass(two_layer):
         assert hy.prefetch_stats(model)["prefetch_submitted"] == 0
     finally:
         hy.disable_hybrid_tier(model)
+
+
+@needs_stack
+def test_concurrent_prefetch_never_evicts_a_demand_row(two_layer):
+    """The 235B crash class: a prefetch ensure racing a demand
+    ensure→read window must never evict the demand rows (KeyError
+    'not resident'). Tiny hot_rows + a hammering loop reproduce the
+    pressure; the transaction lock is what makes this pass."""
+    model, path, _ = two_layer
+    man = _manifest([
+        {"vram": [], "dram": [], "nvme": list(range(E))},
+        {"vram": [], "dram": [], "nvme": list(range(E))},
+    ])
+    hy.enable_hybrid_tier(model, path, man, hot_rows=4, prefetch=True)
+    try:
+        hy.set_prefetch(model, True)
+        wts = torch.rand(1, K, device="cuda", dtype=torch.bfloat16)
+        torch.manual_seed(31)
+        for i in range(40):
+            hidden = torch.randn(1, H, dtype=torch.bfloat16, device="cuda")
+            idx0 = torch.tensor([[(i * 3) % E, (i * 5 + 1) % E]],
+                                device="cuda")
+            idx1 = torch.tensor([[(i * 7 + 2) % E, (i * 11 + 3) % E]],
+                                device="cuda")
+            with torch.no_grad():
+                model[0].experts(hidden, idx0, wts)   # fires prefetch
+                model[1].experts(hidden, idx1, wts)   # races the worker
+        _barrier()
+    finally:
+        hy.disable_hybrid_tier(model)

@@ -81,8 +81,20 @@ class _TieredStack:
             raise ValueError(f"_TieredStack indexes experts on dim 0, got {dim}")
         from nvme_residency import segment_tensor
         globals_ = self.cold_ids.index_select(0, idx.cpu().to(torch.long))
-        return segment_tensor(self.tier, self.index, self.layer,
-                              globals_.tolist(), self.suffix, cast=self.cast)
+        # The tier's ensure() protects slots only while THAT request is in
+        # flight — a concurrent ensure (the hybrid prefetch worker) can
+        # evict between our ensure and our row reads (measured at 235B:
+        # KeyError '(layer 81, expert 73) not resident'). When the hybrid
+        # engine installs a transaction lock on the tier, the whole
+        # ensure+read window runs under it; absent the lock this is a
+        # no-op and single-threaded behavior is unchanged.
+        lock = getattr(self.tier, "_e4b_txn", None)
+        if lock is None:
+            return segment_tensor(self.tier, self.index, self.layer,
+                                  globals_.tolist(), self.suffix, cast=self.cast)
+        with lock:
+            return segment_tensor(self.tier, self.index, self.layer,
+                                  globals_.tolist(), self.suffix, cast=self.cast)
 
     # a cold stack is only ever indexed, but keep these honest rather than absent
     def __len__(self):

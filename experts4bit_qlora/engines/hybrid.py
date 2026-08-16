@@ -134,6 +134,9 @@ class _HybridTier(_NvmeResidency):
         self.pf_enabled = False
         self.pf_submitted = 0
         self.pf_rows = 0
+        self.pf_pin = None             # pinned hidden staging, 2-slot ring
+        self.pf_ev = None
+        self.pf_slot = 0
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
         out = super().forward(hidden_states, top_k_index, top_k_weights)
@@ -160,11 +163,29 @@ class _HybridTier(_NvmeResidency):
         pool = _PF_POOL
         if pool is None or pool._work_queue.qsize() > 2:
             return                          # never queue into lag
-        h = hidden.detach()
+        # The hidden leaves the GPU on the MAIN thread as an async pinned
+        # copy gated by an event; the worker host-waits the event and never
+        # issues a CUDA call. v1 did h.float().cpu() INSIDE the worker — a
+        # cross-thread stream synchronize per layer that cost 4x end-to-end
+        # (measured 6.21 -> 1.57 tok/s at 235B): the same sync class the
+        # CPU router exists to kill, reintroduced from a thread.
+        t_rows = hidden.shape[0]
+        if self.pf_pin is None or self.pf_pin[0].shape[0] < t_rows:
+            self.pf_pin = [torch.empty(max(8, t_rows), hidden.shape[-1],
+                                       dtype=hidden.dtype, pin_memory=True)
+                           for _ in range(2)]
+            self.pf_ev = [torch.cuda.Event(), torch.cuda.Event()]
+        s = self.pf_slot
+        self.pf_slot ^= 1              # ring: worker depth <=2 by the queue
+        pin = self.pf_pin[s]           # guard, so a slot is never live twice
+        ev = self.pf_ev[s]
+        pin[:t_rows].copy_(hidden.detach(), non_blocking=True)
+        ev.record(torch.cuda.current_stream(hidden.device))
 
         def task():
             import numpy as np
-            hc = h.float().cpu().numpy()
+            ev.synchronize()               # host wait only; no CUDA work
+            hc = pin[:t_rows].float().numpy()
             logits = hc @ pf["np_w"].T
             if pf["np_b"] is not None:
                 logits = logits + pf["np_b"]
@@ -173,8 +194,15 @@ class _HybridTier(_NvmeResidency):
             for row in logits:
                 ids.update(np.argpartition(-row, k)[:k].tolist())
             want = sorted(ids & nxt.nvme_set)
+            # never let speculation own more than a quarter of the slots
+            want = want[: max(1, nxt._tier.hot_rows // 4)]
             if want:
-                nxt._tier.ensure(int(nxt.mod._e4b_arena_layer), want)
+                lock = getattr(nxt._tier, "_e4b_txn", None)
+                if lock is not None:
+                    with lock:
+                        nxt._tier.ensure(int(nxt.mod._e4b_arena_layer), want)
+                else:
+                    nxt._tier.ensure(int(nxt.mod._e4b_arena_layer), want)
                 self.pf_rows += len(want)
             self.pf_submitted += 1
 
@@ -282,6 +310,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                                               "nvme": []})[tier_name].append(int(e))
 
     tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd)
+    import threading
+    tier._e4b_txn = threading.RLock()      # spans demand ensure+read windows
     mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(mods)))
     if len(lay) < len(mods):
