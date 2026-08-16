@@ -1,0 +1,27 @@
+
+NOTICE: Existing SQLite export found: /root/g1_audit_legacy.sqlite
+        It is assumed file was previously exported from: /root/g1_audit_legacy.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [/root/g1_audit_legacy.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_api_sum.py]... 
+
+ ** CUDA API Summary (cuda_api_sum):
+
+ Time (%)  Total Time (ns)  Num Calls  Avg (ns)   Med (ns)   Min (ns)  Max (ns)  StdDev (ns)                Name               
+ --------  ---------------  ---------  ---------  ---------  --------  --------  -----------  ---------------------------------
+     71.1        184650441      41857     4411.5     2644.0      2233  28553629     160651.4  cudaLaunchKernel                 
+     12.5         32607588       6400     5094.9     5764.0      1783    217967       4227.9  cudaMemcpyAsync                  
+      9.2         23931087         10  2393108.7  2145778.0     56475   6796021    1868666.7  cuLibraryLoadData                
+      5.1         13125139       6400     2050.8     2413.5       551     21852       1459.6  cudaStreamSynchronize            
+      1.0          2524325          2  1262162.5  1262162.5    812968   1711357     635257.0  cudaGetDeviceProperties_v2_v12000
+      0.6          1662477         45    36943.9    33240.0      1893    121773      16956.7  cudaMalloc                       
+      0.4          1096735          1  1096735.0  1096735.0   1096735   1096735          0.0  cudaFree                         
+      0.1           138830        838      165.7      110.0        50       911        110.9  cuGetProcAddress_v2              
+      0.0            65530        300      218.4      170.0       150     10315        596.4  cudaStreamIsCapturing_v10000     
+      0.0            34172         10     3417.2     3835.5       321      5638       1743.2  cuLibraryGetKernel               
+      0.0            11579         18      643.3      155.5       140      7751       1782.3  cudaEventCreateWithFlags         
+      0.0             5518          1     5518.0     5518.0      5518      5518          0.0  cudaDeviceSynchronize            
+      0.0             4006          4     1001.5      420.5       331      2834       1223.4  cuInit                           
+      0.0             3375          4      843.8      776.0        80      1743        883.6  cuModuleGetLoadingMode           
+      0.0              950          2      475.0      475.0       310       640        233.3  cudaGetDriverEntryPoint_v11030   
+

@@ -1,0 +1,15 @@
+{
+  "arm": "legacy",
+  "layers": 32,
+  "tokens": 300,
+  "batch": 1,
+  "geometry": {
+    "E": 64,
+    "H": 2048,
+    "k": 8
+  },
+  "step_ms_p50": 3.4231236204504967,
+  "per_layer_us_p50": 106.97261313907802,
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090"
+}

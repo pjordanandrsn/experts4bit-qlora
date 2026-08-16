@@ -12,17 +12,19 @@ import torch
 import experts4bit_qlora as e4b
 from experts4bit_qlora import (  # the "Which door?" surface
     Experts4bit, ExpertsLoRA, ExpertsNbit,
-    cold_engine_available, disable_cold_engine, disable_fast,
+    cold_engine_available, cpu_router_available, disable_cold_engine,
+    disable_cpu_router, disable_fast,
     disable_hot_residency, disable_pipelined_residency,
-    enable_cold_engine, enable_expert_offload, enable_fast,
+    enable_cold_engine, enable_cpu_router, enable_expert_offload, enable_fast,
     enable_hot_residency, enable_pipelined_residency, verify_moe_4bit,
 )
 
 _SURFACE = (
     Experts4bit, ExpertsLoRA, ExpertsNbit,
-    cold_engine_available, disable_cold_engine, disable_fast,
+    cold_engine_available, cpu_router_available, disable_cold_engine,
+    disable_cpu_router, disable_fast,
     disable_hot_residency, disable_pipelined_residency,
-    enable_cold_engine, enable_expert_offload, enable_fast,
+    enable_cold_engine, enable_cpu_router, enable_expert_offload, enable_fast,
     enable_hot_residency, enable_pipelined_residency, verify_moe_4bit,
 )
 
