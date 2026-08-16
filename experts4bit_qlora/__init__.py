@@ -86,6 +86,17 @@ from .engines.batched import (  # noqa: E402
     enable_batched_train,
 )
 from .engines.cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
+from .engines.placement import (  # noqa: E402
+    load_manifest,
+    save_manifest,
+    solve_placement,
+    verify_manifest,
+)
+from .engines.hybrid import (  # noqa: E402
+    disable_hybrid_tier,
+    enable_hybrid_tier,
+    hybrid_available,
+)
 from .engines.cpu_router import (  # noqa: E402
     cpu_router_available,
     disable_cpu_router,
@@ -141,6 +152,13 @@ __all__ = [
     "enable_cold_engine",
     "enable_cpu_router",
     "enable_expert_offload",
+    "enable_hybrid_tier",
+    "disable_hybrid_tier",
+    "hybrid_available",
+    "solve_placement",
+    "save_manifest",
+    "load_manifest",
+    "verify_manifest",
     "router_trip_stats",
     "NF4KVCache",
     "kv_nf4_available",

@@ -80,3 +80,29 @@ def verify_moe_4bit(model, *, strict=False):
             "`experts4bit_qlora.loader.load_moe_4bit_streaming(...)` instead."
         )
     return report
+
+
+def main(argv=None) -> int:
+    """CLI: offline manifest verification (hybrid tier Phase 3).
+
+    ``python -m experts4bit_qlora.verify --manifest placement.json
+    [--arena-manifest m.arena.manifest.json]`` — checks the placement is
+    complete and current and reports the hashes that pin the run identity.
+    The in-process model check above stays importable and unchanged.
+    """
+    import argparse
+    import json as _json
+
+    ap = argparse.ArgumentParser(prog="experts4bit_qlora.verify")
+    ap.add_argument("--manifest", required=True)
+    ap.add_argument("--arena-manifest", default=None)
+    args = ap.parse_args(argv)
+    from .engines.placement import verify_manifest
+    rep = verify_manifest(args.manifest,
+                          arena_manifest_path=args.arena_manifest)
+    print(_json.dumps(rep, indent=2))
+    return 0 if rep["reduction_order_current"] else 3
+
+
+if __name__ == "__main__":                                # pragma: no cover
+    raise SystemExit(main())
