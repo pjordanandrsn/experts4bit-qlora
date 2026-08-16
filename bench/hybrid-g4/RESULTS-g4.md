@@ -25,9 +25,13 @@ conflates background warming with stalls, which run 1 demonstrated).
 | B2 off, recheck | 1.184 | 5,543 | 0 | 54.0 s |
 
 **Demand-stall reduction = 53.1% (5,534.5 → 2,596) — gate G4 PASSES**
-(band ok, reduction ok). Residency byte-verify during arm C: 16/16 sampled
-rows bit-identical to direct disk reads, residency maps a consistent
-bijection. Free-when-unused: pinned by `tests/test_hybrid_prefetch.py`
+(band ok, reduction ok). Residency byte-verify after arm C's timed decode:
+16/16 sampled rows bit-identical to direct disk reads, residency maps a
+consistent bijection. (The run-as-measured sampled while the prefetch
+worker was still live; that race can only manufacture FALSE corruption —
+a reassigned slot cannot match the old key's freshly-read reference — so
+the clean verdict stands. The committed runner now quiesces the worker
+before verifying, so the check no longer needs that argument.) Free-when-unused: pinned by `tests/test_hybrid_prefetch.py`
 (zero submits with no NVMe mass) and by B-arm parity with pre-Phase-4
 numbers (1.16–1.18 tok/s here vs 1.17 before any prefetch code existed).
 

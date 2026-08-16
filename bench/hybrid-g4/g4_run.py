@@ -108,10 +108,19 @@ def main(threads: int, dram_gb: int, n_new: int, arms: str):
             p1 = dict(hy.prefetch_stats(model))
         # byte-verify a sample of resident rows against direct disk reads,
         # and check the residency maps are a consistent bijection — rules
-        # out (or in) corruption from concurrent publishes before teardown
+        # out (or in) corruption from concurrent publishes before teardown.
+        # QUIESCE the prefetch worker first: with it live, a speculative
+        # ensure can reassign a snapshotted slot between the map copy and
+        # the byte read. That race can only manufacture FALSE corruption
+        # (a reassigned slot cannot match the old key's reference bytes),
+        # never hide real damage — but the check should not need that
+        # argument to be trusted.
         verify = None
         if prefetch_on:
             from nvme_reader import alloc_landing
+            hy.set_prefetch(model, False)
+            if hy._PF_POOL is not None:
+                hy._PF_POOL.submit(lambda: None).result()
             t = mods[0]._e4b_cold_tier
             with t._lock:
                 res = sorted(t._slot_of.items())
