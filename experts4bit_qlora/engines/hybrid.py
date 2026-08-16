@@ -197,12 +197,17 @@ class _HybridTier(_NvmeResidency):
             # never let speculation own more than a quarter of the slots
             want = want[: max(1, nxt._tier.hot_rows // 4)]
             if want:
-                lock = getattr(nxt._tier, "_e4b_txn", None)
-                if lock is not None:
-                    with lock:
-                        nxt._tier.ensure(int(nxt.mod._e4b_arena_layer), want)
-                else:
-                    nxt._tier.ensure(int(nxt.mod._e4b_arena_layer), want)
+                # speculative=True is the tier's own contract: fills overlap
+                # demand I/O instead of convoying it (a lock-wrapped demand
+                # ensure here measured 6.6x SLOWER end-to-end at 235B), the
+                # demand window is unevictable, and no-victim means skip, not
+                # error. Speculation must never kill serving, so any read
+                # failure is swallowed — the demand path will surface it.
+                try:
+                    nxt._tier.ensure(int(nxt.mod._e4b_arena_layer), want,
+                                     speculative=True)
+                except Exception:                 # noqa: BLE001
+                    return
                 self.pf_rows += len(want)
             self.pf_submitted += 1
 
@@ -309,9 +314,16 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
             per_layer.setdefault(int(layer), {"vram": [], "dram": [],
                                               "nvme": []})[tier_name].append(int(e))
 
+    if prefetch:
+        import inspect
+        if "speculative" not in inspect.signature(ColdTier.ensure).parameters:
+            raise RuntimeError(
+                "hybrid prefetch needs grouped-nf4-gemm with speculative "
+                "ensures (ColdTier.ensure(..., speculative=)) — this gnf4 "
+                "would serialize demand fetches behind prefetch disk time "
+                "and can evict rows the serving thread is reading")
+
     tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd)
-    import threading
-    tier._e4b_txn = threading.RLock()      # spans demand ensure+read windows
     mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(mods)))
     if len(lay) < len(mods):
