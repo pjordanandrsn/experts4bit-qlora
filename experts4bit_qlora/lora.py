@@ -203,7 +203,13 @@ class ExpertsLoRA(nn.Module):
             return False
         base = self.base
         # An engine is attached iff something rebound the base's forward.
-        if getattr(base, "_e4b_fast_ref", None) is None and getattr(base, "_e4b_pipe_ref", None) is None:
+        # `_e4b_hot_ref` is the hybrid three-tier engine (enable_hybrid_tier
+        # delegates through enable_hot_residency): delegating a zero-adapter
+        # eval to it serves the fused hybrid path instead of dying on the
+        # streaming loader's unmaterialized base storage.
+        if (getattr(base, "_e4b_fast_ref", None) is None
+                and getattr(base, "_e4b_pipe_ref", None) is None
+                and getattr(base, "_e4b_hot_ref", None) is None):
             return False
         return self._adapter_is_zero()
 
