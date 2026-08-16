@@ -161,7 +161,7 @@ class _HybridTier(_NvmeResidency):
         if not nxt.nvme_set:
             return                          # free when unused, structurally
         pool = _PF_POOL
-        if pool is None or pool._work_queue.qsize() > 2:
+        if pool is None or pool._work_queue.qsize() > 1:
             return                          # never queue into lag
         # The hidden leaves the GPU on the MAIN thread as an async pinned
         # copy gated by an event; the worker host-waits the event and never
@@ -169,15 +169,21 @@ class _HybridTier(_NvmeResidency):
         # cross-thread stream synchronize per layer that cost 4x end-to-end
         # (measured 6.21 -> 1.57 tok/s at 235B): the same sync class the
         # CPU router exists to kill, reintroduced from a thread.
+        # 4-slot ring vs a live-task bound of 3 (1 running + <=1 queued by
+        # the qsize guard above + this submit): a slot can never be
+        # overwritten while a worker still reads it. The old 2-slot ring
+        # could — qsize() does not count the RUNNING task, so a late copy_
+        # raced the worker's float().numpy() read via CUDA DMA and fed the
+        # predictor torn bytes (wasted fetches, never wrong outputs).
         t_rows = hidden.shape[0]
         if self.pf_pin is None or self.pf_pin[0].shape[0] < t_rows:
             self.pf_pin = [torch.empty(max(8, t_rows), hidden.shape[-1],
                                        dtype=hidden.dtype, pin_memory=True)
-                           for _ in range(2)]
-            self.pf_ev = [torch.cuda.Event(), torch.cuda.Event()]
+                           for _ in range(4)]
+            self.pf_ev = [torch.cuda.Event() for _ in range(4)]
         s = self.pf_slot
-        self.pf_slot ^= 1              # ring: worker depth <=2 by the queue
-        pin = self.pf_pin[s]           # guard, so a slot is never live twice
+        self.pf_slot = (s + 1) % 4
+        pin = self.pf_pin[s]
         ev = self.pf_ev[s]
         pin[:t_rows].copy_(hidden.detach(), non_blocking=True)
         ev.record(torch.cuda.current_stream(hidden.device))
@@ -449,6 +455,15 @@ def disable_hybrid_tier(model) -> int:
     from .hot_residency import disable_hot_residency
     import cpu_grouped
 
+    # Quiesce the prefetch worker BEFORE stripping module attributes: an
+    # in-flight task reads mod._e4b_arena_layer, and deleting attrs first
+    # turns those tasks into AttributeErrors parked on unretrieved futures
+    # during teardown. Disable new fires, then drain what is queued.
+    global _PF_POOL
+    set_prefetch(model, False)
+    if _PF_POOL is not None:
+        _PF_POOL.submit(lambda: None).result()    # barrier: queue drained
+
     owns_pool = False
     n = disable_hot_residency(model)
     for _, mod in model.named_modules():
@@ -463,7 +478,6 @@ def disable_hybrid_tier(model) -> int:
             cpu_grouped.pool_stop()
         except (ImportError, RuntimeError):
             pass
-    global _PF_POOL
     if _PF_POOL is not None:
         _PF_POOL.shutdown(wait=True)
         _PF_POOL = None
