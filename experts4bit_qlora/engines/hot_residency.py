@@ -395,7 +395,8 @@ def dispatched_modules(model) -> list:
 
 
 def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
-                         verbose: bool = False, state_cls=None) -> int:
+                         verbose: bool = False, state_cls=None,
+                         reach_wrapped: bool = False) -> int:
     """Partition every eligible ``ExpertsNbit`` under ``model`` into a resident
     GPU hot-stack + a streamed CPU cold-stack, in MoE-layer order.
 
@@ -464,7 +465,12 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
         # nothing calls. Wrapped bases stay in `mods` — so `hot_sets[i]` keeps the
         # same meaning it has for every other engine — and are skipped per-module in
         # the loop below, consuming their entry like any other ineligible layer.
-        wrapped = wrapped_bases(model)
+        # `reach_wrapped` is the hybrid tier's claim that patches on wrapped
+        # bases ARE reachable: its training seam sits on the ExpertsLoRA
+        # wrapper and reads this engine's state directly, and
+        # `_delegate_to_base` knows `_e4b_hot_ref`, so zero-adapter eval
+        # delegates here too. The v0 engine reached directly keeps refusing.
+        wrapped = set() if reach_wrapped else wrapped_bases(model)
         if wrapped and not [m for m in mods if id(m) not in wrapped]:
             raise NotImplementedError(
                 "every ExpertsNbit here is an ExpertsLoRA.base (the streaming-loader / "

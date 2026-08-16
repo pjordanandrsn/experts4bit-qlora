@@ -366,7 +366,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
 
     try:
         n = enable_hot_residency(model, hot_sets, device=device,
-                                 verbose=verbose, state_cls=_HybridTier)
+                                 verbose=verbose, state_cls=_HybridTier,
+                                 reach_wrapped=True)
     except Exception:
         # no half-enabled state left behind: every stamp this call made
         # comes off before the error propagates (Bugbot)
