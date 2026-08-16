@@ -1,0 +1,92 @@
+{
+ "status": "PASSED",
+ "note": "gpu parity suite green",
+ "env": {
+  "torch_before": "2.8.0+cu128",
+  "torch_after": "2.8.0+cu128",
+  "cuda": true,
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "triton": "3.4.0",
+  "experts4bit-qlora": "0.18.0",
+  "grouped-nf4-gemm": "0.11.0"
+ },
+ "probe": {
+  "cuda": true,
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "measurements": [
+   {
+    "quantity": "gate_up kernel vs oracle",
+    "tokens": 1,
+    "branch": "gemv (all groups size 1)",
+    "rel_max_err": 0.0
+   },
+   {
+    "quantity": "down kernel vs oracle",
+    "tokens": 1,
+    "branch": "gemv (all groups size 1)",
+    "rel_max_err": 3.344392098370008e-06
+   },
+   {
+    "quantity": "forward fused vs reference",
+    "tokens": 1,
+    "branch": "gemv (all groups size 1)",
+    "rel_max_err": 0.0058823530562222
+   },
+   {
+    "quantity": "forward fused vs source oracle",
+    "tokens": 1,
+    "branch": "gemv (all groups size 1)",
+    "rel_max_err": 0.0058823530562222
+   },
+   {
+    "quantity": "forward reference vs source oracle",
+    "tokens": 1,
+    "branch": "gemv (all groups size 1)",
+    "rel_max_err": 0.0
+   },
+   {
+    "quantity": "CONTROL fused vs UNCLAMPED oracle (must be large)",
+    "tokens": 1,
+    "branch": "gemv (all groups size 1)",
+    "rel_max_err": 1.0000659227371216
+   },
+   {
+    "quantity": "gate_up kernel vs oracle",
+    "tokens": 6,
+    "branch": "grouped gemm",
+    "rel_max_err": 0.0
+   },
+   {
+    "quantity": "down kernel vs oracle",
+    "tokens": 6,
+    "branch": "grouped gemm",
+    "rel_max_err": 0.0
+   },
+   {
+    "quantity": "forward fused vs reference",
+    "tokens": 6,
+    "branch": "grouped gemm",
+    "rel_max_err": 0.0043668122962117195
+   },
+   {
+    "quantity": "forward fused vs source oracle",
+    "tokens": 6,
+    "branch": "grouped gemm",
+    "rel_max_err": 0.0043668122962117195
+   },
+   {
+    "quantity": "forward reference vs source oracle",
+    "tokens": 6,
+    "branch": "grouped gemm",
+    "rel_max_err": 0.0
+   },
+   {
+    "quantity": "CONTROL fused vs UNCLAMPED oracle (must be large)",
+    "tokens": 6,
+    "branch": "grouped gemm",
+    "rel_max_err": 0.9991471767425537
+   }
+  ]
+ },
+ "pytest_rc": 0
+}

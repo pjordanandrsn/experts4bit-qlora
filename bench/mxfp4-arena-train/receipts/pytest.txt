@@ -1,0 +1,21 @@
+.................                                                        [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED suite/test_mxfp4_arena_train.py::test_mxfp4_arena_resolves_to_the_four_segment_staging_view
+PASSED suite/test_mxfp4_arena_train.py::test_an_unknown_layout_raises_and_names_both_expectations
+PASSED suite/test_mxfp4_arena_train.py::test_nf4_layout_is_returned_untouched
+PASSED suite/test_mxfp4_arena_train.py::test_meta_experts_declare_mxfp4_shapes_for_an_mxfp4_arena
+PASSED suite/test_mxfp4_arena_train.py::test_geometry_check_rejects_an_nf4_module_against_an_mxfp4_arena
+PASSED suite/test_mxfp4_arena_train.py::test_mxfp4_arena_forward_matches_the_dequantize_then_matmul_oracle
+PASSED suite/test_mxfp4_arena_train.py::test_the_fixture_would_catch_a_plain_swiglu_over_the_clamped_base
+PASSED suite/test_mxfp4_arena_train.py::test_expertslora_over_an_mxfp4_arena_matches_the_oracle
+PASSED suite/test_mxfp4_arena_train.py::test_the_adapter_trains_and_the_frozen_mxfp4_base_does_not
+PASSED suite/test_mxfp4_arena_train.py::test_enable_fast_train_refuses_an_mxfp4_arena_base
+PASSED suite/test_mxfp4_arena_train.py::test_staged_mxfp4_bytes_decode_to_the_source_weights_bit_exactly
+PASSED suite/test_mxfp4_arena_train.py::test_fused_mxfp4_gemm_matches_the_dequantize_then_matmul_oracle[1]
+PASSED suite/test_mxfp4_arena_train.py::test_fused_mxfp4_gemm_matches_the_dequantize_then_matmul_oracle[6]
+PASSED suite/test_mxfp4_arena_train.py::test_fused_forward_agrees_with_the_reference_lane_on_gpu[1]
+PASSED suite/test_mxfp4_arena_train.py::test_fused_forward_agrees_with_the_reference_lane_on_gpu[6]
+PASSED suite/test_mxfp4_arena_train.py::test_the_fused_lane_is_refused_when_a_gradient_is_required
+PASSED suite/test_mxfp4_arena_train.py::test_decoding_an_nf4_module_as_mxfp4_is_refused
+17 passed in 6.37s

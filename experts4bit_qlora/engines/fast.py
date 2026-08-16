@@ -74,6 +74,16 @@ def fast_available() -> bool:
 
 def _eligible(mod) -> Optional[str]:
     """Return None if ``mod`` can take the fast path, else the reason not."""
+    # Checked BEFORE quant_type, because an MXFP4-arena module still reports
+    # `quant_type="nf4"` -- that is the class the loader built, and only its
+    # BUFFERS were re-declared to MXFP4 geometry. So the nf4 test below passes it,
+    # and the `is_cuda` test below rejects it only while it is still on meta. The
+    # kernel here reads fp32 absmax per 64 elements; MXFP4 carries uint8 e8m0 per
+    # 32, so the reshape would either raise mid-forward or, at the sizes where the
+    # element counts happen to divide, compute nonsense.
+    if getattr(mod, "_e4b_mxfp4_arena", False):
+        return ("storage is MXFP4 (arena), which the NF4 grouped kernel cannot read — "
+                "the MXFP4 forward is wired by nvme_experts and needs no patch here")
     if getattr(mod, "bits", None) != 4 or getattr(mod, "quant_type", None) != "nf4":
         return "storage is not nf4-4bit"
     if getattr(mod, "blocksize", None) != 64:
@@ -485,6 +495,15 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
 
     a_cat = hidden_states.index_select(0, token_rows).contiguous()
 
+    # Set by `nvme_train.enable_nvme_train_residency` when this layer's frozen
+    # experts come off an NVMe arena. Routed staging then fills only the routed
+    # rows of a full-shaped stack, so a backward reading a row the recompute did
+    # not re-stage would get uninitialized memory rather than an error. The
+    # closures below run in BACKWARD, which is the one place that can happen, so
+    # the check belongs here and nowhere else. `None` (the host-RAM home, whose
+    # stage is always the whole layer) costs one attribute lookup per forward.
+    guard = getattr(base, "_e4b_stage_guard", None)
+
     # weights_fn is load-bearing, not optional: under expert offload the views
     # below are TRANSIENT staged copies. nf4_qlora must not hold them on the
     # autograd ctx (that pinned all 48 layers and OOMed at 22.41 GB); it calls
@@ -492,6 +511,8 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     # which under gradient checkpointing is this layer, because the recompute
     # forward re-stages it first.
     def _gate_up_now():
+        if guard is not None:
+            guard(expert_ids)
         return (base.gate_up_proj.view(E, n1, k1 // 2),
                 base.gate_up_absmax.view(E, n1, k1 // 64).float())
 
@@ -512,6 +533,8 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     h = _epilogue(base, proj)
 
     def _down_now():
+        if guard is not None:
+            guard(expert_ids)
         return (base.down_proj.view(E, n2, k2 // 2),
                 base.down_absmax.view(E, n2, k2 // 64).float())
 
@@ -614,6 +637,16 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
                 if verbose:
                     print(f"[e4b.fast] skip {type(mod).__name__}: base "
                           f"{type(mod.base).__name__} has a custom forward")
+                continue
+            # An MXFP4-arena base passes every check above -- it is `quant_type="nf4"`
+            # by class and carries `_apply_gate` (V4) -- and then dies inside the
+            # forward on `gate_up_absmax.view(E, n1, k1 // 64)`, because e8m0 scales
+            # are one byte per 32 elements, not fp32 per 64. Refuse at patch time,
+            # where the message can say why, rather than at step 1 of a rented run.
+            if getattr(mod.base, "_e4b_mxfp4_arena", False):
+                if verbose:
+                    print(f"[e4b.fast] skip {type(mod).__name__}: base storage is "
+                          "MXFP4 (arena); the NF4 grouped kernel cannot read it")
                 continue
             mod._e4b_train_ref = mod.forward
             mod._e4b_dgrad = dgrad
