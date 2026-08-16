@@ -1,0 +1,23 @@
+
+NOTICE: Existing SQLite export found: g3_nsys.sqlite
+        It is assumed file was previously exported from: g3_nsys.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [g3_nsys.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_api_sum.py]... 
+
+ ** CUDA API Summary (cuda_api_sum):
+
+ Time (%)  Total Time (ns)  Num Calls  Avg (ns)  Med (ns)  Min (ns)  Max (ns)  StdDev (ns)              Name            
+ --------  ---------------  ---------  --------  --------  --------  --------  -----------  ----------------------------
+     71.6        518030258     172106    3009.9    2714.0      2164    189373       1832.4  cudaLaunchKernel            
+     16.8        121882723      22577    5398.5    5458.0      1823     58046       2684.2  cudaMemcpyAsync             
+      8.7         63161105      17801    3548.2    3435.0       451    239518      10342.3  cudaStreamSynchronize       
+      2.3         16552457       3072    5388.2    3786.0      2614    225155       5494.1  cuLaunchKernelEx            
+      0.3          1886046       3201     589.2     631.0       170     34492        807.2  cudaStreamIsCapturing_v10000
+      0.2          1183427        240    4930.9     270.5       200   1084210      69959.4  cuKernelGetFunction         
+      0.1           723797        240    3015.8    2748.5      2403     12659       1211.6  cuLaunchKernel              
+      0.0           238205          1  238205.0  238205.0    238205    238205          0.0  cudaMalloc                  
+      0.0           226617         32    7081.8    6475.0      4987     19319       2706.1  cudaMemsetAsync             
+      0.0            25498          1   25498.0   25498.0     25498     25498          0.0  cudaDeviceSynchronize       
+      0.0             3044          1    3044.0    3044.0      3044      3044          0.0  cuProfilerStart             
+
