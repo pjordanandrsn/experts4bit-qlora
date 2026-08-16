@@ -1,0 +1,109 @@
+{
+ "arm_c_sampled": {
+  "arm": "C_prefetch_on",
+  "prefetch": true,
+  "toks": 0.17662800605065324,
+  "misses_timed": 6524,
+  "demand_misses_timed": 2975,
+  "spec_misses_timed": 3549,
+  "demand_waits_timed": 2343,
+  "demand_fill_s": 15.825001256,
+  "demand_wait_s": 12.667187373,
+  "spec_fill_s": 24.165657504,
+  "decode_wall_s": 362.34344389103353,
+  "verify": {
+   "rows_checked": 16,
+   "rows_corrupt": 0,
+   "map_inconsistencies": 0
+  },
+  "main_thread_frames": [
+   [
+    "nvme_residency.py:626 segment_tensor",
+    5280
+   ],
+   [
+    "threading.py:327 wait",
+    528
+   ],
+   [
+    "cpu_grouped.py:162 _run",
+    221
+   ],
+   [
+    "modeling_qwen3_moe.py:281 forward",
+    161
+   ],
+   [
+    "hot_residency.py:275 _cold_contrib",
+    99
+   ],
+   [
+    "modeling_qwen3_moe.py:299 forward",
+    82
+   ],
+   [
+    "modeling_qwen3_moe.py:297 forward",
+    59
+   ],
+   [
+    "hot_residency.py:277 _cold_contrib",
+    50
+   ],
+   [
+    "hot_residency.py:276 _cold_contrib",
+    49
+   ],
+   [
+    "modeling_qwen3_moe.py:347 forward",
+    48
+   ],
+   [
+    "cpu_grouped.py:171 _run",
+    41
+   ],
+   [
+    "modeling_qwen3_moe.py:348 forward",
+    40
+   ],
+   [
+    "modeling_qwen3_moe.py:296 forward",
+    35
+   ],
+   [
+    "threading.py:337 wait",
+    33
+   ]
+  ],
+  "other_thread_frames": [
+   [
+    "nvme_reader.py:171 _read",
+    1196
+   ],
+   [
+    "hybrid.py:193 task",
+    157
+   ],
+   [
+    "hybrid.py:207 task",
+    74
+   ],
+   [
+    "nvme_reader.py:178 _read",
+    61
+   ],
+   [
+    "hybrid.py:212 task",
+    34
+   ],
+   [
+    "hybrid.py:195 task",
+    17
+   ]
+  ],
+  "pf_delta": {
+   "prefetch_submitted": 5844,
+   "prefetch_rows": 4426
+  },
+  "tail": " in use. Secondary storage (like hard drives or SSDs"
+ }
+}

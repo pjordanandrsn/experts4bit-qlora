@@ -1,0 +1,135 @@
+{
+  "dram_gb": 25,
+  "n_new": 64,
+  "masses": {
+    "vram_frac": 0.471520390070922,
+    "dram_frac": 0.418218085106383,
+    "nvme_frac": 0.11026152482269504,
+    "target_gpu_cpu_ratio": 3.186782016735215,
+    "achieved_gpu_cpu_ratio": 1.1274509803921569
+  },
+  "manifest_sha": "ea22046c7575f8659e436e5f121befa687b878ebf333a335cad501276bc3124d",
+  "vram_budget_gb": 11.95208740234375,
+  "threads": 40,
+  "arms": [
+    {
+      "arm": "B1_prefetch_off",
+      "prefetch": false,
+      "toks": 1.166876933548098,
+      "misses_timed": 5558,
+      "tier_before": {
+        "requests": 1484,
+        "rows_requested": 21616,
+        "hits": 16216,
+        "misses": 5400,
+        "hit_rate": 0.7501850481125093,
+        "evictions": 5272,
+        "resident_rows": 128,
+        "hot_rows": 128,
+        "disk_reads": 5400,
+        "disk_bytes": 57330892800,
+        "io_mode": "O_DIRECT"
+      },
+      "tier_after": {
+        "requests": 13360,
+        "rows_requested": 44716,
+        "hits": 33758,
+        "misses": 10958,
+        "hit_rate": 0.7549423025315324,
+        "evictions": 10830,
+        "resident_rows": 128,
+        "hot_rows": 128,
+        "disk_reads": 10958,
+        "disk_bytes": 116339245056,
+        "io_mode": "O_DIRECT"
+      },
+      "pf_delta": {
+        "prefetch_submitted": 0,
+        "prefetch_rows": 0
+      },
+      "tail": " and instructions currently in use. Secondary storage (like hard drives"
+    },
+    {
+      "arm": "C_prefetch_on",
+      "prefetch": true,
+      "toks": 0.17665951809586294,
+      "misses_timed": 6734,
+      "tier_before": {
+        "requests": 1591,
+        "rows_requested": 21744,
+        "hits": 16293,
+        "misses": 5451,
+        "hit_rate": 0.7493101545253863,
+        "evictions": 5323,
+        "resident_rows": 128,
+        "hot_rows": 128,
+        "disk_reads": 5451,
+        "disk_bytes": 57872351232,
+        "io_mode": "O_DIRECT"
+      },
+      "tier_after": {
+        "requests": 16354,
+        "rows_requested": 48908,
+        "hits": 36723,
+        "misses": 12185,
+        "hit_rate": 0.7508587552138709,
+        "evictions": 12057,
+        "resident_rows": 128,
+        "hot_rows": 128,
+        "disk_reads": 12185,
+        "disk_bytes": 129366097920,
+        "io_mode": "O_DIRECT"
+      },
+      "pf_delta": {
+        "prefetch_submitted": 5839,
+        "prefetch_rows": 4408
+      },
+      "tail": " in use. Secondary storage (like hard drives or SSDs"
+    },
+    {
+      "arm": "B2_prefetch_off_recheck",
+      "prefetch": false,
+      "toks": 1.171962977216158,
+      "misses_timed": 5526,
+      "tier_before": {
+        "requests": 1484,
+        "rows_requested": 21616,
+        "hits": 16216,
+        "misses": 5400,
+        "hit_rate": 0.7501850481125093,
+        "evictions": 5272,
+        "resident_rows": 128,
+        "hot_rows": 128,
+        "disk_reads": 5400,
+        "disk_bytes": 57330892800,
+        "io_mode": "O_DIRECT"
+      },
+      "tier_after": {
+        "requests": 13228,
+        "rows_requested": 44328,
+        "hits": 33402,
+        "misses": 10926,
+        "hit_rate": 0.7535192203573362,
+        "evictions": 10798,
+        "resident_rows": 128,
+        "hot_rows": 128,
+        "disk_reads": 10926,
+        "disk_bytes": 115999506432,
+        "io_mode": "O_DIRECT"
+      },
+      "pf_delta": {
+        "prefetch_submitted": 0,
+        "prefetch_rows": 0
+      },
+      "tail": " in use. Secondary storage (like hard drives or SSDs"
+    }
+  ],
+  "stall_baseline_misses": 5542.0,
+  "stall_reduction": -0.21508480692890664,
+  "tails_identical": false,
+  "gate_g4": {
+    "nvme_frac": 0.11026152482269504,
+    "band_ok": true,
+    "reduction_ok": false
+  }
+}
