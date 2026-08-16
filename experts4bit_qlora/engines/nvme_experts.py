@@ -767,13 +767,16 @@ def _mxfp4_fused_forward(mod, hidden_states, top_k_index, top_k_weights):
     n1, k1 = mod._gate_up_shape
     n2, k2 = mod._down_shape
 
-    out = torch.zeros(tokens, hidden, dtype=torch.float32, device=x.device)
     k = top_k_index.shape[1]
+    # unique (token, slot) landing + one fixed-order sum — never index_add_
+    # with duplicate token rows (CUDA atomics order = nondeterministic bits;
+    # same fix as hot_residency.forward, see the comment there)
+    out = torch.zeros(tokens, k, hidden, dtype=torch.float32, device=x.device)
     flat = top_k_index.reshape(-1)
     counts = torch.bincount(flat, minlength=E)
     active = torch.nonzero(counts, as_tuple=False).view(-1)
     if active.numel() == 0:                       # nothing routed anywhere
-        return out.to(input_dtype)
+        return out.sum(dim=1).to(input_dtype)
 
     order = torch.argsort(flat, stable=True)
     token_rows = order // k
@@ -805,5 +808,5 @@ def _mxfp4_fused_forward(mod, hidden_states, top_k_index, top_k_weights):
         sizes, expert_ids)
 
     weighted = down.float() * top_k_weights[token_rows, top_pos, None].float()
-    out.index_add_(0, token_rows, weighted)
-    return out.to(input_dtype)
+    out.index_put_((token_rows, top_pos), weighted)
+    return out.sum(dim=1).to(input_dtype)

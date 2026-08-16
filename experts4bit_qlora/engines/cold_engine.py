@@ -190,7 +190,8 @@ class _ColdEngine(_HotResidency):
         dn_all = torch.empty_like(dn_sorted)
         dn_all.index_copy_(0, order, dn_sorted)                       # back to row order
         w = top_k_weights[row_token.index_select(0, cr), row_slot.index_select(0, cr)].to(torch.float32)
-        out.index_add_(0, row_token.index_select(0, cr), dn_all.to(dev) * w[:, None])
+        out.index_put_((row_token.index_select(0, cr), row_slot.index_select(0, cr)),
+                       dn_all.to(dev) * w[:, None])
 
 
 # --------------------------------------------------------------------------- #

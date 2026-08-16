@@ -234,7 +234,16 @@ class _HotResidency:
         row_token = torch.arange(T * k, device=dev) // k
         row_slot = torch.arange(T * k, device=dev) - row_token * k
         hot_row = self.is_hot[flat]                            # [T*k] bool
-        out = torch.zeros(T, H, dtype=torch.float32, device=dev)
+        # [T, k, H] slot landing, NOT [T, H] + index_add_: every assignment
+        # owns a unique (token, slot) cell, so branches WRITE (index_put_,
+        # no accumulate) instead of atomically adding — CUDA index_add_ with
+        # duplicate indices orders its adds by warp scheduling, and at
+        # batch=1 all k contributions collide on one row, flipping output
+        # bits run to run (the determinism-invariant defect filed with the
+        # G3 formal results). The fixed-order sum(dim=1) at the end is the
+        # ONE reduction, deterministic for a fixed shape. Costs k× the
+        # transient (fp32); trivial at decode, bounded at prefill.
+        out = torch.zeros(T, k, H, dtype=torch.float32, device=dev)
 
         # --- HOT: resident GPU stack, zero transfer ---
         hr = hot_row.nonzero(as_tuple=False).view(-1)
@@ -255,14 +264,15 @@ class _HotResidency:
             # so neither order is nearer the truth. Applying it here instead keeps ONE
             # code path for all three epilogues and lets the down GEMM stay batched.
             w = top_k_weights[row_token.index_select(0, hr), row_slot.index_select(0, hr)].to(torch.float32)
-            out.index_add_(0, row_token.index_select(0, hr), dn.to(torch.float32) * w[:, None])
+            out.index_put_((row_token.index_select(0, hr), row_slot.index_select(0, hr)),
+                           dn.to(torch.float32) * w[:, None])
 
         # --- COLD: stream ONLY the routed cold experts from pinned host RAM ---
         cr = (~hot_row).nonzero(as_tuple=False).view(-1)
         if cr.numel():
             self._cold_contrib(x, flat, row_token, row_slot, cr, top_k_weights, out, dev)
 
-        return out.to(device=input_dev, dtype=input_dtype)
+        return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
 
     def _cold_contrib(self, x, flat, row_token, row_slot, cr, top_k_weights, out, dev):
         """Accumulate the routed cold experts' contributions into ``out`` (fp32,
@@ -288,7 +298,8 @@ class _HotResidency:
                                self.shapes, self.has_gate, self.act_fn, gptoss=gptoss,
                                clamp_limit=self.clamp_limit)
         w = top_k_weights[row_token.index_select(0, cr), row_slot.index_select(0, cr)].to(torch.float32)
-        out.index_add_(0, row_token.index_select(0, cr), dn.to(torch.float32) * w[:, None])
+        out.index_put_((row_token.index_select(0, cr), row_slot.index_select(0, cr)),
+                       dn.to(torch.float32) * w[:, None])
 
 
 def hot_residency_available() -> bool:

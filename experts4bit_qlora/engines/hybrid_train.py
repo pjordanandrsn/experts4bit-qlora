@@ -255,8 +255,11 @@ def _train_forward(st, lora, hidden, top_k_index, top_k_weights):
                                   ).to(torch.float32)
 
     w_rows = wts.reshape(-1).to(torch.float32)
-    out = torch.zeros(t, hidden.shape[-1], dtype=torch.float32, device=dev)
-    out = out.index_add(0, row_token, y_dn * w_rows[:, None])
+    # rows are dense token-major/slot-minor by construction, so the weighted
+    # combine is a reshape + fixed-order sum — no scatter, no atomics,
+    # deterministic and differentiable (index_add with duplicate token rows
+    # was the same nondeterminism the serve path carried)
+    out = (y_dn * w_rows[:, None]).view(t, k, -1).sum(dim=1)
     return out.to(device=hidden.device, dtype=hidden.dtype)
 
 
