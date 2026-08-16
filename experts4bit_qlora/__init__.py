@@ -86,6 +86,12 @@ from .engines.batched import (  # noqa: E402
     enable_batched_train,
 )
 from .engines.cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
+from .engines.cpu_router import (  # noqa: E402
+    cpu_router_available,
+    disable_cpu_router,
+    enable_cpu_router,
+    router_trip_stats,
+)
 from .engines.hot_residency import (  # noqa: E402
     disable_hot_residency,
     dispatched_modules,
@@ -126,12 +132,16 @@ __all__ = [
     "LoRALinear",
     "add_attention_lora",
     "cold_engine_available",
+    "cpu_router_available",
     "disable_cold_engine",
+    "disable_cpu_router",
     "disable_fast",
     "disable_hot_residency",
     "disable_pipelined_residency",
     "enable_cold_engine",
+    "enable_cpu_router",
     "enable_expert_offload",
+    "router_trip_stats",
     "NF4KVCache",
     "kv_nf4_available",
     "enable_fast",
