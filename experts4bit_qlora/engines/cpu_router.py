@@ -188,7 +188,12 @@ class _CpuRouter:
         self.host_ms: list[float] = []
         self.seg_ms: list[tuple[float, float, float]] = []  # wake/math/push
 
-    def will_serve(self, hidden: torch.Tensor) -> bool:
+    def will_serve(self, mod, hidden: torch.Tensor) -> bool:
+        if mod.training:
+            # reentrant gradient checkpointing runs its first forward under
+            # no_grad while still in train mode; serving it would disagree
+            # with the grad-enabled recompute (same footgun fast.py guards)
+            return False
         if torch.is_grad_enabled() and hidden.requires_grad:
             return False
         if not hidden.is_cuda:
@@ -370,7 +375,7 @@ def enable_cpu_router(model, *, max_rows: int = 8, assert_every: int = 0,
 
         def patched(hidden_states, _mod=mod, _state=state, _ref=ref):
             h = hidden_states.reshape(-1, _state.w_t.shape[0])
-            if not _state.will_serve(h):
+            if not _state.will_serve(_mod, h):
                 return _ref(hidden_states)
             return _state.route(_mod, h)
 
