@@ -289,14 +289,36 @@ def enable_hybrid_train(model, arena_path: str, manifest, **kw) -> int:
         lora = lora_of.get(id(mod))
         host = lora if lora is not None else mod
         serve = host.forward
+        base_serve = mod.forward       # the tier-installed serve wrapper
 
         def _fwd(hidden, top_k_index, top_k_weights,
-                 _st=st, _lora=lora, _serve=serve):
+                 _st=st, _lora=lora, _serve=serve, _base_serve=base_serve):
             if torch.is_grad_enabled() and (
                     hidden.requires_grad or top_k_weights.requires_grad
                     or (_lora is not None and any(
                         p.requires_grad for p in _lora.parameters()
                         if p is not None))):
+                return _train_forward(_st, _lora, hidden, top_k_index,
+                                      top_k_weights)
+            # No-grad routing must not pass through ExpertsLoRA.forward:
+            # its delegation predicate refuses under model.training, and
+            # the inline fallback reads base storage the streaming loader
+            # never materializes — reentrant checkpointing's no-grad outer
+            # pass and any train()+no_grad validation forward would leave
+            # the tier and crash at scale (Bugbot, HIGH). Route on the
+            # adapter's own state instead:
+            if _lora is not None:
+                if _lora._adapter_is_zero():
+                    # delta is identically zero: the fused tier serve path,
+                    # immune to the training flag. (_adapter_is_zero is the
+                    # cached predicate with documented invalidation — train()
+                    # and load reset it; raw param.data mutation must reset
+                    # _delegate_ok, as lora.py already requires.)
+                    return _base_serve(hidden, top_k_index, top_k_weights)
+                # trained adapter under no-grad: deltas must still apply and
+                # the fused serve path cannot inject them — run the train
+                # forward's math grad-free (buses + deltas, no base-storage
+                # reads); slower than fused serve, correct at any scale
                 return _train_forward(_st, _lora, hidden, top_k_index,
                                       top_k_weights)
             return _serve(hidden, top_k_index, top_k_weights)

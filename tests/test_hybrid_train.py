@@ -253,3 +253,50 @@ def test_inference_calls_bypass_the_training_seam(one_layer):
                                    rtol=3e-2, atol=3e-2)
     finally:
         ht.disable_hybrid_train(model)
+
+
+@needs_stack
+def test_train_mode_no_grad_never_enters_the_lora_inline_path(one_layer):
+    """The Bugbot HIGH: ExpertsLoRA's delegation predicate refuses under
+    model.training, so a no-grad forward routed through it falls into the
+    inline path that reads base storage the streaming loader never
+    materializes (reentrant checkpointing's outer pass, train()+no_grad
+    validation). Routing must key on the ADAPTER's state instead: zero
+    adapter -> the fused tier serve bitwise; trained adapter -> the train
+    forward's math grad-free."""
+    from experts4bit_qlora.lora import ExpertsLoRA
+    from experts4bit_qlora.engines.hybrid_train import _train_forward
+    model, arena = one_layer
+    mod = model[0]
+    lora = ExpertsLoRA(mod, r=4, alpha=8, dtype=torch.float32).to("cuda")
+    wrapped = torch.nn.ModuleList([lora])
+    ht.enable_hybrid_train(
+        wrapped, arena,
+        _manifest({"vram": [0, 1, 2], "dram": [3, 4, 5], "nvme": [6, 7]}),
+        hot_rows=E, threads=2)
+    try:
+        st = mod._hot_residency
+        lora.train()                     # the flag that broke delegation
+        hidden = torch.randn(3, H, device="cuda", dtype=torch.bfloat16)
+        idx = torch.randint(0, E, (3, K), device="cuda")
+        wts = torch.rand(3, K, device="cuda", dtype=torch.bfloat16)
+
+        # zero adapter: must be the fused tier serve path, bitwise
+        with torch.no_grad():
+            got = lora(hidden, idx, wts)
+            want = mod.forward(hidden, idx, wts)
+        assert torch.equal(got, want)
+
+        # trained adapter: deltas must still apply — the grad-free train
+        # forward, bitwise (and nothing read from base torch storage)
+        with torch.no_grad():
+            lora.gate_up_lora_B.normal_(std=0.05)
+            lora.down_lora_B.normal_(std=0.05)
+        lora._delegate_ok = None         # raw .data mutation: manual reset
+        with torch.no_grad():
+            got2 = lora(hidden, idx, wts)
+            want2 = _train_forward(st, lora, hidden, idx, wts)
+        assert torch.equal(got2, want2)
+        assert not torch.equal(got2, want), "deltas did not apply"
+    finally:
+        ht.disable_hybrid_train(wrapped)
