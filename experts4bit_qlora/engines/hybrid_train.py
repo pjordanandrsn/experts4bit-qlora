@@ -308,12 +308,16 @@ def enable_hybrid_train(model, arena_path: str, manifest, **kw) -> int:
             # the tier and crash at scale (Bugbot, HIGH). Route on the
             # adapter's own state instead:
             if _lora is not None:
-                if _lora._adapter_is_zero():
-                    # delta is identically zero: the fused tier serve path,
-                    # immune to the training flag. (_adapter_is_zero is the
-                    # cached predicate with documented invalidation — train()
-                    # and load reset it; raw param.data mutation must reset
-                    # _delegate_ok, as lora.py already requires.)
+                # FRESH zero test, never the cached _adapter_is_zero: an
+                # optimizer step mutates B without invalidating that cache,
+                # so a True cached during warm-up (B still zero) would
+                # silently drop the trained deltas from every later no-grad
+                # forward. Two device reductions per call — noise against a
+                # validation forward.
+                if not (bool(_lora.gate_up_lora_B.any())
+                        or bool(_lora.down_lora_B.any())):
+                    # delta identically zero: the fused tier serve path,
+                    # immune to the training flag
                     return _base_serve(hidden, top_k_index, top_k_weights)
                 # trained adapter under no-grad: deltas must still apply and
                 # the fused serve path cannot inject them — run the train

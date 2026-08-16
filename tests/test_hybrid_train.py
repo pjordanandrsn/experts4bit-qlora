@@ -288,11 +288,13 @@ def test_train_mode_no_grad_never_enters_the_lora_inline_path(one_layer):
         assert torch.equal(got, want)
 
         # trained adapter: deltas must still apply — the grad-free train
-        # forward, bitwise (and nothing read from base torch storage)
+        # forward, bitwise. DELIBERATELY no cache invalidation here: the
+        # zero-adapter forward above ran first (the poisoning scenario —
+        # an optimizer step mutates B without resetting _delegate_ok), so
+        # this passing proves the seam tests B freshly, never the cache.
         with torch.no_grad():
             lora.gate_up_lora_B.normal_(std=0.05)
             lora.down_lora_B.normal_(std=0.05)
-        lora._delegate_ok = None         # raw .data mutation: manual reset
         with torch.no_grad():
             got2 = lora(hidden, idx, wts)
             want2 = _train_forward(st, lora, hidden, idx, wts)
