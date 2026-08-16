@@ -199,6 +199,7 @@ def test_short_layers_refused(arena):
                            hot_rows=E, layers=[])
 
 
+@needs_stack
 def test_empty_dram_degrades_to_parent_and_teardown_is_clean(arena):
     mod, path, _ = arena
     model = _Wrap(_module().to("cuda"))
