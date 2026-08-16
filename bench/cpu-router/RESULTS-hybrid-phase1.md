@@ -102,3 +102,25 @@ when that lands; the miss is carried, not waived.
 
 `g1_replica.json`, `g1_legacy.json`, `g1_model.json`, nsys traces + API
 tables, all in this directory.
+
+## ADDENDUM — G1 re-measure with the Phase-2 native epilogue (same day)
+
+With grouped-nf4-gemm's `gnf4_native` wired in (single-call deterministic
+top-k + softmax + strided pinned writes, plus the dense router gemv), and
+the cache-warm retargeted at the buffer the native path actually reads
+(the positive-control test family caught the decoupling for a third time):
+
+| metric | Phase-1 numpy path | native path | bar |
+|---|---|---|---|
+| replica trip p50 | 45.1 µs | **36.5 µs** | ≤35 |
+| replica trip p99 | 63.6 µs | **50.8 µs** | ≤100 |
+| model host p50 | 54.4 µs | **~29 µs** | — |
+
+p99 PASS with margin; p50 miss narrows 29% → 4%. The model arm's
+previously unexplained math segment is now mostly attributed: it was the
+cold router-weight stream, halved by warm-target + native gemv. Remaining
+p50 gap is event-visibility latency + H2D submission (driver-fixed) plus
+~12 µs of shallow-queue launch latency specific to the replica instrument
+(the deep-queued real decode shows wake ≈ 1.3 µs). Receipts:
+`g1r_replica.json`, `g1r_model.json` (Zen 5 + RTX 5090 class box,
+destroyed after; native path confirmed engaged via the push=0 sentinel).
