@@ -1,0 +1,16 @@
+
+NOTICE: Existing SQLite export found: g3_nsys.sqlite
+        It is assumed file was previously exported from: g3_nsys.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [g3_nsys.sqlite] with [/opt/nvidia/nsight-systems/2024.6.2/host-linux-x64/reports/cuda_gpu_mem_size_sum.py]... 
+
+ ** CUDA GPU MemOps Summary (by Size) (cuda_gpu_mem_size_sum):
+
+ Total (MB)  Count  Avg (MB)  Med (MB)  Min (MB)  Max (MB)  StdDev (MB)            Operation           
+ ----------  -----  --------  --------  --------  --------  -----------  ------------------------------
+     33.399   4547     0.007     0.000     0.000     0.401        0.026  [CUDA memcpy Host-to-Device]  
+     16.878  13254     0.001     0.000     0.000     0.201        0.008  [CUDA memcpy Device-to-Host]  
+      0.327   4776     0.000     0.000     0.000     0.001        0.000  [CUDA memcpy Device-to-Device]
+      0.000     32     0.000     0.000     0.000     0.000        0.000  [CUDA memset]                 
+

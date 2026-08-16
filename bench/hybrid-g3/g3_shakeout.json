@@ -1,0 +1,17 @@
+{
+  "baseline_toks": 1.5393503242203221,
+  "hybrid_toks": 12.07059507762716,
+  "ratio": 7.841356764413515,
+  "L": 48,
+  "E": 128,
+  "masses": {
+    "vram_frac": 0.7689344618055556,
+    "dram_frac": 0.23106553819444445,
+    "nvme_frac": 0.0,
+    "target_gpu_cpu_ratio": 3.327727872621227,
+    "achieved_gpu_cpu_ratio": 3.3277764733505517
+  },
+  "manifest_sha": "52417087588b9c099f95cc96aa2cd2ce7db5d00aec7e65f51a4d1b68d59be76f",
+  "vram_budget_gb": 23.70599365234375,
+  "threads": 40
+}
