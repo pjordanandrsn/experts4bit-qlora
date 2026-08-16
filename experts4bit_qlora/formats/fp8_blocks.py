@@ -93,8 +93,36 @@ def dequantize_fp8_blocks(
         weight = weight.view(torch.float8_e4m3fn)
     out, inn = weight.shape
     s = _scale_values(scale.to(weight.device))
-    # repeat_interleave rather than unflatten so a ragged final tile (out or in not a
-    # multiple of block_size) stays correct; the trailing narrow is a no-op when they are.
+
+    # ALIGNED FAST PATH — the only one DeepSeek-V4 ever takes (every dense tensor
+    # is a multiple of 128), and it exists because the general path below costs
+    # SIX TIMES what this function's own docstring claims.
+    #
+    # The general path holds four full [out, in] tensors at once: the expanded
+    # fp32 scale, `weight.float()`, the fp32 product, and the dtype result —
+    # 12-14 bytes per parameter where the class docstring says "one weight at a
+    # time (~67 MB for V4's largest)". For `wq_b` [32768, 1024] that is ~403 MB,
+    # not 67 MB. It is what OOMs a 24 GB card on the 284B run
+    # (bench/mxfp4-arena-train/RESULTS-284b-ladder.md).
+    #
+    # Doing it in `dtype` with a broadcast scale is BIT-EXACT, not an
+    # approximation, and that is a property of the format rather than luck:
+    # e4m3 -> bf16 is lossless (3 mantissa bits into 7) and an e8m0 scale is a
+    # power of two, so the multiply is exact. Verified bit-identical to the
+    # general path across typical, wide and over/underflow exponent ranges — see
+    # tests/test_fp8_blocks_tiled.py.
+    if out % block_size == 0 and inn % block_size == 0:
+        w = weight.to(dtype)
+        if w is weight:                       # `.to` is a no-op when dtypes match
+            w = w.clone()                     # never mutate the caller's storage
+        to, ti = out // block_size, inn // block_size
+        v = w.view(to, block_size, ti, block_size)
+        v.mul_(s.to(dtype).view(to, 1, ti, 1))
+        return w
+
+    # RAGGED fallback. repeat_interleave rather than unflatten so a ragged final
+    # tile (out or in not a multiple of block_size) stays correct; the trailing
+    # narrow is a no-op when they are.
     s = s.repeat_interleave(block_size, 0)[:out].repeat_interleave(block_size, 1)[:, :inn]
     return (weight.float() * s).to(dtype)
 
@@ -109,8 +137,17 @@ class Fp8BlockLinear(nn.Module):
 
     Decoding on every call sounds wasteful and is not: each of these projections is used
     exactly once per forward pass, so "dequantize on use" performs exactly one dequant
-    per use. The transient bf16 copy is one weight at a time (~67 MB for V4's largest,
-    ``wq_b`` at ``[32768, 1024]``), not the whole dense side at once.
+    per use. The transient is one weight at a time, not the whole dense side at once.
+
+    **That transient used to be six times what this docstring claimed.** It said "~67 MB
+    for V4's largest, ``wq_b`` at ``[32768, 1024]``" — which counts only the bf16 result.
+    The fp32 route also held an expanded fp32 scale, ``weight.float()`` and an fp32
+    product, i.e. 12-14 bytes per parameter, so the real peak was ~403 MB. On a 24 GB
+    card running the 284B model that is the allocation that fails
+    (``bench/mxfp4-arena-train/RESULTS-284b-ladder.md``). The aligned path in
+    :func:`dequantize_fp8_blocks` now decodes in ``dtype`` with a broadcast scale — 2
+    bytes per parameter, bit-identical output — so the figure above is finally true for
+    every V4 tensor. A ragged shape still takes the fp32 route and still costs the 6x.
 
     There is deliberately no FP8 matmul here. The A2000 this was built against is sm_86,
     which has no FP8 tensor cores; decoding to ``compute_dtype`` and running a normal

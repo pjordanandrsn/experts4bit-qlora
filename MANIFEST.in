@@ -1,0 +1,13 @@
+# sdist contents beyond the package itself.
+#
+# The wheel is built from `[tool.setuptools.packages.find] include =
+# ["experts4bit_qlora*"]`, so it carries the library and nothing else — `tools/`,
+# `scripts/` and `bench/` are all repo-only by design. This adds ONE exception:
+# the routing probe, because a release that says "the compacted stack would not
+# help, here are the numbers" is worth more when the reader can re-run the
+# measurement rather than take the table on trust.
+#
+# NOTE this affects the SDIST only. `pip install experts4bit-qlora` resolves the
+# wheel and will not have it; `pip download --no-binary :all:` will.
+recursive-include bench/routing *.py
+include CHANGELOG.md

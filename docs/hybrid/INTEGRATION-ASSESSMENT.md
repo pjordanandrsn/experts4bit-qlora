@@ -1,6 +1,8 @@
 # INTEGRATION-ASSESSMENT — Serving-engine host for the hybrid CPU/GPU MoE tier
 
-**Status: DRAFT — research assessment only. Human decides — do not implement until confirmed.**
+**Status: DECIDED 2026-08-16 — own system. See §6. The engine comparison
+below is retained as the record of what was evaluated and as the map for
+the optional later adapter.**
 **Date: 2026-08-16. Engines assessed: vLLM v0.27.1 (released 2026-08-11), SGLang v0.5.17 (released 2026-08-08). All links and code states verified against `main` / PyPI on 2026-08-16.**
 
 ## 0. What we need from a host engine
@@ -148,3 +150,46 @@ Rationale against the four criteria:
 **Watch items / risks:** (1) vLLM's [RFC #38256](https://github.com/vllm-project/vllm/issues/38256)/[PR #37190](https://github.com/vllm-project/vllm/pull/37190) may land an `ExpertWeightProvider` API — track it and adopt it as our residency engine's attachment point when merged; until then target `FusedMoEMethodBase` (stable shape since early 2025) and pin the vLLM version in the plugin. (2) The scheduler interface is explicitly non-public — avoid depending on it. (3) CUDA-graph capture around CPU callbacks needs the splitting-ops/eager escape hatch first, graphs later. (4) The `RoutedExperts`/`MoERunner` refactor is newer than v0.27.1 — the plugin should carry a small version-shim layer, per the vLLM plugin blog pattern (2025-11-20).
 
 **Runner-up and switching cost.** SGLang, chosen if vLLM review culture blocks the provider RFC direction or the plugin surfaces regress. Switching cost is bounded and mostly glue, by design: the kernels (grouped-nf4-gemm) and the residency engine (experts4bit-qlora) are engine-agnostic; SGLang's `FusedMoEMethodBase` is literally adapted from vLLM's, so the expert-backend core ports nearly 1:1, and `KTEPWrapperMethod` is a working in-tree template for the wrapper shape. What does not port: entry-point packaging (SGLang has none — becomes a fork or in-tree PR, with the CI-ownership burden the KT integration shows is real), the loader hook (SGLang has no load-format registry), and the LoRA/KV glue. Estimate: the engine-adapter layer is a rewrite measured in weeks; the months-scale work (kernels, residency, artifact) is unaffected. The in-repo bit-exact reference path is the hedge either way — the serving engine is always replaceable because it is never the source of truth.
+
+---
+
+## 6. DECISION (2026-08-16, owner): build our own system
+
+The D0 split is revised: there is no engine-hosted serving surface. The
+serving system is built in-repo — which is what Stage 2's own phase list
+(tiered paged KV, FP8 KV, batched hybrid dispatch, continuous batching,
+session park/resume, multi-adapter) already describes. The engine plugin
+(vLLM per §5's seam analysis) is demoted from "hosts the throughput
+surface" to an **optional, later distribution adapter** — unscheduled,
+built only if own-system distribution wants it. The kernels and the
+residency engine were engine-agnostic by construction, so this option
+does not expire.
+
+Why this is the right call, beyond "it's the point":
+
+- **The deployment center of gravity is the cheap heterogeneous box**
+  (vast-community-class hardware: mixed consumer GPUs, thin links, odd
+  CPU slices) — the fleet engines' anti-target. Our core mechanic —
+  per-box calibration feeding a placement solver — exists *because* those
+  boxes differ; a fleet engine's scheduler assumes away exactly what we
+  measure. The flagship claim (a 235B-class MoE decoding at the PCIe
+  physical limit on ≤16 GB of VRAM) is a product for that hardware, not
+  an extension for people who already own H100s.
+- **The impedance mismatches were already visible in §1**: CUDA-graph
+  capture around CPU callbacks, EP/DP interplay unresolved in vLLM's own
+  RFC, their KV manager assuming VRAM(+swap) rather than a
+  three-tier-with-NVMe-park hierarchy. Under own-system these are design
+  freedoms instead of upstream negotiations.
+- **The D0 warning ("months of work producing a worse scheduler") was
+  scoped against vLLM's turf.** Our scheduler's scope is a single box,
+  decode-dominant, B≤32, sessioned (park/resume) workloads, with
+  mixed-mode GPU/CPU expert dispatch — a scheduler vLLM does not have.
+  "Beating vLLM at scheduling" stays a non-goal; G9's aggregate-tok/s
+  gate is the falsifiable check that ours is good enough, and the
+  adapter option remains the hedge if it is not.
+
+Unchanged by this decision: the determinism split (invariant 4′). Bit-
+exactness is incompatible with continuous batching for physics reasons
+(batch composition varies ⇒ reduction order varies), engine or no engine.
+The reference path keeps the bit-exact, manifest-verified guarantee; the
+own serving path documents tolerance and verifies the artifact offline.

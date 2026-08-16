@@ -1,0 +1,31 @@
+{
+ "e4b_version": "0.18.0",
+ "site_packages": "/usr/local/lib/python3.12/site-packages",
+ "files": [
+  {
+   "path": "experts4bit_qlora/lora.py",
+   "stock_sha256": "20ba66c870f7b96657a0b99bb0e512e3f076afc953531f5116525369010b8381",
+   "overlay_sha256": "46a6feebd2509498eea1bf1a0835ec28b26231d50e13e2b3035de13a22062a0f",
+   "backup": "/usr/local/lib/python3.12/site-packages/experts4bit_qlora/lora.py.stock"
+  },
+  {
+   "path": "experts4bit_qlora/engines/nvme_train.py",
+   "stock_sha256": "9c30eb00b8a2e0ab60788ce1e1a853e0b28ef8cbb3fa911cfddb93aa1edc4170",
+   "overlay_sha256": "e369209d81732ba1260544e9bfc4a1fefffbc3b3cb923405ffe2a1f5b173701a",
+   "backup": "/usr/local/lib/python3.12/site-packages/experts4bit_qlora/engines/nvme_train.py.stock"
+  },
+  {
+   "path": "experts4bit_qlora/engines/nvme_experts.py",
+   "stock_sha256": "b9a5c7a3f79d84616a150b87460e88aab2069ba6e5ca001fc0e5a0632070f4e7",
+   "overlay_sha256": "195ae9b76f1dd94dd1b7b095942ed964e7f5012f1bbef11ae0bb2ff2b4da573e",
+   "backup": "/usr/local/lib/python3.12/site-packages/experts4bit_qlora/engines/nvme_experts.py.stock"
+  },
+  {
+   "path": "experts4bit_qlora/engines/fast.py",
+   "stock_sha256": "f3152e1f478fed7f0dfe2183059c590ef4806701883d6ef206c47bf2cab8b0ef",
+   "overlay_sha256": "cb00339e513fc0cfd1d215b5c0ce990957f3adfd6bad56c5ac7fbbefba3faae7",
+   "backup": "/usr/local/lib/python3.12/site-packages/experts4bit_qlora/engines/fast.py.stock"
+  }
+ ],
+ "overlay_applied": true
+}
