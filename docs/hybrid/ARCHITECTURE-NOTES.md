@@ -137,3 +137,64 @@ private-marker guard; run its grep locally before committing.
 G0 <50% · any invariant requires violation · determinism unachievable in a
 phase · a dependency forces a weight-format change · CPU router disagrees
 with GPU reference beyond tie-break cases. Halt and report; do not improvise.
+
+---
+
+# Stage 2 addendum — Phase 6 pre-work map (tiered paged KV, gate G6)
+
+Directive recap (Stage 2, Phase 6): block-based KV (16 tokens/block), block
+table per sequence, allocator backing blocks by tier VRAM → DRAM → NVMe,
+**reusing the weight tier abstraction** (invariant 8 — if the Stage-1 tier
+interface can't express KV blocks, generalizing it is itself the
+deliverable). G6: paged overhead ≤2% vs contiguous KV at batch 1; zero
+regression to Stage-1 numbers; demotion off the critical path,
+nsys-verified.
+
+## Where it hooks
+
+- **Cache seam**: the serve loop (`infer.py` decode, `serve.py`) rides the
+  HF cache protocol (`past_key_values`). `engines/kv_cache.py` already
+  proves the shape Phase 6 wants: a cache OBJECT that owns storage and
+  hands stock attention a per-layer view, patching no attention forwards
+  (arch variance — QK-norm, sinks, per-layer geometry — stays upstream's
+  problem). `TieredPagedKV` is a sibling of `NF4KVCache`, not a patch.
+- **Tier seam (the invariant-8 deliverable)**: gnf4's `ColdTier` is
+  read-only over a baked arena — fixed-stride rows, keyed (layer, id),
+  pinned landing, LFU + demand-window protection, publish-after-fill.
+  KV blocks are fixed-stride rows keyed (layer, block) — the SAME shape —
+  but they are **written during decode and have no arena**: the block's
+  source of truth is born in VRAM and MIGRATES on demote. The
+  generalization is a writable sibling in gnf4's N-series (suggested
+  `kernel/row_pool.py` or an extension of `nvme_residency`): a `RowPool`
+  with `alloc/write/read/demote/promote/park` whose slot accounting,
+  reservation rules, and stats vocabulary are shared with `ColdTier`
+  (same publish-after-fill discipline, same counters). Kernel-vs-runtime
+  placement rule holds: pool mechanics → gnf4; block tables, per-sequence
+  policy, HF cache object → e4b.
+- **Contiguity is the ≤2% trick**: per sequence, the VRAM hot window is
+  allocated as physically contiguous block runs, so batch-1 attention
+  gets a plain VIEW (zero gather) while everything fits — G6's overhead
+  clause is measured in exactly that regime. Demoted cold-context blocks
+  are re-read per step as a per-layer streamed gather (double-buffered on
+  a background stream, the expert-streaming overlap discipline), and the
+  demotion copy itself is copy-on-demote on a background stream.
+- **Instrumentation**: per-tier block counts, demotion/promotion rates,
+  KV-miss stall time — same stats-dict vocabulary as `ColdTier.stats()`.
+
+## Phase-7 forward-compat (FP8 KV)
+
+`kv_cache.py`'s corrected self-assessment is the cautionary precedent: its
+NF4 KV is a capacity feature with an honest, measured latency cost. Phase 7
+(E4M3, per-token-per-head scale, dequant in-kernel) slots into the SAME
+block pool — block bytes are opaque to the pool; dtype/scale layout is a
+block-format tag in the pool row header, so FP8 needs no second tiering
+system either.
+
+## G6 measurement plan
+
+Arm A: stock HF cache (contiguous), batch-1 greedy decode, house
+`timed_decode`. Arm B: `TieredPagedKV`, everything-fits placement (no
+demotion) — overhead = (A−B)/A must be ≥−2%. Arm C: constrained VRAM
+window forcing demotion — nsys audit shows demotion copies on the
+background stream only. Zero-regression clause: the Stage-1 bench suite
+re-run with the feature present-but-unused (invariant 9).
