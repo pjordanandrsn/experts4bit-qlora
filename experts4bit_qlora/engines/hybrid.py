@@ -192,7 +192,16 @@ class _HybridTier(_NvmeResidency):
             import numpy as np
             ev.synchronize()               # host wait only; no CUDA work
             hc = pin[:t_rows].float().numpy()
-            logits = hc @ pf["np_w"].T
+            # BLAS-free on purpose: `hc @ np_w.T` dispatches to OpenBLAS,
+            # which spawns a full spinning thread team PER FIRE on a big
+            # host. ~5.8K fires oversubscribed every core against the gnf4
+            # pool and torch's OMP workers, and every parallel region on
+            # the MAIN thread (each torch.stack, every layer) inherited the
+            # barrier cost — measured as the whole 6.6x arm-C slowdown at
+            # 235B while disk and tier sat idle. Ufunc broadcast+reduce is
+            # single-threaded and this product is 0.5 MFLOP; it needs no
+            # team.
+            logits = (pf["np_w"][None, :, :] * hc[:, None, :]).sum(axis=2)
             if pf["np_b"] is not None:
                 logits = logits + pf["np_b"]
             k = pf["k"]
