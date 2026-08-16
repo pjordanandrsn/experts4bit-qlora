@@ -1,0 +1,290 @@
+{
+ "status": "ARENA_FAILED",
+ "note": "arena arm exit 1 (see arm_arena.json / stage_arena_crash.json)",
+ "arm_stock": {
+  "arm": "STOCK",
+  "started": 1786707462.086434,
+  "outcome": "FAILED",
+  "error_type": "OutOfMemoryError",
+  "error": "CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 1.31 MiB is free. Including non-PyTorch memory, this process has 23.54 GiB memory in use. Of the allocated memory 22.29 GiB is allocated by PyTorch, and 1.02 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 129, in stage_stock\n    AutoModelForCausalLM.from_pretrained(\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/auto/auto_factory.py\", line 402, in from_pretrained\n    return model_class.from_pretrained(\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4348, in from_pretrained\n    loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)\n                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_utils.py\", line 4482, in _load_pretrained_model\n    loading_info, disk_offload_index = convert_and_load_state_dict_in_model(\n                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1714, in convert_and_load_state_dict_in_model\n    realized_value = mapping.convert(\n                     ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1166, in convert\n    collected_tensors = self.materialize_tensors()\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 956, in materialize_tensors\n    tensors = [future.result() for future in tensors if future.result() is not None]\n                                                        ^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 449, in result\n    return self.__get_result()\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/concurrent/futures/_base.py\", line 401, in __get_result\n    raise self._exception\n  File \"/usr/lib/python3.12/concurrent/futures/thread.py\", line 59, in run\n    result = self.fn(*self.args, **self.kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1243, in _job\n    return _materialize_copy(tensor, device, dtype)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/core_model_loading.py\", line 1221, in _materialize_copy\n    tensor = tensor.to(device=device, dtype=dtype)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 1.31 MiB is free. Including non-PyTorch memory, this process has 23.54 GiB memory in use. Of the allocated memory 22.29 GiB is allocated by PyTorch, and 1.02 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n",
+  "failed_on_memory": true
+ },
+ "bake": {
+  "seconds": 55.1,
+  "n_layers": 43,
+  "n_experts_per_layer": 256,
+  "row_stride": 13369344,
+  "segments": [
+   "w1.weight",
+   "w3.weight",
+   "w1.scale",
+   "w3.scale",
+   "w2.weight",
+   "w2.scale"
+  ],
+  "manifest_keys": [
+   "align",
+   "arena_bytes",
+   "bake_mode",
+   "magic",
+   "moe_layers",
+   "n_experts_per_layer",
+   "n_layers",
+   "prefix",
+   "row_bytes",
+   "row_stride",
+   "rows",
+   "segments"
+  ]
+ },
+ "env": {
+  "torch": "2.8.0+cu128",
+  "cuda": true,
+  "gpu": "NVIDIA RTX A5000",
+  "vram_gib": 23.5,
+  "triton": "3.4.0",
+  "experts4bit-qlora": "0.18.0",
+  "grouped-nf4-gemm": "0.11.0",
+  "transformers": "5.15.0"
+ },
+ "gates_pre": {
+  "e4b_version": "0.18.0",
+  "gnf4_mxfp4_grouped": true,
+  "V4_RESIDENCY_KINDS": [
+   "w1.weight",
+   "w3.weight",
+   "w1.scale",
+   "w3.scale",
+   "w2.weight",
+   "w2.scale"
+  ],
+  "overlay_mxfp4_forward": true,
+  "overlay_mxfp4_dequant": true,
+  "overlay_fused_lane": true,
+  "overlay_arena_view": true,
+  "overlay_fast_refusal": true,
+  "overlay_fast_refusal_reason": "storage is MXFP4 (arena), which the NF4 grouped kernel cannot read \u2014 the MXFP4 forward is wired by nvme_experts and needs no patch here",
+  "overlay_gemv_bail": true,
+  "overlay_gnf4_reads_e8m0": true,
+  "G2": true
+ },
+ "overlay_provenance": {
+  "e4b_version": "0.18.0",
+  "site_packages": "/usr/local/lib/python3.12/dist-packages",
+  "files": [
+   {
+    "path": "nvme_residency.py",
+    "stock_sha256": "ada462b89a0367c998d04efb93bf664832884798a69118de828777e63868435c",
+    "overlay_sha256": "fa18255e493840fbcca9c3c145d600aa50c78ebcef3135f8173e538c85700764",
+    "backup": "/usr/local/lib/python3.12/dist-packages/nvme_residency.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/lora.py",
+    "stock_sha256": "20ba66c870f7b96657a0b99bb0e512e3f076afc953531f5116525369010b8381",
+    "overlay_sha256": "46a6feebd2509498eea1bf1a0835ec28b26231d50e13e2b3035de13a22062a0f",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/lora.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/formats/fp8_blocks.py",
+    "stock_sha256": "cdbff2902d5f7d5e97b2605d8945d585eccf056888fbe8e07b6e2fa11f714154",
+    "overlay_sha256": "0b93a4248e7baa31cbcc859f3abca73057b63085eb44565a4dbe80ba0fe66f03",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/formats/fp8_blocks.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/engines/fast.py",
+    "stock_sha256": "f3152e1f478fed7f0dfe2183059c590ef4806701883d6ef206c47bf2cab8b0ef",
+    "overlay_sha256": "cb00339e513fc0cfd1d215b5c0ce990957f3adfd6bad56c5ac7fbbefba3faae7",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/fast.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/engines/nvme_train.py",
+    "stock_sha256": "9c30eb00b8a2e0ab60788ce1e1a853e0b28ef8cbb3fa911cfddb93aa1edc4170",
+    "overlay_sha256": "e369209d81732ba1260544e9bfc4a1fefffbc3b3cb923405ffe2a1f5b173701a",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_train.py.stock"
+   },
+   {
+    "path": "experts4bit_qlora/engines/nvme_experts.py",
+    "stock_sha256": "b9a5c7a3f79d84616a150b87460e88aab2069ba6e5ca001fc0e5a0632070f4e7",
+    "overlay_sha256": "195ae9b76f1dd94dd1b7b095942ed964e7f5012f1bbef11ae0bb2ff2b4da573e",
+    "backup": "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_experts.py.stock"
+   }
+  ],
+  "overlay_applied": true
+ },
+ "progress_t1_s128": {
+  "arm": "ARENA",
+  "tokens": 1,
+  "seqlen": 128,
+  "total_tokens": 128,
+  "steps": 3,
+  "vram": {
+   "card_gib": 23.5,
+   "capped_to_gib": null,
+   "note": "card is at or under the claim; no cap needed"
+  },
+  "host_mem": {
+   "error": "[Errno 2] No such file or directory: '/sys/fs/cgroup/memory.max'",
+   "rejected": "cgroup usable=None; falling back to 24 GB"
+  },
+  "usable_bytes_measured": 24000000000,
+  "hot_rows_floor": 256,
+  "hot_rows_capacity": 944,
+  "row_stride": 13369344,
+  "hot_rows": 944,
+  "arena_layers": 43,
+  "arena_experts": 256,
+  "load_seconds": 21.3,
+  "load_peak_gib": 10.63,
+  "G1_modules_patched": 43,
+  "G4_expertslora_modules": 43,
+  "G4_mxfp4_flagged": 43,
+  "G4_mxfp4_dequant_override": 43,
+  "G4_enable_fast_train_returned": 0,
+  "G4": true
+ },
+ "progress_t1_s256": {
+  "arm": "ARENA",
+  "tokens": 1,
+  "seqlen": 256,
+  "total_tokens": 256,
+  "steps": 3,
+  "vram": {
+   "card_gib": 23.5,
+   "capped_to_gib": null,
+   "note": "card is at or under the claim; no cap needed"
+  },
+  "host_mem": {
+   "error": "[Errno 2] No such file or directory: '/sys/fs/cgroup/memory.max'",
+   "rejected": "cgroup usable=None; falling back to 24 GB"
+  },
+  "usable_bytes_measured": 24000000000,
+  "hot_rows_floor": 256,
+  "hot_rows_capacity": 944,
+  "row_stride": 13369344,
+  "hot_rows": 944,
+  "arena_layers": 43,
+  "arena_experts": 256,
+  "load_seconds": 19.0,
+  "load_peak_gib": 10.63,
+  "G1_modules_patched": 43,
+  "G4_expertslora_modules": 43,
+  "G4_mxfp4_flagged": 43,
+  "G4_mxfp4_dequant_override": 43,
+  "G4_enable_fast_train_returned": 0,
+  "G4": true
+ },
+ "progress_t2_s256": {
+  "arm": "ARENA",
+  "tokens": 2,
+  "seqlen": 256,
+  "total_tokens": 512,
+  "steps": 3,
+  "vram": {
+   "card_gib": 23.5,
+   "capped_to_gib": null,
+   "note": "card is at or under the claim; no cap needed"
+  },
+  "host_mem": {
+   "error": "[Errno 2] No such file or directory: '/sys/fs/cgroup/memory.max'",
+   "rejected": "cgroup usable=None; falling back to 24 GB"
+  },
+  "usable_bytes_measured": 24000000000,
+  "hot_rows_floor": 256,
+  "hot_rows_capacity": 944,
+  "row_stride": 13369344,
+  "hot_rows": 944,
+  "arena_layers": 43,
+  "arena_experts": 256,
+  "load_seconds": 19.0,
+  "load_peak_gib": 10.63,
+  "G1_modules_patched": 43,
+  "G4_expertslora_modules": 43,
+  "G4_mxfp4_flagged": 43,
+  "G4_mxfp4_dequant_override": 43,
+  "G4_enable_fast_train_returned": 0,
+  "G4": true
+ },
+ "progress_t4_s256": {
+  "arm": "ARENA",
+  "tokens": 4,
+  "seqlen": 256,
+  "total_tokens": 1024,
+  "steps": 3,
+  "vram": {
+   "card_gib": 23.5,
+   "capped_to_gib": null,
+   "note": "card is at or under the claim; no cap needed"
+  },
+  "host_mem": {
+   "error": "[Errno 2] No such file or directory: '/sys/fs/cgroup/memory.max'",
+   "rejected": "cgroup usable=None; falling back to 24 GB"
+  },
+  "usable_bytes_measured": 24000000000,
+  "hot_rows_floor": 256,
+  "hot_rows_capacity": 944,
+  "row_stride": 13369344,
+  "hot_rows": 944,
+  "arena_layers": 43,
+  "arena_experts": 256,
+  "load_seconds": 19.6,
+  "load_peak_gib": 10.63,
+  "G1_modules_patched": 43,
+  "G4_expertslora_modules": 43,
+  "G4_mxfp4_flagged": 43,
+  "G4_mxfp4_dequant_override": 43,
+  "G4_enable_fast_train_returned": 0,
+  "G4": true
+ },
+ "progress_t8_s64": {
+  "arm": "ARENA",
+  "tokens": 8,
+  "seqlen": 64,
+  "total_tokens": 512,
+  "steps": 3,
+  "vram": {
+   "card_gib": 23.5,
+   "capped_to_gib": null,
+   "note": "card is at or under the claim; no cap needed"
+  },
+  "host_mem": {
+   "error": "[Errno 2] No such file or directory: '/sys/fs/cgroup/memory.max'",
+   "rejected": "cgroup usable=None; falling back to 24 GB"
+  },
+  "usable_bytes_measured": 24000000000,
+  "hot_rows_floor": 256,
+  "hot_rows_capacity": 944,
+  "row_stride": 13369344,
+  "hot_rows": 944,
+  "arena_layers": 43,
+  "arena_experts": 256,
+  "load_seconds": 19.0,
+  "load_peak_gib": 10.63,
+  "G1_modules_patched": 43,
+  "G4_expertslora_modules": 43,
+  "G4_mxfp4_flagged": 43,
+  "G4_mxfp4_dequant_override": 43,
+  "G4_enable_fast_train_returned": 0,
+  "G4": true
+ },
+ "stage_arena_1x128_crash": {
+  "stage": "arena",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 340, in <module>\n    {\"gates\": stage_gates, \"stock\": stage_stock,\n  File \"/root/v4/v4_run.py\", line 302, in stage_arena\n    loss.backward()\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_tensor.py\", line 647, in backward\n    torch.autograd.backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/__init__.py\", line 354, in backward\n    _engine_run_backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/graph.py\", line 829, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/function.py\", line 311, in apply\n    return user_fn(self, *args)\n           ^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/_vendor/experts.py\", line 105, in backward\n    weight = ctx.dequant_fn()\n             ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_experts.py\", line 687, in _mxfp4_dequantize_expert\n    return _decode_mxfp4_rows(packed, absmax, rows, k, expert_idx, dtype).t()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/nvme_experts.py\", line 624, in _decode_mxfp4_rows\n    return dequantize_mxfp4(blocks[expert].view(rows, groups, 16),\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/formats/mxfp4.py\", line 95, in dequantize_mxfp4\n    out[:, 0::2] = lut[(blk & 0x0F).int()]  # low nibble\n                   ~~~^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 16.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 11.31 MiB is free. Including non-PyTorch memory, this process has 23.49 GiB memory in use. Of the allocated memory 23.21 GiB is allocated by PyTorch, and 20.45 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n"
+ },
+ "stage_arena_1x256_crash": {
+  "stage": "arena",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 340, in <module>\n    {\"gates\": stage_gates, \"stock\": stage_stock,\n  File \"/root/v4/v4_run.py\", line 302, in stage_arena\n    loss.backward()\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_tensor.py\", line 647, in backward\n    torch.autograd.backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/__init__.py\", line 354, in backward\n    _engine_run_backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/graph.py\", line 829, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1146, in unpack_hook\n    _run_fn_with_dynamo_disabled(frame.recompute_fn, *args)\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_compile.py\", line 53, in inner\n    return disable_fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_dynamo/eval_frame.py\", line 929, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1116, in _run_fn_with_dynamo_disabled\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1542, in recompute_fn\n    fn(*args, **kwargs)\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1141, in forward\n    mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1092, in forward\n    routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1879, in _call_impl\n    return inner()\n           ^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1816, in inner\n    args_result = hook(self, args)\n                  ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 807, in _stage_pre_hook\n    handle.stage_routed(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 623, in stage_routed\n    self._copy_routed_to_device(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 576, in _copy_routed_to_device\n    dest = self._alloc_dest()\n           ^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 486, in _alloc_dest\n    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 1013.31 MiB is free. Including non-PyTorch memory, this process has 22.52 GiB memory in use. Of the allocated memory 21.47 GiB is allocated by PyTorch, and 811.42 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n"
+ },
+ "stage_arena_2x256_crash": {
+  "stage": "arena",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 340, in <module>\n    {\"gates\": stage_gates, \"stock\": stage_stock,\n  File \"/root/v4/v4_run.py\", line 302, in stage_arena\n    loss.backward()\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_tensor.py\", line 647, in backward\n    torch.autograd.backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/__init__.py\", line 354, in backward\n    _engine_run_backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/graph.py\", line 829, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1146, in unpack_hook\n    _run_fn_with_dynamo_disabled(frame.recompute_fn, *args)\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_compile.py\", line 53, in inner\n    return disable_fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_dynamo/eval_frame.py\", line 929, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1116, in _run_fn_with_dynamo_disabled\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1542, in recompute_fn\n    fn(*args, **kwargs)\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1141, in forward\n    mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1092, in forward\n    routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1879, in _call_impl\n    return inner()\n           ^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1816, in inner\n    args_result = hook(self, args)\n                  ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 807, in _stage_pre_hook\n    handle.stage_routed(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 623, in stage_routed\n    self._copy_routed_to_device(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 576, in _copy_routed_to_device\n    dest = self._alloc_dest()\n           ^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 486, in _alloc_dest\n    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 611.31 MiB is free. Including non-PyTorch memory, this process has 22.91 GiB memory in use. Of the allocated memory 22.10 GiB is allocated by PyTorch, and 563.54 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n"
+ },
+ "stage_arena_4x256_crash": {
+  "stage": "arena",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 340, in <module>\n    {\"gates\": stage_gates, \"stock\": stage_stock,\n  File \"/root/v4/v4_run.py\", line 300, in stage_arena\n    out = model(input_ids=ids, labels=ids)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/utils/generic.py\", line 939, in wrapper\n    output = func(self, *args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1475, in forward\n    outputs: MoeModelOutputWithPast = self.model(\n                                      ^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/utils/generic.py\", line 1068, in wrapper\n    output = func(self, *args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/utils/output_capturing.py\", line 262, in wrapper\n    outputs = func(self, *args, **kwargs)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1317, in forward\n    hidden_states = layer(\n                    ^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/modeling_layers.py\", line 113, in __call__\n    return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_compile.py\", line 53, in inner\n    return disable_fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_dynamo/eval_frame.py\", line 929, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 495, in checkpoint\n    ret = function(*args, **kwargs)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1141, in forward\n    mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1092, in forward\n    routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1879, in _call_impl\n    return inner()\n           ^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1816, in inner\n    args_result = hook(self, args)\n                  ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 807, in _stage_pre_hook\n    handle.stage_routed(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 623, in stage_routed\n    self._copy_routed_to_device(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 576, in _copy_routed_to_device\n    dest = self._alloc_dest()\n           ^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 486, in _alloc_dest\n    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 128.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 85.31 MiB is free. Including non-PyTorch memory, this process has 23.42 GiB memory in use. Of the allocated memory 22.74 GiB is allocated by PyTorch, and 446.44 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n"
+ },
+ "stage_arena_8x64_crash": {
+  "stage": "arena",
+  "traceback": "Traceback (most recent call last):\n  File \"/root/v4/v4_run.py\", line 340, in <module>\n    {\"gates\": stage_gates, \"stock\": stage_stock,\n  File \"/root/v4/v4_run.py\", line 302, in stage_arena\n    loss.backward()\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_tensor.py\", line 647, in backward\n    torch.autograd.backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/__init__.py\", line 354, in backward\n    _engine_run_backward(\n  File \"/usr/local/lib/python3.12/dist-packages/torch/autograd/graph.py\", line 829, in _engine_run_backward\n    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1146, in unpack_hook\n    _run_fn_with_dynamo_disabled(frame.recompute_fn, *args)\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_compile.py\", line 53, in inner\n    return disable_fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/_dynamo/eval_frame.py\", line 929, in _fn\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1116, in _run_fn_with_dynamo_disabled\n    return fn(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/utils/checkpoint.py\", line 1542, in recompute_fn\n    fn(*args, **kwargs)\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1141, in forward\n    mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1784, in _call_impl\n    return forward_call(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/transformers/models/deepseek_v4/modeling_deepseek_v4.py\", line 1092, in forward\n    routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1773, in _wrapped_call_impl\n    return self._call_impl(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1879, in _call_impl\n    return inner()\n           ^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py\", line 1816, in inner\n    args_result = hook(self, args)\n                  ^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 807, in _stage_pre_hook\n    handle.stage_routed(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 623, in stage_routed\n    self._copy_routed_to_device(ids)\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 576, in _copy_routed_to_device\n    dest = self._alloc_dest()\n           ^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py\", line 486, in _alloc_dest\n    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntorch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 645.31 MiB is free. Including non-PyTorch memory, this process has 22.88 GiB memory in use. Of the allocated memory 22.06 GiB is allocated by PyTorch, and 574.17 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)\n"
+ }
+}

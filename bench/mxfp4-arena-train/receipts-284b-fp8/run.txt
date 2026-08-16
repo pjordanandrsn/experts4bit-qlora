@@ -1,0 +1,93 @@
+[2026-08-14T11:27:59Z] interpreter: python
+[2026-08-14T11:27:59Z] === install ===
+
+[notice] A new release of pip is available: 26.1.2 -> 26.2.1
+[notice] To update, run: python -m pip install --upgrade pip
+{"torch": "2.8.0+cu128", "cuda": true, "gpu": "NVIDIA RTX A5000", "vram_gib": 23.5, "triton": "3.4.0", "experts4bit-qlora": "0.18.0", "grouped-nf4-gemm": "0.11.0", "transformers": "5.15.0"}
+[2026-08-14T11:28:10Z] === overlay ===
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+[2026-08-14T11:28:29Z] === G2/G4 pre-gates in the IMPORTED module ===
+[receipt] gates_pre.json: {"e4b_version": "0.18.0", "gnf4_mxfp4_grouped": true, "V4_RESIDENCY_KINDS": ["w1.weight", "w3.weight", "w1.scale", "w3.scale", "w2.weight", "w2.scale"], "overlay_mxfp4_forward": true, "overlay_mxfp4_dequant": true, "overlay_fused_lane": true, "overlay_arena_view": true, "overlay_fast_refusal": true, "overlay_fast_refusal_reason": "storage is MXFP4 (arena), which the NF4 grouped kernel cannot read \u2014 the MXFP4 forward is wired by nvme_experts and needs no patch here", "overlay_gemv_bail": true, "overlay_gnf4_reads_e8m0": true, "G2": true}
+[2026-08-14T11:28:35Z] === disk ===
+overlay overlay
+overlay         420G  293M  420G   1% /
+[2026-08-14T11:28:35Z] === download DeepSeek-V4-Flash (~160 GB) to LOCAL disk ===
+  warnings.warn(
+Fetching 72 files:   0%|          | 0/72 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 72 files:   1%|▏         | 1/72 [00:00<00:17,  3.98it/s]Fetching 72 files:  10%|▉         | 7/72 [00:00<00:02, 24.19it/s]Fetching 72 files:  24%|██▎       | 17/72 [00:00<00:01, 48.78it/s]Fetching 72 files:  32%|███▏      | 23/72 [00:20<00:01, 48.78it/s]Fetching 72 files:  33%|███▎      | 24/72 [00:24<01:06,  1.39s/it]Fetching 72 files:  35%|███▍      | 25/72 [00:25<01:05,  1.39s/it]Fetching 72 files:  40%|████      | 29/72 [00:27<00:46,  1.09s/it]Fetching 72 files:  44%|████▍     | 32/72 [00:32<00:48,  1.21s/it]Fetching 72 files:  47%|████▋     | 34/72 [00:36<00:53,  1.40s/it]Fetching 72 files:  50%|█████     | 36/72 [00:39<00:51,  1.42s/it]Fetching 72 files:  51%|█████▏    | 37/72 [00:40<00:46,  1.32s/it]Fetching 72 files:  54%|█████▍    | 39/72 [00:41<00:36,  1.11s/it]Fetching 72 files:  56%|█████▌    | 40/72 [00:42<00:37,  1.18s/it]Fetching 72 files:  57%|█████▋    | 41/72 [00:43<00:32,  1.03s/it]Fetching 72 files:  58%|█████▊    | 42/72 [00:46<00:48,  1.63s/it]Fetching 72 files:  60%|█████▉    | 43/72 [00:48<00:46,  1.60s/it]Fetching 72 files:  61%|██████    | 44/72 [00:49<00:40,  1.45s/it]Fetching 72 files:  62%|██████▎   | 45/72 [00:50<00:39,  1.46s/it]Fetching 72 files:  64%|██████▍   | 46/72 [00:51<00:28,  1.11s/it]Fetching 72 files:  65%|██████▌   | 47/72 [00:51<00:24,  1.00it/s]Fetching 72 files:  67%|██████▋   | 48/72 [00:53<00:29,  1.25s/it]Fetching 72 files:  68%|██████▊   | 49/72 [00:54<00:27,  1.19s/it]Fetching 72 files:  69%|██████▉   | 50/72 [00:56<00:28,  1.31s/it]Fetching 72 files:  71%|███████   | 51/72 [01:00<00:44,  2.10s/it]Fetching 72 files:  72%|███████▏  | 52/72 [01:00<00:32,  1.63s/it]Fetching 72 files:  74%|███████▎  | 53/72 [01:02<00:33,  1.76s/it]Fetching 72 files:  75%|███████▌  | 54/72 [01:03<00:25,  1.44s/it]Fetching 72 files:  76%|███████▋  | 55/72 [01:03<00:18,  1.08s/it]Fetching 72 files:  78%|███████▊  | 56/72 [01:04<00:13,  1.20it/s]Fetching 72 files:  79%|███████▉  | 57/72 [01:04<00:09,  1.57it/s]Fetching 72 files:  81%|████████  | 58/72 [01:05<00:11,  1.18it/s]Fetching 72 files:  82%|████████▏ | 59/72 [01:06<00:10,  1.27it/s]Fetching 72 files:  85%|████████▍ | 61/72 [01:08<00:10,  1.08it/s]Fetching 72 files:  86%|████████▌ | 62/72 [01:11<00:13,  1.37s/it]Fetching 72 files:  88%|████████▊ | 63/72 [01:12<00:11,  1.27s/it]Fetching 72 files:  89%|████████▉ | 64/72 [01:14<00:11,  1.44s/it]Fetching 72 files:  90%|█████████ | 65/72 [01:16<00:12,  1.72s/it]Fetching 72 files:  92%|█████████▏| 66/72 [01:17<00:08,  1.43s/it]Fetching 72 files:  93%|█████████▎| 67/72 [01:17<00:06,  1.22s/it]Fetching 72 files:  96%|█████████▌| 69/72 [01:18<00:02,  1.14it/s]Fetching 72 files:  97%|█████████▋| 70/72 [01:19<00:01,  1.28it/s]Fetching 72 files:  99%|█████████▊| 71/72 [01:22<00:01,  1.53s/it]Fetching 72 files: 100%|██████████| 72/72 [01:23<00:00,  1.16s/it]Fetching 72 files: 100%|██████████| 72/72 [01:23<00:00,  1.15s/it]
+snapshot: /root/ckpt
+[2026-08-14T11:29:59Z] download took 84s; 149G on disk
+[2026-08-14T11:29:59Z] HOLD written — pod holds expensive state, teardown deferred to the cap
+[2026-08-14T11:29:59Z] === bake the MXFP4 arena (~147 GB) ===
+  "w1.scale",
+  "w3.scale",
+  "w2.weight",
+  "w2.scale"
+ ],
+ "manifest_keys": [
+  "align",
+  "arena_bytes",
+  "bake_mode",
+  "magic",
+  "moe_layers",
+  "n_experts_per_layer",
+  "n_layers",
+  "prefix",
+  "row_bytes",
+  "row_stride",
+  "rows",
+  "segments"
+ ]
+}
+[2026-08-14T11:30:56Z] bake took 57s; arena 138G
+[2026-08-14T11:30:56Z] === ARM: ARENA (registered batch ladder) ===
+[2026-08-14T11:30:56Z]   rung: tokens=1 seqlen=128 (total 128 tokens)
+  File "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/formats/mxfp4.py", line 95, in dequantize_mxfp4
+    out[:, 0::2] = lut[(blk & 0x0F).int()]  # low nibble
+                   ~~~^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 16.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 11.31 MiB is free. Including non-PyTorch memory, this process has 23.49 GiB memory in use. Of the allocated memory 23.21 GiB is allocated by PyTorch, and 20.45 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[2026-08-14T11:32:20Z]   rung tokens=1 seqlen=128 -> exit 1
+[2026-08-14T11:32:20Z]   rung: tokens=1 seqlen=256 (total 256 tokens)
+  File "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py", line 486, in _alloc_dest
+    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 1013.31 MiB is free. Including non-PyTorch memory, this process has 22.52 GiB memory in use. Of the allocated memory 21.47 GiB is allocated by PyTorch, and 811.42 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[2026-08-14T11:33:32Z]   rung tokens=1 seqlen=256 -> exit 1
+[2026-08-14T11:33:32Z]   rung: tokens=2 seqlen=256 (total 512 tokens)
+  File "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py", line 486, in _alloc_dest
+    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 611.31 MiB is free. Including non-PyTorch memory, this process has 22.91 GiB memory in use. Of the allocated memory 22.10 GiB is allocated by PyTorch, and 563.54 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[2026-08-14T11:34:50Z]   rung tokens=2 seqlen=256 -> exit 1
+[2026-08-14T11:34:50Z]   rung: tokens=4 seqlen=256 (total 1024 tokens)
+  File "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py", line 486, in _alloc_dest
+    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 128.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 85.31 MiB is free. Including non-PyTorch memory, this process has 23.42 GiB memory in use. Of the allocated memory 22.74 GiB is allocated by PyTorch, and 446.44 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[2026-08-14T11:36:18Z]   rung tokens=4 seqlen=256 -> exit 1
+[2026-08-14T11:36:18Z]   rung: tokens=8 seqlen=64 (total 512 tokens)
+  File "/usr/local/lib/python3.12/dist-packages/experts4bit_qlora/engines/offload.py", line 486, in _alloc_dest
+    return {n: torch.empty(self.home[n].shape, dtype=self.home[n].dtype,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 1024.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 645.31 MiB is free. Including non-PyTorch memory, this process has 22.88 GiB memory in use. Of the allocated memory 22.06 GiB is allocated by PyTorch, and 574.17 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[2026-08-14T11:37:40Z]   rung tokens=8 seqlen=64 -> exit 1
+[2026-08-14T11:37:40Z] === ARM: STOCK (run, not asserted) ===
+/usr/local/lib/python3.12/dist-packages/huggingface_hub/constants.py:310: FutureWarning: The `HF_HUB_ENABLE_HF_TRANSFER` environment variable is deprecated as 'hf_transfer' is not used anymore. Please use `HF_XET_HIGH_PERFORMANCE` instead to enable high performance transfer with Xet. Visit https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables#hfxethighperformance for more details.
+  warnings.warn(
+[transformers] FP8 quantized models is only supported on GPUs with compute capability >= 8.9 (e.g 4090/H100), actual = `8.6`. We will default to dequantizing the model to bf16. Feel free to use a different quantization method like bitsandbytes or torchao
+Loading weights:   0%|          | 0/1285 [00:00<?, ?it/s]Loading weights:   1%|          | 15/1285 [00:06<08:33,  2.47it/s]Loading weights:   2%|▏         | 20/1285 [00:06<05:55,  3.56it/s]Loading weights:   3%|▎         | 34/1285 [00:06<02:38,  7.89it/s]Loading weights:   3%|▎         | 42/1285 [00:06<02:01, 10.21it/s]Loading weights:   5%|▌         | 66/1285 [00:06<00:54, 22.56it/s]Loading weights:   6%|▌         | 78/1285 [00:06<00:45, 26.80it/s]Loading weights:   7%|▋         | 93/1285 [00:07<00:32, 37.24it/s]Loading weights:   8%|▊         | 105/1285 [00:07<00:31, 37.13it/s]Loading weights:  10%|▉         | 128/1285 [00:07<00:20, 57.77it/s]Loading weights:  11%|█         | 141/1285 [00:07<00:21, 52.58it/s]Loading weights:  12%|█▏        | 157/1285 [00:07<00:56, 20.01it/s]
+[receipt] arm_stock.json: {"arm": "STOCK", "started": 1786707462.086434, "outcome": "FAILED", "error_type": "OutOfMemoryError", "error": "CUDA out of memory. Tried to allocate 2.00 MiB. GPU 0 has a total capacity of 23.55 GiB of which 1.31 MiB is free. Including non-PyTorch memory, this process has 23.54 GiB memory in use. Of the allocated memory 22.29 GiB is allocated by PyTorch, and 1.02 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.o
+RESULT {"status": "ARENA_FAILED", "note": "arena arm exit 1 (see arm_arena.json / stage_arena_crash.json)"}
+[2026-08-14T11:38:02Z] HOLD retained: ARENA_FAILED happened AFTER the download/bake, so the pod is kept for
+[2026-08-14T11:38:02Z]   inspection and the wall-clock backstop stays the bill cap.
+[2026-08-14T11:38:02Z] finished: ARENA_FAILED — arena arm exit 1 (see arm_arena.json / stage_arena_crash.json)

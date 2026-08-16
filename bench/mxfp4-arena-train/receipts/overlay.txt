@@ -1,0 +1,15 @@
+e4b 0.18.0 at /usr/local/lib/python3.12/dist-packages
+  overlaid experts4bit_qlora/lora.py
+    stock   20ba66c870f7b966
+    overlay 46a6feebd2509498
+  overlaid experts4bit_qlora/engines/fast.py
+    stock   f3152e1f478fed7f
+    overlay cb00339e513fc0cf
+  overlaid experts4bit_qlora/engines/nvme_train.py
+    stock   9c30eb00b8a2e0ab
+    overlay e369209d81732ba1
+  overlaid experts4bit_qlora/engines/nvme_experts.py
+    stock   b9a5c7a3f79d8461
+    overlay 195ae9b76f1dd94d
+provenance -> /root/parity/overlay_provenance.json
+overlay VERIFIED in the imported modules: ['down_blocks', 'down_scales', 'gate_up_blocks', 'gate_up_scales']

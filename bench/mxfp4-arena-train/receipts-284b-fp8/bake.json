@@ -1,0 +1,28 @@
+{
+ "seconds": 55.1,
+ "n_layers": 43,
+ "n_experts_per_layer": 256,
+ "row_stride": 13369344,
+ "segments": [
+  "w1.weight",
+  "w3.weight",
+  "w1.scale",
+  "w3.scale",
+  "w2.weight",
+  "w2.scale"
+ ],
+ "manifest_keys": [
+  "align",
+  "arena_bytes",
+  "bake_mode",
+  "magic",
+  "moe_layers",
+  "n_experts_per_layer",
+  "n_layers",
+  "prefix",
+  "row_bytes",
+  "row_stride",
+  "rows",
+  "segments"
+ ]
+}

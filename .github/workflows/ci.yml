@@ -54,6 +54,12 @@ jobs:
       - name: README link check (tag mapped to this tree pre-release)
         # map to the PR head / pushed SHA, not main — a PR that ADDS a
         # README-linked file must validate against its own tree (Bugbot).
+        env:
+          # ~30 unauthenticated HEADs from a shared Actions IP get throttled: three
+          # red runs in one day, once reporting 28 of 28 links dead on a tree where
+          # every path existed. The script retries transient answers (never a 404)
+          # and authenticates where it can.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           TAG=$(python -c "import tomllib; print('v'+tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           REF="${{ github.event.pull_request.head.sha || github.sha }}"

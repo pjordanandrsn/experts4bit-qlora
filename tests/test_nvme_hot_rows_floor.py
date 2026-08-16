@@ -1,0 +1,157 @@
+"""`hot_rows` below its floor must be refused at attach, not many steps in.
+
+A stage requests every expert one forward routed and each protects a slot from
+eviction, so an undersized tier raises inside `ColdTier.ensure` — correct, but
+only when a forward is finally unlucky enough to route more uniques than the
+tier holds. On Qwen3-30B-A3B at seq 384 that is a MEDIAN of 63 and a MAX of 97
+of 128: a tier sized to the median survives most forwards and kills the run on
+one of them, after the checkpoint has loaded and the arena is open.
+
+`num_experts` is the worst case that request can reach and is known at attach
+for free, so the refusal belongs there — in the pre-flight, which opens nothing
+and therefore has nothing to unwind.
+
+Also covers the qd pass-through: e4b must NOT pin the reader's queue depth,
+because grouped-nf4-gemm now sizes it from the host's CPU budget.
+"""
+import inspect
+
+import pytest
+
+pytest.importorskip("nvme_arena", reason="needs grouped-nf4-gemm N-series modules")
+pytest.importorskip("nvme_residency")
+pytest.importorskip("bitsandbytes", reason="Experts4bit quantization needs bnb")
+
+from experts4bit_qlora.engines.nvme_train import (  # noqa: E402
+    enable_nvme_train_residency,
+)
+from test_nvme_train_residency import (  # noqa: E402
+    E,
+    _bake,
+    _model_of,
+    _module,
+)
+
+
+def test_below_the_floor_is_refused_at_attach(tmp_path):
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="floor.arena")
+    model = _model_of(mod)
+    with pytest.raises(ValueError, match="below the hard floor"):
+        enable_nvme_train_residency(model, path, hot_rows=E - 1, device="cpu",
+                                    pinned=False)
+
+
+def test_the_refusal_opens_no_tier(tmp_path):
+    """Same discipline as the geometry refusal: the check runs in the pre-flight,
+    so a rejected configuration leaves nothing stamped and nothing to close."""
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="floor2.arena")
+    model = _model_of(mod)
+    with pytest.raises(ValueError):
+        enable_nvme_train_residency(model, path, hot_rows=1, device="cpu",
+                                    pinned=False)
+    assert not hasattr(mod, "_e4b_cold_tier"), \
+        "a tier was opened for a configuration that was going to be refused"
+
+
+def test_exactly_the_floor_is_accepted(tmp_path):
+    """The floor is inclusive. `num_experts` rows hold one whole layer, which is
+    the widest a single stage can ever request."""
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="floor3.arena")
+    model = _model_of(mod)
+    n = enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                    pinned=False)
+    assert n > 0
+    assert mod._e4b_cold_tier.hot_rows == E
+
+
+def test_the_message_names_the_floor_and_its_cost(tmp_path):
+    """An error that says only 'too small' makes the reader go measuring. This
+    one has to carry the number to use and what it costs."""
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="floor4.arena")
+    model = _model_of(mod)
+    with pytest.raises(ValueError) as ei:
+        enable_nvme_train_residency(model, path, hot_rows=2, device="cpu",
+                                    pinned=False)
+    msg = str(ei.value)
+    assert str(E) in msg, "the floor value itself is missing"
+    assert "GB pinned" in msg, "the RAM cost of the floor is missing"
+    assert "capacity_for_bytes" in msg, "no pointer to how to size it"
+
+
+def test_qd_defaults_to_None_so_gnf4_sizes_it(tmp_path):
+    """The reader's queue depth is measured against the HOST's CPU budget by
+    grouped-nf4-gemm. A fixed default here would override that on every host and
+    make the measurement inert -- which is exactly what `qd: int = 4` did."""
+    sig = inspect.signature(enable_nvme_train_residency)
+    assert sig.parameters["qd"].default is None
+
+
+def test_qd_is_OMITTED_not_forwarded_when_the_caller_did_not_set_it(tmp_path,
+                                                                    monkeypatch):
+    """Assert the contract directly: the `qd` key must not reach ColdTier at all.
+
+    Two weaker forms were tried and both are wrong. `reader.qd == default_qd()`
+    is VACUOUS wherever default_qd() is already 4 — every small CI box. And
+    monkeypatching `default_qd` to a distinctive value only works on a
+    grouped-nf4-gemm new enough to HAVE it; CI installs 0.10.0 from PyPI, which
+    does not, so that version failed with AttributeError instead of testing
+    anything.
+
+    Spying on the constructor works on every version and tests the actual
+    implementation choice: OMIT the key so each gnf4 applies its own default.
+    Forwarding `qd=None` would open `ThreadPoolExecutor(max_workers=None)` — up
+    to 32 reader threads — on any gnf4 predating the CPU-scaled default.
+    """
+    import nvme_residency
+
+    seen = {}
+    real = nvme_residency.ColdTier
+
+    def spy(*a, **k):
+        seen.update(k)
+        seen["_had_qd"] = "qd" in k
+        return real(*a, **k)
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", spy)
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="qd.arena")
+    model = _model_of(mod)
+    enable_nvme_train_residency(model, path, hot_rows=E, device="cpu", pinned=False)
+    assert seen, "ColdTier was never constructed — the spy measured nothing"
+    assert seen["_had_qd"] is False, (
+        f"e4b forwarded qd={seen.get('qd')!r} to ColdTier. It must omit the key "
+        "so grouped-nf4-gemm applies its own CPU-scaled default; forwarding None "
+        "to an older gnf4 opens up to 32 reader threads.")
+
+
+def test_explicit_qd_IS_forwarded(tmp_path, monkeypatch):
+    """The mirror of the above: an explicit value must still reach ColdTier."""
+    import nvme_residency
+
+    seen = {}
+    real = nvme_residency.ColdTier
+
+    def spy(*a, **k):
+        seen.update(k)
+        return real(*a, **k)
+
+    monkeypatch.setattr(nvme_residency, "ColdTier", spy)
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="qd3.arena")
+    model = _model_of(mod)
+    enable_nvme_train_residency(model, path, hot_rows=E, device="cpu",
+                                pinned=False, qd=5)
+    assert seen.get("qd") == 5
+
+
+def test_explicit_qd_is_still_honoured(tmp_path):
+    mod = _module()
+    path, _index = _bake(mod, tmp_path, name="qd2.arena")
+    model = _model_of(mod)
+    enable_nvme_train_residency(model, path, hot_rows=E, device="cpu", pinned=False,
+                               qd=3)
+    assert mod._e4b_cold_tier.reader.qd == 3

@@ -32,6 +32,7 @@ Usage::
 """
 from __future__ import annotations
 
+import types
 from typing import Sequence
 
 import torch
@@ -233,11 +234,83 @@ def build_meta_experts(index: dict, num_experts: int, *, has_gate: bool = True,
     # resident path already guards against.
     if cls is None:
         cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
-    return cls(num_experts=num_experts, hidden_dim=hidden,
-               intermediate_dim=intermediate, has_gate=has_gate,
-               activation=activation or torch.nn.functional.silu,
-               compute_dtype=compute_dtype or torch.bfloat16,
-               quant_type=quant_type, device="meta")
+    mod = cls(num_experts=num_experts, hidden_dim=hidden,
+              intermediate_dim=intermediate, has_gate=has_gate,
+              activation=activation or torch.nn.functional.silu,
+              compute_dtype=compute_dtype or torch.bfloat16,
+              quant_type=quant_type, device="meta")
+    _redeclare_for_mxfp4_arena(mod, index)
+    return mod
+
+
+def _redeclare_for_mxfp4_arena(mod, index) -> bool:
+    """Re-declare a meta expert's buffers to an MXFP4 arena's geometry.
+
+    An NF4 module declares `absmax` as fp32 per 64 elements; an MXFP4 arena
+    carries uint8 e8m0 scales per 32. Same blocks width, different scales
+    entirely — so the tier's geometry check (rightly) refuses to stage one into
+    the other, and a natively-MXFP4 checkpoint had no way into arena TRAINING
+    without being re-quantized to NF4 first.
+
+    Nothing is allocated: the base is on `meta`, so this only changes DECLARED
+    dtype and per-expert width, which is exactly what the check compares and
+    what `segment_into` sizes its copies from.
+
+    Shapes are taken from the arena's own fused segments rather than recomputed,
+    for the same reason the segment map is positional: the suffixes are
+    checkpoint-dependent, the ORDER is guaranteed.
+    """
+    from .nvme_train import arena_offload_view, OFFLOAD_SEGMENTS
+    try:
+        view, segmap = arena_offload_view(index)
+    except Exception:
+        return False                      # not an arena this tier can stage
+    if segmap is OFFLOAD_SEGMENTS:
+        return False                      # NF4: leave the module exactly as built
+
+    geo = {g["suffix"]: g for g in view["segments"]}
+    for name, suffix in segmap.items():
+        g = geo[suffix]
+        shape = tuple(g["shape_per_expert"])
+        per_expert = 1
+        for d in shape:
+            per_expert *= d
+        dt = _ST_TO_TORCH_DTYPE(g["dtype"])
+        t = torch.empty(mod.num_experts, per_expert, dtype=dt, device="meta")
+        # These four are a mix of parameters and buffers on the primitive, and a
+        # module rejects a bare Tensor assigned over a Parameter. Re-declare in
+        # kind: frozen storage either way (requires_grad=False), since the base
+        # is never trained -- only the adapter is.
+        if name in mod._parameters:
+            mod._parameters[name] = torch.nn.Parameter(t, requires_grad=False)
+        else:
+            mod._buffers[name] = t
+    # Staging is only half of it. Bytes landing correctly does not make the NF4
+    # arithmetic interpret them, so the COMPUTE half is wired here too, in the
+    # two places that read the packed buffers:
+    #
+    #   * `_dequantize_expert` — the per-expert unit every reference forward and
+    #     `ExpertsLoRA._base_project` funnels through. Overriding it makes the
+    #     module's OWN forward correct, whichever one it is, so the arch's
+    #     epilogue (V4's clamped SwiGLU) is used by construction rather than
+    #     re-derived here.
+    #   * `forward` — routed to the grouped MXFP4 kernel when that is both
+    #     available and legal, and to the module's own forward otherwise.
+    mod._e4b_mxfp4_arena = True
+    mod._dequantize_expert = types.MethodType(_mxfp4_dequantize_expert, mod)
+    # Capture the PRISTINE forward once. A second `build_meta_experts` over the
+    # same module would otherwise save our own router as the reference and make
+    # the reference lane recurse.
+    if not hasattr(mod, "_e4b_mxfp4_arena_ref"):
+        mod._e4b_mxfp4_arena_ref = mod.forward
+    mod.forward = types.MethodType(mxfp4_experts_forward, mod)
+    return True
+
+
+def _ST_TO_TORCH_DTYPE(name: str):
+    import torch as _t
+    return {"U8": _t.uint8, "I8": _t.int8, "F8_E8M0": _t.uint8,
+            "F32": _t.float32, "BF16": _t.bfloat16}[name]
 
 
 def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
@@ -277,14 +350,18 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
             "(nvme_residency/nvme_reader/nvme_arena) on the import path"
         ) from exc
 
-    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=pinned, qd=qd)
-    idx = tier.reader.index
-    log(f"  nvme residency: arena {arena_path} rows={idx['n_layers']}x"
-        f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
-        f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
-
-    # Stamp each module with its arena layer BEFORE construction: _build_cold and
-    # _build_hot both run inside _HotResidency.__init__ and need it.
+    # VALIDATE BEFORE ALLOCATING. Everything below needs only `model` and the
+    # caller's lists, so none of it has any business running after a ColdTier
+    # exists — and running it after had two costs, one of them invisible until
+    # this test finally executed on a runner:
+    #
+    #   * The refusals were UNREACHABLE without an accelerator. `ColdTier`
+    #     pins its landing buffer, so on a CPU-only host it raised "Cannot
+    #     access accelerator device when none is available" first, and a caller
+    #     who passed too many hot_sets got an allocator error instead of the
+    #     message naming their mistake.
+    #   * On a host that DOES pin, a refusal leaked the tier: constructed, never
+    #     closed. Same bug Bugbot caught in `nvme_train`'s attach loop.
     #
     # Use the SHARED selection, not an independent walk: a plain `isinstance` sweep
     # yields a different list AND a different order whenever wrapped and bare modules
@@ -303,12 +380,60 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
             f"hot_sets has {len(hot_sets)} entries but the model exposes "
             f"{len(mods)} targetable MoE module(s) — refusing to stamp a partial "
             f"set, which would serve some layers from the wrong arena rows")
-    for i, m in enumerate(mods[:len(hot_sets)]):
-        m._e4b_cold_tier = tier
-        m._e4b_arena_layer = lay[i]
 
-    n = enable_hot_residency(model, hot_sets, device=device, verbose=verbose,
-                             state_cls=_NvmeResidency)
+    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=pinned, qd=qd)
+    idx = tier.reader.index
+    log(f"  nvme residency: arena {arena_path} rows={idx['n_layers']}x"
+        f"{idx['n_experts_per_layer']} row_stride={idx['row_stride']} "
+        f"hot_rows={hot_rows} ({hot_rows * idx['row_stride'] / 1e9:.1f} GB pinned)")
+
+    # Which modules were ALREADY patched before this call. `_e4b_hot_ref` is
+    # sticky — it survives an earlier `enable_hot_residency` or NVMe enable — so
+    # reading it bare answers "has this module ever been patched", not "does this
+    # module hold the tier THIS call just built". Getting that wrong leaks the new
+    # pinned arena: a stale marker reads as a live holder, the close is skipped,
+    # and nothing is actually serving from it. Snapshot first, and count only what
+    # this call added. (Cursor Bugbot, #120: "Sticky hot-ref leaks new ColdTier" —
+    # `nvme_train` avoids it with a call-local attach count, and this is the same
+    # idea where the patching happens inside a callee.)
+    targets = mods[:len(hot_sets)]
+    already = {id(m) for m in targets if hasattr(m, "_e4b_hot_ref")}
+
+    # Stamp each module with its arena layer BEFORE construction: _build_cold and
+    # _build_hot both run inside _HotResidency.__init__ and need it.
+    try:
+        for i, m in enumerate(targets):
+            m._e4b_cold_tier = tier
+            m._e4b_arena_layer = lay[i]
+
+        n = enable_hot_residency(model, hot_sets, device=device, verbose=verbose,
+                                 state_cls=_NvmeResidency)
+    except BaseException as exc:
+        # `enable_hot_residency` patches modules ONE AT A TIME, so "we failed" and
+        # "nothing is live" are different claims. A later-layer failure — OOM, a
+        # bad layers index, an interrupt — leaves earlier modules already patched
+        # and serving from this shared tier, and closing it under them hands them
+        # a shut-down reader. Closing a live tier is strictly worse than leaking
+        # one.
+        #
+        # (Cursor Bugbot, #120 — the SAME finding it made on `nvme_train`'s attach
+        # loop earlier, which is why the policy below is identical: close only
+        # when nothing is holding the tier, never convert control flow into an
+        # error, and chain the real cause rather than replacing it.)
+        live = [m for m in targets
+                if hasattr(m, "_e4b_hot_ref") and id(m) not in already]
+        if not live:
+            tier.close()
+            raise
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        raise RuntimeError(
+            f"NVMe residency failed after {len(live)} of {len(hot_sets)} module(s) "
+            "were already patched and are serving from this tier, so it is left "
+            "OPEN rather than closed under them. The model is partially attached "
+            "and must be discarded, not re-enabled; the tier is released with it. "
+            "The failure that caused this is chained below."
+        ) from exc
     log(f"  nvme residency active on {n} module(s)")
     return n
 
@@ -479,3 +604,200 @@ def disable_mxfp4_nvme_residency(model) -> int:
             del mod._e4b_mxfp4_ref, mod._e4b_mxfp4_engine
             n += 1
     return n
+
+
+def _decode_mxfp4_rows(blocks, scales, rows: int, k: int, expert, dtype):
+    """One expert's projection, decoded from the buffers PASSED IN.
+
+    Takes the tensors rather than reading them off the module, because that is
+    the contract the recompute backward relies on: ``_project`` closes over the
+    buffers it saw in FORWARD, and under arena staging the module's attribute may
+    already point at a different tensor by the time backward re-dequantizes. The
+    NF4 ``_dequantize_expert`` has always worked this way; this matches it.
+
+    Returns ``[k, rows]`` — the oracle's own orientation (``dequantize_mxfp4``
+    transposes the trailing pair), i.e. ``[in, out]``.
+    """
+    from ..formats.mxfp4 import dequantize_mxfp4
+
+    groups = k // 32                       # one e8m0 scale per 32 values
+    return dequantize_mxfp4(blocks[expert].view(rows, groups, 16),
+                            scales[expert].view(rows, groups), dtype=dtype)
+
+
+def mxfp4_expert_weight(mod, name: str, expert: int, *, dtype=None):
+    """Decode ONE expert's projection from staged MXFP4 bytes.
+
+    This is the unit the MXFP4 forward is built on, and it is separated so it can
+    be pinned against the format's own oracle on CPU: `dequantize_mxfp4` is pure
+    torch, so parity here is checkable without a GPU, a kernel, or a checkpoint.
+
+    The staged buffers are flat ``[E, per_expert]`` because every consumer indexes
+    by global expert id; MXFP4 wants ``[rows, G, B]`` with B=16 bytes per 32-value
+    group. The reshape is derived from the module's own declared geometry rather
+    than passed in, so a mismatch surfaces here instead of as silent nonsense.
+
+    Returns ``[in, out]`` (``x @ W`` orientation), which is what
+    ``dequantize_mxfp4`` produces and what ``GptOssExperts`` expects of its
+    ``{gate_up,down}_proj``. The ``F.linear`` orientation ``[out, in]`` is the
+    transpose — see :func:`_mxfp4_dequantize_expert`.
+    """
+    import torch as _t
+
+    if not getattr(mod, "_e4b_mxfp4_arena", False):
+        raise TypeError(
+            f"{type(mod).__name__} is not an MXFP4-arena module; its bytes are "
+            "NF4 and decoding them as MXFP4 would return nonsense")
+    if name == "gate_up":
+        blocks, scales = mod.gate_up_proj, mod.gate_up_absmax
+        rows, k = mod._gate_up_shape
+    elif name == "down":
+        blocks, scales = mod.down_proj, mod.down_absmax
+        rows, k = mod._down_shape
+    else:
+        raise ValueError(f"name must be 'gate_up' or 'down', got {name!r}")
+    return _decode_mxfp4_rows(blocks, scales, rows, k, expert,
+                              dtype or _t.bfloat16)
+
+
+def _mxfp4_dequantize_expert(mod, packed, absmax, shape, expert_idx, dtype):
+    """``ExpertsNbit._dequantize_expert`` for MXFP4 bytes — the REFERENCE path.
+
+    Bound per instance by :func:`_redeclare_for_mxfp4_arena`, which is what makes
+    the module's own forward correct without this file knowing which forward that
+    is. Every reference lane funnels through here:
+    ``ExpertsNbit.forward`` -> ``_project``, ``_DeepseekV4ForwardMixin.forward``
+    -> ``_project``, and ``ExpertsLoRA._base_project`` -> ``base._project``. So
+    the arch's epilogue (V4's clamped SwiGLU via ``_apply_gate``) is applied by
+    the arch's own code, not re-derived here — the failure mode ``lora._epilogue``
+    exists to prevent.
+
+    ``_project`` wraps this in ``_FrozenLinearRecomputeBackward``, so the training
+    path keeps its property that the dequantized expert is dropped after the
+    forward matmul and recomputed in backward. Nothing about that changes: only
+    what "dequantize" means does.
+
+    Returns ``[out, in]``, the layout ``F.linear`` wants — the transpose of the
+    oracle's output. The round trip (``dequantize_mxfp4`` makes its result
+    contiguous, then ``.t()`` makes it a view again) is left as-is deliberately:
+    the decode is pinned to the oracle bit-for-bit, and re-deriving the untransposed
+    form here to save a copy would be a second implementation of the format.
+    """
+    rows, k = shape
+    return _decode_mxfp4_rows(packed, absmax, rows, k, expert_idx, dtype).t()
+
+
+def _mxfp4_grouped_available(dev) -> bool:
+    """Whether the fused grouped MXFP4 kernel can run at all here.
+
+    Import and device are separate questions and both are cheap to get wrong:
+    ``grouped-nf4-gemm`` publishes ``mxfp4_grouped`` on every platform but its
+    Triton dependency is Linux-only, so the import succeeds on a laptop and the
+    launch does not.
+    """
+    if dev.type != "cuda":
+        return False
+    try:
+        import mxfp4_grouped  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def mxfp4_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
+    """Forward for an MXFP4-arena expert module.
+
+    Two lanes, and the router between them is a correctness gate rather than a
+    speed one:
+
+    * **fused** — ``mxfp4_grouped.gemm_mxfp4_grouped``, one launch per projection
+      over all routed tokens. Requires CUDA, bf16 compute (the kernel returns
+      bf16 unconditionally, so an fp16 module would get a silent dtype swap), and
+      **no autograd graph**: the kernel is raw Triton with no ``autograd.Function``
+      behind it, so it produces no ``dL/dx`` and a training step routed here would
+      simply stop learning below this layer. That is the same condition
+      :func:`enable_mxfp4_nvme_residency`'s patch tests, and for the same reason —
+      not ``mod.training``, because a model left in train mode still runs plenty
+      of no-grad eval forwards.
+    * **reference** — the module's own pristine forward, whose per-expert
+      dequantize is :func:`_mxfp4_dequantize_expert`. This is the lane that
+      carries gradients, and it is what the fused lane is graded against.
+
+    The epilogue is the base's own in both lanes: the reference lane reaches it by
+    being the base's forward, the fused lane through ``lora._epilogue`` — the same
+    hook, so the two cannot drift onto different activations.
+    """
+    ref = mod._e4b_mxfp4_arena_ref
+    cd = mod.compute_dtype if mod.compute_dtype is not None else hidden_states.dtype
+    if cd is not torch.bfloat16:
+        return ref(hidden_states, top_k_index, top_k_weights)
+    if torch.is_grad_enabled() and (
+        hidden_states.requires_grad or any(p.requires_grad for p in mod.parameters())
+    ):
+        return ref(hidden_states, top_k_index, top_k_weights)
+    if not _mxfp4_grouped_available(hidden_states.device):
+        return ref(hidden_states, top_k_index, top_k_weights)
+    return _mxfp4_fused_forward(mod, hidden_states, top_k_index, top_k_weights)
+
+
+def _mxfp4_fused_forward(mod, hidden_states, top_k_index, top_k_weights):
+    """The grouped-kernel lane. Group-sorted layout, exactly as ``fast.py`` builds it.
+
+    **Routing weights are applied AFTER the down projection**, which is the
+    vendored ``ExpertsNbit`` contract. ``_DeepseekV4ForwardMixin.forward`` applies
+    them before, in fp32, and the two agree in exact arithmetic — the down
+    projection is linear and these modules carry no down bias, so scaling by a
+    positive scalar commutes with it. What does NOT commute is the activation, and
+    that is taken from the base rather than assumed.
+    """
+    from mxfp4_grouped import gemm_mxfp4_grouped
+
+    from ..lora import _epilogue
+
+    input_dtype = hidden_states.dtype
+    x = hidden_states.to(torch.bfloat16)
+    tokens, hidden = x.shape
+    E = mod.num_experts
+    n1, k1 = mod._gate_up_shape
+    n2, k2 = mod._down_shape
+
+    out = torch.zeros(tokens, hidden, dtype=torch.float32, device=x.device)
+    k = top_k_index.shape[1]
+    flat = top_k_index.reshape(-1)
+    counts = torch.bincount(flat, minlength=E)
+    active = torch.nonzero(counts, as_tuple=False).view(-1)
+    if active.numel() == 0:                       # nothing routed anywhere
+        return out.to(input_dtype)
+
+    order = torch.argsort(flat, stable=True)
+    token_rows = order // k
+    top_pos = order - token_rows * k
+    sizes = counts[active].tolist()               # every entry > 0, by construction
+    expert_ids = active.to(torch.int32).tolist()
+    a_cat = x.index_select(0, token_rows).contiguous()
+
+    # REINTERPRET, never convert. A DeepSeek-V4 arena labels its blocks `I8` and
+    # its scales `F8_E8M0`, so the staged buffers can arrive as int8 even though
+    # the bytes are exactly what the kernel wants; `.to(uint8)` of an e8m0 scale
+    # would yield the VALUE, not the exponent byte. Same trap `formats.mxfp4`
+    # documents, one layer up.
+    def _u8(t):
+        return t if t.dtype == torch.uint8 else t.view(torch.uint8)
+
+    proj = gemm_mxfp4_grouped(
+        a_cat,
+        _u8(mod.gate_up_proj).view(E, n1, k1 // 2),
+        _u8(mod.gate_up_absmax).view(E, n1, k1 // 32),
+        sizes, expert_ids)
+    # The base's OWN epilogue, resolved through the same hook the reference lane
+    # and `ExpertsLoRA` use. A plain SwiGLU here would silently drop V4's clamps.
+    h = _epilogue(mod, proj)
+    down = gemm_mxfp4_grouped(
+        h.to(torch.bfloat16).contiguous(),
+        _u8(mod.down_proj).view(E, n2, k2 // 2),
+        _u8(mod.down_absmax).view(E, n2, k2 // 32),
+        sizes, expert_ids)
+
+    weighted = down.float() * top_k_weights[token_rows, top_pos, None].float()
+    out.index_add_(0, token_rows, weighted)
+    return out.to(input_dtype)
