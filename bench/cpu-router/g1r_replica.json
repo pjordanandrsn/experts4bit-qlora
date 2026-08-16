@@ -1,0 +1,25 @@
+{
+  "arm": "replica",
+  "layers": 32,
+  "tokens": 300,
+  "batch": 1,
+  "geometry": {
+    "E": 64,
+    "H": 2048,
+    "k": 8
+  },
+  "step_ms_p50": 4.112516005989164,
+  "per_layer_us_p50": 128.51612518716138,
+  "router": {
+    "served_calls": 10560,
+    "trip_us_p50": 36.54399886727333,
+    "trip_us_p99": 50.81599950790405,
+    "host_us_p50": 27.25096419453621,
+    "host_us_p99": 33.79996633157134,
+    "wake_us_p50": 12.229022104293108,
+    "math_us_p50": 15.00296639278531,
+    "push_us_p50": 0.0
+  },
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090"
+}

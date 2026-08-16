@@ -1,0 +1,18 @@
+{
+  "arm": "model",
+  "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+  "patched": 16,
+  "router": {
+    "served_calls": 2032,
+    "trip_us_p50": 68.89600306749344,
+    "trip_us_p99": 93.40800344944,
+    "host_us_p50": 31.947041861712933,
+    "host_us_p99": 46.78900586441159,
+    "wake_us_p50": 1.401989720761776,
+    "math_us_p50": 30.546041671186686,
+    "push_us_p50": 0.0
+  },
+  "tail_text": " the L2 cache. It is used to store data and instructions that are less",
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090"
+}

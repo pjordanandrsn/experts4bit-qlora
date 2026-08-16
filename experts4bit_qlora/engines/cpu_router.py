@@ -46,6 +46,7 @@ grouped-topk routers are out of scope for Phase 1 and reported as skipped.
 
 from __future__ import annotations
 
+import ctypes
 import time
 
 import numpy as np
@@ -66,6 +67,26 @@ _ROUTER_KINDS = {
 }
 
 _COPY_STREAMS: dict[int, torch.cuda.Stream] = {}
+
+_NATIVE = None          # None = unprobed, False = unavailable, else the lib
+
+
+def _native_lib():
+    """grouped-nf4-gemm's compile-at-first-use CPU library, if this install
+    can build it. Capability-gated per the cross-package rule: probe the
+    symbols, never the version string; the numpy path stays byte-identical
+    when the probe fails."""
+    global _NATIVE
+    if _NATIVE is None:
+        try:
+            import gnf4_native
+            lib = gnf4_native.load()
+            for sym in ("gnf4_route_epilogue_bf16", "gnf4_dense_gemv_f32"):
+                getattr(lib, sym)
+            _NATIVE = lib
+        except Exception:               # noqa: BLE001 — any failure = no lib
+            _NATIVE = False
+    return _NATIVE or None
 
 
 def _copy_stream(device: torch.device) -> torch.cuda.Stream:
@@ -178,6 +199,23 @@ class _CpuRouter:
             shape=(max_rows, self.k), strides=(self.row_bytes, 8))
         self.spin_wait = 400          # ev queries before falling back to sync
         self.next_w_lines = None      # layer L+1's weight lines (chain warm)
+        # native fast path (G1 p50 fix): dense gemv + one-call epilogue from
+        # grouped-nf4-gemm's CPU library, replacing ~14 interpreter
+        # dispatches. bf16 landing only; batch 1 only; numpy path otherwise.
+        self.native = None
+        self.np_w_row = None
+        if self.model_dtype == torch.bfloat16 and self.np_hidden_u16 is not None:
+            lib = _native_lib()
+            if lib is not None:
+                self.native = lib
+                self.np_w_row = mod.weight.detach().to(
+                    "cpu", torch.float32).contiguous().numpy()
+                self.np_bias_c = (None if self.np_bias is None
+                                  else np.ascontiguousarray(self.np_bias))
+                # the spin/chain warms must heat the buffer THIS path
+                # reads — np_w_row, not np_w_t (caught when the native
+                # G1 re-measure showed the gemv still running cold)
+                self.np_w_lines = self.np_w_row.reshape(-1)[::16]
         self.slot = 0
         self.ev_start = torch.cuda.Event(enable_timing=True)
         self.ev_d2h = torch.cuda.Event(enable_timing=True)
@@ -234,6 +272,39 @@ class _CpuRouter:
                 self.ev_d2h.synchronize()
         if self.timing:
             t_wake = time.perf_counter()
+        if self.native is not None and t == 1:
+            h32u = self.np_h32u[:1]
+            h32u[:] = self.np_hidden_u16[self.slot ^ 1][:1]
+            np.left_shift(h32u, 16, out=h32u)
+            nh = self.np_h32f[:1]
+            logits = self.np_logits[:1]
+            self.native.gnf4_dense_gemv_f32(
+                ctypes.c_void_p(self.np_w_row.ctypes.data),
+                ctypes.c_void_p(nh.ctypes.data),
+                ctypes.c_void_p(None if self.np_bias_c is None
+                                else self.np_bias_c.ctypes.data),
+                ctypes.c_void_p(logits.ctypes.data),
+                self.n_experts, self.np_w_row.shape[1])
+            self.native.gnf4_route_epilogue_bf16(
+                ctypes.c_void_p(logits.ctypes.data), 1, self.n_experts,
+                self.k, 0 if self.kind == _SOFTMAX_THEN_TOPK else 1,
+                int(bool(getattr(mod, "norm_topk_prob", False))),
+                ctypes.c_void_p(self.np_idx.ctypes.data),
+                self.np_idx.strides[0] // 8,
+                ctypes.c_void_p(self.pin_wts.data_ptr()),
+                self.row_bytes // 2)
+            if self.timing:
+                now = time.perf_counter()
+                self.host_ms.append((now - t0) * 1e3)
+                self.seg_ms.append(((t_wake - t0) * 1e3,
+                                    (now - t_wake) * 1e3, 0.0))
+            idx = self.np_idx[:1]
+            self._finish(cur, side, 1)
+            self.calls += 1
+            if self.assert_every and self.calls % self.assert_every == 0:
+                self._cross_check(mod, hidden,
+                                  torch.from_numpy(np.ascontiguousarray(idx)))
+            return (None, self.dev_wts[:1], self.dev_idx[:1])
         # trimmed epilogue in numpy over preallocated buffers: identical
         # math to route_on_host() (pinned by
         # test_route_inline_matches_route_on_host). Stable argsort of the
@@ -277,24 +348,7 @@ class _CpuRouter:
             self.seg_ms.append(((t_wake - t0) * 1e3, (t_math - t_wake) * 1e3,
                                 (now - t_math) * 1e3))
 
-        with torch.cuda.stream(side):
-            nb = t * self.row_bytes                # ONE fused H2D for both
-            self.dev_land[:nb].copy_(self.pin_land[:nb], non_blocking=True)
-            self.ev_idx.record(side)
-        cur.wait_event(self.ev_idx)
-        if self.timing:
-            self.ev_idx.synchronize()
-            self.trip_ms.append(self.ev_start.elapsed_time(self.ev_idx))
-
-        # chain warm: pull the NEXT router's weights toward cache now, off
-        # the critical path (the GPU is busy with the next layer's
-        # attention; a cold gemv costs ~10 µs ON the path, this costs the
-        # same ~10 µs beside it). In a deep-queued real decode the
-        # spin-warm above never fires — this is what keeps the gemv warm
-        # there.
-        if self.next_w_lines is not None:
-            float(self.next_w_lines.sum())
-
+        self._finish(cur, side, t)
         self.calls += 1
         if self.assert_every and self.calls % self.assert_every == 0:
             self._cross_check(mod, hidden,
@@ -305,6 +359,23 @@ class _CpuRouter:
         # training callers run the reference path (grad fallback) and get
         # real logits.
         return (None, self.dev_wts[:t], self.dev_idx[:t])
+
+    def _finish(self, cur, side, t):
+        """Shared tail: ONE fused H2D for idx+weights, device-side wait,
+        then the chain warm — pulling the NEXT router's weights toward
+        cache off the critical path (the GPU is busy with the next layer's
+        attention; in a deep-queued real decode the spin-warm never fires,
+        so this is what keeps the gemv warm there)."""
+        with torch.cuda.stream(side):
+            nb = t * self.row_bytes
+            self.dev_land[:nb].copy_(self.pin_land[:nb], non_blocking=True)
+            self.ev_idx.record(side)
+        cur.wait_event(self.ev_idx)
+        if self.timing:
+            self.ev_idx.synchronize()
+            self.trip_ms.append(self.ev_start.elapsed_time(self.ev_idx))
+        if self.next_w_lines is not None:
+            float(self.next_w_lines.sum())
 
     def _cross_check(self, mod, hidden, idx):
         """Debug-mode GPU-reference comparison (synchronizes; never on the

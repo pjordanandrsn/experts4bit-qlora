@@ -169,10 +169,13 @@ def test_cross_check_positive_control_fires_on_corrupt_weights():
     model, mod = _cuda_router()
     st = getattr(mod, cr._STATE)
     st.assert_every = 1
-    # corrupt IN PLACE: the served path reads the numpy VIEW of w_t, so a
-    # rebinding corruption would silently miss it (this test caught exactly
-    # that when the epilogue moved to numpy)
+    # corrupt IN PLACE, in EVERY buffer a served path reads: the numpy path
+    # reads the np_w_t view, the native path its own np_w_row copy. This
+    # test has now caught the corruption target decoupling from the served
+    # path twice (numpy move, then native move) — that is its job.
     st.np_w_t[:] = np.roll(st.np_w_t, 3, axis=1)    # wrong expert mapping
+    if getattr(st, "np_w_row", None) is not None:
+        st.np_w_row[:] = np.roll(st.np_w_row, 3, axis=0)
     hidden = torch.randn(1, 1, H, device="cuda", dtype=torch.bfloat16)
     with torch.no_grad(), pytest.raises(RuntimeError, match="tie-break"):
         mod(hidden)
@@ -196,6 +199,31 @@ def test_route_inline_matches_route_on_host():
     assert torch.equal(idx.cpu(), ref_idx)
     assert torch.allclose(w.float().cpu(), ref_w.float(),
                           atol=1e-2, rtol=1e-2)   # bf16 staging cast only
+
+
+@requires_cuda
+def test_native_epilogue_matches_numpy_path():
+    """When grouped-nf4-gemm's native library is buildable, the one-call
+    C path must select identically to the numpy path (weights to bf16
+    tolerance — expf vs np.exp differ in ulps)."""
+    if cr._native_lib() is None:
+        pytest.skip("gnf4_native not buildable here")
+    torch.manual_seed(21)
+    hidden = torch.randn(1, 1, H, device="cuda", dtype=torch.bfloat16)
+    model_a, mod_a = _cuda_router()
+    st_a = getattr(mod_a, cr._STATE)
+    st_a.native = None                              # force numpy path
+    model_b, mod_b = _cuda_router()
+    st_b = getattr(mod_b, cr._STATE)
+    if st_b.native is None:
+        pytest.skip("native path not engaged (dtype/symbols)")
+    with torch.no_grad():
+        _, wa, ia = mod_a(hidden)
+        _, wb, ib = mod_b(hidden)
+    torch.cuda.synchronize()
+    assert torch.equal(ia.cpu(), ib.cpu())
+    assert torch.allclose(wa.float().cpu(), wb.float().cpu(),
+                          atol=1e-2, rtol=1e-2)
 
 
 @requires_cuda
