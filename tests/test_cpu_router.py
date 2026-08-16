@@ -98,7 +98,8 @@ def test_enable_skips_unknown_router_and_returns_zero():
 
 def _cuda_router(dtype=torch.bfloat16):
     mod = OlmoeTopKRouter(dtype=dtype, device="cuda")
-    model = torch.nn.Sequential(mod)
+    mod.eval()          # a fresh Module is training=True and the served
+    model = torch.nn.Sequential(mod)   # path (correctly) refuses train mode
     n = cr.enable_cpu_router(model, max_rows=ROWS, timing=True)
     assert n == 1
     return model, mod

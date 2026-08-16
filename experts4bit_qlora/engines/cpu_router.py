@@ -198,7 +198,7 @@ class _CpuRouter:
             self.pin_land.numpy().view(np.int64),
             shape=(max_rows, self.k), strides=(self.row_bytes, 8))
         self.spin_wait = 400          # ev queries before falling back to sync
-        self.next_w_lines = None      # layer L+1's weight lines (chain warm)
+        self.next_warm = None         # layer L+1's warm buffers (chain warm)
         # native fast path (G1 p50 fix): dense gemv + one-call epilogue from
         # grouped-nf4-gemm's CPU library, replacing ~14 interpreter
         # dispatches. bf16 landing only; batch 1 only; numpy path otherwise.
@@ -212,10 +212,13 @@ class _CpuRouter:
                     "cpu", torch.float32).contiguous().numpy()
                 self.np_bias_c = (None if self.np_bias is None
                                   else np.ascontiguousarray(self.np_bias))
-                # the spin/chain warms must heat the buffer THIS path
-                # reads — np_w_row, not np_w_t (caught when the native
-                # G1 re-measure showed the gemv still running cold)
-                self.np_w_lines = self.np_w_row.reshape(-1)[::16]
+        # The warms must heat every buffer a served path can read: the
+        # native t==1 path reads np_w_row, the numpy t>1 path still reads
+        # np_w_t (Bugbot: retargeting alone left the numpy gemv cold
+        # whenever native is installed). Both live in np_warm.
+        self.np_warm = [self.np_w_lines]
+        if self.np_w_row is not None:
+            self.np_warm.insert(0, self.np_w_row.reshape(-1)[::16])
         self.slot = 0
         self.ev_start = torch.cuda.Event(enable_timing=True)
         self.ev_d2h = torch.cuda.Event(enable_timing=True)
@@ -226,7 +229,12 @@ class _CpuRouter:
         self.host_ms: list[float] = []
         self.seg_ms: list[tuple[float, float, float]] = []  # wake/math/push
 
-    def will_serve(self, hidden: torch.Tensor) -> bool:
+    def will_serve(self, mod, hidden: torch.Tensor) -> bool:
+        if mod.training:
+            # reentrant gradient checkpointing runs its first forward under
+            # no_grad while still in train mode; serving it would disagree
+            # with the grad-enabled recompute (same footgun fast.py guards)
+            return False
         if torch.is_grad_enabled() and hidden.requires_grad:
             return False
         if not hidden.is_cuda:
@@ -264,7 +272,8 @@ class _CpuRouter:
         if not self.ev_d2h.query():
             # GPU still on attention/D2H: use the dead time to pull the
             # router weights into cache so the gemv below runs warm
-            float(self.np_w_lines.sum())
+            for wb in self.np_warm:
+                float(wb.sum())
             for _ in range(self.spin_wait):
                 if self.ev_d2h.query():
                     break
@@ -374,8 +383,9 @@ class _CpuRouter:
         if self.timing:
             self.ev_idx.synchronize()
             self.trip_ms.append(self.ev_start.elapsed_time(self.ev_idx))
-        if self.next_w_lines is not None:
-            float(self.next_w_lines.sum())
+        if self.next_warm is not None:
+            for wb in self.next_warm:
+                float(wb.sum())
 
     def _cross_check(self, mod, hidden, idx):
         """Debug-mode GPU-reference comparison (synchronizes; never on the
@@ -441,7 +451,7 @@ def enable_cpu_router(model, *, max_rows: int = 8, assert_every: int = 0,
 
         def patched(hidden_states, _mod=mod, _state=state, _ref=ref):
             h = hidden_states.reshape(-1, _state.w_t.shape[0])
-            if not _state.will_serve(h):
+            if not _state.will_serve(_mod, h):
                 return _ref(hidden_states)
             return _state.route(_mod, h)
 
@@ -458,7 +468,8 @@ def enable_cpu_router(model, *, max_rows: int = 8, assert_every: int = 0,
               if hasattr(m, _STATE)]
     for i, st in enumerate(states):
         if len(states) > 1:
-            st.next_w_lines = states[(i + 1) % len(states)].np_w_lines
+            st.next_warm = getattr(states[(i + 1) % len(states)], "np_warm",
+                                   [states[(i + 1) % len(states)].np_w_lines])
     for s in skipped:
         log(f"cpu_router: SKIPPED unsupported router {s}")
     if verbose or n == 0:
