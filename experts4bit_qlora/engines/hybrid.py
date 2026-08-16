@@ -47,6 +47,8 @@ from .hot_residency import enable_hot_residency, target_modules
 from .nvme_experts import NF4_SEGMENTS, _NvmeResidency
 from .placement import load_manifest
 
+_PF_POOL = None                 # single-worker executor, owned by enable
+
 _MARKER = "_e4b_hybrid"
 
 
@@ -123,6 +125,112 @@ class _HybridTier(_NvmeResidency):
             self.d_dn_b = (mod.down_bias.detach().index_select(0, ci)
                            .to("cpu", torch.float32).contiguous())
 
+        # Phase 4: speculative prefetch (route L+1 from L's hidden). Wired
+        # by enable when prefetch=True and a router chain is discoverable.
+        self.nvme_set = frozenset(range(E)) - set(
+            int(e) for e in self.hot_ids.tolist()) - set(
+            int(e) for e in dram_ids.tolist())
+        self.pf = None                 # {"np_w","np_b","next","k"} for L+1
+        self.pf_enabled = False
+        self.pf_submitted = 0
+        self.pf_rows = 0
+        self.pf_pin = None             # pinned hidden staging, 2-slot ring
+        self.pf_ev = None
+        self.pf_slot = 0
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        out = super().forward(hidden_states, top_k_index, top_k_weights)
+        if (self.pf_enabled and self.pf is not None
+                and hidden_states.shape[0] <= 8):
+            self._submit_prefetch(hidden_states)
+        return out
+
+    def _submit_prefetch(self, hidden):
+        """Predict layer L+1's routing from THIS hidden and warm the
+        predicted NVMe-resident experts' tier slots on a background worker.
+
+        Correctness is trivial by construction: the tier is lock-guarded
+        with publish-after-fill slots, and the demand path is unchanged —
+        a mispredict costs one wasted disk read, never a wrong byte.
+        Deviation from the directive's letter, documented: v1 warms the
+        PINNED tier slots (killing the disk read on the critical path,
+        which is the stall) rather than a VRAM pool; the remaining
+        pinned→GPU hop is the measured 25–56 GB/s fast path."""
+        pf = self.pf
+        nxt = pf["next"]
+        if not nxt.nvme_set:
+            return                          # free when unused, structurally
+        pool = _PF_POOL
+        if pool is None or pool._work_queue.qsize() > 1:
+            return                          # never queue into lag
+        # The hidden leaves the GPU on the MAIN thread as an async pinned
+        # copy gated by an event; the worker host-waits the event and never
+        # issues a CUDA call. v1 did h.float().cpu() INSIDE the worker — a
+        # cross-thread stream synchronize per layer that cost 4x end-to-end
+        # (measured 6.21 -> 1.57 tok/s at 235B): the same sync class the
+        # CPU router exists to kill, reintroduced from a thread.
+        # 4-slot ring vs a live-task bound of 3 (1 running + <=1 queued by
+        # the qsize guard above + this submit): a slot can never be
+        # overwritten while a worker still reads it. The old 2-slot ring
+        # could — qsize() does not count the RUNNING task, so a late copy_
+        # raced the worker's float().numpy() read via CUDA DMA and fed the
+        # predictor torn bytes (wasted fetches, never wrong outputs).
+        t_rows = hidden.shape[0]
+        if self.pf_pin is None or self.pf_pin[0].shape[0] < t_rows:
+            self.pf_pin = [torch.empty(max(8, t_rows), hidden.shape[-1],
+                                       dtype=hidden.dtype, pin_memory=True)
+                           for _ in range(4)]
+            self.pf_ev = [torch.cuda.Event() for _ in range(4)]
+        s = self.pf_slot
+        self.pf_slot = (s + 1) % 4
+        pin = self.pf_pin[s]
+        ev = self.pf_ev[s]
+        pin[:t_rows].copy_(hidden.detach(), non_blocking=True)
+        ev.record(torch.cuda.current_stream(hidden.device))
+
+        def task():
+            import numpy as np
+            ev.synchronize()               # host wait only; no CUDA work
+            hc = pin[:t_rows].float().numpy()
+            # BLAS-free on purpose: `hc @ np_w.T` dispatches to OpenBLAS,
+            # which spawns a full spinning thread team PER FIRE on a big
+            # host. ~5.8K fires oversubscribed every core against the gnf4
+            # pool and torch's OMP workers, and every parallel region on
+            # the MAIN thread (each torch.stack, every layer) inherited the
+            # barrier cost — measured as the whole 6.6x arm-C slowdown at
+            # 235B while disk and tier sat idle. Ufunc broadcast+reduce is
+            # single-threaded and this product is 0.5 MFLOP; it needs no
+            # team.
+            logits = (pf["np_w"][None, :, :] * hc[:, None, :]).sum(axis=2)
+            if pf["np_b"] is not None:
+                logits = logits + pf["np_b"]
+            k = pf["k"]
+            ids = set()
+            for row in logits:
+                ids.update(np.argpartition(-row, k)[:k].tolist())
+            want = sorted(ids & nxt.nvme_set)
+            # never let speculation own more than a quarter of the slots
+            want = want[: max(1, nxt._tier.hot_rows // 4)]
+            if want:
+                # speculative=True is the tier's own contract: fills overlap
+                # demand I/O instead of convoying it (a lock-wrapped demand
+                # ensure here measured 6.6x SLOWER end-to-end at 235B), the
+                # demand window is unevictable, and no-victim means skip, not
+                # error. Speculation must never kill serving, so any read
+                # failure is swallowed — the demand path will surface it.
+                try:
+                    nxt._tier.ensure(int(nxt.mod._e4b_arena_layer), want,
+                                     speculative=True)
+                except Exception:                 # noqa: BLE001
+                    return
+                self.pf_rows += len(want)
+            self.pf_submitted += 1
+
+        try:
+            pool.submit(task)
+        except RuntimeError:
+            pass                            # executor shut down mid-flight
+
     # ------------------------------------------------------------------ #
     def _cold_contrib(self, x, flat, row_token, row_slot, cr, top_k_weights,
                       out, dev):
@@ -195,6 +303,7 @@ def hybrid_available() -> bool:
 def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        hot_rows: int, device: str = "cuda", qd: int = 4,
                        threads: int = 0, pool: bool = True,
+                       prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
     """Patch every MoE module per the placement manifest. Returns the patch
@@ -219,6 +328,15 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         for layer, e in pairs:
             per_layer.setdefault(int(layer), {"vram": [], "dram": [],
                                               "nvme": []})[tier_name].append(int(e))
+
+    if prefetch:
+        import inspect
+        if "speculative" not in inspect.signature(ColdTier.ensure).parameters:
+            raise RuntimeError(
+                "hybrid prefetch needs grouped-nf4-gemm with speculative "
+                "ensures (ColdTier.ensure(..., speculative=)) — this gnf4 "
+                "would serialize demand fetches behind prefetch disk time "
+                "and can evict rows the serving thread is reading")
 
     tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd)
     mods = target_modules(model)
@@ -267,6 +385,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     for mod in mods:
         setattr(mod, _MARKER, True)
         mod._e4b_hybrid_owns_pool = bool(pool)
+    if prefetch:
+        _wire_prefetch(model, mods, verbose=verbose)
     log(f"  hybrid tier active on {n} module(s): "
         f"vram/dram/nvme masses "
         f"{m['masses']['vram_frac']:.2f}/{m['masses']['dram_frac']:.2f}/"
@@ -274,11 +394,84 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     return n
 
 
+def _wire_prefetch(model, mods, *, verbose=False) -> int:
+    """Build the L->L+1 router chain for speculative prefetch. Router
+    modules are discovered with the same per-arch table the CPU router
+    uses; a count mismatch disables prefetch loudly rather than guessing
+    which router belongs to which expert stack."""
+    global _PF_POOL
+    import concurrent.futures
+
+    import numpy as np
+
+    from .cpu_router import _ROUTER_KINDS
+
+    routers = [m for _, m in model.named_modules()
+               if type(m).__name__ in _ROUTER_KINDS]
+    if len(routers) != len(mods):
+        log(f"  hybrid prefetch DISABLED: {len(routers)} router modules "
+            f"for {len(mods)} expert stacks — cannot align the chain")
+        return 0
+    states = [getattr(m, "_hot_residency") for m in mods]
+    wired = 0
+    for i in range(len(states) - 1):
+        r = routers[i + 1]
+        st = states[i]
+        st.pf = {
+            "np_w": np.ascontiguousarray(
+                r.weight.detach().to("cpu", torch.float32).numpy()),
+            "np_b": (None if getattr(r, "bias", None) is None else
+                     np.ascontiguousarray(
+                         r.bias.detach().to("cpu", torch.float32).numpy())),
+            "next": states[i + 1],
+            "k": int(r.top_k),
+        }
+        st.pf_enabled = True
+        wired += 1
+    if _PF_POOL is None:
+        _PF_POOL = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="e4b-prefetch")
+    if verbose:
+        log(f"  hybrid prefetch wired on {wired} layer transitions")
+    return wired
+
+
+def set_prefetch(model, on: bool) -> int:
+    """Cheap A/B toggle: flips the flag on already-wired states without
+    rebuilding any stacks (a 235B re-enable costs minutes; this is free)."""
+    n = 0
+    for _, mod in model.named_modules():
+        st = getattr(mod, "_hot_residency", None)
+        if st is not None and getattr(st, "pf", None) is not None:
+            st.pf_enabled = bool(on)
+            n += 1
+    return n
+
+
+def prefetch_stats(model) -> dict:
+    subs = rows = 0
+    for _, mod in model.named_modules():
+        st = getattr(mod, "_hot_residency", None)
+        if st is not None:
+            subs += getattr(st, "pf_submitted", 0)
+            rows += getattr(st, "pf_rows", 0)
+    return {"prefetch_submitted": subs, "prefetch_rows": rows}
+
+
 def disable_hybrid_tier(model) -> int:
     """Restore forwards and remove EVERY stamped attribute (the
     enable_nvme_residency teardown gap is the counterexample)."""
     from .hot_residency import disable_hot_residency
     import cpu_grouped
+
+    # Quiesce the prefetch worker BEFORE stripping module attributes: an
+    # in-flight task reads mod._e4b_arena_layer, and deleting attrs first
+    # turns those tasks into AttributeErrors parked on unretrieved futures
+    # during teardown. Disable new fires, then drain what is queued.
+    global _PF_POOL
+    set_prefetch(model, False)
+    if _PF_POOL is not None:
+        _PF_POOL.submit(lambda: None).result()    # barrier: queue drained
 
     owns_pool = False
     n = disable_hot_residency(model)
@@ -294,4 +487,7 @@ def disable_hybrid_tier(model) -> int:
             cpu_grouped.pool_stop()
         except (ImportError, RuntimeError):
             pass
+    if _PF_POOL is not None:
+        _PF_POOL.shutdown(wait=True)
+        _PF_POOL = None
     return n

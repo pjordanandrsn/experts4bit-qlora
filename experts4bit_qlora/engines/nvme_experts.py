@@ -81,6 +81,12 @@ class _TieredStack:
             raise ValueError(f"_TieredStack indexes experts on dim 0, got {dim}")
         from nvme_residency import segment_tensor
         globals_ = self.cold_ids.index_select(0, idx.cpu().to(torch.long))
+        # Safe against the hybrid prefetch worker with no locking here: the
+        # tier's DEMAND WINDOW (nvme_residency) keeps every row of the latest
+        # demand ensure unevictable until the next demand ensure, which spans
+        # this whole ensure -> row-reads sequence. (Before that contract, a
+        # concurrent speculative ensure could evict between the two — measured
+        # at 235B as KeyError '(layer 81, expert 73) not resident'.)
         return segment_tensor(self.tier, self.index, self.layer,
                               globals_.tolist(), self.suffix, cast=self.cast)
 

@@ -96,6 +96,8 @@ from .engines.hybrid import (  # noqa: E402
     disable_hybrid_tier,
     enable_hybrid_tier,
     hybrid_available,
+    prefetch_stats,
+    set_prefetch,
 )
 from .engines.cpu_router import (  # noqa: E402
     cpu_router_available,
@@ -163,6 +165,8 @@ __all__ = [
     "enable_hybrid_tier",
     "disable_hybrid_tier",
     "hybrid_available",
+    "set_prefetch",
+    "prefetch_stats",
     "solve_placement",
     "save_manifest",
     "load_manifest",
