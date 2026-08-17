@@ -1,0 +1,50 @@
+{
+  "model": "Qwen/Qwen3-0.6B",
+  "n_tokens": 256,
+  "rounds": 7,
+  "stock_tok_s": [
+    28.8787374533941,
+    28.281715040177158,
+    27.663321376946794,
+    28.59650345673453,
+    27.548048281096193,
+    29.630189280985796,
+    29.80047109679167
+  ],
+  "paged_tok_s": [
+    27.200853623793837,
+    26.23067459060261,
+    27.844490159967883,
+    27.358225970389867,
+    27.615904443042812,
+    28.83939961599329,
+    28.28443895276751
+  ],
+  "median_stock": 28.59650345673453,
+  "median_paged": 27.615904443042812,
+  "paged_overhead": 0.03429087109112239,
+  "armC_tok_s": 17.735395281430392,
+  "armC_tokens_match_stock": true,
+  "armC_stats": {
+    "partitions": 56,
+    "device_rows": 24,
+    "host_rows": 24,
+    "row_bytes": 32768,
+    "appends": 952,
+    "demotions": 672,
+    "settled": 672,
+    "pending_batches": 0,
+    "host_reads": 10584,
+    "host_read_bytes": 2224029696,
+    "device_resident_rows": 280,
+    "gather_returns": 10584
+  },
+  "armC_dtoh_on_compute_stream": 0,
+  "armC_dtoh_off_compute_stream": 672,
+  "armC_scalar_dtoh_excluded": 256,
+  "gate_g6": {
+    "overhead_ok": false,
+    "demotions_ran": true,
+    "copies_off_critical_path": true
+  }
+}

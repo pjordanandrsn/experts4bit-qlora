@@ -1,0 +1,6 @@
+kernels by stream:
+  stream 7: 709666
+DtoH copies by stream (copyKind 2), split at row size 16384:
+  row-sized: stream 7: n=2372 bytes=52613120
+  row-sized: stream 13: n=576 bytes=9437184
+  scalar:    stream 7: n=51725
