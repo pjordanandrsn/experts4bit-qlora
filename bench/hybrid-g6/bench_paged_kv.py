@@ -97,6 +97,7 @@ def main(model_id, n_tokens, rounds, out_dir):
     with profile(activities=[ProfilerActivity.CUDA]) as prof:
         tc, seq_c, cache_c = decode(model, tok, prompt, n_tokens, cache_c)
     same_c = seq_c == seq_a          # identical bytes ⇒ identical greedy path
+    assert same_c, "arm C diverged from stock — demotion corrupted bytes"
     sc = cache_c.stats()
 
     # stream attribution from the chrome trace: the compute stream is the
@@ -137,6 +138,7 @@ def main(model_id, n_tokens, rounds, out_dir):
            "armC_scalar_dtoh_excluded": scalar_copies,
            "gate_g6": {"overhead_ok": overhead <= 0.02,
                        "demotions_ran": sc["demotions"] > 0,
+                       "armC_tokens_ok": same_c,
                        "copies_off_critical_path": on_critical == 0}}
     p = Path(out_dir) / "g6_report.json"
     p.write_text(json.dumps(rep, indent=2))

@@ -63,6 +63,15 @@ class TieredPagedKV:
             if not host_blocks:
                 raise ValueError("hot_window needs host_tokens > 0 to "
                                  "demote into")
+            # append margin: demotion is asynchronous (enqueue → settle a
+            # step later), so the device ring needs slack beyond the window
+            # or the first append after it fills has nowhere to go
+            # (max_tokens == hot_window deadlocks the ring — Bugbot)
+            if dev_blocks < hot_window // self.bt + 2:
+                raise ValueError(
+                    f"max_tokens ({max_tokens}) must give the device ring "
+                    f"at least 2 blocks of slack over hot_window "
+                    f"({hot_window}) — demotion settles asynchronously")
         # partitions: K = [0, L), V = [L, 2L) — separate so each side's
         # token axis stays contiguous for the zero-copy view
         self.pool = RowPool(2 * self.L, dev_blocks, host_blocks,
@@ -202,6 +211,13 @@ class TieredPagedKV:
         if self.hot_window is None:
             return
         self.pool.settle()
+        if self._side is not None:
+            # ORDER the side stream after everything the compute stream has
+            # queued — including the appends that WROTE the rows about to be
+            # copied. Without this fence the DtoH can read a row whose write
+            # has not executed yet; the bench never saw it only because its
+            # greedy loop host-syncs every step on the argmax (Bugbot, HIGH).
+            self._side.wait_stream(torch.cuda.current_stream())
         win_blocks = self.hot_window // self.bt
         for layer in range(self.L):
             done_blocks = self._seen[layer] // self.bt   # full blocks only

@@ -85,3 +85,9 @@ def test_batched_input_is_refused_loudly():
     ks = torch.randn(2, H, 1, D, dtype=torch.bfloat16, device=DEV)
     with pytest.raises(ValueError, match="batch-1"):
         cache.update(ks, ks, 0)
+
+
+def test_window_without_ring_slack_is_refused_at_construction():
+    with pytest.raises(ValueError, match="slack"):
+        TieredPagedKV(L, H, D, device=DEV, max_tokens=32, hot_window=32,
+                      host_tokens=64)

@@ -131,6 +131,7 @@ def stage_run(threads: int, dram_gb: int, rounds: int):
               flush=True)
     ca = _cache(model, window=32, host_tokens=64 + N_TOKENS + 64)
     tc, seq_c, ca = _decode(model, tok, ca)
+    assert seq_c == seq_ref, "arm C diverged from stock — demotion corrupted"
     med_a = statistics.median(a_t)
     med_b = statistics.median(b_t)
     overhead = (med_a - med_b) / med_a
@@ -142,6 +143,7 @@ def stage_run(threads: int, dram_gb: int, rounds: int):
            "armC_stats": ca.stats(), "masses": m["masses"],
            "manifest_sha": sha, "threads": threads,
            "gate_g6": {"overhead_ok": overhead <= 0.02,
+                       "armC_tokens_ok": seq_c == seq_ref,
                        "demotions_ran": ca.stats()["demotions"] > 0}}
     (OUT / "g6_report.json").write_text(json.dumps(rep, indent=2))
     print("G6_REPORT " + json.dumps(rep), flush=True)
