@@ -217,7 +217,11 @@ class TieredPagedKV:
             # copied. Without this fence the DtoH can read a row whose write
             # has not executed yet; the bench never saw it only because its
             # greedy loop host-syncs every step on the argmax (Bugbot, HIGH).
-            self._side.wait_stream(torch.cuda.current_stream())
+            # current_stream(SELF.DEVICE), never bare: the bare call returns
+            # the THREAD's current device's stream, so on a thread whose
+            # current device is not ours the fence waits on the wrong stream
+            # and stops nothing (dense_offload.py documents the same trap)
+            self._side.wait_stream(torch.cuda.current_stream(self.device))
         win_blocks = self.hot_window // self.bt
         for layer in range(self.L):
             done_blocks = self._seen[layer] // self.bt   # full blocks only
