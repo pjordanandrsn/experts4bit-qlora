@@ -1,0 +1,51 @@
+{
+  "model": "qwen3-30b-a3b-hybrid",
+  "n_tokens": 128,
+  "rounds": 5,
+  "stock_tok_s": [
+    14.387439471965823,
+    14.55358191731819,
+    14.549030956706265,
+    14.61386355488017,
+    14.438473885639036
+  ],
+  "paged_tok_s": [
+    14.30683460011554,
+    14.048447919982426,
+    14.347125144112145,
+    14.167084920556196,
+    14.275985850104902
+  ],
+  "median_stock": 14.549030956706265,
+  "median_paged": 14.275985850104902,
+  "paged_overhead": 0.01876723662310335,
+  "armC_tok_s": 13.582519951757302,
+  "armC_tokens_match_stock": true,
+  "armC_stats": {
+    "partitions": 96,
+    "device_rows": 16,
+    "host_rows": 16,
+    "row_bytes": 16384,
+    "appends": 864,
+    "demotions": 576,
+    "settled": 576,
+    "pending_batches": 0,
+    "host_reads": 8928,
+    "host_read_bytes": 500170752,
+    "device_resident_rows": 288,
+    "gather_returns": 8928
+  },
+  "masses": {
+    "vram_frac": 0.7575383771929824,
+    "dram_frac": 0.24246162280701755,
+    "nvme_frac": 0.0,
+    "target_gpu_cpu_ratio": 3.1243294790797473,
+    "achieved_gpu_cpu_ratio": 3.1243640474844545
+  },
+  "manifest_sha": "44044b26d2ee6758a0da93ba118bb8932021cfac33383ff63f953ef5f6cc845a",
+  "threads": 40,
+  "gate_g6": {
+    "overhead_ok": true,
+    "demotions_ran": true
+  }
+}

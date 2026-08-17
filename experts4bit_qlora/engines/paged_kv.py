@@ -69,6 +69,15 @@ class TieredPagedKV:
                             self.row_bytes, device=device)
         self.hot_window = hot_window
         self._seen = [0] * n_layers            # tokens appended per layer
+        # per-partition typed view of the WHOLE device partition, built once
+        # (the pool tensor never reallocates). The everything-fits return is
+        # then one narrow + one permute — python bookkeeping was 6.7% of a
+        # 0.6B model's step before this, vs a 2% gate bar
+        self._typed_dev = [
+            self.pool.dev[p].flatten().view(self.dtype)
+            .view(dev_blocks * self.bt, self.H, self.D)
+            for p in range(2 * self.L)
+        ]
         self._side = (torch.cuda.Stream(self.device)
                       if (self.device.type == "cuda"
                           and hot_window is not None) else None)
@@ -110,15 +119,47 @@ class TieredPagedKV:
             raise ValueError("TieredPagedKV v1 is batch-1 (gate G6's "
                              "regime); batched block tables land with the "
                              "Phase-9 scheduler")
+        seen = self._seen[layer_idx]
+        t_new = key_states.shape[2]
+        pk, pv = layer_idx, self.L + layer_idx
+        # Decode fast path: one token, nothing demoted, no ring wrap. The
+        # measured cost of this method is python DISPATCH COUNT, not any
+        # kernel (SDPA is stride-indifferent and narrow+copy beats cat —
+        # see bench/hybrid-g6): keep it to a handful of torch calls.
+        if (t_new == 1 and self.pool.head[pk] == 0
+                and self.pool.tail[pk] <= self.pool.device_rows
+                and key_states.dtype == self.dtype):
+            if seen % self.bt == 0:
+                self.pool.append(pk)
+                self.pool.append(pv)
+            t = seen + 1
+            kd = self._typed_dev[pk]
+            vd = self._typed_dev[pv]
+            kd.narrow(0, seen, 1).copy_(key_states[0].permute(1, 0, 2))
+            vd.narrow(0, seen, 1).copy_(value_states[0].permute(1, 0, 2))
+            self._seen[layer_idx] = t
+            out_k = kd.narrow(0, 0, t).permute(1, 0, 2)[None]
+            out_v = vd.narrow(0, 0, t).permute(1, 0, 2)[None]
+            if layer_idx == self.L - 1:
+                self._maybe_demote()
+            return out_k, out_v
+
         k = key_states[0].permute(1, 0, 2).to(self.dtype)   # [T, H, D]
         v = value_states[0].permute(1, 0, 2).to(self.dtype)
-        self._append_tokens(layer_idx, layer_idx, k.contiguous())
-        self._append_tokens(self.L + layer_idx, layer_idx, v.contiguous())
+        self._append_tokens(layer_idx, layer_idx, k)
+        self._append_tokens(self.L + layer_idx, layer_idx, v)
         self._seen[layer_idx] += k.shape[0]
 
         t = self._seen[layer_idx]
         out = []
         for part in (layer_idx, self.L + layer_idx):
+            head = self.pool.head[part]
+            if head == 0 and self.pool.tail[part] <= self.pool.device_rows:
+                # everything-fits fast path: the precomputed typed view,
+                # one narrow + one permute, nothing else
+                res = self._typed_dev[part].narrow(0, 0, t)
+                out.append(res.permute(1, 0, 2)[None])
+                continue
             hosted = self.pool.demoted[part] * self.bt
             typed, lo = self._rows(part)
             res = typed.narrow(0, 0, t - lo * self.bt) if lo * self.bt < t \
@@ -171,6 +212,28 @@ class TieredPagedKV:
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         return self._seen[layer_idx]
+
+    # -- the rest of the mask-preprocessing surface modern transformers
+    #    queries before layers run (contracts read off the installed
+    #    DynamicCache: dynamic growth, no offset, nothing sliding)
+    def get_mask_sizes(self, query_length: int, layer_idx: int):
+        return self._seen[layer_idx] + query_length, 0
+
+    def get_max_length(self) -> int:
+        return -1
+
+    def get_query_offset(self, layer_idx: int = 0) -> int:
+        # newer transformers' mask preprocessing; equals the cache length
+        # for everything but MTP caches (per the installed contract)
+        return self._seen[layer_idx]
+
+    @property
+    def is_sliding(self) -> list:
+        return [False] * self.L
+
+    @property
+    def is_compileable(self) -> bool:
+        return False
 
     def stats(self) -> dict:
         s = self.pool.stats()
