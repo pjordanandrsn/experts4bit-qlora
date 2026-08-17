@@ -118,9 +118,16 @@ Both remaining clauses were measured on a calibrated, uncontended RTX 5090
 |---|---|---|
 | ppl ≤0.5% + downstream, both probe models | **PASS** (`fp8_kg32`) | worst ppl +0.42%, LAMBADA within noise |
 | `B_max` ≥25 at 4K, 235B-class geometry | **PASS** | 94-layer B=25 4K set = **9.90 GiB** resident; attention over all of it **10.59 ms/step** with the round-2 kernel (was 13.5), 19.7 GiB VRAM free |
-| kernel ≥70% of measured `B_vram` | **MISS by 0.6 pts** (round 2) | fp8-compute sustained best **69.1–69.6%** (1087–1095 GB/s); shipped defaults 63.8%; f32-decode path 52.9% |
+| kernel ≥70% of measured `B_vram` | **PASS** (refine round) | **90.0% serving-shaped** (1417 GB/s, 94 back-to-back layers, ±0.1% over reps); isolated-launch sustained 70.3–70.6%, worst rep 69.96% |
 
-**G7 = 2 of 3 clauses.** The kernel clause went through a full redesign
+**G7 = 3 of 3 clauses** (kernel clause resolved by the refinement
+round — the split heuristic's `seq_lens.max()` was a per-call device
+sync that serialized every defaults measurement and the 94-layer B_max
+loop, i.e. the exact shape of a real decode step; with it fixed the
+serving-shaped fraction is 90.0% and the B_max step dropped 10.59 →
+7.50 ms. Receipts: grouped-nf4-gemm `bench/hybrid-g7-box/refine/`.)
+
+Earlier rounds' verdict as then measured — **2 of 3.** The kernel clause went through a full redesign
 round (the fp8-tensor-core compute path — receipts in the gnf4 sibling):
 52.9% → 69.4% sustained, and the bar is still missed, by ~0.6 points on
 a reproducible protocol (a single 72.6% measurement did not reproduce in
