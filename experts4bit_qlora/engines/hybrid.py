@@ -153,6 +153,7 @@ class _HybridTier(_NvmeResidency):
         # geometry, read off the stacks rather than assumed.
         self.amort = None              # dict when armed, else None
         self._exp_bytes = None
+        self._gpu_only = False         # Phase 9 mixed mode, off by default
 
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
@@ -184,6 +185,13 @@ class _HybridTier(_NvmeResidency):
                       # from another failed three times in this program
                       # (Phase 1's wake-time hunt); it is not used here.
                       "dram_ns": 0, "gpu_ns": 0,
+                      # per-expert routing histogram: the empirical p_e the
+                      # general amortization law needs. The gate's closed
+                      # form assumes these are all k/E; whether they are is
+                      # a measurement, not an axiom.
+                      "hist": torch.zeros(int(self.mod.num_experts),
+                                          dtype=torch.long,
+                                          device=self.device),
                       } if on else None
         return self.amort
 
@@ -206,6 +214,7 @@ class _HybridTier(_NvmeResidency):
         a["acts_vram"] += int(hot_a.sum())
         a["acts_dram"] += int((dram_a & ~hot_a).sum())
         a["acts_nvme"] += int((~hot_a & ~dram_a).sum())
+        a["hist"] += torch.bincount(flat, minlength=a["hist"].numel())
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
         if self.amort is not None:
@@ -302,6 +311,79 @@ class _HybridTier(_NvmeResidency):
         except RuntimeError:
             pass                            # executor shut down mid-flight
 
+    # ------------------------------------------------------- mixed mode --
+    def prefill_gpu_only(self, on: bool = True):
+        """Phase 9 mixed mode: route DRAM experts to the GPU for this
+        step instead of computing them on the CPU.
+
+        Prefill is compute-bound — G8 measured the DRAM tier leaving the
+        bandwidth-bound regime near ~8 tokens per expert, and a prefill
+        chunk is far past it — so a chunk's expert weights should cross
+        PCIe ONCE and amortize over its many tokens. Decode is the
+        opposite and stays on the hybrid tier.
+
+        The bytes are the SAME bytes: this streams from ``d_*``, the one
+        host copy the CPU tier already computes on, so no expert is
+        duplicated to serve the second path. Routing through the
+        inherited cold path instead would look equivalent and quietly
+        re-read from the ARENA FILE — those stacks are ``_TieredStack``
+        views over disk, not host memory — turning a DRAM hit into an
+        NVMe read for bytes already resident.
+
+        NUMERICS, measured rather than assumed: a per-op probe (same
+        inputs, one layer, both buses) agrees to 1e-4 absolute on
+        outputs of norm ~1.2 — bf16 rounding scale, where a wrong
+        permutation or misaligned stack would land O(1). Over a whole
+        forward those differences accumulate and CAN flip an argmax,
+        because switching a DRAM expert from the CPU tier's fp32 dequant
+        to the GPU's compute-dtype dequant is precisely the
+        cross-placement rounding change this module documents at the
+        top: same placement is bit-identical, a moved expert is not.
+        Mixed mode therefore belongs in run identity alongside the
+        manifest, and a bit-exactness check against the CPU tier is the
+        wrong test to write.
+        """
+        self._gpu_only = bool(on)
+
+    def _dram_on_gpu(self, x, flat, row_token, row_slot, dr, top_k_weights,
+                     out, dev):
+        """DRAM experts, computed on the GPU from the host stacks."""
+        from .hot_residency import _fused_over_stack
+
+        glob = flat.index_select(0, dr).cpu()
+        local_full = self.g2d_cpu.index_select(0, glob)
+        routed, compact = torch.unique(local_full, return_inverse=True)
+        # ONE H2D per unique expert per chunk — the amortization that
+        # makes prefill worth offloading at all (G8's law: unique reads,
+        # not activations)
+        # absmax crosses in the COMPUTE dtype: the DRAM stacks keep fp32
+        # scales for the CPU kernels' locked tree, while the fused GPU
+        # kernel is written against the hot stack's compute-dtype scales
+        # (h_gu_a is bf16). Casting on transfer also halves these bytes,
+        # which measured 2.9x -> 6.7x on a 21-token prefill.
+        cd = x.dtype
+        gu_p = self.d_gu_p.index_select(0, routed).to(dev, non_blocking=True)
+        gu_a = self.d_gu_a.index_select(0, routed).to(dev, cd,
+                                                      non_blocking=True)
+        dn_p = self.d_dn_p.index_select(0, routed).to(dev, non_blocking=True)
+        dn_a = self.d_dn_a.index_select(0, routed).to(dev, cd,
+                                                      non_blocking=True)
+        xr = x.index_select(0, row_token.index_select(0, dr))
+        gptoss = None
+        if self.gptoss:
+            r_dev = routed.to(dev)
+            gptoss = (self.d_gu_b.index_select(0, r_dev).to(dev),
+                      self.d_dn_b.index_select(0, r_dev).to(dev),
+                      self.alpha, self.limit)
+        dn = _fused_over_stack(xr, compact.to(dev), gu_p, gu_a, dn_p, dn_a,
+                               self.shapes, self.has_gate, self.act_fn,
+                               gptoss=gptoss, clamp_limit=self.clamp_limit)
+        w = top_k_weights[row_token.index_select(0, dr),
+                          row_slot.index_select(0, dr)].to(torch.float32)
+        out.index_put_((row_token.index_select(0, dr),
+                        row_slot.index_select(0, dr)),
+                       dn.to(torch.float32) * w[:, None])
+
     # ------------------------------------------------------------------ #
     def _cold_contrib(self, x, flat, row_token, row_slot, cr, top_k_weights,
                       out, dev):
@@ -311,9 +393,13 @@ class _HybridTier(_NvmeResidency):
         if nr.numel():                       # NVMe→GPU, parent's path verbatim
             super()._cold_contrib(x, flat, row_token, row_slot, nr,
                                   top_k_weights, out, dev)
-        if dr.numel():                       # DRAM bus: compute in place
-            self._dram_contrib(x, flat, row_token, row_slot, dr,
-                               top_k_weights, out, dev)
+        if dr.numel():
+            if getattr(self, "_gpu_only", False):
+                self._dram_on_gpu(x, flat, row_token, row_slot, dr,
+                                  top_k_weights, out, dev)
+            else:                            # DRAM bus: compute in place
+                self._dram_contrib(x, flat, row_token, row_slot, dr,
+                                   top_k_weights, out, dev)
 
     def _dram_contrib(self, x, flat, row_token, row_slot, dr, top_k_weights,
                       out, dev):
