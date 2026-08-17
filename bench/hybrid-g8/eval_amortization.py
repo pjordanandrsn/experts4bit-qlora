@@ -42,17 +42,22 @@ def _analytic(n_experts: int, top_k: int, batch: int) -> float:
 
 
 def _tiers(model):
-    """Every hybrid tier state in the model, in layer order."""
+    """Every hybrid tier state in the model, in layer order.
+
+    The state lives on ``mod._hot_residency`` (the attribute
+    ``enable_hot_residency`` installs); ``arm_amortization`` is what
+    distinguishes a hybrid tier from a plain hot-residency state, so
+    duck-typing on it keeps this working across engines."""
     out = []
     for mod in model.modules():
-        st = getattr(mod, "_e4b_hot_state", None)
+        st = getattr(mod, "_hot_residency", None)
         if st is not None and hasattr(st, "arm_amortization"):
             out.append(st)
     return out
 
 
 def measure_amortization(model, tok, batches, seq_len, prompt_pool,
-                         device="cuda"):
+                         device="cuda", label="AMORT"):
     """For each batch size: run one decode step over B independent
     sequences and count unique experts touched per tier."""
     rows = []
@@ -64,9 +69,22 @@ def measure_amortization(model, tok, batches, seq_len, prompt_pool,
     E = getattr(cfg, "num_local_experts", None) or cfg.num_experts
     k = getattr(cfg, "num_experts_per_tok", None) or cfg.top_k
 
+    short = [len(s) for s in prompt_pool if len(s) < seq_len]
+    if short:
+        raise ValueError(
+            f"prompt pool holds sequences shorter than seq_len={seq_len} "
+            f"(min {min(short)}): torch would silently stack the short "
+            f"slices and every 'tokens' below would be an overcount, which "
+            f"reads as a factor-2 law violation rather than a bad harness")
     for B in batches:
         ids = torch.stack([prompt_pool[i % len(prompt_pool)][:seq_len]
                            for i in range(B)]).to(device)
+        assert ids.shape == (B, seq_len), ids.shape
+        # Token diversity is REPORTED, not assumed. B sequences that share
+        # a token id route identically, which would collapse the unique
+        # count and read as amortization the batch never bought — a
+        # routing measurement that is really measuring the sampler.
+        n_distinct = int(torch.unique(ids).numel())
         for st in tiers:
             st.arm_amortization(True)
         with torch.no_grad():
@@ -74,9 +92,11 @@ def measure_amortization(model, tok, batches, seq_len, prompt_pool,
         acc = {"steps": 0, "acts": 0, "uniq_vram": 0, "uniq_dram": 0,
                "uniq_nvme": 0, "acts_vram": 0, "acts_dram": 0,
                "acts_nvme": 0, "dram_groups": 0, "dram_ns": 0, "gpu_ns": 0}
+        hists = []
         for st in tiers:
             for key in acc:
                 acc[key] += st.amort[key]
+            hists.append(st.amort["hist"].detach().cpu())
             st.arm_amortization(False)
         uniq = acc["uniq_vram"] + acc["uniq_dram"] + acc["uniq_nvme"]
         # tokens per step = B * seq_len (a prefill-shaped step at seq_len
@@ -84,6 +104,8 @@ def measure_amortization(model, tok, batches, seq_len, prompt_pool,
         measured = uniq / acc["acts"] if acc["acts"] else float("nan")
         rows.append({
             "batch": B, "tokens": B * seq_len,
+            "distinct_token_ids": n_distinct,
+            "token_diversity": n_distinct / (B * seq_len),
             "acts": acc["acts"], "unique": uniq,
             "measured_factor": measured,
             "analytic_factor": _analytic(E, k, B * seq_len),
@@ -104,13 +126,36 @@ def measure_amortization(model, tok, batches, seq_len, prompt_pool,
                               / max(acc["dram_ns"], acc["gpu_ns"])
                               if max(acc["dram_ns"], acc["gpu_ns"]) else None),
         })
+        rows[-1]["_hists"] = [h.tolist() for h in hists]
         r = rows[-1]
-        print(f"AMORT B={B:3d} tok={r['tokens']:5d} acts={r['acts']:7d} "
+        print(f"{label} B={B:3d} tok={r['tokens']:5d} "
+              f"distinct={r['distinct_token_ids']:4d} acts={r['acts']:7d} "
               f"uniq={r['unique']:6d} measured={r['measured_factor']:.4f} "
               f"analytic={r['analytic_factor']:.4f} "
               f"delta={100*(r['measured_factor']/r['analytic_factor']-1):+6.1f}%",
               flush=True)
     return rows
+
+
+def predict_from_measured_routing(hists, tokens_per_hist, batch):
+    """General law with the routing the model ACTUALLY has.
+
+    ``sum_e 1-(1-p_e)^B`` per layer, where p_e is the empirical per-token
+    selection probability of expert e. The gate's closed form is this
+    with every p_e forced to k/E; comparing the two is how we find out
+    whether real routing is uniform (it is not) and, more importantly,
+    whether the AMORTIZATION MACHINERY is right once the routing model
+    stops being wrong."""
+    total = 0.0
+    for h in hists:
+        n = sum(h)
+        if not n or not tokens_per_hist:
+            continue
+        for c in h:
+            p = c / tokens_per_hist
+            p = min(1.0, max(0.0, p))
+            total += 1.0 - (1.0 - p) ** batch
+    return total
 
 
 def negative_control(rows):
