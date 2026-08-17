@@ -247,6 +247,15 @@ class _HotResidency:
 
         # --- HOT: resident GPU stack, zero transfer ---
         hr = hot_row.nonzero(as_tuple=False).view(-1)
+        # per-bus probe (hybrid Phase 8): armed only when a subclass is
+        # counting, and it brackets ONLY the hot branch — the GPU bus's
+        # completion time is measured, never inferred by subtracting arms
+        _amort = getattr(self, "amort", None)
+        _ev = None
+        if _amort is not None and hr.numel() and dev.type == "cuda":
+            _ev = (torch.cuda.Event(enable_timing=True),
+                   torch.cuda.Event(enable_timing=True))
+            _ev[0].record()
         if hr.numel():
             local = self.g2h[flat.index_select(0, hr)]
             xr = x.index_select(0, row_token.index_select(0, hr))
@@ -266,6 +275,11 @@ class _HotResidency:
             w = top_k_weights[row_token.index_select(0, hr), row_slot.index_select(0, hr)].to(torch.float32)
             out.index_put_((row_token.index_select(0, hr), row_slot.index_select(0, hr)),
                            dn.to(torch.float32) * w[:, None])
+
+        if _ev is not None:
+            _ev[1].record()
+            _ev[1].synchronize()
+            _amort["gpu_ns"] += int(_ev[0].elapsed_time(_ev[1]) * 1e6)
 
         # --- COLD: stream ONLY the routed cold experts from pinned host RAM ---
         cr = (~hot_row).nonzero(as_tuple=False).view(-1)

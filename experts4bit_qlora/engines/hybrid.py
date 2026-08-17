@@ -37,6 +37,7 @@ it detects multiple nodes.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -53,9 +54,16 @@ _MARKER = "_e4b_hybrid"
 
 
 def _split_oversize_groups(sizes, eids, max_rows=8):
-    """The native kernel's decode contract caps a group at 8 rows; a prefill
-    group larger than that is split into same-expert chunks (pure row
-    batching — outputs are per-row, so chunking cannot change them)."""
+    """Split same-expert groups into ``max_rows`` chunks.
+
+    SUPERSEDED as a dispatch step (Phase 8): the native kernel now chunks
+    a group across its 8-row register blocking INTERNALLY, keeping the
+    weight row L1-hot, where splitting into separate groups re-read those
+    weights from DRAM per chunk — the exact amortization G8 measures.
+    Kept because :mod:`hybrid_train`'s backward still batches through the
+    older contract, and because it is the reference the kernel's
+    equivalence test is written against.
+    """
     out_sizes, out_eids = [], []
     for s, e in zip(sizes, eids):
         while s > max_rows:
@@ -138,7 +146,70 @@ class _HybridTier(_NvmeResidency):
         self.pf_ev = None
         self.pf_slot = 0
 
+        # Phase 8 amortization instrument. OFF by default and structurally
+        # free when off (invariant 9): the counting block is guarded and
+        # does its own unique() work only when armed, so a serving run pays
+        # nothing. Bytes are per-expert weight bytes on THIS module's
+        # geometry, read off the stacks rather than assumed.
+        self.amort = None              # dict when armed, else None
+        self._exp_bytes = None
+
+    def expert_bytes(self) -> int:
+        """Weight bytes one expert occupies (gate/up + down, payload plus
+        absmax), from the resident stacks — never a spec-sheet number."""
+        if self._exp_bytes is None:
+            n = 0
+            for attr in ("d_gu_p", "d_gu_a", "d_dn_p", "d_dn_a"):
+                s = getattr(self, attr, None)
+                if s is not None and s.shape[0]:
+                    n += s[0].numel() * s.element_size()
+            if n == 0:                       # no DRAM experts on this module
+                for attr in ("h_gu_p", "h_gu_a", "h_dn_p", "h_dn_a"):
+                    s = getattr(self, attr, None)
+                    if s is not None and s.shape[0]:
+                        n += s[0].numel() * s.element_size()
+            self._exp_bytes = int(n)
+        return self._exp_bytes
+
+    def arm_amortization(self, on: bool = True):
+        """Start (or clear) per-step unique-expert accounting."""
+        self.amort = {"steps": 0, "acts": 0,
+                      "uniq_vram": 0, "uniq_dram": 0, "uniq_nvme": 0,
+                      "acts_vram": 0, "acts_dram": 0, "acts_nvme": 0,
+                      "dram_groups": 0, "expert_bytes": self.expert_bytes(),
+                      # per-bus wall time, measured with a PER-OP PROBE:
+                      # the CPU bus is synchronous host work so its wall
+                      # is exact, and the GPU bus is bracketed by its own
+                      # CUDA events. Attribution by subtracting one arm
+                      # from another failed three times in this program
+                      # (Phase 1's wake-time hunt); it is not used here.
+                      "dram_ns": 0, "gpu_ns": 0,
+                      } if on else None
+        return self.amort
+
+    def _count_amortization(self, top_k_index):
+        """Unique experts touched per tier for THIS step, plus activation
+        counts. The pair is the whole measurement: their ratio is the
+        amortization the batch actually bought, against B*k."""
+        a = self.amort
+        flat = top_k_index.reshape(-1).to(self.device)
+        a["steps"] += 1
+        a["acts"] += int(flat.numel())
+        uniq = torch.unique(flat)
+        hot_u = self.is_hot[uniq]
+        dram_u = self.is_dram[uniq]
+        a["uniq_vram"] += int(hot_u.sum())
+        a["uniq_dram"] += int((dram_u & ~hot_u).sum())
+        a["uniq_nvme"] += int((~hot_u & ~dram_u).sum())
+        hot_a = self.is_hot[flat]
+        dram_a = self.is_dram[flat]
+        a["acts_vram"] += int(hot_a.sum())
+        a["acts_dram"] += int((dram_a & ~hot_a).sum())
+        a["acts_nvme"] += int((~hot_a & ~dram_a).sum())
+
     def forward(self, hidden_states, top_k_index, top_k_weights):
+        if self.amort is not None:
+            self._count_amortization(top_k_index)
         out = super().forward(hidden_states, top_k_index, top_k_weights)
         if (self.pf_enabled and self.pf is not None
                 and hidden_states.shape[0] <= 8):
@@ -246,6 +317,18 @@ class _HybridTier(_NvmeResidency):
 
     def _dram_contrib(self, x, flat, row_token, row_slot, dr, top_k_weights,
                       out, dev):
+        if self.amort is not None:
+            t0 = time.perf_counter_ns()
+            try:
+                return self._dram_contrib_inner(
+                    x, flat, row_token, row_slot, dr, top_k_weights, out, dev)
+            finally:
+                self.amort["dram_ns"] += time.perf_counter_ns() - t0
+        return self._dram_contrib_inner(x, flat, row_token, row_slot, dr,
+                                        top_k_weights, out, dev)
+
+    def _dram_contrib_inner(self, x, flat, row_token, row_slot, dr,
+                            top_k_weights, out, dev):
         import cpu_grouped
 
         glob = flat.index_select(0, dr).cpu()
@@ -257,7 +340,17 @@ class _HybridTier(_NvmeResidency):
         sl = local.index_select(0, order)
         xs = xr.index_select(0, order).contiguous()
         uniq, counts = torch.unique_consecutive(sl, return_counts=True)
-        sizes, eids = _split_oversize_groups(counts.tolist(), uniq.tolist())
+        # NO caller-side split (Phase 8): one group per unique expert, so
+        # its weights are read once and the kernel's internal chunking
+        # amortizes them over every routed row. Splitting here made the
+        # DRAM bus re-read a whole expert every 8 rows.
+        sizes, eids = counts.tolist(), uniq.tolist()
+        if self.amort is not None:
+            # post-split group count, not the unique count: each split
+            # chunk re-reads its expert's weights, so THIS is the number
+            # the DRAM bus actually pays. The gap between it and
+            # uniq_dram is the split tax, and it must be visible.
+            self.amort["dram_groups"] += len(sizes)
 
         gu = cpu_grouped.gemv_nf4_grouped_cpu(
             xs, self.d_gu_p, self.d_gu_a, sizes, eids, threads=self._threads)
