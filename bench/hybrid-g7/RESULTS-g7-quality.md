@@ -109,15 +109,34 @@ stop condition forbids resolving in the batch number's favour. `fp8_kg32`
 is the configuration that can satisfy both clauses, and whether it actually
 does is a measurement on a real box, not this table.
 
-## Still owed for G7
+## G7 verdict — measured on the quiet box (kernel receipts in grouped-nf4-gemm `bench/hybrid-g7-box/`)
 
-1. `B_max` ≥25 at 4K on a 235B-class model — a box run, against the
-   arithmetic above.
-2. Attention kernel ≥70% of measured `B_vram` — the Triton paged-attention
-   kernel with in-register dequant, which is the risky clause of this
-   phase: the in-tree precedent for a *fused* KV attention kernel is one
-   measuring **11.6× slower** than bf16 SDPA invoked properly, after an
-   earlier 0.82× claim turned out to be a baseline error.
+Both remaining clauses were measured on a calibrated, uncontended RTX 5090
+(`B_vram` 1573.4 GB/s):
+
+| clause | result | number |
+|---|---|---|
+| ppl ≤0.5% + downstream, both probe models | **PASS** (`fp8_kg32`) | worst ppl +0.42%, LAMBADA within noise |
+| `B_max` ≥25 at 4K, 235B-class geometry | **PASS** | 94-layer B=25 4K set = **9.90 GiB** resident, attention over all of it 13.5 ms/step, 19.7 GiB VRAM free |
+| kernel ≥70% of measured `B_vram` | **MISS** | 52.9% best-tuned (832 GB/s), 49.5% shipped defaults (778 GB/s) |
+
+**G7 = 2 of 3 clauses.** The kernel miss comes with its mechanism and its
+consolation measured: at serving shapes the kernel reaches wall-clock
+**parity with bf16 SDPA** (×0.99–1.05 at B≥25/4K) while reading half the
+bytes — the byte halving is realized as capacity (the B_max row), not yet
+as speed (the 70% clause). The risky-clause worry above resolved well
+short of the in-tree 11.6× precedent, and the next lever (persistent-CTA
+schedule) is a costed redesign, not a tuning pass — a decision, not a
+default.
+
+The `B_max` measurement is the KV-capacity + attention half of that
+clause: batched expert dispatch does not exist until Phase 8/9, so a
+full-model batched decode is not yet measurable. At 9.9 GiB KV +
+19.7 GiB free, batch 25 is not KV-bound; the expert path is Phase 8's
+gate.
 
 Receipts in this directory: per-model quality JSON (all arms, controls,
-byte accounting), outlier probes, and both harness scripts.
+byte accounting), outlier probes, and both harness scripts. Kernel-side
+receipts (calibration blob, sweep surfaces incl. the packed-heads loss
+table, shipped-defaults formal table, B_max run): grouped-nf4-gemm
+`bench/hybrid-g7-box/RESULTS-g7-kernel.md`.
