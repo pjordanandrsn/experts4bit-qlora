@@ -1,0 +1,155 @@
+{
+  "model": "NousResearch/Llama-3.2-1B",
+  "per_layer": [
+    {
+      "layer": 0,
+      "kind": "K",
+      "amax_over_rms_p50": 4.005314350128174,
+      "amax_over_rms_p99": 5.393994331359863,
+      "amax_over_rms_max": 5.883774757385254,
+      "int4_effective_levels_at_1rms_p50": 1.7474747896194458,
+      "int4_effective_levels_at_1rms_p01": 1.2977396249771118
+    },
+    {
+      "layer": 0,
+      "kind": "V",
+      "amax_over_rms_p50": 3.518909454345703,
+      "amax_over_rms_p99": 6.642829895019531,
+      "amax_over_rms_max": 7.947035312652588,
+      "int4_effective_levels_at_1rms_p50": 1.9892525672912598,
+      "int4_effective_levels_at_1rms_p01": 1.0537678003311157
+    },
+    {
+      "layer": 1,
+      "kind": "K",
+      "amax_over_rms_p50": 3.64560604095459,
+      "amax_over_rms_p99": 5.5585174560546875,
+      "amax_over_rms_max": 5.70969820022583,
+      "int4_effective_levels_at_1rms_p50": 1.9199432134628296,
+      "int4_effective_levels_at_1rms_p01": 1.2593286037445068
+    },
+    {
+      "layer": 1,
+      "kind": "V",
+      "amax_over_rms_p50": 3.4493939876556396,
+      "amax_over_rms_p99": 5.74418830871582,
+      "amax_over_rms_max": 7.966654300689697,
+      "int4_effective_levels_at_1rms_p50": 2.028630495071411,
+      "int4_effective_levels_at_1rms_p01": 1.2186230421066284
+    },
+    {
+      "layer": 2,
+      "kind": "K",
+      "amax_over_rms_p50": 3.5551092624664307,
+      "amax_over_rms_p99": 5.099789619445801,
+      "amax_over_rms_max": 5.459383010864258,
+      "int4_effective_levels_at_1rms_p50": 1.9687589406967163,
+      "int4_effective_levels_at_1rms_p01": 1.372605800628662
+    },
+    {
+      "layer": 2,
+      "kind": "V",
+      "amax_over_rms_p50": 3.03657603263855,
+      "amax_over_rms_p99": 5.580989837646484,
+      "amax_over_rms_max": 7.966891765594482,
+      "int4_effective_levels_at_1rms_p50": 2.305102825164795,
+      "int4_effective_levels_at_1rms_p01": 1.2542579174041748
+    },
+    {
+      "layer": 3,
+      "kind": "K",
+      "amax_over_rms_p50": 4.8423285484313965,
+      "amax_over_rms_p99": 6.018673896789551,
+      "amax_over_rms_max": 6.394792556762695,
+      "int4_effective_levels_at_1rms_p50": 1.4455347061157227,
+      "int4_effective_levels_at_1rms_p01": 1.163046956062317
+    },
+    {
+      "layer": 3,
+      "kind": "V",
+      "amax_over_rms_p50": 2.792198657989502,
+      "amax_over_rms_p99": 5.997426986694336,
+      "amax_over_rms_max": 7.949771881103516,
+      "int4_effective_levels_at_1rms_p50": 2.5069382190704346,
+      "int4_effective_levels_at_1rms_p01": 1.1671671867370605
+    },
+    {
+      "layer": 4,
+      "kind": "K",
+      "amax_over_rms_p50": 4.8091349601745605,
+      "amax_over_rms_p99": 5.7534332275390625,
+      "amax_over_rms_max": 6.375564098358154,
+      "int4_effective_levels_at_1rms_p50": 1.455515742301941,
+      "int4_effective_levels_at_1rms_p01": 1.2166649103164673
+    },
+    {
+      "layer": 4,
+      "kind": "V",
+      "amax_over_rms_p50": 2.8391168117523193,
+      "amax_over_rms_p99": 4.202120304107666,
+      "amax_over_rms_max": 7.953985214233398,
+      "int4_effective_levels_at_1rms_p50": 2.464855194091797,
+      "int4_effective_levels_at_1rms_p01": 1.6658260822296143
+    },
+    {
+      "layer": 5,
+      "kind": "K",
+      "amax_over_rms_p50": 4.804351329803467,
+      "amax_over_rms_p99": 6.192687511444092,
+      "amax_over_rms_max": 6.342660903930664,
+      "int4_effective_levels_at_1rms_p50": 1.4569451808929443,
+      "int4_effective_levels_at_1rms_p01": 1.1303654909133911
+    },
+    {
+      "layer": 5,
+      "kind": "V",
+      "amax_over_rms_p50": 3.189575433731079,
+      "amax_over_rms_p99": 6.218379497528076,
+      "amax_over_rms_max": 7.946591377258301,
+      "int4_effective_levels_at_1rms_p50": 2.1939008235931396,
+      "int4_effective_levels_at_1rms_p01": 1.1256952285766602
+    },
+    {
+      "layer": 6,
+      "kind": "K",
+      "amax_over_rms_p50": 5.230607509613037,
+      "amax_over_rms_p99": 5.983479976654053,
+      "amax_over_rms_max": 6.24020528793335,
+      "int4_effective_levels_at_1rms_p50": 1.3382105827331543,
+      "int4_effective_levels_at_1rms_p01": 1.1698877811431885
+    },
+    {
+      "layer": 6,
+      "kind": "V",
+      "amax_over_rms_p50": 2.8607964515686035,
+      "amax_over_rms_p99": 5.141176223754883,
+      "amax_over_rms_max": 7.938620567321777,
+      "int4_effective_levels_at_1rms_p50": 2.4467110633850098,
+      "int4_effective_levels_at_1rms_p01": 1.361559510231018
+    },
+    {
+      "layer": 7,
+      "kind": "K",
+      "amax_over_rms_p50": 4.545546531677246,
+      "amax_over_rms_p99": 5.857915878295898,
+      "amax_over_rms_max": 6.134405612945557,
+      "int4_effective_levels_at_1rms_p50": 1.5396301746368408,
+      "int4_effective_levels_at_1rms_p01": 1.1949642896652222
+    },
+    {
+      "layer": 7,
+      "kind": "V",
+      "amax_over_rms_p50": 2.7433412075042725,
+      "amax_over_rms_p99": 4.256528377532959,
+      "amax_over_rms_max": 7.935784339904785,
+      "int4_effective_levels_at_1rms_p50": 2.551229238510132,
+      "int4_effective_levels_at_1rms_p01": 1.6445389986038208
+    }
+  ],
+  "summary": {
+    "K_amax_over_rms_p50": 4.429749816656113,
+    "V_amax_over_rms_p50": 3.0537385046482086,
+    "K_int4_levels_p50": 1.6090016663074493,
+    "V_int4_levels_p50": 2.3108275532722473
+  }
+}

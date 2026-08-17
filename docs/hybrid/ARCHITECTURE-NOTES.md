@@ -198,3 +198,75 @@ demotion) — overhead = (A−B)/A must be ≥−2%. Arm C: constrained VRAM
 window forcing demotion — nsys audit shows demotion copies on the
 background stream only. Zero-regression clause: the Stage-1 bench suite
 re-run with the feature present-but-unused (invariant 9).
+
+---
+
+# Stage 2 addendum — Phase 7 pre-work map (FP8 KV, gate G7)
+
+Directive recap: E4M3 for K and V with per-token-per-head scale, quantize
+on write, **dequantize in-kernel on read** — invariant 2 now binds KV, so
+no dequantized KV tensor exists in any tier. Triton paged-attention over
+FP8 blocks. G7: perplexity delta ≤0.5% vs FP16 **plus** a downstream task,
+`B_max` ≥25 at 4K on a 235B-class model, attention kernel ≥70% of measured
+`B_vram`. Stop condition: **quality clause fails ⇒ the format does not
+ship**, whatever it does for the batch ceiling.
+
+## What the survey found before any code
+
+- **No fused KV attention kernel exists to extend.** `kv_cache.py` imports
+  an `nf4_kv` module that is not in this tree (its `kv_nf4_available()`
+  returns False, so the path is dead rather than broken). Phase 7 writes
+  its kernel clean.
+- **The precedent it must beat is a warning, not a head start.** That same
+  docstring records a fused NF4-KV kernel measuring **11.6× slower** than
+  bf16 SDPA invoked properly (`enable_gqa=True`), after an earlier claim of
+  0.82× turned out to be a baseline error. G7's ≥70%-of-`B_vram` clause is
+  therefore the risky half of this phase, not the quality half.
+- **FP8 here is storage, not arithmetic — which makes it portable.** E4M3
+  tensors and casts work on sm_86 (verified on the dev card), because the
+  kernel dequantizes to bf16 in registers and does the matmul in bf16. No
+  FP8 tensor cores are required, so the format runs on exactly the cheap
+  heterogeneous boxes this program targets rather than on Hopper-and-newer.
+- **The scale tail is real and must be budgeted.** One fp32 scale per
+  (token, head) makes the honest ratio against bf16 `2D/(D+4)` — 1.88× at
+  head_dim 64, 1.94× at 128 — never a flat 2×. `fp8_kv.kv_block_bytes` is
+  the one place that arithmetic lives so a pool cannot be sized from the
+  payload alone.
+- **The scale AXIS is measured, not assumed.** The in-tree NF4-KV work
+  compared the same two axes on the same model: per-token cost +0.083
+  perplexity, per-channel +0.275, degrading as the group grows because one
+  loud token spoils the group it shares. Phase 7 carries the measured
+  winner to a wider format rather than re-deriving it.
+
+## Order of work, and why quality goes first
+
+The oracle (`engines/fp8_kv_cache.py`, a protocol cache that stores E4M3
+and hands back a dequantized view) exists **before** the fused kernel, so
+the gate's quality clause is measurable now and the kernel later has
+something bit-comparable to check against. This inverts the order
+`kv_cache.py` used, deliberately: that module shipped as a capacity
+feature whose latency cost went unmeasured for months because every
+comparison it published was against another configuration of itself.
+
+The harness (`bench/hybrid-g7/eval_kv_quality.py`) carries two controls and
+refuses to certify without them:
+
+| control | what it proves | failure meaning |
+|---|---|---|
+| null (`off` vs stock cache) | the plumbing changes nothing | deltas are unreadable |
+| positive (`crush`, 2-bit) | the harness can SEE KV damage | verdict is `FAILED_TO_MEASURE`, never `PASS` |
+
+`int4` rides along as the directive's flag — evaluated, default off, with
+its own numbers, never shipped on an unmeasured quality result.
+
+## Remaining Phase-7 seams
+
+- **Block format into the pool.** `RowPool` rows are opaque bytes, so FP8
+  is a block LAYOUT (`pack_kv_block`: fp8 payload contiguous, fp32 scale
+  tail) rather than a tiering change — Phase 6 was built for exactly this.
+- **The kernel.** Triton paged attention: load a block's fp8 payload plus
+  its scales, dequantize in registers, accumulate in fp32. Bandwidth is the
+  gate, and the honest baseline is bf16 SDPA with `enable_gqa=True` — the
+  same mistake that produced the 0.82× claim is available to make again.
+- **`B_max` arithmetic.** `Fp8KVCache.bytes_per_token` is the input;
+  the 235B-class clause needs a real box.
