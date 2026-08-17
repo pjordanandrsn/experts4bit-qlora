@@ -193,6 +193,11 @@ def main(model_id, n_chunks, chunk, seq_chunk, n_lambada, out_dir):
     # the same lie as reporting it from a KV that was never read.
     lam_base = arms["off"]["lambada_acc"]
     lam_usable = lam_base > 0.05
+    # ...and the null control gates the verdict exactly like the positive
+    # one: if the off arm (identical code path, quantization disabled)
+    # drifts from stock attention, every delta below includes plumbing
+    # error and a PASS would certify the plumbing, not the format
+    null_ok = null_delta < 0.002
 
     from experts4bit_qlora.engines.fp8_kv_cache import Fp8KVCache
     bpt = {m: Fp8KVCache(mode=_ARMS[m][0], key_mode=_ARMS[m][1],
@@ -210,7 +215,7 @@ def main(model_id, n_chunks, chunk, seq_chunk, n_lambada, out_dir):
                for m in others},
            "bytes_per_token": bpt,
            "controls": {"null_delta": null_delta,
-                        "null_ok": null_delta < 0.002,
+                        "null_ok": null_ok,
                         "positive_control_delta": crush_delta,
                         "harness_can_measure": measured,
                         "lambada_baseline": lam_base,
@@ -220,10 +225,11 @@ def main(model_id, n_chunks, chunk, seq_chunk, n_lambada, out_dir):
                "fp8_lambada_delta": (arms["fp8"]["lambada_acc"] - lam_base
                                      if lam_usable else None),
                "bar": 0.005,
-               "quality_ok": bool(measured and lam_usable
+               "quality_ok": bool(measured and lam_usable and null_ok
                                   and fp8_delta <= 0.005),
                "verdict": (
-                   "FAILED_TO_MEASURE" if not (measured and lam_usable)
+                   "FAILED_TO_MEASURE"
+                   if not (measured and lam_usable and null_ok)
                    else ("PASS" if fp8_delta <= 0.005 else "MISS"))}}
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     name = model_id.split("/")[-1]
