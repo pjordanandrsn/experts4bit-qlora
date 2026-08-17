@@ -79,6 +79,25 @@ class Fp8PagedKV:
         self.seq_lens = torch.zeros(n_layers, batch, dtype=torch.int32,
                                     device=self.device)
         self._seen = [[0] * batch for _ in range(n_layers)]
+        # Block rows a (layer, slot) currently owns, so a finished
+        # sequence can hand them back. A serving loop recycles slots
+        # continuously; without this the pool is a one-shot arena and the
+        # engine would die at ``blocks`` sequences regardless of how many
+        # ever ran at once (Phase 9).
+        self._rows: dict[tuple[int, int], list[int]] = {}
+        self._free: list[list[int]] = [
+            list(range(rows)) for _ in range(n_layers)]
+        # Claim the whole arena up front, once. RowPool's append/demote
+        # ring exists for the WEIGHT tier, where rows stream in and out in
+        # order; KV with per-sequence block tables wants the opposite — a
+        # flat resident arena whose blocks this class hands out and takes
+        # back. Appending here makes every row device-resident so
+        # row_view serves any block index; allocation order is then ours,
+        # which is what makes slot reuse possible at all.
+        for layer in range(n_layers):
+            for _ in range(rows):
+                self.kp.append(layer)
+                self.vp.append(layer)
 
     # ---------------------------------------------------------------- write --
     def _quant_bytes(self, x, groups):
@@ -107,15 +126,7 @@ class Fp8PagedKV:
         while written < t_new:
             fill = seen % self.bt
             blk = seen // self.bt
-            if fill == 0:
-                idx, row = pool.append(layer)
-                # v1 equates block-table entries with append order, which
-                # holds only while nothing demotes (ring never wraps)
-                assert idx < pool.device_rows and pool.head[layer] == 0
-                if pool is self.kp:
-                    tbl[seq, blk] = idx
-            else:
-                row = pool.row_view(layer, int(tbl[seq, blk]))
+            row = pool.row_view(layer, int(tbl[seq, blk]))
             take = min(self.bt - fill, t_new - written)
             row.narrow(0, fill * self.H * self.D,
                        take * self.H * self.D).copy_(
@@ -134,6 +145,11 @@ class Fp8PagedKV:
         if seen + k.shape[0] > self.blocks_per_seq * self.bt:
             raise ValueError(f"sequence {seq} overflows its "
                              f"{self.blocks_per_seq} blocks")
+        # Blocks are allocated ONCE per append, before either side
+        # writes. Tying allocation to the K side would leave V — which
+        # writes first, by the publish-last discipline below — landing on
+        # an unassigned table entry, i.e. row 0 for every block.
+        self._ensure_blocks(layer, seq, (seen + k.shape[0] - 1) // self.bt)
         # quantize BOTH sides before touching either pool — see _quant_bytes
         vq = self._quant_bytes(v, 1)
         kq = self._quant_bytes(k, self.k_groups)
@@ -146,6 +162,37 @@ class Fp8PagedKV:
                          *kq, k.shape[0], seen)
         self._seen[layer][seq] = seen + k.shape[0]
         self.seq_lens[layer, seq] = self._seen[layer][seq]
+
+    def _ensure_blocks(self, layer: int, seq: int, upto_blk: int) -> None:
+        """Back every block up to ``upto_blk`` with a pool row."""
+        rows = self._rows.setdefault((layer, seq), [])
+        tbl = self.block_table[layer]
+        while len(rows) <= upto_blk:
+            if not self._free[layer]:
+                raise RuntimeError(
+                    f"layer {layer} is out of KV blocks — the scheduler "
+                    f"admitted past capacity")
+            idx = self._free[layer].pop(0)
+            tbl[seq, len(rows)] = idx
+            rows.append(idx)
+
+    def reset(self, seq: int) -> None:
+        """Release a finished sequence's blocks back to the free lists.
+
+        Rows return in ascending order so a fresh run reuses them
+        deterministically — a scheduler's block assignment is part of
+        what makes a serving run reproducible."""
+        for layer in range(self.L):
+            rows = self._rows.pop((layer, seq), [])
+            if rows:
+                self._free[layer].extend(rows)
+                self._free[layer].sort()
+            self._seen[layer][seq] = 0
+            self.seq_lens[layer, seq] = 0
+            self.block_table[layer][seq].zero_()
+
+    def free_blocks(self, layer: int = 0) -> int:
+        return len(self._free[layer])
 
     def append_batch(self, layer: int, k: torch.Tensor, v: torch.Tensor):
         """Decode-step append: k, v [B, H, 1, D] (attention layout) for all

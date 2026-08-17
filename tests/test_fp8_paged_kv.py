@@ -181,3 +181,60 @@ def test_failed_append_leaves_pools_in_lockstep(monkeypatch):
     got_k, got_v = kv.reference_kv(0, 0)
     assert torch.equal(got_k, _direct(torch.cat([k0, k1]), 4))
     assert torch.equal(got_v, _direct(torch.cat([v0, v1]), 1))
+
+
+def test_slot_reset_recycles_blocks_and_isolates_the_next_sequence():
+    """A serving loop recycles slots continuously. Without reclaim the
+    pool is a one-shot arena that dies at `blocks` sequences no matter
+    how few ran at once; with a leaky reclaim the next tenant inherits
+    the last one's context, which reads as fluent nonsense rather than a
+    crash."""
+    kv = Fp8PagedKV(2, H, D, batch=2, max_tokens_per_seq=64, device=DEV)
+    free0 = kv.free_blocks(0)
+    k1, v1 = _tokens(33, seed=1)
+    kv.append(0, 0, k1, v1)
+    kv.append(1, 0, k1, v1)
+    assert kv.free_blocks(0) < free0, "append did not consume blocks"
+
+    kv.reset(0)
+    assert kv.free_blocks(0) == free0, "reset leaked blocks"
+    assert int(kv.seq_lens[0, 0]) == 0
+    got_k, got_v = kv.reference_kv(0, 0)
+    assert got_k.shape[0] == 0, "reset left the old sequence readable"
+
+    # the recycled slot serves a fresh sequence with no trace of the old
+    k2, v2 = _tokens(5, seed=2)
+    kv.append(0, 0, k2, v2)
+    got_k, got_v = kv.reference_kv(0, 0)
+    assert torch.equal(got_k, _direct(k2, 4))
+    assert torch.equal(got_v, _direct(v2, 1))
+
+
+def test_every_slot_can_reach_its_cap_simultaneously():
+    """The sizing invariant, and the reason block exhaustion is not a
+    runtime hazard: the pool holds batch x blocks_per_seq rows, so all
+    slots filling to max_tokens_per_seq at once still fits — with reuse
+    in the mix, which is where an off-by-one in reclaim would show."""
+    kv = Fp8PagedKV(1, H, D, batch=3, max_tokens_per_seq=32, device=DEV)
+    for slot in range(3):
+        kv.append(0, slot, *_tokens(32, seed=10 + slot))
+    assert kv.free_blocks(0) == 0
+    kv.reset(1)
+    kv.append(0, 1, *_tokens(32, seed=20))          # recycled tenant
+    assert kv.free_blocks(0) == 0
+    for slot in range(3):
+        assert int(kv.seq_lens[0, slot]) == 32
+    # a sequence past its own cap is refused by the per-sequence check,
+    # which fires before the pool can ever run dry
+    with pytest.raises(ValueError, match="overflows"):
+        kv.append(0, 0, *_tokens(1, seed=30))
+
+
+def test_exhausted_free_list_is_refused_loudly():
+    """White-box guard: if reclaim ever leaked, allocation must fail
+    loudly rather than hand out a row another sequence is still
+    reading."""
+    kv = Fp8PagedKV(1, H, D, batch=2, max_tokens_per_seq=64, device=DEV)
+    kv._free[0].clear()
+    with pytest.raises(RuntimeError, match="out of KV blocks"):
+        kv.append(0, 0, *_tokens(4, seed=31))
