@@ -284,7 +284,8 @@ class _HybridTier(_NvmeResidency):
         dn_all = torch.empty_like(dn)
         dn_all.index_copy_(0, order, dn)
         w = top_k_weights[rows, row_slot.index_select(0, dr)].to(torch.float32)
-        out.index_add_(0, rows, dn_all.to(dev) * w[:, None])
+        out.index_put_((rows, row_slot.index_select(0, dr)),
+                       dn_all.to(dev) * w[:, None])
 
 
 # ---------------------------------------------------------------------- #
