@@ -126,7 +126,8 @@ def paged_attention_forward(module, query, key, value, attention_mask,
             ctx.kv.append(layer, slot,
                           key[b].permute(1, 0, 2).contiguous(),
                           value[b].permute(1, 0, 2).contiguous())
-        out = ctx.kv.attention(layer, query[:, :, 0].contiguous())
+        out = ctx.kv.attention(layer, query[:, :, 0].contiguous(),
+                               slots=ctx.slots)
         return out[:, None].to(query.dtype), None
 
     # ---- prefill: causal attention over this sequence's staged context

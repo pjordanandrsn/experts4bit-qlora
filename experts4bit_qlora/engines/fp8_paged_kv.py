@@ -201,18 +201,38 @@ class Fp8PagedKV:
             self.append(layer, b, k[b].permute(1, 0, 2), v[b].permute(1, 0, 2))
 
     # ----------------------------------------------------------------- read --
-    def kernel_args(self, layer: int):
+    def kernel_args(self, layer: int, slots=None):
         """What the fused kernel consumes: flat pool bytes, block table,
-        per-sequence lengths. Views, no copies."""
-        return (self.kp.dev[layer].flatten(), self.vp.dev[layer].flatten(),
-                self.block_table[layer], self.seq_lens[layer])
+        per-sequence lengths.
 
-    def attention(self, layer: int, q: torch.Tensor, **kw) -> torch.Tensor:
+        ``slots`` selects WHICH sequences form the kernel's batch. The
+        kernel indexes its tables by BATCH ROW, so a caller decoding a
+        subset — which is every step of a real serving loop, where
+        sequences finish at different times — must hand it rows in that
+        subset's order. Passing the full tables works only while the
+        active set happens to be slots 0..B-1 in order; anything else
+        silently attends one sequence over another's KV, and it reads as
+        a model that starts coherent and degenerates."""
+        tbl, lens = self.block_table[layer], self.seq_lens[layer]
+        if slots is not None:
+            sel = torch.as_tensor(list(slots), dtype=torch.long,
+                                  device=tbl.device)
+            tbl, lens = tbl.index_select(0, sel), lens.index_select(0, sel)
+        return (self.kp.dev[layer].flatten(), self.vp.dev[layer].flatten(),
+                tbl, lens)
+
+    def attention(self, layer: int, q: torch.Tensor, slots=None,
+                  **kw) -> torch.Tensor:
         """Paged FP8 decode attention for q [B, H_q, D]; dequantization
-        happens in the kernel's registers (invariant 2)."""
+        happens in the kernel's registers (invariant 2). ``slots`` maps
+        q's rows to sequences (see :meth:`kernel_args`)."""
         from fp8_paged_attn import fp8_paged_decode_attention
 
-        kf, vf, tbl, lens = self.kernel_args(layer)
+        kf, vf, tbl, lens = self.kernel_args(layer, slots)
+        if tbl.shape[0] != q.shape[0]:
+            raise ValueError(
+                f"q has {q.shape[0]} rows but the block table has "
+                f"{tbl.shape[0]} — pass slots= so rows map to sequences")
         return fp8_paged_decode_attention(
             q, kf, vf, tbl, lens, n_kv_heads=self.H, head_dim=self.D,
             block_tokens=self.bt, k_groups=self.k_groups, **kw)

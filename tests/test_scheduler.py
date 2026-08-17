@@ -198,3 +198,26 @@ def test_rejects_nonsense_configuration():
         s.add_request([], max_new_tokens=1)
     with pytest.raises(ValueError):
         s.add_request([1], max_new_tokens=0)
+
+
+def test_runner_is_told_which_slot_a_sequence_was_admitted_to():
+    """A runner owning KV must learn the slot at admission — a recycled
+    slot whose previous tenant is still readable produces fluent
+    nonsense, not an error."""
+    class Binding(FakeRunner):
+        def __init__(self):
+            super().__init__()
+            self.bound = []
+
+        def bind(self, rid, slot, prompt):
+            self.bound.append((rid, slot, list(prompt)))
+
+    r = Binding()
+    s = ContinuousScheduler(runner=r, max_seqs=2, kv_slots=1,
+                            chunk_tokens=4)
+    s.add_request([7, 8], max_new_tokens=1)
+    s.add_request([9], max_new_tokens=1)
+    s.run_until_idle()
+    assert [b[0] for b in r.bound] == [0, 1]
+    assert r.bound[0][1] == r.bound[1][1] == 0, "slot was not recycled"
+    assert r.bound[0][2] == [7, 8] and r.bound[1][2] == [9]

@@ -238,3 +238,34 @@ def test_exhausted_free_list_is_refused_loudly():
     kv._free[0].clear()
     with pytest.raises(RuntimeError, match="out of KV blocks"):
         kv.append(0, 0, *_tokens(4, seed=31))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+def test_attention_maps_rows_to_slots_not_positions():
+    """A serving loop decodes SUBSETS — sequences finish at different
+    times — so the kernel's batch rows must be selected by slot. Passing
+    the full tables works only while the active set is slots 0..B-1 in
+    order; otherwise a sequence attends over another's KV, which reads as
+    a model that starts coherent and degenerates rather than as a
+    crash."""
+    pytest.importorskip("fp8_paged_attn")
+    hq, hkv, d = 8, 2, 64
+    kv = Fp8PagedKV(1, hkv, d, batch=3, max_tokens_per_seq=64,
+                    k_groups=2, device="cuda")
+    for slot, n in ((0, 8), (1, 24), (2, 40)):
+        k = (torch.randn(n, hkv, d) * 1.5).cuda()
+        v = torch.randn(n, hkv, d).cuda()
+        kv.append(0, slot, k, v)
+    q = (torch.randn(1, hq, d) * 0.5).to(torch.bfloat16).cuda()
+
+    # decoding ONLY slot 2 must attend over slot 2's 40 tokens
+    got = kv.attention(0, q, slots=[2])
+    kr, vr = kv.reference_kv(0, 2)
+    ref = torch.nn.functional.scaled_dot_product_attention(
+        q[0][None, :, None].float(), kr.permute(1, 0, 2)[None].float(),
+        vr.permute(1, 0, 2)[None].float(), enable_gqa=True)[0, :, 0]
+    torch.testing.assert_close(got[0].float(), ref, rtol=5e-2, atol=5e-2)
+
+    # and the mismatch is refused rather than silently mis-mapped
+    with pytest.raises(ValueError, match="pass slots="):
+        kv.attention(0, q)

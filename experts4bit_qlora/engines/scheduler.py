@@ -112,6 +112,12 @@ class StepRunner(Protocol):
     def run_decode(self, rids: list[int]) -> dict[int, int]:
         """One token for each rid."""
 
+    def bind(self, rid: int, slot: int, prompt) -> None:
+        """Optional: told when a sequence is admitted to ``slot``. A
+        runner that owns KV needs this to clear the slot's history — a
+        recycled slot whose previous tenant is still readable produces
+        fluent nonsense rather than an error."""
+
     def free_slot(self, rid: int) -> None:
         """Release a finished sequence's KV."""
 
@@ -177,6 +183,9 @@ class ContinuousScheduler:
             req.phase = Phase.PREFILL
             req.admitted_at = self.clock()
             self.active[req.rid] = req
+            bind = getattr(self.runner, "bind", None)
+            if bind is not None:
+                bind(req.rid, req.slot, req.prompt)
 
     # ------------------------------------------------------------- plan --
     def plan(self) -> StepPlan:
