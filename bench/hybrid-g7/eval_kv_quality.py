@@ -55,17 +55,41 @@ def _lambada(tok, n):
         text = row["text"].strip()
         ctx, _, last = text.rpartition(" ")
         c = tok(ctx, return_tensors="pt").input_ids[0]
-        t = tok(" " + last, return_tensors="pt").input_ids[0]
+        # add_special_tokens=False is load-bearing: tokenizers that prepend
+        # BOS (Llama's does, Qwen's does not) would put an unpredictable
+        # sentinel at target position 0, so EVERY item scores a miss and the
+        # task reports a clean, plausible 0.0 for all arms — a metric that
+        # measures nothing while looking like a result.
+        t = tok(" " + last, return_tensors="pt",
+                add_special_tokens=False).input_ids[0]
         if c.numel() > 8 and t.numel() >= 1:
             out.append((c, t))
     return out
 
 
-def _make_cache(mode):
-    if mode == "stock":
+# arm -> (value_mode, key_mode). "fp8_vonly" spends bytes asymmetrically:
+# keys stay bf16 because they are the outlier-heavy side (amax/rms ~10 vs
+# ~3), which this repo's NF4-KV work also found the expensive side.
+# arm -> (value_mode, key_mode, key_group, value_group)
+_ARMS = {
+    "stock": None,
+    "off": ("off", "off", None, None),
+    "fp8": ("fp8", "fp8", None, None),
+    "fp8_kg64": ("fp8", "fp8", 64, None),
+    "fp8_kg32": ("fp8", "fp8", 32, None),
+    "fp8_vonly": ("fp8", "off", None, None),
+    "int4": ("int4", "int4", None, None),
+    "crush": ("crush", "crush", None, None),
+}
+
+
+def _make_cache(arm):
+    spec = _ARMS[arm]
+    if spec is None:
         return None
     from experts4bit_qlora.engines.fp8_kv_cache import Fp8KVCache
-    return Fp8KVCache(mode=mode)
+    return Fp8KVCache(mode=spec[0], key_mode=spec[1],
+                      key_group=spec[2], value_group=spec[3])
 
 
 def ppl_arm(model, chunks, mode, seq_chunk):
@@ -144,7 +168,7 @@ def main(model_id, n_chunks, chunk, seq_chunk, n_lambada, out_dir):
           flush=True)
 
     arms = {}
-    for mode in ("stock", "off", "fp8", "int4", "crush"):
+    for mode in _ARMS:
         t0 = time.time()
         ppl, ntok = ppl_arm(model, chunks, mode, seq_chunk)
         acc = lambada_arm(model, lam, mode)
@@ -162,30 +186,45 @@ def main(model_id, n_chunks, chunk, seq_chunk, n_lambada, out_dir):
     # the harness certifies nothing unless it demonstrably SEES damage
     measured = crush_delta > 0.05
     fp8_delta = d("fp8")
+    # ...and the downstream task certifies nothing unless the BASELINE can
+    # do it. A task the unquantized model scores 0 on is not a hard task,
+    # it is a broken metric (a tokenizer prepending BOS to the target does
+    # exactly this), and reporting "FP8 changed nothing" from it would be
+    # the same lie as reporting it from a KV that was never read.
+    lam_base = arms["off"]["lambada_acc"]
+    lam_usable = lam_base > 0.05
 
     from experts4bit_qlora.engines.fp8_kv_cache import Fp8KVCache
-    bpt = {m: Fp8KVCache(mode=m).bytes_per_token(
-               cfg.num_key_value_heads, head_dim, cfg.num_hidden_layers)
-           for m in ("off", "fp8", "int4")}
+    bpt = {m: Fp8KVCache(mode=_ARMS[m][0], key_mode=_ARMS[m][1],
+                         key_group=_ARMS[m][2], value_group=_ARMS[m][3]
+                         ).bytes_per_token(cfg.num_key_value_heads, head_dim,
+                                           cfg.num_hidden_layers)
+           for m in ("off", "fp8", "fp8_kg64", "fp8_kg32", "fp8_vonly",
+                     "int4")}
 
+    others = [m for m in _ARMS if m != "off"]
     rep = {"model": model_id, "arms": arms,
-           "ppl_delta_vs_off": {m: d(m) for m in ("stock", "fp8", "int4",
-                                                  "crush")},
+           "ppl_delta_vs_off": {m: d(m) for m in others},
            "lambada_delta_vs_off": {
                m: arms[m]["lambada_acc"] - arms["off"]["lambada_acc"]
-               for m in ("stock", "fp8", "int4", "crush")},
+               for m in others},
            "bytes_per_token": bpt,
            "controls": {"null_delta": null_delta,
                         "null_ok": null_delta < 0.002,
                         "positive_control_delta": crush_delta,
-                        "harness_can_measure": measured},
+                        "harness_can_measure": measured,
+                        "lambada_baseline": lam_base,
+                        "lambada_usable": lam_usable},
            "gate_g7_quality": {
                "fp8_ppl_delta": fp8_delta,
+               "fp8_lambada_delta": (arms["fp8"]["lambada_acc"] - lam_base
+                                     if lam_usable else None),
                "bar": 0.005,
-               "quality_ok": bool(measured and fp8_delta <= 0.005),
-               "verdict": ("PASS" if (measured and fp8_delta <= 0.005)
-                           else ("FAILED_TO_MEASURE" if not measured
-                                 else "MISS"))}}
+               "quality_ok": bool(measured and lam_usable
+                                  and fp8_delta <= 0.005),
+               "verdict": (
+                   "FAILED_TO_MEASURE" if not (measured and lam_usable)
+                   else ("PASS" if fp8_delta <= 0.005 else "MISS"))}}
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     name = model_id.split("/")[-1]
     (Path(out_dir) / f"g7_quality_{name}.json").write_text(

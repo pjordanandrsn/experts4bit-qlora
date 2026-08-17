@@ -21,8 +21,11 @@ def _kv(t, seed):
     return x.to(DEV).to(torch.bfloat16)
 
 
-@pytest.mark.parametrize("mode", ["fp8", "off", "int4", "crush"])
-def test_chunked_growth_equals_whole_sequence_quantization(mode):
+@pytest.mark.parametrize("mode,kgroup", [
+    ("fp8", None), ("off", None), ("int4", None), ("crush", None),
+    ("fp8", 32), ("fp8", 16),          # grouped scales: tokens move to -2
+])
+def test_chunked_growth_equals_whole_sequence_quantization(mode, kgroup):
     """The scale is per (token, head), so splitting a sequence across
     update() calls cannot change any token's scale — chunked and
     whole-sequence storage must agree BIT for bit. This is what fails when
@@ -35,11 +38,11 @@ def test_chunked_growth_equals_whole_sequence_quantization(mode):
     pieces = [_kv(5, 1), _kv(1, 2), _kv(11, 3), _kv(1, 4)]
     whole = torch.cat(pieces, dim=-2)
 
-    chunked = Fp8KVCache(mode=mode)
+    chunked = Fp8KVCache(mode=mode, key_group=kgroup, value_group=kgroup)
     for p in pieces:
         k_out, v_out = chunked.update(p, p, layer_idx=0)
 
-    single = Fp8KVCache(mode=mode)
+    single = Fp8KVCache(mode=mode, key_group=kgroup, value_group=kgroup)
     k_ref, v_ref = single.update(whole, whole, layer_idx=0)
 
     assert k_out.shape == k_ref.shape == whole.shape

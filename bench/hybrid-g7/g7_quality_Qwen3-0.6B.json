@@ -1,0 +1,94 @@
+{
+  "model": "Qwen/Qwen3-0.6B",
+  "arms": {
+    "stock": {
+      "ppl": 22.997021236928827,
+      "lambada_acc": 0.435,
+      "tokens": 24552,
+      "secs": 11.329722166061401
+    },
+    "off": {
+      "ppl": 22.997021236928827,
+      "lambada_acc": 0.435,
+      "tokens": 24552,
+      "secs": 11.869534015655518
+    },
+    "fp8": {
+      "ppl": 23.01544817820415,
+      "lambada_acc": 0.43,
+      "tokens": 24552,
+      "secs": 15.62209677696228
+    },
+    "fp8_kg64": {
+      "ppl": 23.049052403366616,
+      "lambada_acc": 0.43,
+      "tokens": 24552,
+      "secs": 15.94104528427124
+    },
+    "fp8_kg32": {
+      "ppl": 23.016491968935732,
+      "lambada_acc": 0.425,
+      "tokens": 24552,
+      "secs": 15.238507509231567
+    },
+    "fp8_vonly": {
+      "ppl": 23.02588448305622,
+      "lambada_acc": 0.44,
+      "tokens": 24552,
+      "secs": 12.91807222366333
+    },
+    "int4": {
+      "ppl": 35512.57403363058,
+      "lambada_acc": 0.0,
+      "tokens": 24552,
+      "secs": 13.407132863998413
+    },
+    "crush": {
+      "ppl": 393165.6823987439,
+      "lambada_acc": 0.0,
+      "tokens": 24552,
+      "secs": 14.217695951461792
+    }
+  },
+  "ppl_delta_vs_off": {
+    "stock": 0.0,
+    "fp8": 0.0008012751340913777,
+    "fp8_kg64": 0.0022625176496439956,
+    "fp8_kg32": 0.0008466632180883795,
+    "fp8_vonly": 0.0012550862926997072,
+    "int4": 1543.2249527779784,
+    "crush": 17095.37428030874
+  },
+  "lambada_delta_vs_off": {
+    "stock": 0.0,
+    "fp8": -0.0050000000000000044,
+    "fp8_kg64": -0.0050000000000000044,
+    "fp8_kg32": -0.010000000000000009,
+    "fp8_vonly": 0.0050000000000000044,
+    "int4": -0.435,
+    "crush": -0.435
+  },
+  "bytes_per_token": {
+    "off": 114688,
+    "fp8": 59136,
+    "fp8_kg64": 60032,
+    "fp8_kg32": 61824,
+    "fp8_vonly": 86912,
+    "int4": 30464.0
+  },
+  "controls": {
+    "null_delta": 0.0,
+    "null_ok": true,
+    "positive_control_delta": 17095.37428030874,
+    "harness_can_measure": true,
+    "lambada_baseline": 0.435,
+    "lambada_usable": true
+  },
+  "gate_g7_quality": {
+    "fp8_ppl_delta": 0.0008012751340913777,
+    "fp8_lambada_delta": -0.0050000000000000044,
+    "bar": 0.005,
+    "quality_ok": true,
+    "verdict": "PASS"
+  }
+}
