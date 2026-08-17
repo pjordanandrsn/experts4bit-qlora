@@ -50,6 +50,10 @@ class TieredPagedKV:
         self.D = head_dim
         self.dtype = dtype
         self.device = torch.device(device)
+        if self.device.type == "cuda" and self.device.index is None:
+            # concrete index, or the fence's current_stream(self.device)
+            # resolves through the thread's current device anyway
+            self.device = torch.device("cuda", torch.cuda.current_device())
         self.bt = BLOCK_TOKENS
         self.esize = torch.empty(0, dtype=dtype).element_size()
         self.row_bytes = self.bt * self.H * self.D * self.esize
