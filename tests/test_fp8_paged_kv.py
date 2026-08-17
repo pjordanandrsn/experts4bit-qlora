@@ -145,3 +145,39 @@ def test_kernel_attention_end_to_end():
             enable_gqa=True)[0, :, 0]
         assert torch.allclose(out[seq].float(), ref, atol=2e-2, rtol=2e-2), \
             f"seq {seq}: kernel vs reference-SDPA beyond serving tolerance"
+
+
+def test_failed_append_leaves_pools_in_lockstep(monkeypatch):
+    """A throw mid-append (e.g. OOM inside quantization) must not desync
+    the two pools' tails: both sides quantize BEFORE either pool is
+    touched, so a failed append changes nothing and the next append's K
+    and V land at the same shared block-table row (review finding)."""
+    import experts4bit_qlora.engines.fp8_paged_kv as mod
+    kv = Fp8PagedKV(1, H, D, batch=1, max_tokens_per_seq=64, device=DEV)
+    k0, v0 = _tokens(16, seed=1)
+    kv.append(0, 0, k0, v0)
+    tails = (kv.kp.tail[0], kv.vp.tail[0])
+
+    calls = {"n": 0}
+    orig = mod.Fp8PagedKV._quant_bytes
+
+    def failing(self, x, groups):
+        calls["n"] += 1
+        if calls["n"] == 2:            # the K side of this append
+            raise RuntimeError("simulated OOM")
+        return orig(self, x, groups)
+
+    monkeypatch.setattr(mod.Fp8PagedKV, "_quant_bytes", failing)
+    k1, v1 = _tokens(16, seed=2)
+    with pytest.raises(RuntimeError, match="simulated OOM"):
+        kv.append(0, 0, k1, v1)
+    monkeypatch.setattr(mod.Fp8PagedKV, "_quant_bytes", orig)
+
+    assert (kv.kp.tail[0], kv.vp.tail[0]) == tails, \
+        "failed append advanced a pool tail"
+    assert kv._seen[0][0] == 16 and int(kv.seq_lens[0, 0]) == 16
+    # and the NEXT append still round-trips both sides at the same rows
+    kv.append(0, 0, k1, v1)
+    got_k, got_v = kv.reference_kv(0, 0)
+    assert torch.equal(got_k, _direct(torch.cat([k0, k1]), 4))
+    assert torch.equal(got_v, _direct(torch.cat([v0, v1]), 1))

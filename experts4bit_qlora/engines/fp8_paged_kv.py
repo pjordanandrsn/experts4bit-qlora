@@ -81,17 +81,28 @@ class Fp8PagedKV:
         self._seen = [[0] * batch for _ in range(n_layers)]
 
     # ---------------------------------------------------------------- write --
-    def _write_side(self, pool, pay_bytes, groups, layer, seq, x, seen):
-        """Quantize x [T, H, D] and write into `pool`'s block rows for
-        (layer, seq), starting at absolute token position `seen`."""
+    def _quant_bytes(self, x, groups):
+        """All of append's FALLIBLE work (allocating quantize + reshapes)
+        for one side, done before either pool is touched — so an
+        exception (OOM, bad input) leaves both pools' tails in lockstep.
+        A throw between V's append and K's would otherwise desync the
+        shared block table's row pairing for every later block (review)."""
         from fp8_kv import quantize_kv_fp8
 
         q, s = quantize_kv_fp8(x, group=None if groups == 1
                                else self.D // groups)
         qb = q.view(torch.uint8).reshape(-1, self.H * self.D)   # [T, H*D]
         sb = s.float().reshape(x.shape[0], -1).view(torch.uint8)  # [T, H*g*4]
+        return qb, sb
+
+    def _write_side(self, pool, pay_bytes, groups, layer, seq, qb, sb,
+                    t_new, seen):
+        """Write pre-quantized bytes into `pool`'s block rows for
+        (layer, seq) from absolute token position `seen`. Allocation-free
+        (narrow + copy_ into existing rows; pool.append cannot overrun —
+        capacity is checked before any write)."""
         srow = self.H * groups * 4
-        t_new, written = x.shape[0], 0
+        written = 0
         tbl = self.block_table[layer]
         while written < t_new:
             fill = seen % self.bt
@@ -123,12 +134,16 @@ class Fp8PagedKV:
         if seen + k.shape[0] > self.blocks_per_seq * self.bt:
             raise ValueError(f"sequence {seq} overflows its "
                              f"{self.blocks_per_seq} blocks")
+        # quantize BOTH sides before touching either pool — see _quant_bytes
+        vq = self._quant_bytes(v, 1)
+        kq = self._quant_bytes(k, self.k_groups)
         # V first: K's writer owns the shared block-table entry, and writing
         # K last means a table row is never published for a block whose V
         # bytes haven't landed yet (same publish-last discipline as the pool)
-        self._write_side(self.vp, self._v_pay, 1, layer, seq, v, seen)
-        self._write_side(self.kp, self._k_pay, self.k_groups, layer, seq, k,
-                         seen)
+        self._write_side(self.vp, self._v_pay, 1, layer, seq, *vq,
+                         k.shape[0], seen)
+        self._write_side(self.kp, self._k_pay, self.k_groups, layer, seq,
+                         *kq, k.shape[0], seen)
         self._seen[layer][seq] = seen + k.shape[0]
         self.seq_lens[layer, seq] = self._seen[layer][seq]
 
