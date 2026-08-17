@@ -117,17 +117,24 @@ Both remaining clauses were measured on a calibrated, uncontended RTX 5090
 | clause | result | number |
 |---|---|---|
 | ppl ≤0.5% + downstream, both probe models | **PASS** (`fp8_kg32`) | worst ppl +0.42%, LAMBADA within noise |
-| `B_max` ≥25 at 4K, 235B-class geometry | **PASS** | 94-layer B=25 4K set = **9.90 GiB** resident, attention over all of it 13.5 ms/step, 19.7 GiB VRAM free |
-| kernel ≥70% of measured `B_vram` | **MISS** | 52.9% best-tuned (832 GB/s), 49.5% shipped defaults (778 GB/s) |
+| `B_max` ≥25 at 4K, 235B-class geometry | **PASS** | 94-layer B=25 4K set = **9.90 GiB** resident; attention over all of it **10.59 ms/step** with the round-2 kernel (was 13.5), 19.7 GiB VRAM free |
+| kernel ≥70% of measured `B_vram` | **MISS by 0.6 pts** (round 2) | fp8-compute sustained best **69.1–69.6%** (1087–1095 GB/s); shipped defaults 63.8%; f32-decode path 52.9% |
 
-**G7 = 2 of 3 clauses.** The kernel miss comes with its mechanism and its
-consolation measured: at serving shapes the kernel reaches wall-clock
-**parity with bf16 SDPA** (×0.99–1.05 at B≥25/4K) while reading half the
-bytes — the byte halving is realized as capacity (the B_max row), not yet
-as speed (the 70% clause). The risky-clause worry above resolved well
-short of the in-tree 11.6× precedent, and the next lever (persistent-CTA
-schedule) is a costed redesign, not a tuning pass — a decision, not a
-default.
+**G7 = 2 of 3 clauses.** The kernel clause went through a full redesign
+round (the fp8-tensor-core compute path — receipts in the gnf4 sibling):
+52.9% → 69.4% sustained, and the bar is still missed, by ~0.6 points on
+a reproducible protocol (a single 72.6% measurement did not reproduce in
+eight attempts and is recorded as a transient). What flipped decisively
+is the consequence the bar was a proxy for: at serving shapes the FP8
+kernel is now **17–23% FASTER than bf16 SDPA in wall clock** (×0.77–0.83)
+while reading half the bytes — byte halving realized as capacity AND
+speed. The fp8-compute mode carries a documented serving tolerance
+(kernel-level: exact at T=1, mean 5e-3 / p99 2e-2 / max 0.15 vs the f32
+oracle at serving shapes); model-level quality certification of fp8
+COMPUTE is owed before it becomes the default, so `compute="f32"`
+(decode-exact, 52.9%-class) ships as the default and the fast path is
+opt-in. Two structural alternatives (head-packed, packed+fp8) were
+built, tested correct, measured slower, and recorded.
 
 The `B_max` measurement is the KV-capacity + attention half of that
 clause: batched expert dispatch does not exist until Phase 8/9, so a
