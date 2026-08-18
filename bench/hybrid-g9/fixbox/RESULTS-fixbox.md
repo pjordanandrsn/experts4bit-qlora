@@ -104,9 +104,11 @@ not worker count, is the floor lever the executor actually has.
 
 Ranked next levers: (1) per-job worker-subset wake + call coalescing (attack
 the 441 us x calls floor directly); (2) decompose the ~84 ms attention/engine
-overhead; (3) wire mixed-mode prefill into the scheduler runner (6.7x
-measured at Phase 8; TTFT p50 17.7 s says the gate runs prefill through the
-DRAM tier today); (4) overlap the two expert buses.
+overhead; (3) batch prefill across sequences — mixed-mode prefill WAS active
+in this run (`PagedModelRunner` defaults `gpu_only_prefill=True`), but
+`run_prefill` forwards one sequence per chunk (`ids[None]`), so 8 prompts
+prefill serially and TTFT p50 = ~4.5 sequential chunk forwards (~3.9 s per
+512-token chunk); (4) overlap the two expert buses.
 
 ## Loose ends recorded
 
