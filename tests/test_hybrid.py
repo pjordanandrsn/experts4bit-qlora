@@ -219,3 +219,49 @@ def test_empty_dram_degrades_to_parent_and_teardown_is_clean(arena):
         assert not hasattr(model.experts, attr), attr
     assert cpu_grouped.pool_start(0) >= 1     # pool restartable after stop
     cpu_grouped.pool_stop()
+
+
+@needs_stack
+def test_fused_ffn_path_matches_two_call_within_silu_ulps(arena):
+    """The fused kernel replaces two grouped GEMVs + torch silu with one
+    call; the ONLY numeric difference is the locked-polynomial silu vs
+    torch's sleef (last-ulp level). A wiring error — swapped gate/up
+    halves, wrong stack, wrong group order — shows up at 1e-1 scale, so
+    the tight tolerance here is a real oracle, not decoration."""
+    import cpu_grouped
+    if not hasattr(cpu_grouped, "gemm_nf4_ffn_grouped_cpu"):
+        pytest.skip("gnf4 without the fused FFN entry")
+    mod, path, _ = arena
+    man = _manifest(vram=[0], dram=[1, 2, 3, 4, 5, 6], nvme=[7])
+    torch.manual_seed(11)
+    T = 6
+    hidden = torch.randn(T, H, dtype=torch.bfloat16, device="cuda") * 0.3
+    idx = torch.stack([torch.randperm(E, device="cuda")[:K]
+                       for _ in range(T)])
+    wts = torch.rand(T, K, device="cuda", dtype=torch.bfloat16)
+    outs = {}
+    for fused in (False, True):
+        model = _Wrap(_module().to("cuda"))
+        n = enable_hybrid_tier(model, path, man, hot_rows=E,
+                               fused_ffn=fused)
+        assert n == 1
+        st = model.experts._hot_residency
+        assert st.fused_ffn is fused
+        try:
+            with torch.no_grad():
+                outs[fused] = model.experts(hidden, idx, wts).float()
+        finally:
+            disable_hybrid_tier(model)
+    torch.testing.assert_close(outs[True], outs[False],
+                               atol=1e-4, rtol=1e-4)
+
+
+@needs_stack
+def test_fused_ffn_stamp_cleared_on_disable(arena):
+    mod, path, _ = arena
+    model = _Wrap(_module().to("cuda"))
+    enable_hybrid_tier(model, path, _manifest(vram=[0], dram=[1], nvme=[]),
+                       hot_rows=E, fused_ffn=False)
+    assert model.experts._e4b_hybrid_fused_ffn is False
+    disable_hybrid_tier(model)
+    assert not hasattr(model.experts, "_e4b_hybrid_fused_ffn")
