@@ -1,0 +1,261 @@
+{
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "geometry": {
+    "E": 64,
+    "k": 8,
+    "L": 16
+  },
+  "placement": {
+    "vram": 933,
+    "dram": 91,
+    "nvme": 0
+  },
+  "solved_for_batch": 16,
+  "rows": [
+    {
+      "batch": 1,
+      "tokens": 1,
+      "distinct_token_ids": 1,
+      "token_diversity": 1.0,
+      "acts": 128,
+      "unique": 128,
+      "measured_factor": 1.0,
+      "analytic_factor": 1.0,
+      "per_tier_unique": {
+        "vram": 119,
+        "dram": 9,
+        "nvme": 0
+      },
+      "per_tier_acts": {
+        "vram": 119,
+        "dram": 9,
+        "nvme": 0
+      },
+      "dram_groups": 9,
+      "dram_split_tax": 1.0,
+      "dram_ms": 48.016341,
+      "gpu_ms": 28.654265,
+      "balance_ratio": 0.5967606944477506,
+      "predicted_unique_general_law": 128.0,
+      "predicted_factor_general_law": 1.0,
+      "general_law_rel_delta": 0.0
+    },
+    {
+      "batch": 2,
+      "tokens": 2,
+      "distinct_token_ids": 2,
+      "token_diversity": 1.0,
+      "acts": 256,
+      "unique": 145,
+      "measured_factor": 0.56640625,
+      "analytic_factor": 0.9375,
+      "per_tier_unique": {
+        "vram": 135,
+        "dram": 10,
+        "nvme": 0
+      },
+      "per_tier_acts": {
+        "vram": 239,
+        "dram": 17,
+        "nvme": 0
+      },
+      "dram_groups": 10,
+      "dram_split_tax": 1.0,
+      "dram_ms": 45.341808,
+      "gpu_ms": 41.80777,
+      "balance_ratio": 0.9220578500089807,
+      "predicted_unique_general_law": 147.3272705078125,
+      "predicted_factor_general_law": 0.5754971504211426,
+      "general_law_rel_delta": -0.01579660370948832
+    },
+    {
+      "batch": 4,
+      "tokens": 4,
+      "distinct_token_ids": 4,
+      "token_diversity": 1.0,
+      "acts": 512,
+      "unique": 174,
+      "measured_factor": 0.33984375,
+      "analytic_factor": 0.82763671875,
+      "per_tier_unique": {
+        "vram": 163,
+        "dram": 11,
+        "nvme": 0
+      },
+      "per_tier_acts": {
+        "vram": 481,
+        "dram": 31,
+        "nvme": 0
+      },
+      "dram_groups": 11,
+      "dram_split_tax": 1.0,
+      "dram_ms": 45.810591,
+      "gpu_ms": 42.426396,
+      "balance_ratio": 0.9261263623514484,
+      "predicted_unique_general_law": 173.50072430819273,
+      "predicted_factor_general_law": 0.3388686021644389,
+      "general_law_rel_delta": 0.002877657680093515
+    },
+    {
+      "batch": 8,
+      "tokens": 8,
+      "distinct_token_ids": 8,
+      "token_diversity": 1.0,
+      "acts": 1024,
+      "unique": 199,
+      "measured_factor": 0.1943359375,
+      "analytic_factor": 0.6563910841941833,
+      "per_tier_unique": {
+        "vram": 188,
+        "dram": 11,
+        "nvme": 0
+      },
+      "per_tier_acts": {
+        "vram": 965,
+        "dram": 59,
+        "nvme": 0
+      },
+      "dram_groups": 11,
+      "dram_split_tax": 1.0,
+      "dram_ms": 82.267509,
+      "gpu_ms": 44.755832,
+      "balance_ratio": 0.5440280439267949,
+      "predicted_unique_general_law": 205.23216977317713,
+      "predicted_factor_general_law": 0.2004220407941183,
+      "general_law_rel_delta": -0.030366437094462073
+    },
+    {
+      "batch": 16,
+      "tokens": 16,
+      "distinct_token_ids": 16,
+      "token_diversity": 1.0,
+      "acts": 2048,
+      "unique": 245,
+      "measured_factor": 0.11962890625,
+      "analytic_factor": 0.4409664564893756,
+      "per_tier_unique": {
+        "vram": 229,
+        "dram": 16,
+        "nvme": 0
+      },
+      "per_tier_acts": {
+        "vram": 1933,
+        "dram": 115,
+        "nvme": 0
+      },
+      "dram_groups": 16,
+      "dram_split_tax": 1.0,
+      "dram_ms": 141.581458,
+      "gpu_ms": 50.060438,
+      "balance_ratio": 0.35358046673032567,
+      "predicted_unique_general_law": 237.50090864406968,
+      "predicted_factor_general_law": 0.11596724054886215,
+      "general_law_rel_delta": 0.031575000696813404
+    },
+    {
+      "batch": 32,
+      "tokens": 32,
+      "distinct_token_ids": 32,
+      "token_diversity": 1.0,
+      "acts": 4096,
+      "unique": 278,
+      "measured_factor": 0.06787109375,
+      "analytic_factor": 0.24651504074057923,
+      "per_tier_unique": {
+        "vram": 258,
+        "dram": 20,
+        "nvme": 0
+      },
+      "per_tier_acts": {
+        "vram": 3868,
+        "dram": 228,
+        "nvme": 0
+      },
+      "dram_groups": 20,
+      "dram_split_tax": 1.0,
+      "dram_ms": 278.232677,
+      "gpu_ms": 62.502426,
+      "balance_ratio": 0.22464085338186213,
+      "predicted_unique_general_law": 263.4246777030096,
+      "predicted_factor_general_law": 0.06431266545483633,
+      "general_law_rel_delta": 0.05533013240856244
+    },
+    {
+      "batch": 64,
+      "tokens": 64,
+      "distinct_token_ids": 64,
+      "token_diversity": 1.0,
+      "acts": 8192,
+      "unique": 290,
+      "measured_factor": 0.035400390625,
+      "analytic_factor": 0.12497571011792036,
+      "per_tier_unique": {
+        "vram": 267,
+        "dram": 23,
+        "nvme": 0
+      },
+      "per_tier_acts": {
+        "vram": 7743,
+        "dram": 449,
+        "nvme": 0
+      },
+      "dram_groups": 23,
+      "dram_split_tax": 1.0,
+      "dram_ms": 452.069473,
+      "gpu_ms": 67.875991,
+      "balance_ratio": 0.15014504418881652,
+      "predicted_unique_general_law": 279.6765098702015,
+      "predicted_factor_general_law": 0.034140198958764835,
+      "general_law_rel_delta": 0.036912253140564566
+    }
+  ],
+  "control": {
+    "ran": true,
+    "measured_at_one_token": 1.0,
+    "passes": true,
+    "note": "1 token => k acts on k distinct experts => factor 1.0"
+  },
+  "worst_rel_delta": 0.7287120040776112,
+  "worst_general_law_delta": 0.05533013240856244,
+  "profile_batch": 128,
+  "balance_at_8_16": {
+    "8": 0.5440280439267949,
+    "16": 0.35358046673032567
+  },
+  "gate_amortization_10pct": false,
+  "gate_balance_20pct": false,
+  "achieved_bandwidth": [
+    {
+      "batch": 8,
+      "bus": "dram",
+      "unique": 11,
+      "ms": 82.267509,
+      "achieved_gbs": 0.4337599671335618
+    },
+    {
+      "batch": 8,
+      "bus": "vram",
+      "unique": 188,
+      "ms": 44.755832,
+      "achieved_gbs": 13.626783119571991
+    },
+    {
+      "batch": 16,
+      "bus": "dram",
+      "unique": 16,
+      "ms": 141.581458,
+      "achieved_gbs": 0.3666052937525195
+    },
+    {
+      "batch": 16,
+      "bus": "vram",
+      "unique": 229,
+      "ms": 50.060438,
+      "achieved_gbs": 14.83972888930776
+    }
+  ],
+  "calibrated_bandwidth": {
+    "vram": 255.3,
+    "dram_grouped": 25.02
+  }
+}

@@ -79,6 +79,29 @@ class Fp8PagedKV:
         self.seq_lens = torch.zeros(n_layers, batch, dtype=torch.int32,
                                     device=self.device)
         self._seen = [[0] * batch for _ in range(n_layers)]
+        # Block rows a (layer, slot) currently owns, so a finished
+        # sequence can hand them back. A serving loop recycles slots
+        # continuously; without this the pool is a one-shot arena and the
+        # engine would die at ``blocks`` sequences regardless of how many
+        # ever ran at once (Phase 9).
+        self._rows: dict[tuple[int, int], list[int]] = {}
+        # device selector per active-set tuple (see kernel_args) — bounded
+        # by the distinct decode subsets a run ever sees (arrival/finish
+        # order over <= batch slots), each an 8-byte-per-slot tensor
+        self._slot_sel: dict[tuple, torch.Tensor] = {}
+        self._free: list[list[int]] = [
+            list(range(rows)) for _ in range(n_layers)]
+        # Claim the whole arena up front, once. RowPool's append/demote
+        # ring exists for the WEIGHT tier, where rows stream in and out in
+        # order; KV with per-sequence block tables wants the opposite — a
+        # flat resident arena whose blocks this class hands out and takes
+        # back. Appending here makes every row device-resident so
+        # row_view serves any block index; allocation order is then ours,
+        # which is what makes slot reuse possible at all.
+        for layer in range(n_layers):
+            for _ in range(rows):
+                self.kp.append(layer)
+                self.vp.append(layer)
 
     # ---------------------------------------------------------------- write --
     def _quant_bytes(self, x, groups):
@@ -100,22 +123,19 @@ class Fp8PagedKV:
         """Write pre-quantized bytes into `pool`'s block rows for
         (layer, seq) from absolute token position `seen`. Allocation-free
         (narrow + copy_ into existing rows; pool.append cannot overrun —
-        capacity is checked before any write)."""
+        capacity is checked before any write). Row indices come from the
+        HOST mirror (`_rows`), never the device block table — reading a
+        device scalar here (`int(tbl[seq, blk])`) is a stream sync per
+        block write, which at L layers x 2 sides x B sequences serializes
+        the whole decode step behind the GPU (measured: attention host
+        time == attention device time, ~60 ms/step on the dev box)."""
         srow = self.H * groups * 4
         written = 0
-        tbl = self.block_table[layer]
+        rows = self._rows[(layer, seq)]
         while written < t_new:
             fill = seen % self.bt
             blk = seen // self.bt
-            if fill == 0:
-                idx, row = pool.append(layer)
-                # v1 equates block-table entries with append order, which
-                # holds only while nothing demotes (ring never wraps)
-                assert idx < pool.device_rows and pool.head[layer] == 0
-                if pool is self.kp:
-                    tbl[seq, blk] = idx
-            else:
-                row = pool.row_view(layer, int(tbl[seq, blk]))
+            row = pool.row_view(layer, rows[blk])
             take = min(self.bt - fill, t_new - written)
             row.narrow(0, fill * self.H * self.D,
                        take * self.H * self.D).copy_(
@@ -134,9 +154,16 @@ class Fp8PagedKV:
         if seen + k.shape[0] > self.blocks_per_seq * self.bt:
             raise ValueError(f"sequence {seq} overflows its "
                              f"{self.blocks_per_seq} blocks")
-        # quantize BOTH sides before touching either pool — see _quant_bytes
+        # quantize BOTH sides before touching ANY shared state — the
+        # lockstep invariant is that a failed append changes NOTHING, and
+        # _quant_bytes is the fallible part (allocating). Only then claim
+        # blocks: allocated ONCE per append, before either side writes —
+        # tying allocation to the K side would leave V (which writes
+        # first, by the publish-last discipline below) landing on an
+        # unassigned table entry, i.e. row 0 for every block.
         vq = self._quant_bytes(v, 1)
         kq = self._quant_bytes(k, self.k_groups)
+        self._ensure_blocks(layer, seq, (seen + k.shape[0] - 1) // self.bt)
         # V first: K's writer owns the shared block-table entry, and writing
         # K last means a table row is never published for a block whose V
         # bytes haven't landed yet (same publish-last discipline as the pool)
@@ -145,7 +172,44 @@ class Fp8PagedKV:
         self._write_side(self.kp, self._k_pay, self.k_groups, layer, seq,
                          *kq, k.shape[0], seen)
         self._seen[layer][seq] = seen + k.shape[0]
-        self.seq_lens[layer, seq] = self._seen[layer][seq]
+        # device-side scalar add, value in kernel args: a plain
+        # `seq_lens[layer, seq] = n` wraps the int in a CPU tensor and
+        # the blocking copy stream-syncs — B x L times per decode step
+        self.seq_lens[layer].narrow(0, seq, 1).add_(k.shape[0])
+
+    def _ensure_blocks(self, layer: int, seq: int, upto_blk: int) -> None:
+        """Back every block up to ``upto_blk`` with a pool row."""
+        rows = self._rows.setdefault((layer, seq), [])
+        tbl = self.block_table[layer]
+        while len(rows) <= upto_blk:
+            if not self._free[layer]:
+                raise RuntimeError(
+                    f"layer {layer} is out of KV blocks — the scheduler "
+                    f"admitted past capacity")
+            idx = self._free[layer].pop(0)
+            # fill_ keeps this async (see append's seq_lens note);
+            # prefill flushes allocate prompt/bt blocks x L layers in
+            # one burst, so a sync here dominates the flush wall
+            tbl[seq].narrow(0, len(rows), 1).fill_(idx)
+            rows.append(idx)
+
+    def reset(self, seq: int) -> None:
+        """Release a finished sequence's blocks back to the free lists.
+
+        Rows return in ascending order so a fresh run reuses them
+        deterministically — a scheduler's block assignment is part of
+        what makes a serving run reproducible."""
+        for layer in range(self.L):
+            rows = self._rows.pop((layer, seq), [])
+            if rows:
+                self._free[layer].extend(rows)
+                self._free[layer].sort()
+            self._seen[layer][seq] = 0
+            self.seq_lens[layer].narrow(0, seq, 1).fill_(0)
+            self.block_table[layer][seq].zero_()
+
+    def free_blocks(self, layer: int = 0) -> int:
+        return len(self._free[layer])
 
     def append_batch(self, layer: int, k: torch.Tensor, v: torch.Tensor):
         """Decode-step append: k, v [B, H, 1, D] (attention layout) for all
@@ -154,18 +218,48 @@ class Fp8PagedKV:
             self.append(layer, b, k[b].permute(1, 0, 2), v[b].permute(1, 0, 2))
 
     # ----------------------------------------------------------------- read --
-    def kernel_args(self, layer: int):
+    def kernel_args(self, layer: int, slots=None):
         """What the fused kernel consumes: flat pool bytes, block table,
-        per-sequence lengths. Views, no copies."""
-        return (self.kp.dev[layer].flatten(), self.vp.dev[layer].flatten(),
-                self.block_table[layer], self.seq_lens[layer])
+        per-sequence lengths.
 
-    def attention(self, layer: int, q: torch.Tensor, **kw) -> torch.Tensor:
+        ``slots`` selects WHICH sequences form the kernel's batch. The
+        kernel indexes its tables by BATCH ROW, so a caller decoding a
+        subset — which is every step of a real serving loop, where
+        sequences finish at different times — must hand it rows in that
+        subset's order. Passing the full tables works only while the
+        active set happens to be slots 0..B-1 in order; anything else
+        silently attends one sequence over another's KV, and it reads as
+        a model that starts coherent and degenerates."""
+        tbl, lens = self.block_table[layer], self.seq_lens[layer]
+        if slots is not None:
+            # the selector is CACHED per active-set: building it fresh is a
+            # pageable H2D copy, and torch's non_blocking=False copy ends
+            # in a full stream synchronize — one per LAYER per step, which
+            # serializes decode behind the GPU exactly like the block-table
+            # read did (measured together: attention host time == device
+            # time until both were removed)
+            key = tuple(slots)
+            sel = self._slot_sel.get(key)
+            if sel is None:
+                sel = torch.as_tensor(list(key), dtype=torch.long,
+                                      device=tbl.device)
+                self._slot_sel[key] = sel
+            tbl, lens = tbl.index_select(0, sel), lens.index_select(0, sel)
+        return (self.kp.dev[layer].flatten(), self.vp.dev[layer].flatten(),
+                tbl, lens)
+
+    def attention(self, layer: int, q: torch.Tensor, slots=None,
+                  **kw) -> torch.Tensor:
         """Paged FP8 decode attention for q [B, H_q, D]; dequantization
-        happens in the kernel's registers (invariant 2)."""
+        happens in the kernel's registers (invariant 2). ``slots`` maps
+        q's rows to sequences (see :meth:`kernel_args`)."""
         from fp8_paged_attn import fp8_paged_decode_attention
 
-        kf, vf, tbl, lens = self.kernel_args(layer)
+        kf, vf, tbl, lens = self.kernel_args(layer, slots)
+        if tbl.shape[0] != q.shape[0]:
+            raise ValueError(
+                f"q has {q.shape[0]} rows but the block table has "
+                f"{tbl.shape[0]} — pass slots= so rows map to sequences")
         return fp8_paged_decode_attention(
             q, kf, vf, tbl, lens, n_kv_heads=self.H, head_dim=self.D,
             block_tokens=self.bt, k_groups=self.k_groups, **kw)

@@ -1,0 +1,40 @@
+{
+  "model": "Qwen/Qwen3-30B-A3B",
+  "rows": [
+    {
+      "batch": 8,
+      "step_s": 0.11322278920561075,
+      "placement": {
+        "vram": 4045,
+        "dram": 2099,
+        "nvme": 0
+      },
+      "dram_ms": 49.3854064,
+      "gpu_ms": 16.567222,
+      "unique_dram": 178.0,
+      "unique_vram": 381.0,
+      "balance_ratio": 0.3354679693392176,
+      "dram_achieved_gbs": 9.566571553008421,
+      "vram_achieved_gbs": 61.039397431868785,
+      "offload_steps": 0
+    },
+    {
+      "batch": 16,
+      "step_s": 0.11042735707014799,
+      "placement": {
+        "vram": 4045,
+        "dram": 2099,
+        "nvme": 0
+      },
+      "dram_ms": 48.7295638,
+      "gpu_ms": 16.4262578,
+      "unique_dram": 190.0,
+      "unique_vram": 450.0,
+      "balance_ratio": 0.3370901875382681,
+      "dram_achieved_gbs": 10.348943858184095,
+      "vram_achieved_gbs": 72.71245919444902,
+      "offload_steps": 0
+    }
+  ],
+  "gate_balance_20pct": false
+}

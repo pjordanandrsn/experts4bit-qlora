@@ -1,0 +1,8 @@
+T=  1:    1956.3 us |   244.5 us/row |  14.47 GB/s(touched)
+T=  2:    1962.2 us |   122.6 us/row |  14.43 GB/s(touched)
+T=  4:    1970.4 us |    61.6 us/row |  14.37 GB/s(touched)
+T=  8:    1445.8 us |    22.6 us/row |  19.58 GB/s(touched)
+T= 16:    1537.8 us |    12.0 us/row |  18.41 GB/s(touched)
+T= 32:    1630.9 us |     6.4 us/row |  17.36 GB/s(touched)
+FIT per-expert: t_us = 234.0 + -1.5 * rows  (bytes-term 234us = 15.1 GB/s; compute -1us/row)
+Model name:                              AMD EPYC 9755 128-Core Processor

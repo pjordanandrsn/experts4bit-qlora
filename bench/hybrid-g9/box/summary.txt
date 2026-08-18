@@ -1,0 +1,7 @@
+G8_BAL B=8: dram 159.84ms gpu 19.81ms ratio 0.124 | achieved dram 3.1 vram 49.7 GB/s | placement {'vram': 4045, 'dram': 2099, 'nvme': 0}
+G8_BAL B=16: dram 235.66ms gpu 17.48ms ratio 0.074 | achieved dram 3.1 vram 54.6 GB/s | placement {'vram': 3236, 'dram': 2908, 'nvme': 0}
+placement {'vram': 4045, 'dram': 2099, 'nvme': 0}
+G9_GATE aggregate=23.9 tok/s per_stream=3.0 ttft_p50=12.22s tokens=512 window=21.4s gate=False
+G9_GATE aggregate=3.4 tok/s per_stream=0.4 ttft_p50=38.74s tokens=512 window=149.8s gate=False
+NVIDIA GeForce RTX 4090
+Model name:                              AMD Ryzen Threadripper PRO 7995WX 96-Cores

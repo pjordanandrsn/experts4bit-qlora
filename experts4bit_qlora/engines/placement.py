@@ -52,6 +52,64 @@ def _sha256_file(path) -> str:
     return h.hexdigest()
 
 
+def expected_weight_reads(p: float, batch: int) -> float:
+    """Expected number of times an expert's weights are read in one step.
+
+    An expert selected by each token with probability ``p`` is touched at
+    least once over ``batch`` tokens with probability ``1 - (1-p)^batch``
+    — and once touched its weights are read ONCE, with the GEMM covering
+    all of its tokens. So the per-step weight-read cost is that
+    probability, NOT ``batch * p`` activations.
+
+    At ``batch=1`` this is exactly ``p``, i.e. the Phase-3 mass law: the
+    batched solver is a generalization of the batch-1 solver, not a
+    replacement, and a batch-1 solve is bit-identical to Phase 3's.
+    """
+    if not 0.0 <= p <= 1.0:
+        raise ValueError(f"routing probability {p} outside [0, 1]")
+    if batch < 1:
+        raise ValueError("batch must be >= 1")
+    return 1.0 - (1.0 - p) ** batch
+
+
+def amortization_factor(n_experts: int, top_k: int, batch: int) -> float:
+    """G8's falsifiable law: expected unique-expert weight reads per
+    activation, ``E(1-(1-k/E)^B) / (B*k)``, for UNIFORM routing.
+
+    This is :func:`expected_weight_reads` summed over E identical experts
+    at ``p = k/E`` and normalized by the ``B*k`` activations a naive
+    per-token dispatch would pay. Measured routing is not uniform, so a
+    real profile amortizes BETTER than this curve (hot experts saturate
+    sooner) — which is why the solver uses per-expert probabilities and
+    only the gate quotes the closed form.
+    """
+    if not 1 <= top_k <= n_experts:
+        raise ValueError(f"top_k {top_k} outside [1, {n_experts}]")
+    p = top_k / n_experts
+    return n_experts * expected_weight_reads(p, batch) / (batch * top_k)
+
+
+def routing_probabilities(mass: dict, n_layers: int, n_experts: int,
+                          top_k: int) -> dict:
+    """{(layer, expert) -> per-token routing probability} from profile
+    counts. A layer's counts sum to ``tokens * top_k``, so
+    ``p = top_k * count / layer_total`` needs no token count on the side.
+    Layers absent from the profile fall back to uniform ``k/E``."""
+    totals = defaultdict(float)
+    for (layer, e), m in mass.items():
+        totals[layer] += m
+    out = {}
+    for layer in range(n_layers):
+        tot = totals.get(layer, 0.0)
+        for e in range(n_experts):
+            if tot > 0:
+                out[(layer, e)] = min(
+                    1.0, top_k * mass.get((layer, e), 0.0) / tot)
+            else:
+                out[(layer, e)] = top_k / n_experts
+    return out
+
+
 def load_routing_mass(profile_path, n_layers: int, n_experts: int):
     """Per-(layer, expert) routed-token counts from an expert_profile JSONL.
     Returns a dict {(layer, expert): count} plus the profile sha256; cold
@@ -77,6 +135,10 @@ def solve_placement(
     profile_path=None,
     b_vram_override: float | None = None,
     b_dram_override: float | None = None,
+    batch: int = 1,
+    top_k: int | None = None,
+    cpu_us_fixed: float | None = None,
+    cpu_us_per_row: float | None = None,
 ) -> dict:
     """Returns the placement manifest (a plain dict; write with
     ``save_manifest``). ``calibration`` is the blob dict or its path."""
@@ -103,6 +165,39 @@ def solve_placement(
         mass, profile_hash = {}, None
         profile_kind = "uniform-assumed"
 
+    if batch < 1:
+        raise ValueError("batch must be >= 1")
+    if batch > 1 and top_k is None:
+        raise ValueError("a batched solve needs top_k: the amortization "
+                         "law is per-expert P(touched) = 1-(1-p)^B and p "
+                         "is derived from the profile counts via top_k")
+
+    # Cost weight per expert. At batch 1 this is the routed mass itself
+    # (Phase 3's law, preserved bit-for-bit including the tie order); at
+    # batch B it is the expected number of WEIGHT READS — the same expert
+    # serving many tokens reads its bytes once, so activations stop being
+    # the currency. Ordering stays monotone in mass either way, so the
+    # greedy walks the same experts in the same order; what changes is how
+    # much completion time each one books, and therefore where the
+    # balance point between the buses falls.
+    if batch == 1:
+        weights = {(layer, e): mass.get((layer, e), 0.0)
+                   for layer in range(n_layers) for e in range(n_experts)}
+        cpu_rows = None
+    else:
+        probs = routing_probabilities(mass, n_layers, n_experts, top_k)
+        weights = {key: expected_weight_reads(p, batch)
+                   for key, p in probs.items()}
+        # expected ROWS an expert serves per step: B*k*p_e. The reads
+        # term above is what the batch amortizes; the rows term is what
+        # it cannot — the CPU tier's per-row compute. Measured on the
+        # rows-curve diagnostic: t_cpu(expert) = a + b*rows, with b
+        # dominating past a few rows/expert, which concentrated routing
+        # reaches at B=8. A solver that balances on bandwidth alone
+        # hands the CPU a share it cannot deliver (measured: balance
+        # 0.07-0.18 on the AVX-512 box against a 0.80 bar).
+        cpu_rows = {key: batch * top_k * p for key, p in probs.items()}
+
     items = [
         (mass.get((layer, e), 0.0), layer, e)
         for layer in range(n_layers)
@@ -117,16 +212,38 @@ def solve_placement(
     tiers = {"vram": [], "dram": [], "nvme": []}
     t_gpu = 0.0   # completion-time proxies: mass / bandwidth
     t_cpu = 0.0
+    # CPU-tier cost per unit of "weight" (expected reads): bandwidth term
+    # plus, when the constants are provided, the measured compute term.
+    # Constants come from an in-situ probe (bench rows_curve fit), never
+    # a spec sheet — same rule as every bandwidth in this solver.
+    gb_per_read = bytes_per_expert / 1e9
+    have_term = (cpu_us_fixed is not None or cpu_us_per_row is not None)
+
+    def cpu_cost(key, w):
+        c = w * gb_per_read / b_dram
+        # EITHER constant opens the term: on AVX-512 hosts the fixed
+        # call floor is the operative half (fixbox receipts), so a
+        # fixed-only call must not silently fall back to bandwidth-only
+        if have_term and cpu_rows is not None:
+            c += (w * (cpu_us_fixed or 0.0)
+                  + cpu_rows[key] * (cpu_us_per_row or 0.0)) / 1e6
+        return c
+
+    def gpu_cost(w):
+        return w * gb_per_read / b_vram
+
     for m, layer, e in items:
+        w = weights[(layer, e)]
+        key = (layer, e)
         gpu_ok = len(tiers["vram"]) < vram_slots
         cpu_ok = len(tiers["dram"]) < dram_slots
-        if gpu_ok and (not cpu_ok or (t_gpu + m / b_vram) <=
-                       (t_cpu + m / b_dram)):
+        if gpu_ok and (not cpu_ok or (t_gpu + gpu_cost(w)) <=
+                       (t_cpu + cpu_cost(key, w))):
             tiers["vram"].append([layer, e])
-            t_gpu += m / b_vram
+            t_gpu += gpu_cost(w)
         elif cpu_ok:
             tiers["dram"].append([layer, e])
-            t_cpu += m / b_dram
+            t_cpu += cpu_cost(key, w)
         else:
             tiers["nvme"].append([layer, e])
 
@@ -142,6 +259,24 @@ def solve_placement(
         "budgets": {"vram_bytes": int(vram_budget_bytes),
                     "dram_bytes": int(dram_budget_bytes)},
         "bandwidths_gbs": {"vram": b_vram, "dram_grouped": b_dram},
+        "batch": {
+            "solved_for": batch, "top_k": top_k,
+            "cost_law": ("routed-mass" if batch == 1
+                         else "unique-expert-reads: 1-(1-p)^B"),
+            # what the gate's uniform closed form would predict here; the
+            # solve itself uses per-expert probabilities, which amortize
+            # better whenever routing is skewed
+            "uniform_factor": (amortization_factor(n_experts, top_k, batch)
+                               if top_k else None),
+            "cpu_cost_model": ({"us_fixed": cpu_us_fixed,
+                                "us_per_row": cpu_us_per_row}
+                               if have_term and batch > 1 else
+                               "bandwidth-only"),
+            # completion-time proxies the greedy actually balanced
+            "t_gpu_proxy": t_gpu, "t_cpu_proxy": t_cpu,
+            "balance_ratio": (min(t_gpu, t_cpu) / max(t_gpu, t_cpu)
+                              if max(t_gpu, t_cpu) > 0 else None),
+        },
         "profile": {"kind": profile_kind, "sha256": profile_hash},
         "calibration_sha256": calib_hash,
         "reduction_order_ids": dict(REDUCTION_ORDER_IDS),

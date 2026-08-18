@@ -1,0 +1,47 @@
+{
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "batch": 4,
+  "prompt_len": 128,
+  "gen_tokens": 256,
+  "arrival_every_steps": 24,
+  "rows": [
+    {
+      "chunk_tokens": 128,
+      "quiet_decode_tok_s": 32.8081137783136,
+      "loaded_decode_tok_s": 28.329821168385877,
+      "loaded_aggregate_tok_s": 42.494731752578815,
+      "decode_degradation": 0.13649954520969454,
+      "ttft_p50_s": 20.309897721046582,
+      "ttft_p99_s": 21.876395646017045,
+      "queue_wait_p50_s": 20.04656448098831,
+      "per_stream_tok_s": 6.31799631000766,
+      "completed": 8,
+      "steps": 584,
+      "prefill_tokens": 1024,
+      "decode_tokens": 2048,
+      "prefill_share": 0.3333333333333333
+    },
+    {
+      "chunk_tokens": 512,
+      "quiet_decode_tok_s": 29.80482120350476,
+      "loaded_decode_tok_s": 28.32719978937129,
+      "loaded_aggregate_tok_s": 42.49079968405694,
+      "decode_degradation": 0.04957659044637097,
+      "ttft_p50_s": 20.55411370296497,
+      "ttft_p99_s": 21.103826242964715,
+      "queue_wait_p50_s": 20.284942678990774,
+      "per_stream_tok_s": 6.320894195870655,
+      "completed": 8,
+      "steps": 584,
+      "prefill_tokens": 1024,
+      "decode_tokens": 2048,
+      "prefill_share": 0.3333333333333333
+    }
+  ],
+  "gate_degradation_20pct": true,
+  "passing_chunks": [
+    128,
+    512
+  ],
+  "best_by_degradation": 512
+}

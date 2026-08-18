@@ -1,0 +1,23 @@
+{
+  "model": "Qwen/Qwen3-30B-A3B",
+  "rows": [
+    {
+      "batch": 8,
+      "step_s": 0.1738192869350314,
+      "placement": {
+        "vram": 4045,
+        "dram": 2099,
+        "nvme": 0
+      },
+      "dram_ms": 104.870031,
+      "gpu_ms": 18.9609084,
+      "unique_dram": 179.0,
+      "unique_vram": 379.0,
+      "balance_ratio": 0.18080387904147754,
+      "dram_achieved_gbs": 4.530400415348404,
+      "vram_achieved_gbs": 53.053620152502816,
+      "offload_steps": 0
+    }
+  ],
+  "gate_balance_20pct": false
+}
