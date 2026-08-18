@@ -154,6 +154,18 @@ class _HybridTier(_NvmeResidency):
         self.amort = None              # dict when armed, else None
         self._exp_bytes = None
         self._gpu_only = False         # Phase 9 mixed mode, off by default
+        # Per-STEP offload switch (Phase 8 follow-up): when this step's
+        # DRAM rows-per-unique-expert exceeds the threshold, take the GPU
+        # path for the DRAM experts instead of computing in place. The
+        # rows-curve diagnostic measured the CPU tier's cost as
+        # a + b*rows per expert — compute-BOUND past a few rows — while
+        # the GPU path's cost is one H2D per unique expert, flat in rows.
+        # Concentrated routing (G8's own amortization finding) puts
+        # serving decode past the crossover at B=8, so without this
+        # switch the "warm" tier is the slowest bus exactly when batching
+        # works. None = off (invariant 9: no behavior change unless set).
+        self.offload_rows = getattr(mod, "_e4b_hybrid_offload_rows", None)
+        self.offload_steps = 0         # steps that took the GPU path
 
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
@@ -394,7 +406,14 @@ class _HybridTier(_NvmeResidency):
             super()._cold_contrib(x, flat, row_token, row_slot, nr,
                                   top_k_weights, out, dev)
         if dr.numel():
-            if getattr(self, "_gpu_only", False):
+            gpu_route = getattr(self, "_gpu_only", False)
+            thresh = getattr(self, "offload_rows", None)
+            if not gpu_route and thresh is not None:
+                uniq = int(torch.unique(flat.index_select(0, dr)).numel())
+                if dr.numel() / max(1, uniq) >= thresh:
+                    gpu_route = True
+                    self.offload_steps += 1
+            if gpu_route:
                 self._dram_on_gpu(x, flat, row_token, row_slot, dr,
                                   top_k_weights, out, dev)
             else:                            # DRAM bus: compute in place
@@ -483,6 +502,7 @@ def hybrid_available() -> bool:
 def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        hot_rows: int, device: str = "cuda", qd: int = 4,
                        threads: int = 0, pool: bool = True,
+                       offload_rows: float | None = None,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -534,6 +554,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_arena_layer = li
         mod._e4b_hybrid_dram_ids = place["dram"]
         mod._e4b_hybrid_threads = threads
+        mod._e4b_hybrid_offload_rows = offload_rows
         hot_sets.append(place["vram"])
     try:
         n_nodes = len(list(Path("/sys/devices/system/node").glob("node[0-9]*")))
@@ -553,7 +574,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         # comes off before the error propagates (Bugbot)
         for mod in mods:
             for attr in ("_e4b_cold_tier", "_e4b_arena_layer",
-                         "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads"):
+                         "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
+                         "_e4b_hybrid_offload_rows"):
                 if hasattr(mod, attr):
                     delattr(mod, attr)
         raise

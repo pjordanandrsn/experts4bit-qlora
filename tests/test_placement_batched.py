@@ -129,3 +129,31 @@ def test_uniform_probabilities_when_layer_absent_from_profile():
                                   n_layers=2, n_experts=8, top_k=2)
     assert probs[(1, 0)] == pytest.approx(2 / 8)
     assert probs[(0, 0)] == pytest.approx(2 / 8)   # flat profile
+
+
+def test_compute_term_moves_concentrated_experts_to_the_gpu(tmp_path):
+    """The measured finding the term encodes: hot experts serve many rows
+    per step, and the CPU tier pays per row while the GPU does not. With
+    the term on, the solver must put MORE routed mass on VRAM than the
+    bandwidth-only solve chose — at identical budgets."""
+    prof = _profile(tmp_path, skew=1.5)
+    common = dict(**GEO, vram_budget_bytes=8 << 20,
+                  dram_budget_bytes=40 << 20, calibration=CALIB,
+                  profile_path=str(prof), batch=16, top_k=4)
+    bw_only = solve_placement(**common)
+    with_term = solve_placement(**common, cpu_us_fixed=700.0,
+                                cpu_us_per_row=600.0)
+    assert with_term["batch"]["cpu_cost_model"]["us_per_row"] == 600.0
+    assert bw_only["batch"]["cpu_cost_model"] == "bandwidth-only"
+    assert with_term["masses"]["vram_frac"] > bw_only["masses"]["vram_frac"], \
+        "compute term did not shift routed mass toward the GPU"
+
+
+def test_bandwidth_only_costing_is_placement_identical_to_phase3_units():
+    """The cost refactor rescaled both buses by bytes_per_expert — a
+    monotone transform that must not move a single expert."""
+    common = dict(**GEO, vram_budget_bytes=16 << 20,
+                  dram_budget_bytes=48 << 20, calibration=CALIB)
+    a = solve_placement(**common)
+    b = solve_placement(**common, batch=1, top_k=4)
+    assert a["tiers"] == b["tiers"]

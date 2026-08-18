@@ -137,6 +137,8 @@ def solve_placement(
     b_dram_override: float | None = None,
     batch: int = 1,
     top_k: int | None = None,
+    cpu_us_fixed: float | None = None,
+    cpu_us_per_row: float | None = None,
 ) -> dict:
     """Returns the placement manifest (a plain dict; write with
     ``save_manifest``). ``calibration`` is the blob dict or its path."""
@@ -181,10 +183,20 @@ def solve_placement(
     if batch == 1:
         weights = {(layer, e): mass.get((layer, e), 0.0)
                    for layer in range(n_layers) for e in range(n_experts)}
+        cpu_rows = None
     else:
         probs = routing_probabilities(mass, n_layers, n_experts, top_k)
         weights = {key: expected_weight_reads(p, batch)
                    for key, p in probs.items()}
+        # expected ROWS an expert serves per step: B*k*p_e. The reads
+        # term above is what the batch amortizes; the rows term is what
+        # it cannot — the CPU tier's per-row compute. Measured on the
+        # rows-curve diagnostic: t_cpu(expert) = a + b*rows, with b
+        # dominating past a few rows/expert, which concentrated routing
+        # reaches at B=8. A solver that balances on bandwidth alone
+        # hands the CPU a share it cannot deliver (measured: balance
+        # 0.07-0.18 on the AVX-512 box against a 0.80 bar).
+        cpu_rows = {key: batch * top_k * p for key, p in probs.items()}
 
     items = [
         (mass.get((layer, e), 0.0), layer, e)
@@ -200,17 +212,33 @@ def solve_placement(
     tiers = {"vram": [], "dram": [], "nvme": []}
     t_gpu = 0.0   # completion-time proxies: mass / bandwidth
     t_cpu = 0.0
+    # CPU-tier cost per unit of "weight" (expected reads): bandwidth term
+    # plus, when the constants are provided, the measured compute term.
+    # Constants come from an in-situ probe (bench rows_curve fit), never
+    # a spec sheet — same rule as every bandwidth in this solver.
+    gb_per_read = bytes_per_expert / 1e9
+    def cpu_cost(key, w):
+        c = w * gb_per_read / b_dram
+        if cpu_us_per_row is not None and cpu_rows is not None:
+            c += (w * (cpu_us_fixed or 0.0)
+                  + cpu_rows[key] * cpu_us_per_row) / 1e6
+        return c
+
+    def gpu_cost(w):
+        return w * gb_per_read / b_vram
+
     for m, layer, e in items:
         w = weights[(layer, e)]
+        key = (layer, e)
         gpu_ok = len(tiers["vram"]) < vram_slots
         cpu_ok = len(tiers["dram"]) < dram_slots
-        if gpu_ok and (not cpu_ok or (t_gpu + w / b_vram) <=
-                       (t_cpu + w / b_dram)):
+        if gpu_ok and (not cpu_ok or (t_gpu + gpu_cost(w)) <=
+                       (t_cpu + cpu_cost(key, w))):
             tiers["vram"].append([layer, e])
-            t_gpu += w / b_vram
+            t_gpu += gpu_cost(w)
         elif cpu_ok:
             tiers["dram"].append([layer, e])
-            t_cpu += w / b_dram
+            t_cpu += cpu_cost(key, w)
         else:
             tiers["nvme"].append([layer, e])
 
@@ -235,6 +263,10 @@ def solve_placement(
             # better whenever routing is skewed
             "uniform_factor": (amortization_factor(n_experts, top_k, batch)
                                if top_k else None),
+            "cpu_cost_model": ({"us_fixed": cpu_us_fixed,
+                                "us_per_row": cpu_us_per_row}
+                               if cpu_us_per_row is not None else
+                               "bandwidth-only"),
             # completion-time proxies the greedy actually balanced
             "t_gpu_proxy": t_gpu, "t_cpu_proxy": t_cpu,
             "balance_ratio": (min(t_gpu, t_cpu) / max(t_gpu, t_cpu)
