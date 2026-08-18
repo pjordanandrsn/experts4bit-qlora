@@ -1,0 +1,618 @@
+{
+  "schema": "gnf4-hybrid-calib/1",
+  "created_utc": "2026-08-18T00:35:54Z",
+  "quick_mode": false,
+  "host": {
+    "hostname": "g9box",
+    "kernel": "5.15.0-187-generic",
+    "machine": "x86_64",
+    "cpu_model": "AMD Ryzen Threadripper PRO 7995WX 96-Cores",
+    "cpu_flags_watched": [
+      "avx2",
+      "avx512_vnni",
+      "avx512bw",
+      "avx512f",
+      "avx512vbmi",
+      "avx512vl"
+    ],
+    "online_cpus": 192,
+    "cgroup_cpu_quota": 184.32,
+    "numa_nodes": 1,
+    "mem_total_gib": 251.1,
+    "thp": "always [madvise] never",
+    "hugetlb_2m_total": "8192",
+    "governor": "schedutil",
+    "loadavg_at_start": "13.75 11.16 12.80 1/1904 17331"
+  },
+  "gpus": [
+    {
+      "index": "0",
+      "name": "NVIDIA GeForce RTX 4090",
+      "vram": "24564 MiB",
+      "power_limit": "450.00 W",
+      "pcie_gen_max": "4",
+      "pcie_width_max": "16",
+      "pcie_gen_idle": "1",
+      "pcie_width_idle": "16"
+    }
+  ],
+  "notes": [],
+  "cpu_bench_build": "/usr/bin/cc -O3 -march=native",
+  "cpu_bench": {
+    "features": {
+      "avx2": 1,
+      "avx512f": 1,
+      "avx512bw": 1,
+      "avx512vl": 1,
+      "avx512vbmi": 1,
+      "avx512vnni": 1
+    },
+    "topology": {
+      "online_cpus": 192,
+      "l3_domains": 12
+    },
+    "compiled_simd": "avx512",
+    "triad": [
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 25.0
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 25.74
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 25.01
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 24.34
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 45.41
+      },
+      {
+        "threads": 32,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 74.71
+      },
+      {
+        "threads": 64,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 93.6
+      },
+      {
+        "threads": 128,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 87.45
+      },
+      {
+        "threads": 192,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 91.36
+      },
+      {
+        "threads": 1,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 24.96
+      },
+      {
+        "threads": 2,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 47.24
+      },
+      {
+        "threads": 4,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 77.12
+      },
+      {
+        "threads": 8,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 98.09
+      },
+      {
+        "threads": 16,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 92.18
+      },
+      {
+        "threads": 32,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 95.42
+      },
+      {
+        "threads": 64,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 91.74
+      },
+      {
+        "threads": 128,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 92.05
+      },
+      {
+        "threads": 192,
+        "pin": "spread",
+        "nt": 0,
+        "gbs": 70.8
+      },
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 36.08
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 37.45
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 36.88
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 35.88
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 64.63
+      },
+      {
+        "threads": 32,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 102.0
+      },
+      {
+        "threads": 64,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 122.43
+      },
+      {
+        "threads": 128,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 114.76
+      },
+      {
+        "threads": 192,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 118.78
+      },
+      {
+        "threads": 1,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 36.04
+      },
+      {
+        "threads": 2,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 67.53
+      },
+      {
+        "threads": 4,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 107.96
+      },
+      {
+        "threads": 8,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 136.52
+      },
+      {
+        "threads": 16,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 132.99
+      },
+      {
+        "threads": 32,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 129.67
+      },
+      {
+        "threads": 64,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 120.67
+      },
+      {
+        "threads": 128,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 120.3
+      },
+      {
+        "threads": 192,
+        "pin": "spread",
+        "nt": 1,
+        "gbs": 118.93
+      }
+    ],
+    "triad_best": {
+      "gbs": 136.52,
+      "threads": 8,
+      "pin": "spread",
+      "nt": 1
+    },
+    "scatter": [
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 1,
+        "gbs": 28.42
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 2,
+        "gbs": 54.77
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 4,
+        "gbs": 98.28
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 8,
+        "gbs": 137.42
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 16,
+        "gbs": 140.76
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 32,
+        "gbs": 145.04
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 64,
+        "gbs": 143.17
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 128,
+        "gbs": 140.99
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 192,
+        "gbs": 139.16
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 1,
+        "gbs": 28.7
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 2,
+        "gbs": 57.11
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 4,
+        "gbs": 100.87
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 8,
+        "gbs": 142.12
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 16,
+        "gbs": 145.26
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 32,
+        "gbs": 145.52
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 64,
+        "gbs": 144.23
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 128,
+        "gbs": 142.23
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 192,
+        "gbs": 130.6
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 1,
+        "gbs": 29.07
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 2,
+        "gbs": 57.48
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 4,
+        "gbs": 101.42
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 8,
+        "gbs": 141.75
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 16,
+        "gbs": 145.35
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 32,
+        "gbs": 145.97
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 64,
+        "gbs": 144.79
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 128,
+        "gbs": 142.95
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 192,
+        "gbs": 141.0
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 1,
+        "gbs": 29.25
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 2,
+        "gbs": 57.66
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 4,
+        "gbs": 101.93
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 8,
+        "gbs": 140.84
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 16,
+        "gbs": 144.83
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 32,
+        "gbs": 144.15
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 64,
+        "gbs": 145.15
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 128,
+        "gbs": 143.46
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 192,
+        "gbs": 141.32
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 1,
+        "gbs": 29.37
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 2,
+        "gbs": 57.87
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 4,
+        "gbs": 102.22
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 8,
+        "gbs": 141.92
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 16,
+        "gbs": 145.13
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 32,
+        "gbs": 145.78
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 64,
+        "gbs": 145.0
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 128,
+        "gbs": 142.39
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 192,
+        "gbs": 141.64
+      }
+    ],
+    "scatter_best": {
+      "gbs": 145.97,
+      "block_mib": 8,
+      "threads": 32,
+      "experts": 1024
+    },
+    "gate_g0": {
+      "scatter_pct_of_triad": 106.9
+    },
+    "config": {
+      "triad_gib": 2,
+      "arena_gib": 8,
+      "topk": 8,
+      "fetches": 400,
+      "seed": 20260816,
+      "reps": 5,
+      "tile_bytes": 1048576
+    }
+  },
+  "gpu_bench": {
+    "devices": [
+      {
+        "device": "cuda:0",
+        "name": "NVIDIA GeForce RTX 4090",
+        "b_vram_triad_gbs": 944.4,
+        "b_link": {
+          "h2d_8kb": {
+            "gbs": 2.33,
+            "usec": 3.5
+          },
+          "d2h_8kb": {
+            "gbs": 3.56,
+            "usec": 2.3
+          },
+          "h2d_64mb": {
+            "gbs": 23.2,
+            "usec": 2892.0
+          },
+          "d2h_64mb": {
+            "gbs": 27.07,
+            "usec": 2478.9
+          }
+        }
+      }
+    ]
+  },
+  "gate_g0": {
+    "scatter_pct_of_triad": 106.9,
+    "verdict": "proceed",
+    "thresholds": {
+      "proceed": 70.0,
+      "resolve": 50.0
+    },
+    "triad_best": {
+      "gbs": 136.52,
+      "threads": 8,
+      "pin": "spread",
+      "nt": 1
+    },
+    "scatter_best": {
+      "gbs": 145.97,
+      "block_mib": 8,
+      "threads": 32,
+      "experts": 1024
+    }
+  },
+  "wall_seconds": 37.0
+}
