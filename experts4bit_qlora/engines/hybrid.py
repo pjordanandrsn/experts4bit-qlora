@@ -165,6 +165,7 @@ class _HybridTier(_NvmeResidency):
         # switch the "warm" tier is the slowest bus exactly when batching
         # works. None = off (invariant 9: no behavior change unless set).
         self.offload_rows = getattr(mod, "_e4b_hybrid_offload_rows", None)
+        self.fused_ffn = getattr(mod, "_e4b_hybrid_fused_ffn", True)
         self.offload_steps = 0         # steps that took the GPU path
 
     def expert_bytes(self) -> int:
@@ -457,6 +458,28 @@ class _HybridTier(_NvmeResidency):
             # uniq_dram is the split tax, and it must be visible.
             self.amort["dram_groups"] += len(sizes)
 
+        # Fused expert-FFN path (one kernel call, one pool wake, no
+        # intermediate through python): eligible only for the plain gated
+        # silu epilogue — gpt-oss (biases + clamped alpha-sigmoid) and
+        # clamped variants keep the two-call path. Numerics note: the
+        # fused kernel's silu is gnf4's LOCKED polynomial, not torch's
+        # sleef — last-ulp differences by design; fused_ffn=False on
+        # enable_hybrid_tier restores the previous numerics exactly.
+        if (getattr(self, "fused_ffn", True) and self.has_gate
+                and not self.gptoss and self.clamp_limit is None
+                and _act_is_plain_silu(self.act_fn)
+                and hasattr(cpu_grouped, "gemm_nf4_ffn_grouped_cpu")):
+            dn = cpu_grouped.gemm_nf4_ffn_grouped_cpu(
+                xs, self.d_gu_p, self.d_gu_a, self.d_dn_p, self.d_dn_a,
+                sizes, eids, threads=self._threads)
+            dn_all = torch.empty_like(dn)
+            dn_all.index_copy_(0, order, dn)
+            w = top_k_weights[rows, row_slot.index_select(0, dr)].to(
+                torch.float32)
+            out.index_put_((rows, row_slot.index_select(0, dr)),
+                           dn_all.to(dev) * w[:, None])
+            return
+
         gu = cpu_grouped.gemv_nf4_grouped_cpu(
             xs, self.d_gu_p, self.d_gu_a, sizes, eids, threads=self._threads)
         if self.gptoss:
@@ -488,6 +511,14 @@ class _HybridTier(_NvmeResidency):
 
 # ---------------------------------------------------------------------- #
 
+def _act_is_plain_silu(act_fn) -> bool:
+    """True only for the unmodified silu the fused kernel implements —
+    an nn.SiLU instance or torch.nn.functional.silu itself. Anything
+    else (approximate gelu, custom callables) keeps the two-call path."""
+    return (isinstance(act_fn, torch.nn.SiLU)
+            or act_fn is torch.nn.functional.silu)
+
+
 def hybrid_available() -> bool:
     """CUDA for the hot/cold buses + the native CPU kernels for the warm."""
     if not torch.cuda.is_available():
@@ -503,6 +534,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        hot_rows: int, device: str = "cuda", qd: int = 4,
                        threads: int = 0, pool: bool = True,
                        offload_rows: float | None = None,
+                       fused_ffn: bool = True,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -555,6 +587,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_hybrid_dram_ids = place["dram"]
         mod._e4b_hybrid_threads = threads
         mod._e4b_hybrid_offload_rows = offload_rows
+        mod._e4b_hybrid_fused_ffn = fused_ffn
         hot_sets.append(place["vram"])
     try:
         n_nodes = len(list(Path("/sys/devices/system/node").glob("node[0-9]*")))
@@ -575,7 +608,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         for mod in mods:
             for attr in ("_e4b_cold_tier", "_e4b_arena_layer",
                          "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
-                         "_e4b_hybrid_offload_rows"):
+                         "_e4b_hybrid_offload_rows",
+                         "_e4b_hybrid_fused_ffn"):
                 if hasattr(mod, attr):
                     delattr(mod, attr)
         raise
@@ -682,7 +716,8 @@ def disable_hybrid_tier(model) -> int:
         owns_pool = owns_pool or getattr(mod, "_e4b_hybrid_owns_pool", False)
         for attr in (_MARKER, "_e4b_cold_tier", "_e4b_arena_layer",
                      "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
-                     "_e4b_hybrid_owns_pool"):
+                     "_e4b_hybrid_owns_pool", "_e4b_hybrid_offload_rows",
+                     "_e4b_hybrid_fused_ffn"):
             if hasattr(mod, attr):
                 delattr(mod, attr)
     if owns_pool:
