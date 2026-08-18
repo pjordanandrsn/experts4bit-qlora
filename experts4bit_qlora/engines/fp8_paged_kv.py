@@ -85,6 +85,10 @@ class Fp8PagedKV:
         # engine would die at ``blocks`` sequences regardless of how many
         # ever ran at once (Phase 9).
         self._rows: dict[tuple[int, int], list[int]] = {}
+        # device selector per active-set tuple (see kernel_args) — bounded
+        # by the distinct decode subsets a run ever sees (arrival/finish
+        # order over <= batch slots), each an 8-byte-per-slot tensor
+        self._slot_sel: dict[tuple, torch.Tensor] = {}
         self._free: list[list[int]] = [
             list(range(rows)) for _ in range(n_layers)]
         # Claim the whole arena up front, once. RowPool's append/demote
@@ -119,14 +123,19 @@ class Fp8PagedKV:
         """Write pre-quantized bytes into `pool`'s block rows for
         (layer, seq) from absolute token position `seen`. Allocation-free
         (narrow + copy_ into existing rows; pool.append cannot overrun —
-        capacity is checked before any write)."""
+        capacity is checked before any write). Row indices come from the
+        HOST mirror (`_rows`), never the device block table — reading a
+        device scalar here (`int(tbl[seq, blk])`) is a stream sync per
+        block write, which at L layers x 2 sides x B sequences serializes
+        the whole decode step behind the GPU (measured: attention host
+        time == attention device time, ~60 ms/step on the dev box)."""
         srow = self.H * groups * 4
         written = 0
-        tbl = self.block_table[layer]
+        rows = self._rows[(layer, seq)]
         while written < t_new:
             fill = seen % self.bt
             blk = seen // self.bt
-            row = pool.row_view(layer, int(tbl[seq, blk]))
+            row = pool.row_view(layer, rows[blk])
             take = min(self.bt - fill, t_new - written)
             row.narrow(0, fill * self.H * self.D,
                        take * self.H * self.D).copy_(
@@ -161,7 +170,10 @@ class Fp8PagedKV:
         self._write_side(self.kp, self._k_pay, self.k_groups, layer, seq,
                          *kq, k.shape[0], seen)
         self._seen[layer][seq] = seen + k.shape[0]
-        self.seq_lens[layer, seq] = self._seen[layer][seq]
+        # device-side scalar add, value in kernel args: a plain
+        # `seq_lens[layer, seq] = n` wraps the int in a CPU tensor and
+        # the blocking copy stream-syncs — B x L times per decode step
+        self.seq_lens[layer].narrow(0, seq, 1).add_(k.shape[0])
 
     def _ensure_blocks(self, layer: int, seq: int, upto_blk: int) -> None:
         """Back every block up to ``upto_blk`` with a pool row."""
@@ -173,7 +185,10 @@ class Fp8PagedKV:
                     f"layer {layer} is out of KV blocks — the scheduler "
                     f"admitted past capacity")
             idx = self._free[layer].pop(0)
-            tbl[seq, len(rows)] = idx
+            # fill_ keeps this async (see append's seq_lens note);
+            # prefill flushes allocate prompt/bt blocks x L layers in
+            # one burst, so a sync here dominates the flush wall
+            tbl[seq].narrow(0, len(rows), 1).fill_(idx)
             rows.append(idx)
 
     def reset(self, seq: int) -> None:
@@ -188,7 +203,7 @@ class Fp8PagedKV:
                 self._free[layer].extend(rows)
                 self._free[layer].sort()
             self._seen[layer][seq] = 0
-            self.seq_lens[layer, seq] = 0
+            self.seq_lens[layer].narrow(0, seq, 1).fill_(0)
             self.block_table[layer][seq].zero_()
 
     def free_blocks(self, layer: int = 0) -> int:
@@ -215,8 +230,18 @@ class Fp8PagedKV:
         a model that starts coherent and degenerates."""
         tbl, lens = self.block_table[layer], self.seq_lens[layer]
         if slots is not None:
-            sel = torch.as_tensor(list(slots), dtype=torch.long,
-                                  device=tbl.device)
+            # the selector is CACHED per active-set: building it fresh is a
+            # pageable H2D copy, and torch's non_blocking=False copy ends
+            # in a full stream synchronize — one per LAYER per step, which
+            # serializes decode behind the GPU exactly like the block-table
+            # read did (measured together: attention host time == device
+            # time until both were removed)
+            key = tuple(slots)
+            sel = self._slot_sel.get(key)
+            if sel is None:
+                sel = torch.as_tensor(list(key), dtype=torch.long,
+                                      device=tbl.device)
+                self._slot_sel[key] = sel
             tbl, lens = tbl.index_select(0, sel), lens.index_select(0, sel)
         return (self.kp.dev[layer].flatten(), self.vp.dev[layer].flatten(),
                 tbl, lens)
