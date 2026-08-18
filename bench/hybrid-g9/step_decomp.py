@@ -205,12 +205,16 @@ def main():
     for p in prompts:
         sched.add_request(p, max_new_tokens=a.gen_tokens)
 
-    step_walls = []
-    while sched.active or sched.queue:
+    step_walls = []            # decode-ONLY steps: a wall that included a
+    while sched.active or sched.queue:   # prefill chunk would smear into
+        pf0 = len(runner.prefill_rows)   # sched_py and mis-attribute
+        dr0 = len(runner.decode_rows)
         t0 = time.perf_counter_ns()
         if sched.step().is_empty:
             break
-        step_walls.append(time.perf_counter_ns() - t0)
+        wall = time.perf_counter_ns() - t0
+        if len(runner.prefill_rows) == pf0 and len(runner.decode_rows) > dr0:
+            step_walls.append(wall)
     torch.cuda.synchronize()
 
     # device-side attention occupancy from the recorded events

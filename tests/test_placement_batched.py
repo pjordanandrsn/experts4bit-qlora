@@ -149,6 +149,24 @@ def test_compute_term_moves_concentrated_experts_to_the_gpu(tmp_path):
         "compute term did not shift routed mass toward the GPU"
 
 
+def test_fixed_term_alone_is_honored(tmp_path):
+    """cpu_us_fixed WITHOUT cpu_us_per_row must still open the compute
+    term — on AVX-512 hosts the fixed call floor is the operative half
+    (rows are free post-hoist), so fixed-only is the natural call there.
+    A gate keyed on per_row alone silently degraded it to bandwidth-only
+    (bugbot, PR #155)."""
+    prof = _profile(tmp_path, skew=1.5)
+    common = dict(**GEO, vram_budget_bytes=8 << 20,
+                  dram_budget_bytes=40 << 20, calibration=CALIB,
+                  profile_path=str(prof), batch=16, top_k=4)
+    bw_only = solve_placement(**common)
+    fixed_only = solve_placement(**common, cpu_us_fixed=700.0)
+    assert fixed_only["batch"]["cpu_cost_model"] == {
+        "us_fixed": 700.0, "us_per_row": None}
+    assert fixed_only["masses"]["vram_frac"] > bw_only["masses"]["vram_frac"], \
+        "fixed-only term did not shift routed mass toward the GPU"
+
+
 def test_bandwidth_only_costing_is_placement_identical_to_phase3_units():
     """The cost refactor rescaled both buses by bytes_per_expert — a
     monotone transform that must not move a single expert."""

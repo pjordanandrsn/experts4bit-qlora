@@ -217,11 +217,16 @@ def solve_placement(
     # Constants come from an in-situ probe (bench rows_curve fit), never
     # a spec sheet — same rule as every bandwidth in this solver.
     gb_per_read = bytes_per_expert / 1e9
+    have_term = (cpu_us_fixed is not None or cpu_us_per_row is not None)
+
     def cpu_cost(key, w):
         c = w * gb_per_read / b_dram
-        if cpu_us_per_row is not None and cpu_rows is not None:
+        # EITHER constant opens the term: on AVX-512 hosts the fixed
+        # call floor is the operative half (fixbox receipts), so a
+        # fixed-only call must not silently fall back to bandwidth-only
+        if have_term and cpu_rows is not None:
             c += (w * (cpu_us_fixed or 0.0)
-                  + cpu_rows[key] * cpu_us_per_row) / 1e6
+                  + cpu_rows[key] * (cpu_us_per_row or 0.0)) / 1e6
         return c
 
     def gpu_cost(w):
@@ -265,7 +270,7 @@ def solve_placement(
                                if top_k else None),
             "cpu_cost_model": ({"us_fixed": cpu_us_fixed,
                                 "us_per_row": cpu_us_per_row}
-                               if cpu_us_per_row is not None else
+                               if have_term and batch > 1 else
                                "bandwidth-only"),
             # completion-time proxies the greedy actually balanced
             "t_gpu_proxy": t_gpu, "t_cpu_proxy": t_cpu,

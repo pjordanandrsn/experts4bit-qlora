@@ -154,14 +154,16 @@ class Fp8PagedKV:
         if seen + k.shape[0] > self.blocks_per_seq * self.bt:
             raise ValueError(f"sequence {seq} overflows its "
                              f"{self.blocks_per_seq} blocks")
-        # Blocks are allocated ONCE per append, before either side
-        # writes. Tying allocation to the K side would leave V — which
-        # writes first, by the publish-last discipline below — landing on
-        # an unassigned table entry, i.e. row 0 for every block.
-        self._ensure_blocks(layer, seq, (seen + k.shape[0] - 1) // self.bt)
-        # quantize BOTH sides before touching either pool — see _quant_bytes
+        # quantize BOTH sides before touching ANY shared state — the
+        # lockstep invariant is that a failed append changes NOTHING, and
+        # _quant_bytes is the fallible part (allocating). Only then claim
+        # blocks: allocated ONCE per append, before either side writes —
+        # tying allocation to the K side would leave V (which writes
+        # first, by the publish-last discipline below) landing on an
+        # unassigned table entry, i.e. row 0 for every block.
         vq = self._quant_bytes(v, 1)
         kq = self._quant_bytes(k, self.k_groups)
+        self._ensure_blocks(layer, seq, (seen + k.shape[0] - 1) // self.bt)
         # V first: K's writer owns the shared block-table entry, and writing
         # K last means a table row is never published for a block whose V
         # bytes haven't landed yet (same publish-last discipline as the pool)
