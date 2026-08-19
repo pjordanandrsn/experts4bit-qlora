@@ -53,6 +53,27 @@ _PF_POOL = None                 # single-worker executor, owned by enable
 _MARKER = "_e4b_hybrid"
 
 
+def _parse_cold_dest(dest):
+    """Normalize the cold execution destination: ``"gpu"``, ``"cpu"``, or a
+    positive rows-per-unique-expert threshold.
+
+    Module-level and validated at ENABLE time rather than at the first cold
+    step, so a typo fails when the run is configured instead of thousands of
+    tokens later — and so the rule is testable without a GPU.
+    """
+    if dest in ("gpu", "cpu"):
+        return dest
+    try:
+        val = float(dest)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"cold_dest must be 'gpu', 'cpu', or a rows-per-unique threshold; "
+            f"got {dest!r}") from None
+    if val <= 0 or val != val:
+        raise ValueError(f"cold_dest threshold must be > 0, got {dest!r}")
+    return val
+
+
 def _split_oversize_groups(sizes, eids, max_rows=8):
     """Split same-expert groups into ``max_rows`` chunks.
 
@@ -180,6 +201,43 @@ class _HybridTier(_NvmeResidency):
         self.dram_thin = thin is not None and 0 < n_dram <= int(thin)
         self.thin_steps = 0
 
+        # Stage 3 (tribrid): the CPU destination for cold experts. The tier
+        # reads a cold row from NVMe exactly as before; the view re-lays it
+        # out into the contiguous per-segment stacks the native kernels
+        # require, keyed by the tier's own SLOT. Residency stays the tier's
+        # decision — this adds a destination, not a second cache.
+        self.layer = layer
+        self._cold_dest = _parse_cold_dest(
+            getattr(mod, "_e4b_hybrid_cold_dest", "gpu"))
+        self.view = None
+        self.cold_cpu_steps = 0
+        self.cold_cpu_rows = 0
+        self.cold_gpu_rows = 0
+        if self._cold_dest != "gpu":
+            if self.gptoss:
+                # gpt-oss per-expert biases do NOT ride the arena (the
+                # loader refuses arena serving for exactly this reason), so
+                # a cold row has no bias to add. Dropping it would produce
+                # plausible numbers that are quietly wrong — refuse instead.
+                raise ValueError(
+                    "cold_dest != 'gpu' is unavailable for gpt-oss: per-expert "
+                    "biases do not ride the arena, so a cold row computed on "
+                    "the CPU would silently omit them. Bake biases into the "
+                    "arena first (HANDOFF open work #3).")
+            try:
+                from cold_cpu_view import ColdCpuView
+            except ImportError as exc:
+                raise ImportError(
+                    "cold_dest != 'gpu' needs grouped-nf4-gemm's ColdCpuView "
+                    "(the CPU destination for cold experts). Upgrade gnf4 or "
+                    "leave cold_dest='gpu'.") from exc
+            self.view = ColdCpuView(
+                tier, index,
+                [NF4_SEGMENTS[k] for k in
+                 ("c_gu_p", "c_gu_a", "c_dn_p", "c_dn_a")],
+                casts={NF4_SEGMENTS["c_gu_a"]: torch.float32,
+                       NF4_SEGMENTS["c_dn_a"]: torch.float32})
+
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
         absmax), from the resident stacks — never a spec-sheet number."""
@@ -203,6 +261,11 @@ class _HybridTier(_NvmeResidency):
                       "uniq_vram": 0, "uniq_dram": 0, "uniq_nvme": 0,
                       "acts_vram": 0, "acts_dram": 0, "acts_nvme": 0,
                       "dram_groups": 0, "expert_bytes": self.expert_bytes(),
+                      # Stage 3: the cold CPU destination, counted apart from
+                      # the DRAM bus. Same bus, different bytes-origin — and
+                      # conflating them would hide exactly the cold-path cost
+                      # the tribrid prereg is written to measure.
+                      "cold_cpu_groups": 0, "cold_cpu_ns": 0,
                       # per-bus wall time, measured with a PER-OP PROBE:
                       # the CPU bus is synchronous host work so its wall
                       # is exact, and the GPU bus is bracketed by its own
@@ -415,9 +478,21 @@ class _HybridTier(_NvmeResidency):
         dmask = self.is_dram[flat.index_select(0, cr)]
         nr = cr[~dmask]
         dr = cr[dmask]
-        if nr.numel():                       # NVMe→GPU, parent's path verbatim
-            super()._cold_contrib(x, flat, row_token, row_slot, nr,
+        if nr.numel():
+            # Stage 3: cold rows now have TWO destinations. The choice is
+            # still static — a deadline estimate is workstream 4, and
+            # guessing one here would be a threshold wearing a scheduler's
+            # name. `cold_dest` defaults to "gpu", which is the parent's
+            # path verbatim (invariant 9: no behaviour change unless set).
+            if self._cold_to_cpu(nr, flat):
+                self.cold_cpu_steps += 1
+                self.cold_cpu_rows += int(nr.numel())
+                self._cold_on_cpu(x, flat, row_token, row_slot, nr,
                                   top_k_weights, out, dev)
+            else:
+                self.cold_gpu_rows += int(nr.numel())
+                super()._cold_contrib(x, flat, row_token, row_slot, nr,
+                                      top_k_weights, out, dev)
         if dr.numel():
             gpu_route = getattr(self, "_gpu_only", False)
             if not gpu_route and getattr(self, "dram_thin", False):
@@ -450,11 +525,83 @@ class _HybridTier(_NvmeResidency):
 
     def _dram_contrib_inner(self, x, flat, row_token, row_slot, dr,
                             top_k_weights, out, dev):
-        import cpu_grouped
-
         glob = flat.index_select(0, dr).cpu()
         local = self.g2d_cpu.index_select(0, glob)
-        rows = row_token.index_select(0, dr)
+        self._cpu_over_stacks(
+            x, row_token, row_slot, dr, local, top_k_weights, out, dev,
+            (self.d_gu_p, self.d_gu_a, self.d_dn_p, self.d_dn_a),
+            (self.d_gu_b, self.d_dn_b) if self.gptoss else None,
+            amort_key="dram_groups")
+
+    # ------------------------------------------------- the cold CPU path --
+    def _cold_to_cpu(self, nr, flat) -> bool:
+        """Destination for this step's cold rows: True = CPU, False = GPU.
+
+        Deliberately the same SHAPE of rule the DRAM tier already uses
+        (``offload_rows``), read the other way round. The DRAM tier asks
+        "are there enough rows per unique expert that the GPU's flat-in-rows
+        cost wins?"; a cold row has to be read from NVMe either way, so the
+        question is which engine turns those bytes into a contribution
+        first. Below the threshold the CPU's per-call floor dominates and
+        the GPU wins; at and above it the CPU's in-place compute wins
+        because the bytes never have to cross PCIe a second time.
+
+        This is a threshold, not a scheduler, and the PREREG says so: gate 2
+        is what decides whether a deadline estimate beats it, and it cannot
+        be answered by picking a better constant here.
+        """
+        if self._cold_dest == "gpu":
+            return False
+        if self.view is None:                # no CPU destination available
+            return False
+        if self._cold_dest == "cpu":
+            return True
+        # "auto": rows per unique cold expert, the DRAM tier's own statistic
+        uniq = int(torch.unique(flat.index_select(0, nr)).numel())
+        return (nr.numel() / max(1, uniq)) >= self._cold_dest
+
+    def _cold_on_cpu(self, x, flat, row_token, row_slot, nr, top_k_weights,
+                     out, dev):
+        """Cold experts, computed on the CPU from tier-resident packed bytes.
+
+        The bytes are read from NVMe ONCE, into the cold tier's own rows, and
+        the view re-lays them out for the kernel — no second read, and no
+        duplicate of an expert to serve the second destination (the trap
+        ``prefill_gpu_only`` documents for the DRAM tier, in the other
+        direction). ``ColdCpuView.ensure`` returns TIER SLOTS, which index
+        its stacks directly, so slot IS the kernel's expert id here.
+        """
+        t0 = time.perf_counter_ns() if self.amort is not None else None
+        glob = flat.index_select(0, nr).cpu()
+        slots = self.view.ensure(self.layer, glob.tolist())
+        local = torch.as_tensor(slots, dtype=torch.long)
+        v = self.view
+        self._cpu_over_stacks(
+            x, row_token, row_slot, nr, local, top_k_weights, out, dev,
+            (v.stack(NF4_SEGMENTS["c_gu_p"]), v.stack(NF4_SEGMENTS["c_gu_a"]),
+             v.stack(NF4_SEGMENTS["c_dn_p"]), v.stack(NF4_SEGMENTS["c_dn_a"])),
+            None,                            # gpt-oss is refused at enable
+            amort_key="cold_cpu_groups")
+        if t0 is not None:
+            self.amort["cold_cpu_ns"] += time.perf_counter_ns() - t0
+
+    def _cpu_over_stacks(self, x, row_token, row_slot, sel, local,
+                         top_k_weights, out, dev, stacks, biases,
+                         *, amort_key=None):
+        """The CPU bus, over whichever host stacks hold these rows' bytes.
+
+        Extracted from ``_dram_contrib_inner`` so the DRAM tier and the cold
+        CPU destination run ONE implementation rather than two that drift:
+        the activation chain, the gpt-oss bias/clamp handling, the fused-FFN
+        eligibility rules and the scatter back are identical work, and only
+        the stacks and the per-row index into them differ. ``local`` indexes
+        ``stacks``, whatever those are — the DRAM tier's local expert index,
+        or the cold tier's SLOT index.
+        """
+        import cpu_grouped
+
+        gu_p, gu_a, dn_p, dn_a = stacks
+        rows = row_token.index_select(0, sel)
         xr = x.index_select(0, rows).to("cpu", torch.float32)
 
         order = torch.argsort(local)
@@ -466,12 +613,12 @@ class _HybridTier(_NvmeResidency):
         # amortizes them over every routed row. Splitting here made the
         # DRAM bus re-read a whole expert every 8 rows.
         sizes, eids = counts.tolist(), uniq.tolist()
-        if self.amort is not None:
+        if self.amort is not None and amort_key is not None:
             # post-split group count, not the unique count: each split
             # chunk re-reads its expert's weights, so THIS is the number
             # the DRAM bus actually pays. The gap between it and
             # uniq_dram is the split tax, and it must be visible.
-            self.amort["dram_groups"] += len(sizes)
+            self.amort[amort_key] += len(sizes)
 
         # Fused expert-FFN path (one kernel call, one pool wake, no
         # intermediate through python) — OFF BY DEFAULT: measured on a
@@ -488,20 +635,20 @@ class _HybridTier(_NvmeResidency):
                 and _act_is_plain_silu(self.act_fn)
                 and hasattr(cpu_grouped, "gemm_nf4_ffn_grouped_cpu")):
             dn = cpu_grouped.gemm_nf4_ffn_grouped_cpu(
-                xs, self.d_gu_p, self.d_gu_a, self.d_dn_p, self.d_dn_a,
+                xs, gu_p, gu_a, dn_p, dn_a,
                 sizes, eids, threads=self._threads)
             dn_all = torch.empty_like(dn)
             dn_all.index_copy_(0, order, dn)
-            w = top_k_weights[rows, row_slot.index_select(0, dr)].to(
+            w = top_k_weights[rows, row_slot.index_select(0, sel)].to(
                 torch.float32)
-            out.index_put_((rows, row_slot.index_select(0, dr)),
+            out.index_put_((rows, row_slot.index_select(0, sel)),
                            dn_all.to(dev) * w[:, None])
             return
 
         gu = cpu_grouped.gemv_nf4_grouped_cpu(
-            xs, self.d_gu_p, self.d_gu_a, sizes, eids, threads=self._threads)
-        if self.gptoss:
-            gu = gu + self.d_gu_b.index_select(0, sl)
+            xs, gu_p, gu_a, sizes, eids, threads=self._threads)
+        if biases is not None:
+            gu = gu + biases[0].index_select(0, sl)
             gate, up = gu.chunk(2, dim=-1)
             gate = gate.clamp(max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
@@ -515,15 +662,15 @@ class _HybridTier(_NvmeResidency):
         else:
             h = self.act_fn(gu)
         dn = cpu_grouped.gemv_nf4_grouped_cpu(
-            h.contiguous(), self.d_dn_p, self.d_dn_a, sizes, eids,
+            h.contiguous(), dn_p, dn_a, sizes, eids,
             threads=self._threads)
-        if self.gptoss:
-            dn = dn + self.d_dn_b.index_select(0, sl)
+        if biases is not None:
+            dn = dn + biases[1].index_select(0, sl)
 
         dn_all = torch.empty_like(dn)
         dn_all.index_copy_(0, order, dn)
-        w = top_k_weights[rows, row_slot.index_select(0, dr)].to(torch.float32)
-        out.index_put_((rows, row_slot.index_select(0, dr)),
+        w = top_k_weights[rows, row_slot.index_select(0, sel)].to(torch.float32)
+        out.index_put_((rows, row_slot.index_select(0, sel)),
                        dn_all.to(dev) * w[:, None])
 
 
@@ -554,6 +701,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        offload_rows: float | None = None,
                        fused_ffn: bool = False,
                        offload_thin_uniq: int | None = None,
+                       cold_dest: str | float = "gpu",
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -561,7 +709,23 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     count (0 = not engaged — record it, never infer from timings).
 
     ``manifest`` is a path or dict from ``engines.placement``. ``layers``
-    maps module order to arena/manifest layer ids when they differ."""
+    maps module order to arena/manifest layer ids when they differ.
+
+    ``cold_dest`` picks where a cold (NVMe-placed) expert EXECUTES, which
+    is a separate question from where it lives:
+
+      ``"gpu"``   default, and the pre-Stage-3 path exactly — cold rows
+                  stream NVMe→pinned→H2D and run on the GPU.
+      ``"cpu"``   cold rows are computed in place from the tier's own
+                  packed bytes. One NVMe read either way; no PCIe crossing.
+      *number*    rows-per-unique-cold-expert threshold, at or above which
+                  the CPU path is taken — the DRAM tier's ``offload_rows``
+                  statistic, read the other way round.
+
+    It is a threshold, not a scheduler. Whether a deadline estimate beats
+    it is gate 2 of the tribrid prereg and is not settled by this knob.
+    Unavailable for gpt-oss (per-expert biases do not ride the arena) and
+    needs a gnf4 carrying ``ColdCpuView``; both refuse by name."""
     try:
         from nvme_residency import ColdTier
     except ImportError as exc:                        # pragma: no cover
@@ -608,6 +772,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_hybrid_offload_rows = offload_rows
         mod._e4b_hybrid_fused_ffn = fused_ffn
         mod._e4b_hybrid_thin_uniq = offload_thin_uniq
+        mod._e4b_hybrid_cold_dest = cold_dest
         hot_sets.append(place["vram"])
     try:
         n_nodes = len(list(Path("/sys/devices/system/node").glob("node[0-9]*")))
@@ -630,7 +795,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                          "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
                          "_e4b_hybrid_offload_rows",
                          "_e4b_hybrid_fused_ffn",
-                         "_e4b_hybrid_thin_uniq"):
+                         "_e4b_hybrid_thin_uniq",
+                         "_e4b_hybrid_cold_dest"):
                 if hasattr(mod, attr):
                     delattr(mod, attr)
         raise
@@ -716,6 +882,40 @@ def prefetch_stats(model) -> dict:
     return {"prefetch_submitted": subs, "prefetch_rows": rows}
 
 
+def cold_stats(model) -> dict:
+    """Where this run's cold rows were executed, and what the tier paid.
+
+    The destination split is the falsifiability hook the tribrid prereg
+    asks for: a scheduler that never flips is a placement rule, and this is
+    the counter that shows it. Tier counters are summed from the cold tier
+    itself (one per model), so `resurrections` and `physical_reads` here are
+    the whole run's, not one layer's.
+    """
+    cpu_rows = gpu_rows = steps = 0
+    tier = None
+    for _, mod in model.named_modules():
+        st = getattr(mod, "_hot_residency", None)
+        if st is not None:
+            cpu_rows += getattr(st, "cold_cpu_rows", 0)
+            gpu_rows += getattr(st, "cold_gpu_rows", 0)
+            steps += getattr(st, "cold_cpu_steps", 0)
+        t = getattr(mod, "_e4b_cold_tier", None)
+        if t is not None:
+            tier = t
+    total = cpu_rows + gpu_rows
+    out = {"cold_rows_cpu": cpu_rows, "cold_rows_gpu": gpu_rows,
+           "cold_rows": total, "cold_cpu_steps": steps,
+           "cold_cpu_frac": (cpu_rows / total) if total else 0.0}
+    if tier is not None:
+        ts = tier.stats()
+        for k in ("resurrections", "logical_evictions", "evictions",
+                  "reuse_before_overwrite", "resurrection_bytes_saved",
+                  "disk_reads", "disk_bytes"):
+            if k in ts:
+                out[k] = ts[k]
+    return out
+
+
 def disable_hybrid_tier(model) -> int:
     """Restore forwards and remove EVERY stamped attribute (the
     enable_nvme_residency teardown gap is the counterexample)."""
@@ -738,6 +938,7 @@ def disable_hybrid_tier(model) -> int:
         for attr in (_MARKER, "_e4b_cold_tier", "_e4b_arena_layer",
                      "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
                      "_e4b_hybrid_owns_pool", "_e4b_hybrid_offload_rows",
+                     "_e4b_hybrid_cold_dest",
                      "_e4b_hybrid_fused_ffn", "_e4b_hybrid_thin_uniq"):
             if hasattr(mod, attr):
                 delattr(mod, attr)
