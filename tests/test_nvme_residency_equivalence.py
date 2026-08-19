@@ -138,6 +138,48 @@ def test_absmax_arrives_as_float32_not_reinterpreted_bytes(arena):
         assert got.abs().max() > 0, "absmax should not be all zeros"
 
 
+def test_cold_gather_lands_the_right_expert_on_a_hybrid_partition(arena):
+    """The cold branch's id algebra, on the shape the hybrid tier gives it.
+
+    ``_HotResidency`` splits experts VRAM/not-VRAM, so on a three-tier manifest
+    the cold stack spans DRAM experts too and the NVMe rows sit at cold-local
+    ids with DRAM-shaped holes between them. This replays the exact chain a
+    cold step walks — ``g2c_cpu`` -> ``torch.unique(..., return_inverse=True)``
+    -> ``_TieredStack.index_select`` -> ``compact`` -> the kernel's row order —
+    and checks each ROW against the expert it was routed to.
+
+    Needs no CUDA and no kernel, which is the point: it is the cheap half of
+    #171's question. A mis-indexed cold gather (the hypothesis that issue names)
+    would land here, in CI, rather than only on a box with an arena and a GPU.
+    """
+    mod, path, index = arena
+    resident = dict(zip(NF4_SEGMENTS, _stacks(mod)))
+    # deliberately interleaved so a cold-local id is never its global id and
+    # never its position among the NVMe experts either
+    vram, nvme = [0, 3], [2, 4, 6, 7]                 # the rest, {1, 5}, is DRAM
+    cold_ids = torch.tensor([e for e in range(E) if e not in vram])   # dram + nvme
+    g2c = torch.full((E,), -1, dtype=torch.long)
+    g2c[cold_ids] = torch.arange(cold_ids.numel())
+
+    g = torch.Generator().manual_seed(171)
+    with ColdTier(path, hot_rows=E, pinned=False, index=index) as tier:
+        for attr, suffix in NF4_SEGMENTS.items():
+            ts = _TieredStack(tier, index, LAYER, cold_ids, suffix)
+            for _ in range(32):
+                # one step's cold rows: NVMe globals, with repeats, unsorted
+                pick = torch.randint(0, len(nvme), (int(torch.randint(1, 7, (1,), generator=g)),),
+                                     generator=g)
+                cold_glob = torch.tensor([nvme[int(i)] for i in pick])
+                routed, compact = torch.unique(g2c.index_select(0, cold_glob),
+                                               return_inverse=True)
+                got = ts.index_select(0, routed)
+                for row, e in enumerate(cold_glob.tolist()):
+                    assert torch.equal(got[compact[row]], resident[attr][e]), (
+                        f"{attr}: row {row} routed to expert {e} got another "
+                        f"expert's bytes (cold_glob={cold_glob.tolist()}, "
+                        f"routed={routed.tolist()})")
+
+
 def test_wrong_arena_names_the_missing_segment(arena, tmp_path):
     """A relocation arena of the WRONG kinds must fail loudly, not serve noise."""
     mod, _path, _index = arena
