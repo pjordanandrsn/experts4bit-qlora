@@ -165,7 +165,7 @@ class _HybridTier(_NvmeResidency):
         # switch the "warm" tier is the slowest bus exactly when batching
         # works. None = off (invariant 9: no behavior change unless set).
         self.offload_rows = getattr(mod, "_e4b_hybrid_offload_rows", None)
-        self.fused_ffn = getattr(mod, "_e4b_hybrid_fused_ffn", True)
+        self.fused_ffn = getattr(mod, "_e4b_hybrid_fused_ffn", False)
         self.offload_steps = 0         # steps that took the GPU path
 
     def expert_bytes(self) -> int:
@@ -459,13 +459,16 @@ class _HybridTier(_NvmeResidency):
             self.amort["dram_groups"] += len(sizes)
 
         # Fused expert-FFN path (one kernel call, one pool wake, no
-        # intermediate through python): eligible only for the plain gated
-        # silu epilogue — gpt-oss (biases + clamped alpha-sigmoid) and
-        # clamped variants keep the two-call path. Numerics note: the
-        # fused kernel's silu is gnf4's LOCKED polynomial, not torch's
-        # sleef — last-ulp differences by design; fused_ffn=False on
-        # enable_hybrid_tier restores the previous numerics exactly.
-        if (getattr(self, "fused_ffn", True) and self.has_gate
+        # intermediate through python) — OFF BY DEFAULT: measured on a
+        # serving-class TR 7975WX (bench/hybrid-g9/remeasure/), the
+        # coarse (group, row-chunk) partition loses 13-37% to worker
+        # imbalance against the two-call path's fine column tiles, and
+        # degrades with batch. Opt in (fused_ffn=True) for floor-heavy
+        # small-pool hosts (+24% on the AVX2 dev box) or singleton
+        # decode. Eligibility: plain gated silu only — gpt-oss and
+        # clamped variants always use the two-call path. Numerics note:
+        # the fused silu is gnf4's LOCKED polynomial, not torch's sleef.
+        if (getattr(self, "fused_ffn", False) and self.has_gate
                 and not self.gptoss and self.clamp_limit is None
                 and _act_is_plain_silu(self.act_fn)
                 and hasattr(cpu_grouped, "gemm_nf4_ffn_grouped_cpu")):
@@ -534,7 +537,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        hot_rows: int, device: str = "cuda", qd: int = 4,
                        threads: int = 0, pool: bool = True,
                        offload_rows: float | None = None,
-                       fused_ffn: bool = True,
+                       fused_ffn: bool = False,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
