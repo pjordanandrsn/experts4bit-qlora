@@ -1,0 +1,29 @@
+{
+  "model": "Qwen/Qwen3-30B-A3B",
+  "batch": 8,
+  "cost_model": {
+    "us_fixed": 55.0,
+    "us_per_row": 2.0
+  },
+  "offload_rows": null,
+  "offload_steps": 0,
+  "decode_window_s": 11.601031712954864,
+  "tokens": 512,
+  "aggregate_tok_s": 44.13400572194367,
+  "per_stream_tok_s": 5.516750715242959,
+  "ttft_p50_s": 6.306564014870673,
+  "stats": {
+    "steps": 71,
+    "completed": 8,
+    "in_flight": 0,
+    "queued": 0,
+    "tokens_emitted": 512,
+    "prefill_tokens": 4096,
+    "ttft_p50": 6.306564014870673,
+    "ttft_p99": 10.032149431062862,
+    "queue_wait_p50": 0.0017340159974992275,
+    "per_stream_tok_s_mean": 2.9888068996951893,
+    "kv_slots_free": 8
+  },
+  "gate_140_tok_s": false
+}

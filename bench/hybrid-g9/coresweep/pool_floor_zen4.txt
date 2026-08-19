@@ -1,0 +1,5 @@
+workers=128: cold   1765.5 us (  10.7 GB/s) | hot    954.8 us (  19.8 GB/s)
+workers= 64: cold   1410.8 us (  13.4 GB/s) | hot    672.0 us (  28.1 GB/s)
+workers= 32: cold   1391.7 us (  13.6 GB/s) | hot    470.1 us (  40.2 GB/s)
+workers= 16: cold   1876.0 us (  10.1 GB/s) | hot    822.0 us (  23.0 GB/s)
+workers=  8: cold   2628.7 us (   7.2 GB/s) | hot   1508.9 us (  12.5 GB/s)

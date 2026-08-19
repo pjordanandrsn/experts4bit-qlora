@@ -29,7 +29,8 @@ from .scheduler import StepRunner
 
 class PagedModelRunner(StepRunner):
     def __init__(self, model, kv, *, device="cuda", eos_id: int | None = None,
-                 gpu_only_prefill: bool = True):
+                 gpu_only_prefill: bool = True,
+                 prefill_threads: int | None = None):
         self.model = model
         self.kv = kv
         self.device = torch.device(device)
@@ -42,6 +43,15 @@ class PagedModelRunner(StepRunner):
         self.tiers = [m._hot_residency for m in model.modules()
                       if hasattr(m, "_hot_residency")
                       and hasattr(m._hot_residency, "prefill_gpu_only")]
+        # Per-phase pool engagement (core-sweep receipts,
+        # bench/hybrid-g9/coresweep/): decode's small calls optimize at
+        # 32 workers while prefill-phase steps ran 2.1x faster with 48+
+        # engaged. `threads` is a per-call kernel parameter, so the
+        # runner flips it around each regime; None leaves the tier's
+        # enable-time value untouched in both phases.
+        self.prefill_threads = prefill_threads
+        self._decode_threads = [getattr(t, "_threads", None)
+                                for t in self.tiers]
         self.n_layers = kv.L
 
     # ------------------------------------------------------------ intake --
@@ -55,6 +65,9 @@ class PagedModelRunner(StepRunner):
         if self.gpu_only_prefill:
             for t in self.tiers:
                 t.prefill_gpu_only(prefill)
+        if self.prefill_threads is not None:
+            for t, dec in zip(self.tiers, self._decode_threads):
+                t._threads = self.prefill_threads if prefill else dec
 
     # -------------------------------------------------------- StepRunner --
     @torch.no_grad()
