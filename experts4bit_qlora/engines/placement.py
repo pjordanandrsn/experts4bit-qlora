@@ -340,3 +340,88 @@ def verify_manifest(manifest_path, *, arena_manifest_path=None) -> dict:
         report["arena_manifest_sha256"] = _sha256_file(arena_manifest_path)
         report["arena_hashed_entries"] = n_hashes
     return report
+
+
+def force_cold_mass(manifest: dict, mass: dict, target_frac: float, *,
+                    order: str = "tail", source: str = "dram") -> dict:
+    """Move experts into the NVMe tier until ``target_frac`` of routed mass is
+    cold. Returns a NEW manifest; the input is not mutated.
+
+    Stage 3's first experimental gate needs cold mass it can *dial*, not cold
+    mass it waits for. The directive is explicit about why: run a model whose
+    expert arena fits DRAM, then artificially constrain DRAM so a controlled
+    subset becomes cold, and capacity stops being a confound — there is a
+    known-good hybrid baseline on the same box, and the only difference
+    between arms is the thing under test.
+
+    ``order`` decides WHICH experts go cold, and the two answers measure
+    different machines:
+
+      ``"tail"``  (default) ascending routed mass — the experts a smaller
+                  DRAM budget would genuinely have dropped. This simulates
+                  capacity pressure honestly, and needs many experts to reach
+                  a given mass fraction, so cold hits are spread thin.
+      ``"head"``  descending — few experts carrying much mass, so each is
+                  re-routed often. This is the bursty end, and it is where
+                  reclaimable residency should look best (R4: short-window
+                  recurrence, not global frequency, predicts resurrection).
+
+    Sweeping both is the point; a result that holds only under ``head`` is a
+    statement about burst locality, not about cold-path scheduling.
+
+    Discreteness is reported, never hidden: experts are whole, so the achieved
+    fraction overshoots the target by at most one expert's mass, and
+    ``forced_cold`` records exactly which moved and what was achieved. A gate
+    that reported the REQUESTED fraction while measuring a different one would
+    be unfalsifiable in the most boring possible way.
+    """
+    if order not in ("tail", "head"):
+        raise ValueError(f"order must be 'tail' or 'head', got {order!r}")
+    if source not in ("dram", "vram", "both"):
+        raise ValueError(f"source must be 'dram', 'vram' or 'both', got {source!r}")
+    if not 0.0 <= target_frac <= 1.0:
+        raise ValueError(f"target_frac must be in [0, 1], got {target_frac}")
+
+    out = json.loads(json.dumps(manifest))          # deep copy, no aliasing
+    tiers = out["tiers"]
+    total = sum(mass.values())
+    if total <= 0:
+        raise ValueError("routing mass is empty — nothing to make cold")
+
+    already = sum(mass.get((int(lay), int(e)), 0.0) for lay, e in tiers["nvme"])
+    want = target_frac * total
+
+    pools = ("dram", "vram") if source == "both" else (source,)
+    cands = [(mass.get((int(lay), int(e)), 0.0), t, [int(lay), int(e)])
+             for t in pools for lay, e in tiers[t]]
+    # ascending for "tail"; ties broken by (layer, expert) so a rerun with the
+    # same profile moves the same experts — the arms must differ in ONE thing
+    cands.sort(key=lambda c: (c[0], c[2][0], c[2][1]), reverse=(order == "head"))
+
+    moved, got = [], already
+    for m, t, pair in cands:
+        if got >= want:
+            break
+        tiers[t].remove(pair)
+        tiers["nvme"].append(pair)
+        moved.append({"layer": pair[0], "expert": pair[1], "from": t,
+                      "mass_frac": (m / total) if total else 0.0})
+        got += m
+
+    out.setdefault("masses", {})
+    for name in ("vram", "dram", "nvme"):
+        out["masses"][f"{name}_frac"] = sum(
+            mass.get((int(lay), int(e)), 0.0) for lay, e in tiers[name]) / total
+    out["forced_cold"] = {
+        "target_frac": target_frac, "achieved_frac": got / total,
+        "already_cold_frac": already / total, "order": order,
+        "source": source, "experts_moved": len(moved), "moved": moved,
+        # the arm is only comparable to its control if nothing else changed
+        "note": "synthetic cold mass for the Stage-3 gate; placement "
+                "otherwise identical to the source manifest",
+    }
+    if got < want:
+        out["forced_cold"]["short"] = (
+            f"exhausted {source} tier at {got / total:.4f} of "
+            f"{target_frac:.4f} requested")
+    return out

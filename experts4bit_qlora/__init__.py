@@ -87,6 +87,7 @@ from .engines.batched import (  # noqa: E402
 )
 from .engines.cold_engine import cold_engine_available, disable_cold_engine, enable_cold_engine  # noqa: E402
 from .engines.placement import (  # noqa: E402
+    force_cold_mass,
     load_manifest,
     save_manifest,
     solve_placement,
@@ -167,6 +168,7 @@ __all__ = [
     "hybrid_available",
     "set_prefetch",
     "prefetch_stats",
+    "force_cold_mass",
     "solve_placement",
     "save_manifest",
     "load_manifest",
