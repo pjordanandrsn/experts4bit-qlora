@@ -1,0 +1,426 @@
+{
+  "schema": "gnf4-hybrid-calib/1",
+  "created_utc": "2026-08-19T01:43:50Z",
+  "quick_mode": false,
+  "host": {
+    "hostname": "g8fix",
+    "kernel": "5.15.0-186-generic",
+    "machine": "x86_64",
+    "cpu_model": "AMD EPYC 9554 64-Core Processor",
+    "cpu_flags_watched": [
+      "avx2",
+      "avx512_vnni",
+      "avx512bw",
+      "avx512f",
+      "avx512vbmi",
+      "avx512vl"
+    ],
+    "online_cpus": 64,
+    "cgroup_cpu_quota": 61.43999,
+    "numa_nodes": 1,
+    "mem_total_gib": 62.7,
+    "thp": "always [madvise] never",
+    "hugetlb_2m_total": "0",
+    "governor": "(none)",
+    "loadavg_at_start": "19.79 18.34 12.42 1/5386 1264"
+  },
+  "gpus": [
+    {
+      "index": "0",
+      "name": "NVIDIA GeForce RTX 5090",
+      "vram": "32607 MiB",
+      "power_limit": "575.00 W",
+      "pcie_gen_max": "5",
+      "pcie_width_max": "16",
+      "pcie_gen_idle": "5",
+      "pcie_width_idle": "16"
+    }
+  ],
+  "notes": [],
+  "cpu_bench_build": "/usr/bin/cc -O3 -march=native",
+  "cpu_bench": {
+    "features": {
+      "avx2": 1,
+      "avx512f": 1,
+      "avx512bw": 1,
+      "avx512vl": 1,
+      "avx512vbmi": 1,
+      "avx512vnni": 1
+    },
+    "topology": {
+      "online_cpus": 64,
+      "l3_domains": 1
+    },
+    "compiled_simd": "avx512",
+    "triad": [
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 40.12
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 85.94
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 66.55
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 100.48
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 125.99
+      },
+      {
+        "threads": 32,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 151.58
+      },
+      {
+        "threads": 64,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 193.41
+      },
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 56.41
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 109.63
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 88.95
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 133.26
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 209.33
+      },
+      {
+        "threads": 32,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 184.32
+      },
+      {
+        "threads": 64,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 235.0
+      }
+    ],
+    "triad_best": {
+      "gbs": 235.0,
+      "threads": 64,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter": [
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 1,
+        "gbs": 38.86
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 2,
+        "gbs": 77.23
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 4,
+        "gbs": 123.83
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 8,
+        "gbs": 141.56
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 16,
+        "gbs": 214.19
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 32,
+        "gbs": 269.98
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 64,
+        "gbs": 189.3
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 1,
+        "gbs": 40.39
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 2,
+        "gbs": 78.24
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 4,
+        "gbs": 123.78
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 8,
+        "gbs": 183.0
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 16,
+        "gbs": 254.69
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 32,
+        "gbs": 218.0
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 64,
+        "gbs": 125.96
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 1,
+        "gbs": 39.85
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 2,
+        "gbs": 76.06
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 4,
+        "gbs": 93.07
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 8,
+        "gbs": 169.65
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 16,
+        "gbs": 208.29
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 32,
+        "gbs": 166.61
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 64,
+        "gbs": 107.58
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 1,
+        "gbs": 41.03
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 2,
+        "gbs": 77.27
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 4,
+        "gbs": 104.38
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 8,
+        "gbs": 197.17
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 16,
+        "gbs": 251.2
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 32,
+        "gbs": 182.03
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 64,
+        "gbs": 92.55
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 1,
+        "gbs": 40.95
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 2,
+        "gbs": 77.67
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 4,
+        "gbs": 145.11
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 8,
+        "gbs": 230.08
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 16,
+        "gbs": 281.98
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 32,
+        "gbs": 171.41
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 64,
+        "gbs": 91.66
+      }
+    ],
+    "scatter_best": {
+      "gbs": 281.98,
+      "block_mib": 32,
+      "threads": 16,
+      "experts": 256
+    },
+    "gate_g0": {
+      "scatter_pct_of_triad": 120.0
+    },
+    "config": {
+      "triad_gib": 2,
+      "arena_gib": 8,
+      "topk": 8,
+      "fetches": 400,
+      "seed": 20260816,
+      "reps": 5,
+      "tile_bytes": 1048576
+    }
+  },
+  "gpu_bench": {
+    "devices": [
+      {
+        "device": "cuda:0",
+        "name": "NVIDIA GeForce RTX 5090",
+        "b_vram_triad_gbs": 1434.2,
+        "b_link": {
+          "h2d_8kb": {
+            "gbs": 2.44,
+            "usec": 3.4
+          },
+          "d2h_8kb": {
+            "gbs": 2.63,
+            "usec": 3.1
+          },
+          "h2d_64mb": {
+            "gbs": 55.75,
+            "usec": 1203.8
+          },
+          "d2h_64mb": {
+            "gbs": 56.45,
+            "usec": 1188.7
+          }
+        }
+      }
+    ]
+  },
+  "gate_g0": {
+    "scatter_pct_of_triad": 120.0,
+    "verdict": "proceed",
+    "thresholds": {
+      "proceed": 70.0,
+      "resolve": 50.0
+    },
+    "triad_best": {
+      "gbs": 235.0,
+      "threads": 64,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter_best": {
+      "gbs": 281.98,
+      "block_mib": 32,
+      "threads": 16,
+      "experts": 256
+    }
+  },
+  "wall_seconds": 25.6
+}
