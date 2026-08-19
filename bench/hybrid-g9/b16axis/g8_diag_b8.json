@@ -1,0 +1,22 @@
+{
+  "config": {
+    "pool_threads": 32,
+    "torch_threads": 8
+  },
+  "kernel_only": {
+    "unique": 11,
+    "rows": 64,
+    "touched_mb": 28.975104,
+    "med_us": 543.4565,
+    "achieved_gbs": 53.31632614569887
+  },
+  "phases_us": {
+    "index_cpu": 34.032,
+    "x_transfer": 45.449,
+    "sort": 35.1535,
+    "gu_kernel": 355.057,
+    "activation": 77.968,
+    "dn_kernel": 229.5625,
+    "scatter_back": 256.653
+  }
+}

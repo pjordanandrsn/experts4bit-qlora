@@ -270,3 +270,11 @@ its own numbers, never shipped on an unmeasured quality result.
   same mistake that produced the 0.82× claim is available to make again.
 - **`B_max` arithmetic.** `Fp8KVCache.bytes_per_token` is the input;
   the 235B-class clause needs a real box.
+
+
+## Campaign handoff (2026-08-19)
+
+The Stage-2 measurement campaign's consolidated status — gate
+scoreboard, merged mechanisms, the serving playbook, instrument
+laws, and ordered open work — lives in
+[`bench/hybrid-g9/HANDOFF.md`](../../bench/hybrid-g9/HANDOFF.md).
