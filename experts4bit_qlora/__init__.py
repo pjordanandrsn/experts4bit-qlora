@@ -97,6 +97,7 @@ from .engines.hybrid import (  # noqa: E402
     disable_hybrid_tier,
     enable_hybrid_tier,
     hybrid_available,
+    cold_stats,
     prefetch_stats,
     set_prefetch,
 )
@@ -167,6 +168,7 @@ __all__ = [
     "disable_hybrid_tier",
     "hybrid_available",
     "set_prefetch",
+    "cold_stats",
     "prefetch_stats",
     "force_cold_mass",
     "solve_placement",
