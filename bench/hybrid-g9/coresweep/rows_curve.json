@@ -1,0 +1,45 @@
+{
+  "rows": [
+    {
+      "rows_per_expert": 1,
+      "med_us": 752.716,
+      "us_per_row": 94.0895,
+      "achieved_gbs": 37.61252849680358
+    },
+    {
+      "rows_per_expert": 2,
+      "med_us": 3581.755,
+      "us_per_row": 223.8596875,
+      "achieved_gbs": 7.904379836141779
+    },
+    {
+      "rows_per_expert": 4,
+      "med_us": 945.006,
+      "us_per_row": 29.5314375,
+      "achieved_gbs": 29.95912406905353
+    },
+    {
+      "rows_per_expert": 8,
+      "med_us": 1198.619,
+      "us_per_row": 18.728421875,
+      "achieved_gbs": 23.62014284772726
+    },
+    {
+      "rows_per_expert": 16,
+      "med_us": 1740.997,
+      "us_per_row": 13.6015390625,
+      "achieved_gbs": 16.261689135592995
+    },
+    {
+      "rows_per_expert": 32,
+      "med_us": 2929.089,
+      "us_per_row": 11.44175390625,
+      "achieved_gbs": 9.665650992509958
+    }
+  ],
+  "fit": {
+    "a_us": 184.08944278606972,
+    "b_us_per_row": 4.58708084577114,
+    "bytes_per_expert": 3538944
+  }
+}
