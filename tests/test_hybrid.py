@@ -265,3 +265,41 @@ def test_fused_ffn_stamp_cleared_on_disable(arena):
     assert model.experts._e4b_hybrid_fused_ffn is False
     disable_hybrid_tier(model)
     assert not hasattr(model.experts, "_e4b_hybrid_fused_ffn")
+
+
+@needs_stack
+def test_thin_layer_routes_dram_to_gpu_statically(arena):
+    """A layer whose DRAM population is <= offload_thin_uniq must serve
+    every DRAM activation through the GPU path (thin_steps advances) and
+    still match the fully-resident reference; above the threshold the
+    CPU tier serves as usual (thin_steps stays 0). The decision is
+    static — no per-call device sync."""
+    mod, path, _ = arena
+    ref_mod = _module().to("cuda")
+    torch.manual_seed(23)
+    T = 6
+    hidden = torch.randn(T, H, dtype=torch.bfloat16, device="cuda") * 0.3
+    idx = torch.stack([torch.randperm(E, device="cuda")[:K]
+                       for _ in range(T)])
+    wts = torch.rand(T, K, device="cuda", dtype=torch.bfloat16)
+    man = _manifest(vram=[0, 3], dram=[1, 4, 6], nvme=[2, 5, 7])
+    for thin, expect_thin in ((3, True), (2, False), (None, False)):
+        model = _Wrap(_module().to("cuda"))
+        n = enable_hybrid_tier(model, path, man, hot_rows=E,
+                               offload_thin_uniq=thin)
+        assert n == 1
+        st = model.experts._hot_residency
+        assert st.dram_thin is expect_thin
+        try:
+            with torch.no_grad():
+                got = model.experts(hidden, idx, wts)
+                want = ref_mod(hidden, idx, wts)
+            torch.testing.assert_close(got.float(), want.float(),
+                                       atol=5e-2, rtol=5e-2)
+            if expect_thin:
+                assert st.thin_steps > 0, "thin layer never took the GPU path"
+            else:
+                assert st.thin_steps == 0
+        finally:
+            disable_hybrid_tier(model)
+        assert not hasattr(model.experts, "_e4b_hybrid_thin_uniq")

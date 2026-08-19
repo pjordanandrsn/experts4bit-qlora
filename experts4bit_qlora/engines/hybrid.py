@@ -167,6 +167,18 @@ class _HybridTier(_NvmeResidency):
         self.offload_rows = getattr(mod, "_e4b_hybrid_offload_rows", None)
         self.fused_ffn = getattr(mod, "_e4b_hybrid_fused_ffn", False)
         self.offload_steps = 0         # steps that took the GPU path
+        # Thin-layer routing (coresweep receipts): concentrated
+        # placement leaves early layers with a handful of DRAM
+        # experts, and every such call pays the pool's per-call floor
+        # for a few MB of work. A layer whose TOTAL DRAM population
+        # is <= the threshold can never make a fat call, so the
+        # decision is STATIC — a runtime uniqueness test would cost a
+        # data-dependent device sync per call, the exact stall class
+        # removed from the KV path.
+        thin = getattr(mod, "_e4b_hybrid_thin_uniq", None)
+        n_dram = int(self.is_dram.sum())
+        self.dram_thin = thin is not None and 0 < n_dram <= int(thin)
+        self.thin_steps = 0
 
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
@@ -408,6 +420,9 @@ class _HybridTier(_NvmeResidency):
                                   top_k_weights, out, dev)
         if dr.numel():
             gpu_route = getattr(self, "_gpu_only", False)
+            if not gpu_route and getattr(self, "dram_thin", False):
+                gpu_route = True
+                self.thin_steps += 1
             thresh = getattr(self, "offload_rows", None)
             if not gpu_route and thresh is not None:
                 uniq = int(torch.unique(flat.index_select(0, dr)).numel())
@@ -538,6 +553,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        threads: int = 0, pool: bool = True,
                        offload_rows: float | None = None,
                        fused_ffn: bool = False,
+                       offload_thin_uniq: int | None = None,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -591,6 +607,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_hybrid_threads = threads
         mod._e4b_hybrid_offload_rows = offload_rows
         mod._e4b_hybrid_fused_ffn = fused_ffn
+        mod._e4b_hybrid_thin_uniq = offload_thin_uniq
         hot_sets.append(place["vram"])
     try:
         n_nodes = len(list(Path("/sys/devices/system/node").glob("node[0-9]*")))
@@ -612,7 +629,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
             for attr in ("_e4b_cold_tier", "_e4b_arena_layer",
                          "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
                          "_e4b_hybrid_offload_rows",
-                         "_e4b_hybrid_fused_ffn"):
+                         "_e4b_hybrid_fused_ffn",
+                         "_e4b_hybrid_thin_uniq"):
                 if hasattr(mod, attr):
                     delattr(mod, attr)
         raise
@@ -720,7 +738,7 @@ def disable_hybrid_tier(model) -> int:
         for attr in (_MARKER, "_e4b_cold_tier", "_e4b_arena_layer",
                      "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
                      "_e4b_hybrid_owns_pool", "_e4b_hybrid_offload_rows",
-                     "_e4b_hybrid_fused_ffn"):
+                     "_e4b_hybrid_fused_ffn", "_e4b_hybrid_thin_uniq"):
             if hasattr(mod, attr):
                 delattr(mod, attr)
     if owns_pool:
