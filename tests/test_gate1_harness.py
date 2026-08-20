@@ -48,6 +48,59 @@ def test_over_exposure_is_reported_as_negative_not_floored():
     assert g1.hide_ratio(150.0, 100.0) == pytest.approx(-0.5)
 
 
+# --------------------------------------------------- the engine's config --
+
+def test_engine_config_defaults_are_the_engines_own():
+    """A receipt has to record what RAN, including the settings the runner did
+    not pass. `None` here would be indistinguishable from `not recorded`."""
+    cfg = g1.engine_config()
+    assert cfg["cold_dest"] == "gpu"
+    assert cfg["offload_thin_uniq"] is None and cfg["offload_rows"] is None
+    assert cfg["fused_ffn"] is False and cfg["prefetch"] is False
+
+
+def test_every_recorded_key_is_a_real_enable_hybrid_tier_keyword():
+    """The drift this exists to stop: recording a setting the engine never
+    saw. Checked against the signature, not against a second hand-kept list."""
+    import inspect
+
+    hy = pytest.importorskip("experts4bit_qlora.engines.hybrid")
+    params = inspect.signature(hy.enable_hybrid_tier).parameters
+    for key in g1.engine_config():
+        assert key in params, f"engine_config records {key!r}, not a kwarg"
+        assert params[key].kind is inspect.Parameter.KEYWORD_ONLY, key
+
+
+def test_defaults_match_the_engines_defaults():
+    """And they must not merely EXIST — a stale default would put a wrong
+    value in a receipt that reads as measured."""
+    import inspect
+
+    hy = pytest.importorskip("experts4bit_qlora.engines.hybrid")
+    params = inspect.signature(hy.enable_hybrid_tier).parameters
+    for key, val in g1.engine_config().items():
+        if params[key].default is inspect.Parameter.empty:
+            continue                      # required of the engine (hot_rows)
+        assert params[key].default == val, (
+            f"{key}: receipt default {val!r} != engine default "
+            f"{params[key].default!r}")
+
+
+def test_unknown_engine_kwarg_is_refused_by_name():
+    with pytest.raises(ValueError, match="does not record"):
+        g1.engine_config(offload_thin_units=4)     # plausible typo
+
+
+def test_thin_and_offload_are_recorded_because_they_move_equivalence():
+    """Not provenance trivia: `force_cold_mass` shrinks a layer's DRAM
+    population, and `dram_thin` is decided from that population — so with
+    these set, moving experts to NVMe can flip the destination of experts the
+    arm did NOT move. An arm can stop being matched for a reason unrelated to
+    `cold_dest`, and a receipt without them cannot show it (#171)."""
+    cfg = g1.engine_config(offload_thin_uniq=4, offload_rows=8.0)
+    assert cfg["offload_thin_uniq"] == 4 and cfg["offload_rows"] == 8.0
+
+
 # ------------------------------------------------------------ the verdict --
 
 def _point(**over):
