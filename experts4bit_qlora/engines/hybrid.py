@@ -957,8 +957,27 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     # The cold CPU view is built ONCE per tier (its slot space is global) and
     # before any ensure(), because attach_landing refuses a tier that has
     # already filled rows into its own buffer.
-    if _parse_cold_dest(cold_dest) != "gpu":
-        v = build_cold_view(tier, tier.reader.index, direct=cold_direct)
+    _dest = _parse_cold_dest(cold_dest)
+    if _dest != "gpu":
+        # The direct landing and the GPU cold path are MUTUALLY EXCLUSIVE on
+        # one tier: the GPU path reads raw rows through tier.row(), and an
+        # external-landing tier never fills its own buffer, so row() refuses
+        # by name. With cold_dest="cpu" no cold row ever takes the GPU path
+        # and direct is safe; with "deadline", a threshold, or "auto" either
+        # destination can be chosen per step, so the tier must stay able to
+        # serve rows.
+        #
+        # Downgraded rather than refused, because the fallback is correct and
+        # the cost is bounded (the copy path, ~12.5% slower on the fill path
+        # at high cold mass, gnf4#122) -- but RECORDED, because a silent
+        # downgrade is a silent regression.
+        _direct = cold_direct and _dest == "cpu"
+        v = build_cold_view(tier, tier.reader.index, direct=_direct)
+        if cold_direct and not _direct:
+            v.e4b_fallback_reason = (
+                f"cold_dest={cold_dest!r} can route a cold row to the GPU, "
+                f"which reads tier.row(); an external landing would make "
+                f"that refuse. Use cold_dest='cpu' for the direct landing.")
         if verbose:
             why = getattr(v, "e4b_fallback_reason", None)
             log(f"  hybrid: cold CPU landing = {v.e4b_path}"

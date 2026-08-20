@@ -540,3 +540,14 @@ def test_an_empty_cold_group_decides_nothing():
     assert st._cold_to_cpu_deadline(torch.empty(0, dtype=torch.long),
                                     torch.empty(0, dtype=torch.long)) is False
     assert st.deadline_log == []
+
+
+def test_direct_landing_is_refused_when_a_cold_row_could_take_the_gpu():
+    """The direct landing and the GPU cold path cannot share a tier: the GPU
+    path reads raw rows via tier.row(), which an external-landing tier
+    refuses. Only cold_dest="cpu" guarantees no cold row goes to the GPU, so
+    every other destination downgrades to the copy path -- recorded, because
+    a silent downgrade is a silent regression."""
+    for dest, want_direct in (("cpu", True), ("deadline", False),
+                              (4.0, False)):
+        assert (hy._parse_cold_dest(dest) == "cpu") is want_direct
