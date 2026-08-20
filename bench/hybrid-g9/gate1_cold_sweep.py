@@ -132,6 +132,43 @@ def gate1_verdict(point: dict, *, hide_floor=0.70, slowdown_ceiling=0.05):
                            "slowdown_ceiling": slowdown_ceiling}}
 
 
+def engine_config(**kwargs) -> dict:
+    """Every ``enable_hybrid_tier`` keyword this run will use, for the receipt.
+
+    The gate-1 receipt originally carried the SWEEP's configuration and not the
+    ENGINE's, and the runner was a disposable box script. That made an arm able
+    to differ in a way no reader could see after the fact — and it did: the
+    cold-CPU arm's residual could not be attributed, because whether
+    ``offload_thin_uniq`` was set was unrecoverable from the artifact
+    (grouped-nf4-gemm ``bench/cold-engine/RESULTS-tribrid-gate1.md``,
+    *Reconciliation*).
+
+    It is load-bearing for equivalence, not just provenance. ``dram_thin`` is
+    decided at enable time from a layer's TOTAL DRAM population, and
+    ``force_cold_mass`` shrinks that population — so with ``offload_thin_uniq``
+    set, moving experts to NVMe can flip the destination of experts that did
+    NOT move, and two arms stop being matched for a reason unrelated to
+    ``cold_dest``. ``offload_rows`` reads per-step DRAM routing statistics that
+    a placement change also perturbs, so it is the same class. Measured in e4b
+    ``bench/hybrid-g9/issue171/RESULTS-issue171.md``.
+
+    Defaults are `enable_hybrid_tier`'s own, so a receipt records what ran even
+    when the runner passed nothing.
+    """
+    cfg = {"hot_rows": None, "qd": 4, "threads": 0, "pool": True,
+           "offload_rows": None, "fused_ffn": False,
+           "offload_thin_uniq": None, "cold_dest": "gpu", "prefetch": False}
+    unknown = set(kwargs) - set(cfg)
+    if unknown:
+        raise ValueError(
+            f"engine_config does not record {sorted(unknown)} — a receipt that "
+            f"names a setting the engine never saw is worse than one that "
+            f"records nothing. Add it here AND to enable_hybrid_tier's "
+            f"signature check in tests/test_gate1_harness.py")
+    cfg.update(kwargs)
+    return cfg
+
+
 def arm_config(arm: str, cold_rows_threshold: float):
     """`enable_hybrid_tier` kwargs for one arm. The control point carries no
     forced cold mass at all, which is what makes it a baseline rather than a
@@ -172,6 +209,30 @@ def main():
     ap.add_argument("--threshold", type=float, default=4.0,
                     help="rows-per-unique-expert for the dynamic arm")
     ap.add_argument("--steps", type=int, default=64)
+    # ENGINE configuration. Recorded in the receipt whether or not it is
+    # passed, because "not set" and "not recorded" are different claims.
+    ap.add_argument("--hot-rows", type=int, default=None,
+                    help="ColdTier pinned rows; size from MEASURED free RAM")
+    ap.add_argument("--offload-thin-uniq", type=int, default=None,
+                    help="DRAM population at or below which a layer routes to "
+                         "the GPU. NOTE: force_cold_mass shrinks that "
+                         "population, so a non-None value here can flip the "
+                         "destination of experts the arm did not move — leave "
+                         "unset for an equivalence sweep")
+    ap.add_argument("--offload-rows", type=float, default=None,
+                    help="rows-per-unique DRAM expert at or above which the "
+                         "DRAM tier routes to the GPU (same caveat)")
+    ap.add_argument("--fused-ffn", action="store_true")
+    ap.add_argument("--prefetch", action="store_true")
+    ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--cold-source", default="dram",
+                    choices=("dram", "vram", "both"),
+                    help="which tier force_cold_mass takes experts FROM. "
+                         "'dram' (the default) moves experts off the CPU tier, "
+                         "so a cold_dest='gpu' arm changes their arithmetic "
+                         "and the equivalence clause reads that rounding "
+                         "rather than the cold path; 'vram' holds the GPU "
+                         "destination fixed. See #171")
     ap.add_argument("--warmup", type=int, default=8,
                     help="instrument law 1: warm BOTH shapes before any clock")
     ap.add_argument("--out", required=True)
@@ -190,8 +251,17 @@ def main():
         "config": {"sweep": sweep, "arms": arms, "order": args.order,
                    "threshold": args.threshold, "steps": args.steps,
                    "warmup": args.warmup,
+                   "cold_source": args.cold_source,
                    "dynamic_arm_is": "rows-per-unique-expert threshold, "
                                      "NOT a deadline estimate (gate 2)"},
+        # the ENGINE's configuration, not just the sweep's — see engine_config
+        "engine": engine_config(
+            hot_rows=args.hot_rows,
+            offload_thin_uniq=args.offload_thin_uniq,
+            offload_rows=args.offload_rows,
+            fused_ffn=args.fused_ffn,
+            prefetch=args.prefetch,
+            threads=args.threads),
         "isolated_term": "sum of cold-path stages; over-estimates when "
                          "stages overlap, so hide_ratio is an UPPER bound",
     }
