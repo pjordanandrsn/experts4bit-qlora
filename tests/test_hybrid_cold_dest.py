@@ -106,6 +106,45 @@ def test_cold_stats_on_an_unpatched_model_is_zeros_not_a_crash():
     assert st["cold_rows"] == 0 and st["cold_cpu_frac"] == 0.0
 
 
+class _StubTier:
+    """Only the surface cold_stats reads: a stats() dict."""
+
+    def __init__(self, **kw):
+        self._s = kw
+
+    def stats(self):
+        return dict(self._s)
+
+
+def test_cold_stats_forwards_the_reuse_ratio_s_own_denominator():
+    """`reuse_before_overwrite` is resurrections / (resurrections +
+    reclaimable_overwritten). Forwarding the ratio without its inputs makes
+    a receipt that cannot be audited AND actively misleads: a reader
+    defaulting the absent key to 0 computes 1.0 and silently disagrees with
+    the reported value. logical_evictions cannot substitute -- rows still
+    sitting reclaimable have resolved neither way, so it is strictly larger
+    than the denominator."""
+    m = torch.nn.Linear(4, 4)
+    m._e4b_cold_tier = _StubTier(
+        resurrections=219, spec_resurrections=0,
+        reclaimable_overwritten=3271, logical_evictions=3522,
+        reuse_before_overwrite=219 / (219 + 3271),
+        protected_rows=96, reclaimable_rows=32,
+        evictions=3271, disk_reads=3409, disk_bytes=0)
+    st = hy.cold_stats(m)
+
+    for k in ("resurrections", "spec_resurrections",
+              "reclaimable_overwritten", "logical_evictions",
+              "protected_rows", "reclaimable_rows"):
+        assert k in st, f"cold_stats dropped {k}"
+
+    num = st["resurrections"] + st["spec_resurrections"]
+    den = num + st["reclaimable_overwritten"]
+    assert abs(st["reuse_before_overwrite"] - num / den) < 1e-12
+    assert st["logical_evictions"] > den, (
+        "unresolved reclaimable rows belong to neither term")
+
+
 # ------------------------------------------------ the equivalence, on a box --
 
 class _Router(torch.nn.Module):
