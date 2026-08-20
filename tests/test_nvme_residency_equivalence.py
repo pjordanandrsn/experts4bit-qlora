@@ -58,24 +58,33 @@ def _st_bytes(tensors: dict) -> bytes:
     return struct.pack("<Q", len(hj)) + hj + b"".join(blobs)
 
 
-def _module():
+def _module(e=E, inter=INTER, h=H):
     """A real Experts4bit built from deterministic bf16 weights."""
     g = torch.Generator().manual_seed(1689)
-    gate_up = torch.randn(E, 2 * INTER, H, generator=g, dtype=torch.float32) * 0.05
-    down = torch.randn(E, H, INTER, generator=g, dtype=torch.float32) * 0.05
+    gate_up = torch.randn(e, 2 * inter, h, generator=g, dtype=torch.float32) * 0.05
+    down = torch.randn(e, h, inter, generator=g, dtype=torch.float32) * 0.05
     return Experts4bit.from_float(gate_up.to(torch.bfloat16), down.to(torch.bfloat16),
                                   has_gate=True, activation=torch.nn.functional.silu,
                                   quant_type="nf4", compute_dtype=torch.bfloat16)
 
 
-def _stacks(mod):
+def _stacks(mod, e=E):
     """The four per-expert views _HotResidency derives from a module."""
     n1, k1 = mod._gate_up_shape
     n2, k2 = mod._down_shape
-    return (mod.gate_up_proj.view(E, n1, k1 // 2),
-            mod.gate_up_absmax.view(E, n1, k1 // 64).float(),
-            mod.down_proj.view(E, n2, k2 // 2),
-            mod.down_absmax.view(E, n2, k2 // 64).float())
+    return (mod.gate_up_proj.view(e, n1, k1 // 2),
+            mod.gate_up_absmax.view(e, n1, k1 // 64).float(),
+            mod.down_proj.view(e, n2, k2 // 2),
+            mod.down_absmax.view(e, n2, k2 // 64).float())
+
+
+# align=4096, and the four per-expert segment lengths are INTER*H,
+# INTER*H/8, INTER*H/2 and INTER*H/16 bytes. All four are multiples of 4096
+# exactly when INTER*H is a multiple of 65536, which 256x256 is and the
+# 64x128 default is NOT -- which is why the default arena cannot scatter and
+# a direct-landing test on it SKIPS rather than runs. That skip has bitten
+# this program before; the aligned fixture is the fix, not a wider skip.
+E_AL, INTER_AL, H_AL = 4, 256, 256
 
 
 @pytest.fixture()
@@ -101,6 +110,32 @@ def arena(tmp_path):
         name_template="model.layers.{layer}.mlp.experts.{expert}.{kind}",
         kinds=KINDS, align=4096, log=lambda *a: None)
     return mod, arena_path, load_index(arena_path)
+
+
+@pytest.fixture()
+def arena_aligned(tmp_path):
+    """Same bake as `arena`, at a geometry whose segments are align-multiples
+    so `direct=True` is actually legal. Without it every direct test skips."""
+    mod = _module(E_AL, INTER_AL, H_AL)
+    gu_p, gu_a, dn_p, dn_a = _stacks(mod, E_AL)
+    payload = {"nf4.gate_up_blocks": gu_p, "nf4.gate_up_absmax": gu_a,
+               "nf4.down_blocks": dn_p, "nf4.down_absmax": dn_a}
+    dt = {torch.uint8: "U8", torch.float32: "F32"}
+    tensors = {}
+    for kind, stack in payload.items():
+        for e in range(E_AL):
+            x = stack[e].contiguous().cpu()
+            tensors[f"model.layers.{LAYER}.mlp.experts.{e}.{kind}"] = (
+                tuple(x.shape), dt[x.dtype], x.numpy().tobytes())
+    snap = tmp_path / "snap_al"
+    snap.mkdir()
+    (snap / "model.safetensors").write_bytes(_st_bytes(tensors))
+    path = str(tmp_path / "al.arena")
+    bake_expert_tensors(
+        str(snap), path,
+        name_template="model.layers.{layer}.mlp.experts.{expert}.{kind}",
+        kinds=KINDS, align=4096, log=lambda *a: None)
+    return mod, path, load_index(path)
 
 
 def test_arena_relocation_is_verifiable(arena):
@@ -186,6 +221,45 @@ def test_a_repeat_request_through_the_view_skips_re_materialization(arena):
             "a repeat re-materialized; the view's (key, generation) check "
             "is not being consulted")
         assert view.stats()["view_hits"] > hits_before
+
+
+@_needs_view
+def test_a_direct_landing_serves_the_gpu_stack_without_touching_row(arena_aligned):
+    """The invariant that lets a GPU destination use the direct landing at
+    all. An external-landing tier REFUSES row() by name, so if _TieredStack
+    ever fell back to segment_tensor here it would raise. It must not: a
+    direct view cannot cast, so its stacks carry the arena's own dtype and
+    the dtype guard always passes."""
+    from cold_cpu_view import ColdCpuView
+    from nvme_residency import segment_geometry
+    mod, path, index = arena_aligned
+    resident = dict(zip(NF4_SEGMENTS, _stacks(mod, E_AL)))
+    sufs = list(NF4_SEGMENTS.values())
+    with ColdTier(path, hot_rows=E_AL, pinned=False, index=index) as tier:
+        # NOT a skip. This fixture is aligned precisely so direct is legal,
+        # so a refusal here means the scatter contract moved and the test
+        # must say so -- an earlier version of this test skipped on the
+        # unaligned default arena and verified nothing while reading green.
+        view = ColdCpuView(tier, index, sufs, direct=True)
+        tier.attach_landing(view.landing)
+        tier._e4b_cold_view = view
+
+        # The tier now refuses raw rows -- the whole reason this was banned.
+        with pytest.raises(RuntimeError, match="row"):
+            tier.row(LAYER, 0)
+
+        for attr, suffix in NF4_SEGMENTS.items():
+            native, *_ = segment_geometry(index, suffix)
+            ts = _TieredStack(tier, index, LAYER, torch.arange(E_AL), suffix)
+            vw, stack = ts._view_stack()
+            assert vw is not None, (
+                f"{attr}: the view was refused under a direct landing, so "
+                f"index_select would call row() and raise")
+            assert stack.dtype == native, (attr, stack.dtype, native)
+            got = ts.index_select(0, torch.tensor([E_AL - 1, 0]))
+            ref = resident[attr].index_select(0, torch.tensor([E_AL - 1, 0]))
+            assert torch.equal(got, ref), (
+                f"{attr}: direct-landed bytes differ from the resident stack")
 
 
 @_needs_view

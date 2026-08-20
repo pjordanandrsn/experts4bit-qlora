@@ -116,6 +116,39 @@ class _StubTier:
         return dict(self._s)
 
 
+def test_the_direct_dtype_guard_covers_every_branch_that_can_attach_it():
+    """The guard was written on the pure-GPU branch, then the landing was
+    allowed for MIXED destinations in the other branch without it (Bugbot,
+    e4b#185). Guarding one path and trusting the other is how the
+    first-cold-row crash gets back in, so this asserts the check itself, not
+    the branch that happens to call it."""
+    class _Stack:
+        def __init__(self, dt): self.dtype = dt
+
+    class _View:
+        e4b_path = "direct-scatter"
+        segments = ("nf4.gate_up_blocks",)
+        def __init__(self, dt): self._dt = dt
+        def stack(self, _s): return _Stack(self._dt)
+
+    index = {"segments": [{"suffix": "nf4.gate_up_blocks", "dtype": "U8",
+                           "shape_per_expert": [4, 4], "seg_off": 0,
+                           "length": 16}],
+             "align": 4096}
+
+    # matching dtype: accepted
+    hy._refuse_direct_dtype_mismatch(_View(torch.uint8), index)
+
+    # widened dtype under a direct landing: refused, by name
+    with pytest.raises(RuntimeError, match="reads tier.row"):
+        hy._refuse_direct_dtype_mismatch(_View(torch.float32), index)
+
+    # not a direct landing: nothing to refuse, whatever the dtype
+    v = _View(torch.float32)
+    v.e4b_path = "copy"
+    hy._refuse_direct_dtype_mismatch(v, index)
+
+
 def test_cold_stats_forwards_the_reuse_ratio_s_own_denominator():
     """`reuse_before_overwrite` is resurrections / (resurrections +
     reclaimable_overwritten). Forwarding the ratio without its inputs makes
