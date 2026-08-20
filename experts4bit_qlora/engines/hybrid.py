@@ -1179,6 +1179,18 @@ def cold_stats(model) -> dict:
         ts = tier.stats()
         for k in ("resurrections", "logical_evictions", "evictions",
                   "reuse_before_overwrite", "resurrection_bytes_saved",
+                  # The DENOMINATOR of reuse_before_overwrite, and the second
+                  # half of its numerator. Without these a receipt carries the
+                  # headline ratio but nothing to audit it against: a caller
+                  # defaulting the missing keys to 0 reads
+                  # "reclaimable_overwritten: 0", which says the ratio should
+                  # be 1.0 and silently contradicts the reported value.
+                  # Resolved evictions are also strictly fewer than
+                  # logical_evictions (rows still sitting reclaimable have
+                  # resolved neither way), so logical_evictions cannot stand
+                  # in for the denominator either.
+                  "spec_resurrections", "reclaimable_overwritten",
+                  "protected_rows", "reclaimable_rows",
                   "disk_reads", "disk_bytes"):
             if k in ts:
                 out[k] = ts[k]
