@@ -433,3 +433,110 @@ def test_the_view_is_shared_not_per_module():
     assert t._e4b_cold_view is a
     b = hy.build_cold_view(t, _index())
     assert t._e4b_cold_view is b
+
+
+# ------------------------------------------------ the deadline rule (WS4) --
+
+def _costs():
+    cd = pytest.importorskip("cold_deadline")
+    return cd.Costs(cpu_us_fixed=55.0, cpu_us_per_row=2.0, b_dram_gbs=380.1,
+                    b_vram_gbs=1574.2, b_link_gbs=28.47,
+                    bytes_per_expert=3538944)
+
+
+class _DeadlineStub:
+    """Only what `_cold_to_cpu_deadline` reads. A real _HybridTier needs a
+    model and a GPU; the rule itself is arithmetic over row counts and two
+    residency masks, which is exactly what should be testable without one."""
+
+    def __init__(self, E, vram, dram, costs):
+        self.is_vram = torch.zeros(E, dtype=torch.bool)
+        self.is_dram = torch.zeros(E, dtype=torch.bool)
+        for e in vram:
+            self.is_vram[e] = True
+        for e in dram:
+            self.is_dram[e] = True
+        self.costs = costs
+        self._gpu_only = False
+        self.dram_thin = False
+        self.deadline_log = []
+        self.deadline_flips = 0
+
+    _group = hy._HybridTier._group
+    _cold_to_cpu_deadline = hy._HybridTier._cold_to_cpu_deadline
+
+
+def test_deadline_is_a_valid_destination():
+    assert hy._parse_cold_dest("deadline") == "deadline"
+
+
+def test_deadline_without_measured_costs_refuses_by_name():
+    """Guessing the constants would put a spec-sheet number into a
+    scheduling decision."""
+    st = _DeadlineStub(8, [], [], costs=None)
+    flat = torch.tensor([0, 1, 2, 3])
+    with pytest.raises(RuntimeError, match="measured cost constants"):
+        st._cold_to_cpu_deadline(torch.arange(4), flat)
+
+
+def test_a_busy_gpu_pushes_cold_work_to_the_cpu():
+    """Gate 2's shape, through the executor's own accounting: heavy VRAM
+    routing this step means the GPU is committed, so the cold group reaches
+    the join sooner on the CPU."""
+    c = _costs()
+    st = _DeadlineStub(8, vram=[0, 1], dram=[], costs=c)
+    # 256 rows on the two VRAM experts, 4 cold rows on expert 7
+    flat = torch.cat([torch.zeros(128, dtype=torch.long),
+                      torch.ones(128, dtype=torch.long),
+                      torch.full((4,), 7, dtype=torch.long)])
+    nr = torch.arange(256, 260)
+    assert st._cold_to_cpu_deadline(nr, flat) is True
+    assert st.deadline_log and st.deadline_log[-1]["dest"] == "cpu"
+
+
+def test_an_idle_gpu_keeps_cold_work_on_the_gpu_for_a_fat_group():
+    """The complement: nothing committed on either side, many rows per
+    expert, so the GPU's flat-in-rows cost wins and nothing flips."""
+    c = _costs()
+    st = _DeadlineStub(8, vram=[], dram=[], costs=c)
+    flat = torch.full((256,), 7, dtype=torch.long)
+    assert st._cold_to_cpu_deadline(torch.arange(256), flat) is False
+    assert st.deadline_log[-1]["flipped_by_backlog"] is False
+
+
+def test_dram_work_counts_as_cpu_backlog_unless_it_is_offloaded():
+    """DRAM rows are the CPU's committed work — except when they are being
+    routed to the GPU, in which case they are not the CPU's at all."""
+    c = _costs()
+    flat = torch.cat([torch.zeros(256, dtype=torch.long),
+                      torch.full((4,), 7, dtype=torch.long)])
+    nr = torch.arange(256, 260)
+    busy = _DeadlineStub(8, vram=[], dram=[0], costs=c)
+    idle = _DeadlineStub(8, vram=[], dram=[0], costs=c)
+    idle.dram_thin = True                    # those rows go to the GPU
+    busy._cold_to_cpu_deadline(nr, flat)
+    idle._cold_to_cpu_deadline(nr, flat)
+    assert busy.deadline_log[-1]["cpu_committed_us"] > 0
+    assert idle.deadline_log[-1]["cpu_committed_us"] == 0
+
+
+def test_every_decision_records_its_counterfactual():
+    """A scheduler that logs only its choice cannot be scored."""
+    c = _costs()
+    st = _DeadlineStub(8, vram=[0], dram=[], costs=c)
+    flat = torch.cat([torch.zeros(32, dtype=torch.long),
+                      torch.full((4,), 7, dtype=torch.long)])
+    st._cold_to_cpu_deadline(torch.arange(32, 36), flat)
+    r = st.deadline_log[-1]
+    for k in ("dest", "cpu_join_us", "gpu_join_us", "margin_us",
+              "flipped_by_backlog", "rows", "uniq", "cpu_committed_us",
+              "gpu_committed_us"):
+        assert k in r, k
+
+
+def test_an_empty_cold_group_decides_nothing():
+    c = _costs()
+    st = _DeadlineStub(8, vram=[], dram=[], costs=c)
+    assert st._cold_to_cpu_deadline(torch.empty(0, dtype=torch.long),
+                                    torch.empty(0, dtype=torch.long)) is False
+    assert st.deadline_log == []
