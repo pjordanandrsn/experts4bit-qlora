@@ -702,6 +702,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        fused_ffn: bool = False,
                        offload_thin_uniq: int | None = None,
                        cold_dest: str | float = "gpu",
+                       protected_rows: int | None = None,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -721,6 +722,15 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
       *number*    rows-per-unique-cold-expert threshold, at or above which
                   the CPU path is taken — the DRAM tier's ``offload_rows``
                   statistic, read the other way round.
+
+    ``protected_rows`` (<= ``hot_rows``, default ``hot_rows``) is the cold
+    tier's capacity-ownership budget. Rows beyond it are RECLAIMABLE: still
+    mapped and still readable, but first in line to be overwritten, so a
+    request for one before its slot is reused is a **resurrection** costing
+    no disk read. At the default nothing is ever reclaimable and the tier
+    behaves exactly as it did pre-Stage-3 — which is also why
+    ``resurrections`` reads 0 until this is set, and why R1-R10 cannot be
+    measured without it.
 
     It is a threshold, not a scheduler. Whether a deadline estimate beats
     it is gate 2 of the tribrid prereg and is not settled by this knob.
@@ -753,7 +763,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                 "would serialize demand fetches behind prefetch disk time "
                 "and can evict rows the serving thread is reading")
 
-    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd)
+    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd,
+                    protected_rows=protected_rows)
     mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(mods)))
     if len(lay) < len(mods):
