@@ -549,6 +549,12 @@ class _HybridTier(_NvmeResidency):
         This is a threshold, not a scheduler, and the PREREG says so: gate 2
         is what decides whether a deadline estimate beats it, and it cannot
         be answered by picking a better constant here.
+
+        A step-by-step destination is therefore also a step-by-step ROUNDING
+        path (see ``enable_hybrid_tier``'s numerics note). Under a threshold
+        the same expert can take either destination depending on the step's
+        routing, so a threshold arm is not bit-reproducible against either
+        fixed destination — only against itself on the same routing trace.
         """
         if self._cold_dest == "gpu":
             return False
@@ -702,6 +708,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        fused_ffn: bool = False,
                        offload_thin_uniq: int | None = None,
                        cold_dest: str | float = "gpu",
+                       protected_rows: int | None = None,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -722,10 +729,48 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                   the CPU path is taken — the DRAM tier's ``offload_rows``
                   statistic, read the other way round.
 
+    ``protected_rows`` (<= ``hot_rows``, default ``hot_rows``) is the cold
+    tier's capacity-ownership budget. Rows beyond it are RECLAIMABLE: still
+    mapped and still readable, but first in line to be overwritten, so a
+    request for one before its slot is reused is a **resurrection** costing
+    no disk read. At the default nothing is ever reclaimable and the tier
+    behaves exactly as it did pre-Stage-3 — which is also why
+    ``resurrections`` reads 0 until this is set, and why R1-R10 cannot be
+    measured without it.
+
     It is a threshold, not a scheduler. Whether a deadline estimate beats
     it is gate 2 of the tribrid prereg and is not settled by this knob.
     Unavailable for gpt-oss (per-expert biases do not ride the arena) and
-    needs a gnf4 carrying ``ColdCpuView``; both refuse by name."""
+    needs a gnf4 carrying ``ColdCpuView``; both refuse by name.
+
+    **NUMERICS — this knob is part of run identity.** It picks an execution
+    destination, so the module's cross-placement rounding law (top of this
+    file) applies to it exactly as it applies to a tier move: the CPU
+    destination runs the native kernels' locked fp32 tree, the GPU
+    destination rounds each grouped GEMM's output and the SwiGLU epilogue
+    through the compute dtype.
+
+    The trap that follows, because it reads as a cold-path defect (#171):
+    ``placement.force_cold_mass`` moves experts out of the DRAM tier by
+    default (``source="dram"``), and a DRAM expert EXECUTES ON THE CPU. So
+    ``cold_dest="cpu"`` reproduces the pre-move arithmetic exactly while
+    ``cold_dest="gpu"`` does not — an arm comparison across the two is
+    reading the CPU/GPU rounding difference, not the cold path. Compare
+    each destination against a MATCHED reference: ``"gpu"`` against the
+    same experts placed in ``vram``, ``"cpu"`` against them in ``dram``.
+
+    Measured, A2000 + torch 2.8.0+cu128, one layer at OLMoE-1B-7B geometry
+    (H=2048, I=1024, 8 experts moved), ``bench/hybrid-g9/issue171/``::
+
+        control_dram vs cold_cpu       0.000e+00   bitwise
+        control_vram vs cold_gpu       0.000e+00   bitwise
+        control_dram vs cold_gpu       4.622e-03
+        control_dram vs control_vram   4.622e-03   <- no NVMe in this pair
+
+    The last row is the whole finding: DRAM against VRAM, with no cold path
+    anywhere in it, reproduces the cold arm's divergence to the digit. Both
+    destinations are exact against their matched control, and both of those
+    equalities are pinned in ``tests/test_hybrid_cold_dest.py``."""
     try:
         from nvme_residency import ColdTier
     except ImportError as exc:                        # pragma: no cover
@@ -753,7 +798,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                 "would serialize demand fetches behind prefetch disk time "
                 "and can evict rows the serving thread is reading")
 
-    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd)
+    tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd,
+                    protected_rows=protected_rows)
     mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(mods)))
     if len(lay) < len(mods):
