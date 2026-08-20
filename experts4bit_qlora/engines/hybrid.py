@@ -127,6 +127,33 @@ def build_cold_view(tier, index, *, direct=True):
     return view
 
 
+def _refuse_direct_dtype_mismatch(view, index) -> None:
+    """Refuse an external landing whose stacks are not the arena's own dtype.
+
+    Only meaningful once a direct landing is attached: ``_TieredStack`` falls
+    back to ``segment_tensor`` for any segment the view declines, and
+    ``segment_tensor`` reads ``tier.row()``, which an external-landing tier
+    refuses by name. The fallback and the landing are supposed to be mutually
+    exclusive -- direct cannot cast, so a direct view's stacks always carry
+    the stored dtype -- but that is an argument, and this is the check. It
+    runs at setup so a violation names its cause instead of surfacing as a
+    crash on the first cold row.
+    """
+    if getattr(view, "e4b_path", None) != "direct-scatter":
+        return
+    from nvme_residency import segment_geometry
+    for suf in view.segments:
+        native, *_rest = segment_geometry(index, suf)
+        got = view.stack(suf).dtype
+        if got != native:
+            raise RuntimeError(
+                f"direct landing attached but segment {suf!r} is "
+                f"materialized as {got} against the arena's {native}. "
+                f"_TieredStack would fall back to segment_tensor, which "
+                f"reads tier.row(), which this tier refuses. Refusing at "
+                f"setup rather than failing on the first cold row.")
+
+
 def _split_oversize_groups(sizes, eids, max_rows=8):
     """Split same-expert groups into ``max_rows`` chunks.
 
@@ -1012,18 +1039,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         # timing. Verified below rather than asserted in prose.
         v = build_cold_view(tier, tier.reader.index, direct=cold_direct)
         v.e4b_serve_gpu_stacks = True
-        if v.e4b_path == "direct-scatter":
-            from nvme_residency import segment_geometry
-            for suf in v.segments:
-                native, *_ = segment_geometry(tier.reader.index, suf)
-                if v.stack(suf).dtype != native:
-                    raise RuntimeError(
-                        f"direct landing attached for a GPU destination but "
-                        f"segment {suf!r} is materialized as "
-                        f"{v.stack(suf).dtype} against the arena's {native}. "
-                        f"_TieredStack would fall back to segment_tensor, "
-                        f"which reads tier.row(), which this tier refuses. "
-                        f"Refusing rather than failing on the first cold row.")
+        _refuse_direct_dtype_mismatch(v, tier.reader.index)
         if verbose:
             log(f"  hybrid: cold view for GPU stacks = {v.e4b_path}")
     elif _dest != "gpu":
@@ -1053,6 +1069,10 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         # them per call. False reproduces the pre-change engine exactly, which
         # is what makes the two A/B-able (gnf4#133's rule for DevRowCache).
         v.e4b_serve_gpu_stacks = bool(gpu_stacks_via_view)
+        # A mixed destination can attach the landing too now, so it needs the
+        # same check -- guarding one branch and trusting the other is how a
+        # first-cold-row crash gets back in (Bugbot, e4b#185).
+        _refuse_direct_dtype_mismatch(v, tier.reader.index)
         if cold_direct and not _direct:
             v.e4b_fallback_reason = (
                 f"cold_dest={cold_dest!r} can route a cold row to the GPU, "
