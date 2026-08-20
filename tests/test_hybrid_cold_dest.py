@@ -449,6 +449,8 @@ class _DeadlineStub:
     model and a GPU; the rule itself is arithmetic over row counts and two
     residency masks, which is exactly what should be testable without one."""
 
+    offload_rows = None
+
     def __init__(self, E, vram, dram, costs):
         self.is_vram = torch.zeros(E, dtype=torch.bool)
         self.is_dram = torch.zeros(E, dtype=torch.bool)
@@ -551,3 +553,31 @@ def test_direct_landing_is_refused_when_a_cold_row_could_take_the_gpu():
     for dest, want_direct in (("cpu", True), ("deadline", False),
                               (4.0, False)):
         assert (hy._parse_cold_dest(dest) == "cpu") is want_direct
+
+
+def test_dram_routed_to_the_gpu_is_charged_to_the_gpu_side():
+    """e4b#179. offload_rows can send DRAM to the GPU in the same step. If
+    that cost is charged to neither side the estimator sees a busy CPU beside
+    an idle GPU that is in fact doing the DRAM work, and can send cold rows
+    to the engine already carrying it."""
+    c = _costs()
+    flat = torch.cat([torch.zeros(256, dtype=torch.long),      # DRAM, fat
+                      torch.full((4,), 7, dtype=torch.long)])  # cold
+    nr = torch.arange(256, 260)
+    st = _DeadlineStub(8, vram=[], dram=[0], costs=c)
+    st.offload_rows = 4.0                     # 256 rows / 1 expert >= 4 -> GPU
+    st._cold_to_cpu_deadline(nr, flat)
+    r = st.deadline_log[-1]
+    assert r["cpu_committed_us"] == 0, "DRAM went to the GPU; not CPU work"
+    assert r["gpu_committed_us"] > 0, "so it must be charged to the GPU side"
+
+
+def test_dram_below_the_offload_threshold_stays_cpu_backlog():
+    c = _costs()
+    flat = torch.cat([torch.zeros(2, dtype=torch.long),
+                      torch.full((4,), 7, dtype=torch.long)])
+    st = _DeadlineStub(8, vram=[], dram=[0], costs=c)
+    st.offload_rows = 4.0                     # 2 rows / 1 expert < 4 -> CPU
+    st._cold_to_cpu_deadline(torch.arange(2, 6), flat)
+    r = st.deadline_log[-1]
+    assert r["cpu_committed_us"] > 0 and r["gpu_committed_us"] == 0

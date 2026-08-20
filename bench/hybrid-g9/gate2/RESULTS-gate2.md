@@ -41,3 +41,26 @@ measurement should not toggle a default twice in one day.
 
 Receipts: `g8_fx{55,100,150}.json`, `g8_fused.json`, `g9_gate.json`,
 `calib.json`, `rows_curve.json`.
+
+## Post-hoc: a deadline-estimator defect, and why it does not reach this result
+
+Bugbot (e4b#179) found that `_cold_to_cpu_deadline` charged DRAM work to
+the CPU side unless `_gpu_only`/`dram_thin` was set, while `_cold_contrib`
+could *also* route DRAM to the GPU via the `offload_rows` threshold — and
+that GPU load was charged to neither side. An estimator in that state sees
+a busy CPU beside an idle GPU that is in fact doing the DRAM work.
+
+**It cannot explain this gate's MISS.** The receipt (`g9_gate.json`)
+records `offload_rows = null`, and neither `dram_thin` nor `_gpu_only`
+appears in any arm's config. With no threshold set the DRAM rows went to
+the CPU on every step, which is exactly what the estimator assumed, so its
+inputs were correct throughout. The 0 destination flips out of 1975
+decisions are a real property of the measured regime, not an artifact of
+mis-attributed backlog.
+
+Stated because the alternative — fixing it silently — would leave a reader
+who finds the fix later unable to tell whether the published numbers were
+taken before or after, and therefore unable to trust them. The defect is
+fixed on the branch that carries this paragraph; the gate is NOT re-run,
+because re-running a configuration the bug never touched would produce a
+receipt that differs only by noise.

@@ -116,10 +116,15 @@ def gate1_verdict(point: dict, *, hide_floor=0.70, slowdown_ceiling=0.05):
         "numerically_equivalent": bool(dyn.get("equivalent")),
         "hide_ratio_ge_floor": (dyn.get("hide_ratio") is not None
                                 and dyn["hide_ratio"] >= hide_floor),
+        # A MISSING fixed arm must fail this clause, not satisfy it. Reading
+        # an absent exposed_ns as +inf made "the dynamic arm beat a
+        # measurement that does not exist" pass -- the exact inversion the
+        # missing-numbers rule in this module forbids (Bugbot, e4b#170).
         "beats_both_fixed": (
             dyn.get("exposed_ns") is not None
-            and all(dyn["exposed_ns"] <= point["arms"].get(a, {})
-                    .get("exposed_ns", float("inf"))
+            and all(point["arms"].get(a, {}).get("exposed_ns") is not None
+                    for a in ("cold-gpu", "cold-cpu"))
+            and all(dyn["exposed_ns"] <= point["arms"][a]["exposed_ns"]
                     for a in ("cold-gpu", "cold-cpu"))),
         "destination_flipped": (dyn.get("destination_flips", 0) >= 1),
         "slowdown_under_ceiling": (
