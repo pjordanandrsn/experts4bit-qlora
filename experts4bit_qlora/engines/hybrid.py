@@ -162,11 +162,14 @@ class _HybridTier(_NvmeResidency):
         self.dram_ids = dram_ids
         self._threads = int(getattr(mod, "_e4b_hybrid_threads", 0))
 
+        # Serving tier for residency/runtime; SETUP tier for the one-shot
+        # bulk reads that build the DRAM stacks below (see _build_hot).
         tier = mod._e4b_cold_tier
+        setup = getattr(mod, "_e4b_setup_tier", None) or tier
         index = tier.reader.index
         layer = int(getattr(mod, "_e4b_arena_layer", 0))
         ids = [int(e) for e in dram_ids.tolist()]
-        chunk = max(1, min(len(ids) or 1, tier.hot_rows))
+        chunk = max(1, min(len(ids) or 1, setup.hot_rows))
         for attr, suffix in (("d_gu_p", NF4_SEGMENTS["c_gu_p"]),
                              ("d_gu_a", NF4_SEGMENTS["c_gu_a"]),
                              ("d_dn_p", NF4_SEGMENTS["c_dn_p"]),
@@ -177,7 +180,7 @@ class _HybridTier(_NvmeResidency):
                 dt = torch.float32 if geo["dtype"] == "F32" else torch.uint8
                 setattr(self, attr, torch.empty(shp, dtype=dt))
                 continue
-            parts = [segment_tensor(tier, index, layer, ids[i:i + chunk], suffix)
+            parts = [segment_tensor(setup, index, layer, ids[i:i + chunk], suffix)
                      for i in range(0, len(ids), chunk)]
             stacked = parts[0] if len(parts) == 1 else torch.cat(parts, dim=0)
             # pageable host memory ON PURPOSE — the DRAM-bus law
@@ -856,6 +859,19 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
 
     tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd,
                     protected_rows=protected_rows)
+    # A SEPARATE tier for the one-shot bulk reads that materialize the
+    # resident VRAM/DRAM stacks. Two reasons, one of which is fatal:
+    #   * an external-landing serving tier cannot serve row() at all, so
+    #     reading setup bytes through it makes the direct cold landing
+    #     impossible to attach (and attach_landing refuses a used tier);
+    #   * those reads filled serving slots with experts that then live
+    #     permanently in VRAM/DRAM, evicting rows the cold path wants.
+    # Small on purpose -- it only needs to hold one chunk at a time -- and
+    # closed before serving starts.
+    setup_tier = ColdTier(arena_path, hot_rows=max(8, min(hot_rows, 64)),
+                          pinned=False, qd=qd, index=tier.reader.index,
+                          reader=None)
+
     # The cold CPU view is built ONCE per tier (its slot space is global) and
     # before any ensure(), because attach_landing refuses a tier that has
     # already filled rows into its own buffer.
@@ -884,6 +900,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_hybrid_fused_ffn = fused_ffn
         mod._e4b_hybrid_thin_uniq = offload_thin_uniq
         mod._e4b_hybrid_cold_dest = cold_dest
+        mod._e4b_setup_tier = setup_tier
         hot_sets.append(place["vram"])
     try:
         n_nodes = len(list(Path("/sys/devices/system/node").glob("node[0-9]*")))
@@ -911,6 +928,17 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                 if hasattr(mod, attr):
                     delattr(mod, attr)
         raise
+    finally:
+        # The setup tier's job ends with construction, on BOTH paths. Drop
+        # it from every module and close it before serving, so nothing can
+        # accidentally resolve residency against it later.
+        for mod in mods:
+            if hasattr(mod, "_e4b_setup_tier"):
+                delattr(mod, "_e4b_setup_tier")
+        try:
+            setup_tier.close()
+        except Exception:                          # noqa: BLE001
+            pass
     # pool starts only after enable succeeds, and ownership is recorded so
     # disable never tears down a pool the caller started themselves (Bugbot)
     if pool:

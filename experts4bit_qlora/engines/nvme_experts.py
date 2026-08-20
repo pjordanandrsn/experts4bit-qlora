@@ -128,7 +128,16 @@ class _NvmeResidency(_HotResidency):
         """
         from nvme_residency import segment_tensor
 
-        tier = self.mod._e4b_cold_tier
+        # SETUP tier, not the serving one. These are one-shot bulk reads that
+        # materialize the resident stacks; once copied to the device they are
+        # never requested again. Reading them through the serving tier filled
+        # its slots with experts that then live permanently in VRAM/DRAM, and
+        # -- since an external-landing tier cannot serve row() at all -- made
+        # the direct cold landing impossible to attach. enable_hybrid_tier
+        # stamps _e4b_setup_tier for the duration of the patch and drops it
+        # after; without one this falls back to the serving tier, which is the
+        # pre-existing behaviour.
+        tier = getattr(self.mod, "_e4b_setup_tier", None) or self.mod._e4b_cold_tier
         index = tier.reader.index
         layer = int(getattr(self.mod, "_e4b_arena_layer", 0))
         ids = [int(e) for e in self.hot_ids.tolist()]
