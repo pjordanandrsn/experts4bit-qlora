@@ -76,10 +76,41 @@ class _TieredStack:
                 f"arena (nvme_bake_nf4) is required for the NF4 serving path.")
         self.shape_per_expert = tuple(geo["shape_per_expert"])
 
+    def _view_stack(self):
+        """``(view, stack)`` when handing back rows of the cold view's stack is
+        byte-identical to rebuilding them, else ``(None, None)``.
+
+        ``None`` — meaning take the rebuild path — when there is no view, when
+        it does not materialize this segment, or when its stack dtype differs
+        from this segment's contract. That last case is real: the view widens
+        narrow absmax to f32 for the CPU kernel, and a caller that asked for
+        the stored dtype must not silently receive f32. The dtype is compared
+        against the ARENA's own geometry rather than assumed, because the
+        whole point of this class is that it does not reinterpret bytes.
+        """
+        view = getattr(self.tier, "_e4b_cold_view", None)
+        if view is None or self.suffix not in getattr(view, "segments", ()):
+            return None, None
+        # The A/B control, in the shape gnf4#133 set for DevRowCache: turning
+        # this off is not a degraded mode, it is the engine that shipped
+        # before this change, byte for byte, so the two can be compared
+        # without a second code path to trust. The CPU destination keeps
+        # using the view either way -- this switch governs only whether the
+        # GPU stack reads it.
+        if not getattr(view, "e4b_serve_gpu_stacks", True):
+            return None, None
+        try:
+            stack = view.stack(self.suffix)
+        except KeyError:
+            return None, None
+        from nvme_residency import segment_geometry
+        native, _shape, _off, _ln = segment_geometry(self.index, self.suffix)
+        want = self.cast if self.cast is not None else native
+        return (view, stack) if stack.dtype == want else (None, None)
+
     def index_select(self, dim: int, idx: torch.Tensor) -> torch.Tensor:
         if dim != 0:
             raise ValueError(f"_TieredStack indexes experts on dim 0, got {dim}")
-        from nvme_residency import segment_tensor
         globals_ = self.cold_ids.index_select(0, idx.cpu().to(torch.long))
         # Safe against the hybrid prefetch worker with no locking here: the
         # tier's DEMAND WINDOW (nvme_residency) keeps every row of the latest
@@ -87,6 +118,22 @@ class _TieredStack:
         # this whole ensure -> row-reads sequence. (Before that contract, a
         # concurrent speculative ensure could evict between the two — measured
         # at 235B as KeyError '(layer 81, expert 73) not resident'.)
+        view, stack = self._view_stack()
+        if view is not None:
+            # The view already holds kernel-shaped rows and knows which slots
+            # are still current, so an expert materialized on an earlier step
+            # costs nothing here — where segment_tensor pays a host copy per
+            # row per call regardless. Gate 1 attributes ~98% of cold cost to
+            # exactly this staging, not to disk.
+            #
+            # ensure() is the tier's demand ensure plus the view's own
+            # (key, generation) check, so this is not a weaker residency
+            # guarantee than the rebuild path -- it is the same one, with the
+            # copy skipped when the slot is unchanged.
+            slots = view.ensure(self.layer, globals_.tolist())
+            return stack.index_select(
+                0, torch.as_tensor(slots, dtype=torch.long))
+        from nvme_residency import segment_tensor
         return segment_tensor(self.tier, self.index, self.layer,
                               globals_.tolist(), self.suffix, cast=self.cast)
 

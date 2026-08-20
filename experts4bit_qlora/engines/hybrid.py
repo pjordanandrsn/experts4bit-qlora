@@ -858,6 +858,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        cold_dest: str | float = "gpu",
                        protected_rows: int | None = None,
                        cold_direct: bool = True,
+                       gpu_stacks_via_view: bool = True,
                        costs=None,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
@@ -887,6 +888,12 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     behaves exactly as it did pre-Stage-3 — which is also why
     ``resurrections`` reads 0 until this is set, and why R1-R10 cannot be
     measured without it.
+
+    ``gpu_stacks_via_view`` (default True) lets a GPU-destined cold stack
+    take its rows from the cold view instead of rebuilding them on every
+    call. The view already knows which slots are unchanged, so a repeat costs
+    no host copy — the staging gate 1 attributes ~98% of cold cost to. Pass
+    False for the pre-change engine when A/B-ing.
 
     ``cold_direct`` (default True) asks the cold CPU view for the
     preadv-scatter landing: segments DMA straight into the kernel-shaped
@@ -976,7 +983,27 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     # before any ensure(), because attach_landing refuses a tier that has
     # already filled rows into its own buffer.
     _dest = _parse_cold_dest(cold_dest)
-    if _dest != "gpu":
+    # A pure-GPU destination used to skip the view entirely, which made
+    # `gpu_stacks_via_view` unreachable -- the stack had nothing to read. It
+    # now builds one when that switch is on, in COPY mode: a non-direct view
+    # owns its own buffers and never calls attach_landing, so the tier keeps
+    # filling its own rows and `row()` still answers. Only the EXTERNAL
+    # landing is incompatible with the GPU path, not the view itself.
+    #
+    # It is gated on the switch rather than hoisted unconditionally because
+    # the view costs hot_rows * row_bytes of DRAM (~1.3 GB at this arena's
+    # geometry with hot_rows=384). Mixed destinations already pay it; pure
+    # GPU should not start paying it for a feature that is off.
+    if _dest == "gpu" and gpu_stacks_via_view:
+        v = build_cold_view(tier, tier.reader.index, direct=False)
+        v.e4b_serve_gpu_stacks = True
+        v.e4b_fallback_reason = (
+            "copy-mode view for a GPU destination: the external landing "
+            "cannot serve tier.row(), which the GPU cold path still needs "
+            "for any segment the view does not hold")
+        if verbose:
+            log(f"  hybrid: cold view for GPU stacks = {v.e4b_path}")
+    elif _dest != "gpu":
         # The direct landing and the GPU cold path are MUTUALLY EXCLUSIVE on
         # one tier: the GPU path reads raw rows through tier.row(), and an
         # external-landing tier never fills its own buffer, so row() refuses
@@ -991,6 +1018,10 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         # downgrade is a silent regression.
         _direct = cold_direct and _dest == "cpu"
         v = build_cold_view(tier, tier.reader.index, direct=_direct)
+        # Whether a GPU-destined cold stack reads this view's rows or rebuilds
+        # them per call. False reproduces the pre-change engine exactly, which
+        # is what makes the two A/B-able (gnf4#133's rule for DevRowCache).
+        v.e4b_serve_gpu_stacks = bool(gpu_stacks_via_view)
         if cold_direct and not _direct:
             v.e4b_fallback_reason = (
                 f"cold_dest={cold_dest!r} can route a cold row to the GPU, "

@@ -124,6 +124,80 @@ def test_tiered_stack_is_bitwise_equal_to_the_resident_stack(arena, hot_rows):
                     f"(routed={routed.tolist()}, hot_rows={hot_rows})")
 
 
+@pytest.mark.parametrize("hot_rows", [E, 2])
+def test_tiered_stack_through_the_view_is_bitwise_equal(arena, hot_rows):
+    """Same claim as above, with a ColdCpuView attached so index_select takes
+    the view's stacks instead of rebuilding. hot_rows=2 forces eviction between
+    requests, so a slot the view believed current but the tier had refilled
+    would surface as a bitwise difference rather than a silent wrong answer."""
+    from cold_cpu_view import ColdCpuView
+    mod, path, index = arena
+    resident = dict(zip(NF4_SEGMENTS, _stacks(mod)))
+    cold_ids = torch.arange(E)
+    # Only the BLOCK segments: absmax is stored F32 here, so no cast is in
+    # play and the view would be used for it too -- the cast guard gets its
+    # own test below.
+    sufs = [NF4_SEGMENTS["c_gu_p"], NF4_SEGMENTS["c_dn_p"]]
+    with ColdTier(path, hot_rows=hot_rows, pinned=False, index=index) as tier:
+        tier._e4b_cold_view = ColdCpuView(tier, index, sufs)
+        for attr, suffix in NF4_SEGMENTS.items():
+            ts = _TieredStack(tier, index, LAYER, cold_ids, suffix)
+            used_view = ts._view_stack()[0] is not None
+            assert used_view == (suffix in sufs), (
+                f"{attr}: view used={used_view}, materialized={suffix in sufs}")
+            full = resident[attr]
+            for routed in (torch.tensor([0]), torch.tensor([E - 1, 0]),
+                           torch.tensor([1, 2]), torch.tensor([0, 0])):
+                got = ts.index_select(0, routed)
+                ref = full.index_select(0, routed)
+                assert got.dtype == ref.dtype and got.shape == ref.shape, attr
+                assert torch.equal(got, ref), (
+                    f"{attr}: view-backed bytes differ from the resident stack "
+                    f"(routed={routed.tolist()}, hot_rows={hot_rows})")
+
+
+def test_a_repeat_request_through_the_view_skips_re_materialization(arena):
+    """The point of the change. The second ask for an expert the view already
+    holds must cost no host copy -- that staging is what gate 1 attributes
+    ~98% of cold cost to, not disk."""
+    from cold_cpu_view import ColdCpuView
+    _mod, path, index = arena
+    suffix = NF4_SEGMENTS["c_gu_p"]
+    with ColdTier(path, hot_rows=E, pinned=False, index=index) as tier:
+        view = ColdCpuView(tier, index, [suffix])
+        tier._e4b_cold_view = view
+        ts = _TieredStack(tier, index, LAYER, torch.arange(E), suffix)
+        ts.index_select(0, torch.tensor([0, 1]))
+        first = view.stats()["materializations"]
+        hits_before = view.stats()["view_hits"]
+        ts.index_select(0, torch.tensor([0, 1]))
+        assert view.stats()["materializations"] == first, (
+            "a repeat re-materialized; the view's (key, generation) check "
+            "is not being consulted")
+        assert view.stats()["view_hits"] > hits_before
+
+
+def test_a_view_that_casts_is_refused_and_the_rebuild_path_runs(arena, tmp_path):
+    """The guard that keeps this from being a silent reinterpretation. When the
+    view materializes a segment at a WIDER dtype than the segment's contract,
+    handing back its rows would change what the caller receives. It must fall
+    back instead."""
+    from cold_cpu_view import ColdCpuView
+    _mod, path, index = arena
+    suffix = NF4_SEGMENTS["c_gu_p"]          # stored U8
+    with ColdTier(path, hot_rows=E, pinned=False, index=index) as tier:
+        # A view holding this segment as something other than its stored dtype.
+        view = ColdCpuView(tier, index, [suffix])
+        view.stacks[suffix] = view.stacks[suffix].to(torch.int16)
+        tier._e4b_cold_view = view
+        ts = _TieredStack(tier, index, LAYER, torch.arange(E), suffix)
+        assert ts._view_stack() == (None, None), (
+            "a dtype-mismatched view stack was accepted; that hands the "
+            "caller reinterpreted bytes")
+        got = ts.index_select(0, torch.tensor([0, 1]))
+        assert got.dtype == torch.uint8, "fallback must honour the contract"
+
+
 def test_absmax_arrives_as_float32_not_reinterpreted_bytes(arena):
     """The trap this path had to avoid: the engine holds absmax as float32. If a
     tiered stack handed back raw scale bytes the shapes would still look right."""
