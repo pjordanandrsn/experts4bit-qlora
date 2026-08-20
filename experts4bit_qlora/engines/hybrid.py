@@ -995,12 +995,35 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     # geometry with hot_rows=384). Mixed destinations already pay it; pure
     # GPU should not start paying it for a feature that is off.
     if _dest == "gpu" and gpu_stacks_via_view:
-        v = build_cold_view(tier, tier.reader.index, direct=False)
+        # The direct landing is now legal here, which it was not before the
+        # GPU stack learned to read the view. The old restriction was that
+        # the GPU cold path reads tier.row() and an external-landing tier
+        # refuses it -- but with the view serving those rows, nothing on this
+        # path calls row() at all:
+        #   * _build_hot reads setup bytes through _e4b_setup_tier, never the
+        #     serving tier (that is what the setup tier is for);
+        #   * _TieredStack takes the view for every segment it holds, and
+        #     build_cold_view materializes ALL FOUR NF4 segments;
+        #   * the view's dtype guard can only send it back to segment_tensor
+        #     when the view widened a segment -- and direct REFUSES to cast,
+        #     so a direct view's stacks are always the arena's own dtype.
+        # That last clause is the load-bearing one: the fallback and the
+        # external landing are mutually exclusive by construction, not by
+        # timing. Verified below rather than asserted in prose.
+        v = build_cold_view(tier, tier.reader.index, direct=cold_direct)
         v.e4b_serve_gpu_stacks = True
-        v.e4b_fallback_reason = (
-            "copy-mode view for a GPU destination: the external landing "
-            "cannot serve tier.row(), which the GPU cold path still needs "
-            "for any segment the view does not hold")
+        if v.e4b_path == "direct-scatter":
+            from nvme_residency import segment_geometry
+            for suf in v.segments:
+                native, *_ = segment_geometry(tier.reader.index, suf)
+                if v.stack(suf).dtype != native:
+                    raise RuntimeError(
+                        f"direct landing attached for a GPU destination but "
+                        f"segment {suf!r} is materialized as "
+                        f"{v.stack(suf).dtype} against the arena's {native}. "
+                        f"_TieredStack would fall back to segment_tensor, "
+                        f"which reads tier.row(), which this tier refuses. "
+                        f"Refusing rather than failing on the first cold row.")
         if verbose:
             log(f"  hybrid: cold view for GPU stacks = {v.e4b_path}")
     elif _dest != "gpu":
@@ -1016,7 +1039,15 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         # the cost is bounded (the copy path, ~12.5% slower on the fill path
         # at high cold mass, gnf4#122) -- but RECORDED, because a silent
         # downgrade is a silent regression.
-        _direct = cold_direct and _dest == "cpu"
+        # A MIXED destination (deadline, a threshold, "auto") can send a row
+        # either way, so it used to be barred from the direct landing for the
+        # same reason pure GPU was. With the GPU stack reading the view, both
+        # halves of a mixed step go through the view and neither calls row(),
+        # so the bar lifts here too -- and this is where it is worth the most:
+        # a deadline scheduler's CPU-routed rows were paying the copy path
+        # while a pure-CPU run got the fast one, which biased the very
+        # comparison the scheduler exists to make (gnf4#143).
+        _direct = cold_direct and (_dest == "cpu" or gpu_stacks_via_view)
         v = build_cold_view(tier, tier.reader.index, direct=_direct)
         # Whether a GPU-destined cold stack reads this view's rows or rebuilds
         # them per call. False reproduces the pre-change engine exactly, which
@@ -1026,7 +1057,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
             v.e4b_fallback_reason = (
                 f"cold_dest={cold_dest!r} can route a cold row to the GPU, "
                 f"which reads tier.row(); an external landing would make "
-                f"that refuse. Use cold_dest='cpu' for the direct landing.")
+                f"that refuse. Set gpu_stacks_via_view=True so the GPU stack "
+                f"reads the view instead, or use cold_dest='cpu'.")
         if verbose:
             why = getattr(v, "e4b_fallback_reason", None)
             log(f"  hybrid: cold CPU landing = {v.e4b_path}"
