@@ -364,3 +364,72 @@ def test_a_repeated_cold_step_reads_the_disk_once(one_layer):
         assert hy.cold_stats(model)["disk_reads"] == after_first
     finally:
         hy.disable_hybrid_tier(model)
+
+
+# ------------------------------------------- the cold landing selector --
+
+class _FakeTier:
+    """Only what build_cold_view touches. A real ColdTier needs an arena on
+    disk; the selector's job is choosing a path from GEOMETRY, which is
+    exactly what should be testable without one."""
+
+    def __init__(self):
+        self.hot_rows = 8
+        self.attached = None
+
+    def attach_landing(self, cb):
+        self.attached = cb
+
+
+_ITEMSIZE = {"U8": 1, "BF16": 2, "F16": 2, "F32": 4}
+
+
+def _index(absmax_dtype="F32", aligned=True):
+    """A minimal arena index. shape_per_expert must AGREE with dtype and
+    length — a mismatch is a broken fixture, not a geometry the code should
+    have to survive, and getting it wrong once already sent this test
+    through the fallback path while asserting the fast one."""
+    ln = 4096 if aligned else 4097
+    segs, off = [], 0
+    for k, dt in ((NF4_SEGMENTS["c_gu_p"], "U8"),
+                  (NF4_SEGMENTS["c_gu_a"], absmax_dtype),
+                  (NF4_SEGMENTS["c_dn_p"], "U8"),
+                  (NF4_SEGMENTS["c_dn_a"], absmax_dtype)):
+        segs.append({"suffix": k, "dtype": dt, "seg_off": off, "length": ln,
+                     "shape_per_expert": [ln // _ITEMSIZE[dt]]})
+        off += ln
+    return {"align": 4096, "row_stride": off, "row_bytes": off,
+            "segments": segs, "n_layers": 1, "n_experts_per_layer": 8}
+
+
+def test_narrow_absmax_falls_back_and_says_why():
+    """A DMA has nowhere to widen bf16 to fp32, so direct is impossible and
+    the reason must be recorded, not swallowed."""
+    v = hy.build_cold_view(_FakeTier(), _index(absmax_dtype="BF16"),
+                           direct=True)
+    assert v.e4b_path == "copy"
+    assert "widening cast" in v.e4b_fallback_reason
+
+
+def test_direct_is_recorded_when_it_is_taken():
+    t = _FakeTier()
+    v = hy.build_cold_view(t, _index(), direct=True)
+    assert getattr(v, "e4b_fallback_reason", None) is None, (
+        "direct was refused: %s" % getattr(v, "e4b_fallback_reason", None))
+    assert v.e4b_path == "direct-scatter"
+    assert t.attached is not None, "the tier must receive the landing"
+
+
+def test_direct_false_forces_the_copy_path_for_an_ab():
+    v = hy.build_cold_view(_FakeTier(), _index(), direct=False)
+    assert v.e4b_path == "copy"
+
+
+def test_the_view_is_shared_not_per_module():
+    """One tier, one view: a per-module view sized tier.hot_rows allocated
+    that much host RAM PER LAYER while only using its own layer's slots."""
+    t = _FakeTier()
+    a = hy.build_cold_view(t, _index())
+    assert t._e4b_cold_view is a
+    b = hy.build_cold_view(t, _index())
+    assert t._e4b_cold_view is b

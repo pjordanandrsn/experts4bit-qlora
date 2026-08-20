@@ -74,6 +74,52 @@ def _parse_cold_dest(dest):
     return val
 
 
+def build_cold_view(tier, index, *, direct=True):
+    """The single cold CPU view for a tier, attached as ``_e4b_cold_view``.
+
+    Built once per tier because the tier's slot space is global; see the
+    note in ``_HybridTier.__init__``.
+
+    ``direct=True`` asks for the preadv-scatter landing — segments DMA
+    straight into the kernel-shaped stacks instead of arena row ->
+    ``segment_into`` -> stack (measured ~43% faster on the fill path, gnf4
+    ``RESULTS-direct-scatter.md``). It is not always legal, so the outcome
+    is RECORDED on the view as ``e4b_path`` rather than silently chosen: a
+    quiet fallback here is a quiet 43% regression, which is the same reason
+    ``ArenaExpertSource.fetch_raw`` records ``last_fetch_path``.
+
+    Two things can force the copy path, both stated in the reason string:
+    an arena whose segment lengths, gaps or row padding are not
+    align-aligned cannot scatter at all; and an arena storing absmax
+    narrower than fp32 needs a widening cast, which a DMA has nowhere to
+    perform.
+    """
+    from cold_cpu_view import ColdCpuView
+    sufs = [NF4_SEGMENTS[k] for k in ("c_gu_p", "c_gu_a", "c_dn_p", "c_dn_a")]
+    geo = {g["suffix"]: g for g in index["segments"]}
+    narrow = [s for s in (NF4_SEGMENTS["c_gu_a"], NF4_SEGMENTS["c_dn_a"])
+              if geo.get(s, {}).get("dtype") != "F32"]
+    casts = {s: torch.float32 for s in narrow}
+    reason = None
+    if direct and narrow:
+        reason = (f"absmax stored as {geo[narrow[0]]['dtype']}, which needs a "
+                  f"widening cast a DMA cannot perform")
+    view = None
+    if direct and not narrow:
+        try:
+            view = ColdCpuView(tier, index, sufs, direct=True)
+            tier.attach_landing(view.landing)
+            view.e4b_path = "direct-scatter"
+        except (ValueError, RuntimeError, AttributeError) as exc:
+            view, reason = None, str(exc).split(".")[0]
+    if view is None:
+        view = ColdCpuView(tier, index, sufs, casts=casts or None)
+        view.e4b_path = "copy"
+        view.e4b_fallback_reason = reason
+    tier._e4b_cold_view = view
+    return view
+
+
 def _split_oversize_groups(sizes, eids, max_rows=8):
     """Split same-expert groups into ``max_rows`` chunks.
 
@@ -224,19 +270,19 @@ class _HybridTier(_NvmeResidency):
                     "biases do not ride the arena, so a cold row computed on "
                     "the CPU would silently omit them. Bake biases into the "
                     "arena first (HANDOFF open work #3).")
-            try:
-                from cold_cpu_view import ColdCpuView
-            except ImportError as exc:
-                raise ImportError(
-                    "cold_dest != 'gpu' needs grouped-nf4-gemm's ColdCpuView "
-                    "(the CPU destination for cold experts). Upgrade gnf4 or "
-                    "leave cold_dest='gpu'.") from exc
-            self.view = ColdCpuView(
-                tier, index,
-                [NF4_SEGMENTS[k] for k in
-                 ("c_gu_p", "c_gu_a", "c_dn_p", "c_dn_a")],
-                casts={NF4_SEGMENTS["c_gu_a"]: torch.float32,
-                       NF4_SEGMENTS["c_dn_a"]: torch.float32})
+            # ONE view per TIER, not per module. The tier is shared across
+            # every MoE module and its slot space is global (keyed
+            # (layer, expert)), so a per-module view sized tier.hot_rows
+            # allocated hot_rows*row_bytes PER LAYER while only ever using
+            # the slots holding its own layer's experts — 16x the host RAM
+            # it needed on a 16-layer model. The view is built once, in
+            # enable_hybrid_tier, and every module reads the same one.
+            self.view = getattr(tier, "_e4b_cold_view", None)
+            if self.view is None:
+                raise RuntimeError(
+                    "cold_dest != 'gpu' but no cold view is attached to the "
+                    "tier. enable_hybrid_tier builds it; constructing "
+                    "_HybridTier directly needs build_cold_view() first.")
 
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
@@ -709,6 +755,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        offload_thin_uniq: int | None = None,
                        cold_dest: str | float = "gpu",
                        protected_rows: int | None = None,
+                       cold_direct: bool = True,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -737,6 +784,15 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     behaves exactly as it did pre-Stage-3 — which is also why
     ``resurrections`` reads 0 until this is set, and why R1-R10 cannot be
     measured without it.
+
+    ``cold_direct`` (default True) asks the cold CPU view for the
+    preadv-scatter landing: segments DMA straight into the kernel-shaped
+    stacks instead of arena row -> ``segment_into`` -> stack. Measured ~43%
+    faster on the fill path. It is not always legal — an arena that cannot
+    scatter, or one storing absmax narrower than fp32, falls back to the
+    copy path — so the outcome is RECORDED (``view.e4b_path``) and logged
+    under ``verbose`` rather than silently chosen. Pass False to force the
+    copy path for an A/B.
 
     It is a threshold, not a scheduler. Whether a deadline estimate beats
     it is gate 2 of the tribrid prereg and is not settled by this knob.
@@ -800,6 +856,15 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
 
     tier = ColdTier(arena_path, hot_rows=hot_rows, pinned=True, qd=qd,
                     protected_rows=protected_rows)
+    # The cold CPU view is built ONCE per tier (its slot space is global) and
+    # before any ensure(), because attach_landing refuses a tier that has
+    # already filled rows into its own buffer.
+    if _parse_cold_dest(cold_dest) != "gpu":
+        v = build_cold_view(tier, tier.reader.index, direct=cold_direct)
+        if verbose:
+            why = getattr(v, "e4b_fallback_reason", None)
+            log(f"  hybrid: cold CPU landing = {v.e4b_path}"
+                + (f" ({why})" if why else ""))
     mods = target_modules(model)
     lay = list(layers) if layers is not None else list(range(len(mods)))
     if len(lay) < len(mods):
@@ -949,7 +1014,10 @@ def cold_stats(model) -> dict:
         if t is not None:
             tier = t
     total = cpu_rows + gpu_rows
-    out = {"cold_rows_cpu": cpu_rows, "cold_rows_gpu": gpu_rows,
+    view = getattr(tier, "_e4b_cold_view", None) if tier is not None else None
+    out = {"cold_landing": getattr(view, "e4b_path", None),
+           "cold_landing_fallback": getattr(view, "e4b_fallback_reason", None),
+           "cold_rows_cpu": cpu_rows, "cold_rows_gpu": gpu_rows,
            "cold_rows": total, "cold_cpu_steps": steps,
            "cold_cpu_frac": (cpu_rows / total) if total else 0.0}
     if tier is not None:
