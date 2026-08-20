@@ -61,14 +61,14 @@ def _parse_cold_dest(dest):
     step, so a typo fails when the run is configured instead of thousands of
     tokens later — and so the rule is testable without a GPU.
     """
-    if dest in ("gpu", "cpu"):
+    if dest in ("gpu", "cpu", "deadline"):
         return dest
     try:
         val = float(dest)
     except (TypeError, ValueError):
         raise ValueError(
-            f"cold_dest must be 'gpu', 'cpu', or a rows-per-unique threshold; "
-            f"got {dest!r}") from None
+            f"cold_dest must be 'gpu', 'cpu', 'deadline', or a "
+            f"rows-per-unique threshold; got {dest!r}") from None
     if val <= 0 or val != val:
         raise ValueError(f"cold_dest threshold must be > 0, got {dest!r}")
     return val
@@ -190,6 +190,12 @@ class _HybridTier(_NvmeResidency):
         if self.d_dn_a.dtype != torch.float32:
             self.d_dn_a = self.d_dn_a.float()
 
+        # Companion to is_dram: lets the deadline rule size the GPU's
+        # committed work with a mask lookup rather than a set search on the
+        # hot path.
+        self.is_vram = torch.zeros(E, dtype=torch.bool, device=self.device)
+        if self.hot_ids.numel():
+            self.is_vram[self.hot_ids.to(self.device)] = True
         self.is_dram = torch.zeros(E, dtype=torch.bool, device=self.device)
         if dram_ids.numel():
             self.is_dram[dram_ids.to(self.device)] = True
@@ -262,6 +268,14 @@ class _HybridTier(_NvmeResidency):
         self.cold_cpu_steps = 0
         self.cold_cpu_rows = 0
         self.cold_gpu_rows = 0
+        # Workstream 4. `costs` is None unless cold_dest="deadline"; the
+        # rule then reads BOTH engines' committed work for this layer and
+        # picks the destination that reaches the join first. Decisions are
+        # recorded with their counterfactual so the model can be SCORED
+        # rather than trusted (the prereg's falsifiability hook).
+        self.costs = getattr(mod, "_e4b_hybrid_costs", None)
+        self.deadline_log = []
+        self.deadline_flips = 0
         if self._cold_dest != "gpu":
             if self.gptoss:
                 # gpt-oss per-expert biases do NOT ride the arena (the
@@ -611,9 +625,76 @@ class _HybridTier(_NvmeResidency):
             return False
         if self._cold_dest == "cpu":
             return True
+        if self._cold_dest == "deadline":
+            return self._cold_to_cpu_deadline(nr, flat)
         # "auto": rows per unique cold expert, the DRAM tier's own statistic
         uniq = int(torch.unique(flat.index_select(0, nr)).numel())
         return (nr.numel() / max(1, uniq)) >= self._cold_dest
+
+    def _group(self, idx, flat):
+        """(rows, unique experts) for a row selection. One device->host sync
+        per call, which is why the deadline rule is opt-in."""
+        if idx.numel() == 0:
+            return 0, 0
+        e = flat.index_select(0, idx)
+        return int(idx.numel()), int(torch.unique(e).numel())
+
+    def _cold_to_cpu_deadline(self, nr, flat):
+        """Destination by predicted time-to-contribution, including what each
+        engine is ALREADY committed to for this layer.
+
+        The committed work is what makes this a deadline estimate rather than
+        a threshold. Both sides are this step's, and both are knowable here:
+
+          CPU  the DRAM rows this layer will compute in place. They have not
+               started -- the cold group is dispatched first -- but for a
+               `max(cpu_side, gpu_side)` join it is the SIDE TOTAL that
+               matters, not the order within a side, so counting them is
+               correct either way. Excluded when they are being offloaded to
+               the GPU, because then they are not the CPU's work at all.
+          GPU  the resident VRAM rows, already submitted by the parent's
+               forward and still in flight.
+
+        **Cost, stated rather than hidden**: `_group` forces a device->host
+        sync per call, and this rule makes up to three. That is the stall
+        class the CPU router exists to remove, which is exactly why this is
+        opt-in and not the default. A sync-free version needs the counts to
+        ride the router's existing host-side copy; that is the follow-up,
+        and until it lands the deadline arm is a measurement tool rather
+        than a serving default.
+        """
+        import cold_deadline
+
+        c = self.costs
+        if c is None:                        # no measured constants: refuse
+            raise RuntimeError(
+                "cold_dest='deadline' needs measured cost constants; pass "
+                "costs= to enable_hybrid_tier. Guessing them would put a "
+                "spec-sheet number into a scheduling decision.")
+        rows, uniq = self._group(nr, flat)
+        if rows == 0:
+            return False
+
+        dram_on_gpu = (getattr(self, "_gpu_only", False)
+                       or getattr(self, "dram_thin", False))
+        cpu_committed = 0.0
+        if not dram_on_gpu:
+            d_idx = torch.nonzero(self.is_dram[flat], as_tuple=True)[0]
+            d_rows, d_uniq = self._group(d_idx, flat)
+            cpu_committed = cold_deadline.cpu_us(d_rows, d_uniq, c)
+        v_idx = torch.nonzero(self.is_vram[flat], as_tuple=True)[0]
+        v_rows, v_uniq = self._group(v_idx, flat)
+        gpu_committed = cold_deadline.gpu_us(v_rows, v_uniq, c)
+
+        d = cold_deadline.choose(rows, uniq, c, cpu_backlog_us=cpu_committed,
+                                 gpu_backlog_us=gpu_committed)
+        rec = d.record()
+        rec.update(rows=rows, uniq=uniq, cpu_committed_us=cpu_committed,
+                   gpu_committed_us=gpu_committed)
+        self.deadline_log.append(rec)
+        if d.flipped_by_backlog:
+            self.deadline_flips += 1
+        return d.dest == "cpu"
 
     def _cold_on_cpu(self, x, flat, row_token, row_slot, nr, top_k_weights,
                      out, dev):
@@ -759,6 +840,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        cold_dest: str | float = "gpu",
                        protected_rows: int | None = None,
                        cold_direct: bool = True,
+                       costs=None,
                        prefetch: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
@@ -900,6 +982,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_hybrid_fused_ffn = fused_ffn
         mod._e4b_hybrid_thin_uniq = offload_thin_uniq
         mod._e4b_hybrid_cold_dest = cold_dest
+        mod._e4b_hybrid_costs = costs
         mod._e4b_setup_tier = setup_tier
         hot_sets.append(place["vram"])
     try:
@@ -924,7 +1007,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                          "_e4b_hybrid_offload_rows",
                          "_e4b_hybrid_fused_ffn",
                          "_e4b_hybrid_thin_uniq",
-                         "_e4b_hybrid_cold_dest"):
+                         "_e4b_hybrid_cold_dest", "_e4b_hybrid_costs"):
                 if hasattr(mod, attr):
                     delattr(mod, attr)
         raise
@@ -1043,7 +1126,14 @@ def cold_stats(model) -> dict:
             tier = t
     total = cpu_rows + gpu_rows
     view = getattr(tier, "_e4b_cold_view", None) if tier is not None else None
-    out = {"cold_landing": getattr(view, "e4b_path", None),
+    flips = deadline = 0
+    for _, mod in model.named_modules():
+        st = getattr(mod, "_hot_residency", None)
+        if st is not None:
+            flips += getattr(st, "deadline_flips", 0)
+            deadline += len(getattr(st, "deadline_log", ()) or ())
+    out = {"deadline_decisions": deadline, "deadline_flips": flips,
+           "cold_landing": getattr(view, "e4b_path", None),
            "cold_landing_fallback": getattr(view, "e4b_fallback_reason", None),
            "cold_rows_cpu": cpu_rows, "cold_rows_gpu": gpu_rows,
            "cold_rows": total, "cold_cpu_steps": steps,
@@ -1080,7 +1170,7 @@ def disable_hybrid_tier(model) -> int:
         for attr in (_MARKER, "_e4b_cold_tier", "_e4b_arena_layer",
                      "_e4b_hybrid_dram_ids", "_e4b_hybrid_threads",
                      "_e4b_hybrid_owns_pool", "_e4b_hybrid_offload_rows",
-                     "_e4b_hybrid_cold_dest",
+                     "_e4b_hybrid_cold_dest", "_e4b_hybrid_costs",
                      "_e4b_hybrid_fused_ffn", "_e4b_hybrid_thin_uniq"):
             if hasattr(mod, attr):
                 delattr(mod, attr)
