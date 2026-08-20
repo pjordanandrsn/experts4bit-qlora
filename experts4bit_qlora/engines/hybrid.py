@@ -110,8 +110,15 @@ def build_cold_view(tier, index, *, direct=True):
             view = ColdCpuView(tier, index, sufs, direct=True)
             tier.attach_landing(view.landing)
             view.e4b_path = "direct-scatter"
-        except (ValueError, RuntimeError, AttributeError) as exc:
-            view, reason = None, str(exc).split(".")[0]
+        except Exception as exc:                     # noqa: BLE001
+            # Broad on purpose. An older gnf4 whose ColdCpuView has no
+            # `direct` keyword raises TypeError, and a narrow except would
+            # kill enable_hybrid_tier at its DEFAULT setting rather than
+            # taking the copy path that has always worked (Bugbot, e4b#176).
+            # The reason is kept WHOLE: splitting on "." truncated messages
+            # that name an arena suffix like `nf4.gate_up_blocks`, which is
+            # exactly the message a reader needs.
+            view, reason = None, f"{type(exc).__name__}: {exc}"
     if view is None:
         view = ColdCpuView(tier, index, sufs, casts=casts or None)
         view.e4b_path = "copy"
@@ -675,16 +682,27 @@ class _HybridTier(_NvmeResidency):
         if rows == 0:
             return False
 
+        # Which engine the DRAM rows land on has to be decided the SAME way
+        # _cold_contrib decides it, including the offload_rows test -- and
+        # when they go to the GPU their cost belongs to the GPU side, not
+        # nowhere. Dropping it made the estimator see a busy CPU beside an
+        # idle GPU that was in fact doing the DRAM work, so cold rows could
+        # be sent to the engine already carrying it (Bugbot, e4b#179).
+        d_idx = torch.nonzero(self.is_dram[flat], as_tuple=True)[0]
+        d_rows, d_uniq = self._group(d_idx, flat)
         dram_on_gpu = (getattr(self, "_gpu_only", False)
                        or getattr(self, "dram_thin", False))
-        cpu_committed = 0.0
-        if not dram_on_gpu:
-            d_idx = torch.nonzero(self.is_dram[flat], as_tuple=True)[0]
-            d_rows, d_uniq = self._group(d_idx, flat)
-            cpu_committed = cold_deadline.cpu_us(d_rows, d_uniq, c)
+        thresh = getattr(self, "offload_rows", None)
+        if not dram_on_gpu and thresh is not None and d_rows:
+            dram_on_gpu = (d_rows / max(1, d_uniq)) >= thresh
+        cpu_committed = (0.0 if dram_on_gpu
+                         else cold_deadline.cpu_us(d_rows, d_uniq, c))
+
         v_idx = torch.nonzero(self.is_vram[flat], as_tuple=True)[0]
         v_rows, v_uniq = self._group(v_idx, flat)
         gpu_committed = cold_deadline.gpu_us(v_rows, v_uniq, c)
+        if dram_on_gpu:
+            gpu_committed += cold_deadline.gpu_us(d_rows, d_uniq, c)
 
         d = cold_deadline.choose(rows, uniq, c, cpu_backlog_us=cpu_committed,
                                  gpu_backlog_us=gpu_committed)
