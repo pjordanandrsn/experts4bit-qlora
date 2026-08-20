@@ -225,6 +225,55 @@ def test_cold_on_cpu_is_bit_identical_to_the_same_expert_placed_in_dram(one_laye
 
 
 @needs_stack
+def test_cold_on_gpu_is_bit_identical_to_the_same_expert_placed_in_vram(one_layer):
+    """The GPU destination's half of the equivalence, and the one the suite was
+    missing when #171 was filed.
+
+    A cold expert executed on the GPU and a VRAM-placed expert executed on the
+    GPU run the SAME `_fused_over_stack` over the SAME arena bytes on the same
+    device — only the bytes' provenance differs (tier row vs setup-time stack).
+    So this is BITWISE, exactly like the CPU destination's test above.
+
+    It is the test that separates the two things #171 could have been. A cold
+    gather that mis-indexed an expert, or a router weight applied to the wrong
+    row, lands here as an O(1) difference. Rounding does not: a matched
+    destination cannot round differently from itself. What #171 measured was a
+    cold-GPU arm compared against a control in which those experts sat in the
+    DRAM tier and therefore executed on the CPU in fp32 — a cross-placement
+    rounding change, which is why the same manifest at `cold_dest="cpu"`
+    matched the control and this one did not. `bench/hybrid-g9/issue171/`
+    measures that pair at 4.622e-03 relative RMS, and measures DRAM against
+    VRAM — no cold path in it at all — at the same 4.622e-03.
+    """
+    model, path, _ = one_layer
+    torch.manual_seed(3)
+    hidden = torch.randn(1, H, dtype=torch.bfloat16, device="cuda")
+    wts = torch.rand(1, K, device="cuda", dtype=torch.bfloat16)
+    idx = torch.tensor([[2, 3]], device="cuda")
+
+    hy.enable_hybrid_tier(model, path, _manifest(
+        {"vram": [0, 2, 3], "dram": [], "nvme": [1, 4, 5, 6, 7]}), hot_rows=E)
+    try:
+        resident = _run(model, idx, wts, hidden)
+    finally:
+        hy.disable_hybrid_tier(model)
+
+    hy.enable_hybrid_tier(model, path, _manifest(
+        {"vram": [0], "dram": [], "nvme": [1, 2, 3, 4, 5, 6, 7]}), hot_rows=E)
+    try:
+        cold = _run(model, idx, wts, hidden)
+        st = hy.cold_stats(model)
+    finally:
+        hy.disable_hybrid_tier(model)
+
+    assert st["cold_rows_gpu"] == 2 and st["cold_rows_cpu"] == 0
+    assert torch.equal(cold, resident), (
+        "a cold expert computed on the GPU must equal the same expert placed "
+        "in VRAM — same kernel, same bytes, same device (max abs diff "
+        f"{(cold.float() - resident.float()).abs().max().item():.3e})")
+
+
+@needs_stack
 @needs_view
 def test_default_still_routes_cold_rows_to_the_gpu(one_layer):
     """Invariant 9: the feature is inert unless asked for."""
@@ -243,6 +292,55 @@ def test_default_still_routes_cold_rows_to_the_gpu(one_layer):
         "cold_dest='gpu' must not build a view it will never read"
     hy.disable_hybrid_tier(model)
     assert base is not None
+
+
+@needs_stack
+@needs_view
+def test_the_two_destinations_are_not_interchangeable_and_the_gap_is_bf16_scale(
+        one_layer):
+    """The law the two tests above bracket, stated as a measurement.
+
+    Each destination is bitwise against its OWN matched reference — CPU against
+    DRAM, GPU against VRAM — and the two destinations are NOT bitwise against
+    each other: the CPU kernels run a locked fp32 tree while the GPU kernel
+    lands each grouped GEMM in the compute dtype and runs the SwiGLU epilogue
+    there. Choosing `cold_dest` therefore chooses a rounding path, which is why
+    it belongs in run identity next to the manifest.
+
+    Asserted from both ends. A floor, because a zero here would mean one of the
+    destinations stopped being the engine it claims to be. A ceiling at bf16
+    mantissa scale, because anything larger is a real defect and not rounding —
+    that is the discrimination #171 needed and did not have.
+    """
+    model, path, _ = one_layer
+    torch.manual_seed(3)
+    hidden = torch.randn(8, H, dtype=torch.bfloat16, device="cuda")
+    wts = torch.rand(8, K, device="cuda", dtype=torch.bfloat16)
+    # every token routes to two DISTINCT cold experts (offset 3 is coprime
+    # with 7), so no token's k slots collapse onto one expert
+    idx = torch.stack([torch.arange(8) % 7 + 1,
+                       (torch.arange(8) + 3) % 7 + 1], dim=1).cuda()
+    man = _manifest({"vram": [0], "dram": [], "nvme": [1, 2, 3, 4, 5, 6, 7]})
+
+    hy.enable_hybrid_tier(model, path, man, hot_rows=E, cold_dest="gpu")
+    try:
+        on_gpu = _run(model, idx, wts, hidden).float()
+    finally:
+        hy.disable_hybrid_tier(model)
+
+    hy.enable_hybrid_tier(model, path, man, hot_rows=E, cold_dest="cpu")
+    try:
+        on_cpu = _run(model, idx, wts, hidden).float()
+    finally:
+        hy.disable_hybrid_tier(model)
+
+    rel = ((on_gpu - on_cpu).pow(2).mean().sqrt()
+           / on_cpu.pow(2).mean().sqrt()).item()
+    assert rel > 0, ("the destinations came out bit-identical — one of them is "
+                     "no longer running the engine it claims to")
+    assert rel < 2 ** -5, (
+        f"cold_dest gap is {rel:.3e} relative RMS, past bf16 mantissa scale: "
+        "that is a defect in a destination, not its rounding path")
 
 
 @needs_stack
