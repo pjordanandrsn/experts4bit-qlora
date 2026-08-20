@@ -15,6 +15,7 @@ the bytes on disk are bit-identical to the bytes the engine would have held in
 RAM. That keeps the provenance claim intact end to end: any divergence below is a
 bug in the tiering, not an artifact of a re-quantization step.
 """
+import importlib.util
 import json
 import struct
 
@@ -26,6 +27,14 @@ pytest.importorskip("nvme_residency")
 
 from nvme_arena import bake_expert_tensors, load_index, verify  # noqa: E402
 from nvme_residency import ColdTier  # noqa: E402
+
+# ColdCpuView is NEWER than the gnf4 that CI resolves, so the view-backed
+# tests skip there instead of failing the suite -- but only THOSE tests. A
+# module-level importorskip would take the rebuild-path equivalence tests
+# with it, and those are the ones that hold on every gnf4.
+_HAS_VIEW = importlib.util.find_spec("cold_cpu_view") is not None
+_needs_view = pytest.mark.skipif(
+    not _HAS_VIEW, reason="needs grouped-nf4-gemm cold_cpu_view")
 
 from experts4bit_qlora import Experts4bit  # noqa: E402
 from experts4bit_qlora.engines.nvme_experts import NF4_SEGMENTS, _TieredStack  # noqa: E402
@@ -124,6 +133,7 @@ def test_tiered_stack_is_bitwise_equal_to_the_resident_stack(arena, hot_rows):
                     f"(routed={routed.tolist()}, hot_rows={hot_rows})")
 
 
+@_needs_view
 @pytest.mark.parametrize("hot_rows", [E, 2])
 def test_tiered_stack_through_the_view_is_bitwise_equal(arena, hot_rows):
     """Same claim as above, with a ColdCpuView attached so index_select takes
@@ -156,6 +166,7 @@ def test_tiered_stack_through_the_view_is_bitwise_equal(arena, hot_rows):
                     f"(routed={routed.tolist()}, hot_rows={hot_rows})")
 
 
+@_needs_view
 def test_a_repeat_request_through_the_view_skips_re_materialization(arena):
     """The point of the change. The second ask for an expert the view already
     holds must cost no host copy -- that staging is what gate 1 attributes
@@ -177,6 +188,7 @@ def test_a_repeat_request_through_the_view_skips_re_materialization(arena):
         assert view.stats()["view_hits"] > hits_before
 
 
+@_needs_view
 def test_a_view_that_casts_is_refused_and_the_rebuild_path_runs(arena, tmp_path):
     """The guard that keeps this from being a silent reinterpretation. When the
     view materializes a segment at a WIDER dtype than the segment's contract,
