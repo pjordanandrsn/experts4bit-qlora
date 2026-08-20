@@ -84,3 +84,33 @@ Suite on the box: 962 passed / 45 skipped against 959 / 45 on `origin/main`,
 i.e. exactly the three new tests, no new skips. The one failure
 (`test_version_matches_distribution_metadata`) is present on both and is an
 artifact of running from `PYTHONPATH` rather than an installed distribution.
+
+## Caveat: a matched reference is not only about the experts that MOVE
+
+The `control_dram` vs `cold_cpu` row above holds the destination fixed *for the
+experts under test*. It does not by itself make the two arms matched, because
+`_HybridTier.dram_thin` is decided at enable time from the layer's TOTAL DRAM
+population (`0 < n_dram <= offload_thin_uniq`), and moving experts out of DRAM
+shrinks it. A layer above the threshold in the control can fall to or below it
+in a cold arm, and the DRAM experts that **stayed** then flip from the CPU tier
+to the GPU — a destination change on experts the arm never touched.
+
+Measured on the same box (grouped-nf4-gemm
+`bench/cold-engine/gate1-recon-a2000/thin_flip.py`), one layer, 3 of 7 DRAM
+experts moved, `cold_dest="cpu"` so every mover stays on the CPU:
+
+| `offload_thin_uniq` | control `n_dram`/thin | cold `n_dram`/thin | rel RMS | bitwise |
+|---|---|---|---|---|
+| `None` | 7 / False | 4 / False | 0.000e+00 | **yes** |
+| `4` | 7 / False | 4 / **True** | 3.654e-03 | no |
+| `8` | 7 / **True** | 4 / **True** | 3.362e-03 | no |
+
+`offload_rows` reads per-step DRAM routing statistics that a placement change
+also perturbs, so it is the same class. An equivalence arm therefore has to
+hold the *thin/offload configuration* fixed as well as the destination, or
+report it — and a placement-arm receipt should record the engine's
+`enable_hybrid_tier` kwargs, not only the sweep's.
+
+The campaign-side account of the same finding, including what it does and does
+not settle for gate 1, is in grouped-nf4-gemm
+`bench/cold-engine/RESULTS-tribrid-gate1.md`.
