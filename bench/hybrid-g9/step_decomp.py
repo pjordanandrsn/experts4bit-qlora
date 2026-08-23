@@ -320,7 +320,8 @@ def main():
             am = st.amort
             row = {k2: int(am[k2]) for k2 in
                    ("steps", "acts", "uniq_vram", "uniq_dram",
-                    "uniq_nvme", "acts_vram", "acts_dram", "acts_nvme")}
+                    "uniq_nvme", "acts_vram", "acts_dram", "acts_nvme",
+                    "dram_steps")}
             row["touch"] = am["touch"].cpu().tolist()
             row["hist"] = am["hist"].cpu().tolist()
             per_layer.append(row)
