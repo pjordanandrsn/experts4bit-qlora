@@ -377,6 +377,15 @@ class _HybridTier(_NvmeResidency):
                       "hist": torch.zeros(int(self.mod.num_experts),
                                           dtype=torch.long,
                                           device=self.device),
+                      # per-expert count of STEPS in which the expert was
+                      # touched at all. hist/asks answers "how often is e
+                      # drawn"; this answers "in what fraction of steps
+                      # does e appear" -- the step-level touch frequency
+                      # the co-routing model consumes directly, with no
+                      # independence assumption between a step's tokens.
+                      "touch": torch.zeros(int(self.mod.num_experts),
+                                           dtype=torch.long,
+                                           device=self.device),
                       } if on else None
         return self.amort
 
@@ -389,6 +398,7 @@ class _HybridTier(_NvmeResidency):
         a["steps"] += 1
         a["acts"] += int(flat.numel())
         uniq = torch.unique(flat)
+        a["touch"][uniq] += 1
         hot_u = self.is_hot[uniq]
         dram_u = self.is_dram[uniq]
         a["uniq_vram"] += int(hot_u.sum())
