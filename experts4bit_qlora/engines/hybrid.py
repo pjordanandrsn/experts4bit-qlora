@@ -391,6 +391,12 @@ class _HybridTier(_NvmeResidency):
                       # step, so the regime-split conversion model needs
                       # this count separately from the unique totals.
                       "dram_steps": 0,
+                      # optional per-step series of touched expert ids
+                      # (all tiers -- routing is placement-independent).
+                      # GPU tensors are appended sync-free and moved to
+                      # host only when a consumer drains the list, so a
+                      # timing run without a series consumer pays nothing.
+                      "series": [],
                       } if on else None
         return self.amort
 
@@ -404,6 +410,7 @@ class _HybridTier(_NvmeResidency):
         a["acts"] += int(flat.numel())
         uniq = torch.unique(flat)
         a["touch"][uniq] += 1
+        a["series"].append(uniq)
         hot_u = self.is_hot[uniq]
         dram_u = self.is_dram[uniq]
         a["uniq_vram"] += int(hot_u.sum())
