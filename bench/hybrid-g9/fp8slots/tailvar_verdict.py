@@ -77,11 +77,12 @@ def score(wdir, src):
     h1 = (cvs_fit[-1] >= 2 * cvs_fit[0]
           and cvs_fit.index(max(cvs_fit)) == cvs_held.index(max(cvs_held))
           and cvs_fit.index(min(cvs_fit)) == cvs_held.index(min(cvs_held)))
-    print("H1 structure: tail cv %.1f%% vs 2x deep %.1f%%; argmax/argmin "
-          "replicate: %s -> %s" % (cvs_fit[-1] * 100, 2 * cvs_fit[0] * 100,
-                                   cvs_fit.index(max(cvs_fit)) ==
-                                   cvs_held.index(max(cvs_held)),
-                                   "PASS" if h1 else "FAIL"))
+    amax = cvs_fit.index(max(cvs_fit)) == cvs_held.index(max(cvs_held))
+    amin = cvs_fit.index(min(cvs_fit)) == cvs_held.index(min(cvs_held))
+    print("H1 structure: tail cv %.1f%% vs 2x deep %.1f%%; argmax "
+          "replicates: %s; argmin replicates: %s -> %s"
+          % (cvs_fit[-1] * 100, 2 * cvs_fit[0] * 100, amax, amin,
+             "PASS" if h1 else "FAIL"))
     cov2, covb, cells = 0, 0, 0
     for w in held:
         for bi in range(len(br)):
