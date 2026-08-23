@@ -61,10 +61,14 @@ def score(path):
     if not gate(ladder, point):
         print("VERDICT: VOID (gate failed)")
         return
+    for v in ladder:
+        if abs(uniq(point(1, v)) - uniq(point(2, v))) > 1e-9 \
+                or abs(calls(point(1, v)) - calls(point(2, v))) > 1e-9:
+            print("DETERMINISM-BROKEN at v=%g" % v)
+            print("VERDICT: VOID (counters differ across passes)")
+            return
     br = []
     for lo, hi in zip(ladder, ladder[1:]):
-        for pn in (1, 2):
-            assert abs(uniq(point(pn, lo)) - uniq(point(3 - pn, lo))) < 1e-9
         dT = [dram_ms(point(pn, lo)) - dram_ms(point(pn, hi))
               for pn in (1, 2)]
         dU = uniq(point(1, lo)) - uniq(point(1, hi))
