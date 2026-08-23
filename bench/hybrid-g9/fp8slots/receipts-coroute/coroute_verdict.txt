@@ -1,0 +1,7 @@
+calibration: 142 steps, B=16, fitted B_eff = 16.00
+bracket 7->9 +809 | dU   197.9 | M1   225.5(± 22.5) FAIL | M2   221.2(± 33.2) PASS | M0   221.2 NOT-refuted
+bracket 9->10 +405 | dU    56.8 | M1    51.4(±  5.1) FAIL | M2    50.9(±  7.6) PASS | M0    50.9 NOT-refuted
+bracket 10->10.75 +303 | dU    27.5 | M1    21.5(±  2.1) FAIL | M2    21.4(±  3.2) FAIL | M0    21.4 refuted
+bracket 10.75->11.5 +304 | dU    24.5 | M1    10.0(±  1.4) FAIL | M2     9.9(±  1.5) FAIL | M0     9.9 refuted
+M2 (B_eff=16.00): 2/4 brackets in bar
+VERDICT: M1-REFUTED
