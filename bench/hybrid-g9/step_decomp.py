@@ -64,6 +64,10 @@ def main():
     ap.add_argument("--dram-gb", type=float, default=6.0)
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--prompt-len", type=int, default=128)
+    ap.add_argument("--prompt-offset", type=int, default=0,
+                    help="skip this many corpus tokens before slicing the "
+                         "prompt windows (disjoint-window generalization "
+                         "runs)")
     ap.add_argument("--gen-tokens", type=int, default=32)
     ap.add_argument("--chunk", type=int, default=128)
     ap.add_argument("--hot-rows", type=int, default=64)
@@ -141,6 +145,10 @@ def main():
                       split="test")
     text = "\n\n".join(t for t in ds["text"] if t.strip())
     ids = tok(text, return_tensors="pt").input_ids[0]
+    if a.prompt_offset:
+        assert a.prompt_offset + a.batch * a.prompt_len < ids.numel(), \
+            "prompt-offset leaves too little corpus for the windows"
+        ids = ids[a.prompt_offset:]
     step = max(1, (ids.numel() - a.prompt_len) // max(1, a.batch))
     prompts = [ids[i * step:i * step + a.prompt_len].tolist()
                for i in range(a.batch)]
@@ -305,10 +313,12 @@ def main():
         per_layer = []
         for st in states:
             am = st.amort
-            per_layer.append({k2: int(am[k2]) for k2 in
-                              ("steps", "acts", "uniq_vram", "uniq_dram",
-                               "uniq_nvme", "acts_vram", "acts_dram",
-                               "acts_nvme")})
+            row = {k2: int(am[k2]) for k2 in
+                   ("steps", "acts", "uniq_vram", "uniq_dram",
+                    "uniq_nvme", "acts_vram", "acts_dram", "acts_nvme")}
+            row["touch"] = am["touch"].cpu().tolist()
+            row["hist"] = am["hist"].cpu().tolist()
+            per_layer.append(row)
         Path(a.amort_out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.amort_out).write_text(json.dumps({
             "vram_gb": a.vram_gb, "batch": a.batch, "top_k": k,
