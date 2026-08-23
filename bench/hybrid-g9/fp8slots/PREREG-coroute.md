@@ -33,14 +33,17 @@ so no A/A box-noise gate applies. The inferential weight is
 **cross-window generalization**:
 
 1. **W1 (calibration):** one run at `vram_gb = 10.0`, `--gen-tokens
-   128` (more steps → tighter P̂), `--prompt-offset 0`. Collects
-   per-expert `touch` and `hist` counters (decode-only via the
-   committed rollback mechanism).
+   128` (more steps → tighter P̂), corpus slice `[0, 140000)`
+   (`--prompt-offset 0 --prompt-span 140000`). Collects per-expert
+   `touch` and `hist` counters (decode-only via the committed rollback
+   mechanism).
 2. **W2 (held-out):** the standard sweep — ladder {7.0, 9.0, 10.0,
-   10.75, 11.5} GB, two passes, `--gen-tokens 48`, `--prompt-offset
-   150000` (disjoint wikitext windows ~half the corpus away). The pass
-   pair is the determinism check: any uniques mismatch across passes
-   at any point ⇒ VOID.
+   10.75, 11.5} GB, two passes, `--gen-tokens 48`, corpus slice
+   `[150000, 290000)` (`--prompt-offset 150000 --prompt-span 140000`).
+   The slices are DISJOINT with a 10k-token guard gap — a bare offset
+   is not enough, since prompts spread over the whole remaining corpus
+   (Bugbot, e4b#192). The pass pair is the determinism check: any
+   uniques mismatch across passes at any point ⇒ VOID.
 3. Everything else as the slot-value run: Qwen3-30B-A3B, B=16, chunk
    512, pool 32 / torch-intraop 8, solver constants 55/2, measured
    routing profile for placements, NVMe tier must stay empty.

@@ -65,9 +65,12 @@ def main():
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--prompt-len", type=int, default=128)
     ap.add_argument("--prompt-offset", type=int, default=0,
-                    help="skip this many corpus tokens before slicing the "
-                         "prompt windows (disjoint-window generalization "
-                         "runs)")
+                    help="start of the corpus slice the prompt windows are "
+                         "cut from (disjoint-window generalization runs)")
+    ap.add_argument("--prompt-span", type=int, default=0,
+                    help="length of that corpus slice; 0 = to the end. "
+                         "Without a bounded span, prompts spread over the "
+                         "WHOLE remaining corpus and two offsets overlap")
     ap.add_argument("--gen-tokens", type=int, default=32)
     ap.add_argument("--chunk", type=int, default=128)
     ap.add_argument("--hot-rows", type=int, default=64)
@@ -145,10 +148,12 @@ def main():
                       split="test")
     text = "\n\n".join(t for t in ds["text"] if t.strip())
     ids = tok(text, return_tensors="pt").input_ids[0]
-    if a.prompt_offset:
-        assert a.prompt_offset + a.batch * a.prompt_len < ids.numel(), \
-            "prompt-offset leaves too little corpus for the windows"
-        ids = ids[a.prompt_offset:]
+    if a.prompt_offset or a.prompt_span:
+        end = (a.prompt_offset + a.prompt_span) if a.prompt_span \
+            else ids.numel()
+        assert a.prompt_offset + a.batch * a.prompt_len < end <= ids.numel(), \
+            "prompt slice leaves too little corpus for the windows"
+        ids = ids[a.prompt_offset:end]
     step = max(1, (ids.numel() - a.prompt_len) // max(1, a.batch))
     prompts = [ids[i * step:i * step + a.prompt_len].tolist()
                for i in range(a.batch)]

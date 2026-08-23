@@ -30,6 +30,7 @@ def run_point(a, vram_gb, tag, extra):
            "--gen-tokens", str(a.gen_tokens), "--chunk", str(a.chunk),
            "--threads", str(a.threads),
            "--prompt-offset", str(a.prompt_offset),
+           "--prompt-span", str(a.prompt_span),
            "--cpu-us-fixed", "55", "--cpu-us-per-row", "2",
            "--out", str(out), "--amort-out", str(amort)] + extra
     print("RUN", tag, "vram_gb=", vram_gb, flush=True)
@@ -52,6 +53,7 @@ def main():
     ap.add_argument("--chunk", type=int, default=512)
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--prompt-offset", type=int, default=0)
+    ap.add_argument("--prompt-span", type=int, default=0)
     ap.add_argument("--profile", default=None)
     ap.add_argument("--profile-pass", action="store_true",
                     help="run one top-budget point emitting the routing "
