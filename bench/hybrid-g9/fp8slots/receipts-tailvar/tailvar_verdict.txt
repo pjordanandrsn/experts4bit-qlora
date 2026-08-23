@@ -1,0 +1,10 @@
+bracket sizes: [809, 405, 303, 304]
+b1  fit mean   241.74  cv  11.3%  | held cv   9.0%
+b2  fit mean    67.42  cv  22.9%  | held cv  15.1%
+b3  fit mean    31.77  cv  26.1%  | held cv  17.9%
+b4  fit mean    21.04  cv  28.2%  | held cv  20.9%
+H1 structure: tail cv 28.2% vs 2x deep 22.5%; argmax replicates: True; argmin replicates: True -> PASS
+H2 envelopes: 20/20 held-out cells covered (bar >= 18) -> PASS
+H3 control: binomial-only covers 4/20 (must be < 14) -> informative
+deliverable u_b (2cv): ['22.5%', '45.7%', '52.3%', '56.3%']
+VERDICT: ENVELOPES-CERTIFIED
