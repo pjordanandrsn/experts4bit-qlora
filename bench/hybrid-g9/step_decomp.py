@@ -82,6 +82,9 @@ def main():
     ap.add_argument("--profile-out", default=None,
                     help="write this run's decode routing hist as an "
                          "expert_profile JSONL (profile-pass mode)")
+    ap.add_argument("--series-out", default=None,
+                    help="write the per-step touched-expert series "
+                         "(decode-only, all tiers) as gzipped JSON")
     ap.add_argument("--amort-out", default=None,
                     help="write decode-only per-tier unique/activation "
                          "accounting plus the manifest VRAM set")
@@ -183,7 +186,9 @@ def main():
             for st in states:
                 am = st.amort
                 saved.append(None if am is None else
-                             {k2: (v.clone() if torch.is_tensor(v) else v)
+                             {k2: (v.clone() if torch.is_tensor(v)
+                                   else list(v) if isinstance(v, list)
+                                   else v)
                               for k2, v in am.items()})
             t0 = time.perf_counter_ns()
             out = super().run_prefill(chunks)
@@ -196,6 +201,8 @@ def main():
                         if torch.is_tensor(v):
                             cur[k2].copy_(v)
                         else:
+                            # lists were snapshot-copied above, so plain
+                            # assignment drops any prefill appends
                             cur[k2] = v
             self.prefill_rows.append(
                 {"chunks": len(chunks),
@@ -314,6 +321,18 @@ def main():
                                             "expert_id": e,
                                             "tokens_routed": int(c)}) + "\n")
         print(f"PROFILE_OUT {a.profile_out}", flush=True)
+    if a.series_out:
+        import gzip
+        ser = []
+        for st in states:
+            ser.append([u.cpu().tolist() for u in st.amort["series"]])
+        n_steps_series = {len(x) for x in ser}
+        assert len(n_steps_series) == 1, \
+            f"layers disagree on series length: {n_steps_series}"
+        with gzip.open(a.series_out, "wt") as f:
+            json.dump({"per_layer_series": ser}, f)
+        print(f"SERIES_OUT {a.series_out} steps={n_steps_series.pop()}",
+              flush=True)
     if a.amort_out:
         per_layer = []
         for st in states:

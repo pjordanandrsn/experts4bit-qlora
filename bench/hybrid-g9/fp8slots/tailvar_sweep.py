@@ -28,6 +28,9 @@ def main():
     ap.add_argument("--gen-tokens", type=int, default=64)
     ap.add_argument("--chunk", type=int, default=512)
     ap.add_argument("--threads", type=int, default=32)
+    ap.add_argument("--series", action="store_true",
+                    help="also dump each window's per-step touched-expert "
+                         "series (gzipped)")
     ap.add_argument("--out-dir", required=True)
     a = ap.parse_args()
     pathlib.Path(a.out_dir).mkdir(parents=True, exist_ok=True)
@@ -47,6 +50,9 @@ def main():
                "--prompt-span", str(a.window_span),
                "--out", str(pathlib.Path(a.out_dir) / f"{tag}.json"),
                "--amort-out", str(amort)]
+        if a.series:
+            cmd += ["--series-out",
+                    str(pathlib.Path(a.out_dir) / f"{tag}.series.json.gz")]
         print(f"RUN {tag} offset={off} span={a.window_span}", flush=True)
         r = subprocess.run(cmd)
         if r.returncode != 0:
