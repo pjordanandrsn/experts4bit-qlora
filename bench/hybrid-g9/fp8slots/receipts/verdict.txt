@@ -1,0 +1,14 @@
+gate v=7     dram   19.54 /   19.97 ms  noise   2.2%
+gate v=9     dram   14.69 /   14.75 ms  noise   0.5%
+gate v=10    dram   12.01 /   11.82 ms  noise   1.5%
+gate v=10.75 dram   10.48 /   10.15 ms  noise   3.2%
+gate v=11.5  dram    9.53 /    9.25 ms  noise   3.0%
+gate median noise 2.2% (bar <= 5%), worst 3.2% (bar <= 10%)
+A/A GATE: ACCEPT
+bracket 7->9  +809 slots | dU pred  248.8 meas  195.2 (allow  37.3) B1-FAIL | dT pred  11.32 meas   5.03 ms (allow  2.83) B2-FAIL |   6.2 us/slot
+bracket 9->10  +405 slots | dU pred   55.3 meas   51.7 (allow   8.3) B1-PASS | dT pred   3.00 meas   2.81 ms (allow  0.75) B2-PASS |   6.9 us/slot
+bracket 10->10.75  +303 slots | dU pred   20.9 meas   12.5 (allow   3.1) B1-FAIL | dT pred   0.72 meas   1.60 ms (allow  0.44) B2-FAIL |   5.3 us/slot
+bracket 10.75->11.5  +304 slots | dU pred    9.3 meas    9.2 (allow   1.4) B1-PASS | dT pred   0.53 meas   0.92 ms (allow  0.15) B2-FAIL |   3.0 us/slot
+B3 tail bracket: 3.0 us/slot vs band [12, 45] -> FAIL
+spoiler ok: full-range dT 10.36 ms > 3x spread 2.13 ms
+VERDICT: REFUTED
