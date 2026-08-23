@@ -160,10 +160,30 @@ def main():
         def run_prefill(self, chunks):
             PROF["mode"] = "prefill"
             d0, g0 = self._amort_snap()
+            # decode-only accounting by construction: capture the tier
+            # counters, let the prefill run (its own dram/gpu deltas are
+            # recorded below, before the rollback), then restore — so
+            # prefill chunks interleaved by the scheduler at ANY later
+            # step never leak into --amort-out / --profile-out
+            # (Bugbot, e4b#189).
+            saved = []
+            for st in states:
+                am = st.amort
+                saved.append(None if am is None else
+                             {k2: (v.clone() if torch.is_tensor(v) else v)
+                              for k2, v in am.items()})
             t0 = time.perf_counter_ns()
             out = super().run_prefill(chunks)
             wall = time.perf_counter_ns() - t0
             d1, g1 = self._amort_snap()
+            for st, am in zip(states, saved):
+                if am is not None and st.amort is not None:
+                    cur = st.amort
+                    for k2, v in am.items():
+                        if torch.is_tensor(v):
+                            cur[k2].copy_(v)
+                        else:
+                            cur[k2] = v
             self.prefill_rows.append(
                 {"chunks": len(chunks),
                  "tokens": sum(c[2] for c in chunks),
@@ -175,14 +195,6 @@ def main():
         def run_decode(self, rids):
             if not rids:
                 return {}
-            # decode-only accounting: prefill chunks also count amortization
-            # steps, so the tier totals are re-armed once, at the first
-            # decode step. Per-step dram_ns/gpu_ns deltas snap inside each
-            # call and never straddle the reset.
-            if not getattr(self, "_decode_armed", False):
-                for st in states:
-                    st.arm_amortization(True)
-                self._decode_armed = True
             # duplicated from PagedModelRunner.run_decode by design: the
             # split being measured (forward submission vs drain) lives
             # INSIDE the method, so instrumentation must inline it
