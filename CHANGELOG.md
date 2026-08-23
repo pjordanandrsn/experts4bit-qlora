@@ -1,5 +1,88 @@
 # Changelog
 
+## 0.20.0 — 2026-08-23
+
+Minor release. 0.19.1 predates the hybrid tier (Phases 1–9), the cold engine's
+CPU destination, the residency and scheduling work, and the correctness round
+that followed them.
+
+### Dependency floor
+
+**`grouped-nf4-gemm>=0.14.0` is now required** by both the `[fast]` and `[test]`
+extras, raised from `>=0.12.0`. 0.14.0 carries
+[grouped-nf4-gemm#205](https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/205):
+the MXFP4 port of the grouped kernels had dropped NF4's int64 `eid` promotion,
+so `eid * stride_be` overflowed signed-int32 and an MXFP4 expert stack past
+2^31 bytes raised an illegal memory access. Every arena and cold path here that
+stacks MXFP4 experts crosses that boundary at DeepSeek/K3-class expert counts,
+and there is no degraded mode — the launch faults.
+
+### New capabilities
+
+- **Hybrid three-tier engine** (`engines/hybrid.py`, `engines/hybrid_train.py`)
+  — VRAM / DRAM / NVMe with a placement solver and three-bus executor (#148),
+  speculative prefetch that routes layer L+1 from L (#149), and QLoRA backward
+  over the whole three-tier engine (#150).
+- **CPU router** (`engines/cpu_router.py`) with a native epilogue (#146, #147).
+- **A second execution destination for cold experts** — NVMe → DRAM → **CPU**
+  (#168), with `cold_dest="deadline"` choosing against both engines' committed
+  work (#179), and setup reads given their own tier so the serving tier can
+  carry a direct landing (#177).
+- **Paged KV and attention** — `engines/paged_kv.py`, `engines/fp8_paged_kv.py`,
+  `engines/paged_attention.py`, `engines/paged_runner.py`, `engines/fp8_kv_cache.py`:
+  tiered paged KV over the generalized RowPool (#152), an FP8 KV cache with a
+  quality oracle (#153), and paged FP8 attention with a continuous-batching
+  engine (#155).
+- **Placement and scheduling** — `engines/placement.py`, `engines/scheduler.py`,
+  including the batched placement law (#155).
+- **Thin-layer DRAM routing** — layers below a static population threshold serve
+  their DRAM experts on the GPU (#159).
+- **`protected_rows` is exposed** — R1–R10 cannot be measured without it (#172).
+
+### Performance
+
+Measured on the paths shipped here:
+
+- **GPU cold stacks read the cold view (#184): −5.9% at 5% cold mass, −12.1% at
+  20%.** `_TieredStack.index_select` had rebuilt every routed row with
+  `segment_tensor` on each call, including for experts the cold view had already
+  materialized. Gate 1 attributes ~98% of cold cost to exactly that staging.
+- The hybrid tier adopts the fused expert-FFN kernel — one pool wake per DRAM
+  call (#156). On the full-stack re-measure the `fused_ffn` **default flips to
+  `False`** (#157): it wins only with work-stealing underneath it, so the
+  default follows the measurement rather than the feature.
+- Direct scatter is wired into the engine, and the engine stops building one
+  cold view per module (#176).
+
+### Correctness
+
+- **Four unread Bugbot findings addressed (#181).** `gate1_cold_sweep`'s
+  `beats_both_fixed` read an *absent* fixed arm's `exposed_ns` as `+inf`, so
+  "the dynamic arm beat a measurement that does not exist" **passed** the
+  clause — an inversion in a module whose stated rule is the opposite. Plus two
+  fallback defects and DRAM load the deadline estimator charged to nobody.
+- **The direct landing and the GPU cold path cannot share a tier (#180)**, and
+  #185 then lifted the direct-landing bar for GPU and mixed destinations once
+  #184 removed the `row()` call that required it — the fallback and the external
+  landing are now mutually exclusive by construction rather than by timing.
+- `cold_stats` forwards the reuse ratio's own denominator (#182, #183).
+- Deterministic per-token combine — unique `(token, slot)` writes and one
+  fixed-order sum (#151).
+- `cold_dest` is a rounding path, not just a bus, with matched-reference tests
+  pinning it (#173, #174).
+
+### Measurement and research artifacts (no runtime behavior change)
+
+`bench/hybrid-g3` … `bench/hybrid-g9` and `bench/cpu-router` hold the gate
+record for the hybrid campaign. Reported as measurements, not as product claims:
+G8 closed at 0.51–0.68 with the full stack, with the residual identified as
+intra-call (#163); G9's program best was 45.4 tok/s (#163) and its TTFT missed
+by single-digit milliseconds (#161); the call-size bandwidth ramp is the
+frontier while L3-warmth and spin-window mechanisms were refuted (#164); B=8
+balance closed at 0.978 on reference silicon with B=16 open at 0.618–0.698
+(#166, #167); and a TTFT pool-size effect was **retracted** as a first-run
+compile artifact (#158).
+
 ## 0.19.1 — 2026-08-14
 
 ### The compacted stack: measured, and closed

@@ -596,7 +596,7 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
         warnings.warn(
             "[e4b.fast] dgrad=True ignored: the installed grouped-nf4-gemm has no "
             "`dgrad_kernel` argument (it landed in 0.7.0). Upgrade with "
-            "`pip install -U 'grouped-nf4-gemm>=0.7.0'`; the fused training path "
+            "`pip install -U 'grouped-nf4-gemm>=0.14.0'`; the fused training path "
             "still runs, with its per-expert decode backward.",
             RuntimeWarning, stacklevel=2)
         dgrad = False

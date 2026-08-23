@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.19.1"
+version = "0.20.0"
 description = "QLoRA fine-tuning of fused 4-bit Mixture-of-Experts on a single small GPU, on stock bitsandbytes."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -45,7 +45,14 @@ fast = [
     # training path working and not existing. Measured on a rented 3090 after a
     # 149 GB download and a 147 GB bake (bench/mxfp4-arena-train/), and fixed in
     # grouped-nf4-gemm#75, first released in 0.12.0.
-    "grouped-nf4-gemm>=0.12.0",
+    #
+    # Raised to >=0.14.0 for grouped-nf4-gemm#205: the MXFP4 port of the grouped
+    # kernels had dropped NF4's int64 `eid` promotion, so `eid * stride_be`
+    # overflowed signed-int32 and an MXFP4 expert stack past 2^31 bytes raised
+    # an illegal memory access. Every arena/cold path here that stacks MXFP4
+    # experts crosses that boundary at DeepSeek/K3-class expert counts, and
+    # there is no degraded mode -- the launch faults.
+    "grouped-nf4-gemm>=0.14.0",
 ]
 train = [
     "transformers>=5.0",
@@ -74,12 +81,12 @@ serve = [
 # Pinned >= 0.9.0, not [fast]'s >= 0.2.4: that is the release carrying
 # `nvme_residency.segment_into`, which the training path stages every layer
 # through. An older gnf4 satisfies [fast] and still skips these tests.
-# gnf4 >=0.12.0 here too, and for a reason beyond matching `fast`: below it
-# `test_mxfp4_arena_train.py::test_a_real_v4_arena_labels_its_scales_f8_e8m0`
+# gnf4 >=0.14.0 here too, and for a reason beyond matching `fast`: below
+# 0.12.0 `test_mxfp4_arena_train.py::test_a_real_v4_arena_labels_its_scales_f8_e8m0`
 # XFAILS (its marker is conditional on the installed gnf4). Green either way,
 # so a stale floor would leave CI permanently NOT exercising the V4-label path
 # while looking covered -- the failure mode this repo keeps relearning.
-test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.12.0"]
+test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.14.0"]
 
 [project.urls]
 Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"
