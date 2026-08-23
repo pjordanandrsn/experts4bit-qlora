@@ -1,0 +1,17 @@
+gate v=7     dram   20.78 /   20.79 ms  noise   0.0%
+gate v=8     dram   17.78 /   17.98 ms  noise   1.1%
+gate v=9     dram   15.52 /   15.36 ms  noise   1.1%
+gate v=9.5   dram   14.22 /   14.34 ms  noise   0.8%
+gate v=10    dram   12.83 /   12.96 ms  noise   1.0%
+gate v=10.4  dram   12.10 /   11.63 ms  noise   3.9%
+gate v=10.75 dram   11.10 /   11.25 ms  noise   1.4%
+gate v=11.1  dram   10.44 /   10.37 ms  noise   0.7%
+gate v=11.5  dram   10.11 /    9.66 ms  noise   4.6%
+gate median 1.1% (<=5%), worst 4.6% (<=10%) -> ACCEPT
+fitted: c_fix = 356.5 us/layer-step, c_u = 16.8 us/unique
+scored 8->9  dU   77.9 dC  3.73 | dT   2.44  model   2.64 (allow  1.08) PASS | flat58   4.52 misses
+scored 9.5->10  dU   20.8 dC  3.21 | dT   1.38  model   1.49 (allow  0.30) PASS | flat58   1.21 fits
+scored 10.4->10.75  dU    8.8 dC  2.97 | dT   0.69  model   1.21 (allow  1.87) PASS | flat58   0.51 fits
+scored 11.1->11.5  dU    3.9 dC  1.02 | dT   0.52  model   0.43 (allow  1.15) PASS | flat58   0.22 fits
+R2 over all 8 brackets: 0.907
+VERDICT: UNINFORMATIVE (the flat-58 null survives the scored brackets -- no regime signal on this ladder)
