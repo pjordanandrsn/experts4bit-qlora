@@ -70,6 +70,17 @@ def main():
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--cpu-us-fixed", type=float, default=None)
     ap.add_argument("--cpu-us-per-row", type=float, default=None)
+    ap.add_argument("--profile", default=None,
+                    help="expert_profile JSONL for a measured-routing placement")
+    ap.add_argument("--profile-out", default=None,
+                    help="write this run's decode routing hist as an "
+                         "expert_profile JSONL (profile-pass mode)")
+    ap.add_argument("--amort-out", default=None,
+                    help="write decode-only per-tier unique/activation "
+                         "accounting plus the manifest VRAM set")
+    ap.add_argument("--torch-threads", type=int, default=8,
+                    help="torch intraop cap while the pool runs (serving "
+                         "playbook: 8; the default thrashes pinned workers)")
     ap.add_argument("--out", default="/workspace/g8out/step_decomp.json")
     a = ap.parse_args()
 
@@ -99,11 +110,13 @@ def main():
         for d in seg["shape_per_expert"]:
             n *= d
         bpe += n * (4 if seg["dtype"] == "F32" else 1)
+    torch.set_num_threads(a.torch_threads)
     man = solve_placement(
         n_layers=L, n_experts=E, bytes_per_expert=bpe,
         vram_budget_bytes=int(a.vram_gb * 2**30),
         dram_budget_bytes=int(a.dram_gb * 2**30),
         calibration=json.loads(Path(a.calib).read_text()),
+        profile_path=a.profile,
         batch=a.batch, top_k=k,
         cpu_us_fixed=a.cpu_us_fixed, cpu_us_per_row=a.cpu_us_per_row)
     n = enable_hybrid_tier(model, a.arena, man, hot_rows=a.hot_rows,
@@ -162,6 +175,14 @@ def main():
         def run_decode(self, rids):
             if not rids:
                 return {}
+            # decode-only accounting: prefill chunks also count amortization
+            # steps, so the tier totals are re-armed once, at the first
+            # decode step. Per-step dram_ns/gpu_ns deltas snap inside each
+            # call and never straddle the reset.
+            if not getattr(self, "_decode_armed", False):
+                for st in states:
+                    st.arm_amortization(True)
+                self._decode_armed = True
             # duplicated from PagedModelRunner.run_decode by design: the
             # split being measured (forward submission vs drain) lives
             # INSIDE the method, so instrumentation must inline it
@@ -255,6 +276,38 @@ def main():
                     for r in runner.prefill_rows],
         "prefill_attn_dev_total_ms": attn_dev["prefill"],
     }
+    if a.profile_out:
+        # mass semantics match load_routing_mass: tokens_routed accumulates
+        # raw selection counts; routing_probabilities divides by the layer
+        # total and multiplies by top_k, so p_e = count_e / decode_tokens.
+        with open(a.profile_out, "w") as f:
+            for li, st in enumerate(states):
+                hist = st.amort["hist"].cpu().tolist()
+                for e, c in enumerate(hist):
+                    if c:
+                        f.write(json.dumps({"row": "expert", "layer_id": li,
+                                            "expert_id": e,
+                                            "tokens_routed": int(c)}) + "\n")
+        print(f"PROFILE_OUT {a.profile_out}", flush=True)
+    if a.amort_out:
+        per_layer = []
+        for st in states:
+            am = st.amort
+            per_layer.append({k2: int(am[k2]) for k2 in
+                              ("steps", "acts", "uniq_vram", "uniq_dram",
+                               "uniq_nvme", "acts_vram", "acts_dram",
+                               "acts_nvme")})
+        Path(a.amort_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.amort_out).write_text(json.dumps({
+            "vram_gb": a.vram_gb, "batch": a.batch, "top_k": k,
+            "geometry": man["geometry"],
+            "manifest_counts": {t: len(p) for t, p in man["tiers"].items()},
+            "manifest_vram": man["tiers"]["vram"],
+            "decode_steps": n_steps,
+            "decode_median_ms": rep["decode_median_ms"],
+            "per_layer": per_layer,
+        }, indent=1))
+        print(f"AMORT_OUT {a.amort_out}", flush=True)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(rep, indent=2))
     d = rep["decode_median_ms"]
