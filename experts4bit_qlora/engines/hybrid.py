@@ -386,6 +386,11 @@ class _HybridTier(_NvmeResidency):
                       "touch": torch.zeros(int(self.mod.num_experts),
                                            dtype=torch.long,
                                            device=self.device),
+                      # steps in which THIS layer had any DRAM-tier work at
+                      # all: the per-call fixed cost bills once per such
+                      # step, so the regime-split conversion model needs
+                      # this count separately from the unique totals.
+                      "dram_steps": 0,
                       } if on else None
         return self.amort
 
@@ -402,7 +407,10 @@ class _HybridTier(_NvmeResidency):
         hot_u = self.is_hot[uniq]
         dram_u = self.is_dram[uniq]
         a["uniq_vram"] += int(hot_u.sum())
-        a["uniq_dram"] += int((dram_u & ~hot_u).sum())
+        n_dram_u = int((dram_u & ~hot_u).sum())
+        a["uniq_dram"] += n_dram_u
+        if n_dram_u:
+            a["dram_steps"] += 1
         a["uniq_nvme"] += int((~hot_u & ~dram_u).sum())
         hot_a = self.is_hot[flat]
         dram_a = self.is_dram[flat]
