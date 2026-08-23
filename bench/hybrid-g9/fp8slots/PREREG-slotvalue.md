@@ -39,8 +39,19 @@ at `f08a66f`; e4b at this PR's merge commit.
 2. **Profile pass** (`slot_sweep.py --profile-pass`): one serving run at
    the top budget captures the model's own decode routing as an
    `expert_profile` JSONL. Every placement in the sweep uses it.
-3. **Sweep**: ladder `vram_gb ∈ {10.0, 12.0, 13.0, 13.5, 14.0}` (finer
-   near the reference capacity clamp, where the quoted tail band lives),
+3. **Sweep**: ladder `vram_gb ∈ {7.0, 9.0, 10.0, 10.75, 11.5}`.
+   **Amended pre-gate, disclosed:** the frozen ladder ({10.0, 12.0, 13.0,
+   13.5, 14.0}) assumed the reference bpe (3.54 MB) and capacity-clamping
+   through 14 GB. The box measured bpe = 2.65 MB from its own arena
+   index, and with the measured routing profile the solver goes
+   BALANCE-bound at 4712 slots (~11.7 GB): every budget above the knee
+   yields the identical placement, so the frozen upper points would
+   produce empty brackets — a degenerate sweep that could only VOID.
+   The revised ladder keeps every point capacity-bound (2825 to 4650
+   slots, strictly nested sets) with the top bracket ending at the
+   operative margin the solver itself chooses. No gated arm had run at
+   amendment time; the threads=32 shakeout that surfaced the knee ran at
+   the registered playbook config and is committed unscored.
    `dram_gb = 60` so the NVMe tier stays EMPTY (any NVMe unique aborts
    the run — the cold path must not contaminate the DRAM bucket). Each
    (pass, budget) point is a fresh **subprocess** (no allocator/cache
