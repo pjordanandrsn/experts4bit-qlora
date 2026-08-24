@@ -62,16 +62,24 @@ def _agree_len(ta, tb):
     return n
 
 
-def verdict(curve, h1, h2, r0_1, r0_2, r1_1, r1_2, r1_prof_step_ms,
-            r1_kernel_occ_ms):
-    """curve: {B(str): rep}; arms: timed rep pairs; r1_prof_step_ms +
-    r1_kernel_occ_ms feed the fast/slow anchor."""
+def verdict(curve, h1, h2, r0_1, r0_2, r1_1, r1_2, r1_kernel_occ_ms):
+    """curve: {B(str): rep}; arms: timed rep pairs. The fast/slow anchor
+    compares the CLEAN timed R1 step against kernel occupancy from the
+    profiled run -- the profiled run's own step is host-inflated by the
+    brackets and profiler and would bias the gate toward HOST (Bugbot,
+    e4b#222; the same instrument-tax class AMENDMENT-t5b-h-a hit)."""
     out = {"curve": {}}
     for b, rep in sorted(curve.items(), key=lambda kv: int(kv[0])):
         st = _step(rep)
         out["curve"][b] = {"step_ms": st,
                            "aggregate_tok_s": int(b) * 1000.0 / st,
                            "per_stream_tok_s": 1000.0 / st}
+    if "16" not in curve:
+        out["verdict"] = ("NO-VERDICT (the B=16 anchor rep is required: "
+                          "without it the GS shape-gate cannot certify "
+                          "the operating point, and no decomposition may "
+                          "be read)")
+        return out
     if "16" in curve:
         d = curve["16"]["decode_median_ms"]
         gs = (GS_STEP_LO <= float(d["step"]) <= GS_STEP_HI
@@ -111,14 +119,12 @@ def verdict(curve, h1, h2, r0_1, r0_2, r1_1, r1_2, r1_prof_step_ms,
                   arms["R1"]["step_ms"])
     g_h_r0 = (sH - s0) / sH * 100.0        # residency tax share
     g_r0_r1 = (s0 - s1) / s0 * 100.0       # abstraction tax share
-    fast = r1_prof_step_ms <= FAST_HOST_OVER_DEV * r1_kernel_occ_ms
+    fast = s1 <= FAST_HOST_OVER_DEV * r1_kernel_occ_ms
     out["gaps"] = {"H_ms": sH, "R0_ms": s0, "R1_ms": s1,
                    "residency_tax_pct_of_H": g_h_r0,
                    "abstraction_tax_pct_of_R0": g_r0_r1,
-                   "r1_step_ms_profiled": r1_prof_step_ms,
                    "r1_kernel_occupancy_ms": r1_kernel_occ_ms,
-                   "r1_host_over_device": (r1_prof_step_ms
-                                           / max(1e-9, r1_kernel_occ_ms)),
+                   "r1_host_over_device": s1 / max(1e-9, r1_kernel_occ_ms),
                    "r1_fast": bool(fast)}
 
     branches = []
@@ -173,46 +179,51 @@ def self_test():
     # case 1: residency dominant (H 65, R0 40, R1 38), R1 fast
     v = verdict(curve, _rep(65.0, tok_h), _rep(66.0, tok_h),
                 _rep(40.0, tok), _rep(40.5, tok),
-                _rep(38.0, tok), _rep(38.2, tok), 40.0, 30.0)
+                _rep(38.0, tok), _rep(38.2, tok), 30.0)
     assert v["verdict"].startswith("BRANCH-1"), v["verdict"]
     assert "two operating regimes" in v["verdict"], v["verdict"]
     # case 2: abstraction dominant (H 41, R0 40, R1 25)
     v = verdict(curve, _rep(41.0, tok_h), _rep(41.5, tok_h),
                 _rep(40.0, tok), _rep(40.5, tok),
-                _rep(25.0, tok), _rep(25.2, tok), 26.0, 20.0)
+                _rep(25.0, tok), _rep(25.2, tok), 20.0)
     assert v["verdict"].startswith("BRANCH-2"), v["verdict"]
     # case 3-host: all close, host-heavy R1
     v = verdict(curve, _rep(62.0, tok_h), _rep(63.0, tok_h),
                 _rep(60.0, tok), _rep(60.5, tok),
-                _rep(58.0, tok), _rep(58.4, tok), 60.0, 8.0)
+                _rep(58.0, tok), _rep(58.4, tok), 8.0)
     assert v["verdict"].startswith("BRANCH-3-HOST"), v["verdict"]
     # case 3-device: all close, device-bound R1
     v = verdict(curve, _rep(62.0, tok_h), _rep(63.0, tok_h),
                 _rep(60.0, tok), _rep(60.5, tok),
-                _rep(58.0, tok), _rep(58.4, tok), 58.0, 40.0)
+                _rep(58.0, tok), _rep(58.4, tok), 40.0)
     assert v["verdict"].startswith("BRANCH-3-DEVICE"), v["verdict"]
     # composition: both gaps
     v = verdict(curve, _rep(100.0, tok_h), _rep(101.0, tok_h),
                 _rep(60.0, tok), _rep(60.5, tok),
-                _rep(30.0, tok), _rep(30.2, tok), 31.0, 20.0)
+                _rep(30.0, tok), _rep(30.2, tok), 20.0)
     assert "BRANCH-1" in v["verdict"] and "BRANCH-2" in v["verdict"], v
     # G1: R0/R1 token mismatch blocks
     v = verdict(curve, _rep(65.0, tok_h), _rep(66.0, tok_h),
                 _rep(40.0, tok), _rep(40.5, tok),
-                _rep(38.0, {"0": [7]}), _rep(38.2, {"0": [7]}), 40.0, 30.0)
+                _rep(38.0, {"0": [7]}), _rep(38.2, {"0": [7]}), 30.0)
     assert v["verdict"].startswith("NO-VERDICT (G1"), v["verdict"]
     # G0: arm spread blocks
     v = verdict(curve, _rep(65.0, tok_h), _rep(80.0, tok_h),
                 _rep(40.0, tok), _rep(40.5, tok),
-                _rep(38.0, tok), _rep(38.2, tok), 40.0, 30.0)
+                _rep(38.0, tok), _rep(38.2, tok), 30.0)
     assert v["verdict"].startswith("NO-VERDICT (G0 fail on arm H"), v
     # GS anchor blocks
     bad = dict(curve)
     bad["16"] = _rep(210.0, tok, attn=120.0)
     v = verdict(bad, _rep(65.0, tok_h), _rep(66.0, tok_h),
                 _rep(40.0, tok), _rep(40.5, tok),
-                _rep(38.0, tok), _rep(38.2, tok), 40.0, 30.0)
+                _rep(38.0, tok), _rep(38.2, tok), 30.0)
     assert v["verdict"].startswith("NO-VERDICT (B=16 anchor"), v
+    # missing B=16 anchor blocks (Bugbot, e4b#222)
+    v = verdict({"1": _rep(65.0, tok)}, _rep(65.0, tok_h),
+                _rep(66.0, tok_h), _rep(40.0, tok), _rep(40.5, tok),
+                _rep(38.0, tok), _rep(38.2, tok), 30.0)
+    assert v["verdict"].startswith("NO-VERDICT (the B=16 anchor"), v
     # kernel-table parser: aten and cuda rows excluded, units handled
     tbl = ("Name  x  x  x  x  x  Self CUDA  x  x  Calls\n"
            "aten::mm  1%  1ms  1%  1ms  1us  10.000ms  5%  10ms  10\n"
@@ -221,7 +232,7 @@ def self_test():
            "Memcpy DtoD  0%  0us  0%  0us  0us  6.000ms  2%  6ms  30\n")
     occ = parse_kernel_occupancy_ms(tbl, 12)
     assert abs(occ - (24.0 + 6.0) / 12) < 1e-6, occ
-    print("self-test OK: 9/9 branches exercised")
+    print("self-test OK: 10/10 branches exercised")
 
 
 if __name__ == "__main__":
@@ -232,7 +243,6 @@ if __name__ == "__main__":
     ap.add_argument("--h1"), ap.add_argument("--h2")
     ap.add_argument("--r0-1"), ap.add_argument("--r0-2")
     ap.add_argument("--r1-1"), ap.add_argument("--r1-2")
-    ap.add_argument("--r1-prof", help="R1 profiled rep (brackets on)")
     ap.add_argument("--r1-kernel-table", help="R1 --torch-profile-out")
     a = ap.parse_args()
     if a.self_test:
@@ -248,8 +258,7 @@ if __name__ == "__main__":
                   tab)
     active = int(m.group(1)) if m else 12
     occ = parse_kernel_occupancy_ms(tab, active)
-    prof_step = float(load(a.r1_prof)["decode_median_ms"]["step"])
     print(json.dumps(verdict(curve, load(a.h1), load(a.h2),
                              load(a.r0_1), load(a.r0_2),
                              load(a.r1_1), load(a.r1_2),
-                             prof_step, occ), indent=2))
+                             occ), indent=2))
