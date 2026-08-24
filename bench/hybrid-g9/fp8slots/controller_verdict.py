@@ -35,6 +35,11 @@ def load_windows(wdir):
     idx = json.load(open(pathlib.Path(wdir) / "windows.json"))
     out = []
     for tag in idx["windows"]:
+        # the certification path requires the amort receipt: a mis-tiered
+        # run (NVMe touched) must fail loudly, not be scored as DRAM
+        am = json.load(open(pathlib.Path(wdir) / f"{tag}.amort.json"))
+        nv = sum(pl["uniq_nvme"] for pl in am["per_layer"])
+        assert nv == 0, f"{tag}: NVMe tier touched ({nv} uniques)"
         with gzip.open(pathlib.Path(wdir) / f"{tag}.series.json.gz",
                        "rt") as f:
             w = json.load(f)["per_layer_series"]
