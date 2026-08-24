@@ -29,7 +29,21 @@ import torch
 
 PROF = {"attn_host_ns": 0, "attn_calls": 0, "attn_events": [],
         "mode": "decode"}
-COMPILE_GRAPH_STEP = [False]     # set when --compile-layers uses cudagraphs
+COMPILE_GRAPH_STEP = [False]
+
+
+def _routed_topk(cfg):
+    """The routed top-k under whatever name this family's config uses.
+    Extend the alias list when onboarding a family, never hardcode a
+    key at a call site (docs/hybrid/PORTABILITY.md)."""
+    for key in ("num_experts_per_tok", "num_experts_per_token",
+                "moe_top_k", "moe_topk", "top_k"):
+        v = getattr(cfg, key, None)
+        if isinstance(v, int) and v > 0:
+            return v
+    raise ValueError("cannot find the routed top-k in this config; add "
+                     "its key to _routed_topk")
+     # set when --compile-layers uses cudagraphs
 PER_MODE = {"prefill": {"attn_host_ns": 0, "attn_calls": 0},
             "decode": {"attn_host_ns": 0, "attn_calls": 0}}
 
@@ -88,6 +102,10 @@ def main():
                          "paged-attention fn and the MoE tier forward are "
                          "dynamo-disabled so they graph-break cleanly "
                          "(PREREG-t1-launchpath)")
+    ap.add_argument("--layers-attr", default="model.layers",
+                    help="dotted path to the decoder-layer list for "
+                         "--compile-layers (latent/nested families "
+                         "differ, e.g. model.language_model.layers)")
     ap.add_argument("--compile-mode", default="reduce-overhead",
                     help="torch.compile mode for --compile-layers; drop "
                          "to 'default' if cudagraphs misbehave (recorded)")
@@ -134,7 +152,7 @@ def main():
     model.eval()
     mods = target_modules(model)
     L, E = len(mods), mods[0].num_experts
-    k = model.config.num_experts_per_tok
+    k = _routed_topk(model.config)
     idx = json.loads(Path(a.arena + ".index.json").read_text())
     bpe = 0
     for seg in idx["segments"]:
@@ -175,7 +193,10 @@ def main():
         for m in mods:
             m.forward = dynamo.disable(m.forward)
         n_c = 0
-        for lyr in model.model.layers:
+        layer_list = model
+        for part in a.layers_attr.split("."):
+            layer_list = getattr(layer_list, part)
+        for lyr in layer_list:
             lyr.forward = torch.compile(lyr.forward, mode=a.compile_mode,
                                         dynamic=False)
             n_c += 1
@@ -341,9 +362,19 @@ def main():
         tprof.__exit__(None, None, None)
         tbl = tprof.key_averages().table(sort_by="cuda_time_total",
                                          row_limit=80)
-        Path(a.torch_profile_out).write_text(
-            f"profiled decode steps: {tprof_steps[0]} (12 active)\n" + tbl)
-        print(f"TORCH_PROFILE_OUT {a.torch_profile_out}", flush=True)
+        # the schedule fills its active window only after skip_first(24)
+        # + warmup(2) decode steps; label the receipt with the ACTUAL
+        # window so a short run cannot masquerade as a full attribution
+        active = max(0, min(12, tprof_steps[0] - 24 - 2))
+        hdr = (f"profiled decode steps: {tprof_steps[0]} "
+               f"(active window: {active}/12)\n")
+        if active < 12:
+            hdr += ("WARNING: active window INCOMPLETE -- this table "
+                    "under-samples and must not be cited as the "
+                    "attribution\n")
+        Path(a.torch_profile_out).write_text(hdr + tbl)
+        print(f"TORCH_PROFILE_OUT {a.torch_profile_out} active={active}/12",
+              flush=True)
     if prof is not None:
         prof.disable()
         import io
