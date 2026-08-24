@@ -110,8 +110,13 @@ def main():
                     help="torch.compile mode for --compile-layers; drop "
                          "to 'default' if cudagraphs misbehave (recorded)")
     ap.add_argument("--kv-batched", action="store_true",
-                    help="use the batched KV append decode path "
-                         "(PREREG-g9-kvappend)")
+                    help="accepted for command compatibility -- batched "
+                         "KV append is the DEFAULT since its cert "
+                         "(PREREG-g9-kvappend); see --kv-per-seq")
+    ap.add_argument("--kv-per-seq", action="store_true",
+                    help="run the per-seq KV append path (the kvappend "
+                         "cert A arm; the T5 cycle measured this point "
+                         "by accident when batched was opt-in)")
     ap.add_argument("--sync-attr-out", default=None,
                     help="JSON of op counts over the profiler's active "
                          "window, with aten::nonzero attributed to source "
@@ -188,6 +193,7 @@ def main():
                            threads=a.threads, pool=True,
                            dispatch_diet=a.dispatch_diet)
     assert n == L
+    assert not (a.kv_batched and a.kv_per_seq),         "--kv-batched and --kv-per-seq are contradictory"
     states = [m._hot_residency for m in mods]
     amort_on = a.amort == "on"
     if not amort_on:
@@ -228,7 +234,7 @@ def main():
               f"graph step marking={COMPILE_GRAPH_STEP[0]}", flush=True)
     kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len + a.gen_tokens + 8,
-                    k_groups=4, batched_append=a.kv_batched,
+                    k_groups=4, batched_append=not a.kv_per_seq,
                     device="cuda")
 
     from datasets import load_dataset
