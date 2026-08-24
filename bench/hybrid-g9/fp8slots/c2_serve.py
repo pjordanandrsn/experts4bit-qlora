@@ -22,6 +22,20 @@ import time
 
 import torch
 
+
+def _routed_topk(cfg):
+    """The routed top-k under whatever name this family's config uses.
+    Extend the alias list when onboarding a family, never hardcode a
+    key at a call site (docs/hybrid/PORTABILITY.md)."""
+    for key in ("num_experts_per_tok", "num_experts_per_token",
+                "moe_top_k", "moe_topk", "top_k"):
+        v = getattr(cfg, key, None)
+        if isinstance(v, int) and v > 0:
+            return v
+    raise ValueError("cannot find the routed top-k in this config; add "
+                     "its key to _routed_topk")
+
+
 def load_prior(prior_dir, L, E):
     """Pooled per-(layer,expert) touch rates + selection masses from the
     committed design-set receipts."""
@@ -85,7 +99,7 @@ def main():
     model.eval()
     mods = target_modules(model)
     L, E = len(mods), mods[0].num_experts
-    k = model.config.num_experts_per_tok
+    k = _routed_topk(model.config)
     prior, hist = load_prior(a.prior_dir, L, E)
 
     # deployed static placement: the solver over the design-set masses
