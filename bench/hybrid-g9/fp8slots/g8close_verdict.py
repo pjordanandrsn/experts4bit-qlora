@@ -27,7 +27,8 @@ def bal(rep):
 def score(a1p, cp, rp, a2p):
     a1, c, r, a2 = load(a1p), load(cp), load(rp), load(a2p)
     assert not a1["controller"] and not a2["controller"] and not r["controller"]
-    assert c["controller"]
+    assert c["controller"] and not c.get("controller_cp"), \
+        "arm C must be the plain controller (cp=False, as registered)" 
     if a1["uniq_dram_total"] != a2["uniq_dram_total"]:
         print("DETERMINISM-BROKEN"); print("VERDICT: VOID"); return
     spread = abs(bal(a1) - bal(a2))
