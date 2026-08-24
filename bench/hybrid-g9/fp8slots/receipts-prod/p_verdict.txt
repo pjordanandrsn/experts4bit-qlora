@@ -1,0 +1,8 @@
+uniques: static 158191 | B 104042 (-34.2%) | C 100389 (-36.5%) | C2 anchor 22.7%
+B1 parity (decode-only reduction >= 21.7%%): PASS
+boundary first-32 uniques (w1..9): B 18736 | C 17853 (4.7% cut, bar >= 10%); C total within 2pts of B: True
+B2 boundary: FAIL
+wall B: dram 15865 vs static 20044 (spread 45) -> -20.8% scoreable
+wall C: dram 15953 vs static 20044 (spread 45) -> -20.4% scoreable
+swaps B/C: 1927/1742 | cp_resets C: 22 | controller_ms B/C: 1721/644072
+VERDICT: REFUTED
