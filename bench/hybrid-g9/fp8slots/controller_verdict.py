@@ -34,25 +34,31 @@ THETA = 4.0 / 32.0
 def load_windows(wdir):
     idx = json.load(open(pathlib.Path(wdir) / "windows.json"))
     out = []
+    geom = None
     for tag in idx["windows"]:
         # the certification path requires the amort receipt: a mis-tiered
-        # run (NVMe touched) must fail loudly, not be scored as DRAM
+        # run (NVMe touched) must fail loudly, not be scored as DRAM --
+        # and the receipt's geometry is the AUTHORITATIVE expert stride
+        # (inferring E from max observed id misaligns flat indices
+        # between directories whenever a window never touches the last
+        # expert; Bugbot, e4b#200)
         am = json.load(open(pathlib.Path(wdir) / f"{tag}.amort.json"))
         nv = sum(pl["uniq_nvme"] for pl in am["per_layer"])
         assert nv == 0, f"{tag}: NVMe tier touched ({nv} uniques)"
+        g = (am["geometry"]["n_layers"], am["geometry"]["n_experts"])
+        assert geom is None or geom == g, f"{tag}: geometry drift {g}"
+        geom = g
         with gzip.open(pathlib.Path(wdir) / f"{tag}.series.json.gz",
                        "rt") as f:
             w = json.load(f)["per_layer_series"]
-        L = len(w)
-        E = 1 + max((e for l in w for st in l for e in st), default=0)
-        out.append((w, L, E))
-    L = out[0][1]
-    E = max(x[2] for x in out)
+        assert len(w) == geom[0], f"{tag}: series layer count mismatch"
+        out.append(w)
+    L, E = geom
     flat = []
-    for w, _, _ in out:
+    for w in out:
         flat.append([[l * E + e for l in range(L) for e in w[l][t]]
                      for t in range(len(w[0]))])
-    return flat, L * E
+    return flat, L * E, geom
 
 
 def pooled_prior(flat, NE):
@@ -100,9 +106,10 @@ def run_controller(sw, prior, static_set, NE):
 
 
 def score(fresh_dir, prior_dir):
-    prior_flat, NE = load_windows(prior_dir)
-    fresh_flat, NE2 = load_windows(fresh_dir)
-    NE = max(NE, NE2)
+    prior_flat, NE, g1 = load_windows(prior_dir)
+    fresh_flat, NE2, g2 = load_windows(fresh_dir)
+    assert g1 == g2, f"prior/fresh geometry mismatch: {g1} vs {g2}"
+    assert NE == NE2
     prior = pooled_prior(prior_flat, NE)
     static_set = set(sorted(range(NE), key=lambda i: -prior[i])[:S_SLOTS])
     t_static = t_ctrl = t_swaps = 0
