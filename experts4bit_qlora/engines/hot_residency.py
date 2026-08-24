@@ -37,7 +37,8 @@ import torch
 
 
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
-                      act_fn, gptoss=None, clamp_limit=None):
+                      act_fn, gptoss=None, clamp_limit=None,
+                      singleton_groups=False):
     """Down-projection outputs for each (token,slot) row, computed on the device
     the packed stack lives on. ``local_ids`` index into the G-expert stack
     (``gu_p`` is ``[G, n1, k1//2]`` etc.). Returns ``[R, H]`` in the input row
@@ -62,12 +63,29 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
-    order = torch.argsort(local_ids)
-    sorted_ids = local_ids.index_select(0, order)
-    x_sorted = x_rows.index_select(0, order).contiguous()
-    uniq, counts = torch.unique_consecutive(sorted_ids, return_counts=True)
-    sizes = counts.tolist()
-    eids = uniq.tolist()
+    if singleton_groups:
+        # AMENDMENT-b1d-capture: the grouping step's unique_consecutive
+        # SYNCS to produce host-side group sizes -- structurally illegal
+        # inside CUDA-graph capture. One row per group instead: sizes is
+        # a host CONSTANT, the ids ride as a device tensor (the wrapper
+        # accepts one), and no sort/unsort is needed. Exact at T == 1
+        # (a token's top-k ids are distinct, so dedup buys nothing);
+        # per-row arithmetic is identical to the grouped path, so the
+        # outputs are bitwise-equal -- pinned in CI and held by the
+        # on-box hash gate.
+        order = None
+        sorted_ids = local_ids
+        x_sorted = x_rows.contiguous()
+        sizes = [1] * x_rows.shape[0]
+        eids = local_ids
+    else:
+        order = torch.argsort(local_ids)
+        sorted_ids = local_ids.index_select(0, order)
+        x_sorted = x_rows.index_select(0, order).contiguous()
+        uniq, counts = torch.unique_consecutive(sorted_ids,
+                                                return_counts=True)
+        sizes = counts.tolist()
+        eids = uniq.tolist()
     gu = gemm_4bit_grouped(x_sorted, gu_p, gu_a, sizes, eids)
     if gptoss is not None:
         gu_bias, dn_bias, alpha, limit = gptoss
@@ -99,6 +117,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     else:
         h = act_fn(gu)
         dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
+    if order is None:                  # singleton path: input order kept
+        return dn
     out = torch.empty_like(dn)
     out.index_copy_(0, order, dn)  # unsort back to caller's row order
     return out
@@ -373,7 +393,8 @@ class _HotResidency:
         dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
                                self.h_dn_p, self.h_dn_a, self.shapes,
                                self.has_gate, self.act_fn, gptoss=gptoss,
-                               clamp_limit=self.clamp_limit)
+                               clamp_limit=self.clamp_limit,
+                               singleton_groups=(T == 1))
         w = top_k_weights.reshape(-1).to(torch.float32)
         out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)

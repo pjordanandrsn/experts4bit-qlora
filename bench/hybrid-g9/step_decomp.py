@@ -152,7 +152,8 @@ def wrap_attention(impl_name):
         PER_MODE[PROF["mode"]]["attn_calls"] += 1
         return out
 
-    ALL_ATTENTION_FUNCTIONS[impl_name] = timed
+    timed._orig = orig      # b1d unwraps: timing-event records are
+    ALL_ATTENTION_FUNCTIONS[impl_name] = timed   # capture-invalid
 
 
 def _b1d_stage_a(a, model, runner, sched, kv):
@@ -188,6 +189,19 @@ def _b1d_stage_a(a, model, runner, sched, kv):
                        device=dev)
     runner.ctx.mode = "decode"
     runner.ctx.slots = [slot]
+    # Drop the attention timing wrapper for BOTH arms (symmetry): it
+    # records torch.cuda.Event(enable_timing=True) per call, and timing
+    # cudaEventRecord is ILLEGAL inside stream capture
+    # (cudaErrorStreamCaptureInvalidated on the first attention call --
+    # hit live on the first stage-A box run). The manual loop needs no
+    # attention bracket; the un-wrapped shim is the production path.
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+    from experts4bit_qlora.engines.paged_attention import IMPL_NAME
+    _cur = ALL_ATTENTION_FUNCTIONS[IMPL_NAME]
+    _orig = getattr(_cur, "_orig", None)
+    if _orig is not None:
+        ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = _orig
     prev = set_context(runner.ctx)
 
     def one_step():
@@ -202,9 +216,54 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     used = runner.pos_of[rid] + n_warm + 1
     n_steps = min(a.gen_tokens, cap_tokens - used - 2)
     assert n_steps >= 16, f"window too small for stage A ({n_steps})"
-    for _ in range(n_warm):
-        one_step()
+    # The documented capture recipe: warm on a SIDE stream. cuBLAS/cuDNN
+    # bind workspaces per stream, and a first-use allocation landing
+    # inside capture invalidates it (cudaErrorStreamCaptureInvalidated
+    # at capture_end with no python-level site -- hit live, both before
+    # and after the timing-event unwrap; this was the remaining cause).
+    side = torch.cuda.Stream()
+    side.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(side):
+        for _ in range(n_warm):
+            one_step()
+    torch.cuda.current_stream().wait_stream(side)
     torch.cuda.synchronize()
+
+    if a.b1d_timed:
+        # stage C: tokens land in a device log (one tiny D2D copy per
+        # step, no sync); the window is timed as a whole
+        tok_log = torch.zeros(n_steps, dtype=torch.long, device=dev)
+        if a.b1d_loop == "graph":
+            torch.cuda.empty_cache()
+            g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(g, capture_error_mode="thread_local"):
+                one_step()
+            torch.cuda.synchronize()
+            t0 = time.perf_counter_ns()
+            for i in range(n_steps):
+                g.replay()
+                tok_log[i].copy_(in_ids.reshape(()))
+            torch.cuda.synchronize()
+        else:
+            t0 = time.perf_counter_ns()
+            for i in range(n_steps):
+                one_step()
+                tok_log[i].copy_(in_ids.reshape(()))
+            torch.cuda.synchronize()
+        total_ms = (time.perf_counter_ns() - t0) / 1e6
+        set_context(prev)
+        rep = {
+            "b1d_loop": a.b1d_loop, "b1d_timed": True,
+            "n_steps": n_steps,
+            "tokens": tok_log.cpu().tolist(),
+            "step_ms_clean": total_ms / n_steps,
+            "window_ms": total_ms,
+        }
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(rep, indent=1))
+        print(f"B1D_TIMED_{a.b1d_loop.upper()} steps={n_steps} "
+              f"step={rep['step_ms_clean']:.2f}ms out={a.out}", flush=True)
+        return
 
     hashes, toks, walls, positions = [], [], [], []
     if a.b1d_loop == "graph":
@@ -215,8 +274,16 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         # named instead of downstream as a baffling hash mismatch
         # (Bugbot, e4b#228).
         pos_before = int(pos.reshape(()))
+        # The eager pool hoards cached blocks after warmup; the graph's
+        # PRIVATE pool then needs fresh cudaMallocs mid-capture, and the
+        # allocator's free-and-retry path calls cuStreamSynchronize --
+        # instantly invalidating capture (the CUDA_LOG_FILE trace named
+        # it). Hand the capture clean headroom first. thread_local mode
+        # additionally insulates the capture from stray context probes
+        # by other threads (the CPU pool workers).
+        torch.cuda.empty_cache()
         g = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(g):
+        with torch.cuda.graph(g, capture_error_mode="thread_local"):
             lg_static = one_step()
         torch.cuda.synchronize()
         pos_after = int(pos.reshape(()))
@@ -341,6 +408,10 @@ def main():
                     help="JSON of per-region descendant op counts from "
                          "the profiler event tree (needs --host-brackets; "
                          "engages the torch profiler, stacks off)")
+    ap.add_argument("--b1d-timed", action="store_true",
+                    help="PREREG-b1d stage C: clean timing -- no per-step "
+                         "sync/hash; tokens logged to a device buffer and "
+                         "read once at the end; wall = whole window / N")
     ap.add_argument("--b1d-loop", choices=["eager", "graph"], default=None,
                     help="PREREG-b1d stage A: after prefill + a short "
                          "scheduled warm, drive the B=1 decode loop "
