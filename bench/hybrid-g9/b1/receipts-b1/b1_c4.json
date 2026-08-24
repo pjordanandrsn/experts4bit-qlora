@@ -1,0 +1,59 @@
+{
+  "model": "/root/qwen3-30b",
+  "batch": 4,
+  "layers": 48,
+  "compile_layers": false,
+  "compile_mode": null,
+  "warmup_rows_dropped": 0,
+  "generated_tokens": {},
+  "decode_steps": 130,
+  "decode_median_ms": {
+    "step": 96.896247,
+    "forward_submission": 96.7026385,
+    "drain": 0.3652275,
+    "attention_host": 25.2275025,
+    "dram_experts_host": 0.0,
+    "other_submission": 71.475136,
+    "scheduler_python_and_bookkeeping": -0.17161900000000369
+  },
+  "decode_device_ms": {
+    "attention_kernels_per_step": 24.428584864277106,
+    "gpu_expert_kernels_per_step": 0.0
+  },
+  "attn_calls_per_step": 48.0,
+  "attn_host_us_per_call": 525.57296875,
+  "prefill": [
+    {
+      "tokens": 512,
+      "wall_ms": 1469.096931,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 862.483481,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 882.915131,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 884.549028,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    }
+  ],
+  "prefill_attn_dev_total_ms": 158.54992258548737,
+  "engine": "hybrid",
+  "placement_override": "none",
+  "manifest_counts": {
+    "vram": 4045,
+    "dram": 2099,
+    "nvme": 0
+  }
+}

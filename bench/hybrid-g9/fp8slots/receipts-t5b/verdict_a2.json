@@ -1,0 +1,46 @@
+{
+  "g0": {
+    "aa1_ms": 140.993195,
+    "aa2_ms": 140.651919,
+    "spread_pct": 0.24263870868337992,
+    "pass": true
+  },
+  "gs": {
+    "step_ms": 140.651919,
+    "attn_ms": 45.9579245,
+    "dram_ms": 0.0,
+    "pass": true
+  },
+  "h_a": {
+    "step_ms": 176.084287,
+    "regions_ms": {
+      "attn": 58.696715,
+      "moe": 78.9521945,
+      "lmhead": 0.0624935,
+      "sched": 0.7998444999999943,
+      "drain": 0.361496,
+      "router_topk": 6.350985999999992
+    },
+    "shares_pct": {
+      "attn": 33.3,
+      "moe": 44.8,
+      "lmhead": 0.0,
+      "sched": 0.5,
+      "drain": 0.2,
+      "router_topk": 3.6
+    },
+    "coverage_pct": 82.47398559759054,
+    "residual_pct": 17.52601440240946,
+    "top_region": "moe",
+    "top_share_pct": 44.83772847942986,
+    "region_calls": {
+      "e4b::moe": 1152,
+      "e4b::moe_block": 1152,
+      "e4b::attn": 1152,
+      "e4b::lmhead": 24
+    },
+    "pass": true
+  },
+  "verdict": "PHASE-A-PASS (target=moe at 44.8% of step; Phase B wall bar = 22.4%, partial floor 6%)",
+  "phase_b_bar_pct": 22.41886423971493
+}
