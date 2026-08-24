@@ -25,8 +25,12 @@ graph-break cleanly).
   designed graph breaks. No engine-file changes: the wrapper is
   driver-side patching, receipts-only, so a REFUTED arm reverts
   nothing.
-* Warm-up: two full decode steps before any timed step (compile
-  happens in the first; the warm-up-inventory law).
+* Warm-up: the first FOUR decode steps are dropped from every timed
+  median when compiling (compile lands across the first prefill and
+  decode shapes, and reduce-overhead's cudagraph warm-up can spill into
+  the second and third; the warm-up-inventory law). The receipt records
+  the count actually dropped; device-kernel averages use the full step
+  count, since device work is shape-stable through a host-side compile.
 
 ## Protocol and bars (one box, A/B/A: eager, compiled, eager)
 

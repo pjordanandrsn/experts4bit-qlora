@@ -323,9 +323,12 @@ def main():
         attn_dev[mode] += e0.elapsed_time(e1)
 
     dr = runner.decode_rows
+    n_full = len(dr)
     n_warm = 4 if a.compile_layers else 0
+    n_dropped = 0
     if n_warm and len(dr) > 2 * n_warm:
         dr = dr[n_warm:]
+        n_dropped = n_warm
     med = lambda key: statistics.median(r[key] for r in dr) / 1e6
     n_steps = len(dr)
     step_ms = statistics.median(step_walls[-n_steps:]) / 1e6 if dr else 0
@@ -338,7 +341,7 @@ def main():
         "model": a.model, "batch": a.batch, "layers": L,
         "compile_layers": bool(a.compile_layers),
         "compile_mode": a.compile_mode if a.compile_layers else None,
-        "warmup_rows_dropped": n_warm,
+        "warmup_rows_dropped": n_dropped,
         # the cross-arm void gate: greedy continuations must be
         # token-identical between eager and compiled arms
         "generated_tokens": {str(r): list(map(int, t))
@@ -352,7 +355,7 @@ def main():
         },
         "decode_device_ms": {
             "attention_kernels_per_step":
-                attn_dev["decode"] / max(1, n_steps),
+                attn_dev["decode"] / max(1, n_full),
             "gpu_expert_kernels_per_step": gpu_dev,
         },
         "attn_calls_per_step": (statistics.median(r["attn_calls"]
