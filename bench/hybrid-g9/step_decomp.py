@@ -32,6 +32,53 @@ PROF = {"attn_host_ns": 0, "attn_calls": 0, "attn_events": [],
 COMPILE_GRAPH_STEP = [False]
 
 
+def _materialize_from_arena(mods, arena_path):
+    """R1 mechanics (PREREG-b1): the streaming loader leaves module
+    expert tensors as META stubs (the bytes live in the gnf4 arena), and
+    the pipelined engine sources its pinned arena from MODULE tensors.
+    Fill the modules from the SAME arena file -- identical packed bytes
+    by construction, no requantization. Byte counts are asserted per
+    segment, and the R0==R1 bitwise token gate downstream is the
+    semantic backstop: wrong bytes cannot pass it."""
+    import numpy as np
+    import torch.nn as nn
+
+    from nvme_arena import _seg_len, _seg_off, load_index, row_offset
+
+    idx = load_index(arena_path)
+    layer_ids = sorted({l for l, _e, _o in idx["rows"]})
+    assert len(layer_ids) == len(mods), (len(layer_ids), len(mods))
+    seg_map = (("gate_up_proj", "nf4.gate_up_blocks", True),
+               ("gate_up_absmax", "nf4.gate_up_absmax", False),
+               ("down_proj", "nf4.down_blocks", True),
+               ("down_absmax", "nf4.down_absmax", False))
+    mm = np.memmap(arena_path, dtype=np.uint8, mode="r")
+    for mi, wrapped in enumerate(mods):
+        base = getattr(wrapped, "base", wrapped)
+        E = base.num_experts
+        li = layer_ids[mi]
+        for attr, suffix, is_param in seg_map:
+            meta = getattr(base, attr)
+            t = torch.empty(meta.shape, dtype=meta.dtype)
+            flat = t.view(torch.uint8).reshape(E, -1) \
+                if t.dtype != torch.uint8 else t.reshape(E, -1)
+            off, ln = _seg_off(idx, suffix), _seg_len(idx, suffix)
+            assert flat.shape[1] == ln, \
+                (attr, tuple(meta.shape), flat.shape[1], ln)
+            for e in range(E):
+                lo = row_offset(idx, li, e) + off
+                flat[e] = torch.from_numpy(
+                    np.ascontiguousarray(mm[lo:lo + ln]))
+            if is_param:
+                setattr(base, attr,
+                        nn.Parameter(t, requires_grad=False))
+            else:
+                setattr(base, attr, t)
+    del mm
+    print(f"materialized {len(mods)} modules from {arena_path} "
+          f"(byte-exact, per-segment lengths asserted)", flush=True)
+
+
 def _routed_topk(cfg):
     """The routed top-k under whatever name this family's config uses.
     Extend the alias list when onboarding a family, never hardcode a
@@ -247,8 +294,18 @@ def main():
         assert a.placement_override == "none", \
             "--placement-override is a hybrid-arm knob"
         assert not a.dispatch_diet, "dispatch_diet is hybrid-only"
+        # T>1 falls back to the reference forward, which cannot run CUDA
+        # activations against the host-materialized weights (Bugbot,
+        # e4b#223). chunk=1 keeps every forward on the T=1 fast path;
+        # KV content is mathematically identical (causal prefix math is
+        # chunking-invariant) and the R0==R1 bitwise gate enforces it.
+        assert a.chunk == 1, \
+            "--engine pipelined requires --chunk 1 (see PREREG-b1 R1 "\
+            "mechanics): T>1 prefill would hit the reference forward "\
+            "against host-resident weights and die mid-run"
         from experts4bit_qlora.engines.pipelined import (
             enable_pipelined_residency)
+        _materialize_from_arena(mods, a.arena)
         man = None
         n = enable_pipelined_residency(
             model, [list(range(E)) for _ in range(L)], device="cuda",
@@ -366,6 +423,13 @@ def main():
             super().__init__(*args, **kw)
             self.decode_rows = []
             self.prefill_rows = []
+            # the runner POPS a finished request's tokens (release), so
+            # reading runner.tokens after the loop sees an empty dict --
+            # which made every generated_tokens record EMPTY and every
+            # cross-arm token-identity gate built on it vacuous
+            # (t1/t1b/t5 G1; found by the B1 cycle). Capture at
+            # generation time instead.
+            self.gen_capture = {}
 
         def _amort_snap(self):
             if not states or states[0].amort is None:   # off / pipelined
@@ -396,6 +460,8 @@ def main():
             t0 = time.perf_counter_ns()
             out = super().run_prefill(chunks)
             wall = time.perf_counter_ns() - t0
+            for _rid, _tk in out.items():
+                self.gen_capture.setdefault(_rid, []).append(int(_tk))
             d1, g1 = self._amort_snap()
             for st, am in zip(states, saved):
                 if am is not None and st.amort is not None:
@@ -462,6 +528,7 @@ def main():
             got = {}
             for rid, tk in zip(rids, toks):
                 got[rid] = int(tk)
+                self.gen_capture.setdefault(rid, []).append(int(tk))
                 self.tokens[rid].append(int(tk))
                 self.pos_of[rid] += 1
             return got
@@ -629,7 +696,8 @@ def main():
         # the cross-arm void gate: greedy continuations must be
         # token-identical between eager and compiled arms
         "generated_tokens": {str(r): list(map(int, t))
-                             for r, t in sorted(runner.tokens.items())},
+                             for r, t in
+                             sorted(runner.gen_capture.items())},
         "decode_steps": n_steps,
         "decode_median_ms": {
             "step": step_ms, "forward_submission": fwd, "drain": drain,
