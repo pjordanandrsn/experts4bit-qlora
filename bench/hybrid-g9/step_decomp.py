@@ -82,6 +82,14 @@ def main():
     ap.add_argument("--profile-out", default=None,
                     help="write this run's decode routing hist as an "
                          "expert_profile JSONL (profile-pass mode)")
+    ap.add_argument("--compile-layers", action="store_true",
+                    help="torch.compile each decoder layer body; the "
+                         "paged-attention fn and the MoE tier forward are "
+                         "dynamo-disabled so they graph-break cleanly "
+                         "(PREREG-t1-launchpath)")
+    ap.add_argument("--compile-mode", default="reduce-overhead",
+                    help="torch.compile mode for --compile-layers; drop "
+                         "to 'default' if cudagraphs misbehave (recorded)")
     ap.add_argument("--kv-batched", action="store_true",
                     help="use the batched KV append decode path "
                          "(PREREG-g9-kvappend)")
@@ -149,6 +157,23 @@ def main():
                                             // cfg.num_attention_heads)
     register(model)
     wrap_attention(IMPL_NAME)
+    if a.compile_layers:
+        import torch._dynamo as dynamo
+        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+        # clean graph breaks: the paged-attention shim (host-bound KV
+        # paging) and the hybrid MoE forward (CPU tier dispatch) must
+        # never be traced -- compile owns only the dense layer body
+        ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = dynamo.disable(
+            ALL_ATTENTION_FUNCTIONS[IMPL_NAME])
+        for m in mods:
+            m.forward = dynamo.disable(m.forward)
+        n_c = 0
+        for lyr in model.model.layers:
+            lyr.forward = torch.compile(lyr.forward, mode=a.compile_mode,
+                                        dynamic=False)
+            n_c += 1
+        print(f"compiled {n_c} layer bodies (mode={a.compile_mode}); "
+              f"paged attention + MoE tier dynamo-disabled", flush=True)
     kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len + a.gen_tokens + 8,
                     k_groups=4, batched_append=a.kv_batched,
@@ -298,6 +323,9 @@ def main():
         attn_dev[mode] += e0.elapsed_time(e1)
 
     dr = runner.decode_rows
+    n_warm = 4 if a.compile_layers else 0
+    if n_warm and len(dr) > 2 * n_warm:
+        dr = dr[n_warm:]
     med = lambda key: statistics.median(r[key] for r in dr) / 1e6
     n_steps = len(dr)
     step_ms = statistics.median(step_walls[-n_steps:]) / 1e6 if dr else 0
@@ -308,6 +336,13 @@ def main():
     sched_py = step_ms - fwd - drain
     rep = {
         "model": a.model, "batch": a.batch, "layers": L,
+        "compile_layers": bool(a.compile_layers),
+        "compile_mode": a.compile_mode if a.compile_layers else None,
+        "warmup_rows_dropped": n_warm,
+        # the cross-arm void gate: greedy continuations must be
+        # token-identical between eager and compiled arms
+        "generated_tokens": {str(r): list(map(int, t))
+                             for r, t in sorted(runner.tokens.items())},
         "decode_steps": n_steps,
         "decode_median_ms": {
             "step": step_ms, "forward_submission": fwd, "drain": drain,
