@@ -94,6 +94,12 @@ def main():
     ap.add_argument("--kv-batched", action="store_true",
                     help="use the batched KV append decode path "
                          "(PREREG-g9-kvappend)")
+    ap.add_argument("--torch-profile-out", default=None,
+                    help="capture ~12 decode steps under torch.profiler "
+                         "and dump the CUDA kernel table (T2/T3 "
+                         "attribution: which device kernels own the "
+                         "attention and expert buckets, and how many "
+                         "launches each)")
     ap.add_argument("--cprofile-out", default=None,
                     help="run the serving loop under cProfile and dump "
                          "the top functions by cumulative time (the G9 "
@@ -302,6 +308,16 @@ def main():
     for p in prompts:
         sched.add_request(p, max_new_tokens=a.gen_tokens)
 
+    tprof = None
+    tprof_steps = [0]
+    if a.torch_profile_out:
+        from torch.profiler import (ProfilerActivity, profile, schedule)
+        tprof = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=schedule(skip_first=24, wait=0, warmup=2, active=12,
+                              repeat=1),
+            record_shapes=True)
+        tprof.__enter__()
     prof = None
     if a.cprofile_out:
         import cProfile
@@ -317,7 +333,17 @@ def main():
         wall = time.perf_counter_ns() - t0
         if len(runner.prefill_rows) == pf0 and len(runner.decode_rows) > dr0:
             step_walls.append(wall)
+            if tprof is not None:
+                tprof.step()
+                tprof_steps[0] += 1
     torch.cuda.synchronize()
+    if tprof is not None:
+        tprof.__exit__(None, None, None)
+        tbl = tprof.key_averages().table(sort_by="cuda_time_total",
+                                         row_limit=80)
+        Path(a.torch_profile_out).write_text(
+            f"profiled decode steps: {tprof_steps[0]} (12 active)\n" + tbl)
+        print(f"TORCH_PROFILE_OUT {a.torch_profile_out}", flush=True)
     if prof is not None:
         prof.disable()
         import io
