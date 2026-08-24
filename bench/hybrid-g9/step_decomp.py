@@ -82,6 +82,9 @@ def main():
     ap.add_argument("--profile-out", default=None,
                     help="write this run's decode routing hist as an "
                          "expert_profile JSONL (profile-pass mode)")
+    ap.add_argument("--kv-batched", action="store_true",
+                    help="use the batched KV append decode path "
+                         "(PREREG-g9-kvappend)")
     ap.add_argument("--cprofile-out", default=None,
                     help="run the serving loop under cProfile and dump "
                          "the top functions by cumulative time (the G9 "
@@ -148,7 +151,8 @@ def main():
     wrap_attention(IMPL_NAME)
     kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len + a.gen_tokens + 8,
-                    k_groups=4, device="cuda")
+                    k_groups=4, batched_append=a.kv_batched,
+                    device="cuda")
 
     from datasets import load_dataset
     ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1",

@@ -122,10 +122,17 @@ def paged_attention_forward(module, query, key, value, attention_mask,
         if T != 1:
             raise ValueError(f"decode regime expects one query token per "
                              f"sequence, got {T}")
-        for b, slot in enumerate(ctx.slots):
-            ctx.kv.append(layer, slot,
-                          key[b].permute(1, 0, 2).contiguous(),
-                          value[b].permute(1, 0, 2).contiguous())
+        if getattr(ctx.kv, "batched_append", False):
+            # one permute+quantize per side for the whole batch
+            # (PREREG-g9-kvappend); bit-identical to the loop below
+            ctx.kv.append_many(layer, ctx.slots,
+                                key.permute(0, 2, 1, 3).contiguous(),
+                                value.permute(0, 2, 1, 3).contiguous())
+        else:
+            for b, slot in enumerate(ctx.slots):
+                ctx.kv.append(layer, slot,
+                              key[b].permute(1, 0, 2).contiguous(),
+                              value[b].permute(1, 0, 2).contiguous())
         out = ctx.kv.attention(layer, query[:, :, 0].contiguous(),
                                slots=ctx.slots)
         return out[:, None].to(query.dtype), None
