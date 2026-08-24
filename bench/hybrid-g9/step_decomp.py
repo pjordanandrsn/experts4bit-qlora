@@ -32,6 +32,53 @@ PROF = {"attn_host_ns": 0, "attn_calls": 0, "attn_events": [],
 COMPILE_GRAPH_STEP = [False]
 
 
+def _materialize_from_arena(mods, arena_path):
+    """R1 mechanics (PREREG-b1): the streaming loader leaves module
+    expert tensors as META stubs (the bytes live in the gnf4 arena), and
+    the pipelined engine sources its pinned arena from MODULE tensors.
+    Fill the modules from the SAME arena file -- identical packed bytes
+    by construction, no requantization. Byte counts are asserted per
+    segment, and the R0==R1 bitwise token gate downstream is the
+    semantic backstop: wrong bytes cannot pass it."""
+    import numpy as np
+    import torch.nn as nn
+
+    from nvme_arena import _seg_len, _seg_off, load_index, row_offset
+
+    idx = load_index(arena_path)
+    layer_ids = sorted({l for l, _e, _o in idx["rows"]})
+    assert len(layer_ids) == len(mods), (len(layer_ids), len(mods))
+    seg_map = (("gate_up_proj", "nf4.gate_up_blocks", True),
+               ("gate_up_absmax", "nf4.gate_up_absmax", False),
+               ("down_proj", "nf4.down_blocks", True),
+               ("down_absmax", "nf4.down_absmax", False))
+    mm = np.memmap(arena_path, dtype=np.uint8, mode="r")
+    for mi, wrapped in enumerate(mods):
+        base = getattr(wrapped, "base", wrapped)
+        E = base.num_experts
+        li = layer_ids[mi]
+        for attr, suffix, is_param in seg_map:
+            meta = getattr(base, attr)
+            t = torch.empty(meta.shape, dtype=meta.dtype)
+            flat = t.view(torch.uint8).reshape(E, -1) \
+                if t.dtype != torch.uint8 else t.reshape(E, -1)
+            off, ln = _seg_off(idx, suffix), _seg_len(idx, suffix)
+            assert flat.shape[1] == ln, \
+                (attr, tuple(meta.shape), flat.shape[1], ln)
+            for e in range(E):
+                lo = row_offset(idx, li, e) + off
+                flat[e] = torch.from_numpy(
+                    np.ascontiguousarray(mm[lo:lo + ln]))
+            if is_param:
+                setattr(base, attr,
+                        nn.Parameter(t, requires_grad=False))
+            else:
+                setattr(base, attr, t)
+    del mm
+    print(f"materialized {len(mods)} modules from {arena_path} "
+          f"(byte-exact, per-segment lengths asserted)", flush=True)
+
+
 def _routed_topk(cfg):
     """The routed top-k under whatever name this family's config uses.
     Extend the alias list when onboarding a family, never hardcode a
@@ -249,6 +296,7 @@ def main():
         assert not a.dispatch_diet, "dispatch_diet is hybrid-only"
         from experts4bit_qlora.engines.pipelined import (
             enable_pipelined_residency)
+        _materialize_from_arena(mods, a.arena)
         man = None
         n = enable_pipelined_residency(
             model, [list(range(E)) for _ in range(L)], device="cuda",
