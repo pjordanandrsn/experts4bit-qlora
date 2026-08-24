@@ -63,6 +63,7 @@ class Fp8PagedKV:
         # this flag use append_batch for the whole batch at each layer
         # instead of one append per sequence
         self.batched_append = batched_append
+        self.graph_t1 = False   # B1d graph mode; graph_mode_init flips it
         self._batch_idx_cache = {}
         self.blocks_per_seq = -(-max_tokens_per_seq // self.bt)
         self.k_row = (kv_block_bytes(self.bt, self.H, self.D)
@@ -285,6 +286,69 @@ class Fp8PagedKV:
                          v.permute(0, 2, 1, 3).contiguous())
 
     # ----------------------------------------------------------------- read --
+    # ------------------------------------------------- graph mode (B1d) --
+    def graph_mode_init(self, seq: int = 0, upto_tokens: int | None = None):
+        """Prepare device-addressed T=1 appends for ONE slot so a decode
+        step is CUDA-graph-capturable (PREREG-b1d). Two moves:
+
+        * every block the window can touch is ensured UP FRONT (host
+          allocation leaves the step entirely — no boundary fallback);
+        * flat uint8 views of each side's layer arenas are cached, and
+          `append_graph_t1` addresses them from DEVICE state (seq_lens +
+          block table) each execution — never from host ``_seen``, whose
+          capture-time value a graph would bake (the e4b#227 finding).
+
+        Requires the KV arena in its up-front-claimed, never-demoted
+        state (asserted): row ids then equal ring slots and the flat
+        views are stable for the life of the pool."""
+        for pool in (self.kp, self.vp):
+            assert all(h == 0 for h in pool.head) and \
+                all(t == self.B * self.blocks_per_seq for t in pool.tail), \
+                "graph mode needs the up-front-claimed KV arena"
+        upto = (self.blocks_per_seq * self.bt if upto_tokens is None
+                else upto_tokens)
+        for layer in range(self.L):
+            self._ensure_blocks(layer, seq, (upto - 1) // self.bt)
+        self._g_seq = seq
+        dev = self.device
+        hd = self.H * self.D
+        self._g_ar_hd = torch.arange(hd, device=dev)
+        self._g_ar_sk = torch.arange(self.H * self.k_groups * 4, device=dev)
+        self._g_ar_sv = torch.arange(self.H * 4, device=dev)
+        self._g_kflat = [self.kp.dev[layer].reshape(-1)
+                         for layer in range(self.L)]
+        self._g_vflat = [self.vp.dev[layer].reshape(-1)
+                         for layer in range(self.L)]
+        self.graph_t1 = True
+
+    def append_graph_t1(self, layer: int, k: torch.Tensor, v: torch.Tensor):
+        """One-token, one-slot append with every address computed on
+        device (capture-safe). k, v: [1, H, D]. The write position comes
+        from ``seq_lens`` and the row id from the device block table, so
+        a captured replay writes to the ADVANCING position; the tail
+        ``seq_lens.add_(1)`` is the same in-place publish the attention
+        kernel reads."""
+        seq = self._g_seq
+        vq, vs = self._quant_bytes(v, 1)
+        kq, ks = self._quant_bytes(k, self.k_groups)
+        pos = self.seq_lens[layer, seq].to(torch.long)
+        blk = torch.div(pos, self.bt, rounding_mode="floor")
+        fill = pos - blk * self.bt
+        row = (self.block_table[layer][seq]
+               .gather(0, blk.reshape(1).to(torch.int64))
+               .reshape(()).to(torch.long))
+        hd = self.H * self.D
+        vbase = row * self.v_row + fill * hd
+        self._g_vflat[layer].scatter_(0, vbase + self._g_ar_hd, vq.reshape(-1))
+        vsb = row * self.v_row + self._v_pay + fill * (self.H * 4)
+        self._g_vflat[layer].scatter_(0, vsb + self._g_ar_sv, vs.reshape(-1))
+        kbase = row * self.k_row + fill * hd
+        self._g_kflat[layer].scatter_(0, kbase + self._g_ar_hd, kq.reshape(-1))
+        ksb = (row * self.k_row + self._k_pay
+               + fill * (self.H * self.k_groups * 4))
+        self._g_kflat[layer].scatter_(0, ksb + self._g_ar_sk, ks.reshape(-1))
+        self.seq_lens[layer].narrow(0, seq, 1).add_(1)
+
     def kernel_args(self, layer: int, slots=None):
         """What the fused kernel consumes: flat pool bytes, block table,
         per-sequence lengths.

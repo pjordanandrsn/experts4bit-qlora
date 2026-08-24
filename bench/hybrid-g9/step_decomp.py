@@ -155,6 +155,99 @@ def wrap_attention(impl_name):
     ALL_ATTENTION_FUNCTIONS[impl_name] = timed
 
 
+def _b1d_stage_a(a, model, runner, sched, kv):
+    """PREREG-b1d stage A harness: capture smoke + bitwise replay
+    identity. Prefill runs through the normal scheduled path; the decode
+    loop is then driven manually with static buffers so the 'graph' arm
+    can capture ONE step and replay it. Both arms record per-step logits
+    hashes and tokens -- equality across arms is the gate; a baked write
+    offset (the e4b#227 finding) cannot pass it, because a same-slot KV
+    overwrite diverges the continuation within a few steps."""
+    import hashlib
+
+    from experts4bit_qlora.engines.paged_attention import set_context
+
+    assert a.batch == 1, "b1d is the single-stream lane"
+    assert a.engine == "hybrid" and a.placement_override == "all-vram", \
+        "b1d binds to the collapsed all-resident point"
+    assert a.amort == "off", \
+        "amort-armed runs keep the baseline dispatch path (not capturable)"
+    # prefill + a short scheduled warm through the production path
+    while (sched.active or sched.queue) and len(runner.decode_rows) < 2:
+        if sched.step().is_empty:
+            break
+    assert len(runner.decode_rows) >= 2, "scheduled warm did not decode"
+    rid = next(iter(runner.slot_of))
+    slot = runner.slot_of[rid]
+    cap_tokens = a.prompt_len + a.gen_tokens + 8   # the kv ctor budget
+    kv.graph_mode_init(seq=slot, upto_tokens=cap_tokens)
+    dev = "cuda"
+    in_ids = torch.tensor([[runner.tokens[rid][-1]]], dtype=torch.long,
+                          device=dev)
+    pos = torch.tensor([[runner.pos_of[rid] - 1]], dtype=torch.long,
+                       device=dev)
+    runner.ctx.mode = "decode"
+    runner.ctx.slots = [slot]
+    prev = set_context(runner.ctx)
+
+    def one_step():
+        out = model(input_ids=in_ids, position_ids=pos, use_cache=False)
+        lg = out.logits[:, -1]
+        tok = lg.argmax(-1)
+        in_ids.copy_(tok.reshape(1, 1))
+        pos.add_(1)
+        return lg
+
+    n_warm = 3
+    used = runner.pos_of[rid] + n_warm + 1
+    n_steps = min(a.gen_tokens, cap_tokens - used - 2)
+    assert n_steps >= 16, f"window too small for stage A ({n_steps})"
+    for _ in range(n_warm):
+        one_step()
+    torch.cuda.synchronize()
+
+    hashes, toks, walls = [], [], []
+    if a.b1d_loop == "graph":
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g):
+            lg_static = one_step()
+        torch.cuda.synchronize()
+        for _ in range(n_steps):
+            t0 = time.perf_counter_ns()
+            g.replay()
+            torch.cuda.synchronize()
+            walls.append(time.perf_counter_ns() - t0)
+            hashes.append(hashlib.sha256(
+                lg_static.float().cpu().numpy().tobytes()).hexdigest()[:16])
+            toks.append(int(in_ids.reshape(())))
+    else:
+        for _ in range(n_steps):
+            t0 = time.perf_counter_ns()
+            lg = one_step()
+            torch.cuda.synchronize()
+            walls.append(time.perf_counter_ns() - t0)
+            hashes.append(hashlib.sha256(
+                lg.float().cpu().numpy().tobytes()).hexdigest()[:16])
+            toks.append(int(in_ids.reshape(())))
+    set_context(prev)
+    walls_ms = sorted(w / 1e6 for w in walls)
+    rep = {
+        "b1d_loop": a.b1d_loop,
+        "n_steps": n_steps,
+        "warm_scheduled": 2, "warm_manual": n_warm,
+        "logits_hashes": hashes,
+        "tokens": toks,
+        "step_ms_median_syncd": walls_ms[len(walls_ms) // 2],
+        "note": "stage A: per-step sync for hashing inflates the wall; "
+                "the H-G bar is stage C's, not this number",
+    }
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(a.out).write_text(json.dumps(rep, indent=1))
+    print(f"B1D_{a.b1d_loop.upper()} steps={n_steps} "
+          f"median_syncd={rep['step_ms_median_syncd']:.2f}ms "
+          f"first_tok={toks[0]} out={a.out}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="allenai/OLMoE-1B-7B-0924")
@@ -230,6 +323,14 @@ def main():
                     help="JSON of per-region descendant op counts from "
                          "the profiler event tree (needs --host-brackets; "
                          "engages the torch profiler, stacks off)")
+    ap.add_argument("--b1d-loop", choices=["eager", "graph"], default=None,
+                    help="PREREG-b1d stage A: after prefill + a short "
+                         "scheduled warm, drive the B=1 decode loop "
+                         "manually through the graph-shape append path -- "
+                         "'graph' captures one step and replays; 'eager' "
+                         "runs the identical loop uncaptured (the "
+                         "identity reference). Writes per-step logits "
+                         "hashes + tokens to --out")
     ap.add_argument("--sync-attr-out", default=None,
                     help="JSON of op counts over the profiler's active "
                          "window, with aten::nonzero attributed to source "
@@ -566,6 +667,10 @@ def main():
         import cProfile
         prof = cProfile.Profile()
         prof.enable()
+    if a.b1d_loop:
+        _b1d_stage_a(a, model, runner, sched, kv)
+        return
+
     step_walls = []            # decode-ONLY steps: a wall that included a
     while sched.active or sched.queue:   # prefill chunk would smear into
         pf0 = len(runner.prefill_rows)   # sched_py and mis-attribute
