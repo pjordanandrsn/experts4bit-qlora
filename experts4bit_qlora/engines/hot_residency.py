@@ -141,6 +141,29 @@ class _HotResidency:
     dispatch_diet = False
     _rt_cache = None
 
+    # B1c collapse (PREREG-b1c, the BRANCH-2 optimization): when the
+    # PLACEMENT is all-VRAM, the token-critical path runs no dispatch
+    # algebra at all — no mask, no partition, no cold checks, no
+    # scatter. Placement-static predicate, cached; `swap_expert`
+    # invalidates. Off by default until its cert.
+    collapse_resident = False
+    _all_hot_cache = None
+
+    def _all_hot(self):
+        """Every expert hot AND the hot stack in identity order — the
+        two facts `_forward_collapsed` relies on to pass `flat` directly
+        as local ids. Checked once per placement, never per step; any
+        future hot-stack reordering makes this False and the baseline
+        path runs instead of mis-indexing."""
+        c = self._all_hot_cache
+        if c is None:
+            E = self.is_hot.numel()
+            c = bool(self.is_hot.all()) and bool(
+                (self.g2h == torch.arange(E, device=self.g2h.device))
+                .all())
+            self._all_hot_cache = c
+        return c
+
     def __init__(self, mod, hot_ids, device):
         self.mod = mod
         self.device = torch.device(device)
@@ -260,6 +283,13 @@ class _HotResidency:
         k = top_k_index.shape[1]
 
         flat = top_k_index.reshape(-1).to(dev)                 # [T*k] global expert per assignment
+        if (self.collapse_resident and getattr(self, "amort", None) is None
+                and self._all_hot()):
+            # amort-armed runs keep the instrumented baseline path (the
+            # per-bus event bracket lives there); the collapse serves
+            # the production shape
+            return self._forward_collapsed(x, flat, top_k_weights, T, k,
+                                           H, dev, input_dev, input_dtype)
         if self.dispatch_diet:
             return self._forward_diet(x, flat, top_k_weights, T, k, H, dev,
                                       input_dev, input_dtype)
@@ -318,6 +348,34 @@ class _HotResidency:
         if cr.numel():
             self._cold_contrib(x, flat, row_token, row_slot, cr, top_k_weights, out, dev)
 
+        return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
+
+    def _forward_collapsed(self, x, flat, top_k_weights, T, k, H, dev,
+                           input_dev, input_dtype):
+        """The all-resident collapse (PREREG-b1c). Fires only under the
+        placement-static `_all_hot()` predicate, so `flat` IS the local
+        id (identity g2h, asserted at cache time) and every row lands in
+        a unique (token, slot) cell in row-major order, so the scatter
+        is a reshape and the reduction is the same fixed-order
+        `sum(dim=1)` the baseline runs. Same kernel, same row order,
+        same per-cell values ⇒ bitwise-equal output — the on-box G1
+        gate holds this claim to account."""
+        c = self._rt_cache
+        if c is None or c[0] != (T, k):
+            rt = torch.arange(T * k, device=dev) // k
+            rs = torch.arange(T * k, device=dev) - rt * k
+            self._rt_cache = ((T, k), rt, rs)
+        else:
+            rt = c[1]
+        gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
+                  if self.gptoss else None)
+        xr = x.index_select(0, rt)
+        dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
+                               self.h_dn_p, self.h_dn_a, self.shapes,
+                               self.has_gate, self.act_fn, gptoss=gptoss,
+                               clamp_limit=self.clamp_limit)
+        w = top_k_weights.reshape(-1).to(torch.float32)
+        out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
 
     def _forward_diet(self, x, flat, top_k_weights, T, k, H, dev,
