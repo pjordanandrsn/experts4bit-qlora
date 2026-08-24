@@ -112,6 +112,12 @@ def main():
     ap.add_argument("--kv-batched", action="store_true",
                     help="use the batched KV append decode path "
                          "(PREREG-g9-kvappend)")
+    ap.add_argument("--sync-attr-out", default=None,
+                    help="JSON of op counts over the profiler's active "
+                         "window, with aten::nonzero attributed to source "
+                         "files via stack frames (T5 H1/H2 instrument). "
+                         "Implies the torch profiler with with_stack=True "
+                         "-- run timing arms WITHOUT this flag")
     ap.add_argument("--torch-profile-out", default=None,
                     help="capture ~12 decode steps under torch.profiler "
                          "and dump the CUDA kernel table (T2/T3 "
@@ -128,6 +134,15 @@ def main():
     ap.add_argument("--amort-out", default=None,
                     help="write decode-only per-tier unique/activation "
                          "accounting plus the manifest VRAM set")
+    ap.add_argument("--dispatch-diet", action="store_true",
+                    help="T5: enable the engine's dispatch-algebra diet "
+                         "(one sync/layer, cached index algebra); arm B "
+                         "of PREREG-t5-dispatch-diet")
+    ap.add_argument("--amort", choices=["on", "off"], default="on",
+                    help="off = production shape: no per-layer counters, "
+                         "no per-layer event syncs; the T5 arms run off "
+                         "(--profile-out/--series-out/--amort-out then "
+                         "refuse, they have nothing to write)")
     ap.add_argument("--torch-threads", type=int, default=8,
                     help="torch intraop cap while the pool runs (serving "
                          "playbook: 8; the default thrashes pinned workers)")
@@ -170,11 +185,17 @@ def main():
         batch=a.batch, top_k=k,
         cpu_us_fixed=a.cpu_us_fixed, cpu_us_per_row=a.cpu_us_per_row)
     n = enable_hybrid_tier(model, a.arena, man, hot_rows=a.hot_rows,
-                           threads=a.threads, pool=True)
+                           threads=a.threads, pool=True,
+                           dispatch_diet=a.dispatch_diet)
     assert n == L
     states = [m._hot_residency for m in mods]
+    amort_on = a.amort == "on"
+    if not amort_on:
+        for flag in ("profile_out", "series_out", "amort_out"):
+            assert not getattr(a, flag), \
+                f"--{flag.replace('_', '-')} needs --amort on"
     for st in states:
-        st.arm_amortization(True)
+        st.arm_amortization(amort_on)
 
     cfg = model.config
     hkv = cfg.num_key_value_heads
@@ -233,6 +254,8 @@ def main():
             self.prefill_rows = []
 
         def _amort_snap(self):
+            if states[0].amort is None:      # --amort off: nothing to read
+                return (0, 0)
             return (sum(st.amort["dram_ns"] for st in states),
                     sum(st.amort["gpu_ns"] for st in states))
 
@@ -331,13 +354,14 @@ def main():
 
     tprof = None
     tprof_steps = [0]
-    if a.torch_profile_out:
+    if a.torch_profile_out or a.sync_attr_out:
         from torch.profiler import (ProfilerActivity, profile, schedule)
         tprof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             schedule=schedule(skip_first=24, wait=0, warmup=2, active=12,
                               repeat=1),
-            record_shapes=True)
+            record_shapes=True,
+            with_stack=bool(a.sync_attr_out))
         tprof.__enter__()
     prof = None
     if a.cprofile_out:
@@ -372,9 +396,42 @@ def main():
             hdr += ("WARNING: active window INCOMPLETE -- this table "
                     "under-samples and must not be cited as the "
                     "attribution\n")
-        Path(a.torch_profile_out).write_text(hdr + tbl)
-        print(f"TORCH_PROFILE_OUT {a.torch_profile_out} active={active}/12",
-              flush=True)
+        if a.torch_profile_out:
+            Path(a.torch_profile_out).write_text(hdr + tbl)
+            print(f"TORCH_PROFILE_OUT {a.torch_profile_out} "
+                  f"active={active}/12", flush=True)
+        if a.sync_attr_out:
+            # counts over the ACTIVE window; the verdict divides by
+            # `active_steps` -- never assume the window filled
+            counts = {}
+            for evt in tprof.key_averages():
+                counts[evt.key] = counts.get(evt.key, 0) + evt.count
+            nz = {"engine": 0, "other": 0, "frames": {}}
+            for evt in tprof.key_averages(group_by_stack_n=24):
+                if evt.key != "aten::nonzero" or not evt.count:
+                    continue
+                frames = [f for f in (evt.stack or []) if ".py" in f]
+                site = next((f for f in frames
+                             if "hot_residency.py" in f or "hybrid.py" in f
+                             or "nvme_experts.py" in f), None)
+                bucket = "engine" if site else "other"
+                nz[bucket] += evt.count
+                label = site or (frames[0] if frames else "<no-py-frame>")
+                nz["frames"][label] = nz["frames"].get(label, 0) + evt.count
+            Path(a.sync_attr_out).write_text(json.dumps({
+                "active_steps": active,
+                "dispatch_diet": bool(a.dispatch_diet),
+                "op_counts": {kk: counts.get(kk, 0) for kk in
+                              ("aten::nonzero", "aten::copy_", "aten::to",
+                               "aten::_to_copy",
+                               "aten::index_select", "aten::index_put_",
+                               "aten::unique2", "aten::sort",
+                               "aten::arange", "aten::item",
+                               "aten::_local_scalar_dense")},
+                "nonzero_attr": nz,
+            }, indent=1))
+            print(f"SYNC_ATTR_OUT {a.sync_attr_out} active={active}/12",
+                  flush=True)
     if prof is not None:
         prof.disable()
         import io

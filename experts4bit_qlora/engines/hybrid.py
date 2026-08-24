@@ -378,6 +378,8 @@ class _HybridTier(_NvmeResidency):
         hm = self.hot_ids == demote
         self.hot_ids = torch.where(
             hm, torch.tensor(promote, dtype=self.hot_ids.dtype), self.hot_ids)
+        # the diet's static cold-split caches a fact that depends on is_hot
+        self._cold_static = None
 
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
@@ -639,11 +641,50 @@ class _HybridTier(_NvmeResidency):
                        dn.to(torch.float32) * w[:, None])
 
     # ------------------------------------------------------------------ #
+    # T5 dispatch diet: the DRAM/NVMe destination of a cold row is a fact
+    # about the PLACEMENT far more often than about the data — when every
+    # non-hot expert is DRAM-resident (the swappable/controller mode and
+    # the reference operating point both are), the split needs no mask, no
+    # boolean indexing and no sync at all. Computed lazily, invalidated on
+    # swap (a swap flips is_hot, which the "dram" case depends on).
+    _cold_static = None
+
+    def _split_cold_diet(self, flat, cr):
+        """``(nr, dr)`` with exactly the baseline's boolean-index content
+        and order (``cr[~dmask]`` / ``cr[dmask]``), placement-shortcut
+        when static, single host read + stable argsort when mixed."""
+        st = self._cold_static
+        if st is None:
+            if bool((self.is_dram | self.is_hot).all()):
+                st = "dram"                  # every cold row is DRAM-tier
+            elif not bool(self.is_dram.any()):
+                st = "nvme"                  # no DRAM tier at all
+            else:
+                st = "mixed"
+            self._cold_static = st
+        if st == "dram":
+            return cr[:0], cr
+        if st == "nvme":
+            return cr, cr[:0]
+        dmask = self.is_dram[flat.index_select(0, cr)]
+        n_d = int(dmask.sum())
+        if n_d == 0:
+            return cr, cr[:0]
+        if n_d == cr.numel():
+            return cr[:0], cr
+        perm = torch.argsort(dmask.to(torch.uint8), stable=True)
+        n_n = cr.numel() - n_d
+        return (cr.index_select(0, perm[:n_n]),
+                cr.index_select(0, perm[n_n:]))
+
     def _cold_contrib(self, x, flat, row_token, row_slot, cr, top_k_weights,
                       out, dev):
-        dmask = self.is_dram[flat.index_select(0, cr)]
-        nr = cr[~dmask]
-        dr = cr[dmask]
+        if self.dispatch_diet:
+            nr, dr = self._split_cold_diet(flat, cr)
+        else:
+            dmask = self.is_dram[flat.index_select(0, cr)]
+            nr = cr[~dmask]
+            dr = cr[dmask]
         if nr.numel():
             # Stage 3: cold rows now have TWO destinations. The choice is
             # still static — a deadline estimate is workstream 4, and
@@ -958,6 +999,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        gpu_stacks_via_view: bool = True,
                        costs=None,
                        prefetch: bool = False,
+                       dispatch_diet: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
     """Patch every MoE module per the placement manifest. Returns the patch
@@ -1005,6 +1047,13 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     it is gate 2 of the tribrid prereg and is not settled by this knob.
     Unavailable for gpt-oss (per-expert biases do not ride the arena) and
     needs a gnf4 carrying ``ColdCpuView``; both refuse by name.
+
+    ``dispatch_diet`` (default False) turns on the T5 dispatch-algebra
+    diet on every patched module: one host sync per layer instead of the
+    2–4 variable-size ``nonzero`` syncs, cached row-index algebra,
+    de-duplicated gathers, a partition-free all-hot fast path, and a
+    placement-derived cold split. Registered claim: bit-identical
+    outputs; the arm gate is cross-run token identity (PREREG-t5).
 
     **NUMERICS — this knob is part of run identity.** It picks an execution
     destination, so the module's cross-placement rounding law (top of this
@@ -1222,6 +1271,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     for mod in mods:
         setattr(mod, _MARKER, True)
         mod._e4b_hybrid_owns_pool = bool(pool)
+        if dispatch_diet:
+            mod._hot_residency.dispatch_diet = True
     if prefetch:
         _wire_prefetch(model, mods, verbose=verbose)
     log(f"  hybrid tier active on {n} module(s): "

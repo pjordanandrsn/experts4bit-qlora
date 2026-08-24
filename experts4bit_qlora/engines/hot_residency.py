@@ -104,6 +104,27 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     return out
 
 
+def _partition_by_mask(hot_row):
+    """``(n_cold, cr, hr)`` carrying EXACTLY the index content and order of
+    ``(~hot_row).nonzero()`` / ``hot_row.nonzero()``, for ONE small host
+    read instead of two variable-size ``nonzero`` device→host syncs.
+
+    A stable ascending sort of the mask puts the False (cold) positions
+    first and the True (hot) positions after, each group in original index
+    order — which is precisely ``nonzero``'s order — so the split is a
+    slice of one permutation. The all-hot / all-cold edges skip even the
+    sort. Equivalence to the ``nonzero`` pair is pinned across all three
+    regimes in ``tests/test_dispatch_diet.py``."""
+    n = hot_row.numel()
+    n_cold = n - int(hot_row.sum())          # the ONE device→host read
+    if n_cold == 0 or n_cold == n:
+        full = torch.arange(n, device=hot_row.device)
+        return ((0, full[:0], full) if n_cold == 0
+                else (n, full, full[:0]))
+    perm = torch.argsort(hot_row.to(torch.uint8), stable=True)
+    return n_cold, perm[:n_cold], perm[n_cold:]
+
+
 class _HotResidency:
     """Per-module state: a resident GPU hot-stack + a pinned-CPU cold-stack, and
     the global<->local id maps needed to dispatch each routed expert."""
@@ -111,6 +132,14 @@ class _HotResidency:
     # Subclasses that never H2D-stream the cold weights (the cold engine computes
     # them on the host) set this False and keep the cold stacks pageable.
     _PIN_COLD = True
+
+    # T5 dispatch diet (off by default — `enable_hybrid_tier` plumbs it):
+    # one host sync per layer instead of 2–4 `nonzero` syncs, cached
+    # row_token/row_slot index algebra, de-duplicated gathers, and a
+    # partition-free all-hot fast path. The baseline `forward` body is
+    # untouched when this is False.
+    dispatch_diet = False
+    _rt_cache = None
 
     def __init__(self, mod, hot_ids, device):
         self.mod = mod
@@ -231,6 +260,9 @@ class _HotResidency:
         k = top_k_index.shape[1]
 
         flat = top_k_index.reshape(-1).to(dev)                 # [T*k] global expert per assignment
+        if self.dispatch_diet:
+            return self._forward_diet(x, flat, top_k_weights, T, k, H, dev,
+                                      input_dev, input_dtype)
         row_token = torch.arange(T * k, device=dev) // k
         row_slot = torch.arange(T * k, device=dev) - row_token * k
         hot_row = self.is_hot[flat]                            # [T*k] bool
@@ -286,6 +318,75 @@ class _HotResidency:
         if cr.numel():
             self._cold_contrib(x, flat, row_token, row_slot, cr, top_k_weights, out, dev)
 
+        return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
+
+    def _forward_diet(self, x, flat, top_k_weights, T, k, H, dev,
+                      input_dev, input_dtype):
+        """The baseline forward with its dispatch algebra on a diet (T5).
+
+        Same arithmetic, same index order, bit-identical output — the
+        registered claim, gated by the cross-arm token-identity check:
+        * ``_partition_by_mask`` replaces the hr/cr double-``nonzero``
+          (2 syncs) with one small host read;
+        * ``row_token``/``row_slot`` are cached per (T, k) instead of two
+          ``arange`` builds per layer per step;
+        * each ``index_select`` on them happens once per branch, not 3×;
+        * an all-hot step skips the partition AND the ``index_put_``: with
+          every (token, slot) cell written exactly once in row-major
+          order, the scatter is a reshape.
+        """
+        c = self._rt_cache
+        if c is None or c[0] != (T, k):
+            rt = torch.arange(T * k, device=dev) // k
+            rs = torch.arange(T * k, device=dev) - rt * k
+            self._rt_cache = ((T, k), rt, rs)
+        else:
+            rt, rs = c[1], c[2]
+        row_token, row_slot = rt, rs
+        hot_row = self.is_hot[flat]                            # [T*k] bool
+        n_cold, cr, hr = _partition_by_mask(hot_row)
+
+        _amort = getattr(self, "amort", None)
+        _ev = None
+        if _amort is not None and hr.numel() and dev.type == "cuda":
+            _ev = (torch.cuda.Event(enable_timing=True),
+                   torch.cuda.Event(enable_timing=True))
+            _ev[0].record()
+        gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
+                  if self.gptoss else None)
+        if n_cold == 0:
+            local = self.g2h[flat]
+            xr = x.index_select(0, row_token)
+            dn = _fused_over_stack(xr, local, self.h_gu_p, self.h_gu_a,
+                                   self.h_dn_p, self.h_dn_a, self.shapes,
+                                   self.has_gate, self.act_fn, gptoss=gptoss,
+                                   clamp_limit=self.clamp_limit)
+            # top_k_weights[row_token, row_slot] over ALL rows is exactly
+            # its row-major flattening; same values, no gather kernel
+            w = top_k_weights.reshape(-1).to(torch.float32)
+            out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
+        else:
+            out = torch.zeros(T, k, H, dtype=torch.float32, device=dev)
+            if hr.numel():
+                rt_h = row_token.index_select(0, hr)
+                rs_h = row_slot.index_select(0, hr)
+                local = self.g2h[flat.index_select(0, hr)]
+                xr = x.index_select(0, rt_h)
+                dn = _fused_over_stack(xr, local, self.h_gu_p, self.h_gu_a,
+                                       self.h_dn_p, self.h_dn_a, self.shapes,
+                                       self.has_gate, self.act_fn,
+                                       gptoss=gptoss,
+                                       clamp_limit=self.clamp_limit)
+                w = top_k_weights[rt_h, rs_h].to(torch.float32)
+                out.index_put_((rt_h, rs_h),
+                               dn.to(torch.float32) * w[:, None])
+        if _ev is not None:
+            _ev[1].record()
+            _ev[1].synchronize()
+            _amort["gpu_ns"] += int(_ev[0].elapsed_time(_ev[1]) * 1e6)
+        if n_cold:
+            self._cold_contrib(x, flat, row_token, row_slot, cr,
+                               top_k_weights, out, dev)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
 
     def _cold_contrib(self, x, flat, row_token, row_slot, cr, top_k_weights, out, dev):
