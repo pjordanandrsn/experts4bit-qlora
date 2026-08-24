@@ -51,6 +51,8 @@ PER_MODE = {"prefill": {"attn_host_ns": 0, "attn_calls": 0},
 HOST_BRACKETS = [False]     # --host-brackets: region walls + record_function
 REGION_PROF = {
     "moe": {"prefill": {"ns": 0, "calls": 0}, "decode": {"ns": 0, "calls": 0}},
+    "moe_block": {"prefill": {"ns": 0, "calls": 0},
+                  "decode": {"ns": 0, "calls": 0}},
     "lmhead": {"prefill": {"ns": 0, "calls": 0}, "decode": {"ns": 0, "calls": 0}},
 }
 
@@ -153,6 +155,18 @@ def main():
                     help="run the per-seq KV append path (the kvappend "
                          "cert A arm; the T5 cycle measured this point "
                          "by accident when batched was opt-in)")
+    ap.add_argument("--engine", choices=["hybrid", "pipelined"],
+                    default="hybrid",
+                    help="PREREG-b1 R1 arm: 'pipelined' bypasses the "
+                         "hybrid tier -- enable_pipelined_residency with "
+                         "every expert hot (narrowest existing resident "
+                         "grouped-NF4 path); no placement, no CPU tier")
+    ap.add_argument("--placement-override", choices=["none", "all-vram"],
+                    default="none",
+                    help="PREREG-b1 R0 arm: after the solver runs, move "
+                         "every expert into the VRAM tier, executor "
+                         "machinery left intact -- isolates physical "
+                         "heterogeneity from orchestration")
     ap.add_argument("--host-brackets", action="store_true",
                     help="T5b Phase A: host-wall brackets + profiler "
                          "regions around each MoE forward and lm_head. "
