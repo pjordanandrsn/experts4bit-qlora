@@ -1,0 +1,479 @@
+{
+  "schema": "gnf4-hybrid-calib/1",
+  "created_utc": "2026-08-24T00:53:16Z",
+  "quick_mode": false,
+  "host": {
+    "hostname": "untagged",
+    "kernel": "5.15.0-181-generic",
+    "machine": "x86_64",
+    "cpu_model": "AMD EPYC 9755 128-Core Processor",
+    "cpu_flags_watched": [
+      "avx2",
+      "avx512_vnni",
+      "avx512bw",
+      "avx512f",
+      "avx512vbmi",
+      "avx512vl"
+    ],
+    "online_cpus": 48,
+    "cgroup_cpu_quota": 46.08,
+    "numa_nodes": 1,
+    "mem_total_gib": 176.9,
+    "thp": "always [madvise] never",
+    "hugetlb_2m_total": "0",
+    "governor": "(none)",
+    "loadavg_at_start": "30.68 9.70 3.46 1/759 822"
+  },
+  "gpus": [
+    {
+      "index": "0",
+      "name": "NVIDIA GeForce RTX 5090",
+      "vram": "32607 MiB",
+      "power_limit": "575.00 W",
+      "pcie_gen_max": "4",
+      "pcie_width_max": "16",
+      "pcie_gen_idle": "4",
+      "pcie_width_idle": "16"
+    }
+  ],
+  "notes": [],
+  "cpu_bench_build": "/usr/bin/cc -O3 -march=native",
+  "cpu_bench": {
+    "features": {
+      "avx2": 1,
+      "avx512f": 1,
+      "avx512bw": 1,
+      "avx512vl": 1,
+      "avx512vbmi": 1,
+      "avx512vnni": 1
+    },
+    "topology": {
+      "online_cpus": 48,
+      "l3_domains": 1
+    },
+    "compiled_simd": "avx512",
+    "triad": [
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 48.7
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 94.9
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 181.15
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 192.16
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 310.39
+      },
+      {
+        "threads": 32,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 366.19
+      },
+      {
+        "threads": 48,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 359.71
+      },
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 63.72
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 127.54
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 244.67
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 249.18
+      },
+      {
+        "threads": 16,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 402.65
+      },
+      {
+        "threads": 32,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 401.76
+      },
+      {
+        "threads": 48,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 475.43
+      }
+    ],
+    "triad_best": {
+      "gbs": 475.43,
+      "threads": 48,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter": [
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 1,
+        "gbs": 49.09
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 2,
+        "gbs": 96.55
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 4,
+        "gbs": 185.59
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 8,
+        "gbs": 315.98
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 16,
+        "gbs": 421.98
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 32,
+        "gbs": 471.02
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 48,
+        "gbs": 417.32
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 1,
+        "gbs": 49.0
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 2,
+        "gbs": 98.13
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 4,
+        "gbs": 186.16
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 8,
+        "gbs": 327.39
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 16,
+        "gbs": 438.3
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 32,
+        "gbs": 485.26
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 48,
+        "gbs": 504.91
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 1,
+        "gbs": 49.54
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 2,
+        "gbs": 97.49
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 4,
+        "gbs": 186.88
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 8,
+        "gbs": 336.86
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 16,
+        "gbs": 446.23
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 32,
+        "gbs": 483.29
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 48,
+        "gbs": 506.61
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 1,
+        "gbs": 49.65
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 2,
+        "gbs": 97.89
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 4,
+        "gbs": 187.69
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 8,
+        "gbs": 331.21
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 16,
+        "gbs": 438.76
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 32,
+        "gbs": 486.16
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 48,
+        "gbs": 508.67
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 1,
+        "gbs": 49.73
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 2,
+        "gbs": 98.24
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 4,
+        "gbs": 188.14
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 8,
+        "gbs": 331.33
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 16,
+        "gbs": 444.23
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 32,
+        "gbs": 487.32
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 48,
+        "gbs": 496.57
+      }
+    ],
+    "scatter_best": {
+      "gbs": 508.67,
+      "block_mib": 16,
+      "threads": 48,
+      "experts": 512
+    },
+    "gate_g0": {
+      "scatter_pct_of_triad": 107.0
+    },
+    "nvme": {
+      "o_direct": true,
+      "points": [
+        {
+          "mode": "seq",
+          "qd": 1,
+          "gbs": 0.54,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 4,
+          "gbs": 2.34,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 8,
+          "gbs": 4.26,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 16,
+          "gbs": 5.55,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 1,
+          "gbs": 0.91,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 4,
+          "gbs": 3.37,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 8,
+          "gbs": 5.42,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 16,
+          "gbs": 6.61,
+          "ok": true
+        }
+      ]
+    },
+    "config": {
+      "triad_gib": 2,
+      "arena_gib": 8,
+      "topk": 8,
+      "fetches": 400,
+      "seed": 20260816,
+      "reps": 5,
+      "tile_bytes": 1048576
+    }
+  },
+  "gpu_bench": {
+    "devices": [
+      {
+        "device": "cuda:0",
+        "name": "NVIDIA GeForce RTX 5090",
+        "b_vram_triad_gbs": 1571.7,
+        "b_link": {
+          "h2d_8kb": {
+            "gbs": 2.82,
+            "usec": 2.9
+          },
+          "d2h_8kb": {
+            "gbs": 2.97,
+            "usec": 2.8
+          },
+          "h2d_64mb": {
+            "gbs": 28.47,
+            "usec": 2357.1
+          },
+          "d2h_64mb": {
+            "gbs": 28.25,
+            "usec": 2375.6
+          }
+        }
+      }
+    ]
+  },
+  "gate_g0": {
+    "scatter_pct_of_triad": 107.0,
+    "verdict": "proceed",
+    "thresholds": {
+      "proceed": 70.0,
+      "resolve": 50.0
+    },
+    "triad_best": {
+      "gbs": 475.43,
+      "threads": 48,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter_best": {
+      "gbs": 508.67,
+      "block_mib": 16,
+      "threads": 48,
+      "experts": 512
+    }
+  },
+  "wall_seconds": 65.4
+}
