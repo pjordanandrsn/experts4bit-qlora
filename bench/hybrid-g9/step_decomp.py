@@ -203,9 +203,13 @@ def main():
                          "cert A arm; the T5 cycle measured this point "
                          "by accident when batched was opt-in)")
     ap.add_argument("--collapse", action="store_true",
-                    help="PREREG-b1c: enable the all-resident collapse "
-                         "fast path (fires only when the placement is "
-                         "all-VRAM; inert on subset placements)")
+                    help="accepted for command compatibility -- the "
+                         "all-resident collapse is the DEFAULT since its "
+                         "cert (RESULTS-b1c); see --no-collapse")
+    ap.add_argument("--no-collapse", action="store_true",
+                    help="run the pre-collapse dispatch path (the b1c "
+                         "cert C0 arm; fires only on all-VRAM placements "
+                         "either way)")
     ap.add_argument("--engine", choices=["hybrid", "pipelined"],
                     default="hybrid",
                     help="PREREG-b1 R1 arm: 'pipelined' bypasses the "
@@ -298,7 +302,7 @@ def main():
         assert a.placement_override == "none", \
             "--placement-override is a hybrid-arm knob"
         assert not a.dispatch_diet, "dispatch_diet is hybrid-only"
-        assert not a.collapse, "--collapse is hybrid-only (R1 has no tier)"
+        assert not (a.collapse and a.no_collapse), "contradictory flags"
         # T>1 falls back to the reference forward, which cannot run CUDA
         # activations against the host-materialized weights (Bugbot,
         # e4b#223). chunk=1 keeps every forward on the T=1 fast path;
@@ -338,7 +342,7 @@ def main():
         n = enable_hybrid_tier(model, a.arena, man, hot_rows=a.hot_rows,
                                threads=a.threads, pool=True,
                                dispatch_diet=a.dispatch_diet,
-                               collapse_resident=a.collapse)
+                               collapse_resident=not a.no_collapse)
         assert n == L
     assert not (a.kv_batched and a.kv_per_seq),         "--kv-batched and --kv-per-seq are contradictory"
     states = ([] if a.engine == "pipelined"
@@ -775,7 +779,7 @@ def main():
         print(f"AMORT_OUT {a.amort_out}", flush=True)
     rep["engine"] = a.engine
     rep["placement_override"] = a.placement_override
-    rep["collapse"] = bool(a.collapse)
+    rep["collapse"] = not a.no_collapse
     rep["manifest_counts"] = (None if man is None else
                               {t: len(pp) for t, pp in man["tiers"].items()})
     if a.host_brackets:

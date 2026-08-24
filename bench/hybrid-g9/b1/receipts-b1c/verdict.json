@@ -1,0 +1,47 @@
+{
+  "gs_b16_flag_on": {
+    "pass": true,
+    "step_ms": 126.887451,
+    "collapse_recorded": true
+  },
+  "arms": {
+    "C0": {
+      "step_ms": 59.271776,
+      "aa_spread_pct": 0.15274554958500922,
+      "aa_pass": true
+    },
+    "C1": {
+      "step_ms": 49.795047,
+      "aa_spread_pct": 0.18414883713234265,
+      "aa_pass": true
+    },
+    "R1": {
+      "step_ms": 42.713439,
+      "aa_spread_pct": 2.7713923947917185,
+      "aa_pass": true
+    }
+  },
+  "identity": {
+    "c0_c1_bitwise": true,
+    "c1_r1_bitwise": true
+  },
+  "h_c": {
+    "c0_ms": 59.271776,
+    "c1_ms": 49.795047,
+    "improvement_pct": 15.98860307475856,
+    "pass": true,
+    "partial": false
+  },
+  "h_m": {
+    "c0_moe_host_ms": 28.203033,
+    "c1_moe_host_ms": 17.760804,
+    "ratio": 0.6297480132721895,
+    "pass": false
+  },
+  "reported": {
+    "r1_ms": 42.713439,
+    "gap_closed_fraction": 0.5723237182574558,
+    "c1_vs_r1_residual_pct": 16.579344032682535
+  },
+  "verdict": "CERTIFIED-WITH-OPEN-MECHANISM (wall win real; the bracket attribution is mis-modeled \u2014 ship and file the gap)"
+}
