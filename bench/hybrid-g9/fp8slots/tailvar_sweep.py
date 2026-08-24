@@ -21,6 +21,9 @@ def main():
     ap.add_argument("--windows", type=int, default=10)
     ap.add_argument("--window-span", type=int, default=28000)
     ap.add_argument("--window-stride", type=int, default=29000)
+    ap.add_argument("--window-base", type=int, default=0,
+                    help="corpus offset of window 0 (shifted grids for "
+                         "fresh-content runs)")
     ap.add_argument("--vram-gb", type=float, default=10.0)
     ap.add_argument("--dram-gb", type=float, default=60.0)
     ap.add_argument("--batch", type=int, default=16)
@@ -36,7 +39,7 @@ def main():
     pathlib.Path(a.out_dir).mkdir(parents=True, exist_ok=True)
     tags = []
     for w in range(a.windows):
-        off = w * a.window_stride
+        off = a.window_base + w * a.window_stride
         tag = f"w{w}"
         amort = pathlib.Path(a.out_dir) / f"{tag}.amort.json"
         cmd = [sys.executable, str(STEP_DECOMP),
