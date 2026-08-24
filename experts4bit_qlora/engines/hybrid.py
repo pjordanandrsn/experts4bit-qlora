@@ -378,8 +378,10 @@ class _HybridTier(_NvmeResidency):
         hm = self.hot_ids == demote
         self.hot_ids = torch.where(
             hm, torch.tensor(promote, dtype=self.hot_ids.dtype), self.hot_ids)
-        # the diet's static cold-split caches a fact that depends on is_hot
+        # the diet's static cold-split caches a fact that depends on
+        # is_hot; so does the collapse's all-hot predicate (PREREG-b1c)
         self._cold_static = None
+        self._all_hot_cache = None
 
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
@@ -1000,6 +1002,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        costs=None,
                        prefetch: bool = False,
                        dispatch_diet: bool = False,
+                       collapse_resident: bool = False,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
     """Patch every MoE module per the placement manifest. Returns the patch
@@ -1047,6 +1050,13 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     it is gate 2 of the tribrid prereg and is not settled by this knob.
     Unavailable for gpt-oss (per-expert biases do not ride the arena) and
     needs a gnf4 carrying ``ColdCpuView``; both refuse by name.
+
+    ``collapse_resident`` (default False until its cert) turns on the
+    B1c all-resident collapse: when the placement is all-VRAM (every
+    expert hot, identity hot order — a placement-static predicate,
+    never per-step data), the token-critical path runs no dispatch
+    algebra at all. Bitwise-identical outputs by construction; subset
+    placements are structurally untouched (PREREG-b1c).
 
     ``dispatch_diet`` (default False) turns on the T5 dispatch-algebra
     diet on every patched module: one host sync per layer instead of the
@@ -1273,6 +1283,8 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_hybrid_owns_pool = bool(pool)
         if dispatch_diet:
             mod._hot_residency.dispatch_diet = True
+        if collapse_resident:
+            mod._hot_residency.collapse_resident = True
     if prefetch:
         _wire_prefetch(model, mods, verbose=verbose)
     log(f"  hybrid tier active on {n} module(s): "
