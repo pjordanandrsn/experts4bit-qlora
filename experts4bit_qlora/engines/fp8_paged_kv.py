@@ -46,7 +46,7 @@ class Fp8PagedKV:
 
     def __init__(self, n_layers: int, n_kv_heads: int, head_dim: int, *,
                  batch: int, max_tokens_per_seq: int, k_groups: int = 4,
-                 batched_append: bool = False, device: str = "cuda"):
+                 batched_append: bool = True, device: str = "cuda"):
         from fp8_kv import kv_block_bytes
         from row_pool import RowPool
 
