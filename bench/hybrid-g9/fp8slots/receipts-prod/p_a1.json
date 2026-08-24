@@ -1,0 +1,113 @@
+{
+ "controller": false,
+ "windows": [
+  {
+   "window": 0,
+   "decode_steps": 142,
+   "dram_ms_total": 1955.815803,
+   "wall_ms_total": 28730.156321,
+   "dram_ms_median": 13.804421,
+   "uniq_dram_end": 12633,
+   "uniq_first32": 2470,
+   "swaps": 0
+  },
+  {
+   "window": 1,
+   "decode_steps": 142,
+   "dram_ms_total": 1968.727046,
+   "wall_ms_total": 27485.926372,
+   "dram_ms_median": 14.5116535,
+   "uniq_dram_end": 27569,
+   "uniq_first32": 2438,
+   "swaps": 0
+  },
+  {
+   "window": 2,
+   "decode_steps": 142,
+   "dram_ms_total": 1903.61603,
+   "wall_ms_total": 27185.839957,
+   "dram_ms_median": 14.049747,
+   "uniq_dram_end": 41977,
+   "uniq_first32": 2626,
+   "swaps": 0
+  },
+  {
+   "window": 3,
+   "decode_steps": 142,
+   "dram_ms_total": 2187.783467,
+   "wall_ms_total": 27729.119327,
+   "dram_ms_median": 16.0404725,
+   "uniq_dram_end": 64537,
+   "uniq_first32": 3027,
+   "swaps": 0
+  },
+  {
+   "window": 4,
+   "decode_steps": 142,
+   "dram_ms_total": 2130.317167,
+   "wall_ms_total": 27488.966356,
+   "dram_ms_median": 15.7454935,
+   "uniq_dram_end": 83910,
+   "uniq_first32": 3398,
+   "swaps": 0
+  },
+  {
+   "window": 5,
+   "decode_steps": 142,
+   "dram_ms_total": 2029.121863,
+   "wall_ms_total": 27471.699579,
+   "dram_ms_median": 15.070391,
+   "uniq_dram_end": 99453,
+   "uniq_first32": 3294,
+   "swaps": 0
+  },
+  {
+   "window": 6,
+   "decode_steps": 142,
+   "dram_ms_total": 1909.046947,
+   "wall_ms_total": 27099.442591,
+   "dram_ms_median": 13.4530645,
+   "uniq_dram_end": 112113,
+   "uniq_first32": 1931,
+   "swaps": 0
+  },
+  {
+   "window": 7,
+   "decode_steps": 142,
+   "dram_ms_total": 1987.100895,
+   "wall_ms_total": 27963.221555,
+   "dram_ms_median": 14.820163,
+   "uniq_dram_end": 127543,
+   "uniq_first32": 2678,
+   "swaps": 0
+  },
+  {
+   "window": 8,
+   "decode_steps": 142,
+   "dram_ms_total": 2048.007121,
+   "wall_ms_total": 27455.819345,
+   "dram_ms_median": 14.7706845,
+   "uniq_dram_end": 144073,
+   "uniq_first32": 2673,
+   "swaps": 0
+  },
+  {
+   "window": 9,
+   "decode_steps": 142,
+   "dram_ms_total": 1946.864499,
+   "wall_ms_total": 27471.298167,
+   "dram_ms_median": 14.3098955,
+   "uniq_dram_end": 158191,
+   "uniq_first32": 2148,
+   "swaps": 0
+  }
+ ],
+ "uniq_dram_total": 158191,
+ "dram_ms_grand": 20066.400838,
+ "wall_ms_grand": 276081.48957,
+ "swaps_total": 0,
+ "controller_ms": 0.0,
+ "cp_resets": 0,
+ "controller_cp": false,
+ "decode_steps": 1420
+}
