@@ -1,0 +1,15 @@
+w0  static   8237 | ctrl   7388 | oracle(odd)  2802 vs  4209 | swaps   94
+w1  static  10624 | ctrl   8533 | oracle(odd)  3035 vs  5181 | swaps  113
+w2  static  10330 | ctrl   8966 | oracle(odd)  3386 vs  5307 | swaps  113
+w3  static  17534 | ctrl  13425 | oracle(odd)  5552 vs  8939 | swaps  265
+w4  static  14955 | ctrl  11287 | oracle(odd)  4171 vs  7420 | swaps  219
+w5  static  10048 | ctrl   7929 | oracle(odd)  2932 vs  4942 | swaps  129
+w6  static   7283 | ctrl   6266 | oracle(odd)  1708 vs  3761 | swaps   69
+w7  static  12025 | ctrl   9700 | oracle(odd)  3934 vs  5994 | swaps  125
+w8  static  12338 | ctrl  10111 | oracle(odd)  3506 vs  6127 | swaps  171
+w9  static   8203 | ctrl   7399 | oracle(odd)  2690 vs  4102 | swaps   87
+totals: static 111577 | controller 91004 | swaps 1385
+raw reduction 18.4% | swap-adjusted 16.0% | split-half oracle 39.8% | oracle-gap captured 40%
+B1 swap-adjusted >= 10%%: PASS
+B2 raw >= 15%%: PASS
+VERDICT: CONTROLLER-CERTIFIED
