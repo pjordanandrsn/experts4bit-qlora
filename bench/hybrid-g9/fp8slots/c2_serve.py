@@ -14,7 +14,6 @@ with a 0.25-prior floor -- the C1 rule under the per-layer engine
 geometry, receipt-checked at 17.5% raw / 15.2% adjusted on the C1 data.
 """
 import argparse
-import collections
 import gzip
 import json
 import pathlib
@@ -22,10 +21,6 @@ import statistics
 import time
 
 import torch
-
-EPOCH, TRAIL, PRIOR_FLOOR = 8, 32, 0.25
-THETA = 4.0 / 32.0
-
 
 def load_prior(prior_dir, L, E):
     """Pooled per-(layer,expert) touch rates + selection masses from the
@@ -54,6 +49,8 @@ def main():
     ap.add_argument("--calib", required=True)
     ap.add_argument("--prior-dir", required=True)
     ap.add_argument("--controller", action="store_true")
+    ap.add_argument("--controller-cp", action="store_true",
+                    help="engine controller with change-point reset")
     ap.add_argument("--swap-selftest", action="store_true")
     ap.add_argument("--windows", type=int, default=10)
     ap.add_argument("--window-base", type=int, default=14500)
@@ -117,7 +114,7 @@ def main():
         cpu_us_fixed=55, cpu_us_per_row=2)
     n = enable_hybrid_tier(model, a.arena, man, hot_rows=64,
                            threads=a.threads, pool=True,
-                           swappable=a.controller or a.swap_selftest)
+                           swappable=a.controller or a.controller_cp or a.swap_selftest)
     assert n == L
     states = [m._hot_residency for m in mods]
     for st in states:
@@ -159,41 +156,6 @@ def main():
     # above calls the bare model, which must use the stock attention path
     register(model)
 
-    # ---- controller state (driver-held, strictly causal) ----
-    trail = collections.deque(maxlen=TRAIL)
-    flat_prior = [prior[l][e] for l in range(L) for e in range(E)]
-    swaps_total = 0
-    ctrl_ns = 0
-    decode_step = 0
-
-    def controller_tick():
-        nonlocal swaps_total, ctrl_ns
-        t0 = time.perf_counter_ns()
-        nn = len(trail)
-        cnt = [0] * (L * E)
-        for stp in trail:
-            for i in stp:
-                cnt[i] += 1
-        for l in range(L):
-            st = states[l]
-            lo = l * E
-            est = {}
-            for e in range(E):
-                est[e] = max(cnt[lo + e] / nn, PRIOR_FLOOR * prior[l][e])
-            hot = set(st.hot_ids.tolist())
-            ins = sorted((e for e in range(E) if e not in hot),
-                         key=lambda e: -est[e])
-            outs = sorted(hot, key=lambda e: est[e])
-            ki = 0
-            while ki < len(ins) and ki < len(outs):
-                x, y = est[ins[ki]], est[outs[ki]]
-                sd = ((x * (1 - x) + y * (1 - y)) / nn) ** 0.5
-                if x - y <= max(THETA, 3 * sd):
-                    break
-                st.swap_expert(ins[ki], outs[ki])
-                swaps_total += 1
-                ki += 1
-        ctrl_ns += time.perf_counter_ns() - t0
 
     class Runner(PagedModelRunner):
         def __init__(self, *args, **kw):
@@ -205,24 +167,42 @@ def main():
                     sum(st.amort["uniq_dram"] for st in states))
 
         @torch.no_grad()
+        def run_prefill(self, chunks):
+            # decode-only counters by construction (the step_decomp
+            # rollback, ported): capture the tier counters, let the
+            # prefill run, restore -- so prefill uniques never reach
+            # uniq_dram or the boundary first-32 metric (Bugbot,
+            # e4b#205). Lists are snapshot-copied like tensors.
+            saved = []
+            for st in states:
+                am = st.amort
+                saved.append(None if am is None else
+                             {k2: (v.clone() if torch.is_tensor(v)
+                                   else list(v) if isinstance(v, list)
+                                   else v)
+                              for k2, v in am.items()})
+            out = super().run_prefill(chunks)
+            for st, am in zip(states, saved):
+                if am is not None and st.amort is not None:
+                    cur = st.amort
+                    for k2, v in am.items():
+                        if torch.is_tensor(v):
+                            cur[k2].copy_(v)
+                        else:
+                            cur[k2] = v
+            return out
+
+        @torch.no_grad()
         def run_decode(self, rids):
-            nonlocal_ns = time.perf_counter_ns()
+            t0 = time.perf_counter_ns()
             d0, _ = self._snap()
-            out = super().run_decode(rids)
+            out = super().run_decode(rids)   # engine hook fires in here
             if not rids:
                 return out
             d1, u1 = self._snap()
             self.step_rows.append(
-                {"wall_ns": time.perf_counter_ns() - nonlocal_ns,
+                {"wall_ns": time.perf_counter_ns() - t0,
                  "dram_ns": d1 - d0, "uniq_cum": u1})
-            nonlocal decode_step
-            decode_step += 1
-            trail.append([l * E + int(e)
-                          for l, st in enumerate(states)
-                          for e in st.amort["series"][-1].tolist()])
-            if a.controller and decode_step % EPOCH == 0 \
-                    and len(trail) >= 8:
-                controller_tick()
             return out
 
     from datasets import load_dataset
@@ -230,6 +210,12 @@ def main():
                       split="test")
     text = "\n\n".join(t for t in ds["text"] if t.strip())
     all_ids = tok(text, return_tensors="pt").input_ids[0]
+
+    ctrl = None
+    if a.controller or a.controller_cp:
+        from experts4bit_qlora.engines.slot_controller import SlotController
+        ctrl = SlotController(states, prior, cp=a.controller_cp,
+                              trim_series=True)
 
     win_rows = []
     for w in range(a.windows):
@@ -244,12 +230,15 @@ def main():
                           max_tokens_per_seq=a.prompt_len + a.gen_tokens + 8,
                           k_groups=4, device="cuda")
         runner = Runner(model, kv_w, device="cuda")
+        if ctrl is not None:
+            runner.slot_controller = ctrl
         sched = ContinuousScheduler(runner=runner, max_seqs=a.batch,
                                     kv_slots=a.batch, chunk_tokens=a.chunk,
                                     max_prefill_tokens_per_step=a.chunk)
         for p in prompts:
             sched.add_request(p, max_new_tokens=a.gen_tokens)
-        s0 = swaps_total
+        s0 = ctrl.swaps if ctrl else 0
+        u0 = sum(st.amort["uniq_dram"] for st in states)
         while sched.active or sched.queue:
             if sched.step().is_empty:
                 break
@@ -262,7 +251,9 @@ def main():
             "dram_ms_median": statistics.median(
                 r["dram_ns"] for r in rows) / 1e6 if rows else 0,
             "uniq_dram_end": rows[-1]["uniq_cum"] if rows else 0,
-            "swaps": swaps_total - s0,
+            "uniq_first32": (rows[31]["uniq_cum"] - u0
+                             if len(rows) >= 32 else None),
+            "swaps": (ctrl.swaps - s0) if ctrl else 0,
         })
         print("window %d: steps %d dram %.1f ms wall %.1f ms swaps %d"
               % (w, len(rows), win_rows[-1]["dram_ms_total"],
@@ -272,14 +263,16 @@ def main():
     nv = sum(st.amort["uniq_nvme"] for st in states)
     assert nv == 0, f"NVMe touched: {nv}"
     rep = {
-        "controller": bool(a.controller),
+        "controller": bool(a.controller or a.controller_cp),
         "windows": win_rows,
         "uniq_dram_total": int(sum(st.amort["uniq_dram"] for st in states)),
         "dram_ms_grand": sum(x["dram_ms_total"] for x in win_rows),
         "wall_ms_grand": sum(x["wall_ms_total"] for x in win_rows),
-        "swaps_total": swaps_total,
-        "controller_ms": ctrl_ns / 1e6,
-        "decode_steps": decode_step,
+        "swaps_total": ctrl.swaps if ctrl else 0,
+        "controller_ms": (ctrl.ns / 1e6) if ctrl else 0.0,
+        "cp_resets": ctrl.cp_resets if ctrl else 0,
+        "controller_cp": bool(a.controller_cp),
+        "decode_steps": sum(x["decode_steps"] for x in win_rows),
     }
     pathlib.Path(a.out).write_text(json.dumps(rep, indent=1))
     print("C2_RUN_DONE", json.dumps({k2: rep[k2] for k2 in

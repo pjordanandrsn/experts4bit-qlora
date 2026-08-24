@@ -119,6 +119,11 @@ class PagedModelRunner(StepRunner):
             got[rid] = int(tok)
             self.tokens[rid].append(int(tok))
             self.pos_of[rid] += 1
+        # production hook for the slot controller (engines.slot_controller):
+        # fires between decode forwards, never concurrently with one
+        ctrl = getattr(self, "slot_controller", None)
+        if ctrl is not None:
+            ctrl.on_decode_step()
         return got
 
     def free_slot(self, rid: int) -> None:
