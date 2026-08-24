@@ -3,31 +3,45 @@
 value-identical to the grouped dispatch — the whole sort/group/unsort
 algebra collapses away without changing any row's arithmetic. Tested
 with DUPLICATE ids (harder than the exact T=1 case) through a mocked
-GEMM so CI needs no CUDA and no gnf4 kernels."""
+GEMM so CI needs no CUDA.
+
+The mock is installed per-test via monkeypatch, never module-level:
+`sys.modules.setdefault` would silently NOT install under a full
+.[test] install where an earlier test already imported the real
+`nf4_grouped` (the mock loses), and a module-level insert would LEAK
+the fake into later real-kernel tests in the other order (Bugbot,
+e4b#229). monkeypatch covers both directions and auto-restores."""
 
 import sys
 import types
 
+import pytest
 import torch
+
+from experts4bit_qlora.engines.hot_residency import _fused_over_stack
+
+SHAPES = (8, 16, 8, 8)
 
 
 def _fake_gemm(x, p, a, sizes, eids):
     ids = eids if torch.is_tensor(eids) else torch.as_tensor(eids)
     ids = ids.to(torch.float32)
-    reps = torch.as_tensor(sizes)
-    per_row = ids.repeat_interleave(reps)
+    per_row = ids.repeat_interleave(torch.as_tensor(sizes))
     return x * (per_row.unsqueeze(1) + 2.0)
 
 
-sys.modules.setdefault(
-    "nf4_grouped", types.SimpleNamespace(gemm_4bit_grouped=_fake_gemm))
+@pytest.fixture
+def mock_gemm(monkeypatch):
+    mod = sys.modules.get("nf4_grouped")
+    if mod is None:
+        mod = types.SimpleNamespace()
+        monkeypatch.setitem(sys.modules, "nf4_grouped", mod)
+    monkeypatch.setattr(mod, "gemm_4bit_grouped", _fake_gemm,
+                        raising=False)
+    return mod
 
-from experts4bit_qlora.engines.hot_residency import _fused_over_stack  # noqa: E402
 
-SHAPES = (8, 16, 8, 8)
-
-
-def test_singleton_matches_grouped_plain():
+def test_singleton_matches_grouped_plain(mock_gemm):
     torch.manual_seed(3)
     x = torch.randn(8, 8)
     ids = torch.tensor([3, 1, 3, 0, 2, 1, 5, 5])
@@ -39,7 +53,7 @@ def test_singleton_matches_grouped_plain():
     assert torch.equal(g, s)
 
 
-def test_singleton_matches_grouped_gated():
+def test_singleton_matches_grouped_gated(mock_gemm):
     torch.manual_seed(4)
     x = torch.randn(6, 8)
     ids = torch.tensor([2, 2, 0, 4, 4, 4])
@@ -51,7 +65,7 @@ def test_singleton_matches_grouped_gated():
     assert torch.equal(g, s)
 
 
-def test_singleton_matches_grouped_gptoss_epilogue():
+def test_singleton_matches_grouped_gptoss_epilogue(mock_gemm):
     torch.manual_seed(5)
     # widths matter here: the mock GEMM preserves width, and the gptoss
     # branch chunks gu in half before the down GEMM -- so gu_bias is 2x
