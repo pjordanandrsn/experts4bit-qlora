@@ -206,12 +206,24 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         one_step()
     torch.cuda.synchronize()
 
-    hashes, toks, walls = [], [], []
+    hashes, toks, walls, positions = [], [], [], []
     if a.b1d_loop == "graph":
+        # Capture records kernels, it must not EXECUTE them (documented
+        # torch.cuda.graph semantics) -- but the gate does not rely on
+        # documentation: assert state neutrality at runtime, so a torch
+        # that ever executed during capture fails HERE with the cause
+        # named instead of downstream as a baffling hash mismatch
+        # (Bugbot, e4b#228).
+        pos_before = int(pos.reshape(()))
         g = torch.cuda.CUDAGraph()
         with torch.cuda.graph(g):
             lg_static = one_step()
         torch.cuda.synchronize()
+        pos_after = int(pos.reshape(()))
+        assert pos_after == pos_before, (
+            f"capture advanced state (pos {pos_before} -> {pos_after}): "
+            f"this torch executes during capture; the replay window is "
+            f"misaligned and the arms cannot be compared")
         for _ in range(n_steps):
             t0 = time.perf_counter_ns()
             g.replay()
@@ -220,6 +232,7 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             hashes.append(hashlib.sha256(
                 lg_static.float().cpu().numpy().tobytes()).hexdigest()[:16])
             toks.append(int(in_ids.reshape(())))
+            positions.append(int(pos.reshape(())))
     else:
         for _ in range(n_steps):
             t0 = time.perf_counter_ns()
@@ -229,6 +242,7 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             hashes.append(hashlib.sha256(
                 lg.float().cpu().numpy().tobytes()).hexdigest()[:16])
             toks.append(int(in_ids.reshape(())))
+            positions.append(int(pos.reshape(())))
     set_context(prev)
     walls_ms = sorted(w / 1e6 for w in walls)
     rep = {
@@ -237,6 +251,10 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         "warm_scheduled": 2, "warm_manual": n_warm,
         "logits_hashes": hashes,
         "tokens": toks,
+        # per-step positions make cross-arm alignment CHECKED, never
+        # assumed: an off-by-one (any capture-executes semantics, a
+        # missed warm step) shows as a position shift, not a mystery
+        "positions": positions,
         "step_ms_median_syncd": walls_ms[len(walls_ms) // 2],
         "note": "stage A: per-step sync for hashing inflates the wall; "
                 "the H-G bar is stage C's, not this number",
