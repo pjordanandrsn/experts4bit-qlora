@@ -82,6 +82,10 @@ def main():
     ap.add_argument("--profile-out", default=None,
                     help="write this run's decode routing hist as an "
                          "expert_profile JSONL (profile-pass mode)")
+    ap.add_argument("--cprofile-out", default=None,
+                    help="run the serving loop under cProfile and dump "
+                         "the top functions by cumulative time (the G9 "
+                         "host-bill attribution instrument)")
     ap.add_argument("--series-out", default=None,
                     help="write the per-step touched-expert series "
                          "(decode-only, all tiers) as gzipped JSON")
@@ -258,6 +262,11 @@ def main():
     for p in prompts:
         sched.add_request(p, max_new_tokens=a.gen_tokens)
 
+    prof = None
+    if a.cprofile_out:
+        import cProfile
+        prof = cProfile.Profile()
+        prof.enable()
     step_walls = []            # decode-ONLY steps: a wall that included a
     while sched.active or sched.queue:   # prefill chunk would smear into
         pf0 = len(runner.prefill_rows)   # sched_py and mis-attribute
@@ -269,6 +278,15 @@ def main():
         if len(runner.prefill_rows) == pf0 and len(runner.decode_rows) > dr0:
             step_walls.append(wall)
     torch.cuda.synchronize()
+    if prof is not None:
+        prof.disable()
+        import io
+        import pstats
+        buf = io.StringIO()
+        st_ = pstats.Stats(prof, stream=buf)
+        st_.sort_stats("cumulative").print_stats(60)
+        Path(a.cprofile_out).write_text(buf.getvalue())
+        print(f"CPROFILE_OUT {a.cprofile_out}", flush=True)
 
     # device-side attention occupancy from the recorded events
     attn_dev = {"prefill": 0.0, "decode": 0.0}
