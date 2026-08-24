@@ -1,0 +1,22 @@
+{
+ "active_steps": 12,
+ "dispatch_diet": true,
+ "op_counts": {
+  "aten::nonzero": 0,
+  "aten::copy_": 89952,
+  "aten::to": 75477,
+  "aten::_to_copy": 49185,
+  "aten::index_select": 6927,
+  "aten::index_put_": 750,
+  "aten::unique2": 0,
+  "aten::sort": 1146,
+  "aten::arange": 2874,
+  "aten::item": 2832,
+  "aten::_local_scalar_dense": 2832
+ },
+ "nonzero_attr": {
+  "engine": 0,
+  "other": 0,
+  "frames": {}
+ }
+}
