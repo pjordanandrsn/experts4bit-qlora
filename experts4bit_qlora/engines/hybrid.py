@@ -186,7 +186,15 @@ class _HybridTier(_NvmeResidency):
         dram_ids = torch.as_tensor(
             getattr(mod, "_e4b_hybrid_dram_ids"), dtype=torch.long).unique()
         E = mod.num_experts
-        if dram_ids.numel():
+        # Controller mode (C2): the DRAM stacks cover EVERY expert so a
+        # demotion is a pure mask flip and a promotion sources its H2D from
+        # d_* locally -- runtime swaps never touch the arena or any
+        # membership structure. The manifest still defines the HOT set; the
+        # overlap check is meaningless here because overlap is the point.
+        self.swappable = bool(getattr(mod, "_e4b_hybrid_swappable", False))
+        if self.swappable:
+            dram_ids = torch.arange(E, dtype=torch.long)
+        elif dram_ids.numel():
             if int(dram_ids.min()) < 0 or int(dram_ids.max()) >= E:
                 raise ValueError(f"dram ids outside [0, {E})")
             overlap = set(dram_ids.tolist()) & set(self.hot_ids.tolist())
@@ -255,6 +263,42 @@ class _HybridTier(_NvmeResidency):
         self.pf_pin = None             # pinned hidden staging, 2-slot ring
         self.pf_ev = None
         self.pf_slot = 0
+
+    def swap_expert(self, promote: int, demote: int):
+        """Retarget the demoted expert's VRAM slot to the promoted expert.
+
+        Controller mode only. The hot stacks keep their size; the slot's
+        rows are overwritten from the all-expert DRAM stacks (one H2D per
+        segment), then the id algebra flips: g2h, is_hot, is_vram, and the
+        hot_ids introspection tensor. The demoted expert stays servable
+        from d_* (which covers every expert in this mode), so no other
+        structure changes. Called BETWEEN steps -- never concurrently with
+        a forward.
+        """
+        assert self.swappable, "swap_expert requires controller mode"
+        slot = int(self.g2h[demote].item())
+        di = int(self.g2d_cpu[promote].item())
+        assert slot >= 0, f"demote {demote} is not VRAM-resident"
+        assert int(self.g2h[promote].item()) < 0, f"promote {promote} already hot"
+        assert di >= 0
+        self.h_gu_p[slot].copy_(self.d_gu_p[di], non_blocking=False)
+        self.h_gu_a[slot].copy_(self.d_gu_a[di], non_blocking=False)
+        self.h_dn_p[slot].copy_(self.d_dn_p[di], non_blocking=False)
+        self.h_dn_a[slot].copy_(self.d_dn_a[di], non_blocking=False)
+        if self.gptoss:
+            self.h_gu_b[slot].copy_(
+                self.d_gu_b[di].to(self.h_gu_b.dtype, copy=False))
+            self.h_dn_b[slot].copy_(
+                self.d_dn_b[di].to(self.h_dn_b.dtype, copy=False))
+        self.g2h[promote] = slot
+        self.g2h[demote] = -1
+        self.is_hot[promote] = True
+        self.is_hot[demote] = False
+        self.is_vram[promote] = True
+        self.is_vram[demote] = False
+        hm = self.hot_ids == demote
+        self.hot_ids = torch.where(
+            hm, torch.tensor(promote, dtype=self.hot_ids.dtype), self.hot_ids)
 
         # Phase 8 amortization instrument. OFF by default and structurally
         # free when off (invariant 9): the counting block is guarded and
@@ -906,6 +950,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        threads: int = 0, pool: bool = True,
                        offload_rows: float | None = None,
                        fused_ffn: bool = False,
+                       swappable: bool = False,
                        offload_thin_uniq: int | None = None,
                        cold_dest: str | float = "gpu",
                        protected_rows: int | None = None,
@@ -1122,6 +1167,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
         mod._e4b_cold_tier = tier
         mod._e4b_arena_layer = li
         mod._e4b_hybrid_dram_ids = place["dram"]
+        mod._e4b_hybrid_swappable = swappable
         mod._e4b_hybrid_threads = threads
         mod._e4b_hybrid_offload_rows = offload_rows
         mod._e4b_hybrid_fused_ffn = fused_ffn
