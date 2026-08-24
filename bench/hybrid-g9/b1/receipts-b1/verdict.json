@@ -1,0 +1,66 @@
+{
+  "curve": {
+    "1": {
+      "step_ms": 70.878104,
+      "aggregate_tok_s": 14.10872954502282,
+      "per_stream_tok_s": 14.10872954502282
+    },
+    "2": {
+      "step_ms": 81.105834,
+      "aggregate_tok_s": 24.659138576887084,
+      "per_stream_tok_s": 12.329569288443542
+    },
+    "4": {
+      "step_ms": 96.896247,
+      "aggregate_tok_s": 41.2812686130145,
+      "per_stream_tok_s": 10.320317153253624
+    },
+    "8": {
+      "step_ms": 113.505916,
+      "aggregate_tok_s": 70.48090779691167,
+      "per_stream_tok_s": 8.810113474613958
+    },
+    "16": {
+      "step_ms": 140.993195,
+      "aggregate_tok_s": 113.48065415497537,
+      "per_stream_tok_s": 7.092540884685961
+    }
+  },
+  "gs_b16_anchor": {
+    "pass": true,
+    "step_ms": 140.993195
+  },
+  "arms": {
+    "H": {
+      "step_ms": 70.878104,
+      "aa_spread_pct": 1.0545837964288796,
+      "aa_pass": true
+    },
+    "R0": {
+      "step_ms": 66.193011,
+      "aa_spread_pct": 0.6082485052689384,
+      "aa_pass": true
+    },
+    "R1": {
+      "step_ms": 49.406079,
+      "aa_spread_pct": 0.11369653519762446,
+      "aa_pass": true
+    }
+  },
+  "identity": {
+    "r0_r1_bitwise": true,
+    "h_vs_r0_agree_tokens": 128,
+    "h_total_tokens": 128
+  },
+  "gaps": {
+    "H_ms": 70.878104,
+    "R0_ms": 66.193011,
+    "R1_ms": 49.406079,
+    "residency_tax_pct_of_H": 6.610071003027953,
+    "abstraction_tax_pct_of_R0": 25.360580741673772,
+    "r1_kernel_occupancy_ms": 13.331656333333337,
+    "r1_host_over_device": 3.705922037344246,
+    "r1_fast": false
+  },
+  "verdict": "BRANCH-2 abstraction tax: implement the all-resident collapse fast path (no tier split / bookkeeping / joins / placement decisions when the placement is all-VRAM)"
+}

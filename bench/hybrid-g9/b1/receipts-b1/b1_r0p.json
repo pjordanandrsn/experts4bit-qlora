@@ -1,0 +1,46 @@
+{
+  "model": "/root/qwen3-30b",
+  "batch": 1,
+  "layers": 48,
+  "compile_layers": false,
+  "compile_mode": null,
+  "warmup_rows_dropped": 0,
+  "generated_tokens": {},
+  "decode_steps": 127,
+  "decode_median_ms": {
+    "step": 88.263938,
+    "forward_submission": 87.700551,
+    "drain": 0.365363,
+    "attention_host": 22.014275,
+    "dram_experts_host": 0.0,
+    "other_submission": 65.686276,
+    "scheduler_python_and_bookkeeping": 0.19802399999999165,
+    "moe_host": 32.792824,
+    "moe_block_host": 38.217069,
+    "router_topk_host": 5.424244999999999,
+    "lmhead_host": 0.044816,
+    "host_residual": 32.848636000000006
+  },
+  "decode_device_ms": {
+    "attention_kernels_per_step": 21.508966036668912,
+    "gpu_expert_kernels_per_step": 0.0
+  },
+  "attn_calls_per_step": 48,
+  "attn_host_us_per_call": 458.6307291666667,
+  "prefill": [
+    {
+      "tokens": 512,
+      "wall_ms": 753.664794,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    }
+  ],
+  "prefill_attn_dev_total_ms": 87.18252581357956,
+  "engine": "hybrid",
+  "placement_override": "all-vram",
+  "manifest_counts": {
+    "vram": 6144,
+    "dram": 0,
+    "nvme": 0
+  }
+}

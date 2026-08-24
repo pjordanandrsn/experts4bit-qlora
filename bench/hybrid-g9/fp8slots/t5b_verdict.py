@@ -54,6 +54,12 @@ def verdict(aa1, aa2, attr, region_ops):
         "sched": float(d["scheduler_python_and_bookkeeping"]),
         "drain": float(d["drain"]),
     }
+    # AMENDMENT-t5b-h-a: when the attribution ran with the block region
+    # (b1-instruments), router/top-k = block - experts is its own named
+    # region instead of landing in the residual. Same bars.
+    if "moe_block_host" in d:
+        regions["router_topk"] = (float(d["moe_block_host"])
+                                  - regions["moe"])
     shares = {k: v / step * 100.0 for k, v in regions.items()}
     coverage = sum(shares.values())
     top = max(shares, key=shares.get)
@@ -120,7 +126,22 @@ def self_test():
                      sched=4.0, drain=2.0), ro)
     assert v["verdict"].startswith("PHASE-A-PASS (target=moe"), v
     assert abs(v["phase_b_bar_pct"] - 35.1 / 135.0 * 100 / 2) < 0.1, v
-    print("self-test OK: 6/6 branches exercised")
+    # AMENDED: block region present -- router_topk named, coverage that
+    # missed without it now passes with the SAME bars
+    rep_blk = _rep(165.4, 54.4, 14.0, moe=75.7, lmh=0.06,
+                   sched=0.7, drain=0.4)
+    rep_blk["decode_median_ms"]["moe_block_host"] = 104.0   # router 28.3
+    v = verdict(_rep(141.0, 46.0, 14.0), _rep(140.7, 46.0, 14.0),
+                rep_blk, ro)
+    assert v["h_a"]["shares_pct"]["router_topk"] > 0, v
+    assert v["verdict"].startswith("PHASE-A-PASS (target=moe"), v
+    # and WITHOUT the block region the same numbers still stop (guards
+    # that the amendment changed the instrument, not the bar)
+    v = verdict(_rep(141.0, 46.0, 14.0), _rep(140.7, 46.0, 14.0),
+                _rep(165.4, 54.4, 14.0, moe=75.7, lmh=0.06,
+                     sched=0.7, drain=0.4), ro)
+    assert v["verdict"].startswith("PHASE-A-STOP"), v
+    print("self-test OK: 8/8 branches exercised")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,42 @@
+{
+  "g0": {
+    "aa1_ms": 140.993195,
+    "aa2_ms": 140.651919,
+    "spread_pct": 0.24263870868337992,
+    "pass": true
+  },
+  "gs": {
+    "step_ms": 140.651919,
+    "attn_ms": 45.9579245,
+    "dram_ms": 0.0,
+    "pass": true
+  },
+  "h_a": {
+    "step_ms": 165.409893,
+    "regions_ms": {
+      "attn": 54.3916745,
+      "moe": 75.7419165,
+      "lmhead": 0.0556825,
+      "sched": 0.7252255000000143,
+      "drain": 0.364106
+    },
+    "shares_pct": {
+      "attn": 32.9,
+      "moe": 45.8,
+      "lmhead": 0.0,
+      "sched": 0.4,
+      "drain": 0.2
+    },
+    "coverage_pct": 79.36563080903511,
+    "residual_pct": 20.63436919096489,
+    "top_region": "moe",
+    "top_share_pct": 45.79043920909857,
+    "region_calls": {
+      "e4b::moe": 1152,
+      "e4b::attn": 1152,
+      "e4b::lmhead": 24
+    },
+    "pass": false
+  },
+  "verdict": "PHASE-A-STOP (bill is diffuse: coverage 79.4%, top moe 45.8% -- ladder re-points at T4 overlap; record and stop)"
+}
