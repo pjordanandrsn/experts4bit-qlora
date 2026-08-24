@@ -1,0 +1,10 @@
+b1  static   288.10 | online p90  20.1% | offline p90  19.8% | n=50
+b2  static    85.49 | online p90  19.7% | offline p90  28.7% | n=50
+b3  static    42.82 | online p90  25.4% | offline p90  37.1% | n=50
+b4  static    28.72 | online p90  27.0% | offline p90  38.4% | n=50
+boundary b3 (unscored): median  73.4%, worst 203.7%
+boundary b4 (unscored): median  86.3%, worst 232.4%
+H1 online<offline all brackets: FAIL
+H2 online tail p90 27.0% <= 28%: PASS
+H3 offline tail p90 38.4% >= 30%: yes
+VERDICT: REFUTED
