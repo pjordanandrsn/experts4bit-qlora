@@ -29,6 +29,7 @@ import torch
 
 PROF = {"attn_host_ns": 0, "attn_calls": 0, "attn_events": [],
         "mode": "decode"}
+COMPILE_GRAPH_STEP = [False]     # set when --compile-layers uses cudagraphs
 PER_MODE = {"prefill": {"attn_host_ns": 0, "attn_calls": 0},
             "decode": {"attn_host_ns": 0, "attn_calls": 0}}
 
@@ -172,8 +173,11 @@ def main():
             lyr.forward = torch.compile(lyr.forward, mode=a.compile_mode,
                                         dynamic=False)
             n_c += 1
+        if "reduce-overhead" in a.compile_mode:
+            COMPILE_GRAPH_STEP[0] = True
         print(f"compiled {n_c} layer bodies (mode={a.compile_mode}); "
-              f"paged attention + MoE tier dynamo-disabled", flush=True)
+              f"paged attention + MoE tier dynamo-disabled; "
+              f"graph step marking={COMPILE_GRAPH_STEP[0]}", flush=True)
     kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len + a.gen_tokens + 8,
                     k_groups=4, batched_append=a.kv_batched,
@@ -207,6 +211,8 @@ def main():
 
         @torch.no_grad()
         def run_prefill(self, chunks):
+            if COMPILE_GRAPH_STEP[0]:
+                torch.compiler.cudagraph_mark_step_begin()
             PROF["mode"] = "prefill"
             d0, g0 = self._amort_snap()
             # decode-only accounting by construction: capture the tier
@@ -246,6 +252,11 @@ def main():
 
         @torch.no_grad()
         def run_decode(self, rids):
+            if COMPILE_GRAPH_STEP[0]:
+                # the documented remedy for cudagraph replay reuse across
+                # steps (T1's crash): declare the step boundary so outputs
+                # of the previous replay are not read after overwrite
+                torch.compiler.cudagraph_mark_step_begin()
             if not rids:
                 return {}
             # duplicated from PagedModelRunner.run_decode by design: the
