@@ -294,6 +294,15 @@ def main():
         assert a.placement_override == "none", \
             "--placement-override is a hybrid-arm knob"
         assert not a.dispatch_diet, "dispatch_diet is hybrid-only"
+        # T>1 falls back to the reference forward, which cannot run CUDA
+        # activations against the host-materialized weights (Bugbot,
+        # e4b#223). chunk=1 keeps every forward on the T=1 fast path;
+        # KV content is mathematically identical (causal prefix math is
+        # chunking-invariant) and the R0==R1 bitwise gate enforces it.
+        assert a.chunk == 1, \
+            "--engine pipelined requires --chunk 1 (see PREREG-b1 R1 "\
+            "mechanics): T>1 prefill would hit the reference forward "\
+            "against host-resident weights and die mid-run"
         from experts4bit_qlora.engines.pipelined import (
             enable_pipelined_residency)
         _materialize_from_arena(mods, a.arena)
