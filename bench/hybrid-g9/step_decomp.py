@@ -48,6 +48,29 @@ PER_MODE = {"prefill": {"attn_host_ns": 0, "attn_calls": 0},
             "decode": {"attn_host_ns": 0, "attn_calls": 0}}
 
 
+HOST_BRACKETS = [False]     # --host-brackets: region walls + record_function
+REGION_PROF = {
+    "moe": {"prefill": {"ns": 0, "calls": 0}, "decode": {"ns": 0, "calls": 0}},
+    "lmhead": {"prefill": {"ns": 0, "calls": 0}, "decode": {"ns": 0, "calls": 0}},
+}
+
+
+def _wrap_region(fn, key, region_name):
+    """Host-wall bracket + a profiler region around one call site
+    (T5b Phase A). Region names feed the event-tree op counter; the
+    wall feeds the per-step decomposition. Only installed when
+    --host-brackets is set, so timing arms never carry the overhead."""
+    def timed(*a, **k):
+        t0 = time.perf_counter_ns()
+        with torch.profiler.record_function(region_name):
+            out = fn(*a, **k)
+        d = REGION_PROF[key][PROF["mode"]]
+        d["ns"] += time.perf_counter_ns() - t0
+        d["calls"] += 1
+        return out
+    return timed
+
+
 def wrap_attention(impl_name):
     from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
     orig = ALL_ATTENTION_FUNCTIONS[impl_name]
@@ -55,6 +78,19 @@ def wrap_attention(impl_name):
     def timed(*a, **k):
         e0 = torch.cuda.Event(enable_timing=True)
         e1 = torch.cuda.Event(enable_timing=True)
+        if HOST_BRACKETS[0]:
+            with torch.profiler.record_function("e4b::attn"):
+                t0 = time.perf_counter_ns()
+                e0.record()
+                out = orig(*a, **k)
+                e1.record()
+                dt = time.perf_counter_ns() - t0
+                PROF["attn_host_ns"] += dt
+                PROF["attn_calls"] += 1
+                PROF["attn_events"].append((PROF["mode"], e0, e1))
+                PER_MODE[PROF["mode"]]["attn_host_ns"] += dt
+                PER_MODE[PROF["mode"]]["attn_calls"] += 1
+                return out
         t0 = time.perf_counter_ns()
         e0.record()
         out = orig(*a, **k)
@@ -117,6 +153,14 @@ def main():
                     help="run the per-seq KV append path (the kvappend "
                          "cert A arm; the T5 cycle measured this point "
                          "by accident when batched was opt-in)")
+    ap.add_argument("--host-brackets", action="store_true",
+                    help="T5b Phase A: host-wall brackets + profiler "
+                         "regions around each MoE forward and lm_head. "
+                         "Timing arms must NOT carry this")
+    ap.add_argument("--region-ops-out", default=None,
+                    help="JSON of per-region descendant op counts from "
+                         "the profiler event tree (needs --host-brackets; "
+                         "engages the torch profiler, stacks off)")
     ap.add_argument("--sync-attr-out", default=None,
                     help="JSON of op counts over the profiler's active "
                          "window, with aten::nonzero attributed to source "
@@ -209,6 +253,14 @@ def main():
                                             // cfg.num_attention_heads)
     register(model)
     wrap_attention(IMPL_NAME)
+    if a.region_ops_out and not a.host_brackets:
+        raise SystemExit("--region-ops-out needs --host-brackets")
+    if a.host_brackets:
+        HOST_BRACKETS[0] = True
+        for m in mods:
+            m.forward = _wrap_region(m.forward, "moe", "e4b::moe")
+        model.lm_head.forward = _wrap_region(
+            model.lm_head.forward, "lmhead", "e4b::lmhead")
     if a.compile_layers:
         import torch._dynamo as dynamo
         from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -326,6 +378,8 @@ def main():
                                dtype=torch.long, device=self.device)
             from experts4bit_qlora.engines.paged_attention import set_context
             ah0, ac0 = PROF["attn_host_ns"], PROF["attn_calls"]
+            rm0 = REGION_PROF["moe"]["decode"]["ns"]
+            rl0 = REGION_PROF["lmhead"]["decode"]["ns"]
             d0, g0 = self._amort_snap()
             prev = set_context(self.ctx)
             t0 = time.perf_counter_ns()
@@ -343,6 +397,8 @@ def main():
                 {"batch": len(rids), "fwd_ns": t_fwd, "drain_ns": t_drain,
                  "attn_host_ns": PROF["attn_host_ns"] - ah0,
                  "attn_calls": PROF["attn_calls"] - ac0,
+                 "moe_ns": REGION_PROF["moe"]["decode"]["ns"] - rm0,
+                 "lmhead_ns": REGION_PROF["lmhead"]["decode"]["ns"] - rl0,
                  "dram_ns": d1 - d0, "gpu_ns": g1 - g0})
             got = {}
             for rid, tk in zip(rids, toks):
@@ -360,7 +416,7 @@ def main():
 
     tprof = None
     tprof_steps = [0]
-    if a.torch_profile_out or a.sync_attr_out:
+    if a.torch_profile_out or a.sync_attr_out or a.region_ops_out:
         from torch.profiler import (ProfilerActivity, profile, schedule)
         tprof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
@@ -438,6 +494,39 @@ def main():
             }, indent=1))
             print(f"SYNC_ATTR_OUT {a.sync_attr_out} active={active}/12",
                   flush=True)
+        if a.region_ops_out:
+            evs = tprof.profiler.function_events
+            regions = {"e4b::moe": {}, "e4b::attn": {}, "e4b::lmhead": {}}
+            rcounts = dict.fromkeys(regions, 0)
+            rtime = dict.fromkeys(regions, 0.0)
+
+            def _walk(ev, bag):
+                for c in ev.cpu_children:
+                    if c.name.startswith("aten::"):
+                        bag[c.name] = bag.get(c.name, 0) + 1
+                    _walk(c, bag)
+
+            for ev in evs:
+                if ev.name in regions:
+                    rcounts[ev.name] += 1
+                    rtime[ev.name] += ev.cpu_time_total
+                    _walk(ev, regions[ev.name])
+            # a silent no-match must fail loudly, never read as zero
+            # (PREREG-t5b): every region must appear at its call rate
+            assert rcounts["e4b::moe"] >= L * max(1, active), rcounts
+            assert rcounts["e4b::attn"] >= L * max(1, active), rcounts
+            assert rcounts["e4b::lmhead"] >= max(1, active), rcounts
+            Path(a.region_ops_out).write_text(json.dumps({
+                "active_steps": active,
+                "layers": L,
+                "region_calls": rcounts,
+                "region_cpu_ms_total": {k: v / 1e3
+                                        for k, v in rtime.items()},
+                "region_ops": regions,
+            }, indent=1))
+            print(f"REGION_OPS_OUT {a.region_ops_out} "
+                  f"moe={rcounts['e4b::moe']} attn={rcounts['e4b::attn']} "
+                  f"lmhead={rcounts['e4b::lmhead']}", flush=True)
     if prof is not None:
         prof.disable()
         import io
@@ -546,6 +635,14 @@ def main():
             "per_layer": per_layer,
         }, indent=1))
         print(f"AMORT_OUT {a.amort_out}", flush=True)
+    if a.host_brackets:
+        moe_h, lmh_h = med("moe_ns"), med("lmhead_ns")
+        rep["decode_median_ms"]["moe_host"] = moe_h
+        rep["decode_median_ms"]["lmhead_host"] = lmh_h
+        # dram is INSIDE the moe bracket -- never sum them; the residual
+        # is what no region owns
+        rep["decode_median_ms"]["host_residual"] = (
+            fwd - attn_h - moe_h - lmh_h)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(rep, indent=2))
     d = rep["decode_median_ms"]
