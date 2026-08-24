@@ -145,7 +145,9 @@ def main():
         slot = int(st0.g2h[promote])
         di = int(st0.g2d_cpu[promote])
         assert torch.equal(st0.h_gu_p[slot].cpu(), st0.d_gu_p[di])
+        assert torch.equal(st0.h_gu_a[slot].cpu(), st0.d_gu_a[di])
         assert torch.equal(st0.h_dn_p[slot].cpu(), st0.d_dn_p[di])
+        assert torch.equal(st0.h_dn_a[slot].cpu(), st0.d_dn_a[di])
         st0.swap_expert(demote, promote)
         for n2, t in snap.items():
             assert torch.equal(getattr(st0, n2), t), f"{n2} not restored"

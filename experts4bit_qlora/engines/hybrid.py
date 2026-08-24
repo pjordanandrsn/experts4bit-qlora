@@ -264,42 +264,6 @@ class _HybridTier(_NvmeResidency):
         self.pf_ev = None
         self.pf_slot = 0
 
-    def swap_expert(self, promote: int, demote: int):
-        """Retarget the demoted expert's VRAM slot to the promoted expert.
-
-        Controller mode only. The hot stacks keep their size; the slot's
-        rows are overwritten from the all-expert DRAM stacks (one H2D per
-        segment), then the id algebra flips: g2h, is_hot, is_vram, and the
-        hot_ids introspection tensor. The demoted expert stays servable
-        from d_* (which covers every expert in this mode), so no other
-        structure changes. Called BETWEEN steps -- never concurrently with
-        a forward.
-        """
-        assert self.swappable, "swap_expert requires controller mode"
-        slot = int(self.g2h[demote].item())
-        di = int(self.g2d_cpu[promote].item())
-        assert slot >= 0, f"demote {demote} is not VRAM-resident"
-        assert int(self.g2h[promote].item()) < 0, f"promote {promote} already hot"
-        assert di >= 0
-        self.h_gu_p[slot].copy_(self.d_gu_p[di], non_blocking=False)
-        self.h_gu_a[slot].copy_(self.d_gu_a[di], non_blocking=False)
-        self.h_dn_p[slot].copy_(self.d_dn_p[di], non_blocking=False)
-        self.h_dn_a[slot].copy_(self.d_dn_a[di], non_blocking=False)
-        if self.gptoss:
-            self.h_gu_b[slot].copy_(
-                self.d_gu_b[di].to(self.h_gu_b.dtype, copy=False))
-            self.h_dn_b[slot].copy_(
-                self.d_dn_b[di].to(self.h_dn_b.dtype, copy=False))
-        self.g2h[promote] = slot
-        self.g2h[demote] = -1
-        self.is_hot[promote] = True
-        self.is_hot[demote] = False
-        self.is_vram[promote] = True
-        self.is_vram[demote] = False
-        hm = self.hot_ids == demote
-        self.hot_ids = torch.where(
-            hm, torch.tensor(promote, dtype=self.hot_ids.dtype), self.hot_ids)
-
         # Phase 8 amortization instrument. OFF by default and structurally
         # free when off (invariant 9): the counting block is guarded and
         # does its own unique() work only when armed, so a serving run pays
@@ -378,6 +342,42 @@ class _HybridTier(_NvmeResidency):
                     "cold_dest != 'gpu' but no cold view is attached to the "
                     "tier. enable_hybrid_tier builds it; constructing "
                     "_HybridTier directly needs build_cold_view() first.")
+
+    def swap_expert(self, promote: int, demote: int):
+        """Retarget the demoted expert's VRAM slot to the promoted expert.
+
+        Controller mode only. The hot stacks keep their size; the slot's
+        rows are overwritten from the all-expert DRAM stacks (one H2D per
+        segment), then the id algebra flips: g2h, is_hot, is_vram, and the
+        hot_ids introspection tensor. The demoted expert stays servable
+        from d_* (which covers every expert in this mode), so no other
+        structure changes. Called BETWEEN steps -- never concurrently with
+        a forward.
+        """
+        assert self.swappable, "swap_expert requires controller mode"
+        slot = int(self.g2h[demote].item())
+        di = int(self.g2d_cpu[promote].item())
+        assert slot >= 0, f"demote {demote} is not VRAM-resident"
+        assert int(self.g2h[promote].item()) < 0, f"promote {promote} already hot"
+        assert di >= 0
+        self.h_gu_p[slot].copy_(self.d_gu_p[di], non_blocking=False)
+        self.h_gu_a[slot].copy_(self.d_gu_a[di], non_blocking=False)
+        self.h_dn_p[slot].copy_(self.d_dn_p[di], non_blocking=False)
+        self.h_dn_a[slot].copy_(self.d_dn_a[di], non_blocking=False)
+        if self.gptoss:
+            self.h_gu_b[slot].copy_(
+                self.d_gu_b[di].to(self.h_gu_b.dtype, copy=False))
+            self.h_dn_b[slot].copy_(
+                self.d_dn_b[di].to(self.h_dn_b.dtype, copy=False))
+        self.g2h[promote] = slot
+        self.g2h[demote] = -1
+        self.is_hot[promote] = True
+        self.is_hot[demote] = False
+        self.is_vram[promote] = True
+        self.is_vram[demote] = False
+        hm = self.hot_ids == demote
+        self.hot_ids = torch.where(
+            hm, torch.tensor(promote, dtype=self.hot_ids.dtype), self.hot_ids)
 
     def expert_bytes(self) -> int:
         """Weight bytes one expert occupies (gate/up + down, payload plus
