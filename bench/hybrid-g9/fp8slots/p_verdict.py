@@ -4,9 +4,11 @@ A2 (static).
 
   python p_verdict.py --score A1.json B.json C.json A2.json
 
-B1 parity: B's uniques reduction >= 12% AND within +/-3 points of the
-C2 receipt (22.7%) — the engine-owned component reproduces the
-driver-run value.
+B1 parity (amended pre-run, disclosed in the prereg): B's uniques
+reduction >= 21.7% (C2's 22.7 minus 1 point), no upper cap. The
+counters are now decode-only (prefill rollback); C2's receipt was
+prefill-inclusive, and removing common-mode prefill mass can only RAISE
+the measured reduction, so parity means "no regression", not a band.
 B2 boundary: over windows 1..9 (each starts at a content switch), the
 CP arm's first-32-step uniques total <= 0.90 x the plain arm's, with
 total reduction within 2 points of the plain arm's.
@@ -38,11 +40,11 @@ def score(a1p, bp, cp, a2p):
     ua = a1["uniq_dram_total"]
     rb = 1 - b["uniq_dram_total"] / ua
     rc = 1 - c["uniq_dram_total"] / ua
-    b1 = rb >= 0.12 and abs(rb - C2_ANCHOR) <= 0.03
+    b1 = rb >= C2_ANCHOR - 0.01
     print("uniques: static %d | B %d (-%.1f%%) | C %d (-%.1f%%) | "
           "C2 anchor 22.7%%" % (ua, b["uniq_dram_total"], rb * 100,
                                 c["uniq_dram_total"], rc * 100))
-    print("B1 parity (>=12%% and |dB-22.7|<=3):",
+    print("B1 parity (decode-only reduction >= 21.7%%):",
           "PASS" if b1 else "FAIL")
     fb, fc = first32(b), first32(c)
     b2 = fc <= 0.90 * fb and rc >= rb - 0.02

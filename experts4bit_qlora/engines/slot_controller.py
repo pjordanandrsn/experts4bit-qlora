@@ -73,7 +73,7 @@ class SlotController:
 
     def _on_decode_step(self):
         step_touch = []
-        for l, st in enumerate(self.states):
+        for li, st in enumerate(self.states):
             ser = st.amort["series"]
             ids = ser[-1].tolist()
             if self.trim:
@@ -89,8 +89,8 @@ class SlotController:
     def _hot_mass(self, window):
         m = 0
         for step_touch in window:
-            for l, ids in enumerate(step_touch):
-                hot = self.states[l].is_hot
+            for li, ids in enumerate(step_touch):
+                hot = self.states[li].is_hot
                 for e in ids:
                     if bool(hot[e]):
                         m += 1
@@ -112,12 +112,12 @@ class SlotController:
     def _tick(self):
         nn = len(self.trail)
         E = self.E
-        for l, st in enumerate(self.states):
+        for li, st in enumerate(self.states):
             cnt = [0] * E
             for step_touch in self.trail:
-                for e in step_touch[l]:
+                for e in step_touch[li]:
                     cnt[e] += 1
-            pl = self.prior[l]
+            pl = self.prior[li]
             est = [max(cnt[e] / nn, self.PRIOR_FLOOR * pl[e])
                    for e in range(E)]
             hot = set(st.hot_ids.tolist())

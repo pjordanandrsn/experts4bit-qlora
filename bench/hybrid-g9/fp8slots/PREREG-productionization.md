@@ -42,9 +42,14 @@ C2 (`receipts-c2/` is the driver-run reference).
 ## Bars ([p_verdict.py](p_verdict.py), self-tested: certify /
 parity-fail / boundary-fail)
 
-* **B1 (parity)**: the engine-owned arm's uniques reduction ≥ 12% AND
-  within **±3 points of C2's receipt (22.7%)** — the component
-  reproduces the driver-run value with no driver logic in the loop.
+* **B1 (parity — amended pre-run, disclosed)**: the engine-owned arm's
+  DECODE-ONLY uniques reduction ≥ **21.7%** (C2's 22.7 − 1 point), no
+  upper cap. Bugbot's review exposed that the C2 driver's counters were
+  prefill-inclusive (the rollback lived only in step_decomp); this line
+  ports the rollback, and removing common-mode prefill mass can only
+  RAISE the measured reduction — so parity is a no-regression floor,
+  not a band. C2's receipts stand as measured (prefill mass was
+  common-mode across its arms); the accounting change is recorded.
   (Static arms must agree exactly; mismatch voids.)
 * **B2 (boundary value)**: over windows 1–9 (each begins at a hard
   content switch), the CP arm's first-32-step uniques ≤ **0.90×** the

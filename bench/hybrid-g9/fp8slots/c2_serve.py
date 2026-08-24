@@ -167,6 +167,32 @@ def main():
                     sum(st.amort["uniq_dram"] for st in states))
 
         @torch.no_grad()
+        def run_prefill(self, chunks):
+            # decode-only counters by construction (the step_decomp
+            # rollback, ported): capture the tier counters, let the
+            # prefill run, restore -- so prefill uniques never reach
+            # uniq_dram or the boundary first-32 metric (Bugbot,
+            # e4b#205). Lists are snapshot-copied like tensors.
+            saved = []
+            for st in states:
+                am = st.amort
+                saved.append(None if am is None else
+                             {k2: (v.clone() if torch.is_tensor(v)
+                                   else list(v) if isinstance(v, list)
+                                   else v)
+                              for k2, v in am.items()})
+            out = super().run_prefill(chunks)
+            for st, am in zip(states, saved):
+                if am is not None and st.amort is not None:
+                    cur = st.amort
+                    for k2, v in am.items():
+                        if torch.is_tensor(v):
+                            cur[k2].copy_(v)
+                        else:
+                            cur[k2] = v
+            return out
+
+        @torch.no_grad()
         def run_decode(self, rids):
             t0 = time.perf_counter_ns()
             d0, _ = self._snap()
