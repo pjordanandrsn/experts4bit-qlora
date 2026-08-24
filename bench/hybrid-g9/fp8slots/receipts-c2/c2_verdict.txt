@@ -1,0 +1,5 @@
+uniques: static 268648 | controller 207556 | reduction 22.7% (bar >= 12%) -> B1-PASS
+dram ms: static 19903/20277 (spread 374) | controller 15635 | delta 4455 (22.2%)
+swaps 1948 | controller overhead 1180 ms | wall grand 267000 vs 273852/276785 ms (unscored)
+B2 wall reduction >= 5%%: PASS
+VERDICT: C2-CERTIFIED
