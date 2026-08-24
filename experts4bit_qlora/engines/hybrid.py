@@ -1002,7 +1002,7 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
                        costs=None,
                        prefetch: bool = False,
                        dispatch_diet: bool = False,
-                       collapse_resident: bool = False,
+                       collapse_resident: bool = True,
                        layers: Sequence[int] | None = None,
                        verbose: bool = False) -> int:
     """Patch every MoE module per the placement manifest. Returns the patch
@@ -1051,7 +1051,10 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     Unavailable for gpt-oss (per-expert biases do not ride the arena) and
     needs a gnf4 carrying ``ColdCpuView``; both refuse by name.
 
-    ``collapse_resident`` (default False until its cert) turns on the
+    ``collapse_resident`` (default True since its cert — RESULTS-b1c:
+    16.0% single-stream wall cut at the all-VRAM point, bit-identical
+    outputs C0==C1==R1 over 128 tokens, B=16 subset placement inert
+    in the certified band) turns on the
     B1c all-resident collapse: when the placement is all-VRAM (every
     expert hot, identity hot order — a placement-static predicate,
     never per-step data), the token-critical path runs no dispatch
