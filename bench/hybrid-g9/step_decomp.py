@@ -414,6 +414,13 @@ def main():
             super().__init__(*args, **kw)
             self.decode_rows = []
             self.prefill_rows = []
+            # the runner POPS a finished request's tokens (release), so
+            # reading runner.tokens after the loop sees an empty dict --
+            # which made every generated_tokens record EMPTY and every
+            # cross-arm token-identity gate built on it vacuous
+            # (t1/t1b/t5 G1; found by the B1 cycle). Capture at
+            # generation time instead.
+            self.gen_capture = {}
 
         def _amort_snap(self):
             if not states or states[0].amort is None:   # off / pipelined
@@ -444,6 +451,8 @@ def main():
             t0 = time.perf_counter_ns()
             out = super().run_prefill(chunks)
             wall = time.perf_counter_ns() - t0
+            for _rid, _tk in out.items():
+                self.gen_capture.setdefault(_rid, []).append(int(_tk))
             d1, g1 = self._amort_snap()
             for st, am in zip(states, saved):
                 if am is not None and st.amort is not None:
@@ -510,6 +519,7 @@ def main():
             got = {}
             for rid, tk in zip(rids, toks):
                 got[rid] = int(tk)
+                self.gen_capture.setdefault(rid, []).append(int(tk))
                 self.tokens[rid].append(int(tk))
                 self.pos_of[rid] += 1
             return got
@@ -677,7 +687,8 @@ def main():
         # the cross-arm void gate: greedy continuations must be
         # token-identical between eager and compiled arms
         "generated_tokens": {str(r): list(map(int, t))
-                             for r, t in sorted(runner.tokens.items())},
+                             for r, t in
+                             sorted(runner.gen_capture.items())},
         "decode_steps": n_steps,
         "decode_median_ms": {
             "step": step_ms, "forward_submission": fwd, "drain": drain,

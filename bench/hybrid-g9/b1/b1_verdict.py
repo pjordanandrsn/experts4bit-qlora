@@ -32,15 +32,28 @@ def _tokens(rep):
 
 def parse_kernel_occupancy_ms(table_text, active_steps):
     """Per-step device occupancy from a key_averages table: Self-CUDA of
-    device-event rows only (never aten::/cuda-runtime/ProfilerStep)."""
+    device-event rows only — never aten:: op rows, cuda-runtime rows,
+    ProfilerStep, or e4b:: record_function regions (region rows carry
+    ATTRIBUTED device time and double-count every kernel under them;
+    counting them read 63 ms of 'kernels' against a 48 ms step in the
+    first B1 pass). Sanity: the result must not exceed the profiled
+    wall (the ProfilerStep* CPU-total average row), or the parse is
+    wrong and refuses rather than reporting."""
     total_ms = 0.0
+    wall_ms = None
     for line in table_text.splitlines():
         cols = re.split(r"\s{2,}", line.strip())
         if len(cols) < 10:
             continue
         name = cols[0]
+        if name.startswith("ProfilerStep") and wall_ms is None:
+            mw = re.match(r"^([0-9.]+)(us|ms|s)$", cols[5])
+            if mw and float(mw.group(1)) > 0:
+                unit = {"us": 1e-3, "ms": 1.0, "s": 1e3}[mw.group(2)]
+                wall_ms = float(mw.group(1)) * unit
         if (name.startswith("aten::") or name.startswith("ProfilerStep")
-                or name.startswith("cuda") or name in ("Name", "")):
+                or name.startswith("cuda") or name.startswith("e4b::")
+                or name in ("Name", "")):
             continue
         m = re.match(r"^([0-9.]+)(us|ms|s)$", cols[6])
         if not m:
@@ -48,7 +61,12 @@ def parse_kernel_occupancy_ms(table_text, active_steps):
         v = float(m.group(1))
         unit = {"us": 1e-3, "ms": 1.0, "s": 1e3}[m.group(2)]
         total_ms += v * unit
-    return total_ms / max(1, active_steps)
+    occ = total_ms / max(1, active_steps)
+    if wall_ms is not None:
+        assert occ <= wall_ms * 1.05, \
+            (f"parsed occupancy {occ:.1f} ms/step exceeds the profiled "
+             f"wall {wall_ms:.1f} ms/step -- the table parse is wrong")
+    return occ
 
 
 def _agree_len(ta, tb):
@@ -226,12 +244,23 @@ def self_test():
     assert v["verdict"].startswith("NO-VERDICT (the B=16 anchor"), v
     # kernel-table parser: aten and cuda rows excluded, units handled
     tbl = ("Name  x  x  x  x  x  Self CUDA  x  x  Calls\n"
+           "ProfilerStep*  0%  0.000us  0%  0.000us  0.000us  1.135s  700%  1.1s  12\n"
+           "ProfilerStep*  11%  126ms  100%  1.136s  94.657ms  0.000us  0%  95ms  12\n"
            "aten::mm  1%  1ms  1%  1ms  1us  10.000ms  5%  10ms  10\n"
+           "e4b::attn  0%  0us  0%  0us  0us  344.000ms  100%  344ms  576\n"
            "my_kernel  0%  0us  0%  0us  0us  24.000ms  10%  24ms  96\n"
            "cudaLaunchKernel  1%  1ms  1%  1ms  1us  2.000ms  1%  2ms  9\n"
            "Memcpy DtoD  0%  0us  0%  0us  0us  6.000ms  2%  6ms  30\n")
     occ = parse_kernel_occupancy_ms(tbl, 12)
     assert abs(occ - (24.0 + 6.0) / 12) < 1e-6, occ
+    # a parse that over-counts past the profiled wall must refuse
+    # loudly, not report (2s of "kernels" against a 94.657ms wall)
+    bad = tbl + "not_a_region  0%  0us  0%  0us  0us  2.000s  90%  2s  1\n"
+    try:
+        parse_kernel_occupancy_ms(bad, 12)
+        raise SystemExit("wall-bound assert failed to fire")
+    except AssertionError:
+        pass
     print("self-test OK: 10/10 branches exercised")
 
 
