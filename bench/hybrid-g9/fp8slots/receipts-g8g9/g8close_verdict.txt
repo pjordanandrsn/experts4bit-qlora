@@ -1,0 +1,7 @@
+A1 static    balance 0.495  (gpu 29.55 ms | dram 14.61 ms | dram wall 20119 ms)
+A2 static    balance 0.499  (gpu 29.50 ms | dram 14.73 ms | dram wall 20394 ms)
+C  ctrl      balance 0.384  (gpu 29.46 ms | dram 11.31 ms | dram wall 15612 ms)
+R  g8-calib  balance 0.493  (gpu 29.53 ms | dram 14.56 ms | dram wall 19940 ms)
+A/A balance spread: 0.005
+best serving arm: static (mean A) at 0.497 (gate >= 0.80)
+VERDICT: NOT-CLOSED (best 0.497 < 0.80 beyond noise)

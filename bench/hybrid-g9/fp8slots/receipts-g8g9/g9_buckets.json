@@ -1,0 +1,120 @@
+{
+  "model": "/root/qwen3-30b",
+  "batch": 16,
+  "layers": 48,
+  "decode_steps": 142,
+  "decode_median_ms": {
+    "step": 207.542584,
+    "forward_submission": 206.866507,
+    "drain": 0.367551,
+    "attention_host": 114.4905985,
+    "dram_experts_host": 14.637157,
+    "other_submission": 77.7387515,
+    "scheduler_python_and_bookkeeping": 0.30852599999999225
+  },
+  "decode_device_ms": {
+    "attention_kernels_per_step": 103.14566966933263,
+    "gpu_expert_kernels_per_step": 29.8559935
+  },
+  "attn_calls_per_step": 48.0,
+  "attn_host_us_per_call": 2385.2208020833336,
+  "prefill": [
+    {
+      "tokens": 512,
+      "wall_ms": 901.898633,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 107.557707
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 377.450403,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 92.26407
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 474.772575,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 95.092966
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 338.105125,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 91.329227
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 382.034317,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 91.726727
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 365.707282,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 90.573798
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 389.329458,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 92.140777
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 331.275128,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 90.574435
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 340.003257,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 90.644548
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 360.206986,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 91.810982
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 343.774472,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 89.502056
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 323.497533,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 90.156647
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 388.657712,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 92.576013
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 381.221569,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 92.293067
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 377.952323,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 93.500354
+    },
+    {
+      "tokens": 512,
+      "wall_ms": 378.426324,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 92.029219
+    }
+  ],
+  "prefill_attn_dev_total_ms": 393.86233446002007
+}
