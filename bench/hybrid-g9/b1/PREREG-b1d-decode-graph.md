@@ -31,11 +31,23 @@ treatment:
    steps that would allocate run the eager path (measured fraction
    reported; at BLOCK_TOKENS-page granularity this is a bounded
    fraction of steps).
-2. **Block-table / seq-len indexing in `kv.attention`**: any per-call
-   host-built index tensors must become device-resident state updated
-   in-place (seq_lens incremented on device; block tables written at
-   pre-ensure time). The attribution run (stage A) measures how much
-   of the ~15-20 ms B=1 attention-host bracket this is.
+2. **Block-table / seq-len indexing in `kv.attention`** (read side):
+   any per-call host-built index tensors must become device-resident
+   state updated in-place (seq_lens incremented on device; block
+   tables written at pre-ensure time). The attribution run (stage A)
+   measures how much of the ~15-20 ms B=1 attention-host bracket this
+   is.
+2b. **KV WRITE offsets in `append_many`/`_write_side`** (write side —
+   Bugbot, e4b#227): the store offsets are computed from host `seen`,
+   so a captured graph would BAKE the capture-time destination
+   addresses and every replay would overwrite the same page slot.
+   Treatment: the in-graph writes must address through DEVICE index
+   tensors (per-sequence write position), updated in-place OUTSIDE
+   the graph in the same pre-replay step that pre-ensures pages — one
+   small pinned→device copy per step, never a baked address. Stage
+   A's bit-identity check over 8 consecutive replayed steps is the
+   gate that catches any residual baked offset (a same-slot overwrite
+   cannot decode identical continuations).
 3. **Token feedback**: `argmax` → next `input_ids` stays on device
    (in-place copy into the static input buffer); `position_ids`
    incremented in-place. The host reads tokens asynchronously for the
