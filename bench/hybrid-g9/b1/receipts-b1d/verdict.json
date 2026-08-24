@@ -1,0 +1,39 @@
+{
+  "gs_b16": {
+    "pass": true,
+    "step_ms": 133.240251
+  },
+  "arms": {
+    "eager": {
+      "step_ms": 42.43085281102362,
+      "aa_spread_pct": 1.4313817981504808,
+      "aa_pass": true
+    },
+    "graph": {
+      "step_ms": 15.192799181102362,
+      "aa_spread_pct": 0.010779764887131373,
+      "aa_pass": true
+    }
+  },
+  "identity": {
+    "eager_graph_bitwise": true,
+    "n_tokens": 127
+  },
+  "h_g": {
+    "graph_step_ms": 15.192799181102362,
+    "eager_step_ms": 42.43085281102362,
+    "pass": true,
+    "partial": false
+  },
+  "h_d": {
+    "eager_occ_ms": 12.55,
+    "graph_occ_ms": 15.19,
+    "ratio": 1.2103585657370517,
+    "pass": false
+  },
+  "reported": {
+    "tok_s_single_stream": 65.8206554354944,
+    "speedup_vs_eager": 2.7928265427085646
+  },
+  "verdict": "CERTIFIED-WITH-OPEN-MECHANISM (wall bar met; occupancy drifted beyond 15% -- ship and file what the graph smuggled in or out)"
+}
