@@ -1,0 +1,68 @@
+         18099695 function calls (17816972 primitive calls) in 38.753 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1112 to 60 due to restriction <60>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      143    0.002    0.000   38.811    0.271 /root/e4b/experts4bit_qlora/engines/scheduler.py:213(step)
+  332/158    0.003    0.000   38.786    0.245 /opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py:120(decorate_context)
+113749/158    0.118    0.000   37.656    0.238 /opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py:1774(_wrapped_call_impl)
+113749/158    0.265    0.000   37.655    0.238 /opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py:1782(_call_impl)
+      158    0.001    0.000   37.654    0.238 /opt/conda/lib/python3.11/site-packages/transformers/utils/generic.py:933(wrapper)
+      158    0.003    0.000   37.652    0.238 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:615(forward)
+      158    0.001    0.000   37.634    0.238 /opt/conda/lib/python3.11/site-packages/transformers/utils/generic.py:1006(wrapper)
+      158    0.002    0.000   37.631    0.238 /opt/conda/lib/python3.11/site-packages/transformers/utils/output_capturing.py:231(wrapper)
+      158    0.027    0.000   37.624    0.238 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:456(forward)
+     7584    0.016    0.000   37.198    0.005 /opt/conda/lib/python3.11/site-packages/transformers/modeling_layers.py:79(__call__)
+     7584    0.178    0.000   37.141    0.005 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:319(forward)
+      142    0.005    0.000   31.919    0.225 /root/e4b/bench/hybrid-g9/step_decomp.py:218(run_decode)
+     7584    0.146    0.000   19.730    0.003 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:151(forward)
+     7584    0.055    0.000   17.307    0.002 /root/e4b/bench/hybrid-g9/step_decomp.py:40(timed)
+     7584    0.542    0.000   16.873    0.002 /root/e4b/experts4bit_qlora/engines/paged_attention.py:104(paged_attention_forward)
+     7584    0.029    0.000   16.170    0.002 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:276(forward)
+    98304    0.562    0.000   15.854    0.000 /root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py:148(append)
+     7584    0.017    0.000   15.496    0.002 /root/e4b/experts4bit_qlora/engines/hot_residency.py:558(_fwd)
+     7584    0.099    0.000   15.477    0.002 /root/e4b/experts4bit_qlora/engines/hybrid.py:473(forward)
+     7584    0.636    0.000   13.183    0.002 /root/e4b/experts4bit_qlora/engines/hot_residency.py:222(forward)
+   196608    0.555    0.000   10.291    0.000 /root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py:107(_quant_bytes)
+   196608    3.363    0.000    9.202    0.000 /root/gnf4/kernel/fp8_kv.py:44(quantize_kv_fp8)
+       16    0.005    0.000    6.861    0.429 /root/e4b/bench/hybrid-g9/step_decomp.py:179(run_prefill)
+       16    0.007    0.000    6.832    0.427 /root/e4b/experts4bit_qlora/engines/paged_runner.py:60(run_prefill)
+     8352    0.166    0.000    5.640    0.001 /root/e4b/experts4bit_qlora/engines/hot_residency.py:39(_fused_over_stack)
+     6625    0.384    0.000    5.190    0.001 /root/e4b/experts4bit_qlora/engines/hybrid.py:642(_cold_contrib)
+    16704    0.177    0.000    4.426    0.000 /root/gnf4/kernel/nf4_grouped.py:697(gemm_4bit_grouped)
+   196608    0.695    0.000    4.169    0.000 /root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py:121(_write_side)
+   372793    2.856    0.000    2.856    0.000 {method 'to' of 'torch._C.TensorBase' objects}
+    33182    0.232    0.000    2.802    0.000 /root/gnf4/kernel/nf4_grouped.py:229(to_device_i32)
+      768    0.051    0.000    2.378    0.003 /root/e4b/experts4bit_qlora/engines/hybrid.py:602(_dram_on_gpu)
+     5857    0.016    0.000    2.356    0.000 /root/e4b/experts4bit_qlora/engines/hybrid.py:680(_dram_contrib)
+     5857    0.040    0.000    2.337    0.000 /root/e4b/experts4bit_qlora/engines/hybrid.py:692(_dram_contrib_inner)
+    33483    2.197    0.000    2.197    0.000 {built-in method torch.tensor}
+     7584    1.132    0.000    2.194    0.000 /root/e4b/experts4bit_qlora/engines/hybrid.py:447(_count_amortization)
+     5857    0.240    0.000    2.194    0.000 /root/e4b/experts4bit_qlora/engines/hybrid.py:838(_cpu_over_stacks)
+   489984    1.661    0.000    1.661    0.000 {method 'copy_' of 'torch._C.TensorBase' objects}
+    30494    0.659    0.000    1.630    0.000 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:294(forward)
+   146121    1.568    0.000    1.568    0.000 {method 'index_select' of 'torch._C.TensorBase' objects}
+    30494    0.070    0.000    1.389    0.000 /opt/conda/lib/python3.11/site-packages/triton/runtime/jit.py:370(<lambda>)
+    30494    0.273    0.000    1.320    0.000 /opt/conda/lib/python3.11/site-packages/triton/runtime/jit.py:708(run)
+    11714    0.032    0.000    1.177    0.000 /root/gnf4/kernel/cpu_grouped.py:252(gemv_nf4_grouped_cpu)
+  1107456    1.166    0.000    1.166    0.000 {method 'narrow' of 'torch._C.TensorBase' objects}
+    16478    0.392    0.000    1.161    0.000 /root/gnf4/kernel/nf4_grouped.py:334(build_group_tiles)
+    11714    0.941    0.000    1.080    0.000 /root/gnf4/kernel/cpu_grouped.py:226(_run)
+  1312800    1.006    0.000    1.006    0.000 {method 'reshape' of 'torch._C.TensorBase' objects}
+     6816    0.040    0.000    1.002    0.000 /root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py:251(attention)
+   393374    0.918    0.000    0.918    0.000 {method 'float' of 'torch._C.TensorBase' objects}
+   196608    0.916    0.000    0.916    0.000 {method 'amax' of 'torch._C.TensorBase' objects}
+   196608    0.895    0.000    0.895    0.000 {built-in method torch.where}
+   196608    0.866    0.000    0.866    0.000 {method 'abs' of 'torch._C.TensorBase' objects}
+     6816    0.111    0.000    0.804    0.000 /root/gnf4/kernel/fp8_paged_attn.py:769(fp8_paged_decode_attention)
+   196608    0.774    0.000    0.774    0.000 {built-in method torch.ones_like}
+    38078    0.730    0.000    0.730    0.000 {built-in method torch._C._nn.linear}
+    30336    0.033    0.000    0.700    0.000 /opt/conda/lib/python3.11/site-packages/torch/cuda/streams.py:199(record)
+    30494    0.041    0.000    0.686    0.000 /opt/conda/lib/python3.11/site-packages/torch/nn/modules/linear.py:130(forward)
+45122/22561    0.049    0.000    0.654    0.000 /opt/conda/lib/python3.11/site-packages/torch/_jit_internal.py:627(fn)
+     7584    0.237    0.000    0.562    0.000 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:58(apply_rotary_pos_emb)
+     7584    0.098    0.000    0.552    0.000 /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py:258(forward)
+    60672    0.546    0.000    0.546    0.000 {method 'sum' of 'torch._C.TensorBase' objects}
+
+
