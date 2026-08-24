@@ -225,20 +225,47 @@ def main():
             n *= d
         bpe += n * (4 if seg["dtype"] == "F32" else 1)
     torch.set_num_threads(a.torch_threads)
-    man = solve_placement(
-        n_layers=L, n_experts=E, bytes_per_expert=bpe,
-        vram_budget_bytes=int(a.vram_gb * 2**30),
-        dram_budget_bytes=int(a.dram_gb * 2**30),
-        calibration=json.loads(Path(a.calib).read_text()),
-        profile_path=a.profile,
-        batch=a.batch, top_k=k,
-        cpu_us_fixed=a.cpu_us_fixed, cpu_us_per_row=a.cpu_us_per_row)
-    n = enable_hybrid_tier(model, a.arena, man, hot_rows=a.hot_rows,
-                           threads=a.threads, pool=True,
-                           dispatch_diet=a.dispatch_diet)
-    assert n == L
+    if a.engine == "pipelined":
+        # R1 (PREREG-b1): the narrowest existing resident path. Every
+        # expert hot, one code path, no hybrid tier anywhere in the
+        # process -- no arena serving tier, no CPU pool, no placement.
+        assert a.amort == "off", "--engine pipelined has no amort counters"
+        assert a.placement_override == "none", \
+            "--placement-override is a hybrid-arm knob"
+        assert not a.dispatch_diet, "dispatch_diet is hybrid-only"
+        from experts4bit_qlora.engines.pipelined import (
+            enable_pipelined_residency)
+        man = None
+        n = enable_pipelined_residency(
+            model, [list(range(E)) for _ in range(L)], device="cuda",
+            k_slots=k)
+        assert n == L, f"pipelined patched {n}/{L} modules"
+    else:
+        man = solve_placement(
+            n_layers=L, n_experts=E, bytes_per_expert=bpe,
+            vram_budget_bytes=int(a.vram_gb * 2**30),
+            dram_budget_bytes=int(a.dram_gb * 2**30),
+            calibration=json.loads(Path(a.calib).read_text()),
+            profile_path=a.profile,
+            batch=a.batch, top_k=k,
+            cpu_us_fixed=a.cpu_us_fixed, cpu_us_per_row=a.cpu_us_per_row)
+        if a.placement_override == "all-vram":
+            # R0 (PREREG-b1): physical heterogeneity removed, executor
+            # machinery intact -- the solver ran, then every expert is
+            # moved into the VRAM tier
+            pairs = sorted(tuple(pp) for t in ("vram", "dram", "nvme")
+                           for pp in man["tiers"][t])
+            man["tiers"] = {"vram": [list(pp) for pp in pairs],
+                            "dram": [], "nvme": []}
+            man["masses"] = {"vram_frac": 1.0, "dram_frac": 0.0,
+                             "nvme_frac": 0.0}
+        n = enable_hybrid_tier(model, a.arena, man, hot_rows=a.hot_rows,
+                               threads=a.threads, pool=True,
+                               dispatch_diet=a.dispatch_diet)
+        assert n == L
     assert not (a.kv_batched and a.kv_per_seq),         "--kv-batched and --kv-per-seq are contradictory"
-    states = [m._hot_residency for m in mods]
+    states = ([] if a.engine == "pipelined"
+               else [m._hot_residency for m in mods])
     amort_on = a.amort == "on"
     if not amort_on:
         for flag in ("profile_out", "series_out", "amort_out"):
@@ -259,6 +286,21 @@ def main():
         HOST_BRACKETS[0] = True
         for m in mods:
             m.forward = _wrap_region(m.forward, "moe", "e4b::moe")
+        # the sparse-MoE BLOCK (router + experts) as its own region, so
+        # router/top-k host cost = moe_block - moe (PREREG-b1)
+        _ll = model
+        for _part in a.layers_attr.split("."):
+            _ll = getattr(_ll, _part)
+        n_blk = 0
+        for _lyr in _ll:
+            _blk = getattr(_lyr, "mlp", None)
+            if _blk is not None and hasattr(_blk, "experts"):
+                _blk.forward = _wrap_region(_blk.forward, "moe_block",
+                                            "e4b::moe_block")
+                n_blk += 1
+        assert n_blk == len(mods), \
+            f"moe_block bracket found {n_blk} blocks for {len(mods)} " \
+            f"expert modules -- the region would silently under-count"
         model.lm_head.forward = _wrap_region(
             model.lm_head.forward, "lmhead", "e4b::lmhead")
     if a.compile_layers:
@@ -312,7 +354,7 @@ def main():
             self.prefill_rows = []
 
         def _amort_snap(self):
-            if states[0].amort is None:      # --amort off: nothing to read
+            if not states or states[0].amort is None:   # off / pipelined
                 return (0, 0)
             return (sum(st.amort["dram_ns"] for st in states),
                     sum(st.amort["gpu_ns"] for st in states))
@@ -379,6 +421,7 @@ def main():
             from experts4bit_qlora.engines.paged_attention import set_context
             ah0, ac0 = PROF["attn_host_ns"], PROF["attn_calls"]
             rm0 = REGION_PROF["moe"]["decode"]["ns"]
+            rb0 = REGION_PROF["moe_block"]["decode"]["ns"]
             rl0 = REGION_PROF["lmhead"]["decode"]["ns"]
             d0, g0 = self._amort_snap()
             prev = set_context(self.ctx)
@@ -398,6 +441,8 @@ def main():
                  "attn_host_ns": PROF["attn_host_ns"] - ah0,
                  "attn_calls": PROF["attn_calls"] - ac0,
                  "moe_ns": REGION_PROF["moe"]["decode"]["ns"] - rm0,
+                 "moe_block_ns":
+                     REGION_PROF["moe_block"]["decode"]["ns"] - rb0,
                  "lmhead_ns": REGION_PROF["lmhead"]["decode"]["ns"] - rl0,
                  "dram_ns": d1 - d0, "gpu_ns": g1 - g0})
             got = {}
@@ -489,14 +534,18 @@ def main():
                                "aten::index_select", "aten::index_put_",
                                "aten::unique2", "aten::sort",
                                "aten::arange", "aten::item",
-                               "aten::_local_scalar_dense")},
+                               "aten::_local_scalar_dense",
+                               "cudaLaunchKernel", "cudaMemcpyAsync",
+                               "cudaStreamSynchronize",
+                               "cudaDeviceSynchronize")},
                 "nonzero_attr": nz,
             }, indent=1))
             print(f"SYNC_ATTR_OUT {a.sync_attr_out} active={active}/12",
                   flush=True)
         if a.region_ops_out:
             evs = tprof.profiler.function_events
-            regions = {"e4b::moe": {}, "e4b::attn": {}, "e4b::lmhead": {}}
+            regions = {"e4b::moe": {}, "e4b::moe_block": {},
+                       "e4b::attn": {}, "e4b::lmhead": {}}
             rcounts = dict.fromkeys(regions, 0)
             rtime = dict.fromkeys(regions, 0.0)
 
@@ -514,6 +563,7 @@ def main():
             # a silent no-match must fail loudly, never read as zero
             # (PREREG-t5b): every region must appear at its call rate
             assert rcounts["e4b::moe"] >= L * max(1, active), rcounts
+            assert rcounts["e4b::moe_block"] >= L * max(1, active), rcounts
             assert rcounts["e4b::attn"] >= L * max(1, active), rcounts
             assert rcounts["e4b::lmhead"] >= max(1, active), rcounts
             Path(a.region_ops_out).write_text(json.dumps({
@@ -635,9 +685,16 @@ def main():
             "per_layer": per_layer,
         }, indent=1))
         print(f"AMORT_OUT {a.amort_out}", flush=True)
+    rep["engine"] = a.engine
+    rep["placement_override"] = a.placement_override
+    rep["manifest_counts"] = (None if man is None else
+                              {t: len(pp) for t, pp in man["tiers"].items()})
     if a.host_brackets:
         moe_h, lmh_h = med("moe_ns"), med("lmhead_ns")
+        blk_h = med("moe_block_ns")
         rep["decode_median_ms"]["moe_host"] = moe_h
+        rep["decode_median_ms"]["moe_block_host"] = blk_h
+        rep["decode_median_ms"]["router_topk_host"] = blk_h - moe_h
         rep["decode_median_ms"]["lmhead_host"] = lmh_h
         # dram is INSIDE the moe bracket -- never sum them; the residual
         # is what no region owns
