@@ -46,7 +46,7 @@ class Fp8PagedKV:
 
     def __init__(self, n_layers: int, n_kv_heads: int, head_dim: int, *,
                  batch: int, max_tokens_per_seq: int, k_groups: int = 4,
-                 device: str = "cuda"):
+                 batched_append: bool = False, device: str = "cuda"):
         from fp8_kv import kv_block_bytes
         from row_pool import RowPool
 
@@ -59,6 +59,11 @@ class Fp8PagedKV:
         self.B = batch
         self.bt = BLOCK_TOKENS
         self.k_groups = k_groups
+        # decode call-site switch (PREREG-g9-kvappend): callers that see
+        # this flag use append_batch for the whole batch at each layer
+        # instead of one append per sequence
+        self.batched_append = batched_append
+        self._batch_idx_cache = {}
         self.blocks_per_seq = -(-max_tokens_per_seq // self.bt)
         self.k_row = (kv_block_bytes(self.bt, self.H, self.D)
                       + self.bt * self.H * 4 * (k_groups - 1))
@@ -177,6 +182,65 @@ class Fp8PagedKV:
         # the blocking copy stream-syncs — B x L times per decode step
         self.seq_lens[layer].narrow(0, seq, 1).add_(k.shape[0])
 
+    def append_many(self, layer: int, seqs, k: torch.Tensor,
+                    v: torch.Tensor):
+        """k, v: [B, T, H, D] new tokens for B sequences at ONE layer.
+
+        The batched form of append(): ONE quantize kernel per side for
+        the whole batch instead of one per sequence — the attribution
+        receipts measured the per-sequence form at 196,608 single-token
+        quantize calls (~112 ms/step at B=16), essentially the entire
+        attention bucket. Bit-identical by construction: FP8 scales are
+        per (token, head) or finer (amax over the last dim only), so
+        quantizing [B*T, H, D] in one call equals B separate calls.
+
+        The lockstep discipline is append()'s: ALL fallible allocating
+        work (both sides' quantize, overflow checks) happens before any
+        shared state changes; per-sequence block writes then follow the
+        same V-first publish-last order. A failure inside the write loop
+        leaves a prefix of sequences appended — fatal to the run, as a
+        mid-batch OOM is today.
+        """
+        if k.shape != v.shape or k.dim() != 4 \
+                or k.shape[2:] != (self.H, self.D):
+            raise ValueError(f"expected [B, T, {self.H}, {self.D}], got "
+                             f"{tuple(k.shape)} / {tuple(v.shape)}")
+        B, T = k.shape[0], k.shape[1]
+        if B != len(seqs):
+            raise ValueError(f"{B} rows for {len(seqs)} sequences")
+        for seq in seqs:
+            if self._seen[layer][seq] + T > self.blocks_per_seq * self.bt:
+                raise ValueError(f"sequence {seq} overflows its "
+                                 f"{self.blocks_per_seq} blocks")
+        vq_all = self._quant_bytes(v.reshape(B * T, self.H, self.D), 1)
+        kq_all = self._quant_bytes(k.reshape(B * T, self.H, self.D),
+                                   self.k_groups)
+        for b, seq in enumerate(seqs):
+            seen = self._seen[layer][seq]
+            self._ensure_blocks(layer, seq, (seen + T - 1) // self.bt)
+            vq = (vq_all[0].narrow(0, b * T, T),
+                  vq_all[1].narrow(0, b * T, T))
+            kq = (kq_all[0].narrow(0, b * T, T),
+                  kq_all[1].narrow(0, b * T, T))
+            self._write_side(self.vp, self._v_pay, 1, layer, seq, *vq,
+                             T, seen)
+            self._write_side(self.kp, self._k_pay, self.k_groups, layer,
+                             seq, *kq, T, seen)
+            self._seen[layer][seq] = seen + T
+        key = tuple(seqs)
+        cached = self._batch_idx_cache.get(key)
+        if cached is None:
+            idx = torch.as_tensor(list(seqs), dtype=torch.long,
+                                  device=self.seq_lens.device)
+            ones = torch.ones(len(seqs), dtype=self.seq_lens.dtype,
+                              device=self.seq_lens.device)
+            cached = (idx, ones)
+            self._batch_idx_cache[key] = cached
+        idx, ones = cached
+        # one async device-side add for the whole batch (same reasoning
+        # as append()'s narrow().add_: no CPU-tensor stream sync)
+        self.seq_lens[layer].index_add_(0, idx, ones * T)
+
     def _ensure_blocks(self, layer: int, seq: int, upto_blk: int) -> None:
         """Back every block up to ``upto_blk`` with a pool row."""
         rows = self._rows.setdefault((layer, seq), [])
@@ -213,9 +277,12 @@ class Fp8PagedKV:
 
     def append_batch(self, layer: int, k: torch.Tensor, v: torch.Tensor):
         """Decode-step append: k, v [B, H, 1, D] (attention layout) for all
-        sequences at once. One call point for Phase 9's scheduler."""
-        for b in range(self.B):
-            self.append(layer, b, k[b].permute(1, 0, 2), v[b].permute(1, 0, 2))
+        sequences at once. One call point for Phase 9's scheduler.
+        Delegates to append_many, so it now quantizes the whole batch in
+        one kernel per side instead of one per sequence."""
+        self.append_many(layer, list(range(self.B)),
+                         k.permute(0, 2, 1, 3).contiguous(),
+                         v.permute(0, 2, 1, 3).contiguous())
 
     # ----------------------------------------------------------------- read --
     def kernel_args(self, layer: int, slots=None):
