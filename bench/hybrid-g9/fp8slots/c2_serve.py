@@ -164,7 +164,8 @@ def main():
 
         def _snap(self):
             return (sum(st.amort["dram_ns"] for st in states),
-                    sum(st.amort["uniq_dram"] for st in states))
+                    sum(st.amort["uniq_dram"] for st in states),
+                    sum(st.amort["gpu_ns"] for st in states))
 
         @torch.no_grad()
         def run_prefill(self, chunks):
@@ -195,14 +196,14 @@ def main():
         @torch.no_grad()
         def run_decode(self, rids):
             t0 = time.perf_counter_ns()
-            d0, _ = self._snap()
+            d0, _, g0 = self._snap()
             out = super().run_decode(rids)   # engine hook fires in here
             if not rids:
                 return out
-            d1, u1 = self._snap()
+            d1, u1, g1 = self._snap()
             self.step_rows.append(
                 {"wall_ns": time.perf_counter_ns() - t0,
-                 "dram_ns": d1 - d0, "uniq_cum": u1})
+                 "dram_ns": d1 - d0, "gpu_ns": g1 - g0, "uniq_cum": u1})
             return out
 
     from datasets import load_dataset
@@ -218,6 +219,7 @@ def main():
                               trim_series=True)
 
     win_rows = []
+    all_step_rows = []
     for w in range(a.windows):
         off = a.window_base + w * a.window_stride
         span_ids = all_ids[off:off + a.window_span]
@@ -244,12 +246,15 @@ def main():
                 break
         torch.cuda.synchronize()
         rows = runner.step_rows
+        all_step_rows.extend(rows)
         win_rows.append({
             "window": w, "decode_steps": len(rows),
             "dram_ms_total": sum(r["dram_ns"] for r in rows) / 1e6,
             "wall_ms_total": sum(r["wall_ns"] for r in rows) / 1e6,
             "dram_ms_median": statistics.median(
                 r["dram_ns"] for r in rows) / 1e6 if rows else 0,
+            "gpu_ms_median": statistics.median(
+                r["gpu_ns"] for r in rows) / 1e6 if rows else 0,
             "uniq_dram_end": rows[-1]["uniq_cum"] if rows else 0,
             "uniq_first32": (rows[31]["uniq_cum"] - u0
                              if len(rows) >= 32 else None),
@@ -262,6 +267,10 @@ def main():
 
     nv = sum(st.amort["uniq_nvme"] for st in states)
     assert nv == 0, f"NVMe touched: {nv}"
+    dram_med = statistics.median(r["dram_ns"] for r in all_step_rows) / 1e6
+    gpu_med = statistics.median(r["gpu_ns"] for r in all_step_rows) / 1e6
+    balance = (min(dram_med, gpu_med) / max(dram_med, gpu_med)
+               if max(dram_med, gpu_med) > 0 else 0.0)
     rep = {
         "controller": bool(a.controller or a.controller_cp),
         "windows": win_rows,
@@ -272,11 +281,15 @@ def main():
         "controller_ms": (ctrl.ns / 1e6) if ctrl else 0.0,
         "cp_resets": ctrl.cp_resets if ctrl else 0,
         "controller_cp": bool(a.controller_cp),
+        "dram_ms_median": dram_med,
+        "gpu_ms_median": gpu_med,
+        "balance_ratio": balance,
         "decode_steps": sum(x["decode_steps"] for x in win_rows),
     }
     pathlib.Path(a.out).write_text(json.dumps(rep, indent=1))
     print("C2_RUN_DONE", json.dumps({k2: rep[k2] for k2 in
           ("controller", "uniq_dram_total", "dram_ms_grand",
+           "dram_ms_median", "gpu_ms_median", "balance_ratio",
            "swaps_total", "controller_ms", "decode_steps")}), flush=True)
 
 
