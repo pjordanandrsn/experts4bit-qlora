@@ -1,0 +1,41 @@
+{
+  "g0": {
+    "aa1_ms": 219.048625,
+    "aa2_ms": 215.835649,
+    "spread_pct": 1.4886215576000597,
+    "pass": true
+  },
+  "g1": {
+    "identical": true,
+    "n_distinct": 1
+  },
+  "h1": {
+    "engine_frac": 1.0,
+    "basis": "differential (stacks empty)",
+    "stack_frac": 0.0,
+    "differential_frac": 1.0,
+    "nonzero_total": 2082,
+    "pass": true
+  },
+  "h2": {
+    "nonzero_per_step_b": 0.0,
+    "nonzero_per_step_a": 173.5,
+    "churn_a": 220089,
+    "churn_b": 221541,
+    "churn_cut_pct": -0.6597331079699577,
+    "pass": false
+  },
+  "h3": {
+    "base_ms": 215.342487,
+    "b_ms": 207.532849,
+    "improvement_pct": 3.6266127083412045,
+    "pass": false,
+    "partial": false
+  },
+  "verdict": "REFUTED (revert)",
+  "amort_tax_reported": {
+    "amort_on_ms": 231.721648,
+    "amort_off_ms": 215.835649,
+    "tax_pct": 7.3602294493992515
+  }
+}

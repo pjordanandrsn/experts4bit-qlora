@@ -59,10 +59,27 @@ def verdict(aa1, aa2, b, a3, aprof, bprof, amort_side=None):
     assert not aprof["dispatch_diet"] and bprof["dispatch_diet"], \
         "profile arms mislabeled: aprof must be baseline, bprof diet"
 
+    # AMENDMENT-t5-h1 (2026-08-24): the stack instrument captured no python
+    # frames on the box (every nonzero row grouped under <no-py-frame>), so
+    # frame attribution is unmeasurable there. Replacement, registered
+    # before any H2/H3 number was read: DIFFERENTIAL attribution — the arms
+    # differ by the engine flag alone, so nonzero calls the B arm
+    # eliminates are engine-dispatch calls by construction. Same 50% floor,
+    # stronger identification. Stack attribution used whenever frames exist.
     nz = aprof["nonzero_attr"]
     tot_nz = nz["engine"] + nz["other"]
-    frac = nz["engine"] / tot_nz if tot_nz else 0.0
-    out["h1"] = {"engine_frac": frac, "nonzero_total": tot_nz,
+    stack_frac = nz["engine"] / tot_nz if tot_nz else 0.0
+    no_frames = set(nz.get("frames", {})) <= {"<no-py-frame>"}
+    nz_a = aprof["op_counts"].get("aten::nonzero", 0)
+    nz_b_tot = bprof["op_counts"].get("aten::nonzero", 0)
+    diff_frac = (nz_a - nz_b_tot) / nz_a if nz_a else 0.0
+    if no_frames:
+        frac, basis = diff_frac, "differential (stacks empty)"
+    else:
+        frac, basis = stack_frac, "stack"
+    out["h1"] = {"engine_frac": frac, "basis": basis,
+                 "stack_frac": stack_frac, "differential_frac": diff_frac,
+                 "nonzero_total": tot_nz,
                  "pass": frac >= H1_ENGINE_FRAC}
     if not out["h1"]["pass"]:
         out["verdict"] = ("STOP-AND-AMEND (H1: registered edits aim at the "
@@ -151,11 +168,14 @@ def self_test():
                 _fake_prof(174 * 12, 90000, False),
                 _fake_prof(40 * 12, 60000, True))
     assert v["verdict"].startswith("NO-VERDICT (G0"), v
-    # H1 miss stops-and-amends
+    # H1 miss stops-and-amends (stacks PRESENT, engine fraction low --
+    # frames must carry a real label or the differential basis kicks in)
+    ap_low = _fake_prof(174 * 12, 90000, False, engine=100)
+    ap_low["nonzero_attr"]["frames"] = {"modeling.py(10): fwd": 174 * 12}
     v = verdict(_fake_rep(140.0), _fake_rep(139.0), _fake_rep(110.0),
-                _fake_rep(140.5),
-                _fake_prof(174 * 12, 90000, False, engine=100),
+                _fake_rep(140.5), ap_low,
                 _fake_prof(40 * 12, 60000, True))
+    assert v["h1"]["basis"] == "stack", v
     assert v["verdict"].startswith("STOP-AND-AMEND"), v
     # partial band
     v = verdict(_fake_rep(140.0), _fake_rep(139.0), _fake_rep(125.5),
@@ -164,18 +184,35 @@ def self_test():
                 _fake_prof(40 * 12, 60000, True))
     assert v["verdict"].startswith("PARTIAL"), v
     # wall win with dirty mechanism = certified-with-open-mechanism
+    # (stack basis: frames present and engine-attributed, so H1 holds even
+    # though the B arm barely reduced nonzero -- H2 is what fails)
+    ap_full = _fake_prof(174 * 12, 90000, False)
+    ap_full["nonzero_attr"]["frames"] = {
+        "engines/hot_residency.py(249): forward": 174 * 12}
     v = verdict(_fake_rep(140.0), _fake_rep(139.0), _fake_rep(110.0),
-                _fake_rep(140.5),
-                _fake_prof(174 * 12, 90000, False),
+                _fake_rep(140.5), ap_full,
                 _fake_prof(120 * 12, 89000, True))
+    assert v["h1"]["basis"] == "stack", v
     assert v["verdict"].startswith("CERTIFIED-WITH-OPEN"), v
+    # AMENDED H1: stacks empty + full differential elimination -> proceeds
+    ap = _fake_prof(174 * 12, 90000, False, engine=0)
+    ap["nonzero_attr"]["frames"] = {"<no-py-frame>": 174 * 12}
+    ap["nonzero_attr"]["other"] = 174 * 12
+    v = verdict(_fake_rep(140.0), _fake_rep(139.0), _fake_rep(110.0),
+                _fake_rep(140.5), ap, _fake_prof(0, 60000, True))
+    assert v["h1"]["basis"].startswith("differential"), v
+    assert v["verdict"].startswith("CERTIFIED ("), v
+    # AMENDED H1: stacks empty + nonzero NOT eliminated -> still stops
+    v = verdict(_fake_rep(140.0), _fake_rep(139.0), _fake_rep(110.0),
+                _fake_rep(140.5), ap, _fake_prof(120 * 12, 60000, True))
+    assert v["verdict"].startswith("STOP-AND-AMEND"), v
     # incomplete profile window blocks
     v = verdict(_fake_rep(140.0), _fake_rep(139.0), _fake_rep(110.0),
                 _fake_rep(140.5),
                 _fake_prof(174 * 12, 90000, False, active=9),
                 _fake_prof(40 * 12, 60000, True))
     assert v["verdict"].startswith("NO-VERDICT (aprof"), v
-    print("self-test OK: 8/8 branches exercised")
+    print("self-test OK: 10/10 branches exercised")
 
 
 if __name__ == "__main__":
