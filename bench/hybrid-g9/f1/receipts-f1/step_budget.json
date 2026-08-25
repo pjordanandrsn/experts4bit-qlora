@@ -1,0 +1,133 @@
+{
+ "active_steps": 12,
+ "total_device_us_per_step": 9999.183416666667,
+ "device_us_per_step_truth": 12549.666666666666,
+ "coverage": 0.7967688451220485,
+ "coverage_ok": false,
+ "by_kind": {
+  "matmul": {
+   "us_per_step": 6399.333333333333,
+   "calls_per_step": 193.0
+  },
+  "elementwise": {
+   "us_per_step": 2220.5064166666666,
+   "calls_per_step": 1591.0
+  },
+  "other": {
+   "us_per_step": 908.5103333333334,
+   "calls_per_step": 289.0
+  },
+  "router": {
+   "us_per_step": 319.0,
+   "calls_per_step": 96.0
+  },
+  "memcpy": {
+   "us_per_step": 151.83333333333334,
+   "calls_per_step": 192.0
+  }
+ },
+ "rows": [
+  {
+   "name": "_gemv_nf4_grouped",
+   "us_per_step": 4841.75,
+   "calls_per_step": 96.0,
+   "kind": "matmul"
+  },
+  {
+   "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+   "us_per_step": 1557.5833333333333,
+   "calls_per_step": 97.0,
+   "kind": "matmul"
+  },
+  {
+   "name": "void at::native::unrolled_elementwise_kernel<at::nat...",
+   "us_per_step": 726.1666666666666,
+   "calls_per_step": 434.0,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 4, at::nati...",
+   "us_per_step": 538.0,
+   "calls_per_step": 336.0,
+   "kind": "elementwise"
+  },
+  {
+   "name": "_fp8_combine",
+   "us_per_step": 318.5833333333333,
+   "calls_per_step": 48.0,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::reduce_kernel<512, 1, at::native::R...",
+   "us_per_step": 280.25,
+   "calls_per_step": 193.0,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 2, at::nati...",
+   "us_per_step": 267.5833333333333,
+   "calls_per_step": 241.0,
+   "kind": "elementwise"
+  },
+  {
+   "name": "_fp8_paged_decode_split",
+   "us_per_step": 248.66666666666666,
+   "calls_per_step": 48.0,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::vectorized_elementwise_kernel<4, at...",
+   "us_per_step": 246.58333333333334,
+   "calls_per_step": 291.0,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::sbtopk::gatherTopK<float, unsigned ...",
+   "us_per_step": 175.16666666666666,
+   "calls_per_step": 48.0,
+   "kind": "router"
+  },
+  {
+   "name": "Memcpy DtoD (Device -> Device)",
+   "us_per_step": 151.83333333333334,
+   "calls_per_step": 192.0,
+   "kind": "memcpy"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::CatArrayBatc...",
+   "us_per_step": 148.08333333333334,
+   "calls_per_step": 96.0,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::bitonicSortKVInPlace<-2, -1, 16, 16...",
+   "us_per_step": 143.83333333333334,
+   "calls_per_step": 48.0,
+   "kind": "router"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::indexSelectS...",
+   "us_per_step": 138.25,
+   "calls_per_step": 49.0,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::reduce_kernel<128, 4, at::native::R...",
+   "us_per_step": 110.08333333333333,
+   "calls_per_step": 48.0,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::indexFuncSmallIndex<int, long, unsi...",
+   "us_per_step": 54.927,
+   "calls_per_step": 48.0,
+   "kind": "other"
+  },
+  {
+   "name": "void (anonymous namespace)::softmax_warp_forward<flo...",
+   "us_per_step": 51.83975,
+   "calls_per_step": 48.0,
+   "kind": "elementwise"
+  }
+ ]
+}
