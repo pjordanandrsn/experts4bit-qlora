@@ -78,13 +78,19 @@ class PhaseClock:
     def step_end(self, extra: dict | None = None):
         assert self._open is None, \
             f"bracket {self._open!r} left open at step end"
-        wall_ms = (time.perf_counter() - self._wall0) * 1e3
         row: dict = dict(extra or {})
         if self.use_cuda:
+            # fence BEFORE sampling the wall: phase times are CUDA
+            # events that include kernels still draining here, so a
+            # pre-sync wall undercounts against the phase sum and the
+            # closure gate would compare differently-fenced clocks
+            # (Bugbot retro-review, #253)
             torch.cuda.synchronize()
+            wall_ms = (time.perf_counter() - self._wall0) * 1e3
             for phase, a, b in self._pairs:
                 row[phase] = row.get(phase, 0.0) + a.elapsed_time(b)
         else:
+            wall_ms = (time.perf_counter() - self._wall0) * 1e3
             for phase, a, b in self._pairs:
                 row[phase] = row.get(phase, 0.0) + (b - a) * 1e3
         row["step_wall_ms"] = wall_ms
