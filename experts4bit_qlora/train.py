@@ -445,6 +445,10 @@ def main():
         _clock.write(out_path, {
             "model": MODEL, "seq": SEQ, "steps": STEPS,
             "grad_accum": GRAD_ACCUM, "token_budget": TOKEN_BUDGET,
+            # the OOM backoff halves the LIVE budget; the env value
+            # alone cannot explain an A/A phase drift between runs
+            # that settled at different effective budgets
+            "token_budget_effective": budget,
             "offload": bool(OFFLOAD_EXPERTS),
             "torch": torch.__version__,
         })
