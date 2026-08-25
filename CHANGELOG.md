@@ -27,6 +27,18 @@ verdict.
   NOT claimed bitwise — the prereg records the falsification of that
   claim by its own CPU gate.
 
+### Correctness
+
+- **Fused KV append resolves by the KV's DEVICE, not kernel
+  presence.** gnf4 0.15.0 ships `fp8_kv_append_t1`, so the old
+  presence-only check enabled the fused path on CPU-device KVs and
+  the first append died inside triton's driver ("0 active drivers" —
+  caught by this release's own CI the hour 0.15.0 hit PyPI). A
+  non-cuda KV now degrades to the eager append; an explicit
+  `E4B_FUSED_KV_APPEND=1` on a non-cuda KV refuses loudly. Resolution
+  factored into `_resolve_fused_append` with the full cell table
+  under test.
+
 ### New capabilities
 
 - **Speculative-verification machinery** (S2-lite/S3), shipped as
