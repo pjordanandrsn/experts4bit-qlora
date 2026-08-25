@@ -29,11 +29,18 @@ Registered grid: n_min ∈ {1, 2, 3} × K ∈ {4, 8, 16}.
   acceptance for a greedy pipeline — no distribution math enters.
   Emits per-(n_min, K): window count, E[m], E[tokens/step] = E[m]+1,
   and the match distribution.
-- `--verify-probe K` in step_decomp: after prefill, time R repeats of
-  a (K+1)-row forward at ~512-token past (chunked-median, eager).
-  Eager INCLUDES host gaps, so it is an UPPER bound on verify cost —
-  and the decision map uses it only on the side where conservatism is
-  sound.
+- `--verify-probe K` in step_decomp: **prefill-continuation** timing.
+  Decode attention is T=1 by contract and the staging buffer is popped
+  at prefill completion (both verified in review), so the probe first
+  rebuilds a 512-token staged past with one untimed prefill-mode pass,
+  then times R chunks of (K+1) rows through the production prefill
+  path — causal attention over the staged past plus the prefill expert
+  path. That is a real, existing, certified-numerics way an executor
+  could verify, so the measured cost is an upper bound on the BEST
+  verify implementation S2 could ship (a dedicated paged T>1 kernel
+  could only be cheaper), and eager timing adds host gaps on the same
+  conservative side. The receipt records the past at the timed
+  window's start and end.
 - `s1_verdict.py`, self-tested both directions.
 
 ## Stage A arms (one box, shipped config: compile + fused append)

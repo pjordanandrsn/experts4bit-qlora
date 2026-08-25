@@ -243,16 +243,27 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     torch.cuda.synchronize()
 
     if a.verify_probe:
-        # S1 verify-cost probe: a (K+1)-row step for ONE sequence --
-        # the exact shape a speculative verify step would run. Content
-        # of the extra rows is irrelevant to timing; positions advance
-        # so the paged append stays legal, and the KV grows K+1 per
-        # rep (disclosed: past drifts upward across reps; the
-        # chunked MEDIAN is robust to the mild upward slope).
+        # S1 verify-cost probe, second design (Bugbot e4b#239 killed the
+        # first): decode attention is T=1 by contract, and the prefill
+        # fallback attended over a staging buffer that FLUSH had already
+        # popped -- an empty past, underpricing verify and making the GO
+        # bound unsound. This probe instead measures PREFILL-CONTINUATION:
+        # one untimed staging pass rebuilds a 512-token staged past on
+        # this slot (stage() was flushed at real-prefill completion),
+        # then R chunks of K+1 rows run through the production prefill
+        # path -- causal attention over the staged past + the prefill
+        # expert path. That is a REAL, existing, certified-numerics way
+        # an S2 executor could verify, so its measured cost upper-bounds
+        # the best verify implementation S2 could ship.
         kk = int(a.verify_probe) + 1
+        runner.ctx.mode = "prefill"
+        past = 512
+        st_ids = in_ids.expand(1, past).contiguous()
+        st_pos = torch.arange(past, device=dev).view(1, past)
+        model(input_ids=st_ids, position_ids=st_pos, use_cache=False)
+        torch.cuda.synchronize()
         v_ids = in_ids.expand(1, kk).contiguous()
-        v_pos = (pos.expand(1, kk)
-                 + torch.arange(kk, device=dev).view(1, kk)).contiguous()
+        v_pos = (torch.arange(kk, device=dev).view(1, kk) + past)
 
         def verify_step():
             out = model(input_ids=v_ids, position_ids=v_pos,
@@ -261,24 +272,10 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             v_pos.add_(kk)
             return lg
 
-        probe_mode = "decode"
-        try:
-            verify_step()
-            torch.cuda.synchronize()
-        except Exception as e:                     # noqa: BLE001
-            # the paged decode branch may be T=1-only; the prefill
-            # branch runs the same attention math over the same past,
-            # so it is the registered fallback shape -- recorded, so
-            # the receipt says which path priced the verify step
-            print(f"S1_VERIFY_PROBE decode-mode refused ({e}); "
-                  f"retrying via prefill mode", flush=True)
-            runner.ctx.mode = "prefill"
-            probe_mode = "prefill"
-            verify_step()
-            torch.cuda.synchronize()
-        for _ in range(7):
+        for _ in range(8):
             verify_step()
         torch.cuda.synchronize()
+        past_timing_start = past + 8 * kk
         spans = []
         for _c in range(10):
             e0 = torch.cuda.Event(enable_timing=True)
@@ -290,19 +287,23 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             e1.synchronize()
             spans.append(e0.elapsed_time(e1) / 4)
         spans.sort()
+        past_timing_end = past_timing_start + 40 * kk
         set_context(prev)
         rep = {"verify_probe_k": int(a.verify_probe),
-               "probe_mode": probe_mode,
+               "probe_path": "prefill-continuation over staged past",
                "rows_per_step": kk,
                "verify_ms": spans[len(spans) // 2],
                "verify_ms_all_chunks": spans,
-               "past_at_start": int(v_pos.min().item()) - 8 * kk,
-               "basis": "eager chunked-median -- UPPER bound "
+               "past_at_timing_start": past_timing_start,
+               "past_at_timing_end": past_timing_end,
+               "basis": "eager chunked-median over an EXECUTABLE verify "
+                        "path -- upper bound on best-case S2 verify "
                         "(PREREG-s1-acceptance)"}
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(rep, indent=1))
         print(f"S1_VERIFY_PROBE k={a.verify_probe} rows={kk} "
-              f"verify_ms={rep['verify_ms']:.3f} out={a.out}",
+              f"verify_ms={rep['verify_ms']:.3f} "
+              f"past={past_timing_start}..{past_timing_end} out={a.out}",
               flush=True)
         return
     if a.b1d_timed:
