@@ -325,6 +325,19 @@ def main():
     tok_seen = 0
     from . import census as _census
     _clock = _census.PhaseClock() if _census.enabled() else None
+    _tprof, _tprof_steps = None, [0]
+    _prof_out = os.environ.get("TR1_PROFILE_OUT")
+    if _clock and _prof_out:
+        # kernel-budget instrument (PREREG-tr1-census #2): same
+        # schedule shape + table format as the serving census, so
+        # bench/hybrid-g9/f1/step_budget.py parses it unchanged.
+        from torch.profiler import ProfilerActivity, profile, schedule
+        _tprof = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=schedule(skip_first=3, wait=0, warmup=1, active=8,
+                              repeat=1),
+            record_shapes=True)
+        _tprof.__enter__()
     from .engines.offload import offload_stats_report, reset_offload_stats
 
     reset_offload_stats()  # measure the training loop only (drop load/BEFORE-eval transfers)
@@ -387,6 +400,9 @@ def main():
         if _clock:
             _clock.stop()
             _clock.step_end()
+        if _tprof is not None:
+            _tprof.step()
+            _tprof_steps[0] += 1
         ema = loss_acc if ema is None else 0.9 * ema + 0.1 * loss_acc
         if step % 10 == 0 or step == 1:
             log(
@@ -408,6 +424,20 @@ def main():
         f"| peak GPU mem: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB (offload={'on' if OFFLOAD_EXPERTS else 'off'})"
     )
     offload_stats_report(log)  # no-op unless E4B_OFFLOAD_STATS=1
+    if _tprof is not None:
+        _tprof.__exit__(None, None, None)
+        _tbl = _tprof.key_averages().table(sort_by="cuda_time_total",
+                                           row_limit=80)
+        _active = max(0, min(8, _tprof_steps[0] - 3 - 1))
+        _hdr = (f"profiled training steps: {_tprof_steps[0]} "
+                f"(active window: {_active}/8)\n")
+        if _active < 8:
+            _hdr += ("WARNING: active window INCOMPLETE -- this table "
+                     "under-samples and must not be cited as the "
+                     "attribution\n")
+        with open(_prof_out, "w") as _f:
+            _f.write(_hdr + _tbl)
+        log(f"[tr1-census] wrote {_prof_out} (active={_active}/8)")
     if _clock:
         out_path = os.environ.get("TR1_CENSUS_OUT", "tr1_census.json")
         _clock.write(out_path, {

@@ -67,6 +67,12 @@ def test_trainer_brackets_are_wired_and_gated():
     assert "_clock._open is not None" in src
     # census output is written after the loop
     assert "TR1_CENSUS_OUT" in src
+    # kernel-budget window (instrument 2): step()s per training step,
+    # table format carries the 'active window: N/M' header
+    # step_budget.py requires
+    assert "TR1_PROFILE_OUT" in src
+    assert "_tprof.step()" in src
+    assert "active window:" in src
 
 
 def test_composer_self_test_runs():
