@@ -323,25 +323,47 @@ def main():
     budget = TOKEN_BUDGET
     it, t0, ema, best = _batch_stream(budget), time.time(), None, float("inf")
     tok_seen = 0
+    from . import census as _census
+    _clock = _census.PhaseClock() if _census.enabled() else None
     from .engines.offload import offload_stats_report, reset_offload_stats
 
     reset_offload_stats()  # measure the training loop only (drop load/BEFORE-eval transfers)
     step = 0
     while step < STEPS:
+        if _clock:
+            _clock.step_start()
+            _clock.start("optim")
         opt.zero_grad()
+        if _clock:
+            _clock.stop()
         loss_acc = 0.0
         try:
             for _ in range(GRAD_ACCUM):
+                if _clock:
+                    _clock.start("data")
                 try:
                     ids, lbl, att = next(it)
                 except StopIteration:
                     it = _batch_stream(budget)
                     ids, lbl, att = next(it)
+                if _clock:
+                    _clock.stop()
+                    _clock.start("forward")
                 out = model(input_ids=ids, labels=lbl, attention_mask=att)
+                if _clock:
+                    _clock.stop()
+                    _clock.start("backward")
                 (out.loss / GRAD_ACCUM).backward()
+                if _clock:
+                    _clock.stop()
+                    _clock.start("loss_sync")
                 loss_acc += out.loss.item() / GRAD_ACCUM
                 tok_seen += int(att.sum())
+                if _clock:
+                    _clock.stop()
         except torch.cuda.OutOfMemoryError:
+            if _clock and _clock._open is not None:
+                _clock.stop()
             # The token budget's ceiling is VRAM, and the right value is host- AND
             # model-specific -- 2048 fits OLMoE on a 12 GB card, a 30B offloaded model is
             # a different profile entirely. Dying on a default is a bad way to learn that,
@@ -357,9 +379,14 @@ def main():
                 f"(set TOKEN_BUDGET explicitly to skip this search)")
             continue
         step += 1
+        if _clock:
+            _clock.start("optim")
         torch.nn.utils.clip_grad_norm_(trainable, 1.0)
         opt.step()
         sched.step()
+        if _clock:
+            _clock.stop()
+            _clock.step_end()
         ema = loss_acc if ema is None else 0.9 * ema + 0.1 * loss_acc
         if step % 10 == 0 or step == 1:
             log(
@@ -381,6 +408,15 @@ def main():
         f"| peak GPU mem: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB (offload={'on' if OFFLOAD_EXPERTS else 'off'})"
     )
     offload_stats_report(log)  # no-op unless E4B_OFFLOAD_STATS=1
+    if _clock:
+        out_path = os.environ.get("TR1_CENSUS_OUT", "tr1_census.json")
+        _clock.write(out_path, {
+            "model": MODEL, "seq": SEQ, "steps": STEPS,
+            "grad_accum": GRAD_ACCUM, "token_budget": TOKEN_BUDGET,
+            "offload": bool(OFFLOAD_EXPERTS),
+            "torch": torch.__version__,
+        })
+        log(f"[tr1-census] wrote {out_path} ({len(_clock.steps)} steps)")
 
     model.gradient_checkpointing_disable()
     eval_after = eval_loss(model, eval_data)
