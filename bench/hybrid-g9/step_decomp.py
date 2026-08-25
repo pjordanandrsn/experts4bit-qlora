@@ -234,6 +234,9 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         # stage C: tokens land in a device log (one tiny D2D copy per
         # step, no sync); the window is timed as a whole
         tok_log = torch.zeros(n_steps, dtype=torch.long, device=dev)
+        # PREREG-f1-stageB refusal 4: a dynamo recompile inside the
+        # timed window would time compilation, not the fused kernels.
+        _frames_before = _dynamo_frame_count()
         if a.b1d_loop == "graph":
             torch.cuda.empty_cache()
             g = torch.cuda.CUDAGraph()
@@ -253,17 +256,30 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             torch.cuda.synchronize()
         total_ms = (time.perf_counter_ns() - t0) / 1e6
         set_context(prev)
+        _frames_after = _dynamo_frame_count()
+        _recompiles = None
+        if _frames_before is not None and _frames_after is not None:
+            _recompiles = (_frames_after["total"]
+                           - _frames_before["total"])
         rep = {
             "b1d_loop": a.b1d_loop, "b1d_timed": True,
             "n_steps": n_steps,
             "tokens": tok_log.cpu().tolist(),
             "step_ms_clean": total_ms / n_steps,
             "window_ms": total_ms,
+            "compile_layers": bool(a.compile_layers),
+            "compile_mode": a.compile_mode if a.compile_layers else None,
+            "dynamo_frames_before": _frames_before,
+            "dynamo_frames_after": _frames_after,
+            "recompiles_in_window": _recompiles,
         }
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(rep, indent=1))
         print(f"B1D_TIMED_{a.b1d_loop.upper()} steps={n_steps} "
-              f"step={rep['step_ms_clean']:.2f}ms out={a.out}", flush=True)
+              f"step={rep['step_ms_clean']:.2f}ms "
+              f"compile={rep['compile_mode']} "
+              f"recompiles={rep['recompiles_in_window']} "
+              f"out={a.out}", flush=True)
         return
 
     hashes, toks, walls, positions = [], [], [], []
@@ -446,6 +462,20 @@ class _EwSiteTracer:
             f = f.f_back
             depth += 1
         return "<no-python-frame>"
+
+
+def _dynamo_frame_count():
+    """Dynamo's cumulative compiled-frame count, or None when dynamo is
+    not in use. PREREG-f1-stageB refusal 4 reads this before and after
+    the timed window: a recompile inside it means the arm timed
+    compilation rather than the fused kernels."""
+    try:
+        from torch._dynamo.utils import counters
+    except Exception:                              # noqa: BLE001
+        return None
+    ok = counters.get("frames", {}).get("ok", 0)
+    total = counters.get("frames", {}).get("total", 0)
+    return {"ok": int(ok), "total": int(total)}
 
 
 def _apportion(by_op, counts):
