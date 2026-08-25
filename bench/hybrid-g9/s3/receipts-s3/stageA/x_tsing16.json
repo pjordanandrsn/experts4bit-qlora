@@ -1,0 +1,22 @@
+{
+ "s2": "time",
+ "k": 16,
+ "rows_per_step": 17,
+ "moe_grouping": "singleton",
+ "timing_basis": "graph replay",
+ "verify_graph_ms": 47.236106872558594,
+ "verify_ms_all_chunks": [
+  47.20591735839844,
+  47.22196578979492,
+  47.22922134399414,
+  47.2303466796875,
+  47.23332977294922,
+  47.236106872558594,
+  47.24387741088867,
+  47.24565124511719,
+  47.245811462402344,
+  47.26964569091797
+ ],
+ "past_tokens": 517,
+ "basis": "graphed fixed-position verify step; the inter-replay kv.rewind (one fill_ per layer, ~48 launches) is INSIDE the timed span and inflates verify_ms slightly -- conservative side (PREREG-s2lite Stage A; executor needs device-addressed appends -- Stage B)"
+}

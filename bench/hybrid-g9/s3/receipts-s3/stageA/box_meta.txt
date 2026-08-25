@@ -1,0 +1,4 @@
+28a9fac S3 implementation: device-grouped verify path, parity arm, grouping axis (#245)
+0a2c5f8 K6 prereg: bespoke dot-pad GEMV vs the ~59 µs compute wall (instruments only) (#254)
+2.13.0+cu130 3.7.1
+NVIDIA GeForce RTX 5090, 595.58.03
