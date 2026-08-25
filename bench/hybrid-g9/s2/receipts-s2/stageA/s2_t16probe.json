@@ -1,0 +1,21 @@
+{
+ "s2": "time",
+ "k": 16,
+ "rows_per_step": 17,
+ "moe_grouping": "singleton (capture-legal); grouped routing would share expert weight reads across rows hitting the same expert, so this is an UPPER bound on a device-grouped verify",
+ "verify_graph_ms": 47.71258544921875,
+ "verify_ms_all_chunks": [
+  47.57029724121094,
+  47.70206832885742,
+  47.70513916015625,
+  47.70692443847656,
+  47.711551666259766,
+  47.71258544921875,
+  47.720481872558594,
+  47.79478454589844,
+  48.130985260009766,
+  48.13596725463867
+ ],
+ "past_tokens": 517,
+ "basis": "graphed fixed-position verify step; the inter-replay kv.rewind (one fill_ per layer, ~48 launches) is INSIDE the timed span and inflates verify_ms slightly -- conservative side (PREREG-s2lite Stage A; executor needs device-addressed appends -- Stage B)"
+}

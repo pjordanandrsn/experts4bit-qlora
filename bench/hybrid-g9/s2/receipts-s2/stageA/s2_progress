@@ -1,0 +1,35 @@
+ARM-START a0_a 13:22:23
+B1D_TIMED_GRAPH steps=127 step=7.42ms compile=default recompiles=0 out=/root/out/s2_a0_a.json
+ARM-OK a0_a 13:23:13
+ARM-START a0_b 13:23:13
+B1D_TIMED_GRAPH steps=127 step=7.41ms compile=default recompiles=0 out=/root/out/s2_a0_b.json
+ARM-OK a0_b 13:23:54
+ARM-START gate16 13:23:54
+S2_GATE k=16 match=17/17 bitwise=True continuation=True PASS=True out=/root/out/s2_gate16.json
+ARM-OK gate16 13:24:38
+ARM-START t16 13:24:38
+ARM-FAIL t16
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing erro
+Traceback (most recent call last):
+  File "/root/e4b/bench/hybrid-g9/step_decomp.py", line 323, in _b1d_stage_a
+    out = model(input_ids=v_in, position_ids=v_pos,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/utils/generic.py", line 939, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 658, in forward
+    outputs: MoeModelOutputWithPast = self.model(
+                                      ^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1778, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1789, in _call_impl
+    return forward_call(*args, **kwargs)
+ARM-FAIL-END t16

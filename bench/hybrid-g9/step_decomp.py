@@ -314,11 +314,38 @@ def _b1d_stage_a(a, model, runner, sched, kv):
                   f"PASS={rep['gate_pass']} out={a.out}", flush=True)
             set_context(prev)
             return
-        # ---- time: graph the verify step at FIXED position
+        # ---- time: graph the verify step at FIXED position.
+        # The documented capture recipe (b1d): warm the EXACT call on a
+        # SIDE stream first -- the T=K+1 shapes trigger triton JIT
+        # compilation and first-use cuBLAS workspaces, and either
+        # landing inside capture invalidates it
+        # (cudaErrorStreamCaptureInvalidated; hit live on the first
+        # Stage A run -- the gate arm warms its own process, the timing
+        # arm must warm its own).
+        side = torch.cuda.Stream()
+        side.wait_stream(torch.cuda.current_stream())
+        # a captured T>1 step cannot call unique_consecutive (host-size
+        # sync), so the MoE side runs singleton groups for the capture,
+        # the warm that precedes it, and the replays -- identical
+        # arithmetic, higher expert weight traffic (disclosed in the
+        # receipt; PREREG-s2lite)
+        from experts4bit_qlora.engines import hot_residency as _hr
+        _hr.FORCE_SINGLETON_GROUPS[0] = True
+        # one CHECKED rewind establishes that base_seen is not forward
+        # of the true length; everything after uses the sync-free
+        # variant, since .item() is illegal under capture
         kv.rewind(slot, base_seen)
+        with torch.cuda.stream(side):
+            for _ in range(2):
+                kv.rewind_nosync(slot, base_seen)
+                out = model(input_ids=v_in, position_ids=v_pos,
+                            use_cache=False)
+                _ = out.logits[0].argmax(-1)
+        torch.cuda.current_stream().wait_stream(side)
+        torch.cuda.synchronize()
         torch.cuda.empty_cache()
         g = torch.cuda.CUDAGraph()
-        kv.rewind(slot, base_seen)
+        kv.rewind_nosync(slot, base_seen)
         with torch.cuda.graph(g, capture_error_mode="thread_local"):
             out = model(input_ids=v_in, position_ids=v_pos,
                         use_cache=False)
@@ -330,14 +357,20 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             e1 = torch.cuda.Event(enable_timing=True)
             e0.record()
             for _r in range(8):
-                kv.rewind(slot, base_seen)
+                kv.rewind_nosync(slot, base_seen)
                 g.replay()
             e1.record()
             e1.synchronize()
             spans.append(e0.elapsed_time(e1) / 8)
         spans.sort()
+        _hr.FORCE_SINGLETON_GROUPS[0] = False
         set_context(prev)
         rep = {"s2": "time", "k": a.s2_k, "rows_per_step": kk,
+               "moe_grouping": "singleton (capture-legal); grouped "
+                               "routing would share expert weight reads "
+                               "across rows hitting the same expert, so "
+                               "this is an UPPER bound on a "
+                               "device-grouped verify",
                "verify_graph_ms": spans[len(spans) // 2],
                "verify_ms_all_chunks": spans,
                "past_tokens": base_seen,
