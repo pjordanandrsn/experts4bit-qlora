@@ -242,6 +242,70 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     torch.cuda.current_stream().wait_stream(side)
     torch.cuda.synchronize()
 
+    if a.verify_probe:
+        # S1 verify-cost probe, second design (Bugbot e4b#239 killed the
+        # first): decode attention is T=1 by contract, and the prefill
+        # fallback attended over a staging buffer that FLUSH had already
+        # popped -- an empty past, underpricing verify and making the GO
+        # bound unsound. This probe instead measures PREFILL-CONTINUATION:
+        # one untimed staging pass rebuilds a 512-token staged past on
+        # this slot (stage() was flushed at real-prefill completion),
+        # then R chunks of K+1 rows run through the production prefill
+        # path -- causal attention over the staged past + the prefill
+        # expert path. That is a REAL, existing, certified-numerics way
+        # an S2 executor could verify, so its measured cost upper-bounds
+        # the best verify implementation S2 could ship.
+        kk = int(a.verify_probe) + 1
+        runner.ctx.mode = "prefill"
+        past = 512
+        st_ids = in_ids.expand(1, past).contiguous()
+        st_pos = torch.arange(past, device=dev).view(1, past)
+        model(input_ids=st_ids, position_ids=st_pos, use_cache=False)
+        torch.cuda.synchronize()
+        v_ids = in_ids.expand(1, kk).contiguous()
+        v_pos = (torch.arange(kk, device=dev).view(1, kk) + past)
+
+        def verify_step():
+            out = model(input_ids=v_ids, position_ids=v_pos,
+                        use_cache=False)
+            lg = out.logits[:, -1]
+            v_pos.add_(kk)
+            return lg
+
+        for _ in range(8):
+            verify_step()
+        torch.cuda.synchronize()
+        past_timing_start = past + 8 * kk
+        spans = []
+        for _c in range(10):
+            e0 = torch.cuda.Event(enable_timing=True)
+            e1 = torch.cuda.Event(enable_timing=True)
+            e0.record()
+            for _r in range(4):
+                verify_step()
+            e1.record()
+            e1.synchronize()
+            spans.append(e0.elapsed_time(e1) / 4)
+        spans.sort()
+        past_timing_end = past_timing_start + 40 * kk
+        set_context(prev)
+        rep = {"verify_probe_k": int(a.verify_probe),
+               "probe_path": "prefill-continuation over staged past",
+               "rows_per_step": kk,
+               "verify_ms": spans[len(spans) // 2],
+               "verify_ms_all_chunks": spans,
+               "past_at_timing_start": past_timing_start,
+               "past_at_timing_end": past_timing_end,
+               "basis": "eager chunked-median over an EXECUTABLE verify "
+                        "path -- upper bound on best-case S2 verify "
+                        "(PREREG-s1-acceptance)"}
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(rep, indent=1))
+        print(f"S1_VERIFY_PROBE k={a.verify_probe} rows={kk} "
+              f"verify_ms={rep['verify_ms']:.3f} "
+              f"past={past_timing_start}..{past_timing_end} out={a.out}",
+              flush=True)
+        return
     if a.b1d_timed:
         # stage C: tokens land in a device log (one tiny D2D copy per
         # step, no sync); the window is timed as a whole
@@ -657,6 +721,14 @@ def main():
                          "files via stack frames (T5 H1/H2 instrument). "
                          "Implies the torch profiler with with_stack=True "
                          "-- run timing arms WITHOUT this flag")
+    ap.add_argument("--verify-probe", type=int, default=None,
+                    help="PREREG-s1-acceptance: after prefill+warm, time "
+                         "R repeats of a (K+1)-row single-seq forward at "
+                         "~prompt-len past (chunked-median, eager -- an "
+                         "UPPER bound on verify cost; the S1 map uses it "
+                         "only where conservatism is sound). Writes "
+                         "verify_ms into the b1d-timed report and skips "
+                         "the T=1 loop")
     ap.add_argument("--ew-attr-out", default=None,
                     help="attribute the ELEMENTWISE device block to python "
                          "call sites via stack frames (F1 Stage A "
@@ -867,6 +939,16 @@ def main():
             # (t1/t1b/t5 G1; found by the B1 cycle). Capture at
             # generation time instead.
             self.gen_capture = {}
+            # PREREG-s1-acceptance: prompt ids, captured at BIND time
+            # (the scheduler hands bind() the prompt itself) for the
+            # same reason gen_capture exists -- release pops
+            # runner.tokens, so a report-time read gets nothing
+            # (Bugbot, e4b#239: the first draft did exactly that)
+            self.prompt_capture = {}
+
+        def bind(self, rid, slot, prompt):
+            self.prompt_capture[rid] = list(map(int, prompt))
+            return super().bind(rid, slot, prompt)
 
         def _amort_snap(self):
             if not states or states[0].amort is None:   # off / pipelined
@@ -1184,6 +1266,13 @@ def main():
         "generated_tokens": {str(r): list(map(int, t))
                              for r, t in
                              sorted(runner.gen_capture.items())},
+        # PREREG-s1-acceptance: the drafter matches against the FULL
+        # visible context. Captured at prefill time -- release pops
+        # runner.tokens, so a report-time read would KeyError or hand
+        # the drafter empty prompts (Bugbot, e4b#239)
+        "prompt_tokens": {str(r): runner.prompt_capture.get(r, [])[
+                              :a.prompt_len]
+                          for r in sorted(runner.gen_capture)},
         "decode_steps": n_steps,
         "decode_median_ms": {
             "step": step_ms, "forward_submission": fwd, "drain": drain,
