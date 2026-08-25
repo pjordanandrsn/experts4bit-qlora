@@ -1,4 +1,4 @@
-# RESULTS — S2-lite Stage A: gate PASSED, economics REFUTED-FOR-CELL
+# RESULTS — S2-lite Stage A: gate PASSED; the SINGLETON verify bound REFUTES the cell as measured; the grouped question is registered, not answered
 
 Measured 2026-08-25 under PREREG-s2lite (+ the capture amendments in
 this PR). Receipts in `receipts-s2/stageA/` (RTX 5090, e4b `1b483d1`
@@ -43,20 +43,47 @@ is right; what fails is the price.
    composing from the census gives ~16 ms (1.37×, ≈185 tok/s) as the
    optimistic ceiling for a device-grouped verify that does not exist.
 
-## Why this refutes the LANE, not just the cell
+## What this verdict adjudicates — and what it deliberately cannot
 
-The refutation is architectural: **sparse MoE at B=1 makes
-verification expensive in exactly the proportion that drafting is
-useful.** Each accepted token still pays its own experts' weight
-traffic — the thing speculation amortizes in dense models is the one
-thing an MoE does not share across tokens. Acceptance would need to
-grow faster than distinct-experts-per-window, and the measured curves
-move together (2.948 accept / 41.5 distinct at K=16 → 3.447 / 53.8 at
-K=32). The 425 goal does not survive this: even a floor-cost bespoke
-GEMV composed with a device-grouped verify lands near ~340-350 tok/s
-(bounds in the S1/S2 receipts), short of 425. **425 single-stream is
-REFUTED for this model on this hardware** under everything measured
-this campaign; the composed ceiling is ~350.
+The 47.71 ms number was measured with `FORCE_SINGLETON_GROUPS`,
+because the normal T>1 grouping path's `unique_consecutive` host-size
+sync cannot be captured. Singleton grouping executes one M=1 group
+per route assignment: it DISABLES expert-weight reuse across rows by
+construction. The verdict above therefore adjudicates the singleton
+bound — a valid, conservative UPPER bound on verify cost, refused
+under the registered map exactly as the map requires — and the bars
+are not moved or reinterpreted here.
+
+What it cannot do is price the best grouped verification path, and
+this cycle's own controlled data proves substantial reuse is
+available:
+
+- K=16 verify = 17 rows × top-8 = **136 route assignments over 41.5
+  distinct experts/layer = 3.28 assignments per loaded expert**;
+  K=32 = 264 over 53.8 = **4.91 per loaded expert**.
+- The controlled 136-row curve runs 1.47× a decode step's expert cost
+  at 8 distinct experts to 6.10× at 128 — cost tracks the
+  **distinct-expert union**, not token×expert invocations.
+
+So the correct statement of the concern is:
+
+> Verification can amortize expert weight traffic across rows routed
+> to the same expert. The measured concern is that the distinct-expert
+> union grows with the verification window, potentially faster than
+> useful accepted-token yield.
+
+The negative hypothesis remains live on the existing numbers: even
+with perfect grouping, K=16 touches 41.5/8 = **5.19×** ordinary
+decode's distinct experts for 2.948 accepted tokens/verify, and K=32
+touches 6.73× for 3.447 — the union may outgrow the yield. But that
+is a prediction, not a receipt. **PREREG-s3-grouped-verify** (fresh
+prereg, committed before any implementation) registers the direct
+test: a fully device-side, capture-safe grouped verification arm,
+compared three ways — singleton vs eager-grouped vs captured
+device-grouped — so the reuse-disabled artifact in 47.71 ms is
+quantified rather than inferred. **No statement about 425 tok/s is
+made until that grouped receipt exists**; the composed ceiling is
+recomputed then.
 
 ## What stands after S2
 
@@ -66,8 +93,7 @@ this campaign; the composed ceiling is ~350.
 - The prompt-lookup acceptance table (2.948–3.926 tokens/step) is
   real and paid for; it transfers to any architecture whose verify
   is cheap.
-- The remaining REGISTERED throughput program: the fusion tail
-  (~0.5–1 ms of the 7.41 ms step) and the bespoke loads-floor GEMV
-  (K5's fresh-prereg branch; K4 floor pair 12.4 µs/layer ⇒ GEMV
-  ~0.6 ms/step ⇒ step ~3.5 ms ⇒ **~280 tok/s**), which is now the
-  campaign's limit lane.
+- The remaining REGISTERED throughput program: S3 (the grouped
+  verify arm above), the fusion tail (~0.5–1 ms of the 7.41 ms
+  step), and the bespoke loads-floor GEMV (K6, registered; K4 floor
+  pair ⇒ step ~3.5 ms ⇒ ~280 tok/s trajectory).
