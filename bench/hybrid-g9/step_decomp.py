@@ -242,6 +242,69 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     torch.cuda.current_stream().wait_stream(side)
     torch.cuda.synchronize()
 
+    if a.verify_probe:
+        # S1 verify-cost probe: a (K+1)-row step for ONE sequence --
+        # the exact shape a speculative verify step would run. Content
+        # of the extra rows is irrelevant to timing; positions advance
+        # so the paged append stays legal, and the KV grows K+1 per
+        # rep (disclosed: past drifts upward across reps; the
+        # chunked MEDIAN is robust to the mild upward slope).
+        kk = int(a.verify_probe) + 1
+        v_ids = in_ids.expand(1, kk).contiguous()
+        v_pos = (pos.expand(1, kk)
+                 + torch.arange(kk, device=dev).view(1, kk)).contiguous()
+
+        def verify_step():
+            out = model(input_ids=v_ids, position_ids=v_pos,
+                        use_cache=False)
+            lg = out.logits[:, -1]
+            v_pos.add_(kk)
+            return lg
+
+        probe_mode = "decode"
+        try:
+            verify_step()
+            torch.cuda.synchronize()
+        except Exception as e:                     # noqa: BLE001
+            # the paged decode branch may be T=1-only; the prefill
+            # branch runs the same attention math over the same past,
+            # so it is the registered fallback shape -- recorded, so
+            # the receipt says which path priced the verify step
+            print(f"S1_VERIFY_PROBE decode-mode refused ({e}); "
+                  f"retrying via prefill mode", flush=True)
+            runner.ctx.mode = "prefill"
+            probe_mode = "prefill"
+            verify_step()
+            torch.cuda.synchronize()
+        for _ in range(7):
+            verify_step()
+        torch.cuda.synchronize()
+        spans = []
+        for _c in range(10):
+            e0 = torch.cuda.Event(enable_timing=True)
+            e1 = torch.cuda.Event(enable_timing=True)
+            e0.record()
+            for _r in range(4):
+                verify_step()
+            e1.record()
+            e1.synchronize()
+            spans.append(e0.elapsed_time(e1) / 4)
+        spans.sort()
+        set_context(prev)
+        rep = {"verify_probe_k": int(a.verify_probe),
+               "probe_mode": probe_mode,
+               "rows_per_step": kk,
+               "verify_ms": spans[len(spans) // 2],
+               "verify_ms_all_chunks": spans,
+               "past_at_start": int(v_pos.min().item()) - 8 * kk,
+               "basis": "eager chunked-median -- UPPER bound "
+                        "(PREREG-s1-acceptance)"}
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(rep, indent=1))
+        print(f"S1_VERIFY_PROBE k={a.verify_probe} rows={kk} "
+              f"verify_ms={rep['verify_ms']:.3f} out={a.out}",
+              flush=True)
+        return
     if a.b1d_timed:
         # stage C: tokens land in a device log (one tiny D2D copy per
         # step, no sync); the window is timed as a whole
@@ -657,6 +720,14 @@ def main():
                          "files via stack frames (T5 H1/H2 instrument). "
                          "Implies the torch profiler with with_stack=True "
                          "-- run timing arms WITHOUT this flag")
+    ap.add_argument("--verify-probe", type=int, default=None,
+                    help="PREREG-s1-acceptance: after prefill+warm, time "
+                         "R repeats of a (K+1)-row single-seq forward at "
+                         "~prompt-len past (chunked-median, eager -- an "
+                         "UPPER bound on verify cost; the S1 map uses it "
+                         "only where conservatism is sound). Writes "
+                         "verify_ms into the b1d-timed report and skips "
+                         "the T=1 loop")
     ap.add_argument("--ew-attr-out", default=None,
                     help="attribute the ELEMENTWISE device block to python "
                          "call sites via stack frames (F1 Stage A "
@@ -1184,6 +1255,12 @@ def main():
         "generated_tokens": {str(r): list(map(int, t))
                              for r, t in
                              sorted(runner.gen_capture.items())},
+        # PREREG-s1-acceptance: the drafter matches against the FULL
+        # visible context, so the trace receipt must carry the prompt
+        # ids, not only the continuation
+        "prompt_tokens": {str(r): list(map(int,
+                                           runner.tokens[r][:a.prompt_len]))
+                          for r in sorted(runner.gen_capture)},
         "decode_steps": n_steps,
         "decode_median_ms": {
             "step": step_ms, "forward_submission": fwd, "drain": drain,
