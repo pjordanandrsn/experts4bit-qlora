@@ -38,12 +38,36 @@ class TestRewind:
             assert kv._seen[layer][0] == 6
             assert int(kv.seq_lens[layer][0]) == 6
 
+    def test_rewind_under_graph_mode_drift(self):
+        """append_graph_t1 advances seq_lens ONLY -- _seen goes stale
+        under graph decoding by design. Rewind must judge forwardness by
+        the DEVICE length and then repair BOTH mirrors: with _seen=4 and
+        seq_lens=10, rewind(0, 7) is a legal rollback the old
+        host-mirror check would have refused (Bugbot, e4b#241)."""
+        kv = _kv(n_layers=1)
+        _append(kv, 0, 0, 4)
+        kv.seq_lens[0].narrow(0, 0, 1).fill_(10)   # graph-mode drift
+        assert kv.seen_device(0, 0) == 10 and kv._seen[0][0] == 4
+        kv.rewind(0, 7)
+        assert kv._seen[0][0] == 7
+        assert int(kv.seq_lens[0][0]) == 7
+
     def test_rewind_forward_refuses(self):
         kv = _kv()
         for layer in range(2):
             _append(kv, layer, 0, 4)
         with pytest.raises(ValueError, match="rewind forward"):
             kv.rewind(0, 9)
+
+    def test_rewind_forward_judged_by_device_length(self):
+        """Forwardness is relative to the device truth: seq_lens=10
+        means rewind(0, 9) is a rollback even while _seen reads 4."""
+        kv = _kv(n_layers=1)
+        _append(kv, 0, 0, 4)
+        kv.seq_lens[0].narrow(0, 0, 1).fill_(10)
+        kv.rewind(0, 9)                      # legal: 9 < 10 on device
+        with pytest.raises(ValueError, match="rewind forward"):
+            kv.rewind(0, 11)
 
     def test_rewind_then_append_overwrites_the_tail(self):
         """The whole point: after rewind, the next append lands at the

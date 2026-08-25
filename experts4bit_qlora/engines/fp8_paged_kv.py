@@ -451,16 +451,31 @@ class Fp8PagedKV:
             q, kf, vf, tbl, lens, n_kv_heads=self.H, head_dim=self.D,
             block_tokens=self.bt, k_groups=self.k_groups, **kw)
 
+    def seen_device(self, layer: int, seq: int) -> int:
+        """Authoritative token count for (layer, seq), read from DEVICE
+        state. ``_seen`` is the host mirror maintained by the eager
+        append paths; ``append_graph_t1`` deliberately advances only
+        ``seq_lens`` (its whole point is that a captured replay needs no
+        host state), so after any graph-mode decoding ``_seen`` is
+        STALE. Anything that must know the true length -- rewind, a
+        speculative base capture -- reads here and pays the sync
+        (Bugbot, e4b#241)."""
+        return int(self.seq_lens[layer, seq].item())
+
     def rewind(self, seq: int, to_tokens: int):
         """Roll a sequence back to ``to_tokens`` tokens across ALL
         layers (PREREG-s2lite): speculative verification appends the
         full K+1 window before reading, and rejected tokens must not be
         readable afterward. Reads are governed entirely by lengths --
         the stale bytes past the new length are unreachable -- so
-        rewind is a host-mirror update plus one device fill per layer,
-        with no data movement. Refuses to rewind forward."""
+        rewind is a length update with no data movement.
+
+        Both mirrors are set: ``seq_lens`` (what the kernel reads) and
+        ``_seen`` (what the eager append paths advance), so a rewind is
+        safe whichever append path runs next. The forward check uses the
+        DEVICE length, since ``_seen`` may be stale under graph mode."""
         for layer in range(self.L):
-            cur = self._seen[layer][seq]
+            cur = self.seen_device(layer, seq)
             if to_tokens > cur:
                 raise ValueError(f"rewind forward (layer {layer}: "
                                  f"{cur} -> {to_tokens})")

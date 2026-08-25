@@ -245,8 +245,22 @@ def _b1d_stage_a(a, model, runner, sched, kv):
 
     if a.s2_verify:
         kk = a.s2_k + 1
-        base_seen = kv._seen[0][slot]
+        # DEVICE length: warm ran through append_graph_t1, which
+        # advances seq_lens only -- _seen is stale here (Bugbot,
+        # e4b#241). Same reason base_tok is read from in_ids NOW
+        # rather than from the pre-warm token.
+        base_seen = kv.seen_device(0, slot)
         base_pos = int(pos.reshape(()).item())
+        base_tok = int(in_ids.reshape(()).item())
+        # capacity: the oracle runs kk + 4 steps and the verify step
+        # re-appends kk, so the window must fit twice over plus slack
+        room = cap_tokens - base_seen
+        if room < 2 * kk + 8:
+            raise SystemExit(
+                f"S2 window needs {2 * kk + 8} tokens of paged capacity "
+                f"but only {room} remain (cap {cap_tokens}, at "
+                f"{base_seen}) -- raise --gen-tokens/--prompt-len or "
+                f"lower --s2-k rather than silently overflowing")
         # ---- kk sequential greedy steps (the oracle window) plus 4
         # continuation steps (the post-rewind identity check's expected
         # value -- captured HERE, in the sequential world, before any
@@ -257,10 +271,13 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             seq_toks.append(int(in_ids.reshape(()).item()))
         torch.cuda.synchronize()
         cont_expected, seq_toks = seq_toks[kk:], seq_toks[:kk]
+        seq_end_seen = kv.seen_device(0, slot)
         # ---- rewind and run ONE verify step over the same window
         kv.rewind(slot, base_seen)
         torch.cuda.synchronize()
-        v_in = torch.tensor([[start_tok] + seq_toks[:-1]], device=dev)
+        # row 0 is fed the token the oracle window STARTED from, which
+        # is the post-warm token, not the pre-warm start_tok
+        v_in = torch.tensor([[base_tok] + seq_toks[:-1]], device=dev)
         v_pos = (torch.arange(kk, device=dev) + base_pos).view(1, kk)
         runner.ctx.mode = "verify"
         out = model(input_ids=v_in, position_ids=v_pos, use_cache=False)
@@ -280,6 +297,8 @@ def _b1d_stage_a(a, model, runner, sched, kv):
                 cont_a.append(int(in_ids.reshape(()).item()))
             cont_ok = cont_a == cont_expected
             rep = {"s2": "gate", "k": a.s2_k,
+                   "base_seen_device": base_seen,
+                   "seq_end_seen_device": seq_end_seen,
                    "sequential_tokens": seq_toks,
                    "verify_tokens": ver_toks,
                    "rows_matching": sum(match), "rows_total": kk,
