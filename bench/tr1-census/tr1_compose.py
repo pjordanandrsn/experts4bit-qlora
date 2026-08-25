@@ -10,6 +10,7 @@ absolute, N warmup steps dropped (recorded).
 
 import argparse
 import json
+import math
 import statistics
 import sys
 
@@ -27,7 +28,7 @@ def _shares(run):
         return None, f"only {len(steps)} steps after warmup drop"
     for i, s in enumerate(steps):
         ls = s.get("loss")
-        if ls is None or ls != ls or ls == float("inf"):
+        if ls is None or not math.isfinite(ls):
             return None, (f"step {WARMUP_DROP + i}: loss {ls!r} -- a "
                           "broken run's budget is not a budget")
     walls = [s["step_wall_ms"] for s in steps]
@@ -121,6 +122,11 @@ def _self_test():
     warm_nan["steps"][1]["loss"] = float("nan")
     ok, why = compose(warm_nan, _run())
     assert why is None, why
+    # -inf slipped the first gate (Bugbot retro-review, #253)
+    neg = _run()
+    neg["steps"][6]["loss"] = float("-inf")
+    _, why = compose(neg, _run())
+    assert why and "loss" in why, why
     # missing loss key refuses (an old-format receipt cannot certify)
     old_fmt = _run()
     del old_fmt["steps"][8]["loss"]
