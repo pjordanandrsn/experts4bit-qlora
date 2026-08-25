@@ -28,6 +28,14 @@ def _tokens(arm):
 def verdict(rep):
     b0a, b0b = rep.get("b0_a"), rep.get("b0_b")
     treat, name = rep.get("treatment"), rep.get("treatment_name", "B1")
+    # AMENDMENT-f1-stageB-b2: an arm may carry its own registered bars
+    # (B2: 9.6/10.5). They must come from the reg doc, never be computed
+    # from the data.
+    pass_ms = float(rep.get("pass_ms", PASS_MS))
+    partial_ms = float(rep.get("partial_ms", PARTIAL_MS))
+    if not (0 < pass_ms < partial_ms):
+        return ("REFUSE", f"nonsense bars pass={pass_ms} "
+                f"partial={partial_ms}")
     for label, arm in (("b0_a", b0a), ("b0_b", b0b), (name, treat)):
         if _step(arm) is None:
             return ("REFUSE", f"{label}: no step time in the arm")
@@ -62,17 +70,17 @@ def verdict(rep):
     st = _step(treat)
     base = min(sa, sb)
     gain = base - st
-    if st <= PASS_MS:
-        return ("PASS", f"{name} step {st:.2f} ms <= {PASS_MS} "
+    if st <= pass_ms:
+        return ("PASS", f"{name} step {st:.2f} ms <= {pass_ms} "
                 f"({1000/st:.1f} tok/s, {gain:.2f} ms removed)")
-    if st <= PARTIAL_MS:
+    if st <= partial_ms:
         if spread >= gain / 2:
             return ("REFUSE", f"PARTIAL range but A/A spread "
                     f"{spread:.2f} >= half the gain {gain:.2f}")
         return ("PARTIAL", f"{name} step {st:.2f} ms in "
-                f"({PASS_MS}, {PARTIAL_MS}] ({1000/st:.1f} tok/s, "
+                f"({pass_ms}, {partial_ms}] ({1000/st:.1f} tok/s, "
                 f"{gain:.2f} ms removed, A/A {spread:.2f})")
-    return ("REFUTED", f"{name} step {st:.2f} ms > {PARTIAL_MS} "
+    return ("REFUTED", f"{name} step {st:.2f} ms > {partial_ms} "
             f"({1000/st:.1f} tok/s) -- the block is not addressable "
             "by this mechanism")
 
@@ -111,6 +119,12 @@ def self_test():
         # PARTIAL with an A/A spread >= half the gain must refuse, not
         # report a gain the box cannot resolve
         (_fab(11.9, aa=1.0), "REFUSE"),
+        # B2-style per-arm bar overrides (AMENDMENT-f1-stageB-b2): the
+        # same 10.0 step passes default bars but only PARTIALs B2's
+        (dict(_fab(9.5), pass_ms=9.6, partial_ms=10.5), "PASS"),
+        (dict(_fab(10.0), pass_ms=9.6, partial_ms=10.5), "PARTIAL"),
+        (dict(_fab(10.62), pass_ms=9.6, partial_ms=10.5), "REFUTED"),
+        (dict(_fab(9.5), pass_ms=10.5, partial_ms=9.6), "REFUSE"),
     ]
     for rep, want in cases:
         got, why = verdict(rep)
@@ -119,7 +133,8 @@ def self_test():
     got, _ = verdict(_fab(11.0, aa=0.2))
     assert got == "PARTIAL", got
     print(f"self-test PASS ({len(cases)+1} cases: all four verdicts, "
-          "both boundaries, and every registered refusal)")
+          "both boundaries, per-arm bar overrides, and every "
+          "registered refusal)")
 
 
 def main():
