@@ -19,6 +19,7 @@ of base improvement.
 import argparse
 import importlib.util
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -66,6 +67,12 @@ def verdict(rep):
     launch_cut = lb / lh
 
     ev = rep["evals"]
+    for k in ("base_before", "base_after", "hyb_before", "hyb_after"):
+        val = ev.get(k)
+        if val is None or not math.isfinite(val):
+            return ("REFUSE", f"evals[{k}] = {val!r} -- non-finite "
+                    "eval; a diverged run cannot certify (the TR1 "
+                    "composer's finite-loss rule, applied to evals)")
     b_impr = ev["base_before"] - ev["base_after"]
     h_impr = ev["hyb_before"] - ev["hyb_after"]
     if b_impr <= 0:
@@ -158,6 +165,15 @@ def _self_test():
     out = v(_mk(evals={"base_before": 2.27, "base_after": 1.62,
                        "hyb_before": 2.00, "hyb_after": 1.65}))
     assert out[0] == "REFUSE" and "improvement" in out[1], out
+    # non-finite evals refuse regardless of direction (Bugbot, #258:
+    # NaN comparisons are False, so they slipped every gate)
+    for bad in (float("nan"), float("-inf"), float("inf")):
+        out = v(_mk(evals={"base_before": 2.27, "base_after": 1.62,
+                           "hyb_before": 2.27, "hyb_after": bad}))
+        assert out[0] == "REFUSE" and "non-finite" in out[1], (bad, out)
+    out = v(_mk(evals={"base_before": float("nan"), "base_after": 1.62,
+                       "hyb_before": 2.27, "hyb_after": 1.60}))
+    assert out[0] == "REFUSE" and "non-finite" in out[1], out
     # base didn't learn: frame undefined
     out = v(_mk(evals={"base_before": 1.62, "base_after": 1.62,
                        "hyb_before": 2.27, "hyb_after": 1.60}))
