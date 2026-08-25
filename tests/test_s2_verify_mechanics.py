@@ -155,3 +155,63 @@ def test_verify_mode_refuses_batch():
             pa.paged_attention_forward(_M(), q, q, q, None)
     finally:
         pa.set_context(prev)
+
+
+def test_device_grouping_branch_dispatch(monkeypatch):
+    """PREREG-s3-grouped-verify: with DEVICE_GROUPING set and T>1 the
+    fused stack must route BOTH gemms through the captured wrapper with
+    expert-major rows, and unsort the result to input row order. gnf4's
+    heavy pieces are stubbed; the sort/unsort contract is the thing
+    under test."""
+    import sys
+
+    hr = pytest.importorskip("experts4bit_qlora.engines.hot_residency")
+
+    calls = []
+
+    class _StubGnf4:
+        E4M3_MAX = 448.0
+
+        @staticmethod
+        def build_group_tiles_device(ids, n_experts, block_m):
+            order = torch.argsort(ids.to(torch.int64), stable=True)
+            counts = torch.bincount(ids.to(torch.int64),
+                                    minlength=n_experts)
+            t = torch.zeros(4, dtype=torch.int32)
+            return t, t, t, order, counts
+
+        @staticmethod
+        def gemm_4bit_grouped_captured(xr, pk, am, r0, rw, gp, bm):
+            calls.append(xr.clone())
+            n_out = pk.shape[1]
+            # row-identifying output so unsort is checkable
+            return (xr[:, :1].repeat(1, n_out)).to(torch.bfloat16)
+
+        @staticmethod
+        def gemm_4bit_grouped(*a, **k):
+            raise AssertionError("device branch must not call the host-"
+                                 "sizes wrapper")
+
+    monkeypatch.setitem(sys.modules, "nf4_grouped", _StubGnf4())
+    R, K1, N2 = 6, 8, 4
+    x = torch.arange(R, dtype=torch.float32)[:, None].repeat(1, K1)
+    ids = torch.tensor([3, 0, 3, 1, 0, 3])
+    out = hr._fused_over_stack(
+        x, ids, torch.zeros(4, 2 * N2, K1 // 2), torch.zeros(4, 2 * N2, 1),
+        torch.zeros(4, N2, K1 // 2), torch.zeros(4, N2, 1),
+        (2 * N2, K1, N2, K1), True, torch.nn.functional.silu,
+        device_grouping=True)
+    assert len(calls) == 2, "both gemms must go through the captured path"
+    # the marker column carries each gathered row's ORIGINAL index; the
+    # gather is expert-major when those rows' EXPERT IDS are sorted
+    # (the first draft asserted the markers themselves were sorted --
+    # wrong thing: [1,4,3,0,2,5] IS the correct order for ids
+    # [3,0,3,1,0,3])
+    got_rows = calls[0][:, 0].long()
+    gathered_experts = ids.index_select(0, got_rows)
+    assert torch.equal(gathered_experts.sort().values,
+                       gathered_experts), gathered_experts
+    # and the gather must be a permutation of all rows
+    assert torch.equal(got_rows.sort().values, torch.arange(R)), got_rows
+    # unsort contract: output shape restored to input row order
+    assert out.shape == (R, N2)

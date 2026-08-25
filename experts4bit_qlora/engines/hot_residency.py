@@ -40,11 +40,15 @@ import torch
 # step, where unique_consecutive's sync is illegal. Off by default --
 # grouped routing stays the eager/prefill path's choice.
 FORCE_SINGLETON_GROUPS = [False]
+# PREREG-s3-grouped-verify: capture-safe DEVICE grouping for T > 1 --
+# expert-weight reuse WITH a static, sync-free launch. Takes precedence
+# over FORCE_SINGLETON_GROUPS when both are set.
+DEVICE_GROUPING = [False]
 
 
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
                       act_fn, gptoss=None, clamp_limit=None,
-                      singleton_groups=False):
+                      singleton_groups=False, device_grouping=False):
     """Down-projection outputs for each (token,slot) row, computed on the device
     the packed stack lives on. ``local_ids`` index into the G-expert stack
     (``gu_p`` is ``[G, n1, k1//2]`` etc.). Returns ``[R, H]`` in the input row
@@ -69,7 +73,24 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
-    if singleton_groups:
+    if device_grouping:
+        # PREREG-s3-grouped-verify: expert-major grouping built entirely
+        # on device (gnf4 build_group_tiles_device -- exact-parity vs
+        # the host builder, CI-gated there), executed through the
+        # captured M-tile wrapper. Same math as the grouped path below,
+        # same sort/unsort contract (order feeds the shared tail);
+        # capture-legal because nothing round-trips to the host. Rows
+        # sharing an expert share its packed-weight read -- the reuse
+        # the singleton path deliberately forfeits.
+        from nf4_grouped import (build_group_tiles_device,
+                                 gemm_4bit_grouped_captured)
+        t_row0, t_rows, t_grp, order, _counts = build_group_tiles_device(
+            local_ids, gu_p.shape[0], 16)
+        sorted_ids = local_ids.index_select(0, order)
+        x_sorted = x_rows.index_select(0, order).contiguous()
+        sizes = None                      # the captured path has no host sizes
+        eids = None
+    elif singleton_groups:
         # AMENDMENT-b1d-capture: the grouping step's unique_consecutive
         # SYNCS to produce host-side group sizes -- structurally illegal
         # inside CUDA-graph capture. One row per group instead: sizes is
@@ -103,7 +124,14 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                                                 return_counts=True)
         sizes = counts.tolist()
         eids = uniq.tolist()
-    gu = gemm_4bit_grouped(x_sorted, gu_p, gu_a, sizes, eids)
+    if device_grouping:
+        def _mm(xr, pk, am):
+            return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
+                                              t_grp, 16)
+    else:
+        def _mm(xr, pk, am):
+            return gemm_4bit_grouped(xr, pk, am, sizes, eids)
+    gu = _mm(x_sorted, gu_p, gu_a)
     if gptoss is not None:
         gu_bias, dn_bias, alpha, limit = gptoss
         gu = gu + gu_bias.index_select(0, sorted_ids).to(gu.dtype)  # per-expert bias by local id
@@ -111,7 +139,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         gate = gate.clamp(max=limit)
         up = up.clamp(min=-limit, max=limit)
         h = (up + 1) * (gate * torch.sigmoid(gate * alpha))
-        dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
+        dn = _mm(h.contiguous(), dn_p, dn_a)
         dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
     elif has_gate:
         gate, up = gu.chunk(2, dim=-1)
@@ -130,10 +158,10 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             h = (act_fn(gate) * up).to(gu.dtype)
         else:
             h = act_fn(gate) * up
-        dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
+        dn = _mm(h.contiguous(), dn_p, dn_a)
     else:
         h = act_fn(gu)
-        dn = gemm_4bit_grouped(h.contiguous(), dn_p, dn_a, sizes, eids)
+        dn = _mm(h.contiguous(), dn_p, dn_a)
     if order is None:                  # singleton path: input order kept
         return dn
     out = torch.empty_like(dn)
@@ -412,7 +440,10 @@ class _HotResidency:
                                self.has_gate, self.act_fn, gptoss=gptoss,
                                clamp_limit=self.clamp_limit,
                                singleton_groups=(T == 1 or
-                                                 FORCE_SINGLETON_GROUPS[0]))
+                                                 (FORCE_SINGLETON_GROUPS[0]
+                                                  and not DEVICE_GROUPING[0])),
+                               device_grouping=(DEVICE_GROUPING[0]
+                                                and T > 1))
         w = top_k_weights.reshape(-1).to(torch.float32)
         out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)

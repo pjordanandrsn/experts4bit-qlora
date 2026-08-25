@@ -283,6 +283,46 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         out = model(input_ids=v_in, position_ids=v_pos, use_cache=False)
         ver_toks = out.logits[0].argmax(-1).tolist()
         torch.cuda.synchronize()
+        if a.s2_verify == "parity":
+            # S3 gate 2: numeric parity, eager-grouped vs
+            # device-grouped, identical routing and identical draft.
+            # Both run EAGER here (parity is about the grouping math,
+            # not capture); the sequential oracle above already fixed
+            # the window.
+            from experts4bit_qlora.engines import hot_residency as _hr
+            outs = {}
+            for mode in ("eager", "device"):
+                kv.rewind(slot, base_seen)
+                torch.cuda.synchronize()
+                _hr.DEVICE_GROUPING[0] = (mode == "device")
+                runner.ctx.mode = "verify"
+                o = model(input_ids=v_in, position_ids=v_pos,
+                          use_cache=False)
+                outs[mode] = (o.logits[0].float().cpu(),
+                              o.logits[0].argmax(-1).cpu())
+                torch.cuda.synchronize()
+            _hr.DEVICE_GROUPING[0] = False
+            set_context(prev)
+            lg_e, tk_e = outs["eager"]
+            lg_d, tk_d = outs["device"]
+            maxd = (lg_e - lg_d).abs().max().item()
+            same = bool(torch.equal(tk_e, tk_d))
+            rep = {"s2": "parity", "k": a.s2_k,
+                   "max_abs_logit_delta": maxd,
+                   "verify_tokens_identical": same,
+                   "eager_tokens": tk_e.tolist(),
+                   "device_tokens": tk_d.tolist(),
+                   "pass": same,
+                   "note": "identical greedy verify tokens REQUIRED; "
+                           "logit delta recorded (grouped-vs-grouped "
+                           "fp order differs across tile shapes, so "
+                           "bitwise logits are not claimed)"}
+            Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(a.out).write_text(json.dumps(rep, indent=1))
+            print(f"S3_PARITY k={a.s2_k} max|d|={maxd:.3e} "
+                  f"tokens_identical={same} PASS={same} out={a.out}",
+                  flush=True)
+            return
         if a.s2_verify == "gate":
             match = [int(x) == int(y) for x, y in zip(ver_toks, seq_toks)]
             # after rewinding the REJECTED tail (here: keep all), the
@@ -314,6 +354,56 @@ def _b1d_stage_a(a, model, runner, sched, kv):
                   f"PASS={rep['gate_pass']} out={a.out}", flush=True)
             set_context(prev)
             return
+        if a.s2_verify == "time" and a.moe_grouping == "eager":
+            # the eager-grouped arm of the S3 three-way: this grouping
+            # CANNOT capture (unique_consecutive host-size sync), so it
+            # is timed as an eager loop -- disclosed basis, comparable
+            # as the no-capture grouped reference (Bugbot, e4b#245: the
+            # first draft documented this loop and then captured
+            # anyway, so the arm failed instead of producing a time;
+            # the second draft referenced _hr before importing it and
+            # died at cleanup AFTER timing, never writing the receipt)
+            from experts4bit_qlora.engines import hot_residency as _hr
+            _hr.FORCE_SINGLETON_GROUPS[0] = False
+            _hr.DEVICE_GROUPING[0] = False
+            kv.rewind(slot, base_seen)
+            torch.cuda.synchronize()
+            for _ in range(8):
+                kv.rewind_nosync(slot, base_seen)
+                out = model(input_ids=v_in, position_ids=v_pos,
+                            use_cache=False)
+                _ = out.logits[0].argmax(-1)
+            torch.cuda.synchronize()
+            spans = []
+            for _c in range(10):
+                e0 = torch.cuda.Event(enable_timing=True)
+                e1 = torch.cuda.Event(enable_timing=True)
+                e0.record()
+                for _r in range(4):
+                    kv.rewind_nosync(slot, base_seen)
+                    out = model(input_ids=v_in, position_ids=v_pos,
+                                use_cache=False)
+                    _ = out.logits[0].argmax(-1)
+                e1.record()
+                e1.synchronize()
+                spans.append(e0.elapsed_time(e1) / 4)
+            spans.sort()
+            _hr.FORCE_SINGLETON_GROUPS[0] = False
+            _hr.DEVICE_GROUPING[0] = False
+            set_context(prev)
+            rep = {"s2": "time", "k": a.s2_k, "rows_per_step": kk,
+                   "moe_grouping": "eager",
+                   "timing_basis": "eager loop (not capturable; "
+                                   "includes host submission)",
+                   "verify_graph_ms": spans[len(spans) // 2],
+                   "verify_ms_all_chunks": spans,
+                   "past_tokens": base_seen}
+            Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(a.out).write_text(json.dumps(rep, indent=1))
+            print(f"S2_TIME k={a.s2_k} rows={kk} grouping=eager "
+                  f"verify_eager_ms={rep['verify_graph_ms']:.3f} "
+                  f"out={a.out}", flush=True)
+            return
         # ---- time: graph the verify step at FIXED position.
         # The documented capture recipe (b1d): warm the EXACT call on a
         # SIDE stream first -- the T=K+1 shapes trigger triton JIT
@@ -324,13 +414,15 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         # arm must warm its own).
         side = torch.cuda.Stream()
         side.wait_stream(torch.cuda.current_stream())
-        # a captured T>1 step cannot call unique_consecutive (host-size
-        # sync), so the MoE side runs singleton groups for the capture,
-        # the warm that precedes it, and the replays -- identical
-        # arithmetic, higher expert weight traffic (disclosed in the
-        # receipt; PREREG-s2lite)
+        # grouping per PREREG-s3-grouped-verify: singleton keeps the
+        # S2 bound's semantics; device enables the capture-safe grouped
+        # path; eager leaves the normal unique_consecutive path in
+        # place, which is NOT capturable -- its timing runs eagerly
         from experts4bit_qlora.engines import hot_residency as _hr
-        _hr.FORCE_SINGLETON_GROUPS[0] = True
+        if a.moe_grouping == "device":
+            _hr.DEVICE_GROUPING[0] = True
+        elif a.moe_grouping == "singleton":
+            _hr.FORCE_SINGLETON_GROUPS[0] = True
         # one CHECKED rewind establishes that base_seen is not forward
         # of the true length; everything after uses the sync-free
         # variant, since .item() is illegal under capture
@@ -364,13 +456,11 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             spans.append(e0.elapsed_time(e1) / 8)
         spans.sort()
         _hr.FORCE_SINGLETON_GROUPS[0] = False
+        _hr.DEVICE_GROUPING[0] = False
         set_context(prev)
         rep = {"s2": "time", "k": a.s2_k, "rows_per_step": kk,
-               "moe_grouping": "singleton (capture-legal); grouped "
-                               "routing would share expert weight reads "
-                               "across rows hitting the same expert, so "
-                               "this is an UPPER bound on a "
-                               "device-grouped verify",
+               "moe_grouping": a.moe_grouping,
+               "timing_basis": "graph replay",
                "verify_graph_ms": spans[len(spans) // 2],
                "verify_ms_all_chunks": spans,
                "past_tokens": base_seen,
@@ -865,7 +955,8 @@ def main():
                          "files via stack frames (T5 H1/H2 instrument). "
                          "Implies the torch profiler with with_stack=True "
                          "-- run timing arms WITHOUT this flag")
-    ap.add_argument("--s2-verify", choices=["gate", "time"], default=None,
+    ap.add_argument("--s2-verify", choices=["gate", "time", "parity"],
+                    default=None,
                     help="PREREG-s2lite Stage A. 'gate': bitwise identity "
                          "-- 17 sequential T=1 greedy steps vs ONE "
                          "verify-mode step fed those same tokens as the "
@@ -876,6 +967,16 @@ def main():
                          "addresses bake -- legal for same-position "
                          "replay; timing-only) and report verify_ms vs "
                          "the anchor")
+    ap.add_argument("--moe-grouping",
+                    choices=["singleton", "eager", "device"],
+                    default="singleton",
+                    help="PREREG-s3-grouped-verify: MoE grouping for the "
+                         "--s2-verify arms. singleton = one M=1 group per "
+                         "route (reuse disabled; the S2 bound); eager = "
+                         "normal unique_consecutive grouping (NOT "
+                         "capturable -- its time arm runs an eager timed "
+                         "loop); device = capture-safe device grouping "
+                         "(gnf4 build_group_tiles_device)")
     ap.add_argument("--s2-k", type=int, default=16,
                     help="draft window for --s2-verify (K; the step runs "
                          "K+1 rows)")
