@@ -583,6 +583,7 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             "window_ms": total_ms,
             "compile_layers": bool(a.compile_layers),
             "compile_mode": a.compile_mode if a.compile_layers else None,
+            "fuse_qkv": bool(a.fuse_qkv),
             "dynamo_frames_before": _frames_before,
             "dynamo_frames_after": _frames_after,
             "recompiles_in_window": _recompiles,
@@ -901,6 +902,11 @@ def main():
     ap.add_argument("--compile-mode", default="reduce-overhead",
                     help="torch.compile mode for --compile-layers; drop "
                          "to 'default' if cudagraphs misbehave (recorded)")
+    ap.add_argument("--fuse-qkv", action="store_true",
+                    help="PREREG-f2-tail T2: fuse q/k/v projections into "
+                         "one matmul per attention module (bitwise "
+                         "row-identical); applied before --compile-layers "
+                         "so dynamo traces the fused forward")
     ap.add_argument("--kv-batched", action="store_true",
                     help="accepted for command compatibility -- batched "
                          "KV append is the DEFAULT since its cert "
@@ -1142,6 +1148,14 @@ def main():
             f"expert modules -- the region would silently under-count"
         model.lm_head.forward = _wrap_region(
             model.lm_head.forward, "lmhead", "e4b::lmhead")
+    if a.fuse_qkv:
+        from experts4bit_qlora.engines.qkv_fuse import fuse_qkv
+        n_f = fuse_qkv(model)
+        if n_f == 0:
+            raise SystemExit("--fuse-qkv matched no Qwen3MoeAttention "
+                             "modules -- refusing a vacuous arm")
+        print(f"fused q/k/v projections on {n_f} attention modules "
+              f"(PREREG-f2-tail T2)", flush=True)
     if a.compile_layers:
         import torch._dynamo as dynamo
         from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -1519,6 +1533,7 @@ def main():
         "model": a.model, "batch": a.batch, "layers": L,
         "compile_layers": bool(a.compile_layers),
         "compile_mode": a.compile_mode if a.compile_layers else None,
+        "fuse_qkv": bool(a.fuse_qkv),
         "warmup_rows_dropped": n_dropped,
         # the cross-arm void gate: greedy continuations must be
         # token-identical between eager and compiled arms
