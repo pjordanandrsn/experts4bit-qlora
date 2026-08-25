@@ -86,3 +86,22 @@ def test_composer_self_test_runs():
          "--self-test"], capture_output=True, text=True)
     assert out.returncode == 0, out.stdout + out.stderr
     assert "self-test: OK" in out.stdout
+
+
+def test_tr2_train_arena_wiring():
+    """PREREG-tr2 wiring guards, source-level (importing the trainer
+    pulls the model stack): engagement happens BEFORE the before-eval
+    (both evals and training must run the same path or the quality
+    gate mixes paths), refuses a partial engagement, and is env-gated
+    inert."""
+    from pathlib import Path
+
+    import experts4bit_qlora
+    src = (Path(experts4bit_qlora.__file__).parent / "train.py").read_text()
+    assert 'os.environ.get("TRAIN_ARENA")' in src
+    assert "refusing a partial treatment" in src
+    # ordering: engagement text appears before the before-eval call
+    assert src.index("enable_hybrid_train(") < src.index(
+        "eval_before = eval_loss"), "hybrid must engage before eval"
+    # all-VRAM manifest shape
+    assert '"vram_frac": 1.0' in src

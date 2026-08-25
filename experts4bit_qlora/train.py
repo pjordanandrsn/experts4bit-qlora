@@ -292,6 +292,30 @@ def main():
     data = encode_alpaca(tok, f"train[:{N_TRAIN}]")
     eval_data = encode_alpaca(tok, f"train[{N_TRAIN}:{N_TRAIN + 64}]")
 
+    _train_arena = os.environ.get("TRAIN_ARENA")
+    if _train_arena:
+        # PREREG-tr2-grouped-train: route expert fwd/dgrad through the
+        # gnf4 grouped kernels (one launch over a layer's routed rows)
+        # instead of the per-expert bnb chain. All-VRAM placement; the
+        # wiring must engage fully or refuse -- never silently train
+        # the bnb path the caller opted out of.
+        from .engines.hot_residency import target_modules
+        from .engines.hybrid_train import enable_hybrid_train
+        _mods = target_modules(model)
+        _L, _E = len(_mods), _mods[0].num_experts
+        _man = {"schema": "e4b-placement/1",
+                "tiers": {"vram": [[la, e] for la in range(_L)
+                                   for e in range(_E)],
+                          "dram": [], "nvme": []},
+                "masses": {"vram_frac": 1.0, "dram_frac": 0.0,
+                           "nvme_frac": 0.0}}
+        _n = enable_hybrid_train(model, _train_arena, _man,
+                                 hot_rows=max(_E, 128))
+        if _n != _L:
+            raise SystemExit(f"TRAIN_ARENA engaged {_n}/{_L} modules "
+                             "-- refusing a partial treatment")
+        log(f"[tr2] hybrid-train engaged on {_n} modules "
+            f"(grouped fwd/dgrad, all-VRAM)")
     eval_before = eval_loss(model, eval_data)
     log(f"held-out eval loss BEFORE: {eval_before:.4f}")
 
