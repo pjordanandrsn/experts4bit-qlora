@@ -32,9 +32,17 @@ def propose(ctx, k, n_min, n_max=3):
     return []
 
 
-def degeneracy(trace, min_distinct=30, gram=8, max_rep=6):
+def degeneracy(trace, min_distinct=30, gram=8, max_rep=6, prompt=None,
+               min_prompt=64):
     """The check-traces law: a repetition-looping or low-entropy trace
-    would hand the drafter free matches and fabricate acceptance."""
+    would hand the drafter free matches and fabricate acceptance. The
+    prompt floor is the MIRROR failure: an empty or truncated prompt
+    (e.g. a capture hook that never fired) starves the drafter of
+    context and silently UNDER-measures acceptance -- vacuous in the
+    other direction (Bugbot, e4b#239: the first prompt capture read a
+    popped map and would have handed the drafter nothing)."""
+    if prompt is not None and len(prompt) < min_prompt:
+        return f"prompt has {len(prompt)} tokens < {min_prompt}"
     if len(set(trace)) < min_distinct:
         return f"only {len(set(trace))} distinct tokens"
     grams = Counter(tuple(trace[i:i + gram])
@@ -80,7 +88,7 @@ def main():
     traces = json.loads(open(a.traces_json).read())
     kept, dropped = [], []
     for i, tr in enumerate(traces):
-        why = degeneracy(tr["tokens"])
+        why = degeneracy(tr["tokens"], prompt=tr.get("prompt", []))
         (dropped if why else kept).append((i, tr, why) if why else tr)
     rep = {"n_traces_in": len(traces), "n_traces_kept": len(kept),
            "dropped": [{"idx": i, "why": w} for i, _t, w in dropped],
@@ -139,8 +147,13 @@ def self_test():
     assert degeneracy(healthy) is None, degeneracy(healthy)
     # low-distinct refusal fires independently of looping
     assert degeneracy(list(range(10)) * 13) is not None
+    # empty/short prompt refuses (the under-measurement mirror)
+    assert degeneracy(healthy, prompt=[]) is not None
+    assert degeneracy(healthy, prompt=list(range(63))) is not None
+    assert degeneracy(healthy, prompt=list(range(512))) is None
     print("self-test PASS (drafter recency/floor/history, acceptance "
-          "scoring incl. tail cap, both degeneracy modes)")
+          "scoring incl. tail cap, degeneracy incl. the empty-prompt "
+          "under-measurement mirror)")
 
 
 if __name__ == "__main__":

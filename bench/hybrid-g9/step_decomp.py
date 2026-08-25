@@ -939,6 +939,16 @@ def main():
             # (t1/t1b/t5 G1; found by the B1 cycle). Capture at
             # generation time instead.
             self.gen_capture = {}
+            # PREREG-s1-acceptance: prompt ids, captured at BIND time
+            # (the scheduler hands bind() the prompt itself) for the
+            # same reason gen_capture exists -- release pops
+            # runner.tokens, so a report-time read gets nothing
+            # (Bugbot, e4b#239: the first draft did exactly that)
+            self.prompt_capture = {}
+
+        def bind(self, rid, slot, prompt):
+            self.prompt_capture[rid] = list(map(int, prompt))
+            return super().bind(rid, slot, prompt)
 
         def _amort_snap(self):
             if not states or states[0].amort is None:   # off / pipelined
@@ -1257,10 +1267,11 @@ def main():
                              for r, t in
                              sorted(runner.gen_capture.items())},
         # PREREG-s1-acceptance: the drafter matches against the FULL
-        # visible context, so the trace receipt must carry the prompt
-        # ids, not only the continuation
-        "prompt_tokens": {str(r): list(map(int,
-                                           runner.tokens[r][:a.prompt_len]))
+        # visible context. Captured at prefill time -- release pops
+        # runner.tokens, so a report-time read would KeyError or hand
+        # the drafter empty prompts (Bugbot, e4b#239)
+        "prompt_tokens": {str(r): runner.prompt_capture.get(r, [])[
+                              :a.prompt_len]
                           for r in sorted(runner.gen_capture)},
         "decode_steps": n_steps,
         "decode_median_ms": {
