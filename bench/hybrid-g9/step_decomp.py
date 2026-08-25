@@ -234,21 +234,25 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         # stage C: tokens land in a device log (one tiny D2D copy per
         # step, no sync); the window is timed as a whole
         tok_log = torch.zeros(n_steps, dtype=torch.long, device=dev)
-        # PREREG-f1-stageB refusal 4: a dynamo recompile inside the
-        # timed window would time compilation, not the fused kernels.
-        _frames_before = _dynamo_frame_count()
+        _frames_before = None
         if a.b1d_loop == "graph":
             torch.cuda.empty_cache()
             g = torch.cuda.CUDAGraph()
             with torch.cuda.graph(g, capture_error_mode="thread_local"):
                 one_step()
             torch.cuda.synchronize()
+            # PREREG-f1-stageB refusal 4 counts recompiles inside the
+            # TIMED window. Capture is not timed and traces one_step for
+            # the first time, so sampling before it would charge the arm
+            # for compilation that t0 never sees (Bugbot, e4b#234).
+            _frames_before = _dynamo_frame_count()
             t0 = time.perf_counter_ns()
             for i in range(n_steps):
                 g.replay()
                 tok_log[i].copy_(in_ids.reshape(()))
             torch.cuda.synchronize()
         else:
+            _frames_before = _dynamo_frame_count()
             t0 = time.perf_counter_ns()
             for i in range(n_steps):
                 one_step()

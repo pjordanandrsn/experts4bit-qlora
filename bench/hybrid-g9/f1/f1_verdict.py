@@ -42,9 +42,16 @@ def verdict(rep):
     if not t0 or not tt:
         return ("REFUSE", "missing generated tokens -- a vacuous "
                 "identity check cannot certify a fusion")
-    n = min(len(t0), len(tt))
-    if n == 0 or t0[:n] != tt[:n]:
-        first = next((i for i in range(n) if t0[i] != tt[i]), None)
+    # FULL-generation identity, not a shared prefix: a treatment that
+    # stops early (or runs long) while matching what it did emit is a
+    # different continuation, and prefix-only comparison would pass it
+    # (Bugbot, e4b#234).
+    if len(t0) != len(tt):
+        return ("REFUSE", f"token count differs: B0 emitted {len(t0)}, "
+                f"treatment emitted {len(tt)} -- full-generation "
+                "identity is the gate")
+    if t0 != tt:
+        first = next(i for i in range(len(t0)) if t0[i] != tt[i])
         return ("REFUSE", f"token identity broken at index {first} "
                 f"-- a fusion that moves a token is refused, not disclosed")
     # 4. no silent recompile inside the timed window
@@ -96,6 +103,10 @@ def self_test():
         (_fab(9.8, aa=2.0), "REFUSE"),           # A/A too wide
         (_fab(9.8, treat_toks=[1, 2, 9, 4]), "REFUSE"),   # token moved
         (_fab(9.8, toks=[]), "REFUSE"),          # vacuous identity
+        # matching prefix but SHORTER continuation: prefix-only
+        # comparison would have passed this
+        (_fab(9.8, treat_toks=[1, 2, 3]), "REFUSE"),
+        (_fab(9.8, treat_toks=[1, 2, 3, 4, 5]), "REFUSE"),  # longer
         (_fab(9.8, rc=3), "REFUSE"),             # recompiled in window
         # PARTIAL with an A/A spread >= half the gain must refuse, not
         # report a gain the box cannot resolve
