@@ -1,0 +1,17 @@
+SMOKE-START 08:26:31
+B1D_TIMED_GRAPH steps=31 step=13.46ms compile=None recompiles=0 out=/root/out/f1b_smoke.json
+SMOKE-OK 08:26:58
+ARM-START b0_a 08:26:58
+B1D_TIMED_GRAPH steps=127 step=13.48ms compile=None recompiles=0 out=/root/out/f1b_b0_a.json
+ARM-OK b0_a 08:27:26
+ARM-START b0_b 08:27:26
+B1D_TIMED_GRAPH steps=127 step=13.48ms compile=None recompiles=0 out=/root/out/f1b_b0_b.json
+ARM-OK b0_b 08:27:54
+ARM-START b1 08:27:54
+B1D_TIMED_GRAPH steps=127 step=10.62ms compile=default recompiles=0 out=/root/out/f1b_b1.json
+ARM-OK b1 08:28:29
+ASSEMBLED b0_a=13.48ms b0_b=13.48ms treatment=10.62ms
+self-test PASS (13 cases: all four verdicts, both boundaries, and every registered refusal)
+F1 STAGE B VERDICT: PARTIAL
+  B1 (compile-layers default) step 10.62 ms in (10.5, 12.0] (94.2 tok/s, 2.87 ms removed, A/A 0.00)
+F1B-DONE 08:28:30
