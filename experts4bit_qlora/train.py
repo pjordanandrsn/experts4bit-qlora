@@ -332,11 +332,18 @@ def main():
         # schedule shape + table format as the serving census, so
         # bench/hybrid-g9/f1/step_budget.py parses it unchanged.
         from torch.profiler import ProfilerActivity, profile, schedule
+        # active=4 and NO record_shapes: a 30B training step is
+        # millions of events, and the 8-step shape-recorded window
+        # drove the census container into its 170 GiB cgroup cap
+        # (SIGKILL at step ~10, peak == limit). The kernel-budget
+        # table needs names and times, not shapes. Run the profiler
+        # in its OWN short run, never inside the A/A census pair --
+        # its overhead perturbs the phases it is measuring.
         _tprof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            schedule=schedule(skip_first=3, wait=0, warmup=1, active=8,
+            schedule=schedule(skip_first=3, wait=0, warmup=1, active=4,
                               repeat=1),
-            record_shapes=True)
+            record_shapes=False)
         _tprof.__enter__()
     from .engines.offload import offload_stats_report, reset_offload_stats
 
@@ -430,21 +437,25 @@ def main():
         _tprof.__exit__(None, None, None)
         _tbl = _tprof.key_averages().table(sort_by="cuda_time_total",
                                            row_limit=80)
-        _active = max(0, min(8, _tprof_steps[0] - 3 - 1))
+        _active = max(0, min(4, _tprof_steps[0] - 3 - 1))
         _hdr = (f"profiled training steps: {_tprof_steps[0]} "
-                f"(active window: {_active}/8)\n")
-        if _active < 8:
+                f"(active window: {_active}/4)\n")
+        if _active < 4:
             _hdr += ("WARNING: active window INCOMPLETE -- this table "
                      "under-samples and must not be cited as the "
                      "attribution\n")
         with open(_prof_out, "w") as _f:
             _f.write(_hdr + _tbl)
-        log(f"[tr1-census] wrote {_prof_out} (active={_active}/8)")
+        log(f"[tr1-census] wrote {_prof_out} (active={_active}/4)")
     if _clock:
         out_path = os.environ.get("TR1_CENSUS_OUT", "tr1_census.json")
         _clock.write(out_path, {
             "model": MODEL, "seq": SEQ, "steps": STEPS,
             "grad_accum": GRAD_ACCUM, "token_budget": TOKEN_BUDGET,
+            # the OOM backoff halves the LIVE budget; the env value
+            # alone cannot explain an A/A phase drift between runs
+            # that settled at different effective budgets
+            "token_budget_effective": budget,
             "offload": bool(OFFLOAD_EXPERTS),
             "torch": torch.__version__,
         })

@@ -61,6 +61,13 @@ def compose(run_a, run_b):
         if d > AA_POINTS:
             return None, (f"A/A drift on {p}: {d:.1f} points "
                           f"(> {AA_POINTS}) -- shares not stable")
+    eff_a = run_a.get("meta", {}).get("token_budget_effective")
+    eff_b = run_b.get("meta", {}).get("token_budget_effective")
+    if eff_a is not None and eff_b is not None and eff_a != eff_b:
+        return None, (f"effective token budgets differ: A={eff_a} "
+                      f"B={eff_b} (OOM backoff landed differently) -- "
+                      "phase shares are not comparable; re-run with "
+                      "TOKEN_BUDGET pinned to the smaller value")
     return {
         "anchor_step_ms": min(a["median_step_ms"], b["median_step_ms"]),
         "shares_pct": {p: (a["shares_pct"][p] + b["shares_pct"][p]) / 2
@@ -119,6 +126,15 @@ def _self_test():
     del old_fmt["steps"][8]["loss"]
     _, why = compose(old_fmt, _run())
     assert why and "loss" in why, why
+    # mismatched EFFECTIVE budgets refuse; matching or absent pass
+    ra, rb = _run(), _run()
+    ra["meta"]["token_budget_effective"] = 1024
+    rb["meta"]["token_budget_effective"] = 2048
+    _, why = compose(ra, rb)
+    assert why and "budgets differ" in why, why
+    rb["meta"]["token_budget_effective"] = 1024
+    ok, why = compose(ra, rb)
+    assert why is None, why
     # warmup rows are genuinely dropped: poison the first 3 steps of an
     # otherwise-good run; compose must still pass
     poisoned = _run()
