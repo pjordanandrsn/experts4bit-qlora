@@ -1,0 +1,39 @@
+ARM-START a0_a 12:11:28
+B1D_TIMED_GRAPH steps=127 step=7.41ms compile=default recompiles=0 out=/root/out/s1_a0_a.json
+ARM-OK a0_a 12:12:28
+ARM-START a0_b 12:12:28
+B1D_TIMED_GRAPH steps=127 step=7.41ms compile=default recompiles=0 out=/root/out/s1_a0_b.json
+ARM-OK a0_b 12:13:20
+ARM-START vp4 12:13:20
+S1_VERIFY_PROBE k=4 rows=5 verify_ms=67.626 past=552..752 out=/root/out/s1_vp4.json
+ARM-OK vp4 12:14:14
+ARM-START vp8 12:14:14
+S1_VERIFY_PROBE k=8 rows=9 verify_ms=67.820 past=584..944 out=/root/out/s1_vp8.json
+ARM-OK vp8 12:15:07
+ARM-START vp16 12:15:07
+S1_VERIFY_PROBE k=16 rows=17 verify_ms=70.154 past=648..1328 out=/root/out/s1_vp16.json
+ARM-OK vp16 12:16:01
+ARM-START tr0 12:16:01
+ARM-OK tr0 12:17:20
+ARM-START tr1 12:17:20
+ARM-OK tr1 12:18:23
+ARM-START tr2 12:18:23
+ARM-OK tr2 12:19:26
+ARM-START tr3 12:19:26
+ARM-OK tr3 12:20:30
+TRACES 32 rows, lens [128]
+S1SIM traces=30/32
+  n1_k4: windows=3840 tokens/step=1.955
+  n1_k8: windows=3840 tokens/step=2.388
+  n1_k16: windows=3840 tokens/step=2.948
+  n2_k4: windows=3840 tokens/step=1.819
+  n2_k8: windows=3840 tokens/step=2.233
+  n2_k16: windows=3840 tokens/step=2.786
+  n3_k4: windows=3840 tokens/step=1.681
+  n3_k8: windows=3840 tokens/step=2.069
+  n3_k16: windows=3840 tokens/step=2.602
+COMPOSED anchor=7.406 (A/A 0.006) verify={'4': 67.62635040283203, '8': 67.82038116455078, '16': 70.1540756225586}
+self-test PASS (10 cases: GO incl. boundary, REFUTED on the optimistic side, MARGINAL between, and every refusal)
+S1 VERDICT: MARGINAL
+  best conservative 0.31x (cell n1_k16), best optimistic 2.95x -- register S2-lite for the single best cell only
+S1-DONE 12:20:32

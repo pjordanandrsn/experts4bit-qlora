@@ -1,0 +1,21 @@
+{
+ "verify_probe_k": 4,
+ "probe_path": "prefill-continuation over staged past",
+ "rows_per_step": 5,
+ "verify_ms": 67.62635040283203,
+ "verify_ms_all_chunks": [
+  67.1999282836914,
+  67.20655822753906,
+  67.22932434082031,
+  67.40992736816406,
+  67.58209228515625,
+  67.62635040283203,
+  67.82461547851562,
+  67.92047119140625,
+  68.75985717773438,
+  68.76979064941406
+ ],
+ "past_at_timing_start": 552,
+ "past_at_timing_end": 752,
+ "basis": "eager chunked-median over an EXECUTABLE verify path -- upper bound on best-case S2 verify (PREREG-s1-acceptance)"
+}
