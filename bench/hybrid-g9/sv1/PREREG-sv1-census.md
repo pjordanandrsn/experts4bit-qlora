@@ -1,8 +1,9 @@
 # PREREG — SV1: current-stack decode census + dot-pad×F2 composition
 
 Registered 2026-08-25, before measurement. Target claim under test
-(Jordan): >200 tok/s single-stream on the reference class. Arithmetic
-frame: 200 tok/s = 5.00 ms/step; certified points today are 7.16 ms
+(Jordan; raised from 200 to **275** before any SV1 measurement):
+>275 tok/s single-stream on the reference class. Arithmetic frame:
+275 tok/s = 3.64 ms/step; certified points today are 7.16 ms
 (0.15.1/0.21.0 defaults, from RESULTS-f2-tail's ratio on the anchor)
 and ~6.59 ms with `GNF4_GEMV_DOTPAD=1` (K6-B, measured PRE-F2 — the
 composition has NO receipt and is not claimed).
@@ -23,11 +24,17 @@ composition has NO receipt and is not claimed).
    budget is stale by two treatments. Deliverable = the budget JSON
    naming the remaining slices (attn-proj launches, router, memcpy,
    elementwise, MoE GEMV) with shares.
-3. **A written >200 verdict frame**: from the fresh budget, the sum
-   of addressable slices vs the 1.6–2.2 ms gap. SV2+ preregs claim
-   individual slices only after this names them. No speed bars beyond
-   the composition cert's — the census cannot fail a bar, only
-   REFUSE on its own gates (profiler coverage, A/A).
+3. **A written >275 verdict frame**: from the fresh budget, (a) the
+   serving BUSY FLOOR — Self-CUDA time per graph replay, the number
+   that decides whether 275 is gap/launch elimination (the training
+   census's story again) or genuine compute-cutting — and (b) the
+   sum of addressable slices vs the ~2.9–3.0 ms gap from the knob
+   point. Pre-committed reading: if the busy floor is > 3.64 ms, 275
+   is REFUTED-AS-COMPOSED for this stack and the frame must say so;
+   if below, SV2+ preregs claim the gap slices the census names.
+   No speed bars beyond the composition cert's — the census cannot
+   fail a bar, only REFUSE on its own gates (profiler coverage,
+   A/A).
 
 ## Arms (piggyback on the TR2 box after its arms, same health gate)
 
