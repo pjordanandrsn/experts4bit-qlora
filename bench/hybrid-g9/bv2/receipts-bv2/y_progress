@@ -1,0 +1,62 @@
+ARM-START k6b_off_a 17:37:56
+B1D_TIMED_GRAPH steps=127 step=7.35ms compile=default recompiles=0 out=/root/out/y_k6b_off_a.json
+ARM-OK k6b_off_a 17:38:38
+ARM-START k6b_off_b 17:38:38
+B1D_TIMED_GRAPH steps=127 step=7.36ms compile=default recompiles=0 out=/root/out/y_k6b_off_b.json
+ARM-OK k6b_off_b 17:39:14
+ARM-START k6b_on 17:39:14
+B1D_TIMED_GRAPH steps=127 step=6.59ms compile=default recompiles=0 out=/root/out/y_k6b_on.json
+ARM-OK k6b_on 17:39:49
+K6B COMPOSED off=7.35/7.36 on=6.59
+self-test PASS (11 cases: all outcomes, both ratio boundaries, the divergence floor, and every refusal)
+K6-B VERDICT: PARTIAL
+  step ratio 0.896 in (0.85, 0.95]; first divergence at step NONE of 127, agreement 127/127 -- knob ships OFF, available
+ARM-START bv2_b1_a 17:39:49
+ARM-OK bv2_b1_a 17:40:31
+ARM-START bv2_b1_b 17:40:31
+ARM-OK bv2_b1_b 17:41:14
+ARM-START bv2_b2_a 17:41:14
+ARM-OK bv2_b2_a 17:42:20
+ARM-START bv2_b2_b 17:42:20
+ARM-OK bv2_b2_b 17:43:05
+ARM-START bv2_b4_a 17:43:05
+ARM-OK bv2_b4_a 17:43:57
+ARM-START bv2_b4_b 17:43:57
+ARM-OK bv2_b4_b 17:44:43
+ARM-START bv2_b8_a 17:44:43
+ARM-OK bv2_b8_a 17:45:44
+ARM-START bv2_b8_b 17:45:44
+ARM-OK bv2_b8_b 17:46:36
+ARM-START bv2_b16_a 17:46:36
+ARM-OK bv2_b16_a 17:47:35
+ARM-START bv2_b16_b 17:47:35
+ARM-OK bv2_b16_b 17:48:33
+BV2 COMPOSED {'b1': 59.07, 'b2': 76.1, 'b4': 83.07, 'b8': 107.77, 'b16': 129.37}
+self-test PASS (8 cases: certify line, stop-claiming line, and every refusal incl. cross-B identity)
+BV2: CURVE
+  system throughput tops at 123.7 tok/s (B=16) -- below the 425 line; the campaign reports the measured maximum and stops claiming
+  B= 1:  59.07 ms/step    16.9 tok/s aggregate
+  B= 2:  75.47 ms/step    26.5 tok/s aggregate
+  B= 4:  83.07 ms/step    48.2 tok/s aggregate
+  B= 8: 107.77 ms/step    74.2 tok/s aggregate
+  B=16: 129.37 ms/step   123.7 tok/s aggregate
+ARM-START census 17:48:33
+ARM-OK census 17:50:14
+device budget: 10.81 ms/step over 12 active steps (coverage 100.2% of 10.79 ms truth)
+  matmul         5.00 ms      339 launches/step   46.2%
+  elementwise    4.80 ms     4006 launches/step   44.4%
+  other          0.55 ms      292 launches/step    5.1%
+  router         0.31 ms       96 launches/step    2.9%
+  memcpy         0.15 ms      196 launches/step    1.4%
+  top rows:
+    std::enable_if<!(false), void>::type internal::gemvx     1922.6 us x241  [matmul]
+    _gemv_nf4_grouped_splitk                                 1802.2 us x48  [matmul]
+    void at::native::vectorized_elementwise_kernel<4, at     1632.1 us x1835  [elementwise]
+    _gemv_nf4_grouped                                        1268.5 us x48  [matmul]
+    void at::native::unrolled_elementwise_kernel<at::nat      791.1 us x530  [elementwise]
+    void at::native::elementwise_kernel<128, 4, at::nati      741.8 us x480  [elementwise]
+    void at::native::reduce_kernel<512, 1, at::native::R      479.3 us x338  [elementwise]
+    void at::native::elementwise_kernel<128, 2, at::nati      413.0 us x385  [elementwise]
+    _fp8_combine                                              281.9 us x48  [other]
+    void at::native::(anonymous namespace)::indexSelectS      251.7 us x145  [elementwise]
+Y-DONE 17:50:14

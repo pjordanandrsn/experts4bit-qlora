@@ -1,0 +1,220 @@
+{
+ "active_steps": 12,
+ "total_device_us_per_step": 10805.063750000001,
+ "device_us_per_step_truth": 10787.583333333334,
+ "coverage": 1.0016204200817298,
+ "coverage_ok": true,
+ "by_kind": {
+  "matmul": {
+   "us_per_step": 4995.3175,
+   "calls_per_step": 339.0
+  },
+  "elementwise": {
+   "us_per_step": 4802.474000000001,
+   "calls_per_step": 4006.0
+  },
+  "other": {
+   "us_per_step": 545.8245000000002,
+   "calls_per_step": 291.5833333333333
+  },
+  "router": {
+   "us_per_step": 309.66666666666663,
+   "calls_per_step": 96.0
+  },
+  "memcpy": {
+   "us_per_step": 151.78108333333333,
+   "calls_per_step": 196.0
+  }
+ },
+ "rows": [
+  {
+   "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+   "us_per_step": 1922.5833333333333,
+   "calls_per_step": 241.0,
+   "merged_rows": 2,
+   "kind": "matmul"
+  },
+  {
+   "name": "_gemv_nf4_grouped_splitk",
+   "us_per_step": 1802.25,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "void at::native::vectorized_elementwise_kernel<4, at...",
+   "us_per_step": 1632.0774999999999,
+   "calls_per_step": 1835.0,
+   "merged_rows": 16,
+   "kind": "elementwise"
+  },
+  {
+   "name": "_gemv_nf4_grouped",
+   "us_per_step": 1268.5,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "void at::native::unrolled_elementwise_kernel<at::nat...",
+   "us_per_step": 791.0833333333333,
+   "calls_per_step": 530.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 4, at::nati...",
+   "us_per_step": 741.8333333333333,
+   "calls_per_step": 480.0,
+   "merged_rows": 3,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::reduce_kernel<512, 1, at::native::R...",
+   "us_per_step": 479.2823333333333,
+   "calls_per_step": 338.0,
+   "merged_rows": 4,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 2, at::nati...",
+   "us_per_step": 413.0,
+   "calls_per_step": 385.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "_fp8_combine",
+   "us_per_step": 281.9166666666667,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::indexSelectS...",
+   "us_per_step": 251.68041666666664,
+   "calls_per_step": 145.0,
+   "merged_rows": 3,
+   "kind": "elementwise"
+  },
+  {
+   "name": "_fp8_paged_decode_split",
+   "us_per_step": 247.5,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::reduce_kernel<128, 4, at::native::R...",
+   "us_per_step": 238.66666666666666,
+   "calls_per_step": 96.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::sbtopk::gatherTopK<float, unsigned ...",
+   "us_per_step": 168.66666666666666,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "router"
+  },
+  {
+   "name": "Memcpy DtoD (Device -> Device)",
+   "us_per_step": 150.33333333333334,
+   "calls_per_step": 192.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::CatArrayBatc...",
+   "us_per_step": 147.256,
+   "calls_per_step": 97.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::bitonicSortKVInPlace<-2, -1, 16, 16...",
+   "us_per_step": 141.0,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "router"
+  },
+  {
+   "name": "void at::native::indexFuncSmallIndex<int, long, unsi...",
+   "us_per_step": 53.788833333333336,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void (anonymous namespace)::softmax_warp_forward<flo...",
+   "us_per_step": 50.907000000000004,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "cudaStreamIsCapturing",
+   "us_per_step": 9.818666666666667,
+   "calls_per_step": 99.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "cudaEventRecordWithFlags",
+   "us_per_step": 6.317166666666666,
+   "calls_per_step": 96.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::vectorized_elementwise_kernel<2, at...",
+   "us_per_step": 2.8985833333333333,
+   "calls_per_step": 4.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "_native::bmm_triton_0",
+   "us_per_step": 0.9920833333333333,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "_bmm_outer_product_kernel",
+   "us_per_step": 0.9920833333333333,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "Memset (Device)",
+   "us_per_step": 0.5839166666666666,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  },
+  {
+   "name": "Memcpy HtoD (Pageable -> Device)",
+   "us_per_step": 0.5305833333333333,
+   "calls_per_step": 2.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  },
+  {
+   "name": "Memcpy DtoH (Device -> Pageable)",
+   "us_per_step": 0.33325,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  },
+  {
+   "name": "Buffer Flush",
+   "us_per_step": 0.27199999999999996,
+   "calls_per_step": 0.5833333333333334,
+   "merged_rows": 1,
+   "kind": "other"
+  }
+ ]
+}
