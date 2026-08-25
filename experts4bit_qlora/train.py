@@ -339,9 +339,14 @@ def main():
         # table needs names and times, not shapes. Run the profiler
         # in its OWN short run, never inside the A/A census pair --
         # its overhead perturbs the phases it is measuring.
+        # CUDA-only and active=2: even names-only CPU+CUDA at
+        # active=4 was OOM-killed at the 170 GiB cgroup cap during
+        # key_averages() AFTER training finished (p2). The kernel
+        # budget needs device times; host op events are the bulk of
+        # the volume.
         _tprof = profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            schedule=schedule(skip_first=3, wait=0, warmup=1, active=4,
+            activities=[ProfilerActivity.CUDA],
+            schedule=schedule(skip_first=3, wait=0, warmup=1, active=2,
                               repeat=1),
             record_shapes=False)
         _tprof.__enter__()
@@ -437,16 +442,16 @@ def main():
         _tprof.__exit__(None, None, None)
         _tbl = _tprof.key_averages().table(sort_by="cuda_time_total",
                                            row_limit=80)
-        _active = max(0, min(4, _tprof_steps[0] - 3 - 1))
+        _active = max(0, min(2, _tprof_steps[0] - 3 - 1))
         _hdr = (f"profiled training steps: {_tprof_steps[0]} "
-                f"(active window: {_active}/4)\n")
-        if _active < 4:
+                f"(active window: {_active}/2)\n")
+        if _active < 2:
             _hdr += ("WARNING: active window INCOMPLETE -- this table "
                      "under-samples and must not be cited as the "
                      "attribution\n")
         with open(_prof_out, "w") as _f:
             _f.write(_hdr + _tbl)
-        log(f"[tr1-census] wrote {_prof_out} (active={_active}/4)")
+        log(f"[tr1-census] wrote {_prof_out} (active={_active}/2)")
     if _clock:
         out_path = os.environ.get("TR1_CENSUS_OUT", "tr1_census.json")
         _clock.write(out_path, {
