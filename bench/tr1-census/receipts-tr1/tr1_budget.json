@@ -1,0 +1,45 @@
+{
+ "anchor_step_ms": 51679.70364700159,
+ "shares_pct": {
+  "data": 0.0390753341562227,
+  "forward": 33.55939400763873,
+  "backward": 66.3405867392267,
+  "loss_sync": 0.0068401627170501,
+  "optim": 0.05410375626131653
+ },
+ "a": {
+  "median_step_ms": 52034.010129005765,
+  "shares_pct": {
+   "data": 0.04107123583083883,
+   "forward": 33.55392696542871,
+   "backward": 66.34168241937175,
+   "loss_sync": 0.007102567412671094,
+   "optim": 0.05621681195603948
+  },
+  "steps_used": 17,
+  "closure_gap": 3.813874713900579e-06
+ },
+ "b": {
+  "median_step_ms": 51679.70364700159,
+  "shares_pct": {
+   "data": 0.03707943248160656,
+   "forward": 33.56486104984875,
+   "backward": 66.33949105908162,
+   "loss_sync": 0.006577758021429105,
+   "optim": 0.051990700566593565
+  },
+  "steps_used": 17,
+  "closure_gap": 5.3433934567095395e-06
+ },
+ "meta": {
+  "model": "/root/qwen3-30b",
+  "seq": 192,
+  "steps": 20,
+  "grad_accum": 4,
+  "token_budget": 1024,
+  "token_budget_effective": 1024,
+  "offload": false,
+  "torch": "2.13.0+cu130"
+ },
+ "warmup_dropped": 3
+}

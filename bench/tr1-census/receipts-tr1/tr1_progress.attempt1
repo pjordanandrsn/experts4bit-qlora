@@ -1,0 +1,4 @@
+CENSUS-START a 20:25:04 extra=[TR1_PROFILE_OUT=/root/out/tr1_kernels.txt]
+CENSUS-FAIL a
+CENSUS-FAIL-END a
+TR1-ABORT (non-OOM failure)

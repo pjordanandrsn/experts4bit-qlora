@@ -1,0 +1,35 @@
+PINNED-RERUN budget=1024 21:05:48
+5d4f251 TR1: record the effective token budget; composer refuses a mismatch (#254)
+CENSUS-START a2 21:05:49 extra=[]
+[21:17:30]   step 10/20  loss 1.221  ema 1.821  (53.2s/step, 58 tok/s)
+[21:26:09]   step 20/20  loss 1.209  ema 1.408  (52.5s/step, 59 tok/s)
+[21:26:09] training done in 1050s | peak GPU mem: 24.54 GB (offload=off)
+[21:26:09] [tr1-census] wrote /root/out/tr1_a2.json (20 steps)
+CENSUS-OK a2 21:28:16
+CENSUS-START b2 21:28:16 extra=[]
+[21:39:38]   step 10/20  loss 1.221  ema 1.821  (52.8s/step, 58 tok/s)
+[21:48:19]   step 20/20  loss 1.209  ema 1.408  (52.4s/step, 59 tok/s)
+[21:48:19] training done in 1049s | peak GPU mem: 24.54 GB (offload=off)
+[21:48:19] [tr1-census] wrote /root/out/tr1_b2.json (20 steps)
+CENSUS-OK b2 21:50:25
+CENSUS-START p2 21:50:25 extra=[TR1_PROFILE_OUT=/root/out/tr1_kernels.txt STEPS=10]
+CENSUS-FAIL p2
+CENSUS-FAIL-END p2
+PROFILE-RUN-FAILED (recorded; budget composes without it)
+tr1_compose self-test: OK
+TR1 CENSUS: REFUSE
+run A: not steady: wall spread 7926.4 ms >= 10% of median 52034.0
+Traceback (most recent call last):
+  File "/root/e4b/bench/hybrid-g9/f1/step_budget.py", line 287, in <module>
+    main()
+  File "/root/e4b/bench/hybrid-g9/f1/step_budget.py", line 260, in main
+    rep = budget(*parse(a.kernels_txt))
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/e4b/bench/hybrid-g9/f1/step_budget.py", line 85, in parse
+    text = open(path).read()
+           ^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/root/out/tr1_kernels.txt'
+KERNEL-BUDGET-COVERAGE-REFUSED (recorded)
+TR1-DONE 22:23:04
+f4c2b4e TR1 amendments: trend-test steadiness + per-step A/A; profiler capacity (#256)
+CENSUS-START p3 22:37:14

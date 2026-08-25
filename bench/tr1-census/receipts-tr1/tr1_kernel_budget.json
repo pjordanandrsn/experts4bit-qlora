@@ -1,0 +1,262 @@
+{
+ "active_steps": 2,
+ "total_device_us_per_step": 5553111.5,
+ "device_us_per_step_truth": 5651500.0,
+ "coverage": 0.9825907281252765,
+ "coverage_ok": true,
+ "by_kind": {
+  "other": {
+   "us_per_step": 967931.0,
+   "calls_per_step": 436444.5
+  },
+  "elementwise": {
+   "us_per_step": 2093573.5,
+   "calls_per_step": 1383460.0
+  },
+  "matmul": {
+   "us_per_step": 2064789.5,
+   "calls_per_step": 465249.5
+  },
+  "memcpy": {
+   "us_per_step": 260152.5,
+   "calls_per_step": 593238.0
+  },
+  "router": {
+   "us_per_step": 166665.0,
+   "calls_per_step": 42263.0
+  }
+ },
+ "rows": [
+  {
+   "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_...",
+   "us_per_step": 1300116.0,
+   "calls_per_step": 374840.0,
+   "merged_rows": 15,
+   "kind": "matmul"
+  },
+  {
+   "name": "void at::native::vectorized_elementwise_kernel<4, at...",
+   "us_per_step": 790936.5,
+   "calls_per_step": 589189.0,
+   "merged_rows": 7,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s1681...",
+   "us_per_step": 603462.5,
+   "calls_per_step": 45857.5,
+   "merged_rows": 11,
+   "kind": "matmul"
+  },
+  {
+   "name": "void kDequantizeBlockwise<__nv_bfloat16, 512, 64, 8,...",
+   "us_per_step": 444313.5,
+   "calls_per_step": 126789.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 4, at::nati...",
+   "us_per_step": 398578.5,
+   "calls_per_step": 192204.5,
+   "merged_rows": 4,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::vectorized_elementwise_kernel<2, at...",
+   "us_per_step": 185972.0,
+   "calls_per_step": 168589.5,
+   "merged_rows": 4,
+   "kind": "elementwise"
+  },
+  {
+   "name": "Memcpy DtoH (Device -> Pinned)",
+   "us_per_step": 185928.0,
+   "calls_per_step": 507556.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  },
+  {
+   "name": "void at_cuda_detail::cub::detail::radix_sort::Device...",
+   "us_per_step": 166665.0,
+   "calls_per_step": 42263.0,
+   "merged_rows": 1,
+   "kind": "router"
+  },
+  {
+   "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv...",
+   "us_per_step": 156285.0,
+   "calls_per_step": 111511.5,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at_cuda_detail::cub::detail::select::DeviceSele...",
+   "us_per_step": 145997.0,
+   "calls_per_step": 42263.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::unrolled_elementwise_kernel<at::nat...",
+   "us_per_step": 128186.5,
+   "calls_per_step": 66945.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at_cuda_detail::cub::detail::reduce::DeviceRedu...",
+   "us_per_step": 118449.5,
+   "calls_per_step": 84526.0,
+   "merged_rows": 2,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::vectorized_gather_kernel<16, long>(...",
+   "us_per_step": 80075.0,
+   "calls_per_step": 55693.5,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 2, at::nati...",
+   "us_per_step": 79819.0,
+   "calls_per_step": 44975.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::write_indice...",
+   "us_per_step": 78970.5,
+   "calls_per_step": 42263.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::index_elementwise_kernel<128, 4, at...",
+   "us_per_step": 78418.0,
+   "calls_per_step": 43944.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "Memcpy DtoD (Device -> Device)",
+   "us_per_step": 74224.5,
+   "calls_per_step": 85682.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  },
+  {
+   "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_s1616...",
+   "us_per_step": 70275.0,
+   "calls_per_step": 26540.5,
+   "merged_rows": 2,
+   "kind": "matmul"
+  },
+  {
+   "name": "void (anonymous namespace)::indexing_backward_kernel...",
+   "us_per_step": 68672.5,
+   "calls_per_step": 42263.0,
+   "merged_rows": 2,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::reduce_kernel<512, 1, at::native::R...",
+   "us_per_step": 58534.0,
+   "calls_per_step": 22671.5,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::indexFuncLargeIndex<float, long, un...",
+   "us_per_step": 51693.5,
+   "calls_per_step": 30086.5,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void cublasLt::splitKreduce_kernel<32, 16, int, floa...",
+   "us_per_step": 36992.5,
+   "calls_per_step": 31144.5,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::indexFuncSmallIndex<float, long, un...",
+   "us_per_step": 35720.0,
+   "calls_per_step": 11984.5,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+   "us_per_step": 35088.0,
+   "calls_per_step": 10086.0,
+   "merged_rows": 4,
+   "kind": "matmul"
+  },
+  {
+   "name": "void at_cuda_detail::cub::detail::scan::DeviceCompac...",
+   "us_per_step": 31453.0,
+   "calls_per_step": 42647.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void (anonymous namespace)::elementwise_kernel_with_...",
+   "us_per_step": 29904.5,
+   "calls_per_step": 42283.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::CatArrayBatc...",
+   "us_per_step": 27068.5,
+   "calls_per_step": 21899.5,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::indexSelectS...",
+   "us_per_step": 23958.5,
+   "calls_per_step": 6024.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "fmha_cutlassF_bf16_aligned_64x128_rf_sm80(PyTorchMem...",
+   "us_per_step": 18025.5,
+   "calls_per_step": 384.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "fmha_cutlassB_bf16_aligned_64x64_k128_sm80(PyTorchMe...",
+   "us_per_step": 17658.5,
+   "calls_per_step": 168.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "void cutlass::Kernel2<cutlass_80_tensorop_s16816gemm...",
+   "us_per_step": 13615.0,
+   "calls_per_step": 4011.5,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::cunn_SoftMax...",
+   "us_per_step": 11506.5,
+   "calls_per_step": 8.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "std::enable_if<true, void>::type internal::gemvx::ke...",
+   "us_per_step": 6549.0,
+   "calls_per_step": 3362.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  }
+ ]
+}
