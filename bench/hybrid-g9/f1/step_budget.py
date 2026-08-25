@@ -41,12 +41,20 @@ NON_KERNEL = ("aten::", "e4b::", "ProfilerStep", "cudaLaunch",
               "cuLaunchKernel", "Activity Buffer", "cudaMemcpy",
               "cudaStreamSynchronize", "cudaDeviceSynchronize",
               "cudaFree", "cudaMalloc", "Runtime Trigger")
+# Tokens must be lowercase (classify lowercases) AND short enough to
+# survive the profiler's name clipping -- `CatArrayBatc...` does not
+# contain "catarraybatched", so match on "catarray".
 ELEMENTWISE = ("elementwise_kernel", "unrolled_elementwise",
                "vectorized_elementwise", "reduce_kernel", "softmax",
-               "CatArrayBatched", "indexSelect", "indexFunc",
+               "catarray", "indexselect", "indexfunc",
                "copy_device_to_device")
 MATMUL = ("gemv", "gemm", "mm", "sm80", "sm90", "sm100", "cutlass",
           "ampere", "hopper", "blackwell", "nf4")
+assert all(k == k.lower() and len(k) <= 22
+           for k in ELEMENTWISE + MATMUL), (
+    "classify() lowercases the kernel name, so a mixed-case token can "
+    "never match, and a token longer than the profiler's clip width can "
+    "never match a truncated row (Bugbot, e4b#230)")
 
 
 def _us(tok):
@@ -87,7 +95,14 @@ def parse(path):
         raise SystemExit("no 'Self CUDA time total' footer -- cannot "
                          "verify coverage, refusing to report a budget")
     cuda_total_us = _us(mt.group(1).replace(" ", ""))
-    rows, seen = [], set()
+    # AGGREGATE by printed label, never dedup by it. The profiler CLIPS
+    # long kernel names, so distinct instantiations can print the same
+    # truncated label -- this table has 13 separate
+    # `vectorized_elementwise_kernel<4, at...` rows. A first-wins `seen`
+    # set dropped 22 of 39 rows here and reported 7.06 ms/step against a
+    # 12.55 ms truth, which then read as "the table is row-limited"
+    # rather than "the parser is lossy" (Bugbot, e4b#230).
+    agg = {}
     for line in text.splitlines():
         if REGION_RE.match(line):
             continue                      # region wall, not a kernel
@@ -102,15 +117,17 @@ def parse(path):
         # nested level (it read 23.6 ms/step against a 13.3 ms truth).
         name, self_cuda, calls = m.group(1).strip(), _us(m.group(7)), \
             int(m.group(11))
-        if self_cuda <= 0 or name in seen:   # zero-self dispatcher rows
+        if self_cuda <= 0:                   # zero-self dispatcher rows
             continue
-        seen.add(name)
         if not is_kernel(name):              # op view -- would double-count
             continue
-        rows.append({"name": name, "us_per_step": self_cuda / steps,
-                     "calls_per_step": calls / steps,
-                     "kind": classify(name)})
-    return steps, rows, cuda_total_us
+        r = agg.setdefault(name, {"name": name, "us_per_step": 0.0,
+                                  "calls_per_step": 0.0, "merged_rows": 0,
+                                  "kind": classify(name)})
+        r["us_per_step"] += self_cuda / steps
+        r["calls_per_step"] += calls / steps
+        r["merged_rows"] += 1
+    return steps, list(agg.values()), cuda_total_us
 
 
 def budget(steps, rows, cuda_total_us):
@@ -169,29 +186,50 @@ def self_test():
         "   0.00%       0.000us         0.00%       0.000us       "
         "0.000us      20.000ms         1.40%      21.000ms       "
         "3.650us           500\n"
+        # SAME truncated label as the row above it: distinct kernel
+        # instantiations clipped to one printed name must be SUMMED, not
+        # deduped (Bugbot e4b#230). Without aggregation this row's 10 ms
+        # vanishes and coverage reads 0.89 instead of 1.0.
+        "void at::native::elementwise_kernel<128, 4, at::nati...      "
+        "   0.00%       0.000us         0.00%       0.000us       "
+        "0.000us      10.000ms        10.42%      70.000ms       "
+        "1.177us          5000\n"
+        # mixed-case kernel name: classify() lowercases, so the token
+        # table must be lowercase or this lands in `other`.
+        "void at::native::(anonymous namespace)::CatArrayBatc...      "
+        "   0.00%       0.000us         0.00%       0.000us       "
+        "0.000us       5.000ms         1.00%       6.000ms       "
+        "1.000us           100\n"
         "         cuLaunchKernelEx         0.10%       1.000ms         "
         "0.10%       1.000ms       1.000us       5.000ms         0.01%  "
         "     5.000ms       0.100us          1000\n")
 
     steps, rows, tot = parse(w(hdr + body + "Self CUDA time total: "
-                               "80.000ms\n"))
+                               "95.000ms\n"))
     assert steps == 10, steps
     names = {r["name"] for r in rows}
     assert not any(n.startswith(("e4b::", "aten::")) for n in names), names
     assert not any("cuLaunchKernel" in n for n in names), names
     b = budget(steps, rows, tot)
-    # kernel view only: gemv 50 + elementwise 10 + gatherTopK 20 = 80 ms
-    # over 10 steps = 8000 us/step, and coverage is exactly 1.0.
+    # kernel view only, duplicates summed: gemv 50 + elementwise
+    # (10 + 10 clipped-duplicate) + CatArray 5 + gatherTopK 20 = 95 ms
+    # over 10 steps = 9500 us/step, coverage exactly 1.0.
     assert abs(b["by_kind"]["matmul"]["us_per_step"] - 5000.0) < 1e-6, \
         b["by_kind"]
-    assert abs(b["by_kind"]["elementwise"]["us_per_step"] - 1000.0) < 1e-6
+    assert abs(b["by_kind"]["elementwise"]["us_per_step"] - 2500.0) < 1e-6, \
+        b["by_kind"]["elementwise"]
     assert abs(b["by_kind"]["router"]["us_per_step"] - 2000.0) < 1e-6
-    assert abs(b["total_device_us_per_step"] - 8000.0) < 1e-6
+    assert "other" not in b["by_kind"], b["by_kind"]
+    ew = [r for r in rows if "elementwise_kernel<128, 4" in r["name"]][0]
+    assert ew["merged_rows"] == 2 and \
+        abs(ew["calls_per_step"] - 1000.0) < 1e-9, ew
+    assert abs(b["total_device_us_per_step"] - 9500.0) < 1e-6, \
+        b["total_device_us_per_step"]
     assert b["coverage_ok"] and abs(b["coverage"] - 1.0) < 1e-9, b["coverage"]
 
-    # a row-limited table must REFUSE, not publish a partial budget
+    # a genuinely incomplete table must REFUSE, not publish a partial budget
     steps2, rows2, tot2 = parse(w(hdr + body
-                                  + "Self CUDA time total: 160.000ms\n"))
+                                  + "Self CUDA time total: 190.000ms\n"))
     b2 = budget(steps2, rows2, tot2)
     assert not b2["coverage_ok"] and abs(b2["coverage"] - 0.5) < 1e-9, \
         b2["coverage"]
@@ -204,8 +242,8 @@ def self_test():
     else:
         raise AssertionError("missing footer must refuse")
     print("self-test PASS (region exclusion, op-vs-kernel view, column 7 "
-          "not 9, runtime rows, unit scaling, coverage gate, footer "
-          "refusal)")
+          "not 9, clipped-label aggregation, lowercase classifier tokens, "
+          "runtime rows, unit scaling, coverage gate, footer refusal)")
 
 
 def main():
