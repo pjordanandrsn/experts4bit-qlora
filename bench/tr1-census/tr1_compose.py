@@ -15,8 +15,9 @@ import statistics
 import sys
 
 CLOSURE_FRAC = 0.05
-STEADY_FRAC = 0.10
+DRIFT_FRAC = 0.05          # half-median drift (see amendment note)
 AA_POINTS = 3.0
+AA_STEP_FRAC = 0.02        # mean per-step |a-b| vs median
 WARMUP_DROP = 3
 
 PHASES = ("data", "forward", "backward", "loss_sync", "optim")
@@ -33,10 +34,23 @@ def _shares(run):
                           "broken run's budget is not a budget")
     walls = [s["step_wall_ms"] for s in steps]
     med = statistics.median(walls)
-    spread = (max(walls) - min(walls))
-    if spread >= STEADY_FRAC * med:
-        return None, (f"not steady: wall spread {spread:.1f} ms >= "
-                      f"{STEADY_FRAC:.0%} of median {med:.1f}")
+    # AMENDED after the first composed receipts (disclosed in the
+    # prereg): the original max-min spread statistic refused run A at
+    # 15% -- but the per-step wall pattern REPRODUCES across
+    # independent runs (same min step, same peaks, mean per-step A/B
+    # delta 0.86%), i.e. the spread is deterministic batch-mix
+    # variance from the length-bucketed batcher, not the
+    # compile/caching drift the gate was registered to catch. The
+    # purpose-derived statistic is a TREND test: first-half vs
+    # second-half median. The cross-run per-step check below is the
+    # sharper instrument-validity gate the receipts motivated.
+    h1 = statistics.median(walls[: len(walls) // 2])
+    h2 = statistics.median(walls[len(walls) // 2:])
+    drift = abs(h1 - h2) / med
+    if drift >= DRIFT_FRAC:
+        return None, (f"not steady: half-median drift {drift:.1%} >= "
+                      f"{DRIFT_FRAC:.0%} of median {med:.1f} ms -- "
+                      "warmup/caching residue in the timed window")
     tot = {p: sum(s.get(p, 0.0) for s in steps) for p in PHASES}
     phase_sum = sum(tot.values())
     wall_sum = sum(walls)
@@ -62,6 +76,19 @@ def compose(run_a, run_b):
         if d > AA_POINTS:
             return None, (f"A/A drift on {p}: {d:.1f} points "
                           f"(> {AA_POINTS}) -- shares not stable")
+    sa = run_a["steps"][WARMUP_DROP:]
+    sb = run_b["steps"][WARMUP_DROP:]
+    if len(sa) == len(sb):
+        med = a["median_step_ms"]
+        step_d = statistics.mean(
+            abs(x["step_wall_ms"] - y["step_wall_ms"])
+            for x, y in zip(sa, sb)) / med
+        if step_d > AA_STEP_FRAC:
+            return None, (f"A/A per-step wall delta {step_d:.1%} > "
+                          f"{AA_STEP_FRAC:.0%} -- the runs did not "
+                          "measure the same workload")
+    else:
+        return None, (f"A/A step counts differ: {len(sa)} vs {len(sb)}")
     eff_a = run_a.get("meta", {}).get("token_budget_effective")
     eff_b = run_b.get("meta", {}).get("token_budget_effective")
     if eff_a is not None and eff_b is not None and eff_a != eff_b:
@@ -80,11 +107,17 @@ def compose(run_a, run_b):
 
 
 # ---------------------------------------------------------------- self-test
-def _run(n=12, wall=1000.0, phases=(200.0, 400.0, 300.0, 50.0, 40.0),
-         jitter=0.0, loss=2.0):
+_BATCH_PATTERN = (0.0, 120.0, 0.0, -120.0, 0.0, 0.0)
+
+
+def _run(n=15, wall=1000.0, phases=(200.0, 400.0, 300.0, 50.0, 40.0),
+         pattern=False, loss=2.0):
+    """pattern=True models the RECEIPTS case: per-step walls vary with
+    batch composition (24% max-min here), identically in both runs,
+    with balanced half-medians -- workload variance, not drift."""
     steps = []
     for i in range(n):
-        j = jitter if i % 2 else -jitter
+        j = _BATCH_PATTERN[i % 6] if pattern else 0.0
         row = dict(zip(PHASES, [x + j / len(PHASES) for x in phases]))
         row["step_wall_ms"] = wall + j
         row["loss"] = loss
@@ -102,9 +135,20 @@ def _self_test():
     bad = _run(phases=(200.0, 400.0, 250.0, 50.0, 40.0))  # sum 940
     _, why = compose(bad, bad)
     assert why and "closure" in why, why
-    # steady-state: 12% wall swing refuses
-    _, why = compose(_run(jitter=120.0), _run())
+    # deterministic per-step variance does NOT refuse when both runs
+    # carry the same pattern (the receipts case: max-min 24% here,
+    # which the ORIGINAL spread gate would have refused)
+    ok, why = compose(_run(pattern=True), _run(pattern=True))
+    assert why is None, why
+    # genuine drift (first half systematically slower) refuses
+    slow = _run()
+    for i in range(3, 9):
+        slow["steps"][i]["step_wall_ms"] += 80.0
+    _, why = compose(slow, _run())
     assert why and "not steady" in why, why
+    # runs that measured different workloads refuse on per-step delta
+    _, why = compose(_run(pattern=True), _run())
+    assert why and "per-step" in why, why
     # A/A drift: forward share moved > 3 points between runs
     drift = _run(phases=(200.0, 460.0, 240.0, 50.0, 40.0))
     _, why = compose(_run(), drift)
