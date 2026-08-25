@@ -354,6 +354,51 @@ def _b1d_stage_a(a, model, runner, sched, kv):
                   f"PASS={rep['gate_pass']} out={a.out}", flush=True)
             set_context(prev)
             return
+        if a.s2_verify == "time" and a.moe_grouping == "eager":
+            # the eager-grouped arm of the S3 three-way: this grouping
+            # CANNOT capture (unique_consecutive host-size sync), so it
+            # is timed as an eager loop -- disclosed basis, comparable
+            # as the no-capture grouped reference (Bugbot, e4b#245: the
+            # first draft documented this loop and then captured
+            # anyway, so the arm failed instead of producing a time)
+            kv.rewind(slot, base_seen)
+            torch.cuda.synchronize()
+            for _ in range(8):
+                kv.rewind_nosync(slot, base_seen)
+                out = model(input_ids=v_in, position_ids=v_pos,
+                            use_cache=False)
+                _ = out.logits[0].argmax(-1)
+            torch.cuda.synchronize()
+            spans = []
+            for _c in range(10):
+                e0 = torch.cuda.Event(enable_timing=True)
+                e1 = torch.cuda.Event(enable_timing=True)
+                e0.record()
+                for _r in range(4):
+                    kv.rewind_nosync(slot, base_seen)
+                    out = model(input_ids=v_in, position_ids=v_pos,
+                                use_cache=False)
+                    _ = out.logits[0].argmax(-1)
+                e1.record()
+                e1.synchronize()
+                spans.append(e0.elapsed_time(e1) / 4)
+            spans.sort()
+            _hr.FORCE_SINGLETON_GROUPS[0] = False
+            _hr.DEVICE_GROUPING[0] = False
+            set_context(prev)
+            rep = {"s2": "time", "k": a.s2_k, "rows_per_step": kk,
+                   "moe_grouping": "eager",
+                   "timing_basis": "eager loop (not capturable; "
+                                   "includes host submission)",
+                   "verify_graph_ms": spans[len(spans) // 2],
+                   "verify_ms_all_chunks": spans,
+                   "past_tokens": base_seen}
+            Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(a.out).write_text(json.dumps(rep, indent=1))
+            print(f"S2_TIME k={a.s2_k} rows={kk} grouping=eager "
+                  f"verify_eager_ms={rep['verify_graph_ms']:.3f} "
+                  f"out={a.out}", flush=True)
+            return
         # ---- time: graph the verify step at FIXED position.
         # The documented capture recipe (b1d): warm the EXACT call on a
         # SIDE stream first -- the T=K+1 shapes trigger triton JIT
@@ -410,6 +455,7 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         set_context(prev)
         rep = {"s2": "time", "k": a.s2_k, "rows_per_step": kk,
                "moe_grouping": a.moe_grouping,
+               "timing_basis": "graph replay",
                "verify_graph_ms": spans[len(spans) // 2],
                "verify_ms_all_chunks": spans,
                "past_tokens": base_seen,
