@@ -25,6 +25,11 @@ def _shares(run):
     steps = run["steps"][WARMUP_DROP:]
     if len(steps) < 5:
         return None, f"only {len(steps)} steps after warmup drop"
+    for i, s in enumerate(steps):
+        ls = s.get("loss")
+        if ls is None or ls != ls or ls == float("inf"):
+            return None, (f"step {WARMUP_DROP + i}: loss {ls!r} -- a "
+                          "broken run's budget is not a budget")
     walls = [s["step_wall_ms"] for s in steps]
     med = statistics.median(walls)
     spread = (max(walls) - min(walls))
@@ -68,12 +73,13 @@ def compose(run_a, run_b):
 
 # ---------------------------------------------------------------- self-test
 def _run(n=12, wall=1000.0, phases=(200.0, 400.0, 300.0, 50.0, 40.0),
-         jitter=0.0):
+         jitter=0.0, loss=2.0):
     steps = []
     for i in range(n):
         j = jitter if i % 2 else -jitter
         row = dict(zip(PHASES, [x + j / len(PHASES) for x in phases]))
         row["step_wall_ms"] = wall + j
+        row["loss"] = loss
         steps.append(row)
     return {"meta": {"model": "m"}, "steps": steps}
 
@@ -98,6 +104,21 @@ def _self_test():
     # too few steps
     _, why = compose(_run(n=6), _run())
     assert why and "steps" in why, why
+    # NaN loss inside the timed window refuses; a poisoned WARMUP loss
+    # does not (warmup is dropped)
+    nan_run = _run()
+    nan_run["steps"][7]["loss"] = float("nan")
+    _, why = compose(nan_run, _run())
+    assert why and "loss" in why, why
+    warm_nan = _run()
+    warm_nan["steps"][1]["loss"] = float("nan")
+    ok, why = compose(warm_nan, _run())
+    assert why is None, why
+    # missing loss key refuses (an old-format receipt cannot certify)
+    old_fmt = _run()
+    del old_fmt["steps"][8]["loss"]
+    _, why = compose(old_fmt, _run())
+    assert why and "loss" in why, why
     # warmup rows are genuinely dropped: poison the first 3 steps of an
     # otherwise-good run; compose must still pass
     poisoned = _run()

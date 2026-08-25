@@ -75,11 +75,11 @@ class PhaseClock:
             self._pairs.append(
                 (phase, self._t0, time.perf_counter()))
 
-    def step_end(self):
+    def step_end(self, extra: dict | None = None):
         assert self._open is None, \
             f"bracket {self._open!r} left open at step end"
         wall_ms = (time.perf_counter() - self._wall0) * 1e3
-        row: dict = {}
+        row: dict = dict(extra or {})
         if self.use_cuda:
             torch.cuda.synchronize()
             for phase, a, b in self._pairs:

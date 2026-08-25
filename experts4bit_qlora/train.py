@@ -399,7 +399,9 @@ def main():
         sched.step()
         if _clock:
             _clock.stop()
-            _clock.step_end()
+            # loss lands in the receipt so the prereg's NaN/divergence
+            # refusal is checkable from the artifact, not the log
+            _clock.step_end(extra={"loss": float(loss_acc)})
         if _tprof is not None:
             _tprof.step()
             _tprof_steps[0] += 1
