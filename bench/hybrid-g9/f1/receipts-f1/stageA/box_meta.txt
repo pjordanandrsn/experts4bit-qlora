@@ -1,0 +1,4 @@
+1517955 K5 RESULTS: STRUCTURE-REFUTED (ratio 1.303 on the graph basis) (#251)
+6ddbf4d F1 amendment: with_stack attributes nothing on torch 2.13 — dispatch-mode tracer replaces it (#232)
+2.13.0+cu130 3.7.1
+NVIDIA GeForce RTX 5090, 595.71.05

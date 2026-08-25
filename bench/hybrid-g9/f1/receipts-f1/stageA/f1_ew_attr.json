@@ -1,0 +1,453 @@
+{
+ "active_steps": 12,
+ "window_complete": true,
+ "attributed_us_total": 58553.20400002695,
+ "attributed_us_per_step": 4879.433666668912,
+ "unclassified_us_per_step": 2.602666666647868,
+ "site_method": "dispatch-tracer counts, device time apportioned per op by launch share",
+ "by_site": {
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(298): forward": {
+   "us": 7049.196241402256,
+   "calls": 74112,
+   "ops": {
+    "aten::add": 1993.6140019507636,
+    "aten::rsqrt": 2091.123000007643,
+    "aten::mul": 2964.459239443849
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(147): _write_side": {
+   "us": 6465.132967246651,
+   "calls": 15264,
+   "ops": {
+    "aten::copy_": 6465.132967246651
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(149): _write_side": {
+   "us": 6465.132967246651,
+   "calls": 15264,
+   "ops": {
+    "aten::copy_": 6465.132967246651
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(297): forward": {
+   "us": 5141.954999979565,
+   "calls": 49408,
+   "ops": {
+    "aten::pow": 1897.3209999892572,
+    "aten::mean": 3244.633999990308
+   }
+  },
+  "/root/gnf4/kernel/nf4_grouped.py(919): gemm_4bit_grouped": {
+   "us": 3788.056326631619,
+   "calls": 12192,
+   "ops": {
+    "aten::sum": 1206.0692610960068,
+    "aten::copy_": 2581.987065535612
+   }
+  },
+  "/root/gnf4/kernel/fp8_kv.py(75): quantize_kv_fp8": {
+   "us": 3373.8138151692174,
+   "calls": 49152,
+   "ops": {
+    "aten::gt": 1056.7439999983799,
+    "aten::div": 1150.8145000005322,
+    "aten::ones_like": 0.0,
+    "aten::where": 1166.2553151703053
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(55): rotate_half": {
+   "us": 3183.138968398375,
+   "calls": 24576,
+   "ops": {
+    "aten::neg": 1488.596000005288,
+    "aten::cat": 1694.5429683930868
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(299): forward": {
+   "us": 2964.459239443849,
+   "calls": 49408,
+   "ops": {
+    "aten::_to_copy": 0.0,
+    "aten::mul": 2964.459239443849
+   }
+  },
+  "/root/gnf4/kernel/fp8_kv.py(72): quantize_kv_fp8": {
+   "us": 2623.0489999939655,
+   "calls": 24576,
+   "ops": {
+    "aten::abs": 1049.2669999990549,
+    "aten::amax": 1573.7819999949104
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(378): kernel_args": {
+   "us": 1981.8297083338325,
+   "calls": 12192,
+   "ops": {
+    "aten::index_select": 1981.8297083338325
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(79): apply_rotary_pos_emb": {
+   "us": 1970.3707724365086,
+   "calls": 18432,
+   "ops": {
+    "aten::mul": 1474.5496735057488,
+    "aten::add": 495.82109893075983
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(80): apply_rotary_pos_emb": {
+   "us": 1970.3707724365086,
+   "calls": 18432,
+   "ops": {
+    "aten::mul": 1474.5496735057488,
+    "aten::add": 495.82109893075983
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(264): forward": {
+   "us": 1741.0278694499107,
+   "calls": 12288,
+   "ops": {
+    "aten::sum": 1215.5658694510935,
+    "aten::div_": 525.4619999988172
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(243): append_many": {
+   "us": 1361.8818770943717,
+   "calls": 12192,
+   "ops": {
+    "aten::mul": 731.5148770907425,
+    "aten::index_add_": 630.3670000036291
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(400): _forward_collapsed": {
+   "us": 1215.5658694510935,
+   "calls": 12288,
+   "ops": {
+    "aten::sum": 1215.5658694510935,
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/root/gnf4/kernel/fp8_kv.py(76): quantize_kv_fp8": {
+   "us": 1150.8145000005322,
+   "calls": 24576,
+   "ops": {
+    "aten::div": 1150.8145000005322,
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/activations.py(103): forward": {
+   "us": 1060.0530000023855,
+   "calls": 6144,
+   "ops": {
+    "aten::silu": 1060.0530000023855
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(392): _forward_collapsed": {
+   "us": 998.717333333585,
+   "calls": 6144,
+   "ops": {
+    "aten::index_select": 998.717333333585
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(258): _ensure_blocks": {
+   "us": 810.5533333323641,
+   "calls": 1920,
+   "ops": {
+    "aten::fill_": 810.5533333323641
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(115): _fused_over_stack": {
+   "us": 737.2748367528744,
+   "calls": 6144,
+   "ops": {
+    "aten::mul": 737.2748367528744
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(399): _forward_collapsed": {
+   "us": 737.2748367528744,
+   "calls": 12288,
+   "ops": {
+    "aten::_to_copy": 0.0,
+    "aten::mul": 737.2748367528744
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(261): forward": {
+   "us": 602.8229999974328,
+   "calls": 12288,
+   "ops": {
+    "aten::_to_copy": 0.0,
+    "aten::_softmax": 602.8229999974328
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(341): forward": {
+   "us": 495.82109893075983,
+   "calls": 6144,
+   "ops": {
+    "aten::add": 495.82109893075983
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(347): forward": {
+   "us": 495.82109893075983,
+   "calls": 6144,
+   "ops": {
+    "aten::add": 495.82109893075983
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(273): reset": {
+   "us": 40.52766666661821,
+   "calls": 96,
+   "ops": {
+    "aten::fill_": 40.52766666661821
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/paged_attention.py(163): paged_attention_forward": {
+   "us": 19.94920648454423,
+   "calls": 432,
+   "ops": {
+    "aten::where": 4.555684824884005,
+    "aten::_to_copy": 0.0,
+    "aten::mul": 11.519919324263663,
+    "aten::add": 3.873602335396561
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(431): forward": {
+   "us": 17.651489254094656,
+   "calls": 128,
+   "ops": {
+    "aten::cat": 17.651489254094656
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(432): forward": {
+   "us": 15.359892432351549,
+   "calls": 128,
+   "ops": {
+    "aten::mul": 15.359892432351549
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(433): forward": {
+   "us": 15.359892432351549,
+   "calls": 128,
+   "ops": {
+    "aten::mul": 15.359892432351549
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/paged_attention.py(66): stage": {
+   "us": 13.23861694057099,
+   "calls": 96,
+   "ops": {
+    "aten::cat": 13.23861694057099
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/paged_attention.py(73): flush": {
+   "us": 13.23861694057099,
+   "calls": 96,
+   "ops": {
+    "aten::cat": 13.23861694057099
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(386): _forward_collapsed": {
+   "us": 11.519919324263663,
+   "calls": 192,
+   "ops": {
+    "aten::mul": 11.519919324263663,
+    "aten::sub": 0.0
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(83): _fused_over_stack": {
+   "us": 7.802479166668633,
+   "calls": 48,
+   "ops": {
+    "aten::index_select": 7.802479166668633
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(84): _fused_over_stack": {
+   "us": 7.802479166668633,
+   "calls": 48,
+   "ops": {
+    "aten::index_select": 7.802479166668633
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/paged_attention.py(166): paged_attention_forward": {
+   "us": 6.619308470285495,
+   "calls": 48,
+   "ops": {
+    "aten::cat": 6.619308470285495
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(274): reset": {
+   "us": 0.0,
+   "calls": 96,
+   "ops": {
+    "aten::zero_": 0.0
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(425): forward": {
+   "us": 0.0,
+   "calls": 128,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(435): forward": {
+   "us": 0.0,
+   "calls": 256,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(296): forward": {
+   "us": 0.0,
+   "calls": 24704,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(265): forward": {
+   "us": 0.0,
+   "calls": 6144,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(87): _fused_over_stack": {
+   "us": 0.0,
+   "calls": 48,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(88): _fused_over_stack": {
+   "us": 0.0,
+   "calls": 48,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/hot_residency.py(398): _forward_collapsed": {
+   "us": 0.0,
+   "calls": 6144,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/root/gnf4/kernel/fp8_kv.py(70): quantize_kv_fp8": {
+   "us": 0.0,
+   "calls": 12288,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/fp8_paged_kv.py(184): append": {
+   "us": 0.0,
+   "calls": 48,
+   "ops": {
+    "aten::add_": 0.0
+   }
+  },
+  "/root/gnf4/kernel/nf4_grouped.py(852): gemm_4bit_grouped": {
+   "us": 0.0,
+   "calls": 12192,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  },
+  "/root/e4b/experts4bit_qlora/engines/scheduler.py(238): step": {
+   "us": 0.0,
+   "calls": 127,
+   "ops": {
+    "aten::_to_copy": 0.0
+   }
+  }
+ },
+ "by_op": {
+  "aten::copy_": {
+   "us": 15512.253000028913,
+   "calls": 16800
+  },
+  "aten::mul": {
+   "us": 11137.842000008917,
+   "calls": 17376
+  },
+  "aten::add": {
+   "us": 3980.7720000091995,
+   "calls": 9240
+  },
+  "aten::sum": {
+   "us": 3637.2009999981938,
+   "calls": 3456
+  },
+  "aten::mean": {
+   "us": 3244.6339999903075,
+   "calls": 4632
+  },
+  "aten::index_select": {
+   "us": 2996.152000000755,
+   "calls": 3468
+  },
+  "aten::div": {
+   "us": 2301.6290000010645,
+   "calls": 4608
+  },
+  "aten::rsqrt": {
+   "us": 2091.123000007643,
+   "calls": 4632
+  },
+  "aten::pow": {
+   "us": 1897.3209999892572,
+   "calls": 4632
+  },
+  "aten::cat": {
+   "us": 1745.290999998609,
+   "calls": 2328
+  },
+  "aten::amax": {
+   "us": 1573.7819999949102,
+   "calls": 2304
+  },
+  "aten::neg": {
+   "us": 1488.5960000052878,
+   "calls": 2304
+  },
+  "aten::where": {
+   "us": 1170.8109999951894,
+   "calls": 2304
+  },
+  "aten::silu": {
+   "us": 1060.0530000023855,
+   "calls": 1152
+  },
+  "aten::gt": {
+   "us": 1056.7439999983799,
+   "calls": 2304
+  },
+  "aten::abs": {
+   "us": 1049.2669999990549,
+   "calls": 3456
+  },
+  "aten::fill_": {
+   "us": 851.0809999989824,
+   "calls": 1248
+  },
+  "aten::index_add_": {
+   "us": 630.3670000036291,
+   "calls": 1152
+  },
+  "aten::_softmax": {
+   "us": 602.8229999974328,
+   "calls": 1152
+  },
+  "aten::div_": {
+   "us": 525.4619999988172,
+   "calls": 1152
+  }
+ },
+ "unclassified_ops": {
+  "aten::sin": {
+   "us": 15.616000000411077,
+   "calls": 24
+  },
+  "aten::cos": {
+   "us": 15.61599999936334,
+   "calls": 24
+  }
+ }
+}
