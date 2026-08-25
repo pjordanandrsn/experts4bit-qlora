@@ -45,9 +45,15 @@ the campaign's reference class (RTX 5090 rental, serving graph-anchor
    forward, backward, optimizer step, offload H2D/D2H if enabled.
    Sum-of-phases vs step wall must close within 5% or the census
    REFUSES (unaccounted time is a finding, not a rounding error).
-2. **Kernel budget**: `torch.profiler` over the timed steps, parsed by
-   the existing `bench/hybrid-g9/f1/step_budget.py` coverage-gated
-   pipeline (reused, not rewritten).
+2. **Kernel budget**: `torch.profiler` over a 4-step window in its
+   OWN short run, parsed by the existing
+   `bench/hybrid-g9/f1/step_budget.py` coverage-gated pipeline
+   (reused, not rewritten). Amended before any composed receipt
+   existed: the first arms put an 8-step shape-recorded window INSIDE
+   census run A -- it drove the container into its 170 GiB cgroup cap
+   (SIGKILL at step ~10, cgroup peak == limit), and its overhead was
+   perturbing the very phases the A/A compares. The profiler run is
+   excluded from the A/A pair by design.
 3. **Steady-state gate**: first N warmup steps dropped; the timed
    window's step-time spread must be < 10% of median or REFUSE
    (compile/caching still in flight).
