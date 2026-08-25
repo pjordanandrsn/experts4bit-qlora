@@ -105,3 +105,12 @@ def test_tr2_train_arena_wiring():
         "eval_before = eval_loss"), "hybrid must engage before eval"
     # all-VRAM manifest shape
     assert '"vram_frac": 1.0' in src
+    # the bnb release: post-enable the loader's expert storage is dead
+    # weight and keeping it doubles expert VRAM (Bugbot HIGH, #259) --
+    # the wiring must shrink all four storage attrs and empty the cache
+    for attr in ("gate_up_proj", "down_proj", "gate_up_absmax",
+                 "down_absmax"):
+        assert f'"{attr}"' in src, f"{attr} not released"
+    assert "empty_cache()" in src
+    assert src.index("enable_hybrid_train(") < src.index(
+        "released"), "release must follow engagement"

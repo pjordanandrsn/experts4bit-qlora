@@ -314,8 +314,30 @@ def main():
         if _n != _L:
             raise SystemExit(f"TRAIN_ARENA engaged {_n}/{_L} modules "
                              "-- refusing a partial treatment")
+        # Release the loader's bnb expert storage: post-enable, every
+        # call (train seam, no-grad tier serve, zero-adapter fast
+        # path) reads the arena stacks -- the bnb Parameters are dead
+        # weight, and keeping them doubles expert VRAM (~16 GB each on
+        # the 30B: the hybrid arm would OOM the 32 GB census box
+        # instead of training; Bugbot, HIGH, e4b#259). The trainer
+        # saves adapters only, so shrinking base storage cannot
+        # corrupt a checkpoint.
+        from ._vendor.experts import ExpertsNbit
+        _freed = 0
+        for _m in model.modules():
+            if isinstance(_m, ExpertsNbit):
+                for _attr in ("gate_up_proj", "down_proj",
+                              "gate_up_absmax", "down_absmax"):
+                    _t = getattr(_m, _attr, None)
+                    _dat = getattr(_t, "data", None)
+                    if _dat is not None and _dat.numel():
+                        _freed += _dat.numel() * _dat.element_size()
+                        _t.data = torch.empty(
+                            0, dtype=_dat.dtype, device=_dat.device)
+        torch.cuda.empty_cache()
         log(f"[tr2] hybrid-train engaged on {_n} modules "
-            f"(grouped fwd/dgrad, all-VRAM)")
+            f"(grouped fwd/dgrad, all-VRAM); released "
+            f"{_freed / 1e9:.2f} GB of bnb expert storage")
     eval_before = eval_loss(model, eval_data)
     log(f"held-out eval loss BEFORE: {eval_before:.4f}")
 
