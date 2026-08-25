@@ -333,6 +333,105 @@ def _b1d_stage_a(a, model, runner, sched, kv):
           f"first_tok={toks[0]} out={a.out}", flush=True)
 
 
+# --- F1 Stage A (PREREG-f1-elementwise) elementwise attribution ------
+# The aten ops whose device work makes up the elementwise block. Kernel
+# rows (`void at::native::...`) carry no python stack, so attribution
+# necessarily runs on the OP view; step_budget.py owns the kernel-view
+# total and the two are reconciled in the verdict.
+_EW_OPS = frozenset((
+    "aten::copy_", "aten::to", "aten::_to_copy", "aten::mul",
+    "aten::add", "aten::add_", "aten::mul_", "aten::div", "aten::div_",
+    "aten::rsqrt", "aten::pow", "aten::silu", "aten::softmax",
+    "aten::_softmax", "aten::sub", "aten::neg", "aten::cat",
+    "aten::index_select", "aten::mean", "aten::sum", "aten::clamp",
+    "aten::where", "aten::sigmoid", "aten::type_as", "aten::contiguous",
+    # the fp8 KV scale path (abs/amax/gt) and the scatter/fill helpers:
+    # 447 us/step on the census receipt, every one of them above the
+    # 50 us/step Stage A bar (Bugbot, e4b#231)
+    "aten::amax", "aten::abs", "aten::gt", "aten::lt", "aten::fill_",
+    "aten::zero_", "aten::index_add_", "aten::index_put_",
+    "aten::ones_like", "aten::zeros_like", "aten::masked_fill_",
+    "aten::reciprocal", "aten::exp", "aten::maximum", "aten::minimum",
+))
+# Ops whose device time is deliberately NOT part of the elementwise
+# block. Anything with device time that is in neither set is reported
+# as `unclassified` rather than silently dropped -- a hand-curated list
+# always drifts, so the receipt has to make its own omissions visible.
+_NON_EW_OPS = frozenset((
+    "aten::mm", "aten::matmul", "aten::linear", "aten::bmm",
+    "aten::addmm", "aten::baddbmm", "aten::topk", "aten::sort",
+    "aten::argmax", "aten::argsort", "aten::nonzero", "aten::unique2",
+    "aten::scaled_dot_product_attention",
+))
+# Frames that are never the answer: torch internals and this harness.
+_FRAME_SKIP = ("/torch/", "site-packages/torch", "torch/nn/modules",
+               "torch/autograd", "step_decomp.py", "<built-in",
+               "torch/_dynamo", "torch/_inductor")
+
+
+def _self_device_us(evt):
+    """Self device time in us across torch versions (>=2.5 renamed
+    self_cuda_time_total -> self_device_time_total; the old name warns
+    or is absent)."""
+    for attr in ("self_device_time_total", "self_cuda_time_total"):
+        v = getattr(evt, attr, None)
+        if v is not None:
+            return float(v)
+    return 0.0
+
+
+def _ew_attribute(evts, min_us=0.0):
+    """Split profiler events into the elementwise block (attributed to
+    python call sites), the deliberately-excluded ops, and whatever is
+    in NEITHER list. `unclassified` is the important one: it is how a
+    missing op announces itself instead of quietly shrinking the block
+    the treatment claims to remove."""
+    sites, ops, unclassified, attributed = {}, {}, {}, 0.0
+    for evt in evts:
+        key = getattr(evt, "key", None)
+        if not key or not getattr(evt, "count", 0):
+            continue
+        us = _self_device_us(evt)
+        if us <= min_us:
+            continue
+        if key.startswith("aten::") and key not in _EW_OPS \
+                and key not in _NON_EW_OPS:
+            u = unclassified.setdefault(key, {"us": 0.0, "calls": 0})
+            u["us"] += us
+            u["calls"] += evt.count
+            continue
+        if key not in _EW_OPS:
+            continue
+        attributed += us
+        o = ops.setdefault(key, {"us": 0.0, "calls": 0})
+        o["us"] += us
+        o["calls"] += evt.count
+        site = _py_site(getattr(evt, "stack", None))
+        sr = sites.setdefault(site, {"us": 0.0, "calls": 0, "ops": {}})
+        sr["us"] += us
+        sr["calls"] += evt.count
+        sr["ops"][key] = sr["ops"].get(key, 0.0) + us
+    return {"attributed_us": attributed,
+            "by_site": dict(sorted(sites.items(),
+                                   key=lambda kv: -kv[1]["us"])),
+            "by_op": dict(sorted(ops.items(),
+                                 key=lambda kv: -kv[1]["us"])),
+            "unclassified_ops": dict(sorted(unclassified.items(),
+                                            key=lambda kv: -kv[1]["us"]))}
+
+
+def _py_site(stack):
+    """First python frame that is neither torch internals nor this
+    harness -- i.e. OUR code, which is the only kind of frame a fix can
+    act on. Falls back to the outermost python frame, then to a label
+    that is obviously not a call site so it cannot be mistaken for one."""
+    frames = [f for f in (stack or []) if ".py" in f]
+    for f in frames:
+        if not any(sk in f for sk in _FRAME_SKIP):
+            return f
+    return frames[-1] if frames else "<no-python-frame>"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="allenai/OLMoE-1B-7B-0924")
@@ -426,6 +525,12 @@ def main():
                          "files via stack frames (T5 H1/H2 instrument). "
                          "Implies the torch profiler with with_stack=True "
                          "-- run timing arms WITHOUT this flag")
+    ap.add_argument("--ew-attr-out", default=None,
+                    help="attribute the ELEMENTWISE device block to python "
+                         "call sites via stack frames (F1 Stage A "
+                         "instrument, PREREG-f1-elementwise). Implies the "
+                         "torch profiler with with_stack=True -- run "
+                         "timing arms WITHOUT this flag")
     ap.add_argument("--torch-profile-out", default=None,
                     help="capture ~12 decode steps under torch.profiler "
                          "and dump the CUDA kernel table (T2/T3 "
@@ -742,14 +847,15 @@ def main():
 
     tprof = None
     tprof_steps = [0]
-    if a.torch_profile_out or a.sync_attr_out or a.region_ops_out:
+    if (a.torch_profile_out or a.sync_attr_out
+            or a.region_ops_out or a.ew_attr_out):
         from torch.profiler import (ProfilerActivity, profile, schedule)
         tprof = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             schedule=schedule(skip_first=24, wait=0, warmup=2, active=12,
                               repeat=1),
             record_shapes=True,
-            with_stack=bool(a.sync_attr_out))
+            with_stack=bool(a.sync_attr_out or a.ew_attr_out))
         tprof.__enter__()
     prof = None
     if a.cprofile_out:
@@ -826,6 +932,31 @@ def main():
                 "nonzero_attr": nz,
             }, indent=1))
             print(f"SYNC_ATTR_OUT {a.sync_attr_out} active={active}/12",
+                  flush=True)
+        if a.ew_attr_out:
+            # F1 Stage A: which python call sites own the elementwise
+            # device block. Uses the OP view on purpose -- kernel rows
+            # carry no python stack -- and reports its own unclassified
+            # remainder so a missing op cannot shrink the block silently.
+            attr = _ew_attribute(tprof.key_averages(group_by_stack_n=24))
+            unacc = sum(v["us"] for v in
+                        attr["unclassified_ops"].values())
+            Path(a.ew_attr_out).write_text(json.dumps({
+                "active_steps": active,
+                "window_complete": active >= 12,
+                "attributed_us_total": attr["attributed_us"],
+                "attributed_us_per_step": (attr["attributed_us"] / active
+                                           if active else None),
+                "unclassified_us_per_step": (unacc / active
+                                             if active else None),
+                "by_site": attr["by_site"],
+                "by_op": attr["by_op"],
+                "unclassified_ops": attr["unclassified_ops"],
+            }, indent=1))
+            print(f"EW_ATTR_OUT {a.ew_attr_out} active={active}/12 "
+                  f"attributed="
+                  f"{attr['attributed_us']/max(active,1)/1000:.2f}ms/step "
+                  f"unclassified={unacc/max(active,1)/1000:.2f}ms/step",
                   flush=True)
         if a.region_ops_out:
             evs = tprof.profiler.function_events
