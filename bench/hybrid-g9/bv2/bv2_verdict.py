@@ -32,8 +32,8 @@ def verdict(rep):
         spread = abs(sa - sb) / min(sa, sb) * 100
         # strictly below per the prereg: exactly 5% refuses (Bugbot)
         if spread >= AA_PCT:
-            return ("REFUSE", f"B={b}: A/A spread {spread:.1f}% > "
-                    f"{AA_PCT}%", None)
+            return ("REFUSE", f"B={b}: A/A spread {spread:.1f}% >= "
+                    f"{AA_PCT}% (strictly-below ceiling)", None)
         if not arm.get("aa_tokens_identical"):
             return ("REFUSE", f"B={b}: A/A runs not token-identical",
                     None)
