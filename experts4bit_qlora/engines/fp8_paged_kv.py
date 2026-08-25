@@ -77,11 +77,12 @@ class Fp8PagedKV:
         self.device = self.kp.device
         # payload bytes before the scale tail of a row, per side
         self._k_pay = self.bt * self.H * self.D
-        # AMENDMENT-f1-stageB-b2 opt-in: the fused one-launch append.
-        # Env-gated, default OFF -- the B2 arm flips it; a shipped
-        # default flip needs the B2 RESULTS merged first.
+        # B2-certified default (RESULTS-f1-stageB-b2: PASS, gain
+        # 2.08 ms/step, bitwise 13/13, token-identity exact). The env
+        # is the rollback: E4B_FUSED_KV_APPEND=0 restores the eager
+        # ~25-launch append.
         self._fused_append = os.environ.get(
-            "E4B_FUSED_KV_APPEND", "0") == "1"
+            "E4B_FUSED_KV_APPEND", "1") == "1"
         self._v_pay = self.bt * self.H * self.D
         # block tables live on-device and are written IN PLACE when a block
         # opens (one scalar copy per 16 tokens) — rebuilding [B, blocks]

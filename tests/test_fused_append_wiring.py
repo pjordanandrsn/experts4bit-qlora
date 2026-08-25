@@ -21,15 +21,17 @@ mod = pytest.importorskip("experts4bit_qlora.engines.fp8_paged_kv")
 _CLS = mod.Fp8PagedKV
 
 
-def test_flag_defaults_off(monkeypatch):
+def test_flag_defaults_on_with_env_rollback(monkeypatch):
+    """B2 certified (RESULTS-f1-stageB-b2): the fused append is the
+    default and the env is the rollback, not the opt-in."""
     monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
     src = inspect.getsource(mod)
-    assert 'os.environ.get(\n            "E4B_FUSED_KV_APPEND", "0") == "1"' \
-        in src, "the opt-in must default OFF until B2 RESULTS merge"
+    assert 'os.environ.get(\n            "E4B_FUSED_KV_APPEND", "1") == "1"' \
+        in src, "certified default must be ON with env rollback"
 
 
 @pytest.mark.parametrize("env,expect", [("1", True), ("0", False),
-                                        (None, False)])
+                                        (None, True)])
 def test_flag_reads_env_at_construction(monkeypatch, env, expect):
     if env is None:
         monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
