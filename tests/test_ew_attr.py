@@ -175,7 +175,7 @@ def test_tracer_resolves_real_call_sites(helpers):
     sites = {site for _op, site in tracer.counts}
     assert not any("<no-python-frame>" in s for s in sites), sites
     assert any("_elementwise_work" in s for s in sites), sites
-    assert any(f"test_ew_attr.py" in s for s in sites), sites
+    assert any("test_ew_attr.py" in s for s in sites), sites
     ops = {op for op, _ in tracer.counts}
     assert "aten::mul" in ops and "aten::add" in ops, ops
 
