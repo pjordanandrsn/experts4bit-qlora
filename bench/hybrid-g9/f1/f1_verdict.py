@@ -32,7 +32,20 @@ def verdict(rep):
     # from the data.
     pass_ms = float(rep.get("pass_ms", PASS_MS))
     partial_ms = float(rep.get("partial_ms", PARTIAL_MS))
-    if not (0 < pass_ms < partial_ms):
+    # AMENDMENT-f1-stageB-b2-frame: a removal claim is barred on the
+    # within-box GAIN. Gain bars and absolute bars are mutually
+    # exclusive -- a report carrying both has no single registered map.
+    gain_mode = "pass_gain_ms" in rep or "partial_gain_ms" in rep
+    if gain_mode and ("pass_ms" in rep or "partial_ms" in rep):
+        return ("REFUSE", "report carries BOTH absolute and gain bars "
+                "-- ambiguous registration")
+    if gain_mode:
+        pass_gain = float(rep.get("pass_gain_ms", 0))
+        partial_gain = float(rep.get("partial_gain_ms", 0))
+        if not (0 < partial_gain < pass_gain):
+            return ("REFUSE", f"nonsense gain bars pass={pass_gain} "
+                    f"partial={partial_gain}")
+    elif not (0 < pass_ms < partial_ms):
         return ("REFUSE", f"nonsense bars pass={pass_ms} "
                 f"partial={partial_ms}")
     for label, arm in (("b0_a", b0a), ("b0_b", b0b), (name, treat)):
@@ -47,7 +60,8 @@ def verdict(rep):
     # every PASS, closing the PASS-path gap the fixed margin left open.
     sa, sb = _step(b0a), _step(b0b)
     spread = abs(sa - sb)
-    aa_margin = (min(sa, sb) - pass_ms) / 2
+    aa_margin = (pass_gain / 2 if gain_mode
+                 else (min(sa, sb) - pass_ms) / 2)
     if aa_margin <= 0:
         return ("REFUSE", f"base {min(sa, sb):.2f} ms is already at or "
                 f"under the PASS bar {pass_ms} -- the frame is "
@@ -81,6 +95,19 @@ def verdict(rep):
     st = _step(treat)
     base = min(sa, sb)
     gain = base - st
+    if gain_mode:
+        if gain >= pass_gain:
+            return ("PASS", f"{name} gain {gain:.2f} ms >= {pass_gain} "
+                    f"(step {st:.2f} ms, {1000/st:.1f} tok/s)")
+        if gain >= partial_gain:
+            if spread >= gain / 2:
+                return ("REFUSE", f"PARTIAL gain {gain:.2f} but A/A "
+                        f"spread {spread:.2f} >= half of it")
+            return ("PARTIAL", f"{name} gain {gain:.2f} ms in "
+                    f"[{partial_gain}, {pass_gain}) (step {st:.2f} ms, "
+                    f"{1000/st:.1f} tok/s, A/A {spread:.2f})")
+        return ("REFUTED", f"{name} gain {gain:.2f} ms < {partial_gain} "
+                "-- the block is not addressable by this mechanism")
     if st <= pass_ms:
         return ("PASS", f"{name} step {st:.2f} ms <= {pass_ms} "
                 f"({1000/st:.1f} tok/s, {gain:.2f} ms removed)")
@@ -147,6 +174,23 @@ def self_test():
         # a base already under the bar has no measurable frame
         (dict(_fab(9.0, base=9.5), pass_ms=9.6, partial_ms=10.5),
          "REFUSE"),
+        # gain frame (AMENDMENT-b2-frame): the exact shape the absolute
+        # frame refused -- fast base, big gain -- must adjudicate
+        (dict(_fab(7.50, base=9.57, aa=0.014),
+              pass_gain_ms=1.0, partial_gain_ms=0.5), "PASS"),
+        (dict(_fab(8.9, base=9.57, aa=0.1),
+              pass_gain_ms=1.0, partial_gain_ms=0.5), "PARTIAL"),
+        (dict(_fab(9.3, base=9.57, aa=0.05),
+              pass_gain_ms=1.0, partial_gain_ms=0.5), "REFUTED"),
+        # PARTIAL gain with spread >= gain/2 refuses
+        (dict(_fab(8.9, base=9.57, aa=0.4),
+              pass_gain_ms=1.0, partial_gain_ms=0.5), "REFUSE"),
+        # both bar families at once is ambiguous
+        (dict(_fab(7.5, base=9.57), pass_ms=9.6, partial_ms=10.5,
+              pass_gain_ms=1.0, partial_gain_ms=0.5), "REFUSE"),
+        # inverted gain bars are nonsense
+        (dict(_fab(7.5, base=9.57), pass_gain_ms=0.5,
+              partial_gain_ms=1.0), "REFUSE"),
     ]
     for rep, want in cases:
         got, why = verdict(rep)

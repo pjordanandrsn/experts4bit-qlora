@@ -21,20 +21,54 @@ mod = pytest.importorskip("experts4bit_qlora.engines.fp8_paged_kv")
 _CLS = mod.Fp8PagedKV
 
 
-def test_flag_defaults_off(monkeypatch):
+def test_flag_defaults_on_with_env_rollback(monkeypatch):
+    """B2 certified (RESULTS-f1-stageB-b2): the fused append is the
+    default and the env is the rollback. Asserted BEHAVIORALLY -- the
+    first version matched a source substring and broke on its own
+    refactor while the behavior it certified was intact (Bugbot,
+    e4b#238)."""
+    import sys
     monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
-    src = inspect.getsource(mod)
-    assert 'os.environ.get(\n            "E4B_FUSED_KV_APPEND", "0") == "1"' \
-        in src, "the opt-in must default OFF until B2 RESULTS merge"
+    monkeypatch.setitem(sys.modules, "fp8_kv", _stub(with_kernel=True))
+    kv = _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
+              max_tokens_per_seq=8, device="cpu")
+    assert kv._fused_append is True
+
+
+def _stub(with_kernel):
+    """A stand-in fp8_kv module that DELEGATES to the real one and
+    varies only the kernel symbol's presence. The first stubs replaced
+    the module wholesale and omitted kv_block_bytes, so construction
+    ImportError'd before ever reaching the logic under test -- the
+    tests "covered" a path they never executed (Bugbot, e4b#238)."""
+    import fp8_kv as real
+
+    class _Stub:
+        def __getattr__(self, name):
+            if name == "fp8_kv_append_t1":
+                if with_kernel:
+                    def _kernel(*a, **k):
+                        raise AssertionError(
+                            "wiring test must not launch the kernel")
+                    return _kernel
+                raise AttributeError(name)
+            return getattr(real, name)
+
+    return _Stub()
 
 
 @pytest.mark.parametrize("env,expect", [("1", True), ("0", False),
-                                        (None, False)])
+                                        (None, True)])
 def test_flag_reads_env_at_construction(monkeypatch, env, expect):
+    """Flag semantics in isolation: a kernel-PRESENT stub, so the test
+    holds on machines whose installed gnf4 predates #253 (CI installs
+    from PyPI) as well as on the boxes."""
+    import sys
     if env is None:
         monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
     else:
         monkeypatch.setenv("E4B_FUSED_KV_APPEND", env)
+    monkeypatch.setitem(sys.modules, "fp8_kv", _stub(with_kernel=True))
     kv = _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
               max_tokens_per_seq=8, device="cpu")
     assert kv._fused_append is expect
@@ -60,3 +94,26 @@ def test_fused_branch_argument_order():
         "vq, vs = self._quant_bytes")[0]
     assert "return" in fused_block, \
         "fused branch must return, not run the eager path too"
+
+
+def test_old_gnf4_degrades_to_eager_by_default(monkeypatch):
+    """On an install whose gnf4 predates the kernel, the certified
+    default must fall back to the intact eager path -- not crash graph
+    decode with ImportError (Bugbot, e4b#238)."""
+    import sys
+    monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
+    monkeypatch.setitem(sys.modules, "fp8_kv", _stub(with_kernel=False))
+    kv = _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
+              max_tokens_per_seq=8, device="cpu")
+    assert kv._fused_append is False
+
+
+def test_old_gnf4_with_explicit_env_refuses_loudly(monkeypatch):
+    """An EXPLICIT =1 on a kernel-less install must raise, never
+    silently serve the eager path the caller opted out of."""
+    import sys
+    monkeypatch.setenv("E4B_FUSED_KV_APPEND", "1")
+    monkeypatch.setitem(sys.modules, "fp8_kv", _stub(with_kernel=False))
+    with pytest.raises(RuntimeError, match="gnf4#253"):
+        _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
+             max_tokens_per_seq=8, device="cpu")

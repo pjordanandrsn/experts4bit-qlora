@@ -1,0 +1,21 @@
+GATE0-START bitwise kernel gate 09:43:34
+.............                                                            [100%]
+13 passed in 2.67s
+GATE0-OK
+ARM-START smoke 09:43:37
+B1D_TIMED_GRAPH steps=31 step=7.48ms compile=default recompiles=0 out=/root/out/f1c_smoke.json
+ARM-OK smoke 09:44:28
+ARM-START c0_a 09:44:28
+B1D_TIMED_GRAPH steps=127 step=9.59ms compile=default recompiles=0 out=/root/out/f1c_c0_a.json
+ARM-OK c0_a 09:45:09
+ARM-START c0_b 09:45:09
+B1D_TIMED_GRAPH steps=127 step=9.57ms compile=default recompiles=0 out=/root/out/f1c_c0_b.json
+ARM-OK c0_b 09:45:46
+ARM-START c1 09:45:46
+B1D_TIMED_GRAPH steps=127 step=7.50ms compile=default recompiles=0 out=/root/out/f1c_c1.json
+ARM-OK c1 09:46:22
+ASSEMBLED b0_a=9.59ms b0_b=9.57ms treatment=7.50ms
+self-test PASS (20 cases: all four verdicts, both boundaries, per-arm bar overrides, and every registered refusal)
+F1 STAGE B VERDICT: REFUSE
+  base 9.57 ms is already at or under the PASS bar 9.6 -- the frame is degenerate and no gain is measurable
+F1C-DONE 09:46:23
