@@ -7,7 +7,8 @@ import json
 import sys
 
 SYS_BAR = 425.0
-AA_PCT = 5.0
+AA_PCT = 5.0            # prereg: strictly below 5% -- >= refuses
+GRAM, MAX_REP = 8, 6    # the check-traces law's loop half
 ANCHOR_MS = 7.39
 ANCHOR_TOL = 0.03
 
@@ -29,7 +30,8 @@ def verdict(rep):
         if not sa or not sb:
             return ("REFUSE", f"B={b}: missing A/A step times", None)
         spread = abs(sa - sb) / min(sa, sb) * 100
-        if spread > AA_PCT:
+        # strictly below per the prereg: exactly 5% refuses (Bugbot)
+        if spread >= AA_PCT:
             return ("REFUSE", f"B={b}: A/A spread {spread:.1f}% > "
                     f"{AA_PCT}%", None)
         if not arm.get("aa_tokens_identical"):
@@ -39,6 +41,17 @@ def verdict(rep):
         if not r0 or len(set(r0)) < 30:
             return ("REFUSE", f"B={b}: row-0 trace missing or "
                     "degenerate", None)
+        # BOTH halves of the check-traces law (Bugbot, e4b#247: the
+        # first draft carried only the distinct-count half; an 8-gram
+        # loop with >30 distinct tokens would have slipped through)
+        grams = {}
+        for i in range(len(r0) - GRAM + 1):
+            k = tuple(r0[i:i + GRAM])
+            grams[k] = grams.get(k, 0) + 1
+        worst = max(grams.values(), default=0)
+        if worst > MAX_REP:
+            return ("REFUSE", f"B={b}: an {GRAM}-gram repeats {worst}x "
+                    "in row 0 -- repetition-looping trace", None)
         if ref0 is None:
             ref0 = r0
         elif r0 != ref0:
@@ -84,6 +97,17 @@ def self_test():
     assert verdict(_fab(full, ident=False))[0] == "REFUSE"
     assert verdict(_fab(full, anchor=8.2))[0] == "REFUSE"
     assert verdict(_fab(full, degenerate=True))[0] == "REFUSE"
+    # loop half of the law: >30 distinct tokens but an 8-gram looping
+    loopy = _fab(full)
+    base = list(range(40))
+    loop = base + [7, 8, 9, 10, 11, 12, 13, 14] * 8
+    for b in (1, 2, 4, 8, 16):
+        loopy[f"b{b}"]["row0_tokens"] = list(loop)
+    assert verdict(loopy)[0] == "REFUSE", verdict(loopy)[:2]
+    # exact-5% spread refuses (strictly-below boundary)
+    edge = _fab(full)
+    edge["b4"]["step_ms_b"] = edge["b4"]["step_ms_a"] * 1.05
+    assert verdict(edge)[0] == "REFUSE", verdict(edge)[:2]
     missing = _fab(full)
     del missing["b8"]
     assert verdict(missing)[0] == "REFUSE"
