@@ -22,6 +22,7 @@ serving-class box (G6 tiny-model trap applies to MAGNITUDES, not shape).
 import argparse
 import json
 import statistics
+import sys
 import time
 from pathlib import Path
 
@@ -366,7 +367,8 @@ _NON_EW_OPS = frozenset((
 # Frames that are never the answer: torch internals and this harness.
 _FRAME_SKIP = ("/torch/", "site-packages/torch", "torch/nn/modules",
                "torch/autograd", "step_decomp.py", "<built-in",
-               "torch/_dynamo", "torch/_inductor")
+               "torch/_dynamo", "torch/_inductor", "_python_dispatch",
+               "<frozen ", "importlib")
 
 
 def _self_device_us(evt):
@@ -378,6 +380,90 @@ def _self_device_us(evt):
         if v is not None:
             return float(v)
     return 0.0
+
+
+class _EwSiteTracer:
+    """Count elementwise aten dispatches per python call site.
+
+    PREREG-f1 registered profiler `with_stack` attribution
+    (AMENDMENT-f1-tracer supersedes it). On torch 2.13 `with_stack=True` returns EMPTY stacks
+    for every event -- key_averages, key_averages(group_by_stack_n=),
+    and function_events alike -- so that mechanism yields 100%
+    `<no-python-frame>` and attributes nothing. This tracer replaces it
+    and depends on nothing but python frames.
+
+    It records COUNTS, not time: device time per op comes from the
+    profiler, and each op's time is apportioned across its sites in
+    proportion to counts. That is exact when a single op's launches
+    cost the same, which is the regime here -- the block averages
+    1.21 us per launch, at this GPU's minimum kernel duration, so cost
+    tracks launch count rather than tensor size. The receipt records
+    counts, apportioned time, and this caveat together."""
+
+    def __init__(self, ops):
+        self._ops = ops
+        self.counts = {}
+        self._mode = None
+
+    def __enter__(self):
+        from torch.utils._python_dispatch import TorchDispatchMode
+
+        tracer = self
+
+        class _Mode(TorchDispatchMode):
+            def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                try:
+                    name = "aten::" + func._schema.name.split("::")[-1]
+                except Exception:                      # noqa: BLE001
+                    name = None
+                if name in tracer._ops:
+                    site = tracer._site()
+                    key = (name, site)
+                    tracer.counts[key] = tracer.counts.get(key, 0) + 1
+                return func(*args, **(kwargs or {}))
+
+        self._mode = _Mode()
+        self._mode.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        m, self._mode = self._mode, None
+        if m is not None:
+            m.__exit__(*exc)
+        return False
+
+    @staticmethod
+    def _site():
+        """Nearest python frame that is OUR code. sys._getframe walking
+        is used rather than traceback.extract_stack because this runs on
+        every dispatched op."""
+        f = sys._getframe(1)
+        depth = 0
+        while f is not None and depth < 40:
+            fn = f.f_code.co_filename
+            if not any(sk in fn for sk in _FRAME_SKIP):
+                return f"{fn}({f.f_lineno}): {f.f_code.co_name}"
+            f = f.f_back
+            depth += 1
+        return "<no-python-frame>"
+
+
+def _apportion(by_op, counts):
+    """Spread each op's device time over its call sites by launch share."""
+    per_op_total = {}
+    for (op, _site), c in counts.items():
+        per_op_total[op] = per_op_total.get(op, 0) + c
+    sites = {}
+    for (op, site), c in counts.items():
+        tot = per_op_total.get(op, 0)
+        if not tot:
+            continue
+        us = by_op.get(op, {}).get("us", 0.0) * c / tot
+        sr = sites.setdefault(site, {"us": 0.0, "calls": 0, "ops": {}})
+        sr["us"] += us
+        sr["calls"] += c
+        sr["ops"][op] = sr["ops"].get(op, 0.0) + us
+    return dict(sorted(sites.items(), key=lambda kv: -kv[1]["us"]))
 
 
 def _ew_attribute(evts, min_us=0.0):
@@ -855,8 +941,15 @@ def main():
             schedule=schedule(skip_first=24, wait=0, warmup=2, active=12,
                               repeat=1),
             record_shapes=True,
-            with_stack=bool(a.sync_attr_out or a.ew_attr_out))
+            with_stack=bool(a.sync_attr_out))
         tprof.__enter__()
+    _ew_tracer = None
+    if a.ew_attr_out:
+        # AMENDMENT-f1-tracer: torch 2.13's with_stack yields EMPTY
+        # stacks, so call sites come from a dispatch-mode tracer that
+        # depends only on python frames.
+        _ew_tracer = _EwSiteTracer(_EW_OPS)
+        _ew_tracer.__enter__()
     prof = None
     if a.cprofile_out:
         import cProfile
@@ -883,7 +976,8 @@ def main():
     if tprof is not None:
         tprof.__exit__(None, None, None)
         tbl = tprof.key_averages().table(sort_by="cuda_time_total",
-                                         row_limit=80)
+                                         row_limit=(400 if a.ew_attr_out
+                                                    else 80))
         # the schedule fills its active window only after skip_first(24)
         # + warmup(2) decode steps; label the receipt with the ACTUAL
         # window so a short run cannot masquerade as a full attribution
@@ -933,12 +1027,22 @@ def main():
             }, indent=1))
             print(f"SYNC_ATTR_OUT {a.sync_attr_out} active={active}/12",
                   flush=True)
+        if _ew_tracer is not None:
+            _ew_tracer.__exit__(None, None, None)
         if a.ew_attr_out:
             # F1 Stage A: which python call sites own the elementwise
             # device block. Uses the OP view on purpose -- kernel rows
             # carry no python stack -- and reports its own unclassified
             # remainder so a missing op cannot shrink the block silently.
-            attr = _ew_attribute(tprof.key_averages(group_by_stack_n=24))
+            attr = _ew_attribute(tprof.key_averages())
+            if _ew_tracer is not None and _ew_tracer.counts:
+                attr["by_site"] = _apportion(attr["by_op"],
+                                             _ew_tracer.counts)
+                attr["site_method"] = ("dispatch-tracer counts, device "
+                                       "time apportioned per op by "
+                                       "launch share")
+            else:
+                attr["site_method"] = "NONE -- tracer recorded no ops"
             unacc = sum(v["us"] for v in
                         attr["unclassified_ops"].values())
             Path(a.ew_attr_out).write_text(json.dumps({
@@ -949,6 +1053,7 @@ def main():
                                            if active else None),
                 "unclassified_us_per_step": (unacc / active
                                              if active else None),
+                "site_method": attr.get("site_method"),
                 "by_site": attr["by_site"],
                 "by_op": attr["by_op"],
                 "unclassified_ops": attr["unclassified_ops"],

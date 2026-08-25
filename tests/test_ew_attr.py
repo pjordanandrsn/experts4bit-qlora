@@ -9,13 +9,16 @@ test)."""
 
 import ast
 import pathlib
+import sys
 import types
 
 import pytest
 
 SRC = (pathlib.Path(__file__).resolve().parents[1]
        / "bench" / "hybrid-g9" / "step_decomp.py")
-WANT_FUNCS = ("_py_site", "_self_device_us", "_ew_attribute")
+WANT_FUNCS = ("_py_site", "_self_device_us", "_ew_attribute",
+              "_apportion")
+WANT_CLASSES = ("_EwSiteTracer",)
 WANT_CONSTS = ("_EW_OPS", "_FRAME_SKIP", "_NON_EW_OPS")
 
 
@@ -23,17 +26,20 @@ WANT_CONSTS = ("_EW_OPS", "_FRAME_SKIP", "_NON_EW_OPS")
 def helpers():
     tree = ast.parse(SRC.read_text())
     keep = [n for n in tree.body
-            if (isinstance(n, ast.FunctionDef) and n.name in WANT_FUNCS)
+            if (isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                and n.name in WANT_FUNCS + WANT_CLASSES)
             or (isinstance(n, ast.Assign)
                 and getattr(n.targets[0], "id", "") in WANT_CONSTS)]
-    got = {n.name for n in keep if isinstance(n, ast.FunctionDef)} | {
+    got = {n.name for n in keep
+           if isinstance(n, (ast.FunctionDef, ast.ClassDef))} | {
         n.targets[0].id for n in keep if isinstance(n, ast.Assign)}
-    missing = set(WANT_FUNCS + WANT_CONSTS) - got
+    missing = set(WANT_FUNCS + WANT_CONSTS + WANT_CLASSES) - got
     assert not missing, (
         f"step_decomp.py no longer defines {sorted(missing)} at module "
         "level -- this test silently covers nothing if it cannot find "
         "them, so it fails loudly instead")
     mod = types.ModuleType("ew_attr_helpers")
+    mod.sys = sys
     exec(compile(ast.Module(body=keep, type_ignores=[]), str(SRC), "exec"),
          mod.__dict__)
     return mod
@@ -146,3 +152,62 @@ def test_zero_device_time_events_are_ignored(helpers):
 
 def test_op_sets_are_disjoint(helpers):
     assert not (helpers._EW_OPS & helpers._NON_EW_OPS)
+
+
+# --- AMENDMENT-f1-tracer: the dispatch-mode call-site tracer ----------
+# These run on CPU tensors, so the mechanism that produced 100%
+# "<no-python-frame>" on the box is now caught before a box is rented.
+
+def _elementwise_work(t):
+    """A call site with a known file and function name."""
+    return (t * 2.0 + 1.0)
+
+
+def test_tracer_resolves_real_call_sites(helpers):
+    torch = pytest.importorskip("torch")
+    tracer = helpers._EwSiteTracer(helpers._EW_OPS)
+    t = torch.ones(4)
+    with tracer:
+        _elementwise_work(t)
+    assert tracer.counts, (
+        "tracer recorded nothing -- this is exactly the failure mode "
+        "profiler with_stack had on torch 2.13 (100% unattributed)")
+    sites = {site for _op, site in tracer.counts}
+    assert not any("<no-python-frame>" in s for s in sites), sites
+    assert any("_elementwise_work" in s for s in sites), sites
+    assert any("test_ew_attr.py" in s for s in sites), sites
+    ops = {op for op, _ in tracer.counts}
+    assert "aten::mul" in ops and "aten::add" in ops, ops
+
+
+def test_tracer_ignores_non_elementwise(helpers):
+    torch = pytest.importorskip("torch")
+    tracer = helpers._EwSiteTracer(helpers._EW_OPS)
+    with tracer:
+        torch.mm(torch.ones(2, 2), torch.ones(2, 2))
+    assert not any(op == "aten::mm" for op, _ in tracer.counts), \
+        tracer.counts
+
+
+def test_tracer_restores_dispatch_on_exit(helpers):
+    torch = pytest.importorskip("torch")
+    tracer = helpers._EwSiteTracer(helpers._EW_OPS)
+    with tracer:
+        (torch.ones(2) * 2.0)
+    before = len(tracer.counts)
+    (torch.ones(2) * 2.0)          # outside the mode
+    assert len(tracer.counts) == before, "mode leaked past __exit__"
+
+
+def test_apportion_splits_time_by_launch_share(helpers):
+    by_op = {"aten::mul": {"us": 900.0, "calls": 9}}
+    counts = {("aten::mul", "siteA"): 6, ("aten::mul", "siteB"): 3}
+    out = helpers._apportion(by_op, counts)
+    assert out["siteA"]["us"] == 600.0 and out["siteA"]["calls"] == 6
+    assert out["siteB"]["us"] == 300.0
+    assert list(out) == ["siteA", "siteB"], "must sort by cost"
+
+
+def test_apportion_ignores_ops_with_no_profiler_time(helpers):
+    out = helpers._apportion({}, {("aten::mul", "siteA"): 5})
+    assert out["siteA"]["us"] == 0.0
