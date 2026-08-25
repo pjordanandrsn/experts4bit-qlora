@@ -30,6 +30,8 @@ writes are the part the scheduler will fuse).
 """
 from __future__ import annotations
 
+import os
+
 import torch
 
 BLOCK_TOKENS = 16
@@ -75,6 +77,11 @@ class Fp8PagedKV:
         self.device = self.kp.device
         # payload bytes before the scale tail of a row, per side
         self._k_pay = self.bt * self.H * self.D
+        # AMENDMENT-f1-stageB-b2 opt-in: the fused one-launch append.
+        # Env-gated, default OFF -- the B2 arm flips it; a shipped
+        # default flip needs the B2 RESULTS merged first.
+        self._fused_append = os.environ.get(
+            "E4B_FUSED_KV_APPEND", "0") == "1"
         self._v_pay = self.bt * self.H * self.D
         # block tables live on-device and are written IN PLACE when a block
         # opens (one scalar copy per 16 tokens) — rebuilding [B, blocks]
@@ -329,6 +336,24 @@ class Fp8PagedKV:
         ``seq_lens.add_(1)`` is the same in-place publish the attention
         kernel reads."""
         seq = self._g_seq
+        if self._fused_append:
+            # AMENDMENT-f1-stageB-b2: one launch per side replaces the
+            # ~25-launch eager sequence below. Bitwise against it
+            # (gnf4 test_fp8_kv_append.py, re-asserted on-box before any
+            # timed arm); the seq_lens publish stays the separate
+            # in-stream op it is today.
+            from fp8_kv import fp8_kv_append_t1
+            fp8_kv_append_t1(v, self._g_vflat[layer],
+                             self.block_table[layer][seq],
+                             self.seq_lens[layer].narrow(0, seq, 1),
+                             self.v_row, self._v_pay, self.bt, 1)
+            fp8_kv_append_t1(k, self._g_kflat[layer],
+                             self.block_table[layer][seq],
+                             self.seq_lens[layer].narrow(0, seq, 1),
+                             self.k_row, self._k_pay, self.bt,
+                             self.k_groups)
+            self.seq_lens[layer].narrow(0, seq, 1).add_(1)
+            return
         vq, vs = self._quant_bytes(v, 1)
         kq, ks = self._quant_bytes(k, self.k_groups)
         pos = self.seq_lens[layer, seq].to(torch.long)

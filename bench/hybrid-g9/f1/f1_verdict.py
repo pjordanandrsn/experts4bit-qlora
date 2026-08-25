@@ -8,7 +8,6 @@ import sys
 
 PASS_MS = 10.5
 PARTIAL_MS = 12.0
-AA_MARGIN_MS = 1.48      # half the PASS margin from the 13.46 anchor
 
 
 def _step(arm):
@@ -28,15 +27,35 @@ def _tokens(arm):
 def verdict(rep):
     b0a, b0b = rep.get("b0_a"), rep.get("b0_b")
     treat, name = rep.get("treatment"), rep.get("treatment_name", "B1")
+    # AMENDMENT-f1-stageB-b2: an arm may carry its own registered bars
+    # (B2: 9.6/10.5). They must come from the reg doc, never be computed
+    # from the data.
+    pass_ms = float(rep.get("pass_ms", PASS_MS))
+    partial_ms = float(rep.get("partial_ms", PARTIAL_MS))
+    if not (0 < pass_ms < partial_ms):
+        return ("REFUSE", f"nonsense bars pass={pass_ms} "
+                f"partial={partial_ms}")
     for label, arm in (("b0_a", b0a), ("b0_b", b0b), (name, treat)):
         if _step(arm) is None:
             return ("REFUSE", f"{label}: no step time in the arm")
-    # 2. A/A before A/B
+    # 2. A/A before A/B. The margin is FRAME-RELATIVE: half of the
+    # smallest gain a PASS could claim (base - pass_ms). Stage B's frame
+    # made that 1.48 ms (13.46 anchor, 10.5 bar); a hard-coded 1.48
+    # under B2's bars (base ~10.62, PASS 9.6 -> margin ~0.51) would let
+    # box noise exceed half of any claimed PASS gain (Bugbot, e4b#237).
+    # spread <= (base - pass_ms)/2 also implies spread < gain/2 for
+    # every PASS, closing the PASS-path gap the fixed margin left open.
     sa, sb = _step(b0a), _step(b0b)
     spread = abs(sa - sb)
-    if spread > AA_MARGIN_MS:
-        return ("REFUSE", f"A/A spread {spread:.2f} ms > {AA_MARGIN_MS} ms "
-                "-- box disqualified before the treatment is read")
+    aa_margin = (min(sa, sb) - pass_ms) / 2
+    if aa_margin <= 0:
+        return ("REFUSE", f"base {min(sa, sb):.2f} ms is already at or "
+                f"under the PASS bar {pass_ms} -- the frame is "
+                "degenerate and no gain is measurable")
+    if spread > aa_margin:
+        return ("REFUSE", f"A/A spread {spread:.2f} ms > {aa_margin:.2f} "
+                "ms (half the minimum PASS gain for this frame) -- box "
+                "disqualified before the treatment is read")
     # 1. token identity
     t0, tt = _tokens(b0a), _tokens(treat)
     if not t0 or not tt:
@@ -62,17 +81,17 @@ def verdict(rep):
     st = _step(treat)
     base = min(sa, sb)
     gain = base - st
-    if st <= PASS_MS:
-        return ("PASS", f"{name} step {st:.2f} ms <= {PASS_MS} "
+    if st <= pass_ms:
+        return ("PASS", f"{name} step {st:.2f} ms <= {pass_ms} "
                 f"({1000/st:.1f} tok/s, {gain:.2f} ms removed)")
-    if st <= PARTIAL_MS:
+    if st <= partial_ms:
         if spread >= gain / 2:
             return ("REFUSE", f"PARTIAL range but A/A spread "
                     f"{spread:.2f} >= half the gain {gain:.2f}")
         return ("PARTIAL", f"{name} step {st:.2f} ms in "
-                f"({PASS_MS}, {PARTIAL_MS}] ({1000/st:.1f} tok/s, "
+                f"({pass_ms}, {partial_ms}] ({1000/st:.1f} tok/s, "
                 f"{gain:.2f} ms removed, A/A {spread:.2f})")
-    return ("REFUTED", f"{name} step {st:.2f} ms > {PARTIAL_MS} "
+    return ("REFUTED", f"{name} step {st:.2f} ms > {partial_ms} "
             f"({1000/st:.1f} tok/s) -- the block is not addressable "
             "by this mechanism")
 
@@ -80,14 +99,15 @@ def verdict(rep):
 _MISSING = object()
 
 
-def _fab(step, aa=0.2, toks=_MISSING, treat_toks=_MISSING, rc=0):
+def _fab(step, aa=0.2, toks=_MISSING, treat_toks=_MISSING, rc=0,
+         base=13.46):
     """`or`-defaulting would swallow an explicit empty token list and
     silently turn the vacuous-identity case into a passing one, so the
     sentinel is load-bearing rather than style."""
     t = [1, 2, 3, 4] if toks is _MISSING else toks
     tt = t if treat_toks is _MISSING else treat_toks
-    return {"b0_a": {"step_ms_clean": 13.46, "tokens": t},
-            "b0_b": {"step_ms_clean": 13.46 + aa, "tokens": t},
+    return {"b0_a": {"step_ms_clean": base, "tokens": t},
+            "b0_b": {"step_ms_clean": base + aa, "tokens": t},
             "treatment_name": "B1",
             "treatment": {"step_ms_clean": step, "tokens": tt,
                           "recompiles_in_window": rc}}
@@ -111,6 +131,22 @@ def self_test():
         # PARTIAL with an A/A spread >= half the gain must refuse, not
         # report a gain the box cannot resolve
         (_fab(11.9, aa=1.0), "REFUSE"),
+        # B2-style per-arm bar overrides (AMENDMENT-f1-stageB-b2): the
+        # same 10.0 step passes default bars but only PARTIALs B2's
+        (dict(_fab(9.5), pass_ms=9.6, partial_ms=10.5), "PASS"),
+        (dict(_fab(10.0), pass_ms=9.6, partial_ms=10.5), "PARTIAL"),
+        (dict(_fab(10.62), pass_ms=9.6, partial_ms=10.5), "REFUTED"),
+        (dict(_fab(9.5), pass_ms=10.5, partial_ms=9.6), "REFUSE"),
+        # frame-relative A/A margin (Bugbot, e4b#237): base 10.62 with
+        # PASS 9.6 makes the margin 0.51 ms, so a 1.0 ms spread that the
+        # old fixed 1.48 would ACCEPT must refuse under B2's frame
+        (dict(_fab(9.0, aa=1.0, base=10.62),
+              pass_ms=9.6, partial_ms=10.5), "REFUSE"),
+        (dict(_fab(9.0, aa=0.3, base=10.62),
+              pass_ms=9.6, partial_ms=10.5), "PASS"),
+        # a base already under the bar has no measurable frame
+        (dict(_fab(9.0, base=9.5), pass_ms=9.6, partial_ms=10.5),
+         "REFUSE"),
     ]
     for rep, want in cases:
         got, why = verdict(rep)
@@ -119,7 +155,8 @@ def self_test():
     got, _ = verdict(_fab(11.0, aa=0.2))
     assert got == "PARTIAL", got
     print(f"self-test PASS ({len(cases)+1} cases: all four verdicts, "
-          "both boundaries, and every registered refusal)")
+          "both boundaries, per-arm bar overrides, and every "
+          "registered refusal)")
 
 
 def main():
