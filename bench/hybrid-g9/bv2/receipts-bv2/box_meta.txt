@@ -1,0 +1,3 @@
+e885615 K6-B: productize dot-pad behind GNF4_GEMV_DOTPAD (default OFF) + prereg (#258)
+cf2ab1b BV2 prereg: the batch curve on the current shipped stack (prereg + calculator only) (#247)
+NVIDIA GeForce RTX 5090, 610.43.02, 575.00 W
