@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.21.0 — 2026-08-25
+
+Minor release: the serving-harness half of the K/F campaign, the
+speculative-verification machinery, and two default flips. With gnf4
+0.15.0, single-stream decode on the reference class moves from ~66 to
+**~139–140 tok/s** at defaults. Every default cites an adjudicated
+verdict.
+
+### Performance (defaults changed)
+
+- **`--compile-layers` compiles the dense layer bodies in `default`
+  mode** (F1-B1, PARTIAL ships): the 74.3 → 94.2 tok/s rung. Paged
+  attention and the MoE tier stay dynamo-disabled; the disable is
+  re-asserted after any shim unwrap (the wrapper-cancellation bug is
+  tested against).
+- **Fused T=1 KV append is the default** (F1-B2, PASS): construction-
+  time kernel resolution with graceful degrade, loud refuse on an
+  explicit `E4B_FUSED_KV_APPEND=1` without triton. The 94.2 → 133.4
+  rung. Rollback: `E4B_FUSED_KV_APPEND=0`.
+- **Fused QKV projection is the default at load** (F2 T2,
+  RESULTS-f2-tail PARTIAL ships): one matmul replaces the three
+  per-layer q/k/v GEMVs; +0.120 ms/step under a 0.001 ms A/A,
+  token-identical over the 127-step receipt, per-projection numerics
+  inside `max|ref|·2⁻⁷` on all 48 layers. Rollback: `--no-fuse-qkv`.
+  NOT claimed bitwise — the prereg records the falsification of that
+  claim by its own CPU gate.
+
+### New capabilities
+
+- **Speculative-verification machinery** (S2-lite/S3), shipped as
+  capability with a negative headline: verify-mode paged attention
+  (K+1 rows against one slot with length-staggered causality),
+  `rewind`/`rewind_nosync`/`seen_device` (device-truth forwardness
+  under graph mode), and device-side expert grouping
+  (`DEVICE_GROUPING`, capture-legal via gnf4's grouped API).
+  **The S3 verdict REFUTED grouped verification at this scale**
+  (0.66× vs the decode anchor at K=16–64) — and with it the 425 tok/s
+  single-stream target on the registered path. The machinery ships
+  because the measurement required it and future models may invert it.
+- **Batch-decode curve harness** (BV2): the eager scheduler tops at
+  ~124 tok/s aggregate (B=16) and is host-bound; the registered next
+  lever is a B>1 CUDA-graph decode loop (not in this release).
+- Census instruments: step-budget decomposition, dispatch-mode
+  elementwise attribution (`--ew-attr-out`), recompile guards.
+
+### Measurement and research artifacts
+
+S1 acceptance-length receipts (2.9–3.9 tokens accepted at K=16/32/64,
+MARGINAL), the S2 singleton bound and its correction (the bound is a
+valid conservative upper bound, not a measurement of grouped verify),
+S3 grouped-verify refutation, BV2 curve receipts, and the F2 arm
+receipts. All under `bench/hybrid-g9/`.
+
 ## 0.20.0 — 2026-08-23
 
 Minor release. 0.19.1 predates the hybrid tier (Phases 1–9), the cold engine's
