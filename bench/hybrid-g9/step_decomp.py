@@ -202,6 +202,18 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     _cur = ALL_ATTENTION_FUNCTIONS[IMPL_NAME]
     _orig = getattr(_cur, "_orig", None)
     if _orig is not None:
+        # `_orig` is the RAW shim: unwrapping here discards the
+        # `dynamo.disable` that --compile-layers applied, so under
+        # compile the paged-attention path stops being excluded and
+        # inductor re-emits our own fp8 paged-decode triton kernel
+        # through its user-kernel path -- where it dies on a
+        # loop-carried `m_i` typed fp32 then fp64. PREREG-f1-stageB's
+        # B1 arm is defined as "compile owns only the dense layer
+        # body", so the disable is re-applied rather than the arm
+        # re-scoped (e4b F1 Stage B, first attempt).
+        if getattr(a, "compile_layers", False):
+            import torch._dynamo as _dyn
+            _orig = _dyn.disable(_orig)
         ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = _orig
     prev = set_context(runner.ctx)
 
