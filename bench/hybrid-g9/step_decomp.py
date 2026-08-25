@@ -902,11 +902,17 @@ def main():
     ap.add_argument("--compile-mode", default="reduce-overhead",
                     help="torch.compile mode for --compile-layers; drop "
                          "to 'default' if cudagraphs misbehave (recorded)")
-    ap.add_argument("--fuse-qkv", action="store_true",
-                    help="PREREG-f2-tail T2: fuse q/k/v projections into "
-                         "one matmul per attention module (bitwise "
-                         "row-identical); applied before --compile-layers "
-                         "so dynamo traces the fused forward")
+    ap.add_argument("--fuse-qkv", dest="fuse_qkv",
+                    action="store_true", default=True,
+                    help="fuse q/k/v projections into one matmul per "
+                         "attention module. DEFAULT ON since "
+                         "RESULTS-f2-tail (PARTIAL ships: +0.120 ms "
+                         "under a 0.001 ms A/A, token-identical); "
+                         "applied before --compile-layers so dynamo "
+                         "traces the fused forward")
+    ap.add_argument("--no-fuse-qkv", dest="fuse_qkv",
+                    action="store_false",
+                    help="rollback for --fuse-qkv (the F2 OFF arm)")
     ap.add_argument("--kv-batched", action="store_true",
                     help="accepted for command compatibility -- batched "
                          "KV append is the DEFAULT since its cert "
@@ -1151,11 +1157,14 @@ def main():
     if a.fuse_qkv:
         from experts4bit_qlora.engines.qkv_fuse import fuse_qkv
         n_f = fuse_qkv(model)
-        if n_f == 0:
+        if n_f == 0 and "--fuse-qkv" in sys.argv:
+            # explicit request must fuse or fail loudly; the ON
+            # default degrades gracefully on families without
+            # Qwen3MoeAttention (the F1-B2 resolution pattern)
             raise SystemExit("--fuse-qkv matched no Qwen3MoeAttention "
                              "modules -- refusing a vacuous arm")
         print(f"fused q/k/v projections on {n_f} attention modules "
-              f"(PREREG-f2-tail T2)", flush=True)
+              f"(RESULTS-f2-tail default)", flush=True)
     if a.compile_layers:
         import torch._dynamo as dynamo
         from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
