@@ -1,0 +1,69 @@
+{
+ "anchor_step_ms": 7.414621929133858,
+ "anchor_aa_spread_ms": 0.004212236220473287,
+ "gate": {
+  "s2": "gate",
+  "k": 16,
+  "base_seen_device": 517,
+  "seq_end_seen_device": 538,
+  "sequential_tokens": [
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   1260,
+   1030,
+   264,
+   8640,
+   3476,
+   304
+  ],
+  "verify_tokens": [
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   1260,
+   1030,
+   264,
+   8640,
+   3476,
+   304
+  ],
+  "rows_matching": 17,
+  "rows_total": 17,
+  "bitwise_identical": true,
+  "continuation_expected": [
+   279,
+   12425,
+   4013,
+   20207
+  ],
+  "continuation_after_verify": [
+   279,
+   12425,
+   4013,
+   20207
+  ],
+  "continuation_identical": true,
+  "gate_pass": true
+ },
+ "verify_graph_ms": {
+  "16": 47.71258544921875
+ },
+ "note": "K=32/64 timing arms not run: the K=16 graphed number (47.71 ms, singleton grouping) already sits 3.4x past the REFUTED line, and the routing-overlap receipts (41.5 distinct experts per 17-token window, 53.8 per 33) bound every larger K worse"
+}

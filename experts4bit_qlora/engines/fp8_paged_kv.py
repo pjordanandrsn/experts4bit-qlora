@@ -473,12 +473,28 @@ class Fp8PagedKV:
         Both mirrors are set: ``seq_lens`` (what the kernel reads) and
         ``_seen`` (what the eager append paths advance), so a rewind is
         safe whichever append path runs next. The forward check uses the
-        DEVICE length, since ``_seen`` may be stale under graph mode."""
+        DEVICE length, since ``_seen`` may be stale under graph mode --
+        and that check is a ``.item()``, i.e. a SYNC, which is illegal
+        under stream capture. Callers inside a capture (or timing a
+        capture's replays) use :meth:`rewind_nosync`, which does the
+        same length writes with no read-back."""
         for layer in range(self.L):
             cur = self.seen_device(layer, seq)
             if to_tokens > cur:
                 raise ValueError(f"rewind forward (layer {layer}: "
                                  f"{cur} -> {to_tokens})")
+        self.rewind_nosync(seq, to_tokens)
+
+    def rewind_nosync(self, seq: int, to_tokens: int):
+        """:meth:`rewind` without the device-length read-back.
+
+        Capture-safe and sync-free: ``fill_`` is an in-stream op. The
+        caller owns the guarantee that ``to_tokens`` is not forward of
+        the true length -- inside a capture there is no legal way to
+        check it, so the check happens once outside (Bugbot-adjacent:
+        found live when the S2 timing arm's rewind hit
+        cudaErrorStreamCaptureUnsupported through ``.item()``)."""
+        for layer in range(self.L):
             self._seen[layer][seq] = to_tokens
             # fill_ keeps this async (see append's seq_lens note)
             self.seq_lens[layer].narrow(0, seq, 1).fill_(to_tokens)

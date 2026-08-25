@@ -36,6 +36,12 @@ from typing import Sequence
 import torch
 
 
+# PREREG-s2lite: set by a harness that is about to CAPTURE a T > 1
+# step, where unique_consecutive's sync is illegal. Off by default --
+# grouped routing stays the eager/prefill path's choice.
+FORCE_SINGLETON_GROUPS = [False]
+
+
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
                       act_fn, gptoss=None, clamp_limit=None,
                       singleton_groups=False):
@@ -73,6 +79,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # per-row arithmetic is identical to the grouped path, so the
         # outputs are bitwise-equal -- pinned in CI and held by the
         # on-box hash gate.
+        #
+        # PREREG-s2lite: also correct at T > 1, for the same reason --
+        # the M dimension does not participate in any reduction, so a
+        # row's output does not depend on which group it sits in. What
+        # it COSTS at T > 1 is different: rows sharing an expert no
+        # longer share that expert's weight read, so the MoE side reads
+        # ~R distinct expert weight-sets instead of ~E(distinct). A
+        # captured verify step has no legal alternative absent a
+        # device-side grouping kernel, so this is what a graphed
+        # verify actually costs today -- and it is an UPPER bound on
+        # what a device-grouped one would.
         order = None
         sorted_ids = local_ids
         x_sorted = x_rows.contiguous()
@@ -394,7 +411,8 @@ class _HotResidency:
                                self.h_dn_p, self.h_dn_a, self.shapes,
                                self.has_gate, self.act_fn, gptoss=gptoss,
                                clamp_limit=self.clamp_limit,
-                               singleton_groups=(T == 1))
+                               singleton_groups=(T == 1 or
+                                                 FORCE_SINGLETON_GROUPS[0]))
         w = top_k_weights.reshape(-1).to(torch.float32)
         out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
