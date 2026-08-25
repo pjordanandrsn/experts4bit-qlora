@@ -21,18 +21,38 @@ mod = pytest.importorskip("experts4bit_qlora.engines.fp8_paged_kv")
 _CLS = mod.Fp8PagedKV
 
 
-def test_flag_defaults_on_with_env_rollback(monkeypatch):
-    """B2 certified (RESULTS-f1-stageB-b2): the fused append is the
-    default and the env is the rollback. Asserted BEHAVIORALLY -- the
-    first version matched a source substring and broke on its own
-    refactor while the behavior it certified was intact (Bugbot,
-    e4b#238)."""
+def test_cpu_construction_degrades_even_with_kernel(monkeypatch):
+    """The regression that hit e4b#251 CI the hour gnf4 0.15.0 reached
+    PyPI: the kernel IMPORTS fine on a CPU host, but launching it dies
+    in triton's driver. A cpu-device KV must degrade to eager no
+    matter what is installed."""
     import sys
     monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
     monkeypatch.setitem(sys.modules, "fp8_kv", _stub(with_kernel=True))
     kv = _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
               max_tokens_per_seq=8, device="cpu")
-    assert kv._fused_append is True
+    assert kv._fused_append is False
+
+
+def test_resolver_cell_table():
+    """B2 certified (RESULTS-f1-stageB-b2): fused is the default ON A
+    CUDA DEVICE and the env is the rollback; every degrade has a
+    loud-refuse twin under an explicit =1. Behavioral, on the factored
+    resolver, so all cells run on CPU CI (the first version asserted
+    the default via a cpu construction, which the e4b#251 fix
+    correctly turned into a degrade)."""
+    resolve = mod._resolve_fused_append
+    present, absent = (lambda: True), (lambda: False)
+    assert resolve(None, "cuda", present) is True      # certified default
+    assert resolve(None, "cuda:1", present) is True
+    assert resolve("0", "cuda", present) is False      # rollback
+    assert resolve(None, "cpu", present) is False      # device degrade
+    assert resolve(None, "cuda", absent) is False      # install degrade
+    with pytest.raises(RuntimeError, match="device 'cpu'"):
+        resolve("1", "cpu", present)
+    with pytest.raises(RuntimeError, match="no fp8_kv_append_t1"):
+        resolve("1", "cuda", absent)
+    assert resolve("1", "cuda", present) is True
 
 
 def _stub(with_kernel):
@@ -57,12 +77,13 @@ def _stub(with_kernel):
     return _Stub()
 
 
-@pytest.mark.parametrize("env,expect", [("1", True), ("0", False),
-                                        (None, True)])
+@pytest.mark.parametrize("env,expect", [("0", False), (None, False)])
 def test_flag_reads_env_at_construction(monkeypatch, env, expect):
-    """Flag semantics in isolation: a kernel-PRESENT stub, so the test
-    holds on machines whose installed gnf4 predates #253 (CI installs
-    from PyPI) as well as on the boxes."""
+    """Construction reads the env, on a cpu KV (what CI can build):
+    "0" and unset both land eager here -- unset because the device
+    gate degrades a non-cuda KV regardless of the certified ON
+    default. The ON cells (cuda device) live in
+    test_resolver_cell_table, which needs no cuda tensor to run."""
     import sys
     if env is None:
         monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
@@ -108,12 +129,15 @@ def test_old_gnf4_degrades_to_eager_by_default(monkeypatch):
     assert kv._fused_append is False
 
 
-def test_old_gnf4_with_explicit_env_refuses_loudly(monkeypatch):
-    """An EXPLICIT =1 on a kernel-less install must raise, never
-    silently serve the eager path the caller opted out of."""
+def test_explicit_env_on_cpu_kv_refuses_loudly(monkeypatch):
+    """An EXPLICIT =1 must raise when it cannot be honored, never
+    silently serve the eager path the caller opted out of. On a cpu
+    KV the DEVICE gate refuses first (correct precedence -- the
+    kernel-missing refusal for a cuda KV is covered in
+    test_resolver_cell_table)."""
     import sys
     monkeypatch.setenv("E4B_FUSED_KV_APPEND", "1")
     monkeypatch.setitem(sys.modules, "fp8_kv", _stub(with_kernel=False))
-    with pytest.raises(RuntimeError, match="gnf4#253"):
+    with pytest.raises(RuntimeError, match="CUDA"):
         _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
              max_tokens_per_seq=8, device="cpu")
