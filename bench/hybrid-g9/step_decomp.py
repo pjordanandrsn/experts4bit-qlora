@@ -360,7 +360,12 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             # is timed as an eager loop -- disclosed basis, comparable
             # as the no-capture grouped reference (Bugbot, e4b#245: the
             # first draft documented this loop and then captured
-            # anyway, so the arm failed instead of producing a time)
+            # anyway, so the arm failed instead of producing a time;
+            # the second draft referenced _hr before importing it and
+            # died at cleanup AFTER timing, never writing the receipt)
+            from experts4bit_qlora.engines import hot_residency as _hr
+            _hr.FORCE_SINGLETON_GROUPS[0] = False
+            _hr.DEVICE_GROUPING[0] = False
             kv.rewind(slot, base_seen)
             torch.cuda.synchronize()
             for _ in range(8):
