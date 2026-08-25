@@ -65,8 +65,14 @@ per-expert chains), and/or CUDA-graph the step. The ceiling if device
 work were perfectly packed is ~5.65 s/step (~9x). TR2's prereg will
 register the treatment, bars derived from this census's anchor and
 busy floor. Predictions this file commits to before TR2 is written:
-the win is bounded above by 9.1x, and any treatment that does not cut
-LAUNCH COUNT by ≥10x will not reach 2x.
+the win is bounded above by 9.1x; under the additive launch model
+(wall ~= 5.65 s busy + N x ~15.8 us host cost, the fit that closes
+these receipts) a 2x wall requires a launch-count cut of >= ~2.3x
+and a 5x wall requires >= ~8x. Falsification: a 2x wall achieved
+with a launch cut below ~2x breaks the model. (First draft said
+">=10x for 2x" -- wrong arithmetic, corrected by review before
+merge: 10x is the neighborhood needed to APPROACH the ceiling, not
+the 2x threshold.)
 
 ## Failure record (all receipts committed)
 
