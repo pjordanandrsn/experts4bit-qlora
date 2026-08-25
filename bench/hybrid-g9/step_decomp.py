@@ -184,7 +184,8 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     cap_tokens = a.prompt_len + a.gen_tokens + 8   # the kv ctor budget
     kv.graph_mode_init(seq=slot, upto_tokens=cap_tokens)
     dev = "cuda"
-    in_ids = torch.tensor([[runner.tokens[rid][-1]]], dtype=torch.long,
+    start_tok = int(runner.tokens[rid][-1])
+    in_ids = torch.tensor([[start_tok]], dtype=torch.long,
                           device=dev)
     pos = torch.tensor([[runner.pos_of[rid] - 1]], dtype=torch.long,
                        device=dev)
@@ -242,6 +243,116 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     torch.cuda.current_stream().wait_stream(side)
     torch.cuda.synchronize()
 
+    if a.s2_verify:
+        kk = a.s2_k + 1
+        # DEVICE length: warm ran through append_graph_t1, which
+        # advances seq_lens only -- _seen is stale here (Bugbot,
+        # e4b#241). Same reason base_tok is read from in_ids NOW
+        # rather than from the pre-warm token.
+        base_seen = kv.seen_device(0, slot)
+        base_pos = int(pos.reshape(()).item())
+        base_tok = int(in_ids.reshape(()).item())
+        # capacity: the oracle runs kk + 4 steps and the verify step
+        # re-appends kk, so the window must fit twice over plus slack
+        room = cap_tokens - base_seen
+        if room < 2 * kk + 8:
+            raise SystemExit(
+                f"S2 window needs {2 * kk + 8} tokens of paged capacity "
+                f"but only {room} remain (cap {cap_tokens}, at "
+                f"{base_seen}) -- raise --gen-tokens/--prompt-len or "
+                f"lower --s2-k rather than silently overflowing")
+        # ---- kk sequential greedy steps (the oracle window) plus 4
+        # continuation steps (the post-rewind identity check's expected
+        # value -- captured HERE, in the sequential world, before any
+        # rewind, so the comparison is between two real worlds)
+        seq_toks = []
+        for _ in range(kk + 4):
+            one_step()
+            seq_toks.append(int(in_ids.reshape(()).item()))
+        torch.cuda.synchronize()
+        cont_expected, seq_toks = seq_toks[kk:], seq_toks[:kk]
+        seq_end_seen = kv.seen_device(0, slot)
+        # ---- rewind and run ONE verify step over the same window
+        kv.rewind(slot, base_seen)
+        torch.cuda.synchronize()
+        # row 0 is fed the token the oracle window STARTED from, which
+        # is the post-warm token, not the pre-warm start_tok
+        v_in = torch.tensor([[base_tok] + seq_toks[:-1]], device=dev)
+        v_pos = (torch.arange(kk, device=dev) + base_pos).view(1, kk)
+        runner.ctx.mode = "verify"
+        out = model(input_ids=v_in, position_ids=v_pos, use_cache=False)
+        ver_toks = out.logits[0].argmax(-1).tolist()
+        torch.cuda.synchronize()
+        if a.s2_verify == "gate":
+            match = [int(x) == int(y) for x, y in zip(ver_toks, seq_toks)]
+            # after rewinding the REJECTED tail (here: keep all), the
+            # T=1 continuation must be unchanged -- run 4 more steps in
+            # both worlds and compare
+            runner.ctx.mode = "decode"
+            in_ids.copy_(torch.tensor([[seq_toks[-1]]], device=dev))
+            pos.fill_(base_pos + kk)
+            cont_a = []
+            for _ in range(4):
+                one_step()
+                cont_a.append(int(in_ids.reshape(()).item()))
+            cont_ok = cont_a == cont_expected
+            rep = {"s2": "gate", "k": a.s2_k,
+                   "base_seen_device": base_seen,
+                   "seq_end_seen_device": seq_end_seen,
+                   "sequential_tokens": seq_toks,
+                   "verify_tokens": ver_toks,
+                   "rows_matching": sum(match), "rows_total": kk,
+                   "bitwise_identical": all(match),
+                   "continuation_expected": cont_expected,
+                   "continuation_after_verify": cont_a,
+                   "continuation_identical": cont_ok,
+                   "gate_pass": all(match) and cont_ok}
+            Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(a.out).write_text(json.dumps(rep, indent=1))
+            print(f"S2_GATE k={a.s2_k} match={sum(match)}/{kk} "
+                  f"bitwise={all(match)} continuation={cont_ok} "
+                  f"PASS={rep['gate_pass']} out={a.out}", flush=True)
+            set_context(prev)
+            return
+        # ---- time: graph the verify step at FIXED position
+        kv.rewind(slot, base_seen)
+        torch.cuda.empty_cache()
+        g = torch.cuda.CUDAGraph()
+        kv.rewind(slot, base_seen)
+        with torch.cuda.graph(g, capture_error_mode="thread_local"):
+            out = model(input_ids=v_in, position_ids=v_pos,
+                        use_cache=False)
+            _ = out.logits[0].argmax(-1)
+        torch.cuda.synchronize()
+        spans = []
+        for _c in range(10):
+            e0 = torch.cuda.Event(enable_timing=True)
+            e1 = torch.cuda.Event(enable_timing=True)
+            e0.record()
+            for _r in range(8):
+                kv.rewind(slot, base_seen)
+                g.replay()
+            e1.record()
+            e1.synchronize()
+            spans.append(e0.elapsed_time(e1) / 8)
+        spans.sort()
+        set_context(prev)
+        rep = {"s2": "time", "k": a.s2_k, "rows_per_step": kk,
+               "verify_graph_ms": spans[len(spans) // 2],
+               "verify_ms_all_chunks": spans,
+               "past_tokens": base_seen,
+               "basis": "graphed fixed-position verify step; the "
+                        "inter-replay kv.rewind (one fill_ per layer, "
+                        "~48 launches) is INSIDE the timed span and "
+                        "inflates verify_ms slightly -- conservative "
+                        "side (PREREG-s2lite Stage A; executor needs "
+                        "device-addressed appends -- Stage B)"}
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(rep, indent=1))
+        print(f"S2_TIME k={a.s2_k} rows={kk} "
+              f"verify_graph_ms={rep['verify_graph_ms']:.3f} "
+              f"past={base_seen} out={a.out}", flush=True)
+        return
     if a.verify_probe:
         # S1 verify-cost probe, second design (Bugbot e4b#239 killed the
         # first): decode attention is T=1 by contract, and the prefill
@@ -721,6 +832,20 @@ def main():
                          "files via stack frames (T5 H1/H2 instrument). "
                          "Implies the torch profiler with with_stack=True "
                          "-- run timing arms WITHOUT this flag")
+    ap.add_argument("--s2-verify", choices=["gate", "time"], default=None,
+                    help="PREREG-s2lite Stage A. 'gate': bitwise identity "
+                         "-- 17 sequential T=1 greedy steps vs ONE "
+                         "verify-mode step fed those same tokens as the "
+                         "draft; every verified argmax must equal the "
+                         "sequential token, and after rewind the T=1 "
+                         "continuation must be unchanged. 'time': graph "
+                         "the verify step at fixed position (write "
+                         "addresses bake -- legal for same-position "
+                         "replay; timing-only) and report verify_ms vs "
+                         "the anchor")
+    ap.add_argument("--s2-k", type=int, default=16,
+                    help="draft window for --s2-verify (K; the step runs "
+                         "K+1 rows)")
     ap.add_argument("--verify-probe", type=int, default=None,
                     help="PREREG-s1-acceptance: after prefill+warm, time "
                          "R repeats of a (K+1)-row single-seq forward at "

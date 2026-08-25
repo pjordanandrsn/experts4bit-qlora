@@ -422,13 +422,27 @@ class Fp8PagedKV:
                 tbl, lens)
 
     def attention(self, layer: int, q: torch.Tensor, slots=None,
+                  lens_override: torch.Tensor | None = None,
                   **kw) -> torch.Tensor:
         """Paged FP8 decode attention for q [B, H_q, D]; dequantization
         happens in the kernel's registers (invariant 2). ``slots`` maps
-        q's rows to sequences (see :meth:`kernel_args`)."""
+        q's rows to sequences (see :meth:`kernel_args`).
+
+        ``lens_override`` replaces the per-row lengths read from
+        ``seq_lens`` (PREREG-s2lite): speculative verification maps K+1
+        q-rows to ONE slot with staggered lengths ``base + 1 .. base +
+        K+1`` so row i attends over the past plus draft tokens 0..i —
+        causality enforced by lengths over already-appended K/V, with no
+        kernel change (the kernel always consumed a lens tensor). Must
+        be int32, on-device, one entry per q row."""
         from fp8_paged_attn import fp8_paged_decode_attention
 
         kf, vf, tbl, lens = self.kernel_args(layer, slots)
+        if lens_override is not None:
+            if lens_override.shape != lens.shape:
+                raise ValueError(f"lens_override {tuple(lens_override.shape)}"
+                                 f" must match rows {tuple(lens.shape)}")
+            lens = lens_override.to(dtype=lens.dtype)
         if tbl.shape[0] != q.shape[0]:
             raise ValueError(
                 f"q has {q.shape[0]} rows but the block table has "
@@ -436,6 +450,38 @@ class Fp8PagedKV:
         return fp8_paged_decode_attention(
             q, kf, vf, tbl, lens, n_kv_heads=self.H, head_dim=self.D,
             block_tokens=self.bt, k_groups=self.k_groups, **kw)
+
+    def seen_device(self, layer: int, seq: int) -> int:
+        """Authoritative token count for (layer, seq), read from DEVICE
+        state. ``_seen`` is the host mirror maintained by the eager
+        append paths; ``append_graph_t1`` deliberately advances only
+        ``seq_lens`` (its whole point is that a captured replay needs no
+        host state), so after any graph-mode decoding ``_seen`` is
+        STALE. Anything that must know the true length -- rewind, a
+        speculative base capture -- reads here and pays the sync
+        (Bugbot, e4b#241)."""
+        return int(self.seq_lens[layer, seq].item())
+
+    def rewind(self, seq: int, to_tokens: int):
+        """Roll a sequence back to ``to_tokens`` tokens across ALL
+        layers (PREREG-s2lite): speculative verification appends the
+        full K+1 window before reading, and rejected tokens must not be
+        readable afterward. Reads are governed entirely by lengths --
+        the stale bytes past the new length are unreachable -- so
+        rewind is a length update with no data movement.
+
+        Both mirrors are set: ``seq_lens`` (what the kernel reads) and
+        ``_seen`` (what the eager append paths advance), so a rewind is
+        safe whichever append path runs next. The forward check uses the
+        DEVICE length, since ``_seen`` may be stale under graph mode."""
+        for layer in range(self.L):
+            cur = self.seen_device(layer, seq)
+            if to_tokens > cur:
+                raise ValueError(f"rewind forward (layer {layer}: "
+                                 f"{cur} -> {to_tokens})")
+            self._seen[layer][seq] = to_tokens
+            # fill_ keeps this async (see append's seq_lens note)
+            self.seq_lens[layer].narrow(0, seq, 1).fill_(to_tokens)
 
     def reference_kv(self, layer: int, seq: int, dtype=torch.bfloat16):
         """ORACLE ONLY (tests/quality): materialize this sequence's K, V

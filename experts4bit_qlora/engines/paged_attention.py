@@ -144,6 +144,35 @@ def paged_attention_forward(module, query, key, value, attention_mask,
                                slots=ctx.slots)
         return out[:, None].to(query.dtype), None
 
+    if ctx.mode == "verify":
+        # PREREG-s2lite: speculative verification. ONE sequence, T = K+1
+        # query rows. The window's K/V are appended first (same shim
+        # ordering as decode), then every row reads through the paged
+        # kernel with a STAGGERED length: row i attends over the past
+        # plus draft tokens 0..i. Causality comes from lengths over
+        # already-appended K/V -- no mask, no new kernel. The rejected
+        # tail is made unreadable afterward by kv.rewind(), which the
+        # EXECUTOR owns (the shim appends; it must not also rewind,
+        # or a multi-layer forward would rewind 47 times mid-step).
+        if B != 1:
+            raise ValueError(f"verify regime is single-sequence, got "
+                             f"batch {B}")
+        slot = ctx.slots[0]
+        ctx.kv.append(layer, slot,
+                      key[0].permute(1, 0, 2).contiguous(),
+                      value[0].permute(1, 0, 2).contiguous())
+        # after append, seq_lens[slot] = base + T; row i must read
+        # base + i + 1 of it
+        base_plus_t = ctx.kv.seq_lens[layer].narrow(0, slot, 1)
+        stagger = torch.arange(1 - T, 1, dtype=torch.int32,
+                               device=query.device)
+        lens_override = (base_plus_t + stagger).contiguous()
+        q_rows = query[0].permute(1, 0, 2).contiguous()   # [T, H_q, D]
+        out = ctx.kv.attention(layer, q_rows, slots=[slot] * T,
+                               lens_override=lens_override)
+        # [T, H_q, D] -> [1, T, H_q, D]
+        return out[None].to(query.dtype), None
+
     # ---- prefill: causal attention over this sequence's staged context
     outs = []
     for b, slot in enumerate(ctx.slots):
