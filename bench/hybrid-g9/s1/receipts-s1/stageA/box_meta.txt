@@ -1,0 +1,4 @@
+b63b02f S1 prereg: speculative acceptance + verify-cost, before any executor (#239)
+4f685c0 fp8_kv: fused one-launch T=1 paged append (F1 Stage B, arm B2) (#253)
+2.13.0+cu130 3.7.1
+NVIDIA GeForce RTX 5090, 595.58.03
