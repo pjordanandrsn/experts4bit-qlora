@@ -1,0 +1,61 @@
+{
+ "s2": "gate",
+ "k": 16,
+ "base_seen_device": 517,
+ "seq_end_seen_device": 538,
+ "sequential_tokens": [
+  220,
+  17,
+  15,
+  15,
+  16,
+  518,
+  279,
+  16194,
+  7154,
+  26221,
+  659,
+  1260,
+  1030,
+  264,
+  8640,
+  3476,
+  304
+ ],
+ "verify_tokens": [
+  220,
+  17,
+  15,
+  15,
+  16,
+  518,
+  279,
+  16194,
+  7154,
+  26221,
+  659,
+  1260,
+  1030,
+  264,
+  8640,
+  3476,
+  304
+ ],
+ "rows_matching": 17,
+ "rows_total": 17,
+ "bitwise_identical": true,
+ "continuation_expected": [
+  279,
+  12425,
+  4013,
+  20207
+ ],
+ "continuation_after_verify": [
+  279,
+  12425,
+  4013,
+  20207
+ ],
+ "continuation_identical": true,
+ "gate_pass": true
+}

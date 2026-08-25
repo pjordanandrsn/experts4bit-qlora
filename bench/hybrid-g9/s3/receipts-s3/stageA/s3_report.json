@@ -1,0 +1,79 @@
+{
+ "anchor_step_ms": 7.38644990551181,
+ "anchor_aa_spread_ms": 0.014714007874016666,
+ "grouping_parity": {
+  "pass": true
+ },
+ "numeric_parity": {
+  "pass": true,
+  "max_abs_logit_delta": 0.0
+ },
+ "gate": {
+  "s2": "gate",
+  "k": 16,
+  "base_seen_device": 517,
+  "seq_end_seen_device": 538,
+  "sequential_tokens": [
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   1260,
+   1030,
+   264,
+   8640,
+   3476,
+   304
+  ],
+  "verify_tokens": [
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   1260,
+   1030,
+   264,
+   8640,
+   3476,
+   304
+  ],
+  "rows_matching": 17,
+  "rows_total": 17,
+  "bitwise_identical": true,
+  "continuation_expected": [
+   279,
+   12425,
+   4013,
+   20207
+  ],
+  "continuation_after_verify": [
+   279,
+   12425,
+   4013,
+   20207
+  ],
+  "continuation_identical": true,
+  "gate_pass": true
+ },
+ "verify_graph_ms": {
+  "16": 36.37868881225586,
+  "32": 39.1434440612793,
+  "64": 43.720802307128906
+ },
+ "eager_grouped_verify_ms_k16": 82.99174499511719,
+ "singleton_graph_verify_ms_k16": 47.236106872558594
+}

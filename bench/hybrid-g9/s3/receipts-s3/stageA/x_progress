@@ -1,0 +1,39 @@
+K6-START 15:10:54
+K6BENCH baseline=69.5us wide_scalar=72.5us dot_pad=GATE-FAILED noise=PASS
+  gate_up: base=42.0 wide=45.4 dot=none | gate n/a
+  down: base=27.5 wide=27.1 dot=none | gate n/a
+self-test PASS (9 cases: all three outcomes, both boundaries, every refusal)
+K6 VERDICT: REFUSE
+  gate_up: no config passed its correctness gate -- the census pair is INCOMPLETE and a single cell must not be judged as the pair
+K6-OK 15:41:52
+ARM-START a0_a 15:41:52
+B1D_TIMED_GRAPH steps=127 step=7.40ms compile=default recompiles=0 out=/root/out/x_a0_a.json
+ARM-OK a0_a 15:42:42
+ARM-START a0_b 15:42:42
+B1D_TIMED_GRAPH steps=127 step=7.39ms compile=default recompiles=0 out=/root/out/x_a0_b.json
+ARM-OK a0_b 15:43:23
+ARM-START parity16 15:43:23
+S3_PARITY k=16 max|d|=0.000e+00 tokens_identical=True PASS=True out=/root/out/x_parity16.json
+ARM-OK parity16 15:44:07
+ARM-START gate16dev 15:44:07
+S2_GATE k=16 match=17/17 bitwise=True continuation=True PASS=True out=/root/out/x_gate16dev.json
+ARM-OK gate16dev 15:44:42
+ARM-START tdev16 15:44:42
+S2_TIME k=16 rows=17 verify_graph_ms=36.379 past=517 out=/root/out/x_tdev16.json
+ARM-OK tdev16 15:45:21
+ARM-START tdev32 15:45:21
+S2_TIME k=32 rows=33 verify_graph_ms=39.143 past=517 out=/root/out/x_tdev32.json
+ARM-OK tdev32 15:46:06
+ARM-START tdev64 15:46:06
+S2_TIME k=64 rows=65 verify_graph_ms=43.721 past=517 out=/root/out/x_tdev64.json
+ARM-OK tdev64 15:46:53
+ARM-START teager16 15:46:53
+S2_TIME k=16 rows=17 grouping=eager verify_eager_ms=82.992 out=/root/out/x_teager16.json
+ARM-OK teager16 15:47:33
+ARM-START tsing16 15:47:33
+S2_TIME k=16 rows=17 verify_graph_ms=47.236 past=517 out=/root/out/x_tsing16.json
+ARM-OK tsing16 15:48:13
+COMPOSED anchor=7.386 (A/A 0.015) parity=True gate=True verify={'16': 36.37868881225586, '32': 39.1434440612793, '64': 43.720802307128906}
+python: can't open file '/root/e4b/bench/hybrid-g9/s3/s3_verdict.py': [Errno 2] No such file or directory
+python: can't open file '/root/e4b/bench/hybrid-g9/s3/s3_verdict.py': [Errno 2] No such file or directory
+X-DONE 15:48:13

@@ -1,0 +1,21 @@
+{
+ "s2": "time",
+ "k": 16,
+ "rows_per_step": 17,
+ "moe_grouping": "eager",
+ "timing_basis": "eager loop (not capturable; includes host submission)",
+ "verify_graph_ms": 82.99174499511719,
+ "verify_ms_all_chunks": [
+  82.79080963134766,
+  82.86872863769531,
+  82.90786743164062,
+  82.9086685180664,
+  82.95408630371094,
+  82.99174499511719,
+  83.12265014648438,
+  83.97624969482422,
+  84.33193969726562,
+  85.40361022949219
+ ],
+ "past_tokens": 517
+}
