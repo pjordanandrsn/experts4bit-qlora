@@ -323,25 +323,60 @@ def main():
     budget = TOKEN_BUDGET
     it, t0, ema, best = _batch_stream(budget), time.time(), None, float("inf")
     tok_seen = 0
+    from . import census as _census
+    _clock = _census.PhaseClock() if _census.enabled() else None
+    _tprof, _tprof_steps = None, [0]
+    _prof_out = os.environ.get("TR1_PROFILE_OUT")
+    if _clock and _prof_out:
+        # kernel-budget instrument (PREREG-tr1-census #2): same
+        # schedule shape + table format as the serving census, so
+        # bench/hybrid-g9/f1/step_budget.py parses it unchanged.
+        from torch.profiler import ProfilerActivity, profile, schedule
+        _tprof = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=schedule(skip_first=3, wait=0, warmup=1, active=8,
+                              repeat=1),
+            record_shapes=True)
+        _tprof.__enter__()
     from .engines.offload import offload_stats_report, reset_offload_stats
 
     reset_offload_stats()  # measure the training loop only (drop load/BEFORE-eval transfers)
     step = 0
     while step < STEPS:
+        if _clock:
+            _clock.step_start()
+            _clock.start("optim")
         opt.zero_grad()
+        if _clock:
+            _clock.stop()
         loss_acc = 0.0
         try:
             for _ in range(GRAD_ACCUM):
+                if _clock:
+                    _clock.start("data")
                 try:
                     ids, lbl, att = next(it)
                 except StopIteration:
                     it = _batch_stream(budget)
                     ids, lbl, att = next(it)
+                if _clock:
+                    _clock.stop()
+                    _clock.start("forward")
                 out = model(input_ids=ids, labels=lbl, attention_mask=att)
+                if _clock:
+                    _clock.stop()
+                    _clock.start("backward")
                 (out.loss / GRAD_ACCUM).backward()
+                if _clock:
+                    _clock.stop()
+                    _clock.start("loss_sync")
                 loss_acc += out.loss.item() / GRAD_ACCUM
                 tok_seen += int(att.sum())
+                if _clock:
+                    _clock.stop()
         except torch.cuda.OutOfMemoryError:
+            if _clock and _clock._open is not None:
+                _clock.stop()
             # The token budget's ceiling is VRAM, and the right value is host- AND
             # model-specific -- 2048 fits OLMoE on a 12 GB card, a 30B offloaded model is
             # a different profile entirely. Dying on a default is a bad way to learn that,
@@ -357,9 +392,19 @@ def main():
                 f"(set TOKEN_BUDGET explicitly to skip this search)")
             continue
         step += 1
+        if _clock:
+            _clock.start("optim")
         torch.nn.utils.clip_grad_norm_(trainable, 1.0)
         opt.step()
         sched.step()
+        if _clock:
+            _clock.stop()
+            # loss lands in the receipt so the prereg's NaN/divergence
+            # refusal is checkable from the artifact, not the log
+            _clock.step_end(extra={"loss": float(loss_acc)})
+        if _tprof is not None:
+            _tprof.step()
+            _tprof_steps[0] += 1
         ema = loss_acc if ema is None else 0.9 * ema + 0.1 * loss_acc
         if step % 10 == 0 or step == 1:
             log(
@@ -381,6 +426,29 @@ def main():
         f"| peak GPU mem: {torch.cuda.max_memory_allocated() / 1e9:.2f} GB (offload={'on' if OFFLOAD_EXPERTS else 'off'})"
     )
     offload_stats_report(log)  # no-op unless E4B_OFFLOAD_STATS=1
+    if _tprof is not None:
+        _tprof.__exit__(None, None, None)
+        _tbl = _tprof.key_averages().table(sort_by="cuda_time_total",
+                                           row_limit=80)
+        _active = max(0, min(8, _tprof_steps[0] - 3 - 1))
+        _hdr = (f"profiled training steps: {_tprof_steps[0]} "
+                f"(active window: {_active}/8)\n")
+        if _active < 8:
+            _hdr += ("WARNING: active window INCOMPLETE -- this table "
+                     "under-samples and must not be cited as the "
+                     "attribution\n")
+        with open(_prof_out, "w") as _f:
+            _f.write(_hdr + _tbl)
+        log(f"[tr1-census] wrote {_prof_out} (active={_active}/8)")
+    if _clock:
+        out_path = os.environ.get("TR1_CENSUS_OUT", "tr1_census.json")
+        _clock.write(out_path, {
+            "model": MODEL, "seq": SEQ, "steps": STEPS,
+            "grad_accum": GRAD_ACCUM, "token_budget": TOKEN_BUDGET,
+            "offload": bool(OFFLOAD_EXPERTS),
+            "torch": torch.__version__,
+        })
+        log(f"[tr1-census] wrote {out_path} ({len(_clock.steps)} steps)")
 
     model.gradient_checkpointing_disable()
     eval_after = eval_loss(model, eval_data)
