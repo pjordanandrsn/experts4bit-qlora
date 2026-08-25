@@ -5,7 +5,9 @@ import argparse
 import json
 import sys
 
-ACCEPT = 2.948           # tokens/step, RESULTS-s1-acceptance n1_k16
+# tokens/step from receipts-s2/s1_alpha_kext.json (same traces + same
+# simulator as RESULTS-s1-acceptance; K>16 under-estimated)
+ACCEPT = {16: 2.948, 32: 3.447, 64: 3.926}
 GO_X = 1.5
 REFUTE_X = 1.2
 
@@ -25,26 +27,43 @@ def verdict(rep):
     if aa is None or aa > anchor * (0.5 / 1.5) / 2:
         return ("REFUSE", f"anchor A/A {aa} too wide for the margins "
                 "this map decides")
-    vm = rep.get("verify_graph_ms")
-    if not vm:
-        return ("REFUSE", "no graphed verify time")
-    if vm < 0.9 * anchor:
-        return ("REFUSE", f"verify {vm:.2f} ms < 0.9x anchor "
-                f"{anchor:.2f} -- a 17-row step cheaper than a 1-row "
-                "step is instrument error")
-    x = (ACCEPT / vm) / (1.0 / anchor)
+    vms = rep.get("verify_graph_ms")
+    if isinstance(vms, (int, float)):          # legacy single-K shape
+        vms = {"16": vms}
+    if not vms:
+        return ("REFUSE", "no graphed verify times")
+    best = None
+    for kstr, vm in vms.items():
+        k = int(kstr)
+        if k not in ACCEPT:
+            return ("REFUSE", f"no committed acceptance for K={k}")
+        if not vm:
+            return ("REFUSE", f"empty verify time for K={k}")
+        if vm < 0.9 * anchor:
+            return ("REFUSE", f"verify({k}) {vm:.2f} ms < 0.9x anchor "
+                    f"{anchor:.2f} -- a {k+1}-row step cheaper than a "
+                    "1-row step is instrument error")
+        x = (ACCEPT[k] / vm) / (1.0 / anchor)
+        if best is None or x > best[1]:
+            best = (k, x, vm)
+    k, x, vm = best
     if x >= GO_X:
-        return ("GO-BUILD", f"T_pred {x:.2f}x anchor (verify "
+        return ("GO-BUILD", f"K={k}: T_pred {x:.2f}x anchor (verify "
                 f"{vm:.2f} ms, anchor {anchor:.2f} ms, acceptance "
-                f"{ACCEPT}) >= {GO_X}x -- Stage B with PASS 1.8x")
+                f"{ACCEPT[k]}) >= {GO_X}x -- Stage B on this cell, "
+                "PASS 1.8x")
     if x < REFUTE_X:
-        return ("REFUTED-FOR-CELL", f"T_pred {x:.2f}x < {REFUTE_X}x: "
-                "the graphed verify is too expensive for this cell")
-    return ("INCONCLUSIVE", f"T_pred {x:.2f}x in [{REFUTE_X}, {GO_X}) "
-            "-- Stage B proceeds with PASS bar 1.3x")
+        return ("REFUTED-FOR-CELL", f"best K={k}: T_pred {x:.2f}x < "
+                f"{REFUTE_X}x: the graphed verify is too expensive at "
+                "every measured K")
+    return ("INCONCLUSIVE", f"best K={k}: T_pred {x:.2f}x in "
+            f"[{REFUTE_X}, {GO_X}) -- Stage B on this cell with PASS "
+            "bar 1.3x")
 
 
 def _fab(vm, anchor=7.41, aa=0.01, gate=True, rows=17, cont=True):
+    if isinstance(vm, (int, float)):
+        vm = {"16": vm}
     return {"gate": {"gate_pass": gate and cont,
                      "rows_matching": rows if gate else rows - 3,
                      "rows_total": 17,
@@ -66,6 +85,14 @@ def self_test():
         (_fab(9.0, aa=2.0), "REFUSE"),
         (dict(_fab(9.0), verify_graph_ms=None), "REFUSE"),
         (dict(_fab(9.0), anchor_step_ms=None), "REFUSE"),
+        # K-sweep: the best cell decides. K=64 at 9.0 ms is 3.23x even
+        # while K=16 at 16.0 would be INCONCLUSIVE alone
+        (_fab({"16": 16.0, "64": 9.0}), "GO-BUILD"),
+        # unknown K refuses (no committed acceptance)
+        (_fab({"12": 9.0}), "REFUSE"),
+        # any cell cheaper than anchor is instrument error even if
+        # another cell would win
+        (_fab({"16": 9.0, "64": 6.0}), "REFUSE"),
     ]
     for rep, want in cases:
         got, why = verdict(rep)

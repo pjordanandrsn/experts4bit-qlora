@@ -1,0 +1,26 @@
+{
+ "note": "K-extension from committed S1 traces; K>16 under-estimated (128-token cap)",
+ "n_traces": 30,
+ "cells": {
+  "n1_k16": {
+   "windows": 3840,
+   "tokens_per_step": 2.94765625
+  },
+  "n1_k24": {
+   "windows": 3840,
+   "tokens_per_step": 3.2578125
+  },
+  "n1_k32": {
+   "windows": 3840,
+   "tokens_per_step": 3.4466145833333335
+  },
+  "n1_k48": {
+   "windows": 3840,
+   "tokens_per_step": 3.7140625
+  },
+  "n1_k64": {
+   "windows": 3840,
+   "tokens_per_step": 3.926041666666667
+  }
+ }
+}

@@ -26,16 +26,26 @@ prefill path (compiles on the floor stack — K5).
    equal its sequential counterpart, AND the 4-step continuation after
    the verify world must equal the sequential world's. Any mismatch
    REFUSES the cycle — no timing is read.
-2. **Graphed cost**: capture the verify step at fixed position (write
-   addresses bake at capture — legal when every replay rewinds to the
-   same position; the inter-replay rewind's ~48 `fill_` launches sit
-   inside the timed span, on the conservative side). Report
-   `verify_graph_ms` for K=16, plus the B=1 anchor with A/A.
+2. **Graphed cost, K-swept**: capture the verify step at fixed
+   position (write addresses bake at capture — legal when every replay
+   rewinds to the same position; the inter-replay rewind's ~48 `fill_`
+   launches sit inside the timed span, on the conservative side).
+   Report `verify_graph_ms` for **K ∈ {16, 32, 64}**, plus the B=1
+   anchor with A/A. The acceptance side of those cells is already
+   measured: `receipts-s2/s1_alpha_kext.json` extends the S1 table
+   from the SAME committed traces with the SAME simulator —
+   tokens/step 2.948 (K=16), 3.447 (K=32), 3.926 (K=64), with K>16
+   values UNDER-estimated because 128-token traces cap long matches.
+   The gate runs at K=16 only (one correctness gate covers the
+   mechanism; the K-sweep varies only shapes).
 
 ## Registered decision map (Stage A)
 
-Predicted executor throughput `T_pred = 2.948 / verify_graph_ms`
-tokens/ms, compared as a multiple of the anchor's `1 / anchor_ms`:
+Predicted executor throughput per cell
+`T_pred(K) = accept(K) / verify_graph_ms(K)` with `accept` from the
+committed table above; the decision uses `max over K ∈ {16, 32, 64}`,
+compared as a multiple of the anchor's `1 / anchor_ms`. The winning K
+becomes Stage B's cell:
 
 - **GO-BUILD** — gate passes AND `T_pred ≥ 1.5×` anchor ⇒ Stage B
   (the executor: host drafter with an incremental n-gram index,
