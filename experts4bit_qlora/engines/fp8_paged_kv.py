@@ -80,9 +80,25 @@ class Fp8PagedKV:
         # B2-certified default (RESULTS-f1-stageB-b2: PASS, gain
         # 2.08 ms/step, bitwise 13/13, token-identity exact). The env
         # is the rollback: E4B_FUSED_KV_APPEND=0 restores the eager
-        # ~25-launch append.
-        self._fused_append = os.environ.get(
-            "E4B_FUSED_KV_APPEND", "1") == "1"
+        # ~25-launch append. Resolved at CONSTRUCTION because the
+        # kernel lives in grouped-nf4-gemm > 0.14.0 (gnf4#253): on an
+        # older install the certified default degrades to the intact
+        # eager path, while an EXPLICIT =1 refuses loudly rather than
+        # silently serving something other than what was asked for
+        # (Bugbot, e4b#238: the lazy import made graph decode crash on
+        # every pre-#253 install).
+        env = os.environ.get("E4B_FUSED_KV_APPEND")
+        self._fused_append = (env or "1") == "1"
+        if self._fused_append:
+            try:
+                from fp8_kv import fp8_kv_append_t1  # noqa: F401
+            except ImportError:
+                if env == "1":
+                    raise RuntimeError(
+                        "E4B_FUSED_KV_APPEND=1 but the installed "
+                        "grouped-nf4-gemm has no fp8_kv_append_t1 "
+                        "(needs the gnf4#253 kernel)") from None
+                self._fused_append = False
         self._v_pay = self.bt * self.H * self.D
         # block tables live on-device and are written IN PLACE when a block
         # opens (one scalar copy per 16 tokens) — rebuilding [B, blocks]

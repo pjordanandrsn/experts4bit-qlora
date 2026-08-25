@@ -30,13 +30,27 @@ def test_flag_defaults_on_with_env_rollback(monkeypatch):
         in src, "certified default must be ON with env rollback"
 
 
+class _StubWithKernel:
+    """A post-#253 fp8_kv surface: kernel symbol present."""
+    E4M3_MAX = 448.0
+
+    @staticmethod
+    def fp8_kv_append_t1(*a, **k):
+        raise AssertionError("flag test must not launch the kernel")
+
+
 @pytest.mark.parametrize("env,expect", [("1", True), ("0", False),
                                         (None, True)])
 def test_flag_reads_env_at_construction(monkeypatch, env, expect):
+    """Flag semantics in isolation: a kernel-PRESENT stub, so the test
+    holds on machines whose installed gnf4 predates #253 (CI installs
+    from PyPI) as well as on the boxes."""
+    import sys
     if env is None:
         monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
     else:
         monkeypatch.setenv("E4B_FUSED_KV_APPEND", env)
+    monkeypatch.setitem(sys.modules, "fp8_kv", _StubWithKernel())
     kv = _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
               max_tokens_per_seq=8, device="cpu")
     assert kv._fused_append is expect
@@ -62,3 +76,31 @@ def test_fused_branch_argument_order():
         "vq, vs = self._quant_bytes")[0]
     assert "return" in fused_block, \
         "fused branch must return, not run the eager path too"
+
+
+class _StubFp8Kv:
+    """A pre-#253 fp8_kv: has the torch surface, lacks the kernel."""
+    E4M3_MAX = 448.0
+
+
+def test_old_gnf4_degrades_to_eager_by_default(monkeypatch):
+    """On an install whose gnf4 predates the kernel, the certified
+    default must fall back to the intact eager path -- not crash graph
+    decode with ImportError (Bugbot, e4b#238)."""
+    import sys
+    monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
+    monkeypatch.setitem(sys.modules, "fp8_kv", _StubFp8Kv())
+    kv = _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
+              max_tokens_per_seq=8, device="cpu")
+    assert kv._fused_append is False
+
+
+def test_old_gnf4_with_explicit_env_refuses_loudly(monkeypatch):
+    """An EXPLICIT =1 on a kernel-less install must raise, never
+    silently serve the eager path the caller opted out of."""
+    import sys
+    monkeypatch.setenv("E4B_FUSED_KV_APPEND", "1")
+    monkeypatch.setitem(sys.modules, "fp8_kv", _StubFp8Kv())
+    with pytest.raises(RuntimeError, match="gnf4#253"):
+        _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1,
+             max_tokens_per_seq=8, device="cpu")
