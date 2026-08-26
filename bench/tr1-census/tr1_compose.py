@@ -170,11 +170,13 @@ def _self_test():
     ok2, _ = compose(_run(), _run())
     assert ok2["aa_step_delta_ms"] == 0.0
     # a genuine workload mismatch exceeds any sane floor and refuses
-    big = _run(wall=1000.0)
-    for st in big["steps"]:
-        st["step_wall_ms"] += 800.0
+    # ON THE PER-STEP GATE (phases scale with the wall so closure
+    # holds -- the first draft's flat-phase bump refused via closure
+    # and never exercised the floor; review, e4b#266)
+    big = _run(wall=1800.0,
+               phases=(360.0, 720.0, 540.0, 90.0, 72.0))
     _, why = compose(big, _run(), aa_abs_floor_ms=200.0)
-    assert why is not None, "800 ms systematic delta must refuse"
+    assert why and "per-step" in why, why
     # A/A drift: forward share moved > 3 points between runs
     drift = _run(phases=(200.0, 460.0, 240.0, 50.0, 40.0))
     _, why = compose(_run(), drift)
