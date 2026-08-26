@@ -446,6 +446,13 @@ class _TopkProbe:
         self.calls = 0
         self.shapes = {}
         self._orig = None
+        # B1-C is a REFUSE gate on the SELECTED SET, so measure the set
+        # -- not a proxy. Token streams are neither necessary nor
+        # sufficient: reordered weights can flip a token without
+        # changing the set, and an unchanged set can still shift a
+        # token through fp re-association in w/w.sum(). Digest the
+        # SORTED indices of every call so two arms compare exactly.
+        self._set_digest = hashlib.sha256()
 
     def __enter__(self):
         self._orig = torch.topk
@@ -457,8 +464,16 @@ class _TopkProbe:
             self.shapes[key] = self.shapes.get(key, 0) + 1
             if self.sorted_override is not None:
                 sorted = self.sorted_override
-            return self._orig(input, k, dim=dim, largest=largest,
-                              sorted=sorted, *a, **kw)
+            out = self._orig(input, k, dim=dim, largest=largest,
+                             sorted=sorted, *a, **kw)
+            idx = getattr(out, "indices", None)
+            if idx is not None:
+                # sort so the digest is order-INVARIANT: the whole
+                # point is that sorted=False permutes, and B1 asks
+                # whether the SET survived that permutation
+                v = idx.detach().to("cpu", torch.int64).sort(-1).values
+                self._set_digest.update(v.numpy().tobytes())
+            return out
 
         torch.topk = _wrapped
         return self
@@ -474,6 +489,7 @@ class _TopkProbe:
                 "calls_per_step_per_layer": (self.calls
                                              / max(steps * layers, 1)),
                 "shapes": self.shapes,
+                "selected_set_digest": self._set_digest.hexdigest(),
                 "sorted_override": self.sorted_override}
 
 

@@ -7,6 +7,7 @@ when the body raises), and pass `sorted` through faithfully -- an
 override that silently did nothing would make Stage A's ablation
 unfalsifiable, which is the exact failure K9 died of twice.
 """
+import hashlib
 import importlib.util
 import pathlib
 
@@ -26,7 +27,10 @@ def _probe_cls():
     text = pathlib.Path(src).read_text()
     start = text.index("class _TopkProbe:")
     end = text.index("\ndef _b1d_stage_a", start)
-    ns = {"torch": torch}
+    # the exec namespace must carry every module the class body uses;
+    # step_decomp imports these at module scope, but a text slice does
+    # not bring them along
+    ns = {"torch": torch, "hashlib": hashlib}
     exec(compile(text[start:end], src, "exec"), ns)
     return ns["_TopkProbe"]
 
@@ -95,3 +99,26 @@ def test_sorted_false_keeps_the_set_and_changes_only_order():
         _, i_true = torch.topk(x, 8, dim=-1, sorted=True)
         _, i_false = torch.topk(x, 8, dim=-1, sorted=False)
         assert set(i_true[0].tolist()) == set(i_false[0].tolist())
+
+
+def test_set_digest_is_order_invariant_and_set_sensitive():
+    """B1-C is a REFUSE gate on the selected SET, so its digest must
+    ignore ORDER (sorted=False permutes) while still catching a
+    different set. A digest sensitive to order would refuse every
+    sorted=False arm by construction; one insensitive to membership
+    would pass a genuinely different model."""
+    P = _probe_cls()
+    x = torch.randn(1, 128, generator=torch.Generator().manual_seed(3))
+
+    with P(sorted_override=True) as p_true:
+        torch.topk(x, 8, dim=-1)
+    with P(sorted_override=False) as p_false:
+        torch.topk(x, 8, dim=-1)
+    a = p_true.report(1, 1)["selected_set_digest"]
+    b = p_false.report(1, 1)["selected_set_digest"]
+    assert a == b, "same set, different order must digest identically"
+
+    # a genuinely different set must NOT collide
+    with P() as p_other:
+        torch.topk(x, 7, dim=-1)
+    assert p_other.report(1, 1)["selected_set_digest"] != a
