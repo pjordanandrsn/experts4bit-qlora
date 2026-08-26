@@ -2148,6 +2148,26 @@ def main():
     if a.ppl_steps and a.batch > 1:
         raise SystemExit(
             f"--ppl-steps is a B=1 instrument; got --batch {a.batch}")
+    if getattr(a, "graph_break_census", False):
+        # The ppl block returns before the census site, so these two
+        # together would write a perplexity report and silently skip
+        # the census -- an arm that runs, exits 0 and measures nothing,
+        # which is exactly how K8's quality arms scored nothing while
+        # looking healthy. Refuse instead of choosing one.
+        if a.ppl_steps:
+            raise SystemExit(
+                "--graph-break-census and --ppl-steps are different "
+                "instruments; the ppl path returns first, so passing "
+                "both would silently skip the census")
+        if not a.b1d_loop:
+            raise SystemExit(
+                "--graph-break-census lives on the b1d stage; pass "
+                "--b1d-loop or it never runs")
+        if not a.compile_layers:
+            raise SystemExit(
+                "--graph-break-census with nothing compiled censuses "
+                "an untraced region and would report zero breaks for "
+                "a reason unrelated to the MoE tier (PREREG-k13)")
     if a.b1d_loop:
         _ov = (None if a.router_sorted is None
                else a.router_sorted == "true")

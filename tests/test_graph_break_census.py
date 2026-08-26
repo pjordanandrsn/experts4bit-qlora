@@ -107,3 +107,24 @@ def test_the_flag_is_registered_and_defaults_off():
     m = re.search(r'add_argument\("--graph-break-census"[^)]*\)', _SRC, re.S)
     assert m, "flag not registered"
     assert "store_true" in m.group(0), "must default OFF"
+
+
+def test_it_REFUSES_the_flag_combinations_that_would_silently_skip_it():
+    """The K8 failure class: an arm that runs, exits 0, measures nothing.
+
+    The ppl block returns before the census site, so
+    `--graph-break-census --ppl-steps` would write a perplexity report
+    and silently skip the census. Likewise the census lives on the b1d
+    stage, and censusing an untraced region reports zero breaks for a
+    reason unrelated to the MoE tier -- which `k13_verdict` would then
+    REFUSE as an empty census, blaming the wrong thing.
+    """
+    i = _SRC.index('if getattr(a, "graph_break_census", False):',
+                   _SRC.index("is a B=1 instrument"))
+    guard = _SRC[i:i + 1400]
+    for needle, why in (
+            ("a.ppl_steps", "ppl would return first and skip the census"),
+            ("a.b1d_loop", "the census lives on the b1d stage"),
+            ("a.compile_layers", "an untraced region has no breaks to find")):
+        assert needle in guard, f"unguarded: {why}"
+    assert guard.count("raise SystemExit") >= 3, guard[:200]
