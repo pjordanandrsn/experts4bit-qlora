@@ -169,6 +169,19 @@ def _bv3_stage(a, model, runner, sched, kv):
 
     B = a.batch
     assert B > 1, "bv3 is the batched lane; use b1d at --batch 1"
+    if a.compile_layers:
+        # the scheduler's drain decodes at GROWING batch sizes (1..B)
+        # -- B distinct shapes under dynamic=False -- and the default
+        # recompile_limit (8) exhausts before the manual loop's [B, 1]
+        # shape compiles; dynamo then falls back mid-capture and the
+        # graph invalidates (hit live at B=16: capture_end
+        # cudaErrorStreamCaptureInvalidated after 'hit
+        # config.recompile_limit (8)'). Budget = B shapes + prefill +
+        # margin; replays never re-enter python, and the
+        # recompiles_in_window guard still refuses live recompiles.
+        import torch._dynamo as _dyn
+        _dyn.config.recompile_limit = max(2 * B + 16,
+                                          _dyn.config.recompile_limit)
     assert a.engine == "hybrid" and a.placement_override == "all-vram", \
         "bv3 binds to the collapsed all-resident point"
     assert a.amort == "off", \
@@ -273,6 +286,9 @@ def _bv3_stage(a, model, runner, sched, kv):
         "compile_layers": bool(a.compile_layers),
         "compile_mode": a.compile_mode if a.compile_layers else None,
         "fuse_qkv": bool(a.fuse_qkv),
+        "recompile_limit": (None if not a.compile_layers else
+                            __import__("torch._dynamo", fromlist=["config"])
+                            .config.recompile_limit),
         "dynamo_frames_before": _frames_before,
         "dynamo_frames_after": _frames_after,
         "recompiles_in_window": (
