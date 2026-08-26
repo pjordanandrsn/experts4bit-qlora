@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Corrections
+
+- **The `>275` refutation's basis is corrected; the verdict is not.**
+  0.23.0 argued `>275 tok/s REFUTED-AS-COMPOSED` from "device work alone is
+  8.43 ms/step". That census is an **eager-path** Self-CUDA sum (basis disclosed
+  in RESULTS-sv1), and both it and the 7.25 ms graphed-default wall sit *above*
+  the certified opt-in's own **6.476 ms** wall — which, since device work cannot
+  exceed wall-clock on a single stream, is the correct bound for the certified
+  path. (Box provenance disclosed: 8.43 is box 48728047 / anchor 7.27 ms, 6.476 is
+  48709950 / anchor 7.25 ms — same class to 0.3%; and the load-bearing inequality
+  is within-run on 48709950, so it does not depend on the cross-box step.) The refutation stands: 6.476 → 3.636 ms is a **1.78×** device-work
+  reduction (not 2.32×), still not available from orchestration. The 0.23.0 entry
+  below is left unedited so the record of what was claimed survives; the full
+  reconciliation is appended to `bench/hybrid-g9/sv1/RESULTS-sv1-census.md`.
+  Do not re-derive the 250 verdict from 8.43 — against the certified wall that
+  frame needs 1.62×, and it stays OPEN per `RESULTS-250-closing.md` (#283).
+- **Recorded gap: `tokens_per_step` is not in the TR2 receipts.**
+  `tr2_report.json` records `seq: 192`, `grad_accum: 4`,
+  `token_budget_effective: 1024` — but not the per-step token count that the
+  published "~59 → ~800 tok/s class" figure divides by. The rate is reproducible
+  only by inferring ~3,000 tokens/step from the two s/step values. The s/step
+  numbers (50.86 → 3.77) and the 13.47× are unaffected and remain the primary
+  quantities. Recorded rather than back-filled: the receipts are committed and a
+  denominator reconstructed after the fact is not a measurement. Emit
+  `tokens_per_step` explicitly in the next training run.
+
 ## 0.23.0 — 2026-08-26
 
 Minor release: the batched-serving certification and the honest
