@@ -452,7 +452,11 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     # no-flag run (Bugbot, e4b#275).
     profile_replays = 8 if (a.replay_profile_out and a.b1d_timed
                             and a.b1d_loop == "graph") else 0
-    cap_tokens = (a.prompt_len + a.gen_tokens + 8   # the kv ctor budget
+    # --ppl-steps scores far past --gen-tokens (1024 vs 128 by
+    # default), so capacity must cover whichever window will actually
+    # run or the appends index past the pre-ensured blocks -- the same
+    # overflow class Bugbot caught on the replay profiler (e4b#275).
+    cap_tokens = (a.prompt_len + max(a.gen_tokens, a.ppl_steps) + 8
                   + profile_replays)
     kv.graph_mode_init(seq=slot, upto_tokens=cap_tokens)
     dev = "cuda"
@@ -1574,7 +1578,8 @@ def main():
               f"paged attention + MoE tier dynamo-disabled; "
               f"graph step marking={COMPILE_GRAPH_STEP[0]}", flush=True)
     kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
-                    max_tokens_per_seq=a.prompt_len + a.gen_tokens + 8,
+                    max_tokens_per_seq=a.prompt_len
+                    + max(a.gen_tokens, a.ppl_steps) + 8,
                     k_groups=4, batched_append=not a.kv_per_seq,
                     device="cuda")
 
