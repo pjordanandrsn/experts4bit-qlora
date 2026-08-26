@@ -422,7 +422,8 @@ def _bv3_stage(a, model, runner, sched, kv):
           flush=True)
 
 
-def _b1d_stage_a(a, model, runner, sched, kv):
+def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
+                 ppl_sha=None):
     """PREREG-b1d stage A harness: capture smoke + bitwise replay
     identity. Prefill runs through the normal scheduled path; the decode
     loop is then driven manually with static buffers so the 'graph' arm
@@ -518,6 +519,8 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         # comparison would not be apples-to-apples. After the rewind
         # both arms see byte-identical context at every step and the
         # ONLY difference is the attention arithmetic.
+        assert ppl_ids is not None and ppl_sha is not None, \
+            "--ppl-steps needs the corpus threaded in from main()"
         base = runner.pos_of[rid]                 # prompt boundary
         kv.rewind_nosync(slot, a.prompt_len)
         torch.cuda.synchronize()
@@ -527,7 +530,15 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             f"{a.ppl_steps} needs {a.ppl_steps + 1}; widen "
             "--prompt-span")
         in_ids.fill_(int(cont[0]))
-        pos.fill_(a.prompt_len - 1)
+        # `pos` is the 0-BASED INDEX of the token sitting in in_ids,
+        # which this forward is about to append (the harness's own
+        # convention: pos = pos_of[rid] - 1 for the last produced
+        # token). After the rewind the KV holds indices
+        # 0..prompt_len-1, so cont[0] == ids[prompt_len] belongs at
+        # prompt_len -- NOT prompt_len - 1, which would run every
+        # scored step with RoPE shifted against the stored keys
+        # (Bugbot, e4b#278, High).
+        pos.fill_(a.prompt_len)
         nll = 0.0
         for t in range(a.ppl_steps):
             out = model(input_ids=in_ids, position_ids=pos,
@@ -1768,7 +1779,8 @@ def main():
         if a.batch > 1:
             _bv3_stage(a, model, runner, sched, kv)
         else:
-            _b1d_stage_a(a, model, runner, sched, kv)
+            _b1d_stage_a(a, model, runner, sched, kv,
+                         ppl_ids=ppl_ids, ppl_sha=ppl_sha)
         return
 
     step_walls = []            # decode-ONLY steps: a wall that included a
