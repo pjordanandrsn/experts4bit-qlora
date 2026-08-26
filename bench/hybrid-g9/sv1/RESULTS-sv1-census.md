@@ -30,3 +30,17 @@ teardown scripts now refuse destroy on a manifest mismatch).
 the BV3b box. The composition cert stands regardless: the certified
 single-stream ladder is 138 default / 154.4 with the knob, and the
 gap to 275 is 2.8 ms — undecidable until the floor lands.
+
+## Addendum (2026-08-26): the busy floor — 275 REFUTED-AS-COMPOSED
+
+The re-run on box 48728047 delivered the lost number:
+**Self-CUDA 8.43 ms/step** (101.169 ms over the 12-step active
+window, `bv3b/receipts-bv3b/bv3b_kernels.txt.gz`; eager-path basis,
+disclosed — the graphed 7.25 ms wall bounds device work in the same
+class). Both readings sit far above the 3.64 ms line 275 requires:
+**per the pre-commitment, >275 tok/s single-stream is
+REFUTED-AS-COMPOSED for this stack.** Single-stream decode is
+compute-bound; further gains there are kernel-compute work
+(dot-pad-class), not orchestration. The certified single-stream
+ladder stands at ~138 default / 154.4 with the knob; the throughput
+lane is the batched graph loop (RESULTS-bv3b: 419 aggregate tok/s).

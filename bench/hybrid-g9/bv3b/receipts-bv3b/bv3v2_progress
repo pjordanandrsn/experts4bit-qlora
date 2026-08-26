@@ -1,0 +1,20 @@
+BV3V2-START 04:36:07
+c75a7e7 Uniform dynamo-limit envs for cross-arm comparability (BV3b finding) (#270)
+ARM-START eager_a 04:36:08
+ARM-OK eager_a 04:37:53
+ARM-START eager_b 04:37:53
+ARM-OK eager_b 04:39:19
+ARM-START graph_a 04:39:19
+BV3_GRAPH batch=16 steps=115 step=38.16ms agg=419.3tok/s recompiles=0 out=/root/out/bv3v2_graph_a.json
+ARM-OK graph_a 04:41:26
+ARM-START graph_b 04:41:26
+BV3_GRAPH batch=16 steps=115 step=38.17ms agg=419.2tok/s recompiles=0 out=/root/out/bv3v2_graph_b.json
+ARM-OK graph_b 04:42:25
+ARM-START graph_b1 04:42:25
+B1D_TIMED_GRAPH steps=127 step=7.28ms compile=default recompiles=0 out=/root/out/bv3v2_graph_b1.json
+ARM-OK graph_b1 04:43:11
+BV3V2 COMPOSED eager [120.0, 118.2] graph [38.16, 38.17] b1 7.28 rows-token-identical-prefix 5/16
+bv3b_verdict self-test: OK
+BV3B VERDICT: REFUSE
+graph row 8 degenerate: only 28 distinct tokens
+BV3V2-DONE 04:43:11

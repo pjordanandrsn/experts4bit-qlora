@@ -1,0 +1,247 @@
+{
+ "parity": {
+  "0": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.53125,
+   "rows": 16
+  },
+  "1": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.23046875,
+   "rows": 16
+  },
+  "2": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.43359375,
+   "rows": 16
+  },
+  "3": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.30859375,
+   "rows": 16
+  },
+  "4": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.349609375,
+   "rows": 16
+  },
+  "5": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.54296875,
+   "rows": 16
+  },
+  "6": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.19140625,
+   "rows": 16
+  },
+  "7": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.400390625,
+   "rows": 16
+  },
+  "8": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.453125,
+   "rows": 16
+  },
+  "9": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.55078125,
+   "rows": 16
+  },
+  "10": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.59765625,
+   "rows": 16
+  },
+  "11": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.3359375,
+   "rows": 16
+  },
+  "12": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.1875,
+   "rows": 16
+  },
+  "13": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.27734375,
+   "rows": 16
+  },
+  "14": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.66015625,
+   "rows": 16
+  },
+  "15": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.279296875,
+   "rows": 16
+  },
+  "16": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.47265625,
+   "rows": 16
+  },
+  "17": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.65234375,
+   "rows": 16
+  },
+  "18": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.279296875,
+   "rows": 16
+  },
+  "19": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.6640625,
+   "rows": 16
+  },
+  "20": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.408203125,
+   "rows": 16
+  },
+  "21": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.51953125,
+   "rows": 16
+  },
+  "22": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.85546875,
+   "rows": 16
+  },
+  "23": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.4921875,
+   "rows": 16
+  },
+  "24": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.54296875,
+   "rows": 16
+  },
+  "25": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.96875,
+   "rows": 16
+  },
+  "26": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 1.2421875,
+   "rows": 16
+  },
+  "27": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 1.0703125,
+   "rows": 16
+  },
+  "28": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.88671875,
+   "rows": 16
+  },
+  "29": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 2.046875,
+   "rows": 16
+  },
+  "30": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.61328125,
+   "rows": 16
+  },
+  "31": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.85546875,
+   "rows": 16
+  },
+  "32": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.76953125,
+   "rows": 16
+  },
+  "33": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 1.171875,
+   "rows": 16
+  },
+  "34": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.9921875,
+   "rows": 16
+  },
+  "35": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 1.59375,
+   "rows": 16
+  },
+  "36": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 0.9453125,
+   "rows": 16
+  },
+  "37": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 2.0,
+   "rows": 16
+  },
+  "38": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 1.9296875,
+   "rows": 16
+  },
+  "39": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 2.15625,
+   "rows": 16
+  },
+  "40": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 2.625,
+   "rows": 16
+  },
+  "41": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 5.09375,
+   "rows": 16
+  },
+  "42": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 3.515625,
+   "rows": 16
+  },
+  "43": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 4.8125,
+   "rows": 16
+  },
+  "44": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 8.6875,
+   "rows": 16
+  },
+  "45": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 7.78125,
+   "rows": 16
+  },
+  "46": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 5.1875,
+   "rows": 16
+  },
+  "47": {
+   "max_abs_delta": 0.0,
+   "max_abs_ref": 37.0,
+   "rows": 16
+  }
+ },
+ "batch": 16,
+ "layers": 48,
+ "frame": "max|delta| <= max|ref| * 2^-7 per layer"
+}
