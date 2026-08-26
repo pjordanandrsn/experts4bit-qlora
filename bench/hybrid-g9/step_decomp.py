@@ -814,6 +814,23 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             with torch.cuda.graph(g, capture_error_mode="thread_local"):
                 one_step()
             torch.cuda.synchronize()
+            if a.replay_profile_out:
+                # PREREG-sv2: kernel census of the SHIPPED captured
+                # replay -- kineto records kernels inside graph
+                # replays. A separate UNTIMED window (profiling
+                # perturbs; the timed loop below stays clean), CUDA
+                # activity only (the TR1 capacity lesson).
+                from torch.profiler import ProfilerActivity, profile
+                with profile(activities=[ProfilerActivity.CUDA]) as rp:
+                    for _ in range(8):
+                        g.replay()
+                    torch.cuda.synchronize()
+                tbl = rp.key_averages().table(
+                    sort_by="cuda_time_total", row_limit=120)
+                hdr = "profiled replay steps: 8 (active window: 8/8)\n"
+                Path(a.replay_profile_out).write_text(hdr + tbl)
+                print(f"REPLAY_PROFILE_OUT {a.replay_profile_out}",
+                      flush=True)
             # PREREG-f1-stageB refusal 4 counts recompiles inside the
             # TIMED window. Capture is not timed and traces one_step for
             # the first time, so sampling before it would charge the arm
@@ -1168,6 +1185,11 @@ def main():
     ap.add_argument("--compile-mode", default="reduce-overhead",
                     help="torch.compile mode for --compile-layers; drop "
                          "to 'default' if cudagraphs misbehave (recorded)")
+    ap.add_argument("--replay-profile-out", default=None,
+                    help="PREREG-sv2: write a kernel table of 8 "
+                         "UNTIMED graph replays (kineto sees inside "
+                         "replays) before the timed window; b1d graph "
+                         "loop only")
     ap.add_argument("--grouping-parity", action="store_true",
                     help="PREREG-bv3b: per-layer device-vs-eager MoE "
                          "grouping parity on one recorded live decode "
