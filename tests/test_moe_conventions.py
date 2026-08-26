@@ -305,6 +305,13 @@ _KNOWN_UNCLAIMED = {
     # OCR / multimodal composites whose text tower is not separately validated;
     # and pre-release / obscure types not yet checked against a real checkpoint:
     "deepseek_ocr2", "qwen3_5_moe_text", "axk1", "axk2", "mimo_v2_flash",
+    # Appeared in transformers between 2026-08-26 10:35 and 13:34 UTC,
+    # mapped to the qwen2_moe converter. NOT aliased: sharing a
+    # converter is not evidence of sharing e4b's expert-fusion or
+    # router layout, and aliasing on that assumption is how a wrong
+    # convention reaches a real checkpoint silently. Named here as
+    # UNVERIFIED until it can be adjudicated against one.
+    "qwen4_exp_text",
 }
 
 
