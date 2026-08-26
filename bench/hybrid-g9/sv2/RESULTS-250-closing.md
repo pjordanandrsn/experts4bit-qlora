@@ -4,6 +4,19 @@ That title is the claim this document WITHDREW during review and is
 wrong; the PR title was corrected after merge but the commit message
 on main cannot be. If you are reading `git log`, read this file. -->
 
+> **SUPERSEDED 2026-08-26 by gnf4 K11 — 250 IS NOW CLOSED.** This
+> document left the target OPEN pending its dominant term (the MoE
+> tensor-core mapping). K11 probed that term and found it has **no
+> mechanism**: the M dimension cannot be filled (a T=1 GEMV has no
+> second right-hand side) and cannot be shrunk (`tl.dot(M=8)` compiles
+> on triton 3.7.1 but emits the IDENTICAL `8x
+> mma.sync.aligned.m16n8k16` — the hardware tile is 16 rows).
+> Verified on sm_120, the census hardware. **Single-stream 250 tok/s
+> is out of reach for this design**; 159.2 tok/s is the certified
+> ceiling. See `gnf4 kernel/RESULTS-k11-mrow-feasibility.md`. The
+> analysis below stands as written — only its OPEN verdict is
+> superseded.
+
 # RESULTS — 250 tok/s single-stream: NOT closed.
 
 ## Speculation is refuted. Composition remains OPEN, pending the one
