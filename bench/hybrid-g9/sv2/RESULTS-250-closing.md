@@ -1,3 +1,9 @@
+<!-- RECORD NOTE: this document merged as #282 under the squash
+title "250 tok/s: REFUTED-AS-COMPOSED, by SV2's own registered rule".
+That title is the claim this document WITHDREW during review and is
+wrong; the PR title was corrected after merge but the commit message
+on main cannot be. If you are reading `git log`, read this file. -->
+
 # RESULTS — 250 tok/s single-stream: NOT closed.
 
 ## Speculation is refuted. Composition remains OPEN, pending the one
