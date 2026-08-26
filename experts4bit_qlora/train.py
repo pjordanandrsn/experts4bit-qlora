@@ -309,19 +309,18 @@ def main():
                           "dram": [], "nvme": []},
                 "masses": {"vram_frac": 1.0, "dram_frac": 0.0,
                            "nvme_frac": 0.0}}
-        _n = enable_hybrid_train(model, _train_arena, _man,
-                                 hot_rows=max(_E, 128))
-        if _n != _L:
-            raise SystemExit(f"TRAIN_ARENA engaged {_n}/{_L} modules "
-                             "-- refusing a partial treatment")
-        # Release the loader's bnb expert storage: post-enable, every
-        # call (train seam, no-grad tier serve, zero-adapter fast
-        # path) reads the arena stacks -- the bnb Parameters are dead
-        # weight, and keeping them doubles expert VRAM (~16 GB each on
-        # the 30B: the hybrid arm would OOM the 32 GB census box
-        # instead of training; Bugbot, HIGH, e4b#259). The trainer
-        # saves adapters only, so shrinking base storage cannot
-        # corrupt a checkpoint.
+        # Release the loader's bnb expert storage BEFORE the tier
+        # build: the build materializes ~16 GB of arena stacks while
+        # the ~16 GB of bnb Parameters are still resident, and the
+        # PEAK is what OOMed the 32 GB box (hit live on hyb_a, exactly
+        # as the review predicted -- the post-enable release fixed the
+        # steady state but not the peak). Data swaps to SHAPE-PRESERVED
+        # meta tensors: _HotResidency.__init__ takes .view()s of these
+        # buffers (shape math only) and the hybrid _build hooks source
+        # actual bytes from the ARENA (self.hot_ids, captured before
+        # the views, feeds tolist()). If enable then fails, the
+        # process exits -- there is no path that trains on the freed
+        # weights. Adapter-only checkpoints make the shrink safe.
         from ._vendor.experts import ExpertsNbit
         _freed = 0
         for _m in model.modules():
@@ -330,14 +329,19 @@ def main():
                               "gate_up_absmax", "down_absmax"):
                     _t = getattr(_m, _attr, None)
                     _dat = getattr(_t, "data", None)
-                    if _dat is not None and _dat.numel():
+                    if _dat is not None and _dat.device.type != "meta":
                         _freed += _dat.numel() * _dat.element_size()
-                        _t.data = torch.empty(
-                            0, dtype=_dat.dtype, device=_dat.device)
+                        _t.data = torch.empty_like(_dat, device="meta")
         torch.cuda.empty_cache()
+        log(f"[tr2] released {_freed / 1e9:.2f} GB of bnb expert "
+            f"storage ahead of the tier build")
+        _n = enable_hybrid_train(model, _train_arena, _man,
+                                 hot_rows=max(_E, 128))
+        if _n != _L:
+            raise SystemExit(f"TRAIN_ARENA engaged {_n}/{_L} modules "
+                             "-- refusing a partial treatment")
         log(f"[tr2] hybrid-train engaged on {_n} modules "
-            f"(grouped fwd/dgrad, all-VRAM); released "
-            f"{_freed / 1e9:.2f} GB of bnb expert storage")
+            f"(grouped fwd/dgrad, all-VRAM)")
     eval_before = eval_loss(model, eval_data)
     log(f"held-out eval loss BEFORE: {eval_before:.4f}")
 
