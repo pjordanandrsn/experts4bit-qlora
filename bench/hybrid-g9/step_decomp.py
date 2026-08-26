@@ -444,7 +444,14 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     assert len(runner.decode_rows) >= 2, "scheduled warm did not decode"
     rid = next(iter(runner.slot_of))
     slot = runner.slot_of[rid]
-    cap_tokens = a.prompt_len + a.gen_tokens + 8   # the kv ctor budget
+    # The replay profiler (post-window, below) advances pos/KV by this
+    # many extra appends; reserve their slots here and keep them OUT of
+    # the n_steps budget so the timed window is byte-identical to a
+    # no-flag run (Bugbot, e4b#275).
+    profile_replays = 8 if (a.replay_profile_out and a.b1d_timed
+                            and a.b1d_loop == "graph") else 0
+    cap_tokens = (a.prompt_len + a.gen_tokens + 8   # the kv ctor budget
+                  + profile_replays)
     kv.graph_mode_init(seq=slot, upto_tokens=cap_tokens)
     dev = "cuda"
     start_tok = int(runner.tokens[rid][-1])
@@ -491,7 +498,7 @@ def _b1d_stage_a(a, model, runner, sched, kv):
 
     n_warm = 3
     used = runner.pos_of[rid] + n_warm + 1
-    n_steps = min(a.gen_tokens, cap_tokens - used - 2)
+    n_steps = min(a.gen_tokens, cap_tokens - profile_replays - used - 2)
     assert n_steps >= 16, f"window too small for stage A ({n_steps})"
     # The documented capture recipe: warm on a SIDE stream. cuBLAS/cuDNN
     # bind workspaces per stream, and a first-use allocation landing
@@ -814,23 +821,6 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             with torch.cuda.graph(g, capture_error_mode="thread_local"):
                 one_step()
             torch.cuda.synchronize()
-            if a.replay_profile_out:
-                # PREREG-sv2: kernel census of the SHIPPED captured
-                # replay -- kineto records kernels inside graph
-                # replays. A separate UNTIMED window (profiling
-                # perturbs; the timed loop below stays clean), CUDA
-                # activity only (the TR1 capacity lesson).
-                from torch.profiler import ProfilerActivity, profile
-                with profile(activities=[ProfilerActivity.CUDA]) as rp:
-                    for _ in range(8):
-                        g.replay()
-                    torch.cuda.synchronize()
-                tbl = rp.key_averages().table(
-                    sort_by="cuda_time_total", row_limit=120)
-                hdr = "profiled replay steps: 8 (active window: 8/8)\n"
-                Path(a.replay_profile_out).write_text(hdr + tbl)
-                print(f"REPLAY_PROFILE_OUT {a.replay_profile_out}",
-                      flush=True)
             # PREREG-f1-stageB refusal 4 counts recompiles inside the
             # TIMED window. Capture is not timed and traces one_step for
             # the first time, so sampling before it would charge the arm
@@ -849,6 +839,28 @@ def _b1d_stage_a(a, model, runner, sched, kv):
                 tok_log[i].copy_(in_ids.reshape(()))
             torch.cuda.synchronize()
         total_ms = (time.perf_counter_ns() - t0) / 1e6
+        if profile_replays:
+            # PREREG-sv2: kernel census of the SHIPPED captured replay
+            # -- kineto records kernels inside graph replays. Runs
+            # AFTER the timed window: replays advance pos/KV, so a
+            # pre-window placement shifted the timed tokens off the
+            # eager arm's steps AND overran the pre-ensured blocks
+            # (Bugbot, e4b#275); the slots these appends land in were
+            # reserved via cap_tokens. CUDA activity only (the TR1
+            # capacity lesson); the timed loop above stays clean.
+            from torch.profiler import ProfilerActivity, profile
+            with profile(activities=[ProfilerActivity.CUDA]) as rp:
+                for _ in range(profile_replays):
+                    g.replay()
+                torch.cuda.synchronize()
+            tbl = rp.key_averages().table(
+                sort_by="cuda_time_total", row_limit=120)
+            hdr = (f"profiled replay steps: {profile_replays} "
+                   f"(active window: {profile_replays}/"
+                   f"{profile_replays})\n")
+            Path(a.replay_profile_out).write_text(hdr + tbl)
+            print(f"REPLAY_PROFILE_OUT {a.replay_profile_out}",
+                  flush=True)
         set_context(prev)
         _frames_after = _dynamo_frame_count()
         _recompiles = None
@@ -1188,8 +1200,8 @@ def main():
     ap.add_argument("--replay-profile-out", default=None,
                     help="PREREG-sv2: write a kernel table of 8 "
                          "UNTIMED graph replays (kineto sees inside "
-                         "replays) before the timed window; b1d graph "
-                         "loop only")
+                         "replays) AFTER the timed window, on reserved "
+                         "KV slots; b1d graph loop only")
     ap.add_argument("--grouping-parity", action="store_true",
                     help="PREREG-bv3b: per-layer device-vs-eager MoE "
                          "grouping parity on one recorded live decode "
