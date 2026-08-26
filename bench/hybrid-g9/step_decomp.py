@@ -175,6 +175,8 @@ def _grouping_parity(a, model, runner, sched, kv):
     # (review, e4b#269)
     assert a.engine == "hybrid" and a.placement_override == "all-vram", \
         "parity binds to the collapsed all-resident point"
+    assert a.amort == "off", \
+        "parity binds amort-off: _forward_collapsed requires it too"
     while (sched.active or sched.queue) and (
             len(runner.slot_of) < B
             or any(len(runner.tokens[r]) <= a.prompt_len
@@ -212,7 +214,8 @@ def _grouping_parity(a, model, runner, sched, kv):
     for li, m in enumerate(mods):
         st_ = m._hot_residency
         if not (getattr(st_, "collapse_resident", False)
-                and st_._all_hot()):
+                and st_._all_hot()
+                and getattr(st_, "amort", None) is None):
             raise SystemExit(f"parity: layer {li} is not on the "
                              "collapsed all-resident path -- the "
                              "grouping flag would not dispatch and "
