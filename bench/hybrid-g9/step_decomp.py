@@ -534,6 +534,59 @@ class _TopkProbe:
                 "sorted_override": self.sorted_override}
 
 
+def _mech_reset():
+    """Zero gnf4's dispatch tallies (PREREG-m3 mechanism receipt).
+
+    M3's four arms are selected by env vars, and an env var is a
+    REQUEST: GNF4_GEMV_DOTPAD=1 engages dot-pad only if the shape is
+    registered AND the part carries >= 160 SMs. An arm whose knob was
+    silently ignored matches OFF in step time and -- K6-B measured
+    dot-pad token-IDENTICAL at 127 tokens -- in perplexity too, so
+    nothing downstream would notice. These tallies record what
+    actually dispatched.
+
+    Soft by design: an older gnf4 without the counters yields a None
+    receipt, and m3_verdict REFUSES on a missing receipt rather than
+    assuming one ([[presence-is-not-usability]]).
+    """
+    try:
+        import fp8_paged_attn
+        import nf4_grouped
+        # Probe the READERS too, not just the resetters. A gnf4 with
+        # one half of the pair would let this return True while
+        # _mech_report returns None -- "reset succeeded, receipts
+        # unavailable" is the kind of half-truth that surfaces as a
+        # confusing REFUSE hours later on a rented box.
+        nf4_grouped.dispatch_counts, fp8_paged_attn.compute_counts
+        nf4_grouped.reset_dispatch_counts()
+        fp8_paged_attn.reset_compute_counts()
+        return True
+    except (ImportError, AttributeError):
+        return False
+
+
+def _mech_report():
+    """Read the tallies back. See _mech_reset for what they mean.
+
+    Under CUDA-graph capture these increment ONCE, at capture:
+    replays never re-enter Python. That is the right semantics --
+    what was captured is what every replay goes on to execute -- so
+    the window deliberately spans warmup AND capture. A window around
+    the timed replays alone would read all zeros and look like a
+    knob that never engaged.
+    """
+    try:
+        import fp8_paged_attn
+        import nf4_grouped
+        return {"dispatch": nf4_grouped.dispatch_counts(),
+                "compute": fp8_paged_attn.compute_counts(),
+                "window": "warmup+capture (graph) or the whole loop "
+                          "(eager); graph replays do not re-enter "
+                          "Python and cannot increment"}
+    except (ImportError, AttributeError):
+        return None
+
+
 def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                  ppl_sha=None, probe=None):
     """PREREG-b1d stage A harness: capture smoke + bitwise replay
@@ -643,6 +696,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             "--prompt-span")
         if probe is not None:
             probe.begin_window(a.ppl_steps)
+        _mech_reset()
         in_ids.fill_(int(cont[0]))
         # `pos` is the 0-BASED INDEX of the token sitting in in_ids,
         # which this forward is about to append (the harness's own
@@ -670,8 +724,11 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                "prompt_offset": a.prompt_offset,
                "tokens_scored": a.ppl_steps,
                "text_sha": ppl_sha,
+               # os.environ records the REQUEST; mech records the
+               # event. PREREG-m3 gates on the latter.
                "attn_compute": os.environ.get("GNF4_ATTN_COMPUTE",
                                               "f32"),
+               "mech": _mech_report(),
                "warm_tokens_discarded": base - a.prompt_len,
                "router_probe": (probe.report(kv.L)
                                 if probe else None),
@@ -690,6 +747,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
     used = runner.pos_of[rid] + n_warm + 1
     n_steps = min(a.gen_tokens, cap_tokens - profile_replays - used - 2)
     assert n_steps >= 16, f"window too small for stage A ({n_steps})"
+    _mech_reset()   # PREREG-m3: window spans warmup + capture
     # The documented capture recipe: warm on a SIDE stream. cuBLAS/cuDNN
     # bind workspaces per stream, and a first-use allocation landing
     # inside capture invalidates it (cudaErrorStreamCaptureInvalidated
@@ -1064,6 +1122,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
         rep = {
             "b1d_loop": a.b1d_loop, "b1d_timed": True,
             "n_steps": n_steps,
+            "mech": _mech_report(),
             "tokens": tok_log.cpu().tolist(),
             "step_ms_clean": total_ms / n_steps,
             "window_ms": total_ms,
