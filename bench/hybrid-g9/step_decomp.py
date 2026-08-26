@@ -182,6 +182,13 @@ def _bv3_stage(a, model, runner, sched, kv):
         import torch._dynamo as _dyn
         _dyn.config.recompile_limit = max(2 * B + 16,
                                           _dyn.config.recompile_limit)
+        # ... and the GLOBAL cap: 48 compiled layer bodies x the
+        # growing shapes exceeds accumulated_recompile_limit's default
+        # 256 long before [B,1] compiles (review, e4b#263). The lane
+        # tolerates compile churn pre-capture; live recompiles inside
+        # the timed window still refuse via recompiles_in_window.
+        _dyn.config.accumulated_recompile_limit = max(
+            4096, _dyn.config.accumulated_recompile_limit)
     assert a.engine == "hybrid" and a.placement_override == "all-vram", \
         "bv3 binds to the collapsed all-resident point"
     assert a.amort == "off", \
