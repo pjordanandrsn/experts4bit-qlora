@@ -26,6 +26,7 @@ PARTIAL_RATIO = 1.2
 B1_CLASS_MS = 7.16          # current certified single-stream class
 B1_TOL = 0.05
 MIN_DIVERGE_STEP = 32
+MIN_OVERLAP = 48          # aligned comparison must cover at least this
 GRAM, MAX_REP = 8, 6
 EPS = 1e-9
 
@@ -84,13 +85,22 @@ def verdict(rep):
         return ("REFUSE", "graph rows without matching eager rows")
     idmsg = []
     for row in sorted(g_tok):
+        # graph receipts carry the FULL stream (pre + warm + window);
+        # both arms are the same prompts from decode step 0, so the
+        # comparison is aligned by construction. Bugbot (e4b#261): a
+        # short full-match must NOT pass -- require a real overlap, and
+        # the divergence floor applies inside it.
         gt, et = g_tok[row], e_tok[row]
         why = _degenerate(gt)
         if why:
             return ("REFUSE", f"graph row {row} degenerate: {why}")
         n = min(len(gt), len(et))
+        if n < MIN_OVERLAP:
+            return ("REFUSE", f"row {row}: aligned overlap {n} < "
+                    f"{MIN_OVERLAP} -- streams too short to certify "
+                    f"(graph {len(gt)}, eager {len(et)})")
         p = _prefix(et, gt)
-        if p < min(MIN_DIVERGE_STEP, n):
+        if p < MIN_DIVERGE_STEP:
             return ("REFUSE", f"row {row} diverges at step {p} < "
                     f"{MIN_DIVERGE_STEP}")
         idmsg.append(f"{row}:{'id' if p == n else f'div@{p}'}")
@@ -151,6 +161,13 @@ def _self_test():
     out = v(_mk(div=31))
     assert out[0] == "REFUSE" and "diverges" in out[1], out
     assert v(_mk(div=32))[0] == "PASS"
+    # short full-match refuses on overlap (Bugbot: a 10-token match
+    # must not certify)
+    out = v(_mk(n=10))
+    assert out[0] == "REFUSE" and "overlap" in out[1], out
+    out = v(_mk(n=47))
+    assert out[0] == "REFUSE" and "overlap" in out[1], out
+    assert v(_mk(n=48))[0] == "PASS"
     # eager A/A too wide refuses (margin = 129.4*(1-1/1.5)/2 = 21.6)
     r = _mk()
     r["eager_b"]["decode_median_ms"]["step"] = 129.4 + 22.0

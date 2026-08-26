@@ -173,13 +173,20 @@ def _bv3_stage(a, model, runner, sched, kv):
         "bv3 binds to the collapsed all-resident point"
     assert a.amort == "off", \
         "amort-armed runs keep the baseline dispatch path (not capturable)"
+    # rids come from slot_of -- decode_rows holds per-step TIMING
+    # dicts in TimedRunner, not request ids (Bugbot HIGH, e4b#261;
+    # certified b1d reads slot_of the same way). Drain until all B
+    # admitted rows have generated at least one decode token.
     while (sched.active or sched.queue) and (
-            len(runner.decode_rows) < B
-            or any(len(runner.tokens[r]) < 1 for r in runner.decode_rows)):
+            len(runner.slot_of) < B
+            or any(len(runner.tokens[r]) <= a.prompt_len
+                   for r in runner.slot_of)):
         if sched.step().is_empty:
             break
-    rids = sorted(runner.decode_rows)
+    rids = sorted(runner.slot_of)
     assert len(rids) == B, (len(rids), B)
+    assert all(len(runner.tokens[r]) > a.prompt_len for r in rids), \
+        "a row reached the manual loop without any decoded token"
     slots = [runner.slot_of[r] for r in rids]
     cap_tokens = a.prompt_len + a.gen_tokens + 8
     kv.graph_mode_init_batch(slots, upto_tokens=cap_tokens)
@@ -218,11 +225,20 @@ def _bv3_stage(a, model, runner, sched, kv):
     base_pos = max(runner.pos_of[r] for r in rids)
     n_steps = min(a.gen_tokens, cap_tokens - (base_pos + n_warm) - 2)
     assert n_steps >= 16, f"window too small for bv3 ({n_steps})"
+    # per-row decode tokens generated BEFORE the manual loop, so the
+    # receipt carries the FULL greedy stream and the verdict can align
+    # it against the eager arm from decode step 0 (Bugbot HIGH,
+    # e4b#261: window-only logs cannot be identity-compared)
+    pre_tokens = {str(i): [int(t) for t in
+                           runner.tokens[r][a.prompt_len:]]
+                  for i, r in enumerate(rids)}
+    warm_log = torch.zeros(n_warm, B, dtype=torch.long, device=dev)
     side = torch.cuda.Stream()
     side.wait_stream(torch.cuda.current_stream())
     with torch.cuda.stream(side):
-        for _ in range(n_warm):
+        for w in range(n_warm):
             one_step()
+            warm_log[w].copy_(in_ids.reshape(B))
     torch.cuda.current_stream().wait_stream(side)
     torch.cuda.synchronize()
 
@@ -245,8 +261,12 @@ def _bv3_stage(a, model, runner, sched, kv):
     rep = {
         "bv3": True, "batch": B, "n_steps": n_steps,
         "slots": slots,
-        "tokens": {str(i): tok_log[:, i].cpu().tolist()
+        "tokens": {str(i): (pre_tokens[str(i)]
+                            + warm_log[:, i].cpu().tolist()
+                            + tok_log[:, i].cpu().tolist())
                    for i in range(B)},
+        "pre_len": {k: len(v) for k, v in pre_tokens.items()},
+        "warm_steps": n_warm,
         "step_ms_clean": step_ms,
         "window_ms": total_ms,
         "aggregate_tok_s": 1000.0 / step_ms * B,
