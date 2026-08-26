@@ -189,6 +189,15 @@ def _bv3_stage(a, model, runner, sched, kv):
         # the timed window still refuse via recompiles_in_window.
         _dyn.config.accumulated_recompile_limit = max(
             4096, _dyn.config.accumulated_recompile_limit)
+    # the registered treatment routes T=B MoE rows through the
+    # CAPTURE-SAFE device grouping (PREREG-bv3 item 2; S3 machinery).
+    # The default at T>1 is EAGER grouping, whose host-size sync
+    # invalidates capture -- hit live on graph_a attempt 2: capture
+    # died with NO recompile warning once the dynamo budget was
+    # raised, leaving the grouping path as the remaining host sync.
+    from experts4bit_qlora.engines import hot_residency as _hr
+    _hr.DEVICE_GROUPING[0] = True
+    _hr.FORCE_SINGLETON_GROUPS[0] = False
     assert a.engine == "hybrid" and a.placement_override == "all-vram", \
         "bv3 binds to the collapsed all-resident point"
     assert a.amort == "off", \
@@ -293,6 +302,7 @@ def _bv3_stage(a, model, runner, sched, kv):
         "compile_layers": bool(a.compile_layers),
         "compile_mode": a.compile_mode if a.compile_layers else None,
         "fuse_qkv": bool(a.fuse_qkv),
+        "device_grouping": True,
         "recompile_limit": (None if not a.compile_layers else
                             __import__("torch._dynamo", fromlist=["config"])
                             .config.recompile_limit),
