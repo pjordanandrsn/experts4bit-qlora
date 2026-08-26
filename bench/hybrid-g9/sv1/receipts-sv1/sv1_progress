@@ -1,0 +1,28 @@
+SV1-START 00:59:39
+ARM-START off_a 00:59:39
+B1D_TIMED_GRAPH steps=127 step=7.25ms compile=default recompiles=0 out=/root/out/sv1_off_a.json
+ARM-OK off_a 01:00:36
+ARM-START off_b 01:00:36
+B1D_TIMED_GRAPH steps=127 step=7.25ms compile=default recompiles=0 out=/root/out/sv1_off_b.json
+ARM-OK off_b 01:01:29
+ARM-START dotpad_on 01:01:29
+B1D_TIMED_GRAPH steps=127 step=6.48ms compile=default recompiles=0 out=/root/out/sv1_dotpad_on.json
+ARM-OK dotpad_on 01:02:19
+CENSUS-START 01:02:19
+CENSUS-OK
+Traceback (most recent call last):
+  File "/root/e4b/bench/hybrid-g9/f1/step_budget.py", line 287, in <module>
+    main()
+  File "/root/e4b/bench/hybrid-g9/f1/step_budget.py", line 260, in main
+    rep = budget(*parse(a.kernels_txt))
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/root/e4b/bench/hybrid-g9/f1/step_budget.py", line 85, in parse
+    text = open(path).read()
+           ^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/root/out/sv1_kernels.txt'
+SV1-BUDGET-COVERAGE-REFUSED (recorded)
+SV1 COMPOSED {'off_a': 7.251, 'off_b': 7.249, 'dotpad_on': 6.476}
+self-test PASS (11 cases: all outcomes, both ratio boundaries, the divergence floor, and every refusal)
+K6-B VERDICT: PARTIAL
+  step ratio 0.893 in (0.85, 0.95]; first divergence at step NONE of 127, agreement 127/127 -- knob ships OFF, available
+SV1-DONE 01:03:10
