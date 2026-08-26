@@ -123,12 +123,28 @@ def paged_attention_forward(module, query, key, value, attention_mask,
             raise ValueError(f"decode regime expects one query token per "
                              f"sequence, got {T}")
         if getattr(ctx.kv, "graph_t1", False):
-            # B1d graph mode: one slot, one token, device-computed write
-            # addresses -- the only append shape a CUDA graph may capture
-            # (PREREG-b1d item 2b)
-            ctx.kv.append_graph_t1(layer,
-                                   key[0].permute(1, 0, 2).contiguous(),
-                                   value[0].permute(1, 0, 2).contiguous())
+            # Graph mode: one token per slot, device-computed write
+            # addresses -- the only append shapes a CUDA graph may
+            # capture (PREREG-b1d item 2b; PREREG-bv3 for B>1). The
+            # batch form requires the slot list registered at
+            # graph_mode_init_batch to MATCH ctx.slots -- silently
+            # appending rows to the init-time slots while attention
+            # reads ctx.slots would cross sequences.
+            if key.shape[0] > 1 or len(ctx.slots) > 1:
+                gslots = getattr(ctx.kv, "_g_slots", None)
+                if gslots != list(ctx.slots):
+                    raise RuntimeError(
+                        f"graph batch append: ctx.slots {list(ctx.slots)} "
+                        f"!= graph_mode_init_batch slots {gslots}")
+                ctx.kv.append_graph_bt1(
+                    layer, key.permute(0, 2, 1, 3).reshape(
+                        key.shape[0], -1, key.shape[-1]).contiguous(),
+                    value.permute(0, 2, 1, 3).reshape(
+                        value.shape[0], -1, value.shape[-1]).contiguous())
+            else:
+                ctx.kv.append_graph_t1(
+                    layer, key[0].permute(1, 0, 2).contiguous(),
+                    value[0].permute(1, 0, 2).contiguous())
         elif getattr(ctx.kv, "batched_append", False):
             # one permute+quantize per side for the whole batch
             # (PREREG-g9-kvappend); bit-identical to the loop below
