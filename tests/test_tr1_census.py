@@ -115,6 +115,42 @@ def test_tr2_train_arena_wiring():
     # the release must PRECEDE the tier build: the build's peak (bnb +
     # arena stacks co-resident) is what OOMed the box, so a
     # post-enable release cannot help (hit live on hyb_a)
-    assert src.index("released") < src.index(
+    assert src.index("_release_expert_storage(") < src.index(
         "enable_hybrid_train("), "release must precede engagement"
-    assert 'device="meta"' in src, "shape-preserving meta swap required"
+
+
+def test_release_swaps_shape_preserved_meta_twins():
+    """The BEHAVIOR the wiring depends on, on a real module: after
+    release, every packed attr is a meta tensor with the ORIGINAL
+    shape (the tier init .view()s them and .float()s the absmax
+    views -- both must stay legal), Parameters stay Parameters,
+    buffers stay registered, and the freed byte count is the real
+    storage. Parameter.data = meta is REJECTED by autograd
+    ('incompatible tensor type', hit live on hyb_a attempt 2), which
+    is why the helper REPLACES the objects."""
+    import experts4bit_qlora.train as _tr
+    from experts4bit_qlora._vendor.experts import ExpertsNbit
+
+    m = ExpertsNbit(num_experts=4, hidden_dim=64, intermediate_dim=128,
+                    quant_type="nf4")
+    shapes = {a: getattr(m, a).shape
+              for a in ("gate_up_proj", "down_proj",
+                        "gate_up_absmax", "down_absmax")}
+    want = sum(getattr(m, a).numel() * getattr(m, a).element_size()
+               for a in shapes)
+    holder = torch.nn.ModuleDict({"e": m})
+    freed = _tr._release_expert_storage(holder, ExpertsNbit)
+    assert freed == want, (freed, want)
+    for a, shp in shapes.items():
+        t = getattr(m, a)
+        assert t.device.type == "meta", a
+        assert t.shape == shp, (a, t.shape, shp)
+        E = m.num_experts
+        v = t.view(E, -1)               # the tier init's access pattern
+        assert v.shape[0] == E
+    assert isinstance(m.gate_up_proj, torch.nn.Parameter)
+    assert "gate_up_absmax" in dict(m.named_buffers())
+    # absmax .float() (the init materializes the cast) stays legal
+    assert m.gate_up_absmax.float().device.type == "meta"
+    # idempotent: second call frees nothing
+    assert _tr._release_expert_storage(holder, ExpertsNbit) == 0
