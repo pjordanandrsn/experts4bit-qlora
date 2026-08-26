@@ -401,6 +401,7 @@ def _bv3_stage(a, model, runner, sched, kv):
         "aggregate_tok_s": 1000.0 / step_ms * B,
         "compile_layers": bool(a.compile_layers),
         "compile_moe_tier": bool(a.compile_moe_tier),
+        "compile_attn_tier": bool(a.compile_attn_tier),
         "compile_mode": a.compile_mode if a.compile_layers else None,
         "fuse_qkv": bool(a.fuse_qkv),
         "device_grouping": True,
@@ -1128,6 +1129,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             "window_ms": total_ms,
             "compile_layers": bool(a.compile_layers),
             "compile_moe_tier": bool(a.compile_moe_tier),
+            "compile_attn_tier": bool(a.compile_attn_tier),
             "compile_mode": a.compile_mode if a.compile_layers else None,
             "fuse_qkv": bool(a.fuse_qkv),
             "dyn_limits_env": [os.environ.get("E4B_RECOMPILE_LIMIT"),
@@ -1450,6 +1452,12 @@ def main():
                     help="dotted path to the decoder-layer list for "
                          "--compile-layers (latent/nested families "
                          "differ, e.g. model.language_model.layers)")
+    ap.add_argument("--compile-attn-tier", action="store_true",
+                    help="PREREG-k12 arm 3 CONTROL: also skip the "
+                         "paged-attention dynamo.disable, so BOTH "
+                         "exclusions are lifted. Expected to reproduce "
+                         "F1 Stage B's failure; if it does not, that is "
+                         "a finding. Requires --compile-moe-tier.")
     ap.add_argument("--compile-moe-tier", action="store_true",
                     help="PREREG-k12 Stage A: leave the MoE tier "
                          "forward VISIBLE to dynamo while the "
@@ -1770,8 +1778,26 @@ def main():
         # clean graph breaks: the paged-attention shim (host-bound KV
         # paging) and the hybrid MoE forward (CPU tier dispatch) must
         # never be traced -- compile owns only the dense layer body
-        ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = dynamo.disable(
-            ALL_ATTENTION_FUNCTIONS[IMPL_NAME])
+        # PREREG-k12 AMENDMENT: Stage A lists FOUR arms, and arm 3
+        # ("both-compiled") is the control that should reproduce F1
+        # Stage B's failure -- "if it does NOT fail, F1's exclusion may
+        # itself be stale, and that is a finding to record rather than
+        # bury". But the prereg's "Instrument required" section named
+        # only ONE flag, so arm 3 was not runnable with the registered
+        # instrument at all. This flag is named in the amendment rather
+        # than smuggled in, which is the discipline that section asks
+        # for in its own heading.
+        if a.compile_attn_tier:
+            assert a.compile_moe_tier, (
+                "--compile-attn-tier is the arm-3 CONTROL (BOTH "
+                "compiled); on its own it is an arm PREREG-k12 never "
+                "registered and whose result nothing would interpret")
+            print("K12 arm 3: paged attention NOT dynamo-disabled "
+                  "either -- expected to reproduce the F1 Stage B "
+                  "failure", flush=True)
+        else:
+            ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = dynamo.disable(
+                ALL_ATTENTION_FUNCTIONS[IMPL_NAME])
         # PREREG-k12: the two exclusions are applied together but for
         # DIFFERENT stated reasons -- the attention shim for host-bound
         # KV paging, the MoE forward for CPU TIER DISPATCH. At
@@ -1801,8 +1827,16 @@ def main():
             n_c += 1
         if "reduce-overhead" in a.compile_mode:
             COMPILE_GRAPH_STEP[0] = True
+        # This line is read back out of arm logs, so it must describe
+        # the configuration that RAN. It used to say "paged attention
+        # + MoE tier dynamo-disabled" unconditionally -- including in
+        # the --compile-moe-tier arm, where the MoE tier is precisely
+        # NOT disabled, and where it contradicted the K12 line printed
+        # a few lines above it.
+        _dis = [n for n, off in (("paged attention", not a.compile_attn_tier),
+                                 ("MoE tier", not a.compile_moe_tier)) if off]
         print(f"compiled {n_c} layer bodies (mode={a.compile_mode}); "
-              f"paged attention + MoE tier dynamo-disabled; "
+              f"dynamo-disabled: {' + '.join(_dis) if _dis else 'NOTHING'}; "
               f"graph step marking={COMPILE_GRAPH_STEP[0]}", flush=True)
     kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len
@@ -2191,6 +2225,7 @@ def main():
         "model": a.model, "batch": a.batch, "layers": L,
         "compile_layers": bool(a.compile_layers),
         "compile_moe_tier": bool(a.compile_moe_tier),
+        "compile_attn_tier": bool(a.compile_attn_tier),
         "compile_mode": a.compile_mode if a.compile_layers else None,
         "fuse_qkv": bool(a.fuse_qkv),
         "warmup_rows_dropped": n_dropped,
