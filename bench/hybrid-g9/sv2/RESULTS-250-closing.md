@@ -77,10 +77,22 @@ bar                                         2.480 ms
         the registered MoE lane must supply 0.898 ms
 ```
 
-That lane's theoretical headroom is **1.820 ms** (a 2.469 ms slice
-against a 0.649 ms streaming floor). So **250-as-composed requires
-the tensor-core mapping to capture ~49% of its theoretical
-headroom.**
+How much headroom is left depends on whether K7's retune survives a
+round-2 kernel — and the retune came out of the SAME 2.469 ms slice,
+so banking it *and* granting the lane the full pre-retune headroom
+would spend that slice twice (Bugbot, e4b#282):
+
+| reading | lane must supply | out of | share |
+|---|---|---|---|
+| **A** — the retune composes with a round-2 kernel | 0.898 ms | 1.579 ms remaining (2.228 slice − 0.649 floor) | **57%** |
+| **B** — a round-2 kernel brings its own config and supersedes the retune | 1.139 ms | 1.820 ms | **63%** |
+
+So **250-as-composed requires the tensor-core mapping to capture
+57–63% of the headroom that is actually left** — not the 49% this
+document claimed on its first correction, which double-counted the
+retune. Reading B is the more likely one: a new kernel picks its own
+BLOCK_N/warps/stages, so K7's config win on the *current* kernel
+probably does not carry.
 
 Not demonstrated. Not excluded. That is the whole finding.
 
@@ -93,9 +105,9 @@ the registered MoE treatment is built and measured.
 
 Closing it in either direction requires exactly one thing: a
 registered cycle that implements tensor-core mapping past the M-row
-waste and measures it. A result below ~0.90 ms closes 250 by
-arithmetic. A result at or above it keeps the target live and makes
-the remaining unmeasured lanes worth registering.
+waste and measures it. A result below ~0.90 ms (reading A) or ~1.14 ms (reading B) closes
+250 by arithmetic. A result at or above it keeps the target live and
+makes the remaining unmeasured lanes worth registering.
 
 ## What is certified regardless
 
@@ -115,5 +127,5 @@ term. SV2 left one lane at 1.5–1.8 ms unmeasured and called the route
 NOT-REFUTED; this document left the same lane unmeasured and called
 it REFUTED. Both directions are the same error. The lane has now been
 named precisely enough — *tensor-core mapping past the M-row waste,
-needing ~0.90 ms of a 1.82 ms headroom* — that the next cycle can
+needing 57–63% of the headroom that remains* — that the next cycle can
 settle it instead of estimating it.
