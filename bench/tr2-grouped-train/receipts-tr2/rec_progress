@@ -1,0 +1,49 @@
+REC-START 01:38:26
+577aff7 BV3: route the batched lane through device grouping (capture, hit live) (#265)
+ARM-START hyb_a 01:38:27
+[01:41:58] AFTER-training generations:
+     BEFORE: Okay, the user wants me to list three tips for staying focused when working from home. Let's start by recalling common advice on this topic. First, creating a dedicated workspace is often mentioned because it helps separate work and personal life. That
+     AFTER : Three helpful tips to stay focused when working remotely are: 1) Set up a dedicated workspace, away from distractions. 
+     BEFORE: Okay, the user wants me to explain what a black hole is in just one sentence. Let me start by recalling my knowledge about black holes. They are regions in space where gravity is so strong that not even light can escape. That's
+     AFTER : A black hole is an area of space where the gravitational pull is so strong that nothing, not even light or other electromagnetic waves can escape from it.
+ARM-OK hyb_a 01:42:12
+ARM-START hyb_b 01:42:12
+[01:45:20] AFTER-training generations:
+     BEFORE: Okay, the user wants me to list three tips for staying focused when working from home. Let's start by recalling common advice on this topic. First, creating a dedicated workspace is often mentioned because it helps separate work and personal life. That
+     AFTER : Three helpful tips to stay focused when working remotely are: 1) create a dedicated workspace, away from distractions; 
+     BEFORE: Okay, the user wants me to explain what a black hole is in just one sentence. Let me start by recalling my knowledge about black holes. They are regions in space where gravity is so strong that not even light can escape. That's
+     AFTER : A black hole is an area of space with such strong gravity that nothing, not even light can escape it.
+ARM-OK hyb_b 01:45:33
+ARM-START lc_base 01:45:33
+[02:12:45] AFTER-training generations:
+     BEFORE: Okay, the user wants me to list three tips for staying focused when working from home. Let's start by recalling common advice on this topic. First, creating a dedicated workspace is often mentioned because it helps separate work and personal life. That
+     AFTER : 1. Create a dedicated workspace and keep it organized to minimize distractions.
+     BEFORE: Okay, the user wants me to explain what a black hole is in just one sentence. Let me start by recalling my knowledge about black holes. They are regions in space where gravity is so strong that not even light can escape. That's
+     AFTER : A black hole is an area of space with such strong gravity that nothing, not even light or other electromagnetic waves can escape from it.
+ARM-OK lc_base 02:15:15
+ARM-START lc_hyb 02:15:15
+[02:18:30] AFTER-training generations:
+     BEFORE: Okay, the user wants me to list three tips for staying focused when working from home. Let's start by recalling common advice on this topic. First, creating a dedicated workspace is often mentioned because it helps separate work and personal life. That
+     AFTER : 1. Create a dedicated workspace and keep it organized to minimize distractions.
+     BEFORE: Okay, the user wants me to explain what a black hole is in just one sentence. Let me start by recalling my knowledge about black holes. They are regions in space where gravity is so strong that not even light can escape. That's
+     AFTER : A black hole is an area of space with such strong gravity that nothing, not even light or other electromagnetic waves can escape from it.
+ARM-OK lc_hyb 02:18:53
+TR2 COMPOSED {'base_a': 56.3, 'hyb_a': 5.5} lc: {'base_launches_per_step': 2920655, 'hyb_launches_per_step': 126325} evals: {'base_before': 2.4834, 'base_after': 1.0099, 'hyb_before': 2.4823, 'hyb_after': 1.0086}
+tr2_verdict self-test: OK
+TR2 VERDICT: REFUSE
+hybrid census: A/A per-step wall delta 6.2% > 2% -- the runs did not measure the same workload
+TR2-RECOVER-DONE 02:18:53
+ARM-START graph_a 02:18:53
+BV3_GRAPH batch=16 steps=115 step=38.00ms agg=421.1tok/s recompiles=0 out=/root/out/bv3_graph_a.json
+ARM-OK graph_a 02:20:33
+ARM-START graph_b 02:20:33
+BV3_GRAPH batch=16 steps=115 step=37.99ms agg=421.2tok/s recompiles=0 out=/root/out/bv3_graph_b.json
+ARM-OK graph_b 02:21:41
+ARM-START graph_b1 02:21:41
+B1D_TIMED_GRAPH steps=127 step=7.25ms compile=default recompiles=0 out=/root/out/bv3_graph_b1.json
+ARM-OK graph_b1 02:22:36
+BV3 COMPOSED eager [130.8, 132.4] graph [38.0, 37.99] b1 7.25
+bv3_verdict self-test: OK
+BV3 VERDICT: REFUSE
+row 11 diverges at step 3 < 32
+REC-DONE 02:22:37
