@@ -422,6 +422,16 @@ def _bv3_stage(a, model, runner, sched, kv):
           flush=True)
 
 
+
+def _capturing() -> bool:
+    """True while the current stream is capturing a CUDA graph."""
+    try:
+        return bool(torch.cuda.is_available()
+                    and torch.cuda.is_current_stream_capturing())
+    except Exception:                       # no CUDA build, or no stream
+        return False
+
+
 class _TopkProbe:
     """PREREG-k10 Stage A: name the owner of the census `router` row.
 
@@ -446,12 +456,32 @@ class _TopkProbe:
         self.calls = 0
         self.shapes = {}
         self._orig = None
+        self.window_steps = None
         # B1-C is a REFUSE gate on the SELECTED SET, so measure the set
         # -- not a proxy. Token streams are neither necessary nor
         # sufficient: reordered weights can flip a token without
         # changing the set, and an unchanged set can still shift a
         # token through fp re-association in w/w.sum(). Digest the
         # SORTED indices of every call so two arms compare exactly.
+        self._set_digest = hashlib.sha256()
+
+    def begin_window(self, steps):
+        """Zero the counters and declare how many STEPS the window is.
+
+        The probe wraps the whole stage, so scheduled prefill and warm
+        decode would otherwise fold into counts divided by the
+        window's step count -- breaking the one-topk-per-layer
+        attribution and letting B1-C refuse two arms whose scored sets
+        agree but whose warm tokens diverged (Bugbot, e4b#280 High).
+
+        The graph arm declares ONE step and opens its window around the
+        CAPTURE, not the replay loop: `g.replay()` never enters Python,
+        so a window around the replays would count exactly nothing.
+
+        """
+        self.calls = 0
+        self.shapes = {}
+        self.window_steps = steps
         self._set_digest = hashlib.sha256()
 
     def __enter__(self):
@@ -467,7 +497,11 @@ class _TopkProbe:
             out = self._orig(input, k, dim=dim, largest=largest,
                              sorted=sorted, *a, **kw)
             idx = getattr(out, "indices", None)
-            if idx is not None:
+            # A D2H copy is ILLEGAL inside stream capture, and the
+            # ablation arms capture. Skip the digest there; B1-C is
+            # adjudicated on the EAGER ppl arms, which is where the
+            # scored sets actually live (Bugbot, e4b#280 High).
+            if idx is not None and not _capturing():
                 # sort so the digest is order-INVARIANT: the whole
                 # point is that sorted=False permutes, and B1 asks
                 # whether the SET survived that permutation
@@ -482,7 +516,13 @@ class _TopkProbe:
         torch.topk = self._orig
         return False
 
-    def report(self, steps, layers):
+    def report(self, layers):
+        steps = self.window_steps
+        if not steps:
+            raise RuntimeError(
+                "report() before begin_window(): the counts would "
+                "include prefill and warm decode and be divided by a "
+                "step count that never applied to them")
         return {"topk_calls": self.calls,
                 "steps": steps, "layers": layers,
                 "calls_per_step": self.calls / max(steps, 1),
@@ -600,6 +640,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             f"corpus slice holds {cont.numel()} ids but --ppl-steps "
             f"{a.ppl_steps} needs {a.ppl_steps + 1}; widen "
             "--prompt-span")
+        if probe is not None:
+            probe.begin_window(a.ppl_steps)
         in_ids.fill_(int(cont[0]))
         # `pos` is the 0-BASED INDEX of the token sitting in in_ids,
         # which this forward is about to append (the harness's own
@@ -630,7 +672,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                "attn_compute": os.environ.get("GNF4_ATTN_COMPUTE",
                                               "f32"),
                "warm_tokens_discarded": base - a.prompt_len,
-               "router_probe": (probe.report(a.ppl_steps, kv.L)
+               "router_probe": (probe.report(kv.L)
                                 if probe else None),
                "basis": "teacher-forced through the paged decode path "
                         "after rewinding the scheduler's warm tokens; "
@@ -965,6 +1007,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
         if a.b1d_loop == "graph":
             torch.cuda.empty_cache()
             g = torch.cuda.CUDAGraph()
+            if probe is not None:
+                probe.begin_window(1)   # capture traces exactly one step
             with torch.cuda.graph(g, capture_error_mode="thread_local"):
                 one_step()
             torch.cuda.synchronize()
@@ -980,6 +1024,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             torch.cuda.synchronize()
         else:
             _frames_before = _dynamo_frame_count()
+            if probe is not None:
+                probe.begin_window(n_steps)
             t0 = time.perf_counter_ns()
             for i in range(n_steps):
                 one_step()
@@ -1029,7 +1075,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             "dynamo_frames_before": _frames_before,
             "dynamo_frames_after": _frames_after,
             "recompiles_in_window": _recompiles,
-            "router_probe": (probe.report(n_steps, kv.L)
+            "router_probe": (probe.report(kv.L)
                              if probe else None),
         }
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
