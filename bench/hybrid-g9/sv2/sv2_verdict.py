@@ -79,7 +79,9 @@ def adjudicate(rep):
         return _refuse(out, f"G3: budget coverage "
                             f"{bud.get('coverage', 0) * 100:.1f}% failed "
                             f"its own gate")
-    dev_ms = bud["device_us_per_step"] / 1000.0
+    # the FOOTER truth, not the row sum: row-limited tables under-sum,
+    # and the footer is what the device actually ran (step_budget.py)
+    dev_ms = bud["device_us_per_step_truth"] / 1000.0
     recon = dev_ms / knob
     out["gates"]["census_reconcile"] = recon
     if not (COVER_LO <= recon <= COVER_HI):
@@ -105,7 +107,7 @@ def adjudicate(rep):
     cleared = [k for k, c in out["spec_cells"].items() if c["clears"]]
     out["spec_route"] = ("CLEARED", cleared) if cleared else ("REFUTED",)
 
-    out["slices"] = bud.get("kernels", [])[:40]
+    out["slices"] = bud.get("rows", [])[:40]
     return out
 
 
@@ -135,7 +137,45 @@ def render(out):
                      "negative stands on the current stack)")
     lines.append("SV2 COMPOSITION ROUTE: adjudicated in RESULTS -- sum "
                  "the addressable slices below against the 2.48 ms bar")
+    for r in out["slices"][:25]:
+        lines.append(f"    {r['us_per_step']:9.1f} us/step  "
+                     f"{r['kind']:<12} {r['name'][:70]}")
     return "\n".join(lines)
+
+
+def _load_step_budget():
+    import importlib.util
+    import pathlib
+    p = (pathlib.Path(__file__).resolve().parent.parent / "f1"
+         / "step_budget.py")
+    spec = importlib.util.spec_from_file_location("step_budget", p)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _mk_budget(step_ms, dev_frac=0.97, cover=True):
+    """Build the budget dict by running the REAL producer on a
+    synthetic kineto table -- an invented fixture dict here let a
+    schema mismatch through the self-test once (Bugbot, e4b#276)."""
+    import tempfile
+    sb = _load_step_budget()
+    steps = 8
+    dev_us = step_ms * 1000 * dev_frac * steps
+    row = (f"  gemv_nf4_grouped_kernel  10.0%  1.000ms  10.0%  "
+           f"1.000ms  1.000ms  {dev_us:.3f}us  90.0%  {dev_us:.3f}us  "
+           f"1.000us  {steps * 48}")
+    # footer above the row sum -> coverage below the producer's own
+    # gate; equal -> coverage 1.0
+    total = dev_us if cover else dev_us * 2
+    txt = (f"profiled replay steps: {steps} (active window: "
+           f"{steps}/{steps})\n{row}\n"
+           f"Self CUDA time total: {total / 1000:.3f}ms\n")
+    with tempfile.NamedTemporaryFile("w", suffix=".txt",
+                                     delete=False) as f:
+        f.write(txt)
+        path = f.name
+    return sb.budget(*sb.parse(path))
 
 
 def _mk(a=6.47, b=6.48, dev_frac=0.97, v8=25.0, v16=30.0, v32=35.0,
@@ -147,9 +187,7 @@ def _mk(a=6.47, b=6.48, dev_frac=0.97, v8=25.0, v16=30.0, v32=35.0,
             "on_b": {"step_ms_clean": b,
                      "tokens": toks_b if toks_b is not None else toks,
                      "recompiles_in_window": 0},
-            "budget": {"coverage_ok": cover, "coverage": 0.97,
-                       "device_us_per_step": knob * 1000 * dev_frac,
-                       "kernels": [{"name": "k", "us_per_step": 1.0}]},
+            "budget": _mk_budget(knob, dev_frac, cover),
             "verify": {"8": {"verify_graph_ms": v8},
                        "16": {"verify_graph_ms": v16},
                        "32": {"verify_graph_ms": v32}}}
