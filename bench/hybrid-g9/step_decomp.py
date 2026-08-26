@@ -157,6 +157,85 @@ def wrap_attention(impl_name):
     ALL_ATTENTION_FUNCTIONS[impl_name] = timed   # capture-invalid
 
 
+def _grouping_parity(a, model, runner, sched, kv):
+    """PREREG-bv3b: per-layer device-vs-eager grouping parity on REAL
+    decode inputs. Drain the scheduler until B rows decode, record one
+    step's per-layer MoE inputs via forward hooks, then replay each
+    layer's own forward twice -- DEVICE_GROUPING off, then on -- and
+    record max|delta| / max|ref| per layer. The flag flip exercises
+    the exact live dispatch both ways on identical tensors."""
+    from experts4bit_qlora.engines import hot_residency as _hr
+    from experts4bit_qlora.engines.hot_residency import target_modules
+
+    B = a.batch
+    while (sched.active or sched.queue) and (
+            len(runner.slot_of) < B
+            or any(len(runner.tokens[r]) <= a.prompt_len
+                   for r in runner.slot_of)):
+        if sched.step().is_empty:
+            break
+    assert len(runner.slot_of) == B, (len(runner.slot_of), B)
+    mods = target_modules(model)
+    rec = {}
+    hooks = []
+    for li, m in enumerate(mods):
+        def _mk(li_, m_):
+            orig = m_.forward
+
+            def _wrap(hidden, top_k_index, top_k_weights):
+                if li_ not in rec:
+                    rec[li_] = (hidden.detach().clone(),
+                                top_k_index.detach().clone(),
+                                top_k_weights.detach().clone())
+                return orig(hidden, top_k_index, top_k_weights)
+            return orig, _wrap
+        o, w = _mk(li, m)
+        m.forward = w
+        hooks.append((m, o))
+    try:
+        if sched.step().is_empty:
+            raise SystemExit("parity: no live step to record")
+    finally:
+        for m, o in hooks:
+            m.forward = o
+    missing = [li for li in range(len(mods)) if li not in rec]
+    if missing:
+        raise SystemExit(f"parity: layers without recorded inputs: "
+                         f"{missing} -- refusing a partial probe")
+    out = {}
+    prev_dg = _hr.DEVICE_GROUPING[0]
+    prev_sg = _hr.FORCE_SINGLETON_GROUPS[0]
+    with torch.no_grad():
+        for li, m in enumerate(mods):
+            hidden, idx, wts = rec[li]
+            _hr.DEVICE_GROUPING[0] = False
+            _hr.FORCE_SINGLETON_GROUPS[0] = False
+            y_e = m.forward(hidden, idx, wts)
+            if isinstance(y_e, tuple):
+                y_e = y_e[0]
+            _hr.DEVICE_GROUPING[0] = True
+            y_d = m.forward(hidden, idx, wts)
+            if isinstance(y_d, tuple):
+                y_d = y_d[0]
+            d = (y_e.float() - y_d.float()).abs().max().item()
+            r = y_e.float().abs().max().item()
+            out[str(li)] = {"max_abs_delta": d, "max_abs_ref": r,
+                            "rows": int(hidden.reshape(
+                                -1, hidden.shape[-1]).shape[0])}
+    _hr.DEVICE_GROUPING[0] = prev_dg
+    _hr.FORCE_SINGLETON_GROUPS[0] = prev_sg
+    rep = {"parity": out, "batch": B, "layers": len(mods),
+           "frame": "max|delta| <= max|ref| * 2^-7 per layer"}
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(a.out).write_text(json.dumps(rep, indent=1))
+    worst = max(out.values(),
+                key=lambda c: c["max_abs_delta"] / max(c["max_abs_ref"],
+                                                       1e-30))
+    print(f"GROUPING_PARITY layers={len(mods)} worst_ratio="
+          f"{worst['max_abs_delta']/max(worst['max_abs_ref'],1e-30):.3e}"
+          f" out={a.out}", flush=True)
+
+
 def _bv3_stage(a, model, runner, sched, kv):
     """PREREG-bv3: the B>1 CUDA-graph decode loop. Prefill runs through
     the production scheduler until every row is decoding; the decode
@@ -1065,6 +1144,10 @@ def main():
     ap.add_argument("--compile-mode", default="reduce-overhead",
                     help="torch.compile mode for --compile-layers; drop "
                          "to 'default' if cudagraphs misbehave (recorded)")
+    ap.add_argument("--grouping-parity", action="store_true",
+                    help="PREREG-bv3b: per-layer device-vs-eager MoE "
+                         "grouping parity on one recorded live decode "
+                         "step; writes the parity receipt to --out")
     ap.add_argument("--fuse-qkv", dest="fuse_qkv",
                     action="store_true", default=True,
                     help="fuse q/k/v projections into one matmul per "
@@ -1528,6 +1611,9 @@ def main():
         import cProfile
         prof = cProfile.Profile()
         prof.enable()
+    if a.grouping_parity:
+        _grouping_parity(a, model, runner, sched, kv)
+        return
     if a.b1d_loop:
         if a.batch > 1:
             _bv3_stage(a, model, runner, sched, kv)
