@@ -20,7 +20,9 @@ Methodology validated on the dev box (OLMoE); constants only bind on a
 serving-class box (G6 tiny-model trap applies to MAGNITUDES, not shape).
 """
 import argparse
+import hashlib
 import json
+import math
 import os
 import statistics
 import sys
@@ -495,6 +497,63 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         in_ids.copy_(tok.reshape(1, 1))
         pos.add_(1)
         return lg
+
+    if a.ppl_steps:
+        # PREREG-k8 quality instrument: perplexity measured THROUGH the
+        # paged DECODE path, which is the only place the attention
+        # compute mode is exercised at all. A teacher-forced forward
+        # with use_cache=False -- the obvious way to get perplexity --
+        # never calls fp8_paged_decode_attention, so it would return
+        # bit-identical numbers for both arms and "prove" quality by
+        # construction ([[check-the-result-could-have-failed]]).
+        #
+        # Every step is TEACHER-FORCED from the corpus, and the KV is
+        # first rewound to the prompt boundary to discard the
+        # scheduler's warm tokens: those are MODEL-generated, so the
+        # two arms could otherwise carry different context and the
+        # comparison would not be apples-to-apples. After the rewind
+        # both arms see byte-identical context at every step and the
+        # ONLY difference is the attention arithmetic.
+        base = runner.pos_of[rid]                 # prompt boundary
+        kv.rewind_nosync(slot, a.prompt_len)
+        torch.cuda.synchronize()
+        cont = ppl_ids[a.prompt_len:a.prompt_len + a.ppl_steps + 1]
+        assert cont.numel() >= a.ppl_steps + 1, (
+            f"corpus slice holds {cont.numel()} ids but --ppl-steps "
+            f"{a.ppl_steps} needs {a.ppl_steps + 1}; widen "
+            "--prompt-span")
+        in_ids.fill_(int(cont[0]))
+        pos.fill_(a.prompt_len - 1)
+        nll = 0.0
+        for t in range(a.ppl_steps):
+            out = model(input_ids=in_ids, position_ids=pos,
+                        use_cache=False)
+            lg = out.logits[:, -1].float()
+            nxt = int(cont[t + 1])
+            nll += -torch.log_softmax(lg, -1)[0, nxt].item()
+            in_ids.fill_(nxt)
+            pos.add_(1)
+        set_context(prev)
+        mean_nll = nll / a.ppl_steps
+        rep = {"k8": "ppl", "steps": a.ppl_steps,
+               "mean_nll": mean_nll, "ppl": math.exp(mean_nll),
+               "prompt_len": a.prompt_len,
+               "prompt_offset": a.prompt_offset,
+               "tokens_scored": a.ppl_steps,
+               "text_sha": ppl_sha,
+               "attn_compute": os.environ.get("GNF4_ATTN_COMPUTE",
+                                              "f32"),
+               "warm_tokens_discarded": base - a.prompt_len,
+               "basis": "teacher-forced through the paged decode path "
+                        "after rewinding the scheduler's warm tokens; "
+                        "identical context in both arms by "
+                        "construction (PREREG-k8)"}
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(rep, indent=1))
+        print(f"K8_PPL steps={a.ppl_steps} nll={mean_nll:.5f} "
+              f"ppl={rep['ppl']:.5f} compute={rep['attn_compute']} "
+              f"sha={ppl_sha[:12]} out={a.out}", flush=True)
+        return
 
     n_warm = 3
     used = runner.pos_of[rid] + n_warm + 1
@@ -1202,6 +1261,11 @@ def main():
                          "UNTIMED graph replays (kineto sees inside "
                          "replays) AFTER the timed window, on reserved "
                          "KV slots; b1d graph loop only")
+    ap.add_argument("--ppl-steps", type=int, default=0,
+                    help="PREREG-k8: score N teacher-forced tokens "
+                         "THROUGH the paged decode path and write the "
+                         "perplexity receipt to --out (b1 path; the "
+                         "KV is rewound to the prompt boundary first)")
     ap.add_argument("--grouping-parity", action="store_true",
                     help="PREREG-bv3b: per-layer device-vs-eager MoE "
                          "grouping parity on one recorded live decode "
@@ -1528,6 +1592,12 @@ def main():
     step = max(1, (ids.numel() - a.prompt_len) // max(1, a.batch))
     prompts = [ids[i * step:i * step + a.prompt_len].tolist()
                for i in range(a.batch)]
+    # PREREG-k8 G5: the scored window and a digest of it, so the
+    # verdict can REFUSE two arms that evaluated different text
+    ppl_ids = ids
+    ppl_sha = hashlib.sha256(
+        ids[:a.prompt_len + max(a.ppl_steps, 0) + 1].numpy().tobytes()
+    ).hexdigest()
 
     # ------- timed runner: forward vs drain split, per-regime expert delta
     class TimedRunner(PagedModelRunner):
