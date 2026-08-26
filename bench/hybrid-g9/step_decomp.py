@@ -400,6 +400,8 @@ def _bv3_stage(a, model, runner, sched, kv):
         "compile_mode": a.compile_mode if a.compile_layers else None,
         "fuse_qkv": bool(a.fuse_qkv),
         "device_grouping": True,
+        "dyn_limits_env": [os.environ.get("E4B_RECOMPILE_LIMIT"),
+                           os.environ.get("E4B_ACCUM_RECOMPILE_LIMIT")],
         "recompile_limit": (None if not a.compile_layers else
                             __import__("torch._dynamo", fromlist=["config"])
                             .config.recompile_limit),
@@ -844,6 +846,9 @@ def _b1d_stage_a(a, model, runner, sched, kv):
             "compile_layers": bool(a.compile_layers),
             "compile_mode": a.compile_mode if a.compile_layers else None,
             "fuse_qkv": bool(a.fuse_qkv),
+            "dyn_limits_env": [os.environ.get("E4B_RECOMPILE_LIMIT"),
+                               os.environ.get(
+                                   "E4B_ACCUM_RECOMPILE_LIMIT")],
             "dynamo_frames_before": _frames_before,
             "dynamo_frames_after": _frames_after,
             "recompiles_in_window": _recompiles,
@@ -1300,6 +1305,23 @@ def main():
                          "playbook: 8; the default thrashes pinned workers)")
     ap.add_argument("--out", default="/workspace/g8out/step_decomp.json")
     a = ap.parse_args()
+    # E4B_RECOMPILE_LIMIT / E4B_ACCUM_RECOMPILE_LIMIT: set dynamo's
+    # budgets UNIFORMLY for this run, whatever the lane. The BV3b
+    # parity receipts proved device-vs-eager grouping bitwise, leaving
+    # the arms' only uncontrolled difference the graph lane's raised
+    # limits: compiled-vs-fallback kernels differ numerically, so a
+    # cross-arm identity comparison is confounded unless every arm
+    # runs the same compile coverage. Recorded in the timed receipts.
+    _rl = os.environ.get("E4B_RECOMPILE_LIMIT")
+    _al = os.environ.get("E4B_ACCUM_RECOMPILE_LIMIT")
+    if _rl or _al:
+        import torch._dynamo as _dyn0
+        if _rl:
+            _dyn0.config.recompile_limit = max(
+                int(_rl), _dyn0.config.recompile_limit)
+        if _al:
+            _dyn0.config.accumulated_recompile_limit = max(
+                int(_al), _dyn0.config.accumulated_recompile_limit)
 
     from transformers import AutoTokenizer
     from experts4bit_qlora import load_moe_4bit_streaming
