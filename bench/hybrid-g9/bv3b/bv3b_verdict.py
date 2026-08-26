@@ -79,10 +79,28 @@ def verdict(rep):
                 return ("REFUSE", f"{name} arms not internally "
                         f"deterministic on row {row}")
     e_tok, g_tok = ea["generated_tokens"], ga["tokens"]
+    excluded = []
     for row in g_tok:
-        why = _degenerate(g_tok[row])
-        if why:
-            return ("REFUSE", f"graph row {row} degenerate: {why}")
+        why_g = _degenerate(g_tok[row])
+        why_e = _degenerate(e_tok.get(row, []))
+        if why_g and not why_e:
+            return ("REFUSE", f"graph row {row} degenerate ({why_g}) "
+                    "while its eager stream is clean -- "
+                    "treatment-induced degeneration")
+        if why_g and why_e:
+            # AMENDED with the v2 receipts (disclosed): a row whose
+            # streams loop in BOTH arms certifies nothing -- but when
+            # the two degenerate streams are IDENTICAL it contradicts
+            # nothing either. Excluded with disclosure; a mismatch on
+            # a degenerate pair still refuses (nothing legitimizes
+            # disagreeing loops), and the clean-row floor below keeps
+            # the comparison from hollowing out.
+            n = min(len(g_tok[row]), len(e_tok[row]))
+            if g_tok[row][:n] != e_tok[row][:n]:
+                return ("REFUSE", f"row {row}: both streams degenerate "
+                        "AND they disagree")
+            excluded.append(row)
+            continue
         # crossing iff some OTHER row matches STRICTLY longer than the
         # own row -- max() with first-key tie-break falsely refused
         # legitimate ties (review, e4b#269)
@@ -92,6 +110,11 @@ def verdict(rep):
         if p_other > p_own:
             return ("REFUSE", f"crossing: graph row {row} matches "
                     f"another eager row longer ({p_other} > {p_own})")
+    min_clean = max(1, (3 * len(g_tok)) // 4)   # >=75% (12 of 16)
+    n_clean = len(g_tok) - len(excluded)
+    if n_clean < min_clean:
+        return ("REFUSE", f"only {n_clean} clean rows after excluding "
+                f"{excluded} -- below the {min_clean}-row floor")
 
     e_ms = [ea["decode_median_ms"]["step"], eb["decode_median_ms"]["step"]]
     g_ms = [ga["step_ms_clean"], gb["step_ms_clean"]]
@@ -116,7 +139,8 @@ def verdict(rep):
               f"{worst_layer}) inside 2^-7={REL_BAR:.3e}; graph "
               f"{g_base:.1f} vs eager {e_base:.1f} ms at B={B} = "
               f"{ratio:.2f}x ({1000/e_base*B:.0f} -> "
-              f"{1000/g_base*B:.0f} agg tok/s); b1 {b1:.2f} ms")
+              f"{1000/g_base*B:.0f} agg tok/s); b1 {b1:.2f} ms; "
+              f"excluded both-degenerate rows: {excluded or 'none'}")
     if ratio >= PASS_RATIO - EPS:
         return ("PASS", detail + " -- the batched graph loop ships; "
                 "divergence-vs-eager is certified reorder-class")
@@ -196,12 +220,52 @@ def _self_test():
     # non-deterministic graph arm refuses
     out = v(_mk(nondet=True))
     assert out[0] == "REFUSE" and "deterministic" in out[1], out
-    # degenerate stream refuses
+    # graph-only degeneration refuses (eager clean)
     r = _mk()
     r["bv3"]["graph_a"]["tokens"]["0"] = [1, 2] * 64
     r["bv3"]["graph_b"]["tokens"]["0"] = [1, 2] * 64
     out = v(r)
-    assert out[0] == "REFUSE" and "degenerate" in out[1], out
+    assert out[0] == "REFUSE" and "treatment-induced" in out[1], out
+    # both-degenerate AND identical: excluded, still PASS (>=12 of 16
+    # clean requires B>=13... _mk uses B=4 so floor trips; build B=16)
+    def mk16(**kw):
+        r = _mk(**kw)
+        for arm, key in (("eager_a", "generated_tokens"),
+                         ("eager_b", "generated_tokens"),
+                         ("graph_a", "tokens"), ("graph_b", "tokens")):
+            tk = r["bv3"][arm][key]
+            proto = {k: list(v) for k, v in tk.items()}
+            for i in range(16):
+                tk[str(i)] = [t + i for t in proto["0"]]
+        r["bv3"]["graph_a"]["batch"] = 16
+        r["bv3"]["graph_b"]["batch"] = 16
+        return r
+    r = mk16()
+    loop = [5, 6] * 64
+    for arm, key in (("eager_a", "generated_tokens"),
+                     ("eager_b", "generated_tokens"),
+                     ("graph_a", "tokens"), ("graph_b", "tokens")):
+        r["bv3"][arm][key]["8"] = list(loop)
+    out = v(r)
+    assert out[0] == "PASS" and "'8'" in out[1], out
+    # both-degenerate but DISAGREEING refuses
+    r = mk16()
+    for arm, key in (("eager_a", "generated_tokens"),
+                     ("eager_b", "generated_tokens")):
+        r["bv3"][arm][key]["8"] = list(loop)
+    for arm in ("graph_a", "graph_b"):
+        r["bv3"][arm]["tokens"]["8"] = [9, 9] * 64
+    out = v(r)
+    assert out[0] == "REFUSE" and "disagree" in out[1], out
+    # clean-row floor: 5 excluded of 16 -> 11 < 12 refuses
+    r = mk16()
+    for i in ("3", "5", "8", "9", "11"):
+        for arm, key in (("eager_a", "generated_tokens"),
+                         ("eager_b", "generated_tokens"),
+                         ("graph_a", "tokens"), ("graph_b", "tokens")):
+            r["bv3"][arm][key][i] = list(loop)
+    out = v(r)
+    assert out[0] == "REFUSE" and "floor" in out[1], out
     # tiers + b1 sanity
     assert v(_mk(g=129.4 / 1.5))[0] == "PASS"
     assert v(_mk(g=129.4 / 1.49))[0] == "PARTIAL"
