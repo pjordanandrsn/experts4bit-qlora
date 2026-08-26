@@ -337,6 +337,38 @@ class Fp8PagedKV:
 
     # ----------------------------------------------------------------- read --
     # ------------------------------------------------- graph mode (B1d) --
+    def graph_mode_init_batch(self, slots, upto_tokens: int | None = None):
+        """PREREG-bv3: `graph_mode_init` for a LIST of slots -- each
+        slot's window is block-ensured up front, and `append_graph_bt1`
+        appends one token to every slot per call. Reuses the single-slot
+        init for the shared flat-view/arange state."""
+        slots = list(slots)
+        assert slots, "graph_mode_init_batch needs at least one slot"
+        self.graph_mode_init(seq=slots[0], upto_tokens=upto_tokens)
+        upto = (self.blocks_per_seq * self.bt if upto_tokens is None
+                else upto_tokens)
+        for s_ in slots[1:]:
+            for layer in range(self.L):
+                self._ensure_blocks(layer, s_, (upto - 1) // self.bt)
+        self._g_slots = slots
+
+    def append_graph_bt1(self, layer: int, k: torch.Tensor,
+                         v: torch.Tensor):
+        """One-token append to EACH of the batch slots (PREREG-bv3).
+        k, v: [B, H, D], row i belonging to ``self._g_slots[i]``. A
+        per-slot loop of the certified single-slot path -- ~2B extra
+        launches per layer call, noise against the step -- with each
+        slot's own device table row and lens scalar, so every address
+        stays device-computed and the captured replay writes to each
+        slot's ADVANCING position."""
+        slots = self._g_slots
+        assert k.shape[0] == len(slots), (k.shape, len(slots))
+        for i, s_ in enumerate(slots):
+            self._g_seq = s_
+            self.append_graph_t1(layer, k.narrow(0, i, 1),
+                                 v.narrow(0, i, 1))
+        self._g_seq = slots[0]
+
     def graph_mode_init(self, seq: int = 0, upto_tokens: int | None = None):
         """Prepare device-addressed T=1 appends for ONE slot so a decode
         step is CUDA-graph-capturable (PREREG-b1d). Two moves:

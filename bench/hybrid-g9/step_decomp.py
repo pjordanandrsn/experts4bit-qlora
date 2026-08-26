@@ -157,6 +157,136 @@ def wrap_attention(impl_name):
     ALL_ATTENTION_FUNCTIONS[impl_name] = timed   # capture-invalid
 
 
+def _bv3_stage(a, model, runner, sched, kv):
+    """PREREG-bv3: the B>1 CUDA-graph decode loop. Prefill runs through
+    the production scheduler until every row is decoding; the decode
+    loop is then driven manually with static [B, 1] buffers, one step
+    captured, replayed for the timed window. Per-row token logs land in
+    the receipt for the offline identity gate against the eager arm.
+    A sibling of the certified b1d lane, deliberately branch-free of
+    its S2 probes."""
+    from experts4bit_qlora.engines.paged_attention import set_context
+
+    B = a.batch
+    assert B > 1, "bv3 is the batched lane; use b1d at --batch 1"
+    assert a.engine == "hybrid" and a.placement_override == "all-vram", \
+        "bv3 binds to the collapsed all-resident point"
+    assert a.amort == "off", \
+        "amort-armed runs keep the baseline dispatch path (not capturable)"
+    # rids come from slot_of -- decode_rows holds per-step TIMING
+    # dicts in TimedRunner, not request ids (Bugbot HIGH, e4b#261;
+    # certified b1d reads slot_of the same way). Drain until all B
+    # admitted rows have generated at least one decode token.
+    while (sched.active or sched.queue) and (
+            len(runner.slot_of) < B
+            or any(len(runner.tokens[r]) <= a.prompt_len
+                   for r in runner.slot_of)):
+        if sched.step().is_empty:
+            break
+    rids = sorted(runner.slot_of)
+    assert len(rids) == B, (len(rids), B)
+    assert all(len(runner.tokens[r]) > a.prompt_len for r in rids), \
+        "a row reached the manual loop without any decoded token"
+    slots = [runner.slot_of[r] for r in rids]
+    cap_tokens = a.prompt_len + a.gen_tokens + 8
+    kv.graph_mode_init_batch(slots, upto_tokens=cap_tokens)
+    dev = "cuda"
+    in_ids = torch.tensor([[int(runner.tokens[r][-1])] for r in rids],
+                          dtype=torch.long, device=dev)
+    pos = torch.tensor([[runner.pos_of[r] - 1] for r in rids],
+                       dtype=torch.long, device=dev)
+    runner.ctx.mode = "decode"
+    runner.ctx.slots = slots
+    prev = set_context(runner.ctx)
+
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+    from experts4bit_qlora.engines.paged_attention import IMPL_NAME
+    _cur = ALL_ATTENTION_FUNCTIONS[IMPL_NAME]
+    _orig = getattr(_cur, "_orig", None)
+    if _orig is not None:
+        # same unwrap-then-re-disable dance as b1d: the timing shim's
+        # cudaEventRecord is illegal inside capture, but the RAW shim
+        # would discard the dynamo.disable compile-layers applied
+        # (feedback: disable-wrappers-get-unwrapped)
+        if a.compile_layers:
+            import torch._dynamo as dynamo
+            ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = dynamo.disable(_orig)
+        else:
+            ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = _orig
+
+    def one_step():
+        out = model(input_ids=in_ids, position_ids=pos, use_cache=False)
+        tok = out.logits[:, -1].argmax(-1)
+        in_ids.copy_(tok.reshape(B, 1))
+        pos.add_(1)
+
+    n_warm = 3
+    base_pos = max(runner.pos_of[r] for r in rids)
+    n_steps = min(a.gen_tokens, cap_tokens - (base_pos + n_warm) - 2)
+    assert n_steps >= 16, f"window too small for bv3 ({n_steps})"
+    # per-row decode tokens generated BEFORE the manual loop, so the
+    # receipt carries the FULL greedy stream and the verdict can align
+    # it against the eager arm from decode step 0 (Bugbot HIGH,
+    # e4b#261: window-only logs cannot be identity-compared)
+    pre_tokens = {str(i): [int(t) for t in
+                           runner.tokens[r][a.prompt_len:]]
+                  for i, r in enumerate(rids)}
+    warm_log = torch.zeros(n_warm, B, dtype=torch.long, device=dev)
+    side = torch.cuda.Stream()
+    side.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(side):
+        for w in range(n_warm):
+            one_step()
+            warm_log[w].copy_(in_ids.reshape(B))
+    torch.cuda.current_stream().wait_stream(side)
+    torch.cuda.synchronize()
+
+    tok_log = torch.zeros(n_steps, B, dtype=torch.long, device=dev)
+    _frames_before = _dynamo_frame_count()
+    torch.cuda.empty_cache()
+    g = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(g, capture_error_mode="thread_local"):
+        one_step()
+    torch.cuda.synchronize()
+    t0 = time.perf_counter_ns()
+    for i in range(n_steps):
+        g.replay()
+        tok_log[i].copy_(in_ids.reshape(B))
+    torch.cuda.synchronize()
+    total_ms = (time.perf_counter_ns() - t0) / 1e6
+    set_context(prev)
+    _frames_after = _dynamo_frame_count()
+    step_ms = total_ms / n_steps
+    rep = {
+        "bv3": True, "batch": B, "n_steps": n_steps,
+        "slots": slots,
+        "tokens": {str(i): (pre_tokens[str(i)]
+                            + warm_log[:, i].cpu().tolist()
+                            + tok_log[:, i].cpu().tolist())
+                   for i in range(B)},
+        "pre_len": {k: len(v) for k, v in pre_tokens.items()},
+        "warm_steps": n_warm,
+        "step_ms_clean": step_ms,
+        "window_ms": total_ms,
+        "aggregate_tok_s": 1000.0 / step_ms * B,
+        "compile_layers": bool(a.compile_layers),
+        "compile_mode": a.compile_mode if a.compile_layers else None,
+        "fuse_qkv": bool(a.fuse_qkv),
+        "dynamo_frames_before": _frames_before,
+        "dynamo_frames_after": _frames_after,
+        "recompiles_in_window": (
+            _frames_after["total"] - _frames_before["total"]
+            if _frames_before and _frames_after else None),
+    }
+    Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(a.out).write_text(json.dumps(rep, indent=1))
+    print(f"BV3_GRAPH batch={B} steps={n_steps} "
+          f"step={step_ms:.2f}ms agg={rep['aggregate_tok_s']:.1f}tok/s "
+          f"recompiles={rep['recompiles_in_window']} out={a.out}",
+          flush=True)
+
+
 def _b1d_stage_a(a, model, runner, sched, kv):
     """PREREG-b1d stage A harness: capture smoke + bitwise replay
     identity. Prefill runs through the normal scheduled path; the decode
@@ -1366,7 +1496,10 @@ def main():
         prof = cProfile.Profile()
         prof.enable()
     if a.b1d_loop:
-        _b1d_stage_a(a, model, runner, sched, kv)
+        if a.batch > 1:
+            _bv3_stage(a, model, runner, sched, kv)
+        else:
+            _b1d_stage_a(a, model, runner, sched, kv)
         return
 
     step_walls = []            # decode-ONLY steps: a wall that included a

@@ -64,3 +64,55 @@ def test_graph_mode_requires_pristine_arena():
     gr.kp.head[0] = 1                           # simulate a moved ring
     with pytest.raises(AssertionError):
         gr.graph_mode_init(seq=0)
+
+
+def test_batch_graph_append_matches_per_slot(make=None):
+    """PREREG-bv3: append_graph_bt1 over B slots must leave pool bytes
+    and seq_lens exactly equal to B separate single-slot appends --
+    the batch form is a loop of the certified path, and this pins it."""
+    import experts4bit_qlora.engines.fp8_paged_kv as mod
+    torch.manual_seed(11)
+    B, H, D, steps = 3, 2, 64, 5
+
+    def _mk():
+        kv = mod.Fp8PagedKV(n_layers=1, n_kv_heads=H, head_dim=D,
+                            batch=B, max_tokens_per_seq=64,
+                            device="cpu")
+        for s in range(B):
+            kv.append(0, s, torch.randn(4, H, D), torch.randn(4, H, D))
+        return kv
+
+    torch.manual_seed(11)
+    a = _mk()
+    torch.manual_seed(11)
+    b = _mk()
+    a.graph_mode_init_batch(list(range(B)), upto_tokens=32)
+    b.graph_mode_init(seq=0, upto_tokens=32)
+    for s in range(1, B):
+        for layer in range(1):
+            b._ensure_blocks(layer, s, (32 - 1) // b.bt)
+    for t in range(steps):
+        torch.manual_seed(100 + t)
+        k = torch.randn(B, H, D)
+        v = torch.randn(B, H, D)
+        a.append_graph_bt1(0, k, v)
+        for s in range(B):
+            b._g_seq = s
+            b.append_graph_t1(0, k.narrow(0, s, 1), v.narrow(0, s, 1))
+    assert torch.equal(a.seq_lens, b.seq_lens)
+    assert torch.equal(a.kp.dev[0], b.kp.dev[0]), "K pool bytes differ"
+    assert torch.equal(a.vp.dev[0], b.vp.dev[0]), "V pool bytes differ"
+    # every slot advanced by exactly `steps`
+    assert a.seq_lens[0].tolist() == [4 + steps] * B
+
+
+def test_batch_graph_append_row_count_mismatch_refuses():
+    import experts4bit_qlora.engines.fp8_paged_kv as mod
+    kv = mod.Fp8PagedKV(n_layers=1, n_kv_heads=1, head_dim=64,
+                        batch=2, max_tokens_per_seq=32, device="cpu")
+    for s in range(2):
+        kv.append(0, s, torch.randn(2, 1, 64), torch.randn(2, 1, 64))
+    kv.graph_mode_init_batch([0, 1], upto_tokens=16)
+    with pytest.raises(AssertionError):
+        kv.append_graph_bt1(0, torch.randn(3, 1, 64),
+                            torch.randn(3, 1, 64))
