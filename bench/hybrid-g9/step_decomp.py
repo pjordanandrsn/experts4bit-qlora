@@ -1775,6 +1775,18 @@ def main():
     if a.grouping_parity:
         _grouping_parity(a, model, runner, sched, kv)
         return
+    if a.ppl_steps and not a.b1d_loop:
+        raise SystemExit(
+            "--ppl-steps scores through the B=1 paged decode loop and "
+            "needs --b1d-loop (eager|graph) to reach it. Without that "
+            "flag this run silently produces an ORDINARY decode "
+            "report, which is exactly the failure the K8 quality gate "
+            "exists to avoid -- refusing instead (found live: the K8 "
+            "ppl arms wrote default reports and the compose step's "
+            "assertion was the only thing that noticed).")
+    if a.ppl_steps and a.batch > 1:
+        raise SystemExit(
+            f"--ppl-steps is a B=1 instrument; got --batch {a.batch}")
     if a.b1d_loop:
         if a.batch > 1:
             _bv3_stage(a, model, runner, sched, kv)
