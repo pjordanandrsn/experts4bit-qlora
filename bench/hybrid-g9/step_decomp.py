@@ -573,12 +573,28 @@ def _graph_break_census(one_step, steps: int = 2) -> dict:
         return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
     first = sum(counters["graph_break"].values())
 
-    # already compiled now: anything that re-fires is per-step
-    counters["graph_break"].clear()
-    for _ in range(max(1, steps)):
-        one_step()
-    again = sum(counters["graph_break"].values())
-    phase = "step" if again > 0 else "trace"
+    # PHASE. The first version cleared the counters and re-ran
+    # one_step immediately after explain() -- but explain() resets
+    # dynamo, so that re-run RECOMPILES and re-counts every break.
+    # It could only ever return "step": a measurement no input could
+    # make say "trace" (review, e4b#290;
+    # [[check-the-result-could-have-failed]]).
+    #
+    # A WARM call now absorbs that recompile, so anything counted
+    # afterwards is genuinely per-step. Wrapped, because losing a good
+    # census to a failure in the phase probe would be the worse
+    # outcome -- the verdict REFUSES an unknown phase, which is right,
+    # but the receipt should say why rather than the arm aborting.
+    phase, phase_err, again = None, None, None
+    try:
+        one_step()                               # warm: compile here
+        counters["graph_break"].clear()
+        for _ in range(max(1, steps)):
+            one_step()
+        again = sum(counters["graph_break"].values())
+        phase = "step" if again > 0 else "trace"
+    except Exception as ex:                      # noqa: BLE001
+        phase_err = f"{type(ex).__name__}: {ex}"[:200]
 
     breaks = []
     for br in getattr(exp, "break_reasons", []) or []:
@@ -591,7 +607,8 @@ def _graph_break_census(one_step, steps: int = 2) -> dict:
             "func": (fr.name if fr else "<unknown>"),
             "reason": reason[:240],
             "count": 1,
-            "phase": phase,
+            "phase": phase,          # None if the probe failed
+
             "stack": [f"{f.filename}:{f.lineno} in {f.name}" for f in us][-6:],
         })
     # collapse identical sites, summing counts -- two entries for one
@@ -608,10 +625,13 @@ def _graph_break_census(one_step, steps: int = 2) -> dict:
             "graph_count": getattr(exp, "graph_count", None),
             "counter_total_first": first,
             "counter_total_recompiled": again,
-            "phase_basis": "re-ran the step after compilation; a break "
-                           "that re-fires is per-step, one that does "
-                           "not fired at trace -- which still shapes "
-                           "every graph replay",
+            "phase_error": phase_err,
+            "phase_basis": "WARMED the step after explain() (which "
+                           "resets dynamo), then re-ran with the "
+                           "counters cleared: a break that re-fires "
+                           "once already compiled is per-step, one "
+                           "that does not fired at trace -- which "
+                           "still shapes every graph replay",
             "error": None}
 
 
@@ -2168,6 +2188,17 @@ def main():
                 "--graph-break-census with nothing compiled censuses "
                 "an untraced region and would report zero breaks for "
                 "a reason unrelated to the MoE tier (PREREG-k13)")
+        if a.batch > 1:
+            # --batch DEFAULTS TO 4, and batch > 1 routes to
+            # _bv3_stage, which never reaches the census site and
+            # writes a BV3 timing report to --out instead. That is
+            # the same silent-skip these guards exist to catch, on
+            # the DEFAULT path (review, e4b#290).
+            raise SystemExit(
+                f"--graph-break-census is a B=1 instrument; got "
+                f"--batch {a.batch}. batch > 1 routes to the BV3 "
+                "stage, which never runs the census and would write "
+                "a timing report to --out instead")
     if a.b1d_loop:
         _ov = (None if a.router_sorted is None
                else a.router_sorted == "true")
