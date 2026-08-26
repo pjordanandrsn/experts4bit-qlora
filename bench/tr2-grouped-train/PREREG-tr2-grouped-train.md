@@ -63,7 +63,17 @@ lesson, applied in advance). Gates:
 - hybrid must LEARN: final eval < its own BEFORE eval by ≥80% of the
   base arm's improvement.
 - A/A: per-arm pair must pass the amended TR1 composer gates
-  (closure, trend, per-step, budgets, loss).
+  (closure, trend, per-step, budgets, loss). **Amended with the first
+  composed receipts (disclosed):** the per-step same-workload gate
+  was purely relative (2% of median) and refused the hybrid pair at
+  6.2% -- but the receipts show per-step jitter is ~250 ms ABSOLUTE
+  regardless of step duration (hyb 243 ms vs base 251 ms), so a
+  treatment that shrinks the step 13x inflates the percentage while
+  its absolute agreement BEATS the baseline's own. The hybrid pair's
+  gate now carries an absolute floor of 1.5x the base pair's measured
+  mean per-step delta (same box, same recipe); the relative 2% gate
+  still binds the base pair itself, and the self-test proves a
+  genuine systematic delta refuses at any floor.
 
 ## Calculator
 

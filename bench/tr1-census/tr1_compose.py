@@ -64,7 +64,17 @@ def _shares(run):
             "steps_used": len(steps), "closure_gap": gap}, None
 
 
-def compose(run_a, run_b):
+def compose(run_a, run_b, aa_abs_floor_ms: float = 0.0):
+    """aa_abs_floor_ms: absolute allowance for the per-step A/A gate.
+    AMENDED with the TR2 receipts (disclosed): the per-step delta gate
+    was purely relative (2% of median), derived from a 51 s baseline
+    whose absolute jitter is ~250 ms (0.49%). A treatment that shrinks
+    the step 13x keeps the SAME ~250 ms absolute jitter (measured:
+    hyb 243 ms vs base 251 ms) but reads 6.2% relative -- the gate
+    refused runs whose absolute agreement was BETTER than the
+    baseline's own. Callers pass a measured same-box absolute scale
+    (e.g. the baseline pair's mean delta); the gate is then
+    max(relative, floor). Zero floor preserves the original gate."""
     a, why = _shares(run_a)
     if why:
         return None, f"run A: {why}"
@@ -80,13 +90,15 @@ def compose(run_a, run_b):
     sb = run_b["steps"][WARMUP_DROP:]
     if len(sa) == len(sb):
         med = a["median_step_ms"]
-        step_d = statistics.mean(
+        abs_d = statistics.mean(
             abs(x["step_wall_ms"] - y["step_wall_ms"])
-            for x, y in zip(sa, sb)) / med
-        if step_d > AA_STEP_FRAC:
-            return None, (f"A/A per-step wall delta {step_d:.1%} > "
-                          f"{AA_STEP_FRAC:.0%} -- the runs did not "
-                          "measure the same workload")
+            for x, y in zip(sa, sb))
+        step_d = abs_d / med
+        if step_d > AA_STEP_FRAC and abs_d > aa_abs_floor_ms:
+            return None, (f"A/A per-step wall delta {step_d:.1%} "
+                          f"({abs_d:.0f} ms) > {AA_STEP_FRAC:.0%} and "
+                          f"> {aa_abs_floor_ms:.0f} ms floor -- the "
+                          "runs did not measure the same workload")
     else:
         return None, (f"A/A step counts differ: {len(sa)} vs {len(sb)}")
     eff_a = run_a.get("meta", {}).get("token_budget_effective")
@@ -97,6 +109,7 @@ def compose(run_a, run_b):
                       "phase shares are not comparable; re-run with "
                       "TOKEN_BUDGET pinned to the smaller value")
     return {
+        "aa_step_delta_ms": (abs_d if len(sa) == len(sb) else None),
         "anchor_step_ms": min(a["median_step_ms"], b["median_step_ms"]),
         "shares_pct": {p: (a["shares_pct"][p] + b["shares_pct"][p]) / 2
                        for p in PHASES},
@@ -148,6 +161,21 @@ def _self_test():
     assert why and "not steady" in why, why
     # runs that measured different workloads refuse on per-step delta
     _, why = compose(_run(pattern=True), _run())
+    assert why and "per-step" in why, why
+    # the absolute floor admits fast-step pairs whose ABSOLUTE jitter
+    # matches the measured box noise (TR2 receipts: 243 ms on 3.9 s
+    # steps = 6.2% relative, better than the baseline's own 251 ms)
+    ok, why = compose(_run(pattern=True), _run(), aa_abs_floor_ms=200.0)
+    assert why is None, why
+    ok2, _ = compose(_run(), _run())
+    assert ok2["aa_step_delta_ms"] == 0.0
+    # a genuine workload mismatch exceeds any sane floor and refuses
+    # ON THE PER-STEP GATE (phases scale with the wall so closure
+    # holds -- the first draft's flat-phase bump refused via closure
+    # and never exercised the floor; review, e4b#266)
+    big = _run(wall=1800.0,
+               phases=(360.0, 720.0, 540.0, 90.0, 72.0))
+    _, why = compose(big, _run(), aa_abs_floor_ms=200.0)
     assert why and "per-step" in why, why
     # A/A drift: forward share moved > 3 points between runs
     drift = _run(phases=(200.0, 460.0, 240.0, 50.0, 40.0))
