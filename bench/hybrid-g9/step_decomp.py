@@ -338,7 +338,14 @@ def _bv3_stage(a, model, runner, sched, kv):
         # cudaEventRecord is illegal inside capture, but the RAW shim
         # would discard the dynamo.disable compile-layers applied
         # (feedback: disable-wrappers-get-unwrapped)
-        if a.compile_layers:
+        # PREREG-k12 arm 3: --compile-attn-tier lifts this exclusion,
+        # and it must be lifted HERE too. Skipping only the initial
+        # disable leaves this re-wrap to silently restore it on the
+        # very loops arm 3 measures, so the arm would run as arm 2
+        # while its receipt recorded compile_attn_tier=True
+        # (review, e4b#289) -- the disable-wrappers-get-unwrapped trap
+        # in mirror image.
+        if a.compile_layers and not getattr(a, "compile_attn_tier", False):
             import torch._dynamo as dynamo
             ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = dynamo.disable(_orig)
         else:
@@ -655,7 +662,13 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
         # B1 arm is defined as "compile owns only the dense layer
         # body", so the disable is re-applied rather than the arm
         # re-scoped (e4b F1 Stage B, first attempt).
-        if getattr(a, "compile_layers", False):
+        # PREREG-k12 arm 3: --compile-attn-tier deliberately lifts
+        # this exclusion. It must be honoured HERE -- this is the b1d
+        # graph loop the K12 arms actually run, so re-disabling here
+        # would make arm 3 identical to arm 2 while claiming otherwise
+        # (review, e4b#289).
+        if (getattr(a, "compile_layers", False)
+                and not getattr(a, "compile_attn_tier", False)):
             import torch._dynamo as _dyn
             _orig = _dyn.disable(_orig)
         ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = _orig
@@ -1812,8 +1825,10 @@ def main():
                 "point: the exclusion it lifts exists for CPU tier "
                 "dispatch, which only all-vram is known to avoid "
                 "(PREREG-k12)")
-            print("K12: MoE tier NOT dynamo-disabled (attention still "
-                  "is)", flush=True)
+            print("K12: MoE tier NOT dynamo-disabled (attention "
+                  + ("also NOT -- arm 3" if a.compile_attn_tier
+                     else "still is")
+                  + ")", flush=True)
         else:
             for m in mods:
                 m.forward = dynamo.disable(m.forward)
