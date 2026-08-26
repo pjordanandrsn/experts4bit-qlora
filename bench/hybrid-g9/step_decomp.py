@@ -422,8 +422,119 @@ def _bv3_stage(a, model, runner, sched, kv):
           flush=True)
 
 
+
+def _capturing() -> bool:
+    """True while the current stream is capturing a CUDA graph."""
+    try:
+        return bool(torch.cuda.is_available()
+                    and torch.cuda.is_current_stream_capturing())
+    except Exception:                       # no CUDA build, or no stream
+        return False
+
+
+class _TopkProbe:
+    """PREREG-k10 Stage A: name the owner of the census `router` row.
+
+    A CAPTURED REPLAY carries no Python frames, so a stack-attributed
+    profile cannot say who launched `sbtopk::gatherTopK` /
+    `bitonicSortKVInPlace`. The decisive test is a counted ablation
+    instead: wrap `torch.topk`, count its calls and record the shapes
+    it sees, and optionally force `sorted=False`. If the kernels are
+    this call site, forcing sorted=False must drive
+    `bitonicSortKVInPlace` to ZERO in a profiled window -- and if it
+    does not, the attribution is wrong and Stage A refuses rather than
+    handing a treatment an unidentified cost (K9 died twice that way).
+
+    `sorted_override=False` changes the ORDER of the selected experts,
+    not the set; downstream `w / w.sum()` then sums the same k floats
+    in a different order, so it is numerics-changing and gated as such
+    by Stage B1 -- never shipped from this probe.
+    """
+
+    def __init__(self, sorted_override=None):
+        self.sorted_override = sorted_override
+        self.calls = 0
+        self.shapes = {}
+        self._orig = None
+        self.window_steps = None
+        # B1-C is a REFUSE gate on the SELECTED SET, so measure the set
+        # -- not a proxy. Token streams are neither necessary nor
+        # sufficient: reordered weights can flip a token without
+        # changing the set, and an unchanged set can still shift a
+        # token through fp re-association in w/w.sum(). Digest the
+        # SORTED indices of every call so two arms compare exactly.
+        self._set_digest = hashlib.sha256()
+
+    def begin_window(self, steps):
+        """Zero the counters and declare how many STEPS the window is.
+
+        The probe wraps the whole stage, so scheduled prefill and warm
+        decode would otherwise fold into counts divided by the
+        window's step count -- breaking the one-topk-per-layer
+        attribution and letting B1-C refuse two arms whose scored sets
+        agree but whose warm tokens diverged (Bugbot, e4b#280 High).
+
+        The graph arm declares ONE step and opens its window around the
+        CAPTURE, not the replay loop: `g.replay()` never enters Python,
+        so a window around the replays would count exactly nothing.
+
+        """
+        self.calls = 0
+        self.shapes = {}
+        self.window_steps = steps
+        self._set_digest = hashlib.sha256()
+
+    def __enter__(self):
+        self._orig = torch.topk
+
+        def _wrapped(input, k, dim=-1, largest=True, sorted=True,
+                     *a, **kw):
+            self.calls += 1
+            key = f"{tuple(input.shape)}|k={k}"
+            self.shapes[key] = self.shapes.get(key, 0) + 1
+            if self.sorted_override is not None:
+                sorted = self.sorted_override
+            out = self._orig(input, k, dim=dim, largest=largest,
+                             sorted=sorted, *a, **kw)
+            idx = getattr(out, "indices", None)
+            # A D2H copy is ILLEGAL inside stream capture, and the
+            # ablation arms capture. Skip the digest there; B1-C is
+            # adjudicated on the EAGER ppl arms, which is where the
+            # scored sets actually live (Bugbot, e4b#280 High).
+            if idx is not None and not _capturing():
+                # sort so the digest is order-INVARIANT: the whole
+                # point is that sorted=False permutes, and B1 asks
+                # whether the SET survived that permutation
+                v = idx.detach().to("cpu", torch.int64).sort(-1).values
+                self._set_digest.update(v.numpy().tobytes())
+            return out
+
+        torch.topk = _wrapped
+        return self
+
+    def __exit__(self, *exc):
+        torch.topk = self._orig
+        return False
+
+    def report(self, layers):
+        steps = self.window_steps
+        if not steps:
+            raise RuntimeError(
+                "report() before begin_window(): the counts would "
+                "include prefill and warm decode and be divided by a "
+                "step count that never applied to them")
+        return {"topk_calls": self.calls,
+                "steps": steps, "layers": layers,
+                "calls_per_step": self.calls / max(steps, 1),
+                "calls_per_step_per_layer": (self.calls
+                                             / max(steps * layers, 1)),
+                "shapes": self.shapes,
+                "selected_set_digest": self._set_digest.hexdigest(),
+                "sorted_override": self.sorted_override}
+
+
 def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
-                 ppl_sha=None):
+                 ppl_sha=None, probe=None):
     """PREREG-b1d stage A harness: capture smoke + bitwise replay
     identity. Prefill runs through the normal scheduled path; the decode
     loop is then driven manually with static buffers so the 'graph' arm
@@ -529,6 +640,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             f"corpus slice holds {cont.numel()} ids but --ppl-steps "
             f"{a.ppl_steps} needs {a.ppl_steps + 1}; widen "
             "--prompt-span")
+        if probe is not None:
+            probe.begin_window(a.ppl_steps)
         in_ids.fill_(int(cont[0]))
         # `pos` is the 0-BASED INDEX of the token sitting in in_ids,
         # which this forward is about to append (the harness's own
@@ -559,6 +672,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                "attn_compute": os.environ.get("GNF4_ATTN_COMPUTE",
                                               "f32"),
                "warm_tokens_discarded": base - a.prompt_len,
+               "router_probe": (probe.report(kv.L)
+                                if probe else None),
                "basis": "teacher-forced through the paged decode path "
                         "after rewinding the scheduler's warm tokens; "
                         "identical context in both arms by "
@@ -892,6 +1007,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
         if a.b1d_loop == "graph":
             torch.cuda.empty_cache()
             g = torch.cuda.CUDAGraph()
+            if probe is not None:
+                probe.begin_window(1)   # capture traces exactly one step
             with torch.cuda.graph(g, capture_error_mode="thread_local"):
                 one_step()
             torch.cuda.synchronize()
@@ -907,6 +1024,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             torch.cuda.synchronize()
         else:
             _frames_before = _dynamo_frame_count()
+            if probe is not None:
+                probe.begin_window(n_steps)
             t0 = time.perf_counter_ns()
             for i in range(n_steps):
                 one_step()
@@ -956,6 +1075,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             "dynamo_frames_before": _frames_before,
             "dynamo_frames_after": _frames_after,
             "recompiles_in_window": _recompiles,
+            "router_probe": (probe.report(kv.L)
+                             if probe else None),
         }
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(rep, indent=1))
@@ -1276,6 +1397,16 @@ def main():
                          "UNTIMED graph replays (kineto sees inside "
                          "replays) AFTER the timed window, on reserved "
                          "KV slots; b1d graph loop only")
+    ap.add_argument("--router-probe", action="store_true",
+                    help="PREREG-k10 Stage A: count torch.topk calls "
+                         "and record their shapes across the decode "
+                         "window; writes the attribution receipt")
+    ap.add_argument("--router-sorted", choices=["true", "false"],
+                    default=None,
+                    help="PREREG-k10 Stage B1: force the sorted= kwarg "
+                         "of every torch.topk. 'false' should delete "
+                         "bitonicSortKVInPlace; numerics-changing "
+                         "(same set, different order), gated by B1")
     ap.add_argument("--ppl-steps", type=int, default=0,
                     help="PREREG-k8: score N teacher-forced tokens "
                          "THROUGH the paged decode path and write the "
@@ -1788,8 +1919,15 @@ def main():
         raise SystemExit(
             f"--ppl-steps is a B=1 instrument; got --batch {a.batch}")
     if a.b1d_loop:
+        _ov = (None if a.router_sorted is None
+               else a.router_sorted == "true")
         if a.batch > 1:
             _bv3_stage(a, model, runner, sched, kv)
+        elif a.router_probe or _ov is not None:
+            with _TopkProbe(sorted_override=_ov) as _pr:
+                _b1d_stage_a(a, model, runner, sched, kv,
+                             ppl_ids=ppl_ids, ppl_sha=ppl_sha,
+                             probe=_pr)
         else:
             _b1d_stage_a(a, model, runner, sched, kv,
                          ppl_ids=ppl_ids, ppl_sha=ppl_sha)
