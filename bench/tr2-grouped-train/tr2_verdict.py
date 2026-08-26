@@ -50,7 +50,14 @@ def verdict(rep):
     base, why = _tr1.compose(rep["base_a"], rep["base_b"])
     if why:
         return ("REFUSE", f"base census: {why}")
-    hyb, why = _tr1.compose(rep["hyb_a"], rep["hyb_b"])
+    # the hybrid pair's same-workload gate carries an ABSOLUTE floor
+    # measured from the base pair on the same box (amendment with the
+    # TR2 receipts: per-step jitter is ~250 ms absolute regardless of
+    # step duration, so a purely relative gate refuses fast-step runs
+    # whose absolute agreement beats the baseline's own)
+    floor = 1.5 * (base.get("aa_step_delta_ms") or 0.0)
+    hyb, why = _tr1.compose(rep["hyb_a"], rep["hyb_b"],
+                            aa_abs_floor_ms=floor)
     if why:
         return ("REFUSE", f"hybrid census: {why}")
 
@@ -112,6 +119,18 @@ def verdict(rep):
 
 
 # ---------------------------------------------------------------- self-test
+def _census_jitter(step_ms, jit_ms):
+    """Pair-of-runs builder where run B's walls differ from run A's by
+    +-jit_ms alternating -- absolute jitter, balanced half-medians."""
+    a = _census(step_ms)
+    b = _census(step_ms)
+    for i, st in enumerate(b["steps"]):
+        st["step_wall_ms"] += jit_ms if i % 2 else -jit_ms
+        for ph in ("data", "forward", "backward", "loss_sync", "optim"):
+            st[ph] += (jit_ms if i % 2 else -jit_ms) / 5.0
+    return a, b
+
+
 def _census(step_ms=51680.0):
     # phases scale with the wall so the TR1 closure gate holds on the
     # synthetic (0.2/0.4/0.3/0.05/0.04 of wall = 99% accounted)
@@ -135,6 +154,21 @@ def _self_test():
     v = verdict
     out = v(_mk())
     assert out[0] == "PASS", out
+    # fast-step hybrid pair with ~250 ms ABSOLUTE jitter (6%+ relative)
+    # passes when the base pair carries the same absolute noise -- the
+    # TR2 receipts case; without base noise (floor 0) it still refuses
+    r = _mk(hyb=4000.0, lh=126_000)
+    ba, bb = _census_jitter(51680.0, 250.0)
+    ha, hb = _census_jitter(4000.0, 250.0)
+    r["base_a"], r["base_b"] = ba, bb
+    r["hyb_a"], r["hyb_b"] = ha, hb
+    out = v(r)
+    assert out[0] == "PASS", out
+    r2 = _mk(hyb=4000.0, lh=126_000)
+    ha2, hb2 = _census_jitter(4000.0, 250.0)
+    r2["hyb_a"], r2["hyb_b"] = ha2, hb2   # base pair identical -> floor 0
+    out = v(r2)
+    assert out[0] == "REFUSE" and "per-step" in out[1], out
     # exactly 2x wall passes regardless of launch multiple (bars
     # follow the claim); a 5x launch cut is model-CONSISTENT
     out = v(_mk(hyb=25840.0, lh=600_000))
