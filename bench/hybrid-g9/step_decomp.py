@@ -400,6 +400,7 @@ def _bv3_stage(a, model, runner, sched, kv):
         "window_ms": total_ms,
         "aggregate_tok_s": 1000.0 / step_ms * B,
         "compile_layers": bool(a.compile_layers),
+        "compile_moe_tier": bool(a.compile_moe_tier),
         "compile_mode": a.compile_mode if a.compile_layers else None,
         "fuse_qkv": bool(a.fuse_qkv),
         "device_grouping": True,
@@ -1067,6 +1068,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             "step_ms_clean": total_ms / n_steps,
             "window_ms": total_ms,
             "compile_layers": bool(a.compile_layers),
+            "compile_moe_tier": bool(a.compile_moe_tier),
             "compile_mode": a.compile_mode if a.compile_layers else None,
             "fuse_qkv": bool(a.fuse_qkv),
             "dyn_limits_env": [os.environ.get("E4B_RECOMPILE_LIMIT"),
@@ -1389,6 +1391,13 @@ def main():
                     help="dotted path to the decoder-layer list for "
                          "--compile-layers (latent/nested families "
                          "differ, e.g. model.language_model.layers)")
+    ap.add_argument("--compile-moe-tier", action="store_true",
+                    help="PREREG-k12 Stage A: leave the MoE tier "
+                         "forward VISIBLE to dynamo while the "
+                         "paged-attention fn stays disabled, so "
+                         "inductor can fuse the raw-aten elementwise "
+                         "chains the census attributes to that region. "
+                         "Requires --placement-override all-vram")
     ap.add_argument("--compile-mode", default="reduce-overhead",
                     help="torch.compile mode for --compile-layers; drop "
                          "to 'default' if cudagraphs misbehave (recorded)")
@@ -1704,8 +1713,25 @@ def main():
         # never be traced -- compile owns only the dense layer body
         ALL_ATTENTION_FUNCTIONS[IMPL_NAME] = dynamo.disable(
             ALL_ATTENTION_FUNCTIONS[IMPL_NAME])
-        for m in mods:
-            m.forward = dynamo.disable(m.forward)
+        # PREREG-k12: the two exclusions are applied together but for
+        # DIFFERENT stated reasons -- the attention shim for host-bound
+        # KV paging, the MoE forward for CPU TIER DISPATCH. At
+        # --placement-override all-vram (which every certified serving
+        # measurement uses) there is no CPU tier to dispatch to, so the
+        # MoE half's necessity is an open question. This flag lets an
+        # arm answer it WITHOUT touching the attention disable, whose
+        # cause is known and specific (F1 Stage B).
+        if a.compile_moe_tier:
+            assert a.placement_override == "all-vram", (
+                "--compile-moe-tier is registered only at the all-vram "
+                "point: the exclusion it lifts exists for CPU tier "
+                "dispatch, which only all-vram is known to avoid "
+                "(PREREG-k12)")
+            print("K12: MoE tier NOT dynamo-disabled (attention still "
+                  "is)", flush=True)
+        else:
+            for m in mods:
+                m.forward = dynamo.disable(m.forward)
         n_c = 0
         layer_list = model
         for part in a.layers_attr.split("."):
@@ -2105,6 +2131,7 @@ def main():
     rep = {
         "model": a.model, "batch": a.batch, "layers": L,
         "compile_layers": bool(a.compile_layers),
+        "compile_moe_tier": bool(a.compile_moe_tier),
         "compile_mode": a.compile_mode if a.compile_layers else None,
         "fuse_qkv": bool(a.fuse_qkv),
         "warmup_rows_dropped": n_dropped,
