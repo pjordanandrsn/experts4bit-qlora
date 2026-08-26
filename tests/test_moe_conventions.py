@@ -312,6 +312,16 @@ _KNOWN_UNCLAIMED = {
     # convention reaches a real checkpoint silently. Named here as
     # UNVERIFIED until it can be adjudicated against one.
     "qwen4_exp_text",
+    # Appeared 2026-08-26, also mapped to the qwen2_moe converter.
+    # NOT aliased, and the NAME is the trap: e4b HAS a glm5 lane
+    # (arch/glm5.py) but it covers `glm_moe_dsa` -- DeepSeek-V3
+    # lineage, MLA attention, DSA lightning-indexer. A model routed
+    # to the qwen2_moe converter is a different family, so neither
+    # alias is defensible. arch/glm5.py's own standard is adjudication
+    # against a real released index.json AND the instantiated tree,
+    # "not convention"; that standard cannot be met from a converter
+    # mapping alone.
+    "glm5_next",
 }
 
 
