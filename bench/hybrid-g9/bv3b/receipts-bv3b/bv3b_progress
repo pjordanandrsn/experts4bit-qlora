@@ -1,0 +1,14 @@
+BV3B-START 04:19:28
+32e48c8 BV3b: grouping-parity probe + kernel-swap identity frame (prereg + instruments) (#269)
+ARM-START parity 04:19:28
+GROUPING_PARITY layers=48 worst_ratio=0.000e+00 out=/root/out/bv3b_parity.json
+ARM-OK parity 04:20:45
+ARM-START floor 04:20:45
+TORCH_PROFILE_OUT /root/out/bv3b_kernels.txt active=12/12
+ARM-OK floor 04:21:54
+FLOOR-PARSE-FAILED (recorded): 'NoneType' object has no attribute 'group'
+BV3B COMPOSED
+bv3b_verdict self-test: OK
+BV3B VERDICT: REFUSE
+graph row 2 degenerate: only 26 distinct tokens
+BV3B-DONE 04:21:54
