@@ -1,0 +1,74 @@
+SV2-START 06:17:01
+1384feb Cut 0.15.1: clean non-CUDA refusal for the fused append (#264)
+d5e530f SV2 verdict calculator (gates + speculation route) (#276)
+ARM-START on_a 06:17:02
+B1D_TIMED_GRAPH steps=127 step=6.46ms compile=default recompiles=0 out=/root/out/sv2_on_a.json
+ARM-OK on_a 06:17:44
+ARM-START on_b 06:17:44
+B1D_TIMED_GRAPH steps=127 step=6.46ms compile=default recompiles=0 out=/root/out/sv2_on_b.json
+ARM-OK on_b 06:18:20
+ARM-START census 06:18:20
+REPLAY_PROFILE_OUT /root/out/sv2_replay_kernels.txt
+B1D_TIMED_GRAPH steps=127 step=6.46ms compile=default recompiles=0 out=/root/out/sv2_census.json
+ARM-OK census 06:18:56
+device budget: 6.48 ms/step over 8 active steps (coverage 100.0% of 6.48 ms truth)
+  matmul         4.26 ms      242 launches/step   65.7%
+  other          0.97 ms      432 launches/step   15.0%
+  elementwise    0.94 ms      692 launches/step   14.5%
+  router         0.31 ms       96 launches/step    4.8%
+  memcpy         0.00 ms        2 launches/step    0.0%
+  top rows:
+    _gemv_nf4_dotpad                                         2468.8 us x96  [matmul]
+    std::enable_if<!(false), void>::type internal::gemvx     1786.9 us x145  [matmul]
+    _fp8_paged_decode_split                                   519.5 us x48  [other]
+    void at::native::unrolled_elementwise_kernel<at::nat      245.9 us x218  [elementwise]
+    void at::native::(anonymous namespace)::indexSelectS      234.0 us x145  [elementwise]
+    void at::native::sbtopk::gatherTopK<float, unsigned       174.0 us x48  [router]
+    void at::native::elementwise_kernel<128, 4, at::nati      170.6 us x96  [elementwise]
+    triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0        165.0 us x96  [other]
+    void at::native::bitonicSortKVInPlace<-2, -1, 16, 16      137.4 us x48  [router]
+    _fp8_append_t1_side                                       132.9 us x96  [other]
+ARM-START v8 06:18:56
+S2_TIME k=8 rows=9 verify_graph_ms=35.341 past=517 out=/root/out/sv2_v8.json
+ARM-OK v8 06:19:41
+ARM-START v16 06:19:41
+S2_TIME k=16 rows=17 verify_graph_ms=36.521 past=517 out=/root/out/sv2_v16.json
+ARM-OK v16 06:20:26
+ARM-START v32 06:20:26
+S2_TIME k=32 rows=33 verify_graph_ms=39.437 past=517 out=/root/out/sv2_v32.json
+ARM-OK v32 06:21:12
+Traceback (most recent call last):
+  File "<stdin>", line 11, in <module>
+KeyError: 'device_us_per_step'
+SV2-COMPOSE-FAIL
+sv2_verdict self-test OK (route flip, 4.00 boundary, and eleven refusal directions)
+SV2 CENSUS: OK  (knob 6.462 ms, A/A 0.08%, census reconciles at 1.00x)
+  K=8: verify 35.34 ms / accept 2.39 = 14.79 ms per accepted token -> short of 4.00
+  K=16: verify 36.52 ms / accept 2.948 = 12.39 ms per accepted token -> short of 4.00
+  K=32: verify 39.44 ms / accept 3.447 = 11.44 ms per accepted token -> short of 4.00
+SV2 SPEC ROUTE: REFUTED (no cell clears; the S3 negative stands on the current stack)
+SV2 COMPOSITION ROUTE: adjudicated in RESULTS -- sum the addressable slices below against the 2.48 ms bar
+       2468.8 us/step  matmul       _gemv_nf4_dotpad
+       1786.9 us/step  matmul       std::enable_if<!(false), void>::type internal::gemvx...
+        519.5 us/step  other        _fp8_paged_decode_split
+        245.9 us/step  elementwise  void at::native::unrolled_elementwise_kernel<at::nat...
+        234.0 us/step  elementwise  void at::native::(anonymous namespace)::indexSelectS...
+        174.0 us/step  router       void at::native::sbtopk::gatherTopK<float, unsigned ...
+        170.6 us/step  elementwise  void at::native::elementwise_kernel<128, 4, at::nati...
+        165.0 us/step  other        triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0
+        137.4 us/step  router       void at::native::bitonicSortKVInPlace<-2, -1, 16, 16...
+        132.9 us/step  other        _fp8_append_t1_side
+        109.5 us/step  elementwise  void at::native::reduce_kernel<128, 4, at::native::R...
+         85.6 us/step  other        triton_per_fused__to_copy__unsafe_view_add_cat_mean_...
+         57.6 us/step  elementwise  void at::native::vectorized_elementwise_kernel<4, at...
+         57.3 us/step  elementwise  void at::native::elementwise_kernel<128, 2, at::nati...
+         43.9 us/step  elementwise  triton_per_fused__softmax__to_copy_prepare_softmax_o...
+         34.1 us/step  other        triton_per_fused__to_copy_div_sum_1
+         34.0 us/step  other        triton_poi_fused_add_0
+         11.4 us/step  elementwise  void at::native::vectorized_elementwise_kernel<2, at...
+          6.3 us/step  elementwise  void at::native::reduce_kernel<512, 1, at::native::R...
+          1.0 us/step  matmul       _bmm_outer_product_kernel
+          0.8 us/step  elementwise  void at::native::(anonymous namespace)::CatArrayBatc...
+          0.7 us/step  memcpy       memcpy32_post
+          0.3 us/step  memcpy       Memset (Unknown)
+SV2-DONE 06:21:12

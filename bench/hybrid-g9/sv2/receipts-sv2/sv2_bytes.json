@@ -1,0 +1,22 @@
+{
+ "expert_gb": 1.019215872,
+ "attn_bf16_gb": 1.837105152,
+ "lm_head_gb": 0.622329856,
+ "kv_fp8_gb": 0.000529408,
+ "total_gb_per_step": 3.479180288,
+ "floor_ms_at_triad": 2.2168856174334137,
+ "floor_ms_at_85pct": 2.608100726392252,
+ "measured": {
+  "moe_gemv_dotpad_ms": 2.4688,
+  "attn_gemvx_ms": 1.7869,
+  "decode_split_ms": 0.5195,
+  "matmul_total_ms": 4.26,
+  "step_ms": 6.462
+ },
+ "per_slice_floor_ms": {
+  "moe_expert_stream": 0.6494302739900599,
+  "attn_plus_lm_stream": 1.5671180119791004,
+  "kv_stream": 0.00033733146425385494
+ },
+ "basis": "bytes from arena index row_bytes*384 + analytic bf16 attn/router/lm_head + fp8 KV at seen=517; triad from calib gate G0 (1569.4 GB/s)"
+}
