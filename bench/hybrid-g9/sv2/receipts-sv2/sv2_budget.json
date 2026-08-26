@@ -1,0 +1,192 @@
+{
+ "active_steps": 8,
+ "total_device_us_per_step": 6477.515625,
+ "device_us_per_step_truth": 6477.5,
+ "coverage": 1.0000024121960633,
+ "coverage_ok": true,
+ "by_kind": {
+  "matmul": {
+   "us_per_step": 4256.588374999999,
+   "calls_per_step": 242.0
+  },
+  "other": {
+   "us_per_step": 971.116125,
+   "calls_per_step": 432.0
+  },
+  "router": {
+   "us_per_step": 311.375,
+   "calls_per_step": 96.0
+  },
+  "elementwise": {
+   "us_per_step": 937.5002499999999,
+   "calls_per_step": 692.0
+  },
+  "memcpy": {
+   "us_per_step": 0.935875,
+   "calls_per_step": 2.0
+  }
+ },
+ "rows": [
+  {
+   "name": "_gemv_nf4_dotpad",
+   "us_per_step": 2468.75,
+   "calls_per_step": 96.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+   "us_per_step": 1786.862625,
+   "calls_per_step": 145.0,
+   "merged_rows": 2,
+   "kind": "matmul"
+  },
+  {
+   "name": "_fp8_paged_decode_split",
+   "us_per_step": 519.5,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::unrolled_elementwise_kernel<at::nat...",
+   "us_per_step": 245.887375,
+   "calls_per_step": 218.0,
+   "merged_rows": 3,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::indexSelectS...",
+   "us_per_step": 233.96725,
+   "calls_per_step": 145.0,
+   "merged_rows": 3,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::sbtopk::gatherTopK<float, unsigned ...",
+   "us_per_step": 174.0,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "router"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 4, at::nati...",
+   "us_per_step": 170.635,
+   "calls_per_step": 96.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0",
+   "us_per_step": 165.0,
+   "calls_per_step": 96.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::bitonicSortKVInPlace<-2, -1, 16, 16...",
+   "us_per_step": 137.375,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "router"
+  },
+  {
+   "name": "_fp8_append_t1_side",
+   "us_per_step": 132.875,
+   "calls_per_step": 96.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::reduce_kernel<128, 4, at::native::R...",
+   "us_per_step": 109.529125,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "triton_per_fused__to_copy__unsafe_view_add_cat_mean_...",
+   "us_per_step": 85.64675,
+   "calls_per_step": 96.0,
+   "merged_rows": 2,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::vectorized_elementwise_kernel<4, at...",
+   "us_per_step": 57.64937499999999,
+   "calls_per_step": 72.0,
+   "merged_rows": 10,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::elementwise_kernel<128, 2, at::nati...",
+   "us_per_step": 57.336,
+   "calls_per_step": 49.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "triton_per_fused__softmax__to_copy_prepare_softmax_o...",
+   "us_per_step": 43.931875,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "triton_per_fused__to_copy_div_sum_1",
+   "us_per_step": 34.101,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "triton_poi_fused_add_0",
+   "us_per_step": 33.993375,
+   "calls_per_step": 48.0,
+   "merged_rows": 1,
+   "kind": "other"
+  },
+  {
+   "name": "void at::native::vectorized_elementwise_kernel<2, at...",
+   "us_per_step": 11.4085,
+   "calls_per_step": 13.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "void at::native::reduce_kernel<512, 1, at::native::R...",
+   "us_per_step": 6.32775,
+   "calls_per_step": 2.0,
+   "merged_rows": 2,
+   "kind": "elementwise"
+  },
+  {
+   "name": "_bmm_outer_product_kernel",
+   "us_per_step": 0.97575,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "matmul"
+  },
+  {
+   "name": "void at::native::(anonymous namespace)::CatArrayBatc...",
+   "us_per_step": 0.828,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "elementwise"
+  },
+  {
+   "name": "memcpy32_post",
+   "us_per_step": 0.659875,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  },
+  {
+   "name": "Memset (Unknown)",
+   "us_per_step": 0.276,
+   "calls_per_step": 1.0,
+   "merged_rows": 1,
+   "kind": "memcpy"
+  }
+ ]
+}

@@ -1,0 +1,51 @@
+profiled replay steps: 8 (active window: 8/8)
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                       _gemv_nf4_dotpad         0.00%       0.000us         0.00%       0.000us       0.000us      19.750ms        38.11%      19.750ms      25.716us           768  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us      13.471ms        26.00%      13.471ms      17.360us           776  
+                                _fp8_paged_decode_split         0.00%       0.000us         0.00%       0.000us       0.000us       4.156ms         8.02%       4.156ms      10.822us           384  
+void at::native::sbtopk::gatherTopK<float, unsigned ...         0.00%       0.000us         0.00%       0.000us       0.000us       1.392ms         2.69%       1.392ms       3.626us           384  
+     triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0         0.00%       0.000us         0.00%       0.000us       0.000us       1.320ms         2.55%       1.320ms       1.718us           768  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us       1.178ms         2.27%       1.178ms       1.503us           784  
+void at::native::bitonicSortKVInPlace<-2, -1, 16, 16...         0.00%       0.000us         0.00%       0.000us       0.000us       1.099ms         2.12%       1.099ms       2.861us           384  
+                                    _fp8_append_t1_side         0.00%       0.000us         0.00%       0.000us       0.000us       1.063ms         2.05%       1.063ms       1.384us           768  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     997.767us         1.93%     997.767us       2.545us           392  
+void at::native::reduce_kernel<128, 4, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us     876.233us         1.69%     876.233us       2.282us           384  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us     823.901us         1.59%     823.901us       2.146us           384  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     708.674us         1.37%     708.674us       1.846us           384  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     656.406us         1.27%     656.406us       1.709us           384  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     632.809us         1.22%     632.809us       0.824us           768  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     479.128us         0.92%     479.128us       1.248us           384  
+void at::native::elementwise_kernel<128, 2, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     458.688us         0.89%     458.688us       1.170us           392  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     394.843us         0.76%     394.843us       1.028us           384  
+triton_per_fused__softmax__to_copy_prepare_softmax_o...         0.00%       0.000us         0.00%       0.000us       0.000us     351.455us         0.68%     351.455us       0.915us           384  
+triton_per_fused__to_copy__unsafe_view_add_cat_mean_...         0.00%       0.000us         0.00%       0.000us       0.000us     351.290us         0.68%     351.290us       0.915us           384  
+triton_per_fused__to_copy__unsafe_view_add_cat_mean_...         0.00%       0.000us         0.00%       0.000us       0.000us     333.884us         0.64%     333.884us       0.869us           384  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us     308.075us         0.59%     308.075us       0.755us           408  
+                    triton_per_fused__to_copy_div_sum_1         0.00%       0.000us         0.00%       0.000us       0.000us     272.808us         0.53%     272.808us       0.710us           384  
+                                 triton_poi_fused_add_0         0.00%       0.000us         0.00%       0.000us       0.000us     271.947us         0.52%     271.947us       0.708us           384  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     156.290us         0.30%     156.290us       0.814us           192  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      84.222us         0.16%      84.222us       0.877us            96  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us      83.683us         0.16%      83.683us       0.872us            96  
+void at::native::reduce_kernel<512, 1, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us      38.014us         0.07%      38.014us       4.752us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      13.792us         0.03%      13.792us       0.862us            16  
+void at::native::reduce_kernel<512, 1, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us      12.608us         0.02%      12.608us       1.576us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      10.943us         0.02%      10.943us       1.368us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      10.848us         0.02%      10.848us       1.356us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       8.128us         0.02%       8.128us       1.016us             8  
+                              _bmm_outer_product_kernel         0.00%       0.000us         0.00%       0.000us       0.000us       7.806us         0.02%       7.806us       0.976us             8  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us       7.585us         0.01%       7.585us       0.948us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       6.720us         0.01%       6.720us       0.840us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       6.657us         0.01%       6.657us       0.832us             8  
+void at::native::(anonymous namespace)::CatArrayBatc...         0.00%       0.000us         0.00%       0.000us       0.000us       6.624us         0.01%       6.624us       0.828us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       6.273us         0.01%       6.273us       0.784us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       5.537us         0.01%       5.537us       0.692us             8  
+                                          memcpy32_post         0.00%       0.000us         0.00%       0.000us       0.000us       5.279us         0.01%       5.279us       0.660us             8  
+                                       Memset (Unknown)         0.00%       0.000us         0.00%       0.000us       0.000us       2.208us         0.00%       2.208us       0.276us             8  
+                                        cudaGraphLaunch        14.04%       7.695ms        16.55%       9.067ms       1.133ms       0.000us         0.00%       0.000us       0.000us             8  
+                                Activity Buffer Request         2.50%       1.373ms         2.50%       1.373ms       1.373ms       0.000us         0.00%       0.000us       0.000us             1  
+                                  cudaDeviceSynchronize        83.45%      45.728ms        83.45%      45.728ms      22.864ms       0.000us         0.00%       0.000us       0.000us             2  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 54.796ms
+Self CUDA time total: 51.820ms

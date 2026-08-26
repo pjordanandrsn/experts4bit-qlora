@@ -1,0 +1,11 @@
+instance 48735368 (vast, RTX 5090, ~$0.47/hr class), rented 2026-08-26
+00:45 CDT, destroyed 2026-08-26 ~01:50 CDT (verified by-id null AND
+list 0). NUMA gate G0: 73.3% of triad -> PROCEED. triad 1569.4 GB/s,
+h2d 28.36 / d2h 28.29 GB/s, NVMe seq 7.41 GB/s (o_direct). Anchor
+probe (b1 graph, knob OFF, gen 64): 7.23 ms -- 2.2% off the 7.39
+class, compliant. Stack: gnf4 1384feb (0.15.1), e4b d5e530f (#276).
+Arms wall-clock 06:17:01-06:21:12 UTC. Known cosmetic defect: the
+arms compose-step summary print referenced a stale budget key and
+raised AFTER sv2_report.json was written (SV2-COMPOSE-FAIL in the
+progress log); the verdict ran on the intact report and reproduces
+locally from these pulled receipts.
