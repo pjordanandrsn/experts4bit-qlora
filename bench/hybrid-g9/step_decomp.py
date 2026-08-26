@@ -20,7 +20,9 @@ Methodology validated on the dev box (OLMoE); constants only bind on a
 serving-class box (G6 tiny-model trap applies to MAGNITUDES, not shape).
 """
 import argparse
+import hashlib
 import json
+import math
 import os
 import statistics
 import sys
@@ -420,7 +422,8 @@ def _bv3_stage(a, model, runner, sched, kv):
           flush=True)
 
 
-def _b1d_stage_a(a, model, runner, sched, kv):
+def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
+                 ppl_sha=None):
     """PREREG-b1d stage A harness: capture smoke + bitwise replay
     identity. Prefill runs through the normal scheduled path; the decode
     loop is then driven manually with static buffers so the 'graph' arm
@@ -450,7 +453,11 @@ def _b1d_stage_a(a, model, runner, sched, kv):
     # no-flag run (Bugbot, e4b#275).
     profile_replays = 8 if (a.replay_profile_out and a.b1d_timed
                             and a.b1d_loop == "graph") else 0
-    cap_tokens = (a.prompt_len + a.gen_tokens + 8   # the kv ctor budget
+    # --ppl-steps scores far past --gen-tokens (1024 vs 128 by
+    # default), so capacity must cover whichever window will actually
+    # run or the appends index past the pre-ensured blocks -- the same
+    # overflow class Bugbot caught on the replay profiler (e4b#275).
+    cap_tokens = (a.prompt_len + max(a.gen_tokens, a.ppl_steps) + 8
                   + profile_replays)
     kv.graph_mode_init(seq=slot, upto_tokens=cap_tokens)
     dev = "cuda"
@@ -495,6 +502,73 @@ def _b1d_stage_a(a, model, runner, sched, kv):
         in_ids.copy_(tok.reshape(1, 1))
         pos.add_(1)
         return lg
+
+    if a.ppl_steps:
+        # PREREG-k8 quality instrument: perplexity measured THROUGH the
+        # paged DECODE path, which is the only place the attention
+        # compute mode is exercised at all. A teacher-forced forward
+        # with use_cache=False -- the obvious way to get perplexity --
+        # never calls fp8_paged_decode_attention, so it would return
+        # bit-identical numbers for both arms and "prove" quality by
+        # construction ([[check-the-result-could-have-failed]]).
+        #
+        # Every step is TEACHER-FORCED from the corpus, and the KV is
+        # first rewound to the prompt boundary to discard the
+        # scheduler's warm tokens: those are MODEL-generated, so the
+        # two arms could otherwise carry different context and the
+        # comparison would not be apples-to-apples. After the rewind
+        # both arms see byte-identical context at every step and the
+        # ONLY difference is the attention arithmetic.
+        assert ppl_ids is not None and ppl_sha is not None, \
+            "--ppl-steps needs the corpus threaded in from main()"
+        base = runner.pos_of[rid]                 # prompt boundary
+        kv.rewind_nosync(slot, a.prompt_len)
+        torch.cuda.synchronize()
+        cont = ppl_ids[a.prompt_len:a.prompt_len + a.ppl_steps + 1]
+        assert cont.numel() >= a.ppl_steps + 1, (
+            f"corpus slice holds {cont.numel()} ids but --ppl-steps "
+            f"{a.ppl_steps} needs {a.ppl_steps + 1}; widen "
+            "--prompt-span")
+        in_ids.fill_(int(cont[0]))
+        # `pos` is the 0-BASED INDEX of the token sitting in in_ids,
+        # which this forward is about to append (the harness's own
+        # convention: pos = pos_of[rid] - 1 for the last produced
+        # token). After the rewind the KV holds indices
+        # 0..prompt_len-1, so cont[0] == ids[prompt_len] belongs at
+        # prompt_len -- NOT prompt_len - 1, which would run every
+        # scored step with RoPE shifted against the stored keys
+        # (Bugbot, e4b#278, High).
+        pos.fill_(a.prompt_len)
+        nll = 0.0
+        for t in range(a.ppl_steps):
+            out = model(input_ids=in_ids, position_ids=pos,
+                        use_cache=False)
+            lg = out.logits[:, -1].float()
+            nxt = int(cont[t + 1])
+            nll += -torch.log_softmax(lg, -1)[0, nxt].item()
+            in_ids.fill_(nxt)
+            pos.add_(1)
+        set_context(prev)
+        mean_nll = nll / a.ppl_steps
+        rep = {"k8": "ppl", "steps": a.ppl_steps,
+               "mean_nll": mean_nll, "ppl": math.exp(mean_nll),
+               "prompt_len": a.prompt_len,
+               "prompt_offset": a.prompt_offset,
+               "tokens_scored": a.ppl_steps,
+               "text_sha": ppl_sha,
+               "attn_compute": os.environ.get("GNF4_ATTN_COMPUTE",
+                                              "f32"),
+               "warm_tokens_discarded": base - a.prompt_len,
+               "basis": "teacher-forced through the paged decode path "
+                        "after rewinding the scheduler's warm tokens; "
+                        "identical context in both arms by "
+                        "construction (PREREG-k8)"}
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(rep, indent=1))
+        print(f"K8_PPL steps={a.ppl_steps} nll={mean_nll:.5f} "
+              f"ppl={rep['ppl']:.5f} compute={rep['attn_compute']} "
+              f"sha={ppl_sha[:12]} out={a.out}", flush=True)
+        return
 
     n_warm = 3
     used = runner.pos_of[rid] + n_warm + 1
@@ -1202,6 +1276,11 @@ def main():
                          "UNTIMED graph replays (kineto sees inside "
                          "replays) AFTER the timed window, on reserved "
                          "KV slots; b1d graph loop only")
+    ap.add_argument("--ppl-steps", type=int, default=0,
+                    help="PREREG-k8: score N teacher-forced tokens "
+                         "THROUGH the paged decode path and write the "
+                         "perplexity receipt to --out (b1 path; the "
+                         "KV is rewound to the prompt boundary first)")
     ap.add_argument("--grouping-parity", action="store_true",
                     help="PREREG-bv3b: per-layer device-vs-eager MoE "
                          "grouping parity on one recorded live decode "
@@ -1510,7 +1589,8 @@ def main():
               f"paged attention + MoE tier dynamo-disabled; "
               f"graph step marking={COMPILE_GRAPH_STEP[0]}", flush=True)
     kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
-                    max_tokens_per_seq=a.prompt_len + a.gen_tokens + 8,
+                    max_tokens_per_seq=a.prompt_len
+                    + max(a.gen_tokens, a.ppl_steps) + 8,
                     k_groups=4, batched_append=not a.kv_per_seq,
                     device="cuda")
 
@@ -1528,6 +1608,12 @@ def main():
     step = max(1, (ids.numel() - a.prompt_len) // max(1, a.batch))
     prompts = [ids[i * step:i * step + a.prompt_len].tolist()
                for i in range(a.batch)]
+    # PREREG-k8 G5: the scored window and a digest of it, so the
+    # verdict can REFUSE two arms that evaluated different text
+    ppl_ids = ids
+    ppl_sha = hashlib.sha256(
+        ids[:a.prompt_len + max(a.ppl_steps, 0) + 1].numpy().tobytes()
+    ).hexdigest()
 
     # ------- timed runner: forward vs drain split, per-regime expert delta
     class TimedRunner(PagedModelRunner):
@@ -1693,7 +1779,8 @@ def main():
         if a.batch > 1:
             _bv3_stage(a, model, runner, sched, kv)
         else:
-            _b1d_stage_a(a, model, runner, sched, kv)
+            _b1d_stage_a(a, model, runner, sched, kv,
+                         ppl_ids=ppl_ids, ppl_sha=ppl_sha)
         return
 
     step_walls = []            # decode-ONLY steps: a wall that included a
