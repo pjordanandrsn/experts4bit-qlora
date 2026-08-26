@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.22.0 — 2026-08-26
+
+Minor release: the training arc. Headline: **QLoRA training of the
+30B reference recipe is 13.47× faster** — `TRAIN_ARENA` routes expert
+forward/dgrad through the grouped gnf4 kernels instead of the
+per-expert bitsandbytes chain, adjudicated PASS with learning
+identical to the third decimal (RESULTS-tr2, receipts committed).
+
+### Performance (training)
+
+- **`TRAIN_ARENA=<arena>` is the documented default path for
+  arena-holding models** (RESULTS-tr2: PASS). 50.86 → 3.77 s/step on
+  the reference recipe (Qwen3-30B-A3B QLoRA, RTX 5090 class): ~59 →
+  **~800 tok/s class**; a training epoch of the TR1 recipe drops from
+  ~17 minutes of stepping to ~75 seconds. Kernel launches per step:
+  2.92M → 126k (23.1×). Final held-out evals 1.010 (bnb) vs 1.009
+  (grouped). Engagement releases the loader's bnb expert storage via
+  shape-preserved meta twins BEFORE the tier build (the build peak
+  OOMed a 32 GB card otherwise) and refuses partial engagement.
+- Census instruments behind `TR1_CENSUS=1`: CUDA-event phase
+  brackets in the shipped trainer loop, loss-in-receipt, effective
+  token budget recorded, profiler window (CUDA-only) in its own run.
+  The TR1 census that found the launch-storm (GPU ~8–11% busy on the
+  bnb path) ships with receipts; its 9.1× bound is recorded as
+  falsified-conservative by the TR2 receipts.
+
+### Performance (serving)
+
+- **Dot-pad × F2 composition certified** (SV1, K6-B PARTIAL):
+  `GNF4_GEMV_DOTPAD=1` on the 0.15.1/0.21.0 defaults measures
+  **154.4 tok/s** single-stream on the reference class (6.476 vs
+  7.25 ms; 127 tokens identical). Knob remains opt-in, now with a
+  composed receipt.
+- **B>1 CUDA-graph decode loop implemented; verdict REFUSE,
+  standing** (BV3): 38.0 ms/step at B=16 — a would-be 3.44× over the
+  eager scheduler (421 aggregate tok/s), reproducible to 0.01 ms —
+  but one row diverged from the eager stream at step 3 and the
+  registered identity gate refused. Receipts attribute the
+  divergence to device-vs-eager grouping numerics; BV3b (logit-parity
+  probe + a kernel-swap identity frame) is registered before any
+  re-adjudication, and no BV3 wall number is citable until it lands.
+  The machinery ships: `--b1d-loop graph --batch B`, slot-list graph
+  KV init, batched capture-safe appends.
+
+### Instruments and gates
+
+- The census composer's same-workload A/A gate carries a measured
+  absolute-noise floor (per-step box jitter is ~250 ms regardless of
+  step duration; a purely relative gate mis-refuses fast-step runs).
+  All amendments disclosed in the preregs with self-tests proving the
+  refusal directions survive.
+
 ## 0.21.0 — 2026-08-25
 
 Minor release: the serving-harness half of the K/F campaign, the
