@@ -233,6 +233,33 @@ def _print_env_help(which: str) -> None:
           f"    python -m experts4bit_qlora.{which}")
 
 
+def _release_expert_storage(model, cls) -> int:
+    """Swap every ``cls`` module's packed weights and absmax buffers
+    for SHAPE-PRESERVED meta twins, returning bytes freed. REPLACES
+    the Parameter/buffer objects -- ``Parameter.data =`` refuses a
+    cuda->meta swap outright ("incompatible tensor type", hit live on
+    hyb_a attempt 2. The tier init only ever .view()s these and
+    .float()s the absmax views, both legal on meta."""
+    freed = 0
+    for m in model.modules():
+        if not isinstance(m, cls):
+            continue
+        for attr in ("gate_up_proj", "down_proj",
+                     "gate_up_absmax", "down_absmax"):
+            t = getattr(m, attr, None)
+            if t is None or t.device.type == "meta":
+                continue
+            freed += t.numel() * t.element_size()
+            twin = torch.empty_like(t.data, device="meta")
+            if isinstance(t, torch.nn.Parameter):
+                setattr(m, attr, torch.nn.Parameter(
+                    twin, requires_grad=False))
+            else:
+                setattr(m, attr, twin)   # registered buffer: routed
+                #                          into _buffers by __setattr__
+    return freed
+
+
 def main():
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         _print_env_help("train")
@@ -322,16 +349,7 @@ def main():
         # process exits -- there is no path that trains on the freed
         # weights. Adapter-only checkpoints make the shrink safe.
         from ._vendor.experts import ExpertsNbit
-        _freed = 0
-        for _m in model.modules():
-            if isinstance(_m, ExpertsNbit):
-                for _attr in ("gate_up_proj", "down_proj",
-                              "gate_up_absmax", "down_absmax"):
-                    _t = getattr(_m, _attr, None)
-                    _dat = getattr(_t, "data", None)
-                    if _dat is not None and _dat.device.type != "meta":
-                        _freed += _dat.numel() * _dat.element_size()
-                        _t.data = torch.empty_like(_dat, device="meta")
+        _freed = _release_expert_storage(model, ExpertsNbit)
         torch.cuda.empty_cache()
         log(f"[tr2] released {_freed / 1e9:.2f} GB of bnb expert "
             f"storage ahead of the tier build")
