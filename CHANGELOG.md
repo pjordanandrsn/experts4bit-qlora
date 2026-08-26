@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.23.0 — 2026-08-26
+
+Minor release: the batched-serving certification and the honest
+closure of the single-stream arc.
+
+### Performance (serving)
+
+- **The B>1 CUDA-graph decode loop is certified** (RESULTS-bv3b:
+  PASS 3.10×): `--b1d-loop graph --batch 16` serves **419 aggregate
+  tok/s** on the reference class versus 135 for the eager scheduler
+  at equal compile coverage — with device-vs-eager MoE grouping
+  proven BITWISE on all 48 layers, 11/16 rows token-identical, and
+  the residual divergence deep inside the registered floor. Uniform
+  dynamo-limit envs (`E4B_RECOMPILE_LIMIT`/`E4B_ACCUM_RECOMPILE_LIMIT`)
+  ship as the comparability mechanism — equalizing compile coverage
+  also made the eager baseline ~9% faster.
+- **>275 tok/s single-stream is REFUTED-AS-COMPOSED** per the SV1
+  pre-commitment: device work alone is 8.43 ms/step against the
+  3.64 ms the target requires. The certified single-stream ladder
+  closes at ~138 default / 154.4 with the dot-pad knob; the
+  throughput lane is the batched loop.
+
+### Corrections and instruments
+
+- RESULTS-bv3's grouping-numerics attribution is corrected in
+  public: the parity probe (three review rounds of vacuity binds)
+  measured the paths bitwise-identical; the real confound was
+  dynamo compile coverage.
+- Degeneracy handling amendment: workload rows that loop identically
+  in BOTH arms are excluded with disclosure (75%-clean floor;
+  treatment-induced degeneration still refuses).
+
 ## 0.22.0 — 2026-08-26
 
 Minor release: the training arc. Headline: **QLoRA training of the
