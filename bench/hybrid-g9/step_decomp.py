@@ -542,6 +542,99 @@ class _TopkProbe:
                 "sorted_override": self.sorted_override}
 
 
+def _graph_break_census(one_step, steps: int = 2) -> dict:
+    """PREREG-k13 Stage A: let dynamo NAME its own graph breaks.
+
+    K12 established that compiling the MoE tier costs 0.672 ms and
+    adds ~670 launches/step because dynamo cannot trace it as one
+    graph. It did NOT establish WHICH host read breaks it -- K12's
+    log carries a frame stack, and a stack is not an attribution
+    ([[attribute-from-the-profile]]). This asks the tool.
+
+    `torch._dynamo.explain` returns GraphCompileReason objects with a
+    `reason` string and a `user_stack`, so every entry here is named
+    by dynamo rather than inferred from source or a traceback.
+
+    PHASE is measured, not assumed. A break that fires only while
+    tracing still shapes the captured artifact -- under CUDA-graph
+    capture every replay executes what capture produced -- so the two
+    are recorded separately and neither is scored. Phase is decided
+    empirically: run the step again with the break counter reset and
+    see whether it re-fires once the code is already compiled.
+    """
+    import torch._dynamo as _dyn
+    from torch._dynamo.utils import counters
+
+    _dyn.reset()
+    counters["graph_break"].clear()
+    try:
+        exp = _dyn.explain(one_step)()
+    except Exception as ex:                      # noqa: BLE001
+        return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
+    first = sum(counters["graph_break"].values())
+
+    # PHASE. The first version cleared the counters and re-ran
+    # one_step immediately after explain() -- but explain() resets
+    # dynamo, so that re-run RECOMPILES and re-counts every break.
+    # It could only ever return "step": a measurement no input could
+    # make say "trace" (review, e4b#290;
+    # [[check-the-result-could-have-failed]]).
+    #
+    # A WARM call now absorbs that recompile, so anything counted
+    # afterwards is genuinely per-step. Wrapped, because losing a good
+    # census to a failure in the phase probe would be the worse
+    # outcome -- the verdict REFUSES an unknown phase, which is right,
+    # but the receipt should say why rather than the arm aborting.
+    phase, phase_err, again = None, None, None
+    try:
+        one_step()                               # warm: compile here
+        counters["graph_break"].clear()
+        for _ in range(max(1, steps)):
+            one_step()
+        again = sum(counters["graph_break"].values())
+        phase = "step" if again > 0 else "trace"
+    except Exception as ex:                      # noqa: BLE001
+        phase_err = f"{type(ex).__name__}: {ex}"[:200]
+
+    breaks = []
+    for br in getattr(exp, "break_reasons", []) or []:
+        us = getattr(br, "user_stack", None) or []
+        fr = us[-1] if us else None
+        reason = " ".join(str(getattr(br, "reason", "")).split())
+        breaks.append({
+            "file": (fr.filename if fr else "<unknown>"),
+            "line": (fr.lineno if fr else -1),
+            "func": (fr.name if fr else "<unknown>"),
+            "reason": reason[:240],
+            "count": 1,
+            "phase": phase,          # None if the probe failed
+
+            "stack": [f"{f.filename}:{f.lineno} in {f.name}" for f in us][-6:],
+        })
+    # collapse identical sites, summing counts -- two entries for one
+    # site would rank as two smaller breaks instead of one real one
+    merged: dict = {}
+    for b in breaks:
+        k = (b["file"], b["line"], b["func"], b["reason"])
+        if k in merged:
+            merged[k]["count"] += b["count"]
+        else:
+            merged[k] = b
+    return {"breaks": sorted(merged.values(), key=lambda b: -b["count"]),
+            "graph_break_count": getattr(exp, "graph_break_count", None),
+            "graph_count": getattr(exp, "graph_count", None),
+            "counter_total_first": first,
+            "counter_total_recompiled": again,
+            "phase_error": phase_err,
+            "phase_basis": "WARMED the step after explain() (which "
+                           "resets dynamo), then re-ran with the "
+                           "counters cleared: a break that re-fires "
+                           "once already compiled is per-step, one "
+                           "that does not fired at trace -- which "
+                           "still shapes every graph replay",
+            "error": None}
+
+
 def _mech_reset():
     """Zero gnf4's dispatch tallies (PREREG-m3 mechanism receipt).
 
@@ -762,6 +855,21 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
     n_steps = min(a.gen_tokens, cap_tokens - profile_replays - used - 2)
     assert n_steps >= 16, f"window too small for stage A ({n_steps})"
     _mech_reset()   # PREREG-m3: window spans warmup + capture
+    if getattr(a, "graph_break_census", False):
+        _census = _graph_break_census(one_step)
+        Path(a.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.out).write_text(json.dumps(
+            {"k13": "graph_break_census",
+             "compile_moe_tier": bool(a.compile_moe_tier),
+             "compile_attn_tier": bool(a.compile_attn_tier),
+             "placement_override": a.placement_override,
+             "mech": _mech_report(), **_census}, indent=1))
+        n = len(_census.get("breaks") or [])
+        print(f"K13_CENSUS breaks={n} "
+              f"graph_break_count={_census.get('graph_break_count')} "
+              f"err={_census.get('error')} out={a.out}", flush=True)
+        set_context(prev)
+        return
     # The documented capture recipe: warm on a SIDE stream. cuBLAS/cuDNN
     # bind workspaces per stream, and a first-use allocation landing
     # inside capture invalidates it (cudaErrorStreamCaptureInvalidated
@@ -1465,6 +1573,14 @@ def main():
                     help="dotted path to the decoder-layer list for "
                          "--compile-layers (latent/nested families "
                          "differ, e.g. model.language_model.layers)")
+    ap.add_argument("--graph-break-census", action="store_true",
+                    help="PREREG-k13 Stage A: run torch._dynamo.explain "
+                         "over one decode step and write the graph "
+                         "breaks dynamo NAMES (file, line, function, "
+                         "its own reason, count, and whether the break "
+                         "fires at trace or per step). A census, not a "
+                         "treatment: writes the report and returns "
+                         "without timing anything.")
     ap.add_argument("--compile-attn-tier", action="store_true",
                     help="PREREG-k12 arm 3 CONTROL: also skip the "
                          "paged-attention dynamo.disable, so BOTH "
@@ -2052,6 +2168,37 @@ def main():
     if a.ppl_steps and a.batch > 1:
         raise SystemExit(
             f"--ppl-steps is a B=1 instrument; got --batch {a.batch}")
+    if getattr(a, "graph_break_census", False):
+        # The ppl block returns before the census site, so these two
+        # together would write a perplexity report and silently skip
+        # the census -- an arm that runs, exits 0 and measures nothing,
+        # which is exactly how K8's quality arms scored nothing while
+        # looking healthy. Refuse instead of choosing one.
+        if a.ppl_steps:
+            raise SystemExit(
+                "--graph-break-census and --ppl-steps are different "
+                "instruments; the ppl path returns first, so passing "
+                "both would silently skip the census")
+        if not a.b1d_loop:
+            raise SystemExit(
+                "--graph-break-census lives on the b1d stage; pass "
+                "--b1d-loop or it never runs")
+        if not a.compile_layers:
+            raise SystemExit(
+                "--graph-break-census with nothing compiled censuses "
+                "an untraced region and would report zero breaks for "
+                "a reason unrelated to the MoE tier (PREREG-k13)")
+        if a.batch > 1:
+            # --batch DEFAULTS TO 4, and batch > 1 routes to
+            # _bv3_stage, which never reaches the census site and
+            # writes a BV3 timing report to --out instead. That is
+            # the same silent-skip these guards exist to catch, on
+            # the DEFAULT path (review, e4b#290).
+            raise SystemExit(
+                f"--graph-break-census is a B=1 instrument; got "
+                f"--batch {a.batch}. batch > 1 routes to the BV3 "
+                "stage, which never runs the census and would write "
+                "a timing report to --out instead")
     if a.b1d_loop:
         _ov = (None if a.router_sorted is None
                else a.router_sorted == "true")
