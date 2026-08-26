@@ -168,6 +168,13 @@ def _grouping_parity(a, model, runner, sched, kv):
     from experts4bit_qlora.engines.hot_residency import target_modules
 
     B = a.batch
+    # the DEVICE_GROUPING flag is read only inside _forward_collapsed,
+    # which runs only on the collapsed all-resident path -- without
+    # this bind both replays take the SAME code and every delta is
+    # exactly zero: a vacuous probe the defect gate would green-light
+    # (review, e4b#269)
+    assert a.engine == "hybrid" and a.placement_override == "all-vram", \
+        "parity binds to the collapsed all-resident point"
     while (sched.active or sched.queue) and (
             len(runner.slot_of) < B
             or any(len(runner.tokens[r]) <= a.prompt_len
@@ -202,6 +209,14 @@ def _grouping_parity(a, model, runner, sched, kv):
     if missing:
         raise SystemExit(f"parity: layers without recorded inputs: "
                          f"{missing} -- refusing a partial probe")
+    for li, m in enumerate(mods):
+        st_ = m._hot_residency
+        if not (getattr(st_, "collapse_resident", False)
+                and st_._all_hot()):
+            raise SystemExit(f"parity: layer {li} is not on the "
+                             "collapsed all-resident path -- the "
+                             "grouping flag would not dispatch and "
+                             "the probe would be vacuous")
     out = {}
     prev_dg = _hr.DEVICE_GROUPING[0]
     prev_sg = _hr.FORCE_SINGLETON_GROUPS[0]

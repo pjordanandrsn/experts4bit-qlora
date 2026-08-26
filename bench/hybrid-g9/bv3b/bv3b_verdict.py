@@ -83,10 +83,15 @@ def verdict(rep):
         why = _degenerate(g_tok[row])
         if why:
             return ("REFUSE", f"graph row {row} degenerate: {why}")
-        best = max(e_tok, key=lambda k: _prefix(g_tok[row], e_tok[k]))
-        if best != row:
-            return ("REFUSE", f"crossing: graph row {row} best-matches "
-                    f"eager row {best}")
+        # crossing iff some OTHER row matches STRICTLY longer than the
+        # own row -- max() with first-key tie-break falsely refused
+        # legitimate ties (review, e4b#269)
+        p_own = _prefix(g_tok[row], e_tok[row]) if row in e_tok else -1
+        p_other = max((_prefix(g_tok[row], e_tok[k])
+                       for k in e_tok if k != row), default=-1)
+        if p_other > p_own:
+            return ("REFUSE", f"crossing: graph row {row} matches "
+                    f"another eager row longer ({p_other} > {p_own})")
 
     e_ms = [ea["decode_median_ms"]["step"], eb["decode_median_ms"]["step"]]
     g_ms = [ga["step_ms_clean"], gb["step_ms_clean"]]
@@ -173,9 +178,21 @@ def _self_test():
     del r["parity"]["parity"]["5"]
     out = v(r)
     assert out[0] == "REFUSE" and "partial" in out[1], out
-    # crossing refuses (rows swapped -> best-match mismatch)
+    # crossing refuses (rows swapped -> another row matches longer)
     out = v(_mk(cross=True))
     assert out[0] == "REFUSE" and "crossing" in out[1], out
+    # equal-length ties with an earlier key must NOT refuse: make rows
+    # 0 and 1 IDENTICAL streams in both arms (own-row tie) -- the old
+    # first-key max() called this a crossing
+    r = _mk()
+    for arm in ("eager_a", "eager_b"):
+        tk = r["bv3"][arm]["generated_tokens"]
+        tk["1"] = list(tk["0"])
+    for arm in ("graph_a", "graph_b"):
+        tk = r["bv3"][arm]["tokens"]
+        tk["1"] = list(tk["0"])
+    out = v(r)
+    assert out[0] == "PASS", out
     # non-deterministic graph arm refuses
     out = v(_mk(nondet=True))
     assert out[0] == "REFUSE" and "deterministic" in out[1], out
