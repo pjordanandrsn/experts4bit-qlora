@@ -112,5 +112,9 @@ def test_tr2_train_arena_wiring():
                  "down_absmax"):
         assert f'"{attr}"' in src, f"{attr} not released"
     assert "empty_cache()" in src
-    assert src.index("enable_hybrid_train(") < src.index(
-        "released"), "release must follow engagement"
+    # the release must PRECEDE the tier build: the build's peak (bnb +
+    # arena stacks co-resident) is what OOMed the box, so a
+    # post-enable release cannot help (hit live on hyb_a)
+    assert src.index("released") < src.index(
+        "enable_hybrid_train("), "release must precede engagement"
+    assert 'device="meta"' in src, "shape-preserving meta swap required"
