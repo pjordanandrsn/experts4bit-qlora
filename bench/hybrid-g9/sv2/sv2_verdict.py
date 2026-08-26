@@ -22,7 +22,9 @@ Gates (all REFUSE, in order):
      device us/step reconciles with the measured step
      (0.80 <= device/step <= 1.05) -- below, kineto missed replay
      kernels and the budget cannot anchor the composition frame.
-  G4 all three verify cells present with finite verify_graph_ms.
+  G4 all three verify cells present, finite, and not below the
+     measured single-row step (a cheaper-than-one-row verify is an
+     instrument error that would otherwise CLEAR the route).
 
 Speculation route (registered): accept(K) = {8: 2.39, 16: 2.948,
 32: 3.447} from RESULTS-s1-acceptance; draft cost 0.0 ms (prompt
@@ -92,10 +94,20 @@ def adjudicate(rep):
 
     for k in ACCEPT:
         cell = rep.get("verify", {}).get(k)
-        if cell is None or not math.isfinite(
-                cell.get("verify_graph_ms", float("nan"))):
+        v = (cell.get("verify_graph_ms", float("nan"))
+             if cell else float("nan"))
+        if not math.isfinite(v):
             return _refuse(out, f"G4: verify cell K={k} missing or "
                                 f"non-finite")
+        # mechanism floor, not a style bar: a (K+1)-row step does
+        # strictly more device work than the single-row step, so a
+        # verify below the measured knob step is an instrument error
+        # that would otherwise CLEAR the route (Bugbot, e4b#276)
+        if v < knob:
+            return _refuse(out, f"G4: verify cell K={k} reads "
+                                f"{v:.3f} ms, below the {knob:.3f} ms "
+                                f"single-row step -- instrument error, "
+                                f"not a fast verify")
 
     out["census"] = "OK"
     for k, acc in ACCEPT.items():
@@ -213,7 +225,10 @@ def self_test():
                      (_mk(cover=False), "G3"),
                      (_mk(dev_frac=0.5), "G3"),
                      (_mk(dev_frac=1.2), "G3"),
-                     (_mk(v32=float("nan")), "G4")):
+                     (_mk(v32=float("nan")), "G4"),
+                     (_mk(v8=0.0), "G4"),         # would have CLEARED
+                     (_mk(v8=-3.0), "G4"),
+                     (_mk(v16=5.0), "G4")):       # below the knob step
         r = adjudicate(bad)
         assert isinstance(r["census"], tuple) and \
             r["census"][1].startswith(why), (why, r["census"])
@@ -223,7 +238,7 @@ def self_test():
     assert isinstance(r["census"], tuple) and \
         r["census"][1].startswith("G4"), r
     print("sv2_verdict self-test OK (route flip, 4.00 boundary, and "
-          "eight refusal directions)")
+          "eleven refusal directions)")
 
 
 def main():
