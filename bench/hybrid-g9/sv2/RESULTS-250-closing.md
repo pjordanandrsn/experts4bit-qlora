@@ -1,60 +1,103 @@
-# RESULTS — 250 tok/s single-stream: REFUTED-AS-COMPOSED.
+# RESULTS — 250 tok/s single-stream: NOT closed.
 
-## Adjudicating SV2's pre-commitment against four cycles of receipts.
+## Speculation is refuted. Composition remains OPEN, pending the one
+## lane nobody has measured.
 
-Written 2026-08-26. No new measurement: this closes a registered
-pre-commitment using receipts already committed by SV2, K7, K8 and
-K10.
+Written 2026-08-26; **corrected the same day, before merge** — the
+first draft of this document called 250 REFUTED-AS-COMPOSED and was
+wrong. The error and its correction are recorded below rather than
+edited away, because the error is the same one the document was
+written to diagnose.
+
+No new measurement: this adjudicates a registered pre-commitment
+against receipts already committed by SV2, K7, K8 and K10.
 
 ## The rule being applied
 
-PREREG-sv2 registered two disjoint routes and a closing condition,
-before any of them was measured:
+PREREG-sv2 registered two disjoint routes and a closing condition:
 
 > **250 itself is REFUTED-AS-COMPOSED only if BOTH routes fall
 > short** — and the RESULTS must say so rather than stretching either
 > side's estimates.
 
-### Route 1 — speculation: refuted twice
+### Route 1 — speculation: CLOSED, twice, by measurement
 
 S3 measured grouped speculative verify at 0.60–0.66× (a LOSS at every
 K). SV2 re-measured it on the certified batched-graph stack with
 matched acceptance: best cell **11.44 ms per accepted token against a
 4.00 ms bar**, 2.9× short. F2, dot-pad and bitwise device grouping
-moved verify by ~0.1 ms. Closed by direct measurement, twice.
+moved verify by ~0.1 ms. This route is closed.
 
-### Route 2 — composition: now falls short too
+### Route 2 — composition: OPEN. Its dominant lane is unmeasured.
 
-SV2 left this route open on **estimates**. Three of its four lanes
-have since been measured:
+| lane | SV2 framed | status |
+|---|---|---|
+| **MoE GEMV round 2** — *tensor-core mapping beyond dot-pad's 15/16 M-row waste* | **1.5–1.8 ms** | **NEVER MEASURED** (see below) |
+| fp8-COMPUTE attention | 0.15–0.20 ms | **0.217 ms measured** (K8 PASS, ships OFF) |
+| router sort | inside "residue" | **0.000 ms** (K10 B1 REFUSED — 0.132 ms real, sets diverge) |
+| router select | inside "residue" | ≤0.104 ms (K10 B2 registered, unbuilt) |
+| attn-proj GEMV | 0.22 ms | unmeasured; already 1.14× its floor |
+| fusion/norm residue | 0.7–0.8 ms | unmeasured, never registered |
 
-| lane | SV2 framed | measured | source |
-|---|---|---|---|
-| MoE GEMV round 2 | 1.5–1.8 ms | **0.241 ms** | K7 REFUTED — split-K flat; the 9.8% that appeared was a config retune |
-| fp8-COMPUTE attention | 0.15–0.20 ms | **0.217 ms** | K8 PASS — shipped OFF, +0.0092 ppl |
-| router sort | (inside "residue") | **0.000 ms** | K10 B1 REFUSED — 0.132 ms real, but the expert SETS diverge |
-| router select | (inside "residue") | ≤0.104 ms | K10 B2 registered, unbuilt — ceiling is 60% of a 0.174 ms slice |
-| attn-proj GEMV | 0.22 ms | unmeasured | already 1.14× its streaming floor; little to take |
-| fusion/norm residue | 0.7–0.8 ms | unmeasured | never registered |
+## The correction: K7 did not measure SV2's MoE lane
 
-**The decisive arithmetic.** Grant every unmeasured lane its **best**
-framed value *and* grant B2 a full PASS it has not earned:
+SV2 registered that lane as **tensor-core mapping past dot-pad's
+M-row waste**. K7's prereg scoped itself explicitly *out* of it:
+
+> The treatment is **parallelism and pipelining on the SAME dequant
+> math** […] Explicitly OUT of scope: fp8-MMA activations […] any
+> dequant-chain change (the bf16-MMA rounding mechanism and absmax
+> pre-fold stay IDENTICAL to the certified K6-B chain).
+
+K7 tested a *different hypothesis about the same slice* — that the
+kernel was occupancy-starved — and refuted it cleanly. What it
+produced (0.241 ms) is a **config retune**, real and available, but
+it is not the registered treatment and does not bound it. K7's own
+RESULTS says so: *"the 3.8×-floor gap is still there and still real;
+a different mechanism … may yet reach it."*
+
+The first draft of this document nonetheless entered 0.241 ms as the
+lane's measured value and declared the route refuted. That is
+precisely the failure it goes on to name — **an unmeasured dominant
+term leaves the verdict unmeasured** — committed while writing the
+sentence that names it. Caught in review (Bugbot, e4b#282).
+
+## What the verdict actually hinges on
+
+Grant every *other* lane its best framed value, plus K7's retune:
 
 ```
-measured (K7 0.241 + K8 0.217 + K10-B1 0.000)   = 0.458 ms
-+ B2 at its registered PASS ceiling              = 0.104 ms
-+ attn-proj at its framed value                  = 0.220 ms
-+ fusion residue at the HIGH end of its estimate = 0.800 ms
-                                          total  = 1.582 ms
-bar                                              = 2.480 ms
-                                        SHORTFALL  0.898 ms
+K8 fp8 attention (measured)                 0.217 ms
+K10-B2 at its registered PASS ceiling       0.104 ms
+attn-proj at its framed value               0.220 ms
+fusion residue at the HIGH end              0.800 ms
+K7 config retune (real, not the lane)       0.241 ms
+                                    total   1.582 ms
+bar                                         2.480 ms
+        the registered MoE lane must supply 0.898 ms
 ```
 
-**36% of the bar is unaccounted for under assumptions chosen to
-favour the target.** Both routes fall short, so per SV2's own rule,
-**250-as-composed is REFUTED.**
+That lane's theoretical headroom is **1.820 ms** (a 2.469 ms slice
+against a 0.649 ms streaming floor). So **250-as-composed requires
+the tensor-core mapping to capture ~49% of its theoretical
+headroom.**
 
-## What is true instead
+Not demonstrated. Not excluded. That is the whole finding.
+
+## Verdict
+
+**250-as-composed is NOT refuted, and is NOT on track.** Its status
+is OPEN-PENDING-ITS-DOMINANT-TERM — the label this document argued
+SV2 should have used, and which applies to this document too until
+the registered MoE treatment is built and measured.
+
+Closing it in either direction requires exactly one thing: a
+registered cycle that implements tensor-core mapping past the M-row
+waste and measures it. A result below ~0.90 ms closes 250 by
+arithmetic. A result at or above it keeps the target live and makes
+the remaining unmeasured lanes worth registering.
+
+## What is certified regardless
 
 | configuration | ms/step | tok/s |
 |---|---|---|
@@ -62,45 +105,15 @@ favour the target.** Both routes fall short, so per SV2's own rule,
 | `GNF4_GEMV_DOTPAD=1` | 6.476 | 154.4 |
 | **+ `GNF4_ATTN_COMPUTE=fp8`** | **6.281** | **159.2** |
 
-(The default row's absolute value is under re-certification by
-PREREG-m2; the two knob rows are same-box measurements and do not
-depend on it.)
+(The default row is under re-certification by PREREG-m2; the two knob
+rows are same-box measurements and do not depend on it.)
 
-Reaching 250 needs 4.00 ms/step — another **2.28 ms** off the current
-best. The largest single opportunity on the device remains the MoE
-GEMV at **3.8× its streaming floor**, and K7 refuted one hypothesis
-about why (occupancy) without touching the gap itself.
+## The lesson, stated against this document
 
-## Why the frame was wrong, stated plainly
-
-The composition route survived SV2 on the strength of one lane
-estimated at 1.5–1.8 ms that measured 0.241. Everything else was
-close: K8 came in slightly ABOVE its estimate. The frame was not
-uniformly optimistic — **its dominant term was an estimate, and it
-was 7× off.**
-
-The lesson is about frame construction, not about optimism: a
-composition frame whose largest term is unmeasured is a frame whose
-verdict is unmeasured. SV2 labelled its estimates honestly and
-pre-committed to recomputing on measurement, which is why this
-document can be written at all — but the route should have been
-called OPEN-PENDING-ITS-DOMINANT-TERM rather than NOT-REFUTED.
-
-## What would reopen it
-
-Not a better version of anything in the table above. Reopening 250
-requires a mechanism **outside** the registered frame that addresses
-the MoE GEMV's floor gap — a different tiling, a weight-stationary or
-lower-precision compute path, or a dequant-chain change carrying its
-own numerics frame. Any such candidate is a new registration with its
-own bars, and this document is not evidence for or against it.
-
-## Status of the campaign's single-stream program
-
-- **Closed:** speculation (twice, by measurement); 250-as-composed
-  (here, by its own registered rule).
-- **Open and certified:** 159.2 tok/s, reproducible, with receipts.
-- **Open and registered:** K10-B2 (fused exact top-k, ≤0.104 ms);
-  M2 (anchor re-certification, may restate the default row).
-- **Open and unregistered:** the fusion/norm residue (0.7–0.8 ms
-  estimated, never measured) and the MoE floor gap itself.
+A composition frame's verdict is only as measured as its largest
+term. SV2 left one lane at 1.5–1.8 ms unmeasured and called the route
+NOT-REFUTED; this document left the same lane unmeasured and called
+it REFUTED. Both directions are the same error. The lane has now been
+named precisely enough — *tensor-core mapping past the M-row waste,
+needing ~0.90 ms of a 1.82 ms headroom* — that the next cycle can
+settle it instead of estimating it.
