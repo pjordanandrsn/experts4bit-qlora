@@ -8,6 +8,7 @@ override that silently did nothing would make Stage A's ablation
 unfalsifiable, which is the exact failure K9 died of twice.
 """
 import hashlib
+import re
 import importlib.util
 import pathlib
 
@@ -30,7 +31,12 @@ def _probe_cls(capturing=False):
     # the exec namespace must carry every module the class body uses;
     # step_decomp imports these at module scope, but a text slice does
     # not bring them along
-    ns = {"torch": torch, "hashlib": hashlib,
+    # `re` because this lift spans lines 445..786 of step_decomp,
+    # which now includes module-scope helpers that use it. A
+    # source-range lift silently widens whenever code is inserted
+    # inside it -- the range is defined by two anchors, not by
+    # what it contains.
+    ns = {"torch": torch, "hashlib": hashlib, "re": re,
           "_capturing": lambda: capturing}
     exec(compile(text[start:end], src, "exec"), ns)
     return ns["_TopkProbe"]
