@@ -544,188 +544,117 @@ class _TopkProbe:
 
 
 _BREAK_FRAME = re.compile(r'File "([^"]+)", line (\d+), in (\S+)')
+#: dynamo prefixes each break record; the reason is the text after it
+_BREAK_HEAD = re.compile(r"(Graph break[^\n]*|Skip calling[^\n]*)")
 
 
-def _match_site(reason, sites):
-    """Best site for a counter reason: the log record whose text shares
-    the most with it, else the first captured site, else unknown.
-
-    counters[] gives reason+count but no location; dynamo's log records
-    give location. Neither alone satisfies PREREG-k13, which promises
-    file, line, function AND dynamo's own reason.
-    """
-    if not sites:
-        return "<unknown>", -1, "<unknown>", []
-    key = set(str(reason).lower().split())
-    best, score = sites[0], -1
-    for s in sites:
-        overlap = len(key & set(s[4].lower().split()))
-        if overlap > score:
-            best, score = s, overlap
-    return best[0], best[1], best[2], best[3]
-
-
-def _graph_break_census(one_step, steps: int = 2) -> dict:
-    """PREREG-k13 Stage A: let dynamo NAME its own graph breaks.
+def _graph_break_census(one_step, steps: int = 3) -> dict:
+    """PREREG-k13 Stage A: name the graph breaks in the REAL compile.
 
     K12 established that compiling the MoE tier costs 0.672 ms and
     adds ~670 launches/step because dynamo cannot trace it as one
-    graph. It did NOT establish WHICH host read breaks it -- K12's
-    log carries a frame stack, and a stack is not an attribution
-    ([[attribute-from-the-profile]]). This asks the tool.
+    graph. It did NOT establish WHICH host read breaks it -- a frame
+    stack is not an attribution.
 
-    `torch._dynamo.explain` returns GraphCompileReason objects with a
-    `reason` string and a `user_stack`, so every entry here is named
-    by dynamo rather than inferred from source or a traceback.
+    **This traces the actual compilation, not a wrapper around it.**
+    The first version called `torch._dynamo.explain(one_step)()`, and
+    on the box that named exactly one break --
+    `qkv_fuse.py:60 "Skip calling torch.compiler.disable()d function"`
+    -- IDENTICALLY in both cells, with the MoE tier absent entirely.
+    `explain` traced the OUTER step, saw the deliberate disable
+    boundaries, and never descended into the layer bodies that
+    `--compile-layers` had already wrapped in `torch.compile`, which
+    is where the MoE work lives. It was pointed one level too high,
+    and 2 counter reasons for a step with 48 MoE layers was the tell.
+    (`break_reasons` also came back EMPTY on the box while non-empty
+    in CPU probes, so it is not relied on at all now.)
 
-    PHASE is measured, not assumed. A break that fires only while
-    tracing still shapes the captured artifact -- under CUDA-graph
-    capture every replay executes what capture produced -- so the two
-    are recorded separately and neither is scored. Phase is decided
-    empirically: run the step again with the break counter reset and
-    see whether it re-fires once the code is already compiled.
+    So: install a capture on dynamo's logger, reset the counters, and
+    run the step FOR REAL. The layer bodies compile on that first
+    call and every break they hit is recorded with its own reason and
+    its own stack -- from the same code path K12 measured.
+
+    Each dynamo record carries the reason AND the frames, so they are
+    parsed together per record. The previous version matched counter
+    reasons to separately-captured sites by word overlap, which with
+    1016 captured sites collapsed every reason onto one location.
     """
+    import logging
+
     import torch._dynamo as _dyn
     from torch._dynamo.utils import counters
 
-    import logging
+    seen: dict = {}
 
-    # Capture dynamo's own log records for the duration of the trace.
-    # counters[] carries reason+count but no location; the records
-    # carry the location. PREREG-k13 promises both.
-    log_sites = []
+    def _record(msg):
+        frames = _BREAK_FRAME.findall(msg)
+        head = _BREAK_HEAD.search(msg)
+        if not head:
+            return
+        reason = " ".join(head.group(1).split())[:240]
+        if frames:
+            fn, ln, func = frames[-1]
+            stack = [f"{a}:{b} in {c}" for a, b, c in frames][-6:]
+        else:
+            fn, ln, func, stack = "<no-frame>", -1, "<no-frame>", []
+        key = (fn, int(ln), func, reason)
+        if key in seen:
+            seen[key]["count"] += 1
+        else:
+            seen[key] = {"file": fn, "line": int(ln), "func": func,
+                         "reason": reason, "count": 1, "stack": stack}
 
-    class _SiteCapture(logging.Handler):
+    class _Cap(logging.Handler):
         def emit(self, rec):
             try:
-                msg = rec.getMessage()
+                _record(rec.getMessage())
             except Exception:                    # noqa: BLE001
-                return
-            frames = _BREAK_FRAME.findall(msg)
-            if not frames:
-                return
-            fn, ln, func = frames[-1]            # innermost user frame
-            log_sites.append((fn, int(ln), func,
-                              [f"{a}:{b} in {c}" for a, b, c in frames][-6:],
-                              msg))
+                pass
 
-    _handler = _SiteCapture()
-    _dynlog = logging.getLogger("torch._dynamo")
-    _prev_level, _prev_prop = _dynlog.level, _dynlog.propagate
-    _dynlog.addHandler(_handler)
-    _dynlog.setLevel(logging.DEBUG)
-
+    handler = _Cap()
+    dynlog = logging.getLogger("torch._dynamo")
+    prev_level = dynlog.level
+    dynlog.addHandler(handler)
+    dynlog.setLevel(logging.DEBUG)
     _dyn.reset()
     counters["graph_break"].clear()
     try:
-        exp = _dyn.explain(one_step)()
-    except Exception as ex:                      # noqa: BLE001
-        _dynlog.removeHandler(_handler)
-        _dynlog.setLevel(_prev_level)
-        return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
-    finally:
-        _dynlog.propagate = _prev_prop
-    counter_reasons = dict(counters["graph_break"])
-    first = sum(counters["graph_break"].values())
-    _dynlog.removeHandler(_handler)
-    _dynlog.setLevel(_prev_level)
-
-    # PHASE. The first version cleared the counters and re-ran
-    # one_step immediately after explain() -- but explain() resets
-    # dynamo, so that re-run RECOMPILES and re-counts every break.
-    # It could only ever return "step": a measurement no input could
-    # make say "trace" (review, e4b#290;
-    # [[check-the-result-could-have-failed]]).
-    #
-    # A WARM call now absorbs that recompile, so anything counted
-    # afterwards is genuinely per-step. Wrapped, because losing a good
-    # census to a failure in the phase probe would be the worse
-    # outcome -- the verdict REFUSES an unknown phase, which is right,
-    # but the receipt should say why rather than the arm aborting.
-    phase, phase_err, again = None, None, None
-    try:
-        one_step()                               # warm: compile here
+        one_step()                               # REAL compile happens here
+        first_counts = dict(counters["graph_break"])
+        trace_keys = set(seen)
+        # PHASE: warm, then re-run. Anything recorded now re-fires per
+        # step; anything only in trace_keys fired at compile -- which
+        # under CUDA-graph capture still shapes every replay, so it is
+        # recorded and never scored.
         counters["graph_break"].clear()
+        before_n = len(seen)
         for _ in range(max(1, steps)):
             one_step()
         again = sum(counters["graph_break"].values())
-        phase = "step" if again > 0 else "trace"
+        step_keys = set(seen) - trace_keys
     except Exception as ex:                      # noqa: BLE001
-        phase_err = f"{type(ex).__name__}: {ex}"[:200]
+        return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
+    finally:
+        dynlog.removeHandler(handler)
+        dynlog.setLevel(prev_level)
 
-    # SOURCE OF THE NAMES. `explain().break_reasons` is structured and
-    # preferred; the counters are the fallback, joined to the site
-    # captured from dynamo's log records. `source` records which path
-    # produced the census so it can never be silent about that.
-    #
-    # WHY THE FALLBACK EXISTS -- stated as what is known, because I
-    # got the reason wrong twice. A K13 box run (torch 2.13, RTX 5090,
-    # real model) returned break_reasons EMPTY while graph_break_count
-    # read 3 and counters summed to 6; k13_verdict REFUSED it as "the
-    # instrument did not see what K12 saw", correctly.
-    #
-    # Three explanations were tested on torch 2.13 and ALL REFUTED:
-    #   - "break_reasons is empty on 2.13"      -> returns 1
-    #   - "already-compiled inner frames hide it" -> reasons=1, count=0
-    #   - "dynamo.disable boundaries do it"     -> reasons=1, count=1
-    # Those probes ran CPU-ONLY (the A2000's driver is too old for
-    # 2.13+cu130), so they are not faithful evidence about the box
-    # either way. The cause is UNKNOWN.
-    #
-    # So the fallback is insurance, not a diagnosis, and the raw
-    # counters/log/`break_reasons` sizes are recorded below so ONE
-    # more box run settles it instead of another guess.
-    breaks, source = [], "break_reasons"
-    for br in getattr(exp, "break_reasons", []) or []:
-        us = getattr(br, "user_stack", None) or []
-        fr = us[-1] if us else None
-        reason = " ".join(str(getattr(br, "reason", "")).split())
-        breaks.append({
-            "file": (fr.filename if fr else "<unknown>"),
-            "line": (fr.lineno if fr else -1),
-            "func": (fr.name if fr else "<unknown>"),
-            "reason": reason[:240],
-            "count": 1,
-            "phase": phase,
-            "stack": [f"{f.filename}:{f.lineno} in {f.name}" for f in us][-6:],
-        })
-    if not breaks and counter_reasons:
-        source = "counters+log"
-        for reason, cnt in counter_reasons.items():
-            f_, l_, fn_, st_ = _match_site(reason, log_sites)
-            breaks.append({
-                "file": f_, "line": l_, "func": fn_,
-                "reason": " ".join(str(reason).split())[:240],
-                "count": int(cnt), "phase": phase, "stack": st_,
-            })
-    # collapse identical sites, summing counts -- two entries for one
-    # site would rank as two smaller breaks instead of one real one
-    merged: dict = {}
-    for b in breaks:
-        k = (b["file"], b["line"], b["func"], b["reason"])
-        if k in merged:
-            merged[k]["count"] += b["count"]
-        else:
-            merged[k] = b
-    return {"breaks": sorted(merged.values(), key=lambda b: -b["count"]),
-            "graph_break_count": getattr(exp, "graph_break_count", None),
-            "graph_count": getattr(exp, "graph_count", None),
-            "source": source,
-            # raw diagnostics: the box run recorded only that breaks
-            # was empty, which was not enough to tell WHY
-            "break_reasons_len": len(getattr(exp, "break_reasons", []) or []),
-            "counter_keys": [str(k)[:120] for k in counter_reasons][:8],
-            "log_sample": [s[4][:200] for s in log_sites][:4],
-            "counter_reasons": dict(counter_reasons),
-            "log_sites_seen": len(log_sites),
-            "counter_total_first": first,
+    breaks = []
+    for key, b in seen.items():
+        b = dict(b)
+        b["phase"] = "step" if key in step_keys else "trace"
+        breaks.append(b)
+    breaks.sort(key=lambda b: -b["count"])
+    return {"breaks": breaks,
+            "source": "dynamo-log/real-compile",
+            "counter_reasons_first": {str(k)[:120]: v
+                                      for k, v in first_counts.items()},
+            "counter_total_first": sum(first_counts.values()),
             "counter_total_recompiled": again,
-            "phase_error": phase_err,
-            "phase_basis": "WARMED the step after explain() (which "
-                           "resets dynamo), then re-ran with the "
-                           "counters cleared: a break that re-fires "
-                           "once already compiled is per-step, one "
-                           "that does not fired at trace -- which "
+            "records_seen": before_n,
+            "phase_basis": "the step is run FOR REAL so the layer "
+                           "bodies compile under the capture; then "
+                           "re-run warm -- a break recorded only in "
+                           "the first pass fired at compile, which "
                            "still shapes every graph replay",
             "error": None}
 
