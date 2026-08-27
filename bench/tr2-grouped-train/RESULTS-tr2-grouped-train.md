@@ -1,5 +1,14 @@
 # RESULTS — TR2: grouped expert kernels for the training step
 
+<!-- BASELINE RESTATEMENT (2026-08-27). The 13.47x below is CORRECT as
+measured and is NOT withdrawn: the grouped arm reproduces at 3.7 s/step on a
+fresh box. But its BASELINE has moved. transformers v5 ships
+grouped_mm_experts_forward and fused the per-expert loop upstream, so the same
+bnb arm that read 50.86 s/step here measures 26.6 s/step on transformers 5.5.0.
+Against a CURRENT baseline the same-box speedup is 7.19x. Anyone who reruns
+13.47x on a current stack will get about half of it. See "Baseline restatement"
+at the end of this file. -->
+
 Adjudicated 2026-08-26 by `tr2_verdict.py` (amended A/A gate,
 self-tests green) on `receipts-tr2/tr2_report.json`. Box: RTX 5090 +
 EPYC 9654, instance 48709950 (serving anchor probe 7.25 ms — the
@@ -63,3 +72,42 @@ One box, the TR1 recipe (SEQ=192, GRAD_ACCUM=4, TOKEN_BUDGET=1024,
 grad checkpointing ON), Qwen3-30B-A3B, all-VRAM arena placement.
 TOKEN_BUDGET was pinned for comparability, not optimality — the
 budget knob re-opens on top of this step mechanics as its own cycle.
+
+
+## Baseline restatement (2026-08-27): 13.47x is 7.19x on a current stack
+
+Appended, not edited: the original verdict is left intact because it is
+correct for the stack it was measured on.
+
+**The treatment did not regress.** Re-run on a fresh RTX 5090 (vast 48803545,
+driver 595.84) with transformers 5.5.0, bnb 0.50.1, gnf4 0.16.0, the TR1
+recipe verbatim:
+
+| arm | s/step | tok/s | peak VRAM | held-out eval |
+|---|---|---|---|---|
+| base (bnb) | **26.6** | 116 | 24.36 GB | 1.0093 |
+| grouped (`TRAIN_ARENA`) | **3.7** | 846 | 24.37 GB | 1.0118 |
+
+The grouped arm reproduces this document's 3.77 s/step at 3.7. **The baseline
+halved**: 50.86 -> 26.6 s/step, because transformers v5 ships
+`grouped_mm_experts_forward` and fused the per-expert expert loop upstream.
+Roughly half of the published multiple is now upstream's work, not ours.
+
+Recipe validity is confirmed by eval parity with this document's own figures
+(base 1.010 / grouped 1.009; re-measured 1.0093 / 1.0118), and the token
+denominator is now measured rather than inferred: the trainer's own log prints
+`116 tok/s` at `26.6 s/step` = **3,086 tokens/step**.
+
+**How to state it:** *7.2x over a current-transformers bnb baseline, same-box,
+with held-out eval parity.* That survives a rerun. `13.47x` does not.
+
+### Two caveats that bound even the 7.19x
+
+1. **Same-box only.** Identical config measured 3.7 s/step on one RTX 5090 and
+   6.1 s/step on another — **1.65x**. Use `bench/train-anchor/` to class a box
+   before comparing anything; "RTX 5090" is two hardware classes.
+2. **Not a competitive claim on its own.** Current Unsloth (2026.8.21 +
+   unsloth_zoo 2026.8.15, transformers 5.5.0) *can* now train 4-bit MoE QLoRA
+   -- their docs saying BitsandBytes cannot are stale. Measured same-box at
+   identical 321,257,472 trainable params: **grouped 3.7 s/step vs Unsloth
+   4.3328**, so we lead by 1.17x, at 24.37 GB against their 21.55 GB.
