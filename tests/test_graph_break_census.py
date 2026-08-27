@@ -324,3 +324,54 @@ def test_a_phase_probe_failure_KEEPS_the_captured_census():
     assert out["breaks"], "the captured breaks must survive"
     assert out["phase_error"] and "phase boom" in out["phase_error"]
     assert all(b["phase"] is None for b in out["breaks"])
+
+
+def test_verbose_is_set_during_capture_and_RESTORED_after():
+    """Run 3's blocker: dynamo suppressed the user stack on repeated
+    breaks, so reasons arrived with no file/line and the only located
+    break was the disable boundary.
+
+    Leaving `verbose` on afterwards would change every later compile
+    in the process -- the census must not be a global side effect.
+    """
+    import torch._dynamo as dyn
+    # PIN a known starting value. Reading whatever the config happens
+    # to hold makes this order-dependent: an earlier test in the suite
+    # runs the census first, so under a no-restore mutation `verbose`
+    # is ALREADY True when `before` is captured, and after == before
+    # passes trivially. That is how this test survived a mutation that
+    # removed both restore sites.
+    dyn.config.verbose = False
+    census = _load()
+    out = census(_breaking_step())
+    assert out["error"] is None, out["error"]
+    assert out["verbose_was_set"] is True, out
+    assert dyn.config.verbose is False, (
+        "verbose must be restored to the pinned False; the census is "
+        "not allowed to leave the process more verbose than it found it")
+
+
+def test_verbose_is_restored_even_when_the_compile_RAISES():
+    import torch._dynamo as dyn
+    dyn.config.verbose = False               # pinned, not inherited
+    census = _load()
+
+    def boom():
+        raise RuntimeError("compile boom")
+    out = census(boom)
+    assert out["error"] and "boom" in out["error"]
+    assert dyn.config.verbose is False, "the error path must restore it too"
+
+
+def test_no_frame_records_are_COUNTED_so_blindness_is_visible():
+    """A census that is still partly blind must say so.
+
+    If suppression is not fully lifted, some reasons still arrive
+    without a location -- and a reader comparing 'breaks' counts alone
+    would not notice.
+    """
+    census = _load()
+    out = census(_breaking_step())
+    assert "no_frame_records" in out
+    assert isinstance(out["no_frame_records"], int)
+    assert out["no_frame_records"] <= len(out["breaks"])
