@@ -79,60 +79,6 @@ def test_a_clean_step_yields_an_EMPTY_census():
     assert out["breaks"] == [], out["breaks"]
 
 
-def test_phase_CAN_return_trace_not_only_step():
-    """The bug review caught (e4b#290): a probe with one outcome.
-
-    The first version cleared the counters and re-ran the step right
-    after `explain()` -- but explain() RESETS dynamo, so that re-run
-    recompiled and re-counted every break. It could only ever say
-    "step". A measurement no input can make say "trace" is not a
-    measurement.
-
-    A `.item()` break is re-traced on each compile but does NOT
-    re-fire once the artifact is warm, so with the warm call in place
-    this must come back "trace".
-    """
-    census = _load()
-    out = census(_breaking_step())
-    assert out["error"] is None, out["error"]
-    assert out["breaks"][0]["phase"] == "trace", (
-        "with the warm call absorbing the post-explain recompile, a "
-        "break that does not re-fire must read as trace; 'step' here "
-        "means the probe is counting the recompile again")
-    assert out["counter_total_recompiled"] == 0, out
-
-
-def test_phase_basis_records_the_warm_call():
-    census = _load()
-    out = census(_breaking_step())
-    assert "WARMED" in out["phase_basis"], out["phase_basis"]
-    assert out["counter_total_recompiled"] is not None
-
-
-def test_a_phase_probe_failure_keeps_the_census():
-    """Losing a good census to a failure in the phase probe is the
-    worse outcome. The verdict REFUSES an unknown phase -- correctly --
-    but the receipt must say why rather than the arm aborting."""
-    census = _load()
-    state = {"n": 0}
-
-    def flaky():
-        # the break is INLINE here: a pre-compiled inner is opaque to
-        # explain(), which found no breaks at all and made this test
-        # fail for a reason unrelated to what it checks
-        state["n"] += 1
-        if state["n"] > 1:          # survives explain, dies in the probe
-            raise RuntimeError("probe boom")
-        x = torch.zeros(4)
-        y = x + 1
-        return y * int(y.sum().item())
-    out = census(flaky)
-    assert out["error"] is None, "the census itself succeeded"
-    assert out["breaks"], "the named breaks must survive"
-    assert out["phase_error"] and "probe boom" in out["phase_error"]
-    assert out["breaks"][0]["phase"] is None
-
-
 def test_identical_sites_MERGE_and_sum_rather_than_rank_as_two():
     """Two entries for one site would rank as two smaller breaks and
     the top-break pick would be wrong."""
@@ -188,56 +134,6 @@ def test_it_REFUSES_the_flag_combinations_that_would_silently_skip_it():
     assert guard.count("raise SystemExit") >= 4, guard[:200]
 
 
-def test_the_COUNTERS_fallback_names_breaks_when_break_reasons_is_empty(
-        monkeypatch):
-    """The torch-2.13 case that produced an all-zero census.
-
-    On 2.13 `explain().break_reasons` is EMPTY while
-    graph_break_count reads 3 and counters["graph_break"] sums to 6.
-    The K13 box run banked nothing and the verdict REFUSED it as "the
-    instrument did not see what K12 saw" -- correct, but the data was
-    there and this read the wrong field.
-
-    torch 2.11 populates break_reasons, so the fallback would never
-    run here on its own. Emptying break_reasons forces it, which is
-    the only way to test the path that matters on the box.
-    """
-    census = _load()
-    import torch._dynamo as dyn
-    real_explain = dyn.explain
-
-    def explain_without_reasons(fn):
-        inner = real_explain(fn)
-
-        def run(*a, **k):
-            out = inner(*a, **k)
-            try:
-                out.break_reasons = []          # simulate 2.13
-            except Exception:                    # noqa: BLE001
-                pass
-            return out
-        return run
-    monkeypatch.setattr(dyn, "explain", explain_without_reasons)
-
-    out = census(_breaking_step())
-    assert out["error"] is None, out["error"]
-    assert out["source"] == "counters+log", out["source"]
-    assert out["breaks"], "counters carried the reasons; use them"
-    b = out["breaks"][0]
-    assert "item" in b["reason"].lower(), b["reason"]
-    assert b["count"] >= 1
-    # and the LOCATION came from the captured log records
-    assert b["line"] > 0 and b["file"] != "<unknown>", b
-    assert out["log_sites_seen"] >= 1, out["log_sites_seen"]
-
-
-def test_source_field_says_which_path_produced_the_census():
-    """A census must never be silent about how it was produced."""
-    census = _load()
-    out = census(_breaking_step())
-    assert out["source"] in ("break_reasons", "counters+log")
-
-
 def test_the_REAL_MODULE_imports():
     """The gap that let a NameError reach CI.
 
@@ -258,5 +154,173 @@ def test_the_REAL_MODULE_imports():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)          # raises on a missing import
     assert getattr(mod, "_BREAK_FRAME", None) is not None
-    assert callable(getattr(mod, "_match_site", None))
+    assert getattr(mod, "_BREAK_HEAD", None) is not None
+    # _match_site is GONE by design: it paired counter reasons to
+    # separately-captured sites by word overlap, and each dynamo
+    # record already carries its reason and its stack together
+    assert not hasattr(mod, "_match_site")
     assert callable(getattr(mod, "_graph_break_census", None))
+
+
+def test_it_names_breaks_from_the_REAL_compile_not_a_wrapper():
+    """The redesign: trace the compile, not a wrapper around it.
+
+    The explain()-based version named exactly one break on the box --
+    the paged-attention disable boundary -- IDENTICALLY in both cells,
+    with the MoE tier absent. It traced the outer step and never
+    descended into layer bodies already wrapped in torch.compile,
+    which is where the work lives. Two counter reasons for a step
+    with 48 MoE layers was the tell.
+    """
+    census = _load()
+    out = census(_breaking_step())
+    assert out["error"] is None, out["error"]
+    assert out["source"] == "dynamo-log/real-compile"
+    assert out["breaks"], "the real compile breaks; it must be named"
+    b = out["breaks"][0]
+    assert b["line"] > 0 and b["file"] != "<no-frame>", b
+    assert b["func"] == "step", b
+    assert "item" in b["reason"].lower() or "graph break" in b["reason"].lower()
+
+
+def test_each_record_carries_its_OWN_reason_and_site():
+    """No cross-matching. The previous version paired counter reasons
+    to separately-captured sites by word overlap; with 1016 captured
+    sites every reason collapsed onto one location."""
+    census = _load()
+    out = census(_breaking_step())
+    for b in out["breaks"]:
+        assert b["reason"], b
+        # a site and a reason from the SAME record, or an explicit
+        # no-frame marker -- never a guessed pairing
+        assert (b["file"] != "<no-frame>") == (b["line"] > 0), b
+
+
+def test_phase_is_recorded_per_break_and_is_one_of_two():
+    census = _load()
+    out = census(_breaking_step())
+    assert all(b["phase"] in ("trace", "step") for b in out["breaks"])
+    assert "run FOR REAL" in out["phase_basis"]
+
+
+def test_a_clean_step_yields_no_breaks():
+    """k13_verdict REFUSES an empty census, so empty must stay
+    reachable or that refusal could never fire."""
+    census = _load()
+    out = census(_clean_step())
+    assert out["error"] is None
+    assert out["breaks"] == [], out["breaks"]
+
+
+def test_identical_records_aggregate_rather_than_repeat():
+    census = _load()
+    out = census(_breaking_step())
+    keys = [(b["file"], b["line"], b["func"], b["reason"]) for b in out["breaks"]]
+    assert len(keys) == len(set(keys)), keys
+    assert any(b["count"] >= 1 for b in out["breaks"])
+
+
+def _step_with_precompiled_inner():
+    """The harness shape: layer bodies ALREADY wrapped in
+    torch.compile, called by an outer step. This is what the toy
+    fixtures lack, and it is the only place the redesign differs."""
+    x = torch.zeros(4)
+
+    @torch.compile(dynamic=False)
+    def inner_layer(t):
+        u = t + 1
+        return u * int(u.sum().item())     # the break, INSIDE the layer
+
+    def step():
+        return inner_layer(x) + 1
+    return step, "inner_layer"
+
+
+def test_it_sees_inside_already_compiled_layer_bodies():
+    """A smoke test, NOT a pin on the redesign -- read the caveat.
+
+    The census must name breaks that live inside layer bodies already
+    wrapped in torch.compile, because that is where the MoE work is.
+    This checks it does.
+
+    What it does NOT do is distinguish the redesign from the
+    explain()-wrapper it replaced. Swapping the real compile back to
+    `explain(one_step)()` leaves EVERY test in this file green,
+    including this one: on CPU both paths surface the inner break.
+    The difference only appeared on the box -- 2 counter reasons for
+    a step with 48 MoE layers, and the same single outer disable
+    boundary named in both cells.
+
+    So the redesign rests on box evidence and on being strictly
+    closer to what K12 measured (observing the real compile rather
+    than a wrapper around it), NOT on a passing test here. Saying so
+    is better than a green check that proves something else.
+    """
+    census = _load()
+    step, inner_name = _step_with_precompiled_inner()
+    out = census(step)
+    assert out["error"] is None, out["error"]
+    funcs = {b["func"] for b in out["breaks"]}
+    assert inner_name in funcs, (
+        f"census named {funcs or 'nothing'}; a break inside a "
+        "pre-compiled layer must be visible")
+
+
+def test_phase_field_is_WELL_FORMED_and_nothing_more():
+    """Phase is recorded, not verified — and this test says so.
+
+    I tried five fixtures to pin the trace-vs-step classification and
+    every one passed under a mutation that broke the logic it named:
+      - assertions inside `if count > count_at_compile`, a branch that
+        never runs (a recompile logs under a NEW key rather than
+        incrementing an old one: `existing-and-grew: 0`)
+      - an `expected` computed from the same fields the code uses,
+        which therefore cannot disagree with it
+    A green check that survives breaking the thing it tests is worse
+    than no check, because it reads as coverage.
+
+    So this asserts only what it can: the field exists, and its value
+    is one of the three legal ones. PREREG-k13 RECORDS phase and never
+    scores it, and `k13_verdict` refuses a blank one — so a
+    misclassification cannot silently change a verdict. That is the
+    actual protection; this test is not.
+    """
+    census = _load()
+    out = census(_breaking_step())
+    assert out["error"] is None, out["error"]
+    assert out["breaks"], "fixture must produce breaks"
+    for b in out["breaks"]:
+        assert "phase" in b and "count_at_compile" in b, b
+        assert b["phase"] in ("trace", "step", None), b["phase"]
+
+def test_a_phase_probe_failure_KEEPS_the_captured_census():
+    """The shared-try bug (review, e4b#292), which I had fixed in the
+    previous design and reintroduced in the rewrite.
+
+    An exception after the real compile must not discard a census
+    that was already captured -- k13_verdict would then see an empty
+    instrument and blame the wrong thing.
+    """
+    census = _load()
+    state = {"n": 0}
+
+    # the inner MUST be compiled: this census observes real
+    # compilation, so an uncompiled callable produces no dynamo
+    # tracing and therefore no breaks to preserve. (The old
+    # explain()-based design compiled whatever it was handed, which
+    # is why this fixture needed changing with the redesign.)
+    @torch.compile(dynamic=False)
+    def inner(t_):
+        u = t_ + 1
+        return u * int(u.sum().item())
+
+    def flaky():
+        state["n"] += 1
+        if state["n"] > 1:              # survives the compile, dies in phase
+            raise RuntimeError("phase boom")
+        return inner(torch.zeros(4))
+    out = census(flaky)
+    assert out["error"] is None, "the compile itself succeeded"
+    assert out["breaks"], "the captured breaks must survive"
+    assert out["phase_error"] and "phase boom" in out["phase_error"]
+    assert all(b["phase"] is None for b in out["breaks"])
