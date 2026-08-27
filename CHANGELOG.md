@@ -18,7 +18,38 @@
   reconciliation is appended to `bench/hybrid-g9/sv1/RESULTS-sv1-census.md`.
   Do not re-derive the 250 verdict from 8.43 — against the certified wall that
   frame needs 1.62×, and it stays OPEN per `RESULTS-250-closing.md` (#283).
-- **Recorded gap: `tokens_per_step` is not in the TR2 receipts.**
+- **RESOLVED by measurement (2026-08-26): TR2's tokens/step is 3,086.**
+  Re-ran the TR1/TR2 recipe on a rented RTX 5090 (driver 595.84, transformers
+  5.5.0). The trainer's own log prints `116 tok/s` at `26.6 s/step`, i.e.
+  **3,086 tokens/step** — confirming the ~3,072 that had to be inferred, and
+  closing the gap recorded below. Emit `tokens_per_step` explicitly anyway; a
+  rate whose denominator must be back-derived from a second printed rate is not
+  a receipt. Recipe validity confirmed by held-out eval reproducing TR2's
+  published figures: base 1.010 -> measured **1.0093**, grouped 1.009 ->
+  measured **1.0118**.
+- **The 13.47x needs restating: it is ~7.2x against a current baseline.**
+  Same box, same recipe, identical 321,257,472 trainable params:
+
+      e4b base (bnb)      26.6  s/step   116 tok/s   24.36 GB   eval 1.0093
+      e4b grouped          3.7  s/step   846 tok/s   24.37 GB   eval 1.0118
+      -> same-box speedup 7.19x, against the registered 13.47x
+
+  **The grouped arm did not regress** — it reproduces TR2's 3.77 s/step at 3.7.
+  What moved is the BASELINE: 50.86 -> 26.6 s/step, because transformers v5
+  ships `grouped_mm_experts_forward` and fused the per-expert loop upstream.
+  Roughly half the published multiple is now upstream's work, not ours. Anyone
+  who reruns 13.47x on a current stack gets half of it. Restate as: *7.2x over a
+  current-transformers bnb baseline, same-box, with held-out eval parity.*
+- **Reproducibility gap: no shipped tool bakes the arena.** `TRAIN_ARENA` takes a
+  PATH to a pre-baked arena, is undocumented in `train.py --help`, and
+  `nvme_arena.bake_expert_tensors` only RELOCATES pre-quantized tensors. The HF
+  checkpoint ships bf16 experts, so reproducing TR2 from published artifacts
+  requires writing a quantize -> emit-nf4-snapshot step yourself (~60 lines;
+  15.19 GiB snapshot in 13.3 s, 16.3 GB arena bake in 7.7 s). Ship it as
+  `experts4bit_qlora.bake`. Also: passing a non-path truthy value releases
+  16.31 GB of expert storage BEFORE discovering the arena is missing, then dies
+  on `FileNotFoundError`. Check the path exists before `_release_expert_storage`.
+- **Recorded gap (now resolved above): `tokens_per_step` is not in the TR2 receipts.**
   `tr2_report.json` records `seq: 192`, `grad_accum: 4`,
   `token_budget_effective: 1024` — but not the per-step token count that the
   published "~59 → ~800 tok/s class" figure divides by. The rate is reproducible
