@@ -389,8 +389,14 @@ def main():
         if _n != _L:
             raise SystemExit(f"TRAIN_ARENA engaged {_n}/{_L} modules "
                              "-- refusing a partial treatment")
+        # Report the placement actually used. This string was hardcoded
+        # "all-VRAM" and stayed that way at any TRAIN_VRAM_FRAC < 1, directly
+        # contradicting the `masses ...` line the tier logs immediately above
+        # -- a receipt would have recorded the wrong placement.
+        _place = ("all-VRAM" if _nv == _E
+                  else f"{_nv}/{_E} VRAM + {_E - _nv}/{_E} DRAM per layer")
         log(f"[tr2] hybrid-train engaged on {_n} modules "
-            f"(grouped fwd/dgrad, all-VRAM)")
+            f"(grouped fwd/dgrad, {_place})")
     eval_before = eval_loss(model, eval_data)
     log(f"held-out eval loss BEFORE: {eval_before:.4f}")
 
