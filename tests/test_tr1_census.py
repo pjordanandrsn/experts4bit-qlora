@@ -103,8 +103,24 @@ def test_tr2_train_arena_wiring():
     # ordering: engagement text appears before the before-eval call
     assert src.index("enable_hybrid_train(") < src.index(
         "eval_before = eval_loss"), "hybrid must engage before eval"
-    # all-VRAM manifest shape
-    assert '"vram_frac": 1.0' in src
+    # Placement is checked by BEHAVIOUR, not by grepping this file for a
+    # literal: the old guard asserted '"vram_frac": 1.0' appeared in the
+    # source, which any refactor breaks and any comment satisfies.
+    from experts4bit_qlora.train import placement_manifest
+    man = placement_manifest(48, 128)                 # default == certified TR2
+    assert man["masses"] == {"vram_frac": 1.0, "dram_frac": 0.0,
+                             "nvme_frac": 0.0}
+    assert len(man["tiers"]["vram"]) == 48 * 128
+    assert man["tiers"]["dram"] == [] and man["tiers"]["nvme"] == []
+    # and the dial actually moves experts between tiers
+    half = placement_manifest(48, 128, 0.5)
+    assert half["masses"]["vram_frac"] == 0.5
+    assert len(half["tiers"]["vram"]) == 48 * 64
+    assert len(half["tiers"]["dram"]) == 48 * 64
+    assert placement_manifest(48, 128, 0.0)["tiers"]["vram"] == []
+    import pytest as _pytest
+    with _pytest.raises(SystemExit):
+        placement_manifest(48, 128, 1.5)
     # the bnb release: post-enable the loader's expert storage is dead
     # weight and keeping it doubles expert VRAM (Bugbot HIGH, #259) --
     # the wiring must shrink all four storage attrs and empty the cache

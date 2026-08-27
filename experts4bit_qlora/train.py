@@ -262,6 +262,37 @@ def _release_expert_storage(model, cls) -> int:
     return freed
 
 
+def placement_manifest(n_layers: int, n_experts: int, frac: float = 1.0) -> dict:
+    """The TRAIN_ARENA expert placement. ``frac`` is the share of each layer's
+    experts held in VRAM; the remainder goes to DRAM.
+
+    ``frac=1.0`` is the certified TR2 placement (all-VRAM) and is the default.
+    Split is by expert INDEX, not routing frequency -- deterministic and
+    disclosed. A routing-informed split (cf. E4B_HOT_PER_LAYER in serve.py)
+    should do strictly better.
+
+    Pure and importable so the wiring can be tested by BEHAVIOUR: the previous
+    guard grepped train.py for the literal ``"vram_frac": 1.0``, which passes
+    for any source that merely contains the text and breaks on any refactor
+    that preserves the semantics.
+    """
+    if not 0.0 <= frac <= 1.0:
+        raise SystemExit(f"TRAIN_VRAM_FRAC={frac} out of range [0,1]")
+    nv = max(0, min(n_experts, int(round(n_experts * frac))))
+    return {
+        "schema": "e4b-placement/1",
+        "tiers": {
+            "vram": [[la, e] for la in range(n_layers) for e in range(nv)],
+            "dram": [[la, e] for la in range(n_layers)
+                     for e in range(nv, n_experts)],
+            "nvme": [],
+        },
+        "masses": {"vram_frac": nv / n_experts,
+                   "dram_frac": (n_experts - nv) / n_experts,
+                   "nvme_frac": 0.0},
+    }
+
+
 def main():
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         _print_env_help("train")
@@ -352,18 +383,8 @@ def main():
         # A routing-informed split (cf. E4B_HOT_PER_LAYER in serve.py) would
         # place the hottest experts in VRAM and should do strictly better.
         _frac = float(os.environ.get("TRAIN_VRAM_FRAC", "1"))
-        if not 0.0 <= _frac <= 1.0:
-            raise SystemExit(f"TRAIN_VRAM_FRAC={_frac} out of range [0,1]")
-        _nv = max(0, min(_E, int(round(_E * _frac))))
-        _man = {"schema": "e4b-placement/1",
-                "tiers": {"vram": [[la, e] for la in range(_L)
-                                   for e in range(_nv)],
-                          "dram": [[la, e] for la in range(_L)
-                                   for e in range(_nv, _E)],
-                          "nvme": []},
-                "masses": {"vram_frac": _nv / _E,
-                           "dram_frac": (_E - _nv) / _E,
-                           "nvme_frac": 0.0}}
+        _man = placement_manifest(_L, _E, _frac)
+        _nv = len(_man["tiers"]["vram"]) // _L if _L else 0
         if _nv != _E:
             log(f"[tr2] TRAIN_VRAM_FRAC={_frac}: {_nv}/{_E} experts per layer "
                 f"in VRAM, {_E - _nv} in DRAM")
