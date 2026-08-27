@@ -542,6 +542,28 @@ class _TopkProbe:
                 "sorted_override": self.sorted_override}
 
 
+_BREAK_FRAME = re.compile(r'File "([^"]+)", line (\d+), in (\S+)')
+
+
+def _match_site(reason, sites):
+    """Best site for a counter reason: the log record whose text shares
+    the most with it, else the first captured site, else unknown.
+
+    counters[] gives reason+count but no location; dynamo's log records
+    give location. Neither alone satisfies PREREG-k13, which promises
+    file, line, function AND dynamo's own reason.
+    """
+    if not sites:
+        return "<unknown>", -1, "<unknown>", []
+    key = set(str(reason).lower().split())
+    best, score = sites[0], -1
+    for s in sites:
+        overlap = len(key & set(s[4].lower().split()))
+        if overlap > score:
+            best, score = s, overlap
+    return best[0], best[1], best[2], best[3]
+
+
 def _graph_break_census(one_step, steps: int = 2) -> dict:
     """PREREG-k13 Stage A: let dynamo NAME its own graph breaks.
 
@@ -565,13 +587,47 @@ def _graph_break_census(one_step, steps: int = 2) -> dict:
     import torch._dynamo as _dyn
     from torch._dynamo.utils import counters
 
+    import logging
+
+    # Capture dynamo's own log records for the duration of the trace.
+    # counters[] carries reason+count but no location; the records
+    # carry the location. PREREG-k13 promises both.
+    log_sites = []
+
+    class _SiteCapture(logging.Handler):
+        def emit(self, rec):
+            try:
+                msg = rec.getMessage()
+            except Exception:                    # noqa: BLE001
+                return
+            frames = _BREAK_FRAME.findall(msg)
+            if not frames:
+                return
+            fn, ln, func = frames[-1]            # innermost user frame
+            log_sites.append((fn, int(ln), func,
+                              [f"{a}:{b} in {c}" for a, b, c in frames][-6:],
+                              msg))
+
+    _handler = _SiteCapture()
+    _dynlog = logging.getLogger("torch._dynamo")
+    _prev_level, _prev_prop = _dynlog.level, _dynlog.propagate
+    _dynlog.addHandler(_handler)
+    _dynlog.setLevel(logging.DEBUG)
+
     _dyn.reset()
     counters["graph_break"].clear()
     try:
         exp = _dyn.explain(one_step)()
     except Exception as ex:                      # noqa: BLE001
+        _dynlog.removeHandler(_handler)
+        _dynlog.setLevel(_prev_level)
         return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
+    finally:
+        _dynlog.propagate = _prev_prop
+    counter_reasons = dict(counters["graph_break"])
     first = sum(counters["graph_break"].values())
+    _dynlog.removeHandler(_handler)
+    _dynlog.setLevel(_prev_level)
 
     # PHASE. The first version cleared the counters and re-ran
     # one_step immediately after explain() -- but explain() resets
@@ -596,7 +652,29 @@ def _graph_break_census(one_step, steps: int = 2) -> dict:
     except Exception as ex:                      # noqa: BLE001
         phase_err = f"{type(ex).__name__}: {ex}"[:200]
 
-    breaks = []
+    # SOURCE OF THE NAMES. `explain().break_reasons` is structured and
+    # preferred; the counters are the fallback, joined to the site
+    # captured from dynamo's log records. `source` records which path
+    # produced the census so it can never be silent about that.
+    #
+    # WHY THE FALLBACK EXISTS -- stated as what is known, because I
+    # got the reason wrong twice. A K13 box run (torch 2.13, RTX 5090,
+    # real model) returned break_reasons EMPTY while graph_break_count
+    # read 3 and counters summed to 6; k13_verdict REFUSED it as "the
+    # instrument did not see what K12 saw", correctly.
+    #
+    # Three explanations were tested on torch 2.13 and ALL REFUTED:
+    #   - "break_reasons is empty on 2.13"      -> returns 1
+    #   - "already-compiled inner frames hide it" -> reasons=1, count=0
+    #   - "dynamo.disable boundaries do it"     -> reasons=1, count=1
+    # Those probes ran CPU-ONLY (the A2000's driver is too old for
+    # 2.13+cu130), so they are not faithful evidence about the box
+    # either way. The cause is UNKNOWN.
+    #
+    # So the fallback is insurance, not a diagnosis, and the raw
+    # counters/log/`break_reasons` sizes are recorded below so ONE
+    # more box run settles it instead of another guess.
+    breaks, source = [], "break_reasons"
     for br in getattr(exp, "break_reasons", []) or []:
         us = getattr(br, "user_stack", None) or []
         fr = us[-1] if us else None
@@ -607,10 +685,18 @@ def _graph_break_census(one_step, steps: int = 2) -> dict:
             "func": (fr.name if fr else "<unknown>"),
             "reason": reason[:240],
             "count": 1,
-            "phase": phase,          # None if the probe failed
-
+            "phase": phase,
             "stack": [f"{f.filename}:{f.lineno} in {f.name}" for f in us][-6:],
         })
+    if not breaks and counter_reasons:
+        source = "counters+log"
+        for reason, cnt in counter_reasons.items():
+            f_, l_, fn_, st_ = _match_site(reason, log_sites)
+            breaks.append({
+                "file": f_, "line": l_, "func": fn_,
+                "reason": " ".join(str(reason).split())[:240],
+                "count": int(cnt), "phase": phase, "stack": st_,
+            })
     # collapse identical sites, summing counts -- two entries for one
     # site would rank as two smaller breaks instead of one real one
     merged: dict = {}
@@ -623,6 +709,14 @@ def _graph_break_census(one_step, steps: int = 2) -> dict:
     return {"breaks": sorted(merged.values(), key=lambda b: -b["count"]),
             "graph_break_count": getattr(exp, "graph_break_count", None),
             "graph_count": getattr(exp, "graph_count", None),
+            "source": source,
+            # raw diagnostics: the box run recorded only that breaks
+            # was empty, which was not enough to tell WHY
+            "break_reasons_len": len(getattr(exp, "break_reasons", []) or []),
+            "counter_keys": [str(k)[:120] for k in counter_reasons][:8],
+            "log_sample": [s[4][:200] for s in log_sites][:4],
+            "counter_reasons": dict(counter_reasons),
+            "log_sites_seen": len(log_sites),
             "counter_total_first": first,
             "counter_total_recompiled": again,
             "phase_error": phase_err,

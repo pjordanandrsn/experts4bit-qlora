@@ -13,6 +13,9 @@ import pathlib
 
 import pytest
 
+import logging
+import re
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("torch._dynamo")
 
@@ -22,9 +25,14 @@ _SRC = (pathlib.Path(__file__).resolve().parents[1]
 
 def _load():
     """Lift the helper out of the harness; it needs no CUDA or model."""
-    start = _SRC.index("def _graph_break_census(")
+    # start at the module-level helpers, not the function -- the site
+    # matcher and its regex live above _graph_break_census and lifting
+    # the function alone left them undefined at runtime
+    start = _SRC.index("_BREAK_FRAME = re.compile(")
     end = _SRC.index("def _mech_reset(")
-    ns = {}
+    # seed the namespace the lifted block expects; exec() gets a fresh
+    # globals dict, so imports in THIS file do not reach it
+    ns = {"re": re, "logging": logging}
     exec(compile(_SRC[start:end], "census", "exec"), ns)
     return ns["_graph_break_census"]
 
@@ -178,3 +186,53 @@ def test_it_REFUSES_the_flag_combinations_that_would_silently_skip_it():
                             "-- and --batch DEFAULTS to 4")):
         assert needle in guard, f"unguarded: {why}"
     assert guard.count("raise SystemExit") >= 4, guard[:200]
+
+
+def test_the_COUNTERS_fallback_names_breaks_when_break_reasons_is_empty(
+        monkeypatch):
+    """The torch-2.13 case that produced an all-zero census.
+
+    On 2.13 `explain().break_reasons` is EMPTY while
+    graph_break_count reads 3 and counters["graph_break"] sums to 6.
+    The K13 box run banked nothing and the verdict REFUSED it as "the
+    instrument did not see what K12 saw" -- correct, but the data was
+    there and this read the wrong field.
+
+    torch 2.11 populates break_reasons, so the fallback would never
+    run here on its own. Emptying break_reasons forces it, which is
+    the only way to test the path that matters on the box.
+    """
+    census = _load()
+    import torch._dynamo as dyn
+    real_explain = dyn.explain
+
+    def explain_without_reasons(fn):
+        inner = real_explain(fn)
+
+        def run(*a, **k):
+            out = inner(*a, **k)
+            try:
+                out.break_reasons = []          # simulate 2.13
+            except Exception:                    # noqa: BLE001
+                pass
+            return out
+        return run
+    monkeypatch.setattr(dyn, "explain", explain_without_reasons)
+
+    out = census(_breaking_step())
+    assert out["error"] is None, out["error"]
+    assert out["source"] == "counters+log", out["source"]
+    assert out["breaks"], "counters carried the reasons; use them"
+    b = out["breaks"][0]
+    assert "item" in b["reason"].lower(), b["reason"]
+    assert b["count"] >= 1
+    # and the LOCATION came from the captured log records
+    assert b["line"] > 0 and b["file"] != "<unknown>", b
+    assert out["log_sites_seen"] >= 1, out["log_sites_seen"]
+
+
+def test_source_field_says_which_path_produced_the_census():
+    """A census must never be silent about how it was produced."""
+    census = _load()
+    out = census(_breaking_step())
+    assert out["source"] in ("break_reasons", "counters+log")
