@@ -264,3 +264,63 @@ def test_it_sees_inside_already_compiled_layer_bodies():
     assert inner_name in funcs, (
         f"census named {funcs or 'nothing'}; a break inside a "
         "pre-compiled layer must be visible")
+
+
+def test_phase_field_is_WELL_FORMED_and_nothing_more():
+    """Phase is recorded, not verified — and this test says so.
+
+    I tried five fixtures to pin the trace-vs-step classification and
+    every one passed under a mutation that broke the logic it named:
+      - assertions inside `if count > count_at_compile`, a branch that
+        never runs (a recompile logs under a NEW key rather than
+        incrementing an old one: `existing-and-grew: 0`)
+      - an `expected` computed from the same fields the code uses,
+        which therefore cannot disagree with it
+    A green check that survives breaking the thing it tests is worse
+    than no check, because it reads as coverage.
+
+    So this asserts only what it can: the field exists, and its value
+    is one of the three legal ones. PREREG-k13 RECORDS phase and never
+    scores it, and `k13_verdict` refuses a blank one — so a
+    misclassification cannot silently change a verdict. That is the
+    actual protection; this test is not.
+    """
+    census = _load()
+    out = census(_breaking_step())
+    assert out["error"] is None, out["error"]
+    assert out["breaks"], "fixture must produce breaks"
+    for b in out["breaks"]:
+        assert "phase" in b and "count_at_compile" in b, b
+        assert b["phase"] in ("trace", "step", None), b["phase"]
+
+def test_a_phase_probe_failure_KEEPS_the_captured_census():
+    """The shared-try bug (review, e4b#292), which I had fixed in the
+    previous design and reintroduced in the rewrite.
+
+    An exception after the real compile must not discard a census
+    that was already captured -- k13_verdict would then see an empty
+    instrument and blame the wrong thing.
+    """
+    census = _load()
+    state = {"n": 0}
+
+    # the inner MUST be compiled: this census observes real
+    # compilation, so an uncompiled callable produces no dynamo
+    # tracing and therefore no breaks to preserve. (The old
+    # explain()-based design compiled whatever it was handed, which
+    # is why this fixture needed changing with the redesign.)
+    @torch.compile(dynamic=False)
+    def inner(t_):
+        u = t_ + 1
+        return u * int(u.sum().item())
+
+    def flaky():
+        state["n"] += 1
+        if state["n"] > 1:              # survives the compile, dies in phase
+            raise RuntimeError("phase boom")
+        return inner(torch.zeros(4))
+    out = census(flaky)
+    assert out["error"] is None, "the compile itself succeeded"
+    assert out["breaks"], "the captured breaks must survive"
+    assert out["phase_error"] and "phase boom" in out["phase_error"]
+    assert all(b["phase"] is None for b in out["breaks"])

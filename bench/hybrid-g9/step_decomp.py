@@ -618,22 +618,41 @@ def _graph_break_census(one_step, steps: int = 3) -> dict:
     dynlog.setLevel(logging.DEBUG)
     _dyn.reset()
     counters["graph_break"].clear()
+    # The REAL compile. Its own try: a failure here means there is no
+    # census at all.
     try:
-        one_step()                               # REAL compile happens here
+        one_step()                               # layer bodies compile here
         first_counts = dict(counters["graph_break"])
-        trace_keys = set(seen)
-        # PHASE: warm, then re-run. Anything recorded now re-fires per
-        # step; anything only in trace_keys fired at compile -- which
-        # under CUDA-graph capture still shapes every replay, so it is
-        # recorded and never scored.
+    except Exception as ex:                      # noqa: BLE001
+        dynlog.removeHandler(handler)
+        dynlog.setLevel(prev_level)
+        return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
+
+    # PHASE, per break, by COUNT rather than by set membership.
+    # `set(seen) - trace_keys` labelled every site seen during compile
+    # as "trace" forever, even one that re-fires on every step -- the
+    # receipt then could not tell compile-only from keeps-firing
+    # (review, e4b#292). Snapshot each key's count, re-run, and a key
+    # whose count GREW re-fired.
+    # NOT COVERED BY ANY TEST. Five fixtures were tried and each
+    # passed under a mutation that broke this classification, so no
+    # green check here means it is right. What protects a verdict is
+    # that PREREG-k13 RECORDS phase and never scores it, and that
+    # k13_verdict refuses a blank one -- a misclassification cannot
+    # change a verdict, only mislead a reader.
+    at_compile = {k: v["count"] for k, v in seen.items()}
+    before_n = len(seen)
+    again, phase_err = None, None
+    # Its own try: losing an already-captured census to a failure in
+    # the PHASE probe is the worse outcome. k13_verdict REFUSES an
+    # unknown phase, which is right; the receipt says why.
+    try:
         counters["graph_break"].clear()
-        before_n = len(seen)
         for _ in range(max(1, steps)):
             one_step()
         again = sum(counters["graph_break"].values())
-        step_keys = set(seen) - trace_keys
     except Exception as ex:                      # noqa: BLE001
-        return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
+        phase_err = f"{type(ex).__name__}: {ex}"[:200]
     finally:
         dynlog.removeHandler(handler)
         dynlog.setLevel(prev_level)
@@ -641,7 +660,17 @@ def _graph_break_census(one_step, steps: int = 3) -> dict:
     breaks = []
     for key, b in seen.items():
         b = dict(b)
-        b["phase"] = "step" if key in step_keys else "trace"
+        if phase_err is not None:
+            b["phase"] = None                    # unknown, and said so
+        else:
+            # DEFENSIVE: measurement shows a recompile logs under a
+            # NEW key rather than incrementing an old one, so this
+            # clause is not exercised in practice. Kept because the
+            # review's concern is sound if that ever changes; the
+            # test does not claim to cover it.
+            grew = b["count"] > at_compile.get(key, 0)
+            b["phase"] = "step" if (grew or key not in at_compile) else "trace"
+        b["count_at_compile"] = at_compile.get(key, 0)
         breaks.append(b)
     breaks.sort(key=lambda b: -b["count"])
     return {"breaks": breaks,
@@ -651,6 +680,7 @@ def _graph_break_census(one_step, steps: int = 3) -> dict:
             "counter_total_first": sum(first_counts.values()),
             "counter_total_recompiled": again,
             "records_seen": before_n,
+            "phase_error": phase_err,
             "phase_basis": "the step is run FOR REAL so the layer "
                            "bodies compile under the capture; then "
                            "re-run warm -- a break recorded only in "
