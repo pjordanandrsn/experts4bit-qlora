@@ -616,6 +616,28 @@ def _graph_break_census(one_step, steps: int = 3) -> dict:
     prev_level = dynlog.level
     dynlog.addHandler(handler)
     dynlog.setLevel(logging.DEBUG)
+
+    # STOP THE STACK SUPPRESSION. Run 3 of K13 came back with records
+    # reading "Graph break (user stack suppressed due to duplicate
+    # graph break)" -- a reason with NO file/line. The only LOCATED
+    # break was qkv_fuse.py:60, the deliberate disable boundary,
+    # present identically in both cells, so k13_verdict refused with
+    # "no break inside the MoE tier's frames". The MoE break is
+    # plausibly among the suppressed ones.
+    #
+    # This is dynamo describing its own behaviour, not a frame stack
+    # being read as an attribution -- which is what the three earlier
+    # (and all refuted) explanations were.
+    _prev_verbose = getattr(_dyn.config, "verbose", None)
+    try:
+        _dyn.config.verbose = True
+    except Exception:                            # noqa: BLE001
+        _prev_verbose = None
+    try:
+        import torch._logging as _tlog
+        _tlog.set_logs(graph_breaks=True)
+    except Exception:                            # noqa: BLE001
+        pass
     _dyn.reset()
     counters["graph_break"].clear()
     # The REAL compile. Its own try: a failure here means there is no
@@ -626,6 +648,11 @@ def _graph_break_census(one_step, steps: int = 3) -> dict:
     except Exception as ex:                      # noqa: BLE001
         dynlog.removeHandler(handler)
         dynlog.setLevel(prev_level)
+        if _prev_verbose is not None:
+            try:
+                _dyn.config.verbose = _prev_verbose
+            except Exception:                    # noqa: BLE001
+                pass
         return {"error": f"{type(ex).__name__}: {ex}"[:300], "breaks": []}
 
     # PHASE, per break, by COUNT rather than by set membership.
@@ -656,6 +683,11 @@ def _graph_break_census(one_step, steps: int = 3) -> dict:
     finally:
         dynlog.removeHandler(handler)
         dynlog.setLevel(prev_level)
+        if _prev_verbose is not None:
+            try:
+                _dyn.config.verbose = _prev_verbose
+            except Exception:                    # noqa: BLE001
+                pass
 
     breaks = []
     for key, b in seen.items():
@@ -680,6 +712,12 @@ def _graph_break_census(one_step, steps: int = 3) -> dict:
             "counter_total_first": sum(first_counts.values()),
             "counter_total_recompiled": again,
             "records_seen": before_n,
+            # how many records arrived WITHOUT a location: if this is
+            # still nonzero the suppression is not fully lifted and
+            # the census is still partly blind
+            "no_frame_records": sum(1 for b in seen.values()
+                                    if b["file"] == "<no-frame>"),
+            "verbose_was_set": _prev_verbose is not None,
             "phase_error": phase_err,
             "phase_basis": "the step is run FOR REAL so the layer "
                            "bodies compile under the capture; then "
