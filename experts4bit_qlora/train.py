@@ -219,6 +219,8 @@ def _print_env_help(which: str) -> None:
         ("TRAIN_EXPERTS", "1", "train expert LoRA"),
         ("TRAIN_ATTENTION", "1", "train attention LoRA"),
         ("TRAIN_ROUTER", "0", "train the router"),
+        ("TRAIN_ARENA", "", "PATH to a baked nf4 arena -> grouped expert fwd/dgrad"),
+        ("TRAIN_VRAM_FRAC", "1", "fraction of experts held in VRAM (rest -> DRAM)"),
         ("OFFLOAD_EXPERTS", "0", "keep experts in pinned CPU RAM"),
         ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
         ("DO_GEN", "1", "sample generations during training"),
@@ -258,6 +260,37 @@ def _release_expert_storage(model, cls) -> int:
                 setattr(m, attr, twin)   # registered buffer: routed
                 #                          into _buffers by __setattr__
     return freed
+
+
+def placement_manifest(n_layers: int, n_experts: int, frac: float = 1.0) -> dict:
+    """The TRAIN_ARENA expert placement. ``frac`` is the share of each layer's
+    experts held in VRAM; the remainder goes to DRAM.
+
+    ``frac=1.0`` is the certified TR2 placement (all-VRAM) and is the default.
+    Split is by expert INDEX, not routing frequency -- deterministic and
+    disclosed. A routing-informed split (cf. E4B_HOT_PER_LAYER in serve.py)
+    should do strictly better.
+
+    Pure and importable so the wiring can be tested by BEHAVIOUR: the previous
+    guard grepped train.py for the literal ``"vram_frac": 1.0``, which passes
+    for any source that merely contains the text and breaks on any refactor
+    that preserves the semantics.
+    """
+    if not 0.0 <= frac <= 1.0:
+        raise SystemExit(f"TRAIN_VRAM_FRAC={frac} out of range [0,1]")
+    nv = max(0, min(n_experts, int(round(n_experts * frac))))
+    return {
+        "schema": "e4b-placement/1",
+        "tiers": {
+            "vram": [[la, e] for la in range(n_layers) for e in range(nv)],
+            "dram": [[la, e] for la in range(n_layers)
+                     for e in range(nv, n_experts)],
+            "nvme": [],
+        },
+        "masses": {"vram_frac": nv / n_experts,
+                   "dram_frac": (n_experts - nv) / n_experts,
+                   "nvme_frac": 0.0},
+    }
 
 
 def main():
@@ -326,16 +359,35 @@ def main():
         # instead of the per-expert bnb chain. All-VRAM placement; the
         # wiring must engage fully or refuse -- never silently train
         # the bnb path the caller opted out of.
+        # Validate BEFORE _release_expert_storage: a bad path used to free
+        # ~16 GB of expert weights and only then die on FileNotFoundError,
+        # leaving no path back to the bnb arm it just destroyed.
+        if not os.path.exists(_train_arena + ".index.json"):
+            raise SystemExit(
+                f"TRAIN_ARENA={_train_arena!r}: no {_train_arena}.index.json. "
+                "TRAIN_ARENA is a PATH to a baked arena, not a boolean.")
         from .engines.hot_residency import target_modules
         from .engines.hybrid_train import enable_hybrid_train
         _mods = target_modules(model)
         _L, _E = len(_mods), _mods[0].num_experts
-        _man = {"schema": "e4b-placement/1",
-                "tiers": {"vram": [[la, e] for la in range(_L)
-                                   for e in range(_E)],
-                          "dram": [], "nvme": []},
-                "masses": {"vram_frac": 1.0, "dram_frac": 0.0,
-                           "nvme_frac": 0.0}}
+        # TRAIN_VRAM_FRAC exposes the placement the engine already supports.
+        # enable_hybrid_train takes an arbitrary manifest and the dram/nvme
+        # tiers are exercised by serve.py, but this block hardcoded
+        # vram_frac=1.0, so training had no memory/speed dial at all. The
+        # arena REPLACES the bnb expert storage (see _release_expert_storage
+        # below), so it is the majority of the training peak and tiering it
+        # is the largest lever available.
+        # Default 1.0 == the certified TR2 placement, byte-for-byte.
+        # NOTE: the split is by expert INDEX, not by routing frequency -- a
+        # deterministic, disclosed split for measuring the tradeoff curve.
+        # A routing-informed split (cf. E4B_HOT_PER_LAYER in serve.py) would
+        # place the hottest experts in VRAM and should do strictly better.
+        _frac = float(os.environ.get("TRAIN_VRAM_FRAC", "1"))
+        _man = placement_manifest(_L, _E, _frac)
+        _nv = len(_man["tiers"]["vram"]) // _L if _L else 0
+        if _nv != _E:
+            log(f"[tr2] TRAIN_VRAM_FRAC={_frac}: {_nv}/{_E} experts per layer "
+                f"in VRAM, {_E - _nv} in DRAM")
         # Release the loader's bnb expert storage BEFORE the tier
         # build: the build materializes ~16 GB of arena stacks while
         # the ~16 GB of bnb Parameters are still resident, and the
@@ -358,8 +410,14 @@ def main():
         if _n != _L:
             raise SystemExit(f"TRAIN_ARENA engaged {_n}/{_L} modules "
                              "-- refusing a partial treatment")
+        # Report the placement actually used. This string was hardcoded
+        # "all-VRAM" and stayed that way at any TRAIN_VRAM_FRAC < 1, directly
+        # contradicting the `masses ...` line the tier logs immediately above
+        # -- a receipt would have recorded the wrong placement.
+        _place = ("all-VRAM" if _nv == _E
+                  else f"{_nv}/{_E} VRAM + {_E - _nv}/{_E} DRAM per layer")
         log(f"[tr2] hybrid-train engaged on {_n} modules "
-            f"(grouped fwd/dgrad, all-VRAM)")
+            f"(grouped fwd/dgrad, {_place})")
     eval_before = eval_loss(model, eval_data)
     log(f"held-out eval loss BEFORE: {eval_before:.4f}")
 
