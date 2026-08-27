@@ -24,6 +24,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import statistics
 import sys
 import time

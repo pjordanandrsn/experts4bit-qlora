@@ -236,3 +236,27 @@ def test_source_field_says_which_path_produced_the_census():
     census = _load()
     out = census(_breaking_step())
     assert out["source"] in ("break_reasons", "counters+log")
+
+
+def test_the_REAL_MODULE_imports():
+    """The gap that let a NameError reach CI.
+
+    Every other test here lifts the census block into an exec
+    namespace that this file SEEDS with `re` and `logging`. That made
+    them pass while the real module was broken: `_BREAK_FRAME =
+    re.compile(...)` sat at module scope with no `import re`, and CI
+    caught it, not the suite.
+
+    A test that constructs its own environment cannot vouch for the
+    module's own. This imports the file for real.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "step_decomp_import_check",
+        pathlib.Path(__file__).resolve().parents[1]
+        / "bench" / "hybrid-g9" / "step_decomp.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)          # raises on a missing import
+    assert getattr(mod, "_BREAK_FRAME", None) is not None
+    assert callable(getattr(mod, "_match_site", None))
+    assert callable(getattr(mod, "_graph_break_census", None))
