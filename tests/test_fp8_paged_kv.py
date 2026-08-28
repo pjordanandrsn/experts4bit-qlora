@@ -269,3 +269,144 @@ def test_attention_maps_rows_to_slots_not_positions():
     # and the mismatch is refused rather than silently mis-mapped
     with pytest.raises(ValueError, match="pass slots="):
         kv.attention(0, q)
+
+
+# ---------------------------------------------------------------------------
+# Batched row writes (append_many's scatter fast path). The oracle is the
+# per-sequence loop itself: E4B_BATCHED_KV_WRITE=0 builds a cache through
+# _write_side, and the batched cache must be BYTE-identical — pools,
+# seq_lens and _seen — after the same append schedule. The scatter is a
+# pure re-addressing of the same quantized bytes, so any drift is index
+# arithmetic, not numerics.
+
+def _pair(monkeypatch, batch, max_tokens):
+    monkeypatch.setenv("E4B_BATCHED_KV_WRITE", "0")
+    loop = Fp8PagedKV(L, H, D, batch=batch, max_tokens_per_seq=max_tokens,
+                      k_groups=4, device=DEV)
+    monkeypatch.setenv("E4B_BATCHED_KV_WRITE", "1")
+    fast = Fp8PagedKV(L, H, D, batch=batch, max_tokens_per_seq=max_tokens,
+                      k_groups=4, device=DEV)
+    assert not loop._batched_write and fast._batched_write
+    return loop, fast
+
+
+def _drive(kv, schedule):
+    for i, (layer, seqs, t_new) in enumerate(schedule):
+        g = torch.Generator().manual_seed(1000 + i)
+        k = (torch.randn(len(seqs), t_new, H, D, generator=g) * 1.5).to(DEV)
+        v = torch.randn(len(seqs), t_new, H, D, generator=g).to(DEV)
+        kv.append_many(layer, seqs, k, v)
+
+
+def _assert_identical(loop, fast):
+    assert torch.equal(loop.kp.dev, fast.kp.dev)
+    assert torch.equal(loop.vp.dev, fast.vp.dev)
+    assert torch.equal(loop.seq_lens, fast.seq_lens)
+    assert loop._seen == fast._seen
+
+
+@pytest.mark.parametrize("schedule", [
+    # uniform decode: every sequence at the same fill
+    [(layer, [0, 1, 2, 3], 1) for _ in range(40) for layer in range(L)],
+    # prefill then decode across a block boundary
+    [(layer, [0, 1, 2, 3], 8) for layer in range(L)]
+    + [(layer, [0, 1, 2, 3], 1) for _ in range(20) for layer in range(L)],
+    # multi-token appends that stay inside one block
+    [(layer, [0, 1, 2, 3], 4) for _ in range(6) for layer in range(L)],
+])
+def test_batched_write_matches_loop(monkeypatch, schedule):
+    loop, fast = _pair(monkeypatch, batch=4, max_tokens=128)
+    _drive(loop, schedule)
+    _drive(fast, schedule)
+    _assert_identical(loop, fast)
+
+
+def test_batched_write_ragged_fills(monkeypatch):
+    """Sequences at DIFFERENT in-block offsets — the case the fill-grouped
+    form handled with one scatter per group and this one handles with one
+    scatter per region regardless of spread."""
+    loop, fast = _pair(monkeypatch, batch=4, max_tokens=256)
+    sched = []
+    for q in range(4):                      # stagger starts by q tokens
+        sched += [(layer, [q], 1) for layer in range(L) for _ in range(q)]
+    sched += [(layer, [0, 1, 2, 3], 1) for _ in range(60) for layer in range(L)]
+    _drive(loop, sched)
+    _drive(fast, sched)
+    _assert_identical(loop, fast)
+
+
+def test_batched_write_straddle_falls_back(monkeypatch):
+    """A multi-token append that crosses a block boundary must take the
+    per-sequence loop — and appends AFTER the fallback must stay correct,
+    which is exactly what a stale advance-cached index would corrupt
+    (the loop advances _seen without touching the cache)."""
+    loop, fast = _pair(monkeypatch, batch=4, max_tokens=256)
+    sched = []
+    for _ in range(3):
+        sched += [(layer, [0, 1, 2, 3], 1) for _ in range(14) for layer in range(L)]
+        sched += [(layer, [0, 1, 2, 3], 5) for layer in range(L)]   # 14+5 straddles
+    _drive(loop, sched)
+    _drive(fast, sched)
+    _assert_identical(loop, fast)
+
+
+def test_batched_write_survives_reset_and_slot_reuse(monkeypatch):
+    """reset() hands blocks back and the next sequence may land on the
+    SAME pool rows at different fills. The flat index is a pure function
+    of (slots, fills, T), so no invalidation hook is needed — this pins
+    that reasoning."""
+    loop, fast = _pair(monkeypatch, batch=2, max_tokens=64)
+    first = [(layer, [0, 1], 1) for _ in range(20) for layer in range(L)]
+    _drive(loop, first)
+    _drive(fast, first)
+    loop.reset(0)
+    fast.reset(0)
+    second = [(layer, [0, 1], 1) for _ in range(10) for layer in range(L)]
+    _drive(loop, second)
+    _drive(fast, second)
+    assert torch.equal(loop.seq_lens, fast.seq_lens)
+    assert loop._seen == fast._seen
+    for b in range(2):
+        for layer in range(L):
+            a = loop.reference_kv(layer, b)
+            c = fast.reference_kv(layer, b)
+            assert torch.equal(a[0], c[0]) and torch.equal(a[1], c[1])
+
+
+def test_batched_write_t_change_rebuilds_index(monkeypatch):
+    """T changing between calls must rebuild the cached index (its length
+    is T-dependent); a same-fill coincidence must not advance it."""
+    loop, fast = _pair(monkeypatch, batch=2, max_tokens=128)
+    sched = ([(layer, [0, 1], 2) for layer in range(L)]
+             + [(layer, [0, 1], 1) for _ in range(4) for layer in range(L)]
+             + [(layer, [0, 1], 3) for layer in range(L)]
+             + [(layer, [0, 1], 1) for _ in range(4) for layer in range(L)])
+    _drive(loop, sched)
+    _drive(fast, sched)
+    _assert_identical(loop, fast)
+
+
+def test_batched_write_roundtrip_matches_direct(monkeypatch):
+    """The scatter must also hold the file's own oracle: bytes written
+    through the batched path dequantize to exactly what quantizing the
+    same tokens directly produces."""
+    monkeypatch.setenv("E4B_BATCHED_KV_WRITE", "1")
+    kv = Fp8PagedKV(L, H, D, batch=2, max_tokens_per_seq=64,
+                    k_groups=4, device=DEV)
+    ks = {0: [], 1: []}
+    vs = {0: [], 1: []}
+    for i in range(24):
+        g = torch.Generator().manual_seed(3000 + i)
+        k = (torch.randn(2, 1, H, D, generator=g) * 1.5).to(DEV)
+        v = torch.randn(2, 1, H, D, generator=g).to(DEV)
+        for layer in range(L):
+            kv.append_many(layer, [0, 1], k, v)
+        for b in range(2):
+            ks[b].append(k[b, 0])
+            vs[b].append(v[b, 0])
+    for b in range(2):
+        kr, vr = kv.reference_kv(0, b)
+        torch.testing.assert_close(
+            kr, _direct(torch.stack(ks[b]), 4), rtol=0, atol=0)
+        torch.testing.assert_close(
+            vr, _direct(torch.stack(vs[b]), 1), rtol=0, atol=0)
