@@ -125,6 +125,15 @@ class Fp8PagedKV:
         self._fused_append = _resolve_fused_append(
             os.environ.get("E4B_FUSED_KV_APPEND"), str(device),
             _kernel_present)
+        # append_many's row writes: batched scatter by default, the
+        # per-sequence loop under E4B_BATCHED_KV_WRITE=0. See
+        # _flat_row_index for why the batched form exists and what it
+        # measured; the loop stays reachable because it is the reference
+        # the batched path is checked against.
+        self._batched_write = os.environ.get(
+            "E4B_BATCHED_KV_WRITE", "1") == "1"
+        # (slots, pidx, sidx, fills) per (pool, layer) — see _flat_row_index
+        self._kv_flat_cache: dict[tuple[int, int], list] = {}
         self._v_pay = self.bt * self.H * self.D
         # block tables live on-device and are written IN PLACE when a block
         # opens (one scalar copy per 16 tokens) — rebuilding [B, blocks]
@@ -201,6 +210,72 @@ class Fp8PagedKV:
             written += take
             seen += take
 
+    def _flat_row_index(self, pool, pay_bytes, groups, layer, slots, fills,
+                        T):
+        """Flat destination indices for ONE side of a whole batch write.
+
+        ``_write_side`` costs four ``narrow().copy_()`` per sequence per
+        side, so a decode step issues 4 x B x L tiny copies — at B=16, L=48
+        that measured 3,216 Memcpy DtoD per step whose per-copy cost was
+        FLAT from B=1 to B=16 (0.820 -> 0.816 us). Flat cost under a 16.75x
+        count increase is the signature of a launch-bound write: the fix is
+        fewer launches, not faster copies.
+
+        Grouping sequences by their in-block ``fill`` and issuing one
+        scatter per group is not enough — real batches are not uniform mod
+        ``bt`` (measured four distinct fills at B=16), so that form still
+        paid a scatter and a row gather per group. Indexing the partition
+        FLAT removes the fill spread from the launch count entirely: one
+        ``index_copy_`` per region per side per layer, whatever the offsets.
+
+        Every address here comes from the ``_rows`` HOST mirror, so this
+        adds no device read — the same reason ``_write_side`` reads it.
+
+        Rebuilt only when the cached index is NOT provably one step stale:
+        same slots (nobody crossed a block) and fills exactly ``T`` further
+        on. The fills half is what makes a fallback step safe — the
+        per-sequence path advances ``_seen`` without touching this cache,
+        and advancing a stale index would silently write every later token
+        to the wrong offset.
+        """
+        srow = self.H * groups * 4
+        pstride, sstride = T * self.H * self.D, T * srow
+        key = (id(pool), layer)
+        fills_t = tuple(fills)
+        st = self._kv_flat_cache.get(key)
+        if st is not None and st[0] == slots and st[4] == T \
+                and st[3] == tuple(f - T for f in fills):
+            st[1].add_(pstride)
+            st[2].add_(sstride)
+            st[3] = fills_t
+            return st[1], st[2]
+        dev, rb = pool.dev.device, pool.row_bytes
+        ps, ss = [], []
+        for slot, fill in zip(slots, fills):
+            base = slot * rb
+            ps.append(base + fill * self.H * self.D)
+            ss.append(base + pay_bytes + fill * srow)
+        pidx = (torch.as_tensor(ps, dtype=torch.long, device=dev)[:, None]
+                + torch.arange(pstride, device=dev)).reshape(-1)
+        sidx = (torch.as_tensor(ss, dtype=torch.long, device=dev)[:, None]
+                + torch.arange(sstride, device=dev)).reshape(-1)
+        self._kv_flat_cache[key] = [slots, pidx, sidx, fills_t, T]
+        return pidx, sidx
+
+    def _write_batch(self, pool, pay_bytes, groups, layer, slots, fills,
+                     qb, sb, T):
+        """One scatter per region for the whole batch (see _flat_row_index).
+
+        ``qb``/``sb`` are the batch's quantized bytes in sequence-major
+        order and the index is built in the same order, so the flattened
+        source lines up element for element.
+        """
+        pidx, sidx = self._flat_row_index(pool, pay_bytes, groups, layer,
+                                          slots, fills, T)
+        flat = pool.dev[layer].reshape(-1)
+        flat.index_copy_(0, pidx, qb.reshape(-1))
+        flat.index_copy_(0, sidx, sb.reshape(-1))
+
     def append(self, layer: int, seq: int, k: torch.Tensor, v: torch.Tensor):
         """k, v: [T, H, D] new tokens for one sequence at one layer."""
         if k.shape != v.shape or k.shape[1:] != (self.H, self.D):
@@ -266,6 +341,33 @@ class Fp8PagedKV:
         vq_all = self._quant_bytes(v.reshape(B * T, self.H, self.D), 1)
         kq_all = self._quant_bytes(k.reshape(B * T, self.H, self.D),
                                    self.k_groups)
+        # Batched row writes when every sequence's T tokens land inside
+        # one block (always true for T == 1 decode; a straddling prefill
+        # tail takes the per-sequence loop below). The applicability read
+        # is PURE — nothing has mutated yet, so falling through leaves
+        # the loop exactly the call it always was.
+        if self._batched_write and \
+                all((self._seen[layer][s] % self.bt) + T <= self.bt
+                    for s in seqs):
+            fills, slots = [], []
+            for seq in seqs:
+                seen = self._seen[layer][seq]
+                blk = seen // self.bt
+                self._ensure_blocks(layer, seq, blk)
+                fills.append(seen % self.bt)
+                slots.append(self.kp._dslot(
+                    layer, self._rows[(layer, seq)][blk]))
+            slots = tuple(slots)
+            if len(set(slots)) == len(slots):
+                # V first, publish K second — append()'s lockstep order
+                self._write_batch(self.vp, self._v_pay, 1, layer, slots,
+                                  fills, vq_all[0], vq_all[1], T)
+                self._write_batch(self.kp, self._k_pay, self.k_groups,
+                                  layer, slots, fills, kq_all[0],
+                                  kq_all[1], T)
+                for seq in seqs:
+                    self._seen[layer][seq] += T
+                return self._bump_seq_lens(layer, seqs, T)
         for b, seq in enumerate(seqs):
             seen = self._seen[layer][seq]
             self._ensure_blocks(layer, seq, (seen + T - 1) // self.bt)
@@ -278,6 +380,11 @@ class Fp8PagedKV:
             self._write_side(self.kp, self._k_pay, self.k_groups, layer,
                              seq, *kq, T, seen)
             self._seen[layer][seq] = seen + T
+        self._bump_seq_lens(layer, seqs, T)
+
+    def _bump_seq_lens(self, layer: int, seqs, T: int) -> None:
+        """One async device-side add for the whole batch (same reasoning
+        as append()'s narrow().add_: no CPU-tensor stream sync)."""
         key = tuple(seqs)
         cached = self._batch_idx_cache.get(key)
         if cached is None:
@@ -288,8 +395,6 @@ class Fp8PagedKV:
             cached = (idx, ones)
             self._batch_idx_cache[key] = cached
         idx, ones = cached
-        # one async device-side add for the whole batch (same reasoning
-        # as append()'s narrow().add_: no CPU-tensor stream sync)
         self.seq_lens[layer].index_add_(0, idx, ones * T)
 
     def _ensure_blocks(self, layer: int, seq: int, upto_blk: int) -> None:
