@@ -123,7 +123,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         uniq, counts = torch.unique_consecutive(sorted_ids,
                                                 return_counts=True)
         sizes = counts.tolist()
-        eids = uniq.tolist()
+        # sizes must come to the host (build_group_tiles walks it and the
+        # launch grid needs the tile count), but uniq does NOT: tolist()
+        # here was a D2H sync whose list gemm_4bit_grouped immediately
+        # shipped back with a syncing pageable H2D -- twice, once per
+        # GEMM. The wrapper passes a CUDA tensor straight through, and
+        # the singleton branch already hands it one (eids = local_ids).
+        # Measured at B=16 decode: this plus gnf4's tile-build memo took
+        # to_device_i32 traffic /4 and the step 1.206x, tokens identical.
+        eids = uniq
     if device_grouping:
         def _mm(xr, pk, am):
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
