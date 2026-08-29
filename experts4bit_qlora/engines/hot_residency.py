@@ -137,20 +137,46 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         def _mm(xr, pk, am):
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
-    elif int4_stores is not None and singleton_groups:
-        # Opt-in uniform-int4 expert store (engines/int4_experts): the
-        # singleton decode GEMVs run on the int4-b32 grid -- measured
-        # 2.7-3.3x over this NF4 path at the census cells with the grid
-        # itself at +0.007 ppl. Identity dispatch: _mm is called with
-        # the NF4 stacks it replaces, so `pk is gu_p` names the slot.
-        from int4_b32 import gemv_int4_b32, quant_x_rows
-        e32 = eids.to(torch.int32)
+    elif int4_stores is not None:
+        # Opt-in uniform-int4 expert store (engines/int4_experts). The
+        # NF4 stacks may already be FREED, so BOTH branches must serve
+        # from the int4 bytes. Identity dispatch: _mm is called with the
+        # (possibly empty) NF4 stacks it replaces, so `pk is gu_p` names
+        # the slot.
+        if singleton_groups:
+            # decode: the int4-b32 grouped GEMV -- measured 2.7-3.3x
+            # over the NF4 path at the census cells, grid +0.007 ppl
+            from int4_b32 import gemv_int4_b32, quant_x_rows
+            e32 = eids.to(torch.int32)
 
-        def _mm(xr, pk, am):
-            st = int4_stores["gu" if pk is gu_p else "dn"]
-            xq, xs = quant_x_rows(xr)
-            return gemv_int4_b32(xq, xs, st["packed"], st["scales"], e32,
-                                 st["N"], st["K"], part=st.get("part"))
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                xq, xs = quant_x_rows(xr)
+                return gemv_int4_b32(xq, xs, st["packed"], st["scales"],
+                                     e32, st["N"], st["K"],
+                                     part=st.get("part"))
+        else:
+            # prefill / verify (M per group is large): dequant each
+            # routed expert once and matmul -- the winning regime per
+            # the fused/dequant crossover, paid once per request. The
+            # host loop over ~E_active groups is prefill-frequency.
+            from int4_pack_ref import dequant_int4_ref
+            eids_l = (eids.tolist() if torch.is_tensor(eids) else list(eids))
+            row0 = [0]
+            for m_ in sizes[:-1]:
+                row0.append(row0[-1] + m_)
+
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                N_, K_ = st["N"], st["K"]
+                out = torch.empty(xr.shape[0], N_, dtype=torch.bfloat16,
+                                  device=xr.device)
+                for gi, (m_, e_, r0) in enumerate(zip(sizes, eids_l, row0)):
+                    w = dequant_int4_ref(st["packed"][e_],
+                                         st["scales"][e_], N_, K_)
+                    out[r0:r0 + m_] = (xr[r0:r0 + m_].to(torch.bfloat16)
+                                       @ w.to(torch.bfloat16).t())
+                return out
     else:
         def _mm(xr, pk, am):
             return gemm_4bit_grouped(xr, pk, am, sizes, eids)
