@@ -23,7 +23,7 @@ import sys
 import torch
 
 from .loader import load_moe_4bit_streaming
-from .lora import add_attention_lora
+from .lora import add_attention_lora, quantize_attention_projections_4bit
 from .util import log
 
 MODEL = os.environ.get("MODEL", "allenai/OLMoE-1B-7B-0924")
@@ -55,6 +55,11 @@ N_TRAIN = int(os.environ.get("N_TRAIN", "2000"))
 EVAL_EVERY = int(os.environ.get("EVAL_EVERY", "50"))
 TRAIN_EXPERTS = os.environ.get("TRAIN_EXPERTS", "1") == "1"
 TRAIN_ATTENTION = os.environ.get("TRAIN_ATTENTION", "1") == "1"
+# Opt-in (default OFF): store the frozen attention projections in bnb NF4
+# before the LoRA wrap -- measured -1.34 GB peak at 1.013x step cost on the
+# audit recipe; see lora.quantize_attention_projections_4bit for the regime
+# argument and receipts.
+TRAIN_ATTN_4BIT = os.environ.get("TRAIN_ATTN_4BIT", "0") == "1"
 TRAIN_ROUTER = os.environ.get("TRAIN_ROUTER", "0") == "1"
 DO_GEN = os.environ.get("DO_GEN", "1") == "1"
 OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
@@ -312,6 +317,12 @@ def main():
     # design, so a blanket model.to(DEVICE) would drag them back onto the GPU and defeat offloading.
     if not OFFLOAD_EXPERTS:
         model.to(DEVICE)
+    if TRAIN_ATTN_4BIT:
+        n_q4 = quantize_attention_projections_4bit(model)
+        if n_q4 == 0:
+            raise SystemExit("TRAIN_ATTN_4BIT=1 converted no projections "
+                             "-- refusing a vacuous arm")
+        log(f"[attn-4bit] {n_q4} projections stored in NF4 (frozen base)")
     n_attn = add_attention_lora(model, R, ALPHA, DTYPE) if TRAIN_ATTENTION else 0
     log(f"attn LoRA {n_attn} projs | train experts={TRAIN_EXPERTS} attn={TRAIN_ATTENTION} router={TRAIN_ROUTER}")
 
