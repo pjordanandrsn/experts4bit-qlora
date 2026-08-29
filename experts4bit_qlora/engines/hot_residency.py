@@ -48,7 +48,8 @@ DEVICE_GROUPING = [False]
 
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
                       act_fn, gptoss=None, clamp_limit=None,
-                      singleton_groups=False, device_grouping=False):
+                      singleton_groups=False, device_grouping=False,
+                      int4_stores=None):
     """Down-projection outputs for each (token,slot) row, computed on the device
     the packed stack lives on. ``local_ids`` index into the G-expert stack
     (``gu_p`` is ``[G, n1, k1//2]`` etc.). Returns ``[R, H]`` in the input row
@@ -136,6 +137,20 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         def _mm(xr, pk, am):
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
+    elif int4_stores is not None and singleton_groups:
+        # Opt-in uniform-int4 expert store (engines/int4_experts): the
+        # singleton decode GEMVs run on the int4-b32 grid -- measured
+        # 2.7-3.3x over this NF4 path at the census cells with the grid
+        # itself at +0.007 ppl. Identity dispatch: _mm is called with
+        # the NF4 stacks it replaces, so `pk is gu_p` names the slot.
+        from int4_b32 import gemv_int4_b32, quant_x_rows
+        e32 = eids.to(torch.int32)
+
+        def _mm(xr, pk, am):
+            st = int4_stores["gu" if pk is gu_p else "dn"]
+            xq, xs = quant_x_rows(xr)
+            return gemv_int4_b32(xq, xs, st["packed"], st["scales"], e32,
+                                 st["N"], st["K"], part=st.get("part"))
     else:
         def _mm(xr, pk, am):
             return gemm_4bit_grouped(xr, pk, am, sizes, eids)
@@ -451,7 +466,9 @@ class _HotResidency:
                                                  (FORCE_SINGLETON_GROUPS[0]
                                                   and not DEVICE_GROUPING[0])),
                                device_grouping=(DEVICE_GROUPING[0]
-                                                and T > 1))
+                                                and T > 1),
+                               int4_stores=getattr(self, "_int4_stores",
+                                                   None))
         w = top_k_weights.reshape(-1).to(torch.float32)
         out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
