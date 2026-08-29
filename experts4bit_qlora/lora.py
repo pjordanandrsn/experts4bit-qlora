@@ -487,6 +487,47 @@ class LoRALinear(nn.Module):
         return self.base(x) + delta.to(x.dtype)
 
 
+def quantize_attention_projections_4bit(model) -> int:
+    """Store the FROZEN attention q/k/v/o projections in bnb NF4 (opt-in,
+    ``TRAIN_ATTN_4BIT=1``). Run BEFORE :func:`add_attention_lora`: bnb's
+    ``Linear4bit`` is an ``nn.Linear`` subclass, so the structural detector
+    still matches and ``LoRALinear`` wraps the 4-bit base unchanged.
+
+    Why this is safe where serving-side NF4 attention is not: training's
+    forward runs at M = seq x batch (hundreds of rows), the regime where
+    dequant-then-mm WINS the crossover curve; serving decode is M = 1,
+    where it measured 3.4 ms/step SLOWER (AQ1). Measured on the audit
+    recipe (Qwen3-30B-A3B, 321,257,472 trainable, RTX 5090): peak
+    24.37 -> 23.03 GB at 1.013x step cost, eval-after within the audit
+    arms' own spread (receipts: audit-followon VRAMCENSUS). Embeddings
+    and lm_head deliberately stay bf16 — they sit in the loss path even
+    frozen, and NF4 there measured +0.40 ppl.
+    """
+    import bitsandbytes as bnb
+
+    projs = ("q_proj", "k_proj", "v_proj", "o_proj")
+    n = 0
+    for mod in model.modules():
+        if all(type(getattr(mod, p, None)) is nn.Linear for p in projs):
+            for name in projs:
+                lin = getattr(mod, name)
+                if lin.bias is not None:
+                    raise SystemExit(
+                        f"TRAIN_ATTN_4BIT: {name} carries a bias; this "
+                        f"path stores weight-only NF4 -- refusing rather "
+                        f"than silently dropping the bias")
+                dev = lin.weight.device
+                q = bnb.nn.Linear4bit(
+                    lin.in_features, lin.out_features, bias=False,
+                    compute_dtype=torch.bfloat16, quant_type="nf4")
+                q.weight = bnb.nn.Params4bit(
+                    lin.weight.data.to("cpu", torch.bfloat16).contiguous(),
+                    requires_grad=False, quant_type="nf4")
+                setattr(mod, name, q.to(dev))   # quantises on transfer
+                n += 1
+    return n
+
+
 def add_attention_lora(model, r: int, alpha: int, dtype: torch.dtype) -> int:
     """Wrap each attention q/k/v/o projection with a trainable LoRA adapter (base stays frozen).
 
