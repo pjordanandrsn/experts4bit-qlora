@@ -65,6 +65,17 @@ def enable_serve_experts_int4(model, source_dir: str) -> int:
     if not todo:
         raise RuntimeError("enable_serve_experts_int4 found no hot expert "
                            "state -- refusing a vacuous enable")
+    # The int4 stores are consumed ONLY by the all-resident collapsed
+    # forward (_forward_collapsed); the tiered forwards keep reading the
+    # NF4 stacks this enable frees (Bugbot, e4b#301, High). Refuse any
+    # placement that could route around the collapsed path.
+    not_hot = [li for li, w in todo if not w._all_hot()]
+    if not_hot:
+        raise RuntimeError(
+            "enable_serve_experts_int4 requires every layer all-VRAM "
+            f"(collapsed path); layers {not_hot[:6]} are tiered. This "
+            "lane is the single-stream all-resident serve config -- use "
+            "placement-override all-vram, or keep the NF4 engine.")
     keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
     n_layers = 0
     for li, w in todo:

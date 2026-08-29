@@ -179,6 +179,13 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 return out
     else:
         def _mm(xr, pk, am):
+            if pk.numel() == 0:
+                raise RuntimeError(
+                    "expert stacks are freed (int4 serve lane active) but "
+                    "this forward carries no int4_stores -- a tiered/"
+                    "baseline path reached _fused_over_stack after "
+                    "enable_serve_experts_int4. That enable is collapsed-"
+                    "path-only; re-enable with all-VRAM placement.")
             return gemm_4bit_grouped(xr, pk, am, sizes, eids)
     gu = _mm(x_sorted, gu_p, gu_a)
     if gptoss is not None:
