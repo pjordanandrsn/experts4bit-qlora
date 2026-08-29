@@ -111,3 +111,33 @@ with held-out eval parity.* That survives a rerun. `13.47x` does not.
    -- their docs saying BitsandBytes cannot are stale. Measured same-box at
    identical 321,257,472 trainable params: **grouped 3.7 s/step vs Unsloth
    4.3328**, so we lead by 1.17x, at 24.37 GB against their 21.55 GB.
+
+
+## Fit addendum (2026-08-29): `TRAIN_ATTN_4BIT` closes half the VRAM gap at 1.3% cost
+
+Appended, not edited, same discipline as above. The 21.55-vs-24.37 GB caveat
+now has a shipped answer (PR #299): store the FROZEN attention projections in
+bnb NF4 before the LoRA wrap — Unsloth's own `load_in_4bit` trick, applied
+surgically. Measured on the audit recipe, base arm reproducing this
+document's numbers exactly (receipts in
+[receipts-attn4bit/](receipts-attn4bit/), 2×2 interleaved rounds):
+
+| arm | load GB | peak GB | s/step | held-out eval |
+|---|---|---|---|---|
+| grouped (as above) | 20.03 | 24.37 | 3.850 | 1.0099/1.0101 |
+| grouped + `TRAIN_ATTN_4BIT=1` | **18.69** | **23.03** | 3.900 (**1.013×**) | 1.0142/1.0152 |
+
+**Fit gap to Unsloth: 2.82 → 1.48 GB, with the 1.111× speed lead kept.**
+
+Why training tolerates what serving does not: the forward runs at
+M = seq × batch (hundreds of rows per expert group), the regime where
+dequant-then-matmul wins the fused/dequant crossover; serving decode is
+M = 1, where the same quantisation measured 3.4 ms/step *slower*. One
+curve, two regimes, both verdicts predicted before measurement
+(grouped-nf4-gemm `bench/sm120-census/`).
+
+The remaining 1.48 GB is embeddings + lm_head bf16 plus arena layout —
+deliberately not taken: both sit in the loss path even when frozen, and
+NF4 lm_head measured **+0.40 ppl** over an 8,192-token teacher-forced
+window. Closing it would trade training quality for fit; that is a
+different decision than a free win, so the flag stops here.
