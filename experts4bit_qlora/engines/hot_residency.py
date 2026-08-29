@@ -179,7 +179,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 return out
     else:
         def _mm(xr, pk, am):
-            if pk.numel() == 0:
+            if pk is not None and pk.numel() == 0:
                 raise RuntimeError(
                     "expert stacks are freed (int4 serve lane active) but "
                     "this forward carries no int4_stores -- a tiered/"
