@@ -20,6 +20,7 @@ import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 pytest.importorskip("nf4_grouped")
+pytest.importorskip("int4_pack_ref")   # gnf4 builds predating the int4 lane
 
 from int4_pack_ref import dequant_int4_ref, pack_int4_b32  # noqa: E402
 
