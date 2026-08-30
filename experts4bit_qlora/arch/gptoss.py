@@ -33,6 +33,13 @@ import torch.nn.functional as F
 
 from .._vendor.experts import Experts4bit, ExpertsNbit
 
+#: gpt-oss epilogue scalars. The released config ships neither (only
+#: ``swiglu_limit``, equal to LIMIT), so these ARE the model's values --
+#: kept as module constants so the direct and arena load paths cannot
+#: drift apart on the arithmetic.
+GPTOSS_ALPHA = 1.702
+GPTOSS_LIMIT = 7.0
+
 
 class _GptOssForwardMixin:
     """GPT-OSS expert forward (biases + clamped GLU) + the load-time builder.
@@ -51,8 +58,8 @@ class _GptOssForwardMixin:
         down_dense: torch.Tensor,      # [E, inter, hidden]  (input-major)
         down_bias: torch.Tensor,       # [E, hidden]
         *,
-        alpha: float = 1.702,
-        limit: float = 7.0,
+        alpha: float = GPTOSS_ALPHA,
+        limit: float = GPTOSS_LIMIT,
         quant_type: str = "nf4",
         compute_dtype: torch.dtype = torch.bfloat16,
     ) -> "_GptOssForwardMixin":
