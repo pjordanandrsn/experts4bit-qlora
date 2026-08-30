@@ -140,8 +140,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # Measured at B=16 decode: this plus gnf4's tile-build memo took
         # to_device_i32 traffic /4 and the step 1.206x, tokens identical.
         eids = uniq
-    if device_grouping:
+    if device_grouping and int4_stores is None:
         def _mm(xr, pk, am):
+            if pk is not None and pk.numel() == 0:
+                # freed int4-lane stacks reaching the NF4 captured path
+                # produce a SILENT [R, 0] output (E reads as 0), which
+                # detonates far away as a size-0 view -- raise here like
+                # the host-grouped branch always has
+                raise RuntimeError(
+                    "expert stacks are freed (int4 serve lane active) "
+                    "but the NF4 captured path was selected -- "
+                    "int4_stores did not reach _fused_over_stack")
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
     elif int4_stores is not None:
