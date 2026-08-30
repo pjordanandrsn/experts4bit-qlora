@@ -143,7 +143,25 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # from the int4 bytes. Identity dispatch: _mm is called with the
         # (possibly empty) NF4 stacks it replaces, so `pk is gu_p` names
         # the slot.
-        if singleton_groups:
+        if device_grouping:
+            # batched decode (bv3): the grouped int4-b32 GEMM against
+            # the SAME prebuilt device tiles the NF4 captured path uses
+            # -- measured 1.95x (gate_up) / 4.50x (down) over the NF4
+            # grouped kernel on the B=16 census cells, graph metric.
+            # Rows arrive expert-major (the tile builder's order); the
+            # activation quantise runs per call because gu and dn see
+            # different inputs (x vs the epilogue output). Both the
+            # quantise and the GEMM allocate only through the graph
+            # private pool -- the b1d-certified capture pattern.
+            from int4_b32 import gemm_int4_b32_grouped_captured, quant_x_rows
+
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                xq, xs = quant_x_rows(xr)
+                return gemm_int4_b32_grouped_captured(
+                    xq, xs, st["packed"], st["scales"],
+                    t_row0, t_rows, t_grp)
+        elif singleton_groups:
             # decode: the int4-b32 grouped GEMV -- measured 2.7-3.3x
             # over the NF4 path at the census cells, grid +0.007 ppl
             from int4_b32 import gemv_int4_b32, quant_x_rows
