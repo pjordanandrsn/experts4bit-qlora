@@ -9,6 +9,8 @@ quantize on the test device; if it can't, the affected test skips cleanly.
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -30,10 +32,6 @@ def _reset_resident_slot():
     yield
     _ExpertOffload._resident = None
 
-# bnb signals a missing/broken 4-bit backend in several ways depending on the build; catch them all
-# so a CPU-only host without a bnb 4-bit path SKIPS cleanly (as the module docstring promises)
-# rather than erroring.
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 
 
 def _build_experts_lora(seed=0, quant_type="nf4"):
@@ -41,10 +39,8 @@ def _build_experts_lora(seed=0, quant_type="nf4"):
     gate_up = torch.randn(N_EXP, 2 * INTER, HIDDEN, dtype=DTYPE, device=DEVICE)
     down = torch.randn(N_EXP, HIDDEN, INTER, dtype=DTYPE, device=DEVICE)
     cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit  # mirror the loader's dispatch
-    try:
-        base = cls.from_float(gate_up, down, quant_type=quant_type, compute_dtype=DTYPE)
-    except _QUANTIZE_UNAVAILABLE as e:  # bnb can't quantize this scheme on this device
-        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE, quant_type)
+    base = cls.from_float(gate_up, down, quant_type=quant_type, compute_dtype=DTYPE)
     return ExpertsLoRA(base, r=8, alpha=16, dtype=DTYPE).to(DEVICE)
 
 

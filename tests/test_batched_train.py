@@ -13,6 +13,8 @@ silently computed something else would still "work".
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -24,7 +26,6 @@ from experts4bit_qlora import (  # noqa: E402
 )
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 E, HID, INTER, TOP_K = 8, 128, 192, 2
 
 
@@ -32,11 +33,9 @@ def _build(seed=0, quant_type="nf4"):
     torch.manual_seed(seed)
     gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
     down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type=quant_type,
-                                      compute_dtype=torch.bfloat16)
-    except _QUANTIZE_UNAVAILABLE as exc:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {exc}")
+    require_quantize(DEVICE, quant_type)
+    base = Experts4bit.from_float(gate_up, down, quant_type=quant_type,
+                                  compute_dtype=torch.bfloat16)
     mod = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(DEVICE)
     with torch.no_grad():
         for p in (mod.gate_up_lora_B, mod.down_lora_B):

@@ -22,13 +22,14 @@ Behaviors covered:
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, enable_expert_offload  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 E, HID, INTER, TOP_K, N_TOK = 4, 128, 192, 2, 12
 
 
@@ -36,10 +37,8 @@ def _build(compute_dtype, adapter_dtype, seed=0):
     torch.manual_seed(seed)
     gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
     down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=compute_dtype)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=compute_dtype)
     return ExpertsLoRA(base, r=8, alpha=16, dtype=adapter_dtype).to(DEVICE)
 
 
@@ -146,10 +145,8 @@ def test_rank_zero_is_rejected_with_an_actionable_error():
     torch.manual_seed(0)
     gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
     down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4",
-                                      compute_dtype=torch.float32)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4",
+                                  compute_dtype=torch.float32)
     with pytest.raises(ValueError, match="r >= 1"):
         ExpertsLoRA(base, r=0, alpha=16, dtype=torch.float32)

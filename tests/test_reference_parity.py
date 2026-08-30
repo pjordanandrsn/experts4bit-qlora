@@ -28,7 +28,7 @@ Level 2 — ``test_loaded_model_matches_reference_forward`` (transformers, per a
 
 import pytest
 
-from loader_guard import QUANTIZE_UNAVAILABLE, load_or_skip
+from quant_guard import load_or_skip, require_quantize
 
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
@@ -37,10 +37,10 @@ import torch.nn.functional as F  # noqa: E402
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E402
 
-# The bnb-unavailable exception set is deliberately broad, and the carve-out that keeps it from also
-# swallowing the loader's OWN refusals, both live in tests/loader_guard.py (shared with
-# test_loader_architectures.py). Level 1 below quantizes directly, so it catches the set itself;
-# Level 2 goes through the loader and therefore MUST use the carve-out.
+# Both guards live in tests/quant_guard.py. Level 1 quantizes an in-memory stack, so it asks
+# `require_quantize` up front and then calls `from_float` UNGUARDED — anything it raises is a real
+# bug, since its own validation refusals are ValueErrors. Level 2 goes through the loader, whose
+# refusals share the bnb-unavailable exception types, so it needs the message carve-out instead.
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Per-scheme absolute ceilings, calibrated 2026-07-04 against the worst error observed across CPU
@@ -117,12 +117,10 @@ def test_primitive_forward_matches_float_reference(has_gate, quant_type, blocksi
     idx = torch.randint(0, E, (N_TOK, TOP_K), device=device)
     wts = torch.rand(N_TOK, TOP_K, device=device)
 
-    try:
-        base = _nbit_cls(quant_type).from_float(
-            gate_up, down, has_gate=has_gate, quant_type=quant_type, blocksize=blocksize, compute_dtype=torch.float32
-        )
-    except QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes {quant_type}/bs{blocksize} quantize unavailable on {device}: {e}")
+    require_quantize(device, quant_type, blocksize)
+    base = _nbit_cls(quant_type).from_float(
+        gate_up, down, has_gate=has_gate, quant_type=quant_type, blocksize=blocksize, compute_dtype=torch.float32
+    )
     lora = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(device)
 
     got = lora(hs, idx, wts)
@@ -169,10 +167,8 @@ def test_primitive_square_dims_parity(quant_type):
     hs = torch.randn(N_TOK, HID, device=DEVICE)
     idx = torch.randint(0, E, (N_TOK, TOP_K), device=DEVICE)
     wts = torch.rand(N_TOK, TOP_K, device=DEVICE)
-    try:
-        base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
-    except QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE, quant_type)
+    base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
 
     with torch.no_grad():
         got = base(hs, idx, wts)
@@ -197,10 +193,8 @@ def test_primitive_many_experts_sparse_hit(quant_type):
     hs = torch.randn(N_TOK, HID, device=DEVICE)
     idx = torch.randint(0, E, (N_TOK, TOP_K), device=DEVICE)
     wts = torch.rand(N_TOK, TOP_K, device=DEVICE)
-    try:
-        base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
-    except QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE, quant_type)
+    base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
 
     with torch.no_grad():
         got = base(hs, idx, wts)
@@ -319,7 +313,7 @@ def test_loaded_model_matches_reference_forward(build, per_expert, tmp_path):
                 pytest.skip(f"transformers reference (the oracle) cannot run on this device: {e}")
             raise
 
-    # Through the guard, NOT a bare `except QUANTIZE_UNAVAILABLE: skip`: this arm exists to prove the
+    # Through the carve-out, NOT a bare `except (RuntimeError, ...): skip`: this arm exists to prove the
     # loader mapped THIS architecture's on-disk expert layout correctly, so a loader refusal has to
     # fail it. A blanket skip here reported a loader that quantized no experts at all as green.
     model, _ = load_or_skip(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)

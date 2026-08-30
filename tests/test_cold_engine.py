@@ -17,6 +17,8 @@ fused kernel), so CI exercises the engine's actual math rather than skipping:
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -32,7 +34,6 @@ from experts4bit_qlora.engines.cold_engine import (  # noqa: E402
     _dequant_torch,
 )
 
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 
 E, HID, INTER, T, K = 8, 128, 256, 5, 2
 
@@ -46,10 +47,8 @@ def _mk(compute_dtype=torch.float32, seed=0):
     torch.manual_seed(seed)
     gate_up = torch.randn(E, 2 * INTER, HID)
     down = torch.randn(E, HID, INTER)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=compute_dtype)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bnb 4-bit quantize unavailable on this host: {e}")
+    require_quantize("cpu")
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=compute_dtype)
     hs = torch.randn(T, HID)
     idx = torch.stack([torch.randperm(E)[:K] for _ in range(T)])
     wts = torch.softmax(torch.randn(T, K), dim=-1)
@@ -105,12 +104,10 @@ def test_gptoss_epilogue_all_cold():
     gu_bias = torch.randn(E, 2 * inter)
     dn_dense = torch.randn(E, inter, HID)
     dn_bias = torch.randn(E, HID)
-    try:
-        mod = gptoss_mod.GptOssExperts4bit.from_gptoss(
-            gu_dense, gu_bias, dn_dense, dn_bias, quant_type="nf4",
-            compute_dtype=torch.float32)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bnb 4-bit quantize unavailable on this host: {e}")
+    require_quantize("cpu")
+    mod = gptoss_mod.GptOssExperts4bit.from_gptoss(
+        gu_dense, gu_bias, dn_dense, dn_bias, quant_type="nf4",
+        compute_dtype=torch.float32)
     hs = torch.randn(T, HID)
     idx = torch.stack([torch.randperm(E)[:K] for _ in range(T)])
     wts = torch.softmax(torch.randn(T, K), dim=-1)

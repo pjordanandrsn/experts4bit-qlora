@@ -33,13 +33,14 @@ harness that has never rejected anything is not evidence.
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 E, HID, INTER, TOP_K = 8, 128, 192, 2
 
 # bf16 compute with fp32 adapters (the shipped training configuration). The fused path
@@ -88,11 +89,9 @@ def _build(seed=0, scaling_bug=1.0):
     torch.manual_seed(seed)
     gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
     down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4",
-                                      compute_dtype=torch.bfloat16)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4",
+                                  compute_dtype=torch.bfloat16)
     mod = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(DEVICE)
     # B is zero-initialised, which makes the delta identically zero — the adapter
     # could be dropped entirely and every assertion here would still pass. Give it
@@ -257,11 +256,9 @@ def test_whole_stack_dequant_equals_per_expert_loop(shape, blocksize, quant_type
     torch.manual_seed(0)
     gate_up = (torch.randn(n_exp, 2 * inter, hidden) * 0.02).to(DEVICE)
     down = (torch.randn(n_exp, hidden, inter) * 0.02).to(DEVICE)
-    try:
-        mod = Experts4bit.from_float(gate_up, down, quant_type=quant_type,
-                                     compute_dtype=torch.bfloat16, blocksize=blocksize).to(DEVICE)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE, quant_type, blocksize)
+    mod = Experts4bit.from_float(gate_up, down, quant_type=quant_type,
+                                 compute_dtype=torch.bfloat16, blocksize=blocksize).to(DEVICE)
 
     for packed, absmax, pshape in ((mod.gate_up_proj, mod.gate_up_absmax, mod._gate_up_shape),
                                    (mod.down_proj, mod.down_absmax, mod._down_shape)):

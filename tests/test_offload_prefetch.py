@@ -9,6 +9,8 @@ whole feature is a CUDA-stream construct); the linking/validation surface is CPU
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -18,7 +20,6 @@ from experts4bit_qlora.engines.offload import _ExpertOffload  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires a CUDA GPU")
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 N_LAYERS, E, HID, INTER, TOP_K, N_TOK = 3, 4, 64, 64, 2, 1
 
 
@@ -43,10 +44,8 @@ class _Chain(torch.nn.Module):
         for _ in range(N_LAYERS):
             gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
             down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
-            try:
-                base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=torch.float32)
-            except _QUANTIZE_UNAVAILABLE as e:
-                pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+            require_quantize(DEVICE)
+            base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=torch.float32)
             layers.append(ExpertsLoRA(base, r=4, alpha=8, dtype=torch.float32).to(DEVICE))
         self.layers = torch.nn.ModuleList(layers)
         # Inference contract: prefetch (and the decode routes) require eval mode; grad-enabled

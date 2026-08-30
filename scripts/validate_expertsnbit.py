@@ -35,6 +35,33 @@ MODES = ("nf4", "fp4", "int8", "fp8", "bf16", "fp16")
 PER_MODE_CHECKS = ("forward_parity", "state_roundtrip", "lora_step", "decode_sanity", "offload_identity")
 # bnb signals a missing/broken quantize backend in several ways (same tuple as the test suite).
 _QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
+
+
+def _quantize_unavailable_reason(mode: str, blocksize: int = 64):
+    """None if bnb can quantize `mode` here, else why not — asked of BNB, not of `from_float`.
+
+    Probing through `from_float` would let the bug this script exists to find break the probe:
+    a `from_float` that raised for every input would report as "backend unavailable", and every
+    check would print SKIP against a dead primitive. Same reasoning, and the same two-sided
+    mutation evidence, as tests/quant_guard.py.
+    """
+    import bitsandbytes.functional as bnbF
+
+    from experts4bit_qlora._vendor.experts import _SCHEME_BITS
+
+    bits = _SCHEME_BITS[mode]
+    if bits == 16:
+        return None  # passthrough storage: no codebook, no bnb call, nothing to be unavailable
+    w = ((torch.arange(1, blocksize * blocksize + 1, dtype=torch.float32) * 1e-3)
+         .reshape(blocksize, blocksize).to(DEVICE)).contiguous()
+    try:
+        if bits == 4:
+            bnbF.quantize_4bit(w, blocksize=blocksize, compress_statistics=False, quant_type=mode)
+        else:
+            bnbF.quantize_blockwise(w, blocksize=blocksize)
+    except _QUANTIZE_UNAVAILABLE as e:
+        return f"{type(e).__name__}: {e}"
+    return None
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 E, HID, INTER, TOP_K, N_TOK = 6, 128, 256, 2, 40
 DECODE_STEPS = 64
@@ -117,13 +144,20 @@ def _check_mode(mode: str) -> None:
     if DEVICE == "cuda":
         torch.cuda.reset_peak_memory_stats()
 
+    reason = _quantize_unavailable_reason(mode)
+    if reason is not None:
+        _line("SKIP", mode, "build", f"bitsandbytes {mode} quantize unavailable on {DEVICE}: {reason}")
+        for check in PER_MODE_CHECKS:
+            _line("SKIP", mode, check, "build skipped")
+        return
+
     t0 = time.perf_counter()
     try:
         base = _cls(mode).from_float(gate_up, down, quant_type=mode, compute_dtype=torch.float32)
-    except _QUANTIZE_UNAVAILABLE as e:
-        _line("SKIP", mode, "build", f"bitsandbytes {mode} quantize unavailable on {DEVICE}: {type(e).__name__}: {e}")
+    except Exception as e:  # the backend works, so this is OUR bug: report it, do not skip past it
+        _line("FAIL", mode, "build", f"{type(e).__name__}: {e}")
         for check in PER_MODE_CHECKS:
-            _line("SKIP", mode, check, "build skipped")
+            _line("SKIP", mode, check, "build failed")
         return
     _line("PASS", mode, "build", f"{time.perf_counter() - t0:.2f}s")
 
@@ -211,11 +245,16 @@ def _check_mode(mode: str) -> None:
 
 def _check_metadata_guard() -> None:
     """nf4 and fp4 pack to byte-identical shapes; the state_dict metadata must catch the swap."""
+    for scheme in ("nf4", "fp4"):
+        reason = _quantize_unavailable_reason(scheme)
+        if reason is not None:
+            _line("SKIP", "-", "metadata_guard", f"bitsandbytes {scheme} quantize unavailable on {DEVICE}: {reason}")
+            return
     try:
         src = _cls("nf4").from_float(*_weights(seed=0), quant_type="nf4", compute_dtype=torch.float32)
         dst = _cls("fp4").from_float(*_weights(seed=7), quant_type="fp4", compute_dtype=torch.float32)
-    except _QUANTIZE_UNAVAILABLE as e:
-        _line("SKIP", "-", "metadata_guard", f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {type(e).__name__}")
+    except Exception as e:  # backend is fine, so a raise here is the thing this script hunts
+        _line("FAIL", "-", "metadata_guard", f"build raised {type(e).__name__}: {e}")
         return
     try:
         dst.load_state_dict(src.state_dict(), strict=True)

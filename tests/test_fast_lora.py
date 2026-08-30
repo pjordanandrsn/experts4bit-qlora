@@ -24,6 +24,8 @@ What is asserted here:
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -36,7 +38,6 @@ from experts4bit_qlora import (  # noqa: E402
 )
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 E, HID, INTER, TOP_K = 8, 128, 192, 2
 
 pytestmark = pytest.mark.skipif(
@@ -49,11 +50,9 @@ def _build(compute_dtype=torch.bfloat16, adapter_dtype=torch.float32, seed=0):
     torch.manual_seed(seed)
     gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
     down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4",
-                                      compute_dtype=compute_dtype)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable: {e}")
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4",
+                                  compute_dtype=compute_dtype)
     mod = ExpertsLoRA(base, r=8, alpha=16, dtype=adapter_dtype).to(DEVICE)
     # A zero-init B makes the delta vanish and would pass even if the adapter
     # were dropped entirely; give it real values so the LoRA term is load-bearing.
