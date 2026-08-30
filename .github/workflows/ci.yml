@@ -21,7 +21,27 @@ jobs:
           # Adopt newer ruff deliberately, with its findings, as its own change.
           python -m pip install --upgrade pip "ruff==0.15.22"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # grouped-nf4-gemm comes from a pinned git SHA (a main-reachable
+          # squash), not the latest release: the int4 serve-lane modules
+          # (int4_b32 / int4_pack_ref) entered its packaging after v0.17.0
+          # was cut, and all three tests/test_int4_*.py suites importorskip
+          # on them — against the release they SKIP wholesale and CI reports
+          # green coverage that never executed (surfaced on #310, where one
+          # unguarded import failed where the guarded suites just skipped).
+          # Installed BEFORE .[test] so the extra's version floor sees it
+          # already satisfied; the floor itself stays a plain range because
+          # the published wheel's metadata cannot carry a direct URL. Pin a
+          # SHA, never a branch name — a deleted branch has broken this
+          # install form before. Drop this line for a raised floor once a
+          # release ships the int4 modules.
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@40dc6ed1bbd4d7523166f2e3e70fa7465f68e6c4"
           pip install -e ".[test]"
+      - name: int4 modules present (tripwire)
+        # The int4 suites guard with importorskip, so a gnf4 build without
+        # these modules turns them into green no-ops. Import unguarded here:
+        # if the pin above regresses to a pre-int4 build — or a raised floor
+        # lets a pre-int4 wheel clobber it — this step fails loudly instead.
+        run: python -c "import int4_b32, int4_pack_ref, nf4_grouped"
       - name: Lint
         run: ruff check experts4bit_qlora tests scripts tools
       - name: Test
