@@ -2,7 +2,10 @@
 """Serving attention on the int4-b32 grid: swap structure, refusal
 paths, and (CUDA) forward parity of both branches against the dequant
 reference. Skips wholesale until the grouped-nf4-gemm cut carrying
-``int4_b32`` is installed."""
+``int4_b32`` is installed; the enable-path arms also skip off-linux,
+where that package does not ship triton."""
+import importlib.util
+
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -14,6 +17,16 @@ from torch import nn  # noqa: E402
 from experts4bit_qlora.engines.int4_attn import (  # noqa: E402
     Int4Linear,
     enable_serve_attn_int4,
+)
+
+# The enable-path arms call enable_serve_attn_int4, which imports
+# ``int4_b32`` -- and its module scope needs triton, declared linux-only
+# by grouped-nf4-gemm. Gate on triton's absence, NOT importorskip on
+# int4_b32: where triton exists, a broken kernel module must FAIL these
+# arms, never skip them.
+needs_triton = pytest.mark.skipif(
+    importlib.util.find_spec("triton") is None,
+    reason="enable path imports int4_b32, which needs triton (linux-only)",
 )
 
 
@@ -32,6 +45,7 @@ class _Model(nn.Module):
         self.lm_head = nn.Linear(64, 512, bias=False)
 
 
+@needs_triton
 def test_swap_counts_and_lm_head_untouched():
     m = _Model(n=3)
     n = enable_serve_attn_int4(m)
@@ -43,11 +57,13 @@ def test_swap_counts_and_lm_head_untouched():
     assert type(m.lm_head) is nn.Linear      # NEVER on this grid (+0.18 ppl)
 
 
+@needs_triton
 def test_bias_refused_loudly():
     with pytest.raises(RuntimeError, match="bias"):
         enable_serve_attn_int4(_Model(bias=True))
 
 
+@needs_triton
 def test_vacuous_enable_refused():
     class Bare(nn.Module):
         def __init__(self):
