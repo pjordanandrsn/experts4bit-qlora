@@ -28,6 +28,8 @@ Level 2 — ``test_loaded_model_matches_reference_forward`` (transformers, per a
 
 import pytest
 
+from loader_guard import QUANTIZE_UNAVAILABLE, load_or_skip
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -35,9 +37,10 @@ import torch.nn.functional as F  # noqa: E402
 
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, ExpertsNbit  # noqa: E402
 
-# bnb signals a missing/broken 4-bit backend in several ways depending on the build; catch them all so
-# a host without a working bnb 4-bit path SKIPS cleanly rather than erroring (matches test_offload.py).
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
+# The bnb-unavailable exception set is deliberately broad, and the carve-out that keeps it from also
+# swallowing the loader's OWN refusals, both live in tests/loader_guard.py (shared with
+# test_loader_architectures.py). Level 1 below quantizes directly, so it catches the set itself;
+# Level 2 goes through the loader and therefore MUST use the carve-out.
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Per-scheme absolute ceilings, calibrated 2026-07-04 against the worst error observed across CPU
@@ -118,7 +121,7 @@ def test_primitive_forward_matches_float_reference(has_gate, quant_type, blocksi
         base = _nbit_cls(quant_type).from_float(
             gate_up, down, has_gate=has_gate, quant_type=quant_type, blocksize=blocksize, compute_dtype=torch.float32
         )
-    except _QUANTIZE_UNAVAILABLE as e:
+    except QUANTIZE_UNAVAILABLE as e:
         pytest.skip(f"bitsandbytes {quant_type}/bs{blocksize} quantize unavailable on {device}: {e}")
     lora = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(device)
 
@@ -168,7 +171,7 @@ def test_primitive_square_dims_parity(quant_type):
     wts = torch.rand(N_TOK, TOP_K, device=DEVICE)
     try:
         base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
-    except _QUANTIZE_UNAVAILABLE as e:
+    except QUANTIZE_UNAVAILABLE as e:
         pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
 
     with torch.no_grad():
@@ -196,7 +199,7 @@ def test_primitive_many_experts_sparse_hit(quant_type):
     wts = torch.rand(N_TOK, TOP_K, device=DEVICE)
     try:
         base = _nbit_cls(quant_type).from_float(gate_up, down, quant_type=quant_type, compute_dtype=torch.float32)
-    except _QUANTIZE_UNAVAILABLE as e:
+    except QUANTIZE_UNAVAILABLE as e:
         pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
 
     with torch.no_grad():
@@ -298,8 +301,6 @@ def test_loaded_model_matches_reference_forward(build, per_expert, tmp_path):
     """The 4-bit-loaded model must compute the same function as the bf16 reference (within NF4 error),
     and must be *dramatically* closer to it than a rolled-expert corruption — which is only true if the
     loader mapped each model's on-disk expert layout into experts4bit's [E, out, in] convention right."""
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
-
     torch.manual_seed(0)
     ref_model = build().to(DEVICE, dtype=torch.bfloat16).eval()
     ref_model.config.use_cache = False
@@ -318,10 +319,10 @@ def test_loaded_model_matches_reference_forward(build, per_expert, tmp_path):
                 pytest.skip(f"transformers reference (the oracle) cannot run on this device: {e}")
             raise
 
-    try:
-        model, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit unavailable: {e}")
+    # Through the guard, NOT a bare `except QUANTIZE_UNAVAILABLE: skip`: this arm exists to prove the
+    # loader mapped THIS architecture's on-disk expert layout correctly, so a loader refusal has to
+    # fail it. A blanket skip here reported a loader that quantized no experts at all as green.
+    model, _ = load_or_skip(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
     model.config.use_cache = False
     model.eval()
     with torch.no_grad():

@@ -15,6 +15,8 @@ import os
 
 import pytest
 
+from loader_guard import load_or_skip
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -27,38 +29,18 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # The same hazard exists for any checkpointed data-dependent-routing MoE (stock transformers
 # included) — this is a property of recomputing routing, not of this package's quantization.
 DTYPE = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-# bnb signals a missing/broken 4-bit backend in several ways depending on the build; catch them all
-# so a host without a working bnb 4-bit path SKIPS cleanly (matches the other test modules).
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
-
-#: Substrings that mark a LOADER REFUSAL rather than a missing quantization backend.
-#: `_QUANTIZE_UNAVAILABLE` is deliberately broad — it has to be, because bnb signals a
-#: dead 4-bit backend several different ways — but it covers RuntimeError and
-#: NotImplementedError, which are also how this loader declines a checkpoint it could not
-#: map, a model_type it does not admit, and an untied head it could not find. Those
-#: refusals ARE the regressions the arms below exist for, so catching them as "no backend"
-#: turns the whole module into an instrument that cannot fail. Measured twice: a mutant that
-#: re-merged the checkpoint and module prefixes turned every mixtral arm green as a *skip*,
-#: and a mutant that made the fused-on-disk branch never match did the same to twelve
-#: pre-existing arms — 12 skipped, 0 failed, against a loader that quantized no experts.
-_LOADER_REFUSALS = ("no fused expert stacks", "Unsupported model_type", "tie_word_embeddings=False")
+# The "is this bnb missing, or is this the LOADER refusing?" distinction lives in
+# tests/loader_guard.py, shared with test_reference_parity.py — see that module's docstring for the
+# two mutants that proved a broad `except` turns this whole file into an instrument that cannot fail.
 
 
 def _load_or_skip(path, dtype=DTYPE, *, what="4-bit", **kw):
-    """`load_moe_4bit_streaming`, skipping ONLY for a genuinely absent bnb quantize backend.
+    """`loader_guard.load_or_skip` bound to this module's DEVICE/DTYPE. Every arm loads through here.
 
-    Every arm in this module loads through here. ``dtype`` because several arms pin bf16
-    instead of the module default, and ``what`` because the quant_type arms name the scheme
-    they actually asked for in the skip reason.
-    """
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
-
-    try:
-        return load_moe_4bit_streaming(path, DEVICE, dtype, **kw)
-    except _QUANTIZE_UNAVAILABLE as e:
-        if any(m in str(e) for m in _LOADER_REFUSALS):
-            raise
-        pytest.skip(f"bitsandbytes {what} quantize unavailable on {DEVICE}: {e}")
+    ``dtype`` stays a positional default because several arms pin bf16 instead of the module default,
+    and ``what`` because the quant_type arms name the scheme they actually asked for in the skip
+    reason."""
+    return load_or_skip(path, DEVICE, dtype, what=what, **kw)
 
 
 def _olmoe():
