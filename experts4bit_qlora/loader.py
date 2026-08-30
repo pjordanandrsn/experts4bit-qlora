@@ -29,7 +29,7 @@ from . import Experts4bit, ExpertsNbit, normalize_quant_type
 from .arch.deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
 from .arch.deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
 from .formats.fp8_blocks import convert_to_fp8_blocks
-from .arch.gptoss import GptOssExperts4bit
+from .arch.gptoss import GPTOSS_ALPHA, GPTOSS_LIMIT, GptOssExperts4bit
 from .lora import ExpertsLoRA
 from .formats.mxfp4 import dequantize_mxfp4
 from .engines.offload import enable_expert_offload, enable_inference_prefetch
@@ -542,21 +542,49 @@ def load_moe_4bit_streaming(
             if not keys:
                 continue                                  # dense layer
             bias = sorted(k for k in keys if k.endswith("_bias"))
-            if bias:
+            gptoss_arena = bool(bias) and f"{epfx}gate_up_proj_bias" in weight_map
+            if bias and not gptoss_arena:
                 raise NotImplementedError(
-                    f"layer {i}: arena serving does not yet carry per-expert biases "
-                    f"({bias[0]!r} and {len(bias) - 1} more). gpt-oss keeps its "
-                    "biases resident alongside the packed stacks; an arena path for "
-                    "them is a separate change. Refusing rather than dropping them, "
-                    "which would silently change the epilogue.")
+                    f"layer {i}: arena serving does not carry per-expert biases "
+                    f"in this layout ({bias[0]!r} and {len(bias) - 1} more). "
+                    "Only the gpt-oss spelling (gate_up_proj_bias/"
+                    "down_proj_bias) is handled. Refusing rather than dropping "
+                    "them, which would silently change the epilogue.")
             expert_keys.update(keys)
             n_moe += 1
             from .engines.nvme_experts import build_meta_experts
             v4 = model_type == "deepseek_v4"
+            arena_cls = (GptOssExperts4bit if gptoss_arena
+                         else DeepseekV4Experts4bit if v4 else None)
             experts = build_meta_experts(
                 arena_index, n_exp, has_gate=True, activation=activation,
                 compute_dtype=dtype, quant_type=quant_type,
-                cls=DeepseekV4Experts4bit if v4 else None)
+                cls=arena_cls)
+            if gptoss_arena:
+                # The WEIGHTS stream from the arena; the biases are two small
+                # [E, 2I] / [E, H] stacks that must stay resident, exactly as on
+                # the direct path. Skipping them would leave the gpt-oss epilogue
+                # reading absent buffers -- the failure this branch used to refuse
+                # outright. De-interleave the gate_up bias the SAME way
+                # `from_gptoss` de-interleaves the gate_up ROWS: the arena's baked
+                # stack is already gate-block-then-up-block, so a bias left
+                # interleaved would pair every gate row with an up row's bias and
+                # score a plausible, wrong model.
+                _gub = get(f"{epfx}gate_up_proj_bias").to(dtype)
+                experts.register_buffer(
+                    "gate_up_bias",
+                    torch.cat([_gub[:, 0::2], _gub[:, 1::2]], dim=1).to(device),
+                    persistent=True)
+                experts.register_buffer(
+                    "down_bias",
+                    get(f"{epfx}down_proj_bias").to(dtype).to(device),
+                    persistent=True)
+                # The DIRECT path is the epilogue oracle; take its scalars,
+                # not a config lookup (the released config ships no `alpha`,
+                # and this function's own `alpha` argument is the LoRA one).
+                experts.alpha = GPTOSS_ALPHA
+                experts.limit = float(getattr(lm_config, "swiglu_limit",
+                                              GPTOSS_LIMIT))
             if v4:
                 # The epilogue has to survive the arena path too — see the bare-build
                 # note on the resident branch below.
