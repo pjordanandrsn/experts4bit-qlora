@@ -176,3 +176,25 @@ def test_keep_nf4_env(tmp_path, monkeypatch):
     enable_serve_experts_int4(live, src, model_type="qwen3_moe",
                               plan_model=_PlanTree(names))
     assert st.h_gu_p.numel() != 0
+
+
+def test_meta_twin_prefers_the_live_class():
+    """Composite trees (text decoder under a prefix) must be twinned by
+    rebuilding the live model's own class, not a causal-LM auto class."""
+    from experts4bit_qlora.engines.int4_experts import _meta_twin
+
+    class Composite(torch.nn.Module):
+        def __init__(self, config):
+            super().__init__()
+            self.config = config
+            lang = torch.nn.Module()
+            lang.proj = torch.nn.Linear(4, 4)
+            self.add_module("language_model", lang)
+
+    class _Cfg:
+        model_type = "toy_composite"
+    live = Composite(_Cfg())
+    twin = _meta_twin(live)
+    assert type(twin) is Composite
+    assert "language_model.proj.weight" in twin.state_dict()
+    assert next(twin.parameters()).is_meta

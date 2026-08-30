@@ -71,6 +71,28 @@ def _wrapper_for(model, param_name: str):
     return None
 
 
+def _meta_twin(model):
+    """A plannable twin of the live model on ``meta``.
+
+    The live tree can never validate a plan -- its expert modules are
+    residency wrappers, so the checkpoint's expert keys are unclaimable
+    and the wrapper buffers would be unclaimed. Rebuild the SAME
+    architecture fresh from config instead: constructing the live
+    model's own class keeps composite trees (a vision-language wrapper
+    whose text decoder lives under a prefix) shaped exactly as the
+    checkpoint's keys expect. The causal-LM auto class is only the
+    fallback for objects that cannot be rebuilt from their config.
+    """
+    import torch as _torch
+
+    with _torch.device("meta"):
+        try:
+            return model.__class__(model.config)
+        except Exception:
+            from transformers import AutoModelForCausalLM
+            return AutoModelForCausalLM.from_config(model.config)
+
+
 def enable_serve_experts_int4(model, source_dir: str, *,
                               model_type: str | None = None,
                               plan_model=None) -> int:
@@ -101,15 +123,7 @@ def enable_serve_experts_int4(model, source_dir: str, *,
         raise RuntimeError("enable_serve_experts_int4: model_type unknown; "
                            "pass model_type= explicitly")
     if plan_model is None:
-        # Plan against a META twin of the config, never the live tree:
-        # the serving model's expert modules were replaced by residency
-        # wrappers, so its state_dict neither claims the checkpoint's
-        # expert keys nor stays free of unclaimed wrapper buffers -- the
-        # planner would (rightly) refuse it. The twin is the planner's
-        # documented usage and costs nothing.
-        from transformers import AutoModelForCausalLM
-        with _torch.device("meta"):
-            plan_model = AutoModelForCausalLM.from_config(model.config)
+        plan_model = _meta_twin(model)
     plan = plan_moe_checkpoint(keys, plan_model, mt, skip_extra_layers=True)
     read = make_plan_reader(plan, read_tensor, _torch.float32)
     keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
