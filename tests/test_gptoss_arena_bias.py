@@ -92,3 +92,34 @@ def test_forward_uses_the_deinterleaved_bias(quant):
     assert torch.allclose(mod.gate_up_bias[:, :INTER],
                           torch.full((E, INTER), 5.0))
     assert torch.allclose(mod.gate_up_bias[:, INTER:], torch.zeros(E, INTER))
+
+
+def test_bias_gather_indexes_on_the_bias_device():
+    """Arena serving puts the packed stacks on ``meta`` and keeps the bias
+    stacks resident -- two different tiers in one module. The residency
+    gather must therefore build its indices from the BIASES' device.
+
+    Indices taken from the packed stacks are ``meta``: on CUDA that kills
+    the attach outright (a real tensor indexed by a meta one), and on CPU
+    it silently degrades instead of raising -- which is exactly why this
+    asserts the DEVICE of the index rather than an exception. The full
+    attach needs CUDA, so this pins the contract the fix restored.
+    """
+    packed = torch.empty(E, 4, 2, device="meta")     # arena-served
+    bias = torch.arange(E * 4, dtype=torch.float32).reshape(E, 4)  # resident
+    hot_ids = torch.arange(E)
+
+    assert hot_ids.to(packed.device).is_meta, "packed-derived index is meta"
+    fresh = hot_ids.to(bias.device)
+    assert not fresh.is_meta and fresh.device == bias.device
+    assert torch.equal(bias.index_select(0, fresh), bias)
+
+
+def test_residency_source_uses_the_bias_device():
+    import inspect
+
+    from experts4bit_qlora.engines import hot_residency
+    src = inspect.getsource(hot_residency)
+    assert "bhi = hot_ids.to(gub.device)" in src
+    assert "gub.index_select(0, bhi)" in src
+    assert "gub.index_select(0, hi)" not in src
