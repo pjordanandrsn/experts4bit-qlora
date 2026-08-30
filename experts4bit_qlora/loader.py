@@ -12,10 +12,21 @@ sits under the MLP for OLMoE/Qwen3, directly on the layer (beside a parallel den
 Gemma-4, and under a ``block_sparse_moe`` block for GraniteMoe — whose Hub checkpoints use legacy
 tensor spellings (``input_linear``/``output_linear``, see :data:`LEGACY_KEY_RENAMES`). Requires
 transformers>=5.0.
+
+**The checkpoint prefix is not the module prefix.** For most families they coincide, and this
+loader used to build one string and use it for both. The mixtral family (mixtral, phimoe and the
+minimax aliases) is where that breaks: released checkpoints store experts under
+``model.layers.{L}.block_sparse_moe.experts.{e}.{w1,w3,w2}.weight`` while transformers >= 5 builds
+them at ``model.layers.{L}.mlp.experts``. A module-side prefix therefore matched no checkpoint key,
+every MoE layer looked dense, and the load ended in the zero-expert-stacks guard. The two sides are
+now sourced separately from the convention — ``expert_re`` parses the checkpoint spelling,
+``fused_prefix`` names the module placement — so admitting a family is a convention question, not a
+new read path. See :mod:`experts4bit_qlora.arch.moe_conventions`.
 """
 
 import json
 import os
+import re
 import struct
 
 from accelerate import init_empty_weights
@@ -58,7 +69,10 @@ SUPPORTED_ARCHITECTURES = {
 # nests the language model as `model.language_model.`; Kimi K3 reverses the order
 # (`language_model.model.`), so the prefix cannot be derived from the presence of
 # `text_config` alone — it is per-family.
-MULTIMODAL_CKPT_PREFIX = {"kimi_k3": "language_model.model."}
+# minimax_m3_vl reverses the order the same way K3 does; adjudicated against the
+# released MiniMax-M3 index in moe_conventions.MIXTRAL, not guessed from the default.
+MULTIMODAL_CKPT_PREFIX = {"kimi_k3": "language_model.model.",
+                          "minimax_m3_vl": "language_model.model."}
 # model_type -> (gate, up, down) on-disk projection spellings for per-expert MXFP4
 # checkpoints, plus the packed/scale suffixes. K3: w1=gate, w3=up, w2=down —
 # confirmed by SHAPES, not convention (w1/w3 are [inter, latent]; w2 is
@@ -81,22 +95,87 @@ DEEPSEEK_V4_FP8_DENSE = {"deepseek_v4"}
 SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 
 
+#: Conventions whose per-expert checkpoint layout the streaming read handles.
+#: Membership is the whole admission decision — there is no per-family read code
+#: behind it. ``qwen2_moe`` spells its experts ``mlp.experts.{e}.{gate,up,down}_proj``;
+#: ``mixtral`` and ``phimoe`` spell theirs ``block_sparse_moe.experts.{e}.{w1,w3,w2}``,
+#: under a container the module tree does not use. Both are read through the
+#: convention's own ``expert_re``, so the difference is data, not a branch.
+#:
+#: Still deliberately NARROW. Absent on purpose: ``jamba`` and ``lfm2_moe``
+#: (hybrid Mamba towers whose NON-expert surface this loader has never placed),
+#: ``nemotron_h`` (hybrid AND non-gated), and ``dbrx`` (flat ``[E*inter, hidden]``
+#: stacks, which are not per-expert at all). Each needs evidence, not an entry.
+READ_COMPATIBLE_CONVENTIONS = frozenset({"qwen2_moe", "mixtral", "phimoe"})
+
+
 def _read_compatible_convention(model_type):
-    """True if this model_type loads through the EXISTING per-expert read path.
+    """True if this model_type loads through the GENERIC per-expert read path.
 
-    olmoe and qwen3_moe are already supported and are the qwen2_moe convention;
-    every other qwen2_moe-convention model_type stores experts identically
-    (``mlp.experts.{e}.{gate,up,down}_proj.weight``), so the same streaming read
-    handles them with no new code. Validated on a rented A6000: Qwen1.5-MoE-A2.7B
-    (qwen2_moe, not previously listed) loaded, nf4-quantized, and generated.
+    olmoe and qwen3_moe were already supported and are the qwen2_moe convention;
+    every other qwen2_moe-convention model_type stores experts identically, so the
+    same streaming read handles them with no new code. Validated on a rented A6000:
+    Qwen1.5-MoE-A2.7B (qwen2_moe, not previously listed) loaded, nf4-quantized, and
+    generated.
 
-    Deliberately NARROW: mixtral (w1/w3/w2 spelling), dbrx (flat stacks) and
-    nemotron_h (no gate) need their own read handling and are NOT admitted here."""
+    The mixtral family (mixtral, phimoe, and the minimax aliases that share the
+    MIXTRAL convention) joins them now that the read takes the checkpoint-side
+    container and projection spellings from the convention instead of assuming the
+    module tree's. See :data:`READ_COMPATIBLE_CONVENTIONS` for what is still out."""
     from .arch.moe_conventions import MoEConventionError, convention_for
     try:
-        return convention_for(model_type).name == "qwen2_moe"
+        return convention_for(model_type).name in READ_COMPATIBLE_CONVENTIONS
     except MoEConventionError:
         return False
+
+
+def _convention_or_none(model_type):
+    """The MoE convention for this model_type, or ``None`` if it has no adjudicated
+    one. The loader's dedicated-quant specials (gemma4, kimi_k3, deepseek_v4)
+    predate the convention system and legitimately have none; every path that
+    consults a convention must therefore tolerate its absence rather than raise."""
+    from .arch.moe_conventions import MoEConventionError, convention_for
+    try:
+        return convention_for(model_type)
+    except MoEConventionError:
+        return None
+
+
+#: Split a normalized checkpoint key into (layer index, the suffix a convention's
+#: ``expert_re`` matches). Every key reaching this point has already been rewritten
+#: to the plain ``model.`` prefix (see the multimodal/rewriter branches below), so
+#: the anchor is exact rather than the planner's non-greedy prefix capture.
+_LAYER_KEY = re.compile(r"^model\.layers\.(\d+)\.(.+)$")
+
+
+def _index_per_expert_keys(conv, weight_map):
+    """``{layer: {role: {expert_index: checkpoint key}}}`` for every key the
+    convention recognizes as a per-expert expert tensor.
+
+    This is the checkpoint side of the layout, and it is deliberately built by
+    MATCHING REAL KEYS with the convention's own ``expert_re`` rather than by
+    reconstructing a prefix from that pattern's source. The convention already owns
+    exactly one parser for the checkpoint spelling; a second one written here would
+    be free to drift from it, and the drift would present as a layer silently read
+    as dense — the failure this loader exists to prevent.
+
+    Returns ``{}`` for a convention that is never per-expert (``roles`` empty:
+    pre-fused families like gpt-oss, granitemoe, dbrx) and for a model_type with no
+    convention at all, which leaves those paths exactly as they were.
+    """
+    if conv is None or not conv.roles:
+        return {}
+    index = {}
+    for key in weight_map:
+        m = _LAYER_KEY.match(key)
+        if m is None:
+            continue
+        hit = conv.match(m.group(2))
+        if hit is None:
+            continue
+        expert, role = hit
+        index.setdefault(int(m.group(1)), {}).setdefault(role, {})[expert] = key
+    return index
 
 
 def expert_layout_for(model_type):
@@ -366,9 +445,10 @@ def load_moe_4bit_streaming(
     if model_type not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(model_type):
         raise NotImplementedError(
             f"Unsupported model_type={model_type!r}. This streaming loader handles SwiGLU fused-MoE "
-            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}, plus every model_type on the qwen2_moe "
-            f"convention (same per-expert mlp.experts.N.{{gate,up,down}}_proj read path). The Experts4bit "
-            "primitive itself is model-agnostic — see the README 'Scope' note to adapt another architecture."
+            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}, plus every model_type on the "
+            f"{sorted(READ_COMPATIBLE_CONVENTIONS)} conventions, whose per-expert layout the "
+            "generic read takes from the convention itself. The Experts4bit primitive is "
+            "model-agnostic — see the README 'Scope' note to adapt another architecture."
         )
     # Identity ("zero-computation") experts: the router indexes a space LARGER than the
     # set of real experts, and the surplus indices route the token through nn.Identity
@@ -503,6 +583,13 @@ def load_moe_4bit_streaming(
             renamed = key.replace(old, new)
             weight_map[renamed] = weight_map.pop(key)
             orig_key[renamed] = orig_key.pop(key)
+    # The CHECKPOINT side of the expert layout, kept separate from the module side
+    # (`expert_rel`, above) because for the mixtral family they disagree: experts are
+    # stored under `block_sparse_moe.experts` and built under `mlp.experts`. Indexed
+    # once here rather than probed per layer, so a family whose container this loader
+    # would not have guessed is read by matching, not by string assembly.
+    conv = _convention_or_none(model_type)
+    ckpt_experts = _index_per_expert_keys(conv, weight_map)
     handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in set(weight_map.values())}
 
     raw_readers = {}
@@ -529,7 +616,14 @@ def load_moe_4bit_streaming(
     offload_handles = []
     n_moe = 0
     for i in range(n_layers):
+        # MODULE side: where this layer's fused experts are PLACED in the built tree.
+        # Not a checkpoint prefix — for the mixtral family the checkpoint keys live
+        # under `block_sparse_moe.experts` instead, and `ckpt_experts` holds those.
         epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
+        # CHECKPOINT side: this layer's per-expert keys as the convention parses them.
+        # Empty for the pre-fused and dedicated-quant families, whose branches below
+        # address the checkpoint by `epfx` because there the two sides do coincide.
+        layer_experts = ckpt_experts.get(i, {})
         if quantize_layers is not None and i not in quantize_layers:
             # Deliberately left in the base dtype. Same effect as the dense-layer
             # `continue` below: the original module stays in place, unquantized.
@@ -537,8 +631,12 @@ def load_moe_4bit_streaming(
         if arena_index is not None:
             # Every checkpoint key under the experts submodule is an expert tensor,
             # so they can be marked read-and-skipped WITHOUT reading them — which is
-            # the whole point: at K3 scale the read is what does not fit.
+            # the whole point: at K3 scale the read is what does not fit. Union the
+            # convention's own keys so a family stored under a container `epfx` does
+            # not name is marked consumed rather than falling through as dense; for
+            # every family whose two sides coincide this adds nothing.
             keys = {k for k in weight_map if k.startswith(epfx)}
+            keys |= {k for byidx in layer_experts.values() for k in byidx.values()}
             if not keys:
                 continue                                  # dense layer
             bias = sorted(k for k in keys if k.endswith("_bias"))
@@ -690,8 +788,38 @@ def load_moe_4bit_streaming(
                 })
             gate_up = torch.stack(gate_up_rows).to(dtype)
             down = torch.stack(down_rows).to(dtype)
+        elif layer_experts:
+            # Per-expert Linears on disk (OLMoE and Qwen3 as `mlp.experts.{e}.gate_proj`;
+            # the mixtral family as `block_sparse_moe.experts.{e}.w1`). Both reach here
+            # through the SAME code: `layer_experts` already holds the exact checkpoint
+            # key for each (expert, role), so neither the container nor the projection
+            # spelling is written out here. The role -> on-disk-token mapping stays in
+            # the convention, where w1=gate/w3=up/w2=down was adjudicated against
+            # upstream's converter and the expert forward — the one thing shapes cannot
+            # tell you, because gate and up are shape-identical.
+            from .arch.moe_conventions import fuse_experts, stack_experts
+
+            def _rows(role):
+                """This layer's per-expert tensors for one role, ``None`` where the
+                checkpoint has no key. Holes are not skipped: a short stack would
+                leave the router addressing experts that were never loaded, so they
+                are carried into the fuser, which refuses and names the indices."""
+                byidx = layer_experts.get(role, {})
+                expert_keys.update(byidx[e] for e in range(n_exp) if e in byidx)
+                return [get(byidx[e]) if e in byidx else None for e in range(n_exp)]
+
+            if has_gate:
+                gate_up, down = fuse_experts(_rows("gate"), _rows("up"), _rows("down"))
+            else:
+                gate_up, down = stack_experts(_rows("up"), _rows("down"))
+            gate_up = gate_up.to(dtype)
+            down = down.to(dtype)
         elif f"{epfx}0.gate_proj.weight" in weight_map:
-            # Per-expert Linears on disk (OLMoE, Qwen3): fuse gate_up[e] = cat([gate, up]).
+            # Same per-expert shape, reached WITHOUT a convention: the dedicated-quant
+            # families (gemma4, kimi_k3, deepseek_v4) predate the convention system and
+            # `_convention_or_none` returns None for them, so `layer_experts` is empty
+            # even when their checkpoint is spelled this way. Kept verbatim so nothing
+            # that loads today starts depending on a convention entry it never had.
             gate_up_rows, down_rows = [], []
             for e in range(n_exp):
                 g, u, d = (
@@ -740,12 +868,19 @@ def load_moe_4bit_streaming(
         setattr(model.get_submodule(parent), leaf, experts)
         del gate_up, down
     if n_moe == 0:
+        # Name the CHECKPOINT spelling the convention actually looks for, not the
+        # module path. Reporting `expert_rel` here is what made the mixtral failure
+        # unreadable: it pointed at `mlp.experts`, a prefix that family's checkpoint
+        # never uses, so the message described a key nobody should expect to find.
+        per_expert = (f"'model.layers.<i>.{conv.expert_re.pattern}'"
+                      if conv is not None and conv.roles
+                      else f"'model.layers.<i>.{expert_rel}.0.gate_proj.weight'")
         raise RuntimeError(
             f"no fused expert stacks found in {model_id!r} (model_type={model_type!r}): expected "
-            f"'model.layers.<i>.{expert_rel}.gate_up_proj' (fused) or "
-            f"'model.layers.<i>.{expert_rel}.0.gate_proj.weight' (per-expert) tensors in the "
-            "checkpoint. Refusing to return a model with zero quantized expert layers — silently "
-            "skipping the experts is the exact failure this loader exists to prevent."
+            f"'model.layers.<i>.{expert_rel}.gate_up_proj' (fused) or {per_expert} (per-expert) "
+            "tensors in the checkpoint. Refusing to return a model with zero quantized expert "
+            "layers — silently skipping the experts is the exact failure this loader exists to "
+            "prevent."
         )
     log(f"  quantized experts on {n_moe}/{n_layers} MoE layers ({n_exp} experts each)")
 
@@ -776,10 +911,19 @@ def load_moe_4bit_streaming(
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
     narrowed = []
     renamings = _checkpoint_key_renamings(model_type)
+    # The convention's own SUBSTRING renames, for the non-expert half of a family
+    # whose MoE block is spelled differently on disk: the mixtral family's router
+    # is `block_sparse_moe.gate.weight` on disk and `mlp.gate.weight` in the tree
+    # (phimoe then renames that again to `mlp.router.weight`). These are substrings,
+    # not suffixes, so `_rename_checkpoint_key` — which anchors at a dot boundary at
+    # the END of a key — cannot express them and leaves them untouched. No-op for
+    # every convention with an empty rename table, and for granitemoe, whose
+    # identical renames LEGACY_KEY_RENAMES has already applied to `weight_map`.
+    conv_rename = conv.rename if conv is not None else (lambda k: k)
     renamed = 0
     for name in weight_map:
         if name not in expert_keys:
-            target = _rename_checkpoint_key(name, renamings)
+            target = _rename_checkpoint_key(conv_rename(name), renamings)
             renamed += target != name
             if _assign(model, target, get(name)):
                 narrowed.append(target)
