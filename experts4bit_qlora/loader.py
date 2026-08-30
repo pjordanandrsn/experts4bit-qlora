@@ -69,10 +69,7 @@ SUPPORTED_ARCHITECTURES = {
 # nests the language model as `model.language_model.`; Kimi K3 reverses the order
 # (`language_model.model.`), so the prefix cannot be derived from the presence of
 # `text_config` alone — it is per-family.
-# minimax_m3_vl reverses the order the same way K3 does; adjudicated against the
-# released MiniMax-M3 index in moe_conventions.MIXTRAL, not guessed from the default.
-MULTIMODAL_CKPT_PREFIX = {"kimi_k3": "language_model.model.",
-                          "minimax_m3_vl": "language_model.model."}
+MULTIMODAL_CKPT_PREFIX = {"kimi_k3": "language_model.model."}
 # model_type -> (gate, up, down) on-disk projection spellings for per-expert MXFP4
 # checkpoints, plus the packed/scale suffixes. K3: w1=gate, w3=up, w2=down —
 # confirmed by SHAPES, not convention (w1/w3 are [inter, latent]; w2 is
@@ -106,7 +103,27 @@ SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 #: (hybrid Mamba towers whose NON-expert surface this loader has never placed),
 #: ``nemotron_h`` (hybrid AND non-gated), and ``dbrx`` (flat ``[E*inter, hidden]``
 #: stacks, which are not per-expert at all). Each needs evidence, not an entry.
+#:
+#: **This answers STORAGE ONLY.** A convention says where the weights are and how
+#: they fuse; it says nothing about the epilogue the model runs over them, which is
+#: the model's own forward. Sharing a convention with mixtral therefore does NOT
+#: make a family loadable — see :func:`_declares_clamped_swiglu`, which refuses the
+#: ones whose experts are not the plain ``act(gate) * up`` this loader builds.
 READ_COMPATIBLE_CONVENTIONS = frozenset({"qwen2_moe", "mixtral", "phimoe"})
+
+
+def _declares_clamped_swiglu(lm_config):
+    """True if this config declares the CLAMPED SwiGLU epilogue (gpt-oss lineage):
+    ``gate.clamp(max=limit)``, ``up.clamp(±limit)``, ``gate * sigmoid(gate * alpha)``.
+
+    Read off the config rather than a model_type list so a family that adopts the
+    epilogue later is refused too. ``hidden_act`` cannot be used for this: the
+    families that run it compute the gate INLINE from ``swiglu_alpha``/
+    ``swiglu_limit`` and leave ``hidden_act`` reading like an ordinary activation,
+    so the loader's existing unknown-activation warning never fires and the
+    substitution is silent."""
+    return any(getattr(lm_config, a, None) is not None
+               for a in ("swiglu_alpha", "swiglu_limit"))
 
 
 def _read_compatible_convention(model_type):
@@ -473,6 +490,28 @@ def load_moe_4bit_streaming(
             "loading just the routed ones would leave the router addressing experts that do "
             "not exist. Supporting this needs an identity slot in the expert primitive, not "
             "a loader change."
+        )
+    # A convention-admitted family runs the GENERIC Experts4bit, whose epilogue is a
+    # plain act(gate) * up. A family whose experts CLAMP instead computes a different
+    # function over the same weights, and every shape agrees — so the load succeeds,
+    # nothing raises, and only the outputs are wrong. That is the failure this loader
+    # exists to prevent, and it is worth refusing a family for.
+    #
+    # Scoped to the convention-admitted path on purpose: gpt_oss and deepseek_v4 also
+    # clamp, are named in SUPPORTED_ARCHITECTURES, and carry their own Experts4bit
+    # subclasses that reproduce their epilogues faithfully. They must not be refused.
+    if model_type not in SUPPORTED_ARCHITECTURES and _declares_clamped_swiglu(_gate_cfg):
+        raise NotImplementedError(
+            f"{model_type!r} stores its experts in a layout this loader reads, but runs a "
+            f"CLAMPED SwiGLU over them (swiglu_alpha="
+            f"{getattr(_gate_cfg, 'swiglu_alpha', None)}, swiglu_limit="
+            f"{getattr(_gate_cfg, 'swiglu_limit', None)}) rather than the plain "
+            "act(gate) * up the generic Experts4bit computes. Sharing a STORAGE convention "
+            "does not make the epilogue shared. Loading it here would place every weight "
+            "correctly, agree on every shape, raise nothing — and compute the wrong expert "
+            "function. Supporting it needs an Experts4bit subclass carrying that epilogue "
+            "(see arch/gptoss.py and arch/deepseek_v4.py for the two that do), not a change "
+            "to this gate."
         )
     # Source the expert path and gate from the convention when one exists (the
     # broad source of truth), else this loader's own map. Both agree today; this

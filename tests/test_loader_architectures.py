@@ -1206,11 +1206,11 @@ def test_pre_fused_families_are_never_indexed_as_per_expert():
 
 
 def test_admission_gate_covers_the_family_and_its_aliases():
-    """Which model_types the streaming loader accepts is one convention-membership test,
-    not a per-model list — so the minimax aliases come along with mixtral. The negative arm
-    matters as much: admitting a family whose read this loop has NOT been shown to handle
-    (flat stacks, non-gated experts, hybrid Mamba towers) is the mistake the narrow gate
-    prevents."""
+    """Which STORAGE layouts the streaming read handles is one convention-membership
+    test, not a per-model list — so the minimax aliases come along with mixtral. The
+    negative arm matters as much: admitting a family whose read this loop has NOT been
+    shown to handle (flat stacks, non-gated experts, hybrid Mamba towers) is the mistake
+    the narrow gate prevents."""
     from experts4bit_qlora.loader import _read_compatible_convention
 
     for model_type in ("mixtral", "phimoe", "minimax", "minimax_m2", "minimax_m3_vl",
@@ -1218,6 +1218,53 @@ def test_admission_gate_covers_the_family_and_its_aliases():
         assert _read_compatible_convention(model_type), model_type
     for model_type in ("dbrx", "nemotron_h", "jamba", "lfm2_moe", "gpt2", "llama"):
         assert not _read_compatible_convention(model_type), model_type
+
+
+def test_clamped_swiglu_epilogue_is_refused_despite_a_readable_layout(tmp_path):
+    """Sharing a STORAGE convention is not sharing an EPILOGUE, and the loader must
+    refuse rather than substitute.
+
+    `minimax_m3_vl` is on the mixtral convention — the read above handles its keys
+    perfectly — but its experts run a clamped SwiGLU-OAI (`gate.clamp(max=limit)`,
+    `up.clamp(±limit)`, `gate * sigmoid(gate * alpha)`), not the plain `act(gate) * up`
+    the generic Experts4bit computes. Every weight would land, every shape would agree,
+    nothing would raise, and the model would compute the wrong function — so admitting
+    it on convention membership alone was a real defect in the first cut of this change.
+
+    `hidden_act` cannot catch it: these families compute the gate inline from
+    `swiglu_alpha`/`swiglu_limit` and leave `hidden_act` reading like an ordinary
+    activation, so the loader's unknown-activation warning never fires. The refusal
+    therefore keys on the epilogue's own config fields.
+    """
+    from experts4bit_qlora.loader import _declares_clamped_swiglu, load_moe_4bit_streaming
+
+    ref = _mixtral()
+    assert not _declares_clamped_swiglu(ref.config)          # plain SwiGLU: untouched
+    _write_block_sparse_ckpt(ref, str(tmp_path))
+
+    # Same readable layout, plus the epilogue fields. Written onto the saved config so
+    # the refusal is exercised through the real entry point, not by calling the predicate.
+    cfg = json.load(open(os.path.join(tmp_path, "config.json")))
+    cfg["swiglu_alpha"], cfg["swiglu_limit"] = 1.702, 7.0
+    json.dump(cfg, open(os.path.join(tmp_path, "config.json"), "w"))
+
+    with pytest.raises(NotImplementedError, match="CLAMPED SwiGLU"):
+        load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
+
+
+def test_families_with_their_own_clamped_epilogue_are_not_refused():
+    """The refusal must not catch gpt_oss or deepseek_v4. They clamp too, but each is
+    named in SUPPORTED_ARCHITECTURES and carries an Experts4bit subclass that reproduces
+    its epilogue — so the gate is scoped to the convention-admitted path, and this is the
+    arm that says so. A refusal broad enough to hit them would break shipped families."""
+    from experts4bit_qlora.loader import SUPPORTED_ARCHITECTURES, _declares_clamped_swiglu
+
+    class _Cfg:
+        swiglu_limit = 7.0
+
+    assert _declares_clamped_swiglu(_Cfg())                  # they would trip the predicate
+    for model_type in ("gpt_oss", "deepseek_v4"):            # ...but the gate never asks
+        assert model_type in SUPPORTED_ARCHITECTURES, model_type
 
 
 @pytest.mark.parametrize("build", [_olmoe, _qwen3_moe], ids=["olmoe", "qwen3_moe"])
