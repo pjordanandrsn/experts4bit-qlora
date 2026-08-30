@@ -148,7 +148,7 @@ def _convention_or_none(model_type):
 _LAYER_KEY = re.compile(r"^model\.layers\.(\d+)\.(.+)$")
 
 
-def _index_per_expert_keys(conv, weight_map):
+def _index_per_expert_keys(conv, checkpoint_keys):
     """``{layer: {role: {expert_index: checkpoint key}}}`` for every key the
     convention recognizes as a per-expert expert tensor.
 
@@ -166,7 +166,7 @@ def _index_per_expert_keys(conv, weight_map):
     if conv is None or not conv.roles:
         return {}
     index = {}
-    for key in weight_map:
+    for key in checkpoint_keys:
         m = _LAYER_KEY.match(key)
         if m is None:
             continue
@@ -799,19 +799,16 @@ def load_moe_4bit_streaming(
             # tell you, because gate and up are shape-identical.
             from .arch.moe_conventions import fuse_experts, stack_experts
 
-            def _rows(role):
-                """This layer's per-expert tensors for one role, ``None`` where the
-                checkpoint has no key. Holes are not skipped: a short stack would
-                leave the router addressing experts that were never loaded, so they
-                are carried into the fuser, which refuses and names the indices."""
+            # A hole is carried through as None rather than skipped: a short stack
+            # would leave the router addressing experts that were never loaded, so it
+            # goes to the fuser, which refuses and names the missing indices.
+            rows = {}
+            for role in (("gate", "up", "down") if has_gate else ("up", "down")):
                 byidx = layer_experts.get(role, {})
                 expert_keys.update(byidx[e] for e in range(n_exp) if e in byidx)
-                return [get(byidx[e]) if e in byidx else None for e in range(n_exp)]
-
-            if has_gate:
-                gate_up, down = fuse_experts(_rows("gate"), _rows("up"), _rows("down"))
-            else:
-                gate_up, down = stack_experts(_rows("up"), _rows("down"))
+                rows[role] = [get(byidx[e]) if e in byidx else None for e in range(n_exp)]
+            gate_up, down = (fuse_experts(rows["gate"], rows["up"], rows["down"]) if has_gate
+                             else stack_experts(rows["up"], rows["down"]))
             gate_up = gate_up.to(dtype)
             down = down.to(dtype)
         elif f"{epfx}0.gate_proj.weight" in weight_map:
