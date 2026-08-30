@@ -53,7 +53,7 @@ class _FakeState:
         return self.all_hot
 
 
-def _live_model(wrapper_path, model_type):
+def _live_model(wrapper_path, model_type, top_k=8):
     """A live tree whose experts module carries the fake state at
     ``wrapper_path`` (dotted, rooted at the causal LM)."""
     root = torch.nn.Module()
@@ -68,6 +68,7 @@ def _live_model(wrapper_path, model_type):
         pass
     cfg = _Cfg()
     cfg.model_type = model_type
+    cfg.num_experts_per_tok = top_k
     root.config = cfg
     return root, node._hot_residency
 
@@ -146,6 +147,32 @@ def test_enable_matches_the_loader_stacks(tmp_path, model_type, monkeypatch):
             assert torch.equal(got, want), (model_type, role, e)
     # NF4 dropped by default.
     assert st.h_gu_p.numel() == 0 and st.h_dn_p.numel() == 0
+
+
+def test_split_k_partials_sized_by_config_top_k(tmp_path):
+    """A top-4 router must get a sk*4*N buffer, not a top-8 one -- the
+    kernel reshapes the buffer EXACTLY (found live: Qwen1.5-MoE, K8)."""
+    from int4_b32 import _plan
+
+    ck, names, wrap = _family_case("qwen3_moe")
+    src = _write_ckpt(tmp_path, ck)
+    live, st = _live_model(wrap, "qwen3_moe", top_k=4)
+    enable_serve_experts_int4(live, src, model_type="qwen3_moe",
+                              plan_model=_PlanTree(names))
+    for role in ("gu", "dn"):
+        srow = st._int4_stores[role]
+        _b, _w, sk, _k = _plan(srow["N"], srow["K"])
+        assert srow["part"].shape == (sk * 4, srow["N"])
+
+
+def test_missing_top_k_refused_loudly(tmp_path):
+    ck, names, wrap = _family_case("qwen3_moe")
+    src = _write_ckpt(tmp_path, ck)
+    live, st = _live_model(wrap, "qwen3_moe")
+    del live.config.num_experts_per_tok
+    with pytest.raises(RuntimeError, match="routed-experts-per-token"):
+        enable_serve_experts_int4(live, src, model_type="qwen3_moe",
+                                  plan_model=_PlanTree(names))
 
 
 def test_enable_refuses_tiered_layers(tmp_path):

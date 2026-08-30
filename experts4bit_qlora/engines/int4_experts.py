@@ -71,6 +71,25 @@ def _wrapper_for(model, param_name: str):
     return None
 
 
+def _top_k(model):
+    """Routed experts per token, from the config (text tower for
+    composites). The split-K partial buffer is sized ``sk * R * N`` and
+    the kernel reshapes it EXACTLY, so a wrong R is a loud crash at the
+    first decode step -- a top-8 constant sized it for two lucky
+    families and broke the first top-4 one (Qwen1.5-MoE, K8 campaign).
+    """
+    cfg = getattr(model, "config", None)
+    for c in (cfg, getattr(cfg, "text_config", None)):
+        for attr in ("num_experts_per_tok", "moe_top_k", "moe_topk",
+                     "n_routed_experts_per_tok", "top_k"):
+            v = getattr(c, attr, None)
+            if isinstance(v, int) and v > 0:
+                return v
+    raise RuntimeError(
+        "enable_serve_experts_int4: cannot read routed-experts-per-token "
+        "from the config; the split-K buffer cannot be sized safely")
+
+
 def _meta_twin(model):
     """A plannable twin of the live model on ``meta``.
 
@@ -157,7 +176,7 @@ def enable_serve_experts_int4(model, source_dir: str, *,
         Ndn, Kdn = down.shape[1], down.shape[2]
         _b, _w2, sk_gu, _k = _plan(Ngu, Kgu)
         _b, _w2, sk_dn, _k = _plan(Ndn, Kdn)
-        R = 8
+        R = _top_k(model)
         w._int4_stores = {
             "gu": {"packed": gu_p, "scales": gu_s, "N": Ngu, "K": Kgu,
                    "part": _torch.empty(sk_gu * R, Ngu,
