@@ -318,7 +318,11 @@ def _bv3_stage(a, model, runner, sched, kv):
     assert all(len(runner.tokens[r]) > a.prompt_len for r in rids), \
         "a row reached the manual loop without any decoded token"
     slots = [runner.slot_of[r] for r in rids]
-    cap_tokens = a.prompt_len + a.gen_tokens + 8
+    # Same contract as Stage A's replay profiler (e4b#275): post-window
+    # profiled replays advance pos/KV, so their slots are reserved HERE
+    # and the timed window stays byte-identical to a no-flag run.
+    profile_replays = 8 if (a.replay_profile_out and a.b1d_timed) else 0
+    cap_tokens = a.prompt_len + a.gen_tokens + 8 + profile_replays
     kv.graph_mode_init_batch(slots, upto_tokens=cap_tokens)
     dev = "cuda"
     in_ids = torch.tensor([[int(runner.tokens[r][-1])] for r in rids],
@@ -392,6 +396,22 @@ def _bv3_stage(a, model, runner, sched, kv):
         tok_log[i].copy_(in_ids.reshape(B))
     torch.cuda.synchronize()
     total_ms = (time.perf_counter_ns() - t0) / 1e6
+    if profile_replays:
+        # Kernel census of the SHIPPED batched replay -- kineto records
+        # kernels inside graph replays. AFTER the timed window, in the
+        # slots cap_tokens reserved; CUDA activity only (TR1 capacity
+        # lesson); the timed loop above stays clean. Mirrors Stage A.
+        from torch.profiler import ProfilerActivity, profile
+        with profile(activities=[ProfilerActivity.CUDA]) as rp:
+            for _ in range(profile_replays):
+                g.replay()
+            torch.cuda.synchronize()
+        tbl = rp.key_averages().table(
+            sort_by="cuda_time_total", row_limit=120)
+        hdr = (f"profiled replay steps: {profile_replays} "
+               f"(batched B={B} graph replay)\n")
+        Path(a.replay_profile_out).write_text(hdr + tbl)
+        print(f"REPLAY_PROFILE_OUT {a.replay_profile_out}", flush=True)
     set_context(prev)
     _frames_after = _dynamo_frame_count()
     step_ms = total_ms / n_steps
