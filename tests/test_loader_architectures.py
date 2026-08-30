@@ -31,6 +31,35 @@ DTYPE = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 # so a host without a working bnb 4-bit path SKIPS cleanly (matches the other test modules).
 _QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 
+#: Substrings that mark a LOADER REFUSAL rather than a missing quantization backend.
+#: `_QUANTIZE_UNAVAILABLE` is deliberately broad — it has to be, because bnb signals a
+#: dead 4-bit backend several different ways — but it covers RuntimeError and
+#: NotImplementedError, which are also how this loader declines a checkpoint it could not
+#: map, a model_type it does not admit, and an untied head it could not find. Those
+#: refusals ARE the regressions the arms below exist for, so catching them as "no backend"
+#: turns the whole module into an instrument that cannot fail. Measured twice: a mutant that
+#: re-merged the checkpoint and module prefixes turned every mixtral arm green as a *skip*,
+#: and a mutant that made the fused-on-disk branch never match did the same to twelve
+#: pre-existing arms — 12 skipped, 0 failed, against a loader that quantized no experts.
+_LOADER_REFUSALS = ("no fused expert stacks", "Unsupported model_type", "tie_word_embeddings=False")
+
+
+def _load_or_skip(path, dtype=DTYPE, *, what="4-bit", **kw):
+    """`load_moe_4bit_streaming`, skipping ONLY for a genuinely absent bnb quantize backend.
+
+    Every arm in this module loads through here. ``dtype`` because several arms pin bf16
+    instead of the module default, and ``what`` because the quant_type arms name the scheme
+    they actually asked for in the skip reason.
+    """
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    try:
+        return load_moe_4bit_streaming(path, DEVICE, dtype, **kw)
+    except _QUANTIZE_UNAVAILABLE as e:
+        if any(m in str(e) for m in _LOADER_REFUSALS):
+            raise
+        pytest.skip(f"bitsandbytes {what} quantize unavailable on {DEVICE}: {e}")
+
 
 def _olmoe():
     from transformers.models.olmoe.configuration_olmoe import OlmoeConfig
@@ -153,15 +182,11 @@ def _write_ckpt(model, d, per_expert):
 )
 def test_loader_handles_architecture(build, per_expert, tmp_path):
     from experts4bit_qlora import ExpertsLoRA
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora
 
     torch.manual_seed(0)
     _write_ckpt(build(), str(tmp_path), per_expert=per_expert)
-    try:
-        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    model, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8)
     n_attn = add_attention_lora(model, 4, 8, DTYPE)
 
     n_expert_mods = sum(isinstance(m, ExpertsLoRA) for m in model.modules())
@@ -185,14 +210,10 @@ def test_loader_quant_type_threads_through(quant_type, expected, tmp_path):
     (int8 = 8-bit blockwise; bf16 = 16-bit passthrough — spans both non-4-bit storage families;
     the alias spelling proves normalization happens before the class dispatch, not after.)"""
     from experts4bit_qlora import ExpertsLoRA
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     torch.manual_seed(0)
     _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
-    try:
-        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8, quant_type=quant_type)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
+    model, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8, quant_type=quant_type, what=quant_type)
 
     experts = [m.base for m in model.modules() if isinstance(m, ExpertsLoRA)]
     assert experts and all(b.quant_type == expected for b in experts)
@@ -256,7 +277,6 @@ def test_loader_handles_multimodal_gemma4_checkpoint(tmp_path):
     from transformers.models.gemma4.configuration_gemma4 import Gemma4Config
 
     from experts4bit_qlora import ExpertsLoRA
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     torch.manual_seed(0)
     ref = _gemma4().to(DEVICE, dtype=torch.bfloat16).eval()
@@ -277,10 +297,7 @@ def test_loader_handles_multimodal_gemma4_checkpoint(tmp_path):
     )
     Gemma4Config(text_config=ref.config.to_dict()).save_pretrained(tmp_path)
 
-    try:
-        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    model, cfg = _load_or_skip(str(tmp_path), torch.bfloat16, r=4, alpha=8)
 
     assert cfg.model_type == "gemma4"  # the loader was really on the multimodal branch
     assert sum(isinstance(m, ExpertsLoRA) for m in model.modules()) >= 1
@@ -339,7 +356,6 @@ def test_multimodal_untied_lm_head_is_loaded_not_tied(tmp_path):
     the model loaded, generated plausibly-shaped tokens, and computed every logit through the
     wrong matrix. Assert the head is a DISTINCT tensor carrying the checkpoint's own values."""
     pytest.importorskip("transformers.models.gemma4", reason="this transformers has no gemma4")
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     torch.manual_seed(0)
     ref = _gemma4(tie_word_embeddings=False).to(DEVICE, dtype=torch.bfloat16).eval()
@@ -347,10 +363,7 @@ def test_multimodal_untied_lm_head_is_loaded_not_tied(tmp_path):
     assert ref.lm_head.weight.data_ptr() != ref.model.embed_tokens.weight.data_ptr()
     _write_multimodal_gemma4(ref, tmp_path, with_head=True)
 
-    try:
-        model, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    model, _ = _load_or_skip(str(tmp_path), torch.bfloat16, r=4, alpha=8)
 
     assert not model.lm_head.weight.is_meta
     # The bug, stated as the test would have caught it: the head is not the embedding matrix...
@@ -368,17 +381,13 @@ def test_multimodal_untied_lm_head_missing_raises(tmp_path):
     and a LoRA that "converges" by steering hidden states into embed_tokens, then collapses on
     an inference stack that maps lm_head correctly. A load-time raise is the cheap end of that."""
     pytest.importorskip("transformers.models.gemma4", reason="this transformers has no gemma4")
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     torch.manual_seed(0)
     ref = _gemma4(tie_word_embeddings=False).to(DEVICE, dtype=torch.bfloat16).eval()
     _write_multimodal_gemma4(ref, tmp_path, with_head=False)
 
-    try:
-        with pytest.raises(RuntimeError, match="tie_word_embeddings=False"):
-            load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    with pytest.raises(RuntimeError, match="tie_word_embeddings=False"):
+        _load_or_skip(str(tmp_path), torch.bfloat16, r=4, alpha=8)
 
 
 def test_loader_handles_legacy_granitemoe_checkpoint(tmp_path):
@@ -393,7 +402,6 @@ def test_loader_handles_legacy_granitemoe_checkpoint(tmp_path):
     from safetensors.torch import save_file
 
     from experts4bit_qlora import ExpertsLoRA
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     torch.manual_seed(0)
     ref = _granitemoe(tie_word_embeddings=True).to(DEVICE, dtype=torch.bfloat16).eval()
@@ -412,10 +420,7 @@ def test_loader_handles_legacy_granitemoe_checkpoint(tmp_path):
     save_file(sd, os.path.join(tmp_path, "model.safetensors"))  # single file — deliberately no index.json
     ref.config.save_pretrained(tmp_path)
 
-    try:
-        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, torch.bfloat16, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    model, cfg = _load_or_skip(str(tmp_path), torch.bfloat16, r=4, alpha=8)
 
     assert cfg.model_type == "granitemoe"  # the loader really took the granitemoe + legacy-rename path
     assert sum(isinstance(m, ExpertsLoRA) for m in model.modules()) == cfg.num_hidden_layers
@@ -445,15 +450,11 @@ def test_loaded_model_trains_with_frozen_experts(build, per_expert, tmp_path):
     adapters learn), the frozen 4-bit expert packed weights never receive a gradient and stay
     bit-identical, and nothing goes NaN.
     """
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora
 
     torch.manual_seed(0)
     _write_ckpt(build(), str(tmp_path), per_expert=per_expert)
-    try:
-        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    model, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8)
     add_attention_lora(model, 4, 8, DTYPE)
 
     trainable = []
@@ -517,7 +518,6 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
     the packed bytes are bit-identical afterwards -- read from the CPU homes, since under
     offload the module's registered tensors are 0-element placeholders.
     """
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora
     from experts4bit_qlora.engines.offload import _ExpertOffload
 
@@ -526,12 +526,7 @@ def test_loaded_model_trains_with_offload(build, per_expert, tmp_path):
     try:
         torch.manual_seed(0)
         _write_ckpt(build(), str(tmp_path), per_expert=per_expert)
-        try:
-            model, cfg = load_moe_4bit_streaming(
-                str(tmp_path), DEVICE, DTYPE, r=4, alpha=8, offload=True, pin=False
-            )
-        except _QUANTIZE_UNAVAILABLE as e:
-            pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+        model, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8, offload=True, pin=False)
         add_attention_lora(model, 4, 8, DTYPE)
 
         # The loader hangs the handle on the module it hooked; the packed bytes now live in
@@ -642,15 +637,11 @@ def test_gradient_checkpointing_recomputes_the_expert_layer(build, per_expert, t
     keeps the failure a clean count rather than a crash inside the backward.
     """
     from experts4bit_qlora import ExpertsLoRA
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
     from experts4bit_qlora.lora import add_attention_lora
 
     torch.manual_seed(0)
     _write_ckpt(build(), str(tmp_path), per_expert=per_expert)
-    try:
-        model, cfg = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    model, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8)
     add_attention_lora(model, 4, 8, DTYPE)
     for n, p in model.named_parameters():
         p.requires_grad_("lora" in n)
@@ -957,29 +948,6 @@ def test_quantize_layers_default_quantizes_every_layer(tmp_path):
 # The mixtral convention: block_sparse_moe / w1,w3,w2 on disk -> mlp.experts in
 # the tree. The family that proved the loader was conflating the two prefixes.
 # ---------------------------------------------------------------------------
-
-
-#: Substrings that mark a LOADER REFUSAL rather than a missing quantization backend.
-#: `_QUANTIZE_UNAVAILABLE` is deliberately broad — it has to be, because bnb signals a
-#: dead 4-bit backend several different ways — but it covers RuntimeError and
-#: NotImplementedError, which are also how this loader declines a checkpoint it could
-#: not map and a model_type it does not admit. Those two ARE the regressions the tests
-#: below exist for. Measured against a mutant that re-merged the checkpoint and module
-#: prefixes: every mixtral arm turned green as a *skip*, because the zero-expert-stacks
-#: RuntimeError landed in the skip guard. A test that cannot fail is not an instrument.
-_LOADER_REFUSALS = ("no fused expert stacks", "Unsupported model_type")
-
-
-def _load_or_skip(path, **kw):
-    """`load_moe_4bit_streaming`, skipping ONLY for a genuinely absent bnb 4-bit backend."""
-    from experts4bit_qlora.loader import load_moe_4bit_streaming
-
-    try:
-        return load_moe_4bit_streaming(path, DEVICE, DTYPE, **kw)
-    except _QUANTIZE_UNAVAILABLE as e:
-        if any(m in str(e) for m in _LOADER_REFUSALS):
-            raise
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
 
 
 def _mixtral():
