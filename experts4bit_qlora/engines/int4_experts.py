@@ -24,103 +24,141 @@ from __future__ import annotations
 import json
 import os
 
-import torch
 
 
-def _shard_map(source_dir: str) -> dict:
+def safetensors_reader(source_dir: str):
+    """``read_tensor`` over a safetensors snapshot: (keys, reader)."""
+    from safetensors import safe_open
+
     idx = os.path.join(source_dir, "model.safetensors.index.json")
     if os.path.exists(idx):
         with open(idx) as f:
-            return json.load(f)["weight_map"]
-    lone = os.path.join(source_dir, "model.safetensors")
-    if os.path.exists(lone):
-        return {"*": "model.safetensors"}
-    raise FileNotFoundError(f"no safetensors index under {source_dir}")
+            wmap = json.load(f)["weight_map"]
+    elif os.path.exists(os.path.join(source_dir, "model.safetensors")):
+        with safe_open(os.path.join(source_dir, "model.safetensors"),
+                       framework="pt") as f:
+            wmap = {k: "model.safetensors" for k in f.keys()}
+    else:
+        raise FileNotFoundError(f"no safetensors under {source_dir}")
+
+    def read_tensor(key):
+        with safe_open(os.path.join(source_dir, wmap[key]),
+                       framework="pt") as f:
+            return f.get_tensor(key)
+    return list(wmap.keys()), read_tensor
 
 
-def enable_serve_experts_int4(model, source_dir: str) -> int:
-    """Repack + install; returns the number of layers converted."""
-    from safetensors import safe_open
+def _wrapper_for(model, param_name: str):
+    """The hot-residency state owning ``param_name``.
+
+    Resolves the fused target's parent module (the experts module in the
+    plan's tree), searches it and its descendants, then walks up toward
+    the root. Plan names are rooted at the causal-LM tree; when ``model``
+    is the bare decoder the leading component is stripped and retried.
+    """
+    for name in (param_name, param_name.split(".", 1)[-1]):
+        parts = name.split(".")
+        for cut in range(len(parts) - 1, 0, -1):
+            try:
+                mod = model.get_submodule(".".join(parts[:cut]))
+            except AttributeError:
+                continue
+            search = mod.modules() if cut == len(parts) - 1 else (mod,)
+            for m in search:
+                st = getattr(m, "_hot_residency", None)
+                if st is not None and hasattr(st, "h_gu_p"):
+                    return st
+    return None
+
+
+def enable_serve_experts_int4(model, source_dir: str, *,
+                              model_type: str | None = None,
+                              plan_model=None) -> int:
+    """Repack + install for EVERY family the load plan understands.
+
+    Routes the source read through the same machinery the loader uses --
+    ``plan_moe_checkpoint`` (per-family keymaps), ``make_plan_reader``
+    (dequantizes FP8/GPTQ/AWQ/NVFP4/MXFP4 sources), and
+    ``read_fused_expert_layer`` (gate-first fusion, or non-gated
+    stacking) -- so the int4 stacks are byte-consistent with what the
+    NF4 loader would have produced from the same checkpoint, for every
+    model in the coverage matrix. Never reads resident NF4 (composition
+    measured ~7x the pure grid's ppl cost). Collapsed-path-only, as
+    before: refuses tiered layers loudly.
+    """
+    import torch as _torch
 
     from int4_b32 import _plan
     from int4_pack_ref import pack_int4_b32
 
-    wmap = _shard_map(source_dir)
+    from ..arch.moe_load import make_plan_reader, read_fused_expert_layer
+    from ..arch.moe_plan import plan_moe_checkpoint
 
-    def load(name):
-        shard = wmap.get(name) or wmap.get("*")
-        if shard is None:
-            raise KeyError(f"{name} not in checkpoint index")
-        with safe_open(os.path.join(source_dir, shard), framework="pt") as f:
-            return f.get_tensor(name)
-
-    layers = model.model.layers if hasattr(model, "model") else model.layers
-    todo = []
-    for li, layer in enumerate(layers):
-        for mod in layer.modules():
-            st = getattr(mod, "_hot_residency", None)
-            if st is not None and hasattr(st, "h_gu_p"):
-                todo.append((li, st))
-                break
-    if not todo:
-        raise RuntimeError("enable_serve_experts_int4 found no hot expert "
-                           "state -- refusing a vacuous enable")
-    # The int4 stores are consumed ONLY by the all-resident collapsed
-    # forward (_forward_collapsed); the tiered forwards keep reading the
-    # NF4 stacks this enable frees (Bugbot, e4b#301, High). Refuse any
-    # placement that could route around the collapsed path.
-    not_hot = [li for li, w in todo if not w._all_hot()]
-    if not_hot:
-        raise RuntimeError(
-            "enable_serve_experts_int4 requires every layer all-VRAM "
-            f"(collapsed path); layers {not_hot[:6]} are tiered. This "
-            "lane is the single-stream all-resident serve config -- use "
-            "placement-override all-vram, or keep the NF4 engine.")
+    keys, read_tensor = safetensors_reader(source_dir)
+    mt = model_type or getattr(getattr(model, "config", None),
+                               "model_type", None)
+    if not mt:
+        raise RuntimeError("enable_serve_experts_int4: model_type unknown; "
+                           "pass model_type= explicitly")
+    if plan_model is None:
+        # Plan against a META twin of the config, never the live tree:
+        # the serving model's expert modules were replaced by residency
+        # wrappers, so its state_dict neither claims the checkpoint's
+        # expert keys nor stays free of unclaimed wrapper buffers -- the
+        # planner would (rightly) refuse it. The twin is the planner's
+        # documented usage and costs nothing.
+        from transformers import AutoModelForCausalLM
+        with _torch.device("meta"):
+            plan_model = AutoModelForCausalLM.from_config(model.config)
+    plan = plan_moe_checkpoint(keys, plan_model, mt, skip_extra_layers=True)
+    read = make_plan_reader(plan, read_tensor, _torch.float32)
     keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
+
     n_layers = 0
-    for li, w in todo:
-        E = w.h_gu_p.shape[0]
+    for layer in plan.experts:
+        first_name, _down_name = plan.expert_targets[layer]
+        w = _wrapper_for(model, first_name)
+        if w is None:
+            raise RuntimeError(
+                f"layer {layer}: no hot-residency state near {first_name} "
+                "-- enable hot residency (all-VRAM) before the int4 lane")
+        if not w._all_hot():
+            raise RuntimeError(
+                f"layer {layer} is tiered; this lane is the all-VRAM "
+                "collapsed path -- use placement-override all-vram")
+        first, down = read_fused_expert_layer(plan, layer, read,
+                                              device="cpu",
+                                              dtype=_torch.float32)
         dev = w.h_gu_p.device
-        gu_pk, gu_sc, dn_pk, dn_sc = [], [], [], []
-        for e in range(E):
-            base = f"model.layers.{li}.mlp.experts.{e}"
-            gate = load(f"{base}.gate_proj.weight").float()
-            up = load(f"{base}.up_proj.weight").float()
-            down = load(f"{base}.down_proj.weight").float()
-            gu = torch.cat([gate, up], dim=0)          # gate FIRST
-            pk_, sc_ = pack_int4_b32(gu)
-            gu_pk.append(pk_)
-            gu_sc.append(sc_)
-            pk_, sc_ = pack_int4_b32(down)
-            dn_pk.append(pk_)
-            dn_sc.append(sc_)
-        Ngu, Kgu = gu.shape
-        Ndn, Kdn = down.shape
-        _bn, _wp, sk_gu, _ku = _plan(Ngu, Kgu)
-        _bn, _wp, sk_dn, _ku = _plan(Ndn, Kdn)
-        R = 8   # top-k rows per decode token; parts sized for that
+        E = first.shape[0]
+
+        def _pack_stack(stack, E=E, dev=dev):
+            pk, sc = zip(*[pack_int4_b32(stack[e]) for e in range(E)])
+            return (_torch.stack(pk).to(dev).contiguous(),
+                    _torch.stack(sc).to(dev).contiguous())
+
+        gu_p, gu_s = _pack_stack(first)
+        dn_p, dn_s = _pack_stack(down)
+        Ngu, Kgu = first.shape[1], first.shape[2]
+        Ndn, Kdn = down.shape[1], down.shape[2]
+        _b, _w2, sk_gu, _k = _plan(Ngu, Kgu)
+        _b, _w2, sk_dn, _k = _plan(Ndn, Kdn)
+        R = 8
         w._int4_stores = {
-            "gu": {"packed": torch.stack(gu_pk).to(dev).contiguous(),
-                   "scales": torch.stack(gu_sc).to(dev).contiguous(),
-                   "N": Ngu, "K": Kgu,
-                   "part": torch.empty(sk_gu * R, Ngu,
-                                       dtype=torch.float32, device=dev)},
-            "dn": {"packed": torch.stack(dn_pk).to(dev).contiguous(),
-                   "scales": torch.stack(dn_sc).to(dev).contiguous(),
-                   "N": Ndn, "K": Kdn,
-                   "part": torch.empty(sk_dn * R, Ndn,
-                                       dtype=torch.float32, device=dev)},
+            "gu": {"packed": gu_p, "scales": gu_s, "N": Ngu, "K": Kgu,
+                   "part": _torch.empty(sk_gu * R, Ngu,
+                                        dtype=_torch.float32, device=dev)},
+            "dn": {"packed": dn_p, "scales": dn_s, "N": Ndn, "K": Kdn,
+                   "part": _torch.empty(sk_dn * R, Ndn,
+                                        dtype=_torch.float32, device=dev)},
         }
         if not keep_nf4:
-            # the NF4 and int4 expert stores cannot co-reside at 30B
-            # scale on a 32 GB part; drop NF4 layer-by-layer so peak
-            # overhead is one layer. This makes the process
-            # SINGLETON-DECODE-ONLY (the batched M-tile path needs the
-            # NF4 stacks) -- E4B_INT4_KEEP_NF4=1 keeps both when VRAM
-            # allows.
             for attr in ("h_gu_p", "h_gu_a", "h_dn_p", "h_dn_a"):
                 t = getattr(w, attr)
                 setattr(w, attr, t.new_empty((0,) * t.dim()))
-            torch.cuda.empty_cache()
+            _torch.cuda.empty_cache()
         n_layers += 1
+    if n_layers == 0:
+        raise RuntimeError("enable_serve_experts_int4: the plan holds no "
+                           "expert layers -- refusing a vacuous enable")
     return n_layers

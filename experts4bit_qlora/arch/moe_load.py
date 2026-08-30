@@ -112,24 +112,13 @@ def _materialize_computed_buffers(model: torch.nn.Module, device) -> list:
     return rebuilt
 
 
-def execute_moe_plan(
-    plan,
-    model: torch.nn.Module,
-    read_tensor,
-    *,
-    device="cpu",
-    dtype: torch.dtype = torch.bfloat16,
-    strict: bool = True,
-) -> dict:
-    """Carry out `plan` against `model`.
-
-    ``read_tensor(checkpoint_key) -> torch.Tensor`` is the only I/O this module
-    performs, so the same executor serves safetensors shards, a GGUF reader, an
-    NVMe arena, or a test fixture.
-
-    Returns a report: assigned / fused / rebuilt-buffer counts, plus any
-    parameters still on ``meta`` (which raises under ``strict``).
-    """
+def make_plan_reader(plan, read_tensor, dtype: torch.dtype):
+    """The plan's read path as a reusable closure: dequantizes
+    block-FP8 / GPTQ / AWQ / NVFP4 / MXFP4 / compressed-int sources
+    and applies the family's stored transposes, so every consumer --
+    the loader, or the int4 serve-lane repack -- gets dense tensors
+    without knowing what the checkpoint shipped. Extracted verbatim
+    from execute_moe_plan."""
     def read(key):
         """Read a checkpoint tensor, dequantizing block-FP8 or MXFP4 in place.
 
@@ -190,6 +179,51 @@ def execute_moe_plan(
         if plan.transforms.get(key) == "transpose_last2":
             t = t.transpose(-1, -2).contiguous()
         return t
+    return read
+
+
+def read_fused_expert_layer(plan, layer, read, *, device="cpu",
+                            dtype: torch.dtype = torch.bfloat16):
+    """One layer's expert stacks through the plan: reads every
+    expert's projections and fuses them the family's way
+    (fuse_experts gate-first, or stack_experts for non-gated).
+    Returns (first_stack, down_stack). Extracted verbatim from
+    execute_moe_plan so the loader and the int4 serve-lane repack
+    can never disagree on fusion."""
+    roles = plan.experts[layer]
+    n = len(roles["down"])
+    down = [read(roles["down"][e]).to(dtype).to(device) for e in range(n)]
+    up = [read(roles["up"][e]).to(dtype).to(device) for e in range(n)]
+    if "gate" in roles:
+        gate = [read(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
+        first, down_stack = fuse_experts(gate, up, down)
+        del gate
+    else:
+        # Non-gated (nemotron_h): up_proj stacks on its own.
+        first, down_stack = stack_experts(up, down)
+    del up, down
+    return first, down_stack
+
+
+def execute_moe_plan(
+    plan,
+    model: torch.nn.Module,
+    read_tensor,
+    *,
+    device="cpu",
+    dtype: torch.dtype = torch.bfloat16,
+    strict: bool = True,
+) -> dict:
+    """Carry out `plan` against `model`.
+
+    ``read_tensor(checkpoint_key) -> torch.Tensor`` is the only I/O this module
+    performs, so the same executor serves safetensors shards, a GGUF reader, an
+    NVMe arena, or a test fixture.
+
+    Returns a report: assigned / fused / rebuilt-buffer counts, plus any
+    parameters still on ``meta`` (which raises under ``strict``).
+    """
+    read = make_plan_reader(plan, read_tensor, dtype)
 
     assigned = 0
     for ckpt_key, param in plan.passthrough.items():
@@ -199,17 +233,8 @@ def execute_moe_plan(
     fused = 0
     for layer, roles in plan.experts.items():
         first_name, down_name = plan.expert_targets[layer]
-        n = len(roles["down"])
-        down = [read(roles["down"][e]).to(dtype).to(device) for e in range(n)]
-        up = [read(roles["up"][e]).to(dtype).to(device) for e in range(n)]
-        if "gate" in roles:
-            gate = [read(roles["gate"][e]).to(dtype).to(device) for e in range(n)]
-            first, down_stack = fuse_experts(gate, up, down)
-            del gate
-        else:
-            # Non-gated (nemotron_h): up_proj stacks on its own, no gate to fuse.
-            first, down_stack = stack_experts(up, down)
-        del up, down                           # release the per-expert transient
+        first, down_stack = read_fused_expert_layer(
+            plan, layer, read, device=device, dtype=dtype)
         _assign(model, first_name, first)
         _assign(model, down_name, down_stack)
         fused += 2
