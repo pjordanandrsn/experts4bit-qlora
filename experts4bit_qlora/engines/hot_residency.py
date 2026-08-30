@@ -90,6 +90,11 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # sentinels): gu_p.shape[0] is then 0, and a 0-expert tile
         # table detonates as a storage-size-0 expand in the builder --
         # hit live on the first composed bv3+int4 arm.
+        if int4_stores is None and gu_p is not None and gu_p.numel() == 0:
+            raise RuntimeError(
+                "expert stacks are freed (int4 serve lane active) but the "
+                "device-grouping path carries no int4_stores -- a 0-expert "
+                "tile table would detonate deep in the builder")
         _n_exp = (int4_stores["gu"]["packed"].shape[0]
                   if int4_stores is not None else gu_p.shape[0])
         t_row0, t_rows, t_grp, order, _counts = build_group_tiles_device(
