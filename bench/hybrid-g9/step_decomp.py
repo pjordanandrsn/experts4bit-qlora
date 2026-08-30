@@ -364,7 +364,11 @@ def _bv3_stage(a, model, runner, sched, kv):
 
     n_warm = 3
     base_pos = max(runner.pos_of[r] for r in rids)
-    n_steps = min(a.gen_tokens, cap_tokens - (base_pos + n_warm) - 2)
+    # profile_replays excluded from the budget, mirroring Stage A: when
+    # capacity binds, the reserved slots must survive the timed window
+    # or the profiled replays walk off the reserved KV (review, round 1).
+    n_steps = min(a.gen_tokens,
+                  cap_tokens - profile_replays - (base_pos + n_warm) - 2)
     assert n_steps >= 16, f"window too small for bv3 ({n_steps})"
     # per-row decode tokens generated BEFORE the manual loop, so the
     # receipt carries the FULL greedy stream and the verdict can align
