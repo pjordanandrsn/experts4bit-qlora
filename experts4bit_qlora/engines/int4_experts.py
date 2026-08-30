@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 
 
@@ -90,6 +91,36 @@ def _top_k(model):
         "from the config; the split-K buffer cannot be sized safely")
 
 
+_FUSED_TARGET = re.compile(
+    r"^(?P<pfx>.*\.layers\.(?P<layer>\d+)\..*experts)\."
+    r"(?P<role>gate_up_proj|down_proj)$")
+
+
+def _prefused_layers(plan):
+    """``{layer: (gate_up_key, down_key)}`` for PRE-FUSED families.
+
+    Granite/Gemma-4/Qwen3-VL ship one stacked tensor per projection, so
+    the planner routes them through ``passthrough`` and ``plan.experts``
+    is EMPTY -- the per-expert fusion helper has nothing to fuse. Their
+    stacks are already in the module's layout (any axis swap is recorded
+    in ``plan.transforms`` and applied by the reader), so the int4 lane
+    can pack them directly instead of refusing the family.
+    """
+    out = {}
+    for ckpt_key, target in plan.passthrough.items():
+        m = _FUSED_TARGET.match(target)
+        if not m:
+            continue
+        layer = int(m.group("layer"))
+        gu, dn = out.get(layer, (None, None))
+        if m.group("role") == "gate_up_proj":
+            gu = ckpt_key
+        else:
+            dn = ckpt_key
+        out[layer] = (gu, dn)
+    return {k: v for k, v in out.items() if v[0] and v[1]}
+
+
 def _meta_twin(model):
     """A plannable twin of the live model on ``meta``.
 
@@ -147,9 +178,24 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     read = make_plan_reader(plan, read_tensor, _torch.float32)
     keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
 
+    prefused = _prefused_layers(plan) if not plan.experts else {}
+    if prefused and mt == "gpt_oss":
+        # gpt-oss's stacks are MXFP4 with INTERLEAVED gate/up rows and a
+        # bias-carrying epilogue; the de-interleave lives in the loader's
+        # gpt-oss builder, not in the plan read. Packing the plan's stacks
+        # here would pair gate rows with up rows -- shapes fine, numbers
+        # wrong. Refuse by NAME rather than produce that.
+        raise RuntimeError(
+            "enable_serve_experts_int4: gpt_oss is not served by this lane "
+            "(interleaved gate/up rows + bias epilogue are applied by the "
+            "loader's gpt-oss builder, not by the load plan)")
+
     n_layers = 0
-    for layer in plan.experts:
-        first_name, _down_name = plan.expert_targets[layer]
+    for layer in (plan.experts or prefused):
+        if plan.experts:
+            first_name, _down_name = plan.expert_targets[layer]
+        else:
+            first_name = plan.passthrough[prefused[layer][0]]
         w = _wrapper_for(model, first_name)
         if w is None:
             raise RuntimeError(
@@ -159,9 +205,14 @@ def enable_serve_experts_int4(model, source_dir: str, *,
             raise RuntimeError(
                 f"layer {layer} is tiered; this lane is the all-VRAM "
                 "collapsed path -- use placement-override all-vram")
-        first, down = read_fused_expert_layer(plan, layer, read,
-                                              device="cpu",
-                                              dtype=_torch.float32)
+        if plan.experts:
+            first, down = read_fused_expert_layer(plan, layer, read,
+                                                  device="cpu",
+                                                  dtype=_torch.float32)
+        else:
+            gu_key, dn_key = prefused[layer]
+            first = read(gu_key).to(_torch.float32)
+            down = read(dn_key).to(_torch.float32)
         dev = w.h_gu_p.device
         E = first.shape[0]
 
@@ -192,6 +243,7 @@ def enable_serve_experts_int4(model, source_dir: str, *,
             _torch.cuda.empty_cache()
         n_layers += 1
     if n_layers == 0:
-        raise RuntimeError("enable_serve_experts_int4: the plan holds no "
-                           "expert layers -- refusing a vacuous enable")
+        raise RuntimeError("enable_serve_experts_int4: the plan holds "
+                           "neither per-expert stacks nor pre-fused expert "
+                           "tensors -- refusing a vacuous enable")
     return n_layers

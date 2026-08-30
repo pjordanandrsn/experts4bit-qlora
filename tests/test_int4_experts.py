@@ -225,3 +225,65 @@ def test_meta_twin_prefers_the_live_class():
     assert type(twin) is Composite
     assert "language_model.proj.weight" in twin.state_dict()
     assert next(twin.parameters()).is_meta
+
+
+def _granite_case():
+    """A PRE-FUSED family: one stacked tensor per projection, routed
+    through the plan's passthrough (plan.experts stays empty)."""
+    g = torch.Generator().manual_seed(23)
+    pre = "model.layers.0.block_sparse_moe"
+    ck = {
+        f"{pre}.input_linear.weight": (torch.randn(E, 2 * N1, K1, generator=g) / 8),
+        f"{pre}.output_linear.weight": (torch.randn(E, K1, N1, generator=g) / 8),
+        f"{pre}.router.layer.weight": (torch.randn(E, K1, generator=g) / 8),
+        "model.embed_tokens.weight": (torch.randn(N1, K1, generator=g) / 8),
+    }
+    names = [f"{pre}.experts.gate_up_proj", f"{pre}.experts.down_proj",
+             f"{pre}.router.weight", "model.embed_tokens.weight"]
+    return ck, names, f"{pre}.experts"
+
+
+def test_prefused_family_is_packed_not_refused(tmp_path, monkeypatch):
+    """Granite-style pre-fused stacks must pack, not hit the vacuous
+    refusal: plan.experts is empty for them by design."""
+    monkeypatch.delenv("E4B_INT4_KEEP_NF4", raising=False)
+    ck, names, wrap = _granite_case()
+    src = _write_ckpt(tmp_path, ck)
+    tree = _PlanTree(names)
+    live, st = _live_model(wrap, "granitemoe")
+
+    plan = plan_moe_checkpoint(list(ck), tree, "granitemoe")
+    assert not plan.experts, "fixture must exercise the PRE-FUSED path"
+
+    n = enable_serve_experts_int4(live, src, model_type="granitemoe",
+                                  plan_model=tree)
+    assert n == 1
+    stores = st._int4_stores
+    assert stores["gu"]["N"] == 2 * N1 and stores["gu"]["K"] == K1
+    assert stores["dn"]["N"] == K1 and stores["dn"]["K"] == N1
+    for e in range(E):
+        nn, kk = stores["gu"]["N"], stores["gu"]["K"]
+        pk, sc = pack_int4_b32(ck["model.layers.0.block_sparse_moe."
+                                  "input_linear.weight"][e])
+        assert torch.equal(
+            dequant_int4_ref(stores["gu"]["packed"][e].cpu(),
+                             stores["gu"]["scales"][e].cpu(), nn, kk),
+            dequant_int4_ref(pk, sc, nn, kk))
+
+
+def test_gptoss_refused_by_name(tmp_path):
+    """gpt-oss's stacks are interleaved + bias-carrying; the plan read does
+    not de-interleave, so the lane must refuse BY NAME rather than pack
+    gate rows against up rows."""
+    g = torch.Generator().manual_seed(5)
+    pre = "model.layers.0.mlp.experts"
+    ck = {f"{pre}.gate_up_proj": torch.randn(E, 2 * N1, K1, generator=g) / 8,
+          f"{pre}.down_proj": torch.randn(E, K1, N1, generator=g) / 8,
+          "model.embed_tokens.weight": torch.randn(N1, K1, generator=g) / 8}
+    src = _write_ckpt(tmp_path, ck)
+    names = [f"{pre}.gate_up_proj", f"{pre}.down_proj",
+             "model.embed_tokens.weight"]
+    live, _ = _live_model(pre, "gpt_oss")
+    with pytest.raises(RuntimeError, match="gpt_oss is not served"):
+        enable_serve_experts_int4(live, src, model_type="gpt_oss",
+                                  plan_model=_PlanTree(names))
