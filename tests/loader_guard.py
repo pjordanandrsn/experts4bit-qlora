@@ -61,6 +61,7 @@ LOADER_REFUSALS = (
     "no fused expert stacks",                 # zero expert layers mapped
     "tie_word_embeddings=False",              # untied head never found
     "unmaterialized meta tensors remain",     # something never got materialized
+    "quantize_layers excludes",               # excluded layer's experts are packed on disk
 )
 
 
