@@ -85,8 +85,20 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # the singleton path deliberately forfeits.
         from nf4_grouped import (build_group_tiles_device,
                                  gemm_4bit_grouped_captured)
+        # Expert count from the int4 stores when the NF4 stacks are
+        # FREED (the int4 lane's default drops them to 0-sized
+        # sentinels): gu_p.shape[0] is then 0, and a 0-expert tile
+        # table detonates as a storage-size-0 expand in the builder --
+        # hit live on the first composed bv3+int4 arm.
+        if int4_stores is None and gu_p is not None and gu_p.numel() == 0:
+            raise RuntimeError(
+                "expert stacks are freed (int4 serve lane active) but the "
+                "device-grouping path carries no int4_stores -- a 0-expert "
+                "tile table would detonate deep in the builder")
+        _n_exp = (int4_stores["gu"]["packed"].shape[0]
+                  if int4_stores is not None else gu_p.shape[0])
         t_row0, t_rows, t_grp, order, _counts = build_group_tiles_device(
-            local_ids, gu_p.shape[0], 16)
+            local_ids, _n_exp, 16)
         sorted_ids = local_ids.index_select(0, order)
         x_sorted = x_rows.index_select(0, order).contiguous()
         sizes = None                      # the captured path has no host sizes
@@ -133,8 +145,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # Measured at B=16 decode: this plus gnf4's tile-build memo took
         # to_device_i32 traffic /4 and the step 1.206x, tokens identical.
         eids = uniq
-    if device_grouping:
+    if device_grouping and int4_stores is None:
         def _mm(xr, pk, am):
+            if pk is not None and pk.numel() == 0:
+                # freed int4-lane stacks reaching the NF4 captured path
+                # produce a SILENT [R, 0] output (E reads as 0), which
+                # detonates far away as a size-0 view -- raise here like
+                # the host-grouped branch always has
+                raise RuntimeError(
+                    "expert stacks are freed (int4 serve lane active) "
+                    "but the NF4 captured path was selected -- "
+                    "int4_stores did not reach _fused_over_stack")
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
     elif int4_stores is not None:
@@ -143,7 +164,25 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # from the int4 bytes. Identity dispatch: _mm is called with the
         # (possibly empty) NF4 stacks it replaces, so `pk is gu_p` names
         # the slot.
-        if singleton_groups:
+        if device_grouping:
+            # batched decode (bv3): the grouped int4-b32 GEMM against
+            # the SAME prebuilt device tiles the NF4 captured path uses
+            # -- measured 1.95x (gate_up) / 4.50x (down) over the NF4
+            # grouped kernel on the B=16 census cells, graph metric.
+            # Rows arrive expert-major (the tile builder's order); the
+            # activation quantise runs per call because gu and dn see
+            # different inputs (x vs the epilogue output). Both the
+            # quantise and the GEMM allocate only through the graph
+            # private pool -- the b1d-certified capture pattern.
+            from int4_b32 import gemm_int4_b32_grouped_captured, quant_x_rows
+
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                xq, xs = quant_x_rows(xr)
+                return gemm_int4_b32_grouped_captured(
+                    xq, xs, st["packed"], st["scales"],
+                    t_row0, t_rows, t_grp)
+        elif singleton_groups:
             # decode: the int4-b32 grouped GEMV -- measured 2.7-3.3x
             # over the NF4 path at the census cells, grid +0.007 ppl
             from int4_b32 import gemv_int4_b32, quant_x_rows
