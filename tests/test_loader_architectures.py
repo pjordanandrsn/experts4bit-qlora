@@ -1158,7 +1158,7 @@ def test_block_sparse_router_reaches_the_tree_spelling(build, tmp_path):
         assert torch.equal(got.cpu(), want.cpu())
 
 
-def test_checkpoint_prefix_is_not_the_module_prefix(tmp_path):
+def test_checkpoint_prefix_is_not_the_module_prefix():
     """State the decoupling directly, so a future refactor that re-merges the two fails here.
 
     `expert_layout_for` answers the MODULE question (where the fused stack is placed);
@@ -1234,7 +1234,7 @@ def test_existing_per_expert_families_load_unchanged(build, tmp_path, monkeypatc
     from experts4bit_qlora import loader as loader_mod
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
-    torch.manual_seed(0)  # noqa: F841 — seeded again per load below
+    torch.manual_seed(0)          # deterministic fixture weights
     _write_ckpt(build(), str(tmp_path), per_expert=True)
 
     def _tensors(model):
@@ -1255,7 +1255,8 @@ def test_existing_per_expert_families_load_unchanged(build, tmp_path, monkeypatc
     packed = [n for n in got if n.endswith(".experts.base.gate_up_proj")]
     # Guard the guard: without a real packed 4-bit stack in the comparison, the loop below
     # would be comparing attention and norms only and would pass no matter what the read did.
-    assert packed and all(got[n].dtype == torch.uint8 for n in packed), packed
+    assert packed, "no packed 4-bit expert stack in the comparison"
+    assert all(got[n].dtype == torch.uint8 for n in packed), packed
     for n in sorted(got):
         assert got[n].dtype == want[n].dtype, n
         assert torch.equal(got[n].cpu(), want[n].cpu()), n
