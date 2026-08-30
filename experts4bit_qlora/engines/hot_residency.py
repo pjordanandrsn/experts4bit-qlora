@@ -333,10 +333,19 @@ class _HotResidency:
         self._build_hot(gu_p, gu_a, dn_p, dn_a, hi)
         if self.gptoss:
             gub, dnb = mod.gate_up_bias, mod.down_bias           # [E, 2I] / [E, H], contiguous
-            self.h_gu_b = gub.index_select(0, hi).contiguous().to(self.device)
-            self.h_dn_b = dnb.index_select(0, hi).contiguous().to(self.device)
-            self.c_gu_b = gub.index_select(0, ci).contiguous().to(self.device)
-            self.c_dn_b = dnb.index_select(0, ci).contiguous().to(self.device)
+            # Index on the BIASES' own device, not the packed stacks'. The two
+            # are deliberately different tiers on the arena path: the packed
+            # weights stay on `meta` (served from the arena) while these small
+            # stacks are resident, so reusing `hi`/`ci` -- built on the packed
+            # weights' device -- would index a real tensor with meta indices and
+            # kill the attach for every gpt-oss layer. A no-op on the direct
+            # path, where both live on the same device.
+            bhi = hot_ids.to(gub.device)
+            bci = cold_ids.to(gub.device)
+            self.h_gu_b = gub.index_select(0, bhi).contiguous().to(self.device)
+            self.h_dn_b = dnb.index_select(0, bhi).contiguous().to(self.device)
+            self.c_gu_b = gub.index_select(0, bci).contiguous().to(self.device)
+            self.c_dn_b = dnb.index_select(0, bci).contiguous().to(self.device)
         # COLD: pinned host RAM, streamed per token (only the routed subset).
         # Factored into a hook so a subclass can back the cold tail with
         # something other than a fully-materialized host stack — see

@@ -831,10 +831,10 @@ def test_loader_arena_mode_builds_meta_experts(tmp_path):
             assert not buf.is_meta, f"non-expert buffer left on meta: {name}"
 
 
-def test_loader_arena_mode_refuses_per_expert_biases(tmp_path, monkeypatch):
-    """gpt-oss keeps per-expert biases beside the packed stacks. Arena serving does
-    not carry them yet, so it must REFUSE rather than drop them — dropping would
-    silently change the epilogue."""
+def test_loader_arena_mode_refuses_unknown_per_expert_biases(tmp_path, monkeypatch):
+    """A per-expert bias spelling the arena path does not model must REFUSE
+    rather than be dropped -- dropping silently changes the epilogue. Only
+    the gpt-oss spelling is carried (see the carry test below)."""
     pytest.importorskip("nvme_arena")
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
@@ -843,17 +843,68 @@ def test_loader_arena_mode_refuses_per_expert_biases(tmp_path, monkeypatch):
     arena_path = str(tmp_path / "e.arena")
     _bake_arena_for(ref, arena_path)
 
-    # splice a bias key into the index so the guard sees gpt-oss-shaped input
     ipath = os.path.join(str(tmp_path), "model.safetensors.index.json")
     idx = json.load(open(ipath))
     lay0 = next(k for k in idx["weight_map"] if ".mlp.experts." in k)
     pfx = lay0.split(".mlp.experts.")[0] + ".mlp.experts."
-    idx["weight_map"][pfx + "gate_up_proj_bias"] = "model.safetensors"
+    idx["weight_map"][pfx + "some_other_bias"] = "model.safetensors"
     json.dump(idx, open(ipath, "w"))
 
     with pytest.raises(NotImplementedError, match="per-expert biases"):
         load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
                                 arena=arena_path)
+
+
+def test_loader_arena_mode_carries_gptoss_biases(tmp_path):
+    """The gpt-oss spelling IS carried: weights stream from the arena while
+    the two small bias stacks stay resident, de-interleaved to match the
+    baked gate-block-then-up-block weight layout."""
+    pytest.importorskip("nvme_arena")
+    import torch
+    from safetensors.torch import load_file, save_file
+
+    from experts4bit_qlora.arch.gptoss import GPTOSS_ALPHA, GPTOSS_LIMIT
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    ref, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8)
+    arena_path = str(tmp_path / "e.arena")
+    _bake_arena_for(ref, arena_path)
+
+    # add REAL gpt-oss-spelled bias tensors (index + shard) for every MoE layer
+    fp = os.path.join(str(tmp_path), "model.safetensors")
+    tensors = load_file(fp)
+    ipath = os.path.join(str(tmp_path), "model.safetensors.index.json")
+    idx = json.load(open(ipath))
+    prefixes = sorted({k.split(".mlp.experts.")[0] + ".mlp.experts."
+                       for k in idx["weight_map"] if ".mlp.experts." in k})
+    assert prefixes, "fixture has no expert layers"
+    mods = [m for m in ref.modules() if hasattr(m, "gate_up_proj")]
+    E = mods[0].num_experts
+    n1, _k1 = mods[0]._gate_up_shape
+    _n2, hidden = mods[0]._down_shape[0], mods[0]._down_shape[0]
+    for pfx in prefixes:
+        gub = torch.arange(E * n1, dtype=DTYPE).reshape(E, n1)
+        dnb = torch.zeros(E, hidden, dtype=DTYPE)
+        tensors[pfx + "gate_up_proj_bias"] = gub
+        tensors[pfx + "down_proj_bias"] = dnb
+        idx["weight_map"][pfx + "gate_up_proj_bias"] = "model.safetensors"
+        idx["weight_map"][pfx + "down_proj_bias"] = "model.safetensors"
+    save_file({k: v.contiguous().clone() for k, v in tensors.items()}, fp)
+    json.dump(idx, open(ipath, "w"))
+
+    model, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4,
+                                       alpha=8, arena=arena_path)
+    carried = [m for m in model.modules() if hasattr(m, "gate_up_bias")]
+    assert len(carried) == len(prefixes), "every MoE layer must carry biases"
+    for m in carried:
+        assert not m.gate_up_bias.is_meta and not m.down_bias.is_meta
+        assert m.gate_up_bias.shape == (E, n1)
+        assert m.alpha == GPTOSS_ALPHA and m.limit == GPTOSS_LIMIT
+        # de-interleaved: first half is the EVEN source rows
+        src = torch.arange(E * n1, dtype=DTYPE).reshape(E, n1)
+        want = torch.cat([src[:, 0::2], src[:, 1::2]], dim=1)
+        assert torch.equal(m.gate_up_bias.cpu().to(DTYPE), want)
 
 
 # The tiny fixture has 2 layers, so {0} is the only subset that leaves one to skip;
