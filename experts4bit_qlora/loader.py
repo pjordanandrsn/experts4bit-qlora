@@ -409,6 +409,116 @@ def _install_fp8_block_linears(model, weight_map, get, expert_keys, dtype, devic
     return consumed
 
 
+def _assign_expert_stacks(model, epfx, stacks, has_gate):
+    """Place a ``(gate_up|up, down)`` stack pair into the fused expert module.
+
+    The names are the ones the module declares and the fused-on-disk copy of the same
+    checkpoint would have been assigned into, so this lands the layer in exactly the
+    state that copy reaches — only unquantized. Returns the names :func:`_fit` narrowed.
+
+    Deliberately does NOT cast to the compute dtype. `_assign` places every other weight
+    in the model at whatever dtype the checkpoint holds — attention, embeddings, router,
+    and a fused-on-disk expert stack alike — so casting only these would hand an excluded
+    layer a dtype no other module in the model has, and would make the two on-disk
+    layouts disagree about the same checkpoint. `cat`/`stack` preserve the checkpoint
+    dtype, which is exactly what is wanted.
+    """
+    names = ("gate_up_proj" if has_gate else "up_proj", "down_proj")
+    return [f"{epfx}{n}" for n, stack in zip(names, stacks)
+            if _assign(model, f"{epfx}{n}", stack)]
+
+
+def _place_unquantized_experts(model, epfx, layer, weight_map, get, n_exp, model_type,
+                               layer_experts, has_gate):
+    """Place a ``quantize_layers``-excluded layer's experts, unquantized.
+
+    Excluding a layer means "leave it in the base dtype, original module in place" — the
+    checkpoint's own dtype, the one `_assign` gives every other weight in the model. For a
+    checkpoint whose experts are already FUSED on disk that needs no help: one stack per
+    projection, one module parameter to receive it, and the non-expert ``_assign`` pass
+    below places them unaided.
+
+    A PER-EXPERT checkpoint has no such correspondence. transformers >= 5 builds a single
+    fused ``experts`` module with no per-expert children, so the ``_assign`` pass walked
+    ``...experts.<e>.gate_proj.weight`` and died on ``get_submodule`` with
+    "OlmoeExperts has no attribute `0`" — naming neither ``quantize_layers`` nor the
+    layout, and reproducing on every family whose checkpoints use that spelling
+    ("MixtralExperts has no attribute `0`", and so on). So fuse the per-expert tensors
+    here exactly as the quantizing branch does and assign the result, leaving the layer
+    holding what the fused-on-disk copy of the same checkpoint would have held — only
+    unquantized.
+
+    Returns ``(consumed_keys, narrowed_names)``: the checkpoint keys this placed (so the
+    ``_assign`` pass does not walk them again), and any that :func:`_fit` had to narrow.
+    Both are empty when the layer needs no help — dense, or already fused on disk.
+    """
+    # The arms below mirror the quantizing branch's own dispatch one-for-one, and must
+    # keep doing so: a read path added there without an arm here reintroduces exactly
+    # this bug on exactly the family that read was added for.
+    keys = {k for k in weight_map if k.startswith(epfx)}
+    if f"{epfx}gate_up_proj" in weight_map or not (keys or layer_experts):
+        return set(), []                  # fused on disk, or dense: `_assign` handles it
+    if layer_experts:
+        # Per-expert Linears, located by the CONVENTION rather than by `epfx`. The two
+        # sides differ for the families stored under a `block_sparse_moe` block — keys
+        # spelled `block_sparse_moe.experts.<e>.w1` against a module built at
+        # `mlp.experts` — so their keys do not start with `epfx` at all and the literal
+        # arm below cannot see them. Hand the rows to the convention's own fuser, which
+        # is where w1=gate / w3=up / w2=down was adjudicated; gate and up are
+        # shape-identical, so that ordering is the one thing shapes cannot check.
+        from .arch.moe_conventions import fuse_experts, stack_experts
+
+        consumed, rows = set(), {}
+        for role in (("gate", "up", "down") if has_gate else ("up", "down")):
+            byidx = layer_experts.get(role, {})
+            consumed |= {byidx[e] for e in range(n_exp) if e in byidx}
+            # A hole is carried through as None, not skipped: the fuser refuses a short
+            # stack and names the missing indices, rather than leaving the router
+            # addressing experts that were never loaded.
+            rows[role] = [get(byidx[e]) if e in byidx else None for e in range(n_exp)]
+        stacks = (fuse_experts(rows["gate"], rows["up"], rows["down"]) if has_gate
+                  else stack_experts(rows["up"], rows["down"]))
+        return consumed, _assign_expert_stacks(model, epfx, stacks, has_gate)
+    if f"{epfx}0.gate_proj.weight" in weight_map:
+        # Same per-expert shape reached WITHOUT a convention — the dedicated-quant
+        # families, whose `layer_experts` is empty even when spelled this way. Kept
+        # verbatim against the quantizing branch's own literal arm for the same reason
+        # that one is: nothing that loads today should start depending on a convention
+        # entry it never had.
+        consumed, gate_up_rows, down_rows = set(), [], []
+        for e in range(n_exp):
+            g, u, d = (
+                get(f"{epfx}{e}.gate_proj.weight"),
+                get(f"{epfx}{e}.up_proj.weight"),
+                get(f"{epfx}{e}.down_proj.weight"),
+            )
+            gate_up_rows.append(torch.cat([g, u], dim=0))  # [2*inter, hidden]
+            down_rows.append(d)                            # [hidden, inter]
+            consumed |= {f"{epfx}{e}.{p}.weight" for p in ("gate_proj", "up_proj", "down_proj")}
+        stacks = (torch.stack(gate_up_rows), torch.stack(down_rows))
+        return consumed, _assign_expert_stacks(model, epfx, stacks, has_gate)
+    # Packed layouts the quantizing branch reads by DEQUANTIZING them (gpt-oss MXFP4
+    # blocks/scales; Kimi-K3 / DeepSeek-V4 per-expert `weight_packed`). Their base-dtype
+    # home in the module tree is family-specific — gpt-oss stores gate_up interleaved and
+    # hidden-major, which `from_gptoss` de-interleaves on the quantizing path — so placing
+    # them here would be a guess, and a wrong guess is silent. Refuse instead, naming the
+    # flag and the layout rather than dying in the generic weight walk below.
+    packed = f"{epfx}gate_up_proj_blocks" in weight_map or (
+        model_type in K3_PER_EXPERT_MXFP4
+        and f"{epfx}0.{K3_PER_EXPERT_MXFP4[model_type][0][0]}."
+            f"{K3_PER_EXPERT_MXFP4[model_type][1]}" in weight_map)
+    if packed:
+        raise NotImplementedError(
+            f"layer {layer}: quantize_layers excludes this layer, but {model_type!r} stores "
+            f"its experts packed (e.g. {sorted(keys)[0]!r}), and this loader can only read "
+            "that layout by quantizing it. Excluding a layer means leaving it in the base "
+            "dtype, which is supported for the fused ('gate_up_proj'/'down_proj') and "
+            "per-expert Linear ('<e>.gate_proj.weight') spellings only. Quantize this layer "
+            "too, or drop quantize_layers."
+        )
+    return set(), []                      # unrecognized: unchanged, whatever the walk does
+
+
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
@@ -651,6 +761,7 @@ def load_moe_4bit_streaming(
     n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
     log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to {quant_type} (streaming)...")
     expert_keys = set()
+    narrowed = []                  # tensors `_fit` had to narrow, reported after the walk
     meta_expert_prefixes = []      # arena mode: modules whose buffers stay on meta
     offload_handles = []
     n_moe = 0
@@ -664,8 +775,14 @@ def load_moe_4bit_streaming(
         # address the checkpoint by `epfx` because there the two sides do coincide.
         layer_experts = ckpt_experts.get(i, {})
         if quantize_layers is not None and i not in quantize_layers:
-            # Deliberately left in the base dtype. Same effect as the dense-layer
-            # `continue` below: the original module stays in place, unquantized.
+            # Deliberately left in the base dtype: the original module stays in place,
+            # unquantized. It still has to be FILLED, and a per-expert checkpoint cannot
+            # fill a fused module key-by-key — see `_place_unquantized_experts`.
+            consumed, cut = _place_unquantized_experts(
+                model, epfx, i, weight_map, get, n_exp, model_type,
+                layer_experts, has_gate)
+            expert_keys |= consumed
+            narrowed += cut
             continue
         if arena_index is not None:
             # Every checkpoint key under the experts submodule is an expert tensor,
@@ -945,7 +1062,6 @@ def load_moe_4bit_streaming(
             f"(dense side stays FP8-resident, decoded on use)")
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
-    narrowed = []
     renamings = _checkpoint_key_renamings(model_type)
     # The convention's own SUBSTRING renames, for the non-expert half of a family
     # whose MoE block is spelled differently on disk: the mixtral family's router

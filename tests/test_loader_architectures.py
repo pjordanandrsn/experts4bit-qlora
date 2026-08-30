@@ -880,10 +880,22 @@ def test_loader_arena_mode_carries_gptoss_biases(tmp_path):
         assert torch.equal(m.gate_up_bias.cpu().to(DTYPE), want)
 
 
+# Both on-disk expert layouts, on every `quantize_layers` test. Only `per_expert=False`
+# used to be covered, and that was the one layout the feature actually worked on: a
+# skipped layer was `continue`d before any read branch, so its per-expert keys never
+# reached `expert_keys` and the non-expert `_assign` pass walked them into
+# `get_submodule("...experts.0")` — which transformers >= 5 does not build, since the
+# experts are one fused module. Every per-expert checkpoint died on
+# "OlmoeExperts has no attribute `0`", naming neither the flag nor the layout.
+_LAYOUTS = pytest.mark.parametrize("per_expert", [False, True],
+                                   ids=["fused_on_disk", "per_expert_on_disk"])
+
+
 # The tiny fixture has 2 layers, so {0} is the only subset that leaves one to skip;
 # {0, 1} would be the whole model and would test nothing (CI caught exactly that).
+@_LAYOUTS
 @pytest.mark.parametrize("keep", [{0}])
-def test_quantize_layers_restricts_which_layers_are_quantized(keep, tmp_path):
+def test_quantize_layers_restricts_which_layers_are_quantized(keep, per_expert, tmp_path):
     """`quantize_layers` leaves the excluded MoE layers in the base dtype.
 
     Asserted structurally rather than by output error: a numeric check could pass simply
@@ -896,7 +908,7 @@ def test_quantize_layers_restricts_which_layers_are_quantized(keep, tmp_path):
     model = _olmoe()
     n_layers = model.config.num_hidden_layers
     assert n_layers > max(keep) + 1, "fixture must have a layer outside `keep` to skip"
-    _write_ckpt(model, tmp_path, per_expert=False)
+    _write_ckpt(model, tmp_path, per_expert=per_expert)
 
     m, _ = load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8,
                                    quantize_layers=keep)
@@ -908,14 +920,15 @@ def test_quantize_layers_restricts_which_layers_are_quantized(keep, tmp_path):
     assert quantized == keep, f"expected only {sorted(keep)} quantized, got {sorted(quantized)}"
 
 
-def test_quantize_layers_default_quantizes_every_layer(tmp_path):
+@_LAYOUTS
+def test_quantize_layers_default_quantizes_every_layer(per_expert, tmp_path):
     """Default (None) is unchanged behaviour — the regression this feature could cause."""
     from experts4bit_qlora import ExpertsNbit
     from experts4bit_qlora.loader import load_moe_4bit_streaming
 
     model = _olmoe()
     n_layers = model.config.num_hidden_layers
-    _write_ckpt(model, tmp_path, per_expert=False)
+    _write_ckpt(model, tmp_path, per_expert=per_expert)
 
     m, _ = load_moe_4bit_streaming(str(tmp_path), "cpu", torch.float32, r=4, alpha=8)
     quantized = {
@@ -1257,3 +1270,170 @@ def test_existing_per_expert_families_load_unchanged(build, tmp_path, monkeypatc
     for n in sorted(got):
         assert got[n].dtype == want[n].dtype, n
         assert torch.equal(got[n].cpu(), want[n].cpu()), n
+
+
+@_LAYOUTS
+def test_quantize_layers_excluded_layer_holds_the_source_weights(per_expert, tmp_path):
+    """The excluded layer is not merely unquantized — it holds the RIGHT tensors.
+
+    Loading without raising is too weak a bar for the per-expert layout: fusing
+    gate_up[e] = cat([gate, up]) in the wrong order, or stacking on the wrong axis,
+    produces plausible shapes and a silently wrong model on exactly the layers the caller
+    chose to protect. So compare against an oracle outside the loader — the source
+    module's own fused parameters — and require equality, not closeness.
+    """
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    model = _olmoe()
+    gold = {k: v.clone() for k, v in model.state_dict().items() if ".experts." in k}
+    _write_ckpt(model, tmp_path, per_expert=per_expert)
+
+    # Write, load and compare all at DTYPE. Pinning fp32 here while `_write_ckpt` stores
+    # DTYPE passed only because DTYPE *is* fp32 on a CPU host: on a GPU one the checkpoint
+    # is bf16, and demanding bit-equality with the fp32 original fails on both layouts —
+    # the fused arm because `_assign` keeps the checkpoint dtype, the per-expert arm
+    # because the values have been through a bf16 round-trip.
+    m, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
+                                   quantize_layers={0})
+    skipped = m.model.layers[1].mlp.experts
+    for proj in ("gate_up_proj", "down_proj"):
+        got = getattr(skipped, proj)
+        want = gold[f"model.layers.1.mlp.experts.{proj}"].to(DTYPE)
+        assert not got.is_meta, f"{proj} never reached the excluded layer"
+        # The checkpoint's dtype, which is what `_assign` gives every other weight in the
+        # model — so both on-disk layouts land the excluded layer in the same state.
+        assert got.dtype == DTYPE, f"{proj} is {got.dtype}, not the checkpoint dtype"
+        assert torch.equal(got.cpu(), want.cpu()), f"{proj} does not match the source weights"
+
+
+@pytest.mark.parametrize("build", [_olmoe, _qwen3_moe], ids=["olmoe", "qwen3_moe"])
+def test_quantize_layers_excluded_layer_identical_through_both_reads(build, tmp_path, monkeypatch):
+    """The excluded layer comes out the same whichever per-expert read located it.
+
+    `_place_unquantized_experts` mirrors the quantizing branch's dispatch, so it inherits
+    that branch's two per-expert arms: one driven by the convention index, one a literal
+    `epfx + "{e}.gate_proj.weight"` probe kept for the model_types that have no convention
+    entry. Every family with a CPU fixture now has a convention, so the literal arm is
+    unreachable from this suite unless it is forced — and an unreachable arm is an
+    unchecked one: a gate/up swap in it passes every other test here.
+
+    Forcing `_convention_or_none` to None is exactly what a conventionless family sees
+    (same mechanism as `test_existing_per_expert_families_load_unchanged`), which makes
+    this an equivalence proof for the excluded layer rather than a smoke test.
+    """
+    from experts4bit_qlora import loader as loader_mod
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    _write_ckpt(build(), str(tmp_path), per_expert=True)
+
+    def _excluded(model):
+        e = model.model.layers[1].mlp.experts
+        return {n: t for n, t in list(e.named_parameters()) + list(e.named_buffers())}
+
+    torch.manual_seed(1234)
+    via_convention, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
+                                                quantize_layers={0})
+    monkeypatch.setattr(loader_mod, "_convention_or_none", lambda model_type: None)
+    torch.manual_seed(1234)
+    via_literal, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
+                                             quantize_layers={0})
+
+    got, want = _excluded(via_convention), _excluded(via_literal)
+    assert set(got) == set(want)
+    # Guard the guard: with no expert stack in the comparison this would be asserting
+    # nothing at all, and would stay green whatever either read did.
+    assert "gate_up_proj" in got, f"no expert stack on the excluded layer: {sorted(got)}"
+    for n in sorted(got):
+        assert not got[n].is_meta and not want[n].is_meta, n
+        assert got[n].dtype == want[n].dtype, n
+        assert torch.equal(got[n].cpu(), want[n].cpu()), n
+
+
+@pytest.mark.parametrize("build", [_mixtral, _phimoe], ids=["mixtral", "phimoe"])
+def test_quantize_layers_excluded_layer_from_a_block_sparse_checkpoint(build, tmp_path):
+    """An excluded layer is filled from keys the MODULE prefix does not even match.
+
+    This family stores experts under `block_sparse_moe.experts.<e>.{w1,w3,w2}` and builds
+    them at `mlp.experts`, so an excluded layer's checkpoint keys do not start with the
+    module prefix at all — the literal per-expert arm cannot see them, and the generic
+    weight walk died on "MixtralExperts has no attribute `0`". The convention index
+    locates them, and its fuser keeps w1=gate / w3=up where that was adjudicated: gate
+    and up are shape-identical, so a swap here would round-trip a different function on
+    exactly the layers the caller chose to leave alone, with nothing raised.
+    """
+    from experts4bit_qlora import ExpertsNbit
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    torch.manual_seed(0)
+    model = build()
+    gold = {k: v.clone() for k, v in model.state_dict().items() if ".experts." in k}
+    _write_block_sparse_ckpt(model, str(tmp_path))
+
+    m, _ = load_moe_4bit_streaming(str(tmp_path), DEVICE, DTYPE, r=4, alpha=8,
+                                   quantize_layers={0})
+    quantized = {
+        i for i in range(model.config.num_hidden_layers)
+        if any(isinstance(sub, ExpertsNbit) for sub in m.model.layers[i].mlp.modules())
+    }
+    assert quantized == {0}, f"expected only layer 0 quantized, got {sorted(quantized)}"
+
+    skipped = m.model.layers[1].mlp.experts
+    for proj in ("gate_up_proj", "down_proj"):
+        got = getattr(skipped, proj)
+        want = gold[f"model.layers.1.mlp.experts.{proj}"].to(DTYPE)
+        assert not got.is_meta, f"{proj} never reached the excluded layer"
+        assert got.dtype == DTYPE, f"{proj} is {got.dtype}, not the base dtype"
+        assert torch.equal(got.cpu(), want.cpu()), f"{proj} does not match the source weights"
+
+
+# gpt-oss and Kimi-K3/DeepSeek-V4 keep their experts PACKED (MXFP4 blocks/scales), and this
+# loader can only read that layout by dequantizing it on the way into a quantized module —
+# so "leave this layer in the base dtype" has no implementation for them. Their real
+# checkpoints need CUDA and tens of GB, so the dispatch is exercised directly here: the
+# point under test is which spelling routes where, and that is decidable from the key names
+# alone. What must NOT happen is the pre-fix behaviour — falling through to the generic
+# weight walk and dying on `get_submodule` or a stray meta tensor, naming neither the flag
+# nor the layout.
+@pytest.mark.parametrize("model_type,keys", [
+    ("gpt_oss", ["gate_up_proj_blocks", "gate_up_proj_scales", "down_proj_blocks"]),
+    ("kimi_k3", ["0.w1.weight_packed", "0.w1.weight_scale", "0.w2.weight_packed"]),
+])
+def test_quantize_layers_refuses_packed_expert_layouts(model_type, keys):
+    from experts4bit_qlora.loader import _place_unquantized_experts
+
+    epfx = "model.layers.1.mlp.experts."
+    weight_map = {epfx + k: "model.safetensors" for k in keys}
+    with pytest.raises(NotImplementedError) as e:
+        # `model`/`get` are unused on this path — it refuses before reading anything.
+        _place_unquantized_experts(None, epfx, 1, weight_map, None, 8, model_type, {}, True)
+    msg = str(e.value)
+    assert "quantize_layers" in msg, "the refusal must name the flag the caller passed"
+    assert epfx in msg, "the refusal must name the layout it found"
+    # And it must read as a REFUSAL to the shared guard, not as an absent bnb backend: this
+    # is a NotImplementedError, which `QUANTIZE_UNAVAILABLE` catches, so an unregistered
+    # message would turn a declined load into a green skip. `test_loader_guard.py` enforces
+    # this across the whole loader; asserted here too so the refusal's own arm says it.
+    from loader_guard import is_loader_refusal
+
+    assert is_loader_refusal(e.value), f"unregistered loader refusal: {msg!r}"
+
+
+@pytest.mark.parametrize("keys", [
+    [],                                          # dense layer: no experts here at all
+    ["gate_up_proj", "down_proj"],               # already fused on disk
+])
+def test_quantize_layers_leaves_placeable_layouts_to_the_weight_walk(keys):
+    """Dense and fused-on-disk layers are placed by the generic `_assign` pass, unchanged.
+
+    Claiming those keys here would be the mirror-image bug: the walk would skip them and
+    the layer would keep meta parameters.
+    """
+    from experts4bit_qlora.loader import _place_unquantized_experts
+
+    epfx = "model.layers.1.mlp.experts."
+    weight_map = {epfx + k: "model.safetensors" for k in keys}
+    consumed, narrowed = _place_unquantized_experts(
+        None, epfx, 1, weight_map, None, 8, "olmoe", {}, True)
+    assert consumed == set() and narrowed == []
