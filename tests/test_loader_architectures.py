@@ -15,7 +15,7 @@ import os
 
 import pytest
 
-from loader_guard import load_or_skip
+from quant_guard import load_or_skip
 
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
@@ -30,12 +30,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # included) — this is a property of recomputing routing, not of this package's quantization.
 DTYPE = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 # The "is this bnb missing, or is this the LOADER refusing?" distinction lives in
-# tests/loader_guard.py, shared with test_reference_parity.py — see that module's docstring for the
+# tests/quant_guard.py, shared with test_reference_parity.py — see that module's docstring for the
 # two mutants that proved a broad `except` turns this whole file into an instrument that cannot fail.
 
 
 def _load_or_skip(path, dtype=DTYPE, *, what="4-bit", **kw):
-    """`loader_guard.load_or_skip` bound to this module's DEVICE/DTYPE. Every arm loads through here.
+    """`quant_guard.load_or_skip` bound to this module's DEVICE/DTYPE. Every arm loads through here.
 
     ``dtype`` stays a positional default because several arms pin bf16 instead of the module default,
     and ``what`` because the quant_type arms name the scheme they actually asked for in the skip
@@ -1413,9 +1413,9 @@ def test_quantize_layers_refuses_packed_expert_layouts(model_type, keys):
     assert epfx in msg, "the refusal must name the layout it found"
     # And it must read as a REFUSAL to the shared guard, not as an absent bnb backend: this
     # is a NotImplementedError, which `QUANTIZE_UNAVAILABLE` catches, so an unregistered
-    # message would turn a declined load into a green skip. `test_loader_guard.py` enforces
+    # message would turn a declined load into a green skip. `test_quant_guard.py` enforces
     # this across the whole loader; asserted here too so the refusal's own arm says it.
-    from loader_guard import is_loader_refusal
+    from quant_guard import is_loader_refusal
 
     assert is_loader_refusal(e.value), f"unregistered loader refusal: {msg!r}"
 

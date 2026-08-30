@@ -16,6 +16,8 @@ Covers the two ``no_grad`` additions in :mod:`experts4bit_qlora.lora`:
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -24,7 +26,6 @@ from experts4bit_qlora import lora as lora_mod  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires a CUDA GPU")
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 E, HID, INTER, TOP_K = 4, 128, 192, 2
 
 
@@ -32,10 +33,8 @@ def _build(compute_dtype=torch.float32, adapter_dtype=torch.float32, seed=0):
     torch.manual_seed(seed)
     gate_up = (torch.randn(E, 2 * INTER, HID) * 0.1).to(DEVICE)
     down = (torch.randn(E, HID, INTER) * 0.1).to(DEVICE)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=compute_dtype)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=compute_dtype)
     lora = ExpertsLoRA(base, r=8, alpha=16, dtype=adapter_dtype).to(DEVICE)
     with torch.no_grad():  # nonzero B so the adapter delta participates in every parity check
         lora.gate_up_lora_B.normal_(std=0.02)

@@ -11,13 +11,14 @@ faithfully) — so a regression in any scheme is caught on CPU.
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
 from experts4bit_qlora import Experts4bit, ExpertsNbit, ExpertsLoRA  # noqa: E402
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 E, HID, INTER, TOP_K, N_TOK = 4, 128, 192, 2, 8
 EIGHT_AND_SIXTEEN = ["int8", "fp8", "bf16", "fp16"]
 ALL_SCHEMES = ["nf4", "fp4", *EIGHT_AND_SIXTEEN]
@@ -32,10 +33,8 @@ def _weights(seed=0):
 
 def _build(quant_type, compute_dtype=torch.float32, seed=0):
     gate_up, down = _weights(seed)
-    try:
-        return ExpertsNbit.from_float(gate_up, down, quant_type=quant_type, compute_dtype=compute_dtype)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes {quant_type} quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE, quant_type)
+    return ExpertsNbit.from_float(gate_up, down, quant_type=quant_type, compute_dtype=compute_dtype)
 
 
 def _inputs(dtype=torch.float32, seed=1):
@@ -186,10 +185,8 @@ def test_extra_state_dim_or_blocksize_mismatch_rejected():
     shape complaint."""
     base = _build("nf4", seed=0)  # blocksize 64
     gate_up, down = _weights(seed=7)
-    try:
-        dst = ExpertsNbit.from_float(gate_up, down, quant_type="nf4", blocksize=32)  # 32 divides HID and INTER
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes nf4/bs32 quantize unavailable on {DEVICE}: {e}")
+    require_quantize(DEVICE, "nf4", 32)
+    dst = ExpertsNbit.from_float(gate_up, down, quant_type="nf4", blocksize=32)  # 32 divides HID and INTER
     with pytest.raises(ValueError, match="blocksize: checkpoint=64 vs module=32"):
         dst.load_state_dict(base.state_dict(), strict=False)
 

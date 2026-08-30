@@ -13,6 +13,8 @@ memory, which is precisely the failure this design has to rule out.
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -27,7 +29,6 @@ from experts4bit_qlora import (  # noqa: E402
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.bfloat16
 N_EXP, HIDDEN, INTER, TOP_K, N_TOK = 16, 128, 192, 2, 6
-_QUANTIZE_UNAVAILABLE = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="offload needs CUDA")
 
@@ -36,10 +37,8 @@ def _build(seed=0):
     torch.manual_seed(seed)
     gate_up = torch.randn(N_EXP, 2 * INTER, HIDDEN, dtype=DTYPE, device=DEVICE)
     down = torch.randn(N_EXP, HIDDEN, INTER, dtype=DTYPE, device=DEVICE)
-    try:
-        base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=DTYPE)
-    except _QUANTIZE_UNAVAILABLE as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable: {e}")
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=DTYPE)
     mod = ExpertsLoRA(base, r=8, alpha=16, dtype=DTYPE).to(DEVICE)
     with torch.no_grad():
         for p in (mod.gate_up_lora_B, mod.down_lora_B):
