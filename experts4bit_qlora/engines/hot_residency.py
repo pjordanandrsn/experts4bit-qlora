@@ -85,8 +85,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # the singleton path deliberately forfeits.
         from nf4_grouped import (build_group_tiles_device,
                                  gemm_4bit_grouped_captured)
+        # Expert count from the int4 stores when the NF4 stacks are
+        # FREED (the int4 lane's default drops them to 0-sized
+        # sentinels): gu_p.shape[0] is then 0, and a 0-expert tile
+        # table detonates as a storage-size-0 expand in the builder --
+        # hit live on the first composed bv3+int4 arm.
+        _n_exp = (int4_stores["gu"]["packed"].shape[0]
+                  if int4_stores is not None else gu_p.shape[0])
         t_row0, t_rows, t_grp, order, _counts = build_group_tiles_device(
-            local_ids, gu_p.shape[0], 16)
+            local_ids, _n_exp, 16)
         sorted_ids = local_ids.index_select(0, order)
         x_sorted = x_rows.index_select(0, order).contiguous()
         sizes = None                      # the captured path has no host sizes
