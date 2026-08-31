@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.24.0 — 2026-08-31
+
+### The int4 serve lanes, the coverage matrix, and the batched-step campaign
+
+Everything merged since 0.23.0, receipts in the audit tree:
+
+- **Opt-in uniform-int4 expert serving** (`enable_serve_experts_int4`):
+  repacks the hot expert stacks to int4-b32 and serves decode from
+  them — single-stream ×1.098 with Δppl −0.084 on the certified
+  family; quality gates PASS on three families (qwen3_moe −0.084,
+  olmoe −0.477, qwen15moe +0.030 over 8,192 sha-matched steps).
+- **Coverage via load plans**: the enabler routes through
+  `plan_moe_checkpoint` and the loader's own reader/fusion helpers, so
+  it inherits every family keymap and source quant format; pre-fused
+  families pack off the plan's passthrough; split-K sizing follows the
+  config's routed-expert count. Named refusals for what the engine
+  cannot host.
+- **gpt-oss on the arena path**: per-expert biases now carried
+  resident and de-interleaved to the baked layout, with the residency
+  gather indexed on the biases' own device.
+- **The batched (B=16) campaign**: device-grouped decode routes
+  through the grouped int4 GEMM; one-launch-per-side batched KV
+  append; fused tile table / gathered quantise / fused SwiGLU wiring;
+  a kernel census for the batched graph replay (Stage-A budget
+  contract). Composed: 39.5 → 21.8 ms per step (405 → 734 tok/s
+  aggregate) against the pre-campaign graph lane.
+- **Attention int4 stays fit-only** and the lm_head stays bf16 — the
+  measured refusals (chain cost at B=1, occupancy at M=16, lm_head
+  quality) are recorded with receipts.
+
+
 ## Unreleased
 
 ### Corrections
