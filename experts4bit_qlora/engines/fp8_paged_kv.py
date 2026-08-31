@@ -456,6 +456,21 @@ class Fp8PagedKV:
             for layer in range(self.L):
                 self._ensure_blocks(layer, s_, (upto - 1) // self.bt)
         self._g_slots = slots
+        # one-launch-per-side batched append (census: the per-slot loop
+        # is 1,536 launches / 2.07 ms per B=16 step). Feature-detected
+        # like _fused_append; the loop below stays as the fallback.
+        try:
+            from fp8_kv import fp8_kv_append_bt1  # noqa: F401
+            self._bt1_append = self._fused_append
+        except ImportError:
+            self._bt1_append = False
+        if self._bt1_append:
+            dev = self.device
+            self._g_slot_idx = torch.tensor(slots, dtype=torch.int32,
+                                            device=dev)
+            self._g_slot_ones = torch.ones(len(slots), dtype=torch.int32,
+                                           device=dev)
+            self._g_slot_l = self._g_slot_idx.to(torch.int64)
 
     def append_graph_bt1(self, layer: int, k: torch.Tensor,
                          v: torch.Tensor):
@@ -468,6 +483,23 @@ class Fp8PagedKV:
         slot's ADVANCING position."""
         slots = self._g_slots
         assert k.shape[0] == len(slots), (k.shape, len(slots))
+        if getattr(self, "_bt1_append", False):
+            # ONE launch per side for the whole batch (bitwise against
+            # the per-slot loop -- gnf4 test_fp8_kv_append.py's bt1
+            # gate); the lens publish batches to one index_add_, after
+            # both sides read, preserving the T=1 ordering.
+            from fp8_kv import fp8_kv_append_bt1
+            fp8_kv_append_bt1(v, self._g_vflat[layer],
+                              self.block_table[layer], self._g_slot_idx,
+                              self.seq_lens[layer], self.v_row,
+                              self._v_pay, self.bt, 1)
+            fp8_kv_append_bt1(k, self._g_kflat[layer],
+                              self.block_table[layer], self._g_slot_idx,
+                              self.seq_lens[layer], self.k_row,
+                              self._k_pay, self.bt, self.k_groups)
+            self.seq_lens[layer].index_add_(0, self._g_slot_l,
+                                            self._g_slot_ones)
+            return
         for i, s_ in enumerate(slots):
             self._g_seq = s_
             self.append_graph_t1(layer, k.narrow(0, i, 1),
