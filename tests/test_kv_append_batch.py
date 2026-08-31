@@ -4,15 +4,14 @@ This is PREREG-g9-kvappend's void-gate invariant, machine-checked."""
 import pytest
 import torch
 
-from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+pytest.importorskip("fp8_kv", reason="needs grouped-nf4-gemm N-series")
+
+from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV  # noqa: E402
 
 
 def make(device="cpu", **kw):
-    try:
-        return Fp8PagedKV(3, 2, 64, batch=4, max_tokens_per_seq=48,
-                          k_groups=4, device=device, **kw)
-    except (RuntimeError, AssertionError) as e:      # cpu-hostile pool
-        pytest.skip(f"Fp8PagedKV unavailable on {device}: {e}")
+    return Fp8PagedKV(3, 2, 64, batch=4, max_tokens_per_seq=48,
+                      k_groups=4, device=device, **kw)
 
 
 def drive(kv, steps, T=1, seed=3):

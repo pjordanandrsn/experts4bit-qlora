@@ -16,6 +16,8 @@ same synthetic checkpoints the loader tests use rather than assumed.
 
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -30,7 +32,6 @@ from experts4bit_qlora import (  # noqa: E402
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 DTYPE = torch.bfloat16
 N_EXP, HIDDEN, INTER, TOP_K = 16, 128, 192, 2
-_Q_UNAVAIL = (RuntimeError, NotImplementedError, AssertionError, ImportError, OSError)
 
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="offload needs CUDA")
 
@@ -39,10 +40,8 @@ def _layer(n_exp=N_EXP, hidden=HIDDEN, inter=INTER, seed=0):
     torch.manual_seed(seed)
     gu = torch.randn(n_exp, 2 * inter, hidden, dtype=DTYPE, device=DEVICE)
     dn = torch.randn(n_exp, hidden, inter, dtype=DTYPE, device=DEVICE)
-    try:
-        base = Experts4bit.from_float(gu, dn, quant_type="nf4", compute_dtype=DTYPE)
-    except _Q_UNAVAIL as e:
-        pytest.skip(f"bitsandbytes 4-bit quantize unavailable: {e}")
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gu, dn, quant_type="nf4", compute_dtype=DTYPE)
     m = ExpertsLoRA(base, r=8, alpha=16, dtype=DTYPE).to(DEVICE)
     with torch.no_grad():
         for p in (m.gate_up_lora_B, m.down_lora_B):

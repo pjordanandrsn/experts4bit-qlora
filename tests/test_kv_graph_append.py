@@ -7,15 +7,14 @@ including across a block boundary, the case where a baked write offset
 import pytest
 import torch
 
-from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+pytest.importorskip("fp8_kv", reason="needs grouped-nf4-gemm N-series")
+
+from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV  # noqa: E402
 
 
 def make(device="cpu"):
-    try:
-        return Fp8PagedKV(3, 2, 64, batch=4, max_tokens_per_seq=48,
-                          k_groups=4, device=device)
-    except Exception as e:                                # pragma: no cover
-        pytest.skip(f"Fp8PagedKV unavailable on {device}: {e}")
+    return Fp8PagedKV(3, 2, 64, batch=4, max_tokens_per_seq=48,
+                      k_groups=4, device=device)
 
 
 def test_graph_append_matches_host_append_across_boundary():

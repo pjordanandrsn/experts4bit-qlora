@@ -9,6 +9,8 @@ neither CUDA nor the fused kernel, so CI exercises the real math instead of skip
 """
 import pytest
 
+from quant_guard import require_quantize
+
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
 
@@ -23,11 +25,9 @@ def _mk_v4(limit=LIMIT, seed=0, compute_dtype=torch.float32, scale=1.2):
     torch.manual_seed(seed)
     gate_up = torch.randn(E, 2 * INTER, HID) * scale
     down = torch.randn(E, HID, INTER) * scale
-    try:
-        base = _DeepseekV4ForwardMixin.from_deepseek_v4(
-            gate_up, down, limit=limit, quant_type="nf4", compute_dtype=compute_dtype)
-    except Exception as e:                      # same posture as test_cold_engine._mk
-        pytest.skip(f"bnb 4-bit quantize unavailable on this host: {e}")
+    require_quantize("cpu")
+    base = _DeepseekV4ForwardMixin.from_deepseek_v4(
+        gate_up, down, limit=limit, quant_type="nf4", compute_dtype=compute_dtype)
     hs = torch.randn(T, HID) * 1.5
     idx = torch.stack([torch.randperm(E)[:K] for _ in range(T)])
     wts = torch.softmax(torch.randn(T, K), dim=-1)
