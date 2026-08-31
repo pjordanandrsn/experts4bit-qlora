@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.24.1 — 2026-08-31
+
+### Batched int4 decode routes through the split-K GEMV
+
+One change (#320), no new API: decode shapes (R ≤ 256) on the int4
+expert store now take the per-row split-K GEMV instead of the M-tile
+GEMM. The engine probe showed the M-tile's binding constraint at B=16
+top-8 routing is padded MMA lanes (~1–2 live rows per 16-row tile), not
+occupancy — a split-K M-tile barely moved, while the shipped GEMV wins
+gate_up 1.92× / down 1.28× and serves rows in input order, deleting the
+tile table, gather, and unsort on that path. Prefill keeps the M-tile,
+where tile reuse is real.
+
+Composed on the B=16 serving step: 21.81 → **16.61 ms** (734 → 963
+tok/s aggregate), A/A ≤ 1.0016, base reproduced cross-box to 0.03 ms.
+
+
 ## 0.24.0 — 2026-08-31
 
 ### The int4 serve lanes, the coverage matrix, and the batched-step campaign
