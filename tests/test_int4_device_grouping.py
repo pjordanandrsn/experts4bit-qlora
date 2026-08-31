@@ -106,6 +106,52 @@ def test_int4_wins_device_grouping_dispatch(monkeypatch):
     assert rel < 0.05, float(rel)
 
 
+def test_int4_device_grouping_with_fused_tail(monkeypatch):
+    """Same oracle as the base wiring test, but with the tail-fusion
+    entry points present in the stub: the gathered quantise (order
+    folded in) and the fused SwiGLU must produce the same rows in the
+    same caller order."""
+    from experts4bit_qlora.engines.hot_residency import _fused_over_stack
+    stub = _stub_int4_b32(monkeypatch)
+
+    def quant_x_rows_gathered(x, order):
+        return x.float().index_select(0, order), None
+
+    def swiglu_rows(gu):
+        g, u = gu.chunk(2, dim=-1)
+        return (F.silu(g.float()) * u.float()).to(torch.bfloat16)
+
+    stub.quant_x_rows_gathered = quant_x_rows_gathered
+    stub.swiglu_rows = swiglu_rows
+    torch.manual_seed(9)
+    inter = 32
+    gu_w = torch.randn(E, 2 * inter, K1) * 0.1
+    dn_w = torch.randn(E, K1, inter) * 0.1
+    stores = _stores(gu_w, dn_w)
+    freed_gu = torch.empty(0, 0, 0, dtype=torch.uint8)
+    freed_dn = torch.empty(0, 0, 0, dtype=torch.uint8)
+    freed_a = torch.empty(0, 0, 0)
+    x = torch.randn(R, K1, dtype=torch.bfloat16) * 0.2
+    ids = torch.randint(0, E, (R,))
+
+    out = _fused_over_stack(
+        x, ids, freed_gu, freed_a, freed_dn, freed_a,
+        (2 * inter, K1, K1, inter), True, F.silu,
+        device_grouping=True, int4_stores=stores)
+    ref = torch.empty(R, K1)
+    for i in range(R):
+        e = int(ids[i])
+        w_gu = dequant_int4_ref(stores["gu"]["packed"][e],
+                                stores["gu"]["scales"][e], 2 * inter, K1)
+        w_dn = dequant_int4_ref(stores["dn"]["packed"][e],
+                                stores["dn"]["scales"][e], K1, inter)
+        gu = x[i].float() @ w_gu.t()
+        g, u = gu.chunk(2)
+        ref[i] = (F.silu(g) * u) @ w_dn.t()
+    rel = (out.float() - ref).abs().max() / ref.abs().max()
+    assert rel < 0.05, float(rel)
+
+
 def test_nf4_captured_refuses_freed_stacks(monkeypatch):
     """Belt for the braces: if the dispatch ever regresses, the NF4
     captured path must RAISE on freed stacks, not return [R, 0]."""
