@@ -9,7 +9,6 @@ flag-gated inert. The GPU semantics (event fencing) are exercised on
 the census box."""
 
 import json
-import time
 
 import pytest
 
@@ -17,21 +16,40 @@ torch = pytest.importorskip("torch")
 census = pytest.importorskip("experts4bit_qlora.census")
 
 
-def test_clock_accumulates_phases_cpu(tmp_path):
+class _FakeClock:
+    """Stands in for the census module's ``time``: real sleeps overshoot
+    by more than the old 50% tolerance on hosts that coalesce timers, so
+    the CPU path is driven deterministically and asserted exactly."""
+
+    def __init__(self, t: float = 100.0):
+        self._t = t
+
+    def perf_counter(self) -> float:
+        return self._t
+
+    def advance(self, dt: float):
+        self._t += dt
+
+
+def test_clock_accumulates_phases_cpu(tmp_path, monkeypatch):
+    clk = _FakeClock()
+    monkeypatch.setattr(census, "time", clk)
     c = census.PhaseClock(use_cuda=False)
     for _ in range(2):
         c.step_start()
+        clk.advance(0.005)                      # unbracketed loop overhead
         for phase, dt in (("data", 0.01), ("forward", 0.02),
                           ("data", 0.01)):
             c.start(phase)
-            time.sleep(dt)
+            clk.advance(dt)
             c.stop()
         c.step_end()
     assert len(c.steps) == 2
     row = c.steps[0]
-    assert row["data"] == pytest.approx(20.0, rel=0.5)      # ms, 2 brackets
-    assert row["forward"] == pytest.approx(20.0, rel=0.5)
-    assert row["step_wall_ms"] >= row["data"] + row["forward"] - 1.0
+    assert row["data"] == pytest.approx(20.0)       # ms, 2 brackets
+    assert row["forward"] == pytest.approx(20.0)
+    # wall spans the whole step: brackets plus the unbracketed advance
+    assert row["step_wall_ms"] == pytest.approx(45.0)
     out = c.write(tmp_path / "c.json", {"model": "m"})
     assert json.loads((tmp_path / "c.json").read_text()) == out
 
