@@ -226,3 +226,56 @@ def test_nf4_captured_refuses_freed_stacks(monkeypatch):
             x, ids, freed_gu, freed_a, freed_dn, freed_a,
             (64, K1, K1, 32), True, F.silu,
             device_grouping=True, int4_stores=None)
+
+
+
+def test_int4_singleton_uses_fused_swiglu(monkeypatch):
+    """B=1 singleton int4 must take the fused SwiGLU when the kernel
+    ships it -- the port from the batch campaign. Counted, not assumed."""
+    from experts4bit_qlora.engines.hot_residency import _fused_over_stack
+    stub = _stub_int4_b32(monkeypatch)
+    calls = {"swiglu": 0}
+
+    def gemv_int4_b32(xq, xs, packed, scales, eids, N, K, part=None):
+        out = torch.zeros(xq.shape[0], N, dtype=torch.bfloat16)
+        for i in range(xq.shape[0]):
+            e = int(eids[i])
+            w = dequant_int4_ref(packed[e], scales[e], N, K)
+            out[i] = (xq[i] @ w.t()).to(torch.bfloat16)
+        return out
+
+    def swiglu_rows(gu):
+        calls["swiglu"] += 1
+        g, u = gu.chunk(2, dim=-1)
+        return (F.silu(g.float()) * u.float()).to(torch.bfloat16)
+
+    stub.gemv_int4_b32 = gemv_int4_b32
+    stub.swiglu_rows = swiglu_rows
+    torch.manual_seed(9)
+    inter = 32
+    gu_w = torch.randn(E, 2 * inter, K1) * 0.1
+    dn_w = torch.randn(E, K1, inter) * 0.1
+    stores = _stores(gu_w, dn_w)
+    freed_gu = torch.empty(0, 0, 0, dtype=torch.uint8)
+    freed_dn = torch.empty(0, 0, 0, dtype=torch.uint8)
+    freed_a = torch.empty(0, 0, 0)
+    topk = min(4, E)          # module fixture has E=4 experts
+    x = torch.randn(topk, K1, dtype=torch.bfloat16) * 0.2
+    ids = torch.randperm(E)[:topk]
+    out = _fused_over_stack(
+        x, ids, freed_gu, freed_a, freed_dn, freed_a,
+        (2 * inter, K1, K1, inter), True, F.silu,
+        singleton_groups=True, int4_stores=stores)
+    assert calls["swiglu"] == 1
+    ref = torch.empty(topk, K1)
+    for i in range(topk):
+        e = int(ids[i])
+        w_gu = dequant_int4_ref(stores["gu"]["packed"][e],
+                                stores["gu"]["scales"][e], 2 * inter, K1)
+        w_dn = dequant_int4_ref(stores["dn"]["packed"][e],
+                                stores["dn"]["scales"][e], K1, inter)
+        gu = x[i].float() @ w_gu.t()
+        g, u = gu.chunk(2)
+        ref[i] = (F.silu(g) * u) @ w_dn.t()
+    rel = (out.float() - ref).abs().max() / ref.abs().max()
+    assert rel < 0.05, float(rel)

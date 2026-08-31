@@ -300,9 +300,14 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         dn = _mm(h.contiguous(), dn_p, dn_a)
         dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
     elif has_gate:
-        if (int4_stores is not None and device_grouping
+        if (int4_stores is not None
+                and (device_grouping or singleton_groups)
                 and clamp_limit is None
                 and act_fn is torch.nn.functional.silu):
+            # singleton (B=1 decode) added: the epilogue chain there is
+            # the same chunk/silu/mul over [top_k, 2I] rows, and the
+            # early-return's unsort already handles order=None -- the
+            # batch campaign's fusion ports with a widened gate.
             # fused h = silu(gate) * up when the kernel side ships it --
             # one launch for the chunk/silu/mul chain; falls through to
             # the chain otherwise (and always for the clamped epilogue)
