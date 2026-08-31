@@ -97,10 +97,30 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 "tile table would detonate deep in the builder")
         _n_exp = (int4_stores["gu"]["packed"].shape[0]
                   if int4_stores is not None else gu_p.shape[0])
-        t_row0, t_rows, t_grp, order, _counts = build_group_tiles_device(
-            local_ids, _n_exp, 16)
+        # ONE-launch tile table on decode shapes when the kernel side
+        # ships it (census: the chained builder is ~10 launches/layer,
+        # 48 radix sorts per B=16 step); chained builder otherwise and
+        # for prefill chunks, where launches amortize.
+        _fused_tiles = None
+        if local_ids.numel() <= 256:
+            try:
+                from int4_b32 import build_group_tiles_fused as _fused_tiles
+            except ImportError:
+                _fused_tiles = None
+        if _fused_tiles is not None:
+            t_row0, t_rows, t_grp, order, _counts = _fused_tiles(
+                local_ids, _n_exp, 16)
+        else:
+            t_row0, t_rows, t_grp, order, _counts = \
+                build_group_tiles_device(local_ids, _n_exp, 16)
         sorted_ids = local_ids.index_select(0, order)
-        x_sorted = x_rows.index_select(0, order).contiguous()
+        if int4_stores is not None:
+            # the int4 _mm quantises with the gather FOLDED IN (or takes
+            # the already-sorted epilogue output); the [R, K] gather
+            # here would be pure waste on that branch
+            x_sorted = x_rows
+        else:
+            x_sorted = x_rows.index_select(0, order).contiguous()
         sizes = None                      # the captured path has no host sizes
         eids = None
     elif singleton_groups:
@@ -175,10 +195,26 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             # quantise and the GEMM allocate only through the graph
             # private pool -- the b1d-certified capture pattern.
             from int4_b32 import gemm_int4_b32_grouped_captured, quant_x_rows
+            try:
+                from int4_b32 import quant_x_rows_gathered
+            except ImportError:
+                quant_x_rows_gathered = None
 
             def _mm(xr, pk, am):
                 st = int4_stores["gu" if pk is gu_p else "dn"]
-                xq, xs = quant_x_rows(xr)
+                if xr is x_rows:
+                    # first call: UNSORTED activations -- fold the
+                    # expert-major gather into the quantise when the
+                    # kernel ships it (kills the per-layer [R, K]
+                    # index_select the census priced at 0.46 ms/step)
+                    if quant_x_rows_gathered is not None:
+                        xq, xs = quant_x_rows_gathered(xr, order)
+                    else:
+                        xq, xs = quant_x_rows(
+                            xr.index_select(0, order).contiguous())
+                else:
+                    # epilogue output: already in sorted order
+                    xq, xs = quant_x_rows(xr)
                 return gemm_int4_b32_grouped_captured(
                     xq, xs, st["packed"], st["scales"],
                     t_row0, t_rows, t_grp)
@@ -237,6 +273,23 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         dn = _mm(h.contiguous(), dn_p, dn_a)
         dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
     elif has_gate:
+        if (int4_stores is not None and device_grouping
+                and clamp_limit is None
+                and act_fn is torch.nn.functional.silu):
+            # fused h = silu(gate) * up when the kernel side ships it --
+            # one launch for the chunk/silu/mul chain; falls through to
+            # the chain otherwise (and always for the clamped epilogue)
+            try:
+                from int4_b32 import swiglu_rows as _swiglu
+            except ImportError:
+                _swiglu = None
+            if _swiglu is not None:
+                dn = _mm(_swiglu(gu), dn_p, dn_a)
+                if order is None:
+                    return dn
+                out = torch.empty_like(dn)
+                out.index_copy_(0, order, dn)
+                return out
         gate, up = gu.chunk(2, dim=-1)
         if clamp_limit is not None:
             # fp32, then back to compute dtype for the down GEMM — mirroring
