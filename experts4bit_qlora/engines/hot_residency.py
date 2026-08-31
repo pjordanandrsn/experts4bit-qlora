@@ -74,7 +74,21 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
-    if device_grouping:
+    _int4_gemv_decode = (device_grouping and int4_stores is not None
+                         and x_rows.shape[0] <= 256)
+    if _int4_gemv_decode:
+        # batched DECODE on the int4 store: the split-K GEMV serves rows
+        # in INPUT order (P7: 1.92x/1.28x over the M-tile at ~1-2 rows
+        # per expert -- the tile padding wastes ~90% of the MMA lanes,
+        # which split-K cannot recover). No tile table, no gather, no
+        # unsort: this branch deliberately builds NONE of the grouping
+        # machinery.
+        order = None
+        sorted_ids = local_ids
+        x_sorted = x_rows
+        sizes = None
+        eids = local_ids
+    elif device_grouping:
         # PREREG-s3-grouped-verify: expert-major grouping built entirely
         # on device (gnf4 build_group_tiles_device -- exact-parity vs
         # the host builder, CI-gated there), executed through the
@@ -184,7 +198,20 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # from the int4 bytes. Identity dispatch: _mm is called with the
         # (possibly empty) NF4 stacks it replaces, so `pk is gu_p` names
         # the slot.
-        if device_grouping:
+        if _int4_gemv_decode:
+            # part=None allocates through the graph private pool (the
+            # certified capture pattern); R here is B*top_k, so the
+            # B=1 stores' preallocated part buffers do not fit and are
+            # deliberately not used.
+            from int4_b32 import gemv_int4_b32, quant_x_rows
+            e32d = local_ids.to(torch.int32)
+
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                xq, xs = quant_x_rows(xr)
+                return gemv_int4_b32(xq, xs, st["packed"], st["scales"],
+                                     e32d, st["N"], st["K"])
+        elif device_grouping:
             # batched decode (bv3): the grouped int4-b32 GEMM against
             # the SAME prebuilt device tiles the NF4 captured path uses
             # -- measured 1.95x (gate_up) / 4.50x (down) over the NF4
