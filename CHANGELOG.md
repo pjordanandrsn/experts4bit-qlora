@@ -26,13 +26,6 @@ Everything merged since 0.23.0, receipts in the audit tree:
   a kernel census for the batched graph replay (Stage-A budget
   contract). Composed: 39.5 → 21.8 ms per step (405 → 734 tok/s
   aggregate) against the pre-campaign graph lane.
-- **Attention int4 stays fit-only** and the lm_head stays bf16 — the
-  measured refusals (chain cost at B=1, occupancy at M=16, lm_head
-  quality) are recorded with receipts.
-
-
-## Unreleased
-
 ### Corrections
 
 - **The `>275` refutation's basis is corrected; the verdict is not.**
@@ -89,6 +82,10 @@ Everything merged since 0.23.0, receipts in the audit tree:
   quantities. Recorded rather than back-filled: the receipts are committed and a
   denominator reconstructed after the fact is not a measurement. Emit
   `tokens_per_step` explicitly in the next training run.
+- **Attention int4 stays fit-only** and the lm_head stays bf16 — the
+  measured refusals (chain cost at B=1, occupancy at M=16, lm_head
+  quality) are recorded with receipts.
+
 
 ## 0.23.0 — 2026-08-26
 
