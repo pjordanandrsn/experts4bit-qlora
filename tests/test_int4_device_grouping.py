@@ -72,7 +72,8 @@ def test_int4_wins_device_grouping_dispatch(monkeypatch):
     from experts4bit_qlora.engines.hot_residency import _fused_over_stack
     _stub_int4_b32(monkeypatch)
     torch.manual_seed(9)
-    inter = 32
+    R = 300          # prefill-shape rows: decode (R <= 256) now routes
+    inter = 32       # to the GEMV path, tested separately
     gu_w = torch.randn(E, 2 * inter, K1) * 0.1        # [E, 64, 64]
     dn_w = torch.randn(E, K1, inter) * 0.1            # [E, 64, 32]
     stores = _stores(gu_w, dn_w)
@@ -124,6 +125,7 @@ def test_int4_device_grouping_with_fused_tail(monkeypatch):
     stub.quant_x_rows_gathered = quant_x_rows_gathered
     stub.swiglu_rows = swiglu_rows
     torch.manual_seed(9)
+    R = 300          # prefill-shape rows (see dispatch test)
     inter = 32
     gu_w = torch.randn(E, 2 * inter, K1) * 0.1
     dn_w = torch.randn(E, K1, inter) * 0.1
@@ -138,6 +140,63 @@ def test_int4_device_grouping_with_fused_tail(monkeypatch):
         x, ids, freed_gu, freed_a, freed_dn, freed_a,
         (2 * inter, K1, K1, inter), True, F.silu,
         device_grouping=True, int4_stores=stores)
+    ref = torch.empty(R, K1)
+    for i in range(R):
+        e = int(ids[i])
+        w_gu = dequant_int4_ref(stores["gu"]["packed"][e],
+                                stores["gu"]["scales"][e], 2 * inter, K1)
+        w_dn = dequant_int4_ref(stores["dn"]["packed"][e],
+                                stores["dn"]["scales"][e], K1, inter)
+        gu = x[i].float() @ w_gu.t()
+        g, u = gu.chunk(2)
+        ref[i] = (F.silu(g) * u) @ w_dn.t()
+    rel = (out.float() - ref).abs().max() / ref.abs().max()
+    assert rel < 0.05, float(rel)
+
+
+def test_int4_decode_routes_to_gemv(monkeypatch):
+    """At decode shapes (R <= 256) the int4 store must take the GEMV
+    path -- rows in INPUT order, no tile table, no gather (P7: the
+    M-tile pads ~90% of its MMA lanes at ~1-2 rows/expert). The stub's
+    tile builder RECORDS calls so the skip is asserted, not assumed."""
+    from experts4bit_qlora.engines import hot_residency as hr
+    stub = _stub_int4_b32(monkeypatch)
+    calls = {"gemv": 0, "tiles": 0}
+
+    def gemv_int4_b32(xq, xs, packed, scales, eids, N, K, part=None):
+        calls["gemv"] += 1
+        out = torch.zeros(xq.shape[0], N, dtype=torch.bfloat16)
+        for i in range(xq.shape[0]):
+            e = int(eids[i])
+            w = dequant_int4_ref(packed[e], scales[e], N, K)
+            out[i] = (xq[i] @ w.t()).to(torch.bfloat16)
+        return out
+    stub.gemv_int4_b32 = gemv_int4_b32
+
+    import nf4_grouped
+    real_builder = nf4_grouped.build_group_tiles_device
+    def counting_builder(*a, **k):
+        calls["tiles"] += 1
+        return real_builder(*a, **k)
+    monkeypatch.setattr(nf4_grouped, "build_group_tiles_device",
+                        counting_builder)
+
+    torch.manual_seed(9)
+    inter = 32
+    gu_w = torch.randn(E, 2 * inter, K1) * 0.1
+    dn_w = torch.randn(E, K1, inter) * 0.1
+    stores = _stores(gu_w, dn_w)
+    freed_gu = torch.empty(0, 0, 0, dtype=torch.uint8)
+    freed_dn = torch.empty(0, 0, 0, dtype=torch.uint8)
+    freed_a = torch.empty(0, 0, 0)
+    x = torch.randn(R, K1, dtype=torch.bfloat16) * 0.2
+    ids = torch.randint(0, E, (R,))
+    out = hr._fused_over_stack(
+        x, ids, freed_gu, freed_a, freed_dn, freed_a,
+        (2 * inter, K1, K1, inter), True, F.silu,
+        device_grouping=True, int4_stores=stores)
+    assert calls["gemv"] == 2, calls          # gu + dn
+    assert calls["tiles"] == 0, "tile machinery must be SKIPPED"
     ref = torch.empty(R, K1)
     for i in range(R):
         e = int(ids[i])
