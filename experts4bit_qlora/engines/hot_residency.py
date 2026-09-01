@@ -300,23 +300,6 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         dn = _mm(h.contiguous(), dn_p, dn_a)
         dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
     elif has_gate:
-        if (int4_stores is not None and device_grouping
-                and clamp_limit is None
-                and act_fn is torch.nn.functional.silu):
-            # fused h = silu(gate) * up when the kernel side ships it --
-            # one launch for the chunk/silu/mul chain; falls through to
-            # the chain otherwise (and always for the clamped epilogue)
-            try:
-                from int4_b32 import swiglu_rows as _swiglu
-            except ImportError:
-                _swiglu = None
-            if _swiglu is not None:
-                dn = _mm(_swiglu(gu), dn_p, dn_a)
-                if order is None:
-                    return dn
-                out = torch.empty_like(dn)
-                out.index_copy_(0, order, dn)
-                return out
         gate, up = gu.chunk(2, dim=-1)
         if clamp_limit is not None:
             # fp32, then back to compute dtype for the down GEMM — mirroring

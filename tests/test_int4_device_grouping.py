@@ -110,20 +110,15 @@ def test_int4_wins_device_grouping_dispatch(monkeypatch):
 def test_int4_device_grouping_with_fused_tail(monkeypatch):
     """Same oracle as the base wiring test, but with the tail-fusion
     entry points present in the stub: the gathered quantise (order
-    folded in) and the fused SwiGLU must produce the same rows in the
-    same caller order."""
+    folded in) and the epilogue chain must produce the same rows in
+    the same caller order."""
     from experts4bit_qlora.engines.hot_residency import _fused_over_stack
     stub = _stub_int4_b32(monkeypatch)
 
     def quant_x_rows_gathered(x, order):
         return x.float().index_select(0, order), None
 
-    def swiglu_rows(gu):
-        g, u = gu.chunk(2, dim=-1)
-        return (F.silu(g.float()) * u.float()).to(torch.bfloat16)
-
     stub.quant_x_rows_gathered = quant_x_rows_gathered
-    stub.swiglu_rows = swiglu_rows
     torch.manual_seed(9)
     R = 300          # prefill-shape rows (see dispatch test)
     inter = 32
