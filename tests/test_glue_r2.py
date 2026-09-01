@@ -77,8 +77,20 @@ def _stub(monkeypatch, calls):
         return out, s
 
     def rope_norm_heads(x, w, cos, sin, eps):
+        # real formula, so a mis-paired cos/sin row shows up as a
+        # numeric mismatch rather than passing on zeros
         calls["rope"] += 1
-        return torch.zeros_like(x)
+        assert cos.shape[0] == x.shape[0], "one cos row per input row"
+        calls.setdefault("rope_out", [])
+        xf = x.float()
+        xn = (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+              * w.float()).to(torch.bfloat16).float()
+        half = x.shape[-1] // 2
+        rot = torch.cat([-xn[..., half:], xn[..., :half]], dim=-1)
+        out = (xn * cos.float().unsqueeze(1)
+               + rot * sin.float().unsqueeze(1)).to(torch.bfloat16)
+        calls["rope_out"].append(out)
+        return out
 
     stub.rmsnorm_resid_rows = rmsnorm_resid_rows
     stub.rope_norm_heads = rope_norm_heads
@@ -157,3 +169,82 @@ def test_missing_kernel_refuses_loudly(monkeypatch):
     m.layer = ToyDecoderLayer()
     with pytest.raises(RuntimeError, match="rmsnorm_resid_rows"):
         fuse_t1_glue_r2(m)
+
+
+class ToyFusedAttention(torch.nn.Module):
+    """Mirrors this package's qkv-fused attention closely enough to
+    exercise the rotary fold: one packed projection, per-head norms,
+    norm-then-rotate, and an identity output projection."""
+
+    def __init__(self, heads=2, d=H):
+        super().__init__()
+        self.qkv_proj = torch.nn.Linear(H, 3 * heads * d, bias=False,
+                                        dtype=torch.bfloat16)
+        self.q_norm = ToyRMSNorm(d)
+        self.k_norm = ToyRMSNorm(d)
+        self.o_proj = torch.nn.Identity()
+        self.head_dim = d
+        self._fused_nq = self._fused_nk = self._fused_nv = heads * d
+        self.scaling = 1.0
+        self.sliding_window = None
+        self.layer_idx = 0
+        self.num_key_value_groups = 1
+        self.attention_dropout = 0.0
+        self.config = types.SimpleNamespace(_attn_implementation="eager")
+        self.captured = None
+
+    def forward(self, hidden_states, position_embeddings=None,
+                attention_mask=None, past_key_values=None, **kw):
+        """Unfused reference: norm each head then apply rotary."""
+        d = self.head_dim
+        rows = hidden_states.numel() // hidden_states.shape[-1]
+        qkv = self.qkv_proj(hidden_states)
+        q, k, _ = qkv.split([self._fused_nq, self._fused_nk,
+                             self._fused_nv], dim=-1)
+        cos, sin = position_embeddings
+        out = []
+        for t, norm in ((q, self.q_norm), (k, self.k_norm)):
+            xn = norm(t.reshape(rows, -1, d)).float()
+            half = d // 2
+            rot = torch.cat([-xn[..., half:], xn[..., :half]], dim=-1)
+            c = cos.reshape(-1, d).float()
+            s = sin.reshape(-1, d).float()
+            if c.shape[0] == 1 and rows > 1:
+                c, s = c.expand(rows, d), s.expand(rows, d)
+            out.append((xn * c.unsqueeze(1)
+                        + rot * s.unsqueeze(1)).to(torch.bfloat16))
+        self.captured = out
+        return hidden_states, None
+
+
+@pytest.mark.parametrize("batch,cos_batch", [(1, 1), (4, 4), (4, 1)])
+def test_rotary_fold_handles_broadcast_cos(monkeypatch, batch, cos_batch):
+    """A batch-1 cos/sin that upstream broadcasts must be materialised
+    per row, never paired positionally with row 0 (review finding)."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(5)
+    m = torch.nn.Module()
+    m.attn = ToyFusedAttention()
+    assert fuse_t1_glue_r2(m) == (0, 1)
+
+    x = (torch.randn(batch, 1, H) * 2).to(torch.bfloat16)
+    ang = torch.rand(cos_batch, 1, H // 2) * 6.28
+    ang = torch.cat([ang, ang], dim=-1)
+    cos = ang.cos().to(torch.bfloat16)
+    sin = ang.sin().to(torch.bfloat16)
+
+    ref = ToyFusedAttention()
+    ref.load_state_dict(m.attn.state_dict())
+    ref.forward(x, position_embeddings=(cos, sin))
+    q_ref, k_ref = ref.captured
+
+    with torch.no_grad():
+        m.attn(x, position_embeddings=(cos, sin))
+    assert calls["rope"] == 2, "both projections must take the fused path"
+    q_got, k_got = calls["rope_out"]
+    for got, want in ((q_got, q_ref), (k_got, k_ref)):
+        assert got.shape == want.shape
+        assert torch.allclose(got.float(), want.float(),
+                              rtol=2 ** -6, atol=2 ** -8)

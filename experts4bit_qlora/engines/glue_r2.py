@@ -135,8 +135,22 @@ def _patch_attention(mod, rope_norm_heads) -> bool:
         q, k, v = qkv.split([_m._fused_nq, _m._fused_nk, _m._fused_nv],
                             dim=-1)
         cos, sin = position_embeddings
+        # upstream broadcasts cos/sin against the head axis, and may
+        # carry a batch of 1 that broadcasts across rows as well. The
+        # kernel indexes one cos/sin row PER row, so materialise that
+        # broadcast here; any other layout keeps the upstream chain
+        # rather than silently rotating with the wrong positions
+        # (review finding, High).
         cos2 = cos.reshape(-1, d)
         sin2 = sin.reshape(-1, d)
+        if cos2.shape[0] == 1 and rows > 1:
+            cos2 = cos2.expand(rows, d)
+            sin2 = sin2.expand(rows, d)
+        if cos2.shape[0] != rows or sin2.shape[0] != rows:
+            return _orig(hidden_states,
+                         position_embeddings=position_embeddings,
+                         attention_mask=attention_mask,
+                         past_key_values=past_key_values, **kwargs)
         # norm + rotary, one launch per projection
         query_states = rope_norm_heads(
             q.reshape(rows, -1, d), _qn.weight, cos2, sin2, _qe
