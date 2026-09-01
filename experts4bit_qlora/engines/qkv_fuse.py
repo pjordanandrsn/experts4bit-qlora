@@ -112,4 +112,9 @@ def fuse_qkv(model) -> int:
         del mod.q_proj, mod.k_proj, mod.v_proj
         mod.forward = types.MethodType(_fused_forward, mod)
         fused += 1
+    # env-gated decode fusions ride the same serve assembly point so the
+    # documented flags are LIVE on the advertised path (review finding:
+    # an env var only read by a function nothing calls is dead)
+    from .glue_fuse import fuse_t1_glue
+    fuse_t1_glue(model)
     return fused

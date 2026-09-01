@@ -38,6 +38,30 @@ def _is_rmsnorm(mod) -> bool:
             and type(mod).__name__.endswith("RMSNorm"))
 
 
+def _probe_matches(mod, eps: float) -> bool:
+    """The module's OWN forward licenses the patch: centered variants
+    (``x_norm * (1 + weight)`` with a near-zero stored weight) share the
+    RMSNorm name but a different formula, and patching one would nearly
+    zero the residual stream (review finding, High). A deterministic
+    probe through the module, compared against the non-centered
+    reference, accepts exactly the semantics the fused kernel computes
+    -- name matching alone cannot."""
+    w = mod.weight
+    g = torch.Generator(device="cpu").manual_seed(1234)
+    x = torch.randn(2, w.numel(), generator=g).to(w.device, torch.bfloat16)
+    try:
+        with torch.no_grad():
+            got = mod(x)
+    except Exception:
+        return False
+    if not torch.is_tensor(got) or got.shape != x.shape:
+        return False
+    xf = x.float()
+    ref = (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+           * w.float())
+    return torch.allclose(got.float(), ref, rtol=2 ** -5, atol=2 ** -7)
+
+
 def fuse_t1_glue(model) -> int:
     """Patch every structurally-matched RMSNorm for fused decode calls.
 
@@ -53,11 +77,15 @@ def fuse_t1_glue(model) -> int:
             "install the matching cut or unset the flag") from e
 
     n = 0
+    skipped = 0
     for mod in model.modules():
         if not _is_rmsnorm(mod):
             continue
-        orig = mod.forward
         eps = _norm_eps(mod)
+        if not _probe_matches(mod, eps):
+            skipped += 1        # centered or otherwise non-matching
+            continue
+        orig = mod.forward
 
         def _fwd(hidden_states, _m=mod, _orig=orig, _eps=eps):
             # decode shapes only: few rows, bf16, last-dim matches the
@@ -73,6 +101,7 @@ def fuse_t1_glue(model) -> int:
         n += 1
     if n == 0:
         raise RuntimeError(
-            "E4B_FUSE_T1_GLUE=1 matched no RMSNorm modules -- refusing a "
-            "vacuous enable")
+            f"E4B_FUSE_T1_GLUE=1 patched no RMSNorm modules "
+            f"({skipped} name-matched but failed the semantic probe) -- "
+            "refusing a vacuous enable")
     return n

@@ -69,5 +69,57 @@ def test_off_by_default(monkeypatch):
 def test_vacuous_refused(monkeypatch):
     monkeypatch.setenv("E4B_FUSE_T1_GLUE", "1")
     _stub(monkeypatch, {"fused": 0})
-    with pytest.raises(RuntimeError, match="matched no RMSNorm"):
+    with pytest.raises(RuntimeError, match="patched no RMSNorm"):
         fuse_t1_glue(torch.nn.Module())
+
+
+
+class CenteredToyRMSNorm(ToyRMSNorm):
+    """Gemma-style: x_norm * (1 + weight), weight near zero."""
+    def __init__(self, H=32, eps=1e-6):
+        super().__init__(H, eps)
+        with torch.no_grad():
+            self.weight.zero_()
+
+    def forward(self, x):
+        xf = x.float()
+        return (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True)
+                                 + self.variance_epsilon)
+                * (1.0 + self.weight.float())).to(x.dtype)
+
+
+def test_centered_variant_is_skipped(monkeypatch):
+    """A name-matched module whose forward is the CENTERED formula must
+    be refused by the semantic probe -- patching it would nearly zero
+    the residual stream (review finding, High)."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE", "1")
+    calls = {"fused": 0}
+    _stub(monkeypatch, calls)
+    m = torch.nn.Module()
+    m.good = ToyRMSNorm()
+    m.centered = CenteredToyRMSNorm()
+    assert fuse_t1_glue(m) == 1          # only the matching norm
+    x = torch.randn(1, 1, 32, dtype=torch.bfloat16)
+    y = m.centered(x)                     # unpatched: its own formula
+    assert calls["fused"] == 0
+    ref = CenteredToyRMSNorm()(x)
+    assert torch.allclose(y.float(), ref.float(), rtol=2 ** -6,
+                          atol=2 ** -8)
+    m.good(x)
+    assert calls["fused"] == 1
+
+
+def test_serve_assembly_point_invokes_glue(monkeypatch):
+    """fuse_qkv is the advertised serve assembly point; the env flag
+    must be live there (review finding: an env var read only by a
+    function nothing calls is dead)."""
+    from experts4bit_qlora.engines import qkv_fuse
+    called = {}
+
+    def rec(model):
+        called["yes"] = True
+        return 0
+    monkeypatch.setattr("experts4bit_qlora.engines.glue_fuse.fuse_t1_glue",
+                        rec)
+    qkv_fuse.fuse_qkv(torch.nn.Module())
+    assert called.get("yes")
