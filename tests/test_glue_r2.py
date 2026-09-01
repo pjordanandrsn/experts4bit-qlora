@@ -1,0 +1,250 @@
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
+"""Round-2 decode folds patch structurally, license semantically, and
+fall through off decode shapes."""
+import os
+import sys
+import types
+
+import pytest
+import torch
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from experts4bit_qlora.engines.glue_r2 import fuse_t1_glue_r2  # noqa: E402
+
+H = 32
+
+
+class ToyRMSNorm(torch.nn.Module):
+    def __init__(self, width=H, eps=1e-6):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.ones(width,
+                                                    dtype=torch.bfloat16))
+        self.variance_epsilon = eps
+
+    def forward(self, x):
+        xf = x.float()
+        return (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True)
+                                 + self.variance_epsilon)
+                * self.weight.float()).to(x.dtype)
+
+
+class CenteredRMSNorm(ToyRMSNorm):
+    """Shares the name and the structure, computes ``x * (1 + w)``."""
+
+    def forward(self, x):
+        xf = x.float()
+        return (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True)
+                                 + self.variance_epsilon)
+                * (1.0 + self.weight.float())).to(x.dtype)
+
+
+class ToyAttn(torch.nn.Module):
+    def forward(self, hidden_states=None, **kw):
+        return torch.zeros_like(hidden_states), None
+
+
+class ToyDecoderLayer(torch.nn.Module):
+    def __init__(self, norm_cls=ToyRMSNorm):
+        super().__init__()
+        self.input_layernorm = norm_cls()
+        self.post_attention_layernorm = norm_cls()
+        self.self_attn = ToyAttn()
+        self.mlp = torch.nn.Identity()
+
+    def forward(self, hidden_states, attention_mask=None,
+                position_ids=None, past_key_values=None, use_cache=False,
+                position_embeddings=None, **kw):
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states=hidden_states)
+        hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        return residual + hidden_states
+
+
+def _stub(monkeypatch, calls):
+    stub = types.ModuleType("int4_b32")
+
+    def rmsnorm_resid_rows(x, resid, w, eps):
+        calls["resid"] += 1
+        s = (x.float() + resid.float()).to(torch.bfloat16)
+        sf = s.float()
+        out = (sf * torch.rsqrt(sf.pow(2).mean(-1, keepdim=True) + eps)
+               * w.float()).to(torch.bfloat16)
+        return out, s
+
+    def rope_norm_heads(x, w, cos, sin, eps):
+        # real formula, so a mis-paired cos/sin row shows up as a
+        # numeric mismatch rather than passing on zeros
+        calls["rope"] += 1
+        assert cos.shape[0] == x.shape[0], "one cos row per input row"
+        calls.setdefault("rope_out", [])
+        xf = x.float()
+        xn = (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+              * w.float()).to(torch.bfloat16).float()
+        half = x.shape[-1] // 2
+        rot = torch.cat([-xn[..., half:], xn[..., :half]], dim=-1)
+        out = (xn * cos.float().unsqueeze(1)
+               + rot * sin.float().unsqueeze(1)).to(torch.bfloat16)
+        calls["rope_out"].append(out)
+        return out
+
+    stub.rmsnorm_resid_rows = rmsnorm_resid_rows
+    stub.rope_norm_heads = rope_norm_heads
+    monkeypatch.setitem(sys.modules, "int4_b32", stub)
+
+
+def test_layer_fold_matches_and_falls_through(monkeypatch):
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    m = torch.nn.Module()
+    m.layer = ToyDecoderLayer()
+    assert fuse_t1_glue_r2(m) == (1, 0)
+
+    x = (torch.randn(1, 1, H) * 2).to(torch.bfloat16)
+    got = m.layer(x)
+    assert calls["resid"] == 1
+    ref = ToyDecoderLayer().forward(x)      # unpatched reference
+    assert torch.allclose(got.float(), ref.float(),
+                          rtol=2 ** -6, atol=2 ** -8)
+
+    big = (torch.randn(1, 4096, H)).to(torch.bfloat16)   # prefill
+    m.layer(big)
+    assert calls["resid"] == 1
+    m.layer(torch.randn(1, 1, H))                        # fp32
+    assert calls["resid"] == 1
+
+
+def test_centered_norm_is_refused(monkeypatch):
+    """A centered variant name-matches but must not be patched: folding
+    it would compute a different residual stream entirely."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    m = torch.nn.Module()
+    m.layer = ToyDecoderLayer(norm_cls=CenteredRMSNorm)
+    with pytest.raises(RuntimeError, match="vacuous"):
+        fuse_t1_glue_r2(m)
+
+
+def test_unfused_attention_is_refused(monkeypatch):
+    """Round 2 replaces this package's fused attention forward; an
+    attention without qkv_proj keeps its own."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+
+    class BareAttention(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.q_norm = ToyRMSNorm()
+            self.k_norm = ToyRMSNorm()
+            self.head_dim = H
+
+        def forward(self, hidden_states=None, **kw):
+            return hidden_states, None
+
+    m = torch.nn.Module()
+    m.attn = BareAttention()
+    with pytest.raises(RuntimeError, match="vacuous"):
+        fuse_t1_glue_r2(m)
+
+
+def test_env_gate_off_is_a_noop(monkeypatch):
+    monkeypatch.delenv("E4B_FUSE_T1_GLUE_R2", raising=False)
+    m = torch.nn.Module()
+    m.layer = ToyDecoderLayer()
+    assert fuse_t1_glue_r2(m) == (0, 0)
+    assert m.layer.forward.__self__ is m.layer   # untouched bound method
+
+
+def test_missing_kernel_refuses_loudly(monkeypatch):
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    monkeypatch.setitem(sys.modules, "int4_b32", None)
+    m = torch.nn.Module()
+    m.layer = ToyDecoderLayer()
+    with pytest.raises(RuntimeError, match="rmsnorm_resid_rows"):
+        fuse_t1_glue_r2(m)
+
+
+class ToyFusedAttention(torch.nn.Module):
+    """Mirrors this package's qkv-fused attention closely enough to
+    exercise the rotary fold: one packed projection, per-head norms,
+    norm-then-rotate, and an identity output projection."""
+
+    def __init__(self, heads=2, d=H):
+        super().__init__()
+        self.qkv_proj = torch.nn.Linear(H, 3 * heads * d, bias=False,
+                                        dtype=torch.bfloat16)
+        self.q_norm = ToyRMSNorm(d)
+        self.k_norm = ToyRMSNorm(d)
+        self.o_proj = torch.nn.Identity()
+        self.head_dim = d
+        self._fused_nq = self._fused_nk = self._fused_nv = heads * d
+        self.scaling = 1.0
+        self.sliding_window = None
+        self.layer_idx = 0
+        self.num_key_value_groups = 1
+        self.attention_dropout = 0.0
+        self.config = types.SimpleNamespace(_attn_implementation="eager")
+        self.captured = None
+
+    def forward(self, hidden_states, position_embeddings=None,
+                attention_mask=None, past_key_values=None, **kw):
+        """Unfused reference: norm each head then apply rotary."""
+        d = self.head_dim
+        rows = hidden_states.numel() // hidden_states.shape[-1]
+        qkv = self.qkv_proj(hidden_states)
+        q, k, _ = qkv.split([self._fused_nq, self._fused_nk,
+                             self._fused_nv], dim=-1)
+        cos, sin = position_embeddings
+        out = []
+        for t, norm in ((q, self.q_norm), (k, self.k_norm)):
+            xn = norm(t.reshape(rows, -1, d)).float()
+            half = d // 2
+            rot = torch.cat([-xn[..., half:], xn[..., :half]], dim=-1)
+            c = cos.reshape(-1, d).float()
+            s = sin.reshape(-1, d).float()
+            if c.shape[0] == 1 and rows > 1:
+                c, s = c.expand(rows, d), s.expand(rows, d)
+            out.append((xn * c.unsqueeze(1)
+                        + rot * s.unsqueeze(1)).to(torch.bfloat16))
+        self.captured = out
+        return hidden_states, None
+
+
+@pytest.mark.parametrize("batch,cos_batch", [(1, 1), (4, 4), (4, 1)])
+def test_rotary_fold_handles_broadcast_cos(monkeypatch, batch, cos_batch):
+    """A batch-1 cos/sin that upstream broadcasts must be materialised
+    per row, never paired positionally with row 0 (review finding)."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(5)
+    m = torch.nn.Module()
+    m.attn = ToyFusedAttention()
+    assert fuse_t1_glue_r2(m) == (0, 1)
+
+    x = (torch.randn(batch, 1, H) * 2).to(torch.bfloat16)
+    ang = torch.rand(cos_batch, 1, H // 2) * 6.28
+    ang = torch.cat([ang, ang], dim=-1)
+    cos = ang.cos().to(torch.bfloat16)
+    sin = ang.sin().to(torch.bfloat16)
+
+    ref = ToyFusedAttention()
+    ref.load_state_dict(m.attn.state_dict())
+    ref.forward(x, position_embeddings=(cos, sin))
+    q_ref, k_ref = ref.captured
+
+    with torch.no_grad():
+        m.attn(x, position_embeddings=(cos, sin))
+    assert calls["rope"] == 2, "both projections must take the fused path"
+    q_got, k_got = calls["rope_out"]
+    for got, want in ((q_got, q_ref), (k_got, k_ref)):
+        assert got.shape == want.shape
+        assert torch.allclose(got.float(), want.float(),
+                              rtol=2 ** -6, atol=2 ** -8)
