@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.25.0 — 2026-09-01
+
+### Opt-in fused RMSNorm glue for single-stream decode
+
+One feature (#324). `fuse_t1_glue(model)` — env-gated behind
+`E4B_FUSE_T1_GLUE=1` and hooked from the qkv fusion pass — swaps
+structural RMSNorm sites on the decode path for the kernel package's
+single-launch row-parallel norm (its #306), with decode-shape and
+bf16 gates. Patching is licensed per module by a semantic probe: a
+deterministic probe tensor through the module's OWN forward must
+match the non-centered reference formula at rtol 2^-5, which excludes
+centered variants (`x_norm * (1 + w)`) that a structural name match
+cannot distinguish; a vacuous enable (zero sites patched) refuses and
+reports the probe-skip count. Composed on the B=1 serve lane: 8.344 →
+6.469 ms per step on the rental class, quality gate PASS (Δppl
++0.0136 @ 8192 paired sha-matched steps).
+
 ## 0.24.2 — 2026-09-01
 
 ### The fused-SwiGLU wiring is retired — it never fired and would not pay
