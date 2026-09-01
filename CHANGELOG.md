@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.24.2 — 2026-09-01
+
+### The fused-SwiGLU wiring is retired — it never fired and would not pay
+
+One change (#322), a removal. Census absence across every composed
+receipt showed the epilogue-fusion path added in the tail-fusion round
+never executed: its activation identity gate never matched the live
+activation-registry object. Two dedicated A/Bs with the gate widened
+then bounded the fusion's value below A/A noise at BOTH batch sizes
+(1.0001× at B=1, 1.0000× at B=16, A/A ≤ 1.0005) — under graph replay
+the three-launch epilogue chain is effectively free. Dead code that
+measured null twice comes out rather than being re-gated a third time;
+the kernel-side helper stays in the kernel package, tested and
+documented as unused by this consumer.
+
+The same measurement pass re-baselined B=1 on the released stack:
+**int4 over NF4 is now 1.197×** (9.969 → 8.327 ms) — up from 1.098× at
+certification, the quantise-grid fix having compounded at B=1
+unannounced. The prior tail-fusion release-note attribution is
+corrected accordingly: its composed 1.104× belongs to the one-launch
+tile table and the gather-folded quantise alone.
+
+
 ## 0.24.1 — 2026-08-31
 
 ### Batched int4 decode routes through the split-K GEMV
