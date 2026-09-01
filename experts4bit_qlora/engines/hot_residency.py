@@ -300,10 +300,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         dn = _mm(h.contiguous(), dn_p, dn_a)
         dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
     elif has_gate:
+        _act_is_silu = (act_fn is torch.nn.functional.silu
+                        or isinstance(act_fn, torch.nn.SiLU))
         if (int4_stores is not None
                 and (device_grouping or singleton_groups)
                 and clamp_limit is None
-                and act_fn is torch.nn.functional.silu):
+                and _act_is_silu):
+            # NOTE the instance check: the loader takes act_fn from the
+            # upstream activation registry, which supplies an nn.SiLU
+            # INSTANCE -- the bare `is F.silu` gate never fired on a
+            # real model (found by census absence: _swiglu_rows appears
+            # in NO composed receipt despite the wiring shipping).
             # singleton (B=1 decode) added: the epilogue chain there is
             # the same chunk/silu/mul over [top_k, 2I] rows, and the
             # early-return's unsort already handles order=None -- the

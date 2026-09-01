@@ -262,9 +262,10 @@ def test_int4_singleton_uses_fused_swiglu(monkeypatch):
     topk = min(4, E)          # module fixture has E=4 experts
     x = torch.randn(topk, K1, dtype=torch.bfloat16) * 0.2
     ids = torch.randperm(E)[:topk]
-    out = _fused_over_stack(
+    act = torch.nn.SiLU()     # what the upstream activation registry
+    out = _fused_over_stack(  # actually supplies -- NOT F.silu
         x, ids, freed_gu, freed_a, freed_dn, freed_a,
-        (2 * inter, K1, K1, inter), True, F.silu,
+        (2 * inter, K1, K1, inter), True, act,
         singleton_groups=True, int4_stores=stores)
     assert calls["swiglu"] == 1
     ref = torch.empty(topk, K1)
