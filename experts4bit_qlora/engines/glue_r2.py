@@ -1,0 +1,194 @@
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
+"""Glue round 2 for decode (``E4B_FUSE_T1_GLUE_R2=1``).
+
+Round 1 fused the RMSNorm call itself. The Phase A / P15 censuses put
+what is left of the non-GEMM step at ~1.9 ms of the 6.5 ms B=1 step
+and ~4.0 ms of the 15.5 ms B=16 step, spread over elementwise adds,
+small reductions and the rotary chain. Two folds take the bulk of it:
+
+* **residual + post-attention norm** -- the decoder layer's
+  ``hidden = residual + attn_out`` followed by
+  ``post_attention_layernorm(hidden)`` becomes one kernel call that
+  returns both the new residual and the normed activation.
+* **q/k norm + rotary** -- the per-head norm plus the multi-kernel
+  ``apply_rotary_pos_emb`` chain (slice, negate, concat, two muls, an
+  add) becomes one launch per projection.
+
+Both patches are licensed the way round 1's was: structure is checked,
+never assumed from a class name, and the norm modules must pass the
+same semantic probe that rejects centered ``x * (1 + w)`` variants.
+The attention fold additionally requires a module this package already
+fused (``qkv_proj`` present), because it replaces that forward -- an
+unfused attention keeps its own forward rather than being half-patched.
+Off decode shapes every patch falls through to the original chain.
+
+Engagement is census PRESENCE of ``_rmsnorm_resid_rows`` and
+``_rope_norm_heads``, never a symbol grep.
+"""
+from __future__ import annotations
+
+import os
+
+import torch
+
+from .glue_fuse import _is_rmsnorm, _norm_eps, _probe_matches
+
+__all__ = ["fuse_t1_glue_r2"]
+
+# decode rows stay small; prefill keeps the upstream chain
+_MAX_DECODE_ROWS = 64
+
+
+def _decode_rows(x: torch.Tensor, width: int) -> bool:
+    return (x.dtype == torch.bfloat16
+            and x.shape[-1] == width
+            and x.numel() <= _MAX_DECODE_ROWS * width)
+
+
+def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
+    """Fold ``residual + attn_out`` into the post-attention norm.
+
+    Mirrors the upstream forward (transformers 5.5 source) line for
+    line; only the add-then-norm pair changes."""
+    ln = getattr(mod, "post_attention_layernorm", None)
+    if ln is None or not _is_rmsnorm(ln):
+        return False
+    eps = _norm_eps(ln)
+    if eps is None or not _probe_matches(ln, eps):
+        return False
+    for attr in ("input_layernorm", "self_attn", "mlp"):
+        if not hasattr(mod, attr):
+            return False
+    orig = mod.forward
+    width = ln.weight.numel()
+
+    def _fwd(hidden_states, attention_mask=None, position_ids=None,
+             past_key_values=None, use_cache=False,
+             position_embeddings=None, _m=mod, _ln=ln, _eps=eps,
+             _orig=orig, _w=width, **kwargs):
+        if not _decode_rows(hidden_states, _w):
+            return _orig(hidden_states, attention_mask=attention_mask,
+                         position_ids=position_ids,
+                         past_key_values=past_key_values,
+                         use_cache=use_cache,
+                         position_embeddings=position_embeddings,
+                         **kwargs)
+        residual = hidden_states
+        hidden_states = _m.input_layernorm(hidden_states)
+        hidden_states, _ = _m.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        # residual add + post-attention norm, one launch
+        hidden_states, residual = rmsnorm_resid_rows(
+            hidden_states, residual, _ln.weight, _eps)
+        hidden_states = _m.mlp(hidden_states)
+        return residual + hidden_states
+
+    mod.forward = _fwd
+    return True
+
+
+def _patch_attention(mod, rope_norm_heads) -> bool:
+    """Fold each of q_norm/k_norm plus rotary into one launch."""
+    if not hasattr(mod, "qkv_proj"):
+        return False            # only this package's fused attention
+    for attr in ("q_norm", "k_norm", "head_dim", "_fused_nq",
+                 "_fused_nk", "_fused_nv", "o_proj", "scaling",
+                 "sliding_window", "layer_idx", "config"):
+        if not hasattr(mod, attr):
+            return False
+    qn, kn = mod.q_norm, mod.k_norm
+    if not (_is_rmsnorm(qn) and _is_rmsnorm(kn)):
+        return False
+    qe, ke = _norm_eps(qn), _norm_eps(kn)
+    if qe is None or ke is None:
+        return False
+    if not (_probe_matches(qn, qe) and _probe_matches(kn, ke)):
+        return False
+    if mod.head_dim % 2 or qn.weight.numel() != mod.head_dim:
+        return False
+    orig = mod.forward
+
+    def _fwd(hidden_states, position_embeddings=None,
+             attention_mask=None, past_key_values=None, _m=mod,
+             _qn=qn, _kn=kn, _qe=qe, _ke=ke, _orig=orig, **kwargs):
+        d = _m.head_dim
+        rows = hidden_states.numel() // hidden_states.shape[-1]
+        if (position_embeddings is None
+                or hidden_states.dtype != torch.bfloat16
+                or rows > _MAX_DECODE_ROWS):
+            return _orig(hidden_states,
+                         position_embeddings=position_embeddings,
+                         attention_mask=attention_mask,
+                         past_key_values=past_key_values, **kwargs)
+        from transformers.models.qwen3_moe.modeling_qwen3_moe import (
+            ALL_ATTENTION_FUNCTIONS, eager_attention_forward)
+
+        input_shape = hidden_states.shape[:-1]
+        qkv = _m.qkv_proj(hidden_states)
+        q, k, v = qkv.split([_m._fused_nq, _m._fused_nk, _m._fused_nv],
+                            dim=-1)
+        cos, sin = position_embeddings
+        cos2 = cos.reshape(-1, d)
+        sin2 = sin.reshape(-1, d)
+        # norm + rotary, one launch per projection
+        query_states = rope_norm_heads(
+            q.reshape(rows, -1, d), _qn.weight, cos2, sin2, _qe
+        ).reshape(*input_shape, -1, d).transpose(1, 2)
+        key_states = rope_norm_heads(
+            k.reshape(rows, -1, d), _kn.weight, cos2, sin2, _ke
+        ).reshape(*input_shape, -1, d).transpose(1, 2)
+        value_states = v.view(*input_shape, -1, d).transpose(1, 2)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(
+                key_states, value_states, _m.layer_idx)
+
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            _m.config._attn_implementation, eager_attention_forward)
+        attn_output, attn_weights = attention_interface(
+            _m, query_states, key_states, value_states, attention_mask,
+            dropout=0.0 if not _m.training else _m.attention_dropout,
+            scaling=_m.scaling,
+            sliding_window=_m.sliding_window, **kwargs)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return _m.o_proj(attn_output), attn_weights
+
+    mod.forward = _fwd
+    return True
+
+
+def fuse_t1_glue_r2(model) -> tuple[int, int]:
+    """Apply the round-2 decode folds. Returns ``(layers, attentions)``.
+
+    Refuses a vacuous enable: an arm that asks for the fusion must get
+    it or an error, never a quiet no-op."""
+    if os.environ.get("E4B_FUSE_T1_GLUE_R2", "0") != "1":
+        return (0, 0)
+    try:
+        from int4_b32 import rmsnorm_resid_rows, rope_norm_heads
+    except ImportError as e:
+        raise RuntimeError(
+            "E4B_FUSE_T1_GLUE_R2=1 needs the kernel side's "
+            "rmsnorm_resid_rows/rope_norm_heads; install the matching "
+            "cut or unset the flag") from e
+
+    layers = attns = 0
+    for mod in model.modules():
+        name = type(mod).__name__
+        if name.endswith("DecoderLayer"):
+            layers += bool(_patch_layer(mod, rmsnorm_resid_rows))
+        elif name.endswith("Attention"):
+            attns += bool(_patch_attention(mod, rope_norm_heads))
+    if layers == 0 and attns == 0:
+        raise RuntimeError(
+            "E4B_FUSE_T1_GLUE_R2=1 patched nothing (no structurally "
+            "matched decoder layer or fused attention passed the "
+            "probes) -- refusing a vacuous enable")
+    return (layers, attns)

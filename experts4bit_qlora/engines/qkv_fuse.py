@@ -117,4 +117,8 @@ def fuse_qkv(model) -> int:
     # an env var only read by a function nothing calls is dead)
     from .glue_fuse import fuse_t1_glue
     fuse_t1_glue(model)
+    # round 2 rides the same point and runs AFTER the attention fusion
+    # above, whose qkv_proj it requires (it replaces that forward)
+    from .glue_r2 import fuse_t1_glue_r2
+    fuse_t1_glue_r2(model)
     return fused
