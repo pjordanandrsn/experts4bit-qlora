@@ -39,7 +39,10 @@ def _kernels():
 class Int4Linear(nn.Module):
     """Frozen serving projection stored on the int4-b32 grid."""
 
-    def __init__(self, lin: nn.Linear):
+    def __init__(self, lin: nn.Linear, packer=None):
+        """``packer(w_fp32_cpu) -> (packed, scales)`` defaults to the
+        shipped round-to-nearest packer; the calibrated lane passes one
+        closed over that projection's Hessian. Same bytes either way."""
         super().__init__()
         if lin.bias is not None:
             raise RuntimeError(
@@ -49,7 +52,7 @@ class Int4Linear(nn.Module):
         self._gemv, self._qx, self._dref = gemv, qx, dref
         self.N, self.K = lin.out_features, lin.in_features
         dev = lin.weight.device
-        packed, scales = pack(lin.weight.detach().float().cpu())
+        packed, scales = (packer or pack)(lin.weight.detach().float().cpu())
         self.register_buffer("packed",
                              packed.reshape(1, self.N, self.K // 2).to(dev),
                              persistent=False)
