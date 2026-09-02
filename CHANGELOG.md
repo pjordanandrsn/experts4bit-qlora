@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.26.0 — 2026-09-01
+
+### Glue round 2: two more decode folds, both lanes paid
+
+One feature (#326), gated behind `E4B_FUSE_T1_GLUE_R2=1`. Where round
+one fused the RMSNorm call itself, round two folds what the censuses
+showed around it:
+
+- the decoder layer's `residual + attn_out` disappears into the
+  post-attention norm, one call returning both the new residual and
+  the normed activation;
+- each of q/k's per-head norm folds together with the rotary chain
+  into a single launch per projection.
+
+Licensing follows the round-one lesson exactly: every structural
+attribute is checked before patching, the norms must pass the semantic
+probe that rejects centered variants, and the attention fold only
+touches an attention this package already fused — it replaces that
+forward rather than half-patching an unfused one. A cos/sin tensor
+that upstream broadcasts across the batch is materialised per row, and
+any other layout keeps the upstream chain rather than rotating with
+the wrong positions. Off decode shapes everything falls through, and a
+zero-match enable refuses instead of running as a quiet no-op.
+
+Measured on one box against the round-one tip: **1.1557x at B=1**
+(6.575 -> 5.689 ms, 152.1 -> 175.8 tok/s) and **1.0916x at B=16**
+(15.305 -> 14.021 ms, 1044.7 -> 1141.1 tok/s aggregate), engagement
+confirmed by kernel census in every treated arm and absent in every
+control. The paired quality gate PASSES at delta -0.00105 ppl over
+8192 sha-matched steps.
+
 ## 0.25.0 — 2026-09-01
 
 ### Opt-in fused RMSNorm glue for single-stream decode
