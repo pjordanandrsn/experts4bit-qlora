@@ -62,19 +62,30 @@ def _stubs(monkeypatch, seen):
     pack_ref.dequant_int4_ref = dequant_int4_ref
 
     k = types.ModuleType("int4_b32")
-    k.gemv_int4_b32 = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("no gpu"))
-    k.quant_x_rows = lambda x: (x, x)
-    k._plan = lambda N, K: (128, 4, 1, 1)
+    def _no_gpu(*a, **kw):
+        raise RuntimeError("no gpu in the CPU test")
+
+    def _quant(x):
+        return x, x
+
+    def _plan(N, K):
+        return 128, 4, 1, 1
+    k.gemv_int4_b32 = _no_gpu
+    k.quant_x_rows = _quant
+    k._plan = _plan
 
     gp = types.ModuleType("gptq_pack")
 
     class HessianAccumulator:
         def __init__(self, k, device=None):
-            self.H = torch.zeros(k, k); self.n = 0
+            self.H = torch.zeros(k, k)
+            self.n = 0
 
         def add(self, x):
-            rows = x.reshape(-1, x.shape[-1]).float(); b = rows.shape[0]
-            self.H *= self.n / (self.n + b); self.n += b
+            rows = x.reshape(-1, x.shape[-1]).float()
+            b = rows.shape[0]
+            self.H *= self.n / (self.n + b)
+            self.n += b
             self.H += (2.0 / self.n) * (rows.t() @ rows)
 
     def gptq_pack_int4_b32(w, hessian, **kw):

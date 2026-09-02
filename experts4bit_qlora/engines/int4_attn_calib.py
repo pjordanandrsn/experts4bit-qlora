@@ -65,13 +65,13 @@ def calibrate_attention_hessians(model, batches: Iterable[torch.Tensor],
     if not lins:
         raise RuntimeError("calibration found no attention projections")
     dev = device or next(model.parameters()).device
-    accs = {n: HessianAccumulator(l.in_features, device=dev)
-            for n, l in lins.items()}
+    accs = {n: HessianAccumulator(lin.in_features, device=dev)
+            for n, lin in lins.items()}
     handles = []
-    for n, l in lins.items():
+    for n, lin in lins.items():
         def _hook(mod, inputs, _n=n):
             accs[_n].add(inputs[0].to(dev))
-        handles.append(l.register_forward_pre_hook(_hook))
+        handles.append(lin.register_forward_pre_hook(_hook))
     try:
         for ids in batches:
             model(ids.to(dev))
@@ -110,7 +110,9 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor]) -> in
         # a 4096x4096 fp32 Hessian there is seconds, and it keeps the GPU
         # free for the store buffers being built alongside
         H = hessians[name].to("cpu")
-        packer = lambda w, _H=H: gptq_pack_int4_b32(w, _H)
+
+        def packer(w, _H=H):
+            return gptq_pack_int4_b32(w, _H)
         setattr(parent, child, Int4Linear(lin, packer=packer))
         hessians[name] = None          # free the 16-64 MB as we go
         n += 1
