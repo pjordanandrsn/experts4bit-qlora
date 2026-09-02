@@ -121,4 +121,6 @@ def fuse_qkv(model) -> int:
     # above, whose qkv_proj it requires (it replaces that forward)
     from .glue_r2 import fuse_t1_glue_r2
     fuse_t1_glue_r2(model)
+    from .router_epilogue import fuse_router_epilogue
+    fuse_router_epilogue(model)
     return fused
