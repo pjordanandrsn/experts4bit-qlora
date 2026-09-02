@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.27.0 — 2026-09-02
+
+### Glue round 3: the router epilogue, one launch per layer
+
+One feature (#329), gated behind `E4B_FUSE_ROUTER_EPI=1`. Rounds one
+and two folded the norms, the residual add and the rotary chain; the
+census's largest remaining cluster at decode was what the router does
+after its GEMM — a softmax over every expert, a top-k that torch
+serves with a gather plus a bitonic sort, a sum and a divide. Five
+launches per layer become one. The GEMM itself does not move, which is
+what separates this from the router fusion refused earlier on
+occupancy: a program reads 512 bytes of logits rather than the router
+weight matrix.
+
+Patching is licensed by a semantic probe against the module's own
+forward, requiring both the selected expert **set** and the weights to
+match the reference epilogue — a routing change is not a rounding
+change. Routers that bias logits before selection, or that softmax
+only the selected logits with renormalisation off, are refused by it
+despite sharing every structural attribute. A test also pins the
+algebraic fact that with `norm_topk_prob` on, top-k-then-softmax *is*
+the reference function (the partition function cancels), so the probe
+neither can nor needs to separate those.
+
+Measured against the round-two tip: **1.0735x at B=1** (5.657 → 5.270
+ms, 176.8 → 189.8 tok/s) and **1.0464x at B=16** (13.823 → 13.210 ms,
+1,157.5 → 1,211.2 tok/s aggregate), engagement confirmed by kernel
+census in every treated arm and absent in every control. The paired
+quality gate PASSES at **-0.01968 ppl** over 8,192 sha-matched steps.
+
 ## 0.26.0 — 2026-09-01
 
 ### Glue round 2: two more decode folds, both lanes paid
