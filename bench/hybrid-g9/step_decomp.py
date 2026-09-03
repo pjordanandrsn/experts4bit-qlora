@@ -2025,6 +2025,18 @@ def main():
                              "modules -- refusing a vacuous arm")
         print(f"fused q/k/v projections on {n_f} attention modules "
               f"(RESULTS-f2-tail default)", flush=True)
+    else:
+        # --no-fuse-qkv (non-Qwen families): the glue and router fusions
+        # are env-gated and structural; call them so a set flag either
+        # engages on matching modules or REFUSES with a sentence. The
+        # first non-Qwen sweep ran the fused arm with every flag set and
+        # nothing consulted them -- an identical step and no banner.
+        from experts4bit_qlora.engines.glue_fuse import fuse_t1_glue
+        from experts4bit_qlora.engines.glue_r2 import fuse_t1_glue_r2
+        from experts4bit_qlora.engines.router_epilogue import fuse_router_epilogue
+        fuse_t1_glue(model)
+        fuse_t1_glue_r2(model)
+        fuse_router_epilogue(model)
     if a.compile_layers:
         import torch._dynamo as dynamo
         from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
