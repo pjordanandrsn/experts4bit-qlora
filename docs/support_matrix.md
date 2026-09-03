@@ -127,11 +127,12 @@ which is why Gemma-4 reads −5.84 ppl while agreeing to 0.0078 nats.
 and the paged path decodes incrementally; on a mixture-of-experts model
 those two arithmetic orders route a few percent of tokens to different
 experts, which disagrees regardless of correctness (METHODOLOGY 13.1).
-Measured floors: gpt-oss 0.0099 nats (4.52% of choices flip), Qwen3
-0.0095 nats (6.77%). **Qwen3's parity delta is below its own floor**,
-so the path is indistinguishable from the model's own attention there —
-a stronger result than the number suggests, and one that retires the
-claim that the fp8 KV cache costs +0.047 ppl.
+Measured floors: Granite 0.0033, gpt-oss 0.0176, Qwen3 0.0095 nats.
+**Every paged delta measured against a chunk-free reference is below its
+model's floor** — Granite 0.00229, gpt-oss 0.00288 — and in both cases
+the serving path is closer to the reference than the chunked oracle is.
+Qwen3's delta (0.0058, against the chunked oracle) is likewise below its
+floor, which retires the claim that the fp8 KV cache costs +0.047 ppl.
 
 | Family | Attention features needed | Parity status | Evidence |
 |---|---|---|---|
@@ -139,7 +140,7 @@ claim that the fp8 KV cache costs +0.047 ppl.
 | Granite-3.1-3B-A800M | `attention_multiplier` scale | `validated` +0.0219 ppl = +0.0028 nats vs oracle (PASS) | oracle-compared, 8192 steps |
 | Mixtral-8x7B | plain causal | `not_tested` for absolute parity | paged-vs-paged only (int4 experts −0.015) |
 | OLMoE-1B-7B | plain causal | `not_tested` for absolute parity | paged-vs-paged only |
-| gpt-oss-20b | sinks + alternating sliding window 128 | `unsupported` as a GATED path: no perplexity gate exists for this family (raw-text ppl 2361 through plain transformers; chat-window 2029). Loader and served expert tier are `validated` faithful (MXFP4 dequant bit-exact; expert forward cos 0.991-0.993; served layer 0 cos 0.998). Δ = +0.078 nats raw / +0.152 chat -- 10-20x every other family, so this IS a real signal about the sinks/window path, not a regime artefact. A KL gate is pre-registered in METHODOLOGY 13; the oracle-arm gap is under test in e4b#346. | oracle arms disagree — no verdict |
+| gpt-oss-20b | sinks + alternating sliding window 128 | `validated` as BEHAVING: measured against a chunk-free reference (one full forward, no chunk boundaries) the paged path sits at **0.00288 nats**, BELOW that model's 0.01758-nat floor — indistinguishable from the model's own attention, and closer to the reference than the chunked oracle is. NOT a formal PASS: no perplexity gate exists for this family (raw-text ppl 2361 through plain transformers; chat-window 2029), and the pre-registered KL gate is falsified (METHODOLOGY 13). Loader and served expert tier are `validated` faithful (MXFP4 dequant bit-exact; expert forward cos 0.991-0.993; served layer 0 cos 0.998). | oracle-compared + floor, 512 steps |
 | Gemma-4-26B-A4B-it | per-layer KV geometry (sliding 256/8 beside full 512/2), sliding window, scale 1.0 | `validated` as BEHAVING: one pool served both geometries, Δ = **−0.0078 nats** (same order as the two passing families), output text coherent, whole window ran the fp8 compute path. NOT a formal PASS: the absolute Δppl gate is inapplicable at oracle ppl 752 (it reads −5.84), so a verdict waits on the in-distribution instrument. Loading is separately `broken` on 2 of 4 hosts (e4b#344). | oracle-compared, 8192 steps |
 
 What "unsupported as a gated path" means for gpt-oss: the code serves it

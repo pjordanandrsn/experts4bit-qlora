@@ -561,12 +561,40 @@ does this and reports the router-flip rate and the KL split alongside.
 | gpt-oss-20b (24 layers, top-4 of 32) | 4.52% | 0.0099 | 0.0256 | 0.9115 |
 | Qwen3-30B-A3B (48 layers, top-8 of 128) | 6.77% | 0.0095 | 0.0035 | 0.9896 |
 
-Read against these: gpt-oss's +0.078 nats is about 8x its floor, so it
-is probably a real difference and its serving path is worth
-investigating. **Qwen3's +0.0058 nats is BELOW its floor**, which
-retires the fp8 KV cost claim above. Granite's floor is unmeasured but
-its +0.0028 nats is smaller than both floors here. The PASS verdicts
-stand and are strengthened; the causal story attached to them does not.
+**Measured against a CHUNK-FREE reference (P26, 512 steps,
+`--ppl-oracle full`).** Every delta in the table above compares the
+paged path to the CHUNKED oracle, which is itself one arithmetic order.
+Scoring the same window three ways — one full forward, the chunked
+oracle, the paged path — puts that comparison on a proper footing:
+
+| Family | full-forward nll | chunked | paged | floor \|chunked−full\| | parity \|paged−full\| |
+|---|---|---|---|---|---|
+| Granite-3.1-3B-A800M | 1.68776 | 1.69106 | 1.69005 | 0.00330 | **0.00229** |
+| gpt-oss-20b | 4.94398 | 4.96156 | 4.94686 | 0.01758 | **0.00288** |
+
+**Both paged paths are at or below their floor, and in both families the
+serving path is CLOSER to the reference than the oracle is.** The
+instrument this project gates with is not ground truth; it is another
+arithmetic order, and on these models a less faithful one.
+
+This retires the reading that gpt-oss's +0.078 nats signalled a defect
+in its sinks or sliding-window handling. That number is
+paged-vs-CHUNKED at 8192 steps, and the chunked arm is the one that
+drifts: at 8192 steps with chunk 256 it crosses 32 chunk boundaries
+against 2 here, and every boundary is a fresh chance for a router flip.
+The gap tracked the instrument's boundary count.
+
+**Limit of the P26 measurement, stated plainly.** A full forward is
+quadratic in the window, so this is 512 steps and cannot be run at 8192
+with eager attention. Established: on a 512-step window both paged
+paths sit at their floor. NOT established: that this holds at 8192 —
+only that the 8192 number cannot be read as evidence about the paged
+path, since its reference deviates from the truth by 6x what the path
+does here.
+
+**Qwen3's +0.0058 nats is likewise BELOW its 0.0095 floor**, which
+retires the fp8 KV cost claim above. Every PASS stands and is
+strengthened; the causal stories attached to them do not.
 
 Note that the flip RATE does not predict the floor's size: Qwen3 flips
 more often (6.77% against 4.52%) and disagrees less (KL 0.0035 against
