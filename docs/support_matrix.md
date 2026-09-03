@@ -118,14 +118,19 @@ Two evidence levels appear here and they are NOT interchangeable:
 Host for every row: rented RTX 5090, torch 2.8.0+cu128, triton 3.4.0,
 transformers 5.16.1, e4b main (post-#339/#340), grouped-nf4-gemm 0.24.0.
 
+Parity is quoted in **nats** (mean NLL difference) as well as ppl: the
+`|Δppl| <= 0.05` bar is only meaningful where perplexity is ~8. At
+oracle ppl 752 it is a 0.007% relative bar and mechanically unpassable,
+which is why Gemma-4 reads −5.84 ppl while agreeing to 0.0078 nats.
+
 | Family | Attention features needed | Parity status | Evidence |
 |---|---|---|---|
-| Qwen3-30B-A3B | plain causal, `head_dim**-0.5` | `validated` +0.0467 vs oracle (PASS, 0.003 under the gate) | oracle-compared, 8192 steps |
-| Granite-3.1-3B-A800M | `attention_multiplier` scale | `validated` +0.0219 vs oracle (PASS) | oracle-compared, 8192 steps |
+| Qwen3-30B-A3B | plain causal, `head_dim**-0.5` | `validated` +0.0467 ppl = +0.0058 nats vs oracle (PASS, 0.003 ppl under the gate) | oracle-compared, 8192 steps |
+| Granite-3.1-3B-A800M | `attention_multiplier` scale | `validated` +0.0219 ppl = +0.0028 nats vs oracle (PASS) | oracle-compared, 8192 steps |
 | Mixtral-8x7B | plain causal | `not_tested` for absolute parity | paged-vs-paged only (int4 experts −0.015) |
 | OLMoE-1B-7B | plain causal | `not_tested` for absolute parity | paged-vs-paged only |
-| gpt-oss-20b | sinks + alternating sliding window 128 | `unsupported` as a GATED path: no perplexity gate exists for this family (raw-text ppl 2361 through plain transformers; chat-window 2029). Loader and served expert tier are `validated` faithful (MXFP4 dequant bit-exact; expert forward cos 0.991-0.993; served layer 0 cos 0.998). A KL gate is pre-registered in METHODOLOGY 13 and blocked on an unexplained gap between the two oracle arms (see e4b#346). | oracle arms disagree — no verdict |
-| Gemma-4-26B-A4B | per-layer KV geometry (sliding 256/8 beside full 512/2), sliding window 1024 on 25/30 layers, scale 1.0 | `blocked` — the model does not finish `load_moe_4bit_streaming` on 2 of 4 hosts (`CUDA error: invalid argument` in the non-expert weight load, e4b#344). The paged features it needs are implemented and unit-tested; no end-to-end parity number exists. | none yet |
+| gpt-oss-20b | sinks + alternating sliding window 128 | `unsupported` as a GATED path: no perplexity gate exists for this family (raw-text ppl 2361 through plain transformers; chat-window 2029). Loader and served expert tier are `validated` faithful (MXFP4 dequant bit-exact; expert forward cos 0.991-0.993; served layer 0 cos 0.998). Δ = +0.078 nats raw / +0.152 chat -- 10-20x every other family, so this IS a real signal about the sinks/window path, not a regime artefact. A KL gate is pre-registered in METHODOLOGY 13; the oracle-arm gap is under test in e4b#346. | oracle arms disagree — no verdict |
+| Gemma-4-26B-A4B-it | per-layer KV geometry (sliding 256/8 beside full 512/2), sliding window, scale 1.0 | `validated` as BEHAVING: one pool served both geometries, Δ = **−0.0078 nats** (same order as the two passing families), output text coherent, whole window ran the fp8 compute path. NOT a formal PASS: the absolute Δppl gate is inapplicable at oracle ppl 752 (it reads −5.84), so a verdict waits on the in-distribution instrument. Loading is separately `broken` on 2 of 4 hosts (e4b#344). | oracle-compared, 8192 steps |
 
 What "unsupported as a gated path" means for gpt-oss: the code serves it
 and the expert math is right, but this project will not publish a
