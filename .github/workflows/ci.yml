@@ -41,7 +41,7 @@ jobs:
         # these modules turns them into green no-ops. Import unguarded here:
         # if the pin above regresses to a pre-int4 build — or a raised floor
         # lets a pre-int4 wheel clobber it — this step fails loudly instead.
-        run: python -c "import int4_b32, int4_pack_ref, nf4_grouped"
+        run: python -c "import int4_b32, int4_pack_ref, nf4_grouped, gptq_pack"
       - name: Lint
         run: ruff check experts4bit_qlora tests scripts tools
       - name: Test
