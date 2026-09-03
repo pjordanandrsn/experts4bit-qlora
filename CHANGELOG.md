@@ -1,5 +1,50 @@
 # Changelog
 
+## Corrections to 0.30.0 — 2026-09-03 (same day)
+
+The 0.30.0 entry below is left as written; this records what the same
+day's measurements retired. Full detail: `docs/STATUS.md`,
+`docs/METHODOLOGY.md` §13–13.1, `docs/claims.json`.
+
+- **"The fp8 paged KV cache costs +0.047 ppl on Qwen3-30B and +0.022 on
+  Granite" — RETIRED.** Those deltas are +0.0058 and +0.0028 nats, and
+  the models' measured arithmetic-order floors (two correct forwards
+  differing only in the order of the arithmetic) are 0.0095 and 0.0033
+  nats. Both deltas sit BELOW their floor: indistinguishable from
+  reordering the maths, not a cost of the cache. The rule derived from
+  it — "buy headroom back from the cache first" — is retired with it.
+- **"gpt-oss's +0.078 nats is 10–20× every other family, a real signal
+  about the sinks and sliding-window path" — RETIRED.** Against a
+  chunk-free reference (one full forward, `--ppl-oracle full`) the paged
+  path sits at 0.00288 nats, below its 0.01758-nat floor. The chunked
+  oracle it had been compared against is 6× further from the reference
+  than the path it was judging; the 8192-step gap tracked the oracle's
+  32 chunk boundaries. Established on a 512-step window; a full forward
+  is quadratic in the window and cannot run at 8192.
+- **"Chunked teacher forcing is not equivalent to one full forward on a
+  family whose layers alternate sliding and full attention" — the
+  MECHANISM is retired, the measurement stands.** Widening the window
+  past the context leaves the gap (KL 0.0178); every cache class
+  reproduces it. The cause is MoE router flips under rounding (4.52% of
+  layer-token top-k choices on gpt-oss, 6.77% on Qwen3; flipped tokens
+  carry 39× the KL), which applies to every MoE model. Every parity
+  delta must be read against a per-model measured floor.
+- **The pre-registered KL gate in METHODOLOGY §13 is FALSIFIED** by its
+  first measurement: it rejects shipped NF4 experts (0.029 nats and
+  93.6% top-1 against 0.01 / 99%). Its 0.01 was calibrated from a signed
+  NLL difference and applied to a full-vocabulary KL. Left textually
+  unchanged and marked falsified; not retuned.
+- **The serving-parity table appended to `docs/support_matrix.md` broke
+  that document's OpenTimestamps anchor** (three PRs appended after the
+  attestation footer). The anchored file is restored to its anchored
+  bytes; the section lives in the new, unanchored
+  `docs/SERVING-PARITY.md`.
+- **Gemma-4's parity row reads "behaves", not PASS**: −0.0078 nats, the
+  same order as the passing families, with the absolute |Δppl| ≤ 0.05
+  bar inapplicable at oracle ppl 752. Its load still fails on 2 of 4
+  rented hosts (#344); a 2 GiB host-hop fix was merged and reverted the
+  same day because the model's largest tensor is 1.375 GiB.
+
 ## 0.30.0 — 2026-09-03
 
 ### The paged decode path is valid beyond plain-causal attention
