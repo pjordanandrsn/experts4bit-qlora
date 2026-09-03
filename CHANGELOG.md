@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.31.0 — 2026-09-03
+
+### Documentation release: the README says what is measured, and every number has a register entry
+
+No code changes. This release exists so that what PyPI renders matches
+the repository: the README is distilled from 494 lines of benchmark
+prose (whose serving story stopped at 0.22 tok/s, v0 figures that
+`docs/INFERENCE.md` itself marks superseded) to one page of what the
+package is, the doors, install, quickstart, **one table of what is
+measured with each row's evidence status**, the caveats that change how
+the table reads, what was retired, and where the receipts are.
+
+- `docs/claims.json` — a machine-readable register of 31 claims, each
+  with value, unit, model, hardware, conditions, date, status and
+  evidence path (`docs/claims-schema.md`). Every number in the README's
+  measured section maps to an entry, checked mechanically.
+- **`measured-private`** is a status, not a footnote: the serving
+  speeds, the parity numbers and the vLLM head-to-head come from a
+  private audit tree. Real runs, real receipts, not checkable from
+  this repository — and now labelled as such in the README table.
+- `docs/STATUS.md` — one page: what you get today, what was retired
+  (each with the measurement that retired it), what is open.
+- `docs/INDEX.md` — what each of the 42 documents is for and whether it
+  is current; the anchored July research record is indexed as such.
+- `docs/SERVING-PARITY.md` — the per-family parity table, moved out of
+  the anchored `docs/support_matrix.md`, which three same-day PRs had
+  appended to after its OpenTimestamps footer. The anchored file is
+  restored byte-for-byte to its 2026-07-05 anchored bytes.
+- The 0.30.0 corrections (below) are carried in the register as
+  `retired` entries so the retractions stay findable.
+
 ## Corrections to 0.30.0 — 2026-09-03 (same day)
 
 The 0.30.0 entry below is left as written; this records what the same
