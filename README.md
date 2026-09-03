@@ -84,7 +84,7 @@ private audit tree and you cannot check it from here.
 | Expert offload trains 30B-class MoEs on 12 GB | Qwen3-30B-A3B peaks 7.16 GB, Gemma-4-26B-A4B 8.47 GB | measured |
 | Fused training path, two 30B MoEs × five datasets | 1.52–1.81× per step at 0.75–0.81× VRAM, loss parity, frozen stack bit-identical over 16.31 GB | measured |
 | Arena vs pinned host RAM, at a descending cap | 2.56× / 3.80× / 6.40× less host RAM (OLMoE / Gemma-4 / Qwen3-30B) | measured |
-| Paged decode vs the model's own attention | indistinguishable on Granite (0.00229 nats) and gpt-oss (0.00288) against a chunk-free reference, each below its own floor | measured-private |
+| Paged decode vs the model's own attention | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; **not** on Gemma-4 (0.247 nats, 3× its floor — open, [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
 | Single-stream Qwen3-30B-A3B on an RTX 5090 | ≈100 tok/s NF4; 204.6 tok/s with calibrated int4 attention + int4 experts | measured-private |
 | Batched (B=16) Qwen3-30B-A3B on an RTX 5090 | ≈1,238 tok/s aggregate | measured-private |
 | Same box, same prompts, against vLLM (GPTQ-Int4) | vLLM ahead 1.47× at B=1, 1.55× at B=16 | measured-private |
@@ -128,7 +128,9 @@ Pro). Which families load, run and CUDA-graph-capture, with the
 evidence: [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/ARCHITECTURE_SUPPORT.md).
 Unsupported architectures fail fast with a clear error.
 
-Known open: Gemma-4-26B-A4B fails to load on 2 of 4 rented hosts
+Known open: Gemma-4-26B-A4B's paged decode is not at parity with the
+model's own attention ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)), and the model fails to load on
+2 of 5 rented hosts
 ([#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344));
 no shipped tool bakes the training arena from a bf16 checkpoint yet.
 
