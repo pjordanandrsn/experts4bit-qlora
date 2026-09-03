@@ -394,15 +394,30 @@ def _layer_diff_report(t, pos_abs, cap_paged, cap_ref, model, out_path):
     return summ
 
 
+def _oracle_label(a, impl: str) -> str:
+    """The arm's identity as recorded in `attn_path` and the K8 line. The
+    upstream (HF-loaded) arms keep their `upstream-` prefix under every
+    modifier -- chunk size or fake-quant letters -- so a verdict can always
+    tell the HF-loaded control from the e4b-loaded oracle (Bugbot, #361)."""
+    base = {"upstream": "upstream-eager", "full": "eager-fullforward",
+            "upstream-full": "upstream-eager-fullforward"}.get(a.ppl_oracle, impl)
+    ck = int(getattr(a, "ppl_chunk", 0) or 0)
+    if a.ppl_oracle in ("eager", "upstream") and ck > 0:
+        base = f"{base}-chunk{ck}"
+    fq = getattr(a, "ppl_fq", "none")
+    if fq and fq != "none" and a.ppl_oracle in ("full", "upstream-full"):
+        frm = a.prompt_len if getattr(a, "fq_from", -1) < 0 else a.fq_from
+        base = (f"{base}-fq{fq}-kg{a.fq_kgroups}-vg{a.fq_vgroups}"
+                f"-{a.fq_layers}-from{frm}")
+    return base
+
+
 def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
     import time as _time
     impl = "eager" if a.ppl_oracle in ("upstream", "full", "upstream-full") else a.ppl_oracle
-    label = {"upstream": "upstream-eager", "full": "eager-fullforward",
-             "upstream-full": "upstream-eager-fullforward"}.get(a.ppl_oracle, impl)
-    if a.ppl_oracle == "eager" and int(getattr(a, "ppl_chunk", 0) or 0) > 0:
-        label = f"eager-chunk{a.ppl_chunk}"
+    label = _oracle_label(a, impl)
     fq = getattr(a, "ppl_fq", "none")
     if fq and fq != "none":
         if a.ppl_oracle not in ("full", "upstream-full"):
@@ -410,8 +425,6 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
                              "chunk-free forward: use it with --ppl-oracle full")
         frm = a.prompt_len if a.fq_from < 0 else a.fq_from
         impl = _fq_register(fq, a.fq_kgroups, a.fq_vgroups, a.fq_layers, frm)
-        label = (f"eager-fullforward-fq{fq}-kg{a.fq_kgroups}-vg{a.fq_vgroups}"
-                 f"-{a.fq_layers}-from{frm}")
     model.config._attn_implementation = impl
     for m in model.modules():
         if hasattr(m, "config") and hasattr(m.config, "_attn_implementation"):

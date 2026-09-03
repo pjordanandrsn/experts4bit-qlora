@@ -213,3 +213,18 @@ def test_layer_diff_reference_restores_a_custom_attention_name():
     sd._layer_diff_reference(model, ids[:12], {})
     names = {m.config._attn_implementation for m in model.modules() if hasattr(m, "config")}
     assert names == {"paged_stub_for_test"}, names
+
+
+def test_oracle_label_keeps_upstream_identity_under_every_modifier():
+    sd = _load_harness()
+    from types import SimpleNamespace as NS
+    base = dict(prompt_len=256, ppl_chunk=0, ppl_fq="none", fq_kgroups=4, fq_vgroups=1, fq_layers="all", fq_from=-1)
+    assert sd._oracle_label(NS(ppl_oracle="full", **base), "eager") == "eager-fullforward"
+    assert sd._oracle_label(NS(ppl_oracle="upstream-full", **base), "eager") == "upstream-eager-fullforward"
+    fq = {**base, "ppl_fq": "qkvp"}
+    assert sd._oracle_label(NS(ppl_oracle="full", **fq), "eager") == "eager-fullforward-fqqkvp-kg4-vg1-all-from256"
+    assert sd._oracle_label(NS(ppl_oracle="upstream-full", **fq), "eager").startswith("upstream-eager-fullforward-fqqkvp")
+    ck = {**base, "ppl_chunk": 64}
+    assert sd._oracle_label(NS(ppl_oracle="eager", **ck), "eager") == "eager-chunk64"
+    assert sd._oracle_label(NS(ppl_oracle="upstream", **ck), "eager") == "upstream-eager-chunk64"
+
