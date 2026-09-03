@@ -408,3 +408,74 @@ remains unexplored territory for throughput.
 It serves the QLoRA fine-tune over the exact base it was trained against, on the card it was
 trained on; prefetch turns offloaded decode from unusable (0.40 tok/s) to usable (1.44 tok/s) in
 1.68 GB; and the decode-route additions are correctness-gated conveniences, not speedups.
+
+## 13. Serving parity — the paged decode path against the model's own attention (P25, 2026-09-03)
+
+**What is under test.** The paged B=1 decode path (the `paged_attention`
+shim over `Fp8PagedKV` and the kernel package's split-K attention) must
+score the same perplexity as the model's own attention on the same
+weights. The reference ("oracle") is the e4b-loaded model scored through
+transformers' eager attention with its bf16 HF cache, the shim NOT
+registered, on the identical K8 window (8192 teacher-forced steps,
+sha-matched ids; `step_decomp.py --ppl-oracle eager`). A second control,
+`--ppl-oracle upstream`, scores the same window through the model exactly
+as transformers loads it, with no e4b loader in the process at all.
+
+**The finding that changes earlier reads.** Every K8 verdict before P25
+compared paged against paged (an NF4 baseline against an int4 or
+calibrated variant through the same cache and kernels). Any error the
+two arms SHARE cancels in that comparison. Measured against the oracle,
+the fp8 paged KV cache itself (4 K-groups, split-K kernels) costs:
+
+| Family | oracle ppl | paged ppl | delta |
+|---|---|---|---|
+| Qwen3-30B-A3B | 8.01528 | 8.06197 | **+0.0467** |
+| Granite-3.1-3B-A800M | 7.69596 | 7.71785 | **+0.0219** |
+
+Both pass the |delta| <= 0.05 parity gate, but Qwen3 sits 0.003 under
+it. The earlier one-sided +0.05 budgets for attention-side variants were
+therefore spent ON TOP of a +0.047 the paged-vs-paged instrument could
+not see; those passes were real for the variant-vs-baseline question
+they asked and vacuous for the question "is this within 0.05 of the
+model". Rule from here: any change on the attention or KV path is gated
+against `--ppl-oracle eager`, never against the paged NF4 baseline, and
+a lane that needs headroom on Qwen3 must first buy it back from the
+cache.
+
+**Families where perplexity is not an instrument.** gpt-oss-20b scores
+ppl 2361 on bare wikitext through plain transformers (upstream control)
+and 2029 with the corpus wrapped as the assistant's final-channel reply
+(`--ppl-chat`). Bare text is out of distribution for a harmony-only
+post-trained model and an absolute 0.05 gate means nothing at that
+scale. The e4b-loaded oracle scoring LOWER (1336 raw, 1568 chat) than
+upstream on identical ids is itself a defect signal — NF4 experts
+cannot improve a model over its bf16 self — and is under investigation
+with a per-arm chunked-vs-full check and a per-layer cross-arm
+divergence (`bench/hybrid-g9/gptoss_arm_diff.py`). Until that gap is
+explained, no gate built on either arm is trusted for this family.
+
+**Pre-registered KL gate for chat-only families (fixed 2026-09-03,
+before any KL number has been computed).** Once the two oracle arms
+agree (chunked == full forward on both; cross-arm logit KL at NF4
+noise), the gate for a family whose raw-text perplexity is unusable is:
+
+- Text: the oracle's OWN greedy continuations — 16 harmony-formatted
+  prompts (system + user turn, generation prompt, final channel), 256
+  generated tokens each, 4096 scored tokens total. Self-generated text is
+  in-distribution by construction; the prompts are fixed in the harness
+  and hashed like the K8 window.
+- Statistic: mean per-token **full-vocabulary** KL(oracle || paged) in
+  nats, fp32 log-softmax on both sides, teacher-forced on the same ids.
+  Not top-k: a top-k KL hides mass moved into the tail, which is exactly
+  what a wrong sink or window does.
+- Thresholds: mean KL <= **0.01** nats/token AND top-1 agreement >=
+  **99.0%** AND the sign of (paged NLL - oracle NLL) on the same text is
+  not negative beyond 0.002 nats (paged cannot be "better" than the
+  oracle; if it is, the oracle is the broken arm). Calibration for the
+  0.01: Qwen3's +0.047 ppl at ppl 8 is +0.0058 nats of NLL, and the
+  per-token KL between two models is bounded below by the NLL gap on
+  their own text, so 0.01 is roughly the same budget the ppl gate
+  grants, expressed in a regime-independent unit.
+- Refusals: a sha mismatch between arms, fewer than 4096 scored tokens,
+  or an oracle whose chunked and full-forward NLL differ by more than
+  1e-3 nats each refuse the verdict.
