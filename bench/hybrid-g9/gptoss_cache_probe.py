@@ -59,6 +59,60 @@ def _cache_builders(model):
     return out
 
 
+class _RouterTap:
+    """Record every router's top-k expert choice, per forward.
+
+    A MoE router picks top-k of N experts from the hidden state. Chunked
+    and full forwards differ by bf16 rounding; where two experts' logits
+    are close, that rounding FLIPS the choice, and a flipped expert is a
+    discrete change to that token's output -- an amplifier that turns
+    1e-3 of numerical noise into a large logit difference. This tap
+    counts those flips so the chunked-vs-full gap can be attributed
+    rather than guessed at."""
+
+    def __init__(self, model):
+        self.rows = []
+        self._h = []
+        for name, mod in model.named_modules():
+            if name.endswith("mlp.router") or type(mod).__name__.endswith("TopKRouter"):
+                self._h.append(mod.register_forward_hook(self._hook(name)))
+
+    def _hook(self, name):
+        def fn(mod, inp, out):
+            t = out[0] if isinstance(out, tuple) else out
+            if not torch.is_tensor(t) or t.ndim < 2:
+                return
+            k = min(4, t.shape[-1])
+            self.rows.append((name, t.reshape(-1, t.shape[-1]).float()
+                              .topk(k, dim=-1).indices.cpu()))
+        return fn
+
+    def close(self):
+        for h in self._h:
+            h.remove()
+        return self.rows
+
+
+def _router_flips(a_rows, b_rows):
+    """Fraction of (layer, token) top-k sets that differ between two runs."""
+    if not a_rows or not b_rows:
+        return None
+    by_a, by_b = {}, {}
+    for nm, t in a_rows:
+        by_a.setdefault(nm, []).append(t)
+    for nm, t in b_rows:
+        by_b.setdefault(nm, []).append(t)
+    diff = tot = 0
+    for nm in sorted(set(by_a) & set(by_b)):
+        ca = torch.cat(by_a[nm]); cb = torch.cat(by_b[nm])
+        n = min(ca.shape[0], cb.shape[0])
+        sa = [set(r.tolist()) for r in ca[-n:]]
+        sb = [set(r.tolist()) for r in cb[-n:]]
+        diff += sum(1 for x, y in zip(sa, sb) if x != y)
+        tot += n
+    return (diff, tot, diff / max(1, tot))
+
+
 @torch.no_grad()
 def _full_logits(model, ids, dev, prompt_len):
     out = model(input_ids=ids[None].to(dev))
@@ -161,7 +215,9 @@ def main():
           f"scored={tgt.numel()}, chunk={a.chunk}, sha={sha[:12]}, "
           f"sliding_window={getattr(tc, 'sliding_window', None)}, "
           f"n_sliding={sum(1 for x in (lt or []) if 'sliding' in x)}", flush=True)
+    tap_full = _RouterTap(model)
     full = _full_logits(model, ids, dev, a.prompt_len)
+    rows_full = tap_full.close()
     print(f"CACHEPROBE full-forward nll={float(-torch.log_softmax(full, -1).gather(1, tgt[:, None]).mean()):.5f}",
           flush=True)
     for name, build in _cache_builders(model):
@@ -170,9 +226,17 @@ def main():
             continue
         for cp in (False, True):
             try:
+                tap_ch = _RouterTap(model)
                 ch = _chunked_logits(model, ids, dev, a.prompt_len, a.chunk,
                                      build, cp)
+                rows_ch = tap_ch.close()
+                flips = _router_flips(rows_full, rows_ch)
                 kl, nf, nc, t1 = _stats(full, ch, tgt)
+                if flips is not None:
+                    d, t, frac = flips
+                    print(f"CACHEPROBE   router top-k flips full-vs-chunk: "
+                          f"{d}/{t} = {frac:.4%} of (layer, token) choices",
+                          flush=True)
                 verdict = "EQUAL" if kl < 1e-6 else ("close" if kl < 1e-3 else "DIFFERENT")
                 print(f"CACHEPROBE {name} cache_position={cp}: KL={kl:.6f} "
                       f"nll_full={nf:.5f} nll_chunk={nc:.5f} top1={t1:.4f} -> {verdict}",
