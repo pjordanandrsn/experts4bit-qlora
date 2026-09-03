@@ -163,7 +163,7 @@ def _load_e4b(a):
                    for pp in man["tiers"][t])
     man["tiers"] = {"vram": [list(pp) for pp in pairs], "dram": [], "nvme": []}
     man["masses"] = {"vram_frac": 1.0, "dram_frac": 0.0, "nvme_frac": 0.0}
-    n = enable_hybrid_tier(model, a.arena, man, pool=True)
+    n = enable_hybrid_tier(model, a.arena, man, hot_rows=a.hot_rows, pool=True)
     assert n == L, f"hybrid tier patched {n}/{L} modules"
     print(f"ARMDIFF e4b tier: {n} modules, all-vram placement, "
           f"{E} experts x {L} layers", flush=True)
@@ -180,6 +180,7 @@ def main():
     ap.add_argument("--skip-upstream", action="store_true")
     ap.add_argument("--calib", default="/root/ctrl/calib.json")
     ap.add_argument("--vram-gb", type=float, default=22.0)
+    ap.add_argument("--hot-rows", type=int, default=64)   # the K8 lane's default
     ap.add_argument("--dram-gb", type=float, default=0.0)
     ap.add_argument("--save", default="/root/ctrl/armdiff_upstream.pt")
     a = ap.parse_args()
