@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.29.0 — 2026-09-03
+
+### The serving stack outside Qwen: what the first five-model sweep fixed
+
+Four changes, all from one campaign (receipts `INT4B16/P24-GEN-*`): the
+same instrument as the Qwen lanes — NF4 bake, K8 perplexity on wikitext
+and an out-of-domain C4 shard, graph-timed decode at B=1 and B=16, a
+fusions arm, a greedy sample — run on Mixtral-8x7B, OLMoE-1B-7B,
+Granite-3.1-3B-A800M, Gemma-4-26B-A4B and gpt-oss-20b.
+
+- **The module's attention scale reaches the decode and verify kernels**
+  (#336). The paged `decode` and `verify` branches passed only q/k/v
+  and slots, so the fp8 decode kernel always ran at `head_dim**-0.5`.
+  GraniteMoe's `attention_multiplier` is 0.015625: NF4 perplexity 4142
+  and word salad through the paged loop, **7.72** with the scale threaded
+  (validated on a 5090, receipts P24-GEN-E).
+  Gemma-4 (scale 1.0, folded into q_norm) is the same class. Families
+  whose scale *is* `head_dim**-0.5` (Qwen3-MoE, OLMoE, Mixtral) are
+  unchanged. Sliding windows (Gemma-4, gpt-oss) and attention sinks
+  (gpt-oss) are still not honoured: those models remain numerically
+  invalid on the paged path, and the harness says so rather than
+  quoting them.
+- **Hessians accumulate on the CPU** (#334, with `grouped-nf4-gemm`
+  0.23.0's storage-aware accumulator; the floor moves to 0.23.0).
+  Mixtral's 128 attention projections at K=4096 held 8 GB of fp32
+  Hessians beside a 23 GB model and ran a 32 GB card out of memory.
+  Each batch's Gram is computed on the model's device and only the
+  K×K result moves. With that, the Mixtral calibration completes — and
+  the one-sided gate refuses the pack (+0.09 ppl on both texts, ×1.01):
+  **calibrated int4 attention is a Qwen3-30B-A3B win, not a general
+  lever.** OLMoE says the same (+0.60 out of domain, no speed).
+- **gpt-oss per-expert biases** (#333): the hot-residency state gathered
+  their rows with a CPU index against a CUDA bias; only gpt-oss carries
+  them, so the branch had never run.
+- **Fusion flags on non-Qwen families** (#333): `E4B_FUSE_T1_GLUE`,
+  `_R2` and `_ROUTER_EPI` were consulted only inside the Qwen3-MoE
+  serve assembly; elsewhere a set flag did nothing and said nothing.
+  The harness now calls the three fusions directly, and each engages
+  on matching modules or refuses with a sentence (validated on Granite
+  and Mixtral).
+- **Gemma-4 config spellings** (#335, #336): `text_config.top_k_experts`
+  for the routed top-k; per-layer attributes read uniformly on
+  transformers 5.16 heterogeneous configs instead of a global read that
+  raises.
+
+What the sweep established beyond the fixes: the generic loader bakes
+every one of these layouts; the int4 expert lane is quality-neutral and
+**doubles decode on Mixtral** (×2.04 B=1, ×1.97 B=16 over NF4) while a
+1B-active model (OLMoE) pays 1.8 % perplexity for it — the K8 gate is a
+per-model verdict, not a property of the lane.
+
 ## 0.28.0 — 2026-09-03
 
 ### Calibrated int4 attention for serving, and a gate that knows what calibration does
