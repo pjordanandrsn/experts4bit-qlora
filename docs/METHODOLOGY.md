@@ -601,3 +601,25 @@ more often (6.77% against 4.52%) and disagrees less (KL 0.0035 against
 0.0256), because a top-8-of-128 router's marginal expert carries less
 weight than a top-4-of-32 router's. Measure the floor; do not infer it
 from the architecture.
+
+### 13.2 Batch-shape variance — when a model has no reference at all
+
+§13.1's floor assumes two arithmetically equivalent forwards differ by
+a small, roughly stable amount. Gemma-4-26B-A4B-it violates that: its
+one-shot forward and transformers' own cached forward differ by −0.107
+to +0.271 nats across three 512-token windows. Before quoting any
+parity delta for a family, run the three-forward test in plain
+transformers on the prefill positions: (A) a short forward over the
+prefix; (B) the same prefix with `use_cache=True` — must equal A
+exactly, or the cache is wrong; (C) a long forward, real continuation;
+(D) the long forward with the continuation replaced by random tokens.
+Positions inside the prefix cannot depend on the continuation, so C
+and D differ only through batch-shape arithmetic (the per-expert
+gathered GEMMs change shape with the batch). Read the per-layer
+divergence, not a threshold: a mask leak jumps at one layer; batch
+variance starts at bf16 level and grows. If the NLL of the identical
+prefix tokens moves by more than the delta you intend to measure, the
+register entry says "no reference at this resolution" and the parity
+question waits for a long window or a matched-routing instrument.
+Gemma-4: C vs D 0.24% at layer 1 → 34% at layer 19, NLL 7.38 vs 7.70;
+Qwen3-30B: 0.15% → 3.5%, NLL 2.4235 vs 2.4225. Running the router in fp32 (plain transformers) does not remove the amplification (layer-19 divergence 0.25 against 0.34, top layer unchanged) and itself moves the same tokens' NLL by 1.1 nats, so router precision is not a lever; the sensitivity is the model's.

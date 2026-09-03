@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-03, version 0.31.1.** One page. The README argues the
+**As of 2026-09-03, version 0.31.2.** One page. The README argues the
 case; this page states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -46,7 +46,7 @@ on Gemma-4:
 | Granite-3.1-3B-A800M | 0.00229 nats | 0.00330 | indistinguishable |
 | gpt-oss-20b | 0.00288 nats | 0.01758 | indistinguishable |
 | Qwen3-30B-A3B | 0.00173 nats | 0.00641 | indistinguishable |
-| Gemma-4-26B-A4B | **0.24747 nats** | 0.08137 | **not at parity — 3.0× its floor, open ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359))** |
+| Gemma-4-26B-A4B | +0.093 … +0.247 (three windows) | no stable floor: HF's own cache −0.107 … +0.271 | **no reference at this resolution** ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) |
 
 **Read that table with its floor column or not at all.** Two
 arithmetically equivalent forwards of a mixture-of-experts model do not
@@ -57,14 +57,19 @@ A parity delta below the floor means *indistinguishable*, never "a small
 cost". Method in [`METHODOLOGY.md`](METHODOLOGY.md) §13.1; per-family
 table in [`SERVING-PARITY.md`](SERVING-PARITY.md).
 
-**Gemma-4 is a real, open defect, not a small cost.** Its earlier
-"behaves" reading (−0.0078 nats) was taken against the chunked oracle
-over a different window; against the chunk-free reference the paged
-path is 0.247 nats off, three times a floor that is itself five to
-twenty-five times any other family's. Two things are unexplained — that
-floor, and the sign of the paged gap flipping between windows — and the
-first suspect is the fp8 K-cache group width at `head_dim` 512. Do not
-quote this family as validated ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)).
+**Gemma-4 has no reference at this resolution.** On three 512-token
+windows the paged path sits +0.093, +0.114 and +0.247 nats from a
+one-shot forward — and transformers' *own* cached forward sits −0.107,
++0.271 and +0.081 from that same one-shot forward on the same windows.
+The cause is the model, not a path: plain transformers with no e4b code
+gives the same 255 tokens an NLL that moves by 0.4 nats depending only
+on which tokens follow them (bf16 batch-shape variance in the expert
+gathers, 0.2% at layer 1, amplified by the router to 35% of the hidden
+state by layer 19; Qwen3 shows the mechanism at a tenth of the
+amplitude and loses 0.001). Running the router in fp32 (plain transformers) does not remove the amplification (layer-19 divergence 0.25 against 0.34, top layer unchanged) and itself moves the same tokens' NLL by 1.1 nats, so router precision is not a lever; the sensitivity is the model's. The paged path's one localised,
+measured cost is the fp8 cache and dot: 0.046 nats, concentrated on the
+five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
+§13.2; numbers: SERVING-PARITY.
 
 **Serving speed**, single-stream Qwen3-30B-A3B on a rented RTX 5090:
 about 100 tok/s on the NF4 baseline, 204.6 tok/s with calibrated int4
@@ -97,10 +102,12 @@ is the honest one and it is also measured-private.
   from a signed NLL difference and applied to a full-vocabulary KL. It is
   left textually unchanged in METHODOLOGY §13 and marked falsified rather
   than retuned.
-- **"Gemma-4 behaves (−0.0078 nats)" — SUPERSEDED.** That number
-  compared the paged path to the chunked oracle, never to the model.
-  Against a chunk-free reference the path is 0.247 nats off, three times
-  its floor. Open as [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359).
+- **"Gemma-4 behaves (−0.0078 nats)" — SUPERSEDED**, and then **"Gemma-4
+  is not at parity: 0.247 nats, 3× its floor" — SUPERSEDED the same
+  day.** Both compared one 512-token window to one reference. Three
+  windows and a three-forward test in plain transformers show the model
+  has no reference at that resolution (above). What survives is the
+  fp8 share, 0.046 nats. [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) stays open, re-scoped.
 - **The 13.47× training speedup is ~7.2× against a current baseline.**
   transformers v5 fused the per-expert loop upstream, moving the baseline
   from 50.86 to 26.6 s/step. The grouped arm did not regress. Roughly
@@ -128,10 +135,11 @@ is the honest one and it is also measured-private.
 - **No shipped tool bakes the arena.** Reproducing the training receipt
   from published artifacts still needs a quantise-and-emit step you write
   yourself.
-- **[#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) — Gemma-4 paged decode is not at parity**: 0.247 nats
-  from a chunk-free reference, 3× a floor that is itself anomalous
-  (0.081 nats). First test: the paged arm with a bf16 KV cache on the
-  same window (fp8 K groups are 128-wide at `head_dim` 512).
+- **[#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) — Gemma-4, re-scoped**: (1) finer K groups for
+  512-dim heads in the fp8 cache (the measured 0.046 → 0.017), a kernel
+  change in grouped-nf4-gemm; (2) a parity instrument that survives
+  batch-shape variance — a long window, or matched routing — before any
+  verdict is quoted for this family.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

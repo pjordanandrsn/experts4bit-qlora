@@ -193,7 +193,7 @@
       "model": "google/gemma-4-26B-A4B-it",
       "hardware": "RTX 5090, rented (Vast box 49779056)",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
@@ -202,8 +202,52 @@
       "supersedes": [
         "e4b.parity.gemma4.behaves"
       ],
-      "notes": "full 3.34492 / chunked 3.42629 / paged 3.59239 nats. Two unexplained facts: the floor (HF chunked vs HF full) is 0.081 where other families sit at 0.003-0.018, and the paged gap changes SIGN between this window and the 8192-step window (ppl 28 vs 752). First test: the paged arm with a bf16 KV cache or finer fp8 K groups on this exact window (k_groups=4 at head_dim 512 = 128-wide scale groups).",
-      "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, sha-matched ids e01de6ebd4af across all three arms; NF4 experts on every arm; paged arm mech tally fp8 15360 / f32 0"
+      "notes": "full 3.34492 / chunked 3.42629 / paged 3.59239 nats. Two unexplained facts: the floor (HF chunked vs HF full) is 0.081 where other families sit at 0.003-0.018, and the paged gap changes SIGN between this window and the 8192-step window (ppl 28 vs 752). First test: the paged arm with a bf16 KV cache or finer fp8 K groups on this exact window (k_groups=4 at head_dim 512 = 128-wide scale groups). SUPERSEDED 2026-09-03 (P27): one window, one reference; three windows and the three-forward test show the model has no reference at this resolution.",
+      "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, sha-matched ids e01de6ebd4af across all three arms; NF4 experts on every arm; paged arm mech tally fp8 15360 / f32 0",
+      "superseded_by": "e4b.parity.gemma4.no-reference"
+    },
+    {
+      "id": "e4b.parity.gemma4.no-reference",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "Gemma-4-26B-A4B-it has no parity reference at 512-token resolution: the paged path is +0.093/+0.114/+0.247 nats from a one-shot forward on three windows while transformers' own cached forward is -0.107/+0.271/+0.081 from the same one-shot forwards; in plain transformers the NLL of identical prefix tokens moves 0.4 nats with the batch shape.",
+      "value": null,
+      "unit": "nats",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090, rented (Vast box 49785896)",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P27 phases 4, 7, 7b, 8)"
+      ],
+      "supersedes": [
+        "e4b.parity.gemma4.chunk-free"
+      ],
+      "notes": "Cache flag is a bit-exact no-op (cached prefill == short forward). Real vs random continuation moves prefix positions 0.24% at layer 1 -> 34% at layer 19 (bf16 batch-shape variance in the expert gathers, amplified by the router); Qwen3-30B: 0.15% -> 3.5%, NLL 0.001. Running the router in fp32 (plain transformers) does not remove the amplification (layer-19 divergence 0.25 against 0.34, top layer unchanged) and itself moves the same tokens' NLL by 1.1 nats, so router precision is not a lever; the sensitivity is the model's.",
+      "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, prompt offsets 0/3000/6000; NF4 experts on the e4b arms; plain bf16 transformers 5.16.1 for the three-forward test"
+    },
+    {
+      "id": "e4b.parity.gemma4.fp8-share",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "The fp8 paged cache and fp8 dot cost Gemma-4-26B-A4B-it 0.046 nats on the P26b window (the kernel's full precision model -- Q per-tile, K 4-group, V per-row, P range-folded e4m3 -- applied inside the one-shot forward on the scored rows); 0.017 with 32-wide K groups; the five 512-dim full-attention layers carry 0.019 of it and the 25 sliding layers 0.002.",
+      "value": 0.04645,
+      "unit": "nats (fq_qkvp - full)",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090, rented (Vast box 49785896)",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/step_decomp.py (--ppl-fq)"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P27 phase 1)"
+      ],
+      "notes": "Qwen3-30B control under the same model: -0.0006 nats. The kernel's own precision is flat in head dim on synthetic data (gnf4#324), so the cost is Gemma-4's activation statistics under 128-wide K groups at head_dim 512.",
+      "conditions": "512 scored steps, 256-token prompt, sha e01de6ebd4af; roundings applied on rows >= 256 (the paged prefill attends on bf16)"
     },
     {
       "id": "e4b.parity.moe-routing-flip-floor",
