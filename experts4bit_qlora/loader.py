@@ -43,6 +43,7 @@ from .formats.fp8_blocks import convert_to_fp8_blocks
 from .arch.gptoss import GPTOSS_ALPHA, GPTOSS_LIMIT, GptOssExperts4bit
 from .lora import ExpertsLoRA
 from .formats.mxfp4 import dequantize_mxfp4
+from ._shard_read import too_big_for_one_copy
 from .engines.offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
 
@@ -740,11 +741,31 @@ def load_moe_4bit_streaming(
     conv = _convention_or_none(model_type)
     ckpt_experts = _index_per_expert_keys(conv, weight_map)
     handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in set(weight_map.values())}
+    # A second, HOST-side view of the same shards. `safe_open(device="cuda")`
+    # makes `get_tensor` a single device-side copy of the whole tensor, and a
+    # multi-GB one fails with `CUDA error: invalid argument` on some
+    # driver/host pairs -- observed on 2 of 4 rented 5090 hosts loading
+    # Gemma-4-26B-A4B, whose per-layer embedding is ~4 GB, always in the
+    # non-expert weight load and never in the expert quantisation that
+    # precedes it (e4b#344). Tensors at or above `_CPU_HOP_BYTES` are read
+    # to host memory and moved with a normal `.to()`, which chunks the
+    # transfer itself. Nothing else changes: same bytes, same dtype, same
+    # destination.
+    host_handles: dict = {}
 
     raw_readers = {}
 
+    def _host(fn):
+        h = host_handles.get(fn)
+        if h is None:
+            h = host_handles[fn] = safe_open(os.path.join(snap, fn),
+                                             framework="pt", device="cpu")
+        return h
+
     def get(name):
         fn = weight_map[name]
+        if too_big_for_one_copy(handles[fn], orig_key[name], device):
+            return _host(fn).get_tensor(orig_key[name]).to(device)
         try:
             return handles[fn].get_tensor(orig_key[name])
         except AttributeError:
