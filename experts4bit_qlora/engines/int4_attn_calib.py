@@ -54,23 +54,29 @@ def _attention_linears(model) -> Dict[str, nn.Linear]:
 
 @torch.no_grad()
 def calibrate_attention_hessians(model, batches: Iterable[torch.Tensor],
-                                 device=None) -> Dict[str, torch.Tensor]:
+                                 device=None, hessian_device="cpu",
+                                 ) -> Dict[str, torch.Tensor]:
     """Run ``batches`` (token-id tensors ``[B, T]``) through ``model`` and
     return ``{qualified_name: H}`` with ``H = 2 X X^T`` over every input
     row each attention projection saw. Hooks are removed on exit even if
-    a batch raises."""
+    a batch raises.
+
+    Each batch's Gram is computed on the model's device; the running
+    Hessians LIVE on ``hessian_device`` (CPU by default). Keeping them on
+    the card OOMed Mixtral-8x7B's calibration on a 32 GB GPU: 128
+    projections x 64 MB beside a 23 GB model (receipts P24-GEN-B)."""
     from gptq_pack import HessianAccumulator
 
     lins = _attention_linears(model)
     if not lins:
         raise RuntimeError("calibration found no attention projections")
     dev = device or next(model.parameters()).device
-    accs = {n: HessianAccumulator(lin.in_features, device=dev)
+    accs = {n: HessianAccumulator(lin.in_features, device=hessian_device)
             for n, lin in lins.items()}
     handles = []
     for n, lin in lins.items():
         def _hook(mod, inputs, _n=n):
-            accs[_n].add(inputs[0].to(dev))
+            accs[_n].add(inputs[0])            # Gram where the activations are
         handles.append(lin.register_forward_pre_hook(_hook))
     try:
         for ids in batches:
