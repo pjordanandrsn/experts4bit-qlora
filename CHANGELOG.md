@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.31.2 — 2026-09-03
+
+### Correction: Gemma-4 has no parity reference at 512-token resolution
+
+No code changes. 0.31.1 said Gemma-4-26B-A4B-it's paged decode was "not
+at parity: 0.247 nats, three times its floor". Three windows and a
+three-forward test in plain transformers (no e4b code) say something
+different: the paged path is +0.093 / +0.114 / +0.247 nats from a
+one-shot forward, and transformers' *own* cached forward is −0.107 /
++0.271 / +0.081 from the same one-shot forwards. The cache is
+bit-exact; what moves is the model — bf16 batch-shape variance in the
+expert gathers (0.2% at layer 1) that Gemma-4's router amplifies to a
+0.4-nat swing on identical tokens. Qwen3 shows the mechanism at a tenth
+of the amplitude and loses 0.001. So this family has no reference at
+that resolution, and no parity verdict is quoted for it. What survives
+as a measured, path-specific cost is the fp8 cache and dot: 0.046 nats,
+on the five 512-dim layers, 0.017 with 32-wide K groups. Register:
+`e4b.parity.gemma4.chunk-free` → superseded by
+`e4b.parity.gemma4.no-reference`; new `e4b.parity.gemma4.fp8-share`.
+METHODOLOGY §13.2 describes the three-forward test. [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)
+stays open, re-scoped to the kernel's K groups and a batch-variance-proof
+instrument.
+
+The harness gained `--ppl-fq` (the fp8 kernel's precision model inside
+the one-shot forward), `--ppl-chunk`, `--ppl-layer-diff` and
+`--ppl-oracle upstream-full` (#361).
+
 ## 0.31.1 — 2026-09-03
 
 ### Correction: Gemma-4 is not at parity through the paged decode path
