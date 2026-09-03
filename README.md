@@ -443,6 +443,8 @@ Moved to **[docs/BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlo
 | [DEEPSEEK-V4.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.30.0/docs/DEEPSEEK-V4.md) | V4's storage split, epilogue, arena bake, key mapping |
 | [SERVING.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.30.0/docs/SERVING.md) | the FastAPI shim and Docker deployment |
 | [BENCHMARKS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.30.0/docs/BENCHMARKS.md) | the benchmark scripts and how to run them |
+| [SERVING-PARITY.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.30.0/docs/SERVING-PARITY.md) | paged decode vs each model's own attention, with the per-model noise floor |
+| [STATUS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.30.0/docs/STATUS.md) | what is measured, what was retired, what is open — one page |
 | [BITSANDBYTES.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.30.0/docs/BITSANDBYTES.md) | relationship to bitsandbytes, prior art |
 - **[docs/ARCHITECTURE_SUPPORT.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.30.0/docs/ARCHITECTURE_SUPPORT.md)** — which architectures load, run and capture, with the evidence bundle and the fixture-vs-real-checkpoint caveat.
 

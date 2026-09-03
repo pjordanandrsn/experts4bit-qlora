@@ -1,0 +1,481 @@
+{
+  "package": "experts4bit-qlora",
+  "generated": "2026-09-03",
+  "schema": "docs/claims-schema.md",
+  "status_vocabulary": {
+    "verified": "reproduced under stated conditions with a public receipt",
+    "measured": "one or more runs, receipt public in this repo",
+    "measured-private": "the run happened and the receipt exists, but only in a private audit tree -- a reader of this repo cannot check it",
+    "projected": "arithmetic, not a run",
+    "retired": "was published, now known wrong; kept so the retraction is findable",
+    "superseded": "true as measured, but a later entry is the number to quote",
+    "open": "a question the docs raise with no evidence either way"
+  },
+  "claims": [
+    {
+      "id": "e4b.serve.b1.qwen3-30b.nf4.5090.2026-09",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Qwen3-30B-A3B with NF4 experts and the fp8 paged KV cache runs at roughly 100 tok/s on a rented RTX 5090.",
+      "value": 98.3,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), rented Vast.ai host; the 5090 class carries ~8.5% inter-box dispersion",
+      "conditions": "B=1, NF4 experts, fp8 paged KV (k_groups=4), 512-token prompt, graph-timed, --no-fuse-qkv, e4b 0.30.0 stack",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (speed arms table)"
+      ],
+      "notes": "Same-box NF4 baseline; the earlier public rungs (bench/hybrid-g9/f1, bv2) put the NF4 single stream at 94-134 tok/s on the same class as the glue rounds landed."
+    },
+    {
+      "id": "e4b.serve.b1.qwen3-30b.int4attn-calib.5090",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "With calibrated int4 attention (E4B_SERVE_ATTN_INT4_CALIB=1) and int4 experts, Qwen3-30B-A3B single-stream decode reaches 204.6 tok/s on the same 5090 class, x1.93 over the NF4 baseline.",
+      "value": 204.6,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), rented",
+      "conditions": "B=1, int4-b32 experts + C4-calibrated int4 attention + glue rounds 1-3, K8 gate PASS (-0.042 ppl wikitext, -0.115 C4)",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P21-CALIBINT4",
+        "INT4B16/P22-CALIBINT4-C4",
+        "INT4B16/P22C-SPEED-P23-RPLAN"
+      ],
+      "quoted_in": [
+        "CHANGELOG.md 0.28.0"
+      ],
+      "notes": "Qwen3-specific: the same lane is REFUSED on quality on Mixtral (+0.09) and OLMoE (+0.60). Not a general lever."
+    },
+    {
+      "id": "e4b.serve.b16.qwen3-30b.int4.5090",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16) decode of Qwen3-30B-A3B with int4 experts reaches about 1,238 tok/s aggregate on a 5090, x2.50 over the NF4 batched baseline of about 490.",
+      "value": 1238,
+      "unit": "tok/s aggregate",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), rented",
+      "conditions": "B=16, natural distinct prompts, int4 experts, graph replay, glue rounds 1-3",
+      "measured_on": "2026-09-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/b16close/RESULTS-b16.md"
+      ],
+      "evidence_private": [
+        "INT4B16/P15-B16",
+        "INT4B16/P18-GLUER3",
+        "INT4B16/P19-ANCHORCERT"
+      ],
+      "quoted_in": [
+        "CHANGELOG.md 0.27.0",
+        "CHANGELOG.md 0.24.1"
+      ],
+      "notes": "int4 attention is a B=1 lever only (x0.897 at B=16); rows>1 use cached bf16 attention weights."
+    },
+    {
+      "id": "e4b.serve.h2h.vllm.same-box",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "On the same 5090, vLLM serving Qwen3-30B-A3B-GPTQ-Int4 is ahead of this stack by x1.47 at B=1 and x1.55 at B=16 with natural distinct prompts (1,917 vs 1,234 tok/s aggregate).",
+      "value": 1.55,
+      "unit": "ratio vLLM/e4b at B=16",
+      "model": "Qwen/Qwen3-30B-A3B (GPTQ-Int4 on the vLLM side)",
+      "hardware": "RTX 5090, one box, both engines",
+      "conditions": "slope method (32->128 tokens) isolates decode; identical distinct prompts per row; template prompts had inflated vLLM by 13%, identical prompts by 2.8x",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P20-H2H-FAIR"
+      ],
+      "notes": "The only same-box, same-prompt comparison against a production engine this project has. Supersedes the 2026-08 '6.31x ahead' figure, which used template prompts and a different box."
+    },
+    {
+      "id": "e4b.parity.granite.paged-vs-own-attention",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "Granite-3.1-3B-A800M's paged decode is indistinguishable from the model's own attention: 0.00229 nats from a chunk-free full-forward reference, below the model's own 0.00330-nat arithmetic-order floor.",
+      "value": 0.00229,
+      "unit": "nats (|paged - full forward| mean NLL)",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090, rented",
+      "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, sha-matched ids across all three arms; NF4 experts on every arm",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P26 section)"
+      ],
+      "supersedes": [
+        "e4b.parity.granite.paged-vs-chunked-8192"
+      ],
+      "notes": "The serving path lands CLOSER to the chunk-free reference than the chunked production oracle does (0.00229 vs 0.00330)."
+    },
+    {
+      "id": "e4b.parity.gptoss.paged-vs-own-attention",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "gpt-oss-20b's paged decode (sinks + alternating sliding windows) is indistinguishable from the model's own attention: 0.00288 nats from a chunk-free full-forward reference, below its 0.01758-nat floor.",
+      "value": 0.00288,
+      "unit": "nats",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090, rented",
+      "conditions": "512 scored steps, 256-token prompt, raw wikitext (out of distribution for this model; the DELTA is regime-independent), NF4 experts on every arm",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P26 section)"
+      ],
+      "supersedes": [
+        "e4b.parity.gptoss.plus-0.078-nats"
+      ],
+      "notes": "Established on a 512-step window only; a full forward is quadratic in the window and cannot be run at 8192. The 8192-step +0.078 nats against a CHUNKED oracle is not evidence about the path (see the retired entry)."
+    },
+    {
+      "id": "e4b.parity.qwen3.paged-vs-chunked-8192",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "Qwen3-30B-A3B's paged decode scores +0.0058 nats (+0.0467 ppl) against the chunked eager oracle over 8192 steps; that delta is BELOW the model's 0.0095-nat arithmetic-order floor, so the path is indistinguishable from the model's own attention.",
+      "value": 0.0058,
+      "unit": "nats",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090, rented",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md"
+      ],
+      "notes": "Chunk-free reference measurement for Qwen3 is running (P26b lane). PASS stands; the causal reading of the delta is retired (see e4b.retired.fp8-kv-cost)."
+    },
+    {
+      "id": "e4b.parity.gemma4.behaves",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "Gemma-4-26B-A4B-it's paged decode, serving two KV geometries from one pool with sliding windows and scale 1.0, agrees with the chunked oracle to -0.0078 nats over 8192 steps and produces coherent text; the absolute |dppl|<=0.05 bar is inapplicable at oracle ppl 752.",
+      "value": -0.0078,
+      "unit": "nats",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (188 GB RAM host), rented",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md"
+      ],
+      "notes": "Whole window ran the fp8 compute path (mech tally fp8 245760 / f32 0). Loading FAILS on 2 of 4 rented hosts (e4b#344, unexplained)."
+    },
+    {
+      "id": "e4b.parity.moe-routing-flip-floor",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "Two arithmetically equivalent forwards of an MoE model disagree because rounding flips router top-k choices: 4.52% of (layer, token) choices on gpt-oss-20b and 6.77% on Qwen3-30B, with the disagreement carried by the flipped tokens (KL 0.0504 vs 0.0013). Every parity delta must be read against a per-model measured floor, never against zero.",
+      "value": 4.52,
+      "unit": "% of (layer, token) top-k choices that flip (gpt-oss)",
+      "model": "openai/gpt-oss-20b; Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090, rented",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md#13.1 (bench/hybrid-g9/gptoss_cache_probe.py)"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md"
+      ],
+      "notes": "Floors: Granite 0.0033, Qwen3 0.0095, gpt-oss 0.0176 nats (512-step windows). Flip RATE does not predict floor SIZE."
+    },
+    {
+      "id": "e4b.retired.fp8-kv-cost",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "RETIRED: 'the fp8 paged KV cache costs +0.047 ppl on Qwen3-30B and +0.022 on Granite against a bf16 cache'.",
+      "status": "retired",
+      "retired_on": "2026-09-03",
+      "retired_reason": "The +0.047 ppl is +0.0058 nats, BELOW Qwen3's measured 0.0095-nat arithmetic-order floor; Granite's +0.0028 is below its 0.0033 floor. Indistinguishable from reordering the arithmetic; not attributable to the cache. The derived rule 'buy headroom back from the cache first' is retired with it.",
+      "quoted_in": [
+        "CHANGELOG.md 0.30.0 (left as written; corrected by a Corrections entry)",
+        "docs/METHODOLOGY.md#13 (corrected in #353)"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md ('RETIRED' section)"
+      ]
+    },
+    {
+      "id": "e4b.retired.gptoss-plus-0.078-real-signal",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "RETIRED: 'gpt-oss's +0.078 nats is 10-20x every other family, a real signal about the sinks and sliding-window path'.",
+      "status": "retired",
+      "retired_on": "2026-09-03",
+      "retired_reason": "Against a chunk-free reference the paged path sits at 0.00288 nats, below its floor; the chunked oracle it had been compared to is 6x further from the truth than the path. The 8192-step number tracked the oracle's 32 chunk boundaries, not the serving path.",
+      "quoted_in": [
+        "CHANGELOG.md 0.30.0",
+        "docs/support_matrix.md (corrected in #355)"
+      ]
+    },
+    {
+      "id": "e4b.retired.chunked-scorer-breaks-on-sliding-windows",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "RETIRED (mechanism only): 'chunked teacher-forced scoring is not equivalent to one full forward on a family whose layers alternate sliding and full attention'. The measurement stands; the attribution to sliding windows is refuted.",
+      "status": "retired",
+      "retired_on": "2026-09-03",
+      "retired_reason": "Widening the window past the context leaves the gap at KL 0.0178; every cache class gives the same gap. The cause is MoE router flips (e4b.parity.moe-routing-flip-floor), which applies to every MoE model.",
+      "quoted_in": [
+        "CHANGELOG.md 0.30.0"
+      ]
+    },
+    {
+      "id": "e4b.retired.kl-gate-threshold",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "FALSIFIED as pre-registered: the KL gate for chat-only families (mean full-vocab KL <= 0.01 nats/token, top-1 >= 99%).",
+      "status": "retired",
+      "retired_on": "2026-09-03",
+      "retired_reason": "Its first measurement rejects a shipped configuration (NF4 vs bf16 experts: 0.029 nats, 93.6% top-1). The 0.01 was calibrated from a signed NLL difference and applied to a full-vocabulary KL, a different and strictly larger quantity. Left textually unchanged in METHODOLOGY 13, marked falsified; not retuned.",
+      "quoted_in": [
+        "docs/METHODOLOGY.md#13"
+      ]
+    },
+    {
+      "id": "e4b.serve.gptoss.loader-faithful",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "e4b's gpt-oss expert path is faithful: MXFP4 dequant bit-identical to transformers' and to an independent decode; the NF4 expert forward matches HF's reference math at cosine 0.991-0.993; the served layer 0 inside the running model matches the reference MoE at cosine 0.998 per token.",
+      "status": "measured",
+      "tier": "measured",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090, rented",
+      "measured_on": "2026-09-03",
+      "evidence": [
+        "bench/hybrid-g9/gptoss_expert_probe.py",
+        "bench/hybrid-g9/gptoss_dequant_3way (scratch; probe stage 1)"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md"
+      ]
+    },
+    {
+      "id": "e4b.open.gemma4-load-fault",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 4 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).",
+      "status": "open",
+      "evidence": [
+        "https://github.com/pjordanandrsn/experts4bit-qlora/issues/344"
+      ],
+      "notes": "A 2 GiB host-hop 'fix' was merged and reverted the same day (#350/#351): the model's largest tensor is 1.375 GiB, so it never triggered."
+    },
+    {
+      "id": "e4b.train.olmoe-fits",
+      "area": "train",
+      "claim": "Full bf16 OLMoE-1B-7B (~13.9 GB) OOMs a 12 GB card; in 4-bit it loads at 4.70 GB and trains in under 8 GB, and the streaming loader never materialises the bf16 model in CPU or GPU RAM (verified under a 3 GB container RAM cap).",
+      "value": 4.7,
+      "unit": "GB load",
+      "model": "allenai/OLMoE-1B-7B",
+      "hardware": "RTX A2000 12 GB in a NAS PCIe 3.0 x8 slot",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md",
+        "docs/OLMOE_EXPERTSNBIT_GRID.md"
+      ]
+    },
+    {
+      "id": "e4b.train.olmoe-converges",
+      "area": "train",
+      "claim": "QLoRA on frozen NF4 experts improves a held-out Alpaca eval from 1.4813 to 1.0290 on OLMoE-1B-7B.",
+      "value": 1.029,
+      "unit": "held-out eval loss (from 1.4813)",
+      "model": "allenai/OLMoE-1B-7B",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md",
+        "PROVENANCE.md"
+      ],
+      "notes": "PROVENANCE.md is the OTS-anchored record for this v0.2.0 result specifically; later additions are receipted in bench/ and docs/, not in that file."
+    },
+    {
+      "id": "e4b.train.ablation",
+      "area": "train",
+      "claim": "Adapter placement: experts+attention is the best eval (1.0268) and attention-only is the efficiency pick, reaching 92% of the achievable reduction at 2.1 M trainable params (3.5%); training the router hurts.",
+      "value": 1.0268,
+      "unit": "best eval",
+      "model": "allenai/OLMoE-1B-7B",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md"
+      ]
+    },
+    {
+      "id": "e4b.offload.fits-30b-class",
+      "area": "offload",
+      "claim": "With OFFLOAD_EXPERTS=1 the frozen experts stream from pinned CPU RAM one layer at a time, so a fused MoE whose 4-bit experts exceed the card still QLoRA-trains on 12 GB: Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM without offload. Cost is about +11% s/step at OLMoE scale.",
+      "value": 7.16,
+      "unit": "GB peak (Qwen3-30B)",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md",
+        "docs/STORAGE-MODES.md"
+      ]
+    },
+    {
+      "id": "e4b.offload.arena-vs-host-ram",
+      "area": "offload",
+      "claim": "Against a descending host-RAM cap the arena path completes where the host-RAM path does not: OLMoE 2.56x, Gemma-4 3.80x, Qwen3-30B 6.40x lower host-RAM requirement; at an 8.59 GB cap Qwen3-30B is OOM-killed on host RAM and trains to completion on the arena.",
+      "value": 6.4,
+      "unit": "x lower host RAM (Qwen3-30B)",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/host-ram-ceiling/RESULTS-scaling.md",
+        "bench/host-ram-ceiling/RESULTS-timing.md"
+      ],
+      "notes": "The load saving travels across architectures; the per-step cost does NOT and is worse on faster cards (an arena step includes an NVMe read). Quote the step cost with the card attached."
+    },
+    {
+      "id": "e4b.train.fast-train-dgrad",
+      "area": "train",
+      "claim": "enable_fast_train(model, dgrad=True) is the fastest training lane at real width (2.52x on Qwen3-30B, 48 layers, A6000) while enable_batched_train wins only the toy microbench (24.01x at hidden 512) and gives no speedup at real width (1.05x) with the highest peak memory.",
+      "value": 2.52,
+      "unit": "x at real width",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/dgrad-gate/RESULTS-dgrad-gate.md"
+      ],
+      "notes": "dgrad adds no composed gradient error over the lane it extends (4.97e-2 -> 4.99e-2); every lane including the reference sits on the composed bf16 noise floor."
+    },
+    {
+      "id": "e4b.train.flagship-matrix",
+      "area": "train",
+      "claim": "Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.86-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653 against a 0.05 band) and the frozen 4-bit stack verified bit-identical over 16.31 GB hashed.",
+      "value": "1.52-1.81",
+      "unit": "x per step",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/flagship-matrix/RESULTS-flagship-matrix.md",
+        "bench/fused-train-gate/RESULTS-fused-train-gate.md",
+        "docs/PREREG-flagship-matrix.md",
+        "docs/PREREG-flagship-matrix-model2.md"
+      ],
+      "notes": "The first prereg is unanchored, so its ten cells are `measured`, not `confirmed`; the model2 prereg says so explicitly and was stamped pre-data AND pre-hardware. Single same-process A/B per cell: ratios are indicative, not variance-bounded."
+    },
+    {
+      "id": "e4b.serve.informed-hot-sets",
+      "area": "serve",
+      "claim": "Choosing resident experts from a routing histogram rather than by index buys +56% (K=4) and +120% (K=8) decode on gpt-oss-20b at identical VRAM, +44% on Gemma-4-26B and +37.1% on DeepSeek-V4-Flash, where index-ordered was statistically indistinguishable from pure streaming.",
+      "value": "+37.1",
+      "unit": "% over by-index (DeepSeek-V4-Flash)",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/RESULTS-informed-hotsets.md",
+        "docs/RESIDENCY-ENGINES.md"
+      ],
+      "notes": "The size of the gain is a property of the HOST: +40% on a thin-link A2000, about 0% on a fat-PCIe L40S. On an A6000 with a 128-expert model the informed cells did not replicate and were withdrawn as evidence."
+    },
+    {
+      "id": "e4b.serve.deepseek-v4",
+      "area": "serve",
+      "claim": "DeepSeek-V4-Flash (43 layers x 256 experts, 284B) loads in about 10 s at 8.74 GiB peak VRAM and generates, with 147 GB of experts served from an on-disk arena.",
+      "value": 8.74,
+      "unit": "GiB peak VRAM",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/DEEPSEEK-V4.md",
+        "docs/RESIDENCY-ENGINES.md"
+      ]
+    },
+    {
+      "id": "e4b.serve.cuda-graph-capture",
+      "area": "serve",
+      "claim": "capture_decode replays a decode step as one CUDA graph: 4.4-5.6x on 2-layer fixtures, 1.11x on real OLMoE weights and 1.04x on Qwen3-30B \u2014 the gain is inversely proportional to real GPU work per step. Both real-weight models replay bit-identical to eager.",
+      "value": 1.11,
+      "unit": "x on OLMoE real weights",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/ARCHITECTURE_SUPPORT.md",
+        "docs/METHODOLOGY.md"
+      ],
+      "notes": "Do not expect it to matter at 30B. StaticCache is allocated to max_length up front; step() is greedy argmax with no logits processors, which is why the HTTP server does not use it."
+    },
+    {
+      "id": "e4b.train.energy-honest",
+      "area": "train",
+      "claim": "4-bit vs bf16 on a card that already fits the model is a 1.2-2.3x ENERGY PENALTY (NF4 is storage-only, the GEMM runs in bf16 either way, plus dequant). It inverts when memory binds, where the freed memory unlocks a batch worth up to 4.4x lower energy per token.",
+      "value": "1.2-2.3",
+      "unit": "x energy penalty when the model already fits",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md"
+      ]
+    },
+    {
+      "id": "e4b.retired.13.47x-training-speedup",
+      "area": "train",
+      "claim": "RESTATED: the registered 13.47x training speedup is about 7.2x against a current baseline.",
+      "status": "superseded",
+      "retired_reason": "transformers v5 ships grouped_mm_experts_forward and fused the per-expert loop upstream, moving the baseline from 50.86 to 26.6 s/step. The grouped arm did not regress (3.77 -> 3.7). Roughly half the published multiple is now upstream's work. Restate as 7.2x over a current-transformers bnb baseline, same-box, with held-out eval parity.",
+      "evidence": [
+        "CHANGELOG.md 0.24.0 Corrections"
+      ]
+    },
+    {
+      "id": "e4b.open.tr2-repro-gap",
+      "area": "train",
+      "claim": "OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).",
+      "status": "open",
+      "evidence": [
+        "CHANGELOG.md 0.24.0 Corrections"
+      ],
+      "notes": "Also: passing a non-path truthy TRAIN_ARENA releases 16.31 GB of expert storage BEFORE discovering the arena is missing."
+    },
+    {
+      "id": "e4b.open.int8-offload-confounded",
+      "area": "train",
+      "claim": "OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.",
+      "status": "open",
+      "evidence": [
+        "docs/MEASUREMENT_AUDIT.md",
+        "docs/TRAIN_PLACEMENT_CERTIFICATE.md",
+        "docs/OLMOE_EXPERTSNBIT_GRID.md"
+      ]
+    },
+    {
+      "id": "e4b.retired.inference-md-decode-grid",
+      "area": "serve",
+      "claim": "SUPERSEDED: the v0 offload decode grid (OLMoE 1.44 tok/s at 1.68 GB; Gemma-4 0.43; Qwen3-30B 0.22).",
+      "status": "superseded",
+      "retired_reason": "The pipelined and paged engines supersede these for decode. docs/INFERENCE.md declares this itself.",
+      "evidence": [
+        "docs/INFERENCE.md",
+        "docs/RESIDENCY-ENGINES.md"
+      ]
+    }
+  ]
+}
