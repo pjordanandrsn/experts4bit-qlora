@@ -143,6 +143,30 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
         _json.dump(rec, f, indent=1)
     print(f"K8_PPL steps={a.ppl_steps} nll={mean_nll:.5f} ppl={rec['ppl']:.5f} "
           f"compute={impl}-oracle sha={ppl_sha[:12]} out={a.out}", flush=True)
+def _kv_geometry(cfg):
+    """(kv heads, head_dim) for the paged cache: scalars for a uniform
+    model, per-layer lists for a heterogeneous config (transformers 5.16
+    exposes Gemma-4's sliding layers at 256/8 and full layers at 512/2
+    through ``per_layer_config``). Fp8PagedKV sizes its rows for the
+    largest layer and serves each layer in its own geometry."""
+    def _one(c):
+        heads = getattr(c, "num_key_value_heads")
+        hd = getattr(c, "head_dim", None) or (
+            c.hidden_size // getattr(c, "num_attention_heads"))
+        return int(heads), int(hd)
+    try:
+        return _one(cfg)
+    except Exception as e:                    # AmbiguousGlobalPerLayerAttributeError
+        if "per-layer attribute" not in str(e):
+            raise
+    per = [_one(lc) for lc in cfg.per_layer_config]
+    heads, dims = [h for h, _ in per], [d for _, d in per]
+    if len(set(heads)) == 1 and len(set(dims)) == 1:
+        return heads[0], dims[0]
+    print(f"KV geometry varies per layer: {sorted(set(zip(heads, dims)))} "
+          f"-- the paged cache sizes rows for the largest and serves each "
+          f"layer in its own", flush=True)
+    return heads, dims
 
 
 def _uniform_layer_attr(cfg, key, default=None):
@@ -2085,16 +2109,15 @@ def main():
         st.arm_amortization(amort_on)
 
     cfg = model.config
+    cfg = model.config
     if a.ppl_oracle == "none":
-        hkv = _uniform_layer_attr(cfg, "num_key_value_heads")
-        hd = _uniform_layer_attr(cfg, "head_dim", None) or (
-            cfg.hidden_size // _uniform_layer_attr(cfg, "num_attention_heads"))
+        hkv, hd = _kv_geometry(cfg)
         register(model)
         wrap_attention(IMPL_NAME)
     else:
         # the oracle never builds the paged cache: a family whose KV
-        # geometry varies per layer (Gemma-4) must still be SCORABLE
-        # here -- this arm is that family's reference (Bugbot)
+        # geometry varies per layer must still be SCORABLE here -- this
+        # arm is that family's reference
         hkv = hd = None
     if a.region_ops_out and not a.host_brackets:
         raise SystemExit("--region-ops-out needs --host-brackets")
