@@ -46,7 +46,9 @@ def independent_mxfp4_decode(blocks: torch.Tensor, scales: torch.Tensor) -> torc
 
 def _snapshot(model: str) -> str:
     from huggingface_hub import snapshot_download
-    return snapshot_download(model, allow_patterns=["*.json", "*.safetensors"])
+    # the lane's own download pattern: never the `original/` checkpoint
+    return snapshot_download(model, allow_patterns=["*.json", "*.safetensors"],
+                             ignore_patterns=["original/*", "consolidated*"])
 
 
 def _tensors(snap: str, names):
