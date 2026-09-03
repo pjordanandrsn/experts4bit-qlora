@@ -107,3 +107,18 @@ def test_window_of_prefers_kwargs_then_module():
     assert pa._window_of(_Gemma(), {"sliding_window": 64}) == 64
     assert pa._window_of(_Full(), {}) == 0
     assert pa._window_of(_M(), {"sliding_window": None}) == 0
+
+
+def test_old_wheel_fallback_recognises_a_sink_tensor():
+    """The pre-0.24 wheel fallback must decide what to drop without ever
+    comparing a sinks TENSOR against a number (that raises on a
+    multi-element tensor and would crash gpt-oss decode on old wheels)."""
+    import torch
+    from experts4bit_qlora.engines.fp8_paged_kv import _parity_options_in_use
+    assert _parity_options_in_use({"window": 0, "sinks": None}) == []
+    assert _parity_options_in_use({"window": 1024, "sinks": None}) == ["window"]
+    assert _parity_options_in_use({"window": 0, "sinks": torch.zeros(8)}) == ["sinks"]
+    assert _parity_options_in_use({"window": 128, "sinks": torch.ones(4)}) == [
+        "window", "sinks"]
+    assert _parity_options_in_use({}) == []
+

@@ -78,6 +78,19 @@ def _resolve_fused_append(env, device_str, kernel_present) -> bool:
 _KERNEL_KW_CACHE: dict = {}
 
 
+def _parity_options_in_use(kw) -> list:
+    """Which of the parity options an attention call actually carries: a
+    window is in use when it is a positive width; sinks are in use when a
+    tensor is present at all. (A tensor must never meet ``==`` or ``in``
+    here -- ``tensor == 0`` is a tensor, and its truth value raises.)"""
+    used = []
+    if kw.get("window"):
+        used.append("window")
+    if kw.get("sinks") is not None:
+        used.append("sinks")
+    return used
+
+
 def _kernel_takes(fn, *names) -> bool:
     """Whether the installed kernel wrapper accepts every keyword in
     ``names`` (cached per function object)."""
@@ -652,7 +665,7 @@ class Fp8PagedKV:
         # them there rather than raise, and say so once -- the family then
         # runs the pre-parity (wrong) attention, which the K8 gate catches
         if not _kernel_takes(fp8_paged_decode_attention, "window", "sinks"):
-            dropped = [k for k in ("window", "sinks") if kw.get(k) not in (None, 0)]
+            dropped = _parity_options_in_use(kw)
             if dropped and not getattr(self, "_warned_parity", False):
                 self._warned_parity = True
                 print("PARITY WARNING: installed fp8_paged_decode_attention takes no "
