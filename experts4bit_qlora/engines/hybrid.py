@@ -176,6 +176,15 @@ def _split_oversize_groups(sizes, eids, max_rows=8):
     return out_sizes, out_eids
 
 
+
+def _bias_rows(bias, ids):
+    """Rows ``ids`` of a per-expert bias as a contiguous fp32 CPU tensor.
+    The index is moved to the bias's device first: the bias sits on the
+    GPU, the id list is built on the CPU, and ``index_select`` refuses a
+    mismatch."""
+    return (bias.detach().index_select(0, ids.to(bias.device))
+            .to("cpu", torch.float32).contiguous())
+
 class _HybridTier(_NvmeResidency):
     """VRAM-hot + DRAM-computed-warm + NVMe-streamed-cold, one module."""
 
@@ -245,11 +254,12 @@ class _HybridTier(_NvmeResidency):
         g2d[dram_ids] = torch.arange(dram_ids.numel())
         self.g2d_cpu = g2d
         if self.gptoss:
-            ci = dram_ids
-            self.d_gu_b = (mod.gate_up_bias.detach().index_select(0, ci)
-                           .to("cpu", torch.float32).contiguous())
-            self.d_dn_b = (mod.down_bias.detach().index_select(0, ci)
-                           .to("cpu", torch.float32).contiguous())
+            # per-expert biases live on the module's device; dram_ids is a
+            # CPU index. Only gpt-oss reaches this branch, and it died on
+            # the first non-Qwen serving sweep with "index is on cpu,
+            # different from other tensors on cuda:0" (receipts P24-GEN-A).
+            self.d_gu_b = _bias_rows(mod.gate_up_bias, dram_ids)
+            self.d_dn_b = _bias_rows(mod.down_bias, dram_ids)
 
         # Phase 4: speculative prefetch (route L+1 from L's hidden). Wired
         # by enable when prefetch=True and a router chain is discoverable.
