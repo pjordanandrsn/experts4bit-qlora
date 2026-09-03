@@ -77,16 +77,22 @@ def _stubs(monkeypatch, seen):
     gp = types.ModuleType("gptq_pack")
 
     class HessianAccumulator:
+        """Mirrors grouped-nf4-gemm 0.23: Gram on the activation device,
+        storage on `device`, allocated on the first batch."""
+
         def __init__(self, k, device=None):
-            self.H = torch.zeros(k, k)
-            self.n = 0
+            self.k, self.device, self.H, self.n = k, device, None, 0
 
         def add(self, x):
             rows = x.reshape(-1, x.shape[-1]).float()
             b = rows.shape[0]
+            gram = rows.t() @ rows
+            if self.H is None:
+                self.H = torch.zeros(self.k, self.k,
+                                     device=self.device or gram.device)
             self.H *= self.n / (self.n + b)
             self.n += b
-            self.H += (2.0 / self.n) * (rows.t() @ rows)
+            self.H.add_(gram.to(self.H.device), alpha=2.0 / self.n)
 
     def gptq_pack_int4_b32(w, hessian, **kw):
         seen.append(hessian.shape)
@@ -108,6 +114,8 @@ def test_calibration_sees_every_projection_input(monkeypatch):
     batches = [torch.randint(0, 50, (2, 8)) for _ in range(3)]
     hs = calibrate_attention_hessians(m, batches, device="cpu")
     assert set(hs) == {"attn.qkv_proj", "attn.o_proj"}
+    # Hessians live on the requested device (CPU by default), not the card
+    assert all(v.device.type == "cpu" for v in hs.values())
     assert hs["attn.qkv_proj"].shape == (H, H)
     assert hs["attn.o_proj"].shape == (HEADS * D, HEADS * D)
     # a Gram matrix over real inputs is symmetric PSD and non-trivial
