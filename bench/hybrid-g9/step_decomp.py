@@ -84,6 +84,36 @@ def _materialize_from_arena(mods, arena_path):
           f"(byte-exact, per-segment lengths asserted)", flush=True)
 
 
+def _uniform_layer_attr(cfg, key, default=None):
+    """A per-layer attribute read once for the whole model. transformers
+    5.16 marks heterogeneous configs (Gemma-4: sliding and full attention
+    layers) and REFUSES a global read of a per-layer attribute; this
+    harness sizes one KV cache for every layer, so it reads the value
+    from each layer config and insists they agree (P24-GEN-B: Gemma-4's
+    NF4 arms died on ``config.num_key_value_heads``)."""
+    try:
+        from transformers.integrations.heterogeneity.configuration_utils import (
+            AmbiguousGlobalPerLayerAttributeError as _Ambiguous)
+    except ImportError:                       # older transformers: no heterogeneity
+        _Ambiguous = ()
+    try:
+        return getattr(cfg, key, default)
+    except _Ambiguous:
+        pass
+    except Exception as e:                    # the base class has moved between 5.x releases
+        if "per-layer attribute" not in str(e):
+            raise
+    vals = {getattr(lc, key, default) for lc in cfg.per_layer_config}
+    if len(vals) != 1:
+        raise SystemExit(
+            f"{key} varies across layers ({sorted(map(str, vals))}): the paged "
+            "KV cache and the fp8 decode kernel take ONE geometry for every "
+            "layer, so this family cannot be served through the paged path "
+            "until per-layer KV geometry exists -- refusing rather than "
+            "sizing the cache for the wrong layers")
+    return vals.pop()
+
+
 def _routed_topk(cfg):
     """The routed top-k under whatever name this family's config uses.
     Extend the alias list when onboarding a family, never hardcode a
@@ -1988,9 +2018,9 @@ def main():
         st.arm_amortization(amort_on)
 
     cfg = model.config
-    hkv = cfg.num_key_value_heads
-    hd = getattr(cfg, "head_dim", None) or (cfg.hidden_size
-                                            // cfg.num_attention_heads)
+    hkv = _uniform_layer_attr(cfg, "num_key_value_heads")
+    hd = _uniform_layer_attr(cfg, "head_dim", None) or (
+        cfg.hidden_size // _uniform_layer_attr(cfg, "num_attention_heads"))
     register(model)
     wrap_attention(IMPL_NAME)
     if a.region_ops_out and not a.host_brackets:
