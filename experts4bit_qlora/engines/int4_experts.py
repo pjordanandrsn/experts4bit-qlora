@@ -82,7 +82,7 @@ def _top_k(model):
     cfg = getattr(model, "config", None)
     for c in (cfg, getattr(cfg, "text_config", None)):
         for attr in ("num_experts_per_tok", "moe_top_k", "moe_topk",
-                     "n_routed_experts_per_tok", "top_k"):
+                     "n_routed_experts_per_tok", "top_k_experts", "top_k"):
             v = getattr(c, attr, None)
             if isinstance(v, int) and v > 0:
                 return v
