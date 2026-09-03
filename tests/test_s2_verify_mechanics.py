@@ -107,7 +107,8 @@ class _RecordingKV:
         self.appended = (layer, slot, k.shape[0])
         self.seq_lens[layer, slot] += k.shape[0]
 
-    def attention(self, layer, q, slots=None, lens_override=None):
+    def attention(self, layer, q, slots=None, lens_override=None, **kw):
+        self.last_kw = dict(kw)
         self.read_slots = list(slots)
         self.read_lens = lens_override.clone()
         return torch.zeros(q.shape[0], q.shape[1], q.shape[2])

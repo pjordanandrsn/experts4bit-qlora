@@ -156,8 +156,12 @@ def paged_attention_forward(module, query, key, value, attention_mask,
                 ctx.kv.append(layer, slot,
                               key[b].permute(1, 0, 2).contiguous(),
                               value[b].permute(1, 0, 2).contiguous())
+        # the family's attention scale rides through to the decode kernel:
+        # GraniteMoe's attention_multiplier (0.0156 vs head_dim**-0.5 =
+        # 0.125) and Gemma-4's 1.0 (folded into q_norm) served garbage
+        # while this branch passed only q/k/v/slots (receipts P24-GEN-B)
         out = ctx.kv.attention(layer, query[:, :, 0].contiguous(),
-                               slots=ctx.slots)
+                               slots=ctx.slots, sm_scale=scaling)
         return out[:, None].to(query.dtype), None
 
     if ctx.mode == "verify":
@@ -185,7 +189,7 @@ def paged_attention_forward(module, query, key, value, attention_mask,
         lens_override = (base_plus_t + stagger).contiguous()
         q_rows = query[0].permute(1, 0, 2).contiguous()   # [T, H_q, D]
         out = ctx.kv.attention(layer, q_rows, slots=[slot] * T,
-                               lens_override=lens_override)
+                               lens_override=lens_override, sm_scale=scaling)
         # [T, H_q, D] -> [1, T, H_q, D]
         return out[None].to(query.dtype), None
 
