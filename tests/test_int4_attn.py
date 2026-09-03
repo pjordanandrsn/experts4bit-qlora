@@ -135,11 +135,10 @@ def _cpu_kernel_stubs(monkeypatch, calls):
         monkeypatch.setitem(sys.modules, name, mod)
 
 
-def test_decode_batch_stays_on_the_gemv(monkeypatch):
-    """rows in (1, DECODE_ROWS_MAX] take the GEMV with an R-sized buffer
-    pair, allocated once per R; rows above take the dequant path. The
-    first B=16 int4 serving run sent 16 rows down the prefill path and
-    halved throughput -- this pins the route."""
+def test_one_row_on_the_gemv_batches_on_cached_bf16(monkeypatch):
+    """rows == 1 takes the GEMV; rows > 1 takes a dequantised bf16 weight
+    built ONCE and reused, never the GEMV (which re-streams the weight per
+    row: x0.90 at B=16 on a 5090) and never a per-call dequant (x0.52)."""
     calls = []
     _cpu_kernel_stubs(monkeypatch, calls)
     from experts4bit_qlora.engines.int4_attn import Int4Linear
@@ -147,17 +146,19 @@ def test_decode_batch_stays_on_the_gemv(monkeypatch):
     lin = nn.Linear(64, 96, bias=False, dtype=torch.bfloat16)
     m = Int4Linear(lin)
     x = torch.randn(16, 64, dtype=torch.bfloat16)
+    assert m._bf16_cache is None
     y16 = m(x)
-    assert calls[-1] == ("gemv", 16, (2 * 16, 96))       # R rows, sk*R partials
-    eids, part = m._decode_bufs(16)
-    assert eids.shape == (16,) and eids.dtype == torch.int32
-    assert m._decode_bufs(16)[1] is part                  # cached, no realloc
-    # each row is the same computation the R=1 path does
-    rows = torch.cat([m(x[i:i + 1]) for i in range(16)])
-    assert torch.equal(y16, rows)
-    # the R=1 path still uses the construction-time buffers
+    assert calls == []                                   # no GEMV for 16 rows
+    w = m._bf16_cache
+    assert w is not None and w.shape == (96, 64) and w.dtype == torch.bfloat16
+    m(x)
+    assert m._bf16_cache is w                            # built once, reused
+    assert calls == []
+    # the cached weight is the same int4 values the GEMV serves
+    import int4_pack_ref
+    ref = int4_pack_ref.dequant_int4_ref(m.packed[0], m.scales[0], 96, 64)
+    assert torch.equal(w.float(), ref.to(torch.bfloat16).float())
+    assert torch.allclose(y16.float(), (x.float() @ ref.t()), rtol=2e-2, atol=2e-2)
+    # one row still takes the GEMV with the construction-time buffers
+    m(x[:1])
     assert calls[-1] == ("gemv", 1, (2, 96))
-    # above the cap: prefill path, no GEMV call
-    n = len(calls)
-    m(torch.randn(Int4Linear.DECODE_ROWS_MAX + 1, 64, dtype=torch.bfloat16))
-    assert len(calls) == n

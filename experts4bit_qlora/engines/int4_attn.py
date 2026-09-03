@@ -69,30 +69,42 @@ class Int4Linear(nn.Module):
                                          device=dev),
                              persistent=False)
         self._decode_cache = {}        # R -> (eids, part) for 1 < R <= cap
+        self._bf16_cache = None        # dequantised weight for rows > cap
 
-    # decode batches (1 < rows <= this) stay on the int4 GEMV, which has a
-    # row axis: every row re-reads the same 8 MB projection, which the L2
-    # absorbs. The first int4 serving run at B=16 (receipts INT4B16/P21)
-    # sent rows > 1 down the prefill path below -- dequantising 1.8 GB of
-    # bf16 per decode step -- and HALVED batched throughput (x0.52). Above
-    # the cap the crossover curve favours a dense matmul on dequantised
-    # weights (fused wins M <= 128, loses M >= 256).
-    DECODE_ROWS_MAX = 128
+    # The int4 GEMV is a ONE-ROW lever. Its grid has a row axis but no
+    # weight reuse across rows: each row-program re-streams the projection,
+    # so 16 rows cost ~16 L2 reads of a 4-5 MB tile (~15 us per launch x 96
+    # launches). Measured on a 5090 (receipts INT4B16/P22C): rows=1 x1.06,
+    # rows=16 x0.90 -- and the dequant-per-call path P21 had was x0.52.
+    # Above one row the fastest thing we have is cuBLAS on a bf16 weight
+    # read ONCE with tensor cores, so the dequantised weight is built once
+    # and CACHED (+~1.8 GB for 96 projections); batched decode then costs
+    # exactly what bf16 attention costs. A batched int4 attention that WINS
+    # needs a small-M int4 GEMM with weight-tile reuse; not this module.
+    GEMV_ROWS_MAX = 1
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         rows = x.reshape(-1, self.K)
         R = rows.shape[0]
-        if R <= self.DECODE_ROWS_MAX:
+        if R <= self.GEMV_ROWS_MAX:
             eids, part = self._decode_bufs(R)
             xq, xs = self._qx(rows)
             out = self._gemv(xq, xs, self.packed, self.scales, eids,
                              self.N, self.K, part=part)
             return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
-        # prefill / verify (M > DECODE_ROWS_MAX): dequant once, dense
-        # matmul -- the large-M side of the crossover; per-request cost
-        w = self._deq()
+        w = self._bf16_weight()
         return (rows.to(torch.bfloat16) @ w.t()).reshape(
             *x.shape[:-1], self.N).to(x.dtype)
+
+    def _bf16_weight(self) -> torch.Tensor:
+        """The dequantised weight, built on first use (warm-up, before any
+        graph capture) and kept: the same int4 values the GEMV serves, in
+        the layout cuBLAS reads once."""
+        w = self._bf16_cache
+        if w is None:
+            w = self._deq()
+            self._bf16_cache = w
+        return w
 
     def _decode_bufs(self, R: int):
         """Row-count-keyed GEMV buffers. Allocated on first use for each R
