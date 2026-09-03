@@ -123,6 +123,16 @@ Parity is quoted in **nats** (mean NLL difference) as well as ppl: the
 oracle ppl 752 it is a 0.007% relative bar and mechanically unpassable,
 which is why Gemma-4 reads −5.84 ppl while agreeing to 0.0078 nats.
 
+**Every delta below sits on an unmeasured routing-flip floor.** The
+oracle chunks and the paged path decodes incrementally; on a
+mixture-of-experts model those two arithmetic orders route a few percent
+of tokens to different experts, which disagrees regardless of
+correctness (gpt-oss: 4.52% of choices flip, and the flipped tokens
+carry 39x the KL — METHODOLOGY 13.1). Only gpt-oss's floor has been
+measured (0.0099 nats). A PASS with a delta below an unmeasured floor is
+conservative, not wrong; but a delta that small cannot be attributed to
+any specific cause until its floor exists.
+
 | Family | Attention features needed | Parity status | Evidence |
 |---|---|---|---|
 | Qwen3-30B-A3B | plain causal, `head_dim**-0.5` | `validated` +0.0467 ppl = +0.0058 nats vs oracle (PASS, 0.003 ppl under the gate) | oracle-compared, 8192 steps |
