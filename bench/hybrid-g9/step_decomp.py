@@ -84,6 +84,91 @@ def _materialize_from_arena(mods, arena_path):
           f"(byte-exact, per-segment lengths asserted)", flush=True)
 
 
+@torch.no_grad()
+def ppl_oracle_score(model, ids, prompt_len: int, steps: int,
+                     chunk: int = 256, device=None):
+    """Teacher-forced NLL of ``ids[prompt_len + 1 : prompt_len + steps + 1]``
+    through the model's OWN attention with its own cache: prefill the
+    prompt, then feed the continuation in chunks. Every scored token is
+    predicted from exactly the tokens before it (a chunk's logits at row
+    j predict ids[start + j + 1]), so this equals a single full forward's
+    NLL -- checked by a CPU test -- while fitting eager attention's
+    [H, chunk, ctx] scores in memory at 8k context."""
+    dev = device or next(model.parameters()).device
+    ids = ids.to(dev)
+    end = prompt_len + steps + 1
+    assert ids.numel() >= end, (ids.numel(), end)
+    out = model(input_ids=ids[None, :prompt_len], use_cache=True)
+    cache = out.past_key_values
+    last_logit = out.logits[0, -1].float()          # predicts ids[prompt_len]
+    nll = 0.0
+    pos = prompt_len
+    # the first scored token is ids[prompt_len + 1], predicted after
+    # feeding ids[prompt_len]; the prompt's last logit predicts
+    # ids[prompt_len] which the paged instrument does NOT score (it
+    # starts at cont[1]) -- keep the two windows identical
+    while pos < end - 1:
+        n = min(chunk, end - 1 - pos)
+        chunk_ids = ids[pos:pos + n]
+        out = model(input_ids=chunk_ids[None], use_cache=True,
+                    past_key_values=cache,
+                    position_ids=torch.arange(pos, pos + n, device=dev)[None])
+        cache = out.past_key_values
+        lg = torch.log_softmax(out.logits[0].float(), -1)   # [n, V]
+        tgt = ids[pos + 1:pos + n + 1]
+        nll += -lg[torch.arange(n, device=dev), tgt].sum().item()
+        pos += n
+    return nll / steps
+
+
+def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
+    """The oracle arm: same window, same sha, transformers' attention."""
+    import json as _json
+    import time as _time
+    impl = a.ppl_oracle
+    model.config._attn_implementation = impl
+    for m in model.modules():
+        if hasattr(m, "config") and hasattr(m.config, "_attn_implementation"):
+            m.config._attn_implementation = impl
+    model.eval()
+    t0 = _time.perf_counter()
+    mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps)
+    rec = {"k8": "ppl", "attn_path": f"{impl}-oracle", "steps": a.ppl_steps,
+           "mean_nll": mean_nll, "ppl": float(torch.exp(torch.tensor(mean_nll))),
+           "prompt_len": a.prompt_len, "prompt_offset": a.prompt_offset,
+           "ppl_source": a.ppl_source, "tokens_scored": a.ppl_steps,
+           "text_sha": ppl_sha, "wall_s": round(_time.perf_counter() - t0, 1)}
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
+    with open(a.out, "w") as f:
+        _json.dump(rec, f, indent=1)
+    print(f"K8_PPL steps={a.ppl_steps} nll={mean_nll:.5f} ppl={rec['ppl']:.5f} "
+          f"compute={impl}-oracle sha={ppl_sha[:12]} out={a.out}", flush=True)
+def _kv_geometry(cfg):
+    """(kv heads, head_dim) for the paged cache: scalars for a uniform
+    model, per-layer lists for a heterogeneous config (transformers 5.16
+    exposes Gemma-4's sliding layers at 256/8 and full layers at 512/2
+    through ``per_layer_config``). Fp8PagedKV sizes its rows for the
+    largest layer and serves each layer in its own geometry."""
+    def _one(c):
+        heads = getattr(c, "num_key_value_heads")
+        hd = getattr(c, "head_dim", None) or (
+            c.hidden_size // getattr(c, "num_attention_heads"))
+        return int(heads), int(hd)
+    try:
+        return _one(cfg)
+    except Exception as e:                    # AmbiguousGlobalPerLayerAttributeError
+        if "per-layer attribute" not in str(e):
+            raise
+    per = [_one(lc) for lc in cfg.per_layer_config]
+    heads, dims = [h for h, _ in per], [d for _, d in per]
+    if len(set(heads)) == 1 and len(set(dims)) == 1:
+        return heads[0], dims[0]
+    print(f"KV geometry varies per layer: {sorted(set(zip(heads, dims)))} "
+          f"-- the paged cache sizes rows for the largest and serves each "
+          f"layer in its own", flush=True)
+    return heads, dims
+
+
 def _uniform_layer_attr(cfg, key, default=None):
     """A per-layer attribute read once for the whole model. transformers
     5.16 marks heterogeneous configs (Gemma-4: sliding and full attention
@@ -1695,6 +1780,12 @@ def main():
     ap.add_argument("--dram-gb", type=float, default=6.0)
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--prompt-len", type=int, default=128)
+    ap.add_argument("--ppl-oracle", default="none", choices=["none", "eager"],
+                    help="score the SAME --ppl-steps window through transformers' "
+                         "own attention (eager, HF cache, chunked teacher forcing) "
+                         "with the paged shim NOT registered: the reference the "
+                         "paged path must match on families the shim does not "
+                         "yet serve (sliding windows, sinks, per-layer KV)")
     ap.add_argument("--ppl-source", default="wikitext",
                     choices=["wikitext", "c4val1"],
                     help="corpus the prompt windows and --ppl-steps score: "
@@ -2018,11 +2109,16 @@ def main():
         st.arm_amortization(amort_on)
 
     cfg = model.config
-    hkv = _uniform_layer_attr(cfg, "num_key_value_heads")
-    hd = _uniform_layer_attr(cfg, "head_dim", None) or (
-        cfg.hidden_size // _uniform_layer_attr(cfg, "num_attention_heads"))
-    register(model)
-    wrap_attention(IMPL_NAME)
+    cfg = model.config
+    if a.ppl_oracle == "none":
+        hkv, hd = _kv_geometry(cfg)
+        register(model)
+        wrap_attention(IMPL_NAME)
+    else:
+        # the oracle never builds the paged cache: a family whose KV
+        # geometry varies per layer must still be SCORABLE here -- this
+        # arm is that family's reference
+        hkv = hd = None
     if a.region_ops_out and not a.host_brackets:
         raise SystemExit("--region-ops-out needs --host-brackets")
     if a.host_brackets:
@@ -2137,7 +2233,7 @@ def main():
         print(f"compiled {n_c} layer bodies (mode={a.compile_mode}); "
               f"dynamo-disabled: {' + '.join(_dis) if _dis else 'NOTHING'}; "
               f"graph step marking={COMPILE_GRAPH_STEP[0]}", flush=True)
-    kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
+    kv = None if a.ppl_oracle != "none" else Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len
                     + max(a.gen_tokens, a.ppl_steps) + 8,
                     k_groups=4, batched_append=not a.kv_per_seq,
@@ -2169,6 +2265,10 @@ def main():
     ppl_sha = hashlib.sha256(
         ids[:a.prompt_len + max(a.ppl_steps, 0) + 1].numpy().tobytes()
     ).hexdigest()
+    if a.ppl_oracle != "none":
+        assert a.ppl_steps > 0, "--ppl-oracle needs --ppl-steps"
+        _ppl_oracle_main(a, model, ppl_ids, ppl_sha)
+        return
 
     # ------- timed runner: forward vs drain split, per-regime expert delta
     class TimedRunner(PagedModelRunner):

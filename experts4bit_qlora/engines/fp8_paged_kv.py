@@ -118,12 +118,27 @@ class Fp8PagedKV:
         from fp8_kv import kv_block_bytes
         from row_pool import RowPool
 
-        if head_dim % max(k_groups, 1):
-            raise ValueError(f"k_groups {k_groups} must divide "
-                             f"head_dim {head_dim}")
+        # per-layer geometry: an int broadcasts; a sequence gives each
+        # layer its own (H, D). Gemma-4 runs sliding layers at head_dim
+        # 256 / 8 kv heads and full layers at 512 / 2; one cache serves
+        # both. Every pool row is sized for the LARGEST layer (the row
+        # stride the kernels take separately from a launch's H/D); the
+        # smaller layers leave a tail unused.
+        Hs = [int(x) for x in (n_kv_heads if hasattr(n_kv_heads, "__len__")
+                               else [n_kv_heads] * n_layers)]
+        Ds = [int(x) for x in (head_dim if hasattr(head_dim, "__len__")
+                               else [head_dim] * n_layers)]
+        if len(Hs) != n_layers or len(Ds) != n_layers:
+            raise ValueError(f"per-layer geometry needs {n_layers} entries, "
+                             f"got {len(Hs)} heads / {len(Ds)} dims")
+        for lyr, d in enumerate(Ds):
+            if d % max(k_groups, 1):
+                raise ValueError(f"k_groups {k_groups} must divide "
+                                 f"head_dim {d} (layer {lyr})")
         self.L = n_layers
-        self.H = n_kv_heads
-        self.D = head_dim
+        self.Hs, self.Ds = Hs, Ds
+        self.H = max(Hs)          # the largest geometry (row sizing)
+        self.D = max(Ds)
         self.B = batch
         self.bt = BLOCK_TOKENS
         self.k_groups = k_groups
@@ -134,15 +149,20 @@ class Fp8PagedKV:
         self.graph_t1 = False   # B1d graph mode; graph_mode_init flips it
         self._batch_idx_cache = {}
         self.blocks_per_seq = -(-max_tokens_per_seq // self.bt)
-        self.k_row = (kv_block_bytes(self.bt, self.H, self.D)
-                      + self.bt * self.H * 4 * (k_groups - 1))
-        self.v_row = kv_block_bytes(self.bt, self.H, self.D)
+        # natural row per layer, pool stride = the largest
+        self.k_rows = [kv_block_bytes(self.bt, h, d) + self.bt * h * 4 * (k_groups - 1)
+                       for h, d in zip(Hs, Ds)]
+        self.v_rows = [kv_block_bytes(self.bt, h, d) for h, d in zip(Hs, Ds)]
+        self.k_row = max(self.k_rows)
+        self.v_row = max(self.v_rows)
         rows = batch * self.blocks_per_seq
         self.kp = RowPool(n_layers, rows, 0, self.k_row, device=device)
         self.vp = RowPool(n_layers, rows, 0, self.v_row, device=device)
         self.device = self.kp.device
-        # payload bytes before the scale tail of a row, per side
-        self._k_pay = self.bt * self.H * self.D
+        # payload bytes before the scale tail of a row, per side, per layer
+        self._k_pays = [self.bt * h * d for h, d in zip(Hs, Ds)]
+        self._v_pays = list(self._k_pays)
+        self._k_pay = self._k_pays[0]
         # resolution semantics + history: _resolve_fused_append
         def _kernel_present():
             try:
@@ -163,7 +183,7 @@ class Fp8PagedKV:
             "E4B_BATCHED_KV_WRITE", "1") == "1"
         # (slots, pidx, sidx, fills) per (pool, layer) — see _flat_row_index
         self._kv_flat_cache: dict[tuple[int, int], list] = {}
-        self._v_pay = self.bt * self.H * self.D
+        self._v_pay = self._v_pays[0]
         # block tables live on-device and are written IN PLACE when a block
         # opens (one scalar copy per 16 tokens) — rebuilding [B, blocks]
         # tables per decode step would be an H2D per layer per step
@@ -206,9 +226,12 @@ class Fp8PagedKV:
         shared block table's row pairing for every later block (review)."""
         from fp8_kv import quantize_kv_fp8
 
+        # geometry from the tensor itself ([T, H, D]): the same call serves
+        # every layer of a mixed-geometry cache
+        H, D = int(x.shape[-2]), int(x.shape[-1])
         q, s = quantize_kv_fp8(x, group=None if groups == 1
-                               else self.D // groups)
-        qb = q.view(torch.uint8).reshape(-1, self.H * self.D)   # [T, H*D]
+                               else D // groups)
+        qb = q.view(torch.uint8).reshape(-1, H * D)             # [T, H*D]
         sb = s.float().reshape(x.shape[0], -1).view(torch.uint8)  # [T, H*g*4]
         return qb, sb
 
@@ -223,7 +246,8 @@ class Fp8PagedKV:
         block write, which at L layers x 2 sides x B sequences serializes
         the whole decode step behind the GPU (measured: attention host
         time == attention device time, ~60 ms/step on the dev box)."""
-        srow = self.H * groups * 4
+        H, D = self.Hs[layer], self.Ds[layer]
+        srow = H * groups * 4
         written = 0
         rows = self._rows[(layer, seq)]
         while written < t_new:
@@ -231,8 +255,7 @@ class Fp8PagedKV:
             blk = seen // self.bt
             row = pool.row_view(layer, rows[blk])
             take = min(self.bt - fill, t_new - written)
-            row.narrow(0, fill * self.H * self.D,
-                       take * self.H * self.D).copy_(
+            row.narrow(0, fill * H * D, take * H * D).copy_(
                 qb.narrow(0, written, take).reshape(-1))
             row.narrow(0, pay_bytes + fill * srow, take * srow).copy_(
                 sb.narrow(0, written, take).reshape(-1))
@@ -267,8 +290,9 @@ class Fp8PagedKV:
         and advancing a stale index would silently write every later token
         to the wrong offset.
         """
-        srow = self.H * groups * 4
-        pstride, sstride = T * self.H * self.D, T * srow
+        H, D = self.Hs[layer], self.Ds[layer]
+        srow = H * groups * 4
+        pstride, sstride = T * H * D, T * srow
         key = (id(pool), layer)
         fills_t = tuple(fills)
         st = self._kv_flat_cache.get(key)
@@ -282,7 +306,7 @@ class Fp8PagedKV:
         ps, ss = [], []
         for slot, fill in zip(slots, fills):
             base = slot * rb
-            ps.append(base + fill * self.H * self.D)
+            ps.append(base + fill * H * D)
             ss.append(base + pay_bytes + fill * srow)
         pidx = (torch.as_tensor(ps, dtype=torch.long, device=dev)[:, None]
                 + torch.arange(pstride, device=dev)).reshape(-1)
@@ -307,8 +331,9 @@ class Fp8PagedKV:
 
     def append(self, layer: int, seq: int, k: torch.Tensor, v: torch.Tensor):
         """k, v: [T, H, D] new tokens for one sequence at one layer."""
-        if k.shape != v.shape or k.shape[1:] != (self.H, self.D):
-            raise ValueError(f"expected [T, {self.H}, {self.D}], got "
+        H, D = self.Hs[layer], self.Ds[layer]
+        if k.shape != v.shape or k.shape[1:] != (H, D):
+            raise ValueError(f"expected [T, {H}, {D}] at layer {layer}, got "
                              f"{tuple(k.shape)} / {tuple(v.shape)}")
         seen = self._seen[layer][seq]
         if seen + k.shape[0] > self.blocks_per_seq * self.bt:
@@ -327,10 +352,10 @@ class Fp8PagedKV:
         # V first: K's writer owns the shared block-table entry, and writing
         # K last means a table row is never published for a block whose V
         # bytes haven't landed yet (same publish-last discipline as the pool)
-        self._write_side(self.vp, self._v_pay, 1, layer, seq, *vq,
+        self._write_side(self.vp, self._v_pays[layer], 1, layer, seq, *vq,
                          k.shape[0], seen)
-        self._write_side(self.kp, self._k_pay, self.k_groups, layer, seq,
-                         *kq, k.shape[0], seen)
+        self._write_side(self.kp, self._k_pays[layer], self.k_groups, layer,
+                         seq, *kq, k.shape[0], seen)
         self._seen[layer][seq] = seen + k.shape[0]
         # device-side scalar add, value in kernel args: a plain
         # `seq_lens[layer, seq] = n` wraps the int in a CPU tensor and
@@ -356,10 +381,11 @@ class Fp8PagedKV:
         leaves a prefix of sequences appended — fatal to the run, as a
         mid-batch OOM is today.
         """
+        H, D = self.Hs[layer], self.Ds[layer]
         if k.shape != v.shape or k.dim() != 4 \
-                or k.shape[2:] != (self.H, self.D):
-            raise ValueError(f"expected [B, T, {self.H}, {self.D}], got "
-                             f"{tuple(k.shape)} / {tuple(v.shape)}")
+                or k.shape[2:] != (H, D):
+            raise ValueError(f"expected [B, T, {H}, {D}] at layer {layer}, "
+                             f"got {tuple(k.shape)} / {tuple(v.shape)}")
         B, T = k.shape[0], k.shape[1]
         if B != len(seqs):
             raise ValueError(f"{B} rows for {len(seqs)} sequences")
@@ -367,8 +393,8 @@ class Fp8PagedKV:
             if self._seen[layer][seq] + T > self.blocks_per_seq * self.bt:
                 raise ValueError(f"sequence {seq} overflows its "
                                  f"{self.blocks_per_seq} blocks")
-        vq_all = self._quant_bytes(v.reshape(B * T, self.H, self.D), 1)
-        kq_all = self._quant_bytes(k.reshape(B * T, self.H, self.D),
+        vq_all = self._quant_bytes(v.reshape(B * T, H, D), 1)
+        kq_all = self._quant_bytes(k.reshape(B * T, H, D),
                                    self.k_groups)
         # Batched row writes when every sequence's T tokens land inside
         # one block (always true for T == 1 decode; a straddling prefill
@@ -389,9 +415,9 @@ class Fp8PagedKV:
             slots = tuple(slots)
             if len(set(slots)) == len(slots):
                 # V first, publish K second — append()'s lockstep order
-                self._write_batch(self.vp, self._v_pay, 1, layer, slots,
-                                  fills, vq_all[0], vq_all[1], T)
-                self._write_batch(self.kp, self._k_pay, self.k_groups,
+                self._write_batch(self.vp, self._v_pays[layer], 1, layer,
+                                  slots, fills, vq_all[0], vq_all[1], T)
+                self._write_batch(self.kp, self._k_pays[layer], self.k_groups,
                                   layer, slots, fills, kq_all[0],
                                   kq_all[1], T)
                 for seq in seqs:
@@ -404,10 +430,10 @@ class Fp8PagedKV:
                   vq_all[1].narrow(0, b * T, T))
             kq = (kq_all[0].narrow(0, b * T, T),
                   kq_all[1].narrow(0, b * T, T))
-            self._write_side(self.vp, self._v_pay, 1, layer, seq, *vq,
-                             T, seen)
-            self._write_side(self.kp, self._k_pay, self.k_groups, layer,
-                             seq, *kq, T, seen)
+            self._write_side(self.vp, self._v_pays[layer], 1, layer, seq,
+                             *vq, T, seen)
+            self._write_side(self.kp, self._k_pays[layer], self.k_groups,
+                             layer, seq, *kq, T, seen)
             self._seen[layer][seq] = seen + T
         self._bump_seq_lens(layer, seqs, T)
 
@@ -521,11 +547,11 @@ class Fp8PagedKV:
             fp8_kv_append_bt1(v, self._g_vflat[layer],
                               self.block_table[layer], self._g_slot_idx,
                               self.seq_lens[layer], self.v_row,
-                              self._v_pay, self.bt, 1)
+                              self._v_pays[layer], self.bt, 1)
             fp8_kv_append_bt1(k, self._g_kflat[layer],
                               self.block_table[layer], self._g_slot_idx,
                               self.seq_lens[layer], self.k_row,
-                              self._k_pay, self.bt, self.k_groups)
+                              self._k_pays[layer], self.bt, self.k_groups)
             self.seq_lens[layer].index_add_(0, self._g_slot_l,
                                             self._g_slot_ones)
             return
@@ -559,10 +585,11 @@ class Fp8PagedKV:
             self._ensure_blocks(layer, seq, (upto - 1) // self.bt)
         self._g_seq = seq
         dev = self.device
-        hd = self.H * self.D
-        self._g_ar_hd = torch.arange(hd, device=dev)
-        self._g_ar_sk = torch.arange(self.H * self.k_groups * 4, device=dev)
-        self._g_ar_sv = torch.arange(self.H * 4, device=dev)
+        self._g_ar_hd = [torch.arange(h * d, device=dev)
+                         for h, d in zip(self.Hs, self.Ds)]
+        self._g_ar_sk = [torch.arange(h * self.k_groups * 4, device=dev)
+                         for h in self.Hs]
+        self._g_ar_sv = [torch.arange(h * 4, device=dev) for h in self.Hs]
         self._g_kflat = [self.kp.dev[layer].reshape(-1)
                          for layer in range(self.L)]
         self._g_vflat = [self.vp.dev[layer].reshape(-1)
@@ -587,11 +614,11 @@ class Fp8PagedKV:
             fp8_kv_append_t1(v, self._g_vflat[layer],
                              self.block_table[layer][seq],
                              self.seq_lens[layer].narrow(0, seq, 1),
-                             self.v_row, self._v_pay, self.bt, 1)
+                             self.v_row, self._v_pays[layer], self.bt, 1)
             fp8_kv_append_t1(k, self._g_kflat[layer],
                              self.block_table[layer][seq],
                              self.seq_lens[layer].narrow(0, seq, 1),
-                             self.k_row, self._k_pay, self.bt,
+                             self.k_row, self._k_pays[layer], self.bt,
                              self.k_groups)
             self.seq_lens[layer].narrow(0, seq, 1).add_(1)
             return
@@ -603,16 +630,17 @@ class Fp8PagedKV:
         row = (self.block_table[layer][seq]
                .gather(0, blk.reshape(1).to(torch.int64))
                .reshape(()).to(torch.long))
-        hd = self.H * self.D
+        H = self.Hs[layer]
+        hd = H * self.Ds[layer]
         vbase = row * self.v_row + fill * hd
-        self._g_vflat[layer].scatter_(0, vbase + self._g_ar_hd, vq.reshape(-1))
-        vsb = row * self.v_row + self._v_pay + fill * (self.H * 4)
-        self._g_vflat[layer].scatter_(0, vsb + self._g_ar_sv, vs.reshape(-1))
+        self._g_vflat[layer].scatter_(0, vbase + self._g_ar_hd[layer], vq.reshape(-1))
+        vsb = row * self.v_row + self._v_pays[layer] + fill * (H * 4)
+        self._g_vflat[layer].scatter_(0, vsb + self._g_ar_sv[layer], vs.reshape(-1))
         kbase = row * self.k_row + fill * hd
-        self._g_kflat[layer].scatter_(0, kbase + self._g_ar_hd, kq.reshape(-1))
-        ksb = (row * self.k_row + self._k_pay
-               + fill * (self.H * self.k_groups * 4))
-        self._g_kflat[layer].scatter_(0, ksb + self._g_ar_sk, ks.reshape(-1))
+        self._g_kflat[layer].scatter_(0, kbase + self._g_ar_hd[layer], kq.reshape(-1))
+        ksb = (row * self.k_row + self._k_pays[layer]
+               + fill * (H * self.k_groups * 4))
+        self._g_kflat[layer].scatter_(0, ksb + self._g_ar_sk[layer], ks.reshape(-1))
         self.seq_lens[layer].narrow(0, seq, 1).add_(1)
 
     def kernel_args(self, layer: int, slots=None):
@@ -683,8 +711,10 @@ class Fp8PagedKV:
                 f"q has {q.shape[0]} rows but the block table has "
                 f"{tbl.shape[0]} — pass slots= so rows map to sequences")
         return fp8_paged_decode_attention(
-            q, kf, vf, tbl, lens, n_kv_heads=self.H, head_dim=self.D,
-            block_tokens=self.bt, k_groups=self.k_groups, **kw)
+            q, kf, vf, tbl, lens, n_kv_heads=self.Hs[layer],
+            head_dim=self.Ds[layer], block_tokens=self.bt,
+            k_groups=self.k_groups, k_row_bytes=self.k_row,
+            v_row_bytes=self.v_row, **kw)
 
     def seen_device(self, layer: int, seq: int) -> int:
         """Authoritative token count for (layer, seq), read from DEVICE
@@ -744,20 +774,22 @@ class Fp8PagedKV:
         for blk in range(-(-t // self.bt)):
             row_i = int(self.block_table[layer][seq, blk])
             qk, sk = unpack_kv_block_grouped(
-                self.kp.dev[layer, row_i], self.bt, self.H, self.D,
-                self.k_groups)
+                self.kp.dev[layer, row_i], self.bt, self.Hs[layer],
+                self.Ds[layer], self.k_groups)
             qv, sv = unpack_kv_block_grouped(
-                self.vp.dev[layer, row_i], self.bt, self.H, self.D, 1)
+                self.vp.dev[layer, row_i], self.bt, self.Hs[layer],
+                self.Ds[layer], 1)
             ks.append(dequant_kv_fp8_ref(qk, sk, dtype=dtype))
             vs.append(dequant_kv_fp8_ref(qv, sv, dtype=dtype))
         if not ks:
-            z = torch.zeros(0, self.H, self.D, dtype=dtype,
+            z = torch.zeros(0, self.Hs[layer], self.Ds[layer], dtype=dtype,
                             device=self.device)
             return z, z
         return (torch.cat(ks)[:t], torch.cat(vs)[:t])
 
     def bytes_per_token(self) -> int:
-        """Honest per-token cost across K and V (payload + scale tails)."""
+        """Honest per-token cost across K and V (payload + scale tails),
+        as ALLOCATED: every row carries the largest layer's stride."""
         return (self.k_row + self.v_row) // self.bt
 
     def stats(self) -> dict:
