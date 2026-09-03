@@ -132,6 +132,44 @@ def _compare_chunked(tag, model, ids, prompt_len, dev, full_logits, chunk):
                   f"{str(e)[:160]}", flush=True)
 
 
+def _load_e4b(a):
+    """Load exactly as the K8 lane does: arena-backed experts THEN
+    `enable_hybrid_tier` with every expert forced into the VRAM tier.
+    Without the tier the arena's expert buffers stay unmaterialised and
+    the model returns NaN -- which is what the first version of this
+    script measured."""
+    import json
+    from pathlib import Path
+    from experts4bit_qlora import load_moe_4bit_streaming
+    from experts4bit_qlora.engines.hot_residency import target_modules
+    from experts4bit_qlora.engines.hybrid import enable_hybrid_tier
+    from experts4bit_qlora.engines.placement import solve_placement
+    model, _ = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, r=8, alpha=16,
+                                       quant_type="nf4", arena=a.arena)
+    mods = target_modules(model)
+    L, E = len(mods), mods[0].num_experts
+    idx = json.loads(Path(a.arena + ".index.json").read_text())
+    bpe = 0
+    for seg in idx["segments"]:
+        n = 1
+        for d in seg["shape_per_expert"]:
+            n *= d
+        bpe += n * (4 if seg["dtype"] == "F32" else 1)
+    man = solve_placement(n_layers=L, n_experts=E, bytes_per_expert=bpe,
+                          vram_budget_bytes=int(a.vram_gb * 2**30),
+                          dram_budget_bytes=int(a.dram_gb * 2**30),
+                          calibration=json.loads(Path(a.calib).read_text()))
+    pairs = sorted(tuple(pp) for t in ("vram", "dram", "nvme")
+                   for pp in man["tiers"][t])
+    man["tiers"] = {"vram": [list(pp) for pp in pairs], "dram": [], "nvme": []}
+    man["masses"] = {"vram_frac": 1.0, "dram_frac": 0.0, "nvme_frac": 0.0}
+    n = enable_hybrid_tier(model, a.arena, man, pool=True)
+    assert n == L, f"hybrid tier patched {n}/{L} modules"
+    print(f"ARMDIFF e4b tier: {n} modules, all-vram placement, "
+          f"{E} experts x {L} layers", flush=True)
+    return model
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="openai/gpt-oss-20b")
@@ -140,6 +178,9 @@ def main():
     ap.add_argument("--n-after", type=int, default=64)
     ap.add_argument("--chunk", type=int, default=256)
     ap.add_argument("--skip-upstream", action="store_true")
+    ap.add_argument("--calib", default="/root/ctrl/calib.json")
+    ap.add_argument("--vram-gb", type=float, default=22.0)
+    ap.add_argument("--dram-gb", type=float, default=0.0)
     ap.add_argument("--save", default="/root/ctrl/armdiff_upstream.pt")
     a = ap.parse_args()
     tok, ids, sha = _window(a.model, a.prompt_len, a.n_after)
@@ -175,9 +216,7 @@ def main():
     up_logits, up_hs = saved["logits"], saved["hs"]
 
     # ---- arm 2: e4b-loaded (NF4 experts, HF attention, shim NOT registered)
-    from experts4bit_qlora import load_moe_4bit_streaming
-    e4b, _ = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, r=8, alpha=16,
-                                     quant_type="nf4", arena=a.arena)
+    e4b = _load_e4b(a)
     _set_eager(e4b)
     dev = torch.device("cuda")
     _cfg_line("e4b", e4b)
@@ -195,9 +234,13 @@ def main():
         cos = torch.nn.functional.cosine_similarity(u, e, dim=-1)
         rel = float((u - e).norm() / u.norm().clamp_min(1e-9))
         flag = ""
-        if first_bad is None and float(cos.min()) < 0.98:
-            first_bad = l
+        bad = bool(torch.isnan(cos).any()) or float(cos.min()) < 0.98
+        if torch.isnan(cos).any():
+            flag = "  <-- NaN (an arm is producing garbage, not a divergence)"
+        elif bad:
             flag = "  <-- first layer below 0.98"
+        if first_bad is None and bad:
+            first_bad = l
         print(f"ARMDIFF cross layer {l:2d}: cos mean={float(cos.mean()):.5f} min={float(cos.min()):.5f} "
               f"rel={rel:.4f}{flag}", flush=True)
     fl_u = up_logits[a.prompt_len - 1:-1]
@@ -205,9 +248,18 @@ def main():
     print(f"ARMDIFF cross logits: KL(upstream||e4b)={_kl(fl_u, fl_e):.5f} KL(e4b||upstream)={_kl(fl_e, fl_u):.5f} "
           f"top1={_top1(fl_u, fl_e):.4f} nll_up={_nll(fl_u, tgt):.4f} nll_e4b={_nll(fl_e, tgt):.4f}",
           flush=True)
-    print(f"ARMDIFF verdict: first divergent layer = {first_bad} "
-          f"({'hidden states agree through the stack' if first_bad is None else 'arms part here'})",
-          flush=True)
+    nan_arm = []
+    if any(bool(torch.isnan(h).any()) for h in up_hs):
+        nan_arm.append("upstream")
+    if any(bool(torch.isnan(h).any()) for h in e_hs):
+        nan_arm.append("e4b")
+    if nan_arm:
+        print(f"ARMDIFF verdict: REFUSED -- NaN in {nan_arm} hidden states; "
+              "fix that arm before reading any divergence", flush=True)
+    else:
+        print(f"ARMDIFF verdict: first divergent layer = {first_bad} "
+              f"({'hidden states agree through the stack' if first_bad is None else 'arms part here'})",
+              flush=True)
 
 
 if __name__ == "__main__":
