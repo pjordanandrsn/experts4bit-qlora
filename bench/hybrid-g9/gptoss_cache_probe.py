@@ -93,6 +93,41 @@ class _RouterTap:
         return self.rows
 
 
+def _flip_mask(a_rows, b_rows, n_pos):
+    """Per-POSITION flag: did any layer route this token differently?
+    Both passes cover the same contiguous positions in order, so the
+    concatenation per layer aligns by position."""
+    by_a, by_b = {}, {}
+    for nm, t in a_rows:
+        by_a.setdefault(nm, []).append(t)
+    for nm, t in b_rows:
+        by_b.setdefault(nm, []).append(t)
+    flagged = torch.zeros(n_pos, dtype=torch.bool)
+    for nm in sorted(set(by_a) & set(by_b)):
+        ca, cb = torch.cat(by_a[nm]), torch.cat(by_b[nm])
+        if ca.shape[0] < n_pos or cb.shape[0] < n_pos:
+            continue
+        for i in range(n_pos):
+            if set(ca[i].tolist()) != set(cb[i].tolist()):
+                flagged[i] = True
+    return flagged
+
+
+def _kl_split(full, chunk, flagged):
+    """Mean KL over positions whose routing FLIPPED vs positions whose
+    routing was identical. If the flips carry the disagreement, the
+    unflipped side is near zero -- that is the attribution, as opposed
+    to noticing that both happen in the same run."""
+    lf, lc = torch.log_softmax(full, -1), torch.log_softmax(chunk, -1)
+    per = (lf.exp() * (lf - lc)).sum(-1)
+    f = flagged[:per.shape[0]]
+    out = []
+    for name, m in (("flipped", f), ("unflipped", ~f)):
+        out.append((name, int(m.sum()),
+                    float(per[m].mean()) if int(m.sum()) else float("nan")))
+    return out
+
+
 def _router_flips(a_rows, b_rows):
     """Fraction of (layer, token) top-k sets that differ between two runs."""
     if not a_rows or not b_rows:
@@ -237,6 +272,14 @@ def main():
                     print(f"CACHEPROBE   router top-k flips full-vs-chunk: "
                           f"{d}/{t} = {frac:.4%} of (layer, token) choices",
                           flush=True)
+                    mask = _flip_mask(rows_full, rows_ch, ids.numel())
+                    # the scored logit at row j predicts ids[prompt_len+j],
+                    # computed AT position prompt_len+j-1
+                    sc = mask[a.prompt_len - 1:a.prompt_len - 1 + full.shape[0]]
+                    parts = _kl_split(full, ch, sc)
+                    print("CACHEPROBE   KL by routing: " + "; ".join(
+                        f"{n} n={k} meanKL={v:.6f}" for n, k, v in parts),
+                        flush=True)
                 verdict = "EQUAL" if kl < 1e-6 else ("close" if kl < 1e-3 else "DIFFERENT")
                 print(f"CACHEPROBE {name} cache_position={cp}: KL={kl:.6f} "
                       f"nll_full={nf:.5f} nll_chunk={nc:.5f} top1={t1:.4f} -> {verdict}",
