@@ -174,3 +174,25 @@ def test_missing_mask_is_refused_not_attended_non_causally():
                                     scaling=q.shape[-1] ** -0.5)
     assert out.shape == (1, 1, 4, 32)
 
+
+
+def test_layer_diff_hooks_and_compare_on_a_tiny_model():
+    """Eager vs eager at the same position must read as zero at every part;
+    a different position must not. Exercises the hook installer, the
+    reference forward (context cleared, impl forced to eager) and the
+    comparison -- the paged half needs a GPU and runs on the lane."""
+    sd = _load_harness()
+    model = _tiny_llama()
+    torch.manual_seed(2)
+    ids = torch.randint(0, 97, (40,))
+    cap_a, cap_b = {}, {}
+    sd._layer_diff_reference(model, ids[:20], cap_a)
+    sd._layer_diff_reference(model, ids[:20], cap_b)
+    rows, summ = sd._layer_diff_compare(cap_a, cap_b, sd._layer_kinds(model))
+    assert len(rows) == 2 and all(r["attn"] == 0.0 and r["mlp"] == 0.0 and r["layer"] == 0.0 for r in rows)
+    assert summ["first_layer_over_5pct"] is None and summ["attn_rel_full"] == 0.0
+    cap_c = {}
+    sd._layer_diff_reference(model, ids[:21], cap_c)
+    rows, summ = sd._layer_diff_compare(cap_a, cap_c, sd._layer_kinds(model))
+    assert all(r["layer"] > 0 for r in rows) and summ["layer_rel"] > 0
+    assert model.config._attn_implementation == "eager"

@@ -266,6 +266,125 @@ def _fq_register(spec: str, kg: int, vg: int, layers: str, frm: int) -> str:
     return _FQ_IMPL
 
 
+# ---------------------------------------------------------------------------
+# Per-layer output diff: the paged decode step against the chunk-free eager
+# forward at the SAME position, hooked at every decoder layer's attention,
+# dense MLP, expert block and router (e4b#359 next test under H0). The
+# paged step is captured from the K8 loop's OWN forward (a second paged
+# forward would append that token's K/V twice); the reference is one eager
+# forward over ids[:pos+1] with the paged context cleared, i.e. the `full`
+# arm's path, and only its last position is compared.
+def _decoder_layers(model):
+    """The first ModuleList whose members carry `self_attn`."""
+    for _, m in model.named_modules():
+        if isinstance(m, torch.nn.ModuleList) and len(m) and hasattr(m[0], "self_attn"):
+            return m
+    raise RuntimeError("no decoder layer list with self_attn found")
+
+
+def _layer_diff_install(model, cap):
+    """Forward hooks that record each part's LAST-position output (fp32,
+    cpu) into `cap[(layer, part)]`; router hooks record (weights, index)."""
+    handles = []
+
+    def rec(i, part):
+        def hook(_m, _inp, out):
+            if part == "router":
+                w, idx = out[1], out[2]
+                cap[(i, "router")] = (w.detach().float().cpu()[-1], idx.detach().cpu()[-1])
+                return
+            y = out[0] if isinstance(out, tuple) else out
+            y = y.detach().float()
+            cap[(i, part)] = (y[:, -1] if y.ndim == 3 else y[-1:]).reshape(-1).cpu()
+        return hook
+
+    for i, L in enumerate(_decoder_layers(model)):
+        handles.append(L.register_forward_hook(rec(i, "layer")))
+        handles.append(L.self_attn.register_forward_hook(rec(i, "attn")))
+        for part in ("mlp", "experts", "router"):
+            sub = getattr(L, part, None)
+            if isinstance(sub, torch.nn.Module):
+                handles.append(sub.register_forward_hook(rec(i, part)))
+    return handles
+
+
+def _layer_diff_compare(cap_paged, cap_ref, layers_meta):
+    """Per-layer relative errors ||paged - ref|| / ||ref|| and router
+    agreement; returns rows plus a summary."""
+    rows = []
+    for i, kind in layers_meta:
+        row = {"layer": i, "kind": kind}
+        for part in ("attn", "mlp", "experts", "layer"):
+            a_, b_ = cap_paged.get((i, part)), cap_ref.get((i, part))
+            if a_ is not None and b_ is not None:
+                row[part] = float((a_ - b_).norm() / (b_.norm() + 1e-12))
+        if (i, "router") in cap_paged and (i, "router") in cap_ref:
+            (wp, ip), (wr, ir) = cap_paged[(i, "router")], cap_ref[(i, "router")]
+            sp, sr = set(ip.tolist()), set(ir.tolist())
+            row["router_overlap"] = len(sp & sr) / max(len(sr), 1)
+            if sp == sr:
+                order = {int(e): k for k, e in enumerate(ir.tolist())}
+                wr_al = torch.stack([wr[order[int(e)]] for e in ip.tolist()])
+                row["router_w_maxabs"] = float((wp - wr_al).abs().max())
+        rows.append(row)
+
+    def mean_of(part, kind=None):
+        v = [r[part] for r in rows if part in r and (kind is None or r["kind"] == kind)]
+        return sum(v) / len(v) if v else None
+    summ = {"attn_rel_sliding": mean_of("attn", "sliding"), "attn_rel_full": mean_of("attn", "full"),
+            "mlp_rel": mean_of("mlp"), "experts_rel": mean_of("experts"), "layer_rel": mean_of("layer"),
+            "router_overlap_mean": mean_of("router_overlap"),
+            "first_layer_over_5pct": next((r["layer"] for r in rows if r.get("layer", 0) > 0.05), None)}
+    return rows, summ
+
+
+def _layer_diff_reference(model, ids_upto, cap_ref):
+    """One eager forward over `ids_upto` (the `full` arm's path) with the
+    paged context cleared; hooks fill cap_ref with the last position."""
+    try:
+        from experts4bit_qlora.engines.paged_attention import set_context
+    except ImportError:          # no engine in this environment: nothing to clear
+        set_context = lambda _ctx: None  # noqa: E731
+    prev_ctx = set_context(None)
+    saved = []
+    for m in [model] + list(model.modules()):
+        cfg = getattr(m, "config", None)
+        if cfg is not None and hasattr(cfg, "_attn_implementation"):
+            saved.append((cfg, cfg._attn_implementation))
+            cfg._attn_implementation = "eager"
+    handles = _layer_diff_install(model, cap_ref)
+    try:
+        with torch.no_grad():
+            model(input_ids=ids_upto[None].to(next(model.parameters()).device), use_cache=False)
+    finally:
+        for h in handles:
+            h.remove()
+        for cfg, impl in saved:
+            cfg._attn_implementation = impl
+        set_context(prev_ctx)
+
+
+def _layer_kinds(model):
+    out = []
+    for i, L in enumerate(_decoder_layers(model)):
+        at = L.self_attn
+        sliding = bool(getattr(at, "is_sliding", None) or getattr(at, "sliding_window", None))
+        out.append((i, "sliding" if sliding else "full"))
+    return out
+
+
+def _layer_diff_report(t, pos_abs, cap_paged, cap_ref, model, out_path):
+    import json as _json
+    rows, summ = _layer_diff_compare(cap_paged, cap_ref, _layer_kinds(model))
+    fmt = lambda d: " ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in d.items())  # noqa: E731
+    print(f"LAYER_DIFF t={t} pos={pos_abs} {fmt(summ)}", flush=True)
+    for r in rows:
+        print("  " + fmt(r), flush=True)
+    with open(f"{out_path}.layerdiff_t{t}.json", "w") as f:
+        _json.dump({"t": t, "pos": pos_abs, "summary": summ, "rows": rows}, f, indent=1)
+    return summ
+
+
 def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
@@ -1317,9 +1436,18 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
         # (Bugbot, e4b#278, High).
         pos.fill_(a.prompt_len)
         nll = 0.0
+        diff_steps = {int(x) for x in str(getattr(a, "ppl_layer_diff", "") or "").split(",") if x.strip()}
         for t in range(a.ppl_steps):
+            cap_paged = {}
+            hooks = _layer_diff_install(model, cap_paged) if t in diff_steps else []
             out = model(input_ids=in_ids, position_ids=pos,
                         use_cache=False)
+            if hooks:
+                for h in hooks:
+                    h.remove()
+                cap_ref = {}
+                _layer_diff_reference(model, ppl_ids[:a.prompt_len + t + 1], cap_ref)
+                _layer_diff_report(t, a.prompt_len + t, cap_paged, cap_ref, model, a.out)
             lg = out.logits[:, -1].float()
             nxt = int(cont[t + 1])
             nll += -torch.log_softmax(lg, -1)[0, nxt].item()
@@ -2074,6 +2202,10 @@ def main():
                          "with the paged shim NOT registered: the reference the "
                          "paged path must match on families the shim does not "
                          "yet serve (sliding windows, sinks, per-layer KV)")
+    ap.add_argument("--ppl-layer-diff", default="",
+                    help="comma list of K8 steps at which to diff the paged "
+                         "decode step against the chunk-free eager forward per "
+                         "layer (attention / dense MLP / experts / router)")
     ap.add_argument("--ppl-chunk", type=int, default=0,
                     help="chunk size for the chunked oracle (0 = the scorer's "
                          "default of 256); two sizes on one window split a "
