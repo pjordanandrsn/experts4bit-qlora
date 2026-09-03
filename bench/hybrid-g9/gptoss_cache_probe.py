@@ -104,12 +104,16 @@ def main():
     ap.add_argument("--prompt-len", type=int, default=256)
     ap.add_argument("--n-after", type=int, default=192)
     ap.add_argument("--chunk", type=int, default=64)
-    ap.add_argument("--force-full-attention", action="store_true",
-                    help="rewrite every layer to full_attention and drop "
-                         "sliding_window before running. The CONTROL: same "
-                         "model, same weights, same text, same chunking, with "
-                         "only the window feature removed. If the chunked-vs-"
-                         "full gap survives it, the gap is not about windows.")
+    ap.add_argument("--wide-window", action="store_true",
+                    help="widen sliding_window past the sequence instead of "
+                         "removing it. The CONTROL: same model, weights, text, "
+                         "chunking AND mask code path, with the window's WIDTH "
+                         "made irrelevant -- a sliding layer whose window "
+                         "exceeds the context is exactly full attention. If "
+                         "the chunked-vs-full gap survives, it is not about "
+                         "windows. (Setting sliding_window=None instead makes "
+                         "transformers raise from create_sliding_window_causal_"
+                         "mask, since layer_types still names sliding layers.)")
     a = ap.parse_args()
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import types
@@ -132,21 +136,26 @@ def main():
     model.eval()
     dev = next(model.parameters()).device
     tc = getattr(model.config, "text_config", model.config)
-    if a.force_full_attention:
-        n_before = sum(1 for x in (getattr(tc, "layer_types", None) or [])
-                       if "sliding" in x)
-        for cfg_obj in {id(model.config): model.config, id(tc): tc}.values():
-            if getattr(cfg_obj, "layer_types", None):
-                cfg_obj.layer_types = ["full_attention"] * len(cfg_obj.layer_types)
-            if getattr(cfg_obj, "sliding_window", None):
-                cfg_obj.sliding_window = None
-        for mod in model.modules():                  # per-module copies too
-            if hasattr(mod, "sliding_window") and mod.sliding_window:
-                mod.sliding_window = None
-            if getattr(mod, "attention_type", None) == "sliding_attention":
-                mod.attention_type = "full_attention"
-        print(f"CACHEPROBE CONTROL: {n_before} sliding layers rewritten to "
-              "full_attention, sliding_window dropped", flush=True)
+    if a.wide_window:
+        WIDE = 1 << 20
+        n_sliding = sum(1 for x in (getattr(tc, "layer_types", None) or [])
+                        if "sliding" in x)
+        seen = {}
+        for mod in model.modules():                  # every config object in play
+            c = getattr(mod, "config", None)
+            if c is not None and getattr(c, "sliding_window", None):
+                seen[id(c)] = c
+            if getattr(mod, "sliding_window", None):
+                mod.sliding_window = WIDE
+        for c in (model.config, tc):
+            if getattr(c, "sliding_window", None):
+                seen[id(c)] = c
+        for c in seen.values():
+            c.sliding_window = WIDE
+        print(f"CACHEPROBE CONTROL: {n_sliding} sliding layers kept, window "
+              f"widened to {WIDE} on {len(seen)} config object(s) -- wider than "
+              "the context, so they are full attention with the same code path",
+              flush=True)
     lt = getattr(tc, "layer_types", None)
     print(f"CACHEPROBE window {ids.numel()} ids, prompt_len={a.prompt_len}, "
           f"scored={tgt.numel()}, chunk={a.chunk}, sha={sha[:12]}, "
