@@ -100,3 +100,34 @@ requires seed-level reproduction; `blocked`/`impractical` are first-class, actio
 - Anchor file: `support_matrix.md.ots`
 - Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
 - **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
+
+## Serving parity — paged decode vs the model's own attention (P25, 2026-09-03)
+
+The paged B=1 decode path is only as valid as the attention it reproduces.
+Two evidence levels appear here and they are NOT interchangeable:
+
+- **oracle-compared** — scored against the same weights through
+  transformers' eager attention and bf16 cache on the same sha-matched
+  window (`--ppl-oracle eager`). This is the only evidence that the
+  paged path matches the MODEL.
+- **paged-vs-paged only** — the family's K8 numbers compare one paged
+  configuration against another. Error the two arms share cancels, so
+  these say nothing about absolute parity. See `docs/METHODOLOGY.md`
+  section 13.
+
+Host for every row: rented RTX 5090, torch 2.8.0+cu128, triton 3.4.0,
+transformers 5.16.1, e4b main (post-#339/#340), grouped-nf4-gemm 0.24.0.
+
+| Family | Attention features needed | Parity status | Evidence |
+|---|---|---|---|
+| Qwen3-30B-A3B | plain causal, `head_dim**-0.5` | `validated` +0.0467 vs oracle (PASS, 0.003 under the gate) | oracle-compared, 8192 steps |
+| Granite-3.1-3B-A800M | `attention_multiplier` scale | `validated` +0.0219 vs oracle (PASS) | oracle-compared, 8192 steps |
+| Mixtral-8x7B | plain causal | `not_tested` for absolute parity | paged-vs-paged only (int4 experts −0.015) |
+| OLMoE-1B-7B | plain causal | `not_tested` for absolute parity | paged-vs-paged only |
+| gpt-oss-20b | sinks + alternating sliding window 128 | `unsupported` as a GATED path: no perplexity gate exists for this family (raw-text ppl 2361 through plain transformers; chat-window 2029). Loader and served expert tier are `validated` faithful (MXFP4 dequant bit-exact; expert forward cos 0.991-0.993; served layer 0 cos 0.998). A KL gate is pre-registered in METHODOLOGY 13 and blocked on an unexplained gap between the two oracle arms (see e4b#346). | oracle arms disagree — no verdict |
+| Gemma-4-26B-A4B | per-layer KV geometry (sliding 256/8 beside full 512/2), sliding window 1024 on 25/30 layers, scale 1.0 | `blocked` — the model does not finish `load_moe_4bit_streaming` on 2 of 4 hosts (`CUDA error: invalid argument` in the non-expert weight load, e4b#344). The paged features it needs are implemented and unit-tested; no end-to-end parity number exists. | none yet |
+
+What "unsupported as a gated path" means for gpt-oss: the code serves it
+and the expert math is right, but this project will not publish a
+quality number for it until the gate exists. Serve it if you want; do
+not read a perplexity from this harness as evidence about it.
