@@ -150,6 +150,122 @@ def ppl_oracle_score_full(model, ids, prompt_len: int, steps: int, device=None):
     return float(nll) / steps
 
 
+# ---------------------------------------------------------------------------
+# Fake-quantised eager attention: the fp8 paged kernel's PRECISION MODEL run
+# inside the chunk-free full forward. Every rounding the sm_120 fp8 compute
+# path performs is reproduced on the bf16 tensors HF's own attention module
+# hands over, and nothing else changes -- same weights, same mask, same
+# softmax order as ``eager``. So the arm isolates "what the fp8 cache and
+# fp8 dot cost" from "what the paged shim/geometry does", which a paged-vs-
+# full delta cannot (e4b#359). What the kernel does, mirrored here:
+#   q  -> one scale per (kv head, query row) over its G query heads x D
+#         (``q_amax = max|q[G, D]|``, ``q_s = 448 / q_amax``), e4m3
+#   k  -> stored e4m3 with ``k_groups`` sub-row absmax scales (fp8_kv)
+#   v  -> stored e4m3 with one absmax scale per (token, head)   (fp8_kv)
+#   p  -> the softmax weights times the V scale, range-folded by
+#         ``c = 448 / max(vs)`` over the row's valid keys, e4m3
+# ``from`` rows attend unmodified: the paged prefill computes the prompt's
+# own attention on staged bf16 K/V and only the decode steps read fp8.
+_FQ = {"spec": "", "kg": 4, "vg": 1, "layers": "all", "frm": 0}
+_FQ_IMPL = "eager_fq"
+_E4M3_MAX = 448.0
+
+
+def _fq_quant_dequant(x, group):
+    """fp8_kv.quantize_kv_fp8 + dequant_kv_fp8_ref in one step (fp32 in and
+    out): absmax per ``group`` consecutive values of the last dim, scale =
+    amax/448 with the all-zero group pinned to 1.0, e4m3 round trip.
+    Kept local so the CPU oracle needs no kernel wheel; a test pins it
+    bit-exact to fp8_kv when that module imports."""
+    d = x.shape[-1]
+    group = d if group is None else group
+    xg = x.reshape(*x.shape[:-1], d // group, group)
+    amax = xg.abs().amax(dim=-1, keepdim=True)
+    scale = torch.where(amax > 0, amax / _E4M3_MAX, torch.ones_like(amax))
+    q = (xg / scale).to(torch.float8_e4m3fn).to(torch.float32)
+    return (q * scale).reshape(x.shape), scale.squeeze(-1)
+
+
+def _fq_eager_attention(module, query, key, value, attention_mask,
+                        scaling=None, dropout: float = 0.0,
+                        softcap=None, **kwargs):
+    """``[B, H_q, T, D]`` in, ``([B, T, H_q, D], None)`` out -- transformers'
+    eager attention with the fp8 kernel's roundings applied per _FQ."""
+    B, Hq, T, D = query.shape
+    Hkv = key.shape[1]
+    G = Hq // Hkv
+    if attention_mask is None and T > 1:
+        raise RuntimeError("eager_fq received no attention mask for a "
+                           f"{T}-token forward: the causal mask was not built "
+                           "for this attention name, and attending without "
+                           "one is silent and non-causal")
+    spec = _FQ["spec"]
+    is_sliding = bool(getattr(module, "is_sliding", None)
+                      or getattr(module, "sliding_window", None))
+    want = _FQ["layers"]
+    apply = bool(spec) and (want == "all" or (want == "sliding") == is_sliding)
+    scale = float(D ** -0.5 if scaling is None else scaling)
+
+    def attend(fq: bool):
+        qf, kf, vf = query.float(), key.float(), value.float()
+        vs = None
+        if fq and "k" in spec:
+            kf, _ = _fq_quant_dequant(kf, None if _FQ["kg"] == 1 else D // _FQ["kg"])
+        if fq and "v" in spec:
+            vf, vs = _fq_quant_dequant(vf, None if _FQ["vg"] == 1 else D // _FQ["vg"])
+            if vs.ndim == 4:                      # grouped V: kernel folds one
+                vs = vs.amax(-1)                  # scale per row; approximate
+        if fq and "q" in spec:
+            qt = qf.view(B, Hkv, G, T, D)
+            amax = qt.abs().amax(dim=(2, 4), keepdim=True)          # per (b, kv head, row)
+            qs = torch.where(amax > 0, _E4M3_MAX / amax, torch.ones_like(amax))
+            qf = ((qt * qs).to(torch.float8_e4m3fn).to(torch.float32) / qs).view(B, Hq, T, D)
+        k_rep = kf.repeat_interleave(G, dim=1)
+        v_rep = vf.repeat_interleave(G, dim=1)
+        sc = torch.matmul(qf, k_rep.transpose(-1, -2)) * scale
+        if softcap is not None:
+            sc = torch.tanh(sc / softcap) * softcap
+        if attention_mask is not None:
+            sc = sc + attention_mask[:, :, :, : k_rep.shape[-2]].to(sc.dtype)
+        p = torch.softmax(sc, dim=-1, dtype=torch.float32)
+        if fq and "p" in spec and vs is not None:
+            vs_q = vs.repeat_interleave(G, dim=1)[:, :, None, :]     # [B, Hq, 1, Tk]
+            valid = p > 0
+            cmax = (vs_q * valid).amax(-1, keepdim=True)
+            c = torch.where(cmax > 0, _E4M3_MAX / cmax, torch.ones_like(cmax))
+            pv = p * vs_q * c
+            p = pv.to(torch.float8_e4m3fn).to(torch.float32) / (vs_q * c)
+        return torch.matmul(p, v_rep)                                  # [B, Hq, T, D]
+
+    out = attend(apply)
+    frm = int(_FQ["frm"])
+    if apply and 0 < frm < T:
+        out = torch.cat([attend(False)[:, :, :frm], out[:, :, frm:]], dim=2)
+    return out.transpose(1, 2).contiguous().to(query.dtype), None
+
+
+def _fq_register(spec: str, kg: int, vg: int, layers: str, frm: int) -> str:
+    """Install the precision model under ``eager_fq`` (attention AND mask
+    interfaces -- a custom name with no mask entry gets no causal mask)."""
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+    from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+    if any(ch not in "qkvp" for ch in spec):
+        raise ValueError(f"--ppl-fq letters must be from qkvp, got {spec!r}")
+    _FQ.update(spec=spec, kg=int(kg), vg=int(vg), layers=layers, frm=int(frm))
+    ALL_ATTENTION_FUNCTIONS[_FQ_IMPL] = _fq_eager_attention
+    # transformers' mask preprocessor consults the CLASS-level mapping only
+    # (masking_utils._preprocess_mask_arguments: "not in
+    # ALL_MASK_ATTENTION_FUNCTIONS._global_mapping" -> no mask is built and
+    # the attention function is left to mask for itself). A name registered
+    # through __setitem__ lands in the instance's local mapping, is skipped,
+    # and the model runs NON-causal with no error -- caught by the tiny-model
+    # test. So register in both.
+    eager_mask = ALL_MASK_ATTENTION_FUNCTIONS["eager"]
+    ALL_MASK_ATTENTION_FUNCTIONS[_FQ_IMPL] = eager_mask
+    ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[_FQ_IMPL] = eager_mask
+    return _FQ_IMPL
+
+
 def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
@@ -157,6 +273,15 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     impl = "eager" if a.ppl_oracle in ("upstream", "full") else a.ppl_oracle
     label = {"upstream": "upstream-eager", "full": "eager-fullforward"}.get(
         a.ppl_oracle, impl)
+    fq = getattr(a, "ppl_fq", "none")
+    if fq and fq != "none":
+        if a.ppl_oracle != "full":
+            raise SystemExit("--ppl-fq models the fp8 kernel inside the "
+                             "chunk-free forward: use it with --ppl-oracle full")
+        frm = a.prompt_len if a.fq_from < 0 else a.fq_from
+        impl = _fq_register(fq, a.fq_kgroups, a.fq_vgroups, a.fq_layers, frm)
+        label = (f"eager-fullforward-fq{fq}-kg{a.fq_kgroups}-vg{a.fq_vgroups}"
+                 f"-{a.fq_layers}-from{frm}")
     model.config._attn_implementation = impl
     for m in model.modules():
         if hasattr(m, "config") and hasattr(m.config, "_attn_implementation"):
@@ -1945,6 +2070,20 @@ def main():
                          "with the paged shim NOT registered: the reference the "
                          "paged path must match on families the shim does not "
                          "yet serve (sliding windows, sinks, per-layer KV)")
+    ap.add_argument("--ppl-fq", default="none",
+                    help="with --ppl-oracle full: apply the fp8 paged kernel's "
+                         "roundings inside the full forward; letters from "
+                         "q,k,v,p (e.g. kv, qkvp), or none")
+    ap.add_argument("--fq-kgroups", type=int, default=4,
+                    help="K sub-row scale groups modelled (Fp8PagedKV default 4)")
+    ap.add_argument("--fq-vgroups", type=int, default=1)
+    ap.add_argument("--fq-layers", default="all", choices=["all", "full", "sliding"],
+                    help="apply the roundings on every layer, only the "
+                         "full-attention layers, or only the sliding ones")
+    ap.add_argument("--fq-from", type=int, default=-1,
+                    help="first query row that reads fake-quantised K/V "
+                         "(default: prompt_len -- the paged prefill attends "
+                         "on bf16, decode reads fp8)")
     ap.add_argument("--ppl-source", default="wikitext",
                     choices=["wikitext", "c4val1"],
                     help="corpus the prompt windows and --ppl-steps score: "
