@@ -273,6 +273,8 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     impl = "eager" if a.ppl_oracle in ("upstream", "full") else a.ppl_oracle
     label = {"upstream": "upstream-eager", "full": "eager-fullforward"}.get(
         a.ppl_oracle, impl)
+    if a.ppl_oracle == "eager" and int(getattr(a, "ppl_chunk", 0) or 0) > 0:
+        label = f"eager-chunk{a.ppl_chunk}"
     fq = getattr(a, "ppl_fq", "none")
     if fq and fq != "none":
         if a.ppl_oracle != "full":
@@ -292,7 +294,9 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
         mean_nll = ppl_oracle_score_full(model, ppl_ids, a.prompt_len,
                                          a.ppl_steps)
     else:
-        mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps)
+        ck = int(getattr(a, "ppl_chunk", 0) or 0)
+        mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps,
+                                    **({"chunk": ck} if ck > 0 else {}))
     rec = {"k8": "ppl", "attn_path": f"{label}-oracle", "steps": a.ppl_steps,
            "mean_nll": mean_nll, "ppl": float(torch.exp(torch.tensor(mean_nll))),
            "prompt_len": a.prompt_len, "prompt_offset": a.prompt_offset,
@@ -2070,6 +2074,11 @@ def main():
                          "with the paged shim NOT registered: the reference the "
                          "paged path must match on families the shim does not "
                          "yet serve (sliding windows, sinks, per-layer KV)")
+    ap.add_argument("--ppl-chunk", type=int, default=0,
+                    help="chunk size for the chunked oracle (0 = the scorer's "
+                         "default of 256); two sizes on one window split a "
+                         "family's chunked-vs-full floor into routing noise "
+                         "versus a chunk-boundary effect")
     ap.add_argument("--ppl-fq", default="none",
                     help="with --ppl-oracle full: apply the fp8 paged kernel's "
                          "roundings inside the full forward; letters from "
