@@ -138,6 +138,7 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
            "prompt_len": a.prompt_len, "prompt_offset": a.prompt_offset,
            "ppl_source": a.ppl_source, "tokens_scored": a.ppl_steps,
            "text_sha": ppl_sha, "wall_s": round(_time.perf_counter() - t0, 1)}
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
     with open(a.out, "w") as f:
         _json.dump(rec, f, indent=1)
     print(f"K8_PPL steps={a.ppl_steps} nll={mean_nll:.5f} ppl={rec['ppl']:.5f} "
@@ -2084,12 +2085,17 @@ def main():
         st.arm_amortization(amort_on)
 
     cfg = model.config
-    hkv = _uniform_layer_attr(cfg, "num_key_value_heads")
-    hd = _uniform_layer_attr(cfg, "head_dim", None) or (
-        cfg.hidden_size // _uniform_layer_attr(cfg, "num_attention_heads"))
     if a.ppl_oracle == "none":
+        hkv = _uniform_layer_attr(cfg, "num_key_value_heads")
+        hd = _uniform_layer_attr(cfg, "head_dim", None) or (
+            cfg.hidden_size // _uniform_layer_attr(cfg, "num_attention_heads"))
         register(model)
         wrap_attention(IMPL_NAME)
+    else:
+        # the oracle never builds the paged cache: a family whose KV
+        # geometry varies per layer (Gemma-4) must still be SCORABLE
+        # here -- this arm is that family's reference (Bugbot)
+        hkv = hd = None
     if a.region_ops_out and not a.host_brackets:
         raise SystemExit("--region-ops-out needs --host-brackets")
     if a.host_brackets:
@@ -2204,7 +2210,7 @@ def main():
         print(f"compiled {n_c} layer bodies (mode={a.compile_mode}); "
               f"dynamo-disabled: {' + '.join(_dis) if _dis else 'NOTHING'}; "
               f"graph step marking={COMPILE_GRAPH_STEP[0]}", flush=True)
-    kv = Fp8PagedKV(L, hkv, hd, batch=a.batch,
+    kv = None if a.ppl_oracle != "none" else Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len
                     + max(a.gen_tokens, a.ppl_steps) + 8,
                     k_groups=4, batched_append=not a.kv_per_seq,
