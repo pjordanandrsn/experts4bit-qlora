@@ -146,6 +146,21 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
           f"compute={label}-oracle sha={ppl_sha[:12]} out={a.out}", flush=True)
 
 
+def _chat_prefix_ids(tok, suffix: str = "") -> "torch.Tensor":
+    """Token ids of the chat-template prefix that turns the K8 corpus into
+    an assistant reply: system/developer defaults, one user turn, the
+    generation prompt, then ``suffix`` (special tokens honoured)."""
+    msgs = [{"role": "user",
+             "content": "Continue the following text verbatim, without commentary."}]
+    ids = tok.apply_chat_template(msgs, add_generation_prompt=True, tokenize=True)
+    if hasattr(ids, "input_ids"):
+        ids = ids["input_ids"]
+    ids = list(ids)
+    if suffix:
+        ids += list(tok(suffix, add_special_tokens=False)["input_ids"])
+    return torch.tensor(ids, dtype=torch.long)
+
+
 def _k8_window(a, tok):
     """The K8 corpus, the per-row prompts and the scored window with its
     digest -- one function so every arm (paged, e4b-loaded oracle,
@@ -161,6 +176,14 @@ def _k8_window(a, tok):
                           split="test")
         text = "\n\n".join(t for t in ds["text"] if t.strip())
     ids = tok(text, return_tensors="pt").input_ids[0]
+    if getattr(a, "ppl_chat", False):
+        pre = _chat_prefix_ids(tok, getattr(a, "ppl_chat_suffix", ""))
+        assert pre.numel() < a.prompt_len, \
+            f"chat prefix ({pre.numel()} tokens) must fit inside --prompt-len"
+        print(f"K8 chat window: {pre.numel()}-token template prefix, corpus as the "
+              f"assistant reply (suffix={getattr(a, 'ppl_chat_suffix', '')!r})",
+              flush=True)
+        ids = torch.cat([pre, ids])
     if a.prompt_offset or a.prompt_span:
         end = (a.prompt_offset + a.prompt_span) if a.prompt_span \
             else ids.numel()
@@ -1837,6 +1860,18 @@ def main():
     ap.add_argument("--dram-gb", type=float, default=6.0)
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--prompt-len", type=int, default=128)
+    ap.add_argument("--ppl-chat", action="store_true",
+                    help="build the K8 window INSIDE the tokenizer's chat template: "
+                         "a user turn asking for a verbatim continuation, then the "
+                         "corpus as the assistant's reply. For chat-only families "
+                         "(gpt-oss scores ~2000 ppl on bare wikitext through "
+                         "transformers itself) bare text is out of distribution and "
+                         "an absolute ppl delta means nothing; in-distribution the "
+                         "delta is a quality number again. Both arms hash the same ids.")
+    ap.add_argument("--ppl-chat-suffix", default="",
+                    help="raw text appended after the template's generation prompt "
+                         "(gpt-oss: '<|channel|>final<|message|>' puts the reply in "
+                         "the final channel); tokenised WITH special tokens")
     ap.add_argument("--ppl-oracle", default="none",
                     choices=["none", "eager", "upstream"],
                     help="score the SAME --ppl-steps window through transformers' "

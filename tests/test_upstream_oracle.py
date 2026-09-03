@@ -63,3 +63,23 @@ def test_k8_window_is_a_function_of_args_and_tokenizer():
     assert callable(sd._k8_window) and callable(sd._upstream_oracle_main)
     import inspect
     assert list(inspect.signature(sd._k8_window).parameters) == ["a", "tok"]
+
+
+class _StubTok:
+    """A tokenizer with a chat template that prefixes a fixed header."""
+    def apply_chat_template(self, msgs, add_generation_prompt=True, tokenize=True):
+        assert msgs[0]["role"] == "user" and add_generation_prompt and tokenize
+        return [1, 2, 3]
+
+    def __call__(self, text, add_special_tokens=True, return_tensors=None):
+        assert add_special_tokens is False
+        return {"input_ids": [9] * len(text.split("|"))}
+
+
+def test_chat_prefix_ids_template_then_suffix():
+    sd = _step_decomp()
+    pre = sd._chat_prefix_ids(_StubTok())
+    assert pre.tolist() == [1, 2, 3]
+    pre = sd._chat_prefix_ids(_StubTok(), "<|channel|>final<|message|>")
+    assert pre.tolist()[:3] == [1, 2, 3] and len(pre) > 3
+    assert pre.dtype == torch.long
