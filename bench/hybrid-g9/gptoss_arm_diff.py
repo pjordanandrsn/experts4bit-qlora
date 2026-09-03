@@ -73,8 +73,14 @@ def _cfg_line(tag, model):
 @torch.no_grad()
 def _full(model, ids, dev):
     out = model(input_ids=ids[None].to(dev), output_hidden_states=True)
-    hs = [h[0].float().cpu() for h in out.hidden_states]
-    return out.logits[0].float().cpu(), hs
+    # .cpu() BEFORE .float(): a [T, 201088] fp32 copy on a card already
+    # holding a 42 GB bf16 model in a 32 GB budget is the OOM
+    hs = [h[0].cpu().float() for h in out.hidden_states]
+    lg = out.logits[0].cpu().float()
+    del out
+    gc.collect()
+    torch.cuda.empty_cache()
+    return lg, hs
 
 
 @torch.no_grad()
@@ -92,7 +98,7 @@ def _chunked(model, ids, prompt_len, dev, chunk, cache_position):
             kw["cache_position"] = torch.arange(pos, pos + n, device=dev)
         out = model(**kw)
         cache = out.past_key_values
-        logits.append(out.logits[0].float().cpu())
+        logits.append(out.logits[0].cpu().float())
         pos += n
     return torch.cat(logits)[:-1]          # predicts ids[prompt_len : end]
 
@@ -130,8 +136,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="openai/gpt-oss-20b")
     ap.add_argument("--arena", required=True)
-    ap.add_argument("--prompt-len", type=int, default=512)
-    ap.add_argument("--n-after", type=int, default=128)
+    ap.add_argument("--prompt-len", type=int, default=256)
+    ap.add_argument("--n-after", type=int, default=64)
     ap.add_argument("--chunk", type=int, default=256)
     ap.add_argument("--skip-upstream", action="store_true")
     ap.add_argument("--save", default="/root/ctrl/armdiff_upstream.pt")
@@ -144,8 +150,14 @@ def main():
     # ---- arm 1: upstream (transformers' own load)
     if not a.skip_upstream or not os.path.exists(a.save):
         from transformers import AutoModelForCausalLM
-        up = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.bfloat16,
-                                                  device_map="auto", attn_implementation="eager")
+        free, total = torch.cuda.mem_get_info()
+        budget = max(4, int(total / 2**30) - 6)      # leave ~6 GiB for activations
+        up = AutoModelForCausalLM.from_pretrained(
+            a.model, dtype=torch.bfloat16, device_map="auto",
+            attn_implementation="eager",
+            max_memory={0: f"{budget}GiB", "cpu": "120GiB"})
+        print(f"ARMDIFF upstream budget: {budget} GiB on GPU 0 of "
+              f"{total / 2**30:.1f} GiB total", flush=True)
         _set_eager(up)
         dev = next(up.parameters()).device
         _cfg_line("upstream", up)
@@ -157,6 +169,8 @@ def main():
         del up
         gc.collect()
         torch.cuda.empty_cache()
+    gc.collect()
+    torch.cuda.empty_cache()
     saved = torch.load(a.save)
     up_logits, up_hs = saved["logits"], saved["hs"]
 
