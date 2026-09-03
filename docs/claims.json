@@ -476,6 +476,19 @@
         "docs/INFERENCE.md",
         "docs/RESIDENCY-ENGINES.md"
       ]
+    },
+    {
+      "id": "e4b.host.ratios-travel-absolutes-do-not",
+      "area": "serve",
+      "claim": "Absolute s/step and tok/s are host-specific: the same config on two RTX 4090s moved 8.6% in s/step and 3.4x in idle power, and the RTX 5090 class carries ~8.5% inter-box dispersion while each box repeats itself to 0.16%. Only within-pair ratios survive a host change.",
+      "value": 8.6,
+      "unit": "% s/step spread between two 4090s on identical config",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md (Test host note)",
+        "grouped-nf4-gemm kernel/RESULTS-m2-anchor-recert.md"
+      ]
     }
   ]
 }
