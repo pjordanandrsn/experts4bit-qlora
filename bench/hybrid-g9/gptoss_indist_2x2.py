@@ -200,8 +200,33 @@ def main():
         win_e4 = up_on_e4b > e4["e4b_on_e4b"]
         print(f"INDIST prediction[e4b wins on e4b-text]: {win_e4} "
               f"(margin {up_on_e4b - e4['e4b_on_e4b']:+.5f} nats)", flush=True)
-        print(f"INDIST verdict: {'ENTROPY EXPLANATION HOLDS (each arm wins its own text)' if win_up and win_e4 else 'ONE ARM WINS BOTH -- that arm is DEFECTIVE, investigate it'}",
-              flush=True)
+        # four distinct outcomes, not two: a single "one arm wins both"
+        # branch would also swallow the each-wins-the-other case and ties
+        # (Bugbot, #346)
+        d_up = e4["e4b_on_up"] - up["up_on_up"]          # >0: upstream won its text
+        d_e4 = up_on_e4b - e4["e4b_on_e4b"]              # >0: e4b won its text
+        tie = 1e-4
+        if abs(d_up) < tie or abs(d_e4) < tie:
+            verdict = (f"INCONCLUSIVE -- a margin is within {tie} nats of a tie "
+                       f"(own-text margins {d_up:+.5f}, {d_e4:+.5f}); "
+                       "lengthen the text before concluding")
+        elif d_up > 0 and d_e4 > 0:
+            verdict = ("ENTROPY EXPLANATION HOLDS -- each arm wins the text it "
+                       "generated, so neither is defective and the raw-text "
+                       "ordering was a regime artefact")
+        elif d_up > 0 and d_e4 < 0:
+            verdict = ("UPSTREAM WINS BOTH TEXTS -- the e4b arm is the weaker "
+                       "model everywhere (expected for NF4) and the raw-text "
+                       "ordering is NOT explained by entropy; investigate e4b")
+        elif d_up < 0 and d_e4 > 0:
+            verdict = ("E4B WINS BOTH TEXTS -- an NF4 model cannot beat its own "
+                       "bf16 weights on in-distribution text; the UPSTREAM arm "
+                       "is defective, investigate it (and file upstream)")
+        else:
+            verdict = ("EACH ARM WINS THE OTHER'S TEXT -- neither arm prefers "
+                       "its own greedy output, which indicts the SCORING path "
+                       "(text/ids mismatch, prompt_len offset), not either model")
+        print(f"INDIST verdict: {verdict}", flush=True)
     print(f"INDIST gate quantities on in-distribution text: "
           f"mean full-vocab KL(up||e4b)={kl:.5f} nats/token top1={top1:.4f} "
           f"(pre-registered gate: KL <= 0.01, top1 >= 0.99)", flush=True)
