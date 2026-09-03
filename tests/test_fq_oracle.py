@@ -189,10 +189,27 @@ def test_layer_diff_hooks_and_compare_on_a_tiny_model():
     sd._layer_diff_reference(model, ids[:20], cap_a)
     sd._layer_diff_reference(model, ids[:20], cap_b)
     rows, summ = sd._layer_diff_compare(cap_a, cap_b, sd._layer_kinds(model))
-    assert len(rows) == 2 and all(r["attn"] == 0.0 and r["mlp"] == 0.0 and r["layer"] == 0.0 for r in rows)
+    assert len(rows) == 2 and all(r["attn"] == 0.0 and r["mlp"] == 0.0 and r["out"] == 0.0 for r in rows)
+    assert [r["layer"] for r in rows] == [0, 1], "the layer key is the INDEX, never the error"
     assert summ["first_layer_over_5pct"] is None and summ["attn_rel_full"] == 0.0
     cap_c = {}
     sd._layer_diff_reference(model, ids[:21], cap_c)
     rows, summ = sd._layer_diff_compare(cap_a, cap_c, sd._layer_kinds(model))
-    assert all(r["layer"] > 0 for r in rows) and summ["layer_rel"] > 0
-    assert model.config._attn_implementation == "eager"
+    assert all(r["out"] > 0 for r in rows) and summ["out_rel"] > 0
+    assert summ["first_layer_over_5pct"] in (0, 1, None)
+
+
+def test_layer_diff_reference_restores_a_custom_attention_name():
+    """HF modules share the model's config: the restore must put back the
+    name that was there BEFORE the reference forward, on every module,
+    not the 'eager' that a per-module save would have recorded."""
+    sd = _load_harness()
+    model = _tiny_llama()
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+    from transformers.models.llama.modeling_llama import eager_attention_forward
+    ALL_ATTENTION_FUNCTIONS["paged_stub_for_test"] = eager_attention_forward
+    model.config._attn_implementation = "paged_stub_for_test"
+    ids = torch.randint(0, 97, (30,))
+    sd._layer_diff_reference(model, ids[:12], {})
+    names = {m.config._attn_implementation for m in model.modules() if hasattr(m, "config")}
+    assert names == {"paged_stub_for_test"}, names

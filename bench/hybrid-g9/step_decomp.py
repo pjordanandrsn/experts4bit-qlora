@@ -314,10 +314,12 @@ def _layer_diff_compare(cap_paged, cap_ref, layers_meta):
     rows = []
     for i, kind in layers_meta:
         row = {"layer": i, "kind": kind}
-        for part in ("attn", "mlp", "experts", "layer"):
+        # the decoder layer's own output is reported as "out" so the row's
+        # "layer" key stays the layer INDEX (Bugbot, #361)
+        for part, key in (("attn", "attn"), ("mlp", "mlp"), ("experts", "experts"), ("layer", "out")):
             a_, b_ = cap_paged.get((i, part)), cap_ref.get((i, part))
             if a_ is not None and b_ is not None:
-                row[part] = float((a_ - b_).norm() / (b_.norm() + 1e-12))
+                row[key] = float((a_ - b_).norm() / (b_.norm() + 1e-12))
         if (i, "router") in cap_paged and (i, "router") in cap_ref:
             (wp, ip), (wr, ir) = cap_paged[(i, "router")], cap_ref[(i, "router")]
             sp, sr = set(ip.tolist()), set(ir.tolist())
@@ -332,9 +334,9 @@ def _layer_diff_compare(cap_paged, cap_ref, layers_meta):
         v = [r[part] for r in rows if part in r and (kind is None or r["kind"] == kind)]
         return sum(v) / len(v) if v else None
     summ = {"attn_rel_sliding": mean_of("attn", "sliding"), "attn_rel_full": mean_of("attn", "full"),
-            "mlp_rel": mean_of("mlp"), "experts_rel": mean_of("experts"), "layer_rel": mean_of("layer"),
+            "mlp_rel": mean_of("mlp"), "experts_rel": mean_of("experts"), "out_rel": mean_of("out"),
             "router_overlap_mean": mean_of("router_overlap"),
-            "first_layer_over_5pct": next((r["layer"] for r in rows if r.get("layer", 0) > 0.05), None)}
+            "first_layer_over_5pct": next((r["layer"] for r in rows if r.get("out", 0.0) > 0.05), None)}
     return rows, summ
 
 
@@ -346,12 +348,19 @@ def _layer_diff_reference(model, ids_upto, cap_ref):
     except ImportError:          # no engine in this environment: nothing to clear
         set_context = lambda _ctx: None  # noqa: E731
     prev_ctx = set_context(None)
-    saved = []
+    # One save per DISTINCT config object: HF modules share the model's
+    # config, so saving per module would record "eager" for every module
+    # after the first and the restore would leave the model on eager --
+    # every paged step after the first diff would then run one-token
+    # eager attention with no cache (Bugbot, #361, High).
+    saved, seen = [], set()
     for m in [model] + list(model.modules()):
         cfg = getattr(m, "config", None)
-        if cfg is not None and hasattr(cfg, "_attn_implementation"):
-            saved.append((cfg, cfg._attn_implementation))
-            cfg._attn_implementation = "eager"
+        if cfg is None or not hasattr(cfg, "_attn_implementation") or id(cfg) in seen:
+            continue
+        seen.add(id(cfg))
+        saved.append((cfg, cfg._attn_implementation))
+        cfg._attn_implementation = "eager"
     handles = _layer_diff_install(model, cap_ref)
     try:
         with torch.no_grad():
@@ -359,7 +368,7 @@ def _layer_diff_reference(model, ids_upto, cap_ref):
     finally:
         for h in handles:
             h.remove()
-        for cfg, impl in saved:
+        for cfg, impl in reversed(saved):
             cfg._attn_implementation = impl
         set_context(prev_ctx)
 
