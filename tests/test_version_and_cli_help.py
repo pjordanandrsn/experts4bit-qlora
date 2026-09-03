@@ -55,3 +55,18 @@ def test_changelog_documents_the_released_version():
         f"present: {versions[:5]}. Add the release notes, or keep in-flight work under "
         f"'## Unreleased' until the version is bumped."
     )
+
+def test_pyproject_and_package_version_agree():
+    """Two sources of truth for the version: `pyproject.toml` and
+    `experts4bit_qlora.__version__`. A release that bumps one and not
+    the other fails the metadata test only when the package is INSTALLED
+    from that tree, which is why it slipped through locally (release
+    0.30.0: pyproject said 0.30.0, the package said 0.29.0)."""
+    import pathlib
+    import tomllib
+
+    import experts4bit_qlora
+    root = pathlib.Path(__file__).resolve().parent.parent
+    declared = tomllib.load(open(root / "pyproject.toml", "rb"))["project"]["version"]
+    assert experts4bit_qlora.__version__ == declared, (
+        f"__version__ {experts4bit_qlora.__version__} != pyproject {declared}")
