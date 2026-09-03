@@ -945,6 +945,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                "mean_nll": mean_nll, "ppl": math.exp(mean_nll),
                "prompt_len": a.prompt_len,
                "prompt_offset": a.prompt_offset,
+               "ppl_source": a.ppl_source,
                "tokens_scored": a.ppl_steps,
                "text_sha": ppl_sha,
                # os.environ records the REQUEST; mech records the
@@ -1662,6 +1663,13 @@ def main():
     ap.add_argument("--dram-gb", type=float, default=6.0)
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--prompt-len", type=int, default=128)
+    ap.add_argument("--ppl-source", default="wikitext",
+                    choices=["wikitext", "c4val1"],
+                    help="corpus the prompt windows and --ppl-steps score: "
+                         "wikitext-2 TEST (the K8 text) or a C4 validation "
+                         "shard (00001) disjoint from any calibration shard "
+                         "-- the out-of-domain check for a calibrated pack "
+                         "whose wikitext delta is 'too good'")
     ap.add_argument("--prompt-offset", type=int, default=0,
                     help="start of the corpus slice the prompt windows are "
                          "cut from (disjoint-window generalization runs)")
@@ -2092,9 +2100,15 @@ def main():
                     device="cuda")
 
     from datasets import load_dataset
-    ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1",
-                      split="test")
-    text = "\n\n".join(t for t in ds["text"] if t.strip())
+    if a.ppl_source == "c4val1":
+        ds = load_dataset("allenai/c4",
+                          data_files={"v": "en/c4-validation.00001-of-00008.json.gz"},
+                          split="v")
+        text = "\n\n".join(ds["text"][:2000])
+    else:
+        ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1",
+                          split="test")
+        text = "\n\n".join(t for t in ds["text"] if t.strip())
     ids = tok(text, return_tensors="pt").input_ids[0]
     if a.prompt_offset or a.prompt_span:
         end = (a.prompt_offset + a.prompt_span) if a.prompt_span \

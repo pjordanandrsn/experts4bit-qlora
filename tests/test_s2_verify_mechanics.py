@@ -193,6 +193,15 @@ def test_device_grouping_branch_dispatch(monkeypatch):
                                  "sizes wrapper")
 
     monkeypatch.setitem(sys.modules, "nf4_grouped", _StubGnf4())
+
+    # grouped-nf4-gemm >= 0.19 ships a ONE-launch Triton tile builder
+    # (int4_b32.build_group_tiles_fused) that the stack prefers on decode
+    # shapes; on a CPU runner that launch has no driver. Stub it with the
+    # same torch contract -- the kernel is not what this test is about.
+    class _StubInt4B32:
+        build_group_tiles_fused = staticmethod(_StubGnf4.build_group_tiles_device)
+
+    monkeypatch.setitem(sys.modules, "int4_b32", _StubInt4B32())
     R, K1, N2 = 6, 8, 4
     x = torch.arange(R, dtype=torch.float32)[:, None].repeat(1, K1)
     ids = torch.tensor([3, 0, 3, 1, 0, 3])

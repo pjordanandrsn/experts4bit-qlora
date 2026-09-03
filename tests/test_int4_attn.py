@@ -90,3 +90,75 @@ def test_decode_and_prefill_parity():
     rm = (xm.reshape(-1, 64) @ wref.t()).reshape_as(gm)
     assert torch.allclose(gm.float(), rm.float(), rtol=1e-2, atol=1e-2)
     assert gm.dtype == xm.dtype
+
+
+def _cpu_kernel_stubs(monkeypatch, calls):
+    """A CPU reference of the kernel package so the ROUTE (which path a
+    given row count takes) is tested where CI runs, not skipped."""
+    import sys
+    import types
+    pack_ref = types.ModuleType("int4_pack_ref")
+
+    def pack_int4_b32(w):
+        N, K = w.shape
+        b = w.float().reshape(N, K // 32, 32)
+        s = b.abs().amax(-1).clamp_min(1e-12) / 7.0
+        q = ((b / s[..., None]).round().clamp(-8, 7) + 8).to(torch.uint8)
+        q = q.reshape(N, K)
+        return (q[:, 0::2] | (q[:, 1::2] << 4)).contiguous(), s.half()
+
+    def dequant_int4_ref(packed, scales, N, K):
+        lo = (packed & 0xF).to(torch.int16) - 8
+        hi = ((packed >> 4) & 0xF).to(torch.int16) - 8
+        q = torch.stack([lo, hi], -1).reshape(N, K).float()
+        return (q.reshape(N, K // 32, 32) * scales.float()[..., None]).reshape(N, K)
+    pack_ref.pack_int4_b32 = pack_int4_b32
+    pack_ref.dequant_int4_ref = dequant_int4_ref
+
+    k = types.ModuleType("int4_b32")
+
+    def gemv_int4_b32(xq, xs, packed, scales, eids, N, K, part=None):
+        calls.append(("gemv", int(eids.numel()), tuple(part.shape)))
+        w = dequant_int4_ref(packed[0].reshape(N, K // 2),
+                             scales[0].reshape(N, K // 32), N, K)
+        return (xq.float() @ w.t()).to(torch.bfloat16)
+
+    def quant_x_rows(x):
+        return x, torch.ones(x.shape[0])
+
+    def _plan(N, K):
+        return 128, 4, 2, 1
+    k.gemv_int4_b32 = gemv_int4_b32
+    k.quant_x_rows = quant_x_rows
+    k._plan = _plan
+    for name, mod in (("int4_pack_ref", pack_ref), ("int4_b32", k)):
+        monkeypatch.setitem(sys.modules, name, mod)
+
+
+def test_one_row_on_the_gemv_batches_on_cached_bf16(monkeypatch):
+    """rows == 1 takes the GEMV; rows > 1 takes a dequantised bf16 weight
+    built ONCE and reused, never the GEMV (which re-streams the weight per
+    row: x0.90 at B=16 on a 5090) and never a per-call dequant (x0.52)."""
+    calls = []
+    _cpu_kernel_stubs(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    torch.manual_seed(3)
+    lin = nn.Linear(64, 96, bias=False, dtype=torch.bfloat16)
+    m = Int4Linear(lin)
+    x = torch.randn(16, 64, dtype=torch.bfloat16)
+    assert m._bf16_cache is None
+    y16 = m(x)
+    assert calls == []                                   # no GEMV for 16 rows
+    w = m._bf16_cache
+    assert w is not None and w.shape == (96, 64) and w.dtype == torch.bfloat16
+    m(x)
+    assert m._bf16_cache is w                            # built once, reused
+    assert calls == []
+    # the cached weight is the same int4 values the GEMV serves
+    import int4_pack_ref
+    ref = int4_pack_ref.dequant_int4_ref(m.packed[0], m.scales[0], 96, 64)
+    assert torch.equal(w.float(), ref.to(torch.bfloat16).float())
+    assert torch.allclose(y16.float(), (x.float() @ ref.t()), rtol=2e-2, atol=2e-2)
+    # one row still takes the GEMV with the construction-time buffers
+    m(x[:1])
+    assert calls[-1] == ("gemv", 1, (2, 96))

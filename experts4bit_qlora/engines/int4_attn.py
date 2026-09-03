@@ -39,7 +39,10 @@ def _kernels():
 class Int4Linear(nn.Module):
     """Frozen serving projection stored on the int4-b32 grid."""
 
-    def __init__(self, lin: nn.Linear):
+    def __init__(self, lin: nn.Linear, packer=None):
+        """``packer(w_fp32_cpu) -> (packed, scales)`` defaults to the
+        shipped round-to-nearest packer; the calibrated lane passes one
+        closed over that projection's Hessian. Same bytes either way."""
         super().__init__()
         if lin.bias is not None:
             raise RuntimeError(
@@ -49,7 +52,7 @@ class Int4Linear(nn.Module):
         self._gemv, self._qx, self._dref = gemv, qx, dref
         self.N, self.K = lin.out_features, lin.in_features
         dev = lin.weight.device
-        packed, scales = pack(lin.weight.detach().float().cpu())
+        packed, scales = (packer or pack)(lin.weight.detach().float().cpu())
         self.register_buffer("packed",
                              packed.reshape(1, self.N, self.K // 2).to(dev),
                              persistent=False)
@@ -65,19 +68,59 @@ class Int4Linear(nn.Module):
                              torch.empty(sk, self.N, dtype=torch.float32,
                                          device=dev),
                              persistent=False)
+        self._decode_cache = {}        # R -> (eids, part) for 1 < R <= cap
+        self._bf16_cache = None        # dequantised weight for rows > cap
+
+    # The int4 GEMV is a ONE-ROW lever. Its grid has a row axis but no
+    # weight reuse across rows: each row-program re-streams the projection,
+    # so 16 rows cost ~16 L2 reads of a 4-5 MB tile (~15 us per launch x 96
+    # launches). Measured on a 5090 (receipts INT4B16/P22C): rows=1 x1.06,
+    # rows=16 x0.90 -- and the dequant-per-call path P21 had was x0.52.
+    # Above one row the fastest thing we have is cuBLAS on a bf16 weight
+    # read ONCE with tensor cores, so the dequantised weight is built once
+    # and CACHED (+~1.8 GB for 96 projections); batched decode then costs
+    # exactly what bf16 attention costs. A batched int4 attention that WINS
+    # needs a small-M int4 GEMM with weight-tile reuse; not this module.
+    GEMV_ROWS_MAX = 1
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         rows = x.reshape(-1, self.K)
-        if rows.shape[0] == 1:
+        R = rows.shape[0]
+        if R <= self.GEMV_ROWS_MAX:
+            eids, part = self._decode_bufs(R)
             xq, xs = self._qx(rows)
-            out = self._gemv(xq, xs, self.packed, self.scales, self._eid0,
-                             self.N, self.K, part=self._part)
+            out = self._gemv(xq, xs, self.packed, self.scales, eids,
+                             self.N, self.K, part=part)
             return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
-        # prefill / verify (M > 1): dequant once, dense matmul -- the
-        # large-M side of the crossover; per-request cost, not per-token
-        w = self._deq()
+        w = self._bf16_weight()
         return (rows.to(torch.bfloat16) @ w.t()).reshape(
             *x.shape[:-1], self.N).to(x.dtype)
+
+    def _bf16_weight(self) -> torch.Tensor:
+        """The dequantised weight, built on first use (warm-up, before any
+        graph capture) and kept: the same int4 values the GEMV serves, in
+        the layout cuBLAS reads once."""
+        w = self._bf16_cache
+        if w is None:
+            w = self._deq()
+            self._bf16_cache = w
+        return w
+
+    def _decode_bufs(self, R: int):
+        """Row-count-keyed GEMV buffers. Allocated on first use for each R
+        (the warm-up pass, before any CUDA-graph capture) and reused, so a
+        captured replay never allocates. R=1 reuses the buffers built at
+        construction."""
+        if R == 1:
+            return self._eid0, self._part
+        cache = self._decode_cache
+        if R not in cache:
+            sk = self._part.shape[0]
+            eids = torch.zeros(R, dtype=torch.int32, device=self._part.device)
+            part = torch.empty(sk * R, self.N, dtype=torch.float32,
+                               device=self._part.device)
+            cache[R] = (eids, part)
+        return cache[R]
 
     def _deq(self) -> torch.Tensor:
         lo = (self.packed.to(torch.int16) & 0xF) - 8
