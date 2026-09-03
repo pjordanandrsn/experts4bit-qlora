@@ -125,7 +125,8 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
     import time as _time
-    impl = a.ppl_oracle
+    impl = "eager" if a.ppl_oracle == "upstream" else a.ppl_oracle
+    label = "upstream-eager" if a.ppl_oracle == "upstream" else impl
     model.config._attn_implementation = impl
     for m in model.modules():
         if hasattr(m, "config") and hasattr(m.config, "_attn_implementation"):
@@ -133,7 +134,7 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     model.eval()
     t0 = _time.perf_counter()
     mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps)
-    rec = {"k8": "ppl", "attn_path": f"{impl}-oracle", "steps": a.ppl_steps,
+    rec = {"k8": "ppl", "attn_path": f"{label}-oracle", "steps": a.ppl_steps,
            "mean_nll": mean_nll, "ppl": float(torch.exp(torch.tensor(mean_nll))),
            "prompt_len": a.prompt_len, "prompt_offset": a.prompt_offset,
            "ppl_source": a.ppl_source, "tokens_scored": a.ppl_steps,
@@ -142,7 +143,63 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     with open(a.out, "w") as f:
         _json.dump(rec, f, indent=1)
     print(f"K8_PPL steps={a.ppl_steps} nll={mean_nll:.5f} ppl={rec['ppl']:.5f} "
-          f"compute={impl}-oracle sha={ppl_sha[:12]} out={a.out}", flush=True)
+          f"compute={label}-oracle sha={ppl_sha[:12]} out={a.out}", flush=True)
+
+
+def _k8_window(a, tok):
+    """The K8 corpus, the per-row prompts and the scored window with its
+    digest -- one function so every arm (paged, e4b-loaded oracle,
+    upstream control) scores byte-identical text."""
+    from datasets import load_dataset
+    if a.ppl_source == "c4val1":
+        ds = load_dataset("allenai/c4",
+                          data_files={"v": "en/c4-validation.00001-of-00008.json.gz"},
+                          split="v")
+        text = "\n\n".join(ds["text"][:2000])
+    else:
+        ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1",
+                          split="test")
+        text = "\n\n".join(t for t in ds["text"] if t.strip())
+    ids = tok(text, return_tensors="pt").input_ids[0]
+    if a.prompt_offset or a.prompt_span:
+        end = (a.prompt_offset + a.prompt_span) if a.prompt_span \
+            else ids.numel()
+        assert a.prompt_offset + a.batch * a.prompt_len < end <= ids.numel(), \
+            "prompt slice leaves too little corpus for the windows"
+        ids = ids[a.prompt_offset:end]
+    step = max(1, (ids.numel() - a.prompt_len) // max(1, a.batch))
+    prompts = [ids[i * step:i * step + a.prompt_len].tolist()
+               for i in range(a.batch)]
+    # PREREG-k8 G5: the scored window and a digest of it, so the
+    # verdict can REFUSE two arms that evaluated different text
+    ppl_sha = hashlib.sha256(
+        ids[:a.prompt_len + max(a.ppl_steps, 0) + 1].numpy().tobytes()
+    ).hexdigest()
+    return ids, step, prompts, ids, ppl_sha
+
+
+def _upstream_oracle_main(a, tok):
+    """Positive control for the oracle: the SAME window through the model
+    exactly as transformers loads it -- its own expert weights (MXFP4
+    dequantised to bf16 where no kernel is installed), its own router,
+    its own attention -- with no e4b loader anywhere in the process.
+    Where this disagrees with the e4b-loaded oracle, the loader or the
+    expert tier owns the gap, not attention."""
+    from transformers import AutoModelForCausalLM
+    model = AutoModelForCausalLM.from_pretrained(
+        a.model, dtype=torch.bfloat16, device_map="auto",
+        attn_implementation="eager")
+    model.eval()
+    n_params = sum(p.numel() for p in model.parameters()) / 1e9
+    devs = sorted({str(d) for d in getattr(model, "hf_device_map", {}).values()}) \
+        or [str(next(model.parameters()).device)]
+    print(f"UPSTREAM loaded {type(model).__name__} params={n_params:.2f}B "
+          f"devices={devs} quant={getattr(model.config, 'quantization_config', None)}",
+          flush=True)
+    _, _, _, ppl_ids, ppl_sha = _k8_window(a, tok)
+    _ppl_oracle_main(a, model, ppl_ids, ppl_sha)
+
+
 def _kv_geometry(cfg):
     """(kv heads, head_dim) for the paged cache: scalars for a uniform
     model, per-layer lists for a heterogeneous config (transformers 5.16
@@ -1780,7 +1837,8 @@ def main():
     ap.add_argument("--dram-gb", type=float, default=6.0)
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--prompt-len", type=int, default=128)
-    ap.add_argument("--ppl-oracle", default="none", choices=["none", "eager"],
+    ap.add_argument("--ppl-oracle", default="none",
+                    choices=["none", "eager", "upstream"],
                     help="score the SAME --ppl-steps window through transformers' "
                          "own attention (eager, HF cache, chunked teacher forcing) "
                          "with the paged shim NOT registered: the reference the "
@@ -2032,6 +2090,10 @@ def main():
 
     torch.manual_seed(1689)
     tok = AutoTokenizer.from_pretrained(a.model)
+    if a.ppl_oracle == "upstream":
+        assert a.ppl_steps > 0, "--ppl-oracle needs --ppl-steps"
+        _upstream_oracle_main(a, tok)
+        return
     model, _ = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16,
                                        r=8, alpha=16, quant_type="nf4",
                                        arena=a.arena)
@@ -2239,32 +2301,7 @@ def main():
                     k_groups=4, batched_append=not a.kv_per_seq,
                     device="cuda")
 
-    from datasets import load_dataset
-    if a.ppl_source == "c4val1":
-        ds = load_dataset("allenai/c4",
-                          data_files={"v": "en/c4-validation.00001-of-00008.json.gz"},
-                          split="v")
-        text = "\n\n".join(ds["text"][:2000])
-    else:
-        ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1",
-                          split="test")
-        text = "\n\n".join(t for t in ds["text"] if t.strip())
-    ids = tok(text, return_tensors="pt").input_ids[0]
-    if a.prompt_offset or a.prompt_span:
-        end = (a.prompt_offset + a.prompt_span) if a.prompt_span \
-            else ids.numel()
-        assert a.prompt_offset + a.batch * a.prompt_len < end <= ids.numel(), \
-            "prompt slice leaves too little corpus for the windows"
-        ids = ids[a.prompt_offset:end]
-    step = max(1, (ids.numel() - a.prompt_len) // max(1, a.batch))
-    prompts = [ids[i * step:i * step + a.prompt_len].tolist()
-               for i in range(a.batch)]
-    # PREREG-k8 G5: the scored window and a digest of it, so the
-    # verdict can REFUSE two arms that evaluated different text
-    ppl_ids = ids
-    ppl_sha = hashlib.sha256(
-        ids[:a.prompt_len + max(a.ppl_steps, 0) + 1].numpy().tobytes()
-    ).hexdigest()
+    ids, step, prompts, ppl_ids, ppl_sha = _k8_window(a, tok)
     if a.ppl_oracle != "none":
         assert a.ppl_steps > 0, "--ppl-oracle needs --ppl-steps"
         _ppl_oracle_main(a, model, ppl_ids, ppl_sha)
