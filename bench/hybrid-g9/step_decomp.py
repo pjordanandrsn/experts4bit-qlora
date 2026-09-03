@@ -398,14 +398,14 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
     import time as _time
-    impl = "eager" if a.ppl_oracle in ("upstream", "full") else a.ppl_oracle
-    label = {"upstream": "upstream-eager", "full": "eager-fullforward"}.get(
-        a.ppl_oracle, impl)
+    impl = "eager" if a.ppl_oracle in ("upstream", "full", "upstream-full") else a.ppl_oracle
+    label = {"upstream": "upstream-eager", "full": "eager-fullforward",
+             "upstream-full": "upstream-eager-fullforward"}.get(a.ppl_oracle, impl)
     if a.ppl_oracle == "eager" and int(getattr(a, "ppl_chunk", 0) or 0) > 0:
         label = f"eager-chunk{a.ppl_chunk}"
     fq = getattr(a, "ppl_fq", "none")
     if fq and fq != "none":
-        if a.ppl_oracle != "full":
+        if a.ppl_oracle not in ("full", "upstream-full"):
             raise SystemExit("--ppl-fq models the fp8 kernel inside the "
                              "chunk-free forward: use it with --ppl-oracle full")
         frm = a.prompt_len if a.fq_from < 0 else a.fq_from
@@ -418,7 +418,7 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
             m.config._attn_implementation = impl
     model.eval()
     t0 = _time.perf_counter()
-    if a.ppl_oracle == "full":
+    if a.ppl_oracle in ("full", "upstream-full"):
         mean_nll = ppl_oracle_score_full(model, ppl_ids, a.prompt_len,
                                          a.ppl_steps)
     else:
@@ -2205,7 +2205,7 @@ def main():
                          "(gpt-oss: '<|channel|>final<|message|>' puts the reply in "
                          "the final channel); tokenised WITH special tokens")
     ap.add_argument("--ppl-oracle", default="none",
-                    choices=["none", "eager", "full", "upstream"],
+                    choices=["none", "eager", "full", "upstream", "upstream-full"],
                     help="score the SAME --ppl-steps window through transformers' "
                          "own attention (eager, HF cache, chunked teacher forcing) "
                          "with the paged shim NOT registered: the reference the "
@@ -2480,7 +2480,7 @@ def main():
 
     torch.manual_seed(1689)
     tok = AutoTokenizer.from_pretrained(a.model)
-    if a.ppl_oracle == "upstream":
+    if a.ppl_oracle in ("upstream", "upstream-full"):
         assert a.ppl_steps > 0, "--ppl-oracle needs --ppl-steps"
         _upstream_oracle_main(a, tok)
         return
