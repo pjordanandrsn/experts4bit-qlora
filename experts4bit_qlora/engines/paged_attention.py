@@ -101,6 +101,48 @@ def _sdpa(module, q, k, v, attention_mask, dropout, scaling, is_causal,
                                   is_causal=is_causal, **kw)
 
 
+def _window_of(module, kwargs) -> int:
+    """The layer's sliding window in tokens, 0 for full attention. gpt-oss
+    passes ``sliding_window`` through the interface; Gemma-4 keeps it on
+    the module (``module.sliding_window`` on sliding layers, None on full
+    ones). The paged kernel skips tiles below the window and masks the
+    boundary tile; the prefill branch masks explicitly."""
+    w = kwargs.get("sliding_window")
+    if w is None:
+        w = getattr(module, "sliding_window", None)
+    return int(w) if w else 0
+
+
+def _sinks_of(module, kwargs):
+    """gpt-oss attention sinks: one learned logit per q head (``s_aux``),
+    in the softmax max and denominator, never the numerator."""
+    s_aux = kwargs.get("s_aux")
+    if s_aux is None:
+        s_aux = getattr(module, "sinks", None)
+    return s_aux
+
+
+def _prefill_attend(q_b, kk, vv, mask, scaling, sinks):
+    """Prefill attention for one sequence. Without sinks this is SDPA with
+    the explicit (causal, windowed) mask. A sink cannot be expressed as a
+    key (its logit does not depend on q), so the sink path computes the
+    scores directly, appends the sink column, softmaxes, drops it."""
+    if sinks is None:
+        return torch.nn.functional.scaled_dot_product_attention(
+            q_b, kk, vv, attn_mask=mask, scale=scaling, enable_gqa=True)
+    hq, hkv = q_b.shape[1], kk.shape[1]
+    g = hq // hkv
+    kk = kk.repeat_interleave(g, dim=1) if g > 1 else kk
+    vv = vv.repeat_interleave(g, dim=1) if g > 1 else vv
+    scale = scaling if scaling is not None else q_b.shape[-1] ** -0.5
+    att = torch.matmul(q_b.float(), kk.float().transpose(-1, -2)) * scale
+    att = att.masked_fill(~mask, float("-inf"))
+    sk = sinks.float().to(att.device).view(1, hq, 1, 1).expand(
+        att.shape[0], hq, att.shape[2], 1)
+    probs = torch.softmax(torch.cat([att, sk], dim=-1), dim=-1)[..., :-1]
+    return torch.matmul(probs.to(vv.dtype), vv)
+
+
 def paged_attention_forward(module, query, key, value, attention_mask,
                             dropout: float = 0.0,
                             scaling: float | None = None,
@@ -161,7 +203,9 @@ def paged_attention_forward(module, query, key, value, attention_mask,
         # 0.125) and Gemma-4's 1.0 (folded into q_norm) served garbage
         # while this branch passed only q/k/v/slots (receipts P24-GEN-B)
         out = ctx.kv.attention(layer, query[:, :, 0].contiguous(),
-                               slots=ctx.slots, sm_scale=scaling)
+                               slots=ctx.slots, sm_scale=scaling,
+                               window=_window_of(module, kwargs),
+                               sinks=_sinks_of(module, kwargs))
         return out[:, None].to(query.dtype), None
 
     if ctx.mode == "verify":
@@ -189,7 +233,9 @@ def paged_attention_forward(module, query, key, value, attention_mask,
         lens_override = (base_plus_t + stagger).contiguous()
         q_rows = query[0].permute(1, 0, 2).contiguous()   # [T, H_q, D]
         out = ctx.kv.attention(layer, q_rows, slots=[slot] * T,
-                               lens_override=lens_override, sm_scale=scaling)
+                               lens_override=lens_override, sm_scale=scaling,
+                               window=_window_of(module, kwargs),
+                               sinks=_sinks_of(module, kwargs))
         # [T, H_q, D] -> [1, T, H_q, D]
         return out[None].to(query.dtype), None
 
@@ -208,9 +254,14 @@ def paged_attention_forward(module, query, key, value, attention_mask,
         # each attends to everything up to and including itself
         pos = torch.arange(t_total - T, t_total, device=query.device)
         keys = torch.arange(t_total, device=query.device)
-        mask = (keys[None, :] <= pos[:, None])[None, None]
-        o = torch.nn.functional.scaled_dot_product_attention(
-            q_b, kk, vv, attn_mask=mask, scale=scaling, enable_gqa=True)
+        mask = keys[None, :] <= pos[:, None]
+        win = _window_of(module, kwargs)
+        if win:
+            # the last `win` keys of each query's past, itself included
+            mask = mask & (keys[None, :] > pos[:, None] - win)
+        mask = mask[None, None]
+        o = _prefill_attend(q_b, kk, vv, mask, scaling,
+                            _sinks_of(module, kwargs))
         outs.append(o)
     out = torch.cat(outs, dim=0).transpose(1, 2).contiguous()
     return out.to(query.dtype), None
