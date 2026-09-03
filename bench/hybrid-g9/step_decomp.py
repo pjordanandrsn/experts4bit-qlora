@@ -121,19 +121,53 @@ def ppl_oracle_score(model, ids, prompt_len: int, steps: int,
     return nll / steps
 
 
+@torch.no_grad()
+def ppl_oracle_score_full(model, ids, prompt_len: int, steps: int, device=None):
+    """Teacher-forced NLL of the same window as :func:`ppl_oracle_score`,
+    computed in ONE forward with no cache and no chunking.
+
+    Why this exists: the chunked scorer and a single full forward are the
+    same mathematics in a different order, and on a mixture-of-experts
+    model that reordering flips a few percent of router top-k choices --
+    4.52% on gpt-oss, 6.77% on Qwen3 -- which disagrees regardless of
+    correctness (METHODOLOGY 13.1). A single forward has no such
+    ordering, so it is the reference an incremental decode should be
+    compared against, and the chunked-vs-full difference is that model's
+    floor.
+
+    Cost is quadratic in the window: eager attention materialises
+    [heads, T, T]. Keep `steps` in the hundreds, not thousands -- this
+    is a reference measurement, not the 8192-step production window.
+    """
+    dev = device or next(model.parameters()).device
+    end = prompt_len + steps + 1
+    assert ids.numel() >= end, (ids.numel(), end)
+    out = model(input_ids=ids[None, :end].to(dev))
+    # row j predicts ids[j + 1]; the scored window starts at prompt_len + 1
+    lg = out.logits[0, prompt_len:end - 1].cpu().float()
+    tgt = ids[prompt_len + 1:end].cpu()
+    nll = -torch.log_softmax(lg, -1).gather(1, tgt[:, None]).sum()
+    return float(nll) / steps
+
+
 def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
     import time as _time
-    impl = "eager" if a.ppl_oracle == "upstream" else a.ppl_oracle
-    label = "upstream-eager" if a.ppl_oracle == "upstream" else impl
+    impl = "eager" if a.ppl_oracle in ("upstream", "full") else a.ppl_oracle
+    label = {"upstream": "upstream-eager", "full": "eager-fullforward"}.get(
+        a.ppl_oracle, impl)
     model.config._attn_implementation = impl
     for m in model.modules():
         if hasattr(m, "config") and hasattr(m.config, "_attn_implementation"):
             m.config._attn_implementation = impl
     model.eval()
     t0 = _time.perf_counter()
-    mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps)
+    if a.ppl_oracle == "full":
+        mean_nll = ppl_oracle_score_full(model, ppl_ids, a.prompt_len,
+                                         a.ppl_steps)
+    else:
+        mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps)
     rec = {"k8": "ppl", "attn_path": f"{label}-oracle", "steps": a.ppl_steps,
            "mean_nll": mean_nll, "ppl": float(torch.exp(torch.tensor(mean_nll))),
            "prompt_len": a.prompt_len, "prompt_offset": a.prompt_offset,
@@ -1905,7 +1939,7 @@ def main():
                          "(gpt-oss: '<|channel|>final<|message|>' puts the reply in "
                          "the final channel); tokenised WITH special tokens")
     ap.add_argument("--ppl-oracle", default="none",
-                    choices=["none", "eager", "upstream"],
+                    choices=["none", "eager", "full", "upstream"],
                     help="score the SAME --ppl-steps window through transformers' "
                          "own attention (eager, HF cache, chunked teacher forcing) "
                          "with the paged shim NOT registered: the reference the "
