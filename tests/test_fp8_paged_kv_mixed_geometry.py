@@ -74,3 +74,26 @@ def test_append_many_and_kernel_args_per_layer():
         assert lens.tolist() == [5, 5]
         kk, _ = kv.reference_kv(layer, 1)
         torch.testing.assert_close(kk.float(), k[1].float(), rtol=0.13, atol=0.05)
+
+
+def test_harness_reads_per_layer_geometry():
+    """The harness sizes the cache per layer on a heterogeneous config and
+    with scalars on a uniform one."""
+    import importlib.util
+    import os
+    import sys
+    from types import SimpleNamespace as N
+    spec = importlib.util.spec_from_file_location(
+        "step_decomp", os.path.join(os.path.dirname(__file__), "..", "bench", "hybrid-g9", "step_decomp.py"))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["step_decomp"] = mod
+    spec.loader.exec_module(mod)
+    assert mod._kv_geometry(N(num_key_value_heads=8, head_dim=128, hidden_size=2048, num_attention_heads=32)) == (8, 128)
+
+    class Hetero:
+        per_layer_config = [N(num_key_value_heads=8, head_dim=256, hidden_size=2816, num_attention_heads=16),
+                            N(num_key_value_heads=2, head_dim=512, hidden_size=2816, num_attention_heads=16)]
+
+        def __getattr__(self, k):
+            raise RuntimeError(f"'{k}' is a per-layer attribute and may vary across layers")
+    assert mod._kv_geometry(Hetero()) == ([8, 2], [256, 512])
