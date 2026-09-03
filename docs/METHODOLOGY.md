@@ -424,23 +424,37 @@ as transformers loads it, with no e4b loader in the process at all.
 **The finding that changes earlier reads.** Every K8 verdict before P25
 compared paged against paged (an NF4 baseline against an int4 or
 calibrated variant through the same cache and kernels). Any error the
-two arms SHARE cancels in that comparison. Measured against the oracle,
-the fp8 paged KV cache itself (4 K-groups, split-K kernels) costs:
+two arms SHARE cancels in that comparison. Measured against the oracle:
 
 | Family | oracle ppl | paged ppl | delta |
 |---|---|---|---|
 | Qwen3-30B-A3B | 8.01528 | 8.06197 | **+0.0467** |
 | Granite-3.1-3B-A800M | 7.69596 | 7.71785 | **+0.0219** |
 
-Both pass the |delta| <= 0.05 parity gate, but Qwen3 sits 0.003 under
-it. The earlier one-sided +0.05 budgets for attention-side variants were
-therefore spent ON TOP of a +0.047 the paged-vs-paged instrument could
-not see; those passes were real for the variant-vs-baseline question
-they asked and vacuous for the question "is this within 0.05 of the
-model". Rule from here: any change on the attention or KV path is gated
-against `--ppl-oracle eager`, never against the paged NF4 baseline, and
-a lane that needs headroom on Qwen3 must first buy it back from the
-cache.
+Both pass the |delta| <= 0.05 parity gate.
+
+**These deltas are NOT a measured cost of the fp8 KV cache, and an
+earlier version of this section said they were.** Qwen3's +0.0467 ppl
+is +0.0058 nats; that model's arithmetic-order floor -- two paths that
+are both correct, differing only in the order of the arithmetic -- is
+**0.00948 nats** (section 13.1). The delta is BELOW the floor, so it is
+indistinguishable from reordering the maths, and Granite's +0.0028 nats
+is further below still. The claim that the cache costs +0.047 ppl on
+Qwen3 is retired, as is the rule derived from it ("Qwen3 has 0.003 ppl
+of headroom, buy it back from the cache first" -- there is nothing to
+buy back).
+
+What survives is stronger than the claim it replaces: **the paged decode
+path agrees with the model's own attention, on both families, to within
+the noise of doing the same arithmetic in a different order.**
+
+The earlier one-sided +0.05 budgets remain real for the
+variant-vs-baseline question they asked and vacuous for "is this within
+0.05 of the model". Rule from here, for a sounder reason: gate any
+attention- or KV-path change against `--ppl-oracle eager`, never against
+the paged NF4 baseline, and quote the delta beside a MEASURED floor for
+that model. A delta below the floor means indistinguishable -- never "a
+small cost".
 
 **Families where perplexity is not an instrument.** gpt-oss-20b scores
 ppl 2361 on bare wikitext through plain transformers (upstream control)
@@ -540,12 +554,22 @@ different (chunk 64 against chunk 128, or chunked against one full
 forward) and take the disagreement as the floor. `bench/hybrid-g9/gptoss_cache_probe.py`
 does this and reports the router-flip rate and the KL split alongside.
 
-**What this puts in doubt above.** gpt-oss's +0.078 nats is about 8x its
-own 0.0099-nat chunk-vs-full floor, so it is probably a real difference.
-The floors for Qwen3 (+0.0058) and Granite (+0.0028) have NOT been
-measured, and both deltas are smaller than gpt-oss's floor. Until those
-floors exist, the PASS verdicts stand — an unmeasured floor makes a
-small delta conservative, not wrong — but the CAUSAL claim that "the fp8
-paged KV cache costs +0.047 ppl on Qwen3" is not established, because a
-routing-flip floor of that size would produce the same number with no
-cache cost at all. That measurement is in progress.
+**Measured floors.**
+
+| Model | routing flips (layer, token) | floor \|Δnll\| | KL | top-1 |
+|---|---|---|---|---|
+| gpt-oss-20b (24 layers, top-4 of 32) | 4.52% | 0.0099 | 0.0256 | 0.9115 |
+| Qwen3-30B-A3B (48 layers, top-8 of 128) | 6.77% | 0.0095 | 0.0035 | 0.9896 |
+
+Read against these: gpt-oss's +0.078 nats is about 8x its floor, so it
+is probably a real difference and its serving path is worth
+investigating. **Qwen3's +0.0058 nats is BELOW its floor**, which
+retires the fp8 KV cost claim above. Granite's floor is unmeasured but
+its +0.0028 nats is smaller than both floors here. The PASS verdicts
+stand and are strengthened; the causal story attached to them does not.
+
+Note that the flip RATE does not predict the floor's size: Qwen3 flips
+more often (6.77% against 4.52%) and disagrees less (KL 0.0035 against
+0.0256), because a top-8-of-128 router's marginal expert carries less
+weight than a top-4-of-32 router's. Measure the floor; do not infer it
+from the architecture.
