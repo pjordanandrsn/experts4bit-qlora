@@ -50,34 +50,37 @@ def test_chunked_oracle_equals_full_forward(chunk):
     assert abs(got - ref) < 1e-4, (got, ref)
 
 
-def test_full_forward_scorer_equals_the_chunked_one_on_a_dense_model():
-    """On a model with no MoE router, chunked and full-forward scoring are
-    the same computation in a different order and must agree to
-    float noise. (The two DISagree on a mixture-of-experts model, where
+def test_full_forward_scorer_matches_the_chunked_one_on_a_dense_model():
+    """The positive control for `--ppl-oracle full`: with no MoE router,
+    chunking is a pure reordering and the two scorers must agree to float
+    noise. (They DISagree on a mixture-of-experts model, where the
     reordering flips router top-k choices — that is the floor
-    METHODOLOGY 13.1 describes, not a bug in either scorer.)"""
-    sd = _step_decomp()
+    METHODOLOGY 13.1 measures, not a bug in either scorer.)"""
+    h = _load_harness()
     model = _tiny_llama()
-    ids = torch.randint(0, 64, (48,))
-    chunked = sd.ppl_oracle_score(model, ids, prompt_len=8, steps=32, chunk=7)
-    full = sd.ppl_oracle_score_full(model, ids, prompt_len=8, steps=32)
+    torch.manual_seed(1)
+    ids = torch.randint(0, 97, (120,))
+    prompt_len, steps = 16, 40
+    chunked = h.ppl_oracle_score(model, ids, prompt_len, steps, chunk=7,
+                                 device="cpu")
+    full = h.ppl_oracle_score_full(model, ids, prompt_len, steps, device="cpu")
     assert abs(chunked - full) < 1e-4, (chunked, full)
 
 
-def test_full_forward_scorer_scores_the_same_window():
-    """Both scorers must score ids[prompt_len+1 : prompt_len+steps+1] --
-    an off-by-one here would silently compare different text."""
-    sd = _step_decomp()
+def test_full_forward_scorer_scores_the_documented_window():
+    """It must score ids[prompt_len+1 .. prompt_len+steps] from the logits
+    at positions prompt_len .. prompt_len+steps-1 — the same window the
+    paged instrument scores. An off-by-one would silently compare
+    different text between arms."""
+    h = _load_harness()
     model = _tiny_llama()
-    ids = torch.randint(0, 64, (48,))
-    a = sd.ppl_oracle_score_full(model, ids, prompt_len=8, steps=32)
-    b = sd.ppl_oracle_score_full(model, ids, prompt_len=8, steps=16)
-    # the shorter window is a prefix of the longer one, so its mean NLL
-    # is the first half's mean; recompute it directly as a cross-check
-    import torch as _t
-    with _t.no_grad():
-        lg = model(input_ids=ids[None, :8 + 16 + 1]).logits[0, 8:8 + 16].float()
-    tgt = ids[9:9 + 16]
-    ref = float(-_t.log_softmax(lg, -1).gather(1, tgt[:, None]).mean())
-    assert abs(b - ref) < 1e-4, (b, ref)
-    assert a != b
+    torch.manual_seed(3)
+    ids = torch.randint(0, 97, (120,))
+    prompt_len, steps = 16, 40
+    got = h.ppl_oracle_score_full(model, ids, prompt_len, steps, device="cpu")
+    with torch.no_grad():
+        lg = torch.log_softmax(
+            model(input_ids=ids[None, :prompt_len + steps + 1]).logits[0].float(), -1)
+    rows = torch.arange(prompt_len, prompt_len + steps)
+    ref = -lg[rows, ids[rows + 1]].mean().item()
+    assert abs(got - ref) < 1e-4, (got, ref)
