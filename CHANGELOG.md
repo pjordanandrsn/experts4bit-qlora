@@ -1,5 +1,83 @@
 # Changelog
 
+## 0.30.0 — 2026-09-03
+
+### The paged decode path is valid beyond plain-causal attention
+
+Three changes and a floor bump. Until this release the paged B=1 decode
+path (the `paged_attention` shim over `Fp8PagedKV` and the kernel
+package's split-K attention) computed one attention: full causal,
+scaled by `head_dim**-0.5`, one KV geometry for every layer. It served
+Qwen3, Mixtral, OLMoE and Granite correctly once #336 forwarded the
+attention scale; it could not serve a sliding-window family, an
+attention-sink family, or a family whose KV geometry changes per layer.
+
+- **Oracle arm** (#338). `step_decomp.py --ppl-oracle eager` scores the
+  same K8 window through transformers' own eager attention with the HF
+  cache, shim not registered, in 256-token chunks with explicit
+  `position_ids`. It is the reference every paged verdict below is
+  measured against; a family's paged perplexity must sit within the K8
+  gate of its oracle.
+- **Windows and sinks** (#339). The shim reads each layer's sliding
+  window (`sliding_window` kwarg, else the module attribute) and
+  attention sinks (`s_aux`, else `module.sinks`) and passes them to the
+  kernel for decode and verify; prefill attends through SDPA, or
+  through a sink-aware manual path when sinks are present. On a kernel
+  wheel older than 0.24 the options are dropped with one `PARITY
+  WARNING` (the K8 gate then catches the wrong attention); the fallback
+  never compares the sinks tensor against a number.
+- **Per-layer KV geometry** (#340). `Fp8PagedKV` accepts per-layer KV
+  head counts and head dims (Gemma-4: sliding layers at 256/8 beside
+  full layers at 512/2), sizes one pool at the widest row and addresses
+  each layer at its natural row; the harness reads
+  `config.per_layer_config` where transformers 5.16 refuses a global
+  attribute.
+- **Floor**: `grouped-nf4-gemm >= 0.24.0` (windows, sinks, scale and
+  stride overrides in the decode kernels).
+- **Instrument fixes found by running the lane**: the K8 record now
+  reports the attention compute mode that RAN, from the kernel's own
+  tally, instead of the environment request whose default string is
+  `f32` (#348); `--ppl-chat` builds the scored window inside the
+  tokenizer's chat template for chat-only families (#343);
+  `--ppl-oracle upstream` scores the same window through the model as
+  transformers loads it, with no e4b loader in the process (#342).
+  Known limitation recorded rather than papered over: chunked
+  teacher-forced scoring is NOT equivalent to one full forward on a
+  family whose layers alternate sliding and full attention (gpt-oss:
+  KL 0.0165 nats, top-1 93.9%), so an oracle for such a family must be
+  a single full forward.
+
+**Parity verdicts** (paged minus oracle, 8192 sha-matched steps, RTX
+5090). Quoted in nats as well as perplexity, because the `|dppl| <=
+0.05` bar is only meaningful where perplexity is around 8:
+
+| Family | oracle ppl | dppl | dnats | verdict |
+|---|---|---|---|---|
+| Granite-3.1-3B-A800M | 7.696 | +0.0219 | +0.0028 | PASS |
+| Qwen3-30B-A3B | 8.015 | +0.0467 | +0.0058 | PASS (0.003 ppl of headroom) |
+| Gemma-4-26B-A4B-it | 752.5 | −5.839 | −0.0078 | behaves; the absolute bar is inapplicable at ppl 752 |
+| gpt-oss-20b | 1336.0 | +108.45 | +0.0781 | no gate exists for this family |
+
+Two things this release makes explicit. **The fp8 paged KV cache costs
++0.047 ppl on Qwen3-30B and +0.022 on Granite against a bf16 cache.**
+Every earlier K8 compared paged against paged, so error the two arms
+shared cancelled and that cost was invisible; attention-side and
+KV-side changes are gated against `--ppl-oracle eager` from here (see
+`docs/METHODOLOGY.md` section 13). **And two families have no usable
+perplexity gate**: gpt-oss-20b scores 2361 on bare wikitext through
+plain transformers, Gemma-4 752, so an absolute 0.05 bar means nothing
+for either. A full-vocabulary KL gate is pre-registered in METHODOLOGY
+13, thresholds fixed before any KL number was computed.
+
+For gpt-oss specifically: the loader and the served expert tier are
+validated faithful (MXFP4 dequant bit-identical against an independent
+decode; expert forward cosine 0.991-0.993 against the reference math;
+the served layer 0 inside the running model cosine 0.998 per token),
+and its +0.078 nats is 10-20x every other family, which is a real
+signal about the sinks and sliding-window path rather than a regime
+artefact. Serve it if you want; do not read a perplexity from this
+harness as evidence about it.
+
 ## 0.29.0 — 2026-09-03
 
 ### The serving stack outside Qwen: what the first five-model sweep fixed
