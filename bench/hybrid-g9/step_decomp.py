@@ -228,6 +228,27 @@ def _upstream_oracle_main(a, tok):
     _ppl_oracle_main(a, model, ppl_ids, ppl_sha)
 
 
+def _attn_compute_ran() -> str:
+    """The compute mode the decode attention ACTUALLY used, from the
+    kernel's own tally: "fp8", "f32", "fp8+f32 (n/m)" when a window
+    mixed them, or "none (no decode attention entered)". Never the
+    environment request -- an unset `GNF4_ATTN_COMPUTE` selects
+    capability-conditionally, so the request is silent about the event."""
+    try:
+        import fp8_paged_attn
+        counts = fp8_paged_attn.compute_counts() or {}
+    except Exception:                                    # noqa: BLE001
+        return "unknown (kernel tally unavailable)"
+    hot = {k: v for k, v in counts.items() if v}
+    if not hot:
+        return "none (no decode attention entered)"
+    if len(hot) == 1:
+        return next(iter(hot))
+    total = sum(hot.values())
+    parts = ", ".join(f"{k} {v}" for k, v in sorted(hot.items()))
+    return f"mixed ({parts}; {total} calls)"
+
+
 def _kv_geometry(cfg):
     """(kv heads, head_dim) for the paged cache: scalars for a uniform
     model, per-layer lists for a heterogeneous config (transformers 5.16
@@ -1151,9 +1172,15 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                "tokens_scored": a.ppl_steps,
                "text_sha": ppl_sha,
                # os.environ records the REQUEST; mech records the
-               # event. PREREG-m3 gates on the latter.
-               "attn_compute": os.environ.get("GNF4_ATTN_COMPUTE",
-                                              "f32"),
+               # event. PREREG-m3 gates on the latter -- so carry BOTH,
+               # and never let the request stand in for the event: every
+               # K8 line printed "compute=f32" while the mech tally said
+               # fp8 245760 / f32 0, which is how an arm gets
+               # mislabelled (P25: it briefly looked as though Gemma-4
+               # had been scored through the f32 kernel modes that fail
+               # their reference on torch 2.8 / triton 3.4, gnf4#319).
+               "attn_compute_requested": os.environ.get("GNF4_ATTN_COMPUTE"),
+               "attn_compute": _attn_compute_ran(),
                "mech": _mech_report(),
                "warm_tokens_discarded": base - a.prompt_len,
                "router_probe": (probe.report(kv.L)
