@@ -90,3 +90,74 @@ def test_decode_and_prefill_parity():
     rm = (xm.reshape(-1, 64) @ wref.t()).reshape_as(gm)
     assert torch.allclose(gm.float(), rm.float(), rtol=1e-2, atol=1e-2)
     assert gm.dtype == xm.dtype
+
+
+def _cpu_kernel_stubs(monkeypatch, calls):
+    """A CPU reference of the kernel package so the ROUTE (which path a
+    given row count takes) is tested where CI runs, not skipped."""
+    import sys
+    import types
+    pack_ref = types.ModuleType("int4_pack_ref")
+
+    def pack_int4_b32(w):
+        N, K = w.shape
+        b = w.float().reshape(N, K // 32, 32)
+        s = b.abs().amax(-1).clamp_min(1e-12) / 7.0
+        q = ((b / s[..., None]).round().clamp(-8, 7) + 8).to(torch.uint8)
+        q = q.reshape(N, K)
+        return (q[:, 0::2] | (q[:, 1::2] << 4)).contiguous(), s.half()
+
+    def dequant_int4_ref(packed, scales, N, K):
+        lo = (packed & 0xF).to(torch.int16) - 8
+        hi = ((packed >> 4) & 0xF).to(torch.int16) - 8
+        q = torch.stack([lo, hi], -1).reshape(N, K).float()
+        return (q.reshape(N, K // 32, 32) * scales.float()[..., None]).reshape(N, K)
+    pack_ref.pack_int4_b32 = pack_int4_b32
+    pack_ref.dequant_int4_ref = dequant_int4_ref
+
+    k = types.ModuleType("int4_b32")
+
+    def gemv_int4_b32(xq, xs, packed, scales, eids, N, K, part=None):
+        calls.append(("gemv", int(eids.numel()), tuple(part.shape)))
+        w = dequant_int4_ref(packed[0].reshape(N, K // 2),
+                             scales[0].reshape(N, K // 32), N, K)
+        return (xq.float() @ w.t()).to(torch.bfloat16)
+
+    def quant_x_rows(x):
+        return x, torch.ones(x.shape[0])
+
+    def _plan(N, K):
+        return 128, 4, 2, 1
+    k.gemv_int4_b32 = gemv_int4_b32
+    k.quant_x_rows = quant_x_rows
+    k._plan = _plan
+    for name, mod in (("int4_pack_ref", pack_ref), ("int4_b32", k)):
+        monkeypatch.setitem(sys.modules, name, mod)
+
+
+def test_decode_batch_stays_on_the_gemv(monkeypatch):
+    """rows in (1, DECODE_ROWS_MAX] take the GEMV with an R-sized buffer
+    pair, allocated once per R; rows above take the dequant path. The
+    first B=16 int4 serving run sent 16 rows down the prefill path and
+    halved throughput -- this pins the route."""
+    calls = []
+    _cpu_kernel_stubs(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    torch.manual_seed(3)
+    lin = nn.Linear(64, 96, bias=False, dtype=torch.bfloat16)
+    m = Int4Linear(lin)
+    x = torch.randn(16, 64, dtype=torch.bfloat16)
+    y16 = m(x)
+    assert calls[-1] == ("gemv", 16, (2 * 16, 96))       # R rows, sk*R partials
+    eids, part = m._decode_bufs(16)
+    assert eids.shape == (16,) and eids.dtype == torch.int32
+    assert m._decode_bufs(16)[1] is part                  # cached, no realloc
+    # each row is the same computation the R=1 path does
+    rows = torch.cat([m(x[i:i + 1]) for i in range(16)])
+    assert torch.equal(y16, rows)
+    # the R=1 path still uses the construction-time buffers
+    assert calls[-1] == ("gemv", 1, (2, 96))
+    # above the cap: prefill path, no GEMV call
+    n = len(calls)
+    m(torch.randn(Int4Linear.DECODE_ROWS_MAX + 1, 64, dtype=torch.bfloat16))
+    assert len(calls) == n

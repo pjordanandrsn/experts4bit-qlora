@@ -68,19 +68,47 @@ class Int4Linear(nn.Module):
                              torch.empty(sk, self.N, dtype=torch.float32,
                                          device=dev),
                              persistent=False)
+        self._decode_cache = {}        # R -> (eids, part) for 1 < R <= cap
+
+    # decode batches (1 < rows <= this) stay on the int4 GEMV, which has a
+    # row axis: every row re-reads the same 8 MB projection, which the L2
+    # absorbs. The first int4 serving run at B=16 (receipts INT4B16/P21)
+    # sent rows > 1 down the prefill path below -- dequantising 1.8 GB of
+    # bf16 per decode step -- and HALVED batched throughput (x0.52). Above
+    # the cap the crossover curve favours a dense matmul on dequantised
+    # weights (fused wins M <= 128, loses M >= 256).
+    DECODE_ROWS_MAX = 128
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         rows = x.reshape(-1, self.K)
-        if rows.shape[0] == 1:
+        R = rows.shape[0]
+        if R <= self.DECODE_ROWS_MAX:
+            eids, part = self._decode_bufs(R)
             xq, xs = self._qx(rows)
-            out = self._gemv(xq, xs, self.packed, self.scales, self._eid0,
-                             self.N, self.K, part=self._part)
+            out = self._gemv(xq, xs, self.packed, self.scales, eids,
+                             self.N, self.K, part=part)
             return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
-        # prefill / verify (M > 1): dequant once, dense matmul -- the
-        # large-M side of the crossover; per-request cost, not per-token
+        # prefill / verify (M > DECODE_ROWS_MAX): dequant once, dense
+        # matmul -- the large-M side of the crossover; per-request cost
         w = self._deq()
         return (rows.to(torch.bfloat16) @ w.t()).reshape(
             *x.shape[:-1], self.N).to(x.dtype)
+
+    def _decode_bufs(self, R: int):
+        """Row-count-keyed GEMV buffers. Allocated on first use for each R
+        (the warm-up pass, before any CUDA-graph capture) and reused, so a
+        captured replay never allocates. R=1 reuses the buffers built at
+        construction."""
+        if R == 1:
+            return self._eid0, self._part
+        cache = self._decode_cache
+        if R not in cache:
+            sk = self._part.shape[0]
+            eids = torch.zeros(R, dtype=torch.int32, device=self._part.device)
+            part = torch.empty(sk * R, self.N, dtype=torch.float32,
+                               device=self._part.device)
+            cache[R] = (eids, part)
+        return cache[R]
 
     def _deq(self) -> torch.Tensor:
         lo = (self.packed.to(torch.int16) & 0xF) - 8
