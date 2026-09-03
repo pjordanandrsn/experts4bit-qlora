@@ -115,7 +115,8 @@ def main():
     ap.add_argument("--dram-gb", type=float, default=0.0)
     ap.add_argument("--hot-rows", type=int, default=64)
     ap.add_argument("--work", default="/root/ctrl/indist")
-    ap.add_argument("--stage", choices=["upstream", "e4b", "report"], required=True)
+    ap.add_argument("--stage", required=True,
+                    choices=["upstream", "e4b", "upstream_on_e4b", "report"])
     a = ap.parse_args()
     os.makedirs(a.work, exist_ok=True)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -141,6 +142,26 @@ def main():
         torch.save(P, f"{a.work}/logits_up_on_up.pt")
         print(f"INDIST score[up on up-text]: nll={nll:.5f}", flush=True)
         json.dump({"up_on_up": nll}, open(f"{a.work}/up.json", "w"))
+        return
+
+    if a.stage == "upstream_on_e4b":
+        # the fourth cell: the bf16 arm on the text the NF4 arm generated.
+        # A fresh load is required -- the e4b stage owned the card.
+        from transformers import AutoModelForCausalLM
+        _, total = torch.cuda.mem_get_info()
+        budget = max(4, int(total / 2**30) - 6)
+        m = AutoModelForCausalLM.from_pretrained(
+            a.model, dtype=torch.bfloat16, device_map="auto",
+            attn_implementation="eager",
+            max_memory={0: f"{budget}GiB", "cpu": "120GiB"})
+        m.eval()
+        dev = next(m.parameters()).device
+        e4b_text = torch.load(f"{a.work}/text_e4b.pt")
+        nll, _ = _score_full(m, e4b_text, dev)
+        rec = json.load(open(f"{a.work}/up.json"))
+        rec["up_on_e4b"] = nll
+        json.dump(rec, open(f"{a.work}/up.json", "w"))
+        print(f"INDIST score[up on e4b-text]: nll={nll:.5f}", flush=True)
         return
 
     if a.stage == "e4b":
