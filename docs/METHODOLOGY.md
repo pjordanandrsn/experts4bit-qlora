@@ -447,17 +447,30 @@ ppl 2361 on bare wikitext through plain transformers (upstream control)
 and 2029 with the corpus wrapped as the assistant's final-channel reply
 (`--ppl-chat`). Bare text is out of distribution for a harmony-only
 post-trained model and an absolute 0.05 gate means nothing at that
-scale. The e4b-loaded oracle scoring LOWER (1336 raw, 1568 chat) than
-upstream on identical ids is itself a defect signal — NF4 experts
-cannot improve a model over its bf16 self — and is under investigation
-with a per-arm chunked-vs-full check and a per-layer cross-arm
-divergence (`bench/hybrid-g9/gptoss_arm_diff.py`). Until that gap is
-explained, no gate built on either arm is trusted for this family.
+scale. The e4b-loaded oracle scored LOWER than upstream on identical ids (1336
+against 2361 raw; 1568 against 2029 chat), which looked like a defect —
+NF4 experts cannot improve a model over its bf16 self. **RESOLVED, and
+it was not a defect.** A 2x2 with its prediction fixed in advance
+(`bench/hybrid-g9/gptoss_indist_2x2.py`) scored each arm on the text
+BOTH arms generated: each wins its own greedy output (+0.049 and +0.024
+nats), which is what a faithful pair does. Far out of distribution the
+reference is confidently wrong and quantisation noise, which raises
+predictive entropy, lowers NLL. The ordering was a regime artefact.
+Both arms also score ~0.35 nats on in-distribution text against ~5.0 on
+wikitext, the same regime gap from the other side.
 
-**Pre-registered KL gate for chat-only families (fixed 2026-09-03,
-before any KL number has been computed).** Once the two oracle arms
-agree (chunked == full forward on both; cross-arm logit KL at NF4
-noise), the gate for a family whose raw-text perplexity is unusable is:
+**Pre-registered KL gate for chat-only families — FALSIFIED by its own
+first measurement; recorded here as written, and NOT retuned.** The gate
+below was fixed on 2026-09-03 before any KL number existed. The first
+measurement rejected a configuration this project ships: NF4 experts
+against bf16, on in-distribution text, measure **0.02907 nats/token and
+93.6% top-1** against thresholds of 0.01 and 99%. The calibration was
+wrong in a specific way — 0.01 came from converting Qwen3's perplexity
+budget into a signed NLL DIFFERENCE, then applying it to a
+full-vocabulary KL, which is a different and strictly larger quantity.
+A replacement must be calibrated on the statistic it judges and
+pre-registered again. The original text follows unchanged, because a
+gate that is quietly edited after seeing the number is not a gate:
 
 - Text: the oracle's OWN greedy continuations — 16 harmony-formatted
   prompts (system + user turn, generation prompt, final channel), 256
@@ -479,3 +492,60 @@ noise), the gate for a family whose raw-text perplexity is unusable is:
 - Refusals: a sha mismatch between arms, fewer than 4096 scored tokens,
   or an oracle whose chunked and full-forward NLL differ by more than
   1e-3 nats each refuse the verdict.
+
+**A further defect in the gate as written:** its last refusal demands
+that an oracle's chunked and full-forward NLL agree to 1e-3 nats. On a
+mixture-of-experts model that is unattainable for reasons that have
+nothing to do with correctness — see the routing-flip floor below — so
+the gate would refuse every MoE family, which is every family this
+project serves.
+
+### 13.1 The routing-flip floor — why an MoE parity delta is not measured against zero
+
+Two arithmetically equivalent forwards of a mixture-of-experts model do
+not agree. A chunked-with-cache forward and a single full forward are
+the same mathematics in a different order, and the bf16 rounding that
+separates them is about 1e-3. But the router takes a top-k over expert
+logits, and where two experts sit close together that rounding changes
+WHICH experts run. A flipped expert is a discrete change to that token's
+computation.
+
+Measured on gpt-oss-20b (448-token window, chunk 64, eager, bf16):
+
+```
+router top-k flips full-vs-chunk: 486/10752 = 4.5201% of (layer, token) choices
+KL by routing: flipped n=95 meanKL=0.050441 ; unflipped n=97 meanKL=0.001290
+```
+
+The flipped tokens carry a mean KL 39x that of the tokens that routed
+identically, and the unflipped side sits at ordinary arithmetic noise.
+The flips are not correlated with the disagreement, they are the
+disagreement. Two other explanations were tested first and refuted by
+control: sliding windows (widening the window past the context, so those
+layers are full attention through the same mask code, leaves the gap at
+KL 0.0178) and a window-unaware cache (all five cache classes give the
+same gap; `cache_position` never matters).
+
+**Consequence for every parity number in section 13.** The oracle chunks
+and the paged path decodes incrementally, so the two differ in
+arithmetic order and therefore route differently on a few percent of
+tokens no matter how correct both are. A delta must be read against a
+measured floor, not against zero. The floor is model-specific: it
+depends on the router's margin distribution — gpt-oss is 32 experts
+top-4, Qwen3-30B is 128 top-8 — and on the text.
+
+**How to measure it, per model, before quoting a delta:** score the same
+window through two paths that are both correct but arithmetically
+different (chunk 64 against chunk 128, or chunked against one full
+forward) and take the disagreement as the floor. `bench/hybrid-g9/gptoss_cache_probe.py`
+does this and reports the router-flip rate and the KL split alongside.
+
+**What this puts in doubt above.** gpt-oss's +0.078 nats is about 8x its
+own 0.0099-nat chunk-vs-full floor, so it is probably a real difference.
+The floors for Qwen3 (+0.0058) and Granite (+0.0028) have NOT been
+measured, and both deltas are smaller than gpt-oss's floor. Until those
+floors exist, the PASS verdicts stand — an unmeasured floor makes a
+small delta conservative, not wrong — but the CAUSAL claim that "the fp8
+paged KV cache costs +0.047 ppl on Qwen3" is not established, because a
+routing-flip floor of that size would produce the same number with no
+cache cost at all. That measurement is in progress.
