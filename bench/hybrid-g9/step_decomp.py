@@ -150,24 +150,294 @@ def ppl_oracle_score_full(model, ids, prompt_len: int, steps: int, device=None):
     return float(nll) / steps
 
 
+# ---------------------------------------------------------------------------
+# Fake-quantised eager attention: the fp8 paged kernel's PRECISION MODEL run
+# inside the chunk-free full forward. Every rounding the sm_120 fp8 compute
+# path performs is reproduced on the bf16 tensors HF's own attention module
+# hands over, and nothing else changes -- same weights, same mask, same
+# softmax order as ``eager``. So the arm isolates "what the fp8 cache and
+# fp8 dot cost" from "what the paged shim/geometry does", which a paged-vs-
+# full delta cannot (e4b#359). What the kernel does, mirrored here:
+#   q  -> one scale per (kv head, query row) over its G query heads x D
+#         (``q_amax = max|q[G, D]|``, ``q_s = 448 / q_amax``), e4m3
+#   k  -> stored e4m3 with ``k_groups`` sub-row absmax scales (fp8_kv)
+#   v  -> stored e4m3 with one absmax scale per (token, head)   (fp8_kv)
+#   p  -> the softmax weights times the V scale, range-folded by
+#         ``c = 448 / max(vs)`` over the row's valid keys, e4m3
+# ``from`` rows attend unmodified: the paged prefill computes the prompt's
+# own attention on staged bf16 K/V and only the decode steps read fp8.
+_FQ = {"spec": "", "kg": 4, "vg": 1, "layers": "all", "frm": 0}
+_FQ_IMPL = "eager_fq"
+_E4M3_MAX = 448.0
+
+
+def _fq_quant_dequant(x, group):
+    """fp8_kv.quantize_kv_fp8 + dequant_kv_fp8_ref in one step (fp32 in and
+    out): absmax per ``group`` consecutive values of the last dim, scale =
+    amax/448 with the all-zero group pinned to 1.0, e4m3 round trip.
+    Kept local so the CPU oracle needs no kernel wheel; a test pins it
+    bit-exact to fp8_kv when that module imports."""
+    d = x.shape[-1]
+    group = d if group is None else group
+    xg = x.reshape(*x.shape[:-1], d // group, group)
+    amax = xg.abs().amax(dim=-1, keepdim=True)
+    scale = torch.where(amax > 0, amax / _E4M3_MAX, torch.ones_like(amax))
+    q = (xg / scale).to(torch.float8_e4m3fn).to(torch.float32)
+    return (q * scale).reshape(x.shape), scale.squeeze(-1)
+
+
+def _fq_eager_attention(module, query, key, value, attention_mask,
+                        scaling=None, dropout: float = 0.0,
+                        softcap=None, **kwargs):
+    """``[B, H_q, T, D]`` in, ``([B, T, H_q, D], None)`` out -- transformers'
+    eager attention with the fp8 kernel's roundings applied per _FQ."""
+    B, Hq, T, D = query.shape
+    Hkv = key.shape[1]
+    G = Hq // Hkv
+    if attention_mask is None and T > 1:
+        raise RuntimeError("eager_fq received no attention mask for a "
+                           f"{T}-token forward: the causal mask was not built "
+                           "for this attention name, and attending without "
+                           "one is silent and non-causal")
+    spec = _FQ["spec"]
+    is_sliding = bool(getattr(module, "is_sliding", None)
+                      or getattr(module, "sliding_window", None))
+    want = _FQ["layers"]
+    apply = bool(spec) and (want == "all" or (want == "sliding") == is_sliding)
+    scale = float(D ** -0.5 if scaling is None else scaling)
+
+    def attend(fq: bool):
+        qf, kf, vf = query.float(), key.float(), value.float()
+        vs = None
+        if fq and "k" in spec:
+            kf, _ = _fq_quant_dequant(kf, None if _FQ["kg"] == 1 else D // _FQ["kg"])
+        if fq and "v" in spec:
+            vf, vs = _fq_quant_dequant(vf, None if _FQ["vg"] == 1 else D // _FQ["vg"])
+            if vs.ndim == 4:                      # grouped V: kernel folds one
+                vs = vs.amax(-1)                  # scale per row; approximate
+        if fq and "q" in spec:
+            qt = qf.view(B, Hkv, G, T, D)
+            amax = qt.abs().amax(dim=(2, 4), keepdim=True)          # per (b, kv head, row)
+            qs = torch.where(amax > 0, _E4M3_MAX / amax, torch.ones_like(amax))
+            qf = ((qt * qs).to(torch.float8_e4m3fn).to(torch.float32) / qs).view(B, Hq, T, D)
+        k_rep = kf.repeat_interleave(G, dim=1)
+        v_rep = vf.repeat_interleave(G, dim=1)
+        sc = torch.matmul(qf, k_rep.transpose(-1, -2)) * scale
+        if softcap is not None:
+            sc = torch.tanh(sc / softcap) * softcap
+        if attention_mask is not None:
+            sc = sc + attention_mask[:, :, :, : k_rep.shape[-2]].to(sc.dtype)
+        p = torch.softmax(sc, dim=-1, dtype=torch.float32)
+        if fq and "p" in spec and vs is not None:
+            vs_q = vs.repeat_interleave(G, dim=1)[:, :, None, :]     # [B, Hq, 1, Tk]
+            valid = p > 0
+            cmax = (vs_q * valid).amax(-1, keepdim=True)
+            c = torch.where(cmax > 0, _E4M3_MAX / cmax, torch.ones_like(cmax))
+            pv = p * vs_q * c
+            p = pv.to(torch.float8_e4m3fn).to(torch.float32) / (vs_q * c)
+        return torch.matmul(p, v_rep)                                  # [B, Hq, T, D]
+
+    out = attend(apply)
+    frm = int(_FQ["frm"])
+    if apply and 0 < frm < T:
+        out = torch.cat([attend(False)[:, :, :frm], out[:, :, frm:]], dim=2)
+    return out.transpose(1, 2).contiguous().to(query.dtype), None
+
+
+def _fq_register(spec: str, kg: int, vg: int, layers: str, frm: int) -> str:
+    """Install the precision model under ``eager_fq`` (attention AND mask
+    interfaces -- a custom name with no mask entry gets no causal mask)."""
+    from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+    from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
+    if any(ch not in "qkvp" for ch in spec):
+        raise ValueError(f"--ppl-fq letters must be from qkvp, got {spec!r}")
+    _FQ.update(spec=spec, kg=int(kg), vg=int(vg), layers=layers, frm=int(frm))
+    ALL_ATTENTION_FUNCTIONS[_FQ_IMPL] = _fq_eager_attention
+    # transformers' mask preprocessor consults the CLASS-level mapping only
+    # (masking_utils._preprocess_mask_arguments: "not in
+    # ALL_MASK_ATTENTION_FUNCTIONS._global_mapping" -> no mask is built and
+    # the attention function is left to mask for itself). A name registered
+    # through __setitem__ lands in the instance's local mapping, is skipped,
+    # and the model runs NON-causal with no error -- caught by the tiny-model
+    # test. So register in both.
+    eager_mask = ALL_MASK_ATTENTION_FUNCTIONS["eager"]
+    ALL_MASK_ATTENTION_FUNCTIONS[_FQ_IMPL] = eager_mask
+    ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[_FQ_IMPL] = eager_mask
+    return _FQ_IMPL
+
+
+# ---------------------------------------------------------------------------
+# Per-layer output diff: the paged decode step against the chunk-free eager
+# forward at the SAME position, hooked at every decoder layer's attention,
+# dense MLP, expert block and router (e4b#359 next test under H0). The
+# paged step is captured from the K8 loop's OWN forward (a second paged
+# forward would append that token's K/V twice); the reference is one eager
+# forward over ids[:pos+1] with the paged context cleared, i.e. the `full`
+# arm's path, and only its last position is compared.
+def _decoder_layers(model):
+    """The first ModuleList whose members carry `self_attn`."""
+    for _, m in model.named_modules():
+        if isinstance(m, torch.nn.ModuleList) and len(m) and hasattr(m[0], "self_attn"):
+            return m
+    raise RuntimeError("no decoder layer list with self_attn found")
+
+
+def _layer_diff_install(model, cap):
+    """Forward hooks that record each part's LAST-position output (fp32,
+    cpu) into `cap[(layer, part)]`; router hooks record (weights, index)."""
+    handles = []
+
+    def rec(i, part):
+        def hook(_m, _inp, out):
+            if part == "router":
+                w, idx = out[1], out[2]
+                cap[(i, "router")] = (w.detach().float().cpu()[-1], idx.detach().cpu()[-1])
+                return
+            y = out[0] if isinstance(out, tuple) else out
+            y = y.detach().float()
+            cap[(i, part)] = (y[:, -1] if y.ndim == 3 else y[-1:]).reshape(-1).cpu()
+        return hook
+
+    for i, L in enumerate(_decoder_layers(model)):
+        handles.append(L.register_forward_hook(rec(i, "layer")))
+        handles.append(L.self_attn.register_forward_hook(rec(i, "attn")))
+        for part in ("mlp", "experts", "router"):
+            sub = getattr(L, part, None)
+            if isinstance(sub, torch.nn.Module):
+                handles.append(sub.register_forward_hook(rec(i, part)))
+    return handles
+
+
+def _layer_diff_compare(cap_paged, cap_ref, layers_meta):
+    """Per-layer relative errors ||paged - ref|| / ||ref|| and router
+    agreement; returns rows plus a summary."""
+    rows = []
+    for i, kind in layers_meta:
+        row = {"layer": i, "kind": kind}
+        # the decoder layer's own output is reported as "out" so the row's
+        # "layer" key stays the layer INDEX (Bugbot, #361)
+        for part, key in (("attn", "attn"), ("mlp", "mlp"), ("experts", "experts"), ("layer", "out")):
+            a_, b_ = cap_paged.get((i, part)), cap_ref.get((i, part))
+            if a_ is not None and b_ is not None:
+                row[key] = float((a_ - b_).norm() / (b_.norm() + 1e-12))
+        if (i, "router") in cap_paged and (i, "router") in cap_ref:
+            (wp, ip), (wr, ir) = cap_paged[(i, "router")], cap_ref[(i, "router")]
+            sp, sr = set(ip.tolist()), set(ir.tolist())
+            row["router_overlap"] = len(sp & sr) / max(len(sr), 1)
+            if sp == sr:
+                order = {int(e): k for k, e in enumerate(ir.tolist())}
+                wr_al = torch.stack([wr[order[int(e)]] for e in ip.tolist()])
+                row["router_w_maxabs"] = float((wp - wr_al).abs().max())
+        rows.append(row)
+
+    def mean_of(part, kind=None):
+        v = [r[part] for r in rows if part in r and (kind is None or r["kind"] == kind)]
+        return sum(v) / len(v) if v else None
+    summ = {"attn_rel_sliding": mean_of("attn", "sliding"), "attn_rel_full": mean_of("attn", "full"),
+            "mlp_rel": mean_of("mlp"), "experts_rel": mean_of("experts"), "out_rel": mean_of("out"),
+            "router_overlap_mean": mean_of("router_overlap"),
+            "first_layer_over_5pct": next((r["layer"] for r in rows if r.get("out", 0.0) > 0.05), None)}
+    return rows, summ
+
+
+def _layer_diff_reference(model, ids_upto, cap_ref):
+    """One eager forward over `ids_upto` (the `full` arm's path) with the
+    paged context cleared; hooks fill cap_ref with the last position."""
+    try:
+        from experts4bit_qlora.engines.paged_attention import set_context
+    except ImportError:          # no engine in this environment: nothing to clear
+        set_context = lambda _ctx: None  # noqa: E731
+    prev_ctx = set_context(None)
+    # One save per DISTINCT config object: HF modules share the model's
+    # config, so saving per module would record "eager" for every module
+    # after the first and the restore would leave the model on eager --
+    # every paged step after the first diff would then run one-token
+    # eager attention with no cache (Bugbot, #361, High).
+    saved, seen = [], set()
+    for m in [model] + list(model.modules()):
+        cfg = getattr(m, "config", None)
+        if cfg is None or not hasattr(cfg, "_attn_implementation") or id(cfg) in seen:
+            continue
+        seen.add(id(cfg))
+        saved.append((cfg, cfg._attn_implementation))
+        cfg._attn_implementation = "eager"
+    handles = _layer_diff_install(model, cap_ref)
+    try:
+        with torch.no_grad():
+            model(input_ids=ids_upto[None].to(next(model.parameters()).device), use_cache=False)
+    finally:
+        for h in handles:
+            h.remove()
+        for cfg, impl in reversed(saved):
+            cfg._attn_implementation = impl
+        set_context(prev_ctx)
+
+
+def _layer_kinds(model):
+    out = []
+    for i, L in enumerate(_decoder_layers(model)):
+        at = L.self_attn
+        sliding = bool(getattr(at, "is_sliding", None) or getattr(at, "sliding_window", None))
+        out.append((i, "sliding" if sliding else "full"))
+    return out
+
+
+def _layer_diff_report(t, pos_abs, cap_paged, cap_ref, model, out_path):
+    import json as _json
+    rows, summ = _layer_diff_compare(cap_paged, cap_ref, _layer_kinds(model))
+    fmt = lambda d: " ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in d.items())  # noqa: E731
+    print(f"LAYER_DIFF t={t} pos={pos_abs} {fmt(summ)}", flush=True)
+    for r in rows:
+        print("  " + fmt(r), flush=True)
+    with open(f"{out_path}.layerdiff_t{t}.json", "w") as f:
+        _json.dump({"t": t, "pos": pos_abs, "summary": summ, "rows": rows}, f, indent=1)
+    return summ
+
+
+def _oracle_label(a, impl: str) -> str:
+    """The arm's identity as recorded in `attn_path` and the K8 line. The
+    upstream (HF-loaded) arms keep their `upstream-` prefix under every
+    modifier -- chunk size or fake-quant letters -- so a verdict can always
+    tell the HF-loaded control from the e4b-loaded oracle (Bugbot, #361)."""
+    base = {"upstream": "upstream-eager", "full": "eager-fullforward",
+            "upstream-full": "upstream-eager-fullforward"}.get(a.ppl_oracle, impl)
+    ck = int(getattr(a, "ppl_chunk", 0) or 0)
+    if a.ppl_oracle in ("eager", "upstream") and ck > 0:
+        base = f"{base}-chunk{ck}"
+    fq = getattr(a, "ppl_fq", "none")
+    if fq and fq != "none" and a.ppl_oracle in ("full", "upstream-full"):
+        frm = a.prompt_len if getattr(a, "fq_from", -1) < 0 else a.fq_from
+        base = (f"{base}-fq{fq}-kg{a.fq_kgroups}-vg{a.fq_vgroups}"
+                f"-{a.fq_layers}-from{frm}")
+    return base
+
+
 def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
     import time as _time
-    impl = "eager" if a.ppl_oracle in ("upstream", "full") else a.ppl_oracle
-    label = {"upstream": "upstream-eager", "full": "eager-fullforward"}.get(
-        a.ppl_oracle, impl)
+    impl = "eager" if a.ppl_oracle in ("upstream", "full", "upstream-full") else a.ppl_oracle
+    label = _oracle_label(a, impl)
+    fq = getattr(a, "ppl_fq", "none")
+    if fq and fq != "none":
+        if a.ppl_oracle not in ("full", "upstream-full"):
+            raise SystemExit("--ppl-fq models the fp8 kernel inside the "
+                             "chunk-free forward: use it with --ppl-oracle full")
+        frm = a.prompt_len if a.fq_from < 0 else a.fq_from
+        impl = _fq_register(fq, a.fq_kgroups, a.fq_vgroups, a.fq_layers, frm)
     model.config._attn_implementation = impl
     for m in model.modules():
         if hasattr(m, "config") and hasattr(m.config, "_attn_implementation"):
             m.config._attn_implementation = impl
     model.eval()
     t0 = _time.perf_counter()
-    if a.ppl_oracle == "full":
+    if a.ppl_oracle in ("full", "upstream-full"):
         mean_nll = ppl_oracle_score_full(model, ppl_ids, a.prompt_len,
                                          a.ppl_steps)
     else:
-        mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps)
+        ck = int(getattr(a, "ppl_chunk", 0) or 0)
+        mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps,
+                                    **({"chunk": ck} if ck > 0 else {}))
     rec = {"k8": "ppl", "attn_path": f"{label}-oracle", "steps": a.ppl_steps,
            "mean_nll": mean_nll, "ppl": float(torch.exp(torch.tensor(mean_nll))),
            "prompt_len": a.prompt_len, "prompt_offset": a.prompt_offset,
@@ -1188,9 +1458,18 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
         # (Bugbot, e4b#278, High).
         pos.fill_(a.prompt_len)
         nll = 0.0
+        diff_steps = {int(x) for x in str(getattr(a, "ppl_layer_diff", "") or "").split(",") if x.strip()}
         for t in range(a.ppl_steps):
+            cap_paged = {}
+            hooks = _layer_diff_install(model, cap_paged) if t in diff_steps else []
             out = model(input_ids=in_ids, position_ids=pos,
                         use_cache=False)
+            if hooks:
+                for h in hooks:
+                    h.remove()
+                cap_ref = {}
+                _layer_diff_reference(model, ppl_ids[:a.prompt_len + t + 1], cap_ref)
+                _layer_diff_report(t, a.prompt_len + t, cap_paged, cap_ref, model, a.out)
             lg = out.logits[:, -1].float()
             nxt = int(cont[t + 1])
             nll += -torch.log_softmax(lg, -1)[0, nxt].item()
@@ -1939,12 +2218,35 @@ def main():
                          "(gpt-oss: '<|channel|>final<|message|>' puts the reply in "
                          "the final channel); tokenised WITH special tokens")
     ap.add_argument("--ppl-oracle", default="none",
-                    choices=["none", "eager", "full", "upstream"],
+                    choices=["none", "eager", "full", "upstream", "upstream-full"],
                     help="score the SAME --ppl-steps window through transformers' "
                          "own attention (eager, HF cache, chunked teacher forcing) "
                          "with the paged shim NOT registered: the reference the "
                          "paged path must match on families the shim does not "
                          "yet serve (sliding windows, sinks, per-layer KV)")
+    ap.add_argument("--ppl-layer-diff", default="",
+                    help="comma list of K8 steps at which to diff the paged "
+                         "decode step against the chunk-free eager forward per "
+                         "layer (attention / dense MLP / experts / router)")
+    ap.add_argument("--ppl-chunk", type=int, default=0,
+                    help="chunk size for the chunked oracle (0 = the scorer's "
+                         "default of 256); two sizes on one window split a "
+                         "family's chunked-vs-full floor into routing noise "
+                         "versus a chunk-boundary effect")
+    ap.add_argument("--ppl-fq", default="none",
+                    help="with --ppl-oracle full: apply the fp8 paged kernel's "
+                         "roundings inside the full forward; letters from "
+                         "q,k,v,p (e.g. kv, qkvp), or none")
+    ap.add_argument("--fq-kgroups", type=int, default=4,
+                    help="K sub-row scale groups modelled (Fp8PagedKV default 4)")
+    ap.add_argument("--fq-vgroups", type=int, default=1)
+    ap.add_argument("--fq-layers", default="all", choices=["all", "full", "sliding"],
+                    help="apply the roundings on every layer, only the "
+                         "full-attention layers, or only the sliding ones")
+    ap.add_argument("--fq-from", type=int, default=-1,
+                    help="first query row that reads fake-quantised K/V "
+                         "(default: prompt_len -- the paged prefill attends "
+                         "on bf16, decode reads fp8)")
     ap.add_argument("--ppl-source", default="wikitext",
                     choices=["wikitext", "c4val1"],
                     help="corpus the prompt windows and --ppl-steps score: "
@@ -2191,7 +2493,7 @@ def main():
 
     torch.manual_seed(1689)
     tok = AutoTokenizer.from_pretrained(a.model)
-    if a.ppl_oracle == "upstream":
+    if a.ppl_oracle in ("upstream", "upstream-full"):
         assert a.ppl_steps > 0, "--ppl-oracle needs --ppl-steps"
         _upstream_oracle_main(a, tok)
         return
