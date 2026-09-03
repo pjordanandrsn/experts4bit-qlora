@@ -88,11 +88,13 @@ def _routed_topk(cfg):
     """The routed top-k under whatever name this family's config uses.
     Extend the alias list when onboarding a family, never hardcode a
     key at a call site (docs/hybrid/PORTABILITY.md)."""
-    for key in ("num_experts_per_tok", "num_experts_per_token",
-                "moe_top_k", "moe_topk", "top_k"):
-        v = getattr(cfg, key, None)
-        if isinstance(v, int) and v > 0:
-            return v
+    # multimodal configs (gemma4) keep the MoE fields under text_config
+    for c in (cfg, getattr(cfg, "text_config", None)):
+        for key in ("num_experts_per_tok", "num_experts_per_token",
+                    "moe_top_k", "moe_topk", "top_k_experts", "top_k"):
+            v = getattr(c, key, None)
+            if isinstance(v, int) and v > 0:
+                return v
     raise ValueError("cannot find the routed top-k in this config; add "
                      "its key to _routed_topk")
      # set when --compile-layers uses cudagraphs
