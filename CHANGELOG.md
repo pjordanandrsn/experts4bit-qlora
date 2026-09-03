@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.28.0 — 2026-09-03
+
+### Calibrated int4 attention for serving, and a gate that knows what calibration does
+
+One serving lane (#331), gated behind `E4B_SERVE_ATTN_INT4_CALIB=1`.
+The uncalibrated int4 attention lane was refused on quality at +0.056
+perplexity, and the fp8 lane that followed showed the obvious fix is
+not a fix: 4.6× lower weight error bought almost nothing, because
+weight error is not what the gate measures. This lane keeps the same
+grid, bytes and kernel and changes only *which* grid point each weight
+lands on: `int4_attn_calib` records `H = 2·XXᵀ` for every attention
+projection through forward hooks over a short calibration text, and
+`Int4Linear` takes a `packer` closed over that Hessian
+(`grouped-nf4-gemm` 0.22.0's `gptq_pack_int4_b32`). A projection
+without a Hessian is refused, never silently packed uncalibrated under
+the calibrated banner.
+
+What it measures (RTX 5090, receipts INT4B16/P21–P22c). Calibrated on a
+C4 validation shard, the pack scores **−0.042** against bf16 attention
+on the wikitext gate and **−0.115** on an out-of-domain C4 text — an
+improvement on both, with the same sign. Calibrated on wikitext-2
+*train*, two window choices scored −0.017 and −0.078: an improvement
+that moves with the calibration windows is fitting the scored text, and
+that pack is refused. Speed: **×1.06 at B=1** (5.185 → 4.888 ms/step,
+204.6 tok/s on that box). At batch the int4 GEMV *loses* — each row
+re-streams the projection, ×0.90 at B=16 on its row axis and ×0.52
+through a per-call dequant — so `Int4Linear` serves one row on the
+GEMV and every larger row count on a bf16 weight dequantised once and
+cached (+≈1.8 GB for 96 projections); batched decode costs exactly what
+bf16 attention costs. A batched int4 attention that wins needs a
+small-M int4 GEMM with weight-tile reuse; that is a kernel, not this
+release.
+
+`experts4bit_qlora.k8_gate` is the perplexity gate as one function.
+Uncalibrated formats keep the symmetric `|Δ| ≤ 0.05`. Calibrated packs
+are gated one-sided, `Δ ≤ +0.05`, and an improvement is trusted only
+with the same sign on two scoring texts, one outside the calibration
+domain; `bench/hybrid-g9/step_decomp.py --ppl-source c4val1` scores the
+K8 instrument on such a text, and `ppl_source` travels in the output
+beside `text_sha`. `grouped-nf4-gemm >= 0.22.0` is now the floor.
+
 ## 0.27.0 — 2026-09-02
 
 ### Glue round 3: the router epilogue, one launch per layer
