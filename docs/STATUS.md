@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-03, version 0.30.0.** One page. The README argues the
+**As of 2026-09-03, version 0.31.1.** One page. The README argues the
 case; this page states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -34,18 +34,19 @@ MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at
 registered criteria and the frozen 4-bit stack bit-identical over
 16.31 GB hashed. Default to `enable_fast_train(model, dgrad=True)`.
 
-**Serving is at parity with the model's own attention.** This is the
-part that changed most this week. Measured against a *chunk-free*
-reference — one full forward, no chunk boundaries — the paged decode path
-is indistinguishable from the model's own attention on every family
-tested:
+**Serving is at parity with the model's own attention on three of four
+families, and not on the fourth.** This is the part that changed most
+this week. Measured against a *chunk-free* reference — one full forward,
+no chunk boundaries — the paged decode path is indistinguishable from
+the model's own attention on Granite, gpt-oss and Qwen3, and is **not**
+on Gemma-4:
 
 | family | paged vs reference | that model's noise floor | reading |
 |---|---|---|---|
 | Granite-3.1-3B-A800M | 0.00229 nats | 0.00330 | indistinguishable |
 | gpt-oss-20b | 0.00288 nats | 0.01758 | indistinguishable |
-| Qwen3-30B-A3B | 0.0058 nats (vs chunked) | 0.0095 | below floor |
-| Gemma-4-26B-A4B | −0.0078 nats (vs chunked) | not yet measured | behaves |
+| Qwen3-30B-A3B | 0.00173 nats | 0.00641 | indistinguishable |
+| Gemma-4-26B-A4B | **0.24747 nats** | 0.08137 | **not at parity — 3.0× its floor, open ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359))** |
 
 **Read that table with its floor column or not at all.** Two
 arithmetically equivalent forwards of a mixture-of-experts model do not
@@ -55,6 +56,15 @@ carried almost entirely by the flipped tokens (KL 0.0504 against 0.0013).
 A parity delta below the floor means *indistinguishable*, never "a small
 cost". Method in [`METHODOLOGY.md`](METHODOLOGY.md) §13.1; per-family
 table in [`SERVING-PARITY.md`](SERVING-PARITY.md).
+
+**Gemma-4 is a real, open defect, not a small cost.** Its earlier
+"behaves" reading (−0.0078 nats) was taken against the chunked oracle
+over a different window; against the chunk-free reference the paged
+path is 0.247 nats off, three times a floor that is itself five to
+twenty-five times any other family's. Two things are unexplained — that
+floor, and the sign of the paged gap flipping between windows — and the
+first suspect is the fp8 K-cache group width at `head_dim` 512. Do not
+quote this family as validated ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)).
 
 **Serving speed**, single-stream Qwen3-30B-A3B on a rented RTX 5090:
 about 100 tok/s on the NF4 baseline, 204.6 tok/s with calibrated int4
@@ -87,6 +97,10 @@ is the honest one and it is also measured-private.
   from a signed NLL difference and applied to a full-vocabulary KL. It is
   left textually unchanged in METHODOLOGY §13 and marked falsified rather
   than retuned.
+- **"Gemma-4 behaves (−0.0078 nats)" — SUPERSEDED.** That number
+  compared the paged path to the chunked oracle, never to the model.
+  Against a chunk-free reference the path is 0.247 nats off, three times
+  its floor. Open as [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359).
 - **The 13.47× training speedup is ~7.2× against a current baseline.**
   transformers v5 fused the per-expert loop upstream, moving the baseline
   from 50.86 to 26.6 s/step. The grouped arm did not regress. Roughly
@@ -103,7 +117,7 @@ is the honest one and it is also measured-private.
 
 ## What is open
 
-- **#344 — Gemma-4 fails to load on 2 of 4 rented hosts** with
+- **#344 — Gemma-4 fails to load on 2 of 5 rented hosts** with
   `CUDA error: invalid argument`, after the experts quantise. A 2 GiB
   host-hop fix was merged and reverted the same day: the model's largest
   tensor is 1.375 GiB, so it never triggered. The live lead is that CUDA
@@ -114,8 +128,10 @@ is the honest one and it is also measured-private.
 - **No shipped tool bakes the arena.** Reproducing the training receipt
   from published artifacts still needs a quantise-and-emit step you write
   yourself.
-- **Qwen3's and Gemma-4's chunk-free parity numbers are not measured
-  yet** — both rows above are against the chunked oracle.
+- **[#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) — Gemma-4 paged decode is not at parity**: 0.247 nats
+  from a chunk-free reference, 3× a floor that is itself anomalous
+  (0.081 nats). First test: the paged arm with a bf16 KV cache on the
+  same window (fp8 K groups are 128-wide at `head_dim` 512).
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

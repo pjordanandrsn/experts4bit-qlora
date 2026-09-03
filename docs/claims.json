@@ -146,12 +146,12 @@
       "notes": "Established on a 512-step window only; a full forward is quadratic in the window and cannot be run at 8192. The 8192-step +0.078 nats against a CHUNKED oracle is not evidence about the path (see the retired entry)."
     },
     {
-      "id": "e4b.parity.qwen3.paged-vs-chunked-8192",
+      "id": "e4b.parity.qwen3.paged-vs-own-attention",
       "package": "experts4bit-qlora",
       "area": "parity",
-      "claim": "Qwen3-30B-A3B's paged decode scores +0.0058 nats (+0.0467 ppl) against the chunked eager oracle over 8192 steps; that delta is BELOW the model's 0.0095-nat arithmetic-order floor, so the path is indistinguishable from the model's own attention.",
-      "value": 0.0058,
-      "unit": "nats",
+      "claim": "Qwen3-30B-A3B's paged decode is indistinguishable from the model's own attention: 0.00173 nats from a chunk-free full-forward reference, below the model's own 0.00641-nat arithmetic-order floor (512-step window). Its 8192-step delta against the chunked oracle (+0.0058 nats) also sits below the 8192-window floor of 0.0095.",
+      "value": 0.00173,
+      "unit": "nats (|paged - full forward| mean NLL)",
       "model": "Qwen/Qwen3-30B-A3B",
       "hardware": "RTX 5090, rented",
       "measured_on": "2026-09-03",
@@ -159,9 +159,10 @@
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
-        "INT4B16/P25-PARITY.md"
+        "INT4B16/P25-PARITY.md (P26b section)"
       ],
-      "notes": "Chunk-free reference measurement for Qwen3 is running (P26b lane). PASS stands; the causal reading of the delta is retired (see e4b.retired.fp8-kv-cost)."
+      "notes": "The serving path lands CLOSER to the chunk-free reference than the chunked production oracle does (0.00173 vs 0.00641). Third family with that ordering.",
+      "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, sha-matched ids across all three arms; NF4 experts on every arm; mech tally fp8"
     },
     {
       "id": "e4b.parity.gemma4.behaves",
@@ -173,13 +174,36 @@
       "model": "google/gemma-4-26B-A4B-it",
       "hardware": "RTX 5090 (188 GB RAM host), rented",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
         "INT4B16/P25-PARITY.md"
       ],
-      "notes": "Whole window ran the fp8 compute path (mech tally fp8 245760 / f32 0). Loading FAILS on 2 of 4 rented hosts (e4b#344, unexplained)."
+      "notes": "Whole window ran the fp8 compute path (mech tally fp8 245760 / f32 0). Loading FAILS on 2 of 4 rented hosts (e4b#344, unexplained). SUPERSEDED 2026-09-03: this compared the paged path to the CHUNKED ORACLE, not to the model; against a chunk-free reference the path fails (see e4b.parity.gemma4.chunk-free).",
+      "superseded_by": "e4b.parity.gemma4.chunk-free"
+    },
+    {
+      "id": "e4b.parity.gemma4.chunk-free",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "claim": "Gemma-4-26B-A4B-it's paged decode is NOT at parity with the model's own attention: 0.24747 nats from a chunk-free full-forward reference on a 512-step window, 3.0x the model's own arithmetic-order floor (0.08137 nats, itself 5-25x any other family's). Cause open (e4b#359).",
+      "value": 0.24747,
+      "unit": "nats (|paged - full forward| mean NLL)",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090, rented (Vast box 49779056)",
+      "measured_on": "2026-09-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P26b section)"
+      ],
+      "supersedes": [
+        "e4b.parity.gemma4.behaves"
+      ],
+      "notes": "full 3.34492 / chunked 3.42629 / paged 3.59239 nats. Two unexplained facts: the floor (HF chunked vs HF full) is 0.081 where other families sit at 0.003-0.018, and the paged gap changes SIGN between this window and the 8192-step window (ppl 28 vs 752). First test: the paged arm with a bf16 KV cache or finer fp8 K groups on this exact window (k_groups=4 at head_dim 512 = 128-wide scale groups).",
+      "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, sha-matched ids e01de6ebd4af across all three arms; NF4 experts on every arm; paged arm mech tally fp8 15360 / f32 0"
     },
     {
       "id": "e4b.parity.moe-routing-flip-floor",
@@ -412,7 +436,7 @@
     {
       "id": "e4b.serve.cuda-graph-capture",
       "area": "serve",
-      "claim": "capture_decode replays a decode step as one CUDA graph: 4.4-5.6x on 2-layer fixtures, 1.11x on real OLMoE weights and 1.04x on Qwen3-30B \u2014 the gain is inversely proportional to real GPU work per step. Both real-weight models replay bit-identical to eager.",
+      "claim": "capture_decode replays a decode step as one CUDA graph: 4.4-5.6x on 2-layer fixtures, 1.11x on real OLMoE weights and 1.04x on Qwen3-30B — the gain is inversely proportional to real GPU work per step. Both real-weight models replay bit-identical to eager.",
       "value": 1.11,
       "unit": "x on OLMoE real weights",
       "status": "measured",

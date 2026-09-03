@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.31.1 — 2026-09-03
+
+### Correction: Gemma-4 is not at parity through the paged decode path
+
+No code changes. Against a chunk-free reference (one full forward, no
+chunk boundaries) on a 512-step window, Gemma-4-26B-A4B-it's paged
+decode is 0.247 nats from the model's own attention — three times a
+floor (0.081 nats) that is itself five to twenty-five times any other
+family's. The 0.31.0 README, `docs/STATUS.md`, `docs/SERVING-PARITY.md`
+and `docs/claims.json` carried this family as "behaves" on the strength
+of −0.0078 nats against the *chunked* oracle over 8192 steps; that was a
+comparison with an instrument, not with the model, and it is superseded
+(`e4b.parity.gemma4.behaves` → `e4b.parity.gemma4.chunk-free`). Tracked
+as [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)
+with the tests in order: the paged arm with a bf16 KV cache on the same
+window first, because the fp8 K-cache scale groups are 128-wide at
+`head_dim` 512.
+
+Also in this release: Qwen3-30B-A3B's chunk-free row (0.00173 nats,
+floor 0.00641) — three of four families indistinguishable from their
+own attention, one not — and the #344 host tally is 3 load / 2 fail.
+
 ## 0.31.0 — 2026-09-03
 
 ### Documentation release: the README says what is measured, and every number has a register entry

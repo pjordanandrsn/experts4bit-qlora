@@ -16,8 +16,8 @@ a test-pinned fidelity ordering), pairs it with a streaming loader and
 per-expert LoRA so you can fine-tune, and serves the result through a
 paged decode engine that is measured against each model's own attention.
 
-**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/STATUS.md).
-**Every number, with its evidence and status:** [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/claims.json).
+**Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/STATUS.md).
+**Every number, with its evidence and status:** [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/claims.json).
 
 ## Install
 
@@ -45,7 +45,7 @@ on stock bitsandbytes; every feature has a reference path.
 | serving, want it faster | `enable_fast(model)` | `[fast]` |
 | serving, spare VRAM to trade | `enable_pipelined_residency(model, hot_sets, k_slots=k)` | `[fast]` |
 
-Reasoning and caveats for each: [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/CHOOSING.md).
+Reasoning and caveats for each: [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/CHOOSING.md).
 **Assert the return value** of every `enable_*`: `0` and "silently still
 on the per-expert loop" look identical from the caller's side.
 
@@ -84,7 +84,7 @@ private audit tree and you cannot check it from here.
 | Expert offload trains 30B-class MoEs on 12 GB | Qwen3-30B-A3B peaks 7.16 GB, Gemma-4-26B-A4B 8.47 GB | measured |
 | Fused training path, two 30B MoEs × five datasets | 1.52–1.81× per step at 0.75–0.81× VRAM, loss parity, frozen stack bit-identical over 16.31 GB | measured |
 | Arena vs pinned host RAM, at a descending cap | 2.56× / 3.80× / 6.40× less host RAM (OLMoE / Gemma-4 / Qwen3-30B) | measured |
-| Paged decode vs the model's own attention | indistinguishable on Granite (0.00229 nats) and gpt-oss (0.00288) against a chunk-free reference, each below its own floor | measured-private |
+| Paged decode vs the model's own attention | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; **not** on Gemma-4 (0.247 nats, 3× its floor — open, [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
 | Single-stream Qwen3-30B-A3B on an RTX 5090 | ≈100 tok/s NF4; 204.6 tok/s with calibrated int4 attention + int4 experts | measured-private |
 | Batched (B=16) Qwen3-30B-A3B on an RTX 5090 | ≈1,238 tok/s aggregate | measured-private |
 | Same box, same prompts, against vLLM (GPTQ-Int4) | vLLM ahead 1.47× at B=1, 1.55× at B=16 | measured-private |
@@ -99,7 +99,7 @@ means:
   disagree, because rounding flips which experts the router picks; on
   gpt-oss 4.5% of layer-token choices flip and those tokens carry the
   whole disagreement. "Below the floor" means indistinguishable.
-  [`docs/METHODOLOGY.md` §13.1](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/METHODOLOGY.md).
+  [`docs/METHODOLOGY.md` §13.1](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/METHODOLOGY.md).
 - **4-bit on a card that already fits the model is a 1.2–2.3× energy
   penalty**, not a saving: NF4 is storage-only and the GEMM runs in bf16
   either way. It inverts when memory binds.
@@ -111,7 +111,7 @@ means:
 
 Claims this project published and then withdrew, each with the
 measurement that withdrew it, are listed in
-[`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/STATUS.md#what-changed--retired-superseded-corrected)
+[`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/STATUS.md#what-changed--retired-superseded-corrected)
 and kept as `retired` entries in `docs/claims.json` so they stay
 findable. The most recent: the "+0.047 ppl fp8 KV cost" on Qwen3 (below
 the model's own floor), and the "+0.078 nats gpt-oss sinks/windows
@@ -125,10 +125,12 @@ handle SwiGLU fused-MoE families stored per-expert or pre-fused:
 **GraniteMoe**, **gpt-oss** (MXFP4 experts with per-expert biases and a
 clamped GLU, dequantised bit-identically), and **DeepSeek-V4** (Flash /
 Pro). Which families load, run and CUDA-graph-capture, with the
-evidence: [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/ARCHITECTURE_SUPPORT.md).
+evidence: [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/ARCHITECTURE_SUPPORT.md).
 Unsupported architectures fail fast with a clear error.
 
-Known open: Gemma-4-26B-A4B fails to load on 2 of 4 rented hosts
+Known open: Gemma-4-26B-A4B's paged decode is not at parity with the
+model's own attention ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)), and the model fails to load on
+2 of 5 rented hosts
 ([#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344));
 no shipped tool bakes the training arena from a bf16 checkpoint yet.
 
@@ -136,17 +138,17 @@ no shipped tool bakes the training arena from a bf16 checkpoint yet.
 
 | | |
 |---|---|
-| [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/STATUS.md) | what you get, what was retired, what is open — one page |
-| [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/claims.json) | every claim with value, hardware, status, evidence |
-| [`docs/INDEX.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/INDEX.md) | what each of the 42 documents is, and whether it is current |
-| [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/CHOOSING.md) | which mode, and why |
-| [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/METHODOLOGY.md) | hosts, protocols, every measurement's provenance |
-| [`docs/SERVING-PARITY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/SERVING-PARITY.md) | paged decode vs each model's own attention |
-| [`docs/STORAGE-MODES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/STORAGE-MODES.md) | the six storage modes and what each promises |
-| [`docs/RESIDENCY-ENGINES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/RESIDENCY-ENGINES.md) | residency engines, hot-set selection, host-regime laws |
-| [`docs/SERVING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/SERVING.md) | the HTTP shim and Docker deployment |
-| [`docs/DEEPSEEK-V4.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/DEEPSEEK-V4.md) | V4's storage split, epilogue, arena bake |
-| [`docs/BITSANDBYTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.0/docs/BITSANDBYTES.md) | relationship to bitsandbytes, prior art |
+| [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/STATUS.md) | what you get, what was retired, what is open — one page |
+| [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/claims.json) | every claim with value, hardware, status, evidence |
+| [`docs/INDEX.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/INDEX.md) | what each of the 42 documents is, and whether it is current |
+| [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/CHOOSING.md) | which mode, and why |
+| [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/METHODOLOGY.md) | hosts, protocols, every measurement's provenance |
+| [`docs/SERVING-PARITY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/SERVING-PARITY.md) | paged decode vs each model's own attention |
+| [`docs/STORAGE-MODES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/STORAGE-MODES.md) | the six storage modes and what each promises |
+| [`docs/RESIDENCY-ENGINES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/RESIDENCY-ENGINES.md) | residency engines, hot-set selection, host-regime laws |
+| [`docs/SERVING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/SERVING.md) | the HTTP shim and Docker deployment |
+| [`docs/DEEPSEEK-V4.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/DEEPSEEK-V4.md) | V4's storage split, epilogue, arena bake |
+| [`docs/BITSANDBYTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.31.1/docs/BITSANDBYTES.md) | relationship to bitsandbytes, prior art |
 
 ## The package family
 
