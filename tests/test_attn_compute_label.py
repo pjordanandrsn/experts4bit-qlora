@@ -7,8 +7,6 @@ import os
 import sys
 import types
 
-import pytest
-
 _HERE = os.path.dirname(__file__)
 
 
