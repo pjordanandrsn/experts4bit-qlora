@@ -175,8 +175,13 @@ def _k8_window(a, tok):
         ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1",
                           split="test")
         text = "\n\n".join(t for t in ds["text"] if t.strip())
-    ids = tok(text, return_tensors="pt").input_ids[0]
-    if getattr(a, "ppl_chat", False):
+    chat = bool(getattr(a, "ppl_chat", False))
+    # inside the chat template the corpus is the assistant's reply: it must
+    # carry no BOS of its own (Gemma/Llama tokenizers add one by default;
+    # a BOS mid-sequence is exactly the out-of-distribution token the chat
+    # window exists to avoid)
+    ids = tok(text, return_tensors="pt", add_special_tokens=not chat).input_ids[0]
+    if chat:
         pre = _chat_prefix_ids(tok, getattr(a, "ppl_chat_suffix", ""))
         assert pre.numel() < a.prompt_len, \
             f"chat prefix ({pre.numel()} tokens) must fit inside --prompt-len"
