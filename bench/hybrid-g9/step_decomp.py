@@ -92,14 +92,25 @@ def _uniform_layer_attr(cfg, key, default=None):
     from each layer config and insists they agree (P24-GEN-B: Gemma-4's
     NF4 arms died on ``config.num_key_value_heads``)."""
     try:
+        from transformers.integrations.heterogeneity.configuration_utils import (
+            AmbiguousGlobalPerLayerAttributeError as _Ambiguous)
+    except ImportError:                       # older transformers: no heterogeneity
+        _Ambiguous = ()
+    try:
         return getattr(cfg, key, default)
-    except RuntimeError as e:                 # AmbiguousGlobalPerLayerAttributeError
+    except _Ambiguous:
+        pass
+    except Exception as e:                    # the base class has moved between 5.x releases
         if "per-layer attribute" not in str(e):
             raise
     vals = {getattr(lc, key, default) for lc in cfg.per_layer_config}
     if len(vals) != 1:
-        raise ValueError(f"{key} varies across layers ({sorted(map(str, vals))}); "
-                         "this harness sizes one KV cache for all layers")
+        raise SystemExit(
+            f"{key} varies across layers ({sorted(map(str, vals))}): the paged "
+            "KV cache and the fp8 decode kernel take ONE geometry for every "
+            "layer, so this family cannot be served through the paged path "
+            "until per-layer KV geometry exists -- refusing rather than "
+            "sizing the cache for the wrong layers")
     return vals.pop()
 
 
