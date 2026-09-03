@@ -74,6 +74,35 @@ def _resolve_fused_append(env, device_str, kernel_present) -> bool:
         return False
     return True
 
+
+_KERNEL_KW_CACHE: dict = {}
+
+
+def _parity_options_in_use(kw) -> list:
+    """Which of the parity options an attention call actually carries: a
+    window is in use when it is a positive width; sinks are in use when a
+    tensor is present at all. (A tensor must never meet ``==`` or ``in``
+    here -- ``tensor == 0`` is a tensor, and its truth value raises.)"""
+    used = []
+    if kw.get("window"):
+        used.append("window")
+    if kw.get("sinks") is not None:
+        used.append("sinks")
+    return used
+
+
+def _kernel_takes(fn, *names) -> bool:
+    """Whether the installed kernel wrapper accepts every keyword in
+    ``names`` (cached per function object)."""
+    key = (id(fn), names)
+    hit = _KERNEL_KW_CACHE.get(key)
+    if hit is None:
+        import inspect
+        params = inspect.signature(fn).parameters
+        hit = all(n in params for n in names)
+        _KERNEL_KW_CACHE[key] = hit
+    return hit
+
 class Fp8PagedKV:
     """FP8 paged KV for ``L`` layers, ``B`` sequences, one model.
 
@@ -660,6 +689,17 @@ class Fp8PagedKV:
         be int32, on-device, one entry per q row."""
         from fp8_paged_attn import fp8_paged_decode_attention
 
+        # older kernel wheels (< 0.24) take neither window nor sinks; drop
+        # them there rather than raise, and say so once -- the family then
+        # runs the pre-parity (wrong) attention, which the K8 gate catches
+        if not _kernel_takes(fp8_paged_decode_attention, "window", "sinks"):
+            dropped = _parity_options_in_use(kw)
+            if dropped and not getattr(self, "_warned_parity", False):
+                self._warned_parity = True
+                print("PARITY WARNING: installed fp8_paged_decode_attention takes no "
+                      f"{dropped}; this family's paged attention is NOT valid on this "
+                      "wheel (needs grouped-nf4-gemm >= 0.24)", flush=True)
+            kw = {k: v for k, v in kw.items() if k not in ("window", "sinks")}
         kf, vf, tbl, lens = self.kernel_args(layer, slots)
         if lens_override is not None:
             if lens_override.shape != lens.shape:
