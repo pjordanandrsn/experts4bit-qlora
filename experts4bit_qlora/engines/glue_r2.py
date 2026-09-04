@@ -45,6 +45,25 @@ def _decode_rows(x: torch.Tensor, width: int) -> bool:
             and x.numel() <= _MAX_DECODE_ROWS * width)
 
 
+_PLAIN_LAYER_CHILDREN = frozenset(
+    {"input_layernorm", "self_attn", "post_attention_layernorm", "mlp"})
+
+
+def _layer_is_plain(mod) -> bool:
+    """True when the decoder layer is exactly the four-child pre-norm
+    body the round-2 fold re-implements: no extra child modules (further
+    norms, parallel branches), no parameters or buffers of its own
+    (residual multipliers, layer scalars)."""
+    children = {n for n, _ in mod.named_children()}
+    if children != _PLAIN_LAYER_CHILDREN:
+        return False
+    if any(True for _ in mod.named_parameters(recurse=False)):
+        return False
+    if any(True for _ in mod.named_buffers(recurse=False)):
+        return False
+    return True
+
+
 def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
     """Fold ``residual + attn_out`` into the post-attention norm.
 
@@ -59,6 +78,15 @@ def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
     for attr in ("input_layernorm", "self_attn", "mlp"):
         if not hasattr(mod, attr):
             return False
+    # The fold REPLACES the layer's forward with the Qwen3-shaped body
+    # (norm -> attn -> add+norm -> mlp -> add). A layer whose children are
+    # a superset of that shape has a different body: Gemma-4 carries two
+    # more norms, a parallel routed-expert branch and a layer scalar under
+    # the SAME four attribute names, and GraniteMoe scales its residuals.
+    # Name presence cannot tell them apart, so the structure must be
+    # EXACTLY the four children and nothing else on the layer itself.
+    if not _layer_is_plain(mod):
+        return False
     orig = mod.forward
     width = ln.weight.numel()
 

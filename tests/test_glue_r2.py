@@ -248,3 +248,68 @@ def test_rotary_fold_handles_broadcast_cos(monkeypatch, batch, cos_batch):
         assert got.shape == want.shape
         assert torch.allclose(got.float(), want.float(),
                               rtol=2 ** -6, atol=2 ** -8)
+
+
+class Gemma4ShapedDecoderLayer(ToyDecoderLayer):
+    """Same four attribute names as the plain layer, a different body:
+    two more norms, a routed-expert branch beside the dense MLP and a
+    layer scalar -- Gemma-4's decoder layer. The fold's re-implemented
+    forward would silently drop all of that."""
+    def __init__(self):
+        super().__init__()
+        self.pre_feedforward_layernorm = ToyRMSNorm()
+        self.post_feedforward_layernorm = ToyRMSNorm()
+        self.router = torch.nn.Linear(H, 4, bias=False)
+        self.experts = torch.nn.Identity()
+        self.layer_scalar = torch.nn.Buffer(torch.ones(1))
+
+
+class GraniteShapedDecoderLayer(ToyDecoderLayer):
+    """Plain children, but the layer scales its residual adds."""
+    def __init__(self):
+        super().__init__()
+        self.residual_multiplier = torch.nn.Parameter(torch.full((1,), 0.22))
+
+
+def test_layer_with_extra_structure_is_refused(monkeypatch):
+    """Name presence is not structure: a layer whose children exceed the
+    four the fold re-implements, or that carries parameters or buffers of
+    its own, keeps its own forward (Gemma-4, GraniteMoe)."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    for cls in (Gemma4ShapedDecoderLayer, GraniteShapedDecoderLayer):
+        m = torch.nn.Module()
+        m.layer = cls()
+        with pytest.raises(RuntimeError, match="patched nothing"):
+            fuse_t1_glue_r2(m)
+        x = (torch.randn(1, 1, H) * 2).to(torch.bfloat16)
+        m.layer(x)
+        assert calls["resid"] == 0, cls.__name__
+    # the plain layer beside them still folds
+    m = torch.nn.Module()
+    m.plain = ToyDecoderLayer()
+    m.gemma = Gemma4ShapedDecoderLayer()
+    assert fuse_t1_glue_r2(m) == (1, 0)
+    assert calls["resid"] == 0
+    m.plain(torch.randn(1, 1, H).to(torch.bfloat16))
+    m.gemma(torch.randn(1, 1, H).to(torch.bfloat16))
+    assert calls["resid"] == 1, "only the plain layer folded"
+
+
+def test_structural_guard_is_what_refuses(monkeypatch):
+    """The guard itself, and proof the end-to-end refusal goes through it:
+    with the guard forced permissive, the Gemma-shaped layer WOULD fold
+    (Bugbot, #366 -- the earlier toy names did not end in DecoderLayer,
+    so the fold never looked at them)."""
+    from experts4bit_qlora.engines import glue_r2
+    assert glue_r2._layer_is_plain(ToyDecoderLayer())
+    assert not glue_r2._layer_is_plain(Gemma4ShapedDecoderLayer())
+    assert not glue_r2._layer_is_plain(GraniteShapedDecoderLayer())
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    _stub(monkeypatch, {"resid": 0, "rope": 0})
+    monkeypatch.setattr(glue_r2, "_layer_is_plain", lambda mod: True)
+    m = torch.nn.Module()
+    m.layer = Gemma4ShapedDecoderLayer()
+    assert fuse_t1_glue_r2(m) == (1, 0), "with the guard gone the fold reaches the Gemma-shaped layer"
+
