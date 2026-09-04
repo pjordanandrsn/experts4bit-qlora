@@ -17,8 +17,8 @@ orchestration, adapters, training, residency and serving; the kernels it
 calls through the `[fast]` extra live in
 [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm).
 **Environment:** Linux, a CUDA GPU, torch ≥ 2.2 and bitsandbytes ≥ 0.43
-(Python 3.11 is what CI tests; the kernels need Triton on an sm_80+
-GPU). **The material limitation:** on a model that already fits in bf16,
+(the floors are `pyproject.toml`'s; Python 3.11 is what CI tests; the
+kernels need Triton on an sm_80+ GPU). **The material limitation:** on a model that already fits in bf16,
 4-bit here is a memory trade, not a speed-up, and on the measured
 comparator it cost energy (`e4b.train.energy-honest.scoped-a2000`) — this
 is for models that do not fit. Machine-readable capabilities and evidence:
@@ -105,7 +105,12 @@ lookup aliases that install this package; always install and cite
 reference path. Building from source — `pip install --no-build-isolation`,
 or any build outside pip's isolated build environment — needs setuptools ≥ 77
 for the PEP 639 license metadata in `pyproject.toml`; an ordinary
-`pip install` gets it automatically through build isolation.
+`pip install` gets it automatically through build isolation. The `[fast]`
+extra's floor on `grouped-nf4-gemm` is `pyproject.toml`'s and is not
+repeated here; which version of this package needs which kernel release,
+and why, is the `compatibility` record in
+[`docs/system-manifest.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/system-manifest.json),
+validated in CI against `pyproject.toml`.
 
 ## Which door? Start from what does not fit
 
@@ -150,24 +155,24 @@ experts in bf16, and OOMs.
 
 ## What is measured
 
-Each row is an entry in `docs/claims.json`; the last column is its
-evidence status. **measured** means the receipt is in this repository;
+Each row names its entries in `docs/claims.json`, which carry the value,
+the conditions and the receipt path; the last column is the status there. **measured** means the receipt is in this repository;
 **measured-private** means the run happened but the receipt lives in a
 private audit tree and you cannot check it from here.
 
 | | result | status |
 |---|---|---|
-| OLMoE-1B-7B fits a 12 GB card and trains | 4.70 GB load; held-out eval 1.4813 → 1.0290 | measured |
-| Expert offload trains 30B-class MoEs on 12 GB | Qwen3-30B-A3B peaks 7.16 GB, Gemma-4-26B-A4B 8.47 GB | measured |
-| Fused training path, two 30B MoEs × five datasets | 1.52–1.81× per step at 0.75–0.81× VRAM, loss parity, frozen stack bit-identical over 16.31 GB | measured |
-| Arena vs pinned host RAM, at a descending cap | 2.56× / 3.80× / 6.40× less host RAM (OLMoE / Gemma-4 / Qwen3-30B) | measured |
-| Paged decode vs the model's own attention | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; Gemma-4 has no reference at this resolution — its own cached forward swings −0.107 … +0.271 nats across windows — and the paged path's one measured cost there is the fp8 cache, 0.046 nats ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
-| Per-family serving throughput on one rented RTX 5090 class (six families, same protocol) | Qwen3-30B 97 → 155 tok/s B=1 and 483 → 944 B=16; OLMoE 248 → 452; Granite 191 → 285; Mixtral 48 → 107; gpt-oss and Gemma-4 NF4 only (124, 71) — the refused arms are the build-out ([`SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.35.0/docs/SERVING-THROUGHPUT.md)) | measured |
-| Single-stream Qwen3-30B-A3B on an RTX 5090 | ≈100 tok/s NF4; 204.6 tok/s with calibrated int4 attention + int4 experts | measured-private |
-| Batched (B=16) Qwen3-30B-A3B on an RTX 5090 | ≈1,238 tok/s aggregate | measured |
-| Same box, same prompts, against vLLM (GPTQ-Int4) | vLLM ahead 1.47× at B=1, 1.55× at B=16 | measured-private |
-| DeepSeek-V4-Flash (284B, 147 GB of experts on disk) | loads in ~10 s at 8.74 GiB peak VRAM and generates | measured |
-| Informed hot sets vs by-index, identical VRAM | +37.1% on DeepSeek-V4-Flash; the gain is a property of the host | measured |
+| OLMoE-1B-7B fits a 12 GB card and trains (`e4b.train.olmoe-fits`, `e4b.train.olmoe-converges`) | 4.70 GB load; held-out eval 1.4813 → 1.0290 | measured |
+| Expert offload trains 30B-class MoEs on 12 GB (`e4b.offload.fits-30b-class`) | Qwen3-30B-A3B peaks 7.16 GB, Gemma-4-26B-A4B 8.47 GB | measured |
+| Fused training path, two 30B MoEs × five datasets (`e4b.train.flagship-matrix`) | 1.52–1.81× per step at 0.75–0.81× VRAM, loss parity, frozen stack bit-identical over 16.31 GB | measured |
+| Arena vs pinned host RAM, at a descending cap (`e4b.offload.arena-vs-host-ram`) | 2.56× / 3.80× / 6.40× less host RAM (OLMoE / Gemma-4 / Qwen3-30B) | measured |
+| Paged decode vs the model's own attention (`e4b.parity.*.paged-vs-own-attention`, `e4b.parity.gemma4.no-reference`, `e4b.parity.gemma4.fp8-share`) | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; Gemma-4 has no reference at this resolution — its own cached forward swings −0.107 … +0.271 nats across windows — and the paged path's one measured cost there is the fp8 cache, 0.046 nats ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
+| Per-family serving throughput on one rented RTX 5090 class (six families, same protocol; `e4b.serve.tp.*`) | Qwen3-30B 97 → 155 tok/s B=1 and 483 → 944 B=16; OLMoE 248 → 452; Granite 191 → 285; Mixtral 48 → 107; gpt-oss and Gemma-4 NF4 only (124, 71) — the refused arms are the build-out ([`SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.35.0/docs/SERVING-THROUGHPUT.md)) | measured |
+| Single-stream Qwen3-30B-A3B on an RTX 5090 (`e4b.serve.b1.qwen3-30b.nf4.5090.2026-09`, `e4b.serve.b1.qwen3-30b.int4attn-calib.5090`) | ≈100 tok/s NF4; 204.6 tok/s with calibrated int4 attention + int4 experts | measured-private |
+| Batched (B=16) Qwen3-30B-A3B on an RTX 5090 (`e4b.serve.b16.qwen3-30b.int4.5090`) | ≈1,238 tok/s aggregate | measured |
+| Same box, same prompts, against vLLM (GPTQ-Int4) (`e4b.serve.h2h.vllm.same-box`) | vLLM ahead 1.47× at B=1, 1.55× at B=16 | measured-private |
+| DeepSeek-V4-Flash (284B, 147 GB of experts on disk) (`e4b.serve.deepseek-v4`) | loads in ~10 s at 8.74 GiB peak VRAM and generates | measured |
+| Informed hot sets vs by-index, identical VRAM (`e4b.serve.informed-hot-sets`) | +37.1% on DeepSeek-V4-Flash; the gain is a property of the host | measured |
 
 Three things to read beside that table, because they change what it
 means:

@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-04, version 0.34.0.** One page. The README argues the
+**As of 2026-09-04, version 0.35.0** (the version of record is `pyproject.toml`'s). One page. The README argues the
 case; this page states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.

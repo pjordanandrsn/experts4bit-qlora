@@ -16,7 +16,8 @@ the corrections and retractions, the caveats and refused arms. A number in a
 release note is a quote of an entry in `docs/claims.json`; the entry, not the
 note, decides whether it is still current.
 
-Historical release notes are not rewritten to this shape.
+Historical release notes are not rewritten to this shape. Releases are cut
+from `main` by the maintainer; do not tag or publish from a branch.
 
 Example opening:
 
