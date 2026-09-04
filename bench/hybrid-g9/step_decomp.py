@@ -412,6 +412,104 @@ def _oracle_label(a, impl: str) -> str:
     return base
 
 
+# ---------------------------------------------------------------------------
+# Matched routing: record every router's top-k choice (index + weight) per
+# layer and position from a reference forward, then REPLAY them into another
+# path scoring the same tokens. On a mixture-of-experts model two
+# arithmetically different paths route a few percent of tokens to different
+# experts, and Gemma-4 amplifies that into 0.1-0.3 nats per 512-token window
+# (P27, e4b#359) -- so a parity delta at that resolution measures the
+# router's chaos, not the path. With routing matched, what remains is the
+# attention + kernel difference, which is the thing being asked about.
+#
+# Positions are tracked by CONSUMPTION: each layer's router serves rows in
+# order (a full forward serves all T rows at once; a paged path serves the
+# prompt in prefill chunks, then one row per decode step), and the harness
+# resets the counters when the KV cache is rewound to the prompt boundary.
+# Every router call outside the recorded range passes through untouched
+# and is counted, so the K8 line can say how much of the window was
+# actually matched.
+_ROUTE = {"mode": None, "store": {}, "consumed": {}, "served": 0, "passed": 0,
+          "k": None, "handles": []}
+
+
+def _router_modules(model):
+    """(layer index, router module) for every decoder layer that has one --
+    the first submodule whose class name carries 'Router' (Gemma-4
+    `layer.router`, Qwen3-MoE / OLMoE / Mixtral `layer.mlp.gate`)."""
+    out = []
+    for i, L in enumerate(_decoder_layers(model)):
+        for _n, m in L.named_modules():
+            if "Router" in type(m).__name__:
+                out.append((i, m))
+                break
+    return out
+
+
+def _route_hook(layer):
+    def hook(_m, _inp, out):
+        w, idx = out[1], out[2]
+        n = int(idx.shape[0])
+        st = _ROUTE
+        if st["mode"] == "record":
+            st["store"].setdefault(layer, {"idx": [], "w": []})
+            st["store"][layer]["idx"].append(idx.detach().cpu())
+            st["store"][layer]["w"].append(w.detach().float().cpu())
+            st["consumed"][layer] = st["consumed"].get(layer, 0) + n
+            return None
+        if st["mode"] == "replay":
+            rec = st["store"].get(layer)
+            c = st["consumed"].get(layer, 0)
+            st["consumed"][layer] = c + n
+            if rec is None or c + n > int(rec["idx"].shape[0]):
+                st["passed"] += n
+                return None
+            st["served"] += n
+            new_idx = rec["idx"][c:c + n].to(idx.device)
+            new_w = rec["w"][c:c + n].to(device=w.device, dtype=w.dtype)
+            return (out[0], new_w, new_idx) + tuple(out[3:])
+        return None
+    return hook
+
+
+def _route_install(model, mode: str, store=None):
+    """Arm record or replay on every router; returns the number armed."""
+    _route_clear()
+    _ROUTE["mode"] = mode
+    _ROUTE["store"] = {} if store is None else store
+    for layer, m in _router_modules(model):
+        _ROUTE["handles"].append(m.register_forward_hook(_route_hook(layer)))
+    return len(_ROUTE["handles"])
+
+
+def _route_clear():
+    for h in _ROUTE["handles"]:
+        h.remove()
+    _ROUTE.update(mode=None, store={}, consumed={}, served=0, passed=0, handles=[])
+
+
+def _route_reset(pos: int = 0):
+    """Point every layer's counter at absolute position `pos` (after a KV
+    rewind to the prompt boundary) and zero the served/passed tallies."""
+    for layer in list(_ROUTE["consumed"]) + [l for l, _ in _ROUTE.get("_layers", [])]:
+        _ROUTE["consumed"][layer] = pos
+    _ROUTE["served"] = 0
+    _ROUTE["passed"] = 0
+
+
+def _route_save(path: str, meta: dict) -> dict:
+    """Concatenate the recorded chunks per layer and write them."""
+    rec = {int(l): {"idx": torch.cat(v["idx"]), "w": torch.cat(v["w"])}
+           for l, v in _ROUTE["store"].items()}
+    torch.save({"layers": rec, "meta": meta}, path)
+    return rec
+
+
+def _route_load(path: str):
+    d = torch.load(path, map_location="cpu")
+    return d["layers"], d.get("meta", {})
+
+
 def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
     """The oracle arm: same window, same sha, transformers' attention."""
     import json as _json
@@ -431,9 +529,25 @@ def _ppl_oracle_main(a, model, ppl_ids, ppl_sha):
             m.config._attn_implementation = impl
     model.eval()
     t0 = _time.perf_counter()
+    route = getattr(a, "ppl_route", "none")
     if a.ppl_oracle in ("full", "upstream-full"):
+        if route == "record":
+            n_armed = _route_install(model, "record")
+            print(f"ROUTE record armed on {n_armed} routers", flush=True)
+        elif route == "replay":
+            raise SystemExit("--ppl-route replay is for the paged arm; the "
+                             "full forward is what gets RECORDED")
         mean_nll = ppl_oracle_score_full(model, ppl_ids, a.prompt_len,
                                          a.ppl_steps)
+        if route == "record":
+            rec = _route_save(a.ppl_route_file, {"text_sha": ppl_sha,
+                                                 "prompt_len": a.prompt_len,
+                                                 "steps": a.ppl_steps,
+                                                 "model": a.model})
+            n_pos = next(iter(rec.values()))["idx"].shape[0] if rec else 0
+            print(f"ROUTE recorded {len(rec)} layers x {n_pos} positions -> "
+                  f"{a.ppl_route_file}", flush=True)
+            _route_clear()
     else:
         ck = int(getattr(a, "ppl_chunk", 0) or 0)
         mean_nll = ppl_oracle_score(model, ppl_ids, a.prompt_len, a.ppl_steps,
@@ -1439,6 +1553,23 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
         base = runner.pos_of[rid]                 # prompt boundary
         kv.rewind_nosync(slot, a.prompt_len)
         torch.cuda.synchronize()
+        route = getattr(a, "ppl_route", "none")
+        if route == "replay":
+            rec, meta = _route_load(a.ppl_route_file)
+            if meta.get("text_sha") and meta["text_sha"] != ppl_sha:
+                raise SystemExit(f"routing record is for window {meta['text_sha'][:12]}, "
+                                 f"this window is {ppl_sha[:12]}")
+            n_armed = _route_install(model, "replay", rec)
+            # the prompt's rows were routed by the prefill on THIS path; the
+            # scored rows start at the prompt boundary, matching the record
+            for layer in rec:
+                _ROUTE["consumed"][layer] = a.prompt_len
+            _ROUTE["served"] = 0
+            _ROUTE["passed"] = 0
+            print(f"ROUTE replay armed on {n_armed} routers from position "
+                  f"{a.prompt_len} ({len(rec)} recorded layers)", flush=True)
+        elif route == "record":
+            raise SystemExit("--ppl-route record is for --ppl-oracle full")
         cont = ppl_ids[a.prompt_len:a.prompt_len + a.ppl_steps + 1]
         assert cont.numel() >= a.ppl_steps + 1, (
             f"corpus slice holds {cont.numel()} ids but --ppl-steps "
@@ -1496,6 +1627,11 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                "attn_compute": _attn_compute_ran(),
                "mech": _mech_report(),
                "warm_tokens_discarded": base - a.prompt_len,
+               "route": (None if getattr(a, "ppl_route", "none") == "none" else
+                         {"mode": a.ppl_route, "file": a.ppl_route_file,
+                          "rows_served": _ROUTE["served"],
+                          "rows_passed": _ROUTE["passed"],
+                          "layers": len(_ROUTE["store"])}),
                "router_probe": (probe.report(kv.L)
                                 if probe else None),
                "basis": "teacher-forced through the paged decode path "
@@ -1504,9 +1640,14 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                         "construction (PREREG-k8)"}
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(rep, indent=1))
+        route_tag = ""
+        if rep["route"]:
+            route_tag = (f" route=replay served={rep['route']['rows_served']}"
+                         f" passed={rep['route']['rows_passed']}")
+            _route_clear()
         print(f"K8_PPL steps={a.ppl_steps} nll={mean_nll:.5f} "
               f"ppl={rep['ppl']:.5f} compute={rep['attn_compute']} "
-              f"sha={ppl_sha[:12]} out={a.out}", flush=True)
+              f"sha={ppl_sha[:12]}{route_tag} out={a.out}", flush=True)
         return
 
     n_warm = 3
@@ -2228,6 +2369,11 @@ def main():
                     help="key scale groups for the fp8 paged cache: 'auto' keeps "
                          "32-wide scales per layer (4/8/16 at head_dim 128/256/512 "
                          "when the kernel unrolls them, else 4); an int broadcasts")
+    ap.add_argument("--ppl-route", default="none", choices=["none", "record", "replay"],
+                    help="matched routing: 'record' the reference full forward's "
+                         "top-k choices per layer and position to --ppl-route-file; "
+                         "'replay' them into the paged arm scoring the same window")
+    ap.add_argument("--ppl-route-file", default="route.pt")
     ap.add_argument("--ppl-layer-diff", default="",
                     help="comma list of K8 steps at which to diff the paged "
                          "decode step against the chunk-free eager forward per "
