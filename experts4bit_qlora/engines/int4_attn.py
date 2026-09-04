@@ -15,7 +15,10 @@ Measured basis (receipts: int4port P1, INT4GATE/INT4SPLIT): the GEMV
 runs the qkv shape at 1,044 GB/s -- 6.9x over the NF4 register-LUT path
 and 2.6x over the bf16 dense baseline -- and the int4 grid on attention
 costs -0.006 ppl over 8,192 teacher-forced tokens. The lm_head is NOT
-eligible (+0.18 ppl measured); this module never touches it.
+eligible uncalibrated (+0.18 ppl measured); the calibrated lane takes it
+under its own flag. A projection bias (gpt-oss) rides beside the int4
+weight in bf16 and is added after the GEMV; the weight alone is on the
+grid.
 
 Capture-legality: each module preallocates its split-K partials buffer
 and its activation-quant outputs at swap time, so a captured decode
@@ -44,10 +47,6 @@ class Int4Linear(nn.Module):
         shipped round-to-nearest packer; the calibrated lane passes one
         closed over that projection's Hessian. Same bytes either way."""
         super().__init__()
-        if lin.bias is not None:
-            raise RuntimeError(
-                "E4B_SERVE_ATTN_INT4: projection carries a bias; this path "
-                "stores weight-only int4 -- refusing rather than dropping it")
         gemv, qx, dref, pack = _kernels()
         self._gemv, self._qx, self._dref = gemv, qx, dref
         self.N, self.K = lin.out_features, lin.in_features
@@ -70,6 +69,15 @@ class Int4Linear(nn.Module):
                              persistent=False)
         self._decode_cache = {}        # R -> (eids, part) for 1 < R <= cap
         self._bf16_cache = None        # dequantised weight for rows > cap
+        # A projection bias (gpt-oss's q/k/v/o carry one) rides beside the
+        # int4 weight in bf16 and is added after the GEMV / matmul -- the
+        # weight is what the grid stores, the bias is not quantised. Kept
+        # as a buffer of the module's own so the swap stays weight-exact.
+        if lin.bias is not None:
+            self.register_buffer("bias", lin.bias.detach().to(torch.bfloat16).clone(),
+                                 persistent=False)
+        else:
+            self.bias = None
 
     # The int4 GEMV is a ONE-ROW lever. Its grid has a row axis but no
     # weight reuse across rows: each row-program re-streams the projection,
@@ -91,10 +99,14 @@ class Int4Linear(nn.Module):
             xq, xs = self._qx(rows)
             out = self._gemv(xq, xs, self.packed, self.scales, eids,
                              self.N, self.K, part=part)
+            if self.bias is not None:
+                out = out + self.bias.to(out.dtype)
             return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
         w = self._bf16_weight()
-        return (rows.to(torch.bfloat16) @ w.t()).reshape(
-            *x.shape[:-1], self.N).to(x.dtype)
+        out = rows.to(torch.bfloat16) @ w.t()
+        if self.bias is not None:
+            out = out + self.bias
+        return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
 
     def _bf16_weight(self) -> torch.Tensor:
         """The dequantised weight, built on first use (warm-up, before any
