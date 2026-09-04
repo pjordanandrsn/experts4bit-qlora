@@ -132,3 +132,39 @@ def test_layer_diff_reference_does_not_consume_replay_rows(tmp_path):
     assert sd._ROUTE["mode"] == "replay"
     sd._route_clear()
 
+
+class _GraniteShapedRouter(torch.nn.Module):
+    """Returns (index, weights, logits) like GraniteMoeTopKRouter."""
+    def __init__(self, hidden, E, k):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(E, hidden) * 0.1)
+        self.k = k
+    def forward(self, x):
+        logits = torch.nn.functional.linear(x, self.weight)
+        top, idx = logits.topk(self.k, dim=-1)
+        return idx, torch.softmax(top, dim=-1), logits
+
+
+def test_router_outputs_are_located_by_dtype_not_position():
+    sd = _load_harness()
+    r = _GraniteShapedRouter(8, 6, 2)
+    x = torch.randn(5, 8)
+    out = r(x)
+    assert sd._router_out_positions(out) == (1, 0)
+    std = (torch.randn(5, 6), torch.randn(5, 2), torch.randint(0, 6, (5, 2)))
+    assert sd._router_out_positions(std) == (1, 2)
+    assert sd._router_out_positions((torch.randn(5, 6),)) is None
+    # record + replay through the Granite-shaped order
+    sd._ROUTE.update(mode="record", store={}, consumed={}, served=0, passed=0)
+    h = r.register_forward_hook(sd._route_hook(0))
+    r(x)
+    rec = {0: {"idx": torch.cat(sd._ROUTE["store"][0]["idx"]), "w": torch.cat(sd._ROUTE["store"][0]["w"])}}
+    assert torch.equal(rec[0]["idx"], out[0]) and torch.allclose(rec[0]["w"], out[1])
+    sd._ROUTE.update(mode="replay", store=rec, consumed={0: 0}, served=0, passed=0)
+    y = torch.randn(5, 8)
+    got = r(y)
+    assert torch.equal(got[0], out[0]) and torch.allclose(got[1], out[1]), "replayed into the module's own order"
+    assert got[2].shape == (5, 6) and sd._ROUTE["served"] == 5
+    h.remove()
+    sd._route_clear()
+

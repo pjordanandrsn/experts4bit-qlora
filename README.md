@@ -85,6 +85,7 @@ private audit tree and you cannot check it from here.
 | Fused training path, two 30B MoEs × five datasets | 1.52–1.81× per step at 0.75–0.81× VRAM, loss parity, frozen stack bit-identical over 16.31 GB | measured |
 | Arena vs pinned host RAM, at a descending cap | 2.56× / 3.80× / 6.40× less host RAM (OLMoE / Gemma-4 / Qwen3-30B) | measured |
 | Paged decode vs the model's own attention | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; Gemma-4 has no reference at this resolution — its own cached forward swings −0.107 … +0.271 nats across windows — and the paged path's one measured cost there is the fp8 cache, 0.046 nats ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
+| Per-family serving throughput on one rented RTX 5090 class (six families, same protocol) | Qwen3-30B 97 → 155 tok/s B=1 and 483 → 944 B=16; OLMoE 248 → 452; Granite 191 → 285; Mixtral 48 → 107; gpt-oss and Gemma-4 NF4 only (124, 71) — the refused arms are the build-out ([`SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/SERVING-THROUGHPUT.md)) | measured |
 | Single-stream Qwen3-30B-A3B on an RTX 5090 | ≈100 tok/s NF4; 204.6 tok/s with calibrated int4 attention + int4 experts | measured-private |
 | Batched (B=16) Qwen3-30B-A3B on an RTX 5090 | ≈1,238 tok/s aggregate | measured-private |
 | Same box, same prompts, against vLLM (GPTQ-Int4) | vLLM ahead 1.47× at B=1, 1.55× at B=16 | measured-private |
@@ -145,6 +146,7 @@ no shipped tool bakes the training arena from a bf16 checkpoint yet.
 | [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/CHOOSING.md) | which mode, and why |
 | [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/METHODOLOGY.md) | hosts, protocols, every measurement's provenance |
 | [`docs/SERVING-PARITY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/SERVING-PARITY.md) | paged decode vs each model's own attention |
+| [`docs/SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/SERVING-THROUGHPUT.md) | per-family decode throughput under one protocol, with the refusal list |
 | [`docs/STORAGE-MODES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/STORAGE-MODES.md) | the six storage modes and what each promises |
 | [`docs/RESIDENCY-ENGINES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/RESIDENCY-ENGINES.md) | residency engines, hot-set selection, host-regime laws |
 | [`docs/SERVING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.32.0/docs/SERVING.md) | the HTTP shim and Docker deployment |

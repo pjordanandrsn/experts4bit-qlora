@@ -1,0 +1,3 @@
+allenai/OLMoE-1B-7B-0924-Instruct olmoe
+ibm-granite/granite-3.1-3b-a800m-instruct granite
+openai/gpt-oss-20b gptoss
