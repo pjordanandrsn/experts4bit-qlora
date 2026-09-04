@@ -40,7 +40,8 @@ def main() -> int:
     n_blocks = 0
     for f in files:
         if not f.exists():
-            errors.append(f"missing: {f.relative_to(root)}"); continue
+            errors.append(f"missing: {f.relative_to(root)}")
+            continue
         text = f.read_text(errors="replace")
         lines = text.splitlines()
         for m in FENCE.finditer(text):

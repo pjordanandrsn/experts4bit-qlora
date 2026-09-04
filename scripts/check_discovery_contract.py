@@ -42,16 +42,21 @@ def _bm25_report(root: Path, corpus_globs: list[str], queries: list[dict], k1=1.
         for p in sorted(root.glob(g)):
             docs[str(p.relative_to(root))] = _tokens(p.read_text(errors="replace"))
     if not docs:
-        print("bm25: no corpus"); return 0
-    N = len(docs); avgdl = sum(len(t) for t in docs.values()) / N
+        print("bm25: no corpus")
+        return 0
+    N = len(docs)
+    avgdl = sum(len(t) for t in docs.values()) / N
     df = Counter()
     for toks in docs.values():
         df.update(set(toks))
     hits = 0
     for q in queries:
-        qt = _tokens(q["query"]); scores = {}
+        qt = _tokens(q["query"])
+        scores = {}
         for name, toks in docs.items():
-            tf = Counter(toks); dl = len(toks); s = 0.0
+            tf = Counter(toks)
+            dl = len(toks)
+            s = 0.0
             for t in qt:
                 if t not in tf:
                     continue
@@ -93,8 +98,10 @@ def main() -> int:
         seen.add(key)
         doc = root / r["expected_document"]
         if not doc.exists():
-            errors.append(f"{r['query']!r}: expected document missing: {r['expected_document']}"); continue
-        text = doc.read_text(errors="replace"); low = text.lower()
+            errors.append(f"{r['query']!r}: expected document missing: {r['expected_document']}")
+            continue
+        text = doc.read_text(errors="replace")
+        low = text.lower()
         for group in r["required_concepts"]:
             alts = [group] if isinstance(group, str) else group
             if not any(alt.lower() in low for alt in alts):

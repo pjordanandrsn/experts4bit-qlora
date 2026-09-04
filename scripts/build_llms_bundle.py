@@ -35,7 +35,8 @@ def _claims_projection(claims_path: Path, keep_tiers: set[str]) -> str:
     lines = ["Active claims (projection of docs/claims.json; the file is authoritative and carries evidence paths):", ""]
     n = 0
     for c in claims:
-        st = str(c.get("status", "")).lower(); tier = str(c.get("tier", "")).lower()
+        st = str(c.get("status", "")).lower()
+        tier = str(c.get("tier", "")).lower()
         if st in RETIRED or tier in RETIRED or (keep_tiers and tier not in keep_tiers):
             continue
         n += 1
@@ -56,7 +57,8 @@ def build(root: Path, cfg: dict) -> str:
             parts = []
             for f in sorted(root.glob(item["glob"])):
                 parts.append(f"## Source: {f.relative_to(root)} ({base}{f.relative_to(root)})\n\n{f.read_text(errors='replace').strip()}\n")
-            out.append("\n".join(parts)); continue
+            out.append("\n".join(parts))
+            continue
         if kind == "claims":
             body = _claims_projection(root / item["path"], set(item.get("tiers", [])))
         else:
@@ -85,11 +87,14 @@ def main() -> int:
     outp = root / a.out
     limit = cfg.get("max_bytes", 400_000)
     if len(text.encode()) > limit:
-        print(f"FAIL: bundle is {len(text.encode())} bytes > max_bytes {limit}; trim docs/llms-bundle.json"); return 1
+        print(f"FAIL: bundle is {len(text.encode())} bytes > max_bytes {limit}; trim docs/llms-bundle.json")
+        return 1
     if a.check:
         if not outp.exists() or outp.read_text() != text:
-            print(f"FAIL: {a.out} is stale -- run: python scripts/build_llms_bundle.py"); return 1
-        print(f"OK: {a.out} is current ({len(text.encode())} bytes, {len(cfg['sources'])} sources)"); return 0
+            print(f"FAIL: {a.out} is stale -- run: python scripts/build_llms_bundle.py")
+            return 1
+        print(f"OK: {a.out} is current ({len(text.encode())} bytes, {len(cfg['sources'])} sources)")
+        return 0
     outp.write_text(text)
     print(f"wrote {a.out} ({len(text.encode())} bytes, {len(cfg['sources'])} sources)")
     return 0

@@ -24,7 +24,8 @@ def _pyproject(root: Path) -> dict:
         import tomllib
         return tomllib.loads((root / "pyproject.toml").read_text())
     except ImportError:
-        print("check_wheel_metadata needs Python >= 3.11 (tomllib)"); sys.exit(2)
+        print("check_wheel_metadata needs Python >= 3.11 (tomllib)")
+        sys.exit(2)
 
 
 def main() -> int:
@@ -44,7 +45,8 @@ def main() -> int:
     fields: dict[str, list[str]] = {}
     for line in head.splitlines():
         if ":" in line and not line.startswith(" "):
-            k, v = line.split(":", 1); fields.setdefault(k.strip(), []).append(v.strip())
+            k, v = line.split(":", 1)
+            fields.setdefault(k.strip(), []).append(v.strip())
     errors = []
     def one(k):
         return (fields.get(k) or [""])[0]
@@ -81,7 +83,8 @@ def main() -> int:
             errors.append(f"Provides-Extra missing: {ex}")
     reqs = fields.get("Requires-Dist", [])
     for want in a.requires:
-        norm = lambda s: re.sub(r"\s+", "", s)
+        def norm(s):
+            return re.sub(r"\s+", "", s)
         if not any(norm(r).startswith(norm(want)) for r in reqs):
             errors.append(f"Requires-Dist lacks {want!r}; have {reqs}")
     if errors:

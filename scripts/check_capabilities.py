@@ -56,7 +56,8 @@ def _schema_check(doc: dict, schema: dict, errors: list[str]) -> None:
         t = sch.get("type")
         if t == "object":
             if not isinstance(node, dict):
-                errors.append(f"{path}: expected object"); return
+                errors.append(f"{path}: expected object")
+                return
             for k in sch.get("required", []):
                 if k not in node:
                     errors.append(f"{path}: missing required key {k!r}")
@@ -70,14 +71,16 @@ def _schema_check(doc: dict, schema: dict, errors: list[str]) -> None:
                     walk(v, props[k], f"{path}.{k}")
         elif t == "array":
             if not isinstance(node, list):
-                errors.append(f"{path}: expected array"); return
+                errors.append(f"{path}: expected array")
+                return
             if "minItems" in sch and len(node) < sch["minItems"]:
                 errors.append(f"{path}: needs at least {sch['minItems']} item(s)")
             for i, v in enumerate(node):
                 walk(v, sch.get("items", {}), f"{path}[{i}]")
         elif t == "string":
             if not isinstance(node, str):
-                errors.append(f"{path}: expected string"); return
+                errors.append(f"{path}: expected string")
+                return
             if "const" in sch and node != sch["const"]:
                 errors.append(f"{path}: must be {sch['const']!r}")
             if "enum" in sch and node not in sch["enum"]:
@@ -131,7 +134,8 @@ def main() -> int:
     try:
         doc = json.loads(cap_path.read_text())
     except Exception as e:  # noqa: BLE001
-        print(f"FAIL: {cap_path}: not valid JSON: {e}"); return 1
+        print(f"FAIL: {cap_path}: not valid JSON: {e}")
+        return 1
     schema = json.loads((root / a.schema).read_text())
     _schema_check(doc, schema, errors)
     if errors:
@@ -178,7 +182,8 @@ def main() -> int:
                     errors.append(f"{cid}: entry point not found in source: {ep}")
                 elif a.do_import:
                     try:
-                        m = __import__(mod, fromlist=[sym]); getattr(m, sym)
+                        m = __import__(mod, fromlist=[sym])
+                        getattr(m, sym)
                     except Exception as e:  # noqa: BLE001
                         errors.append(f"{cid}: import failed for {ep}: {e!r}")
             else:
