@@ -19,6 +19,16 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
   the machine-readable capability contract; validated in CI by
   `scripts/check_capabilities.py` against pyproject, source and the claims
   register. Current.
+- **[`system-manifest.json`](system-manifest.json)** — the cross-repository
+  system manifest: what each of the two packages owns, the compatibility
+  records (which version of this package needs which grouped-nf4-gemm
+  floor, and why), the evidence vocabulary, the invariants. Byte-identical
+  in both repositories; validated by `scripts/check_system_manifest.py`
+  against pyproject, the claims register and `capabilities.json`. Current.
+- **[`change-impact.json`](change-impact.json)** — which files must move
+  together (public API, new kernel capability, measured result, dependency
+  floor); `scripts/check_change_impact.py --base <ref>` checks a diff.
+  Current.
 - **[`discovery-queries.json`](discovery-queries.json)** — the
   discoverability regression corpus (`scripts/check_discovery_contract.py`).
   Current.

@@ -37,10 +37,14 @@ always install and cite `experts4bit-qlora`.
 ## Environment, in one line
 
 Linux, an NVIDIA CUDA GPU, torch ≥ 2.2, bitsandbytes ≥ 0.43; transformers
-≥ 5.0 for the streaming loader (`[train]`); grouped-nf4-gemm ≥ 0.28.0 and
-Triton on an sm_80+ GPU for the kernel path (`[fast]`). CI tests Python
-3.11. No macOS, Windows, ROCm or XPU. The current position, including what
-is measured-private and what is open, is [`STATUS.md`](STATUS.md).
+≥ 5.0 for the streaming loader (`[train]`); for the kernel path (`[fast]`),
+Triton on an sm_80+ GPU and the `fast` extra's floor in `pyproject.toml`
+(grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI). Every floor
+above is `pyproject.toml`'s; the machine-readable record of which
+experts4bit-qlora version needs which kernel release, and why, is
+[`system-manifest.json`](system-manifest.json) (`compatibility`). CI tests
+Python 3.11. No macOS, Windows, ROCm or XPU. The current position, including
+what is measured-private and what is open, is [`STATUS.md`](STATUS.md).
 
 ## Limitations that apply to every page
 
@@ -53,4 +57,5 @@ is measured-private and what is open, is [`STATUS.md`](STATUS.md).
   4-bit is a memory trade, and on the measured comparator it cost energy
   (`e4b.train.energy-honest.scoped-a2000`).
 - Numbers live in [`claims.json`](claims.json) with their status; a page
-  quotes claim IDs, never figures, and a retired claim is never current.
+  quotes claim IDs, never figures, and a retired or superseded claim is
+  never current — the register's `status` field, not a page, decides.

@@ -96,8 +96,21 @@ jobs:
           python-version: "3.11"
       - name: capability contract (schema, pyproject, source symbols, claims, install routes)
         run: python scripts/check_capabilities.py
-      - name: discovery contract (queries -> solution pages -> concepts, canonical install, limitations)
-        run: python scripts/check_discovery_contract.py --bm25
+      - name: system manifest (byte-identical across the two repositories; floors, ownership and vocabulary vs pyproject, claims, capabilities)
+        run: python scripts/check_system_manifest.py
+      - name: dependency-floor drift (every current document states pyproject's [fast] floor; historical lines are listed, not failed)
+        run: python scripts/check_dependency_floor.py
+      - name: change-impact contract (pull requests only -- docs/change-impact.json, what must move together)
+        # The base commit is not in a depth-1 checkout; fetch it by sha so the
+        # diff is the pull request's own changes. Skipped on push events.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE"
+          python scripts/check_change_impact.py --base "$BASE"
+      - name: discovery contract (queries -> solution pages -> concepts, canonical install, limitations; BM25 floor = baseline minus two queries, a local proxy)
+        run: python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 30
       - name: llms bundle is current
         run: python scripts/build_llms_bundle.py --check
       - name: solution-page code blocks parse (python) and every local link resolves

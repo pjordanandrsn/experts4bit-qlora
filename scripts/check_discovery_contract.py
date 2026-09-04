@@ -25,8 +25,10 @@ For every record it verifies that:
 
 ``--bm25`` prints a small BM25 ranking of the curated docs for each query as
 a regression aid. It is a local proxy only -- never evidence of ranking in
-any external search or assistant. ``--bm25-min-top1 N`` turns it into a
-floor: fail when fewer than N queries rank their own page first.
+any external search or assistant, and a BM25 regression is never evidence
+of LLM discoverability. ``--bm25-min-top1 N`` turns it into a floor: fail
+when fewer than N queries rank their own page first, naming every query
+whose expected page is not first.
 """
 from __future__ import annotations
 
@@ -54,21 +56,24 @@ def _tokens(text: str) -> list[str]:
     return TOKEN.findall(text.lower())
 
 
-def _bm25_report(root: Path, corpus_globs: list[str], queries: list[dict], k1=1.5, b=0.75) -> int:
-    """Print the ranking; return how many queries rank their page first."""
+def _bm25_report(root: Path, corpus_globs: list[str], queries: list[dict], k1=1.5, b=0.75) -> tuple[int, list[str]]:
+    """Print the ranking; return how many queries rank their page first and
+    one line per query that does not (query, expected page, its rank, the
+    page that ranked first)."""
     docs = {}
     for g in corpus_globs:
         for p in sorted(root.glob(g)):
             docs[p.relative_to(root).as_posix()] = _tokens(read_text(p))
     if not docs:
         print("bm25: no corpus")
-        return 0
+        return 0, []
     N = len(docs)
     avgdl = sum(len(t) for t in docs.values()) / N
     df = Counter()
     for toks in docs.values():
         df.update(set(toks))
     hits = 0
+    misses: list[str] = []
     for q in queries:
         qt = _tokens(q["query"])
         scores = {}
@@ -86,9 +91,11 @@ def _bm25_report(root: Path, corpus_globs: list[str], queries: list[dict], k1=1.
         want = q["expected_document"]
         pos = ranked.index(want) + 1 if want in ranked else None
         hits += 1 if pos == 1 else 0
+        if pos != 1:
+            misses.append(f"{q['query']!r}: expected {want} ranked {pos}; first was {ranked[0]}")
         print(f"  bm25 top1={'yes' if pos == 1 else 'no ':3} rank={pos!s:>4}  {q['query'][:60]!r} -> {ranked[0]}")
     print(f"bm25: {hits}/{len(queries)} queries rank their expected page first (local proxy, not a ranking claim)")
-    return hits
+    return hits, misses
 
 
 def _install_commands(text: str) -> str:
@@ -200,9 +207,12 @@ def main() -> int:
         return 1
     print(f"OK: {len(records)} queries route to existing pages with their concepts, canonical install routes and limitations")
     if a.bm25 or a.bm25_min_top1 > 0:
-        hits = _bm25_report(root, q.get("bm25_corpus", ["docs/solutions/*.md", "docs/SOLUTIONS.md", "README.md"]), records)
+        hits, misses = _bm25_report(root, q.get("bm25_corpus", ["docs/solutions/*.md", "docs/SOLUTIONS.md", "README.md"]), records)
         if hits < a.bm25_min_top1:
-            print(f"FAIL: bm25 top-1 hits {hits} < --bm25-min-top1 {a.bm25_min_top1}")
+            for m in misses:
+                print(f"FAIL: bm25: {m}")
+            print(f"FAIL: bm25 top-1 hits {hits} < --bm25-min-top1 {a.bm25_min_top1} "
+                  f"({len(misses)} query/queries not first; local proxy, not a ranking claim)")
             return 1
     return 0
 

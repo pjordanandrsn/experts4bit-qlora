@@ -94,7 +94,7 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 OFFLOAD_EXPERTS=1 OUT=./out python -m experts4bit_
 - Families: the trainer docstring names OLMoE, Qwen3-MoE and Gemma-4; the loader's families are in [`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md). DeepSeek-V4 is trainable: the base supplies its clamped epilogue via `_apply_gate` ([`../DEEPSEEK-V4.md`](../DEEPSEEK-V4.md)).
 - Storage: nf4 is the benchmarked QLoRA default; fp4 / int8 / fp8 / bf16 / fp16 carry a tested LoRA-step contract only ([`../STORAGE-MODES.md`](../STORAGE-MODES.md)).
 - `OFFLOAD_EXPERTS=1` / `offload=True` is what makes a 30B-class MoE train on a 12 GB or 24 GB card ([`run-moe-larger-than-vram.md`](run-moe-larger-than-vram.md)).
-- Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. `[fast]` needs grouped-nf4-gemm>=0.28.0, which needs Triton (Linux-only) on an sm_80-or-newer GPU.
+- Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. `[fast]` installs grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), which needs Triton (Linux-only) on an sm_80-or-newer GPU.
 
 ## Limitations
 

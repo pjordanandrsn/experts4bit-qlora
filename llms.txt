@@ -2,6 +2,12 @@
 
 > Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs. Canonical PyPI package `experts4bit-qlora` (import `experts4bit_qlora`); `e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit` and `experts-mxfp4` are lookup aliases only.
 
+- Starting from a model, training, serving, or fit problem → experts4bit-qlora (this repository).
+- Starting from a packed layout, kernel, GEMM/GEMV, attention, or arena primitive → grouped-nf4-gemm.
+- Need a current number → docs/claims.json.
+- Need current support/status → docs/STATUS.md + docs/capabilities.json.
+- Changing public behaviour → AGENTS.md, "When you change something".
+
 Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before quoting a number: a claim whose status is retired or superseded is not current, and `evidence_private` marks a real run whose receipt is not in this repository. Division of responsibility: this project owns model loading, quantization orchestration, adapters, training, residency integration and serving; the kernel package grouped-nf4-gemm owns the packed-expert kernels, decode kernels, packing/reference operations and host/NVMe primitives, and is installed by the `[fast]` extra. Every `enable_*` call returns a count or a non-empty handle list, or raises — examples assert it; nothing falls back silently. Environment: Linux, CUDA GPU (sm_80+ for the kernels), Python 3.11 tested.
 
 ## Start here
@@ -12,6 +18,8 @@ Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before qu
 - [Status](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md): the current position — measured, measured-private, retired, superseded, open
 - [Claims register](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json): every number with hardware, conditions, status and evidence path ([schema](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims-schema.md))
 - [Documentation index](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md): what each document is and whether it is current or an anchored research record
+- [System manifest](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/system-manifest.json): what each of the two packages owns, the compatibility records (which experts4bit-qlora version needs which grouped-nf4-gemm floor, and why), the evidence vocabulary and the invariants; byte-identical in both repositories. The floors themselves are pyproject.toml's.
+- [Change-impact contract](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/change-impact.json): which files must move together for a public API change, a new kernel capability, a measured result or a dependency-floor change
 
 ## Solutions
 
