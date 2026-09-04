@@ -1,6 +1,6 @@
 {
   "package": "experts4bit-qlora",
-  "generated": "2026-09-03",
+  "generated": "2026-09-04",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "verified": "reproduced under stated conditions with a public receipt",
@@ -557,6 +557,270 @@
         "docs/METHODOLOGY.md (Test host note)",
         "grouped-nf4-gemm kernel/RESULTS-m2-anchor-recert.md"
       ]
+    },
+    {
+      "id": "e4b.serve.tp.qwen3.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Qwen3-30B-A3B on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 154.9 tok/s (int4 experts + calibrated int4 attention + round-1/2 glue folds + router epilogue); NF4 baseline 97.4 tok/s.",
+      "value": 154.9,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b1_nf4=97.4, b1_int4exp=116.3, b1_calib=112.0, b1_fused=154.9",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpB/qwen3_b1_fused.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.8621, int4exp=1.8578, calib=1.8448. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.qwen3.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of Qwen3-30B-A3B on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 943.9 tok/s (int4-b32 experts); NF4 baseline 482.8 tok/s.",
+      "value": 943.9,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b16_nf4=482.8, b16_int4exp=943.9",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpB/qwen3_b16_int4exp.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.8621, int4exp=1.8578, calib=1.8448. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.olmoe.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of OLMoE-1B-7B on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 452.5 tok/s (int4 experts + calibrated int4 attention + round-1/2 glue folds + router epilogue); NF4 baseline 247.7 tok/s.",
+      "value": 452.5,
+      "unit": "tok/s",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.159.03) on an AMD Ryzen 9 9900X host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b1_nf4=247.7, b1_int4exp=345.5, b1_calib=336.2, b1_fused=452.5",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpA/olmoe_b1_fused.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.9380, int4exp=1.9337, calib=1.9295. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.olmoe.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of OLMoE-1B-7B on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 2412.5 tok/s (int4-b32 experts); NF4 baseline 1294.0 tok/s.",
+      "value": 2412.5,
+      "unit": "tok/s",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.159.03) on an AMD Ryzen 9 9900X host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b16_nf4=1294.0, b16_int4exp=2412.5",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpA/olmoe_b16_int4exp.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.9380, int4exp=1.9337, calib=1.9295. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.granite.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Granite-3.1-3B-A800M on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 284.6 tok/s (int4-b32 experts); NF4 baseline 191.0 tok/s.",
+      "value": 284.6,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.159.03) on an AMD Ryzen 9 9900X host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b1_nf4=191.0, b1_int4exp=284.6, b1_calib=218.0; refused: b1_fused",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpA/granite_b1_int4exp.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.granite.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of Granite-3.1-3B-A800M on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 2210.2 tok/s (int4-b32 experts); NF4 baseline 1447.3 tok/s.",
+      "value": 2210.2,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.159.03) on an AMD Ryzen 9 9900X host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b16_nf4=1447.3, b16_int4exp=2210.2",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpA/granite_b16_int4exp.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.gptoss.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of gpt-oss-20b on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 124.2 tok/s (NF4 experts, bf16 attention); NF4 baseline 124.2 tok/s.",
+      "value": 124.2,
+      "unit": "tok/s",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 580.159.03) on an AMD Ryzen 9 9900X host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b1_nf4=124.2; refused: b1_int4exp, b1_calib, b1_fused",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpA/gptoss_b1_nf4.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=6.3354. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.gptoss.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of gpt-oss-20b on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 731.9 tok/s (NF4 experts); NF4 baseline 731.9 tok/s.",
+      "value": 731.9,
+      "unit": "tok/s",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 580.159.03) on an AMD Ryzen 9 9900X host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b16_nf4=731.9; refused: b16_int4exp",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpA/gptoss_b16_nf4.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=6.3354. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.gemma4.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Gemma-4-26B-A4B on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 71.1 tok/s (NF4 experts, bf16 attention); NF4 baseline 71.1 tok/s.",
+      "value": 71.1,
+      "unit": "tok/s",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b1_nf4=71.1; refused: b1_int4exp, b1_calib, b1_fused",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpB/gemma4_b1_nf4.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=4.8103. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.gemma4.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of Gemma-4-26B-A4B on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 571.9 tok/s (NF4 experts); NF4 baseline 571.9 tok/s.",
+      "value": 571.9,
+      "unit": "tok/s",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b16_nf4=571.9; refused: b16_int4exp",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpB/gemma4_b16_nf4.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=4.8103. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.mixtral.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Mixtral-8x7B-Instruct on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 106.7 tok/s (int4 experts + C4-calibrated int4 attention); NF4 baseline 47.6 tok/s.",
+      "value": 106.7,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b1_nf4=47.6, b1_int4exp=99.2, b1_calib=106.7; refused: b1_fused",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpB/mixtral_b1_calib.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.1805, int4exp=1.1690, calib=1.1916. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.tp.mixtral.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of Mixtral-8x7B-Instruct on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 370.8 tok/s (int4-b32 experts); NF4 baseline 185.7 tok/s.",
+      "value": 370.8,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV (4 key groups at head_dim<=128), placement all-vram, e4b 0.32.0 + grouped-nf4-gemm 0.26.0 (PyPI), transformers 5.16.1; arms: b16_nf4=185.7, b16_int4exp=370.8",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/README.md",
+        "bench/hybrid-g9/throughput-20260904/tpB/mixtral_b16_int4exp.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30 sections)"
+      ],
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.1805, int4exp=1.1690, calib=1.1916. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
     }
   ]
 }
