@@ -3,6 +3,13 @@
 
 `load_moe_4bit_streaming` dequantises the released MXFP4 experts bit-identically and, by default, re-quantises them to NF4 for QLoRA. To keep computing on the released bytes, relocate them into an arena with `grouped-nf4-gemm` and bind it with `enable_mxfp4_nvme_residency` (serving) or `enable_nvme_train_residency` (training); the native MXFP4 expert store for the paged engine is a separate opt-in whose quality gate is still open.
 
+## Two fidelity paths — choose before loading
+
+Only the second path keeps the checkpoint's original expert bytes.
+
+1. **Convenient QLoRA path — decode, then re-quantise to NF4.** The quantising branch of `load_moe_4bit_streaming` (`experts4bit_qlora/loader.py`) reads the released blocks and scales through `experts4bit_qlora.formats.mxfp4.dequantize_mxfp4` — verified bit-identical to transformers' reference decode in `tests/test_mxfp4_dequant.py` — and then builds the expert stack in the storage you asked for, NF4 by default: `GptOssExperts4bit.from_gptoss(..., quant_type=quant_type)` for gpt-oss and `DeepseekV4Experts4bit.from_deepseek_v4(..., quant_type=quant_type)` for DeepSeek-V4, each of which quantises the decoded stack through `Experts4bit.from_float`. What trains and serves afterwards is an NF4 re-quantisation of an exact decode of the release: the decode is bit-exact, the NF4 that follows it is the quantiser's output, and that — not the release — is the provenance of the served experts. Needs no arena and no kernel package. `verify_moe_4bit(model, strict=True)` proves the stack is 4-bit, not that it is the released bytes.
+2. **Native-byte path — retain the released MXFP4 blocks and scales.** Relocate the checkpoint's own blocks and scales verbatim into an arena with `nvme_arena.bake_expert_tensors` (hash-preserving; the manifest's `bake_mode` records it) and bind it with `enable_mxfp4_nvme_residency` (serving through `mxfp4_grouped`'s native kernels) or `enable_nvme_train_residency` on an `arena=..., arena_train=True` load (training against the arena, gradient checkpointing required). The paged engine's native MXFP4 store — `enable_serve_experts_int4` on gpt-oss, which never re-quantises onto the int4 grid — is the all-VRAM form of the same idea. Here the checkpoint's expert bytes are what computes, and provenance is preserved end to end.
+
 ## Symptoms
 
 - "gpt-oss MXFP4 experts: training and residency" / "QLoRA on an MXFP4 checkpoint" / "MXFP4 expert inference kernel".
