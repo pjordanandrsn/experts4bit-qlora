@@ -16,7 +16,7 @@ from experts4bit_qlora.engines.int4_experts import (
     _ExpertHessianSink, enable_serve_experts_int4)
 from int4_pack_ref import dequant_int4_ref, pack_int4_b32
 
-from test_int4_experts import E, K1, N1, _family_case, _live_model, _PlanTree, _write_ckpt
+from test_int4_experts import K1, N1, _family_case, _live_model, _PlanTree, _write_ckpt
 
 
 class _Acc:
