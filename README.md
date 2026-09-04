@@ -6,6 +6,24 @@
 Train and serve **fused Mixture-of-Experts** models in 4-bit on hardware
 that cannot hold them in bf16.
 
+**The problem in one line:** `load_in_4bit=True` leaves a fused MoE's
+expert weights in bf16, so the model still OOMs; this package quantises
+exactly those experts, fine-tunes them with QLoRA, keeps them in host RAM
+or on NVMe when they do not fit, and serves them on one consumer NVIDIA
+GPU. **Canonical package:** `experts4bit-qlora` on PyPI (`import
+experts4bit_qlora`); `e4b`, `experts4bit` and `expertsnbit` are lookup
+aliases. **Two repositories:** this one owns loading, quantisation
+orchestration, adapters, training, residency and serving; the kernels it
+calls through the `[fast]` extra live in
+[`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm).
+**Environment:** Linux, a CUDA GPU, torch ≥ 2.2 and bitsandbytes ≥ 0.43
+(Python 3.11 is what CI tests; the kernels need Triton on an sm_80+
+GPU). **The material limitation:** on a model that already fits in bf16,
+storage-only 4-bit is slower and costs energy — this is for models that
+do not fit. Machine-readable capabilities and evidence:
+[`docs/capabilities.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json)
+and [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json).
+
 transformers v5 stores a MoE's experts as one fused 3-D parameter per
 layer. bitsandbytes' 4-bit walker only replaces `nn.Linear`, so it
 **silently skips the experts** — the overwhelming majority of the weights
@@ -19,6 +37,52 @@ paged decode engine that is measured against each model's own attention.
 **Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.34.0/docs/STATUS.md).
 **Every number, with its evidence and status:** [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.34.0/docs/claims.json).
 
+## Use this when
+
+- `load_in_4bit=True` / `BitsAndBytesConfig` loads your MoE but the
+  expert tensors (`gate_up_proj`, `down_proj`) stay bf16 and the model
+  still OOMs — the experts are fused 3-D parameters, not `nn.Linear`.
+- You need QLoRA or LoRA on the experts themselves, and PEFT or the
+  bitsandbytes walker never sees them.
+- The quantised experts fit in host RAM but not VRAM (stream per layer),
+  or fit on NVMe but not host RAM (serve or train from an arena).
+- You want to serve or train a 30B-class MoE on a 24–32 GB consumer GPU.
+- You are choosing between the reference per-expert path, the batched
+  path, the fused kernel path, host-streamed residency and the NVMe tier —
+  [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/CHOOSING.md) is the decision page.
+- Your experts are NF4, native MXFP4 (gpt-oss, DeepSeek-V4), int4-b32 for
+  serving, fp8 for the KV cache, or a mix across storage and residency
+  tiers.
+
+## Do not use this when
+
+- The model is dense (no experts): bitsandbytes' own 4-bit path already
+  covers every `nn.Linear`.
+- The model already fits in bf16 with headroom: storage-only 4-bit is
+  slower and uses more energy here (`e4b.train.energy-honest` in the
+  claims register).
+- You expect a general-purpose serving engine or a vLLM replacement: on
+  the same box vLLM is ahead (`e4b.serve.h2h.vllm.same-box`); this is a
+  measured 4-bit path for models that otherwise do not run at all.
+- You need Windows, macOS, ROCm or a non-CUDA accelerator.
+- The model family or expert layout is not in
+  [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md)
+  — unsupported architectures fail fast with a named error; there is no
+  silent fallback, and every `enable_*` returns a count you must assert.
+
+## Start here
+
+| | |
+|---|---|
+| [`docs/SOLUTIONS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md) | one page per problem: symptoms, cause, install, smallest example, verification, limits |
+| [`docs/capabilities.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json) | the machine-readable capability contract (entry points, environments, limitations, claim IDs) |
+| [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md) | the current position — measured, retired, open |
+| [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json) | every number with its evidence and status |
+| [`docs/INDEX.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md) | what each document is and whether it is current |
+| [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm) | the kernel package this one drives (`pip install "experts4bit-qlora[fast]"`) |
+| [PyPI: experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/) | the canonical distribution |
+| [`llms.txt`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/llms.txt) · [`AGENTS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/AGENTS.md) | orientation for language models and coding agents |
+
 ## Install
 
 ```bash
@@ -27,8 +91,9 @@ pip install "experts4bit-qlora[train]"  # + the streaming MoE trainer
 pip install "experts4bit-qlora[fast]"   # + the fused grouped-GEMM path (grouped-nf4-gemm)
 ```
 
-`e4b`, `experts4bit` and `expertsnbit` are aliases of this package. Runs
-on stock bitsandbytes; every feature has a reference path.
+`e4b`, `experts4bit` and `expertsnbit` are lookup aliases that install this
+package; always install and cite `experts4bit-qlora`. Runs on stock
+bitsandbytes; every feature has a reference path.
 
 ## Which door? Start from what does not fit
 
@@ -178,5 +243,6 @@ edited in place (see `docs/INDEX.md`). Falsification work lives under
 
 ## License
 
-MIT. `experts4bit_qlora/_vendor/experts.py` is vendored from bitsandbytes
-(also MIT) pending upstream merge.
+MIT ([`LICENSE`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/LICENSE)). `experts4bit_qlora/_vendor/experts.py`
+is vendored from bitsandbytes (also MIT) pending upstream merge; its
+notice is in [`THIRD_PARTY_NOTICES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/THIRD_PARTY_NOTICES.md).

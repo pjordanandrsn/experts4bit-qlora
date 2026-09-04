@@ -16,8 +16,9 @@ route to close, stream or compute the rest.
 
 ## Both host-RAM engines need standalone expert modules (2026-07-28)
 
-`enable_pipelined_residency` raises `NotImplementedError` when every `ExpertsNbit` it finds
-is an `ExpertsLoRA.base`, and `enable_hot_residency` *silently skips* those modules
+`enable_pipelined_residency` accepts an `ExpertsLoRA.base` as a target (it once raised
+`NotImplementedError` there; the wrapper now delegates to the patched base in eval mode under
+`no_grad` when the adapter provably contributes nothing), and `enable_hot_residency` *silently skips* those modules
 (returning a lower patch count). `load_moe_4bit_streaming` always wraps in `ExpertsLoRA`,
 so the offload/streaming-loader path — the one a "serve past VRAM" reader is most likely on
 — does not reach either engine. Load bare (`Experts4bit`/`ExpertsNbit`, no LoRA wrapper) to

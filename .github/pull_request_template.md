@@ -1,36 +1,25 @@
-## What this changes
+<!-- Keep what applies; delete what does not. The claims register, not this text, decides whether a number is current. -->
 
-<!-- One or two sentences. "Closes #123" if it fixes an issue. -->
+## What changed and why
 
-## Why
+## Checks
 
----
+- [ ] **Public API changed?** If yes: docstrings updated (when to use, layout expected, return/success assertion, refusal conditions), `docs/capabilities.json` entry points updated, `AGENTS.md` API list updated.
+- [ ] **Solution pages** (`docs/solutions/*.md`, `docs/SOLUTIONS.md`) still answer their H1 for this change; new capability → new or updated page.
+- [ ] **Capabilities** (`docs/capabilities.json`) updated; `python scripts/check_capabilities.py` passes.
+- [ ] **Claims**: every number in new prose links an ACTIVE claim ID in `docs/claims.json`; no retired or superseded claim is repeated as current; `docs/STATUS.md` updated if the position moved.
+- [ ] **llms bundle** regenerated (`python scripts/build_llms_bundle.py`; `--check` passes) when README opening, SOLUTIONS, STATUS, capabilities or the listed docs changed.
+- [ ] **Discovery contract**: `python scripts/check_discovery_contract.py` passes (queries still route to pages that carry their concepts, canonical install route and limitations).
+- [ ] **PyPI metadata**: `pyproject.toml` description/keywords/urls/extras still accurate; if an extra or dependency floor changed, README install section, `docs/capabilities.json` install commands and `AGENTS.md` say so.
+- [ ] **README routing** (Use this when / Do not use this when / Start here) still accurate.
+- [ ] **Examples** in new docs are executed in CI, executed in a hardware lane, or explicitly marked as needing GPU / network / model download / large storage. No example silently falls back.
+- [ ] **Related repository** updated (or an issue filed there) if the kernel/consumer contract changed.
+- [ ] **Anchored docs untouched**: nothing under `docs/` with an `ots-attestation-footer` was edited (`grep -l ots-attestation-footer docs/*.md`).
 
-### If it touches expert math (ExpertsLoRA, an epilogue, a kernel lane)
+## Evidence
 
-- [ ] **Parity test against the reference**, not a loss curve. This adapter
-      re-implements expert math so the delta lands pre-activation, so it owns the
-      nonlinearity — a clamped/gated base must supply `_apply_gate`. Getting this
-      wrong fails silently: the model trains and optimises the wrong function
-- [ ] Compared against the pure-torch oracle (`dequant_ref` / `dequantize_mxfp4`),
-      not against another accelerated lane — that measures similarity of
-      rounding, not truth
+<!-- Lane / box / receipt paths for any measured number; "capability only, no performance claim" otherwise. -->
 
-### If it makes a performance or memory claim
+## Release note draft (if this ships in a release)
 
-- [ ] Cites a committed receipt, or is marked "measuring now"
-- [ ] Ships a **self-pair**; a ratio inside the instrument's spread is not a measurement
-- [ ] Two devices, or names the single architecture it holds for
-- [ ] Benchmarked on **real text** — random token ids route to fewer experts far
-      more unevenly and understate the fused lane by ~1.6–1.7x
-- [ ] Reports the cells that lose
-
-### Always
-
-- [ ] `python -m pytest tests -q -k "not gpu"` passes
-- [ ] Enabler return values are asserted (`n = enable_*(...)`; `0` looks identical
-      to "silently on the per-expert loop")
-- [ ] No private-lane paths or markers
-- [ ] **`Cursor Bugbot` reads `pass`, not `skipping`** — on this repo `skipping`
-      means Bugbot FOUND something. `gh pr checks` shows no red for it either
-      way, so a run that looks green can be hiding a finding; only `pass` is clean
+<!-- First paragraph, in ordinary language: which problem changed, which users / model families / environments are affected, and whether they should upgrade. Mechanism, measurements, receipts, corrections and caveats follow. -->

@@ -202,7 +202,13 @@ def main() -> int:
         pass
     gh = [t for t in targets if t.startswith("https://github.com/")]
     if ref_map:
+        # A PR adds files that `main` does not have yet, and canonical docs
+        # URLs are pinned to `main` on purpose (release-independent). Under
+        # --map-ref the tag AND `main` both resolve to the ref under review;
+        # at release time the checker runs unmapped against the real tag.
         gh = [t.replace(f"/{ref_map[0]}/", f"/{ref_map[1]}/")
+               .replace("/blob/main/", f"/blob/{ref_map[1]}/")
+               .replace("/tree/main/", f"/tree/{ref_map[1]}/")
               if t.startswith(self_prefix) else t
               for t in gh]
     headers = _auth_headers()

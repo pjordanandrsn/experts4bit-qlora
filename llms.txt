@@ -1,0 +1,43 @@
+# experts4bit-qlora
+
+> Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs. Canonical PyPI package `experts4bit-qlora` (import `experts4bit_qlora`); `e4b`, `experts4bit` and `expertsnbit` are lookup aliases only.
+
+Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before quoting a number: a claim whose status is retired or superseded is not current, and `evidence_private` marks a real run whose receipt is not in this repository. Division of responsibility: this project owns model loading, quantization orchestration, adapters, training, residency integration and serving; the kernel package grouped-nf4-gemm owns the packed-expert kernels, decode kernels, packing/reference operations and host/NVMe primitives, and is installed by the `[fast]` extra. Every `enable_*` call returns a count or raises — examples assert it; nothing falls back silently. Environment: Linux, CUDA GPU (sm_80+ for the kernels), Python 3.11 tested.
+
+## Start here
+
+- [README](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/README.md): the problem, the mechanism, install, the routing table, what is measured and what was retired
+- [Solutions index](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md): one page per ordinary problem — symptoms, cause, install, smallest example, verification, limits, evidence
+- [Capabilities (machine-readable)](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json): entry points, environments, limitations and claim IDs per capability; schema in [capabilities.schema.json](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.schema.json)
+- [Status](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md): the current position — measured, measured-private, retired, superseded, open
+- [Claims register](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json): every number with hardware, conditions, status and evidence path ([schema](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims-schema.md))
+- [Documentation index](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md): what each document is and whether it is current or an anchored research record
+
+## Solutions
+
+- [My MoE still OOMs after load_in_4bit](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md): fused 3-D expert tensors are not nn.Linear; quantise them with load_moe_4bit_streaming and verify with verify_moe_4bit
+- [QLoRA on fused MoE experts](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/qlora-fused-moe-experts.md): ExpertsLoRA, enable_fast_train, enable_batched_train, the trainer CLI
+- [Run a MoE larger than VRAM](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/run-moe-larger-than-vram.md): host-RAM expert residency, dense offload, hot sets from a routing profile
+- [Offload experts to CPU RAM or NVMe](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md): the NVMe arena tier for serving and training
+- [Serve a large MoE on a consumer GPU](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/serve-large-moe-on-a-consumer-gpu.md): the paged decode engine and its measured levers
+- [MXFP4 models: gpt-oss and DeepSeek-V4](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/mxfp4-moe-training-and-residency.md): faithful load, native-byte arenas, training, the native store
+
+## API and architecture
+
+- [Choosing a path](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/CHOOSING.md): which entry point for which constraint, with the caveats
+- [Architecture support](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md): which model families load, run and capture, with evidence
+- [Residency engines](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/RESIDENCY-ENGINES.md) and [storage modes](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STORAGE-MODES.md)
+- [Serving](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING.md), [serving throughput](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-THROUGHPUT.md), [serving parity](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-PARITY.md)
+- [AGENTS.md](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/AGENTS.md): operational rules for coding agents — sources of truth, build/test commands, what to update when
+
+## Related
+
+- [grouped-nf4-gemm](https://github.com/pjordanandrsn/grouped-nf4-gemm): the kernel package ([PyPI](https://pypi.org/project/grouped-nf4-gemm/))
+- [experts4bit-qlora on PyPI](https://pypi.org/project/experts4bit-qlora/): the canonical distribution
+- [Changelog](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/CHANGELOG.md) and [releases](https://github.com/pjordanandrsn/experts4bit-qlora/releases)
+
+## Optional
+
+- [llms-full.txt](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/llms-full.txt): a project-generated convenience bundle of the documents above (not part of the llms.txt proposal); regenerated by scripts/build_llms_bundle.py
+- [Methodology](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/METHODOLOGY.md), [bitsandbytes relationship](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/BITSANDBYTES.md), [DeepSeek-V4 notes](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/DEEPSEEK-V4.md)
+- [Third-party notices](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/THIRD_PARTY_NOTICES.md), [contributing](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/CONTRIBUTING.md), [security policy](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/SECURITY.md)

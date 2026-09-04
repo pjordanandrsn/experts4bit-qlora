@@ -541,6 +541,16 @@ def load_moe_4bit_streaming(
     ``no_grad`` forwards each layer starts the next layer's H2D copy on a side stream, overlapping
     transfer with compute at a bounded cost of two layers resident instead of one. Training forwards
     are unaffected. See :func:`experts4bit_qlora.engines.offload.enable_inference_prefetch`.
+    Use it when a fused-expert MoE (transformers v5 stores each layer's experts as one 3-D
+    parameter) must be loaded in 4-bit: ``load_in_4bit=True`` leaves those stacks in bf16.
+    Expects a Hugging Face model id or local snapshot of a family in
+    ``docs/ARCHITECTURE_SUPPORT.md``; returns ``(model, config)`` with every fused expert
+    stack an :class:`Experts4bit` base under an :class:`ExpertsLoRA` wrapper (verify with
+    :func:`experts4bit_qlora.verify_moe_4bit` ``strict=True``). Refuses an unsupported
+    ``model_type`` (``NotImplementedError``), identity-expert families, and ``prefetch``
+    without ``offload`` (``ValueError``). Needs a CUDA device, the ``[train]`` extra
+    (transformers >= 5.0) and network access to the checkpoint. See
+    ``docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md``.
     """
     # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
     # fetch, snapshot download, or shard read — and the Experts4bit-vs-ExpertsNbit class dispatch

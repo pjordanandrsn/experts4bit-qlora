@@ -263,6 +263,9 @@ def enable_batched_train(model, verbose: bool = False) -> int:
     fallbacks — pad-waste, evicted storage — land on the fused forward instead of the
     reference, which is not what "fall back" is supposed to mean. Call
     ``disable_fast_train`` first if you want to switch lanes.
+    Use it as the no-extras training path (torch + bitsandbytes only) when ``[fast]`` will
+    not build; it costs peak memory for a decoded stack. See
+    ``docs/solutions/qlora-fused-moe-experts.md``.
     """
     from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.lora import ExpertsLoRA

@@ -1,16 +1,21 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
 version = "0.34.0"
-description = "QLoRA fine-tuning of fused 4-bit Mixture-of-Experts on a single small GPU, on stock bitsandbytes."
+description = "Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 authors = [{ name = "Jordan Anderson", email = "paul.jordan.anderson@gmail.com" }]
-keywords = ["bitsandbytes", "qlora", "moe", "mixture-of-experts", "quantization", "nf4", "lora", "olmoe"]
+keywords = [
+    "mixture-of-experts", "moe", "qlora", "lora", "bitsandbytes", "transformers", "pytorch",
+    "quantization", "nf4", "mxfp4", "int4", "fp8", "cuda", "triton", "gpu-offload", "nvme",
+    "llm-inference", "llm-training", "fine-tuning", "consumer-gpu",
+]
 dependencies = [
     "torch>=2.2",
     "bitsandbytes>=0.43",
@@ -101,6 +106,16 @@ test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4"
 
 [project.urls]
 Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"
+Documentation = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md"
+Source = "https://github.com/pjordanandrsn/experts4bit-qlora"
+Issues = "https://github.com/pjordanandrsn/experts4bit-qlora/issues"
+Changelog = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/pjordanandrsn/experts4bit-qlora/releases/latest"
+Status = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md"
+Capabilities = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json"
+Solutions = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md"
+Benchmarks = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json"
+"Kernel package (grouped-nf4-gemm)" = "https://pypi.org/project/grouped-nf4-gemm/"
 "Upstream (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
 "Tracking (bitsandbytes#1849)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/issues/1849"
 
