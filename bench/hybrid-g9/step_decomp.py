@@ -2132,10 +2132,15 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
                      f"{sum(tracer.counts.values())} "
                      f"({sum(tracer.counts.values()) / profile_ops:.0f}"
                      f"/step)", "",
-                     "== by call site (dispatch-mode tracer; launches/step,"
-                     " apportioned device us/step, top ops) =="]
+                     "== by call site (dispatch-mode tracer; dispatches/step,"
+                     " apportioned device us/step, top ops; device time"
+                     " first) =="]
+            # device time first: views/strides dominate the DISPATCH
+            # count (a third of Granite's 3689/step) and cost no device
+            # time; the fuse list is the sites that launch kernels
             for site, sr in sorted(sites.items(),
-                                   key=lambda kv: -kv[1]["calls"])[:80]:
+                                   key=lambda kv: (-kv[1]["us"],
+                                                   -kv[1]["calls"]))[:80]:
                 top = ", ".join(f"{k.split('::')[-1]}x{v // profile_ops}"
                                 for k, v in sorted(sr["ops"].items(),
                                                    key=lambda kv: -kv[1])[:4])
@@ -2361,7 +2366,11 @@ class _EwSiteTracer:
         depth = 0
         while f is not None and depth < 40:
             fn = f.f_code.co_filename
-            if not any(sk in fn for sk in _FRAME_SKIP):
+            # the tracer's own dispatch hook is the first frame and is
+            # not a call site, whatever this file is called on the box
+            # (a renamed copy attributed every op to itself -- bo3l)
+            if (not any(sk in fn for sk in _FRAME_SKIP)
+                    and f.f_code.co_name != "__torch_dispatch__"):
                 return f"{fn}({f.f_lineno}): {f.f_code.co_name}"
             f = f.f_back
             depth += 1
