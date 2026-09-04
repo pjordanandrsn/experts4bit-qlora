@@ -1,6 +1,8 @@
 # How do I offload MoE experts to host RAM, or serve and train them from an NVMe arena?
 <!-- summary: Bind pinned host RAM or a baked NVMe arena to a real model with the streaming loader and the nvme_residency, mxfp4_nvme_residency and nvme_train_residency engines. -->
 
+**This is the model-level integration page**: the loaders and the `experts4bit-qlora` engines that bind pinned host RAM or an NVMe arena to a real model. Choosing a path by workload and by the memory tier that ran out is [`run-moe-larger-than-vram.md`](run-moe-larger-than-vram.md), the decision/router page; the arena bake, reader and tier primitives themselves are the kernel package's page, [stream-moe-experts-from-host-or-nvme.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md).
+
 For host RAM, `load_moe_4bit_streaming(..., offload=True)` pins each layer's frozen 4-bit experts in CPU RAM and streams one layer to the GPU at a time. When the experts do not fit host RAM either, bake them into an arena with `grouped-nf4-gemm` and bind it with `enable_nvme_residency` or `enable_mxfp4_nvme_residency` (serving) or `enable_nvme_train_residency` (training): cold rows are read from NVMe on demand while a pinned-DRAM hot tier of `hot_rows` absorbs repeats.
 
 ## Symptoms
@@ -68,9 +70,14 @@ Serving a native-MXFP4 arena (DeepSeek-V4) is the other side of the seam — [`m
 - The per-step cost of arena training does not travel across cards (an arena step includes an NVMe read); quote it with the card attached (notes on `e4b.offload.arena-vs-host-ram`).
 - Bulk host-RAM offload at decode is transfer-bound; for speed use the pipelined engine ([`run-moe-larger-than-vram.md`](run-moe-larger-than-vram.md)).
 
+## Use this page when…
+
+- **you are wiring a model** — `load_moe_4bit_streaming(..., offload=True)`, the arena loader (`arena=`, `arena_train=True`), `enable_nvme_residency` / `enable_mxfp4_nvme_residency` / `enable_nvme_train_residency` — this page, the model-level integration page.
+- **you are choosing** a path by workload and by the memory tier that ran out — [`run-moe-larger-than-vram.md`](run-moe-larger-than-vram.md), the decision/router page.
+- **you are baking, reading or sizing the tier itself** — `nvme_bake_nf4`, `bake_expert_tensors`, the reader, `ColdTier`, `capacity_for_bytes` — the kernel package's [stream-moe-experts-from-host-or-nvme.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md).
+
 ## Related
 
-- [`run-moe-larger-than-vram.md`](run-moe-larger-than-vram.md) — which door, by what ran out.
 - [`mxfp4-moe-training-and-residency.md`](mxfp4-moe-training-and-residency.md) — native MXFP4 arenas (gpt-oss, DeepSeek-V4).
 - [`qlora-fused-moe-experts.md`](qlora-fused-moe-experts.md) — the training lane the arena feeds.
 - [`../RESIDENCY-ENGINES.md`](../RESIDENCY-ENGINES.md) · [`../DEEPSEEK-V4.md`](../DEEPSEEK-V4.md) · [`../CHOOSING.md`](../CHOOSING.md) · [`../STATUS.md`](../STATUS.md)
