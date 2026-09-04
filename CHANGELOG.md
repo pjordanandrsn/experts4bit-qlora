@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### fp8 paged KV: key scale groups per layer, 32-wide at every head_dim
+
+`Fp8PagedKV(k_groups=None)` (the new default) sizes each layer's key
+scale groups to keep 32-wide scales — 4 at head_dim 128 (unchanged), 8
+at 256, 16 at 512 — when the installed grouped-nf4-gemm unrolls that
+many (a capability probe of `fp8_compute_unsupported`, never a version
+string), and falls back to 4 otherwise. Gemma-4's five 512-dim layers
+measured 0.046 nats of fp8 cost with 128-wide groups and 0.017 with
+32-wide (P27, #359). Small heads are never coarser than before. An int
+still broadcasts to every layer; `kv.kgs[layer]` is the per-layer value
+and `kv.k_groups` is the uniform value or `None` under mixed geometry.
+
 ## 0.31.2 — 2026-09-03
 
 ### Correction: Gemma-4 has no parity reference at 512-token resolution

@@ -103,6 +103,35 @@ def _kernel_takes(fn, *names) -> bool:
         _KERNEL_KW_CACHE[key] = hit
     return hit
 
+def _auto_k_groups(head_dim: int, width: int = 32) -> int:
+    """Key scale groups that keep ``width``-wide scales at this head_dim,
+    capped by what the INSTALLED kernel unrolls. Capability-conditional
+    per the cross-package rule: ask ``fp8_compute_unsupported`` (the
+    kernel's single source of truth) whether it accepts the count, and
+    fall back to 4 groups -- the pre-0.32 default -- when it does not
+    or when the kernel is absent."""
+    # never coarser than the pre-0.32 default of 4 groups: head_dim 64
+    # keeps its 16-wide scales, 128 its 32-wide; only larger heads refine
+    want = max(4, head_dim // width)
+    while head_dim % want:
+        want //= 2
+    if want <= 4:
+        return want
+    try:
+        from fp8_paged_attn import fp8_compute_unsupported
+        # the group-count check precedes the dtype/device checks, so a CPU
+        # dummy still gets the "unrolls k_groups" reason from an old kernel
+        why = fp8_compute_unsupported(torch.zeros(1, dtype=torch.bfloat16),
+                                      head_dim, want, 1)
+    except ImportError:
+        return 4
+    except Exception:            # noqa: BLE001 -- device checks on a dummy
+        return want
+    if why and "unrolls k_groups" in why:
+        return 4
+    return want
+
+
 class Fp8PagedKV:
     """FP8 paged KV for ``L`` layers, ``B`` sequences, one model.
 
@@ -113,7 +142,8 @@ class Fp8PagedKV:
     """
 
     def __init__(self, n_layers: int, n_kv_heads: int, head_dim: int, *,
-                 batch: int, max_tokens_per_seq: int, k_groups: int = 4,
+                 batch: int, max_tokens_per_seq: int,
+                 k_groups: int | None = None,
                  batched_append: bool = True, device: str = "cuda"):
         from fp8_kv import kv_block_bytes
         from row_pool import RowPool
@@ -131,9 +161,20 @@ class Fp8PagedKV:
         if len(Hs) != n_layers or len(Ds) != n_layers:
             raise ValueError(f"per-layer geometry needs {n_layers} entries, "
                              f"got {len(Hs)} heads / {len(Ds)} dims")
-        for lyr, d in enumerate(Ds):
-            if d % max(k_groups, 1):
-                raise ValueError(f"k_groups {k_groups} must divide "
+        # key scale groups PER LAYER: an int broadcasts (the pre-0.32
+        # behaviour); None keeps 32-wide scales at every head_dim --
+        # 4 groups at 128, 8 at 256, 16 at 512 -- when the installed
+        # kernel unrolls that many, and 4 otherwise. Gemma-4's five
+        # 512-dim layers measured 0.046 nats of fp8 cost with 128-wide
+        # groups and 0.017 with 32-wide (P27, e4b#359); Qwen3 at 128 is
+        # unchanged either way.
+        if k_groups is None:
+            kgs = [_auto_k_groups(d) for d in Ds]
+        else:
+            kgs = [int(k_groups)] * n_layers
+        for lyr, (d, kg) in enumerate(zip(Ds, kgs)):
+            if d % max(kg, 1):
+                raise ValueError(f"k_groups {kg} must divide "
                                  f"head_dim {d} (layer {lyr})")
         self.L = n_layers
         self.Hs, self.Ds = Hs, Ds
@@ -141,7 +182,10 @@ class Fp8PagedKV:
         self.D = max(Ds)
         self.B = batch
         self.bt = BLOCK_TOKENS
-        self.k_groups = k_groups
+        self.kgs = kgs
+        # the uniform value when there is one (what callers used to read);
+        # None under mixed geometry -- read ``kgs[layer]``
+        self.k_groups = kgs[0] if len(set(kgs)) == 1 else None
         # decode call-site switch (PREREG-g9-kvappend): callers that see
         # this flag use append_batch for the whole batch at each layer
         # instead of one append per sequence
@@ -150,8 +194,8 @@ class Fp8PagedKV:
         self._batch_idx_cache = {}
         self.blocks_per_seq = -(-max_tokens_per_seq // self.bt)
         # natural row per layer, pool stride = the largest
-        self.k_rows = [kv_block_bytes(self.bt, h, d) + self.bt * h * 4 * (k_groups - 1)
-                       for h, d in zip(Hs, Ds)]
+        self.k_rows = [kv_block_bytes(self.bt, h, d) + self.bt * h * 4 * (kg - 1)
+                       for h, d, kg in zip(Hs, Ds, kgs)]
         self.v_rows = [kv_block_bytes(self.bt, h, d) for h, d in zip(Hs, Ds)]
         self.k_row = max(self.k_rows)
         self.v_row = max(self.v_rows)
@@ -347,14 +391,14 @@ class Fp8PagedKV:
         # first, by the publish-last discipline below) landing on an
         # unassigned table entry, i.e. row 0 for every block.
         vq = self._quant_bytes(v, 1)
-        kq = self._quant_bytes(k, self.k_groups)
+        kq = self._quant_bytes(k, self.kgs[layer])
         self._ensure_blocks(layer, seq, (seen + k.shape[0] - 1) // self.bt)
         # V first: K's writer owns the shared block-table entry, and writing
         # K last means a table row is never published for a block whose V
         # bytes haven't landed yet (same publish-last discipline as the pool)
         self._write_side(self.vp, self._v_pays[layer], 1, layer, seq, *vq,
                          k.shape[0], seen)
-        self._write_side(self.kp, self._k_pays[layer], self.k_groups, layer,
+        self._write_side(self.kp, self._k_pays[layer], self.kgs[layer], layer,
                          seq, *kq, k.shape[0], seen)
         self._seen[layer][seq] = seen + k.shape[0]
         # device-side scalar add, value in kernel args: a plain
@@ -395,7 +439,7 @@ class Fp8PagedKV:
                                  f"{self.blocks_per_seq} blocks")
         vq_all = self._quant_bytes(v.reshape(B * T, H, D), 1)
         kq_all = self._quant_bytes(k.reshape(B * T, H, D),
-                                   self.k_groups)
+                                   self.kgs[layer])
         # Batched row writes when every sequence's T tokens land inside
         # one block (always true for T == 1 decode; a straddling prefill
         # tail takes the per-sequence loop below). The applicability read
@@ -417,7 +461,7 @@ class Fp8PagedKV:
                 # V first, publish K second — append()'s lockstep order
                 self._write_batch(self.vp, self._v_pays[layer], 1, layer,
                                   slots, fills, vq_all[0], vq_all[1], T)
-                self._write_batch(self.kp, self._k_pays[layer], self.k_groups,
+                self._write_batch(self.kp, self._k_pays[layer], self.kgs[layer],
                                   layer, slots, fills, kq_all[0],
                                   kq_all[1], T)
                 for seq in seqs:
@@ -432,7 +476,7 @@ class Fp8PagedKV:
                   kq_all[1].narrow(0, b * T, T))
             self._write_side(self.vp, self._v_pays[layer], 1, layer, seq,
                              *vq, T, seen)
-            self._write_side(self.kp, self._k_pays[layer], self.k_groups,
+            self._write_side(self.kp, self._k_pays[layer], self.kgs[layer],
                              layer, seq, *kq, T, seen)
             self._seen[layer][seq] = seen + T
         self._bump_seq_lens(layer, seqs, T)
@@ -551,7 +595,7 @@ class Fp8PagedKV:
             fp8_kv_append_bt1(k, self._g_kflat[layer],
                               self.block_table[layer], self._g_slot_idx,
                               self.seq_lens[layer], self.k_row,
-                              self._k_pays[layer], self.bt, self.k_groups)
+                              self._k_pays[layer], self.bt, self.kgs[layer])
             self.seq_lens[layer].index_add_(0, self._g_slot_l,
                                             self._g_slot_ones)
             return
@@ -587,8 +631,8 @@ class Fp8PagedKV:
         dev = self.device
         self._g_ar_hd = [torch.arange(h * d, device=dev)
                          for h, d in zip(self.Hs, self.Ds)]
-        self._g_ar_sk = [torch.arange(h * self.k_groups * 4, device=dev)
-                         for h in self.Hs]
+        self._g_ar_sk = [torch.arange(h * kg * 4, device=dev)
+                         for h, kg in zip(self.Hs, self.kgs)]
         self._g_ar_sv = [torch.arange(h * 4, device=dev) for h in self.Hs]
         self._g_kflat = [self.kp.dev[layer].reshape(-1)
                          for layer in range(self.L)]
@@ -619,11 +663,11 @@ class Fp8PagedKV:
                              self.block_table[layer][seq],
                              self.seq_lens[layer].narrow(0, seq, 1),
                              self.k_row, self._k_pays[layer], self.bt,
-                             self.k_groups)
+                             self.kgs[layer])
             self.seq_lens[layer].narrow(0, seq, 1).add_(1)
             return
         vq, vs = self._quant_bytes(v, 1)
-        kq, ks = self._quant_bytes(k, self.k_groups)
+        kq, ks = self._quant_bytes(k, self.kgs[layer])
         pos = self.seq_lens[layer, seq].to(torch.long)
         blk = torch.div(pos, self.bt, rounding_mode="floor")
         fill = pos - blk * self.bt
@@ -639,7 +683,7 @@ class Fp8PagedKV:
         kbase = row * self.k_row + fill * hd
         self._g_kflat[layer].scatter_(0, kbase + self._g_ar_hd[layer], kq.reshape(-1))
         ksb = (row * self.k_row + self._k_pays[layer]
-               + fill * (H * self.k_groups * 4))
+               + fill * (H * self.kgs[layer] * 4))
         self._g_kflat[layer].scatter_(0, ksb + self._g_ar_sk[layer], ks.reshape(-1))
         self.seq_lens[layer].narrow(0, seq, 1).add_(1)
 
@@ -713,7 +757,7 @@ class Fp8PagedKV:
         return fp8_paged_decode_attention(
             q, kf, vf, tbl, lens, n_kv_heads=self.Hs[layer],
             head_dim=self.Ds[layer], block_tokens=self.bt,
-            k_groups=self.k_groups, k_row_bytes=self.k_row,
+            k_groups=self.kgs[layer], k_row_bytes=self.k_row,
             v_row_bytes=self.v_row, **kw)
 
     def seen_device(self, layer: int, seq: int) -> int:
@@ -775,7 +819,7 @@ class Fp8PagedKV:
             row_i = int(self.block_table[layer][seq, blk])
             qk, sk = unpack_kv_block_grouped(
                 self.kp.dev[layer, row_i], self.bt, self.Hs[layer],
-                self.Ds[layer], self.k_groups)
+                self.Ds[layer], self.kgs[layer])
             qv, sv = unpack_kv_block_grouped(
                 self.vp.dev[layer, row_i], self.bt, self.Hs[layer],
                 self.Ds[layer], 1)

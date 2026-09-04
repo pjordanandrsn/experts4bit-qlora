@@ -105,7 +105,7 @@ def test_fused_branch_argument_order():
     assert "_g_vflat" in v_call and "self.v_row" in v_call \
         and "self._v_pay" in v_call and ", 1)" in v_call
     assert "_g_kflat" in k_call and "self.k_row" in k_call \
-        and "self._k_pay" in k_call and "self.k_groups)" in k_call
+        and "self._k_pay" in k_call and "self.kgs[layer])" in k_call
     # the publish must remain OUTSIDE the kernel, after both sides
     after_k = src.split("fp8_kv_append_t1(")[2]
     assert ".add_(1)" in after_k, \
