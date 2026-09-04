@@ -121,14 +121,16 @@ def test_auto_key_groups_keep_32_wide_scales_per_layer(monkeypatch):
     # per-layer row sizing carries the extra scale bytes of the finer layers
     assert kv.k_rows[1] - (16 * 8 * 256) == 16 * 8 * 8 * 4
     assert kv.k_rows[2] - (16 * 2 * 512) == 16 * 2 * 16 * 4
-    # round trip through append + dequant on every layer
+    # round trip through append + read-back on every layer: the finer
+    # layers' scale bytes must land where the reader expects them
     for layer in range(3):
         H, D = kv.Hs[layer], kv.Ds[layer]
         k, v = torch.randn(5, H, D), torch.randn(5, H, D)
         kv.append(layer, 0, k, v)
-        kk, vv = kv.dequant(layer, 0) if hasattr(kv, "dequant") else (None, None)
-        if kk is not None:
-            assert (kk.float() - k).abs().max() < 0.1 * k.abs().max()
+        kk, vv = kv.reference_kv(layer, 0)
+        assert kk.shape == (5, H, D) and vv.shape == (5, H, D)
+        assert (kk.float() - k).abs().max() < 0.1 * k.abs().max(), layer
+        assert (vv.float() - v).abs().max() < 0.1 * v.abs().max(), layer
 
     def refusing_probe(q, head_dim, k_groups, v_groups, **kw):
         return f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
