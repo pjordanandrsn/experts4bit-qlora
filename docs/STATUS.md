@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-03, version 0.31.2.** One page. The README argues the
+**As of 2026-09-04, version 0.32.0.** One page. The README argues the
 case; this page states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -124,7 +124,7 @@ is the honest one and it is also measured-private.
 
 ## What is open
 
-- **#344 — Gemma-4 fails to load on 2 of 5 rented hosts** with
+- **#344 — Gemma-4 fails to load on 2 of 6 rented hosts** with
   `CUDA error: invalid argument`, after the experts quantise. A 2 GiB
   host-hop fix was merged and reverted the same day: the model's largest
   tensor is 1.375 GiB, so it never triggered. The live lead is that CUDA
@@ -135,11 +135,12 @@ is the honest one and it is also measured-private.
 - **No shipped tool bakes the arena.** Reproducing the training receipt
   from published artifacts still needs a quantise-and-emit step you write
   yourself.
-- **[#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) — Gemma-4, re-scoped**: (1) finer K groups for
-  512-dim heads in the fp8 cache (the measured 0.046 → 0.017), a kernel
-  change in grouped-nf4-gemm; (2) a parity instrument that survives
-  batch-shape variance — a long window, or matched routing — before any
-  verdict is quoted for this family.
+- **[#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) — Gemma-4, re-scoped**: (1) DONE in 0.32.0 with
+  grouped-nf4-gemm 0.26.0 — 32-wide key scales on the 512-dim heads
+  take the paged path from 3.59239 to 3.57228 nats on the P26b window;
+  (2) still open: a parity instrument that survives batch-shape
+  variance — a long window, or matched routing — before any verdict is
+  quoted for this family.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
