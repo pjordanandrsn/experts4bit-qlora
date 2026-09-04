@@ -226,6 +226,12 @@ def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
         hidden_states, residual = rmsnorm_resid_rows(
             hidden_states, residual, _ln.weight, _eps)
         hidden_states = _m.mlp(hidden_states)
+        if isinstance(hidden_states, tuple):
+            # gpt-oss's MoE block returns (hidden, router_scores) and its
+            # layer unpacks ``hidden_states, _ = self.mlp(...)``; adding
+            # the tuple to the residual raised a TypeError on the
+            # validation lane. Mirror the unpack.
+            hidden_states = hidden_states[0]
         return residual + hidden_states
 
     mod.forward = _fwd

@@ -459,3 +459,52 @@ def test_scaled_fold_keeps_the_centered_norm_refusal(monkeypatch):
     m.layer = GraniteMoeShapedDecoderLayer(0.22, norm_cls=CenteredRMSNorm)
     with pytest.raises(RuntimeError, match="patched nothing"):
         fuse_t1_glue_r2(m)
+
+
+class TupleMoE(torch.nn.Module):
+    """gpt-oss's MoE block shape: returns ``(hidden, router_scores)``."""
+    def __init__(self):
+        super().__init__()
+        self.proj = torch.nn.Linear(H, H, bias=False, dtype=torch.bfloat16)
+
+    def forward(self, x):
+        return self.proj(x), torch.zeros(x.shape[0], 4)
+
+
+class GptOssShapedDecoderLayer(ToyDecoderLayer):
+    """Plain four children, but the MoE child returns a tuple and the
+    layer unpacks it -- gpt-oss's decoder layer."""
+    def __init__(self):
+        super().__init__()
+        self.mlp = TupleMoE()
+
+    def forward(self, hidden_states, attention_mask=None,
+                position_ids=None, past_key_values=None, use_cache=False,
+                position_embeddings=None, **kw):
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states=hidden_states)
+        hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)
+        return residual + hidden_states
+
+
+def test_plain_fold_unpacks_a_tuple_returning_moe(monkeypatch):
+    """The gpt-oss layer is structurally plain; its MoE block returns
+    ``(hidden, scores)``. The fold must mirror the layer's unpack, not
+    add a tuple to the residual (validation lane, TypeError)."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(9)
+    m = torch.nn.Module()
+    m.layer = GptOssShapedDecoderLayer()
+    m.layer.self_attn = NoisyAttn()
+    x = (torch.randn(1, 1, H) * 2).to(torch.bfloat16)
+    want = m.layer(x)
+    assert fuse_t1_glue_r2(m) == (1, 0)
+    got = m.layer(x)
+    assert torch.equal(got, want)
+    assert calls["resid"] == 1
