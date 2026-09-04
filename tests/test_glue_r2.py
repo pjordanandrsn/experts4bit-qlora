@@ -508,3 +508,120 @@ def test_plain_fold_unpacks_a_tuple_returning_moe(monkeypatch):
     got = m.layer(x)
     assert torch.equal(got, want)
     assert calls["resid"] == 1
+
+
+class ToyUnfusedAttention(torch.nn.Module):
+    """The standard separate-projection attention (Qwen3-MoE-shaped): four
+    projections, per-head q/k norms, norm-then-rotate, eager attention.
+    The forward IS the reference (transformers' eager kernel on the
+    normed+rotated heads), so the fold is checked against real math."""
+    def __init__(self, heads=2, d=H, norm_width=None, extra_child=None, norms=True):
+        super().__init__()
+        self.q_proj = torch.nn.Linear(H, heads * d, bias=False, dtype=torch.bfloat16)
+        self.k_proj = torch.nn.Linear(H, heads * d, bias=False, dtype=torch.bfloat16)
+        self.v_proj = torch.nn.Linear(H, heads * d, bias=False, dtype=torch.bfloat16)
+        self.o_proj = torch.nn.Linear(heads * d, H, bias=False, dtype=torch.bfloat16)
+        if norms:
+            self.q_norm = ToyRMSNorm(norm_width or d)
+            self.k_norm = ToyRMSNorm(norm_width or d)
+        if extra_child is not None:
+            self.v_norm = extra_child
+        self.head_dim = d
+        self.scaling = d ** -0.5
+        self.sliding_window = None
+        self.layer_idx = 0
+        self.num_key_value_groups = 1
+        self.attention_dropout = 0.0
+        self.is_causal = True
+        self.config = types.SimpleNamespace(_attn_implementation="eager")
+
+    def forward(self, hidden_states, position_embeddings=None, attention_mask=None,
+                past_key_values=None, **kw):
+        from transformers.models.qwen3_moe.modeling_qwen3_moe import eager_attention_forward
+        d = self.head_dim
+        input_shape = hidden_states.shape[:-1]
+        rows = hidden_states.numel() // hidden_states.shape[-1]
+        q = self.q_norm(self.q_proj(hidden_states).reshape(rows, -1, d))
+        k = self.k_norm(self.k_proj(hidden_states).reshape(rows, -1, d))
+        v = self.v_proj(hidden_states).reshape(rows, -1, d)
+        cos, sin = position_embeddings
+        c = cos.reshape(-1, d).float()
+        s = sin.reshape(-1, d).float()
+        if c.shape[0] == 1 and rows > 1:
+            c, s = c.expand(rows, d), s.expand(rows, d)
+        def rope(x):
+            xf = x.float()
+            half = d // 2
+            rot = torch.cat([-xf[..., half:], xf[..., :half]], dim=-1)
+            return (xf * c.unsqueeze(1) + rot * s.unsqueeze(1)).to(torch.bfloat16)
+        qs = rope(q).reshape(*input_shape, -1, d).transpose(1, 2)
+        ks = rope(k).reshape(*input_shape, -1, d).transpose(1, 2)
+        vs = v.reshape(*input_shape, -1, d).transpose(1, 2)
+        out, w = eager_attention_forward(self, qs, ks, vs, attention_mask, dropout=0.0,
+                                         scaling=self.scaling, sliding_window=None)
+        return self.o_proj(out.reshape(*input_shape, -1).contiguous()), w
+
+
+def _rope_inputs(batch, T, d=H):
+    x = (torch.randn(batch, T, H) * 0.5).to(torch.bfloat16)
+    ang = torch.linspace(0, 1, d // 2).repeat(2)
+    cos = torch.cos(ang).expand(batch, T, d).contiguous()
+    sin = torch.sin(ang).expand(batch, T, d).contiguous()
+    return x, (cos, sin)
+
+
+def test_unfused_attention_with_head_norms_folds_and_matches(monkeypatch):
+    """The Qwen3-MoE-shaped attention (what every family runs under the
+    calibrated int4 lane) folds: the fold's output equals the module's own
+    forward on decode shapes, and falls through above the row cap."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(21)
+    m = torch.nn.Module()
+    m.attn = ToyUnfusedAttention()
+    x, pe = _rope_inputs(2, 3)
+    want, _ = m.attn(x, position_embeddings=pe)
+    assert fuse_t1_glue_r2(m) == (0, 1)
+    got, _ = m.attn(x, position_embeddings=pe)
+    assert calls["rope"] == 2, "one fused launch per projection"
+    assert torch.allclose(got.float(), want.float(), rtol=2 ** -6, atol=2 ** -7), \
+        (got.float() - want.float()).abs().max()
+    xb, peb = _rope_inputs(1, 65)
+    m.attn(xb, position_embeddings=peb)
+    assert calls["rope"] == 2, "prefill keeps the upstream chain"
+
+
+def test_unfused_fold_refuses_other_attention_shapes(monkeypatch):
+    """OLMoE norms the full hidden width before the head split (a different
+    function), Gemma-4 carries a v_norm beside the six children, Granite
+    has no norms at all: each keeps its own forward."""
+    from experts4bit_qlora.engines import glue_r2
+    olmoe = ToyUnfusedAttention(norm_width=2 * H)          # hidden-width norms
+    gemma = ToyUnfusedAttention(extra_child=torch.nn.Identity())
+    granite = ToyUnfusedAttention(norms=False)
+    for mod in (olmoe, gemma, granite):
+        assert not glue_r2._patch_attention_unfused(mod, lambda *a: None), type(mod).__name__
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    _stub(monkeypatch, {"resid": 0, "rope": 0})
+    m = torch.nn.Module()
+    m.olmoe, m.gemma, m.granite = olmoe, gemma, granite
+    with pytest.raises(RuntimeError, match="patched nothing"):
+        fuse_t1_glue_r2(m)
+
+
+def test_fused_attention_still_takes_the_fused_fold(monkeypatch):
+    """A module this package fused (qkv_proj) goes through the fused
+    fold, never the unfused one."""
+    from experts4bit_qlora.engines import glue_r2
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    seen = []
+    orig = glue_r2._patch_attention_unfused
+    monkeypatch.setattr(glue_r2, "_patch_attention_unfused",
+                        lambda mod, k: seen.append(type(mod).__name__) or orig(mod, k))
+    m = torch.nn.Module()
+    m.attn = ToyFusedAttention()
+    assert fuse_t1_glue_r2(m) == (0, 1)
+    assert seen == [], "the unfused fold was not consulted for a fused module"
