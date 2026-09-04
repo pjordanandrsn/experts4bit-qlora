@@ -89,6 +89,7 @@ paged decode engine that is measured against each model's own attention.
 | [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm) | the kernel package this one drives (`pip install "experts4bit-qlora[fast]"`) |
 | [PyPI: experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/) | the canonical distribution |
 | [`llms.txt`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/llms.txt) · [`AGENTS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/AGENTS.md) | orientation for language models and coding agents |
+| The routing page for this project on cerinamroth.com (problem-first index, status, compatibility) | [https://cerinamroth.com/ml/experts4bit-qlora/](https://cerinamroth.com/ml/experts4bit-qlora/) |
 
 ## Install
 
