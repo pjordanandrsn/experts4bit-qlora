@@ -40,6 +40,32 @@ Two lanes on two host classes, and **B=1 is host-bound**: OLMoE, Granite and gpt
 
 The build-out PRs above are **in review and unvalidated** at this date; their numbers, when they land, go in a second table here with their own receipt, never into this one.
 
+## Build-out validation (0.33.0 → 0.34.0), measured in-repo
+
+The refused arms in the table above became the build-out; one lane (bo3, the same RTX 5090 class on an
+EPYC 9755 host, 17 phases over 2026-09-04) validated each piece with one arm per fusion. The full
+receipt — every run JSON and log, the kernel and op censuses, the reducer, and the per-arm verdict table
+in the registered gate's own units — is [`bench/hybrid-g9/throughput-20260904/bo3/`](../bench/hybrid-g9/throughput-20260904/bo3/README.md).
+The best per family after it (B=1 tok/s / B=16 tok/s, ratio to that family's NF4 baseline on the same
+box), with the registered gate's reading — a calibrated pack is licensed only with the same sign on a
+second text, which these lanes did not score:
+
+| family | licensed configuration | B=1 | B=16 | K8 vs NF4 | gate |
+|---|---|---|---|---|---|
+| Qwen3-30B-A3B | int4 experts + calibrated int4 attention + round-1/2 folds (now engaging, #375) + epilogue | **177.9** (×1.81) | 1089.6 (`all`) | −0.081 ppl | calibrated: one text scored, the rule needs two |
+| Granite-3.1-3B-A800M | NF4 experts + round-1/2 folds (rotary-only fold, #379) + epilogue | **259.1** (×1.37) | **1689.6** (×1.18) | +0.019 ppl | pass |
+| Gemma-4-26B-A4B | int4 experts + round-1 folds + epilogue | **121.1** (×1.69) | **962.8** (×1.68) | — | no instrument |
+| Mixtral-8x7B | int4 experts + calibrated int4 attention + round-1/2 folds + epilogue | **110.0** (×2.29) | **373.4** (×2.00) | +0.045 ppl | calibrated: one text scored, the rule needs two (uncalibrated `stack` 102.8 / 372.0 passes) |
+| gpt-oss-20b | NF4 experts + round-1/2 folds | **133.3** (×1.08) | 833.9 (`stack`, int4 — FAILS) / 726.2 (NF4) | +0.049 nats | no instrument (OOD text) |
+
+Two rows that were quoted in 0.33.0 are not here. Granite's "302 tok/s, ×1.59" carried int4 experts
+that fail the registered 0.05-ppl gate (+0.063 ppl) — retracted in `docs/STATUS.md`; the row above is
+the licensed one. gpt-oss's int4-expert rows fail on a grid mismatch (+0.63 nats); its native MXFP4
+store is exact against the checkpoint's own bytes and reaches **151.1 tok/s at B=1** through
+`gemv_mxfp4_b32` (×1.22), but this family's raw-text perplexity cannot rank an exact arm against a
+noisy one (its NF4 arm scores *better* than bf16 upstream), so that number is quoted as speed with the
+quality gate open, not as a licensed best.
+
 ## Reading the numbers
 
 - Quote a ratio or quote the card and the host. The 5090 class carries ~8.5% inter-box dispersion; B=1 moves with the host CPU.
