@@ -826,7 +826,7 @@
       "id": "e4b.serve.buildout.qwen3.b1.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 177.9 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue, the round-2 fold engaging on the unfused attention (#375)); NF4 baseline 98.0 tok/s on the same box.",
+      "claim": "Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack that FAILS the registered gate on its second text (lane bo5, C4 validation: +0.063 ppl against the +0.05 budget; noise-attributed, not retuned), so this is measured speed of a configuration NOT licensed under the rule as written: 177.9 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue, the round-2 fold engaging on the unfused attention (#375)); NF4 baseline 98.0 tok/s on the same box.",
       "value": 177.9,
       "unit": "tok/s",
       "model": "Qwen/Qwen3-30B-A3B",
@@ -838,12 +838,13 @@
       "evidence": [
         "bench/hybrid-g9/throughput-20260904/bo3/README.md",
         "bench/hybrid-g9/throughput-20260904/bo3/qwen3_b1_all_rope.json",
-        "bench/hybrid-g9/throughput-20260904/bo3/logs/run_qwen3_ppl_all_rope.log"
+        "bench/hybrid-g9/throughput-20260904/bo3/logs/run_qwen3_ppl_all_rope.log",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md"
       ],
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps sha 9ef10d760ad9: nf4 1.86213, all 1.85053, all_rope 1.84944 (-0.081 ppl vs NF4, pass; -0.0011 nats vs all, inside the 0.0095-nat floor). The calibrated output head passes only inside this stack (allhead -0.020 ppl); alone it is +0.062 ppl and FAILS. LICENSING: the calibrated pack's verdict needs a second text (k8_gate: same sign on >=2 texts, one outside the calibration domain); this lane scored wikitext only, so the number is measured speed of a not-yet-licensed configuration. The second text is on lane bo5."
+      "notes": "K8 2048 steps sha 9ef10d760ad9: nf4 1.86213, all 1.85053, all_rope 1.84944 (-0.081 ppl vs NF4, pass; -0.0011 nats vs all, inside the 0.0095-nat floor). The calibrated output head passes only inside this stack (allhead -0.020 ppl); alone it is +0.062 ppl and FAILS. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214, integration-6 = 0.34.0 + #372 + #384 + #385, the same configuration class plus #385's exact glue): c4val1 NF4 2.80923 (ppl 16.59705), all 2.81299 = +0.0627 ppl (+0.0038 nats) -- FAIL as registered (over +0.05). Attribution on that text: int4exp +0.0709 (FAIL), int4exp+calib attn +0.0476 (pass), exact folds alone -0.0730 (FAIL as registered by improving), int4exp+folds -0.0183 (pass); every arm inside the 0.0095-nat floor (+-0.158 ppl at that perplexity) and non-additive by 0.005 nats, so the +0.063 attributes to noise, not a component. The gate is not retuned; the configuration is NOT licensed under the rule as written pending the user's decision on re-registering it in nats against the measured floor. bo5 re-measured the stack on its box at 204.1 tok/s B=1 / 1251.6 B=16 (e4b.serve.buildout.bo5.qwen3.*). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
     },
     {
       "id": "e4b.serve.buildout.granite.b1.5090.2026-09-04",
@@ -866,7 +867,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps sha 5281b7c3df28: nf4 1.67407, nf4_r12epi_new 1.67767 (+0.019 ppl, pass). The int4-expert rows (int4exp +0.063 ppl, stack +0.056) FAIL the registered 0.05-ppl gate and are retracted as a parity claim (#381); the fold's own delta on the int4 stack is x1.156 (stackr2_old 3.19 ms -> stackr2_new 2.76 ms, control flat)."
+      "notes": "K8 2048 steps sha 5281b7c3df28: nf4 1.67407, nf4_r12epi_new 1.67767 (+0.019 ppl, pass). The int4-expert rows (int4exp +0.063 ppl, stack +0.056) FAIL the registered 0.05-ppl gate and are retracted as a parity claim (#381); the fold's own delta on the int4 stack is x1.156 (stackr2_old 3.19 ms -> stackr2_new 2.76 ms, control flat). Lane bo5 (2026-09-04, box 49841214, integration-6) re-measured this licensed stack at 294.1 tok/s B=1 / 1736.1 B=16 (e4b.serve.buildout.bo5.granite.*) and scored the C4-calibrated int4 experts route (#384 draft; 2524 gptq / 36 rtn): wikitext +0.0140 ppl (pass, sub-floor) but c4val1 2.48148 (ppl 11.95897) vs NF4 2.44857 (11.57180) = +0.3872 ppl, 10x the 0.0033-nat floor -- FAIL; its 409.8 / 3050.1 is measured and refused. Uncalibrated int4 experts reproduce the retraction (+0.0634 ppl, FAIL). #387's fused qkv + fused rope-only fold is quality-clean (-0.0011 nats) and x0.968 at B=1 -- draft. Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
     },
     {
       "id": "e4b.serve.buildout.granite.b16.5090.2026-09-04",
@@ -888,7 +889,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "Same window and gate as the B=1 claim; the int4-expert B=16 rows (2201-2869 tok/s) fail quality and are not licensed."
+      "notes": "Same window and gate as the B=1 claim; the int4-expert B=16 rows (2201-2869 tok/s) fail quality and are not licensed. Lane bo5 (box 49841214) re-measured the licensed stack at 1736.1 tok/s B=16 (e4b.serve.buildout.bo5.granite.b16); the C4-calibrated int4 experts route (#384 draft) reaches 3050.1 but FAILS the second text (+0.3872 ppl on c4val1) and is refused; #387 fused qkv 1748.4 vs 1724.6 unfused on integration-7 (x1.014, one pair). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
     },
     {
       "id": "e4b.serve.buildout.gemma4.b1.5090.2026-09-04",
@@ -938,7 +939,7 @@
       "id": "e4b.serve.buildout.mixtral.b1.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 110.0 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 48.0 tok/s on the same box.",
+      "claim": "Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack that FAILS the registered gate on its second text (lane bo5, C4 validation: +0.116 ppl against the +0.05 budget), so this is measured speed of a configuration NOT licensed under the rule as written: 110.0 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 48.0 tok/s on the same box.",
       "value": 110.0,
       "unit": "tok/s",
       "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -950,18 +951,19 @@
       "evidence": [
         "bench/hybrid-g9/throughput-20260904/bo3/README.md",
         "bench/hybrid-g9/throughput-20260904/bo3/mixtral_b1_all.json",
-        "bench/hybrid-g9/throughput-20260904/bo3/logs/run_mixtral_ppl_all.log"
+        "bench/hybrid-g9/throughput-20260904/bo3/logs/run_mixtral_ppl_all.log",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md"
       ],
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it. LICENSING: the calibrated pack's verdict needs a second text (k8_gate: same sign on >=2 texts, one outside the calibration domain); this lane scored wikitext only, so the number is measured speed of a not-yet-licensed configuration. The second text is on lane bo5."
+      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
     },
     {
       "id": "e4b.serve.buildout.mixtral.b16.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 373.4 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 186.7 tok/s on the same box.",
+      "claim": "Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack that FAILS the registered gate on its second text (lane bo5, C4 validation: +0.116 ppl against the +0.05 budget), so this is measured speed of a configuration NOT licensed under the rule as written: 373.4 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 186.7 tok/s on the same box.",
       "value": 373.4,
       "unit": "tok/s",
       "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -972,12 +974,13 @@
       "tier": "measured",
       "evidence": [
         "bench/hybrid-g9/throughput-20260904/bo3/README.md",
-        "bench/hybrid-g9/throughput-20260904/bo3/mixtral_b16_all.json"
+        "bench/hybrid-g9/throughput-20260904/bo3/mixtral_b16_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md"
       ],
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "Same window and gate as the B=1 claim. LICENSING: the calibrated pack's verdict needs a second text (k8_gate: same sign on >=2 texts, one outside the calibration domain); this lane scored wikitext only, so the number is measured speed of a not-yet-licensed configuration. The second text is on lane bo5."
+      "notes": "Same window and gate as the B=1 claim. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
     },
     {
       "id": "e4b.serve.buildout.gptoss.b1.5090.2026-09-04",
@@ -1000,7 +1003,207 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "gpt-oss has no ppl instrument on raw text (ppl ~560, OOD-flattery regime: its NF4 arm scores better than bf16 upstream and every noisier arm scores 'better'); the folds' +0.049 nats is above the family's 0.0176-nat floor and cannot be read against the ppl budget. The native MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o) and ~10%/row from the NF4 path (NF4's own error); 151.1 tok/s is quoted as SPEED with the quality gate open, pending a KL against the model's own MXFP4 forward on harmony text."
+      "notes": "gpt-oss has no ppl instrument on raw text (ppl ~560, OOD-flattery regime: its NF4 arm scores better than bf16 upstream and every noisier arm scores 'better'); the folds' +0.049 nats is above the family's 0.0176-nat floor and cannot be read against the ppl budget. The native MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o) and ~10%/row from the NF4 path (NF4's own error); 151.1 tok/s is quoted as SPEED with the quality gate open, pending a KL against the model's own MXFP4 forward on harmony text. Lane bo5 (2026-09-04, box 49841214, integration-6 with #372): the route rule -- gemv_mxfp4_b32 for single rows, NF4 kept for batched rows (E4B_INT4_KEEP_NF4=1) -- measures 173.3 tok/s B=1 (x1.270 vs r12 136.4 on that box) and 719.7 B=16 (x0.971 vs 741.4), recovering the GEMV-everywhere route's x0.81 at B=16; still no K8 arm (exact bytes, bo3q) and the quality gate stays open on this family (e4b.serve.buildout.bo5.gptoss.*). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090, the build-out's full stack on integration-6 (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 swiglu/combine glue) -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text, C4 validation: +0.063 ppl against the +0.05 budget; noise-attributed, not retuned): 204.1 tok/s (4.90 ms/step); 193.1 tok/s with the #385 glue off on the same box.",
+      "value": 204.1,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-6 @0535930 (main 0.34.0 + #372 + #384 + #385) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b1_all=204.1 (4.90 ms), b1_all_noglue=193.1 (5.18 ms; E4B_FUSE_SWIGLU=0 E4B_FUSE_COMBINE=0), census pair 4.89 / 5.18 ms",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/qwen3_b1_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo5/qwen3_ppl_all_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/qwen3_ppl_nf4_c4val.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "K8 2048 steps: wikitext all 1.84571 (ppl 6.33260; -0.105 ppl vs bo3's NF4 1.86213 on the same window sha 9ef10d760ad9); c4val1 (sha 4bcb55179b96) NF4 2.80923 (16.59705), all 2.81299 (16.65973) = +0.0627 ppl, +0.0038 nats -- FAIL as registered. Attribution on c4val1 (bo5b, integration-7): int4exp +0.0709 ppl FAIL; int4exp+calib attn +0.0476 pass; exact folds alone -0.0730 FAIL-by-improving; int4exp+folds -0.0183 pass -- every arm inside the 0.0095-nat floor (+-0.158 ppl at ppl 16.6), non-additive by 0.005 nats: the +0.063 is noise, not a component. NOT licensed under the rule as written; the gate is not retuned; user decision pending on re-registering in nats against the measured floor. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. No NF4 speed arm on this lane, so no in-lane ratio; bo3's same-class box had NF4 at 98.0 and this stack (without #385) at 177.9 -- different boxes, quote each with its box, never the ratio between them."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.qwen3.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090, the build-out's full stack on integration-6 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text +0.063 ppl; noise-attributed, not retuned): 1251.6 tok/s.",
+      "value": 1251.6,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-6 @0535930 (main 0.34.0 + #372 + #384 + #385) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b16_all=1251.6 (12.78 ms/step)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/qwen3_b16_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.qwen3.b1 (FAIL as registered on c4val1, +0.0627 ppl / +0.0038 nats, sub-floor). bo3's same-class box measured 1089.6 for the stack without #385's glue -- a different box; quote each with its box."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.granite.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090, the licensed configuration under the registered K8 gate re-measured on integration-6: 294.1 tok/s (NF4 experts + round-1/2 folds with the rotary-only fold + router epilogue, 3.40 ms/step).",
+      "value": 294.1,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-6 @0535930 (main 0.34.0 + #372 + #384 + #385) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b1_nf4_r12epi=294.1 (3.40 ms), b1_calibexp_r12epi=409.8 (2.44 ms; FAILS quality, refused), b1_nf4_r12epi_fq=294.1 (no-op control); integration-7 pairs unfused/fused-qkv (#387): 3.38/3.49, 3.48/3.50, 3.40/3.50 ms",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/granite_b1_nf4_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/granite_ppl_nf4_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo5/granite_ppl_calibexp_r12epi_c4val.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "K8 2048 steps: wikitext nf4_r12epi 1.67304 (ppl 5.32834, sha 5281b7c3df28; bo3: +0.019 ppl vs plain NF4, pass), c4val1 2.44857 (11.57180, sha 549ca209af16) -- this lane's baseline. C4-calibrated int4 experts (#384 draft, 2524 gptq / 36 rtn): wikitext +0.0140 ppl (+0.0026 nats, sub-floor, pass) but c4val1 +0.3872 ppl (+0.0329 nats, 10x the 0.0033-nat floor) -- FAIL as registered; refused. RTN int4 experts +0.0634 ppl FAIL (bo3's retraction reproduced). #387 fused qkv + fused rope-only fold: K8 1.67198 (-0.0011 nats, pass), x0.968 B=1 across three pairs, census Self CUDA 27.099 -> 26.031 ms per 8 steps (-4%) with wall +3% -- buys nothing, draft. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.granite.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090, the licensed configuration under the registered K8 gate re-measured on integration-6: 1736.1 tok/s (NF4 experts + round-1/2 folds + router epilogue).",
+      "value": 1736.1,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-6 @0535930 (main 0.34.0 + #372 + #384 + #385) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b16_nf4_r12epi=1736.1, b16_calibexp_r12epi=3050.1 (FAILS quality, refused); integration-7: b16_nf4_r12epi_i7=1724.6, b16_nf4_r12epi_fq2 (#387)=1748.4",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/granite_b16_nf4_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "Same window and gate as the B=1 claim; the calibrated-expert B=16 row (3050.1) fails the second text (+0.3872 ppl on c4val1) and is not licensed. #387 at B=16 is x1.014 on one pair (1724.6 -> 1748.4)."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.gptoss.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of openai/gpt-oss-20b on a rented RTX 5090 with the native MXFP4 expert store under the route rule -- gemv_mxfp4_b32 for single rows, NF4 kept for batched rows (E4B_INT4_KEEP_NF4=1) -- plus round-1/2 folds: 173.3 tok/s (5.77 ms/step), x1.270 over the NF4 + folds row (136.4) on the same box; quoted as speed with this family's quality gate open (no raw-text instrument; the store is exact against the checkpoint's own bytes).",
+      "value": 173.3,
+      "unit": "tok/s",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-6 @0535930 (main 0.34.0 + #372 + #384 + #385) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b1_r12=136.4 (7.33 ms), b1_store_r12=173.3 (5.77 ms), b1_store_r12_cen=173.3",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/gptoss_b1_store_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo5/gptoss_b1_r12.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "No K8 arm on this lane: the MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o/bo3q) and gpt-oss has no raw-text ppl instrument (OOD-flattery regime), so the quality gate stays open as in e4b.serve.buildout.gptoss.b1. Census (store_r12_cen): Self CUDA 42.989 ms per 8 replayed steps, 1288 launches/step."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.gptoss.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of openai/gpt-oss-20b on a rented RTX 5090 with the native MXFP4 expert store under the route rule (GEMV for single rows, NF4 kept for batched rows) plus round-1/2 folds: 719.7 tok/s, x0.971 of the NF4 + folds row (741.4) on the same box -- the GEMV-everywhere route's x0.81 at B=16 (bo3) is recovered; quality gate open on this family.",
+      "value": 719.7,
+      "unit": "tok/s",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-6 @0535930 (main 0.34.0 + #372 + #384 + #385) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b16_r12=741.4 (21.58 ms/step), b16_store_r12=719.7 (22.23 ms/step)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/gptoss_b16_store_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo5/gptoss_b16_r12.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "Batched rows stay on the NF4 path by the route rule, so the residual x0.971 is the route's dispatch cost, not the MXFP4 GEMV re-streaming weights per row (bo3's 589.7 vs 726.2). Same open quality gate as the B=1 claim."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.mixtral.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090, the int4-expert stack without a calibrated pack (int4 experts + round-1/2 folds with the rotary-only fold + router epilogue) on integration-7 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text, C4 validation: +0.0575 ppl against the +0.05 budget; the P30 'licensed stack' label is withdrawn, not retuned): 112.0 tok/s (8.93 ms/step); 115.6 with #387's fused qkv.",
+      "value": 112.0,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-7 @d090940 (main + #384 + #385 + #387) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b1_lic=112.0 (8.93 ms), b1_lic_fq (#387, 32 modules fused)=115.6 (8.65 ms); integration-6 calibrated stack b1_all=123.3 (8.11 ms), b1_all_nor2=116.1 (8.61 ms), integration-7 b1_all_i7=123.3, b1_all_fq (0 modules fused)=123.3",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/mixtral_b1_lic.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo5/mixtral_ppl_lic_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/mixtral_ppl_nf4_c4val.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "K8 2048 steps: wikitext NF4 control on integration-7 1.18105 (ppl 3.25778, sha 31fd7d408809), lic 1.16684 (3.21181, -0.046 ppl, pass); c4val1 (sha 061534dadd4d) NF4 2.11031 (8.25079), lic 2.11726 (8.30834) = +0.0575 ppl, +0.0070 nats -- FAIL as registered by 0.008 (uncalibrated rule |dppl| <= 0.05 on every text); this family's arithmetic-order floor is unmeasured, so the nats cannot be read against one. The 'licensed stack' label (P30; bo3's uncalibrated stack 102.8 / 372.0) is WITHDRAWN under the rule as written pending the user's decision on re-registering the gate in nats against a measured floor. The calibrated stack (all) fails the second text outright (+0.1157 ppl). lic_fq K8 1.16702 (+0.0002 nats vs lic). Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo5.mixtral.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090, the int4-expert stack without a calibrated pack on integration-7 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text +0.0575 ppl; the 'licensed stack' label is withdrawn): 376.5 tok/s.",
+      "value": 376.5,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49841214; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-7 @d090940 (main + #384 + #385 + #387) + grouped-nf4-gemm @587eb7a (0.29.0 + combine_rows); arms: b16_lic=376.5, b16_lic_fq=378.3; integration-6 calibrated stack b16_all=377.3, b16_all_nor2=374.5, integration-7 b16_all_fq=377.1",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo5/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo5/mixtral_b16_lic.json",
+        "bench/hybrid-g9/throughput-20260904/bo5/summary.txt"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P33 sections)"
+      ],
+      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.mixtral.b1: FAIL as registered on c4val1 by 0.008 ppl (+0.0070 nats, floor unmeasured); NOT licensed pending the user's decision. Every Mixtral B=16 arm on this lane sits within 374.5-378.3."
     }
   ]
 }

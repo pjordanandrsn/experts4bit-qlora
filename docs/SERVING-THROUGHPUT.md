@@ -48,7 +48,8 @@ receipt — every run JSON and log, the kernel and op censuses, the reducer, and
 in the registered gate's own units — is [`bench/hybrid-g9/throughput-20260904/bo3/`](../bench/hybrid-g9/throughput-20260904/bo3/README.md).
 The best per family after it (B=1 tok/s / B=16 tok/s, ratio to that family's NF4 baseline on the same
 box), with the registered gate's reading — a calibrated pack is licensed only with the same sign on a
-second text, which these lanes did not score:
+second text, which these lanes did not score (the second text was scored on lane bo5, next section: both
+calibrated rows FAIL as registered, and Mixtral's uncalibrated `stack` fails it by 0.008 ppl):
 
 | family | licensed configuration | B=1 | B=16 | K8 vs NF4 | gate |
 |---|---|---|---|---|---|
@@ -65,6 +66,38 @@ store is exact against the checkpoint's own bytes and reaches **151.1 tok/s at B
 `gemv_mxfp4_b32` (×1.22), but this family's raw-text perplexity cannot rank an exact arm against a
 noisy one (its NF4 arm scores *better* than bf16 upstream), so that number is quoted as speed with the
 quality gate open, not as a licensed best.
+
+## The second text and the optimisation pass (bo5), measured in-repo
+
+Lane bo5 — box 49841214, the same RTX 5090 class on an EPYC 9755 host, 2026-09-04 08:5x–12:33Z; e4b
+integration-6 @0535930 (0.34.0 + #372 + #384 + #385) and integration-7 @d090940 (+ #387), grouped-nf4-gemm
+0.29.0 + `combine_rows` — scored the second text the registered rule asks for (C4 validation, `c4val1`) on
+every calibrated pack bo3 had left at "one text", re-measured the shipped positions on one box, and A/B'd the
+drafts. Receipt: [`bench/hybrid-g9/throughput-20260904/bo5/`](../bench/hybrid-g9/throughput-20260904/bo5/README.md);
+the per-arm table with the verdict column is its
+[`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md). The gate column below is the
+registered rule in perplexity on every text scored; the nats beside it never change it. `i6` / `i7` = the cut.
+
+| family | configuration | cut | B=1 | B=16 | K8 vs NF4 (wikitext / c4val1) | gate (registered, ppl) |
+|---|---|---|---|---|---|---|
+| Qwen3-30B-A3B | int4 experts + calibrated int4 attention + round-1/2 folds + epilogue + #385 glue (`all`) | i6 | **204.1** | **1251.6** | −0.105 / **+0.063** ppl (−0.0164 / +0.0038 nats) | FAIL as registered on c4val1; attributes to noise (every attribution arm sub-floor, the exact folds alone −0.073) — measured speed, NOT licensed pending the user's decision; not retuned |
+| Granite-3.1-3B-A800M | NF4 experts + round-1/2 folds (rotary-only fold) + epilogue (`nf4_r12epi`, the licensed stack) | i6 | **294.1** | **1736.1** | this lane's baseline (bo3: +0.019 ppl vs NF4) | licensed |
+| Granite-3.1-3B-A800M | licensed stack + C4-calibrated int4 experts (#384 draft, `calibexp_r12epi`) | i6 | 409.8 | 3050.1 | +0.014 / **+0.387** ppl (10× the floor) | FAIL — refused |
+| Granite-3.1-3B-A800M | licensed stack + #387 fused q/k/v + fused rope-only fold (`nf4_r12epi_fq2`) | i7 | 286.5 (×0.968 vs 295.9 unfused) | 1748.4 (×1.014 vs 1724.6) | −0.006 ppl (−0.0011 nats) / — | pass; buys nothing — draft |
+| gpt-oss-20b | native MXFP4 store: GEMV for single rows, NF4 kept for batched rows (`store_r12`) | i6 | **173.3** (×1.270 vs `r12` 136.4) | **719.7** (×0.971 vs 741.4) | — | no instrument (exact bytes, bo3q); the ×0.81 B=16 penalty is recovered |
+| Mixtral-8x7B | int4 experts + calibrated int4 attention + round-1/2 folds + epilogue (`all`) | i6 | **123.3** | **377.3** | +0.033 / **+0.116** ppl | FAIL as registered on c4val1 — measured speed, NOT licensed |
+| Mixtral-8x7B | int4 experts + round-1/2 folds + epilogue, no calibrated pack (`lic`) | i7 | **112.0** | **376.5** | −0.046 / **+0.058** ppl (−0.0142 / +0.0070 nats; floor unmeasured) | FAIL as registered on c4val1 by 0.008 — the "licensed stack" label is WITHDRAWN pending the user's decision on a nats gate against a measured floor; NOT licensed |
+| Mixtral-8x7B | `lic` + #387 fused q/k/v, 32 modules (`lic_fq`) | i7 | 115.6 (×1.032) | 378.3 | +0.0002 nats vs `lic` / — | pass vs `lic`; inherits `lic`'s verdict — draft |
+
+What this settles: Granite's calibrated-expert route (#384) fails the second text and is refused; Mixtral's
+int4-expert stack is one-text pass / one-text FAIL-as-registered, so the label P30 and the table above gave it
+is withdrawn (the gate is not retuned to fit; re-registering it in nats against a *measured* floor is a user
+decision); Qwen3's `all` fails the second text by a margin every attribution arm shows to be noise, same
+disposition; gpt-oss's route rule holds ×1.27 at B=1 without the B=16 penalty; #387 is quality-clean and buys
+nothing (on Granite the census shows GPU time −4% and wall +3% — unexplained non-GPU time on the fused path).
+bo3's 177.9 / 1089.6 and bo5's 204.1 / 1251.6 for Qwen3 are different boxes of the same class (~8.5%
+dispersion; B=1 is host-bound) and different cuts (bo5 carries #385's glue, ×1.057 measured on the bo5 box):
+quote either with its box, never the ratio between them.
 
 ## Reading the numbers
 

@@ -1356,6 +1356,36 @@ stack keeps NF4 experts (round-1 + round-2 folds + router epilogue) and
 its combined number is 259.1 tok/s at B=1 (×1.37) and 1689.6 at B=16
 (×1.18), +0.019 ppl — measured, in the same receipt.
 
+**The second text (2026-09-04, lane bo5; measured — receipt
+[`bench/hybrid-g9/throughput-20260904/bo5/`](../bench/hybrid-g9/throughput-20260904/bo5/README.md),
+table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md)).**
+The registered K8 gate is in perplexity: an uncalibrated arm |Δppl| ≤ 0.05
+on every text, a calibrated pack ≤ +0.05 on every text with an improvement
+claimable only when it holds with the same sign on two; nats are quoted
+beside the verdict and never change it. bo3 had scored one text; bo5 scored
+C4 validation on one box (49841214, the same 5090 class) for every
+calibrated pack bo3 left at "one text", and **every one FAILS as
+registered**: Qwen3's `all` stack +0.063 ppl (+0.0038 nats — every
+attribution arm on that text is inside the family's 0.0095-nat floor and
+the exact folds alone read −0.073, so the reading is noise, not a component;
+the verdict is not retuned), Mixtral's `all` +0.116 ppl, and Granite's
+C4-calibrated int4 experts (e4b#384, draft) +0.387 ppl at 10× the floor —
+that route is refused. Mixtral's *uncalibrated* int4-expert stack — called
+licensed in P30 and bo3 on wikitext (−0.046 ppl there) — fails the second
+text by 0.008 (+0.058 ppl, +0.0070 nats; this family's floor is
+unmeasured), so that label is **withdrawn** under the rule as written,
+pending a decision on re-registering the gate in nats against a measured
+floor. Licensed and re-measured on the bo5 box: Granite's NF4 stack
+294.1 tok/s B=1 / 1736.1 B=16; gpt-oss's MXFP4 store under the route rule
+(GEMV for single rows, NF4 kept for batched rows) 173.3 (×1.270) / 719.7
+(×0.971 — the ×0.81 B=16 penalty is recovered), quality gate open on that
+family as before. Measured speed of configurations NOT licensed under the
+registered rule: Qwen3 `all` 204.1 / 1251.6 (with #385's glue, ×1.057 at
+B=1 on that box), Mixtral `all` 123.3 / 377.3, Mixtral's int4-expert stack
+112.0 / 376.5. #387's fused q/k/v is quality-clean (−0.0011 nats on
+Granite, +0.0002 on Mixtral) and buys nothing (Granite ×0.968 B=1, Mixtral
+×1.032) — it stays a draft.
+
 ---
 
 ## What changed — retired, superseded, corrected
@@ -1833,14 +1863,22 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.tp.gemma4.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of Gemma-4-26B-A4B on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 571.9 tok/s (NF4 experts); NF4 baseline 571.9 tok/s.
 - e4b.serve.tp.mixtral.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of Mixtral-8x7B-Instruct on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 106.7 tok/s (int4 experts + C4-calibrated int4 attention); NF4 baseline 47.6 tok/s.
 - e4b.serve.tp.mixtral.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of Mixtral-8x7B-Instruct on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 370.8 tok/s (int4-b32 experts); NF4 baseline 185.7 tok/s.
-- e4b.serve.buildout.qwen3.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 177.9 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue, the round-2 fold engaging on the unfused attention (#375)); NF4 baseline 98.0 tok/s on the same box.
+- e4b.serve.buildout.qwen3.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack that FAILS the registered gate on its second text (lane bo5, C4 validation: +0.063 ppl against the +0.05 budget; noise-attributed, not retuned), so this is measured speed of a configuration NOT licensed under the rule as written: 177.9 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue, the round-2 fold engaging on the unfused attention (#375)); NF4 baseline 98.0 tok/s on the same box.
 - e4b.serve.buildout.granite.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 259.1 tok/s (NF4 experts + round-1/2 folds with the rotary-only fold (#379) + router epilogue); NF4 baseline 189.8 tok/s on the same box.
 - e4b.serve.buildout.granite.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 1689.6 tok/s (NF4 experts + round-1/2 folds with the rotary-only fold (#379) + router epilogue); NF4 baseline 1436.2 tok/s on the same box.
 - e4b.serve.buildout.gemma4.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of google/gemma-4-26B-A4B-it on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 121.1 tok/s (int4 experts + round-1 folds + router epilogue (round-2 refuses on Gemma-4's layer shape)); NF4 baseline 71.6 tok/s on the same box.
 - e4b.serve.buildout.gemma4.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of google/gemma-4-26B-A4B-it on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 962.8 tok/s (int4 experts + round-1 folds + router epilogue); NF4 baseline 574.1 tok/s on the same box.
-- e4b.serve.buildout.mixtral.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 110.0 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 48.0 tok/s on the same box.
-- e4b.serve.buildout.mixtral.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 373.4 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 186.7 tok/s on the same box.
+- e4b.serve.buildout.mixtral.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack that FAILS the registered gate on its second text (lane bo5, C4 validation: +0.116 ppl against the +0.05 budget), so this is measured speed of a configuration NOT licensed under the rule as written: 110.0 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 48.0 tok/s on the same box.
+- e4b.serve.buildout.mixtral.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack that FAILS the registered gate on its second text (lane bo5, C4 validation: +0.116 ppl against the +0.05 budget), so this is measured speed of a configuration NOT licensed under the rule as written: 373.4 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 186.7 tok/s on the same box.
 - e4b.serve.buildout.gptoss.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of openai/gpt-oss-20b on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 133.3 tok/s (NF4 experts + round-1/2 folds (no calibrated pack, no int4 experts)); NF4 baseline 123.2 tok/s on the same box.
+- e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090, the build-out's full stack on integration-6 (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 swiglu/combine glue) -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text, C4 validation: +0.063 ppl against the +0.05 budget; noise-attributed, not retuned): 204.1 tok/s (4.90 ms/step); 193.1 tok/s with the #385 glue off on the same box.
+- e4b.serve.buildout.bo5.qwen3.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090, the build-out's full stack on integration-6 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text +0.063 ppl; noise-attributed, not retuned): 1251.6 tok/s.
+- e4b.serve.buildout.bo5.granite.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090, the licensed configuration under the registered K8 gate re-measured on integration-6: 294.1 tok/s (NF4 experts + round-1/2 folds with the rotary-only fold + router epilogue, 3.40 ms/step).
+- e4b.serve.buildout.bo5.granite.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090, the licensed configuration under the registered K8 gate re-measured on integration-6: 1736.1 tok/s (NF4 experts + round-1/2 folds + router epilogue).
+- e4b.serve.buildout.bo5.gptoss.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of openai/gpt-oss-20b on a rented RTX 5090 with the native MXFP4 expert store under the route rule -- gemv_mxfp4_b32 for single rows, NF4 kept for batched rows (E4B_INT4_KEEP_NF4=1) -- plus round-1/2 folds: 173.3 tok/s (5.77 ms/step), x1.270 over the NF4 + folds row (136.4) on the same box; quoted as speed with this family's quality gate open (no raw-text instrument; the store is exact against the checkpoint's own bytes).
+- e4b.serve.buildout.bo5.gptoss.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of openai/gpt-oss-20b on a rented RTX 5090 with the native MXFP4 expert store under the route rule (GEMV for single rows, NF4 kept for batched rows) plus round-1/2 folds: 719.7 tok/s, x0.971 of the NF4 + folds row (741.4) on the same box -- the GEMV-everywhere route's x0.81 at B=16 (bo3) is recovered; quality gate open on this family.
+- e4b.serve.buildout.bo5.mixtral.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090, the int4-expert stack without a calibrated pack (int4 experts + round-1/2 folds with the rotary-only fold + router epilogue) on integration-7 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text, C4 validation: +0.0575 ppl against the +0.05 budget; the P30 'licensed stack' label is withdrawn, not retuned): 112.0 tok/s (8.93 ms/step); 115.6 with #387's fused qkv.
+- e4b.serve.buildout.bo5.mixtral.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090, the int4-expert stack without a calibrated pack on integration-7 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text +0.0575 ppl; the 'licensed stack' label is withdrawn): 376.5 tok/s.
 
 Open items (no evidence either way):
 
@@ -1848,4 +1886,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(43 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(51 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

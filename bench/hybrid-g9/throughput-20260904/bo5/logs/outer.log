@@ -1,0 +1,279 @@
+[2026-09-04T09:17:25Z] install: gnf4 @587eb7aaf5618a045a92cf30d6a66bfb77507127 + e4b @0535930324e5d11c35966ae0569f3c519a684355
+pip rc=0
+bo5 tripwire OK: integration-6 (calib experts, swiglu/combine, mxfp4 route) + gnf4 0.29.0+combine; e4b 0.34.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02
+Model name:                              AMD EPYC 9755 128-Core Processor
+cuda ok
+overlay         320G   56G  265G  18% /
+[2026-09-04T09:17:44Z] bake qwen3
+BAKE OK
+overlay         320G   91G  230G  29% /
+[2026-09-04T09:19:34Z] K8 qwen3/all (exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=1.84571 ppl=6.33260 compute=fp8 sha=9ef10d760ad9 out=/root/bo5/qwen3_ppl_all.json
+[2026-09-04T09:24:02Z] arm qwen3/all (B=1 exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=4.90ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all.json
+[2026-09-04T09:27:05Z] arm qwen3/all (B=16 exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    BV3_GRAPH batch=16 steps=70 step=12.78ms agg=1251.6tok/s recompiles=0 out=/root/bo5/qwen3_b16_all.json
+[2026-09-04T09:30:20Z] K8 qwen3/all_c4val (exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.81299 ppl=16.65973 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_all_c4val.json
+[2026-09-04T09:34:38Z] K8 qwen3/nf4_c4val (exp=0 calib=0 fuse=0 )
+    K8_PPL steps=2048 nll=2.80923 ppl=16.59705 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_nf4_c4val.json
+[2026-09-04T09:36:23Z] arm qwen3/all_noglue (B=1 exp=1 calib=1 fuse=all E4B_FUSE_SWIGLU=0 E4B_FUSE_COMBINE=0)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=5.18ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_noglue.json
+[2026-09-04T09:39:23Z] arm qwen3/all_cen (B=1 exp=1 calib=1 fuse=all )
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    REPLAY_PROFILE_OUT /root/bo5/census_qwen3_all_cen.txt
+    B1D_TIMED_GRAPH steps=127 step=4.89ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_cen.json
+[2026-09-04T09:42:25Z] arm qwen3/all_noglue_cen (B=1 exp=1 calib=1 fuse=all E4B_FUSE_SWIGLU=0 E4B_FUSE_COMBINE=0)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    REPLAY_PROFILE_OUT /root/bo5/census_qwen3_all_noglue_cen.txt
+    B1D_TIMED_GRAPH steps=127 step=5.18ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_noglue_cen.json
+QWEN3 DONE
+[2026-09-04T09:45:28Z] freed qwen3 (disk: 320G free)
+[2026-09-04T09:45:28Z] bake granite
+BAKE OK
+overlay         320G   11G  310G   4% /
+[2026-09-04T09:47:25Z] K8 granite/nf4_r12epi (exp=0 calib=0 fuse=all )
+    K8_PPL steps=2048 nll=1.67304 ppl=5.32834 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi.json
+[2026-09-04T09:48:12Z] arm granite/nf4_r12epi (B=1 exp=0 calib=0 fuse=all )
+    B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi.json
+[2026-09-04T09:48:23Z] arm granite/nf4_r12epi (B=16 exp=0 calib=0 fuse=all )
+    BV3_GRAPH batch=16 steps=70 step=9.22ms agg=1736.1tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi.json
+[2026-09-04T09:48:43Z] K8 granite/calibexp_r12epi (exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 2524 gptq / 36 rtn (min_rows=32) over 32 layers
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    K8_PPL steps=2048 nll=1.67567 ppl=5.34235 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_calibexp_r12epi.json
+[2026-09-04T09:54:37Z] arm granite/calibexp_r12epi (B=1 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 2524 gptq / 36 rtn (min_rows=32) over 32 layers
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    B1D_TIMED_GRAPH steps=127 step=2.44ms compile=None recompiles=0 out=/root/bo5/granite_b1_calibexp_r12epi.json
+[2026-09-04T09:59:54Z] arm granite/calibexp_r12epi (B=16 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 2524 gptq / 36 rtn (min_rows=32) over 32 layers
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    BV3_GRAPH batch=16 steps=70 step=5.25ms agg=3050.1tok/s recompiles=0 out=/root/bo5/granite_b16_calibexp_r12epi.json
+[2026-09-04T10:05:20Z] K8 granite/calibexp_r12epi_c4val (exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 2524 gptq / 36 rtn (min_rows=32) over 32 layers
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    K8_PPL steps=2048 nll=2.48148 ppl=11.95897 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_calibexp_r12epi_c4val.json
+[2026-09-04T10:11:14Z] K8 granite/nf4_r12epi_c4val (exp=0 calib=0 fuse=all )
+    K8_PPL steps=2048 nll=2.44857 ppl=11.57180 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_nf4_r12epi_c4val.json
+[2026-09-04T10:12:00Z] K8 granite/rtnexp_r12epi (exp=1 calib=0 fuse=all )
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    K8_PPL steps=2048 nll=1.68487 ppl=5.39176 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_rtnexp_r12epi.json
+[2026-09-04T10:12:51Z] arm granite/nf4_r12epi_fq (B=1 exp=0 calib=0 fuse=all )
+    B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq.json
+[2026-09-04T10:13:01Z] K8 granite/nf4_r12epi_fq (exp=0 calib=0 fuse=all )
+    K8_PPL steps=2048 nll=1.67304 ppl=5.32834 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi_fq.json
+GRANITE DONE
+[2026-09-04T10:13:46Z] bake gptoss
+BAKE OK
+overlay         320G   57G  264G  18% /
+[2026-09-04T10:23:23Z] arm gptoss/r12 (B=1 exp=0 calib=0 fuse=r12 )
+    B1D_TIMED_GRAPH steps=127 step=7.33ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_r12.json
+[2026-09-04T10:23:41Z] arm gptoss/r12 (B=16 exp=0 calib=0 fuse=r12 )
+    BV3_GRAPH batch=16 steps=70 step=21.58ms agg=741.4tok/s recompiles=0 out=/root/bo5/gptoss_b16_r12.json
+[2026-09-04T10:24:04Z] arm gptoss/store_r12 (B=1 exp=1 calib=0 fuse=r12 E4B_INT4_KEEP_NF4=1)
+    INT4EXP enabled: 24 layers (model_type=gpt_oss)
+    B1D_TIMED_GRAPH steps=127 step=5.77ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_store_r12.json
+[2026-09-04T10:24:23Z] arm gptoss/store_r12 (B=16 exp=1 calib=0 fuse=r12 E4B_INT4_KEEP_NF4=1)
+    INT4EXP enabled: 24 layers (model_type=gpt_oss)
+    BV3_GRAPH batch=16 steps=70 step=22.23ms agg=719.7tok/s recompiles=0 out=/root/bo5/gptoss_b16_store_r12.json
+[2026-09-04T10:24:47Z] arm gptoss/store_r12_cen (B=1 exp=1 calib=0 fuse=r12 E4B_INT4_KEEP_NF4=1)
+    INT4EXP enabled: 24 layers (model_type=gpt_oss)
+    REPLAY_PROFILE_OUT /root/bo5/census_gptoss_store_r12_cen.txt
+    B1D_TIMED_GRAPH steps=127 step=5.77ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_store_r12_cen.json
+GPTOSS DONE
+[2026-09-04T10:25:06Z] freed granite (disk: 269G free)
+[2026-09-04T10:25:07Z] freed gptoss (disk: 307G free)
+[2026-09-04T10:25:07Z] bake mixtral
+BAKE OK
+overlay         320G  136G  185G  43% /
+[2026-09-04T10:32:11Z] K8 mixtral/all (exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    K8_PPL steps=2048 nll=1.19051 ppl=3.28876 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_all.json
+[2026-09-04T10:39:14Z] arm mixtral/all (B=1 exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all.json
+[2026-09-04T10:45:11Z] arm mixtral/all (B=16 exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    BV3_GRAPH batch=16 steps=70 step=42.40ms agg=377.3tok/s recompiles=0 out=/root/bo5/mixtral_b16_all.json
+[2026-09-04T10:51:34Z] K8 mixtral/all_c4val (exp=1 calib=1 fuse=all )
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    K8_PPL steps=2048 nll=2.12424 ppl=8.36651 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_all_c4val.json
+[2026-09-04T10:58:12Z] K8 mixtral/nf4_c4val (exp=0 calib=0 fuse=0 )
+    K8_PPL steps=2048 nll=2.11031 ppl=8.25079 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_nf4_c4val.json
+[2026-09-04T10:59:28Z] arm mixtral/all_nor2 (B=1 exp=1 calib=1 fuse=r1epi )
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    B1D_TIMED_GRAPH steps=127 step=8.61ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_nor2.json
+[2026-09-04T11:05:26Z] arm mixtral/all_nor2 (B=16 exp=1 calib=1 fuse=r1epi )
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    BV3_GRAPH batch=16 steps=70 step=42.73ms agg=374.5tok/s recompiles=0 out=/root/bo5/mixtral_b16_all_nor2.json
+MIXTRAL DONE
+SUMMARY run_granite_ppl_calibexp_r12epi.log K8_PPL steps=2048 nll=1.67567 ppl=5.34235 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_calibexp_r12epi.json
+SUMMARY run_granite_ppl_calibexp_r12epi_c4val.log K8_PPL steps=2048 nll=2.48148 ppl=11.95897 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_calibexp_r12epi_c4val.json
+SUMMARY run_granite_ppl_nf4_r12epi.log K8_PPL steps=2048 nll=1.67304 ppl=5.32834 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi.json
+SUMMARY run_granite_ppl_nf4_r12epi_c4val.log K8_PPL steps=2048 nll=2.44857 ppl=11.57180 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_nf4_r12epi_c4val.json
+SUMMARY run_granite_ppl_nf4_r12epi_fq.log K8_PPL steps=2048 nll=1.67304 ppl=5.32834 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi_fq.json
+SUMMARY run_granite_ppl_rtnexp_r12epi.log K8_PPL steps=2048 nll=1.68487 ppl=5.39176 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_rtnexp_r12epi.json
+SUMMARY run_mixtral_ppl_all.log K8_PPL steps=2048 nll=1.19051 ppl=3.28876 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_all.json
+SUMMARY run_mixtral_ppl_all_c4val.log K8_PPL steps=2048 nll=2.12424 ppl=8.36651 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_all_c4val.json
+SUMMARY run_mixtral_ppl_nf4_c4val.log K8_PPL steps=2048 nll=2.11031 ppl=8.25079 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_nf4_c4val.json
+SUMMARY run_qwen3_ppl_all.log K8_PPL steps=2048 nll=1.84571 ppl=6.33260 compute=fp8 sha=9ef10d760ad9 out=/root/bo5/qwen3_ppl_all.json
+SUMMARY run_qwen3_ppl_all_c4val.log K8_PPL steps=2048 nll=2.81299 ppl=16.65973 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_all_c4val.json
+SUMMARY run_qwen3_ppl_nf4_c4val.log K8_PPL steps=2048 nll=2.80923 ppl=16.59705 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_nf4_c4val.json
+SUMMARY run_gptoss_b1_r12.log B1D_TIMED_GRAPH steps=127 step=7.33ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_r12.json
+SUMMARY run_gptoss_b1_store_r12.log B1D_TIMED_GRAPH steps=127 step=5.77ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_store_r12.json
+SUMMARY run_gptoss_b1_store_r12_cen.log B1D_TIMED_GRAPH steps=127 step=5.77ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_store_r12_cen.json
+SUMMARY run_granite_b1_calibexp_r12epi.log B1D_TIMED_GRAPH steps=127 step=2.44ms compile=None recompiles=0 out=/root/bo5/granite_b1_calibexp_r12epi.json
+SUMMARY run_granite_b1_nf4_r12epi.log B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi.json
+SUMMARY run_granite_b1_nf4_r12epi_fq.log B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq.json
+SUMMARY run_mixtral_b1_all.log B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all.json
+SUMMARY run_mixtral_b1_all_nor2.log B1D_TIMED_GRAPH steps=127 step=8.61ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_nor2.json
+SUMMARY run_qwen3_b1_all.log B1D_TIMED_GRAPH steps=127 step=4.90ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all.json
+SUMMARY run_qwen3_b1_all_cen.log B1D_TIMED_GRAPH steps=127 step=4.89ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_cen.json
+SUMMARY run_qwen3_b1_all_noglue.log B1D_TIMED_GRAPH steps=127 step=5.18ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_noglue.json
+SUMMARY run_qwen3_b1_all_noglue_cen.log B1D_TIMED_GRAPH steps=127 step=5.18ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_noglue_cen.json
+SUMMARY run_gptoss_b16_r12.log BV3_GRAPH batch=16 steps=70 step=21.58ms agg=741.4tok/s recompiles=0 out=/root/bo5/gptoss_b16_r12.json
+SUMMARY run_gptoss_b16_store_r12.log BV3_GRAPH batch=16 steps=70 step=22.23ms agg=719.7tok/s recompiles=0 out=/root/bo5/gptoss_b16_store_r12.json
+SUMMARY run_granite_b16_calibexp_r12epi.log BV3_GRAPH batch=16 steps=70 step=5.25ms agg=3050.1tok/s recompiles=0 out=/root/bo5/granite_b16_calibexp_r12epi.json
+SUMMARY run_granite_b16_nf4_r12epi.log BV3_GRAPH batch=16 steps=70 step=9.22ms agg=1736.1tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi.json
+SUMMARY run_mixtral_b16_all.log BV3_GRAPH batch=16 steps=70 step=42.40ms agg=377.3tok/s recompiles=0 out=/root/bo5/mixtral_b16_all.json
+SUMMARY run_mixtral_b16_all_nor2.log BV3_GRAPH batch=16 steps=70 step=42.73ms agg=374.5tok/s recompiles=0 out=/root/bo5/mixtral_b16_all_nor2.json
+SUMMARY run_qwen3_b16_all.log BV3_GRAPH batch=16 steps=70 step=12.78ms agg=1251.6tok/s recompiles=0 out=/root/bo5/qwen3_b16_all.json
+[2026-09-04T11:11:35Z] TP_DONE
+[2026-09-04T11:11:42Z] bo5b: install: e4b integration-7 @d090940ee10518872e4f8fd05dabe100f8dc1fa8 (+#387) + gnf4 @587eb7aaf5618a045a92cf30d6a66bfb77507127
+bo5b tripwire OK: #387 + #385 + #384; e4b 0.34.0
+[2026-09-04T11:11:54Z] bo5b: arm mixtral/all_i7 (B=1 exp=1 calib=1 fuse=all fq=--no-fuse-qkv )
+    B5B INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5B ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    B5B B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_i7.json
+[2026-09-04T11:17:50Z] bo5b: arm mixtral/all_fq (B=1 exp=1 calib=1 fuse=all fq=  )
+[2026-09-04T11:21:45Z] bo5c: waiting for TP2_DONE
+    B5B ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    B5B fused q/k/v projections on 0 attention modules (RESULTS-f2-tail default)
+    B5B B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_fq.json
+[2026-09-04T11:23:41Z] bo5b: arm mixtral/all_fq (B=16 exp=1 calib=1 fuse=all fq=  )
+[2026-09-04T11:25:46Z] bo5c: waiting for TP2_DONE
+    B5B ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    B5B fused q/k/v projections on 0 attention modules (RESULTS-f2-tail default)
+    B5B BV3_GRAPH batch=16 steps=70 step=42.43ms agg=377.1tok/s recompiles=0 out=/root/bo5/mixtral_b16_all_fq.json
+[2026-09-04T11:29:57Z] bo5b: K8 mixtral/all_fq (exp=1 calib=1 fuse=all src=wikitext fq=  )
+    B5B INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5B ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    B5B K8_PPL steps=2048 nll=1.19051 ppl=3.28876 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_all_fq.json
+MIXTRAL FQ DONE
+[2026-09-04T11:36:44Z] bo5b: freed mixtral (319G free)
+[2026-09-04T11:36:44Z] bo5b: bake granite
+BAKE OK
+overlay         320G   11G  310G   4% /
+[2026-09-04T11:41:53Z] bo5b: arm granite/nf4_r12epi_i7 (B=1 exp=0 calib=0 fuse=all fq=--no-fuse-qkv )
+    B5B B1D_TIMED_GRAPH steps=127 step=3.38ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_i7.json
+[2026-09-04T11:42:05Z] bo5b: arm granite/nf4_r12epi_fq2 (B=1 exp=0 calib=0 fuse=all fq=  )
+    B5B fused q/k/v projections on 32 attention modules (RESULTS-f2-tail default)
+    B5B B1D_TIMED_GRAPH steps=127 step=3.49ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq2.json
+[2026-09-04T11:42:15Z] bo5b: arm granite/nf4_r12epi_fq2 (B=16 exp=0 calib=0 fuse=all fq=  )
+    B5B fused q/k/v projections on 32 attention modules (RESULTS-f2-tail default)
+    B5B BV3_GRAPH batch=16 steps=70 step=9.15ms agg=1748.4tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi_fq2.json
+[2026-09-04T11:42:31Z] bo5b: K8 granite/nf4_r12epi_fq2 (exp=0 calib=0 fuse=all src=wikitext fq=  )
+    B5B K8_PPL steps=2048 nll=1.67198 ppl=5.32270 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi_fq2.json
+GRANITE FQ DONE
+[2026-09-04T11:43:16Z] bo5b: bake qwen3
+BAKE OK
+overlay         320G   98G  223G  31% /
+[2026-09-04T11:46:43Z] bo5b: K8 qwen3/int4exp_c4val (exp=1 calib=0 fuse=0 src=c4val1 fq=--no-fuse-qkv )
+[2026-09-04T11:48:15Z] bo5c: waiting for TP2_DONE
+    B5B INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    B5B K8_PPL steps=2048 nll=2.81349 ppl=16.66793 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_int4exp_c4val.json
+[2026-09-04T11:49:08Z] bo5b: K8 qwen3/calib_c4val (exp=1 calib=1 fuse=0 src=c4val1 fq=--no-fuse-qkv )
+    B5B INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    B5B ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    B5B K8_PPL steps=2048 nll=2.81209 ppl=16.64462 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_calib_c4val.json
+[2026-09-04T11:53:42Z] bo5b: K8 qwen3/folds_c4val (exp=0 calib=0 fuse=all src=c4val1 fq=--no-fuse-qkv )
+    B5B K8_PPL steps=2048 nll=2.80482 ppl=16.52406 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_folds_c4val.json
+[2026-09-04T11:55:03Z] bo5b: K8 qwen3/int4folds_c4val (exp=1 calib=0 fuse=all src=c4val1 fq=--no-fuse-qkv )
+    B5B INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    B5B K8_PPL steps=2048 nll=2.80812 ppl=16.57874 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_int4folds_c4val.json
+QWEN3 ATTRIBUTION DONE
+B5B SUMMARY run_granite_ppl_calibexp_r12epi_c4val.log K8_PPL steps=2048 nll=2.48148 ppl=11.95897 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_calibexp_r12epi_c4val.json
+B5B SUMMARY run_granite_ppl_nf4_r12epi_c4val.log K8_PPL steps=2048 nll=2.44857 ppl=11.57180 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_nf4_r12epi_c4val.json
+B5B SUMMARY run_granite_ppl_nf4_r12epi_fq.log K8_PPL steps=2048 nll=1.67304 ppl=5.32834 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi_fq.json
+B5B SUMMARY run_granite_ppl_nf4_r12epi_fq2.log K8_PPL steps=2048 nll=1.67198 ppl=5.32270 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi_fq2.json
+B5B SUMMARY run_mixtral_ppl_all_c4val.log K8_PPL steps=2048 nll=2.12424 ppl=8.36651 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_all_c4val.json
+B5B SUMMARY run_mixtral_ppl_all_fq.log K8_PPL steps=2048 nll=1.19051 ppl=3.28876 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_all_fq.json
+B5B SUMMARY run_mixtral_ppl_nf4_c4val.log K8_PPL steps=2048 nll=2.11031 ppl=8.25079 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_nf4_c4val.json
+B5B SUMMARY run_qwen3_ppl_all_c4val.log K8_PPL steps=2048 nll=2.81299 ppl=16.65973 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_all_c4val.json
+B5B SUMMARY run_qwen3_ppl_calib_c4val.log K8_PPL steps=2048 nll=2.81209 ppl=16.64462 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_calib_c4val.json
+B5B SUMMARY run_qwen3_ppl_folds_c4val.log K8_PPL steps=2048 nll=2.80482 ppl=16.52406 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_folds_c4val.json
+B5B SUMMARY run_qwen3_ppl_int4exp_c4val.log K8_PPL steps=2048 nll=2.81349 ppl=16.66793 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_int4exp_c4val.json
+B5B SUMMARY run_qwen3_ppl_int4folds_c4val.log K8_PPL steps=2048 nll=2.80812 ppl=16.57874 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_int4folds_c4val.json
+B5B SUMMARY run_qwen3_ppl_nf4_c4val.log K8_PPL steps=2048 nll=2.80923 ppl=16.59705 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_nf4_c4val.json
+B5B SUMMARY run_granite_b1_nf4_r12epi_i7.log B1D_TIMED_GRAPH steps=127 step=3.38ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_i7.json
+B5B SUMMARY run_mixtral_b1_all_i7.log B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_i7.json
+B5B SUMMARY run_granite_b1_nf4_r12epi_fq.log B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq.json
+B5B SUMMARY run_granite_b1_nf4_r12epi_fq2.log B1D_TIMED_GRAPH steps=127 step=3.49ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq2.json
+B5B SUMMARY run_mixtral_b1_all_fq.log B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_fq.json
+B5B SUMMARY run_granite_b16_nf4_r12epi_fq2.log BV3_GRAPH batch=16 steps=70 step=9.15ms agg=1748.4tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi_fq2.json
+B5B SUMMARY run_mixtral_b16_all_fq.log BV3_GRAPH batch=16 steps=70 step=42.43ms agg=377.1tok/s recompiles=0 out=/root/bo5/mixtral_b16_all_fq.json
+[2026-09-04T11:57:05Z] bo5b: TP2_DONE
+bo5c tripwire OK: integration-7 still installed; e4b 0.34.0
+[2026-09-04T11:57:22Z] bo5c: disk after free: 310G free
+[2026-09-04T11:57:22Z] bo5c: arm granite/nf4_r12epi_i7 (B=16 exp=0 calib=0 fuse=all fq=--no-fuse-qkv )
+    B5C BV3_GRAPH batch=16 steps=70 step=9.28ms agg=1724.6tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi_i7.json
+[2026-09-04T11:57:38Z] bo5c: arm granite/nf4_r12epi_i7b (B=1 exp=0 calib=0 fuse=all fq=--no-fuse-qkv )
+    B5C B1D_TIMED_GRAPH steps=127 step=3.48ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_i7b.json
+[2026-09-04T11:57:48Z] bo5c: arm granite/nf4_r12epi_fq2b (B=1 exp=0 calib=0 fuse=all fq=  )
+    B5C fused q/k/v projections on 32 attention modules (RESULTS-f2-tail default)
+    B5C B1D_TIMED_GRAPH steps=127 step=3.50ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq2b.json
+[2026-09-04T11:57:59Z] bo5c: arm granite/nf4_r12epi_i7_cen (B=1 exp=0 calib=0 fuse=all fq=--no-fuse-qkv )
+    B5C B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_i7_cen.json
+[2026-09-04T11:58:09Z] bo5c: arm granite/nf4_r12epi_fq2_cen (B=1 exp=0 calib=0 fuse=all fq=  )
+    B5C fused q/k/v projections on 32 attention modules (RESULTS-f2-tail default)
+    B5C B1D_TIMED_GRAPH steps=127 step=3.50ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq2_cen.json
+GRANITE CENSUS DONE
+[2026-09-04T11:58:20Z] bo5c: freed granite
+[2026-09-04T11:58:20Z] bo5c: bake mixtral
+BAKE OK
+overlay         320G  136G  185G  43% /
+[2026-09-04T12:06:02Z] bo5c: K8 mixtral/nf4_i7 (exp=0 calib=0 fuse=0 src=wikitext fq=--no-fuse-qkv )
+    B5C K8_PPL steps=2048 nll=1.18105 ppl=3.25778 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_nf4_i7.json
+[2026-09-04T12:07:18Z] bo5c: K8 mixtral/lic (exp=1 calib=0 fuse=all src=wikitext fq=--no-fuse-qkv )
+    B5C INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5C K8_PPL steps=2048 nll=1.16684 ppl=3.21181 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_lic.json
+[2026-09-04T12:11:52Z] bo5c: K8 mixtral/lic_c4val (exp=1 calib=0 fuse=all src=c4val1 fq=--no-fuse-qkv )
+    B5C INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5C K8_PPL steps=2048 nll=2.11726 ppl=8.30834 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_lic_c4val.json
+[2026-09-04T12:15:38Z] bo5c: arm mixtral/lic (B=1 exp=1 calib=0 fuse=all fq=--no-fuse-qkv )
+    B5C INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5C B1D_TIMED_GRAPH steps=127 step=8.93ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_lic.json
+[2026-09-04T12:18:45Z] bo5c: arm mixtral/lic (B=16 exp=1 calib=0 fuse=all fq=--no-fuse-qkv )
+    B5C INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5C BV3_GRAPH batch=16 steps=70 step=42.50ms agg=376.5tok/s recompiles=0 out=/root/bo5/mixtral_b16_lic.json
+[2026-09-04T12:22:07Z] bo5c: arm mixtral/lic_fq (B=1 exp=1 calib=0 fuse=all fq=  )
+    B5C INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5C fused q/k/v projections on 32 attention modules (RESULTS-f2-tail default)
+    B5C B1D_TIMED_GRAPH steps=127 step=8.65ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_lic_fq.json
+[2026-09-04T12:25:09Z] bo5c: arm mixtral/lic_fq (B=16 exp=1 calib=0 fuse=all fq=  )
+    B5C INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5C fused q/k/v projections on 32 attention modules (RESULTS-f2-tail default)
+    B5C BV3_GRAPH batch=16 steps=70 step=42.29ms agg=378.3tok/s recompiles=0 out=/root/bo5/mixtral_b16_lic_fq.json
+[2026-09-04T12:28:21Z] bo5c: K8 mixtral/lic_fq (exp=1 calib=0 fuse=all src=wikitext fq=  )
+    B5C INT4EXP enabled: 32 layers (model_type=mixtral)
+    B5C K8_PPL steps=2048 nll=1.16702 ppl=3.21239 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_lic_fq.json
+MIXTRAL-LIC DONE
+[2026-09-04T12:32:06Z] bo5c: TP3_DONE
