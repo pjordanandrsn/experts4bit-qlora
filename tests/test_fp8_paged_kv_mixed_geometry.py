@@ -97,3 +97,63 @@ def test_harness_reads_per_layer_geometry():
         def __getattr__(self, k):
             raise RuntimeError(f"'{k}' is a per-layer attribute and may vary across layers")
     assert mod._kv_geometry(Hetero()) == ([8, 2], [256, 512])
+
+
+def test_auto_key_groups_keep_32_wide_scales_per_layer(monkeypatch):
+    """k_groups=None sizes each layer's key scale groups to 32-wide (4 at
+    head_dim 128, 8 at 256, 16 at 512) when the installed kernel unrolls
+    that many, and falls back to 4 when it refuses (capability probe,
+    never a version string). Gemma-4's 512-dim layers measured 0.046 nats
+    of fp8 cost with 128-wide groups and 0.017 with 32-wide (e4b#359)."""
+    import experts4bit_qlora.engines.fp8_paged_kv as mod
+    calls = []
+    def fake_probe(q, head_dim, k_groups, v_groups, **kw):
+        calls.append((head_dim, k_groups))
+        return None                       # a kernel that unrolls the count
+    import types, sys
+    fake = types.SimpleNamespace(fp8_compute_unsupported=fake_probe)
+    monkeypatch.setitem(sys.modules, "fp8_paged_attn", fake)
+    kv = mod.Fp8PagedKV(3, [8, 8, 2], [128, 256, 512], batch=1,
+                        max_tokens_per_seq=32, device="cpu")
+    assert kv.kgs == [4, 8, 16] and kv.k_groups is None
+    assert calls == [(256, 8), (512, 16)], "128 needs no probe: 4 groups is the old default"
+    # per-layer row sizing carries the extra scale bytes of the finer layers
+    assert kv.k_rows[1] - (16 * 8 * 256) == 16 * 8 * 8 * 4
+    assert kv.k_rows[2] - (16 * 2 * 512) == 16 * 2 * 16 * 4
+    # round trip through append + dequant on every layer
+    for layer in range(3):
+        H, D = kv.Hs[layer], kv.Ds[layer]
+        k, v = torch.randn(5, H, D), torch.randn(5, H, D)
+        kv.append(layer, 0, k, v)
+        kk, vv = kv.dequant(layer, 0) if hasattr(kv, "dequant") else (None, None)
+        if kk is not None:
+            assert (kk.float() - k).abs().max() < 0.1 * k.abs().max()
+
+    def refusing_probe(q, head_dim, k_groups, v_groups, **kw):
+        return f"fp8 compute unrolls k_groups in (1, 2, 4), got {k_groups}"
+    fake.fp8_compute_unsupported = refusing_probe
+    kv_old = mod.Fp8PagedKV(3, [8, 8, 2], [128, 256, 512], batch=1,
+                            max_tokens_per_seq=32, device="cpu")
+    assert kv_old.kgs == [4, 4, 4] and kv_old.k_groups == 4
+
+    monkeypatch.delitem(sys.modules, "fp8_paged_attn")
+    monkeypatch.setattr("builtins.__import__", _import_blocker("fp8_paged_attn"))
+    kv_none = mod.Fp8PagedKV(1, 2, 512, batch=1, max_tokens_per_seq=32, device="cpu")
+    assert kv_none.kgs == [4], "no kernel installed: the old default"
+
+
+def _import_blocker(name):
+    real = __import__
+    def blocked(n, *a, **k):
+        if n == name:
+            raise ImportError(name)
+        return real(n, *a, **k)
+    return blocked
+
+
+def test_explicit_key_groups_still_broadcast():
+    import experts4bit_qlora.engines.fp8_paged_kv as mod
+    kv = mod.Fp8PagedKV(2, [8, 2], [256, 512], batch=1, max_tokens_per_seq=32,
+                        k_groups=4, device="cpu")
+    assert kv.kgs == [4, 4] and kv.k_groups == 4
+
