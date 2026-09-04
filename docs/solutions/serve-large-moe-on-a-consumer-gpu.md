@@ -10,7 +10,7 @@ Load the experts in 4-bit with `experts4bit-qlora`. Two serving surfaces exist a
 
 ## Why it happens
 
-Single-stream decode is bandwidth-bound: each token reads the routed experts plus the unquantised attention and output head. The stock 4-bit path decodes NF4 to bf16 and reads it again, several launches per active expert. Fusing the decode into the GEMM removes the round trip; quantising attention and the KV cache removes more bytes; folding norm, residual, rotary and router glue removes launches.
+Single-stream decode is bandwidth-bound: each token reads the routed experts plus the unquantised attention and output head. Which 4-bit path the experts take decides how many bytes and launches that costs. The reference per-expert path — and bitsandbytes' dequantize-then-matmul route, which is what releases before 0.50.0 and any unsupported cell use — decodes NF4 to bf16 and reads it again, several launches per active expert. bitsandbytes ≥ 0.50.0 CUDA inference can consume packed 4-bit weights directly for a supported ordinary 2-D matrix, but that is a per-`Linear` contract; a routed MoE stack — many expert matrices, variable group sizes, one launch — is a separate contract, and it is the one `grouped-nf4-gemm` supplies ([`../BITSANDBYTES.md`](../BITSANDBYTES.md)). Fusing the decode into the grouped GEMM removes the round trip; quantising attention and the KV cache removes more bytes; folding norm, residual, rotary and router glue removes launches.
 
 ## Which project solves it
 

@@ -31,7 +31,7 @@
     "non_goals": [
       "dense (non-MoE) models: use bitsandbytes directly",
       "a general-purpose serving engine or a vLLM replacement",
-      "models that already fit in bf16 and need no offload: storage-only 4-bit is slower and costs energy (claim e4b.train.energy-honest)",
+      "models that already fit in bf16 and need no offload: 4-bit here is a memory trade, not a speed-up, and on the measured comparator it cost energy (claim e4b.train.energy-honest.scoped-a2000)",
       "silent fallbacks: every enable_* returns a count or a non-empty handle list, or raises; callers must assert it",
       "operating systems other than Linux, or GPUs without CUDA"
     ]
@@ -107,11 +107,12 @@
       ],
       "claim_ids": [
         "e4b.train.olmoe-fits",
-        "e4b.serve.gptoss.loader-faithful"
+        "e4b.serve.gptoss.loader-faithful",
+        "e4b.train.energy-honest.scoped-a2000"
       ],
       "limitations": [
         "Unsupported model_type raises NotImplementedError; identity-expert families (LongCat-Flash) are refused by name",
-        "Storage-only 4-bit is slower than bf16 when the model already fits: claim e4b.train.energy-honest",
+        "4-bit is a memory trade when the model already fits, and cost energy on the measured comparator (one card, one bitsandbytes development build): claim e4b.train.energy-honest.scoped-a2000",
         "Dense (non-MoE) models are not the target; use bitsandbytes directly"
       ],
       "status": "supported"

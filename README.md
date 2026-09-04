@@ -19,8 +19,9 @@ calls through the `[fast]` extra live in
 **Environment:** Linux, a CUDA GPU, torch ≥ 2.2 and bitsandbytes ≥ 0.43
 (Python 3.11 is what CI tests; the kernels need Triton on an sm_80+
 GPU). **The material limitation:** on a model that already fits in bf16,
-storage-only 4-bit is slower and costs energy — this is for models that
-do not fit. Machine-readable capabilities and evidence:
+4-bit here is a memory trade, not a speed-up, and on the measured
+comparator it cost energy (`e4b.train.energy-honest.scoped-a2000`) — this
+is for models that do not fit. Machine-readable capabilities and evidence:
 [`docs/capabilities.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json)
 and [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json).
 
@@ -61,9 +62,11 @@ paged decode engine that is measured against each model's own attention.
 
 - The model is dense (no experts): bitsandbytes' own 4-bit path already
   covers every `nn.Linear`.
-- The model already fits in bf16 with headroom: storage-only 4-bit is
-  slower and uses more energy here (`e4b.train.energy-honest` in the
-  claims register).
+- The model already fits in bf16 with headroom: 4-bit is a memory trade
+  there, and on the measured comparator it was slower and used more
+  energy (`e4b.train.energy-honest.scoped-a2000` in the claims register —
+  one card and one bitsandbytes development build, not a statement about
+  every 4-bit path).
 - You expect a general-purpose serving engine or a vLLM replacement: on
   the same box vLLM is ahead (`e4b.serve.h2h.vllm.same-box`); this is a
   measured 4-bit path for models that otherwise do not run at all.
@@ -80,7 +83,7 @@ paged decode engine that is measured against each model's own attention.
 |---|---|
 | [`docs/SOLUTIONS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md) | one page per problem: symptoms, cause, install, smallest example, verification, limits |
 | [`docs/capabilities.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json) | the machine-readable capability contract (entry points, environments, limitations, claim IDs) |
-| [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md) | the current position — measured, retired, open |
+| [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md) | the current position — claims tiered in the public register: confirmed, measured, measured-private, open, superseded, retired |
 | [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json) | every number with its evidence and status |
 | [`docs/INDEX.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md) | what each document is and whether it is current |
 | [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm) | the kernel package this one drives (`pip install "experts4bit-qlora[fast]"`) |
@@ -174,9 +177,18 @@ means:
   gpt-oss 4.5% of layer-token choices flip and those tokens carry the
   whole disagreement. "Below the floor" means indistinguishable.
   [`docs/METHODOLOGY.md` §13.1](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.34.0/docs/METHODOLOGY.md).
-- **4-bit on a card that already fits the model is a 1.2–2.3× energy
-  penalty**, not a saving: NF4 is storage-only and the GEMM runs in bf16
-  either way. It inverts when memory binds.
+- **4-bit on a card that already fits the model was a 1.2–2.3× energy
+  penalty on the measured comparator**, not a saving: one OLMoE-dims
+  expert projection on an RTX A2000, dequantize-then-`linear` and a
+  bitsandbytes 0.50-dev fork build's `matmul_4bit` routing against native
+  bf16 (`e4b.train.energy-honest.scoped-a2000`). It inverts when memory
+  binds. *Note, 2026-09-04:* the earlier wording "NF4 is storage-only and
+  the GEMM runs in bf16 either way" was a universal mechanism statement
+  and is withdrawn as such — bitsandbytes ≥ 0.50.0 can run supported
+  ordinary 2-D 4-bit inference cells on the packed weights directly, while
+  routed grouped MoE execution and training's input gradient are separate
+  contracts ([`docs/BITSANDBYTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.34.0/docs/BITSANDBYTES.md)).
+  The measurement stands as its receipt made it.
 - **Ratios travel; absolutes do not.** The 5090 class carries ~8.5%
   inter-box dispersion; the same config on two 4090s moved 8.6% in
   s/step. Quote the card, or quote a ratio.
