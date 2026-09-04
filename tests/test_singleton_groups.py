@@ -82,3 +82,50 @@ def test_singleton_matches_grouped_gptoss_epilogue(mock_gemm):
                           gptoss=(gu_b, dn_b, 1.702, 7.0),
                           singleton_groups=True)
     assert torch.equal(g, s)
+
+
+def test_swiglu_and_combine_kernels_are_taken_when_present(monkeypatch):
+    """CPU-side plumbing: with stand-in kernels installed the gated path
+    calls swiglu_rows and the collapsed combine calls combine_rows; the
+    A/B env arms and a missing kernel fall back to the torch chain."""
+    from experts4bit_qlora.engines import hot_residency as hr
+    calls = {"swiglu": 0, "combine": 0}
+
+    def swiglu_rows(gu):
+        calls["swiglu"] += 1
+        g, u = gu.float().chunk(2, dim=-1)
+        return (torch.nn.functional.silu(g) * u).to(torch.bfloat16)
+
+    def combine_rows(dn, w, k):
+        calls["combine"] += 1
+        T = dn.shape[0] // k
+        return (dn.float() * w[:, None]).view(T, k, -1).sum(1).to(torch.bfloat16)
+    stub = types.SimpleNamespace(swiglu_rows=swiglu_rows, combine_rows=combine_rows)
+    monkeypatch.setitem(sys.modules, "int4_b32", stub)
+    hr._SWIGLU.clear()
+    hr._COMBINE.clear()
+    monkeypatch.delenv("E4B_FUSE_SWIGLU", raising=False)
+    monkeypatch.delenv("E4B_FUSE_COMBINE", raising=False)
+    assert hr._swiglu_kernel() is swiglu_rows and hr._combine_kernel() is combine_rows
+    # CPU tensors never take the kernel (the guard is device + dtype), so
+    # the routing predicate is exercised directly
+    gu = torch.randn(4, 16, dtype=torch.bfloat16)
+    gate, up = gu.chunk(2, dim=-1)
+    h = hr._swiglu_or(torch.nn.functional.silu, gu, gate, up)
+    assert calls["swiglu"] == 0 and h.shape == (4, 8)
+    assert hr._is_silu(torch.nn.SiLU()) and not hr._is_silu(torch.nn.functional.gelu)
+    hr._SWIGLU.clear()
+    hr._COMBINE.clear()
+    monkeypatch.setenv("E4B_FUSE_SWIGLU", "0")
+    monkeypatch.setenv("E4B_FUSE_COMBINE", "0")
+    assert hr._swiglu_kernel() is None and hr._combine_kernel() is None
+    hr._SWIGLU.clear()
+    hr._COMBINE.clear()
+    monkeypatch.delenv("E4B_FUSE_SWIGLU")
+    monkeypatch.delenv("E4B_FUSE_COMBINE")
+    monkeypatch.setitem(sys.modules, "int4_b32", types.SimpleNamespace())   # an older cut
+    hr._SWIGLU.clear()
+    hr._COMBINE.clear()
+    assert hr._swiglu_kernel() is None and hr._combine_kernel() is None
+    hr._SWIGLU.clear()
+    hr._COMBINE.clear()
