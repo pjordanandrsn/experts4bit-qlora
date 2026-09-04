@@ -562,3 +562,74 @@ def test_gemma4_is_a_prefused_convention_in_the_module_layout():
     # the DENSE mlp beside the experts is not an expert stack
     assert _FUSED_TARGET.match("model.language_model.layers.0.mlp.gate_proj.weight") is None
 
+
+
+class _NamesTree(torch.nn.Module):
+    """A state_dict-only planning tree: the planner needs names, not tensors."""
+    def __init__(self, names):
+        super().__init__()
+        self._names = list(names)
+
+    def state_dict(self, *a, **k):
+        return {n: torch.zeros(1) for n in self._names}
+
+
+def _gemma4_release_keys():
+    """The released multimodal index's shape: language tower under
+    ``model.language_model.``, a vision tower beside it."""
+    lm = "model.language_model"
+    keys = [f"{lm}.embed_tokens.weight", f"{lm}.norm.weight"]
+    for i in range(2):
+        keys += [f"{lm}.layers.{i}.experts.gate_up_proj", f"{lm}.layers.{i}.experts.down_proj",
+                 f"{lm}.layers.{i}.router.proj.weight", f"{lm}.layers.{i}.router.per_expert_scale",
+                 f"{lm}.layers.{i}.mlp.gate_proj.weight", f"{lm}.layers.{i}.input_layernorm.weight",
+                 f"{lm}.layers.{i}.layer_scalar"]
+    keys += ["model.embed_vision.embedding_projection.weight",
+             "model.vision_tower.encoder.layers.0.attn.q_proj.weight"]
+    return keys
+
+
+def test_gemma4_text_only_tree_strips_the_prefix_and_drops_the_vision_tower():
+    """A text-only build (what the loader constructs from text_config) has no
+    home for the vision tower and names the language keys without the
+    ``model.language_model.`` prefix. The plan renames the language keys,
+    drops the towers DELIBERATELY (recorded in skipped_keys) and raises on
+    nothing -- the validation lane refused Gemma-4's int4 arm on exactly
+    this ("1013 checkpoint keys do not map")."""
+    from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint
+    keys = _gemma4_release_keys()
+    text = [k.replace("model.language_model.", "model.") for k in keys
+            if k.startswith("model.language_model.")]
+    plan = plan_moe_checkpoint(keys, _NamesTree(text), "gemma4_text")
+    assert not plan.experts, "pre-fused: never per-expert"
+    assert plan.passthrough["model.language_model.layers.0.experts.gate_up_proj"] == \
+        "model.layers.0.experts.gate_up_proj"
+    assert set(plan.skipped_keys) == {"model.embed_vision.embedding_projection.weight",
+                                      "model.vision_tower.encoder.layers.0.attn.q_proj.weight"}
+    assert len(plan.passthrough) == len(text)
+
+
+def test_gemma4_multimodal_tree_keeps_every_key():
+    """A tree that builds the vision tower claims the released keys as they
+    are: no rename, nothing dropped."""
+    from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint
+    keys = _gemma4_release_keys()
+    plan = plan_moe_checkpoint(keys, _NamesTree(keys), "gemma4")
+    assert plan.skipped_keys == ()
+    assert plan.passthrough["model.language_model.layers.0.experts.gate_up_proj"] == \
+        "model.language_model.layers.0.experts.gate_up_proj"
+    assert plan.passthrough["model.vision_tower.encoder.layers.0.attn.q_proj.weight"] == \
+        "model.vision_tower.encoder.layers.0.attn.q_proj.weight"
+
+
+def test_gemma4_drop_never_hides_a_missing_language_key():
+    """The drop rule is scoped to the towers: a language key with no home
+    still raises, so a wrong tree cannot pass by silence."""
+    from experts4bit_qlora.arch.moe_conventions import MoEConventionError
+    from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint
+    keys = _gemma4_release_keys()
+    text = [k.replace("model.language_model.", "model.") for k in keys
+            if k.startswith("model.language_model.")]
+    text.remove("model.layers.1.experts.down_proj")
+    with pytest.raises(MoEConventionError, match="do not map"):
+        plan_moe_checkpoint(keys, _NamesTree(text), "gemma4_text")
