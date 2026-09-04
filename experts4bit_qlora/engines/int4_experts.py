@@ -491,13 +491,18 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                     # and tens of seconds on the CPU, x256 experts. The pack
                     # is the same arithmetic either way; an OOM falls back.
                     gdev = os.environ.get("E4B_INT4_GPTQ_DEVICE", "cpu")
+                    # E4B_INT4_GPTQ_DAMP scales the Hessian's diagonal damping
+                    # (kernel default 0.01): a thin calibration set leaves an
+                    # expert's Hessian rank-deficient, and more damping is the
+                    # standard response before adding data.
+                    damp = float(os.environ.get("E4B_INT4_GPTQ_DAMP", "0.01"))
                     try:
-                        p, c = gptq_pack_int4_b32(stack[e].to(gdev), H.to(gdev))
+                        p, c = gptq_pack_int4_b32(stack[e].to(gdev), H.to(gdev), damp=damp)
                     except RuntimeError:
                         if gdev == "cpu":
                             raise
                         _torch.cuda.empty_cache()
-                        p, c = gptq_pack_int4_b32(stack[e], H.to("cpu"))
+                        p, c = gptq_pack_int4_b32(stack[e], H.to("cpu"), damp=damp)
                     # back to the stack's device: the RTN-packed experts of the
                     # same layer stay where the stack lives, and they are stacked together
                     p, c = p.to(stack.device), c.to(stack.device)
