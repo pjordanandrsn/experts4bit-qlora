@@ -105,15 +105,15 @@ serve = [
 test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.28.0"]
 
 [project.urls]
-Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"
-Documentation = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md"
+Homepage = "https://cerinamroth.com/ml/experts4bit-qlora/"
+Documentation = "https://cerinamroth.com/ml/experts4bit-qlora/"
 Source = "https://github.com/pjordanandrsn/experts4bit-qlora"
 Issues = "https://github.com/pjordanandrsn/experts4bit-qlora/issues"
 Changelog = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/CHANGELOG.md"
 "Release Notes" = "https://github.com/pjordanandrsn/experts4bit-qlora/releases/latest"
-Status = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md"
+Status = "https://cerinamroth.com/ml/status/"
 Capabilities = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json"
-Solutions = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md"
+Solutions = "https://cerinamroth.com/ml/solutions/"
 Benchmarks = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json"
 "Kernel: grouped-nf4-gemm" = "https://pypi.org/project/grouped-nf4-gemm/"
 "Upstream (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
