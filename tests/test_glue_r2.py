@@ -558,7 +558,7 @@ class ToyUnfusedAttention(torch.nn.Module):
         ks = rope(k).reshape(*input_shape, -1, d).transpose(1, 2)
         vs = v.reshape(*input_shape, -1, d).transpose(1, 2)
         out, w = eager_attention_forward(self, qs, ks, vs, attention_mask, dropout=0.0,
-                                         scaling=self.scaling, sliding_window=None)
+                                         scaling=self.scaling)
         return self.o_proj(out.reshape(*input_shape, -1).contiguous()), w
 
 
@@ -595,7 +595,9 @@ def test_unfused_attention_with_head_norms_folds_and_matches(monkeypatch):
 def test_unfused_fold_refuses_other_attention_shapes(monkeypatch):
     """OLMoE norms the full hidden width before the head split (a different
     function), Gemma-4 carries a v_norm beside the six children, Granite
-    has no norms at all: each keeps its own forward."""
+    has no norms at all: none is this fold's. The norm-less shape belongs
+    to the rotary-only fold (its own tests below); the other two keep
+    their forward."""
     from experts4bit_qlora.engines import glue_r2
     olmoe = ToyUnfusedAttention(norm_width=2 * H)          # hidden-width norms
     gemma = ToyUnfusedAttention(extra_child=torch.nn.Identity())
@@ -605,7 +607,7 @@ def test_unfused_fold_refuses_other_attention_shapes(monkeypatch):
     monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
     _stub(monkeypatch, {"resid": 0, "rope": 0})
     m = torch.nn.Module()
-    m.olmoe, m.gemma, m.granite = olmoe, gemma, granite
+    m.olmoe, m.gemma = olmoe, gemma
     with pytest.raises(RuntimeError, match="patched nothing"):
         fuse_t1_glue_r2(m)
 
@@ -625,3 +627,100 @@ def test_fused_attention_still_takes_the_fused_fold(monkeypatch):
     m.attn = ToyFusedAttention()
     assert fuse_t1_glue_r2(m) == (0, 1)
     assert seen == [], "the unfused fold was not consulted for a fused module"
+
+
+class ToyNoNormAttention(torch.nn.Module):
+    """Llama-shaped attention (GraniteMoe, Mixtral): q/k/v/o, no head
+    norm, rotary straight on the projection output, eager attention."""
+    def __init__(self, heads=2, d=H, extra_param=False):
+        super().__init__()
+        self.q_proj = torch.nn.Linear(H, heads * d, bias=False, dtype=torch.bfloat16)
+        self.k_proj = torch.nn.Linear(H, heads * d, bias=False, dtype=torch.bfloat16)
+        self.v_proj = torch.nn.Linear(H, heads * d, bias=False, dtype=torch.bfloat16)
+        self.o_proj = torch.nn.Linear(heads * d, H, bias=False, dtype=torch.bfloat16)
+        if extra_param:
+            self.sinks = torch.nn.Parameter(torch.zeros(heads))    # gpt-oss shape
+        self.head_dim = d
+        self.scaling = 0.015625                                    # Granite's attention_multiplier
+        # no ``sliding_window``: GraniteMoe/Mixtral attention never sets it
+        self.layer_idx = 0
+        self.num_key_value_groups = 1
+        self.attention_dropout = 0.0
+        self.is_causal = True
+        self.config = types.SimpleNamespace(_attn_implementation="eager")
+
+    def forward(self, hidden_states, position_embeddings=None, attention_mask=None,
+                past_key_values=None, **kw):
+        from transformers.models.qwen3_moe.modeling_qwen3_moe import eager_attention_forward
+        d = self.head_dim
+        input_shape = hidden_states.shape[:-1]
+        rows = hidden_states.numel() // hidden_states.shape[-1]
+        q = self.q_proj(hidden_states).reshape(rows, -1, d)
+        k = self.k_proj(hidden_states).reshape(rows, -1, d)
+        v = self.v_proj(hidden_states).reshape(rows, -1, d)
+        cos, sin = position_embeddings
+        c = cos.reshape(-1, d).float()
+        s = sin.reshape(-1, d).float()
+        if c.shape[0] == 1 and rows > 1:
+            c, s = c.expand(rows, d), s.expand(rows, d)
+
+        def rope(x):
+            xf = x.float()
+            half = d // 2
+            rot = torch.cat([-xf[..., half:], xf[..., :half]], dim=-1)
+            return (xf * c.unsqueeze(1) + rot * s.unsqueeze(1)).to(torch.bfloat16)
+        qs = rope(q).reshape(*input_shape, -1, d).transpose(1, 2)
+        ks = rope(k).reshape(*input_shape, -1, d).transpose(1, 2)
+        vs = v.reshape(*input_shape, -1, d).transpose(1, 2)
+        out, w = eager_attention_forward(self, qs, ks, vs, attention_mask, dropout=0.0,
+                                         scaling=self.scaling)
+        return self.o_proj(out.reshape(*input_shape, -1).contiguous()), w
+
+
+def _stub_rope_only(monkeypatch, calls):
+    """The kernel stand-in with rope_heads (the >= 0.28 cut)."""
+    _stub(monkeypatch, calls)
+    stub = sys.modules["int4_b32"]
+
+    def rope_heads(x, cos, sin):
+        calls["rope_only"] = calls.get("rope_only", 0) + 1
+        assert cos.shape[0] == x.shape[0]
+        xf = x.float()
+        half = x.shape[-1] // 2
+        rot = torch.cat([-xf[..., half:], xf[..., :half]], dim=-1)
+        return (xf * cos.float().unsqueeze(1) + rot * sin.float().unsqueeze(1)).to(torch.bfloat16)
+    stub.rope_heads = rope_heads
+
+
+def test_norm_less_attention_folds_and_matches(monkeypatch):
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub_rope_only(monkeypatch, calls)
+    torch.manual_seed(23)
+    m = torch.nn.Module()
+    m.attn = ToyNoNormAttention()
+    x, pe = _rope_inputs(2, 3)
+    want, _ = m.attn(x, position_embeddings=pe)
+    assert fuse_t1_glue_r2(m) == (0, 1)
+    got, _ = m.attn(x, position_embeddings=pe)
+    assert calls["rope_only"] == 2 and calls["rope"] == 0
+    assert torch.allclose(got.float(), want.float(), rtol=2 ** -6, atol=2 ** -7), \
+        (got.float() - want.float()).abs().max()
+    xb, peb = _rope_inputs(1, 65)
+    m.attn(xb, position_embeddings=peb)
+    assert calls["rope_only"] == 2, "prefill keeps the upstream chain"
+
+
+def test_norm_less_fold_refuses_sinks_and_needs_the_kernel(monkeypatch):
+    """gpt-oss carries `sinks` as its own parameter -> refused; and a
+    kernel cut without rope_heads refuses LOUDLY, never quietly."""
+    from experts4bit_qlora.engines import glue_r2
+    _stub_rope_only(monkeypatch, {"resid": 0, "rope": 0})
+    import int4_b32
+    assert not glue_r2._patch_attention_rope_only(ToyNoNormAttention(extra_param=True), int4_b32)
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    _stub(monkeypatch, {"resid": 0, "rope": 0})        # the older cut: no rope_heads
+    m = torch.nn.Module()
+    m.attn = ToyNoNormAttention()
+    with pytest.raises(RuntimeError, match="rope_heads"):
+        fuse_t1_glue_r2(m)

@@ -16,6 +16,16 @@
   stack keeps NF4 experts (round-1 + round-2 folds + epilogue); its
   combined number is on the validation lane.
 
+### Round-2 glue: rotary fold for attention without a head norm
+
+- `E4B_FUSE_T1_GLUE_R2=1` now also folds the rotary chain of the
+  Llama-shaped q/k/v/o attention GraniteMoe and Mixtral use (no q/k norm),
+  through the kernel side's `rope_heads` (grouped-nf4-gemm >= 0.28).
+  Licensed on structure — exactly the four projections and nothing of the
+  module's own — so gpt-oss's attention (`sinks`) is refused, and a kernel
+  cut without `rope_heads` refuses loudly rather than silently skipping.
+  Lane numbers gate the merge.
+
 ## 0.33.0 — 2026-09-04
 
 ### Throughput parity across families: the build-out, measured
