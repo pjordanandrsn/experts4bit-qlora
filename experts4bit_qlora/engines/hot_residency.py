@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from typing import Sequence
 
+import os
+
 import torch
 
 
@@ -44,6 +46,12 @@ FORCE_SINGLETON_GROUPS = [False]
 # expert-weight reuse WITH a static, sync-free launch. Takes precedence
 # over FORCE_SINGLETON_GROUPS when both are set.
 DEVICE_GROUPING = [False]
+
+
+#: Rows up to which the MXFP4 store's decode GEMV beats the alternatives
+#: (bo3n: x1.22 over NF4 at 4 rows, x0.81 at 64); above it the NF4 stacks,
+#: when kept, serve the call.
+_MXFP4_GEMV_ROWS = 16
 
 
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
@@ -74,8 +82,27 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
-    _int4_gemv_decode = (device_grouping and int4_stores is not None
-                         and x_rows.shape[0] <= 256)
+    # A native-MXFP4 store (gpt-oss) serves EVERY shape through the kernel
+    # side's grouped MXFP4 GEMM on the singleton contract (one row per
+    # group, ids as a device tensor): no int4-b32 kernels, no tile table,
+    # no unsort. The mxfp4 kernel has no captured M-tile variant yet, so
+    # the device-grouping branch is not taken for this store kind.
+    _mxfp4_store = int4_stores is not None and int4_stores.get("kind") == "mxfp4"
+    if (_mxfp4_store and x_rows.shape[0] > _MXFP4_GEMV_ROWS
+            and gu_p is not None and gu_p.numel() > 0):
+        # Batched rows on the MXFP4 store: the decode GEMV re-streams the
+        # weights per row and loses to NF4 above a handful of rows
+        # (lane bo3n: x0.81 at 64 rows), and the v1 grouped GEMM loses
+        # more (x0.41). With the NF4 stacks kept (E4B_INT4_KEEP_NF4=1)
+        # those rows take the NF4 path; the store is a decode lever until
+        # an M-tile MXFP4 GEMM exists.
+        int4_stores = None
+        _mxfp4_store = False
+    _int4_gemv_decode = (not _mxfp4_store and device_grouping
+                         and int4_stores is not None and x_rows.shape[0] <= 256)
+    if _mxfp4_store:
+        singleton_groups = True
+        device_grouping = False
     if _int4_gemv_decode:
         # batched DECODE on the int4 store: the split-K GEMV serves rows
         # in INPUT order (P7: 1.92x/1.28x over the M-tile at ~1-2 rows
@@ -192,6 +219,34 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "int4_stores did not reach _fused_over_stack")
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
+    elif _mxfp4_store:
+        import mxfp4_grouped
+        _sizes_mx = [1] * x_rows.shape[0]           # host constant: capture-safe
+        _eids_mx = local_ids.to(torch.int32)
+        # Decode rows go through the decode-grade GEMV when the kernel
+        # side has it (grouped-nf4-gemm >= 0.28, `gemv_mxfp4_b32`: the
+        # int4-b32 split-K structure on the MXFP4 bytes, int8 activation
+        # rows); the v1 grouped GEMM's M==1 reduction (one program per
+        # 64 rows, no split-K) measured SLOWER than NF4 at B=1 on
+        # gpt-oss. E4B_MXFP4_GEMV=0 forces the v1 route (the A/B arm).
+        _gemv_mx = getattr(mxfp4_grouped, "gemv_mxfp4_b32", None)
+        _use_gemv_mx = (_gemv_mx is not None
+                        and x_rows.shape[0] <= _MXFP4_GEMV_ROWS
+                        and os.environ.get("E4B_MXFP4_GEMV", "1") == "1")
+        if _use_gemv_mx:
+            from int4_b32 import quant_x_rows
+
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                xq, xs = quant_x_rows(xr.to(torch.bfloat16).contiguous())
+                return _gemv_mx(xq, xs, st["blocks"], st["scales"],
+                                _eids_mx, st["N"], st["K"])
+        else:
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                return mxfp4_grouped.gemm_mxfp4_grouped(
+                    xr.to(torch.bfloat16).contiguous(),
+                    st["blocks"], st["scales"], _sizes_mx, _eids_mx)
     elif int4_stores is not None:
         # Opt-in uniform-int4 expert store (engines/int4_experts). The
         # NF4 stacks may already be FREED, so BOTH branches must serve

@@ -41,13 +41,19 @@ class _PlanTree(torch.nn.Module):
 
 
 class _FakeState:
-    """Just enough hot-residency surface for the enabler."""
-    def __init__(self):
+    """Just enough hot-residency surface for the enabler. ``gptoss``
+    mirrors the wrapper flag the loader sets on a gpt-oss build (biases
+    resident, clamped-GLU epilogue)."""
+    def __init__(self, gptoss=False, gu_bias=None, dn_bias=None):
         self.h_gu_p = torch.zeros(3, dtype=torch.uint8)
         self.h_gu_a = torch.zeros(3)
         self.h_dn_p = torch.zeros(3, dtype=torch.uint8)
         self.h_dn_a = torch.zeros(3)
         self.all_hot = True
+        self.gptoss = gptoss
+        if gptoss:
+            self.h_gu_b = gu_bias
+            self.h_dn_b = dn_bias
 
     def _all_hot(self):
         return self.all_hot
@@ -271,19 +277,126 @@ def test_prefused_family_is_packed_not_refused(tmp_path, monkeypatch):
             dequant_int4_ref(pk, sc, nn, kk))
 
 
-def test_gptoss_refused_by_name(tmp_path):
-    """gpt-oss's stacks are interleaved + bias-carrying; the plan read does
-    not de-interleave, so the lane must refuse BY NAME rather than pack
-    gate rows against up rows."""
-    g = torch.Generator().manual_seed(5)
+def _gptoss_case(E=2, H=128, inter=64):
+    """A gpt-oss layer as RELEASED: MXFP4 ``_blocks``/``_scales`` pairs
+    (uint8, the e8m0 exponent per 32-group) plus per-projection biases,
+    gate/up rows interleaved. Returns (ckpt, plan names, prefix, dense
+    stacks in the module layout, biases)."""
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+    g = torch.Generator().manual_seed(11)
     pre = "model.layers.0.mlp.experts"
-    ck = {f"{pre}.gate_up_proj": torch.randn(E, 2 * N1, K1, generator=g) / 8,
-          f"{pre}.down_proj": torch.randn(E, K1, N1, generator=g) / 8,
-          "model.embed_tokens.weight": torch.randn(N1, K1, generator=g) / 8}
-    src = _write_ckpt(tmp_path, ck)
+    gu_blocks = torch.randint(0, 256, (E, 2 * inter, H // 32, 16), generator=g,
+                              dtype=torch.uint8)
+    gu_scales = torch.randint(120, 130, (E, 2 * inter, H // 32), generator=g,
+                              dtype=torch.uint8)
+    dn_blocks = torch.randint(0, 256, (E, H, inter // 32, 16), generator=g,
+                              dtype=torch.uint8)
+    dn_scales = torch.randint(120, 130, (E, H, inter // 32), generator=g,
+                              dtype=torch.uint8)
+    gu_bias = torch.randn(E, 2 * inter, generator=g)
+    dn_bias = torch.randn(E, H, generator=g)
+    ck = {f"{pre}.gate_up_proj_blocks": gu_blocks,
+          f"{pre}.gate_up_proj_scales": gu_scales,
+          f"{pre}.gate_up_proj_bias": gu_bias,
+          f"{pre}.down_proj_blocks": dn_blocks,
+          f"{pre}.down_proj_scales": dn_scales,
+          f"{pre}.down_proj_bias": dn_bias,
+          "model.embed_tokens.weight": torch.randn(8, H, generator=g)}
     names = [f"{pre}.gate_up_proj", f"{pre}.down_proj",
+             f"{pre}.gate_up_proj_bias", f"{pre}.down_proj_bias",
              "model.embed_tokens.weight"]
-    live, _ = _live_model(pre, "gpt_oss")
-    with pytest.raises(RuntimeError, match="gpt_oss is not served"):
+    gu_dense = dequantize_mxfp4(gu_blocks, gu_scales, dtype=torch.float32)
+    dn_dense = dequantize_mxfp4(dn_blocks, dn_scales, dtype=torch.float32)
+    assert tuple(gu_dense.shape) == (E, H, 2 * inter)  # module layout, interleaved
+    assert tuple(dn_dense.shape) == (E, inter, H)
+    return ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias
+
+
+def test_gptoss_store_is_the_released_mxfp4_bytes(tmp_path, monkeypatch):
+    """gpt-oss is served NATIVELY: the store holds the released fp4 blocks
+    and e8m0 scales, row-de-interleaved (gate block first) and flattened
+    to the kernel's [E, N, K//2] / [E, N, K//32] -- byte-identical to the
+    checkpoint, and dequantising the store reproduces the loader builder's
+    gate-first dense layout. Nothing is re-quantised (int4-b32 measured
+    +0.626 nats on this family: a uniform grid cannot hold e2m1 levels)."""
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+    monkeypatch.delenv("E4B_INT4_KEEP_NF4", raising=False)
+    ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias = _gptoss_case()
+    E_, H_, twoI = gu_dense.shape
+    I_ = twoI // 2
+    src = _write_ckpt(tmp_path, ck)
+    gub = torch.cat([gu_bias[:, 0::2], gu_bias[:, 1::2]], dim=1)
+    live, st = _live_model(pre, "gpt_oss", top_k=4)
+    st.gptoss = True
+    st.h_gu_b = gub
+    st.h_dn_b = dn_bias
+    n = enable_serve_experts_int4(live, src, model_type="gpt_oss",
+                                  plan_model=_PlanTree(names))
+    assert n == 1
+    stores = st._int4_stores
+    assert stores["kind"] == "mxfp4"
+    assert stores["gu"]["N"] == twoI and stores["gu"]["K"] == H_
+    assert stores["dn"]["N"] == H_ and stores["dn"]["K"] == I_
+    gb, gs = ck[f"{pre}.gate_up_proj_blocks"], ck[f"{pre}.gate_up_proj_scales"]
+    db, ds = ck[f"{pre}.down_proj_blocks"], ck[f"{pre}.down_proj_scales"]
+    want_gb = torch.cat([gb[:, 0::2], gb[:, 1::2]], 1).reshape(E_, twoI, H_ // 2)
+    want_gs = torch.cat([gs[:, 0::2], gs[:, 1::2]], 1)
+    assert torch.equal(stores["gu"]["blocks"].cpu(), want_gb)
+    assert torch.equal(stores["gu"]["scales"].cpu(), want_gs)
+    assert torch.equal(stores["dn"]["blocks"].cpu(), db.reshape(E_, H_, I_ // 2))
+    assert torch.equal(stores["dn"]["scales"].cpu(), ds)
+    assert stores["gu"]["blocks"].dtype == torch.uint8 and stores["gu"]["scales"].dtype == torch.uint8
+    # dequantising the store == the loader builder's transform on the raw dequant
+    gt = gu_dense.transpose(1, 2).contiguous()
+    gt = torch.cat([gt[:, 0::2, :], gt[:, 1::2, :]], dim=1)          # [E, 2I, H] gate first
+    deq = dequantize_mxfp4(stores["gu"]["blocks"].cpu().reshape(E_, twoI, H_ // 32, 16),
+                           stores["gu"]["scales"].cpu(), dtype=torch.float32)   # [E, H, 2I]
+    assert torch.equal(deq.transpose(1, 2), gt)
+    deq_dn = dequantize_mxfp4(stores["dn"]["blocks"].cpu().reshape(E_, H_, I_ // 32, 16),
+                              stores["dn"]["scales"].cpu(), dtype=torch.float32)  # [E, I, H]
+    assert torch.equal(deq_dn.transpose(1, 2), dn_dense.transpose(1, 2))
+    # the NF4 stacks are freed by default; the biases stay
+    assert st.h_gu_p.numel() == 0 and st.h_gu_b is gub
+    # and the interleaved rows would NOT have passed
+    assert not torch.equal(stores["gu"]["blocks"].cpu(), gb.reshape(E_, twoI, H_ // 2))
+
+
+def test_gptoss_refuses_a_wrapper_without_the_bias_epilogue(tmp_path):
+    """A wrapper the loader did not build as gpt-oss has no bias epilogue;
+    serving int4 bytes through it would run a plain SwiGLU. Refuse."""
+    ck, names, pre, *_ = _gptoss_case()
+    src = _write_ckpt(tmp_path, ck)
+    live, _st = _live_model(pre, "gpt_oss", top_k=4)
+    with pytest.raises(RuntimeError, match="not gpt-oss flagged"):
         enable_serve_experts_int4(live, src, model_type="gpt_oss",
                                   plan_model=_PlanTree(names))
+
+
+def test_gptoss_refuses_bias_width_mismatch(tmp_path):
+    ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias = _gptoss_case()
+    src = _write_ckpt(tmp_path, ck)
+    live, st = _live_model(pre, "gpt_oss", top_k=4)
+    st.gptoss = True
+    st.h_gu_b = gu_bias[:, : gu_bias.shape[1] // 2]     # wrong width
+    st.h_dn_b = dn_bias
+    with pytest.raises(RuntimeError, match="bias widths"):
+        enable_serve_experts_int4(live, src, model_type="gpt_oss",
+                                  plan_model=_PlanTree(names))
+
+
+def test_gptoss_layout_helpers_refuse_misshapen_stacks():
+    from experts4bit_qlora.engines.int4_experts import _gptoss_packer_layout, _mxfp4_store_layout
+    with pytest.raises(RuntimeError, match="disagree"):
+        _gptoss_packer_layout(torch.zeros(2, 8, 6), torch.zeros(2, 4, 8))
+    with pytest.raises(RuntimeError, match="expected"):
+        _gptoss_packer_layout(torch.zeros(8, 6), torch.zeros(3, 8))
+    u8 = torch.uint8
+    bad = (torch.zeros(2, 8, 2, 16, dtype=u8), torch.zeros(2, 8, 2, dtype=u8),     # 2I=8 rows -> I=4, but
+           torch.zeros(2, 64, 1, 16, dtype=u8), torch.zeros(2, 64, 1, dtype=u8))   # down says I//32 = 1
+    with pytest.raises(RuntimeError, match="disagree"):
+        _mxfp4_store_layout(*bad)
+    gub, gus, dnb, dns = _mxfp4_store_layout(
+        torch.zeros(2, 64, 4, 16, dtype=u8), torch.zeros(2, 64, 4, dtype=u8),     # 2I=64 (I=32), H=128
+        torch.zeros(2, 128, 1, 16, dtype=u8), torch.zeros(2, 128, 1, dtype=u8))   # H=128 rows, I//32 = 1
+    assert tuple(gub.shape) == (2, 64, 64) and tuple(gus.shape) == (2, 64, 4)
+    assert tuple(dnb.shape) == (2, 128, 16) and tuple(dns.shape) == (2, 128, 1)
