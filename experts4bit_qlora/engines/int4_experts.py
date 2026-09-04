@@ -222,9 +222,148 @@ def _meta_twin(model):
             return AutoModelForCausalLM.from_config(model.config)
 
 
+class _ExpertHessianSink:
+    """Per-(layer, expert) ``2 X X^T`` accumulators fed by the fused
+    forward's calibration tap. Layers are recognised by the identity of
+    their hot NF4 gate/up stack (``w.h_gu_p``), which is what the fused
+    forward is handed; ``layers`` restricts a pass to a subset so the
+    running Hessians fit ``hessian_device`` (a 128-expert layer at hidden
+    2048 / inter 768 is 2.4 GB in fp32)."""
+
+    def __init__(self, layer_of: dict, layers, hessian_device="cpu"):
+        self.layer_of = layer_of            # id(h_gu_p) -> layer index
+        self.layers = set(layers)
+        self.hessian_device = hessian_device
+        self.gu = {}                        # (layer, e) -> HessianAccumulator
+        self.dn = {}
+        self.rows = {}                      # (layer, e) -> rows seen
+        self.unmatched = 0
+
+    def __call__(self, gu_p, sorted_ids, x_sorted, h):
+        from gptq_pack import HessianAccumulator
+        layer = self.layer_of.get(id(gu_p))
+        if layer is None:
+            self.unmatched += 1
+            return
+        if layer not in self.layers:
+            return
+        import torch
+        ids = sorted_ids.to("cpu")
+        for e in torch.unique(ids).tolist():
+            m = (ids == e)
+            idx = m.nonzero().flatten().to(x_sorted.device)
+            key = (layer, int(e))
+            if key not in self.gu:
+                self.gu[key] = HessianAccumulator(x_sorted.shape[-1], device=self.hessian_device)
+                self.dn[key] = HessianAccumulator(h.shape[-1], device=self.hessian_device)
+                self.rows[key] = 0
+            self.gu[key].add(x_sorted.index_select(0, idx))
+            self.dn[key].add(h.index_select(0, idx))
+            self.rows[key] += int(idx.numel())
+
+    def hessians(self):
+        out = {}
+        for (layer, e), acc in self.gu.items():
+            out.setdefault(layer, {})[e] = (acc.H, self.dn[(layer, e)].H, self.rows[(layer, e)])
+        return out
+
+
+def _expert_layers(model, source_dir, model_type=None, plan_model=None):
+    """(plan, [(layer, wrapper state)]) -- the enabler's own enumeration,
+    shared with calibration so both see the same layers in the same order."""
+    import torch as _torch
+
+    from ..arch.moe_plan import plan_moe_checkpoint
+    keys, _read_tensor = safetensors_reader(source_dir)
+    mt = model_type or getattr(getattr(model, "config", None), "model_type", None)
+    if not mt:
+        raise RuntimeError("model_type unknown; pass model_type= explicitly")
+    if plan_model is None:
+        plan_model = _meta_twin(model)
+    plan = plan_moe_checkpoint(keys, plan_model, mt, skip_extra_layers=True)
+    prefused = _prefused_layers(plan) if not plan.experts else {}
+    out = []
+    for layer in (plan.experts or prefused):
+        if plan.experts:
+            first_name, _down_name = plan.expert_targets[layer]
+        else:
+            first_name = plan.passthrough[prefused[layer][0]]
+        w = _wrapper_for(model, first_name)
+        if w is None:
+            raise RuntimeError(f"layer {layer}: no hot-residency state near {first_name}")
+        out.append((layer, w))
+    del _torch
+    return plan, out
+
+
+def calibrate_expert_hessians(model, source_dir: str, batches, *,
+                              model_type: str | None = None,
+                              plan_model=None, device=None,
+                              hessian_device="cpu",
+                              max_hessian_bytes: int = 24 << 30,
+                              layers_per_pass: int | None = None) -> dict:
+    """Run ``batches`` (token-id tensors ``[B, T]``) through ``model`` on
+    its NF4 expert stacks and return ``{layer: {expert: (H_gu, H_dn,
+    rows)}}`` with ``H = 2 X X^T`` over the rows each expert actually
+    saw -- the gate/up input for ``H_gu`` and the down-projection input
+    (post-activation) for ``H_dn``, both taken at the fused forward's
+    calibration tap. Must run BEFORE ``enable_serve_experts_int4``: the
+    tap keys layers by their live NF4 stack.
+
+    Memory is the constraint, not time: a 128-expert layer's fp32
+    Hessians are ~2.4 GB, so the layers are calibrated in passes sized
+    by ``max_hessian_bytes`` (or ``layers_per_pass``), each pass a full
+    run over ``batches``."""
+    from . import hot_residency as _hr
+    _plan, layers = _expert_layers(model, source_dir, model_type, plan_model)
+    if not layers:
+        raise RuntimeError("calibrate_expert_hessians: no expert layers")
+    layer_of = {id(w.h_gu_p): layer for layer, w in layers}
+    if len(layer_of) != len(layers):
+        raise RuntimeError("calibrate_expert_hessians: expert stacks are not "
+                           "distinct objects (freed?) -- calibrate before the int4 enable")
+    cfg = getattr(model, "config", None)
+    if layers_per_pass is None:
+        hid = getattr(cfg, "hidden_size", None)
+        inter = (getattr(cfg, "moe_intermediate_size", None)
+                 or getattr(cfg, "intermediate_size", None))
+        n_exp = (getattr(cfg, "num_local_experts", None)
+                 or getattr(cfg, "num_experts", None))
+        if hid and inter and n_exp:
+            per_layer = int(n_exp) * (int(hid) ** 2 + int(inter) ** 2) * 4
+            layers_per_pass = max(1, int(max_hessian_bytes // per_layer))
+        else:
+            layers_per_pass = len(layers)
+    import torch
+    batches = list(batches)
+    dev = device or next(model.parameters()).device
+    order = [layer for layer, _w in layers]
+    result = {}
+    prev = _hr._CALIB_SINK
+    try:
+        for i in range(0, len(order), layers_per_pass):
+            chunk = order[i:i + layers_per_pass]
+            sink = _ExpertHessianSink(layer_of, chunk, hessian_device)
+            _hr._CALIB_SINK = sink
+            with torch.no_grad():
+                for ids in batches:
+                    model(ids.to(dev))
+            if not sink.gu:
+                raise RuntimeError(
+                    f"calibrate_expert_hessians: the tap saw no expert rows for layers "
+                    f"{chunk[:4]}... (unmatched calls: {sink.unmatched}) -- is the model "
+                    "on the fused NF4 path (all-VRAM hot residency)?")
+            result.update(sink.hessians())
+    finally:
+        _hr._CALIB_SINK = prev
+    return result
+
+
 def enable_serve_experts_int4(model, source_dir: str, *,
                               model_type: str | None = None,
-                              plan_model=None) -> int:
+                              plan_model=None,
+                              expert_hessians: dict | None = None,
+                              min_rows: int = 32) -> int:
     """Repack + install for EVERY family the load plan understands.
 
     Routes the source read through the same machinery the loader uses --
@@ -236,6 +375,14 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     model in the coverage matrix. Never reads resident NF4 (composition
     measured ~7x the pure grid's ppl cost). Collapsed-path-only, as
     before: refuses tiered layers loudly.
+
+    ``expert_hessians`` (from :func:`calibrate_expert_hessians`) switches
+    the packer to the kernel side's GPTQ-style ``gptq_pack_int4_b32`` per
+    expert, with each expert's own gate/up and down Hessians. An expert
+    the calibration text never routed to (fewer than ``min_rows`` rows)
+    is packed round-to-nearest and COUNTED; the store records
+    ``calibrated=(n_gptq, n_rtn)`` so a lane can refuse a mostly-RTN pack
+    under the calibrated banner.
     """
     import torch as _torch
 
@@ -269,6 +416,7 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     gptoss = bool(prefused) and mt == "gpt_oss"
 
     n_layers = 0
+    tot_gptq = tot_rtn = 0
     for layer in (plan.experts or prefused):
         if plan.experts:
             first_name, _down_name = plan.expert_targets[layer]
@@ -320,13 +468,36 @@ def enable_serve_experts_int4(model, source_dir: str, *,
         dev = w.h_gu_p.device
         E = first.shape[0]
 
-        def _pack_stack(stack, E=E, dev=dev):
-            pk, sc = zip(*[pack_int4_b32(stack[e]) for e in range(E)])
+        hl = (expert_hessians or {}).get(layer)
+        if expert_hessians is not None and hl is None:
+            raise RuntimeError(f"layer {layer}: calibrated enable but no expert "
+                               "Hessians for this layer -- refusing to pack it "
+                               "round-to-nearest under the calibrated banner")
+        n_gptq = n_rtn = 0
+
+        def _pack_stack(stack, role, E=E, dev=dev):
+            nonlocal n_gptq, n_rtn
+            pk, sc = [], []
+            for e in range(E):
+                H = None
+                if hl is not None and e in hl:
+                    H_gu, H_dn, rows = hl[e]
+                    if rows >= min_rows:
+                        H = H_gu if role == "gu" else H_dn
+                if H is not None:
+                    from gptq_pack import gptq_pack_int4_b32
+                    p, c = gptq_pack_int4_b32(stack[e], H.to("cpu"))
+                    n_gptq += 1
+                else:
+                    p, c = pack_int4_b32(stack[e])
+                    n_rtn += 1
+                pk.append(p)
+                sc.append(c)
             return (_torch.stack(pk).to(dev).contiguous(),
                     _torch.stack(sc).to(dev).contiguous())
 
-        gu_p, gu_s = _pack_stack(first)
-        dn_p, dn_s = _pack_stack(down)
+        gu_p, gu_s = _pack_stack(first, "gu")
+        dn_p, dn_s = _pack_stack(down, "dn")
         Ngu, Kgu = first.shape[1], first.shape[2]
         Ndn, Kdn = down.shape[1], down.shape[2]
         _b, _w2, sk_gu, _k = _plan(Ngu, Kgu)
@@ -345,9 +516,16 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                 t = getattr(w, attr)
                 setattr(w, attr, t.new_empty((0,) * t.dim()))
             _torch.cuda.empty_cache()
+        if expert_hessians is not None:
+            w._int4_stores["calibrated"] = (n_gptq, n_rtn)
         n_layers += 1
+        tot_gptq += n_gptq
+        tot_rtn += n_rtn
     if n_layers == 0:
         raise RuntimeError("enable_serve_experts_int4: the plan holds "
                            "neither per-expert stacks nor pre-fused expert "
                            "tensors -- refusing a vacuous enable")
+    if expert_hessians is not None:
+        print(f"INT4EXP calibrated experts: {tot_gptq} gptq / {tot_rtn} rtn "
+              f"(min_rows={min_rows}) over {n_layers} layers", flush=True)
     return n_layers

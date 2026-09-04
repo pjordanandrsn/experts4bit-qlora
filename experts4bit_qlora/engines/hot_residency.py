@@ -105,6 +105,14 @@ def _combine_kernel():
         _COMBINE["k"] = k
     return _COMBINE["k"]
 
+#: Calibration tap for the expert Hessians (engines/int4_experts):
+#: ``sink(gu_p, sorted_ids, x_sorted, h)`` is called once per MoE call
+#: with the gate/up input rows and the down-projection input rows, in
+#: expert-sorted order with their local expert ids -- the two matrices a
+#: per-expert GPTQ pack needs. ``None`` in serving: no cost, no branch
+#: inside the kernels.
+_CALIB_SINK = None
+
 
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
                       act_fn, gptoss=None, clamp_limit=None,
@@ -404,6 +412,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         gate = gate.clamp(max=limit)
         up = up.clamp(min=-limit, max=limit)
         h = (up + 1) * (gate * torch.sigmoid(gate * alpha))
+        if _CALIB_SINK is not None:
+            _CALIB_SINK(gu_p, sorted_ids, x_sorted, h)
         dn = _mm(h.contiguous(), dn_p, dn_a)
         dn = dn + dn_bias.index_select(0, sorted_ids).to(dn.dtype)
     elif has_gate:
@@ -423,9 +433,13 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             h = (act_fn(gate) * up).to(gu.dtype)
         else:
             h = _swiglu_or(act_fn, gu, gate, up)
+        if _CALIB_SINK is not None:
+            _CALIB_SINK(gu_p, sorted_ids, x_sorted, h)
         dn = _mm(h.contiguous(), dn_p, dn_a)
     else:
         h = act_fn(gu)
+        if _CALIB_SINK is not None:
+            _CALIB_SINK(gu_p, sorted_ids, x_sorted, h)
         dn = _mm(h.contiguous(), dn_p, dn_a)
     if order is None:                  # singleton path: input order kept
         return dn
