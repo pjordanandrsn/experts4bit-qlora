@@ -1,0 +1,81 @@
+{
+  "$comment": "Change-impact contract for experts4bit-qlora: which files must (or should) move together. scripts/check_change_impact.py --base <git ref> detects the mechanically detectable triggers from the diff and names the missing companions; the human-readable form is AGENTS.md section 8. Nothing here changes runtime behaviour. File lists are relative to the repository root.",
+  "schema_version": "1.0",
+  "checked_by": "scripts/check_change_impact.py --base <git ref> [--allow-claims-only] [--strict]",
+  "flow": [
+    "A kernel capability lands and is released in grouped-nf4-gemm first (invariant kernel-first in docs/system-manifest.json).",
+    "experts4bit-qlora integrates it behind a version guard or raises the `fast` floor in pyproject.toml to the release that ships it; the pyproject comment ladder records why.",
+    "The same change updates docs/system-manifest.json (a new compatibility record, or the current one), docs/capabilities.json (install/environment text), the CI `--requires` assertion and the current solution documents; scripts/check_dependency_floor.py and scripts/check_system_manifest.py hold them equal.",
+    "A public entry point that changes (signature, return value, refusal condition) updates its docstring, docs/capabilities.json entrypoints/limitations, the affected docs/solutions page and CHANGELOG.md.",
+    "A measured result enters docs/claims.json first, then docs/STATUS.md, then prose that quotes the claim ID; retired and superseded claims are kept, never deleted.",
+    "The llms bundle is regenerated (python scripts/build_llms_bundle.py) whenever a bundled document changed; --check is a CI gate.",
+    "Releases are cut from main by the maintainer; the release note's first paragraph follows docs/RELEASE_NOTES_GUIDE.md."
+  ],
+  "classes": {
+    "public-api-change": {
+      "description": "A public entry point changed: a symbol entered or left `__all__`, or a signature, return value or refusal condition of a documented entry point changed.",
+      "mechanical_trigger": "a symbol added to or removed from `__all__` in experts4bit_qlora/__init__.py",
+      "severity": "warn (--strict: fail)",
+      "must_change": [
+        "docs/capabilities.json OR docs/solutions/*.md",
+        "CHANGELOG.md"
+      ],
+      "must_consider": [
+        "the entry point's docstring (when to use, expected layout, what it returns or asserts, refusal conditions, platform needs, the solution page)",
+        "docs/capabilities.json (entrypoints, limitations)",
+        "docs/solutions/*.md",
+        "AGENTS.md section 5",
+        "CHANGELOG.md",
+        "scripts/wheel_smoke.py (the wheel's promised surface)"
+      ]
+    },
+    "new-kernel-capability": {
+      "description": "The consumer side of a capability that landed in grouped-nf4-gemm: this package starts using a kernel, packer, glue or arena primitive the kernel package released.",
+      "mechanical_trigger": "a kernel import name listed in docs/system-manifest.json packages.kernels.import_names is imported by the package for the first time (warn only; a new use of an already-imported module is not detectable from the diff)",
+      "severity": "warn",
+      "must_consider": [
+        "pyproject.toml (does the `fast` floor have to rise to the release that ships it? if so, class dependency-floor applies)",
+        "docs/system-manifest.json (compatibility record: floor, since, why)",
+        "the version guard or capability probe in the engine that uses it (nothing falls back silently)",
+        "docs/capabilities.json (entrypoints, environment)",
+        "the docs/solutions page that routes to it, and docs/SOLUTIONS.md 'Which of the two packages'",
+        "the CI pin of grouped-nf4-gemm and the import tripwire in .github/workflows/ci.yml",
+        "a K8 quality arm beside every fused speed arm (docs/METHODOLOGY.md, experts4bit_qlora/k8_gate.py)"
+      ]
+    },
+    "measured-result": {
+      "description": "A number or a verdict moved: a claim was added, or an existing claim's status or value changed.",
+      "mechanical_trigger": "docs/claims.json gained a claim id, or a claim's `status` or `value` differs from the base",
+      "severity": "fail (--allow-claims-only: warn, for a register-only correction whose position did not move)",
+      "must_change": [
+        "docs/STATUS.md"
+      ],
+      "must_consider": [
+        "the receipt under bench/ (a number is not published before its receipt exists; private receipts are marked evidence_private)",
+        "docs/STATUS.md (what you get today / what changed / what is open)",
+        "prose that quotes the claim id (README.md, docs/solutions/*.md, docs/SERVING-THROUGHPUT.md, docs/SERVING-PARITY.md)",
+        "docs/capabilities.json claim_ids (only active statuses may back a capability)",
+        "llms-full.txt (regenerate)",
+        "never an anchored document: corrections go in a sibling file"
+      ]
+    },
+    "dependency-floor": {
+      "description": "The `fast` extra's grouped-nf4-gemm floor moved (or another extra's floor did).",
+      "mechanical_trigger": "the grouped-nf4-gemm requirement of `[project.optional-dependencies] fast` in pyproject.toml differs from the base",
+      "severity": "fail",
+      "must_change": [
+        "docs/system-manifest.json (the compatibility record for this version)",
+        "docs/capabilities.json (special_requirements / install text that states the floor)",
+        ".github/workflows/ci.yml (the check_wheel_metadata --requires assertion)",
+        "docs/SOLUTIONS.md and every docs/solutions/*.md that stated the previous floor"
+      ],
+      "must_consider": [
+        "the pyproject comment ladder (why the floor moved)",
+        "README.md install section (it points at the manifest; a number there is drift)",
+        "the CI grouped-nf4-gemm pin (a raised floor must not let an older wheel clobber the pinned build)",
+        "CHANGELOG.md ('Requires grouped-nf4-gemm >= X for the fast extra')",
+        "the sibling repository's copy of docs/system-manifest.json (byte-identical)"
+      ]
+    }
+  }
+}
