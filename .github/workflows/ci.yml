@@ -34,7 +34,7 @@ jobs:
           # SHA, never a branch name — a deleted branch has broken this
           # install form before. Drop this line for a raised floor once a
           # release ships the int4 modules.
-          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@d8999fe92918224814c061540813cb4df8c4ea68"
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@4159d5fdef8fe85a79b6ced2da3dd60a569e45f7"
           pip install -e ".[test]"
       - name: int4 modules present (tripwire)
         # The int4 suites guard with importorskip, so a gnf4 build without

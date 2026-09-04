@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.33.0 — 2026-09-04
+
+### Throughput parity across families: the build-out, measured
+
+Six families were run under the Qwen3-30B campaign's serving protocol on
+one rented RTX 5090 class (`docs/SERVING-THROUGHPUT.md`, receipt in
+`bench/hybrid-g9/throughput-20260904/`, 12 claims at tier **measured**).
+Every refused arm became a change; each is listed with the lane number
+that gates it.
+
+- **Round-2 layer fold licenses on structure** (#366): exactly the four
+  pre-norm children and no parameters or buffers of the layer's own.
+  Gemma-4's decoder body (two more norms, a routed branch, a layer
+  scalar) and GraniteMoe's (scaled residuals) were being silently
+  replaced by the Qwen3-shaped body. Any pre-#366 non-Qwen fused
+  number is invalid; none was published.
+- **GraniteMoe-shaped layer fold** (#371, grouped-nf4-gemm #328): the
+  scaled-residual body folds with the kernel's `rmsnorm_resid_rows(
+  scale=)` and a one-launch `scaled_resid_add_rows`, both carrying
+  upstream's two bf16 roundings. The plain fold now mirrors a
+  tuple-returning MoE block (gpt-oss raised `TypeError` on the lane).
+  LANE (bo3, one RTX 5090): Granite K8 round-1 1.67927 → round-1 +
+  round-2 1.67927 (bit-identical) vs NF4 1.67407; B=1 216 → 222 tok/s
+  (×1.027); gpt-oss bit-identical too (6.38437), 132.8 → 133.3.
+- **Router epilogue kinds** (#370, grouped-nf4-gemm #327):
+  `topk_softmax` (select on the logits, optional bias: gpt-oss,
+  GraniteMoe), `gemma4` (normed/scaled router with a per-expert scale),
+  and Mixtral's renormalising router without `norm_topk_prob`; probe-
+  chosen among candidates; output order by dtype; the first slot is
+  the module's own (probabilities or raw logits), recorded by the probe.
+  LANE: Granite +0.0009 nats, ×1.046 at B=1; gpt-oss −0.017 nats (inside
+  its floor), ×1.009; Gemma-4 ×1.011 (`gemma4` kind); Mixtral −0.003 nats, ×1.01 (its
+  step is expert-bandwidth-bound; int4 experts are ×2.07 there).
+  Granite's licensed stack (int4 experts + round-1 norms + epilogue)
+  reaches 302 tok/s at B=1 = ×1.59 over NF4, the Qwen3-30B reference's
+  own ratio, and ×1.80 at B=16 (2,582 tok/s).
+- **Gemma-4 MoE convention** (#369): `gemma4` / `gemma4_text` adjudicated
+  pre-fused (`experts.gate_up_proj [E, 2I, H]` gate rows first,
+  `down_proj [E, H, I]`), so the int4 expert lane can plan it; the
+  released multimodal index maps onto the text-only tree (the
+  `model.language_model.` prefix is stripped by the loader's own rule,
+  the vision tower dropped deliberately and recorded). The loader's
+  dedicated path is unchanged. LANE: int4 experts plan 30 layers,
+  calibrated attention 115 projections; Gemma-4 int4 experts 71.7 → 86.0 tok/s at B=1 (×1.20), 574 → 797
+  at B=16 (×1.39); int4 + round-1 norms + router epilogue 121.1 tok/s
+  (×1.69 — above the reference's ×1.59).
+- **Matched routing** (#365/#368): `--ppl-route record|replay` pins the
+  router's choices across arms (consumption counters, order-agnostic
+  by dtype). On Gemma-4 it removes 0.014 of a 0.21-nat remainder —
+  routing is not the mechanism.
+- **Refused, with its number** (#367): 2 key groups at head_dim 64 so
+  Granite and gpt-oss leave the f32 attention path. Paired A/B on one
+  box, twice: the released cut on the f32 path times identically to the
+  fp8 path (4.10 / 5.19 ms on Granite; gpt-oss flat), for +0.0136 nats
+  on Granite (4× its floor) and +0.108 on gpt-oss (6×). The power-of-two
+  rounding of the group count (head_dim 96 asked for 3) is kept; the
+  floor of 4 groups is restored.
+- The K8 harness gains per-layer diff (`--ppl-layer-diff`), the fp8
+  kernel precision model inside a one-shot forward (`--ppl-fq`), and an
+  `upstream-full` oracle (#361). `--ppl-layer-diff` must not be combined
+  with route replay (not inert: +0.46 nats on the same replay).
+
+Floors: `grouped-nf4-gemm>=0.27.0` for `[fast]` and `[test]`.
+
+
 ## 0.32.0 — 2026-09-04
 
 ### fp8 paged KV: key scale groups per layer, 32-wide at every head_dim

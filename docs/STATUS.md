@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-04, version 0.32.0.** One page. The README argues the
+**As of 2026-09-04, version 0.33.0.** One page. The README argues the
 case; this page states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -80,8 +80,18 @@ is the honest one and it is also measured-private.
 
 **Per-family throughput is now measured in-repo** (2026-09-04): six
 families under one protocol on one rented 5090 class, with every refused
-arm named — that list is the build-out under review. Table and receipt:
-[`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md).
+arm named — that list became the build-out, and 0.33.0 ships it. Table
+and receipt: [`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md).
+
+**Two more families reach the reference's ratio with the build-out**
+(0.33.0, **measured-private** until the validation lane's receipt lands
+in-repo; the numbers are on the merged PRs): Granite-3.1-3B-A800M at
+302 tok/s B=1 with int4 experts + round-1 norms + router epilogue (×1.59
+over NF4, the Qwen3-30B ratio; ×1.80 at B=16), and Gemma-4-26B-A4B at
+121 tok/s (×1.69; int4 experts alone ×1.20 B=1 / ×1.39 B=16). Mixtral
+reaches ×2.14 (×2.29 with calibrated attention). gpt-oss stays NF4-only:
+a uniform int4 grid cannot hold its MXFP4 experts (+0.63 nats measured),
+and the native path is not yet a lever.
 
 ---
 
