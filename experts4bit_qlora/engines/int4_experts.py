@@ -121,6 +121,50 @@ def _prefused_layers(plan):
     return {k: v for k, v in out.items() if v[0] and v[1]}
 
 
+def _gptoss_packer_layout(gate_up, down):
+    """gpt-oss's dense stacks leave the plan reader in the MODULE layout:
+    ``gate_up [E, H, 2I]`` input-major with the gate and up rows
+    INTERLEAVED (``[..., ::2]`` gate, ``[..., 1::2]`` up), ``down
+    [E, I, H]``. The packer wants ``[E, N, K]`` with the gate block
+    before the up block (the serve epilogue splits with ``chunk(2)``).
+    This is the loader builder's transform (``arch/gptoss.py``,
+    ``from_gptoss``) line for line, so the int4 bytes pair gate rows
+    with the wrapper's de-interleaved gate biases."""
+    import torch as _torch
+
+    if gate_up.ndim != 3 or down.ndim != 3:
+        raise RuntimeError("gpt_oss: expected [E, *, *] expert stacks, got "
+                           f"{tuple(gate_up.shape)} / {tuple(down.shape)}")
+    E, H, twoI = gate_up.shape
+    if twoI % 2 or tuple(down.shape) != (E, twoI // 2, H):
+        raise RuntimeError(
+            "gpt_oss: stacks disagree with the module layout [E, H, 2I] / "
+            f"[E, I, H]: gate_up {tuple(gate_up.shape)}, down "
+            f"{tuple(down.shape)}")
+    gu = gate_up.transpose(1, 2).contiguous()                 # [E, 2I, H]
+    gu = _torch.cat([gu[:, 0::2, :], gu[:, 1::2, :]], dim=1)  # de-interleave rows
+    return gu, down.transpose(1, 2).contiguous()              # [E, H, I]
+
+
+def _check_gptoss_wrapper(w, layer, first, down):
+    """The int4 bytes are served by the hot-residency forward, whose
+    gpt-oss epilogue (biases, clamped GLU) engages only on a wrapper the
+    loader built as gpt-oss. A wrapper without that flag would serve the
+    bytes through the plain SwiGLU -- shapes fine, model wrong."""
+    gub = getattr(w, "h_gu_b", None)
+    dnb = getattr(w, "h_dn_b", None)
+    if not getattr(w, "gptoss", False) or gub is None or dnb is None:
+        raise RuntimeError(
+            f"layer {layer}: the hot-residency wrapper is not gpt-oss "
+            "flagged (no bias epilogue); the int4 bytes would be served "
+            "through a plain SwiGLU -- refusing")
+    if gub.shape[-1] != first.shape[1] or dnb.shape[-1] != down.shape[1]:
+        raise RuntimeError(
+            f"layer {layer}: gpt-oss bias widths {tuple(gub.shape)} / "
+            f"{tuple(dnb.shape)} do not match the packed stacks "
+            f"{tuple(first.shape)} / {tuple(down.shape)}")
+
+
 def _meta_twin(model):
     """A plannable twin of the live model on ``meta``.
 
@@ -179,16 +223,14 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
 
     prefused = _prefused_layers(plan) if not plan.experts else {}
-    if prefused and mt == "gpt_oss":
-        # gpt-oss's stacks are MXFP4 with INTERLEAVED gate/up rows and a
-        # bias-carrying epilogue; the de-interleave lives in the loader's
-        # gpt-oss builder, not in the plan read. Packing the plan's stacks
-        # here would pair gate rows with up rows -- shapes fine, numbers
-        # wrong. Refuse by NAME rather than produce that.
-        raise RuntimeError(
-            "enable_serve_experts_int4: gpt_oss is not served by this lane "
-            "(interleaved gate/up rows + bias epilogue are applied by the "
-            "loader's gpt-oss builder, not by the load plan)")
+    # gpt-oss's stacks are MXFP4 with INTERLEAVED gate/up rows in the
+    # module's input-major layout, and a bias-carrying epilogue. The plan
+    # read dequantizes them but does not de-interleave (that lives in the
+    # loader's gpt-oss builder), so they are brought to the packer's
+    # layout below by the builder's own transform; the biases and the
+    # clamped GLU are applied by the serve forward's gpt-oss epilogue,
+    # which runs after whichever GEMM branch served the int4 bytes.
+    gptoss = bool(prefused) and mt == "gpt_oss"
 
     n_layers = 0
     for layer in (plan.experts or prefused):
@@ -213,6 +255,9 @@ def enable_serve_experts_int4(model, source_dir: str, *,
             gu_key, dn_key = prefused[layer]
             first = read(gu_key).to(_torch.float32)
             down = read(dn_key).to(_torch.float32)
+            if gptoss:
+                first, down = _gptoss_packer_layout(first, down)
+                _check_gptoss_wrapper(w, layer, first, down)
         dev = w.h_gu_p.device
         E = first.shape[0]
 

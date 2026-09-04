@@ -41,13 +41,19 @@ class _PlanTree(torch.nn.Module):
 
 
 class _FakeState:
-    """Just enough hot-residency surface for the enabler."""
-    def __init__(self):
+    """Just enough hot-residency surface for the enabler. ``gptoss``
+    mirrors the wrapper flag the loader sets on a gpt-oss build (biases
+    resident, clamped-GLU epilogue)."""
+    def __init__(self, gptoss=False, gu_bias=None, dn_bias=None):
         self.h_gu_p = torch.zeros(3, dtype=torch.uint8)
         self.h_gu_a = torch.zeros(3)
         self.h_dn_p = torch.zeros(3, dtype=torch.uint8)
         self.h_dn_a = torch.zeros(3)
         self.all_hot = True
+        self.gptoss = gptoss
+        if gptoss:
+            self.h_gu_b = gu_bias
+            self.h_dn_b = dn_bias
 
     def _all_hot(self):
         return self.all_hot
@@ -271,19 +277,110 @@ def test_prefused_family_is_packed_not_refused(tmp_path, monkeypatch):
             dequant_int4_ref(pk, sc, nn, kk))
 
 
-def test_gptoss_refused_by_name(tmp_path):
-    """gpt-oss's stacks are interleaved + bias-carrying; the plan read does
-    not de-interleave, so the lane must refuse BY NAME rather than pack
-    gate rows against up rows."""
-    g = torch.Generator().manual_seed(5)
+def _gptoss_case(E=2, H=128, inter=64):
+    """A gpt-oss layer as RELEASED: MXFP4 ``_blocks``/``_scales`` pairs
+    (uint8, the e8m0 exponent per 32-group) plus per-projection biases,
+    gate/up rows interleaved. Returns (ckpt, plan names, prefix, dense
+    stacks in the module layout, biases)."""
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+    g = torch.Generator().manual_seed(11)
     pre = "model.layers.0.mlp.experts"
-    ck = {f"{pre}.gate_up_proj": torch.randn(E, 2 * N1, K1, generator=g) / 8,
-          f"{pre}.down_proj": torch.randn(E, K1, N1, generator=g) / 8,
-          "model.embed_tokens.weight": torch.randn(N1, K1, generator=g) / 8}
-    src = _write_ckpt(tmp_path, ck)
+    gu_blocks = torch.randint(0, 256, (E, 2 * inter, H // 32, 16), generator=g,
+                              dtype=torch.uint8)
+    gu_scales = torch.randint(120, 130, (E, 2 * inter, H // 32), generator=g,
+                              dtype=torch.uint8)
+    dn_blocks = torch.randint(0, 256, (E, H, inter // 32, 16), generator=g,
+                              dtype=torch.uint8)
+    dn_scales = torch.randint(120, 130, (E, H, inter // 32), generator=g,
+                              dtype=torch.uint8)
+    gu_bias = torch.randn(E, 2 * inter, generator=g)
+    dn_bias = torch.randn(E, H, generator=g)
+    ck = {f"{pre}.gate_up_proj_blocks": gu_blocks,
+          f"{pre}.gate_up_proj_scales": gu_scales,
+          f"{pre}.gate_up_proj_bias": gu_bias,
+          f"{pre}.down_proj_blocks": dn_blocks,
+          f"{pre}.down_proj_scales": dn_scales,
+          f"{pre}.down_proj_bias": dn_bias,
+          "model.embed_tokens.weight": torch.randn(8, H, generator=g)}
     names = [f"{pre}.gate_up_proj", f"{pre}.down_proj",
+             f"{pre}.gate_up_proj_bias", f"{pre}.down_proj_bias",
              "model.embed_tokens.weight"]
-    live, _ = _live_model(pre, "gpt_oss")
-    with pytest.raises(RuntimeError, match="gpt_oss is not served"):
+    gu_dense = dequantize_mxfp4(gu_blocks, gu_scales, dtype=torch.float32)
+    dn_dense = dequantize_mxfp4(dn_blocks, dn_scales, dtype=torch.float32)
+    assert tuple(gu_dense.shape) == (E, H, 2 * inter)  # module layout, interleaved
+    assert tuple(dn_dense.shape) == (E, inter, H)
+    return ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias
+
+
+def test_gptoss_is_packed_in_the_builders_layout(tmp_path, monkeypatch):
+    """gpt-oss packs: the int4 stores must be byte-identical to packing
+    the stacks the loader's own builder (``from_gptoss``) produces from
+    the same released bytes -- gate block then up block, output-major --
+    with N/K oriented for the GEMV. The oracle is the builder's transform
+    replicated on the raw dequant, never the lane's own helper."""
+    monkeypatch.delenv("E4B_INT4_KEEP_NF4", raising=False)
+    ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias = _gptoss_case()
+    E_, H_, twoI = gu_dense.shape
+    I_ = twoI // 2
+    src = _write_ckpt(tmp_path, ck)
+    gub = torch.cat([gu_bias[:, 0::2], gu_bias[:, 1::2]], dim=1)  # as the loader stores it
+    live, st = _live_model(pre, "gpt_oss", top_k=4)
+    st.gptoss = True
+    st.h_gu_b = gub
+    st.h_dn_b = dn_bias
+
+    n = enable_serve_experts_int4(live, src, model_type="gpt_oss",
+                                  plan_model=_PlanTree(names))
+    assert n == 1
+    stores = st._int4_stores
+    assert stores["gu"]["N"] == twoI and stores["gu"]["K"] == H_
+    assert stores["dn"]["N"] == H_ and stores["dn"]["K"] == I_
+    # the builder's transform, line for line (arch/gptoss.py from_gptoss)
+    gt = gu_dense.transpose(1, 2).contiguous()
+    gt = torch.cat([gt[:, 0::2, :], gt[:, 1::2, :]], dim=1)
+    gt_dn = dn_dense.transpose(1, 2).contiguous()
+    for e in range(E_):
+        pk, sc = pack_int4_b32(gt[e])
+        assert torch.equal(stores["gu"]["packed"][e].cpu(), pk)
+        assert torch.equal(stores["gu"]["scales"][e].cpu(), sc)
+        pk, sc = pack_int4_b32(gt_dn[e])
+        assert torch.equal(stores["dn"]["packed"][e].cpu(), pk)
+        assert torch.equal(stores["dn"]["scales"][e].cpu(), sc)
+    # and NOT the interleaved rows: packing the raw transpose must differ
+    raw = gu_dense.transpose(1, 2).contiguous()
+    pk_raw, _ = pack_int4_b32(raw[0])
+    assert not torch.equal(stores["gu"]["packed"][0].cpu(), pk_raw), \
+        "an interleaved pack must not pass -- the test would prove nothing"
+    # split-K partials sized from the config's top_k (4 for gpt-oss)
+    assert stores["gu"]["part"].shape[0] % 4 == 0
+
+
+def test_gptoss_refuses_a_wrapper_without_the_bias_epilogue(tmp_path):
+    """A wrapper the loader did not build as gpt-oss has no bias epilogue;
+    serving int4 bytes through it would run a plain SwiGLU. Refuse."""
+    ck, names, pre, *_ = _gptoss_case()
+    src = _write_ckpt(tmp_path, ck)
+    live, _st = _live_model(pre, "gpt_oss", top_k=4)
+    with pytest.raises(RuntimeError, match="not gpt-oss flagged"):
         enable_serve_experts_int4(live, src, model_type="gpt_oss",
                                   plan_model=_PlanTree(names))
+
+
+def test_gptoss_refuses_bias_width_mismatch(tmp_path):
+    ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias = _gptoss_case()
+    src = _write_ckpt(tmp_path, ck)
+    live, st = _live_model(pre, "gpt_oss", top_k=4)
+    st.gptoss = True
+    st.h_gu_b = gu_bias[:, : gu_bias.shape[1] // 2]     # wrong width
+    st.h_dn_b = dn_bias
+    with pytest.raises(RuntimeError, match="bias widths"):
+        enable_serve_experts_int4(live, src, model_type="gpt_oss",
+                                  plan_model=_PlanTree(names))
+
+
+def test_gptoss_layout_helper_refuses_misshapen_stacks():
+    from experts4bit_qlora.engines.int4_experts import _gptoss_packer_layout
+    with pytest.raises(RuntimeError, match="disagree"):
+        _gptoss_packer_layout(torch.zeros(2, 8, 6), torch.zeros(2, 4, 8))
+    with pytest.raises(RuntimeError, match="expected"):
+        _gptoss_packer_layout(torch.zeros(8, 6), torch.zeros(3, 8))
