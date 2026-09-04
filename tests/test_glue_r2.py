@@ -558,7 +558,7 @@ class ToyUnfusedAttention(torch.nn.Module):
         ks = rope(k).reshape(*input_shape, -1, d).transpose(1, 2)
         vs = v.reshape(*input_shape, -1, d).transpose(1, 2)
         out, w = eager_attention_forward(self, qs, ks, vs, attention_mask, dropout=0.0,
-                                         scaling=self.scaling, sliding_window=None)
+                                         scaling=self.scaling)
         return self.o_proj(out.reshape(*input_shape, -1).contiguous()), w
 
 
@@ -642,7 +642,7 @@ class ToyNoNormAttention(torch.nn.Module):
             self.sinks = torch.nn.Parameter(torch.zeros(heads))    # gpt-oss shape
         self.head_dim = d
         self.scaling = 0.015625                                    # Granite's attention_multiplier
-        self.sliding_window = None
+        # no ``sliding_window``: GraniteMoe/Mixtral attention never sets it
         self.layer_idx = 0
         self.num_key_value_groups = 1
         self.attention_dropout = 0.0
@@ -673,7 +673,7 @@ class ToyNoNormAttention(torch.nn.Module):
         ks = rope(k).reshape(*input_shape, -1, d).transpose(1, 2)
         vs = v.reshape(*input_shape, -1, d).transpose(1, 2)
         out, w = eager_attention_forward(self, qs, ks, vs, attention_mask, dropout=0.0,
-                                         scaling=self.scaling, sliding_window=None)
+                                         scaling=self.scaling)
         return self.o_proj(out.reshape(*input_shape, -1).contiguous()), w
 
 
