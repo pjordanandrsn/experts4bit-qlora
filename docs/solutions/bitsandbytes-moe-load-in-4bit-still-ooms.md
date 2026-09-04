@@ -1,4 +1,5 @@
 # Why does `load_in_4bit` still OOM on a Mixture-of-Experts model?
+<!-- summary: bitsandbytes' 4-bit walker replaces only nn.Linear and skips a fused MoE's 3-D expert stacks, so load_moe_4bit_streaming quantises exactly those stacks and verify_moe_4bit proves it. -->
 
 Because bitsandbytes' 4-bit walker only replaces `nn.Linear`, and transformers v5 stores a MoE's experts as one fused 3-D `nn.Parameter` per layer, so the experts — most of the weights — are silently left in bf16. `experts4bit-qlora` quantises exactly that fused stack on the way to the GPU, and `verify_moe_4bit(model, strict=True)` proves it happened.
 

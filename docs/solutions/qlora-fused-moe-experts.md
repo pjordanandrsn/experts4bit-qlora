@@ -1,4 +1,5 @@
 # How do I QLoRA-train the fused experts of a MoE (per-expert LoRA on 4-bit experts)?
+<!-- summary: ExpertsLoRA adds a trainable per-expert low-rank delta before each routed expert's activation over a frozen NF4 stack PEFT cannot target; enable_fast_train runs it on grouped kernels. -->
 
 Load with `load_moe_4bit_streaming`, which installs a frozen NF4 `Experts4bit` stack wrapped in trainable per-expert `ExpertsLoRA` adapters for every MoE layer, then train with `python -m experts4bit_qlora.train` or your own loop. Add `enable_fast_train(model, dgrad=True)` from the `[fast]` extra to run the step through `grouped-nf4-gemm`'s grouped kernels, and assert its return value.
 
@@ -22,8 +23,8 @@ Adapter libraries attach low-rank deltas to `nn.Linear`. A fused expert stack ha
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[train]"   # loader + trainer
-pip install "experts4bit-qlora[fast]"    # + grouped-nf4-gemm for the fused training path
+pip install "experts4bit-qlora[train]"   # minimum/reference training: loader + trainer
+pip install "experts4bit-qlora[fast]"    # accelerated grouped-kernel path: + grouped-nf4-gemm for enable_fast_train
 ```
 
 ## Smallest correct example

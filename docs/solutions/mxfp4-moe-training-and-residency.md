@@ -1,4 +1,5 @@
 # How do I train and serve MoE models released in MXFP4 (gpt-oss, DeepSeek-V4)?
+<!-- summary: Choose between the convenient QLoRA path, which decodes MXFP4 and re-quantises to NF4, and the native-byte path, which keeps the released blocks and scales in an arena. -->
 
 `load_moe_4bit_streaming` dequantises the released MXFP4 experts bit-identically and, by default, re-quantises them to NF4 for QLoRA. To keep computing on the released bytes, relocate them into an arena with `grouped-nf4-gemm` and bind it with `enable_mxfp4_nvme_residency` (serving) or `enable_nvme_train_residency` (training); the native MXFP4 expert store for the paged engine is a separate opt-in whose quality gate is still open.
 
@@ -19,8 +20,8 @@ MXFP4 (OCP microscaling FP4) stores two e2m1 nibbles per byte in blocks of 32 va
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[train]"   # loader
-pip install "experts4bit-qlora[fast]"    # grouped-nf4-gemm: MXFP4 kernels, arena bake, residency
+pip install "experts4bit-qlora[train]"   # minimum/reference training: the loader (decode-then-NF4 path)
+pip install "experts4bit-qlora[fast]"    # residency/NVMe/fast-kernel route: grouped-nf4-gemm's MXFP4 kernels, arena bake, residency
 ```
 
 ## Smallest correct example

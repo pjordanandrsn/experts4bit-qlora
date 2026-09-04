@@ -154,11 +154,11 @@
       },
       "install": [
         {
-          "purpose": "streaming loader + trainer",
+          "purpose": "minimum/reference training",
           "command": "pip install \"experts4bit-qlora[train]\""
         },
         {
-          "purpose": "fused grouped-GEMM path (installs grouped-nf4-gemm)",
+          "purpose": "accelerated grouped-kernel path",
           "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],
@@ -234,8 +234,12 @@
       },
       "install": [
         {
-          "purpose": "streaming loader + trainer",
+          "purpose": "host-RAM training route",
           "command": "pip install \"experts4bit-qlora[train]\""
+        },
+        {
+          "purpose": "residency/NVMe/fast-kernel route",
+          "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],
       "entrypoints": [
@@ -299,6 +303,7 @@
           "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
         ],
         "special_requirements": [
+          "transformers>=5.0 for the streaming loader ([train] extra)",
           "grouped-nf4-gemm>=0.28.0 ([fast] extra)",
           "triton>=3.4 (Linux-only distribution)",
           "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
@@ -307,8 +312,12 @@
       },
       "install": [
         {
-          "purpose": "fused grouped-GEMM path (installs grouped-nf4-gemm)",
+          "purpose": "residency/NVMe/fast-kernel route",
           "command": "pip install \"experts4bit-qlora[fast]\""
+        },
+        {
+          "purpose": "host-RAM training route",
+          "command": "pip install \"experts4bit-qlora[train]\""
         }
       ],
       "entrypoints": [
@@ -375,11 +384,11 @@
       },
       "install": [
         {
-          "purpose": "fused grouped-GEMM path (installs grouped-nf4-gemm)",
+          "purpose": "library fast path",
           "command": "pip install \"experts4bit-qlora[fast]\""
         },
         {
-          "purpose": "HTTP serving shim",
+          "purpose": "HTTP shim (optional)",
           "command": "pip install \"experts4bit-qlora[serve]\""
         }
       ],
@@ -463,7 +472,11 @@
       },
       "install": [
         {
-          "purpose": "fused grouped-GEMM path (installs grouped-nf4-gemm)",
+          "purpose": "minimum/reference training",
+          "command": "pip install \"experts4bit-qlora[train]\""
+        },
+        {
+          "purpose": "residency/NVMe/fast-kernel route",
           "command": "pip install \"experts4bit-qlora[fast]\""
         }
       ],

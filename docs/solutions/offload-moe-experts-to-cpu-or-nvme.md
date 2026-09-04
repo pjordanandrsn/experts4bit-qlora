@@ -1,4 +1,5 @@
 # How do I offload MoE experts to host RAM, or serve and train them from an NVMe arena?
+<!-- summary: Bind pinned host RAM or a baked NVMe arena to a real model with the streaming loader and the nvme_residency, mxfp4_nvme_residency and nvme_train_residency engines. -->
 
 For host RAM, `load_moe_4bit_streaming(..., offload=True)` pins each layer's frozen 4-bit experts in CPU RAM and streams one layer to the GPU at a time. When the experts do not fit host RAM either, bake them into an arena with `grouped-nf4-gemm` and bind it with `enable_nvme_residency` or `enable_mxfp4_nvme_residency` (serving) or `enable_nvme_train_residency` (training): cold rows are read from NVMe on demand while a pinned-DRAM hot tier of `hot_rows` absorbs repeats.
 
@@ -19,8 +20,8 @@ Layer-granular offload bounds VRAM but not host RAM: its homes are the full `[E,
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[train]"   # loader + host-RAM offload
-pip install "experts4bit-qlora[fast]"    # + grouped-nf4-gemm: arena bake, reader, tier, kernels
+pip install "experts4bit-qlora[fast]"    # residency/NVMe/fast-kernel route: grouped-nf4-gemm's arena bake, reader, tier and kernels
+pip install "experts4bit-qlora[train]"   # host-RAM training route: the streaming loader and pinned-host expert offload
 ```
 
 ## Smallest correct example

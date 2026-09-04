@@ -1,4 +1,5 @@
 # How can I run a Mixture-of-Experts model larger than my GPU's VRAM?
+<!-- summary: Choose a residency path by workload and by the memory tier that ran out: pinned-host expert streaming, dense offload, profiled hot residency, or an NVMe arena. -->
 
 Start from what ran out. If the 4-bit experts exceed VRAM, `load_moe_4bit_streaming(..., offload=True)` homes them in pinned host RAM and streams one layer at a time; if the dense side does not fit, `enable_dense_offload`; if the experts do not fit host RAM either, an NVMe arena; if you have spare VRAM to trade at serve time, `enable_pipelined_residency` with hot sets chosen from a routing profile.
 
@@ -29,8 +30,8 @@ A MoE's weights are mostly experts, and each token touches only its top-k of the
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[train]"   # loader + host-RAM offload; no kernel package needed
-pip install "experts4bit-qlora[fast]"    # + grouped-nf4-gemm for residency engines and NVMe arenas
+pip install "experts4bit-qlora[train]"   # host-RAM training route: loader + pinned-host expert streaming; no kernel package needed
+pip install "experts4bit-qlora[fast]"    # residency/NVMe/fast-kernel route: + grouped-nf4-gemm for the residency engines and NVMe arenas
 ```
 
 ## Smallest correct example
