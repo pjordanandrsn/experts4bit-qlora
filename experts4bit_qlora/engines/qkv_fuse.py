@@ -69,6 +69,67 @@ def _fused_forward(self, hidden_states, position_embeddings,
     return attn_output, attn_weights
 
 
+def _fused_forward_nonorm(self, hidden_states, position_embeddings=None,
+                          attention_mask=None, past_key_values=None,
+                          **kwargs):
+    """The fused forward for attention WITHOUT per-head norms (the
+    Llama-shaped module GraniteMoe and Mixtral use): one qkv GEMM, split,
+    rotary, attention, o_proj -- upstream's chain minus the norms."""
+    from transformers.models.qwen3_moe.modeling_qwen3_moe import (
+        ALL_ATTENTION_FUNCTIONS, apply_rotary_pos_emb,
+        eager_attention_forward)
+    input_shape = hidden_states.shape[:-1]
+    hidden_shape = (*input_shape, -1, self.head_dim)
+    qkv = self.qkv_proj(hidden_states)
+    q, k, v = qkv.split([self._fused_nq, self._fused_nk,
+                         self._fused_nv], dim=-1)
+    query_states = q.view(hidden_shape).transpose(1, 2)
+    key_states = k.view(hidden_shape).transpose(1, 2)
+    value_states = v.view(hidden_shape).transpose(1, 2)
+    cos, sin = position_embeddings
+    query_states, key_states = apply_rotary_pos_emb(
+        query_states, key_states, cos, sin)
+    if past_key_values is not None:
+        key_states, value_states = past_key_values.update(
+            key_states, value_states, self.layer_idx)
+    attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+        self.config._attn_implementation, eager_attention_forward)
+    attn_output, attn_weights = attention_interface(
+        self, query_states, key_states, value_states, attention_mask,
+        dropout=0.0 if not self.training else self.attention_dropout,
+        scaling=self.scaling,
+        sliding_window=getattr(self, "sliding_window", None),
+        **kwargs,
+    )
+    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+    attn_output = self.o_proj(attn_output)
+    return attn_output, attn_weights
+
+
+_NONORM_CHILDREN = frozenset({"q_proj", "k_proj", "v_proj", "o_proj"})
+
+
+def _is_nonorm_attention(mod) -> bool:
+    """Structure, not name: exactly q/k/v/o as children, nothing of the
+    module's own (gpt-oss's ``sinks`` parameter refuses it), plain
+    unbiased ``nn.Linear`` projections, the usual attributes."""
+    if not type(mod).__name__.endswith("Attention"):
+        return False
+    if {n for n, _ in mod.named_children()} != _NONORM_CHILDREN:
+        return False
+    if any(True for _ in mod.named_parameters(recurse=False)):
+        return False
+    if any(True for _ in mod.named_buffers(recurse=False)):
+        return False
+    for attr in ("head_dim", "scaling", "layer_idx", "config",
+                 "attention_dropout"):
+        if not hasattr(mod, attr):
+            return False
+    return all(isinstance(getattr(mod, n), torch.nn.Linear)
+               and getattr(mod, n).bias is None
+               for n in ("q_proj", "k_proj", "v_proj"))
+
+
 def fuse_qkv(model) -> int:
     """Fuse every Qwen3MoeAttention's q/k/v projections in place.
 
@@ -80,7 +141,29 @@ def fuse_qkv(model) -> int:
     """
     fused = 0
     for mod in model.modules():
-        if type(mod).__name__ != "Qwen3MoeAttention":
+        nonorm = _is_nonorm_attention(mod)
+        if type(mod).__name__ != "Qwen3MoeAttention" and not nonorm:
+            continue
+        if nonorm:
+            # GraniteMoe / Mixtral shape: no per-head norms; same weight
+            # concatenation, the norm-less fused forward
+            wq, wk, wv = (mod.q_proj.weight, mod.k_proj.weight,
+                          mod.v_proj.weight)
+            qkv = torch.nn.Linear(wq.shape[1],
+                                  wq.shape[0] + wk.shape[0] + wv.shape[0],
+                                  bias=False, device=wq.device,
+                                  dtype=wq.dtype)
+            with torch.no_grad():
+                qkv.weight[: wq.shape[0]].copy_(wq)
+                qkv.weight[wq.shape[0]: wq.shape[0] + wk.shape[0]].copy_(wk)
+                qkv.weight[wq.shape[0] + wk.shape[0]:].copy_(wv)
+            mod.qkv_proj = qkv
+            mod._fused_nq = wq.shape[0]
+            mod._fused_nk = wk.shape[0]
+            mod._fused_nv = wv.shape[0]
+            del mod.q_proj, mod.k_proj, mod.v_proj
+            mod.forward = types.MethodType(_fused_forward_nonorm, mod)
+            fused += 1
             continue
         for attr in ("q_proj", "k_proj", "v_proj", "q_norm", "k_norm",
                      "head_dim", "config"):
