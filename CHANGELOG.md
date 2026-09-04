@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.32.0 — 2026-09-04
 
 ### fp8 paged KV: key scale groups per layer, 32-wide at every head_dim
 
@@ -13,6 +13,21 @@ measured 0.046 nats of fp8 cost with 128-wide groups and 0.017 with
 32-wide (P27, #359). Small heads are never coarser than before. An int
 still broadcasts to every layer; `kv.kgs[layer]` is the per-layer value
 and `kv.k_groups` is the uniform value or `None` under mixed geometry.
+
+Measured end to end on a rented RTX 5090 with grouped-nf4-gemm 0.26.0
+(which unrolls 8 and 16 groups): Gemma-4-26B-A4B-it's paged decode on
+the P26b window moves from 3.59239 to **3.57228 nats (−0.020)** with
+16 groups on its five 512-dim layers and 8 on the sliding layers; the
+fake-quant instrument had predicted about −0.029. Qwen3-30B-A3B (head
+dim 128, groups unchanged at 4) is bit-exact at 1.61067. The K8 harness
+gains `--kv-groups` (default `auto`). The `[fast]` and `[test]` floors
+move to `grouped-nf4-gemm>=0.26.0`.
+
+Also: the #344 Gemma-4 load fault did not reproduce on a third host
+running driver 580.159.03 (every copy path and the bake succeeded under
+`CUDA_LAUNCH_BLOCKING=1`), so the driver-version lead is refuted and the
+fault stays confined to two specific, currently unrentable machines.
+
 
 ## 0.31.2 — 2026-09-03
 

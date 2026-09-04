@@ -246,7 +246,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P27 phase 1)"
       ],
-      "notes": "Qwen3-30B control under the same model: -0.0006 nats. The kernel's own precision is flat in head dim on synthetic data (gnf4#324), so the cost is Gemma-4's activation statistics under 128-wide K groups at head_dim 512.",
+      "notes": "Qwen3-30B control under the same model: -0.0006 nats. The kernel's own precision is flat in head dim on synthetic data (gnf4#324), so the cost is Gemma-4's activation statistics under 128-wide K groups at head_dim 512. SERVED (0.32.0 + grouped-nf4-gemm 0.26.0, 2026-09-04): per-layer groups (16 at D=512, 8 at D=256) move the paged path from 3.59239 to 3.57228 nats on the same window (-0.020; fp8 throughout); Qwen3-30B bit-exact at 1.61067 with its unchanged 4 groups.",
       "conditions": "512 scored steps, 256-token prompt, sha e01de6ebd4af; roundings applied on rows >= 256 (the paged prefill attends on bf16)"
     },
     {
