@@ -108,3 +108,27 @@ def test_chunked_scorer_under_replay_routes_like_the_full_forward(tmp_path):
     assert sd._ROUTE["served"] == 2 * (prompt_len + steps)
     assert abs(got - ref) < 1e-4, (got, ref)
     sd._route_clear()
+
+
+def test_layer_diff_reference_does_not_consume_replay_rows(tmp_path):
+    """The per-layer diff runs an eager reference forward while replay is
+    armed; that forward must not advance the replay counters or the
+    remaining decode steps replay the wrong positions (Bugbot, #365)."""
+    sd = _load_harness()
+    model = _tiny_olmoe()
+    torch.manual_seed(5)
+    ids = torch.randint(0, 97, (40,))
+    sd._route_install(model, "record")
+    with torch.no_grad():
+        model(input_ids=ids[None], use_cache=False)
+    rec = sd._route_save(str(tmp_path / "r.pt"), {})
+    sd._route_clear()
+    sd._route_install(model, "replay", rec)
+    for layer in rec:
+        sd._ROUTE["consumed"][layer] = 10
+    sd._layer_diff_reference(model, ids[:25], {})
+    assert all(sd._ROUTE["consumed"][layer] == 10 for layer in rec)
+    assert sd._ROUTE["served"] == 0 and sd._ROUTE["passed"] == 0
+    assert sd._ROUTE["mode"] == "replay"
+    sd._route_clear()
+

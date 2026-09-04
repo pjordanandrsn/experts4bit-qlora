@@ -348,6 +348,10 @@ def _layer_diff_reference(model, ids_upto, cap_ref):
     except ImportError:          # no engine in this environment: nothing to clear
         set_context = lambda _ctx: None  # noqa: E731
     prev_ctx = set_context(None)
+    # the reference forward must not consume routing-replay rows: pause
+    # replay/record for its duration and restore afterwards (Bugbot, #365)
+    route_mode = _ROUTE["mode"]
+    _ROUTE["mode"] = None
     # One save per DISTINCT config object: HF modules share the model's
     # config, so saving per module would record "eager" for every module
     # after the first and the restore would leave the model on eager --
@@ -370,6 +374,7 @@ def _layer_diff_reference(model, ids_upto, cap_ref):
             h.remove()
         for cfg, impl in reversed(saved):
             cfg._attn_implementation = impl
+        _ROUTE["mode"] = route_mode
         set_context(prev_ctx)
 
 
