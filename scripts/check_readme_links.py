@@ -178,6 +178,23 @@ def _self_slug() -> str:
     return m.group(1)
 
 
+def _map_targets(links, self_prefix: str, tag: str, ref: str) -> list:
+    """``--map-ref`` as a pure function. A PR adds files that ``main`` does
+    not have yet, and canonical docs URLs are pinned to ``main`` on purpose
+    (release-independent), so under --map-ref the current ``tag`` AND
+    ``main`` both resolve to ``ref`` -- for SELF-repo links only. Third-party
+    pins are theirs and come back untouched. Order is preserved; collapsing
+    the duplicates this creates is the caller's job."""
+    out = []
+    for t in links:
+        if t.startswith(self_prefix):
+            t = (t.replace(f"/{tag}/", f"/{ref}/")
+                  .replace("/blob/main/", f"/blob/{ref}/")
+                  .replace("/tree/main/", f"/tree/{ref}/"))
+        out.append(t)
+    return out
+
+
 def main() -> int:
     args = sys.argv[1:]
     ref_map = None
@@ -202,9 +219,12 @@ def main() -> int:
         pass
     gh = [t for t in targets if t.startswith("https://github.com/")]
     if ref_map:
-        gh = [t.replace(f"/{ref_map[0]}/", f"/{ref_map[1]}/")
-              if t.startswith(self_prefix) else t
-              for t in gh]
+        # At release time the checker runs unmapped against the real tag.
+        gh = _map_targets(gh, self_prefix, *ref_map)
+    # One HEAD per distinct URL: the tag form and the main form of one path
+    # collapse under --map-ref, and the README repeats some links verbatim.
+    # Every duplicate was one more handshake in the churn that got throttled.
+    gh = list(dict.fromkeys(gh))
     headers = _auth_headers()
     session = _Session()
     bad, unanswered = [], []

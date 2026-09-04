@@ -403,6 +403,12 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
             0..N-1 (dense layers interleaved, or a partial bake).
 
     Returns the number of modules patched.
+    Use it for serving when the NF4 experts do not fit host RAM: the cold experts live in an
+    arena on NVMe, ``hot_rows`` expert rows stay pinned in DRAM. Expects an arena from
+    grouped-nf4-gemm's ``nvme_bake_nf4`` and a model whose experts are plain (not
+    adapter-wrapped) modules. Returns the number of layers attached (assert > 0). Needs the
+    ``[fast]`` extra, a CUDA device, local NVMe. See
+    ``docs/solutions/offload-moe-experts-to-cpu-or-nvme.md``.
     """
     try:
         from nvme_residency import ColdTier
@@ -539,6 +545,11 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
             inferred.
 
     Returns the number of modules bound.
+    Use it when the experts are native MXFP4 (gpt-oss, DeepSeek-V4) and must be served from
+    the checkpoint's own bytes relocated into an arena (``nvme_arena.bake_expert_tensors``),
+    never re-quantised. Returns the number of layers attached (assert > 0); pair with
+    :func:`disable_mxfp4_nvme_residency`. Needs ``[fast]``, a CUDA device, local NVMe. See
+    ``docs/solutions/mxfp4-moe-training-and-residency.md``.
     """
     try:
         from nvme_arena import load_index

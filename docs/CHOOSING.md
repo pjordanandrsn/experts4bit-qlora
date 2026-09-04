@@ -68,8 +68,12 @@ Inference only; for training use `enable_fast_train`.
 `enable_pipelined_residency(model, hot_sets, k_slots=k)` (needs `[fast]`). Keeps K hot experts
 per layer resident and streams the cold tail; K=0 is pure streaming, K=all is fully resident,
 the middle is the dial. **Pick the hot sets from a routing histogram, not by index.**
-⚠️ Requires standalone `Experts4bit`/`ExpertsNbit` modules and raises `NotImplementedError`
-on the `ExpertsLoRA` wrapper that `load_moe_4bit_streaming` always produces.
+An `ExpertsLoRA` wrapper (what `load_moe_4bit_streaming` always produces) is a
+valid target: the engine patches its base, and the wrapper delegates to it in
+eval mode under `no_grad` when the adapter provably contributes nothing (the
+serve shim relies on this). Outside those conditions the patch installs and
+never runs — assert the returned count and check the served path. (Earlier
+notes said this raised `NotImplementedError`; the code no longer does.)
 
 **My GPU is small but my CPU is strong.**
 `enable_cold_engine(model, hot_sets, dequant="auto")` computes the cold experts on

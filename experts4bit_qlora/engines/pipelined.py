@@ -605,6 +605,12 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
     Mutually exclusive with the v0 hot-residency and the [fast] patch on the
     same module (disable those first). Grad-enabled forwards, T>1 (prefill),
     and non-bf16/fp16 compute run the saved reference forward.
+    Use it at serve time when spare VRAM can be traded for speed. Expects the expert modules
+    :func:`experts4bit_qlora.load_moe_4bit_streaming` installs -- an :class:`ExpertsLoRA`
+    wrapper's base is a valid target (see the note above on when the wrapper delegates).
+    Refuses a missing ``k_slots`` (``ValueError``). Returns the number of modules partitioned
+    (assert > 0). Needs ``[fast]`` and a CUDA device. See
+    ``docs/solutions/run-moe-larger-than-vram.md``.
     """
     from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.arch.gptoss import GptOssExperts4bit

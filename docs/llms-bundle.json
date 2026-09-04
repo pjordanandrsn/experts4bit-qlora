@@ -1,0 +1,18 @@
+{
+  "$comment": "Curated inputs for scripts/build_llms_bundle.py (llms-full.txt). Order matters; no receipts, no changelog, no anchored research records.",
+  "title": "experts4bit-qlora — context bundle",
+  "preamble": "A project-generated convenience bundle (not part of the llms.txt proposal): the README opening, the solution pages, the capability contract, the status page, the routing documents and a projection of the ACTIVE claims. docs/claims.json is authoritative for every number; docs/STATUS.md for the position.",
+  "canonical_url_base": "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/",
+  "max_bytes": 400000,
+  "sources": [
+    {"path": "README.md", "until_marker": "## What is measured"},
+    {"path": "docs/SOLUTIONS.md"},
+    {"path": "docs/solutions", "glob": "docs/solutions/*.md"},
+    {"path": "docs/capabilities.json"},
+    {"path": "docs/STATUS.md"},
+    {"path": "docs/CHOOSING.md"},
+    {"path": "docs/ARCHITECTURE_SUPPORT.md"},
+    {"path": "AGENTS.md"},
+    {"path": "docs/claims.json", "kind": "claims"}
+  ]
+}

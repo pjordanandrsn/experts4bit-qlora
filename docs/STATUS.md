@@ -78,7 +78,7 @@ On the 2026-09-04 validation box the same stack went from 156.1 to
 177.9 tok/s at B=1 (×1.14) when 0.34.0's round-2 fold started engaging
 on the calibrated int4 attention it had silently skipped (#375) —
 measured, receipt in the bo3 bundle below.
-Those figures are **measured-private**. On the same box, vLLM is ahead by
+The single-stream figures are **measured-private** (register: `e4b.serve.b1.*`); the B=16 figure carries a public receipt and is **measured** (`e4b.serve.b16.qwen3-30b.int4.5090`). On the same box, vLLM is ahead by
 1.47× at B=1 and 1.55× at B=16 with identical prompts — that comparison
 is the honest one and it is also measured-private.
 

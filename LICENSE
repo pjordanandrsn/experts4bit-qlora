@@ -20,10 +20,4 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
----
-
-experts4bit_qlora/_vendor/experts.py is vendored from bitsandbytes
-(https://github.com/bitsandbytes-foundation/bitsandbytes), which is likewise
-distributed under the MIT License. It is included here only while the upstream
-Experts4bit proposal (bitsandbytes#1965) is unmerged, and will be removed once
-the class ships in a bitsandbytes release.
+Third-party notices for vendored code: see THIRD_PARTY_NOTICES.md.

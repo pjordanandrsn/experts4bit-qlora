@@ -23,7 +23,7 @@
       "hardware": "RTX 5090 (sm_120), rented Vast.ai host; the 5090 class carries ~8.5% inter-box dispersion",
       "conditions": "B=1, NF4 experts, fp8 paged KV (k_groups=4), 512-token prompt, graph-timed, --no-fuse-qkv, e4b 0.30.0 stack",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "measured-private",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
@@ -42,7 +42,7 @@
       "hardware": "RTX 5090 (sm_120), rented",
       "conditions": "B=1, int4-b32 experts + C4-calibrated int4 attention + glue rounds 1-3, K8 gate PASS (-0.042 ppl wikitext, -0.115 C4)",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "measured-private",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
@@ -93,7 +93,7 @@
       "hardware": "RTX 5090, one box, both engines",
       "conditions": "slope method (32->128 tokens) isolates decode; identical distinct prompts per row; template prompts had inflated vLLM by 13%, identical prompts by 2.8x",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "measured-private",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
@@ -112,7 +112,7 @@
       "hardware": "RTX 5090, rented",
       "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, sha-matched ids across all three arms; NF4 experts on every arm",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "measured-private",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
@@ -134,7 +134,7 @@
       "hardware": "RTX 5090, rented",
       "conditions": "512 scored steps, 256-token prompt, raw wikitext (out of distribution for this model; the DELTA is regime-independent), NF4 experts on every arm",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "measured-private",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
@@ -155,7 +155,7 @@
       "model": "Qwen/Qwen3-30B-A3B",
       "hardware": "RTX 5090, rented",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "measured-private",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
@@ -216,7 +216,7 @@
       "model": "google/gemma-4-26B-A4B-it",
       "hardware": "RTX 5090, rented (Vast box 49785896)",
       "measured_on": "2026-09-03",
-      "status": "measured",
+      "status": "measured-private",
       "tier": "measured",
       "evidence": [],
       "evidence_private": [
