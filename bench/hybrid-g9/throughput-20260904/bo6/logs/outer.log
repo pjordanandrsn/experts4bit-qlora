@@ -1,0 +1,97 @@
+[2026-09-04T13:50:05Z] install: gnf4 @0b25d1389701bb793d60075e5b870212c848e33a + e4b integration-8 @db2a0703b803e50de1e3ac4d18b4705cb90c17fe
+pip rc=0
+bo6 tripwire OK: integration-8 (calibrated experts + gpu solve, swiglu/combine) + gnf4 main; e4b 0.34.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.173.02
+Model name:                              AMD Ryzen Threadripper PRO 7975WX 32-Cores
+               total        used        free      shared  buff/cache   available
+Mem:             251          32         130           0          87         213
+cuda ok
+overlay         320G   89G  232G  28% /
+[2026-09-04T13:50:30Z] bake qwen3: arena present, kept
+[2026-09-04T13:50:30Z] K8 qwen3/calibexp_c4val (exp=1 calib=0 fuse=0 src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP hessians: 48 layers, 6050 (layer, expert) pairs from 8 batches of c4
+    INT4EXP calibrated experts: 10826 gptq / 1462 rtn (min_rows=32) over 48 layers
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.81222 ppl=16.64678 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_c4val.json
+[2026-09-04T14:10:51Z] K8 qwen3/all_calibexp (exp=1 calib=1 fuse=all src=wikitext E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 10826 gptq / 1462 rtn (min_rows=32) over 48 layers
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=1.85005 ppl=6.36015 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_all_calibexp.json
+[2026-09-04T14:33:26Z] K8 qwen3/all_calibexp_c4val (exp=1 calib=1 fuse=all src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 10826 gptq / 1462 rtn (min_rows=32) over 48 layers
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.80531 ppl=16.53226 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_all_calibexp_c4val.json
+[2026-09-04T14:56:15Z] arm qwen3/all_calibexp (B=1 exp=1 calib=1 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=6.33ms compile=None recompiles=0 out=/root/bo6/qwen3_b1_all_calibexp.json
+[2026-09-04T15:17:31Z] arm qwen3/all_calibexp (B=16 exp=1 calib=1 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    BV3_GRAPH batch=16 steps=70 step=16.10ms agg=993.6tok/s recompiles=0 out=/root/bo6/qwen3_b16_all_calibexp.json
+QWEN3 DONE
+[2026-09-04T15:39:05Z] freed qwen3 (disk: 319G free)
+[2026-09-04T15:39:05Z] bake mixtral
+BAKE OK
+overlay         320G  136G  185G  43% /
+[2026-09-04T15:54:21Z] K8 mixtral/nf4 (exp=0 calib=0 fuse=0 src=wikitext )
+    K8_PPL steps=2048 nll=1.18214 ppl=3.26135 compute=fp8 sha=31fd7d408809 out=/root/bo6/mixtral_ppl_nf4.json
+[2026-09-04T15:56:04Z] K8 mixtral/nf4_c4val (exp=0 calib=0 fuse=0 src=c4val1 )
+    K8_PPL steps=2048 nll=2.10973 ppl=8.24604 compute=fp8 sha=061534dadd4d out=/root/bo6/mixtral_ppl_nf4_c4val.json
+[2026-09-04T15:57:46Z] K8 mixtral/lic_calibexp_c4val (exp=1 calib=0 fuse=all src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+./bo6_run.sh: line 33: 10815 Killed                  env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E perl -e 'alarm 5400; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source ${PPLSRC:-wikitext} --out $W/${TAG}_ppl_$ARM.json > run_${TAG}_ppl_$ARM.log 2>&1
+[2026-09-04T16:09:13Z] K8 mixtral/lic_calibexp (exp=1 calib=0 fuse=all src=wikitext E4B_SERVE_EXP_INT4_CALIB=1)
+./bo6_run.sh: line 33: 11331 Killed                  env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E perl -e 'alarm 5400; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source ${PPLSRC:-wikitext} --out $W/${TAG}_ppl_$ARM.json > run_${TAG}_ppl_$ARM.log 2>&1
+[2026-09-04T16:20:41Z] arm mixtral/lic_calibexp (B=1 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+./bo6_run.sh: line 40: 12003 Killed                  env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E perl -e 'alarm 3600; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/${TAG}_b${B}_$ARM.json > run_${TAG}_b${B}_$ARM.log 2>&1
+[2026-09-04T16:32:02Z] arm mixtral/lic_calibexp (B=16 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+./bo6_run.sh: line 40: 12508 Killed                  env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E perl -e 'alarm 3600; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/${TAG}_b${B}_$ARM.json > run_${TAG}_b${B}_$ARM.log 2>&1
+MIXTRAL DONE
+[2026-09-04T16:43:25Z] freed mixtral (disk: 319G free)
+[2026-09-04T16:43:25Z] TP_DONE
+[2026-09-04T16:43:43Z] bo6b: reinstall e4b @d286dd52a8b23222479fb9de880bbdd00f6bf671 (damp knob)
+bo6b tripwire OK: damp knob + hook v5
+[2026-09-04T16:43:56Z] bo6b: bake qwen3
+BAKE OK
+overlay         320G   89G  232G  28% /
+[2026-09-04T16:53:31Z] bo6b: K8 qwen3/nf4_c4val_rep1 (exp=0 calib=0 fuse=0 src=c4val1 )
+    K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_nf4_c4val_rep1.json
+[2026-09-04T16:55:17Z] bo6b: K8 qwen3/nf4_c4val_rep2 (exp=0 calib=0 fuse=0 src=c4val1 )
+    K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_nf4_c4val_rep2.json
+[2026-09-04T16:57:02Z] bo6b: K8 qwen3/nf4_rep1 (exp=0 calib=0 fuse=0 src=wikitext )
+    K8_PPL steps=2048 nll=1.85939 ppl=6.41984 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_nf4_rep1.json
+[2026-09-04T16:58:45Z] bo6b: K8 qwen3/calibexp_c4val_rep1 (exp=1 calib=0 fuse=0 src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 1834 gptq / 214 rtn (min_rows=32) over 8 layers
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.80011 ppl=16.44653 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_c4val_rep1.json
+[2026-09-04T17:18:48Z] bo6b: K8 qwen3/calibexp_d01_c4val (exp=1 calib=0 fuse=0 src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_INT4_GPTQ_DAMP=0.1)
+[2026-09-04T17:22:56Z] bo6c: waiting for TP2_DONE
+    INT4EXP calibrated experts: 1834 gptq / 214 rtn (min_rows=32) over 8 layers
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.80647 ppl=16.55145 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_d01_c4val.json
+[2026-09-04T17:39:08Z] bo6b: K8 qwen3/calibexp_n128_c4val (exp=1 calib=0 fuse=0 src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128)
+    INT4EXP calibrated experts: 1954 gptq / 94 rtn (min_rows=32) over 8 layers
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.79031 ppl=16.28610 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_n128_c4val.json
+[2026-09-04T18:06:08Z] bo6b: K8 qwen3/calibexp_n512_c4val (exp=1 calib=0 fuse=0 src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=512)
+    INT4EXP calibrated experts: 2018 gptq / 30 rtn (min_rows=32) over 8 layers
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.79459 ppl=16.35598 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_n512_c4val.json
+QWEN3 SWEEP DONE
+[2026-09-04T18:56:02Z] bo6b: freed qwen3 (disk: 319G free)
+[2026-09-04T18:56:02Z] bo6b: bake mixtral
+[2026-09-04T18:58:29Z] bo6c: waiting for TP2_DONE
+BAKE OK
+overlay         320G  136G  185G  43% /
+[2026-09-04T19:10:45Z] bo6b: K8 mixtral/lic_calibexp_c4val (exp=1 calib=0 fuse=all src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated streaming: 32 layers in 32 passes of <= 1 layer(s)
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    K8_PPL steps=2048 nll=2.11447 ppl=8.28518 compute=fp8 sha=061534dadd4d out=/root/bo6/mixtral_ppl_lic_calibexp_c4val.json
+[2026-09-04T20:33:00Z] bo6b: K8 mixtral/lic_calibexp (exp=1 calib=0 fuse=all src=wikitext E4B_SERVE_EXP_INT4_CALIB=1)

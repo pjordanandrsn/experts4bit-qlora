@@ -1,0 +1,9 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 2351.41it/s]
+[13:40:58]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[13:40:58]   quantized experts on 48/48 MoE layers (128 experts each)
+[13:40:58]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[13:40:59]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[13:41:12]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 90726.68 examples/s]Generating v split: 27432 examples [00:00, 93765.95 examples/s]Generating v split: 45576 examples [00:00, 91172.18 examples/s]Generating v split: 45576 examples [00:00, 91515.77 examples/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (866460 > 131072). Running this sequence through the model will result in indexing errors
+K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_nf4_c4val.json

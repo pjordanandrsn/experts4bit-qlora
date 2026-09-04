@@ -1,0 +1,22 @@
+[2026-09-04T13:25:09Z] install: gnf4 @0b25d1389701bb793d60075e5b870212c848e33a + e4b integration-8 @f42924d509ecb3f534f57a87976219986fe5b69f
+pip rc=0
+bo6 tripwire OK: integration-8 (calibrated experts + gpu solve, swiglu/combine) + gnf4 main; e4b 0.34.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.173.02
+Model name:                              AMD Ryzen Threadripper PRO 7975WX 32-Cores
+               total        used        free      shared  buff/cache   available
+Mem:             251          36         126           0          88         210
+cuda ok
+overlay         320G  230M  320G   1% /
+[2026-09-04T13:25:28Z] bake qwen3
+qwen3: BAKE FAILED
+  File "/root/bo6/k8_bake.py", line 10, in <module>
+    from safetensors.torch import save_file
+ModuleNotFoundError: No module named 'safetensors'
+[2026-09-04T13:25:29Z] freed qwen3 (disk: 320G free)
+[2026-09-04T13:25:29Z] bake mixtral
+mixtral: BAKE FAILED
+  File "/root/bo6/k8_bake.py", line 10, in <module>
+    from safetensors.torch import save_file
+ModuleNotFoundError: No module named 'safetensors'
+[2026-09-04T13:25:30Z] freed mixtral (disk: 320G free)
+[2026-09-04T13:25:30Z] TP_DONE

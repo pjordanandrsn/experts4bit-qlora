@@ -1,0 +1,11 @@
+# forensics 2026-09-04T21:03:14Z
+NVIDIA GeForce RTX 5090, 580.173.02, 32607 MiB
+CPU(s):                                  64
+Model name:                              AMD Ryzen Threadripper PRO 7975WX 32-Cores
+Mem:             251          45          13           8         191         191
+183093952512
+torch 2.8.0+cu128 transformers 5.16.1 bnb 0.50.1 triton 3.4.0
+Name: grouped-nf4-gemm
+Version: 0.29.0
+Name: experts4bit-qlora
+Version: 0.34.0

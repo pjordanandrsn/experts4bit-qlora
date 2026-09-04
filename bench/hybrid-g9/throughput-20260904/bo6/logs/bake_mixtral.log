@@ -1,0 +1,14 @@
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files:   8%|▊         | 2/26 [00:00<00:02, 10.70it/s]Fetching 26 files:   8%|▊         | 2/26 [00:19<00:02, 10.70it/s]Fetching 26 files:  12%|█▏        | 3/26 [05:01<48:11, 125.73s/it]Fetching 26 files:  15%|█▌        | 4/26 [05:04<29:18, 79.94s/it] Fetching 26 files:  19%|█▉        | 5/26 [05:08<18:41, 53.42s/it]Fetching 26 files:  23%|██▎       | 6/26 [06:12<19:00, 57.02s/it]Fetching 26 files:  27%|██▋       | 7/26 [06:17<12:40, 40.05s/it]Fetching 26 files:  31%|███       | 8/26 [06:18<08:20, 27.79s/it]Fetching 26 files:  35%|███▍      | 9/26 [06:26<06:10, 21.81s/it]Fetching 26 files:  42%|████▏     | 11/26 [10:07<15:51, 63.42s/it]Fetching 26 files:  46%|████▌     | 12/26 [10:08<11:10, 47.88s/it]Fetching 26 files:  50%|█████     | 13/26 [10:09<07:40, 35.43s/it]Fetching 26 files:  54%|█████▍    | 14/26 [12:32<12:58, 64.88s/it]Fetching 26 files:  58%|█████▊    | 15/26 [12:33<08:34, 46.74s/it]Fetching 26 files:  62%|██████▏   | 16/26 [12:33<05:33, 33.38s/it]Fetching 26 files:  65%|██████▌   | 17/26 [12:33<03:34, 23.85s/it]Fetching 26 files:  69%|██████▉   | 18/26 [12:34<02:16, 17.03s/it]Fetching 26 files:  73%|███████▎  | 19/26 [12:34<01:24, 12.07s/it]Fetching 26 files:  77%|███████▋  | 20/26 [12:36<00:54,  9.11s/it]Fetching 26 files:  81%|████████  | 21/26 [12:37<00:33,  6.63s/it]Fetching 26 files:  85%|████████▍ | 22/26 [12:44<00:26,  6.72s/it]Fetching 26 files:  88%|████████▊ | 23/26 [12:45<00:14,  4.97s/it]Fetching 26 files:  92%|█████████▏| 24/26 [13:30<00:33, 16.96s/it]Fetching 26 files:  96%|█████████▌| 25/26 [13:41<00:15, 15.38s/it]Fetching 26 files: 100%|██████████| 26/26 [13:52<00:00, 13.94s/it]Fetching 26 files: 100%|██████████| 26/26 [13:52<00:00, 32.02s/it]
+[19:09:58]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[19:10:15]   quantized experts on 32/32 MoE layers (8 experts each)
+[19:10:15]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[19:10:15]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+layers=32 experts=8
+  shard 0/32  0.7 GiB  1s
+  shard 8/32  6.6 GiB  6s
+  shard 16/32  12.6 GiB  11s
+  shard 24/32  18.5 GiB  17s
+snapshot done 23.62 GiB in 21.6s
+expert-tensor bake: L=32 E=8 (baking 8) row=99090432 stride=99090432 total=25.4 GB workers=8
+bake complete: 256 rows (25.4 GB) in 5s
+BAKE OK
