@@ -1,6 +1,57 @@
 # Changelog
 
-## Unreleased
+## 0.34.0 — 2026-09-04
+
+Optimisation pass, day one: the round-2 fold reaches the stacks it never
+engaged on, the calibrated int4 set is complete (attention, output head,
+dense MLP, biased projections), an op-level census instrument, and a
+retraction. Every lane number below is **measured-private** until the
+receipt bundle lands in-repo; the numbers are on the merged PRs. Floors
+grouped-nf4-gemm >= 0.28.0 (`rope_heads`).
+
+### Round-2 glue reaches the calibrated int4 stack (#375) and norm-less attention (#379)
+
+- The norm + rotary fold had only licensed the FUSED-qkv attention module.
+  The calibrated int4 attention lane packs q/k/v/o separately and is
+  exclusive with qkv fusion, so on every family's best stack the fold
+  never engaged. #375 adds the same fold for the standard
+  separate-projection shape (q/k/v/o + per-head q/k norms), licensed on
+  structure. Qwen3-30B-A3B, full stack, one RTX 5090: K8 1.8505 → 1.84944
+  (−0.0011 nats, inside the 0.0095 floor), B=1 6.41 → 5.62 ms —
+  **156.1 → 177.9 tok/s (×1.14)**, ×1.82 over the NF4 baseline.
+- #379 (grouped-nf4-gemm `rope_heads`, 0.28.0): the rotary chain folded
+  for attention WITHOUT a head norm (GraniteMoe, Mixtral), licensed on
+  exactly `{q_proj, k_proj, v_proj, o_proj}`; gpt-oss's `sinks` refuses
+  it. Granite, same box: ΔK8 −0.0026 nats (inside the 0.0033 floor),
+  **×1.156 at B=1, ×1.093 at B=16**, control arm flat. Review caught a
+  vacuous license (the fold required `sliding_window`, which neither
+  family's attention sets) before the lane ran.
+
+### The calibrated int4 set is complete: output head (#373), biased projections (#377), dense MLP (#378)
+
+- `E4B_SERVE_LMHEAD_INT4_CALIB=1` (#373): the calibrated int4 output head,
+  opt-in. Qwen3 +0.0085 nats in-stack (below its floor), ×1.04 at B=1;
+  Gemma-4 (262k vocabulary) ×1.078 on top of its calibrated stack.
+- `Int4Linear` carries a projection bias (#377): gpt-oss's q/k/v/o no
+  longer refuse the calibrated lane. Speed on gpt-oss ×1.005 alone,
+  ×1.015 in-stack (head_dim 64 — a small attention slice); its best
+  licensed B=1 moves 133.3 → 137.4 tok/s with the head. Quality is NOT
+  readable for this family on raw text (K8 falls 0.13–0.17 nats under
+  every int4-attention arm — the documented OOD-regime flattery); the
+  flag stays opt-in for gpt-oss until a harmony-text or KL gate exists.
+- `E4B_SERVE_DENSE_INT4_CALIB=1` (#378): the dense MLP beside a routed
+  block as an opt-in calibrated target (Gemma-4's shape). Measured
+  ×1.010 at B=1 on Gemma-4 — not a lever there; correct by test, shipped
+  for completeness, default off.
+
+### Instrument: `--op-profile-out` (#380)
+
+- `bench/hybrid-g9/step_decomp.py --b1d-loop eager --b1d-timed
+  --op-profile-out PATH`: an op-level census behind the kernel census —
+  by call site (the dispatch-mode tracer; torch 2.13 returns empty
+  profiler stacks), by op launch count, by op + input shape — from two
+  uncaptured steps after the timed window, reserved so the window stays
+  byte-identical to a no-flag run.
 
 ### Correction: Granite's int4-expert rows fail the registered K8 gate
 

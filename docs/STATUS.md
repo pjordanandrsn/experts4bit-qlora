@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-04, version 0.33.0.** One page. The README argues the
+**As of 2026-09-04, version 0.34.0.** One page. The README argues the
 case; this page states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
@@ -74,6 +74,9 @@ five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
 **Serving speed**, single-stream Qwen3-30B-A3B on a rented RTX 5090:
 about 100 tok/s on the NF4 baseline, 204.6 tok/s with calibrated int4
 attention and int4 experts, and about 1,238 tok/s aggregate at B=16.
+On the 2026-09-04 validation box the same stack went from 156.1 to
+177.9 tok/s at B=1 (×1.14) when 0.34.0's round-2 fold started engaging
+on the calibrated int4 attention it had silently skipped (#375).
 Those figures are **measured-private**. On the same box, vLLM is ahead by
 1.47× at B=1 and 1.55× at B=16 with identical prompts — that comparison
 is the honest one and it is also measured-private.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.33.0"
+version = "0.34.0"
 description = "QLoRA fine-tuning of fused 4-bit Mixture-of-Experts on a single small GPU, on stock bitsandbytes."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -63,7 +63,7 @@ fast = [
     # Raised to >=0.23.0 for grouped-nf4-gemm#316: calibrate_attention_hessians
     # hands GPU activations to a HessianAccumulator that STORES on the CPU; the
     # 0.22.0 accumulator expected both on one device and raised a mismatch.
-    "grouped-nf4-gemm>=0.27.0",
+    "grouped-nf4-gemm>=0.28.0",
 ]
 train = [
     "transformers>=5.0",
@@ -97,7 +97,7 @@ serve = [
 # XFAILS (its marker is conditional on the installed gnf4). Green either way,
 # so a stale floor would leave CI permanently NOT exercising the V4-label path
 # while looking covered -- the failure mode this repo keeps relearning.
-test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.27.0"]
+test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.28.0"]
 
 [project.urls]
 Homepage = "https://github.com/pjordanandrsn/experts4bit-qlora"
