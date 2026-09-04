@@ -248,3 +248,47 @@ def test_rotary_fold_handles_broadcast_cos(monkeypatch, batch, cos_batch):
         assert got.shape == want.shape
         assert torch.allclose(got.float(), want.float(),
                               rtol=2 ** -6, atol=2 ** -8)
+
+
+class Gemma4ShapedLayer(ToyDecoderLayer):
+    """Same four attribute names as the plain layer, a different body:
+    two more norms, a routed-expert branch beside the dense MLP and a
+    layer scalar -- Gemma-4's decoder layer. The fold's re-implemented
+    forward would silently drop all of that."""
+    def __init__(self):
+        super().__init__()
+        self.pre_feedforward_layernorm = ToyRMSNorm()
+        self.post_feedforward_layernorm = ToyRMSNorm()
+        self.router = torch.nn.Linear(H, 4, bias=False)
+        self.experts = torch.nn.Identity()
+        self.layer_scalar = torch.nn.Buffer(torch.ones(1))
+
+
+class GraniteShapedLayer(ToyDecoderLayer):
+    """Plain children, but the layer scales its residual adds."""
+    def __init__(self):
+        super().__init__()
+        self.residual_multiplier = torch.nn.Parameter(torch.full((1,), 0.22))
+
+
+def test_layer_with_extra_structure_is_refused(monkeypatch):
+    """Name presence is not structure: a layer whose children exceed the
+    four the fold re-implements, or that carries parameters or buffers of
+    its own, keeps its own forward (Gemma-4, GraniteMoe)."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    for cls in (Gemma4ShapedLayer, GraniteShapedLayer):
+        m = torch.nn.Module()
+        m.layer = cls()
+        with pytest.raises(RuntimeError, match="patched nothing"):
+            fuse_t1_glue_r2(m)
+        x = (torch.randn(1, 1, H) * 2).to(torch.bfloat16)
+        m.layer(x)
+        assert calls["resid"] == 0, cls.__name__
+    # the plain layer beside them still folds
+    m = torch.nn.Module()
+    m.plain = ToyDecoderLayer()
+    m.gemma = Gemma4ShapedLayer()
+    assert fuse_t1_glue_r2(m) == (1, 0)
+
