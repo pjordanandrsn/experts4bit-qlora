@@ -595,7 +595,9 @@ def test_unfused_attention_with_head_norms_folds_and_matches(monkeypatch):
 def test_unfused_fold_refuses_other_attention_shapes(monkeypatch):
     """OLMoE norms the full hidden width before the head split (a different
     function), Gemma-4 carries a v_norm beside the six children, Granite
-    has no norms at all: each keeps its own forward."""
+    has no norms at all: none is this fold's. The norm-less shape belongs
+    to the rotary-only fold (its own tests below); the other two keep
+    their forward."""
     from experts4bit_qlora.engines import glue_r2
     olmoe = ToyUnfusedAttention(norm_width=2 * H)          # hidden-width norms
     gemma = ToyUnfusedAttention(extra_child=torch.nn.Identity())
@@ -605,7 +607,7 @@ def test_unfused_fold_refuses_other_attention_shapes(monkeypatch):
     monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
     _stub(monkeypatch, {"resid": 0, "rope": 0})
     m = torch.nn.Module()
-    m.olmoe, m.gemma, m.granite = olmoe, gemma, granite
+    m.olmoe, m.gemma = olmoe, gemma
     with pytest.raises(RuntimeError, match="patched nothing"):
         fuse_t1_glue_r2(m)
 
