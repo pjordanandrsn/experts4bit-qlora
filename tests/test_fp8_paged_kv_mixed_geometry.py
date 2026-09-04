@@ -110,7 +110,8 @@ def test_auto_key_groups_keep_32_wide_scales_per_layer(monkeypatch):
     def fake_probe(q, head_dim, k_groups, v_groups, **kw):
         calls.append((head_dim, k_groups))
         return None                       # a kernel that unrolls the count
-    import types, sys
+    import sys
+    import types
     fake = types.SimpleNamespace(fp8_compute_unsupported=fake_probe)
     monkeypatch.setitem(sys.modules, "fp8_paged_attn", fake)
     kv = mod.Fp8PagedKV(3, [8, 8, 2], [128, 256, 512], batch=1,
