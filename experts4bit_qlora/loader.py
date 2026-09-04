@@ -148,9 +148,11 @@ def _read_compatible_convention(model_type):
 
 def _convention_or_none(model_type):
     """The MoE convention for this model_type, or ``None`` if it has no adjudicated
-    one. The loader's dedicated-quant specials (gemma4, kimi_k3, deepseek_v4)
-    predate the convention system and legitimately have none; every path that
-    consults a convention must therefore tolerate its absence rather than raise."""
+    one. The loader's dedicated-quant specials (kimi_k3, deepseek_v4) predate the
+    convention system and legitimately have none (gemma4 gained an empty-roles,
+    pre-fused convention on 2026-09-04 so the int4 expert lane can plan it; the
+    loader's dedicated path is unchanged); every path that consults a convention
+    must therefore tolerate its absence rather than raise."""
     from .arch.moe_conventions import MoEConventionError, convention_for
     try:
         return convention_for(model_type)
