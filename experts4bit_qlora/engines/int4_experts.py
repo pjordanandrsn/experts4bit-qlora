@@ -486,7 +486,18 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                         H = H_gu if role == "gu" else H_dn
                 if H is not None:
                     from gptq_pack import gptq_pack_int4_b32
-                    p, c = gptq_pack_int4_b32(stack[e], H.to("cpu"))
+                    # E4B_INT4_GPTQ_DEVICE=cuda solves on the GPU: a 14336^2
+                    # Hessian (Mixtral's down projection) takes ~0.5 s there
+                    # and tens of seconds on the CPU, x256 experts. The pack
+                    # is the same arithmetic either way; an OOM falls back.
+                    gdev = os.environ.get("E4B_INT4_GPTQ_DEVICE", "cpu")
+                    try:
+                        p, c = gptq_pack_int4_b32(stack[e].to(gdev), H.to(gdev))
+                    except RuntimeError:
+                        if gdev == "cpu":
+                            raise
+                        _torch.cuda.empty_cache()
+                        p, c = gptq_pack_int4_b32(stack[e], H.to("cpu"))
                     n_gptq += 1
                 else:
                     p, c = pack_int4_b32(stack[e])
