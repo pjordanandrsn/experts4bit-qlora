@@ -184,3 +184,99 @@ def test_uncalibrated_int4linear_is_unchanged(monkeypatch):
     assert torch.equal(a.packed.reshape(-1), p.reshape(-1))
     assert torch.equal(a.scales.reshape(-1), s.reshape(-1))
     assert seen == []
+
+
+class ToyLM(ToyModel):
+    """A causal-LM-shaped toy: the attention plus a bias-free output
+    head TIED to the embedding table (Gemma-style), found through
+    ``get_output_embeddings``."""
+    def __init__(self, tied=True, bias=False):
+        super().__init__()
+        self.lm_head = nn.Linear(H, 50, bias=bias, dtype=torch.bfloat16)
+        if tied:
+            self.emb.weight = self.lm_head.weight = nn.Parameter(
+                torch.randn(50, H).to(torch.bfloat16))
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def forward(self, ids):
+        h = self.attn(self.emb(ids).to(torch.bfloat16))
+        return self.lm_head(h)
+
+
+def test_output_head_is_packed_only_when_opted_in(monkeypatch):
+    """Without the flag the head is untouched (the attention lane's
+    standing contract); with it the head is calibrated with its own
+    Hessian and swapped, and the tied embedding table is NOT changed --
+    the swap replaces the Linear module, not the shared Parameter."""
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    from experts4bit_qlora.engines.int4_attn_calib import (
+        calibrate_attention_hessians, enable_serve_attn_int4_calib)
+    seen = []
+    _stubs(monkeypatch, seen)
+    torch.manual_seed(1)
+    m = ToyLM()
+    ids = torch.randint(0, 50, (2, 8))
+    hess = calibrate_attention_hessians(m, [ids])
+    assert "lm_head" not in hess
+    assert enable_serve_attn_int4_calib(m, hess) == 2
+    assert type(m.lm_head) is nn.Linear, "no flag: the head stays"
+    m2 = ToyLM()
+    emb_param = m2.emb.weight
+    emb_before = emb_param.detach().clone()
+    assert m2.lm_head.weight is emb_param, "fixture must be tied"
+    hess = calibrate_attention_hessians(m2, [ids], include_head=True)
+    assert "lm_head" in hess and tuple(hess["lm_head"].shape) == (H, H)
+    seen.clear()
+    assert enable_serve_attn_int4_calib(m2, hess, include_head=True) == 3
+    assert isinstance(m2.lm_head, Int4Linear)
+    assert (H, H) in seen and len(seen) == 3
+    # the tied table is the SAME Parameter object, bitwise unchanged, still bf16
+    assert m2.emb.weight is emb_param
+    assert torch.equal(m2.emb.weight.detach(), emb_before)
+    assert m2.emb.weight.dtype == torch.bfloat16 and m2.emb.weight.shape == (50, H)
+
+
+def test_output_head_alone(monkeypatch):
+    """Head-only mode packs the head and nothing else."""
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    from experts4bit_qlora.engines.int4_attn_calib import (
+        calibrate_attention_hessians, enable_serve_attn_int4_calib)
+    _stubs(monkeypatch, [])
+    m = ToyLM(tied=False)
+    ids = torch.randint(0, 50, (2, 8))
+    hess = calibrate_attention_hessians(m, [ids], include_attention=False, include_head=True)
+    assert list(hess) == ["lm_head"]
+    assert enable_serve_attn_int4_calib(m, hess, include_attention=False, include_head=True) == 1
+    assert isinstance(m.lm_head, Int4Linear)
+    assert type(m.attn.qkv_proj) is nn.Linear and type(m.attn.o_proj) is nn.Linear
+
+
+def test_output_head_refusals(monkeypatch):
+    from experts4bit_qlora.engines.int4_attn_calib import _int4_targets
+    _stubs(monkeypatch, [])
+    with pytest.raises(RuntimeError, match="carries a bias"):
+        _int4_targets(ToyLM(tied=False, bias=True), include_head=True)
+    with pytest.raises(RuntimeError, match="no nn.Linear output head"):
+        _int4_targets(ToyModel(), include_head=True)
+
+
+def test_env_flags_for_the_head(monkeypatch):
+    """The head flag alone is a head-only enable, never a silent ignore;
+    both off is a no-op."""
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    from experts4bit_qlora.engines.int4_attn_calib import enable_from_env
+    _stubs(monkeypatch, [])
+    ids = torch.randint(0, 50, (2, 8))
+    monkeypatch.delenv("E4B_SERVE_ATTN_INT4_CALIB", raising=False)
+    monkeypatch.delenv("E4B_SERVE_LMHEAD_INT4_CALIB", raising=False)
+    m = ToyLM(tied=False)
+    assert enable_from_env(m, [ids]) == 0
+    monkeypatch.setenv("E4B_SERVE_LMHEAD_INT4_CALIB", "1")
+    m = ToyLM(tied=False)
+    assert enable_from_env(m, [ids]) == 1
+    assert isinstance(m.lm_head, Int4Linear) and type(m.attn.o_proj) is nn.Linear
+    monkeypatch.setenv("E4B_SERVE_ATTN_INT4_CALIB", "1")
+    m = ToyLM(tied=False)
+    assert enable_from_env(m, [ids]) == 3
