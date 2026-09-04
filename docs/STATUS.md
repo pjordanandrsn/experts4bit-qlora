@@ -83,15 +83,21 @@ families under one protocol on one rented 5090 class, with every refused
 arm named — that list became the build-out, and 0.33.0 ships it. Table
 and receipt: [`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md).
 
-**Two more families reach the reference's ratio with the build-out**
-(0.33.0, **measured-private** until the validation lane's receipt lands
-in-repo; the numbers are on the merged PRs): Granite-3.1-3B-A800M at
-302 tok/s B=1 with int4 experts + round-1 norms + router epilogue (×1.59
-over NF4, the Qwen3-30B ratio; ×1.80 at B=16), and Gemma-4-26B-A4B at
-121 tok/s (×1.69; int4 experts alone ×1.20 B=1 / ×1.39 B=16). Mixtral
-reaches ×2.14 (×2.29 with calibrated attention). gpt-oss stays NF4-only:
-a uniform int4 grid cannot hold its MXFP4 experts (+0.63 nats measured),
-and the native path is not yet a lever.
+**One more family reaches the reference's ratio with the build-out,
+and one claimed to has been retracted** (0.33.0, **measured-private**
+until the validation lane's receipt lands in-repo; the numbers are on
+the merged PRs): Gemma-4-26B-A4B at 121 tok/s B=1 with int4 experts +
+round-1 norms + router epilogue (×1.69 over NF4; int4 experts alone
+×1.20 B=1 / ×1.39 B=16; ×1.68 at B=16). Mixtral reaches ×2.14 (×2.29
+with calibrated attention). gpt-oss stays NF4-only: a uniform int4 grid
+cannot hold its MXFP4 experts (+0.63 nats measured), and the native path
+is not yet a lever. **Granite-3.1-3B-A800M's "302 tok/s, ×1.59" row is
+retracted as a parity claim**: its int4 experts cost +0.063 ppl on the
+same window, over the registered 0.05-ppl gate (`k8_gate`, uncalibrated
+rule), and the 0.33.0 text quoted the row without applying that gate.
+The speed is real; the configuration is not licensed. Granite's licensed
+stack keeps NF4 experts (round-1 + round-2 folds + router epilogue) and
+its combined number is being measured.
 
 ---
 
@@ -117,6 +123,18 @@ and the native path is not yet a lever.
   from a signed NLL difference and applied to a full-vocabulary KL. It is
   left textually unchanged in METHODOLOGY §13 and marked falsified rather
   than retuned.
+- **"Granite reaches the Qwen3 ratio: 302 tok/s, ×1.59 with int4
+  experts" (0.33.0 changelog and this page) — RETRACTED.** The int4
+  experts on that row cost +0.0118 nats = +0.063 ppl against NF4 on the
+  same 2048-step window, over the registered 0.05-ppl uncalibrated gate.
+  The lane table read nats against the family's 0.0033-nat noise floor
+  (which the row clears by 3.6×) and never against the budget; a floor
+  says an effect is real, a budget says whether it ships. The pattern was
+  already on record — int4-b32 experts are quality-neutral at ≥13B
+  active and cost ~1.2–1.8% ppl at ≤1B active — and this row is that
+  pattern. The 0.32.0 throughput table's Granite int4 rows carry the
+  same delta (1.6741 → 1.6859) and are re-labelled in
+  [`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md) and `claims.json`.
 - **"Gemma-4 behaves (−0.0078 nats)" — SUPERSEDED**, and then **"Gemma-4
   is not at parity: 0.247 nats, 3× its floor" — SUPERSEDED the same
   day.** Both compared one 512-token window to one reference. Three

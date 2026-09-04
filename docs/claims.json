@@ -650,7 +650,7 @@
       "id": "e4b.serve.tp.granite.b1.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Single-stream (B=1) paged decode of Granite-3.1-3B-A800M on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 284.6 tok/s (int4-b32 experts); NF4 baseline 191.0 tok/s.",
+      "claim": "Single-stream (B=1) paged decode of Granite-3.1-3B-A800M on a rented RTX 5090, fastest configuration under the Qwen3-30B campaign's protocol — NOT a licensed best (its int4 experts fail the registered K8 gate, see notes): 284.6 tok/s (int4-b32 experts); NF4 baseline 191.0 tok/s.",
       "value": 284.6,
       "unit": "tok/s",
       "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
@@ -666,13 +666,13 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. CORRECTION 2026-09-04: int4exp − nf4 = +0.0118 nats = +0.063 ppl, over the registered 0.05-ppl uncalibrated gate (experts4bit_qlora.k8_gate); this row is the speed of a configuration that FAILS quality on this family (int4-b32 experts cost ~1.2-1.8% ppl at <=1B active), not a licensed best. The licensed Granite stack keeps NF4 experts; its number is pending on the validation lane."
     },
     {
       "id": "e4b.serve.tp.granite.b16.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Batched (B=16, aggregate) paged decode of Granite-3.1-3B-A800M on a rented RTX 5090, best licensed configuration under the Qwen3-30B campaign's protocol: 2210.2 tok/s (int4-b32 experts); NF4 baseline 1447.3 tok/s.",
+      "claim": "Batched (B=16, aggregate) paged decode of Granite-3.1-3B-A800M on a rented RTX 5090, fastest configuration under the Qwen3-30B campaign's protocol — NOT a licensed best (its int4 experts fail the registered K8 gate, see notes): 2210.2 tok/s (int4-b32 experts); NF4 baseline 1447.3 tok/s.",
       "value": 2210.2,
       "unit": "tok/s",
       "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
@@ -688,7 +688,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. CORRECTION 2026-09-04: int4exp − nf4 = +0.0118 nats = +0.063 ppl, over the registered 0.05-ppl uncalibrated gate (experts4bit_qlora.k8_gate); this row is the speed of a configuration that FAILS quality on this family (int4-b32 experts cost ~1.2-1.8% ppl at <=1B active), not a licensed best. The licensed Granite stack keeps NF4 experts; its number is pending on the validation lane."
     },
     {
       "id": "e4b.serve.tp.gptoss.b1.5090.2026-09-04",
