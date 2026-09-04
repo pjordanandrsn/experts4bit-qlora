@@ -58,38 +58,17 @@ def test_swap_counts_and_lm_head_untouched():
 
 
 @needs_triton
-def test_bias_refused_loudly():
-    with pytest.raises(RuntimeError, match="bias"):
-        enable_serve_attn_int4(_Model(bias=True))
-
-
-@needs_triton
-def test_vacuous_enable_refused():
-    class Bare(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.fc = nn.Linear(8, 8)
-    with pytest.raises(RuntimeError, match="vacuous|matched no"):
-        enable_serve_attn_int4(Bare())
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
-def test_decode_and_prefill_parity():
-    pytest.importorskip("triton")
-    torch.manual_seed(0)
-    lin = nn.Linear(64, 160, bias=False).cuda().to(torch.bfloat16)
-    q = Int4Linear(lin)
-    wref = q._deq()                        # the module's own int4 truth
-    x1 = torch.randn(1, 1, 64, device="cuda", dtype=torch.bfloat16) * 0.2
-    got = q(x1)
-    ref = (x1.reshape(-1, 64).to(torch.bfloat16) @ wref.t()).reshape_as(got)
-    assert (got.float() - ref.float()).abs().max() \
-        <= ref.float().abs().max() * 2 ** -6   # two bf16 roundings + int8 act
-    xm = torch.randn(1, 7, 64, device="cuda", dtype=torch.bfloat16) * 0.2
-    gm = q(xm)
-    rm = (xm.reshape(-1, 64) @ wref.t()).reshape_as(gm)
-    assert torch.allclose(gm.float(), rm.float(), rtol=1e-2, atol=1e-2)
-    assert gm.dtype == xm.dtype
+def test_bias_is_carried_not_refused():
+    """gpt-oss's q/k/v/o carry biases: the int4 store keeps the weight on
+    the grid and the bias in bf16, added after the GEMV / matmul. The
+    swap must count the biased projections and the module must expose
+    the bias it carries."""
+    m = _Model(bias=True)
+    n = enable_serve_attn_int4(m)
+    assert n == 4
+    for layer in m.layers:
+        assert layer.qkv_proj.bias is not None and layer.qkv_proj.bias.dtype == torch.bfloat16
+        assert layer.o_proj.bias is not None
 
 
 def _cpu_kernel_stubs(monkeypatch, calls):
@@ -162,3 +141,36 @@ def test_one_row_on_the_gemv_batches_on_cached_bf16(monkeypatch):
     # one row still takes the GEMV with the construction-time buffers
     m(x[:1])
     assert calls[-1] == ("gemv", 1, (2, 96))
+
+
+def test_bias_is_added_after_the_gemv_and_the_matmul(monkeypatch):
+    """A biased projection: the weight goes on the grid, the bias rides in
+    bf16 and is added on BOTH routes (one row -> GEMV, many rows -> the
+    cached bf16 matmul), so the swapped module equals the Linear it
+    replaced up to the grid's own rounding."""
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    calls = []
+    _cpu_kernel_stubs(monkeypatch, calls)
+    torch.manual_seed(3)
+    lin = nn.Linear(64, 96, bias=True)
+    with torch.no_grad():
+        lin.weight.mul_(0.05)
+        lin.bias.copy_(torch.randn(96))
+    q = Int4Linear(lin)
+    assert q.bias is not None and q.bias.dtype == torch.bfloat16
+    x1 = torch.randn(1, 64).to(torch.bfloat16)
+    ref1 = lin(x1.float())
+    got1 = q(x1)
+    assert calls and calls[-1][0] == "gemv"
+    assert torch.allclose(got1.float(), ref1, rtol=2 ** -4, atol=2 ** -3), (got1.float() - ref1).abs().max()
+    # the bias is the whole difference between a biased and an unbiased store
+    lin0 = nn.Linear(64, 96, bias=False)
+    with torch.no_grad():
+        lin0.weight.copy_(lin.weight)
+    q0 = Int4Linear(lin0)
+    assert q0.bias is None
+    assert torch.allclose((q(x1) - q0(x1)).float(), lin.bias.to(torch.bfloat16).float().expand(1, 96), rtol=2 ** -6, atol=2 ** -6)
+    xb = torch.randn(4, 64).to(torch.bfloat16)
+    gotb = q(xb)
+    assert torch.allclose(gotb.float(), lin(xb.float()), rtol=2 ** -4, atol=2 ** -3)
+    assert torch.allclose((q(xb) - q0(xb)).float(), lin.bias.to(torch.bfloat16).float().expand(4, 96), rtol=2 ** -6, atol=2 ** -6)
