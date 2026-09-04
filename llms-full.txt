@@ -27,10 +27,11 @@ calls through the `[fast]` extra live in
 [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm).
 **Environment:** Linux, a CUDA GPU, torch ≥ 2.2 and bitsandbytes ≥ 0.43
 (the floors are `pyproject.toml`'s; Python 3.11 is what CI tests; the
-kernels need Triton on an sm_80+ GPU). **The material limitation:** on a model that already fits in bf16,
-4-bit here is a memory trade, not a speed-up, and on the measured
-comparator it cost energy (`e4b.train.energy-honest.scoped-a2000`) — this
-is for models that do not fit. Machine-readable capabilities and evidence:
+kernels need Triton on an sm_80+ GPU). **The material limitation:** on a
+model that already fits in bf16, 4-bit here is a memory trade, not a
+speed-up, and on the measured comparator it cost energy
+(`e4b.train.energy-honest.scoped-a2000`) — this is for models that do not
+fit. Machine-readable capabilities and evidence:
 [`docs/capabilities.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json)
 and [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json).
 
@@ -1365,8 +1366,9 @@ Register: [`../claims.json`](../claims.json). Per-family throughput, **measured*
 
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-04, version 0.35.0** (the version of record is `pyproject.toml`'s). One page. The README argues the
-case; this page states the position. Every line has an entry in
+**As of 2026-09-04, version 0.35.0** (the version of record is
+`pyproject.toml`'s). One page. The README argues the case; this page
+states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
 here that does not.
 

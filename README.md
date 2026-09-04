@@ -18,10 +18,11 @@ calls through the `[fast]` extra live in
 [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm).
 **Environment:** Linux, a CUDA GPU, torch ≥ 2.2 and bitsandbytes ≥ 0.43
 (the floors are `pyproject.toml`'s; Python 3.11 is what CI tests; the
-kernels need Triton on an sm_80+ GPU). **The material limitation:** on a model that already fits in bf16,
-4-bit here is a memory trade, not a speed-up, and on the measured
-comparator it cost energy (`e4b.train.energy-honest.scoped-a2000`) — this
-is for models that do not fit. Machine-readable capabilities and evidence:
+kernels need Triton on an sm_80+ GPU). **The material limitation:** on a
+model that already fits in bf16, 4-bit here is a memory trade, not a
+speed-up, and on the measured comparator it cost energy
+(`e4b.train.energy-honest.scoped-a2000`) — this is for models that do not
+fit. Machine-readable capabilities and evidence:
 [`docs/capabilities.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json)
 and [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json).
 
@@ -156,9 +157,10 @@ experts in bf16, and OOMs.
 ## What is measured
 
 Each row names its entries in `docs/claims.json`, which carry the value,
-the conditions and the receipt path; the last column is the status there. **measured** means the receipt is in this repository;
-**measured-private** means the run happened but the receipt lives in a
-private audit tree and you cannot check it from here.
+the conditions and the receipt path; the last column is the status there.
+**measured** means the receipt is in this repository; **measured-private**
+means the run happened but the receipt lives in a private audit tree and
+you cannot check it from here.
 
 | | result | status |
 |---|---|---|
