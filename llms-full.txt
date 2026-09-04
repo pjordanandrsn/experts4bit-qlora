@@ -1573,9 +1573,9 @@ Granite, +0.0002 on Mixtral) and buys nothing (Granite ×0.968 B=1, Mixtral
   tolerance applied to the fp8 default on sm_120).
 - **[#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392) —
   the energy receipt does not record its bitsandbytes build.**
-  `docs/METHODOLOGY.md` §10 names "0.50.0.dev0 / the fork (bnb 0.50-dev)"
-  and no commit; the harness prints the GPU name, not
-  `bitsandbytes.__version__`. Until it is rerun on a recorded release,
+  `docs/METHODOLOGY.md` names the build only as `0.50.0.dev0` (§1) and
+  "the fork (bnb 0.50-dev)" (the packaging note covering §9–§10), with no
+  commit; the harness prints the GPU name, not `bitsandbytes.__version__`. Until it is rerun on a recorded release,
   `e4b.train.energy-honest.scoped-a2000` is a one-card, one-build number.
 - **No shipped tool bakes the arena.** Reproducing the training receipt
   from published artifacts still needs a quantise-and-emit step you write
