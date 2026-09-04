@@ -247,6 +247,7 @@ class _ExpertHessianSink:
             return
         if layer not in self.layers:
             return
+        import torch
         ids = sorted_ids.to("cpu")
         for e in torch.unique(ids).tolist():
             m = (ids == e)
@@ -333,6 +334,7 @@ def calibrate_expert_hessians(model, source_dir: str, batches, *,
             layers_per_pass = max(1, int(max_hessian_bytes // per_layer))
         else:
             layers_per_pass = len(layers)
+    import torch
     batches = list(batches)
     dev = device or next(model.parameters()).device
     order = [layer for layer, _w in layers]
@@ -502,7 +504,6 @@ def enable_serve_experts_int4(model, source_dir: str, *,
         _b, _w2, sk_dn, _k = _plan(Ndn, Kdn)
         R = _top_k(model)
         w._int4_stores = {
-            "calibrated": (n_gptq, n_rtn) if expert_hessians is not None else None,
             "gu": {"packed": gu_p, "scales": gu_s, "N": Ngu, "K": Kgu,
                    "part": _torch.empty(sk_gu * R, Ngu,
                                         dtype=_torch.float32, device=dev)},
@@ -515,6 +516,8 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                 t = getattr(w, attr)
                 setattr(w, attr, t.new_empty((0,) * t.dim()))
             _torch.cuda.empty_cache()
+        if expert_hessians is not None:
+            w._int4_stores["calibrated"] = (n_gptq, n_rtn)
         n_layers += 1
         tot_gptq += n_gptq
         tot_rtn += n_rtn
