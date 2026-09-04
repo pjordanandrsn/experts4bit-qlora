@@ -1510,12 +1510,17 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
     # no-flag run (Bugbot, e4b#275).
     profile_replays = 8 if (a.replay_profile_out and a.b1d_timed
                             and a.b1d_loop == "graph") else 0
+    # The op-level census (below) runs extra EAGER steps after the
+    # window; they advance pos/KV like the replay profiler's, so they
+    # are reserved the same way and kept out of the timed budget.
+    profile_ops = 2 if (a.op_profile_out and a.b1d_timed
+                        and a.b1d_loop == "eager") else 0
     # --ppl-steps scores far past --gen-tokens (1024 vs 128 by
     # default), so capacity must cover whichever window will actually
     # run or the appends index past the pre-ensured blocks -- the same
     # overflow class Bugbot caught on the replay profiler (e4b#275).
     cap_tokens = (a.prompt_len + max(a.gen_tokens, a.ppl_steps) + 8
-                  + profile_replays)
+                  + profile_replays + profile_ops)
     kv.graph_mode_init(seq=slot, upto_tokens=cap_tokens)
     dev = "cuda"
     start_tok = int(runner.tokens[rid][-1])
@@ -2069,6 +2074,36 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             Path(a.replay_profile_out).write_text(hdr + tbl)
             print(f"REPLAY_PROFILE_OUT {a.replay_profile_out}",
                   flush=True)
+        if profile_ops:
+            # Op-level census: the kernel table above names KERNELS
+            # (at::native::elementwise_kernel ...) but not the ops or
+            # call sites behind them, and graph replays carry no
+            # Python stack. Two uncaptured steps after the window,
+            # profiled with stacks and shapes, grouped by call stack
+            # (self CUDA time) and by op (launch count) -- the two
+            # views that turn a "torch elementwise 22%" class into a
+            # list of ops to fuse. Same post-window placement and
+            # reservation as the replay census.
+            from torch.profiler import ProfilerActivity, profile
+            with profile(activities=[ProfilerActivity.CPU,
+                                     ProfilerActivity.CUDA],
+                         with_stack=True, record_shapes=True) as op:
+                for _ in range(profile_ops):
+                    one_step()
+                torch.cuda.synchronize()
+            by_stack = op.key_averages(group_by_stack_n=8).table(
+                sort_by="self_cuda_time_total", row_limit=80)
+            by_op = op.key_averages().table(
+                sort_by="count", row_limit=80)
+            by_shape = op.key_averages(group_by_input_shape=True).table(
+                sort_by="self_cuda_time_total", row_limit=80)
+            hdr = (f"profiled eager steps: {profile_ops}\n\n"
+                   "== by call stack (self CUDA time) ==\n")
+            Path(a.op_profile_out).write_text(
+                hdr + by_stack + "\n\n== by op (launch count) ==\n"
+                + by_op + "\n\n== by op + input shape (self CUDA time) ==\n"
+                + by_shape)
+            print(f"OP_PROFILE_OUT {a.op_profile_out}", flush=True)
         set_context(prev)
         _frames_after = _dynamo_frame_count()
         _recompiles = None
@@ -2560,6 +2595,13 @@ def main():
                     help="JSON of per-region descendant op counts from "
                          "the profiler event tree (needs --host-brackets; "
                          "engages the torch profiler, stacks off)")
+    ap.add_argument("--op-profile-out", default=None,
+                    help="with --b1d-loop eager --b1d-timed: after the "
+                         "timed window, profile two uncaptured steps with "
+                         "stacks and shapes and write the op-level census "
+                         "(by call stack, by op count, by op+shape) here; "
+                         "the kernel census (--replay-profile-out) names "
+                         "kernels, this names the ops and call sites")
     ap.add_argument("--b1d-timed", action="store_true",
                     help="PREREG-b1d stage C: clean timing -- no per-step "
                          "sync/hash; tokens logged to a device buffer and "
