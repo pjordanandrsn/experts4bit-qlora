@@ -78,10 +78,39 @@ def _output_head(model):
     return None
 
 
+_DENSE_MLP_ENV = "E4B_SERVE_DENSE_INT4_CALIB"
+
+
+def _dense_mlp_linears(model) -> Dict[str, nn.Linear]:
+    """Every ``nn.Linear`` that is a direct child of a decoder layer's
+    DENSE ``mlp`` (a module whose class name ends with ``MLP``: Gemma-4's
+    ``Gemma4TextMLP`` beside its routed experts). A routed block under
+    the same attribute name (``*SparseMoeBlock``, ``*MoE``, ``GptOssMLP``
+    with a router and fused experts) is never an MLP by this rule, so a
+    router's ``gate`` Linear is not selected; nested shared experts are
+    not direct children and are not selected either."""
+    out: Dict[str, nn.Linear] = {}
+    for lname, layer in model.named_modules():
+        if not type(layer).__name__.endswith("DecoderLayer"):
+            continue
+        mlp = getattr(layer, "mlp", None)
+        if mlp is None or not type(mlp).__name__.endswith("MLP"):
+            continue
+        if any(True for _ in mlp.named_parameters(recurse=False)):
+            continue
+        for cname, child in mlp.named_children():
+            if type(child) is nn.Linear:
+                out[f"{lname}.mlp.{cname}"] = child
+    return out
+
+
 def _int4_targets(model, include_attention: bool = True,
-                  include_head: bool = False) -> Dict[str, nn.Linear]:
+                  include_head: bool = False,
+                  include_dense_mlp: bool = False) -> Dict[str, nn.Linear]:
     """The projections one calibrated enable packs: the attention set
-    (the structural rule above) and, opted in, the output head.
+    (the structural rule above) and, opted in, the output head and the
+    dense MLP beside a routed block (Gemma-4: 3 x 30 bf16 GEMVs, the
+    largest unquantised slice after attention in its census).
 
     The output head was measured +0.18 ppl UNCALIBRATED and refused
     (``int4_attn``); the calibrated packer is what turned attention from
@@ -91,6 +120,19 @@ def _int4_targets(model, include_attention: bool = True,
     the embedding keeps its bf16 table untouched (the swap replaces the
     Linear module, not the shared Parameter)."""
     lins = _attention_linears(model) if include_attention else {}
+    if include_dense_mlp:
+        dense = _dense_mlp_linears(model)
+        if not dense:
+            raise RuntimeError(
+                f"{_DENSE_MLP_ENV}=1: no decoder layer carries a dense MLP "
+                "(a *MLP module under .mlp with Linear children) -- refusing "
+                "a vacuous enable")
+        for n, lin in dense.items():
+            if lin.bias is not None:
+                raise RuntimeError(
+                    f"{_DENSE_MLP_ENV}=1: {n} carries a bias; this path "
+                    "stores weight-only int4 -- refusing rather than dropping it")
+        lins.update(dense)
     if include_head:
         found = _output_head(model)
         if found is None:
@@ -111,6 +153,7 @@ def calibrate_attention_hessians(model, batches: Iterable[torch.Tensor],
                                  device=None, hessian_device="cpu",
                                  include_attention: bool = True,
                                  include_head: bool = False,
+                                 include_dense_mlp: bool = False,
                                  ) -> Dict[str, torch.Tensor]:
     """Run ``batches`` (token-id tensors ``[B, T]``) through ``model`` and
     return ``{qualified_name: H}`` with ``H = 2 X X^T`` over every input
@@ -123,7 +166,7 @@ def calibrate_attention_hessians(model, batches: Iterable[torch.Tensor],
     projections x 64 MB beside a 23 GB model (receipts P24-GEN-B)."""
     from gptq_pack import HessianAccumulator
 
-    lins = _int4_targets(model, include_attention, include_head)
+    lins = _int4_targets(model, include_attention, include_head, include_dense_mlp)
     if not lins:
         raise RuntimeError("calibration found no attention projections")
     dev = device or next(model.parameters()).device
@@ -145,7 +188,8 @@ def calibrate_attention_hessians(model, batches: Iterable[torch.Tensor],
 
 def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
                                  include_attention: bool = True,
-                                 include_head: bool = False) -> int:
+                                 include_head: bool = False,
+                                 include_dense_mlp: bool = False) -> int:
     """Swap every attention projection (and, opted in, the output head)
     for the int4 store, packed with calibration. A projection without a
     Hessian is NOT silently packed uncalibrated -- that would mix two
@@ -160,7 +204,7 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
             f"int4_b32 and gptq_pack (missing: {e})") from e
     from gptq_pack import gptq_pack_int4_b32
 
-    lins = _int4_targets(model, include_attention, include_head)
+    lins = _int4_targets(model, include_attention, include_head, include_dense_mlp)
     missing = sorted(n for n in lins if n not in hessians)
     if missing:
         raise RuntimeError(
@@ -193,16 +237,20 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
 def enable_from_env(model, batches: Iterable[torch.Tensor]) -> int:
     """Harness convenience: calibrate then enable when the flags are set.
     ``E4B_SERVE_ATTN_INT4_CALIB=1`` packs the attention projections;
-    ``E4B_SERVE_LMHEAD_INT4_CALIB=1`` packs the output head (alone, or
-    beside attention). Both off is a no-op; the head flag alone is a
-    head-only enable, never a silent ignore."""
+    ``E4B_SERVE_LMHEAD_INT4_CALIB=1`` packs the output head and
+    ``E4B_SERVE_DENSE_INT4_CALIB=1`` the dense MLP beside a routed block
+    (each alone, or beside attention). All off is a no-op; any flag alone
+    is an enable of that set, never a silent ignore."""
     attn = os.environ.get("E4B_SERVE_ATTN_INT4_CALIB", "0") == "1"
     head = os.environ.get(_LM_HEAD_ENV, "0") == "1"
-    if not attn and not head:
+    dense = os.environ.get(_DENSE_MLP_ENV, "0") == "1"
+    if not attn and not head and not dense:
         return 0
     hess = calibrate_attention_hessians(model, batches,
                                         include_attention=attn,
-                                        include_head=head)
+                                        include_head=head,
+                                        include_dense_mlp=dense)
     return enable_serve_attn_int4_calib(model, hess,
                                         include_attention=attn,
-                                        include_head=head)
+                                        include_head=head,
+                                        include_dense_mlp=dense)

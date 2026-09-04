@@ -280,3 +280,103 @@ def test_env_flags_for_the_head(monkeypatch):
     monkeypatch.setenv("E4B_SERVE_ATTN_INT4_CALIB", "1")
     m = ToyLM(tied=False)
     assert enable_from_env(m, [ids]) == 3
+
+
+class ToyDenseMLP(nn.Module):
+    def __init__(self, bias=False):
+        super().__init__()
+        self.gate_proj = nn.Linear(H, 2 * H, bias=bias, dtype=torch.bfloat16)
+        self.up_proj = nn.Linear(H, 2 * H, bias=bias, dtype=torch.bfloat16)
+        self.down_proj = nn.Linear(2 * H, H, bias=bias, dtype=torch.bfloat16)
+
+    def forward(self, x):
+        return self.down_proj(torch.nn.functional.gelu(self.gate_proj(x)) * self.up_proj(x))
+
+
+class ToySparseMoeBlock(nn.Module):
+    """A routed block under the same attribute name: a router Linear and
+    fused experts -- NOT a dense MLP, so nothing in it is selected."""
+    def __init__(self):
+        super().__init__()
+        self.gate = nn.Linear(H, 4, bias=False, dtype=torch.bfloat16)
+        self.experts = nn.Identity()
+
+    def forward(self, x):
+        return x
+
+
+class ToyDecoderLayer(nn.Module):
+    def __init__(self, mlp):
+        super().__init__()
+        self.self_attn = ToyAttention()
+        self.mlp = mlp
+
+    def forward(self, x):
+        return self.mlp(self.self_attn(x))
+
+
+class ToyGemmaLikeModel(nn.Module):
+    """A Gemma-4-shaped tree: a dense MLP beside the routed block in one
+    layer, a routed block alone in another."""
+    def __init__(self, dense_bias=False):
+        super().__init__()
+        self.emb = nn.Embedding(50, H)
+        self.layers = nn.ModuleList([ToyDecoderLayer(ToyDenseMLP(dense_bias)),
+                                     ToyDecoderLayer(ToySparseMoeBlock())])
+
+    def forward(self, ids):
+        x = self.emb(ids).to(torch.bfloat16)
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
+def test_dense_mlp_target_selects_the_dense_mlp_only(monkeypatch):
+    """The dense MLP's three projections are packed under their flag; the
+    routed block's router Linear (same attribute name) is not; attention
+    is untouched when its flag is off."""
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    from experts4bit_qlora.engines.int4_attn_calib import (
+        _dense_mlp_linears, calibrate_attention_hessians, enable_serve_attn_int4_calib)
+    seen = []
+    _stubs(monkeypatch, seen)
+    torch.manual_seed(2)
+    m = ToyGemmaLikeModel()
+    names = sorted(_dense_mlp_linears(m))
+    assert names == ["layers.0.mlp.down_proj", "layers.0.mlp.gate_proj", "layers.0.mlp.up_proj"]
+    ids = torch.randint(0, 50, (2, 8))
+    hess = calibrate_attention_hessians(m, [ids], include_attention=False, include_dense_mlp=True)
+    assert sorted(hess) == names
+    assert tuple(hess["layers.0.mlp.down_proj"].shape) == (2 * H, 2 * H)
+    n = enable_serve_attn_int4_calib(m, hess, include_attention=False, include_dense_mlp=True)
+    assert n == 3
+    assert isinstance(m.layers[0].mlp.gate_proj, Int4Linear) and isinstance(m.layers[0].mlp.down_proj, Int4Linear)
+    assert type(m.layers[1].mlp.gate) is nn.Linear, "the router Linear is never a dense-MLP target"
+    for layer in m.layers:
+        assert type(layer.self_attn.qkv_proj) is nn.Linear
+
+
+def test_dense_mlp_refusals(monkeypatch):
+    from experts4bit_qlora.engines.int4_attn_calib import _int4_targets
+    _stubs(monkeypatch, [])
+    with pytest.raises(RuntimeError, match="carries a bias"):
+        _int4_targets(ToyGemmaLikeModel(dense_bias=True), include_attention=False, include_dense_mlp=True)
+    m = ToyModel()                                   # no decoder layers at all
+    with pytest.raises(RuntimeError, match="no decoder layer carries a dense MLP"):
+        _int4_targets(m, include_attention=False, include_dense_mlp=True)
+
+
+def test_env_flag_for_the_dense_mlp(monkeypatch):
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    from experts4bit_qlora.engines.int4_attn_calib import enable_from_env
+    _stubs(monkeypatch, [])
+    for k in ("E4B_SERVE_ATTN_INT4_CALIB", "E4B_SERVE_LMHEAD_INT4_CALIB", "E4B_SERVE_DENSE_INT4_CALIB"):
+        monkeypatch.delenv(k, raising=False)
+    ids = torch.randint(0, 50, (2, 8))
+    monkeypatch.setenv("E4B_SERVE_DENSE_INT4_CALIB", "1")
+    m = ToyGemmaLikeModel()
+    assert enable_from_env(m, [ids]) == 3
+    assert isinstance(m.layers[0].mlp.up_proj, Int4Linear)
+    monkeypatch.setenv("E4B_SERVE_ATTN_INT4_CALIB", "1")
+    m = ToyGemmaLikeModel()
+    assert enable_from_env(m, [ids]) == 3 + 4
