@@ -117,6 +117,10 @@ def _auto_k_groups(head_dim: int, width: int = 32) -> int:
     # attention compute path on sm_120 (P30). Wider than 32 is never
     # chosen; narrower than the rule never was the measured config.
     want = max(1, head_dim // width)
+    # the fp8 compute kernels unroll powers of two only (1, 2, 4, 8, 16):
+    # head_dim 96 would otherwise ask for 3 groups and be refused at decode
+    # (Bugbot, #367); round down, then keep the count dividing head_dim
+    want = 1 << (want.bit_length() - 1)
     while head_dim % want:
         want //= 2
     if want <= 4:

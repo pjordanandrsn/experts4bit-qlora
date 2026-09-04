@@ -168,6 +168,10 @@ def test_auto_key_groups_keep_32_wide_at_small_heads():
     assert mod._auto_k_groups(64) == 2
     assert mod._auto_k_groups(32) == 1
     assert mod._auto_k_groups(128) == 4
+    # only counts the kernel unrolls: 96 // 32 = 3 rounds down to 2, 192 // 32 = 6 to 4
+    assert mod._auto_k_groups(96) == 2
+    assert mod._auto_k_groups(192) == 4
+    assert mod._auto_k_groups(80) == 2
     kv = mod.Fp8PagedKV(2, 8, 64, batch=1, max_tokens_per_seq=32, device="cpu")
     assert kv.kgs == [2, 2] and kv.k_groups == 2
     # round trip on the new default
