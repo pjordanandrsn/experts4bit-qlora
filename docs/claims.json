@@ -821,6 +821,186 @@
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
       "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.1805, int4exp=1.1690, calib=1.1916. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+    },
+    {
+      "id": "e4b.serve.buildout.qwen3.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 177.9 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue, the round-2 fold engaging on the unfused attention (#375)); NF4 baseline 98.0 tok/s on the same box.",
+      "value": 177.9,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b @0119cde (main + #375) + grouped-nf4-gemm kernel-integration; arms: b1_nf4=98.0, b1_all=156.0, b1_all_rope=177.9",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/qwen3_b1_all_rope.json",
+        "bench/hybrid-g9/throughput-20260904/bo3/logs/run_qwen3_ppl_all_rope.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "K8 2048 steps sha 9ef10d760ad9: nf4 1.86213, all 1.85053, all_rope 1.84944 (-0.081 ppl vs NF4, pass; -0.0011 nats vs all, inside the 0.0095-nat floor). The calibrated output head passes only inside this stack (allhead -0.020 ppl); alone it is +0.062 ppl and FAILS."
+    },
+    {
+      "id": "e4b.serve.buildout.granite.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 259.1 tok/s (NF4 experts + round-1/2 folds with the rotary-only fold (#379) + router epilogue); NF4 baseline 189.8 tok/s on the same box.",
+      "value": 259.1,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b @b5100d9 (#379) + grouped-nf4-gemm @7bf3458 (#330); arms: b1_nf4=189.8, b1_nf4_r1epi=227.3, b1_nf4_r12epi_old=233.6, b1_nf4_r12epi_new=259.1",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/granite_b1_nf4_r12epi_new.json",
+        "bench/hybrid-g9/throughput-20260904/bo3/logs/run_granite_ppl_nf4_r12epi_new.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "K8 2048 steps sha 5281b7c3df28: nf4 1.67407, nf4_r12epi_new 1.67767 (+0.019 ppl, pass). The int4-expert rows (int4exp +0.063 ppl, stack +0.056) FAIL the registered 0.05-ppl gate and are retracted as a parity claim (#381); the fold's own delta on the int4 stack is x1.156 (stackr2_old 3.19 ms -> stackr2_new 2.76 ms, control flat)."
+    },
+    {
+      "id": "e4b.serve.buildout.granite.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 1689.6 tok/s (NF4 experts + round-1/2 folds with the rotary-only fold (#379) + router epilogue); NF4 baseline 1436.2 tok/s on the same box.",
+      "value": 1689.6,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b @b5100d9 + grouped-nf4-gemm @7bf3458; arms: b16_nf4=1436.2, b16_nf4_r12epi_old=1603.6, b16_nf4_r12epi_new=1689.6",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/granite_b16_nf4_r12epi_new.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "Same window and gate as the B=1 claim; the int4-expert B=16 rows (2201-2869 tok/s) fail quality and are not licensed."
+    },
+    {
+      "id": "e4b.serve.buildout.gemma4.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of google/gemma-4-26B-A4B-it on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 121.1 tok/s (int4 experts + round-1 folds + router epilogue (round-2 refuses on Gemma-4's layer shape)); NF4 baseline 71.6 tok/s on the same box.",
+      "value": 121.1,
+      "unit": "tok/s",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-2/-3 (#369-#371); arms: b1_nf4=71.6, b1_int4exp=86.0, b1_stack=121.1, b1_best(+calib attn)=130.2, b1_bestdensehead(+calib dense MLP + head)=141.8",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/gemma4_b1_stack.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "NO quality instrument on this family (SERVING-PARITY: the same tokens move +-0.1-0.27 nats under arithmetically equivalent forwards); the quoted best is the arm with no calibrated pack. The calibrated attention (x1.075) and head (x1.078 on top) are measured speed with an unreadable K8; the dense MLP (#378) is x1.010."
+    },
+    {
+      "id": "e4b.serve.buildout.gemma4.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of google/gemma-4-26B-A4B-it on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 962.8 tok/s (int4 experts + round-1 folds + router epilogue); NF4 baseline 574.1 tok/s on the same box.",
+      "value": 962.8,
+      "unit": "tok/s",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; arms: b16_nf4=574.1, b16_int4exp=797.2, b16_stack=962.8, b16_best=960.7",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/gemma4_b16_stack.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "No quality instrument on this family; calibrated attention adds nothing at B=16 (960.7)."
+    },
+    {
+      "id": "e4b.serve.buildout.mixtral.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 110.0 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 48.0 tok/s on the same box.",
+      "value": 110.0,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; bo4 (320 GB box, same 5090 class); arms: b1_nf4=48.0, b1_int4exp=99.5, b1_stack=102.8, b1_all=110.0",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/mixtral_b1_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo3/logs/run_mixtral_ppl_all.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it."
+    },
+    {
+      "id": "e4b.serve.buildout.mixtral.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 373.4 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 186.7 tok/s on the same box.",
+      "value": 373.4,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; arms: b16_nf4=186.7, b16_int4exp=367.2, b16_stack=372.0, b16_all=373.4",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/mixtral_b16_all.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "Same window and gate as the B=1 claim."
+    },
+    {
+      "id": "e4b.serve.buildout.gptoss.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of openai/gpt-oss-20b on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 133.3 tok/s (NF4 experts + round-1/2 folds (no calibrated pack, no int4 experts)); NF4 baseline 123.2 tok/s on the same box.",
+      "value": 133.3,
+      "unit": "tok/s",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02) on an AMD EPYC 9755 host, Vast.ai instance 49817195; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; arms: b1_nf4=123.2, b1_r12=133.3, b1_r1epicalibhead(calib attn + head)=137.4, b1_int4exp=152.7 (FAILS: +0.63 nats), MXFP4 store + gemv_mxfp4_b32 (bo3n, gptoss_mx2_b1_gemv.json)=151.1",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo3/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo3/gptoss_b1_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo3/gptoss_mx2_b1_gemv.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P30-P32 sections)"
+      ],
+      "notes": "gpt-oss has no ppl instrument on raw text (ppl ~560, OOD-flattery regime: its NF4 arm scores better than bf16 upstream and every noisier arm scores 'better'); the folds' +0.049 nats is above the family's 0.0176-nat floor and cannot be read against the ppl budget. The native MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o) and ~10%/row from the NF4 path (NF4's own error); 151.1 tok/s is quoted as SPEED with the quality gate open, pending a KL against the model's own MXFP4 forward on harmony text."
     }
   ]
 }

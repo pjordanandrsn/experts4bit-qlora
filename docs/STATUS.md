@@ -76,7 +76,8 @@ about 100 tok/s on the NF4 baseline, 204.6 tok/s with calibrated int4
 attention and int4 experts, and about 1,238 tok/s aggregate at B=16.
 On the 2026-09-04 validation box the same stack went from 156.1 to
 177.9 tok/s at B=1 (×1.14) when 0.34.0's round-2 fold started engaging
-on the calibrated int4 attention it had silently skipped (#375).
+on the calibrated int4 attention it had silently skipped (#375) —
+measured, receipt in the bo3 bundle below.
 Those figures are **measured-private**. On the same box, vLLM is ahead by
 1.47× at B=1 and 1.55× at B=16 with identical prompts — that comparison
 is the honest one and it is also measured-private.
@@ -87,9 +88,10 @@ arm named — that list became the build-out, and 0.33.0 ships it. Table
 and receipt: [`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md).
 
 **One more family reaches the reference's ratio with the build-out,
-and one claimed to has been retracted** (0.33.0, **measured-private**
-until the validation lane's receipt lands in-repo; the numbers are on
-the merged PRs): Gemma-4-26B-A4B at 121 tok/s B=1 with int4 experts +
+and one claimed to has been retracted** (0.33.0; **measured** — the validation lane's full receipt, every run and
+its verdict in the gate's own units, is
+[`bench/hybrid-g9/throughput-20260904/bo3/`](../bench/hybrid-g9/throughput-20260904/bo3/README.md),
+and the licensed-best table is in [`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md)): Gemma-4-26B-A4B at 121 tok/s B=1 with int4 experts +
 round-1 norms + router epilogue (×1.69 over NF4; int4 experts alone
 ×1.20 B=1 / ×1.39 B=16; ×1.68 at B=16). Mixtral reaches ×2.14 (×2.29
 with calibrated attention). gpt-oss stays NF4-only: a uniform int4 grid
@@ -100,7 +102,8 @@ same window, over the registered 0.05-ppl gate (`k8_gate`, uncalibrated
 rule), and the 0.33.0 text quoted the row without applying that gate.
 The speed is real; the configuration is not licensed. Granite's licensed
 stack keeps NF4 experts (round-1 + round-2 folds + router epilogue) and
-its combined number is being measured.
+its combined number is 259.1 tok/s at B=1 (×1.37) and 1689.6 at B=16
+(×1.18), +0.019 ppl — measured, in the same receipt.
 
 ---
 

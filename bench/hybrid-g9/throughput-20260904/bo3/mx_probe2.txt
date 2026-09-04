@@ -1,0 +1,19 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+default --vram-gb = 1.2
+default --dram-gb = 6.0
+default --hot-rows = 64
+default --threads = 0
+[06:38:23]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[06:38:23]   quantized experts on 24/24 MoE layers (32 experts each)
+[06:38:23]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[06:38:24]   experts deferred to the arena: 24 module(s), 120 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[06:38:30]   hybrid tier active on 24 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+INT4EXP enabled: 24 layers (model_type=gpt_oss)
+hybrid tier on 24 layers; hook lanes: INT4EXP
+store kind: mxfp4 | nf4 stacks kept: True | gptoss flag: True | G (local experts): 32
+wrapper hot_ids = tensor([ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11])
+ROUTE nf4-path vs reference(ckpt ids): rel=0.11961
+ROUTE mxfp4-store vs reference(ckpt ids): rel=0.00490
+ROUTE mxfp4-store vs nf4-path:            rel=0.12258
+ROUTE nf4-path row -> best-matching checkpoint expert (local id, ckpt id, rel): [(3, 3, 0.10777221620082855), (7, 7, 0.11899358779191971), (3, 3, 0.15372435748577118), (0, 0, 0.14023859798908234), (11, 11, 0.1530502587556839), (5, 5, 0.10995777696371078), (7, 7, 0.12653961777687073), (1, 1, 0.1005634218454361)]
+ROUTE mxfp4-store row -> best-matching checkpoint expert: [(3, 3, 0.003924929536879063), (7, 7, 0.006224329583346844), (3, 3, 0.006444735452532768), (0, 0, 0.0053356061689555645), (11, 11, 0.006022680550813675), (5, 5, 0.0042385258711874485), (7, 7, 0.005764095578342676), (1, 1, 0.0037203507963567972)]
