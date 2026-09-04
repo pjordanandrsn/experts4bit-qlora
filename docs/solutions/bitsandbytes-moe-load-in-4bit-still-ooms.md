@@ -1,4 +1,5 @@
 # Why does `load_in_4bit` still OOM on a Mixture-of-Experts model?
+<!-- summary: bitsandbytes' 4-bit walker replaces only nn.Linear and skips a fused MoE's 3-D expert stacks, so load_moe_4bit_streaming quantises exactly those stacks and verify_moe_4bit proves it. -->
 
 Because bitsandbytes' 4-bit walker only replaces `nn.Linear`, and transformers v5 stores a MoE's experts as one fused 3-D `nn.Parameter` per layer, so the experts — most of the weights — are silently left in bf16. `experts4bit-qlora` quantises exactly that fused stack on the way to the GPU, and `verify_moe_4bit(model, strict=True)` proves it happened.
 
@@ -65,7 +66,7 @@ for stack in report["unquantized"]:
 
 - An unsupported `model_type` fails fast with a clear error; LongCat-Flash's identity experts are refused by name; `deepseek_v3` is blocked by stale remote code in the tiny checkpoint ([`../ARCHITECTURE_SUPPORT.md`](../ARCHITECTURE_SUPPORT.md)).
 - Detection in `verify_moe_4bit` is a heuristic: a module whose class name contains `Experts` holding a 3-D float parameter. A new family may need its class recognised.
-- 4-bit on a card that already fits the model is a memory trade, not a speed-up, and costs energy: claim `e4b.train.energy-honest`.
+- 4-bit on a card that already fits the model is a memory trade, not a speed-up. On the measured comparator — one OLMoE-dims expert projection on an RTX A2000, a bitsandbytes 0.50-dev fork build, dequantize-then-`linear` and the fork's `matmul_4bit` routing against native bf16 — it also cost energy: claim `e4b.train.energy-honest.scoped-a2000`, which scopes and supersedes `e4b.train.energy-honest`. That is one card and one development build; it is not a statement about bitsandbytes ≥ 0.50.0's direct packed-4-bit inference path for ordinary 2-D layers, nor about routed grouped MoE execution ([`../BITSANDBYTES.md`](../BITSANDBYTES.md)).
 - DeepSeek-V4's full-width resident load stacks one layer's experts in bf16 before quantising; use the arena path on a small card ([`../DEEPSEEK-V4.md`](../DEEPSEEK-V4.md)).
 - Gemma-4-26B-A4B fails to load on some rented hosts after the experts quantise — open, [#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344).
 - `python -m experts4bit_qlora.verify --manifest ...` is the placement-manifest verifier, not the model check; the model check is the Python function above.
@@ -83,4 +84,4 @@ Register: [`../claims.json`](../claims.json). Status words as in [`../STATUS.md`
 
 - `e4b.train.olmoe-fits` — measured: bf16 OLMoE-1B-7B OOMs a 12 GB card, 4-bit loads and trains; the loader never materialises bf16 under a container RAM cap.
 - `e4b.serve.gptoss.loader-faithful` — measured; the numeric receipt is in a private audit tree (`evidence_private`), the probe script is in-repo: gpt-oss MXFP4 dequant is bit-identical to the reference.
-- `e4b.train.energy-honest` — measured: storage-only 4-bit is an energy penalty when the model already fits.
+- `e4b.train.energy-honest.scoped-a2000` — measured: on the measured comparator (RTX A2000, bitsandbytes 0.50-dev fork build, one expert projection) 4-bit cost more energy than native bf16 when the model already fits, and the sign inverts when memory binds. Supersedes `e4b.train.energy-honest`, whose mechanism sentence was broader than the measurement.

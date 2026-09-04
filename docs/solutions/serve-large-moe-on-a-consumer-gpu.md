@@ -1,4 +1,5 @@
 # How do I serve a large MoE on a consumer GPU (RTX 5090 class)?
+<!-- summary: The paged decode runner with experts on grouped-nf4-gemm's kernels is the measured serving path on one RTX 5090 class; the HTTP shim is a separate reference-path deployment. -->
 
 Load the experts in 4-bit with `experts4bit-qlora`. Two serving surfaces exist and they are not the same path. The **measured decode path** is the paged runner (`PagedModelRunner`: paged fp8 KV cache and paged attention) with the experts on `grouped-nf4-gemm`'s kernels — NF4 experts on the grouped GEMM (`enable_fast(model)` is the library entry point for that kernel; the harness attaches it through its residency engines), int4-b32 experts through `enable_serve_experts_int4` — driven by the in-tree bench harness `bench/hybrid-g9/step_decomp.py`, which produced the throughput and parity claims on this page. The **HTTP shim** (`python -m experts4bit_qlora.serve`) is a reference-path deployment: it loads with `load_moe_4bit_streaming` (experts streamed from pinned host RAM by default), runs stock `model.generate`, hot-swaps per-expert LoRA adapters per request, and attaches a kernel-backed engine only under `E4B_RESIDENCY=pipelined`; it does not use the paged runner or `enable_fast`. The serving levers — NF4 experts, int4-b32 experts, calibrated int4 attention, fused glue rounds, the router epilogue and the paged fp8 KV cache — are opt-in, licensed per family by a registered quality gate, and measured per family under one protocol in [`../SERVING-THROUGHPUT.md`](../SERVING-THROUGHPUT.md). Every serving number in the register was measured on one rented RTX 5090 class; no smaller card carries a serving claim.
 
@@ -10,7 +11,7 @@ Load the experts in 4-bit with `experts4bit-qlora`. Two serving surfaces exist a
 
 ## Why it happens
 
-Single-stream decode is bandwidth-bound: each token reads the routed experts plus the unquantised attention and output head. The stock 4-bit path decodes NF4 to bf16 and reads it again, several launches per active expert. Fusing the decode into the GEMM removes the round trip; quantising attention and the KV cache removes more bytes; folding norm, residual, rotary and router glue removes launches.
+Single-stream decode is bandwidth-bound: each token reads the routed experts plus the unquantised attention and output head. Which 4-bit path the experts take decides how many bytes and launches that costs. The reference per-expert path — and bitsandbytes' dequantize-then-matmul route, which is what releases before 0.50.0 and any unsupported cell use — decodes NF4 to bf16 and reads it again, several launches per active expert. bitsandbytes ≥ 0.50.0 CUDA inference can consume packed 4-bit weights directly for a supported ordinary 2-D matrix, but that is a per-`Linear` contract; a routed MoE stack — many expert matrices, variable group sizes, one launch — is a separate contract, and it is the one `grouped-nf4-gemm` supplies ([`../BITSANDBYTES.md`](../BITSANDBYTES.md)). Fusing the decode into the grouped GEMM removes the round trip; quantising attention and the KV cache removes more bytes; folding norm, residual, rotary and router glue removes launches.
 
 ## Which project solves it
 
@@ -31,8 +32,8 @@ The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the i
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[fast]"    # grouped-nf4-gemm: kernels, paged attention, glue
-pip install "experts4bit-qlora[serve]"   # FastAPI shim
+pip install "experts4bit-qlora[fast]"    # library fast path: grouped-nf4-gemm's kernels, paged attention, glue
+pip install "experts4bit-qlora[serve]"   # HTTP shim (optional): the FastAPI reference-path deployment
 ```
 
 ## Smallest correct example

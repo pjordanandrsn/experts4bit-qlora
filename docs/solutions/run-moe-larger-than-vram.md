@@ -1,6 +1,34 @@
 # How can I run a Mixture-of-Experts model larger than my GPU's VRAM?
+<!-- summary: Choose a residency path by workload and by the memory tier that ran out: pinned-host expert streaming, dense offload, profiled hot residency, or an NVMe arena. -->
+
+**This is the decision page**: choose by workload and by the memory tier that ran out. Model-level integration — the loaders and the `experts4bit-qlora` engines that bind pinned host RAM or an NVMe arena to a real model — is [`offload-moe-experts-to-cpu-or-nvme.md`](offload-moe-experts-to-cpu-or-nvme.md); the arena bake, reader and tier primitives themselves are the kernel package's page, [stream-moe-experts-from-host-or-nvme.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md).
 
 Start from what ran out. If the 4-bit experts exceed VRAM, `load_moe_4bit_streaming(..., offload=True)` homes them in pinned host RAM and streams one layer at a time; if the dense side does not fit, `enable_dense_offload`; if the experts do not fit host RAM either, an NVMe arena; if you have spare VRAM to trade at serve time, `enable_pipelined_residency` with hot sets chosen from a routing profile.
+
+Four things to hold before choosing. **Fitting is not a speed claim.** **Layer-granular host streaming is the capacity floor** — it is what makes the model run at all. **Profiled or paged residency is the serving-performance path.** **Absolute throughput is host-specific**: only ratios travel between hosts (claim `e4b.host.ratios-travel-absolutes-do-not`).
+
+## First choose the workload
+
+| workload | start with | escalate to |
+|---|---|---|
+| QLoRA training | pinned-host 4-bit expert streaming (`offload=True`; `OFFLOAD_EXPERTS=1` in the trainer) | NVMe training residency (`enable_nvme_train_residency`) when host RAM also runs out |
+| Serving / generation | streaming, or profiled residency (`hot_sets_from_profile` + `enable_pipelined_residency`) | the NVMe arena (`enable_nvme_residency`, `enable_mxfp4_nvme_residency`) when the expert store exceeds host RAM |
+
+## What fits, from the register
+
+Training and serving are different workloads measured on different hardware; the two examples below share nothing but the register, and neither implies a throughput.
+
+- **Training** — claim `e4b.offload.fits-30b-class` (measured): with `OFFLOAD_EXPERTS=1`, Qwen3-30B-A3B peaks at 7.16 GB of GPU memory during a QLoRA step and Gemma-4-26B-A4B at 8.47 GB; both OOM without offload on the 12 GB card. Fit, not speed.
+- **Serving** — claim `e4b.serve.deepseek-v4` (measured): DeepSeek-V4-Flash, 284B parameters, loads in about 10 s at 8.74 GiB peak VRAM and generates with its 147 GB expert arena served from disk. Fit, not speed: that path's decode rate is a property of the host link and is not quoted here.
+
+```text
+VRAM overflow
+  -> experts:       pinned-host expert streaming
+  -> dense side:    dense offload
+  -> spare VRAM:    profile-ranked hot residency
+Host-RAM overflow
+  -> expert store:  NVMe arena -> serving residency / training residency + checkpointing
+```
 
 ## Symptoms
 
@@ -29,8 +57,8 @@ A MoE's weights are mostly experts, and each token touches only its top-k of the
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[train]"   # loader + host-RAM offload; no kernel package needed
-pip install "experts4bit-qlora[fast]"    # + grouped-nf4-gemm for residency engines and NVMe arenas
+pip install "experts4bit-qlora[train]"   # host-RAM training route: loader + pinned-host expert streaming; no kernel package needed
+pip install "experts4bit-qlora[fast]"    # residency/NVMe/fast-kernel route: + grouped-nf4-gemm for the residency engines and NVMe arenas
 ```
 
 ## Smallest correct example
@@ -70,9 +98,14 @@ Or from the CLI: `OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora
 - `enable_hot_residency` is deprecated in favour of `enable_pipelined_residency`.
 - Absolutes are host-specific; only ratios travel (claim `e4b.host.ratios-travel-absolutes-do-not`).
 
+## Use this page when…
+
+- **you are choosing** a path by workload and by the memory tier that ran out — this page, the decision/router page.
+- **you are wiring a model** — `load_moe_4bit_streaming(..., offload=True)`, the arena loader (`arena=`, `arena_train=True`), `enable_nvme_residency` / `enable_mxfp4_nvme_residency` / `enable_nvme_train_residency` — [`offload-moe-experts-to-cpu-or-nvme.md`](offload-moe-experts-to-cpu-or-nvme.md), the model-level integration page.
+- **you are baking, reading or sizing the tier itself** — `nvme_bake_nf4`, `bake_expert_tensors`, the reader, `ColdTier`, `capacity_for_bytes` — the kernel package's [stream-moe-experts-from-host-or-nvme.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/solutions/stream-moe-experts-from-host-or-nvme.md).
+
 ## Related
 
-- [`offload-moe-experts-to-cpu-or-nvme.md`](offload-moe-experts-to-cpu-or-nvme.md) — the host-RAM and NVMe arena details.
 - [`qlora-fused-moe-experts.md`](qlora-fused-moe-experts.md) — training on the offloaded experts.
 - [`serve-large-moe-on-a-consumer-gpu.md`](serve-large-moe-on-a-consumer-gpu.md) — the paged serving engine.
 - [`../CHOOSING.md`](../CHOOSING.md) · [`../RESIDENCY-ENGINES.md`](../RESIDENCY-ENGINES.md) · [`../STATUS.md`](../STATUS.md)

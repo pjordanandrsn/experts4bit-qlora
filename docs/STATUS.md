@@ -105,6 +105,36 @@ stack keeps NF4 experts (round-1 + round-2 folds + router epilogue) and
 its combined number is 259.1 tok/s at B=1 (×1.37) and 1689.6 at B=16
 (×1.18), +0.019 ppl — measured, in the same receipt.
 
+**The second text (2026-09-04, lane bo5; measured — receipt
+[`bench/hybrid-g9/throughput-20260904/bo5/`](../bench/hybrid-g9/throughput-20260904/bo5/README.md),
+table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md)).**
+The registered K8 gate is in perplexity: an uncalibrated arm |Δppl| ≤ 0.05
+on every text, a calibrated pack ≤ +0.05 on every text with an improvement
+claimable only when it holds with the same sign on two; nats are quoted
+beside the verdict and never change it. bo3 had scored one text; bo5 scored
+C4 validation on one box (49841214, the same 5090 class) for every
+calibrated pack bo3 left at "one text", and **every one FAILS as
+registered**: Qwen3's `all` stack +0.063 ppl (+0.0038 nats — every
+attribution arm on that text is inside the family's 0.0095-nat floor and
+the exact folds alone read −0.073, so the reading is noise, not a component;
+the verdict is not retuned), Mixtral's `all` +0.116 ppl, and Granite's
+C4-calibrated int4 experts (e4b#384, draft) +0.387 ppl at 10× the floor —
+that route is refused. Mixtral's *uncalibrated* int4-expert stack — called
+licensed in P30 and bo3 on wikitext (−0.046 ppl there) — fails the second
+text by 0.008 (+0.058 ppl, +0.0070 nats; this family's floor is
+unmeasured), so that label is **withdrawn** under the rule as written,
+pending a decision on re-registering the gate in nats against a measured
+floor. Licensed and re-measured on the bo5 box: Granite's NF4 stack
+294.1 tok/s B=1 / 1736.1 B=16; gpt-oss's MXFP4 store under the route rule
+(GEMV for single rows, NF4 kept for batched rows) 173.3 (×1.270) / 719.7
+(×0.971 — the ×0.81 B=16 penalty is recovered), quality gate open on that
+family as before. Measured speed of configurations NOT licensed under the
+registered rule: Qwen3 `all` 204.1 / 1251.6 (with #385's glue, ×1.057 at
+B=1 on that box), Mixtral `all` 123.3 / 377.3, Mixtral's int4-expert stack
+112.0 / 376.5. #387's fused q/k/v is quality-clean (−0.0011 nats on
+Granite, +0.0002 on Mixtral) and buys nothing (Granite ×0.968 B=1, Mixtral
+×1.032) — it stays a draft.
+
 ---
 
 ## What changed — retired, superseded, corrected
@@ -147,6 +177,22 @@ its combined number is 259.1 tok/s at B=1 (×1.37) and 1689.6 at B=16
   windows and a three-forward test in plain transformers show the model
   has no reference at that resolution (above). What survives is the
   fp8 share, 0.046 nats. [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) stays open, re-scoped.
+- **"4-bit on a card that already fits is a 1.2–2.3× energy penalty:
+  NF4 is storage-only and the GEMM runs in bf16 either way" —
+  SUPERSEDED, number unchanged** (2026-09-04). The measurement stands as
+  its receipt made it — one OLMoE-dims expert projection on an RTX A2000,
+  dequantize-then-`linear` and a bitsandbytes 0.50-dev fork build's
+  `matmul_4bit` routing against native bf16 — and is re-registered with
+  that comparator and version named as `e4b.train.energy-honest.scoped-a2000`
+  (`e4b.train.energy-honest` is `superseded`, pointing at it). What is
+  withdrawn is the mechanism sentence as a universal: bitsandbytes ≥ 0.50.0
+  CUDA inference can consume packed 4-bit weights directly for supported
+  ordinary 2-D cells, routed grouped MoE execution is a separate contract,
+  and training's input gradient is separate again
+  ([`BITSANDBYTES.md`](BITSANDBYTES.md)). The receipt names its build only
+  as "0.50.0.dev0 / the fork", so which path its 4-bit arm exercised is not
+  recoverable from it — remeasure with a recorded version:
+  [#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392).
 - **The 13.47× training speedup is ~7.2× against a current baseline.**
   transformers v5 fused the per-expert loop upstream, moving the baseline
   from 50.86 to 26.6 s/step. The grouped arm did not regress. Roughly
@@ -171,6 +217,12 @@ its combined number is 259.1 tok/s at B=1 (×1.37) and 1689.6 at B=16
   kernel.
 - **#341 — a flaky end-to-end KV test** (unseeded inputs, an f32-mode
   tolerance applied to the fp8 default on sm_120).
+- **[#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392) —
+  the energy receipt does not record its bitsandbytes build.**
+  `docs/METHODOLOGY.md` names the build only as `0.50.0.dev0` (§1) and
+  "the fork (bnb 0.50-dev)" (the packaging note covering §9–§10), with no
+  commit; the harness prints the GPU name, not `bitsandbytes.__version__`. Until it is rerun on a recorded release,
+  `e4b.train.energy-honest.scoped-a2000` is a one-card, one-build number.
 - **No shipped tool bakes the arena.** Reproducing the training receipt
   from published artifacts still needs a quantise-and-emit step you write
   yourself.

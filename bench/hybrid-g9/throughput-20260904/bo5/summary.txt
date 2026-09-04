@@ -1,0 +1,56 @@
+SUMMARY run_granite_ppl_calibexp_r12epi.log K8_PPL steps=2048 nll=1.67567 ppl=5.34235 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_calibexp_r12epi.json
+SUMMARY run_granite_ppl_calibexp_r12epi_c4val.log K8_PPL steps=2048 nll=2.48148 ppl=11.95897 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_calibexp_r12epi_c4val.json
+SUMMARY run_granite_ppl_nf4_r12epi.log K8_PPL steps=2048 nll=1.67304 ppl=5.32834 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi.json
+SUMMARY run_granite_ppl_nf4_r12epi_c4val.log K8_PPL steps=2048 nll=2.44857 ppl=11.57180 compute=f32 sha=549ca209af16 out=/root/bo5/granite_ppl_nf4_r12epi_c4val.json
+SUMMARY run_granite_ppl_nf4_r12epi_fq.log K8_PPL steps=2048 nll=1.67304 ppl=5.32834 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi_fq.json
+SUMMARY run_granite_ppl_nf4_r12epi_fq2.log K8_PPL steps=2048 nll=1.67198 ppl=5.32270 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_nf4_r12epi_fq2.json
+SUMMARY run_granite_ppl_rtnexp_r12epi.log K8_PPL steps=2048 nll=1.68487 ppl=5.39176 compute=f32 sha=5281b7c3df28 out=/root/bo5/granite_ppl_rtnexp_r12epi.json
+SUMMARY run_mixtral_ppl_all.log K8_PPL steps=2048 nll=1.19051 ppl=3.28876 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_all.json
+SUMMARY run_mixtral_ppl_all_c4val.log K8_PPL steps=2048 nll=2.12424 ppl=8.36651 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_all_c4val.json
+SUMMARY run_mixtral_ppl_all_fq.log K8_PPL steps=2048 nll=1.19051 ppl=3.28876 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_all_fq.json
+SUMMARY run_mixtral_ppl_lic.log K8_PPL steps=2048 nll=1.16684 ppl=3.21181 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_lic.json
+SUMMARY run_mixtral_ppl_lic_c4val.log K8_PPL steps=2048 nll=2.11726 ppl=8.30834 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_lic_c4val.json
+SUMMARY run_mixtral_ppl_lic_fq.log K8_PPL steps=2048 nll=1.16702 ppl=3.21239 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_lic_fq.json
+SUMMARY run_mixtral_ppl_nf4_c4val.log K8_PPL steps=2048 nll=2.11031 ppl=8.25079 compute=fp8 sha=061534dadd4d out=/root/bo5/mixtral_ppl_nf4_c4val.json
+SUMMARY run_mixtral_ppl_nf4_i7.log K8_PPL steps=2048 nll=1.18105 ppl=3.25778 compute=fp8 sha=31fd7d408809 out=/root/bo5/mixtral_ppl_nf4_i7.json
+SUMMARY run_qwen3_ppl_all.log K8_PPL steps=2048 nll=1.84571 ppl=6.33260 compute=fp8 sha=9ef10d760ad9 out=/root/bo5/qwen3_ppl_all.json
+SUMMARY run_qwen3_ppl_all_c4val.log K8_PPL steps=2048 nll=2.81299 ppl=16.65973 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_all_c4val.json
+SUMMARY run_qwen3_ppl_calib_c4val.log K8_PPL steps=2048 nll=2.81209 ppl=16.64462 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_calib_c4val.json
+SUMMARY run_qwen3_ppl_folds_c4val.log K8_PPL steps=2048 nll=2.80482 ppl=16.52406 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_folds_c4val.json
+SUMMARY run_qwen3_ppl_int4exp_c4val.log K8_PPL steps=2048 nll=2.81349 ppl=16.66793 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_int4exp_c4val.json
+SUMMARY run_qwen3_ppl_int4folds_c4val.log K8_PPL steps=2048 nll=2.80812 ppl=16.57874 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_int4folds_c4val.json
+SUMMARY run_qwen3_ppl_nf4_c4val.log K8_PPL steps=2048 nll=2.80923 ppl=16.59705 compute=fp8 sha=4bcb55179b96 out=/root/bo5/qwen3_ppl_nf4_c4val.json
+SUMMARY run_gptoss_b1_r12.log B1D_TIMED_GRAPH steps=127 step=7.33ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_r12.json
+SUMMARY run_gptoss_b1_store_r12.log B1D_TIMED_GRAPH steps=127 step=5.77ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_store_r12.json
+SUMMARY run_gptoss_b1_store_r12_cen.log B1D_TIMED_GRAPH steps=127 step=5.77ms compile=None recompiles=0 out=/root/bo5/gptoss_b1_store_r12_cen.json
+SUMMARY run_granite_b1_calibexp_r12epi.log B1D_TIMED_GRAPH steps=127 step=2.44ms compile=None recompiles=0 out=/root/bo5/granite_b1_calibexp_r12epi.json
+SUMMARY run_granite_b1_nf4_r12epi.log B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi.json
+SUMMARY run_granite_b1_nf4_r12epi_fq.log B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq.json
+SUMMARY run_granite_b1_nf4_r12epi_fq2.log B1D_TIMED_GRAPH steps=127 step=3.49ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq2.json
+SUMMARY run_granite_b1_nf4_r12epi_fq2_cen.log B1D_TIMED_GRAPH steps=127 step=3.50ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq2_cen.json
+SUMMARY run_granite_b1_nf4_r12epi_fq2b.log B1D_TIMED_GRAPH steps=127 step=3.50ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_fq2b.json
+SUMMARY run_granite_b1_nf4_r12epi_i7.log B1D_TIMED_GRAPH steps=127 step=3.38ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_i7.json
+SUMMARY run_granite_b1_nf4_r12epi_i7_cen.log B1D_TIMED_GRAPH steps=127 step=3.40ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_i7_cen.json
+SUMMARY run_granite_b1_nf4_r12epi_i7b.log B1D_TIMED_GRAPH steps=127 step=3.48ms compile=None recompiles=0 out=/root/bo5/granite_b1_nf4_r12epi_i7b.json
+SUMMARY run_mixtral_b1_all.log B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all.json
+SUMMARY run_mixtral_b1_all_fq.log B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_fq.json
+SUMMARY run_mixtral_b1_all_i7.log B1D_TIMED_GRAPH steps=127 step=8.11ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_i7.json
+SUMMARY run_mixtral_b1_all_nor2.log B1D_TIMED_GRAPH steps=127 step=8.61ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_all_nor2.json
+SUMMARY run_mixtral_b1_lic.log B1D_TIMED_GRAPH steps=127 step=8.93ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_lic.json
+SUMMARY run_mixtral_b1_lic_fq.log B1D_TIMED_GRAPH steps=127 step=8.65ms compile=None recompiles=0 out=/root/bo5/mixtral_b1_lic_fq.json
+SUMMARY run_qwen3_b1_all.log B1D_TIMED_GRAPH steps=127 step=4.90ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all.json
+SUMMARY run_qwen3_b1_all_cen.log B1D_TIMED_GRAPH steps=127 step=4.89ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_cen.json
+SUMMARY run_qwen3_b1_all_noglue.log B1D_TIMED_GRAPH steps=127 step=5.18ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_noglue.json
+SUMMARY run_qwen3_b1_all_noglue_cen.log B1D_TIMED_GRAPH steps=127 step=5.18ms compile=None recompiles=0 out=/root/bo5/qwen3_b1_all_noglue_cen.json
+SUMMARY run_gptoss_b16_r12.log BV3_GRAPH batch=16 steps=70 step=21.58ms agg=741.4tok/s recompiles=0 out=/root/bo5/gptoss_b16_r12.json
+SUMMARY run_gptoss_b16_store_r12.log BV3_GRAPH batch=16 steps=70 step=22.23ms agg=719.7tok/s recompiles=0 out=/root/bo5/gptoss_b16_store_r12.json
+SUMMARY run_granite_b16_calibexp_r12epi.log BV3_GRAPH batch=16 steps=70 step=5.25ms agg=3050.1tok/s recompiles=0 out=/root/bo5/granite_b16_calibexp_r12epi.json
+SUMMARY run_granite_b16_nf4_r12epi.log BV3_GRAPH batch=16 steps=70 step=9.22ms agg=1736.1tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi.json
+SUMMARY run_granite_b16_nf4_r12epi_fq2.log BV3_GRAPH batch=16 steps=70 step=9.15ms agg=1748.4tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi_fq2.json
+SUMMARY run_granite_b16_nf4_r12epi_i7.log BV3_GRAPH batch=16 steps=70 step=9.28ms agg=1724.6tok/s recompiles=0 out=/root/bo5/granite_b16_nf4_r12epi_i7.json
+SUMMARY run_mixtral_b16_all.log BV3_GRAPH batch=16 steps=70 step=42.40ms agg=377.3tok/s recompiles=0 out=/root/bo5/mixtral_b16_all.json
+SUMMARY run_mixtral_b16_all_fq.log BV3_GRAPH batch=16 steps=70 step=42.43ms agg=377.1tok/s recompiles=0 out=/root/bo5/mixtral_b16_all_fq.json
+SUMMARY run_mixtral_b16_all_nor2.log BV3_GRAPH batch=16 steps=70 step=42.73ms agg=374.5tok/s recompiles=0 out=/root/bo5/mixtral_b16_all_nor2.json
+SUMMARY run_mixtral_b16_lic.log BV3_GRAPH batch=16 steps=70 step=42.50ms agg=376.5tok/s recompiles=0 out=/root/bo5/mixtral_b16_lic.json
+SUMMARY run_mixtral_b16_lic_fq.log BV3_GRAPH batch=16 steps=70 step=42.29ms agg=378.3tok/s recompiles=0 out=/root/bo5/mixtral_b16_lic_fq.json
+SUMMARY run_qwen3_b16_all.log BV3_GRAPH batch=16 steps=70 step=12.78ms agg=1251.6tok/s recompiles=0 out=/root/bo5/qwen3_b16_all.json
