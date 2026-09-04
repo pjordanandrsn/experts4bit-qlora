@@ -1,0 +1,2 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03
+Model name:                              AMD Ryzen 9 9900X 12-Core Processor
