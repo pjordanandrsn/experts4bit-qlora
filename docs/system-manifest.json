@@ -1,0 +1,105 @@
+{
+  "$comment": "Cross-repository system manifest. One system, two independently released packages. This file is byte-identical in pjordanandrsn/experts4bit-qlora and pjordanandrsn/grouped-nf4-gemm; scripts/check_system_manifest.py validates it against the local pyproject.toml and docs/claims.json, and against the sibling repository when its path is given. Values that pyproject.toml carries (names, versions, floors) are validated, never trusted from here. The umbrella name is still under consideration; no package or repository is renamed by this file.",
+  "schema_version": "1.0",
+  "system": {
+    "name": "experts4bit-qlora + grouped-nf4-gemm",
+    "umbrella_name": null,
+    "umbrella_name_status": "under consideration; naming migration is out of scope",
+    "relationship": "one system, two independently released packages: the runtime package depends on the kernel package through its optional `fast` extra; the kernel package never depends on the runtime package",
+    "dependency_direction": ["experts4bit-qlora -> grouped-nf4-gemm"]
+  },
+  "packages": {
+    "runtime": {
+      "package": "experts4bit-qlora",
+      "import_names": ["experts4bit_qlora"],
+      "repository": "https://github.com/pjordanandrsn/experts4bit-qlora",
+      "pypi": "https://pypi.org/project/experts4bit-qlora/",
+      "aliases_lookup_only": ["e4b", "e4b-qlora", "experts4bit", "expertsnbit", "experts-mxfp4"],
+      "owns": [
+        "model loading (streaming loader, fused expert stacks, Experts4bit/ExpertsNbit bases)",
+        "quantization orchestration (NF4/MXFP4 routes, int4 expert store, calibration drivers)",
+        "adapters (ExpertsLoRA)",
+        "training (trainer, fast/batched/hybrid paths, checkpointing)",
+        "residency integration (host-RAM and NVMe engines bound to a loaded model)",
+        "serving (paged runner, decode stack, HTTP shim)",
+        "model-level measurement, quality gates and the claims register for model-level numbers"
+      ]
+    },
+    "kernels": {
+      "package": "grouped-nf4-gemm",
+      "import_names": ["nf4_grouped", "mxfp4_grouped", "int4_b32", "fp8_paged_attn", "fp8_kv", "nvme_arena", "nvme_reader", "nvme_residency", "nvme_bake_nf4", "mxfp4_loader", "gptq_pack", "nf4_pack_ref", "mxfp4_pack_ref", "verify_provenance"],
+      "repository": "https://github.com/pjordanandrsn/grouped-nf4-gemm",
+      "pypi": "https://pypi.org/project/grouped-nf4-gemm/",
+      "aliases_lookup_only": ["nf4gemm", "gnf4", "grouped-mxfp4-gemm"],
+      "owns": [
+        "grouped packed GEMM (NF4 and native MXFP4) and its dgrad",
+        "decode GEMV (int4-b32, MXFP4) and split-K reduce",
+        "FP8 paged attention and the fp8 KV appends",
+        "decode glue kernels (rope, norm and residual folds, swiglu, combine)",
+        "pack and pure-torch reference operations, GPTQ packing, provenance verification",
+        "host/NVMe primitives (arena, reader, row tier, bake, residency primitives)",
+        "kernel-level measurement and the claims register for kernel-level numbers"
+      ]
+    }
+  },
+  "capability_ownership": {
+    "runtime": ["quantize-fused-moe-experts", "qlora-fused-moe-experts", "run-moe-larger-than-vram", "offload-moe-experts-to-cpu-or-nvme", "serve-moe-on-consumer-gpu", "mxfp4-moe-training-and-residency"],
+    "kernels": ["grouped-nf4-gemm", "native-mxfp4-moe-inference", "int4-decode-gemv", "fp8-paged-attention-fp8-compute", "fp8-paged-attention-f32-compute", "decode-glue-kernels", "stream-experts-from-host-or-nvme", "verify-checkpoint-provenance"]
+  },
+  "compatibility": [
+    {
+      "consumer": "experts4bit-qlora",
+      "consumer_versions": ">=0.35.0",
+      "kernel": "grouped-nf4-gemm",
+      "floor": ">=0.30.0",
+      "extra": "fast",
+      "since": "2026-09-04",
+      "why": "combine_rows (grouped-nf4-gemm#335) with the swiglu_rows / reduce_partials decode glue that experts4bit-qlora#385 integrates, and gptq_pack for the calibrated int4 expert store (experts4bit-qlora#384)",
+      "consumer_ci_pin": "the consumer's CI installs the kernel package from the git commit of the v0.30.0 release"
+    },
+    {
+      "consumer": "experts4bit-qlora",
+      "consumer_versions": "0.34.x",
+      "kernel": "grouped-nf4-gemm",
+      "floor": ">=0.28.0",
+      "extra": "fast",
+      "since": "2026-09-04",
+      "why": "rope_heads (the rotary-only fold for attention without a head norm, grouped-nf4-gemm#330) and gemv_mxfp4_b32 (the decode-grade MXFP4 GEMV)"
+    }
+  ],
+  "compatibility_note": "The current floor is the one whose consumer_versions range contains the consumer's pyproject version; scripts/check_system_manifest.py asserts it equals the `fast` extra in pyproject.toml. Older floors are in the pyproject comments and the changelog; historical receipts may name older versions and are never rewritten.",
+  "evidence_vocabulary": {
+    "confirmed": "a public receipt plus an independent confirmation cell (kernel register)",
+    "verified": "a public receipt plus an independent check (runtime register)",
+    "measured": "the run happened and the receipt is public in the repository",
+    "measured-private": "the run happened and the receipt lives outside the repository; NOT publicly reproducible from the repository alone",
+    "projected": "arithmetic from measured inputs, not a run",
+    "open": "a statement the documents make that has no evidence either way yet; it backs no capability",
+    "superseded": "replaced by a later claim that names it; kept as the record, never current",
+    "retired": "withdrawn; kept as the record, never current"
+  },
+  "authority": {
+    "current_numbers": "docs/claims.json in the repository that owns the number",
+    "current_position": "docs/STATUS.md",
+    "current_support": "docs/capabilities.json (status per row) with docs/STATUS.md",
+    "dependency_floors": "pyproject.toml (validated by scripts/check_system_manifest.py and scripts/check_dependency_floor.py)",
+    "historical_records": "documents with a sibling .ots file or an ots-attestation-footer marker are never edited in place"
+  },
+  "invariants": [
+    {"id": "no-silent-fallback", "statement": "an accelerated path never falls back silently: every enable_* returns a count or a handle to assert on, and a documented example asserts it", "checked_by": "examples and tests in both repositories"},
+    {"id": "claims-own-numbers", "statement": "docs/claims.json is authoritative for whether a numerical claim is current; prose quotes claim IDs", "checked_by": "scripts/check_capabilities.py, the site's provenance checks"},
+    {"id": "status-owns-position", "statement": "docs/STATUS.md is authoritative for the current position of a project", "checked_by": "review"},
+    {"id": "kernel-first", "statement": "a kernel capability lands and is released in grouped-nf4-gemm before experts4bit-qlora raises its `fast` floor to require it", "checked_by": "scripts/check_system_manifest.py (floor <= the kernel's released version) and the consumer CI pin"},
+    {"id": "measured-private-is-not-public", "statement": "measured-private is not equivalent to publicly reproducible measured evidence and is always labelled", "checked_by": "scripts/build_llms_bundle.py (status printed per claim), the site's tier labels"},
+    {"id": "green-skip-is-not-evidence", "statement": "a green CI run whose GPU suites skipped proves nothing about the GPU path; the import tripwire and the lane tripwires exist for this", "checked_by": "CI import tripwire; lane tripwires"},
+    {"id": "floor-is-not-budget", "statement": "an arithmetic-order noise floor is quoted beside a quality verdict, never used as the budget; the registered gate is applied in its own units", "checked_by": "the K8 gate (experts4bit_qlora/k8_gate.py) and receipts"},
+    {"id": "failed-gates-stay-failed", "statement": "a failed quality gate is recorded as FAIL and never normalised away by retuning the gate to fit", "checked_by": "review; docs/STATUS.md corrections"}
+  ],
+  "router": {
+    "model, training, serving or fit problem": "experts4bit-qlora",
+    "packed layout, kernel, GEMM/GEMV, attention or arena primitive": "grouped-nf4-gemm",
+    "a current number": "docs/claims.json",
+    "current support or status": "docs/STATUS.md + docs/capabilities.json",
+    "changing public behaviour": "AGENTS.md, 'When you change something'"
+  }
+}
