@@ -1,0 +1,26 @@
+TP qwen3 ppl_nf4=1.8621 ppl_int4exp=1.8578 ppl_calib=1.8448 b1_nf4=97.4 b1_int4exp=116.3 b1_calib=112.0 b1_fused=154.9 b1_nf4fused=127.5 b16_nf4=482.8 b16_int4exp=943.9
+TPLINE qwen3 B1D_TIMED_GRAPH steps=127 step=8.93ms compile=None recompiles=0 out=/root/tpB/qwen3_b1_calib.json
+TPLINE qwen3 B1D_TIMED_GRAPH steps=127 step=6.45ms compile=None recompiles=0 out=/root/tpB/qwen3_b1_fused.json
+TPLINE qwen3 B1D_TIMED_GRAPH steps=127 step=8.60ms compile=None recompiles=0 out=/root/tpB/qwen3_b1_int4exp.json
+TPLINE qwen3 B1D_TIMED_GRAPH steps=127 step=10.27ms compile=None recompiles=0 out=/root/tpB/qwen3_b1_nf4.json
+TPLINE qwen3 B1D_TIMED_GRAPH steps=127 step=7.84ms compile=None recompiles=0 out=/root/tpB/qwen3_b1_nf4fused.json
+TPLINE qwen3 BV3_GRAPH batch=16 steps=70 step=16.95ms agg=943.9tok/s recompiles=0 out=/root/tpB/qwen3_b16_int4exp.json
+TPLINE qwen3 BV3_GRAPH batch=16 steps=70 step=33.14ms agg=482.8tok/s recompiles=0 out=/root/tpB/qwen3_b16_nf4.json
+gemma4/ppl_int4exp FAIL
+gemma4/ppl_calib FAIL
+gemma4/b1_int4exp FAIL
+gemma4/b1_calib FAIL
+gemma4/b1_fused FAIL
+gemma4/b1_nf4fused FAIL
+gemma4/b16_int4exp FAIL
+TP gemma4 ppl_nf4=4.8103 ppl_int4exp=-- ppl_calib=-- b1_nf4=71.1 b1_int4exp=-- b1_calib=-- b1_fused=-- b1_nf4fused=-- b16_nf4=571.9 b16_int4exp=--
+TPLINE gemma4 B1D_TIMED_GRAPH steps=127 step=14.07ms compile=None recompiles=0 out=/root/tpB/gemma4_b1_nf4.json
+TPLINE gemma4 BV3_GRAPH batch=16 steps=70 step=27.98ms agg=571.9tok/s recompiles=0 out=/root/tpB/gemma4_b16_nf4.json
+mixtral/b1_fused FAIL
+mixtral/b1_nf4fused FAIL
+TP mixtral ppl_nf4=1.1805 ppl_int4exp=1.1690 ppl_calib=1.1916 b1_nf4=47.6 b1_int4exp=99.2 b1_calib=106.7 b1_fused=-- b1_nf4fused=-- b16_nf4=185.7 b16_int4exp=370.8
+TPLINE mixtral B1D_TIMED_GRAPH steps=127 step=9.37ms compile=None recompiles=0 out=/root/tpB/mixtral_b1_calib.json
+TPLINE mixtral B1D_TIMED_GRAPH steps=127 step=10.08ms compile=None recompiles=0 out=/root/tpB/mixtral_b1_int4exp.json
+TPLINE mixtral B1D_TIMED_GRAPH steps=127 step=21.01ms compile=None recompiles=0 out=/root/tpB/mixtral_b1_nf4.json
+TPLINE mixtral BV3_GRAPH batch=16 steps=70 step=43.15ms agg=370.8tok/s recompiles=0 out=/root/tpB/mixtral_b16_int4exp.json
+TPLINE mixtral BV3_GRAPH batch=16 steps=70 step=86.14ms agg=185.7tok/s recompiles=0 out=/root/tpB/mixtral_b16_nf4.json
