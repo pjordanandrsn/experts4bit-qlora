@@ -78,6 +78,11 @@ Those figures are **measured-private**. On the same box, vLLM is ahead by
 1.47× at B=1 and 1.55× at B=16 with identical prompts — that comparison
 is the honest one and it is also measured-private.
 
+**Per-family throughput is now measured in-repo** (2026-09-04): six
+families under one protocol on one rented 5090 class, with every refused
+arm named — that list is the build-out under review. Table and receipt:
+[`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md).
+
 ---
 
 ## What changed — retired, superseded, corrected
