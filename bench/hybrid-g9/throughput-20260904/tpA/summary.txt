@@ -1,0 +1,26 @@
+TP olmoe ppl_nf4=1.9380 ppl_int4exp=1.9337 ppl_calib=1.9295 b1_nf4=247.7 b1_int4exp=345.5 b1_calib=336.2 b1_fused=452.5 b1_nf4fused=303.4 b16_nf4=1294.0 b16_int4exp=2412.5
+TPLINE olmoe B1D_TIMED_GRAPH steps=127 step=2.97ms compile=None recompiles=0 out=/root/tpA/olmoe_b1_calib.json
+TPLINE olmoe B1D_TIMED_GRAPH steps=127 step=2.21ms compile=None recompiles=0 out=/root/tpA/olmoe_b1_fused.json
+TPLINE olmoe B1D_TIMED_GRAPH steps=127 step=2.89ms compile=None recompiles=0 out=/root/tpA/olmoe_b1_int4exp.json
+TPLINE olmoe B1D_TIMED_GRAPH steps=127 step=4.04ms compile=None recompiles=0 out=/root/tpA/olmoe_b1_nf4.json
+TPLINE olmoe B1D_TIMED_GRAPH steps=127 step=3.30ms compile=None recompiles=0 out=/root/tpA/olmoe_b1_nf4fused.json
+TPLINE olmoe BV3_GRAPH batch=16 steps=70 step=6.63ms agg=2412.5tok/s recompiles=0 out=/root/tpA/olmoe_b16_int4exp.json
+TPLINE olmoe BV3_GRAPH batch=16 steps=70 step=12.37ms agg=1294.0tok/s recompiles=0 out=/root/tpA/olmoe_b16_nf4.json
+granite/b1_fused FAIL
+granite/b1_nf4fused FAIL
+TP granite ppl_nf4=1.6741 ppl_int4exp=1.6859 ppl_calib=1.7003 b1_nf4=191.0 b1_int4exp=284.6 b1_calib=218.0 b1_fused=-- b1_nf4fused=-- b16_nf4=1447.3 b16_int4exp=2210.2
+TPLINE granite B1D_TIMED_GRAPH steps=127 step=4.59ms compile=None recompiles=0 out=/root/tpA/granite_b1_calib.json
+TPLINE granite B1D_TIMED_GRAPH steps=127 step=3.51ms compile=None recompiles=0 out=/root/tpA/granite_b1_int4exp.json
+TPLINE granite B1D_TIMED_GRAPH steps=127 step=5.24ms compile=None recompiles=0 out=/root/tpA/granite_b1_nf4.json
+TPLINE granite BV3_GRAPH batch=16 steps=70 step=7.24ms agg=2210.2tok/s recompiles=0 out=/root/tpA/granite_b16_int4exp.json
+TPLINE granite BV3_GRAPH batch=16 steps=70 step=11.06ms agg=1447.3tok/s recompiles=0 out=/root/tpA/granite_b16_nf4.json
+gptoss/ppl_int4exp FAIL
+gptoss/ppl_calib FAIL
+gptoss/b1_int4exp FAIL
+gptoss/b1_calib FAIL
+gptoss/b1_fused FAIL
+gptoss/b1_nf4fused FAIL
+gptoss/b16_int4exp FAIL
+TP gptoss ppl_nf4=6.3354 ppl_int4exp=-- ppl_calib=-- b1_nf4=124.2 b1_int4exp=-- b1_calib=-- b1_fused=-- b1_nf4fused=-- b16_nf4=731.9 b16_int4exp=--
+TPLINE gptoss B1D_TIMED_GRAPH steps=127 step=8.05ms compile=None recompiles=0 out=/root/tpA/gptoss_b1_nf4.json
+TPLINE gptoss BV3_GRAPH batch=16 steps=70 step=21.86ms agg=731.9tok/s recompiles=0 out=/root/tpA/gptoss_b16_nf4.json
