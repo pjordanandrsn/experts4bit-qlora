@@ -107,4 +107,4 @@ jobs:
           python -m pip install --quiet --upgrade pip build twine
           python -m build
           python -m twine check dist/*
-          python scripts/check_wheel_metadata.py dist/*.whl --requires 'grouped-nf4-gemm>=0.28.0; extra == "fast"'
+          python scripts/check_wheel_metadata.py dist/*.whl --requires 'grouped-nf4-gemm>=0.30.0; extra == "fast"'
