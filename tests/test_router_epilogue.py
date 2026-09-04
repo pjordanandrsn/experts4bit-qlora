@@ -66,17 +66,30 @@ class UnnormalisedTopkSoftmaxRouter(ToyRouter):
         return logits, torch.softmax(v, dim=-1), i
 
 
-def _stub(monkeypatch, calls):
+def _stub(monkeypatch, calls, legacy=False):
+    """A torch stand-in for the kernel epilogue. ``legacy=True`` mimics a
+    grouped-nf4-gemm whose router_epilogue predates select_on_logits."""
     stub = types.ModuleType("int4_b32")
 
-    def router_epilogue(logits, k, norm):
+    def _softmax_topk(logits, k, norm):
         calls["fused"] += 1
         probs = torch.softmax(logits.float(), dim=-1)
         v, i = torch.topk(probs, k, dim=-1)
         if norm:
             v = v / v.sum(dim=-1, keepdim=True)
         return probs, v, i
-    stub.router_epilogue = router_epilogue
+
+    if legacy:
+        stub.router_epilogue = _softmax_topk
+    else:
+        def router_epilogue(logits, k, norm, *, select_on_logits=False, bias=None):
+            if not select_on_logits:
+                return _softmax_topk(logits, k, norm)
+            calls["fused"] += 1
+            x = logits.float() + (bias.float() if bias is not None else 0.0)
+            top, i = torch.topk(x, k, dim=-1)
+            return x, torch.softmax(top, dim=-1), i
+        stub.router_epilogue = router_epilogue
     monkeypatch.setitem(sys.modules, "int4_b32", stub)
 
 
@@ -104,19 +117,151 @@ def test_patches_and_matches_the_unpatched_router(monkeypatch):
     assert calls["fused"] == 1
 
 
-@pytest.mark.parametrize("cls", [BiasedRouter, UnnormalisedTopkSoftmaxRouter])
-def test_refuses_routers_with_different_math(monkeypatch, cls):
-    """Both name-match and are structurally identical to the reference
-    router; one selects a different expert SET, the other returns
-    different WEIGHTS. Patching either would change routing, which no
-    perplexity gate downstream would forgive."""
+def test_refuses_a_router_whose_math_matches_no_kind(monkeypatch):
+    """Bias added BEFORE a softmax over all experts (then renormalised) is
+    neither the softmax-topk kind nor the select-on-logits kind: no
+    family does it, and its structure looks like the softmax-topk one, so
+    only the semantic probe catches it. Patching it would change routing,
+    which no perplexity gate downstream would forgive."""
     monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
     _stub(monkeypatch, {"fused": 0})
     torch.manual_seed(8)
     m = torch.nn.Module()
-    m.gate = cls()
+    m.gate = BiasedRouter()
     with pytest.raises(RuntimeError, match="vacuous"):
         fuse_router_epilogue(m)
+
+
+class GptOssLikeRouter(torch.nn.Module):
+    """top-k on the biased logits, softmax over the k, returns
+    (logits, weights, index) -- GptOssTopKRouter."""
+    def __init__(self):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(E, HID))
+        self.bias = torch.nn.Parameter(torch.randn(E) * 2)
+        self.top_k, self.num_experts, self.hidden_dim = K, E, HID
+
+    def forward(self, x):
+        logits = F.linear(x.reshape(-1, HID), self.weight, self.bias)
+        top, i = torch.topk(logits, self.top_k, dim=-1)
+        return logits, torch.softmax(top, dim=-1, dtype=top.dtype), i
+
+
+class GraniteLikeRouter(torch.nn.Module):
+    """No bias; returns (index, weights, logits) -- GraniteMoeTopKRouter's
+    order, which position-based hooks would misread."""
+    def __init__(self):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(E, HID))
+        self.top_k = K
+
+    def forward(self, x):
+        logits = F.linear(x.reshape(-1, HID), self.weight)
+        top, i = torch.topk(logits, self.top_k, dim=-1)
+        return i, torch.softmax(top, dim=-1), logits
+
+
+class MixtralLikeRouter(torch.nn.Module):
+    """MixtralTopKRouter (transformers 5.16): softmax over all experts,
+    top-k, always renormalised; carries num_experts/hidden_dim but NO
+    norm_topk_prob. Returns (logits, scores, index)."""
+    def __init__(self):
+        super().__init__()
+        self.top_k = K
+        self.num_experts = E
+        self.hidden_dim = HID
+        self.weight = torch.nn.Parameter(torch.randn(E, HID))
+
+    def forward(self, x):
+        x = x.reshape(-1, HID)
+        logits = F.linear(x, self.weight)
+        probs = torch.softmax(logits.float(), dim=-1)
+        top, i = torch.topk(probs, self.top_k, dim=-1)
+        top = top / top.sum(dim=-1, keepdim=True)
+        return logits, top, i
+
+
+class _NoScaleRMSNorm(torch.nn.Module):
+    def __init__(self, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+    def forward(self, x):
+        xf = x.float()
+        return (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + self.eps)).type_as(x)
+
+
+class Gemma4TextRouter(torch.nn.Module):
+    """Gemma-4's router: unscaled RMSNorm, per-channel scale and
+    hidden**-0.5 before the projection; softmax -> top-k -> renormalise ->
+    times a learned per-expert scale. Named as upstream names it."""
+    def __init__(self):
+        super().__init__()
+        self.norm = _NoScaleRMSNorm()
+        self.scale = torch.nn.Parameter(torch.rand(HID) + 0.5)
+        self.scalar_root_size = HID ** -0.5
+        self.proj = torch.nn.Linear(HID, E, bias=False)
+        self.per_expert_scale = torch.nn.Parameter(torch.rand(E) + 0.5)
+        self.config = types.SimpleNamespace(top_k_experts=K)
+
+    def forward(self, x):
+        h = self.norm(x.reshape(-1, HID)) * self.scale * self.scalar_root_size
+        probs = torch.softmax(self.proj(h), dim=-1, dtype=torch.float32)
+        w, i = torch.topk(probs, self.config.top_k_experts, dim=-1)
+        w = w / w.sum(dim=-1, keepdim=True)
+        return probs, w * self.per_expert_scale[i], i
+
+
+@pytest.mark.parametrize("cls,order", [(UnnormalisedTopkSoftmaxRouter, (0, 1, 2)), (GptOssLikeRouter, (0, 1, 2)),
+                                       (GraniteLikeRouter, (2, 1, 0)), (Gemma4TextRouter, (0, 1, 2)),
+                                       (MixtralLikeRouter, (0, 1, 2))])
+def test_other_router_kinds_are_licensed_and_match_their_own_forward(monkeypatch, cls, order):
+    """select-on-logits (with and without a bias, in either output order)
+    and Gemma-4's normed/scaled router are patched and reproduce the
+    module's own forward: same expert set, same weights, same tuple order."""
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    calls = {"fused": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(9)
+    m = torch.nn.Module()
+    m.gate = cls()
+    ref = cls()
+    ref.load_state_dict(m.gate.state_dict())
+    assert fuse_router_epilogue(m) == 1
+    x = torch.randn(1, 1, HID)
+    got = m.gate(x)
+    assert calls["fused"] == 1
+    want = ref(x)
+    fpos, wpos, ipos = order
+    assert torch.equal(got[ipos], want[ipos]), "selected experts must be identical"
+    assert torch.allclose(got[wpos].float(), want[wpos].float(), rtol=2 ** -10, atol=2 ** -12)
+    # the first slot is the module's contract too: probabilities for the
+    # softmax-first kinds, raw logits for Mixtral/Gemma-4, biased logits
+    # for select-on-logits -- whatever the module returns, the fused path
+    # returns (review finding on #370: Mixtral got probabilities in its
+    # logits slot)
+    assert got[fpos].shape == want[fpos].shape
+    assert torch.allclose(got[fpos].float(), want[fpos].float(), rtol=2 ** -6, atol=2 ** -8), \
+        "first slot must be what the module returns"
+    big = torch.randn(1, 4096, HID)      # prefill falls through
+    m.gate(big)
+    assert calls["fused"] == 1
+
+
+def test_select_on_logits_kinds_need_the_kernel_mode(monkeypatch):
+    """With a kernel whose router_epilogue predates select_on_logits, the
+    select-on-logits routers are skipped -- counted in the refusal, never
+    served by the wrong epilogue -- while the softmax-topk kind still folds."""
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    _stub(monkeypatch, {"fused": 0}, legacy=True)
+    torch.manual_seed(10)
+    m = torch.nn.Module()
+    m.gate = GptOssLikeRouter()
+    with pytest.raises(RuntimeError, match="select_on_logits"):
+        fuse_router_epilogue(m)
+    m2 = torch.nn.Module()
+    m2.a = GptOssLikeRouter()
+    m2.b = ToyRouter()
+    assert fuse_router_epilogue(m2) == 1
 
 
 def test_topk_then_softmax_is_the_same_function_when_renormalising():
@@ -150,3 +295,43 @@ def test_missing_kernel_refuses_loudly(monkeypatch):
     m.gate = ToyRouter()
     with pytest.raises(RuntimeError, match="router_epilogue"):
         fuse_router_epilogue(m)
+
+
+def test_mixtral_router_is_offered_both_renormalisations_and_the_probe_picks():
+    """No norm_topk_prob on the module: the matcher offers softmax_topk
+    with and without renormalisation and the probe keeps the one the
+    forward computes (Mixtral renormalises)."""
+    from experts4bit_qlora.engines.router_epilogue import _probe_matches, _structural
+    torch.manual_seed(3)
+    mod = MixtralLikeRouter()
+    cands = _structural(mod)
+    assert [(k, s["norm"]) for k, s in cands if k == "softmax_topk"] == [("softmax_topk", True), ("softmax_topk", False)]
+    picked = [s["norm"] for k, s in cands if k == "softmax_topk" and _probe_matches(mod, k, s)]
+    assert picked == [True]
+
+
+class ProbsInLogitsSlotRouter(MixtralLikeRouter):
+    """A router whose first slot is neither the raw logits nor the kind's
+    first output: refused, never licensed with a guessed first slot."""
+    def forward(self, x):
+        logits, top, i = super().forward(x)
+        return logits * 0.5 + 1.0, top, i
+
+
+def test_first_slot_semantics_are_recorded_or_refused(monkeypatch):
+    from experts4bit_qlora.engines.router_epilogue import _probe_matches, _structural
+    torch.manual_seed(5)
+    m = MixtralLikeRouter()
+    kind, spec = [(k, s) for k, s in _structural(m) if k == "softmax_topk" and s["norm"]][0]
+    assert _probe_matches(m, kind, spec) and spec["first"] == "raw"
+    q = ToyRouter()
+    kind, spec = [(k, s) for k, s in _structural(q) if k == "softmax_topk"][0]
+    assert _probe_matches(q, kind, spec) and spec["first"] == "ref"
+    bad = ProbsInLogitsSlotRouter()
+    assert not any(_probe_matches(bad, k, s) for k, s in _structural(bad))
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    _stub(monkeypatch, {"fused": 0})
+    holder = torch.nn.Module()
+    holder.gate = ProbsInLogitsSlotRouter()
+    with pytest.raises(RuntimeError, match="failed the semantic probe"):
+        fuse_router_epilogue(holder)
