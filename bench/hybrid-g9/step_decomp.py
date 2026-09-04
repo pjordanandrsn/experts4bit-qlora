@@ -290,7 +290,10 @@ def _layer_diff_install(model, cap):
     def rec(i, part):
         def hook(_m, _inp, out):
             if part == "router":
-                w, idx = out[1], out[2]
+                pos = _router_out_positions(out)
+                if pos is None:
+                    return
+                w, idx = out[pos[0]], out[pos[1]]
                 cap[(i, "router")] = (w.detach().float().cpu()[-1], idx.detach().cpu()[-1])
                 return
             y = out[0] if isinstance(out, tuple) else out
@@ -451,9 +454,33 @@ def _router_modules(model):
     return out
 
 
+def _router_out_positions(out):
+    """Where a router's (weights, index) sit in its output tuple. Most
+    families return (logits_or_probs, weights, index); GraniteMoe returns
+    (index, weights, logits). The index is the only integer tensor, and
+    the weights are the float tensor with its shape."""
+    if not isinstance(out, tuple):
+        return None
+    ipos = [i for i, t in enumerate(out) if torch.is_tensor(t) and not t.is_floating_point()]
+    if len(ipos) != 1:
+        return None
+    idx = out[ipos[0]]
+    wpos = [i for i, t in enumerate(out) if i != ipos[0] and torch.is_tensor(t)
+            and t.is_floating_point() and tuple(t.shape) == tuple(idx.shape)]
+    if len(wpos) != 1:
+        return None
+    return wpos[0], ipos[0]
+
+
 def _route_hook(layer):
     def hook(_m, _inp, out):
-        w, idx = out[1], out[2]
+        pos = _router_out_positions(out)
+        if pos is None:
+            raise RuntimeError(f"layer {layer}: router output {type(out).__name__} of "
+                               f"{len(out) if isinstance(out, tuple) else 'n/a'} carries no "
+                               "single (weights, index) pair -- refusing to record/replay")
+        wpos, ipos = pos
+        w, idx = out[wpos], out[ipos]
         n = int(idx.shape[0])
         st = _ROUTE
         if st["mode"] == "record":
@@ -472,7 +499,9 @@ def _route_hook(layer):
             st["served"] += n
             new_idx = rec["idx"][c:c + n].to(idx.device)
             new_w = rec["w"][c:c + n].to(device=w.device, dtype=w.dtype)
-            return (out[0], new_w, new_idx) + tuple(out[3:])
+            new = list(out)
+            new[wpos], new[ipos] = new_w, new_idx
+            return tuple(new)
         return None
     return hook
 
