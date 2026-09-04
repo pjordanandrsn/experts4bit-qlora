@@ -82,3 +82,71 @@ def test_singleton_matches_grouped_gptoss_epilogue(mock_gemm):
                           gptoss=(gu_b, dn_b, 1.702, 7.0),
                           singleton_groups=True)
     assert torch.equal(g, s)
+
+
+def _mxfp4_reference_gemm(a_cat, blocks, scales, sizes, expert_ids):
+    """The kernel side's contract, in torch: ``out[t] = a[t] @ dequant(B[e(t)]).T``
+    with blocks [E, N, K//2] u8 + scales [E, N, K//32] e8m0, bf16 out."""
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+    E, N, half = blocks.shape
+    K = half * 2
+    ids = expert_ids if torch.is_tensor(expert_ids) else torch.as_tensor(expert_ids)
+    per_row = ids.repeat_interleave(torch.as_tensor(sizes))
+    w_kn = dequantize_mxfp4(blocks.reshape(E, N, K // 32, 16), scales, dtype=torch.float32)  # [E, K, N]
+    out = torch.stack([a_cat[t].float() @ w_kn[int(per_row[t])] for t in range(a_cat.shape[0])])
+    return out.to(torch.bfloat16)
+
+
+def test_mxfp4_store_serves_gptoss_through_the_grouped_mxfp4_gemm(mock_gemm, monkeypatch):
+    """A native-MXFP4 store (gpt-oss) routes every projection through the
+    kernel side's grouped MXFP4 GEMM on the singleton contract, and the
+    forward -- store bytes + bias epilogue + clamped GLU -- equals gpt-oss's
+    own expert math on the dequantised weights."""
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+    mx = sys.modules.get("mxfp4_grouped")
+    if mx is None:
+        mx = types.SimpleNamespace()
+        monkeypatch.setitem(sys.modules, "mxfp4_grouped", mx)
+    monkeypatch.setattr(mx, "gemm_mxfp4_grouped", _mxfp4_reference_gemm, raising=False)
+    torch.manual_seed(11)
+    E, H, inter = 3, 64, 32
+    g = torch.Generator().manual_seed(2)
+    gu_blocks = torch.randint(0, 256, (E, 2 * inter, H // 32, 16), generator=g, dtype=torch.uint8)
+    gu_scales = torch.randint(122, 128, (E, 2 * inter, H // 32), generator=g, dtype=torch.uint8)
+    dn_blocks = torch.randint(0, 256, (E, H, inter // 32, 16), generator=g, dtype=torch.uint8)
+    dn_scales = torch.randint(122, 128, (E, H, inter // 32), generator=g, dtype=torch.uint8)
+    gu_bias_i = torch.randn(E, 2 * inter) * 0.1                       # interleaved, as released
+    dn_bias = torch.randn(E, H) * 0.1
+    # the store: rows de-interleaved (gate first), flattened
+    gub = torch.cat([gu_blocks[:, 0::2], gu_blocks[:, 1::2]], 1).reshape(E, 2 * inter, H // 2)
+    gus = torch.cat([gu_scales[:, 0::2], gu_scales[:, 1::2]], 1)
+    stores = {"kind": "mxfp4",
+              "gu": {"blocks": gub, "scales": gus, "N": 2 * inter, "K": H},
+              "dn": {"blocks": dn_blocks.reshape(E, H, inter // 2), "scales": dn_scales, "N": H, "K": inter}}
+    gu_b = torch.cat([gu_bias_i[:, 0::2], gu_bias_i[:, 1::2]], 1)   # as the loader stores it
+    x = (torch.randn(5, H) * 0.5).to(torch.bfloat16)
+    ids = torch.tensor([1, 0, 2, 2, 0])
+    freed_gu, freed_dn = torch.empty(0, dtype=torch.uint8), torch.empty(0, dtype=torch.uint8)
+    got = _fused_over_stack(x, ids, freed_gu, None, freed_dn, None, (2 * inter, H, H, inter),
+                            has_gate=True, act_fn=torch.nn.functional.silu,
+                            gptoss=(gu_b, dn_bias, 1.702, 7.0), int4_stores=stores)
+    # gpt-oss's own math on the dequantised (module-layout) weights
+    W_gu = dequantize_mxfp4(gu_blocks, gu_scales, dtype=torch.float32)   # [E, H, 2I] interleaved
+    W_dn = dequantize_mxfp4(dn_blocks, dn_scales, dtype=torch.float32)   # [E, I, H]
+    # the same dtype path the kernel contract imposes: fp32 accumulate,
+    # bf16 out of each GEMM, the bias add and the GLU in bf16 (as the
+    # fused forward and _GptOssForwardMixin both run them at compute dtype)
+    want = []
+    for t in range(x.shape[0]):
+        e = int(ids[t])
+        gu = (x[t].float() @ W_gu[e]).to(torch.bfloat16) + gu_bias_i[e].to(torch.bfloat16)
+        gate, up = gu[0::2], gu[1::2]
+        gate = gate.clamp(max=7.0)
+        up = up.clamp(min=-7.0, max=7.0)
+        h = (up + 1) * (gate * torch.sigmoid(gate * 1.702))
+        dn = (h.float() @ W_dn[e]).to(torch.bfloat16) + dn_bias[e].to(torch.bfloat16)
+        want.append(dn)
+    want = torch.stack(want)
+    assert got.shape == want.shape and got.dtype == torch.bfloat16
+    assert torch.allclose(got.float(), want.float(), rtol=2 ** -7, atol=2 ** -6), \
+        (got.float() - want.float()).abs().max()

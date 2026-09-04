@@ -121,6 +121,41 @@ def _prefused_layers(plan):
     return {k: v for k, v in out.items() if v[0] and v[1]}
 
 
+def _mxfp4_store_layout(gu_blocks, gu_scales, dn_blocks, dn_scales):
+    """gpt-oss's released MXFP4 stacks, kept as released: ``gate_up_proj_blocks
+    [E, 2I, H//32, 16]`` (fp4 nibble pairs, gate/up rows INTERLEAVED) with
+    ``gate_up_proj_scales [E, 2I, H//32]`` (e8m0), and ``down_proj_blocks
+    [E, H, I//32, 16]`` / ``[E, H, I//32]``. The kernel side's grouped MXFP4
+    GEMM takes ``blocks [E, N, K//2]`` + ``scales [E, N, K//32]`` in exactly
+    this orientation, so the only transform is the ROW de-interleave of the
+    gate/up stack (gate block first, as the serve epilogue's ``chunk(2)``
+    and the loader builder expect) and a flatten of the group axis. No
+    value is re-quantised: the int4-b32 re-quantisation of these weights
+    measured +0.626 nats (P30) because the uniform grid cannot hold e2m1
+    levels; NF4's can, and this path holds them exactly."""
+    import torch as _torch
+
+    def _u8(t):
+        return t if t.dtype == _torch.uint8 else t.view(_torch.uint8)
+    gu_blocks, gu_scales = _u8(gu_blocks), _u8(gu_scales)
+    dn_blocks, dn_scales = _u8(dn_blocks), _u8(dn_scales)
+    if gu_blocks.ndim != 4 or dn_blocks.ndim != 4 or gu_blocks.shape[-1] != 16:
+        raise RuntimeError("gpt_oss: expected MXFP4 blocks [E, rows, K//32, 16], got "
+                           f"{tuple(gu_blocks.shape)} / {tuple(dn_blocks.shape)}")
+    E, twoI, gH, _ = gu_blocks.shape
+    E2, H, gI, _ = dn_blocks.shape
+    if (twoI % 2 or E2 != E or tuple(gu_scales.shape) != (E, twoI, gH)
+            or tuple(dn_scales.shape) != (E, H, gI) or gH * 32 != H or gI * 32 != twoI // 2):
+        raise RuntimeError(
+            "gpt_oss: MXFP4 stacks disagree with [E, 2I, H//32, 16] / [E, H, I//32, 16]: "
+            f"blocks {tuple(gu_blocks.shape)} / {tuple(dn_blocks.shape)}, scales "
+            f"{tuple(gu_scales.shape)} / {tuple(dn_scales.shape)}")
+    gub = _torch.cat([gu_blocks[:, 0::2], gu_blocks[:, 1::2]], dim=1)   # de-interleave rows
+    gus = _torch.cat([gu_scales[:, 0::2], gu_scales[:, 1::2]], dim=1)
+    return (gub.reshape(E, twoI, gH * 16).contiguous(), gus.contiguous(),
+            dn_blocks.reshape(E, H, gI * 16).contiguous(), dn_scales.contiguous())
+
+
 def _gptoss_packer_layout(gate_up, down):
     """gpt-oss's dense stacks leave the plan reader in the MODULE layout:
     ``gate_up [E, H, 2I]`` input-major with the gate and up rows
@@ -223,13 +258,14 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
 
     prefused = _prefused_layers(plan) if not plan.experts else {}
-    # gpt-oss's stacks are MXFP4 with INTERLEAVED gate/up rows in the
-    # module's input-major layout, and a bias-carrying epilogue. The plan
-    # read dequantizes them but does not de-interleave (that lives in the
-    # loader's gpt-oss builder), so they are brought to the packer's
-    # layout below by the builder's own transform; the biases and the
-    # clamped GLU are applied by the serve forward's gpt-oss epilogue,
-    # which runs after whichever GEMM branch served the int4 bytes.
+    # gpt-oss's stacks are MXFP4 with INTERLEAVED gate/up rows and a
+    # bias-carrying epilogue. They are served NATIVELY -- the released fp4
+    # blocks and e8m0 scales, row-de-interleaved, through the kernel side's
+    # grouped MXFP4 GEMM -- never re-quantised onto the int4-b32 grid (that
+    # measured +0.626 nats, P30: a uniform grid cannot hold e2m1 levels).
+    # The biases and the clamped GLU are applied by the serve forward's
+    # gpt-oss epilogue, which runs after whichever GEMM branch served the
+    # store.
     gptoss = bool(prefused) and mt == "gpt_oss"
 
     n_layers = 0
@@ -253,11 +289,34 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                                                   dtype=_torch.float32)
         else:
             gu_key, dn_key = prefused[layer]
+            if gptoss:
+                # native MXFP4: the released blocks and scales, never the
+                # dequantised stacks (see _mxfp4_store_layout)
+                gkind, gblk, gsc, _x = plan.scales[gu_key]
+                dkind, dblk, dsc, _x = plan.scales[dn_key]
+                if gkind != "mxfp4" or dkind != "mxfp4":
+                    raise RuntimeError(f"layer {layer}: gpt_oss stacks are not MXFP4 "
+                                       f"in this checkpoint ({gkind}/{dkind})")
+                gub, gus, dnb, dns = _mxfp4_store_layout(
+                    read_tensor(gblk), read_tensor(gsc), read_tensor(dblk), read_tensor(dsc))
+                dev = w.h_gu_p.device
+                Ngu, Kgu = gub.shape[1], gub.shape[2] * 2
+                Ndn, Kdn = dnb.shape[1], dnb.shape[2] * 2
+                _check_gptoss_wrapper(w, layer, gub, dnb)
+                w._int4_stores = {
+                    "kind": "mxfp4",
+                    "gu": {"blocks": gub.to(dev), "scales": gus.to(dev), "N": Ngu, "K": Kgu},
+                    "dn": {"blocks": dnb.to(dev), "scales": dns.to(dev), "N": Ndn, "K": Kdn},
+                }
+                if not keep_nf4:
+                    for attr in ("h_gu_p", "h_gu_a", "h_dn_p", "h_dn_a"):
+                        t = getattr(w, attr)
+                        setattr(w, attr, t.new_empty((0,) * t.dim()))
+                    _torch.cuda.empty_cache()
+                n_layers += 1
+                continue
             first = read(gu_key).to(_torch.float32)
             down = read(dn_key).to(_torch.float32)
-            if gptoss:
-                first, down = _gptoss_packer_layout(first, down)
-                _check_gptoss_wrapper(w, layer, first, down)
         dev = w.h_gu_p.device
         E = first.shape[0]
 
