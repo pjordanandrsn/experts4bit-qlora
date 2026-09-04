@@ -1,5 +1,5 @@
 {
-  "$comment": "Discoverability regression corpus: realistic user queries and the page that must answer each. Checked offline by scripts/check_discovery_contract.py; the optional BM25 report is a local proxy, never evidence of external ranking.",
+  "$comment": "Discoverability regression corpus: realistic user queries and the page that must answer each. Checked offline by scripts/check_discovery_contract.py; the optional BM25 report is a local proxy, never evidence of external ranking. A BM25 regression, or a BM25 gain, is never evidence of LLM discoverability; the floor only catches a corpus that stopped routing its own queries.",
   "project": "experts4bit-qlora",
   "minimum_queries": 30,
   "bm25_corpus": [
@@ -502,6 +502,103 @@
         ],
         [
           "expert"
+        ]
+      ]
+    },
+    {
+      "query": "My MoE still OOMs after load_in_4bit; where do I start?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+      "required_concepts": [
+        [
+          "load_in_4bit"
+        ],
+        [
+          "OOM",
+          "out of memory"
+        ],
+        [
+          "verify_moe_4bit"
+        ],
+        [
+          "load_moe_4bit_streaming"
+        ]
+      ]
+    },
+    {
+      "query": "I need to optimize a packed MXFP4 decode GEMV; which repository owns it?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/mxfp4-moe-training-and-residency.md",
+      "required_concepts": [
+        [
+          "MXFP4"
+        ],
+        [
+          "GEMV"
+        ],
+        [
+          "owns"
+        ],
+        [
+          "grouped-nf4-gemm"
+        ]
+      ]
+    },
+    {
+      "query": "What is the current minimum grouped-nf4-gemm version for the experts4bit-qlora fast extra?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "pyproject.toml"
+        ],
+        [
+          "fast"
+        ],
+        [
+          "grouped-nf4-gemm"
+        ],
+        [
+          "system-manifest.json"
+        ]
+      ]
+    },
+    {
+      "query": "Where do I check whether a benchmark claim has been superseded or retired?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "claims.json"
+        ],
+        [
+          "superseded"
+        ],
+        [
+          "retired"
+        ],
+        [
+          "status"
+        ]
+      ]
+    },
+    {
+      "query": "Where does an NVMe primitive belong versus model-level NVMe integration?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
+      "required_concepts": [
+        [
+          "model-level"
+        ],
+        [
+          "primitives",
+          "primitive"
+        ],
+        [
+          "NVMe"
+        ],
+        [
+          "grouped-nf4-gemm"
         ]
       ]
     }
