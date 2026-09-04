@@ -826,7 +826,7 @@
       "id": "e4b.serve.buildout.qwen3.b1.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 177.9 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue, the round-2 fold engaging on the unfused attention (#375)); NF4 baseline 98.0 tok/s on the same box.",
+      "claim": "Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 177.9 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue, the round-2 fold engaging on the unfused attention (#375)); NF4 baseline 98.0 tok/s on the same box.",
       "value": 177.9,
       "unit": "tok/s",
       "model": "Qwen/Qwen3-30B-A3B",
@@ -843,7 +843,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps sha 9ef10d760ad9: nf4 1.86213, all 1.85053, all_rope 1.84944 (-0.081 ppl vs NF4, pass; -0.0011 nats vs all, inside the 0.0095-nat floor). The calibrated output head passes only inside this stack (allhead -0.020 ppl); alone it is +0.062 ppl and FAILS."
+      "notes": "K8 2048 steps sha 9ef10d760ad9: nf4 1.86213, all 1.85053, all_rope 1.84944 (-0.081 ppl vs NF4, pass; -0.0011 nats vs all, inside the 0.0095-nat floor). The calibrated output head passes only inside this stack (allhead -0.020 ppl); alone it is +0.062 ppl and FAILS. LICENSING: the calibrated pack's verdict needs a second text (k8_gate: same sign on >=2 texts, one outside the calibration domain); this lane scored wikitext only, so the number is measured speed of a not-yet-licensed configuration. The second text is on lane bo5."
     },
     {
       "id": "e4b.serve.buildout.granite.b1.5090.2026-09-04",
@@ -938,7 +938,7 @@
       "id": "e4b.serve.buildout.mixtral.b1.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 110.0 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 48.0 tok/s on the same box.",
+      "claim": "Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 110.0 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 48.0 tok/s on the same box.",
       "value": 110.0,
       "unit": "tok/s",
       "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -955,13 +955,13 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it."
+      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it. LICENSING: the calibrated pack's verdict needs a second text (k8_gate: same sign on >=2 texts, one outside the calibration domain); this lane scored wikitext only, so the number is measured speed of a not-yet-licensed configuration. The second text is on lane bo5."
     },
     {
       "id": "e4b.serve.buildout.mixtral.b16.5090.2026-09-04",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, licensed configuration under the registered K8 gate: 373.4 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 186.7 tok/s on the same box.",
+      "claim": "Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090 after the 0.33.0-0.34.0 build-out, fastest configuration — carries a calibrated int4 pack scored on ONE text, which the registered gate (same sign on two texts) does not yet license: 373.4 tok/s (int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue); NF4 baseline 186.7 tok/s on the same box.",
       "value": 373.4,
       "unit": "tok/s",
       "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
@@ -977,7 +977,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "Same window and gate as the B=1 claim."
+      "notes": "Same window and gate as the B=1 claim. LICENSING: the calibrated pack's verdict needs a second text (k8_gate: same sign on >=2 texts, one outside the calibration domain); this lane scored wikitext only, so the number is measured speed of a not-yet-licensed configuration. The second text is on lane bo5."
     },
     {
       "id": "e4b.serve.buildout.gptoss.b1.5090.2026-09-04",

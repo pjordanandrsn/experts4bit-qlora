@@ -46,15 +46,16 @@ The refused arms in the table above became the build-out; one lane (bo3, the sam
 EPYC 9755 host, 17 phases over 2026-09-04) validated each piece with one arm per fusion. The full
 receipt — every run JSON and log, the kernel and op censuses, the reducer, and the per-arm verdict table
 in the registered gate's own units — is [`bench/hybrid-g9/throughput-20260904/bo3/`](../bench/hybrid-g9/throughput-20260904/bo3/README.md).
-The licensed best per family after it (B=1 tok/s / B=16 tok/s, ratio to that family's NF4 baseline on
-the same box):
+The best per family after it (B=1 tok/s / B=16 tok/s, ratio to that family's NF4 baseline on the same
+box), with the registered gate's reading — a calibrated pack is licensed only with the same sign on a
+second text, which these lanes did not score:
 
 | family | licensed configuration | B=1 | B=16 | K8 vs NF4 | gate |
 |---|---|---|---|---|---|
-| Qwen3-30B-A3B | int4 experts + calibrated int4 attention + round-1/2 folds (now engaging, #375) + epilogue | **177.9** (×1.81) | 1089.6 (`all`) | −0.081 ppl | pass |
+| Qwen3-30B-A3B | int4 experts + calibrated int4 attention + round-1/2 folds (now engaging, #375) + epilogue | **177.9** (×1.81) | 1089.6 (`all`) | −0.081 ppl | calibrated: one text scored, the rule needs two |
 | Granite-3.1-3B-A800M | NF4 experts + round-1/2 folds (rotary-only fold, #379) + epilogue | **259.1** (×1.37) | **1689.6** (×1.18) | +0.019 ppl | pass |
 | Gemma-4-26B-A4B | int4 experts + round-1 folds + epilogue | **121.1** (×1.69) | **962.8** (×1.68) | — | no instrument |
-| Mixtral-8x7B | int4 experts + calibrated int4 attention + round-1/2 folds + epilogue | **110.0** (×2.29) | **373.4** (×2.00) | +0.045 ppl | pass (one text) |
+| Mixtral-8x7B | int4 experts + calibrated int4 attention + round-1/2 folds + epilogue | **110.0** (×2.29) | **373.4** (×2.00) | +0.045 ppl | calibrated: one text scored, the rule needs two (uncalibrated `stack` 102.8 / 372.0 passes) |
 | gpt-oss-20b | NF4 experts + round-1/2 folds | **133.3** (×1.08) | 833.9 (`stack`, int4 — FAILS) / 726.2 (NF4) | +0.049 nats | no instrument (OOD text) |
 
 Two rows that were quoted in 0.33.0 are not here. Granite's "302 tok/s, ×1.59" carried int4 experts

@@ -85,8 +85,11 @@ for fam in ["qwen3", "granite", "gemma4", "mixtral", "gptoss"]:
         elif arm == "nf4":
             verdict = "baseline"
         elif calibrated:
-            verdict = "pass*" if dppl <= 0.05 else "FAIL"
+            # the registered rule for a calibrated pack needs the same
+            # sign on >= 2 texts, one outside the calibration domain;
+            # these lanes scored ONE text, so a pass cannot be declared
+            verdict = "FAIL" if dppl > 0.05 else "one text (needs 2)"
         else:
             verdict = "pass" if abs(dppl) <= 0.05 else "FAIL"
         print(f"| `{arm}` | {DESC.get(arm, arm)}{ref} | {fmt(ppl,5)} | {fmt(d,4)} | {fmt(dppl,4)} | {verdict} | {fmt(b1,2)} | {fmt(tps,1)} | {fmt(x1,2)} | {fmt(b16,1)} | {fmt(x16,2)} |")
-print("\n`pass*` = one-sided calibrated rule on ONE text; the second, out-of-domain text has not been scored on these lanes.")
+print("\n`one text (needs 2)` = a calibrated pack within +0.05 ppl on the one text these lanes scored; the registered rule (k8_gate) licenses it only with the same sign on a second text, so it is NOT licensed here.")
