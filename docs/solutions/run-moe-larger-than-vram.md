@@ -54,7 +54,7 @@ Or from the CLI: `OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora
 
 ## Expected result
 
-`verify_moe_4bit(model, strict=True)` returns without raising, and `torch.cuda.max_memory_allocated()` during a forward stays near one layer's experts plus the dense side rather than the whole model. `enable_dense_offload` returns a non-empty list of per-layer handles, described by `dense_offload_report(handles)`. Every `enable_*` returns a count — assert it.
+`verify_moe_4bit(model, strict=True)` returns without raising, and `torch.cuda.max_memory_allocated()` during a forward stays near one layer's experts plus the dense side rather than the whole model. `enable_dense_offload` returns a non-empty list of per-layer handles, described by `dense_offload_report(handles)`. Every `enable_*` returns a count or a non-empty handle list, or raises — assert it.
 
 ## Supported scope
 
@@ -66,7 +66,7 @@ Or from the CLI: `OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora
 
 - Bulk layer-granular offload is PCIe-bound for decode at 26–30B scale; the v0 decode grid in [`../INFERENCE.md`](../INFERENCE.md) is **superseded** for decode by the pipelined and paged engines (claim `e4b.retired.inference-md-decode-grid`).
 - Pick hot sets from a routing histogram (`E4B_EXPERT_PROFILE`, `hot_sets_from_profile`), never by index: an index-ordered set is a uniform random draw. The gain is a property of the host link and did not replicate on a fat-PCIe box ([`../RESIDENCY-ENGINES.md`](../RESIDENCY-ENGINES.md)).
-- [`../CHOOSING.md`](../CHOOSING.md) and [`../RESIDENCY-ENGINES.md`](../RESIDENCY-ENGINES.md) say `enable_pipelined_residency` raises `NotImplementedError` on the `ExpertsLoRA` wrapper the loader installs. The current `engines/pipelined.py` accepts the wrapped base and warns instead: the patch runs only while the adapter is provably zero (eval mode, `no_grad`, untrained `B`); with a trained adapter it installs and never runs, which is why `experts4bit_qlora.serve` treats residency and trained adapters as mutually exclusive.
+- `enable_pipelined_residency` accepts the `ExpertsLoRA` wrapper the loader installs and patches its base. The patch runs only while the wrapper delegates to the base (eval mode, `no_grad`, an adapter that provably contributes nothing — an untrained `B`); with a trained adapter it installs, never runs, and warns, which is why `experts4bit_qlora.serve` treats residency and trained adapters as mutually exclusive. Assert the count and check the served path ([`../CHOOSING.md`](../CHOOSING.md), [`../RESIDENCY-ENGINES.md`](../RESIDENCY-ENGINES.md)).
 - `enable_hot_residency` is deprecated in favour of `enable_pipelined_residency`.
 - Absolutes are host-specific; only ratios travel (claim `e4b.host.ratios-travel-absolutes-do-not`).
 

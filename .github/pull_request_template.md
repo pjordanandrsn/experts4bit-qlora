@@ -15,6 +15,11 @@
 - [ ] **Examples** in new docs are executed in CI, executed in a hardware lane, or explicitly marked as needing GPU / network / model download / large storage. No example silently falls back.
 - [ ] **Related repository** updated (or an issue filed there) if the kernel/consumer contract changed.
 - [ ] **Anchored docs untouched**: nothing under `docs/` with an `ots-attestation-footer` was edited (`grep -l ots-attestation-footer docs/*.md`).
+- [ ] **Cursor Bugbot** reads `pass`, not `skipping` — on this repo `skipping` means Bugbot FOUND something; `gh pr checks` shows no red for it either way, so only `pass` is clean.
+- [ ] **Measured numbers** ship a self-pair, two devices or the named single architecture, real text (not random token ids), and report the cells that lose (`CONTRIBUTING.md`).
+- [ ] **Expert-math changes** (`ExpertsLoRA`, an epilogue, a kernel lane) carry a parity test against the reference, not a loss curve.
+- [ ] **Enabler return values are asserted** (`n = enable_*(...)`; `0` looks identical to "silently on the per-expert loop").
+- [ ] **No private-lane paths or markers.**
 
 ## Evidence
 

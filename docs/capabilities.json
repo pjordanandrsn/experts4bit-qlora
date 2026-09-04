@@ -12,8 +12,7 @@
       "e4b-qlora",
       "experts4bit",
       "expertsnbit",
-      "experts-mxfp4",
-      "expertsmxfp4"
+      "experts-mxfp4"
     ],
     "import_names": [
       "experts4bit_qlora"
@@ -33,7 +32,7 @@
       "dense (non-MoE) models: use bitsandbytes directly",
       "a general-purpose serving engine or a vLLM replacement",
       "models that already fit in bf16 and need no offload: storage-only 4-bit is slower and costs energy (claim e4b.train.energy-honest)",
-      "silent fallbacks: every enable_* returns a count or raises, and callers must assert it",
+      "silent fallbacks: every enable_* returns a count or a non-empty handle list, or raises; callers must assert it",
       "operating systems other than Linux, or GPUs without CUDA"
     ]
   },
@@ -98,8 +97,7 @@
         "experts4bit_qlora.loader:load_moe_4bit_streaming",
         "experts4bit_qlora.verify:verify_moe_4bit",
         "experts4bit_qlora:Experts4bit",
-        "experts4bit_qlora:ExpertsNbit",
-        "cli:python -m experts4bit_qlora.verify"
+        "experts4bit_qlora:ExpertsNbit"
       ],
       "documentation": [
         "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
@@ -343,7 +341,7 @@
         "faster MoE decode than the per-expert loop",
         "is the quantised serving path at parity with the model"
       ],
-      "solution": "The paged decode engine (experts4bit_qlora.serve HTTP shim over the paged runner) serves NF4 or int4-b32 experts through grouped-nf4-gemm's kernels; enable_fast(model) routes inference through the fused grouped GEMM; opt-in lanes add int4-b32 experts, calibrated int4 attention/head, fused glue and router epilogue, and an fp8 paged KV cache.",
+      "solution": "Two surfaces. The measured decode path is the paged runner (PagedModelRunner: paged fp8 KV cache and paged attention) with the experts on grouped-nf4-gemm's kernels -- NF4 experts on the grouped GEMM (enable_fast is the library entry point for that kernel; the harness attaches it through its residency engines), int4-b32 experts through enable_serve_experts_int4, and the opt-in calibrated int4 attention/head, fused glue rounds and router epilogue -- exercised by the in-tree bench harness bench/hybrid-g9/step_decomp.py, which produced the throughput and parity claims. The HTTP shim (python -m experts4bit_qlora.serve) is a reference-path deployment: load_moe_4bit_streaming with the experts streamed from pinned host RAM by default, stock model.generate, per-expert LoRA adapters hot-swapped per request; it attaches a kernel-backed engine only under E4B_RESIDENCY=pipelined and does not use the paged runner or enable_fast.",
       "modes": [
         "serving",
         "inference"
@@ -351,8 +349,7 @@
       "formats": [
         "nf4",
         "int4",
-        "fp8",
-        "mxfp4"
+        "fp8"
       ],
       "model_families": [
         "qwen3_moe",
@@ -404,7 +401,8 @@
         "e4b.serve.tp.qwen3.b1.5090.2026-09-04",
         "e4b.serve.tp.qwen3.b16.5090.2026-09-04",
         "e4b.serve.tp.olmoe.b1.5090.2026-09-04",
-        "e4b.serve.tp.granite.b1.5090.2026-09-04",
+        "e4b.serve.buildout.granite.b1.5090.2026-09-04",
+        "e4b.serve.buildout.granite.b16.5090.2026-09-04",
         "e4b.serve.tp.gptoss.b1.5090.2026-09-04",
         "e4b.serve.tp.gemma4.b1.5090.2026-09-04",
         "e4b.serve.tp.mixtral.b1.5090.2026-09-04",
@@ -418,7 +416,7 @@
       "limitations": [
         "Not a general-purpose vLLM replacement: on the same box vLLM is ahead (claim e4b.serve.h2h.vllm.same-box)",
         "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
-        "Granite's int4-expert rows fail the registered 0.05-ppl gate; its licensed stack keeps NF4 experts (docs/STATUS.md)",
+        "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts (docs/STATUS.md)",
         "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not"
       ],
       "status": "supported"

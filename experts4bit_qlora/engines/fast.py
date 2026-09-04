@@ -292,9 +292,16 @@ def enable_fast(model, verbose: bool = False) -> int:
     skipped — pass ``verbose=True`` to print each skip reason once.
     Use it for inference when the ``[fast]`` extra (grouped-nf4-gemm, Triton, NVIDIA sm_80+
     under Linux) is installed and the per-expert loop is the bottleneck. Expects the modules
-    :func:`experts4bit_qlora.load_moe_4bit_streaming` installs. Returns the number of modules
-    patched -- assert it is > 0, because ``0`` and "still on the loop" look identical from the
-    caller's side; it never raises for a missing kernel package. See
+    :func:`experts4bit_qlora.load_moe_4bit_streaming` installs. Assert the count is > 0,
+    because ``0`` and "still on the loop" look identical from the caller's side.
+
+    What the count does and does not tell you: this function does not check that the
+    kernel package is importable -- it patches every eligible module regardless, and the
+    ``from nf4_grouped import gemm_4bit_grouped`` happens inside the patched forward. So
+    ``0`` means no eligible module was found (not a missing kernel), and a missing
+    grouped-nf4-gemm surfaces as ``ImportError`` at the FIRST forward that reaches the fused
+    path (eval, no grad, bf16/fp16 compute), not here. Call :func:`fast_available` before
+    this if you need to detect the kernel package up front. See
     ``docs/solutions/serve-large-moe-on-a-consumer-gpu.md``.
     """
     from experts4bit_qlora import Experts4bit, ExpertsNbit

@@ -1,8 +1,8 @@
 # experts4bit-qlora
 
-> Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs. Canonical PyPI package `experts4bit-qlora` (import `experts4bit_qlora`); `e4b`, `experts4bit` and `expertsnbit` are lookup aliases only.
+> Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs. Canonical PyPI package `experts4bit-qlora` (import `experts4bit_qlora`); `e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit` and `experts-mxfp4` are lookup aliases only.
 
-Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before quoting a number: a claim whose status is retired or superseded is not current, and `evidence_private` marks a real run whose receipt is not in this repository. Division of responsibility: this project owns model loading, quantization orchestration, adapters, training, residency integration and serving; the kernel package grouped-nf4-gemm owns the packed-expert kernels, decode kernels, packing/reference operations and host/NVMe primitives, and is installed by the `[fast]` extra. Every `enable_*` call returns a count or raises — examples assert it; nothing falls back silently. Environment: Linux, CUDA GPU (sm_80+ for the kernels), Python 3.11 tested.
+Read `docs/STATUS.md` before quoting a position and `docs/claims.json` before quoting a number: a claim whose status is retired or superseded is not current, and `evidence_private` marks a real run whose receipt is not in this repository. Division of responsibility: this project owns model loading, quantization orchestration, adapters, training, residency integration and serving; the kernel package grouped-nf4-gemm owns the packed-expert kernels, decode kernels, packing/reference operations and host/NVMe primitives, and is installed by the `[fast]` extra. Every `enable_*` call returns a count or a non-empty handle list, or raises — examples assert it; nothing falls back silently. Environment: Linux, CUDA GPU (sm_80+ for the kernels), Python 3.11 tested.
 
 ## Start here
 

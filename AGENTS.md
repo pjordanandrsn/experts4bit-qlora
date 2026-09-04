@@ -44,8 +44,13 @@ Exported from `experts4bit_qlora` (see `__all__` in `__init__.py`):
 and `engines/router_epilogue.py`; the fusion functions read
 `E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2` and `E4B_FUSE_ROUTER_EPI`, and
 `enable_from_env` reads `E4B_SERVE_ATTN_INT4_CALIB`. `E4B_SERVE_EXP_INT4` is
-consumed by the bench harness hook, not by the package. CLIs are module mains, configured by
-environment variables: `python -m experts4bit_qlora.{train,infer,serve,verify}`.
+read only by an out-of-tree bench hook (a `usercustomize` module that is not
+in this repository); the package never reads it — the in-package entry point
+is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`. CLIs
+are module mains: `python -m experts4bit_qlora.{train,infer,serve}` are
+configured by environment variables, and `python -m experts4bit_qlora.verify
+--manifest <placement.json>` is argparse-driven and verifies a placement
+manifest, not a model (the in-process model check is `verify_moe_4bit`).
 Names with a leading underscore are internal. The machine-readable list is
 `docs/capabilities.json` (`entrypoints`).
 
@@ -87,9 +92,10 @@ add its tripwire.
 ## Rules that have bitten
 
 - Examples must not silently fall back. Every `enable_*` returns a count or
-  raises; a documented example asserts the count (`0` and "still on the
-  per-expert loop" look identical otherwise). `verify_moe_4bit(model,
-  strict=True)` is the load-time assertion.
+  a non-empty handle list, or raises; a documented example asserts the
+  return value (`0` and "still on the per-expert loop" look identical
+  otherwise). `verify_moe_4bit(model, strict=True)` is the load-time
+  assertion.
 - Fusion and licensing decisions are made on module STRUCTURE (exact
   children, nothing of the module's own), never on class names.
 - A K8 quality gate is applied in its registered units (perplexity budget

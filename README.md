@@ -11,8 +11,8 @@ expert weights in bf16, so the model still OOMs; this package quantises
 exactly those experts, fine-tunes them with QLoRA, keeps them in host RAM
 or on NVMe when they do not fit, and serves them on one consumer NVIDIA
 GPU. **Canonical package:** `experts4bit-qlora` on PyPI (`import
-experts4bit_qlora`); `e4b`, `experts4bit` and `expertsnbit` are lookup
-aliases. **Two repositories:** this one owns loading, quantisation
+experts4bit_qlora`); `e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit` and
+`experts-mxfp4` are lookup aliases. **Two repositories:** this one owns loading, quantisation
 orchestration, adapters, training, residency and serving; the kernels it
 calls through the `[fast]` extra live in
 [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm).
@@ -46,7 +46,10 @@ paged decode engine that is measured against each model's own attention.
   bitsandbytes walker never sees them.
 - The quantised experts fit in host RAM but not VRAM (stream per layer),
   or fit on NVMe but not host RAM (serve or train from an arena).
-- You want to serve or train a 30B-class MoE on a 24–32 GB consumer GPU.
+- You want to train a 30B-class MoE on a 12–24 GB consumer GPU (expert
+  offload; `e4b.offload.fits-30b-class`), or serve one on an RTX 5090 —
+  the only card the serving claims (`e4b.serve.tp.*`,
+  `e4b.serve.buildout.*`) are measured on.
 - You are choosing between the reference per-expert path, the batched
   path, the fused kernel path, host-streamed residency and the NVMe tier —
   [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/CHOOSING.md) is the decision page.
@@ -67,8 +70,9 @@ paged decode engine that is measured against each model's own attention.
 - You need Windows, macOS, ROCm or a non-CUDA accelerator.
 - The model family or expert layout is not in
   [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md)
-  — unsupported architectures fail fast with a named error; there is no
-  silent fallback, and every `enable_*` returns a count you must assert.
+  — unsupported architectures fail fast with a named error; the
+  accelerated paths fall back to the reference loop, so assert every
+  `enable_*` count (a `0` looks identical to the per-expert loop).
 
 ## Start here
 
@@ -91,9 +95,13 @@ pip install "experts4bit-qlora[train]"  # + the streaming MoE trainer
 pip install "experts4bit-qlora[fast]"   # + the fused grouped-GEMM path (grouped-nf4-gemm)
 ```
 
-`e4b`, `experts4bit` and `expertsnbit` are lookup aliases that install this
-package; always install and cite `experts4bit-qlora`. Runs on stock
-bitsandbytes; every feature has a reference path.
+`e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit` and `experts-mxfp4` are
+lookup aliases that install this package; always install and cite
+`experts4bit-qlora`. Runs on stock bitsandbytes; every feature has a
+reference path. Building from source — `pip install --no-build-isolation`,
+or any build outside pip's isolated build environment — needs setuptools ≥ 77
+for the PEP 639 license metadata in `pyproject.toml`; an ordinary
+`pip install` gets it automatically through build isolation.
 
 ## Which door? Start from what does not fit
 
@@ -152,7 +160,7 @@ private audit tree and you cannot check it from here.
 | Paged decode vs the model's own attention | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; Gemma-4 has no reference at this resolution — its own cached forward swings −0.107 … +0.271 nats across windows — and the paged path's one measured cost there is the fp8 cache, 0.046 nats ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
 | Per-family serving throughput on one rented RTX 5090 class (six families, same protocol) | Qwen3-30B 97 → 155 tok/s B=1 and 483 → 944 B=16; OLMoE 248 → 452; Granite 191 → 285; Mixtral 48 → 107; gpt-oss and Gemma-4 NF4 only (124, 71) — the refused arms are the build-out ([`SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.34.0/docs/SERVING-THROUGHPUT.md)) | measured |
 | Single-stream Qwen3-30B-A3B on an RTX 5090 | ≈100 tok/s NF4; 204.6 tok/s with calibrated int4 attention + int4 experts | measured-private |
-| Batched (B=16) Qwen3-30B-A3B on an RTX 5090 | ≈1,238 tok/s aggregate | measured-private |
+| Batched (B=16) Qwen3-30B-A3B on an RTX 5090 | ≈1,238 tok/s aggregate | measured |
 | Same box, same prompts, against vLLM (GPTQ-Int4) | vLLM ahead 1.47× at B=1, 1.55× at B=16 | measured-private |
 | DeepSeek-V4-Flash (284B, 147 GB of experts on disk) | loads in ~10 s at 8.74 GiB peak VRAM and generates | measured |
 | Informed hot sets vs by-index, identical VRAM | +37.1% on DeepSeek-V4-Flash; the gain is a property of the host | measured |

@@ -31,7 +31,7 @@ statement that the page describes a capability without a measurement).
   own solution index is
   [docs/SOLUTIONS.md](https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/SOLUTIONS.md).
 
-Lookup aliases (`e4b`, `experts4bit`, `expertsnbit`) install this package;
+Lookup aliases (`e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit`, `experts-mxfp4`) install this package;
 always install and cite `experts4bit-qlora`.
 
 ## Environment, in one line
@@ -47,7 +47,8 @@ is measured-private and what is open, is [`STATUS.md`](STATUS.md).
 - Linux + NVIDIA CUDA only; Python 3.11 is what CI tests. The kernel path
   needs Triton on an sm_80+ GPU.
 - Nothing falls back silently: an unsupported family fails fast with a
-  named error, and every `enable_*` returns a count the caller asserts.
+  named error, and every `enable_*` returns a count or a non-empty handle
+  list, or raises — the caller asserts it.
 - A model that already fits in bf16 with headroom gains nothing here and
   pays an energy penalty (`e4b.train.energy-honest`).
 - Numbers live in [`claims.json`](claims.json) with their status; a page

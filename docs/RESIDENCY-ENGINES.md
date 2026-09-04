@@ -14,20 +14,30 @@ route to close, stream or compute the rest.
 | `enable_cold_engine` | resident VRAM | **computed on the host CPU** | — |
 | `enable_mxfp4_nvme_residency` | resident VRAM | streamed from an on-disk arena | `[fast]` + a baked arena |
 
-## Both host-RAM engines need standalone expert modules (2026-07-28)
+## Which engines reach an `ExpertsLoRA`-wrapped base (2026-07-28, revised 2026-09-04)
 
-`enable_pipelined_residency` accepts an `ExpertsLoRA.base` as a target (it once raised
-`NotImplementedError` there; the wrapper now delegates to the patched base in eval mode under
-`no_grad` when the adapter provably contributes nothing), and `enable_hot_residency` *silently skips* those modules
-(returning a lower patch count). `load_moe_4bit_streaming` always wraps in `ExpertsLoRA`,
-so the offload/streaming-loader path — the one a "serve past VRAM" reader is most likely on
-— does not reach either engine. Load bare (`Experts4bit`/`ExpertsNbit`, no LoRA wrapper) to
-use them. Composing offload with residency is a library increment, not a supported
-configuration.
+`load_moe_4bit_streaming` wraps each expert stack in `ExpertsLoRA`, and `ExpertsLoRA.forward`
+re-implements the expert math instead of calling `base.forward`, so a patch installed on the
+base runs only when the wrapper delegates to it (`ExpertsLoRA._delegate_to_base`: eval mode,
+`no_grad`, an engine attached, and an adapter that provably contributes nothing — the rule
+[CHOOSING.md](CHOOSING.md) documents).
 
-`enable_mxfp4_nvme_residency` **refuses** rather than skipping, for the same reason plus a
-sharper one: under the arena loader an adapter's base buffers are on `meta`, so it could not
-run even if it were reached.
+- `enable_pipelined_residency` accepts an `ExpertsLoRA.base` as a target. Under the
+  delegation conditions the wrapper hands the whole forward to the patched base; outside them
+  (training mode, grad enabled, a trained adapter) the patch installs and never runs, and the
+  function warns rather than returning a count that implies work — assert the count and check
+  the served path. This is the engine the streaming-loader path reaches, and what
+  `experts4bit_qlora.serve` attaches under `E4B_RESIDENCY=pipelined`. Host-RAM offload
+  composes with it: on an offloaded module the engine takes the pinned homes as its cold
+  source and removes offload's per-forward stage/evict hooks.
+- `enable_hot_residency`, the deprecated v0 engine, is the one that still needs standalone
+  `Experts4bit`/`ExpertsNbit` modules. Called directly it does not target wrapped bases: when
+  every expert module is a wrapped base it raises `NotImplementedError` and points at
+  `enable_pipelined_residency`; in a mixed model it skips the wrapped bases per module (each
+  still consumes its `hot_sets` entry) and returns a lower count.
+- `enable_mxfp4_nvme_residency` **refuses** a wrapped module rather than skipping, for the
+  same reason plus a sharper one: under the arena loader an adapter's base buffers are on
+  `meta`, so it could not run even if it were reached.
 
 ## Pick the hot sets from a routing histogram, not by index
 

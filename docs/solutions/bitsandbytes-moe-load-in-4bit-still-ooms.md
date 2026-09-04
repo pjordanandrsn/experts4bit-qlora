@@ -24,7 +24,7 @@ transformers v5 fuses each MoE layer's experts into two stacked tensors, `gate_u
 pip install "experts4bit-qlora[train]"   # the streaming loader needs transformers>=5.0
 ```
 
-`e4b`, `experts4bit` and `expertsnbit` are lookup aliases of the same package; install the canonical name.
+`e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit` and `experts-mxfp4` are lookup aliases of the same package; install the canonical name.
 
 ## Smallest correct example
 

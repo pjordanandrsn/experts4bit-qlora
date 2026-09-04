@@ -101,7 +101,7 @@ jobs:
       - name: llms bundle is current
         run: python scripts/build_llms_bundle.py --check
       - name: solution-page code blocks parse (python) and every local link resolves
-        run: python scripts/check_docs_examples.py
+        run: python scripts/check_docs_examples.py --root .
       - name: build sdist + wheel, twine check, METADATA assertions
         run: |
           python -m pip install --quiet --upgrade pip build twine

@@ -115,7 +115,7 @@ Status = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STAT
 Capabilities = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json"
 Solutions = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SOLUTIONS.md"
 Benchmarks = "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json"
-"Kernel package (grouped-nf4-gemm)" = "https://pypi.org/project/grouped-nf4-gemm/"
+"Kernel: grouped-nf4-gemm" = "https://pypi.org/project/grouped-nf4-gemm/"
 "Upstream (bitsandbytes#1965)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/pull/1965"
 "Tracking (bitsandbytes#1849)" = "https://github.com/bitsandbytes-foundation/bitsandbytes/issues/1849"
 
