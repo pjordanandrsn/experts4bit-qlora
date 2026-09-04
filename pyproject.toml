@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.34.0"
+version = "0.35.0"
 description = "Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -68,7 +68,9 @@ fast = [
     # Raised to >=0.23.0 for grouped-nf4-gemm#316: calibrate_attention_hessians
     # hands GPU activations to a HessianAccumulator that STORES on the CPU; the
     # 0.22.0 accumulator expected both on one device and raised a mismatch.
-    "grouped-nf4-gemm>=0.28.0",
+    # Raised to >=0.30.0 for grouped-nf4-gemm#335 (combine_rows) and the swiglu_rows /
+    # reduce_partials glue the 0.35.0 decode path uses when the kernel side has them.
+    "grouped-nf4-gemm>=0.30.0",
 ]
 train = [
     "transformers>=5.0",

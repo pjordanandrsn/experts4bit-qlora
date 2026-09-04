@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.35.0 — 2026-09-04
+
+### Calibrated int4 experts, calibrated sequentially (#384)
+
+- Per-expert GPTQ packing for the int4-b32 expert store from the fused forward's Hessian tap: `calibrate_expert_hessians`, `enable_serve_experts_int4(..., expert_hessians=)`, and the driver that decides the result, `enable_serve_experts_int4_calibrated`, which calibrates and packs layer chunk by layer chunk so every chunk is calibrated against the already-int4 prefix (GPTQ's sequential convention) and the host never holds more than one budget of Hessians. Knobs: `E4B_INT4_GPTQ_DEVICE=cuda` (GPU solve), `E4B_INT4_GPTQ_DAMP`, `E4B_INT4_HESSIAN_BUDGET_GB`. Off by default; the serve hook enables it with `E4B_SERVE_EXP_INT4_CALIB=1`.
+- Verdicts stay in the register: Granite's calibrated experts fail the registered gate on their second text (`e4b.serve.buildout.bo5.granite.b1.5090.2026-09-04`, notes); the Qwen3 and Mixtral readings under the sequential method are in the bo6 receipt and are registered with its bundle, not here. Calibrating all layers at once against the unquantised prefix is the two-step API only and is not the method that ships.
+
+### Decode glue through the kernel side (#385)
+
+- `silu(gate) * up` through `swiglu_rows` and the top-k combine through `combine_rows` when the kernel side has them (`E4B_FUSE_SWIGLU=0` / `E4B_FUSE_COMBINE=0` are the A/B arms); the split-K reduce through `reduce_partials`. Qwen3's licensed single-stream and batched positions after this cut: `e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04`, `e4b.serve.buildout.bo5.qwen3.b16.5090.2026-09-04`.
+
+### gpt-oss: the native MXFP4 expert store (#372)
+
+- gpt-oss experts are served from their released MXFP4 blocks and scales through the grouped MXFP4 GEMM, never re-quantised onto the int4 grid; single rows take the MXFP4 decode GEMV and batched rows keep the NF4 stack (`E4B_INT4_KEEP_NF4=1`): `e4b.serve.buildout.bo5.gptoss.b1.5090.2026-09-04`, `e4b.serve.buildout.bo5.gptoss.b16.5090.2026-09-04`.
+
+### Receipts: the second text, in the gate's own units (#386, #390)
+
+- The bo3 and bo5 build-out bundles are in-repo. Every calibrated and int4 arm now has a second text; three read FAIL as registered, and Mixtral's licensed label is withdrawn (`e4b.serve.buildout.mixtral.*`, notes). The gate was not retuned.
+
+### Documentation and packaging (#388, #393, #389, #394, #391)
+
+- The agent discoverability layer: routing sections in the README, `docs/SOLUTIONS.md` and six problem-first pages, `docs/capabilities.json` under a schema, `AGENTS.md`, `llms.txt` and the generated bundle, PyPI metadata with labelled project URLs, and a CPU-only CI job for all of it.
+- The bitsandbytes position is version-, workload- and shape-aware (upstream 5453368 is in 0.50.0, not in 0.49.2); `e4b.train.energy-honest` is superseded by `e4b.train.energy-honest.scoped-a2000`, scoped to its measured comparator and build. Solution pages for capacity, QLoRA on fused experts, offload and MXFP4 carry their decision structure.
+- LICENSE is the verbatim MIT text; the vendored bitsandbytes-derived file names `THIRD_PARTY_NOTICES.md` in its header. Homepage, Documentation, Status and Solutions point at the cerinamroth.com routing pages. CI pins grouped-nf4-gemm at a commit that no longer tracks a stale `build/lib/` (the previous pin could ship an old `nvme_reader.py`).
+- Requires grouped-nf4-gemm >= 0.30.0 for the `fast` extra.
+
 ## 0.34.0 — 2026-09-04
 
 Optimisation pass, day one: the round-2 fold reaches the stacks it never
