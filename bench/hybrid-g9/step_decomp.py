@@ -1510,12 +1510,17 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
     # no-flag run (Bugbot, e4b#275).
     profile_replays = 8 if (a.replay_profile_out and a.b1d_timed
                             and a.b1d_loop == "graph") else 0
+    # The op-level census (below) runs extra EAGER steps after the
+    # window; they advance pos/KV like the replay profiler's, so they
+    # are reserved the same way and kept out of the timed budget.
+    profile_ops = 2 if (a.op_profile_out and a.b1d_timed
+                        and a.b1d_loop == "eager") else 0
     # --ppl-steps scores far past --gen-tokens (1024 vs 128 by
     # default), so capacity must cover whichever window will actually
     # run or the appends index past the pre-ensured blocks -- the same
     # overflow class Bugbot caught on the replay profiler (e4b#275).
     cap_tokens = (a.prompt_len + max(a.gen_tokens, a.ppl_steps) + 8
-                  + profile_replays)
+                  + profile_replays + profile_ops)
     kv.graph_mode_init(seq=slot, upto_tokens=cap_tokens)
     dev = "cuda"
     start_tok = int(runner.tokens[rid][-1])
@@ -1686,7 +1691,8 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
 
     n_warm = 3
     used = runner.pos_of[rid] + n_warm + 1
-    n_steps = min(a.gen_tokens, cap_tokens - profile_replays - used - 2)
+    n_steps = min(a.gen_tokens,
+                  cap_tokens - profile_replays - profile_ops - used - 2)
     assert n_steps >= 16, f"window too small for stage A ({n_steps})"
     _mech_reset()   # PREREG-m3: window spans warmup + capture
     if getattr(a, "graph_break_census", False):
@@ -2069,6 +2075,81 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             Path(a.replay_profile_out).write_text(hdr + tbl)
             print(f"REPLAY_PROFILE_OUT {a.replay_profile_out}",
                   flush=True)
+        if profile_ops:
+            # Op-level census: the kernel table above names KERNELS
+            # (at::native::elementwise_kernel ...) but not the ops or
+            # call sites behind them, and graph replays carry no
+            # Python stack. Two uncaptured steps after the window --
+            # same post-window placement and reservation as the replay
+            # census -- profiled two ways at once: the torch profiler
+            # (per-op device time, launch count, input shapes; stacks
+            # OFF, torch 2.13 returns empty ones -- AMENDMENT-f1-tracer)
+            # and the dispatch-mode site tracer over EVERY aten op,
+            # which attributes launch counts to the nearest python
+            # frame of our own code. Time per site is apportioned by
+            # launch share, exact in the ~1 us/launch regime this
+            # census exists for (the tracer's own caveat).
+            from torch.profiler import ProfilerActivity, profile
+
+            class _AllOps:
+                # every op -- except the tracer's None sentinel for a
+                # failed schema lookup, which the whitelist path used to
+                # drop and which is not a name (Bugbot, e4b#380)
+                def __contains__(self, name):
+                    return name is not None
+
+            tracer = _EwSiteTracer(_AllOps())
+            with tracer, profile(activities=[ProfilerActivity.CPU,
+                                             ProfilerActivity.CUDA],
+                                 record_shapes=True) as op:
+                for _ in range(profile_ops):
+                    one_step()
+                torch.cuda.synchronize()
+            by_op = op.key_averages().table(
+                sort_by="count", row_limit=80)
+            by_shape = op.key_averages(group_by_input_shape=True).table(
+                sort_by="self_cuda_time_total", row_limit=80)
+            op_us = {}
+            for evt in op.key_averages():
+                if evt.key.startswith("aten::"):
+                    op_us[evt.key] = op_us.get(evt.key, 0.0) + float(
+                        getattr(evt, "self_device_time_total",
+                                getattr(evt, "self_cuda_time_total", 0.0)))
+            per_op_calls = {}
+            for (name, _site), n in tracer.counts.items():
+                per_op_calls[name] = per_op_calls.get(name, 0) + n
+            sites = {}
+            for (name, site), n in tracer.counts.items():
+                share = (op_us.get(name, 0.0) * n / per_op_calls[name]
+                         if per_op_calls.get(name) else 0.0)
+                sr = sites.setdefault(site, {"calls": 0, "us": 0.0,
+                                             "ops": {}})
+                sr["calls"] += n
+                sr["us"] += share
+                sr["ops"][name] = sr["ops"].get(name, 0) + n
+            lines = [f"profiled eager steps: {profile_ops}",
+                     f"traced aten dispatches: "
+                     f"{sum(tracer.counts.values())} "
+                     f"({sum(tracer.counts.values()) / profile_ops:.0f}"
+                     f"/step)", "",
+                     "== by call site (dispatch-mode tracer; launches/step,"
+                     " apportioned device us/step, top ops) =="]
+            for site, sr in sorted(sites.items(),
+                                   key=lambda kv: -kv[1]["calls"])[:80]:
+                top = ", ".join(f"{k.split('::')[-1]}x{v // profile_ops}"
+                                for k, v in sorted(sr["ops"].items(),
+                                                   key=lambda kv: -kv[1])[:4])
+                lines.append(f"{sr['calls'] / profile_ops:7.0f}  "
+                             f"{sr['us'] / profile_ops:8.1f} us  {site}  "
+                             f"[{top}]")
+            Path(a.op_profile_out).write_text(
+                "\n".join(lines) + "\n\n== by op (profiler; launch count) ==\n"
+                + by_op + "\n\n== by op + input shape (profiler; self device"
+                " time) ==\n" + by_shape)
+            print(f"OP_PROFILE_OUT {a.op_profile_out} "
+                  f"dispatches/step="
+                  f"{sum(tracer.counts.values()) / profile_ops:.0f} "
+                  f"sites={len(sites)}", flush=True)
         set_context(prev)
         _frames_after = _dynamo_frame_count()
         _recompiles = None
@@ -2560,6 +2641,14 @@ def main():
                     help="JSON of per-region descendant op counts from "
                          "the profiler event tree (needs --host-brackets; "
                          "engages the torch profiler, stacks off)")
+    ap.add_argument("--op-profile-out", default=None,
+                    help="with --b1d-loop eager --b1d-timed: after the "
+                         "timed window, profile two uncaptured steps with "
+                         "shapes (profiler) and a dispatch-mode site tracer "
+                         "and write the op-level census (by call site, by "
+                         "op count, by op+shape) here; "
+                         "the kernel census (--replay-profile-out) names "
+                         "kernels, this names the ops and call sites")
     ap.add_argument("--b1d-timed", action="store_true",
                     help="PREREG-b1d stage C: clean timing -- no per-step "
                          "sync/hash; tokens logged to a device buffer and "
