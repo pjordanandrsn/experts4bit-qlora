@@ -2092,8 +2092,11 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             from torch.profiler import ProfilerActivity, profile
 
             class _AllOps:
-                def __contains__(self, _name):
-                    return True
+                # every op -- except the tracer's None sentinel for a
+                # failed schema lookup, which the whitelist path used to
+                # drop and which is not a name (Bugbot, e4b#380)
+                def __contains__(self, name):
+                    return name is not None
 
             tracer = _EwSiteTracer(_AllOps())
             with tracer, profile(activities=[ProfilerActivity.CPU,
