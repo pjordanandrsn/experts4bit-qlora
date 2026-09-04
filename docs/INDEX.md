@@ -19,6 +19,7 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
 | [`CHOOSING.md`](CHOOSING.md) | which entry point, by the constraint you hit (VRAM, host RAM, disk) |
 | [`METHODOLOGY.md`](METHODOLOGY.md) | hosts, protocols, every measurement's provenance; §13 serving parity, §13.1 the routing-flip floor |
 | [`SERVING-PARITY.md`](SERVING-PARITY.md) | per-family parity of paged decode against the model's own attention |
+| [`SERVING-THROUGHPUT.md`](SERVING-THROUGHPUT.md) | per-family decode throughput (B=1, B=16) under the Qwen3-30B campaign's protocol; refused arms = the build-out list; receipt in `bench/hybrid-g9/throughput-20260904/` |
 | [`STORAGE-MODES.md`](STORAGE-MODES.md) | the nf4/fp4/int8/fp8/bf16/fp16 support matrix and what each promises |
 | [`RESIDENCY-ENGINES.md`](RESIDENCY-ENGINES.md) | the residency engines, hot-set selection, host-regime laws |
 | [`ARCHITECTURE_SUPPORT.md`](ARCHITECTURE_SUPPORT.md) | which model families load, run and capture, with evidence |
