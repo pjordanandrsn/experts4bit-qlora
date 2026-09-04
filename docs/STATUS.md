@@ -177,6 +177,22 @@ Granite, +0.0002 on Mixtral) and buys nothing (Granite ×0.968 B=1, Mixtral
   windows and a three-forward test in plain transformers show the model
   has no reference at that resolution (above). What survives is the
   fp8 share, 0.046 nats. [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) stays open, re-scoped.
+- **"4-bit on a card that already fits is a 1.2–2.3× energy penalty:
+  NF4 is storage-only and the GEMM runs in bf16 either way" —
+  SUPERSEDED, number unchanged** (2026-09-04). The measurement stands as
+  its receipt made it — one OLMoE-dims expert projection on an RTX A2000,
+  dequantize-then-`linear` and a bitsandbytes 0.50-dev fork build's
+  `matmul_4bit` routing against native bf16 — and is re-registered with
+  that comparator and version named as `e4b.train.energy-honest.scoped-a2000`
+  (`e4b.train.energy-honest` is `superseded`, pointing at it). What is
+  withdrawn is the mechanism sentence as a universal: bitsandbytes ≥ 0.50.0
+  CUDA inference can consume packed 4-bit weights directly for supported
+  ordinary 2-D cells, routed grouped MoE execution is a separate contract,
+  and training's input gradient is separate again
+  ([`BITSANDBYTES.md`](BITSANDBYTES.md)). The receipt names its build only
+  as "0.50.0.dev0 / the fork", so which path its 4-bit arm exercised is not
+  recoverable from it — remeasure with a recorded version:
+  [#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392).
 - **The 13.47× training speedup is ~7.2× against a current baseline.**
   transformers v5 fused the per-expert loop upstream, moving the baseline
   from 50.86 to 26.6 s/step. The grouped arm did not regress. Roughly
@@ -201,6 +217,12 @@ Granite, +0.0002 on Mixtral) and buys nothing (Granite ×0.968 B=1, Mixtral
   kernel.
 - **#341 — a flaky end-to-end KV test** (unseeded inputs, an f32-mode
   tolerance applied to the fp8 default on sm_120).
+- **[#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392) —
+  the energy receipt does not record its bitsandbytes build.**
+  `docs/METHODOLOGY.md` names the build only as `0.50.0.dev0` (§1) and
+  "the fork (bnb 0.50-dev)" (the packaging note covering §9–§10), with no
+  commit; the harness prints the GPU name, not `bitsandbytes.__version__`. Until it is rerun on a recorded release,
+  `e4b.train.energy-honest.scoped-a2000` is a one-card, one-build number.
 - **No shipped tool bakes the arena.** Reproducing the training receipt
   from published artifacts still needs a quantise-and-emit step you write
   yourself.
