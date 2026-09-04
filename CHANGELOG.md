@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Correction: Granite's int4-expert rows fail the registered K8 gate
+
+- The 0.33.0 notes quoted Granite-3.1-3B-A800M at 302 tok/s (×1.59) with
+  int4 experts + round-1 norms + router epilogue as reaching the Qwen3-30B
+  ratio. Its int4 experts cost +0.0118 nats = **+0.063 ppl** against NF4
+  on the same 2048-step window, over the registered 0.05-ppl uncalibrated
+  gate (`experts4bit_qlora.k8_gate`). The lane table carried the family's
+  0.0033-nat noise floor and no budget verdict, so the row passed unread.
+  Retracted as a parity claim in `docs/STATUS.md`; the 0.32.0 throughput
+  table's Granite int4 rows (same delta) are re-labelled in
+  `docs/SERVING-THROUGHPUT.md` and `docs/claims.json`. Granite's licensed
+  stack keeps NF4 experts (round-1 + round-2 folds + epilogue); its
+  combined number is on the validation lane.
+
 ## 0.33.0 — 2026-09-04
 
 ### Throughput parity across families: the build-out, measured
