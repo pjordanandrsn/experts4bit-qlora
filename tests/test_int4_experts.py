@@ -312,47 +312,53 @@ def _gptoss_case(E=2, H=128, inter=64):
     return ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias
 
 
-def test_gptoss_is_packed_in_the_builders_layout(tmp_path, monkeypatch):
-    """gpt-oss packs: the int4 stores must be byte-identical to packing
-    the stacks the loader's own builder (``from_gptoss``) produces from
-    the same released bytes -- gate block then up block, output-major --
-    with N/K oriented for the GEMV. The oracle is the builder's transform
-    replicated on the raw dequant, never the lane's own helper."""
+def test_gptoss_store_is_the_released_mxfp4_bytes(tmp_path, monkeypatch):
+    """gpt-oss is served NATIVELY: the store holds the released fp4 blocks
+    and e8m0 scales, row-de-interleaved (gate block first) and flattened
+    to the kernel's [E, N, K//2] / [E, N, K//32] -- byte-identical to the
+    checkpoint, and dequantising the store reproduces the loader builder's
+    gate-first dense layout. Nothing is re-quantised (int4-b32 measured
+    +0.626 nats on this family: a uniform grid cannot hold e2m1 levels)."""
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
     monkeypatch.delenv("E4B_INT4_KEEP_NF4", raising=False)
     ck, names, pre, gu_dense, dn_dense, gu_bias, dn_bias = _gptoss_case()
     E_, H_, twoI = gu_dense.shape
     I_ = twoI // 2
     src = _write_ckpt(tmp_path, ck)
-    gub = torch.cat([gu_bias[:, 0::2], gu_bias[:, 1::2]], dim=1)  # as the loader stores it
+    gub = torch.cat([gu_bias[:, 0::2], gu_bias[:, 1::2]], dim=1)
     live, st = _live_model(pre, "gpt_oss", top_k=4)
     st.gptoss = True
     st.h_gu_b = gub
     st.h_dn_b = dn_bias
-
     n = enable_serve_experts_int4(live, src, model_type="gpt_oss",
                                   plan_model=_PlanTree(names))
     assert n == 1
     stores = st._int4_stores
+    assert stores["kind"] == "mxfp4"
     assert stores["gu"]["N"] == twoI and stores["gu"]["K"] == H_
     assert stores["dn"]["N"] == H_ and stores["dn"]["K"] == I_
-    # the builder's transform, line for line (arch/gptoss.py from_gptoss)
+    gb, gs = ck[f"{pre}.gate_up_proj_blocks"], ck[f"{pre}.gate_up_proj_scales"]
+    db, ds = ck[f"{pre}.down_proj_blocks"], ck[f"{pre}.down_proj_scales"]
+    want_gb = torch.cat([gb[:, 0::2], gb[:, 1::2]], 1).reshape(E_, twoI, H_ // 2)
+    want_gs = torch.cat([gs[:, 0::2], gs[:, 1::2]], 1)
+    assert torch.equal(stores["gu"]["blocks"].cpu(), want_gb)
+    assert torch.equal(stores["gu"]["scales"].cpu(), want_gs)
+    assert torch.equal(stores["dn"]["blocks"].cpu(), db.reshape(E_, H_, I_ // 2))
+    assert torch.equal(stores["dn"]["scales"].cpu(), ds)
+    assert stores["gu"]["blocks"].dtype == torch.uint8 and stores["gu"]["scales"].dtype == torch.uint8
+    # dequantising the store == the loader builder's transform on the raw dequant
     gt = gu_dense.transpose(1, 2).contiguous()
-    gt = torch.cat([gt[:, 0::2, :], gt[:, 1::2, :]], dim=1)
-    gt_dn = dn_dense.transpose(1, 2).contiguous()
-    for e in range(E_):
-        pk, sc = pack_int4_b32(gt[e])
-        assert torch.equal(stores["gu"]["packed"][e].cpu(), pk)
-        assert torch.equal(stores["gu"]["scales"][e].cpu(), sc)
-        pk, sc = pack_int4_b32(gt_dn[e])
-        assert torch.equal(stores["dn"]["packed"][e].cpu(), pk)
-        assert torch.equal(stores["dn"]["scales"][e].cpu(), sc)
-    # and NOT the interleaved rows: packing the raw transpose must differ
-    raw = gu_dense.transpose(1, 2).contiguous()
-    pk_raw, _ = pack_int4_b32(raw[0])
-    assert not torch.equal(stores["gu"]["packed"][0].cpu(), pk_raw), \
-        "an interleaved pack must not pass -- the test would prove nothing"
-    # split-K partials sized from the config's top_k (4 for gpt-oss)
-    assert stores["gu"]["part"].shape[0] % 4 == 0
+    gt = torch.cat([gt[:, 0::2, :], gt[:, 1::2, :]], dim=1)          # [E, 2I, H] gate first
+    deq = dequantize_mxfp4(stores["gu"]["blocks"].cpu().reshape(E_, twoI, H_ // 32, 16),
+                           stores["gu"]["scales"].cpu(), dtype=torch.float32)   # [E, H, 2I]
+    assert torch.equal(deq.transpose(1, 2), gt)
+    deq_dn = dequantize_mxfp4(stores["dn"]["blocks"].cpu().reshape(E_, H_, I_ // 32, 16),
+                              stores["dn"]["scales"].cpu(), dtype=torch.float32)  # [E, I, H]
+    assert torch.equal(deq_dn.transpose(1, 2), dn_dense.transpose(1, 2))
+    # the NF4 stacks are freed by default; the biases stay
+    assert st.h_gu_p.numel() == 0 and st.h_gu_b is gub
+    # and the interleaved rows would NOT have passed
+    assert not torch.equal(stores["gu"]["blocks"].cpu(), gb.reshape(E_, twoI, H_ // 2))
 
 
 def test_gptoss_refuses_a_wrapper_without_the_bias_epilogue(tmp_path):
@@ -378,9 +384,19 @@ def test_gptoss_refuses_bias_width_mismatch(tmp_path):
                                   plan_model=_PlanTree(names))
 
 
-def test_gptoss_layout_helper_refuses_misshapen_stacks():
-    from experts4bit_qlora.engines.int4_experts import _gptoss_packer_layout
+def test_gptoss_layout_helpers_refuse_misshapen_stacks():
+    from experts4bit_qlora.engines.int4_experts import _gptoss_packer_layout, _mxfp4_store_layout
     with pytest.raises(RuntimeError, match="disagree"):
         _gptoss_packer_layout(torch.zeros(2, 8, 6), torch.zeros(2, 4, 8))
     with pytest.raises(RuntimeError, match="expected"):
         _gptoss_packer_layout(torch.zeros(8, 6), torch.zeros(3, 8))
+    u8 = torch.uint8
+    bad = (torch.zeros(2, 8, 2, 16, dtype=u8), torch.zeros(2, 8, 2, dtype=u8),     # 2I=8 rows -> I=4, but
+           torch.zeros(2, 64, 1, 16, dtype=u8), torch.zeros(2, 64, 1, dtype=u8))   # down says I//32 = 1
+    with pytest.raises(RuntimeError, match="disagree"):
+        _mxfp4_store_layout(*bad)
+    gub, gus, dnb, dns = _mxfp4_store_layout(
+        torch.zeros(2, 64, 4, 16, dtype=u8), torch.zeros(2, 64, 4, dtype=u8),     # 2I=64 (I=32), H=128
+        torch.zeros(2, 128, 1, 16, dtype=u8), torch.zeros(2, 128, 1, dtype=u8))   # H=128 rows, I//32 = 1
+    assert tuple(gub.shape) == (2, 64, 64) and tuple(gus.shape) == (2, 64, 4)
+    assert tuple(dnb.shape) == (2, 128, 16) and tuple(dns.shape) == (2, 128, 1)

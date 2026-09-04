@@ -74,8 +74,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
-    _int4_gemv_decode = (device_grouping and int4_stores is not None
-                         and x_rows.shape[0] <= 256)
+    # A native-MXFP4 store (gpt-oss) serves EVERY shape through the kernel
+    # side's grouped MXFP4 GEMM on the singleton contract (one row per
+    # group, ids as a device tensor): no int4-b32 kernels, no tile table,
+    # no unsort. The mxfp4 kernel has no captured M-tile variant yet, so
+    # the device-grouping branch is not taken for this store kind.
+    _mxfp4_store = int4_stores is not None and int4_stores.get("kind") == "mxfp4"
+    _int4_gemv_decode = (not _mxfp4_store and device_grouping
+                         and int4_stores is not None and x_rows.shape[0] <= 256)
+    if _mxfp4_store:
+        singleton_groups = True
+        device_grouping = False
     if _int4_gemv_decode:
         # batched DECODE on the int4 store: the split-K GEMV serves rows
         # in INPUT order (P7: 1.92x/1.28x over the M-tile at ~1-2 rows
@@ -192,6 +201,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "int4_stores did not reach _fused_over_stack")
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
+    elif _mxfp4_store:
+        from mxfp4_grouped import gemm_mxfp4_grouped
+        _sizes_mx = [1] * x_rows.shape[0]           # host constant: capture-safe
+        _eids_mx = local_ids.to(torch.int32)
+
+        def _mm(xr, pk, am):
+            st = int4_stores["gu" if pk is gu_p else "dn"]
+            return gemm_mxfp4_grouped(xr.to(torch.bfloat16).contiguous(),
+                                      st["blocks"], st["scales"], _sizes_mx, _eids_mx)
     elif int4_stores is not None:
         # Opt-in uniform-int4 expert store (engines/int4_experts). The
         # NF4 stacks may already be FREED, so BOTH branches must serve
