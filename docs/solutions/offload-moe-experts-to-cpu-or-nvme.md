@@ -59,7 +59,7 @@ Serving a native-MXFP4 arena (DeepSeek-V4) is the other side of the seam — [`m
 
 - Families in the register for this path: Qwen3-MoE and OLMoE (host-RAM ceiling receipts), DeepSeek-V4 Flash / Pro and gpt-oss (native MXFP4).
 - Arena formats: NF4 quantize-at-bake (four segments per expert row) and native MXFP4 relocation (six segments, fused on read). The manifest's `bake_mode` records which provenance claim the arena supports.
-- Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm>=0.28.0 (Triton, Linux-only), local NVMe or a fast block device, pinned host RAM for the hot tier; CI tests Python 3.11.
+- Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), Triton (Linux-only), local NVMe or a fast block device, pinned host RAM for the hot tier; CI tests Python 3.11.
 
 ## Limitations
 

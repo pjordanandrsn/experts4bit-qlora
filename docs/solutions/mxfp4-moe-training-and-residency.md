@@ -67,7 +67,7 @@ Training against the same relocated bytes: load with `arena=..., arena_train=Tru
 
 - Families: gpt-oss (per-expert biases, clamped GLU, interleaved rows) and DeepSeek-V4 Flash / Pro (clamped SwiGLU, FP8 dense side).
 - Arena provenance: a relocation bake is hash-preserving, so the served bytes are the checkpoint's own; a quantize-at-bake NF4 arena is bit-identical to the quantiser's output, not to the release. The manifest records `bake_mode`.
-- Version floors from `pyproject.toml`: training on an MXFP4 arena needs grouped-nf4-gemm>=0.12.0 (the `F8_E8M0` scale tag; below it `check_arena_geometry` raises `KeyError`), the MXFP4 grouped kernels need >=0.14.0, and the `[fast]` extra pins >=0.28.0.
+- Version floors, all from `pyproject.toml`: the `fast` extra's floor is grouped-nf4-gemm >= 0.30.0 at this commit (validated by CI). Two lower feature floors are recorded in its comment ladder and sit below the current floor: training on an MXFP4 arena landed in grouped-nf4-gemm 0.12.0 (the `F8_E8M0` scale tag; below it `check_arena_geometry` raises `KeyError`), and the MXFP4 grouped kernels' 64-bit expert offset (grouped-nf4-gemm#205) in 0.14.0.
 - Environment: Linux, NVIDIA CUDA sm_80 or newer, Triton (Linux-only); CI tests Python 3.11.
 
 ## Limitations

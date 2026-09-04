@@ -182,7 +182,7 @@
       ],
       "limitations": [
         "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
-        "dgrad=True needs grouped-nf4-gemm>=0.7.0; on older cuts it is downgraded with a RuntimeWarning",
+        "dgrad=True needs grouped-nf4-gemm>=0.7.0 (below the current [fast] floor in pyproject.toml, so any [fast] install has it); on older cuts it is downgraded with a RuntimeWarning",
         "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset"
       ],
       "status": "supported"
@@ -304,7 +304,7 @@
         ],
         "special_requirements": [
           "transformers>=5.0 for the streaming loader ([train] extra)",
-          "grouped-nf4-gemm>=0.28.0 ([fast] extra)",
+          "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
           "triton>=3.4 (Linux-only distribution)",
           "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
           "local NVMe or a fast block device; pinned host RAM for the hot tier"
@@ -378,7 +378,7 @@
           "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
         ],
         "special_requirements": [
-          "grouped-nf4-gemm>=0.28.0 ([fast] extra)",
+          "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
           "triton>=3.4 (Linux-only distribution)"
         ]
       },
@@ -464,7 +464,7 @@
           "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
         ],
         "special_requirements": [
-          "grouped-nf4-gemm>=0.28.0 ([fast] extra)",
+          "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
           "triton>=3.4 (Linux-only distribution)",
           "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
           "local NVMe or a fast block device; pinned host RAM for the hot tier"
@@ -498,7 +498,7 @@
       "limitations": [
         "A uniform int4 grid cannot hold e2m1 levels: re-quantising MXFP4 experts to int4-b32 fails the quality gate (docs/STATUS.md)",
         "gpt-oss raw-text perplexity is not an instrument for ranking an exact arm against a noisy one; the native store's speed is quoted with its quality gate open (docs/SERVING-THROUGHPUT.md)",
-        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales); the [fast] floor is higher"
+        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml"
       ],
       "status": "experimental"
     }

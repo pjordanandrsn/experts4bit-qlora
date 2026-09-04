@@ -88,7 +88,7 @@ Or from the CLI: `OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora
 
 - Families: those of the loader ([`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md)). Offload identity is tested on nf4 / int8 / bf16; fp4 / fp8 / fp16 ride the same code path ([`../STORAGE-MODES.md`](../STORAGE-MODES.md)).
 - Offload training requires gradient checkpointing (`use_reentrant=False`); the shipped trainer always enables it.
-- Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. Residency engines need grouped-nf4-gemm>=0.28.0 (Triton, Linux-only, sm_80 or newer).
+- Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. Residency engines need grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), with Triton (Linux-only) on an sm_80-or-newer GPU.
 
 ## Limitations
 

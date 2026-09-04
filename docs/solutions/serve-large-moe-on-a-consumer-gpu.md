@@ -27,7 +27,7 @@ Single-stream decode is bandwidth-bound: each token reads the routed experts plu
 | router epilogue | `engines.router_epilogue.fuse_router_epilogue` | `E4B_FUSE_ROUTER_EPI=1` |
 | paged fp8 KV cache | `engines.fp8_paged_kv` + `engines.paged_attention` | — |
 
-The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the in-tree harness `bench/hybrid-g9/step_decomp.py`, which produced the receipts; the HTTP shim and `infer` CLI do not read them.
+The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the in-tree harness `bench/hybrid-g9/step_decomp.py`, which produced the receipts; the HTTP shim and `infer` CLI do not read them. `E4B_SERVE_EXP_INT4` is read only by an out-of-tree bench hook (a `usercustomize` module that is not in this repository), never by the package: the in-package entry point for the int4 expert store is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
 
 ## Install
 
@@ -69,7 +69,7 @@ curl -s localhost:8777/generate -H 'content-type: application/json' \
 
 ## Supported scope
 
-Six families measured under one protocol on a rented RTX 5090 class: Qwen3-30B-A3B, OLMoE-1B-7B, Granite-3.1-3B-A800M, gpt-oss-20b, Gemma-4-26B-A4B and Mixtral-8x7B-Instruct. Licensed configuration per family after the 0.33–0.34 build-out ([`../SERVING-THROUGHPUT.md`](../SERVING-THROUGHPUT.md)): Qwen3 and OLMoE take every lever; **Granite keeps NF4 experts** with the folds and epilogue; Gemma-4 int4 experts plus round-1 folds and epilogue, with no quality instrument; Mixtral int4 experts plus calibrated attention, folds and epilogue; gpt-oss NF4 experts plus folds. Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm>=0.28.0 (Triton, Linux-only); CI tests Python 3.11.
+Six families measured under one protocol on a rented RTX 5090 class: Qwen3-30B-A3B, OLMoE-1B-7B, Granite-3.1-3B-A800M, gpt-oss-20b, Gemma-4-26B-A4B and Mixtral-8x7B-Instruct. Licensed configuration per family after the 0.33–0.34 build-out ([`../SERVING-THROUGHPUT.md`](../SERVING-THROUGHPUT.md)): Qwen3 and OLMoE take every lever; **Granite keeps NF4 experts** with the folds and epilogue; Gemma-4 int4 experts plus round-1 folds and epilogue, with no quality instrument; Mixtral int4 experts plus calibrated attention, folds and epilogue; gpt-oss NF4 experts plus folds. Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), Triton (Linux-only); CI tests Python 3.11.
 
 ## Limitations
 
