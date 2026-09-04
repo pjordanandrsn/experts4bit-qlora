@@ -160,3 +160,19 @@ def test_explicit_key_groups_still_broadcast():
                         k_groups=4, device="cpu")
     assert kv.kgs == [4, 4] and kv.k_groups == 4
 
+
+def test_auto_key_groups_keep_32_wide_at_small_heads():
+    """head_dim 64 gets 2 groups (32-wide), not the old 4 (16-wide) that
+    kept it off the fp8 attention compute path; 32 gets 1; 128 stays 4."""
+    import experts4bit_qlora.engines.fp8_paged_kv as mod
+    assert mod._auto_k_groups(64) == 2
+    assert mod._auto_k_groups(32) == 1
+    assert mod._auto_k_groups(128) == 4
+    kv = mod.Fp8PagedKV(2, 8, 64, batch=1, max_tokens_per_seq=32, device="cpu")
+    assert kv.kgs == [2, 2] and kv.k_groups == 2
+    # round trip on the new default
+    k, v = torch.randn(5, 8, 64), torch.randn(5, 8, 64)
+    kv.append(0, 0, k, v)
+    kk, vv = kv.reference_kv(0, 0)
+    assert (kk.float() - k).abs().max() < 0.1 * k.abs().max()
+

@@ -110,9 +110,13 @@ def _auto_k_groups(head_dim: int, width: int = 32) -> int:
     kernel's single source of truth) whether it accepts the count, and
     fall back to 4 groups -- the pre-0.32 default -- when it does not
     or when the kernel is absent."""
-    # never coarser than the pre-0.32 default of 4 groups: head_dim 64
-    # keeps its 16-wide scales, 128 its 32-wide; only larger heads refine
-    want = max(4, head_dim // width)
+    # 32-wide scales at EVERY head_dim: 2 groups at 64, 4 at 128, 8 at
+    # 256, 16 at 512. The old fixed 4 gave 64-dim heads 16-wide groups,
+    # which is finer than the rule but below the fp8 dot's 32-wide
+    # minimum, so GraniteMoe and gpt-oss (head_dim 64) ran the f32
+    # attention compute path on sm_120 (P30). Wider than 32 is never
+    # chosen; narrower than the rule never was the measured config.
+    want = max(1, head_dim // width)
     while head_dim % want:
         want //= 2
     if want <= 4:

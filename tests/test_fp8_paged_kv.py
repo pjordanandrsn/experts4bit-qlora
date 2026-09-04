@@ -79,7 +79,7 @@ def test_interleaved_sequences_stay_separate():
         k_all = torch.cat([c[0] for c in chunks])
         v_all = torch.cat([c[1] for c in chunks])
         got_k, got_v = kv.reference_kv(0, seq)
-        assert torch.equal(got_k, _direct(k_all, 4))
+        assert torch.equal(got_k, _direct(k_all, kv.k_groups))
         assert torch.equal(got_v, _direct(v_all, 1))
     # rows really are interleaved across sequences (this test would pass
     # trivially if each sequence's blocks were contiguous)
@@ -179,7 +179,7 @@ def test_failed_append_leaves_pools_in_lockstep(monkeypatch):
     # and the NEXT append still round-trips both sides at the same rows
     kv.append(0, 0, k1, v1)
     got_k, got_v = kv.reference_kv(0, 0)
-    assert torch.equal(got_k, _direct(torch.cat([k0, k1]), 4))
+    assert torch.equal(got_k, _direct(torch.cat([k0, k1]), kv.k_groups))
     assert torch.equal(got_v, _direct(torch.cat([v0, v1]), 1))
 
 
@@ -206,7 +206,7 @@ def test_slot_reset_recycles_blocks_and_isolates_the_next_sequence():
     k2, v2 = _tokens(5, seed=2)
     kv.append(0, 0, k2, v2)
     got_k, got_v = kv.reference_kv(0, 0)
-    assert torch.equal(got_k, _direct(k2, 4))
+    assert torch.equal(got_k, _direct(k2, kv.k_groups))
     assert torch.equal(got_v, _direct(v2, 1))
 
 
