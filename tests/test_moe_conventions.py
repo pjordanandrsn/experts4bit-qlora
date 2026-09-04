@@ -551,7 +551,14 @@ def test_gemma4_is_a_prefused_convention_in_the_module_layout():
     for mt in ("gemma4_text", "gemma4"):
         c = convention_for(mt)
         assert c.name == "gemma4" and c.fused_prefix == "experts"
-        assert c.transpose_re is None and c.roles == {} and c.renames == ()
+        assert c.transpose_re is None and c.roles == {}
+        # the released multimodal index's prefix is stripped for a text-only
+        # tree (the loader's rule) and the towers it lacks are dropped by rule
+        assert c.renames == (("model.language_model.", "model."),)
+        assert c.rename("model.language_model.layers.0.experts.gate_up_proj") == "model.layers.0.experts.gate_up_proj"
+        assert c.drop_re.search("model.vision_tower.encoder.layers.0.attn.q_proj.weight")
+        assert c.drop_re.search("model.embed_vision.embedding_projection.weight")
+        assert not c.drop_re.search("model.language_model.layers.0.experts.gate_up_proj")
         assert c.expert_re.search("model.language_model.layers.0.experts.gate_up_proj") is None
     # the int4 lane's pre-fused matcher sees these keys as layer 0's stacks
     from experts4bit_qlora.engines.int4_experts import _FUSED_TARGET
