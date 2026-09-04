@@ -78,9 +78,10 @@ def _out_positions(out):
 
 
 def _structural(mod):
-    """Which router this is, structurally, or None. Returns
-    ``(kind, spec)`` with ``spec`` carrying k, E, hidden and the kind's
-    extras. Kinds: ``softmax_topk`` (Qwen3-MoE / OLMoE / Mixtral: softmax
+    """Which routers this could be, structurally, or None. Returns a list
+    of ``(kind, spec)`` candidates in probe order; the module's own forward
+    decides among them (attribute presence alone cannot: a module may
+    carry ``norm_topk_prob`` and still select on the logits). Kinds: ``softmax_topk`` (Qwen3-MoE / OLMoE / Mixtral: softmax
     over all, top-k, optional renormalise), ``topk_softmax`` (gpt-oss with
     a bias, GraniteMoe without: top-k on the logits, softmax over the k),
     ``gemma4`` (Gemma4TextRouter: norm and scale before the projection,
@@ -97,7 +98,7 @@ def _structural(mod):
             return None
         if getattr(mod.proj, "bias", None) is not None or tuple(pes.shape) != (e,) or not (0 < k <= e):
             return None
-        return "gemma4", {"k": k, "e": e, "hidden": hidden}
+        return [("gemma4", {"k": k, "e": e, "hidden": hidden})]
     w = getattr(mod, "weight", None)
     if not torch.is_tensor(w) or w.dim() != 2:
         return None
@@ -108,17 +109,18 @@ def _structural(mod):
         return None
     if not (0 < k <= e):
         return None
+    cands = []
     if hasattr(mod, "norm_topk_prob"):
         try:
-            if int(mod.num_experts) != e or int(mod.hidden_dim) != hidden:
-                return None
+            ok = int(mod.num_experts) == e and int(mod.hidden_dim) == hidden
         except Exception:
-            return None
-        return "softmax_topk", {"k": k, "e": e, "hidden": hidden, "norm": bool(mod.norm_topk_prob)}
+            ok = False
+        if ok:
+            cands.append(("softmax_topk", {"k": k, "e": e, "hidden": hidden, "norm": bool(mod.norm_topk_prob)}))
     bias = getattr(mod, "bias", None)
-    if bias is not None and (not torch.is_tensor(bias) or tuple(bias.shape) != (e,)):
-        return None
-    return "topk_softmax", {"k": k, "e": e, "hidden": hidden, "bias": bias}
+    if bias is None or (torch.is_tensor(bias) and tuple(bias.shape) == (e,)):
+        cands.append(("topk_softmax", {"k": k, "e": e, "hidden": hidden, "bias": bias}))
+    return cands or None
 
 
 def _reference_for(mod, kind, spec, x):
@@ -188,16 +190,25 @@ def fuse_router_epilogue(model) -> int:
     for mod in model.modules():
         if "Router" not in type(mod).__name__:
             continue
-        st = _structural(mod)
-        if st is None:
+        cands = _structural(mod)
+        if not cands:
             continue
-        kind, spec = st
-        if kind == "topk_softmax" and not has_sol:
-            no_kernel_mode += 1     # the installed kernel predates select_on_logits
+        chosen = None
+        needs_mode = False
+        for kind, spec in cands:
+            if kind == "topk_softmax" and not has_sol:
+                needs_mode = True   # the installed kernel predates select_on_logits
+                continue
+            if _probe_matches(mod, kind, spec):
+                chosen = (kind, spec)
+                break
+        if chosen is None:
+            if needs_mode:
+                no_kernel_mode += 1
+            else:
+                skipped += 1
             continue
-        if not _probe_matches(mod, kind, spec):
-            skipped += 1
-            continue
+        kind, spec = chosen
         orig = mod.forward
         k, hidden, pos = spec["k"], spec["hidden"], spec["out_pos"]
 
