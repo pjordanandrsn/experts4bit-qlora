@@ -2224,6 +2224,10 @@ def main():
                          "with the paged shim NOT registered: the reference the "
                          "paged path must match on families the shim does not "
                          "yet serve (sliding windows, sinks, per-layer KV)")
+    ap.add_argument("--kv-groups", default="auto",
+                    help="key scale groups for the fp8 paged cache: 'auto' keeps "
+                         "32-wide scales per layer (4/8/16 at head_dim 128/256/512 "
+                         "when the kernel unrolls them, else 4); an int broadcasts")
     ap.add_argument("--ppl-layer-diff", default="",
                     help="comma list of K8 steps at which to diff the paged "
                          "decode step against the chunk-free eager forward per "
@@ -2701,7 +2705,8 @@ def main():
     kv = None if a.ppl_oracle != "none" else Fp8PagedKV(L, hkv, hd, batch=a.batch,
                     max_tokens_per_seq=a.prompt_len
                     + max(a.gen_tokens, a.ppl_steps) + 8,
-                    k_groups=4, batched_append=not a.kv_per_seq,
+                    k_groups=(None if a.kv_groups == "auto" else int(a.kv_groups)),
+                    batched_append=not a.kv_per_seq,
                     device="cuda")
 
     ids, step, prompts, ppl_ids, ppl_sha = _k8_window(a, tok)
