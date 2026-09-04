@@ -50,7 +50,7 @@ def _capture_routing(sd, model, ids):
         model(input_ids=ids[None], use_cache=False)
     for h in handles:
         h.remove()
-    return {l: torch.cat(v) for l, v in seen.items()}
+    return {layer: torch.cat(v) for layer, v in seen.items()}
 
 
 def test_record_then_replay_forces_the_recorded_choices(tmp_path):
@@ -67,7 +67,7 @@ def test_record_then_replay_forces_the_recorded_choices(tmp_path):
     sd._route_clear()
     assert set(rec) == {0, 1} and rec[0]["idx"].shape == (30, 2)
     # different tokens: natural routing differs from A's on some rows
-    assert any(not torch.equal(nat_b[l], rec[l]["idx"]) for l in rec)
+    assert any(not torch.equal(nat_b[layer], rec[layer]["idx"]) for layer in rec)
     loaded, meta = sd._route_load(str(tmp_path / "r.pt"))
     assert meta["text_sha"] == "abc"
     sd._route_install(model, "replay", loaded)
@@ -75,8 +75,8 @@ def test_record_then_replay_forces_the_recorded_choices(tmp_path):
     # the hook returns the replaced output; the model consumed the recorded
     # choices, and the capture hook (registered after) sees them too
     assert sd._ROUTE["served"] == 60 and sd._ROUTE["passed"] == 0
-    for l in rec:
-        assert torch.equal(got_b[l], rec[l]["idx"])
+    for layer in rec:
+        assert torch.equal(got_b[layer], rec[layer]["idx"])
     # beyond the recorded range the hook passes through and counts it
     with torch.no_grad():
         model(input_ids=ids_b[None, :5], use_cache=False)
