@@ -301,7 +301,8 @@ def calibrate_expert_hessians(model, source_dir: str, batches, *,
                               plan_model=None, device=None,
                               hessian_device="cpu",
                               max_hessian_bytes: int = 24 << 30,
-                              layers_per_pass: int | None = None) -> dict:
+                              layers_per_pass: int | None = None,
+                              only_layers=None) -> dict:
     """Run ``batches`` (token-id tensors ``[B, T]``) through ``model`` on
     its NF4 expert stacks and return ``{layer: {expert: (H_gu, H_dn,
     rows)}}`` with ``H = 2 X X^T`` over the rows each expert actually
@@ -338,6 +339,9 @@ def calibrate_expert_hessians(model, source_dir: str, batches, *,
     batches = list(batches)
     dev = device or next(model.parameters()).device
     order = [layer for layer, _w in layers]
+    if only_layers is not None:
+        keep = set(only_layers)
+        order = [layer for layer in order if layer in keep]
     result = {}
     prev = _hr._CALIB_SINK
     try:
@@ -363,7 +367,8 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                               model_type: str | None = None,
                               plan_model=None,
                               expert_hessians: dict | None = None,
-                              min_rows: int = 32) -> int:
+                              min_rows: int = 32,
+                              layers=None) -> int:
     """Repack + install for EVERY family the load plan understands.
 
     Routes the source read through the same machinery the loader uses --
@@ -417,7 +422,10 @@ def enable_serve_experts_int4(model, source_dir: str, *,
 
     n_layers = 0
     tot_gptq = tot_rtn = 0
+    only = set(layers) if layers is not None else None
     for layer in (plan.experts or prefused):
+        if only is not None and layer not in only:
+            continue
         if plan.experts:
             first_name, _down_name = plan.expert_targets[layer]
         else:
@@ -548,3 +556,56 @@ def enable_serve_experts_int4(model, source_dir: str, *,
         print(f"INT4EXP calibrated experts: {tot_gptq} gptq / {tot_rtn} rtn "
               f"(min_rows={min_rows}) over {n_layers} layers", flush=True)
     return n_layers
+
+
+def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
+                                         model_type: str | None = None,
+                                         min_rows: int = 32,
+                                         hessian_device="cpu",
+                                         max_hessian_bytes: int | None = None,
+                                         layers_per_pass: int | None = None) -> int:
+    """Calibrate AND pack layer by layer, so the host never holds more than
+    one pass's Hessians: ``calibrate_expert_hessians`` returned every
+    layer's fp32 Hessians before any packing began, which for Mixtral-8x7B
+    (8 experts x 14336^2 down projections, ~7 GB a layer) is ~230 GB and
+    was OOM-killed inside a 170 GiB container. Each pass runs ``batches``
+    over the model with the tap armed for its chunk of layers, packs those
+    layers at once (GPTQ where an expert saw >= ``min_rows`` rows, RTN
+    otherwise) and frees the Hessians. Later passes therefore see the
+    earlier layers already on the int4 path, which is the sequential
+    convention GPTQ itself uses. ``E4B_INT4_HESSIAN_BUDGET_GB`` sets the
+    per-pass budget when ``max_hessian_bytes`` is not given (default 24).
+    Returns the number of layers installed."""
+    import gc
+    if max_hessian_bytes is None:
+        max_hessian_bytes = int(float(os.environ.get("E4B_INT4_HESSIAN_BUDGET_GB", "24")) * (1 << 30))
+    _plan, layer_ws = _expert_layers(model, source_dir, model_type, None)
+    order = [layer for layer, _w in layer_ws]
+    if not order:
+        raise RuntimeError("enable_serve_experts_int4_calibrated: no expert layers")
+    cfg = getattr(model, "config", None)
+    if layers_per_pass is None:
+        hid = getattr(cfg, "hidden_size", None)
+        inter = (getattr(cfg, "moe_intermediate_size", None) or getattr(cfg, "intermediate_size", None))
+        n_exp = (getattr(cfg, "num_local_experts", None) or getattr(cfg, "num_experts", None))
+        if hid and inter and n_exp:
+            per_layer = int(n_exp) * (int(hid) ** 2 + int(inter) ** 2) * 4
+            layers_per_pass = max(1, int(max_hessian_bytes // per_layer))
+        else:
+            layers_per_pass = len(order)
+    batches = list(batches)
+    total = 0
+    n_pass = 0
+    for i in range(0, len(order), layers_per_pass):
+        chunk = order[i:i + layers_per_pass]
+        hs = calibrate_expert_hessians(model, source_dir, batches, model_type=model_type,
+                                       hessian_device=hessian_device, layers_per_pass=len(chunk),
+                                       only_layers=chunk)
+        total += enable_serve_experts_int4(model, source_dir, model_type=model_type,
+                                           expert_hessians=hs, min_rows=min_rows, layers=chunk)
+        n_pass += 1
+        del hs
+        gc.collect()
+    print(f"INT4EXP calibrated streaming: {total} layers in {n_pass} passes of <= {layers_per_pass} layer(s)", flush=True)
+    return total
+
