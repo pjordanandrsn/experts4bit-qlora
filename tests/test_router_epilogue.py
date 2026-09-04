@@ -234,7 +234,14 @@ def test_other_router_kinds_are_licensed_and_match_their_own_forward(monkeypatch
     fpos, wpos, ipos = order
     assert torch.equal(got[ipos], want[ipos]), "selected experts must be identical"
     assert torch.allclose(got[wpos].float(), want[wpos].float(), rtol=2 ** -10, atol=2 ** -12)
+    # the first slot is the module's contract too: probabilities for the
+    # softmax-first kinds, raw logits for Mixtral/Gemma-4, biased logits
+    # for select-on-logits -- whatever the module returns, the fused path
+    # returns (review finding on #370: Mixtral got probabilities in its
+    # logits slot)
     assert got[fpos].shape == want[fpos].shape
+    assert torch.allclose(got[fpos].float(), want[fpos].float(), rtol=2 ** -6, atol=2 ** -8), \
+        "first slot must be what the module returns"
     big = torch.randn(1, 4096, HID)      # prefill falls through
     m.gate(big)
     assert calls["fused"] == 1
@@ -301,3 +308,30 @@ def test_mixtral_router_is_offered_both_renormalisations_and_the_probe_picks():
     assert [(k, s["norm"]) for k, s in cands if k == "softmax_topk"] == [("softmax_topk", True), ("softmax_topk", False)]
     picked = [s["norm"] for k, s in cands if k == "softmax_topk" and _probe_matches(mod, k, s)]
     assert picked == [True]
+
+
+class ProbsInLogitsSlotRouter(MixtralLikeRouter):
+    """A router whose first slot is neither the raw logits nor the kind's
+    first output: refused, never licensed with a guessed first slot."""
+    def forward(self, x):
+        logits, top, i = super().forward(x)
+        return logits * 0.5 + 1.0, top, i
+
+
+def test_first_slot_semantics_are_recorded_or_refused(monkeypatch):
+    from experts4bit_qlora.engines.router_epilogue import _probe_matches, _structural
+    torch.manual_seed(5)
+    m = MixtralLikeRouter()
+    kind, spec = [(k, s) for k, s in _structural(m) if k == "softmax_topk" and s["norm"]][0]
+    assert _probe_matches(m, kind, spec) and spec["first"] == "raw"
+    q = ToyRouter()
+    kind, spec = [(k, s) for k, s in _structural(q) if k == "softmax_topk"][0]
+    assert _probe_matches(q, kind, spec) and spec["first"] == "ref"
+    bad = ProbsInLogitsSlotRouter()
+    assert not any(_probe_matches(bad, k, s) for k, s in _structural(bad))
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    _stub(monkeypatch, {"fused": 0})
+    holder = torch.nn.Module()
+    holder.gate = ProbsInLogitsSlotRouter()
+    with pytest.raises(RuntimeError, match="failed the semantic probe"):
+        fuse_router_epilogue(holder)
