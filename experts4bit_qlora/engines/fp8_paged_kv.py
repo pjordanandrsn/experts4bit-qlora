@@ -110,12 +110,27 @@ def _auto_k_groups(head_dim: int, width: int = 32) -> int:
     kernel's single source of truth) whether it accepts the count, and
     fall back to 4 groups -- the pre-0.32 default -- when it does not
     or when the kernel is absent."""
-    # never coarser than the pre-0.32 default of 4 groups: head_dim 64
-    # keeps its 16-wide scales, 128 its 32-wide; only larger heads refine
-    want = max(4, head_dim // width)
+    # 32-wide scales at head_dim >= 128: 4 groups at 128, 8 at 256, 16 at
+    # 512. Below 128 the count FLOORS at 4: a 64-dim head keeps 16-wide
+    # groups and therefore the f32 attention compute path on sm_120
+    # (below the fp8 dot's 32-wide minimum). The alternative -- 2 groups
+    # at 64 so GraniteMoe and gpt-oss leave the f32 path -- was measured
+    # and REFUSED (P30 A/B, one box, paired twice): it buys nothing at
+    # B=1 or B=16 on either family (the PyPI cut on the f32 path times
+    # identically to the fp8 path) and costs +0.0136 nats on Granite (4x
+    # its floor) and +0.108 on gpt-oss (6x). Wider than 32 is never
+    # chosen; narrower than 16 never was.
+    want = max(1, head_dim // width)
+    # the fp8 compute kernels unroll powers of two only (1, 2, 4, 8, 16):
+    # head_dim 96 would otherwise ask for 3 groups and be refused at decode
+    # (Bugbot, #367); round down, then keep the count dividing head_dim
+    want = 1 << (want.bit_length() - 1)
     while head_dim % want:
         want //= 2
     if want <= 4:
+        want = 4
+        while head_dim % want:
+            want //= 2
         return want
     try:
         from fp8_paged_attn import fp8_compute_unsupported
