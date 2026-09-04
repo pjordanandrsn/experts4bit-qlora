@@ -498,6 +498,9 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                             raise
                         _torch.cuda.empty_cache()
                         p, c = gptq_pack_int4_b32(stack[e], H.to("cpu"))
+                    # back to the stack's device: the RTN-packed experts of the
+                    # same layer stay where the stack lives, and they are stacked together
+                    p, c = p.to(stack.device), c.to(stack.device)
                     n_gptq += 1
                 else:
                     p, c = pack_int4_b32(stack[e])
