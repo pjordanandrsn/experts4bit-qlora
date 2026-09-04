@@ -497,11 +497,40 @@
       "claim": "4-bit vs bf16 on a card that already fits the model is a 1.2-2.3x ENERGY PENALTY (NF4 is storage-only, the GEMM runs in bf16 either way, plus dequant). It inverts when memory binds, where the freed memory unlocks a batch worth up to 4.4x lower energy per token.",
       "value": "1.2-2.3",
       "unit": "x energy penalty when the model already fits",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "docs/METHODOLOGY.md"
-      ]
+      ],
+      "superseded_by": "e4b.train.energy-honest.scoped-a2000",
+      "quoted_in": [
+        "README.md (opening 'material limitation', 'Do not use this when', 'What is measured' -- re-pointed to the successor 2026-09-04)",
+        "docs/SOLUTIONS.md (limitations that apply to every page -- re-pointed 2026-09-04)",
+        "docs/capabilities.json (non_goals; quantize-fused-moe-experts limitations -- re-pointed 2026-09-04)",
+        "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md (limitations, evidence -- re-pointed 2026-09-04)"
+      ],
+      "notes": "SUPERSEDED 2026-09-04, number unchanged. The measurement stands exactly as its receipt made it (docs/METHODOLOGY.md section 10; bench/_upstream/bench_energy.py, bench/bench_energy_excluded.py). What is withdrawn is the parenthetical mechanism 'NF4 is storage-only, the GEMM runs in bf16 either way', which was a universal present-tense statement about every bitsandbytes 4-bit path: it is true of the two 4-bit arms this receipt measured (dequantize-then-linear, and the bitsandbytes#1965 fork's matmul_4bit routing on a [packed, 1] weight, on one Ampere card) and of this package's own reference training path, but bitsandbytes >= 0.50.0 CUDA inference can consume packed 4-bit weights directly for supported ordinary 2-D cells (docs/BITSANDBYTES.md), routed grouped MoE execution is a separate contract, and training's input gradient is separate again. The receipt identifies the bitsandbytes build only as '0.50.0.dev0' / 'the fork (bnb 0.50-dev)' (METHODOLOGY section 1 and its packaging note) -- no commit SHA, and the harness does not print bitsandbytes.__version__ -- so whether that build carried upstream 5453368bed15d19cbcfba4426ed118de33dc3d94 is not recoverable from it; the remeasure with a recorded version is e4b#392. Successor: e4b.train.energy-honest.scoped-a2000 (same value, comparator and version scoped)."
+    },
+    {
+      "id": "e4b.train.energy-honest.scoped-a2000",
+      "area": "train",
+      "claim": "On a card that already fits the model, 4-bit expert projections cost 1.2-2.3x the GPU energy of native bf16 on the measured comparator: one OLMoE-dims gate_up projection (NF4 through Experts4bit) on an RTX A2000, bitsandbytes 0.50.0.dev0 (the bitsandbytes#1965 fork build; exact commit unrecorded), measured as dequantize-then-linear and the fork's matmul_4bit routing on a [packed, 1] weight against F.linear on the bf16 weight, at decode M=1 and prefill M=512 (no grad) and train fwd+bwd M=32 (grad enabled). It inverts when memory binds: on the same card bf16 OLMoE-1B-7B does not fit at all, and the fused 4-bit MoE forward's freed memory unlocks a batch worth up to 4.4x lower energy per token (64 -> 4096 tokens).",
+      "value": "1.2-2.3",
+      "unit": "x GPU energy per op vs native bf16, model already fits (one-projection microbench)",
+      "model": "one OLMoE-1B-7B-dims expert projection ([2*1024, 2048], synthetic weights) for the penalty; OLMoE-1B-7B totals and a synthetic 8-expert fused forward for the inversion",
+      "hardware": "RTX A2000 12 GB (Ampere, 70 W cap), idle, in the NAS host; one card",
+      "conditions": "nvidia-smi power sampling at 50 ms over a tight op-loop, total J/op only (idle-subtracted figures unreliable); arms native bf16 F.linear / dequantize_4bit -> F.linear / bnb.matmul_4bit on the [packed, 1] weight; workloads decode M=1, prefill M=512, train fwd+bwd M=32; inversion sweep batch 64/256/1024/4096 tokens under no_grad",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "docs/METHODOLOGY.md#10",
+        "bench/_upstream/bench_energy.py",
+        "bench/bench_energy_excluded.py"
+      ],
+      "supersedes": [
+        "e4b.train.energy-honest"
+      ],
+      "notes": "Scoped successor of e4b.train.energy-honest (2026-09-04): same numbers, comparator and version named, the universal 'GEMM runs in bf16 either way' mechanism dropped. Per arm from the receipt's table: the fork's matmul_4bit routing 1.18x decode / 1.29x prefill / 2.25x train; dequantize-then-linear 2.68x decode / 1.57x train -- the 1.2-2.3x headline is the receipt's own summary line and brackets the matmul_4bit arm; the dequantize arm's decode cell sits above it. The 4.4x inversion figure is independently measured by bench/bench_energy_excluded.py Part B (2311 -> 520 uJ/token). This is one card and one development build of a fork: it says nothing about bitsandbytes >= 0.50.0's direct packed-4-bit inference path for ordinary 2-D layers, about routed grouped MoE execution (grouped-nf4-gemm's contract), or about any other card. Receipt written 2026-07-01; the harness records the GPU name but not bitsandbytes.__version__ -- remeasure with a recorded version is tracked in e4b#392."
     },
     {
       "id": "e4b.retired.13.47x-training-speedup",
