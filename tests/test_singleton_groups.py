@@ -226,3 +226,51 @@ def test_mxfp4_store_decode_rows_take_the_b32_gemv(mock_gemm, monkeypatch):
     monkeypatch.delattr(mx, "gemv_mxfp4_b32", raising=False)
     _fused_over_stack(x, ids, freed_gu, None, freed_dn, None, shapes, **kw)
     assert calls == {"gemv": 2, "gemm": 4}, calls
+
+
+def test_mxfp4_store_batched_rows_take_the_kept_nf4_stacks(mock_gemm, monkeypatch):
+    """Above the GEMV row cap, a call with the NF4 stacks kept ignores the
+    MXFP4 store (bo3n: the GEMV loses at 64 rows); with the stacks freed
+    the store still serves it (v1), never a size-0 view."""
+    mx = sys.modules.get("mxfp4_grouped")
+    if mx is None:
+        mx = types.SimpleNamespace()
+        monkeypatch.setitem(sys.modules, "mxfp4_grouped", mx)
+    calls = {"gemv": 0, "gemm": 0}
+
+    def gemm(*a, **k):
+        calls["gemm"] += 1
+        return _mxfp4_reference_gemm(*a, **k)
+
+    def gemv(*a, **k):
+        calls["gemv"] += 1
+        return _ref_gemv_mxfp4_b32(*a, **k)
+    monkeypatch.setattr(mx, "gemm_mxfp4_grouped", gemm, raising=False)
+    monkeypatch.setattr(mx, "gemv_mxfp4_b32", gemv, raising=False)
+    monkeypatch.setitem(sys.modules, "int4_b32",
+                        types.SimpleNamespace(quant_x_rows=_ref_quant_x_rows))
+    g = torch.Generator().manual_seed(9)
+    E, H, inter = 3, 64, 32
+    stores = {"kind": "mxfp4",
+              "gu": {"blocks": torch.randint(0, 256, (E, 2 * inter, H // 2), generator=g, dtype=torch.uint8),
+                     "scales": torch.randint(122, 128, (E, 2 * inter, H // 32), generator=g, dtype=torch.uint8),
+                     "N": 2 * inter, "K": H},
+              "dn": {"blocks": torch.randint(0, 256, (E, H, inter // 2), generator=g, dtype=torch.uint8),
+                     "scales": torch.randint(122, 128, (E, H, inter // 32), generator=g, dtype=torch.uint8),
+                     "N": H, "K": inter}}
+    x = (torch.randn(40, H) * 0.5).to(torch.bfloat16)          # 40 rows > the 16-row GEMV cap
+    ids = torch.randint(0, E, (40,))
+    shapes = (2 * inter, H, H, inter)
+    # no gpt-oss bias epilogue here: the NF4 arm is the shape-agnostic
+    # mock GEMM, and this test is about which path a call takes
+    kw = dict(has_gate=True, act_fn=torch.nn.functional.silu, int4_stores=stores)
+    monkeypatch.delenv("E4B_MXFP4_GEMV", raising=False)
+    kept_gu, kept_dn = torch.ones(8, dtype=torch.uint8), torch.ones(8, dtype=torch.uint8)   # "kept" stacks
+    _fused_over_stack(x, ids, kept_gu, None, kept_dn, None, shapes, **kw)
+    assert calls == {"gemv": 0, "gemm": 0}, calls           # the NF4 (mock) path served it
+    freed_gu, freed_dn = torch.empty(0, dtype=torch.uint8), torch.empty(0, dtype=torch.uint8)
+    _fused_over_stack(x, ids, freed_gu, None, freed_dn, None, shapes, **kw)
+    assert calls == {"gemv": 0, "gemm": 2}, calls           # freed: the store's grouped GEMM, not the GEMV
+    small = (torch.randn(4, H) * 0.5).to(torch.bfloat16)
+    _fused_over_stack(small, ids[:4], kept_gu, None, kept_dn, None, shapes, **kw)
+    assert calls == {"gemv": 2, "gemm": 2}, calls           # decode rows: the GEMV, stacks kept or not

@@ -48,6 +48,12 @@ FORCE_SINGLETON_GROUPS = [False]
 DEVICE_GROUPING = [False]
 
 
+#: Rows up to which the MXFP4 store's decode GEMV beats the alternatives
+#: (bo3n: x1.22 over NF4 at 4 rows, x0.81 at 64); above it the NF4 stacks,
+#: when kept, serve the call.
+_MXFP4_GEMV_ROWS = 16
+
+
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
                       act_fn, gptoss=None, clamp_limit=None,
                       singleton_groups=False, device_grouping=False,
@@ -82,6 +88,16 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     # no unsort. The mxfp4 kernel has no captured M-tile variant yet, so
     # the device-grouping branch is not taken for this store kind.
     _mxfp4_store = int4_stores is not None and int4_stores.get("kind") == "mxfp4"
+    if (_mxfp4_store and x_rows.shape[0] > _MXFP4_GEMV_ROWS
+            and gu_p is not None and gu_p.numel() > 0):
+        # Batched rows on the MXFP4 store: the decode GEMV re-streams the
+        # weights per row and loses to NF4 above a handful of rows
+        # (lane bo3n: x0.81 at 64 rows), and the v1 grouped GEMM loses
+        # more (x0.41). With the NF4 stacks kept (E4B_INT4_KEEP_NF4=1)
+        # those rows take the NF4 path; the store is a decode lever until
+        # an M-tile MXFP4 GEMM exists.
+        int4_stores = None
+        _mxfp4_store = False
     _int4_gemv_decode = (not _mxfp4_store and device_grouping
                          and int4_stores is not None and x_rows.shape[0] <= 256)
     if _mxfp4_store:
@@ -214,7 +230,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # 64 rows, no split-K) measured SLOWER than NF4 at B=1 on
         # gpt-oss. E4B_MXFP4_GEMV=0 forces the v1 route (the A/B arm).
         _gemv_mx = getattr(mxfp4_grouped, "gemv_mxfp4_b32", None)
-        _use_gemv_mx = (_gemv_mx is not None and x_rows.shape[0] <= 256
+        _use_gemv_mx = (_gemv_mx is not None
+                        and x_rows.shape[0] <= _MXFP4_GEMV_ROWS
                         and os.environ.get("E4B_MXFP4_GEMV", "1") == "1")
         if _use_gemv_mx:
             from int4_b32 import quant_x_rows
