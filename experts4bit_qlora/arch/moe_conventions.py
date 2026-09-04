@@ -87,7 +87,14 @@ class MoEConvention:
     # the module declares [E, out, in]; upstream's converter is a Transpose(1,2)
     # with nothing else. None means no key is ever transposed. The orientation
     # is adjudicated against the real checkpoint's shapes, never inferred.
-    transpose_re: "re.Pattern | None" = None
+    transpose_re: re.Pattern | None = None
+    # Checkpoint keys a TEXT-ONLY build of this family never claims because
+    # they belong to a tower it does not construct (a vision or audio
+    # encoder beside the language model). The planner drops them
+    # deliberately and records them in ``plan.skipped_keys`` -- only when
+    # the key has no home in the tree; a multimodal tree that does build
+    # the tower keeps them. None means no key is ever dropped.
+    drop_re: re.Pattern | None = None
 
     def rename(self, key: str) -> str:
         for src, dst in self.renames:
@@ -258,6 +265,39 @@ QWEN3_VL_MOE = MoEConvention(
     transpose_re=re.compile(r"mlp\.experts\.(gate_up_proj|down_proj)$"),
 )
 
+#: Gemma-4 (text tower ``gemma4_text`` inside the multimodal ``gemma4``) ships
+#: its routed experts PRE-FUSED, one stacked tensor per projection, in exactly
+#: the module's layout: adjudicated 2026-09-04 against the released
+#: google/gemma-4-26B-A4B-it index -- ``layers.N.experts.gate_up_proj``
+#: [128, 1408, 2816] = [E, 2I, H] and ``layers.N.experts.down_proj``
+#: [128, 2816, 704] = [E, H, I] (H 2816, I 704, E 128, top-k 8), no biases, no
+#: converter entry (transformers 5.16.1's conversion_mapping has none for
+#: gemma4, so nothing is transposed or merged on load). The expert forward
+#: (``Gemma4TextExperts.forward``) is ``gate, up = linear(x, gate_up_proj[e])
+#: .chunk(2, dim=-1); act(gate) * up`` with ``hidden_activation`` =
+#: gelu_pytorch_tanh: gate rows FIRST, the standard half-split, the two-call
+#: activation path. The experts sit at ``layer.experts`` beside a DENSE
+#: ``layer.mlp`` (gate/up/down_proj) and a router of ``proj.weight``,
+#: ``scale``, ``per_expert_scale`` -- all passthrough. Never per-expert, so
+#: the expert pattern matches nothing.
+GEMMA4 = MoEConvention(
+    name="gemma4",
+    expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
+    roles={},
+    fused_prefix="experts",
+    model_types=frozenset({"gemma4_text", "gemma4"}),
+    # The released multimodal checkpoint prefixes the text tower
+    # ``model.language_model.`` and carries a SigLIP vision tower under
+    # ``model.vision_tower.`` / ``model.embed_vision.`` (1 + 355 keys on
+    # gemma-4-26B-A4B-it). A text-only build (``gemma4_text``, what the
+    # loader constructs from ``text_config``) maps the language keys by
+    # stripping that prefix -- the loader's own rule
+    # (``MULTIMODAL_CKPT_PREFIX``) -- and drops the towers it does not
+    # build; a multimodal tree keeps every key. Recorded, never silent.
+    renames=(("model.language_model.", "model."),),
+    drop_re=re.compile(r"^model\.(vision_tower|embed_vision|audio_tower|embed_audio)\."),
+)
+
 #: JetMoE is a DUAL MoE — mixture-of-experts in BOTH the MLP (``mlp.input_linear``
 #: / ``output_linear`` / ``router.layer``) AND the attention block
 #: (``self_attention.experts.*``). The obvious worry is that an MLP-expert
@@ -355,7 +395,7 @@ AXK1 = MoEConvention(
     renames=(),
 )
 
-CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS,
+CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS, GEMMA4,
                QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE, NEMOTRON_H, AXK1)
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 

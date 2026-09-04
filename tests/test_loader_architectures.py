@@ -1159,11 +1159,14 @@ def test_pre_fused_families_are_never_indexed_as_per_expert():
     no convention at all (the dedicated-quant specials) must not raise on the lookup."""
     from experts4bit_qlora.loader import _convention_or_none, _index_per_expert_keys
 
-    for model_type in ("gpt_oss", "granitemoe", "dbrx", "qwen3_vl_moe"):
+    # gemma4 joined this group on 2026-09-04: adjudicated pre-fused, empty roles,
+    # so the loader's dedicated path is untouched and the int4 lane can plan it
+    for model_type in ("gpt_oss", "granitemoe", "dbrx", "qwen3_vl_moe", "gemma4", "gemma4_text"):
         conv = _convention_or_none(model_type)
         assert conv is not None and not conv.roles
         assert _index_per_expert_keys(conv, ["model.layers.0.mlp.experts.gate_up_proj"]) == {}
-    for model_type in ("gemma4", "kimi_k3", "deepseek_v4"):
+        assert _index_per_expert_keys(conv, ["model.language_model.layers.0.experts.gate_up_proj"]) == {}
+    for model_type in ("kimi_k3", "deepseek_v4"):
         assert _convention_or_none(model_type) is None
         assert _index_per_expert_keys(None, ["model.layers.0.mlp.experts.0.gate_proj.weight"]) == {}
 
