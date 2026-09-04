@@ -164,11 +164,18 @@ follow-up lane, bo6c) and reads 158.0 tok/s at B=1 / 993.6 at B=16 on
 that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` / `.b16`
 — quoted with its box, no ratio: the lane has no NF4 speed arm). Granite
 stays NF4 (bo5: calibrated experts +0.387 ppl, not closable with this
-lever). Mixtral's calibrated int4-expert stack passes its first text
-(c4val1 +0.039,
-`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`);
-its second text and speed arms were still running at the snapshot and are
-filled in before merge. Qwen3's NF4 reference sits 0.006 nats from bo5's
+lever). **Sequential calibration closed Qwen3's gap and did not close
+Mixtral's:** its calibrated int4-expert stack passes the in-domain text
+(c4val1 +0.039) and fails the out-of-domain one (wikitext +0.077 ppl,
++0.0234 nats; this family's floor is unmeasured) — FAIL as registered,
+measured, not licensed
+(`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`),
+the mirror image of bo5's RTN stack; not a reference shift (same window
+sha, NF4 agrees with bo5c to 0.001 nats). Next levers are not gate
+changes: a per-expert NF4 fallback for the largest-residual experts, or
+the 64k calibration set scored on wikitext. The wikitext receipt, the
+speed arms and the 64k arm land with the lane's final snapshot before
+merge. Qwen3's NF4 reference sits 0.006 nats from bo5's
 on the identical window while Mixtral's agree to 0.001 — that shift stays
 open, and no sub-0.01-nat number is compared across lanes.
 

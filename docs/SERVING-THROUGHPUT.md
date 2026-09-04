@@ -122,12 +122,16 @@ measures it).
 | Qwen3-30B-A3B | calibrated int4 experts alone, damping 0.1 (`calibexp_d01`) | streamed, 16k tok, damp 0.1 | ae9dc122 | — | — | — / +0.054 ppl (+0.0033 nats) | FAIL as registered by 0.004 (`…bo6.qwen3.calibexp-streamed-16k-damp0.1.c4val1…`) |
 | Qwen3-30B-A3B | calibrated int4 experts alone, 4× the calibration set (`calibexp_n128`) | streamed, 64k tok | ae9dc122 | — | — | — / **−0.211** ppl (−0.0129 nats, 1.4× floor) | pass on 1 text; the sweep's best point, improvement not claimable until wikitext agrees (`…bo6.qwen3.calibexp-streamed-64k.c4val1…`) |
 | Qwen3-30B-A3B | calibrated int4 experts alone, 16× the calibration set (`calibexp_n512`) | streamed, 256k tok | ae9dc122 | — | — | — / −0.141 ppl (−0.0086 nats) | pass on 1 text; non-monotonic sweep at one measurement per point (`…bo6.qwen3.calibexp-streamed-256k.c4val1…`) |
-| Mixtral-8x7B | calibrated int4 experts + round-1/2 folds + epilogue, no calibrated pack — bo5's `lic` with calibrated experts (`lic_calibexp`) | streamed, 16k tok, 8 GiB budget | ae9dc122 | pending | pending | pending / **+0.039** ppl (+0.0047 nats; floor unmeasured) | pass on the first text; second text, B=1 and B=16 pending (arrive before merge) (`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`) |
+| Mixtral-8x7B | calibrated int4 experts + round-1/2 folds + epilogue, no calibrated pack — bo5's `lic` with calibrated experts (`lic_calibexp`) | streamed, 16k tok, 8 GiB budget | ae9dc122 | pending | pending | **+0.077** / +0.039 ppl (+0.0234 / +0.0047 nats; floor unmeasured) | **FAIL as registered** on wikitext — measured, not licensed; the mirror image of bo5's RTN `lic`; B=1 / B=16 pending (arrive before merge; speed of an unlicensed configuration) (`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`) |
 
 What this settles: the gap closes by *method*, not by moving the gate. Attempt 3's "calibrated experts alone FAIL
 +0.150" is a verdict on all-at-once calibration; the streamed (sequential) method — what e4b#384 shipped — reads
-−0.050 on the same text, box and batches, and Qwen3's full calibrated stack passes both texts as registered. Granite
-stays NF4 (bo5's +0.387 is not closable with this lever). Nothing here is claimed as an improvement over NF4: every
+−0.050 on the same text, box and batches, and Qwen3's full calibrated stack passes both texts as registered. **It did
+not close Mixtral's:** the calibrated stack passes the in-domain text (+0.039) and fails the out-of-domain one
+(+0.077, over the +0.05 budget) — FAIL as registered, measured, not licensed; not a reference shift (same window sha as
+bo5c, NF4 within 0.001 nats). Next levers are not gate changes: a per-expert NF4 fallback for the largest-residual
+experts, or the 64k calibration set scored on wikitext. Granite stays NF4 (bo5's +0.387 is not closable with this
+lever). Nothing here is claimed as an improvement over NF4: every
 streamed arm has one text, and the rule needs wikitext with the same sign (lane bo6c, separate). The Qwen3 speed on
 this box (158.0 / 993.6) and bo5's on its EPYC box (204.1 / 1251.6, RTN experts) are different hosts and cuts with
 no same-box NF4 arm and no bandwidth probe on this one: quote each with its box, never the ratio between them.

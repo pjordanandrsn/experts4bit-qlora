@@ -1,6 +1,6 @@
 # bo6 — results (2026-09-04, box 49861751, one RTX 5090)
 
-The tables below are the verbatim output of `python buildout_reduce.py .` over the JSON receipts in this directory (cuts, box, protocol, the two calibration methods and the layout: [`README.md`](README.md)). Gate cells and the registered verdict are the registered rule in perplexity on every text scored; the nats beside them are read against the family's arithmetic-order floor and never change the verdict. Every delta is against the NF4 arm re-scored on this lane — nothing on this page is compared across lanes, and there is no speed ratio because this lane has no NF4 speed arm (bo7 measures it). The `method` column is read from each arm's own run log (`logs/run_<family>_ppl_<arm>.log`): `INT4EXP hessians:` = all-at-once, `INT4EXP calibrating (streamed):` = streamed. Rows marked **pending (arrives before merge)** are arms the lane script runs whose receipts were still being produced when this snapshot was taken (Mixtral `lic_calibexp` on wikitext, its B=1 / B=16 arms, and `lic_calibexp_n128`).
+The tables below are the verbatim output of `python buildout_reduce.py .` over the JSON receipts in this directory (cuts, box, protocol, the two calibration methods and the layout: [`README.md`](README.md)). Gate cells and the registered verdict are the registered rule in perplexity on every text scored; the nats beside them are read against the family's arithmetic-order floor and never change the verdict. Every delta is against the NF4 arm re-scored on this lane — nothing on this page is compared across lanes, and there is no speed ratio because this lane has no NF4 speed arm (bo7 measures it). The `method` column is read from each arm's own run log (`logs/run_<family>_ppl_<arm>.log`): `INT4EXP hessians:` = all-at-once, `INT4EXP calibrating (streamed):` = streamed. Rows marked **pending (arrives before merge)** are arms the lane script runs whose receipts were still being produced when this snapshot was taken (Mixtral `lic_calibexp` on wikitext, its B=1 / B=16 arms, and `lic_calibexp_n128`). The wikitext reading itself has since landed on the lane console and is read below; its receipt file fills the row on the final snapshot.
 
 ### Qwen3-30B-A3B
 arithmetic-order floor 0.0095 nats = wikitext: base ppl 6.420 → ±0.061 ppl; c4val1: base ppl 16.497 → ±0.157 ppl. Every delta is against `nf4` re-scored on this lane (same box, same window sha). Speed ratio: not measured on this lane (no NF4 speed arm; bo7 measures it).
@@ -87,8 +87,14 @@ Gate cells and the registered verdict are in perplexity, the registered unit; th
   produced a reading: the container's 170 GiB cgroup killed each of them (README: the arithmetic). bo6b's streamed
   arm at an 8 GiB Hessian budget (32 passes of one layer; 512 GPTQ packs, 0 RTN — top-2-of-8 routing gives every
   expert its rows): c4val1 2.11447 (8.28518) = **+0.0391 ppl (+0.0047 nats; this family's floor is unmeasured)
-  — pass on the first text**, where bo5's RTN `lic` read +0.0575 on its own lane. **wikitext, B=1, B=16 and the
-  64k-token arm are pending (arrive before merge)**; the full-gate verdict is given when the second text lands.
+  — pass on the in-domain text**, where bo5's RTN `lic` read +0.0575 on its own lane. **wikitext (from the lane
+  console, K8 20:33–21:54Z; the receipt lands with the final snapshot): 1.20549 (3.33841) = +0.0771 ppl
+  (+0.0234 nats) — FAIL as registered**, over the +0.05 budget on the out-of-domain text. Full-gate verdict for the
+  calibrated Mixtral stack: **FAIL as registered; measured, not licensed.** It is the mirror image of bo5's RTN
+  `lic` (wikitext −0.046 pass / c4val1 +0.0575 FAIL): the calibrated stack passes the text inside the calibration
+  domain and fails the one outside it. Not a reference shift — the window sha `31fd7d408809` matches bo5c's and the
+  NF4 references agree to 0.001 nats. B=1, B=16 and the 64k-token arm are pending (arrive before merge) and will be
+  measured speed of a configuration that is not licensed.
 
 ## Consequences
 
@@ -102,6 +108,9 @@ Gate cells and the registered verdict are in perplexity, the registered unit; th
    158.0 / 993.6 tok/s on this box, quoted with its box and without a ratio.
 4. **Granite stays NF4** (bo5: calibrated experts +0.387 ppl on c4val1, 8× the budget — not closable with this
    lever; not re-run).
-5. **Mixtral: first text pass (+0.039), second text pending.**
+5. **Sequential calibration closed Qwen3's gap and did not close Mixtral's:** c4val1 +0.039 (pass) but wikitext
+   +0.077 ppl (+0.0234 nats; floor unmeasured) — FAIL as registered; measured, not licensed. Next levers are not
+   gate changes: a per-expert NF4 fallback for the experts with the largest GPTQ residual, or the 64k-token
+   calibration set scored on wikitext (the queued `lic_calibexp_n128` arm is c4val1-only).
 6. **Instrument:** deterministic on one box + cut; Qwen3's 0.006-nat NF4 shift against bo5 stays OPEN; no
    sub-0.01-nat comparison is made against bo5 or any lane installed from a commit before grouped-nf4-gemm#336.

@@ -9,9 +9,10 @@ memory-bandwidth probe ran on this box.
 refused), attempt 3 13:50:05Z (`QWEN3 DONE` 15:39Z, Mixtral bake 15:39–15:54Z, Mixtral NF4 references 15:54–15:57Z,
 its four calibrated arms killed one after another, `TP_DONE` 16:43:25Z), bo6b 16:43:43Z (Qwen3 re-bake, the repeat
 controls and the sweep, `QWEN3 SWEEP DONE` 18:56Z; Mixtral re-bake 18:56–19:10Z; `lic_calibexp_c4val` 19:10–20:33Z;
-`lic_calibexp` on wikitext running from 20:33Z at the time of this snapshot, 21:03Z). The rows still pending when the
-snapshot was taken — Mixtral `lic_calibexp` on wikitext, its B=1 and B=16 arms, and `lic_calibexp_n128_c4val` — are
-marked **pending (arrives before merge)** in [`RESULTS.md`](RESULTS.md) and are filled in from the final snapshot.
+`lic_calibexp` on wikitext 20:33–21:54Z — its result reached the lane console after this snapshot, 21:03Z, and is
+read below; B=1 from 21:54Z). The receipts still pending when the snapshot was taken — Mixtral `lic_calibexp` on
+wikitext, its B=1 and B=16 arms, and `lic_calibexp_n128_c4val` — are marked **pending (arrives before merge)** in
+[`RESULTS.md`](RESULTS.md)'s table and are filled in from the final snapshot (after `TP2_DONE`).
 **Lane:** the user's decision at 13:10Z — *close the gap rather than move the gate*. The registered K8 gate stays in
 perplexity: a calibrated pack passes when Δppl ≤ +0.05 against NF4 on **every** text scored, an improvement is
 claimable only with the same sign on ≥ 2 texts, and wikitext is the text outside the calibration domain. The
@@ -117,10 +118,15 @@ calibration domain, the stronger reading. This lane ships its hook.
   c4val1, both within +0.05; *no improvement is claimed* (the signs differ). Its 158.0 / 993.6 tok/s are
   rental-measured on this box, with no ratio (no NF4 speed arm here; bo7 measures it).
 - **Pass on one text, improvement not claimed:** the streamed Qwen3 expert arms (−0.0505 at 16k, −0.2109 at 64k,
-  −0.1410 at 256k on c4val1) — the rule needs wikitext with the same sign; that is bo6c's job. Mixtral `lic_calibexp`
-  +0.0391 on c4val1 — wikitext pending.
+  −0.1410 at 256k on c4val1) — the rule needs wikitext with the same sign; that is bo6c's job.
 - **FAIL as registered, and recorded as such:** Qwen3 calibrated experts alone under the all-at-once method
-  (+0.1498) and under streamed calibration with damping 0.1 (+0.0544).
+  (+0.1498) and under streamed calibration with damping 0.1 (+0.0544); and **Mixtral `lic_calibexp`** — c4val1
+  +0.0391 (pass) but wikitext +0.0771 ppl (+0.0234 nats; floor unmeasured; from the lane console, receipt on the
+  final snapshot) — **measured, not licensed**. Sequential calibration closed Qwen3's gap and did not close
+  Mixtral's: the calibrated stack passes the in-domain text and fails the out-of-domain one, the mirror image of
+  bo5's RTN `lic`. Its B=1 / B=16 arms, when they land, are speed of an unlicensed configuration. Next levers are
+  not gate changes: a per-expert NF4 fallback for the largest-residual experts, or the 64k calibration set scored
+  on wikitext (the queued `lic_calibexp_n128` arm is c4val1-only).
 - **Not touched:** Granite (NF4 experts stay licensed; bo5's +0.387 is not closable by this lever), gpt-oss, Gemma-4,
   OLMoE. Nothing on this page licenses a *ratio*; nothing is compared across lanes.
 

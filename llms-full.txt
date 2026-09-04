@@ -1530,11 +1530,18 @@ follow-up lane, bo6c) and reads 158.0 tok/s at B=1 / 993.6 at B=16 on
 that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` / `.b16`
 — quoted with its box, no ratio: the lane has no NF4 speed arm). Granite
 stays NF4 (bo5: calibrated experts +0.387 ppl, not closable with this
-lever). Mixtral's calibrated int4-expert stack passes its first text
-(c4val1 +0.039,
-`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`);
-its second text and speed arms were still running at the snapshot and are
-filled in before merge. Qwen3's NF4 reference sits 0.006 nats from bo5's
+lever). **Sequential calibration closed Qwen3's gap and did not close
+Mixtral's:** its calibrated int4-expert stack passes the in-domain text
+(c4val1 +0.039) and fails the out-of-domain one (wikitext +0.077 ppl,
++0.0234 nats; this family's floor is unmeasured) — FAIL as registered,
+measured, not licensed
+(`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`),
+the mirror image of bo5's RTN stack; not a reference shift (same window
+sha, NF4 agrees with bo5c to 0.001 nats). Next levers are not gate
+changes: a per-expert NF4 fallback for the largest-residual experts, or
+the 64k calibration set scored on wikitext. The wikitext receipt, the
+speed arms and the 64k arm land with the lane's final snapshot before
+merge. Qwen3's NF4 reference sits 0.006 nats from bo5's
 on the identical window while Mixtral's agree to 0.001 — that shift stays
 open, and no sub-0.01-nat number is compared across lanes.
 
@@ -2063,7 +2070,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04 [measured]: The ORDER of calibration and packing is the mechanism: on the same box, the same 8 calibration batches (16k tokens), the same damping (0.01) and min_rows (32), Qwen/Qwen3-30B-A3B's calibrated-int4-experts-alone arm reads c4val1 +0.1498 ppl when every layer's Hessian is accumulated against the unquantised prefix and packed afterwards (all-at-once) and -0.0505 ppl when each layer chunk is packed before the next chunk's Hessians accumulate (sequential / streamed, GPTQ's own convention) -- a 0.200-ppl move (0.0121 nats, 1.3x the family's floor) that flips the registered verdict from FAIL to pass.
 - e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 glue -- a configuration that passes the registered K8 gate on both texts on this lane: 158.0 tok/s (6.33 ms/step), rental-measured on this box; no ratio (no NF4 speed arm on this lane).
 - e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) -- passes the registered K8 gate on both texts on this lane: 993.6 tok/s (16.10 ms/step), rental-measured on this box; no ratio.
-- e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 [measured]: mistralai/Mixtral-8x7B-Instruct-v0.1's int4-expert stack -- GPTQ-calibrated int4 experts calibrated SEQUENTIALLY (streamed, 8 GiB Hessian budget) + round-1/2 folds (rope-only fold) + router epilogue, no calibrated attention (bo5's `lic` with calibrated experts in place of RTN) -- reads c4val1 +0.0391 ppl (+0.0047 nats; this family's floor is unmeasured) against the same-cut NF4: PASS on the first text as registered; wikitext PENDING (arrives before merge), so the full-gate verdict is not yet given.
+- e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 [measured]: mistralai/Mixtral-8x7B-Instruct-v0.1's int4-expert stack -- GPTQ-calibrated int4 experts calibrated SEQUENTIALLY (streamed, 8 GiB Hessian budget) + round-1/2 folds (rope-only fold) + router epilogue, no calibrated attention (bo5's `lic` with calibrated experts in place of RTN) -- reads wikitext +0.0771 ppl (+0.0234 nats; this family's floor is unmeasured) and c4val1 +0.0391 ppl (+0.0047 nats) against the same-cut NF4: FAIL as registered on wikitext (budget +0.05 on every text) -- measured, NOT licensed. Sequential calibration closed Qwen3's gap and did not close Mixtral's: the stack passes its in-domain text and fails the out-of-domain one, the mirror image of bo5's RTN stack.
 
 Open items (no evidence either way):
 
