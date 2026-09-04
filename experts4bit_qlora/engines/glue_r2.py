@@ -437,8 +437,12 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
         return False
     if any(True for _ in mod.named_buffers(recurse=False)):
         return False
-    for attr in ("head_dim", "scaling", "sliding_window", "layer_idx",
-                 "config", "attention_dropout"):
+    # No ``sliding_window`` in this list: GraniteMoe's and Mixtral's
+    # attention modules do not set it (the Qwen3-shaped license above
+    # requires it; copying that here skipped both families -- Bugbot,
+    # e4b#379). It is read with a default below.
+    for attr in ("head_dim", "scaling", "layer_idx", "config",
+                 "attention_dropout"):
         if not hasattr(mod, attr):
             return False
     d = int(mod.head_dim)
@@ -498,7 +502,7 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
             _m, query_states, key_states, value_states, attention_mask,
             dropout=0.0 if not _m.training else _m.attention_dropout,
             scaling=_m.scaling,
-            sliding_window=_m.sliding_window, **kwargs)
+            sliding_window=getattr(_m, "sliding_window", None), **kwargs)
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return _m.o_proj(attn_output), attn_weights
 
