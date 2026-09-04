@@ -99,6 +99,42 @@ bo3's 177.9 / 1089.6 and bo5's 204.1 / 1251.6 for Qwen3 are different boxes of t
 dispersion; B=1 is host-bound) and different cuts (bo5 carries #385's glue, ×1.057 measured on the bo5 box):
 quote either with its box, never the ratio between them.
 
+## Closing the gap, not the gate (bo6), measured in-repo
+
+Lane bo6 + bo6b — box 49861751, an RTX 5090 on a Threadripper PRO 7975WX host, 2026-09-04 13:25Z onward; e4b
+integration-8 @db2a070 (attempt 3) and @ae9dc122 (bo6b: streamed calibration), grouped-nf4-gemm main @0b25d13. The
+registered gate stayed in perplexity; the int4-expert arms bo5 had failed on their second text with RTN experts were
+re-run with per-expert GPTQ calibration (e4b#384), against NF4 **re-scored on this box** (Qwen3 wikitext 1.85939 /
+c4val1 2.80318 — repeated after a fresh bake, bit-identical; Mixtral 1.18214 / 2.10973). Receipt:
+[`bench/hybrid-g9/throughput-20260904/bo6/`](../bench/hybrid-g9/throughput-20260904/bo6/README.md); the per-arm
+table with the method and verdict columns is its
+[`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md). **Method** is read from each arm's run log:
+*all-at-once* = every layer's Hessian accumulated against the unquantised prefix, then packed (the two-step API);
+*streamed* = each layer chunk packed before the next chunk's Hessians accumulate, GPTQ's sequential convention — the
+mechanism 0.35.0 ships. Speed is rental-measured on this box with **no ratio** (the lane has no NF4 speed arm; bo7
+measures it).
+
+| family | configuration | method | cut | B=1 | B=16 | K8 vs NF4 (wikitext / c4val1) | gate (registered, ppl) |
+|---|---|---|---|---|---|---|---|
+| Qwen3-30B-A3B | calibrated int4 experts alone (`calibexp`) | all-at-once, 16k tok, damp 0.01 | db2a070 | — | — | — / **+0.150** ppl (+0.0090 nats) | FAIL as registered — a verdict on the all-at-once method (`e4b.serve.buildout.bo6.qwen3.calibexp-allatonce.c4val1.2026-09-04`) |
+| Qwen3-30B-A3B | calibrated int4 experts + calibrated int4 attention + round-1/2 folds + epilogue + #385 glue (`all_calibexp`) | all-at-once, 16k tok | db2a070 | **158.0** | **993.6** | −0.060 / +0.035 ppl (−0.0093 / +0.0021 nats) | **pass on both texts**; the wikitext improvement is not claimed (signs differ) (`…bo6.qwen3.all-calibexp-allatonce.k8…`, `…bo6.qwen3.b1…`, `…bo6.qwen3.b16…`) |
+| Qwen3-30B-A3B | calibrated int4 experts alone (`calibexp_c4val_rep1`) | **streamed**, 16k tok, damp 0.01 | ae9dc122 | — | — | — / **−0.050** ppl (−0.0031 nats) | pass on 1 text; improvement not claimable until wikitext agrees (bo6c) (`…bo6.qwen3.calibexp-streamed-16k.c4val1…`); the order alone moves c4val1 by 0.200 ppl (`…bo6.qwen3.calibration-order.c4val1…`) |
+| Qwen3-30B-A3B | calibrated int4 experts alone, damping 0.1 (`calibexp_d01`) | streamed, 16k tok, damp 0.1 | ae9dc122 | — | — | — / +0.054 ppl (+0.0033 nats) | FAIL as registered by 0.004 (`…bo6.qwen3.calibexp-streamed-16k-damp0.1.c4val1…`) |
+| Qwen3-30B-A3B | calibrated int4 experts alone, 4× the calibration set (`calibexp_n128`) | streamed, 64k tok | ae9dc122 | — | — | — / **−0.211** ppl (−0.0129 nats, 1.4× floor) | pass on 1 text; the sweep's best point, improvement not claimable until wikitext agrees (`…bo6.qwen3.calibexp-streamed-64k.c4val1…`) |
+| Qwen3-30B-A3B | calibrated int4 experts alone, 16× the calibration set (`calibexp_n512`) | streamed, 256k tok | ae9dc122 | — | — | — / −0.141 ppl (−0.0086 nats) | pass on 1 text; non-monotonic sweep at one measurement per point (`…bo6.qwen3.calibexp-streamed-256k.c4val1…`) |
+| Mixtral-8x7B | calibrated int4 experts + round-1/2 folds + epilogue, no calibrated pack — bo5's `lic` with calibrated experts (`lic_calibexp`) | streamed, 16k tok, 8 GiB budget | ae9dc122 | pending | pending | pending / **+0.039** ppl (+0.0047 nats; floor unmeasured) | pass on the first text; second text, B=1 and B=16 pending (arrive before merge) (`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`) |
+
+What this settles: the gap closes by *method*, not by moving the gate. Attempt 3's "calibrated experts alone FAIL
++0.150" is a verdict on all-at-once calibration; the streamed (sequential) method — what e4b#384 shipped — reads
+−0.050 on the same text, box and batches, and Qwen3's full calibrated stack passes both texts as registered. Granite
+stays NF4 (bo5's +0.387 is not closable with this lever). Nothing here is claimed as an improvement over NF4: every
+streamed arm has one text, and the rule needs wikitext with the same sign (lane bo6c, separate). The Qwen3 speed on
+this box (158.0 / 993.6) and bo5's on its EPYC box (204.1 / 1251.6, RTN experts) are different hosts and cuts with
+no same-box NF4 arm and no bandwidth probe on this one: quote each with its box, never the ratio between them.
+Qwen3's NF4 c4val1 reference reads 0.006 nats from bo5's on the identical window (Mixtral's agree to 0.001); the K8
+instrument is bit-for-bit deterministic within a box, so that shift is between installs or boxes and stays open — no
+sub-0.01-nat number is compared across lanes.
+
 ## Reading the numbers
 
 - Quote a ratio or quote the card and the host. The 5090 class carries ~8.5% inter-box dispersion; B=1 moves with the host CPU.

@@ -1502,6 +1502,42 @@ B=1 on that box), Mixtral `all` 123.3 / 377.3, Mixtral's int4-expert stack
 Granite, +0.0002 on Mixtral) and buys nothing (Granite ×0.968 B=1, Mixtral
 ×1.032) — it stays a draft.
 
+**Closing the gap, not the gate (2026-09-04, lane bo6; measured — receipt
+[`bench/hybrid-g9/throughput-20260904/bo6/`](../bench/hybrid-g9/throughput-20260904/bo6/README.md),
+table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md)).**
+The registered gate stays in perplexity; the int4-expert arms that failed
+their second text with round-to-nearest experts were re-run with
+per-expert GPTQ calibration (e4b#384) on one box, against NF4 re-scored on
+that box. **Sequential calibration is the mechanism that ships** (0.35.0):
+on Qwen3-30B-A3B the calibrated experts alone read c4val1 +0.150 ppl
+(FAIL) when every layer's Hessian is accumulated against the unquantised
+prefix and packed afterwards, and −0.050 (pass on that text) when each
+layer chunk is packed before the next chunk's Hessians accumulate — the
+same box, batches and damping; the order alone moves the reading 0.200 ppl
+and flips the verdict
+(`e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04`; the
+instrument is run-to-run deterministic there,
+`e4b.serve.buildout.bo6.qwen3.k8-deterministic.5090.2026-09-04`). More
+calibration text helps (64k tokens −0.211, 256k −0.141; damping 0.1 fails
+at +0.054), and none of those is claimed as an improvement until wikitext
+agrees. **Qwen3's calibrated int4 experts pass the registered gate under
+it:** the full calibrated stack — calibrated experts + calibrated int4
+attention + folds + epilogue + glue — passes on both texts (wikitext
+−0.060 / c4val1 +0.035,
+`e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; that
+pack was calibrated all-at-once, and the streamed full stack is a separate
+follow-up lane, bo6c) and reads 158.0 tok/s at B=1 / 993.6 at B=16 on
+that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` / `.b16`
+— quoted with its box, no ratio: the lane has no NF4 speed arm). Granite
+stays NF4 (bo5: calibrated experts +0.387 ppl, not closable with this
+lever). Mixtral's calibrated int4-expert stack passes its first text
+(c4val1 +0.039,
+`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`);
+its second text and speed arms were still running at the snapshot and are
+filled in before merge. Qwen3's NF4 reference sits 0.006 nats from bo5's
+on the identical window while Mixtral's agree to 0.001 — that shift stays
+open, and no sub-0.01-nat number is compared across lanes.
+
 ---
 
 ## What changed — retired, superseded, corrected
@@ -2017,6 +2053,17 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.buildout.bo5.gptoss.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of openai/gpt-oss-20b on a rented RTX 5090 with the native MXFP4 expert store under the route rule (GEMV for single rows, NF4 kept for batched rows) plus round-1/2 folds: 719.7 tok/s, x0.971 of the NF4 + folds row (741.4) on the same box -- the GEMV-everywhere route's x0.81 at B=16 (bo3) is recovered; quality gate open on this family.
 - e4b.serve.buildout.bo5.mixtral.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090, the int4-expert stack without a calibrated pack (int4 experts + round-1/2 folds with the rotary-only fold + router epilogue) on integration-7 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text, C4 validation: +0.0575 ppl against the +0.05 budget; the P30 'licensed stack' label is withdrawn, not retuned): 112.0 tok/s (8.93 ms/step); 115.6 with #387's fused qkv.
 - e4b.serve.buildout.bo5.mixtral.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on a rented RTX 5090, the int4-expert stack without a calibrated pack on integration-7 -- measured speed of a configuration that is NOT licensed under the registered K8 gate as written (second text +0.0575 ppl; the 'licensed stack' label is withdrawn): 376.5 tok/s.
+- e4b.serve.buildout.bo6.qwen3.k8-deterministic.5090.2026-09-04 [measured]: The K8 instrument (teacher-forced NLL through the paged decode path, 2048 steps, fp8 paged KV) is run-to-run deterministic on one box and cut, bake included: Qwen3-30B-A3B's NF4 reference re-baked and re-scored reads bit-identical mean_nll three times on c4val1 (2.803180268104794) and twice on wikitext (1.85939315385821), spread 0.0 nats -- so a 0.006-nat difference between two lanes on the identical window is not run noise.
+- e4b.serve.buildout.bo6.qwen3.calibexp-allatonce.c4val1.2026-09-04 [measured]: Qwen/Qwen3-30B-A3B with GPTQ-calibrated int4 experts alone, calibrated ALL-AT-ONCE (every layer's Hessian accumulated against the unquantised prefix, then every layer packed -- the two-step API, not the method that ships): c4val1 +0.1498 ppl (+0.0090 nats) against the same-cut NF4 -- FAIL as registered, three times the +0.05 budget.
+- e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04 [measured]: Qwen/Qwen3-30B-A3B with GPTQ-calibrated int4 experts alone, calibrated SEQUENTIALLY (streamed: each layer chunk packed before the next chunk's Hessians accumulate, so layer L is calibrated against the int4 outputs of layers < L -- the mechanism e4b#384 ships in 0.35.0), 16k calibration tokens, damping 0.01: c4val1 -0.0505 ppl (-0.0031 nats) against the same-cut NF4 -- PASS on this text as registered; the improvement is NOT claimed until wikitext (outside the calibration domain) agrees with the same sign.
+- e4b.serve.buildout.bo6.qwen3.calibexp-streamed-64k.c4val1.2026-09-04 [measured]: Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 64k calibration tokens (E4B_CALIB_NSEQ=128, damping 0.01): c4val1 -0.2109 ppl (-0.0129 nats, 1.4x the family's floor) against the same-cut NF4 -- PASS on this text as registered; the best point of the size sweep, the improvement NOT claimed until wikitext agrees.
+- e4b.serve.buildout.bo6.qwen3.calibexp-streamed-256k.c4val1.2026-09-04 [measured]: Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 256k calibration tokens (E4B_CALIB_NSEQ=512, damping 0.01): c4val1 -0.1410 ppl (-0.0086 nats) against the same-cut NF4 -- PASS on this text as registered; better than 16k, worse than 64k; the improvement NOT claimed until wikitext agrees.
+- e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k-damp0.1.c4val1.2026-09-04 [measured]: Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 16k calibration tokens and GPTQ damping 0.1 (E4B_INT4_GPTQ_DAMP=0.1, ten times the kernel default): c4val1 +0.0544 ppl (+0.0033 nats) against the same-cut NF4 -- FAIL as registered, by 0.004; heavier damping hurts.
+- e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04 [measured]: Qwen/Qwen3-30B-A3B's full calibrated stack -- GPTQ-calibrated int4 experts + C4-calibrated int4 attention + round-1/2 folds (rope-only fold) + router epilogue + #385 glue, the experts calibrated ALL-AT-ONCE -- passes the registered K8 gate on both texts against the same-cut NF4: wikitext -0.0597 ppl (-0.0093 nats), c4val1 +0.0352 ppl (+0.0021 nats), both within +0.05; the wikitext improvement is NOT claimed (c4val1 carries the other sign).
+- e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04 [measured]: The ORDER of calibration and packing is the mechanism: on the same box, the same 8 calibration batches (16k tokens), the same damping (0.01) and min_rows (32), Qwen/Qwen3-30B-A3B's calibrated-int4-experts-alone arm reads c4val1 +0.1498 ppl when every layer's Hessian is accumulated against the unquantised prefix and packed afterwards (all-at-once) and -0.0505 ppl when each layer chunk is packed before the next chunk's Hessians accumulate (sequential / streamed, GPTQ's own convention) -- a 0.200-ppl move (0.0121 nats, 1.3x the family's floor) that flips the registered verdict from FAIL to pass.
+- e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 glue -- a configuration that passes the registered K8 gate on both texts on this lane: 158.0 tok/s (6.33 ms/step), rental-measured on this box; no ratio (no NF4 speed arm on this lane).
+- e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) -- passes the registered K8 gate on both texts on this lane: 993.6 tok/s (16.10 ms/step), rental-measured on this box; no ratio.
+- e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 [measured]: mistralai/Mixtral-8x7B-Instruct-v0.1's int4-expert stack -- GPTQ-calibrated int4 experts calibrated SEQUENTIALLY (streamed, 8 GiB Hessian budget) + round-1/2 folds (rope-only fold) + router epilogue, no calibrated attention (bo5's `lic` with calibrated experts in place of RTN) -- reads c4val1 +0.0391 ppl (+0.0047 nats; this family's floor is unmeasured) against the same-cut NF4: PASS on the first text as registered; wikitext PENDING (arrives before merge), so the full-gate verdict is not yet given.
 
 Open items (no evidence either way):
 
@@ -2024,4 +2071,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(51 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(62 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

@@ -136,6 +136,42 @@ B=1 on that box), Mixtral `all` 123.3 / 377.3, Mixtral's int4-expert stack
 Granite, +0.0002 on Mixtral) and buys nothing (Granite ×0.968 B=1, Mixtral
 ×1.032) — it stays a draft.
 
+**Closing the gap, not the gate (2026-09-04, lane bo6; measured — receipt
+[`bench/hybrid-g9/throughput-20260904/bo6/`](../bench/hybrid-g9/throughput-20260904/bo6/README.md),
+table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md)).**
+The registered gate stays in perplexity; the int4-expert arms that failed
+their second text with round-to-nearest experts were re-run with
+per-expert GPTQ calibration (e4b#384) on one box, against NF4 re-scored on
+that box. **Sequential calibration is the mechanism that ships** (0.35.0):
+on Qwen3-30B-A3B the calibrated experts alone read c4val1 +0.150 ppl
+(FAIL) when every layer's Hessian is accumulated against the unquantised
+prefix and packed afterwards, and −0.050 (pass on that text) when each
+layer chunk is packed before the next chunk's Hessians accumulate — the
+same box, batches and damping; the order alone moves the reading 0.200 ppl
+and flips the verdict
+(`e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04`; the
+instrument is run-to-run deterministic there,
+`e4b.serve.buildout.bo6.qwen3.k8-deterministic.5090.2026-09-04`). More
+calibration text helps (64k tokens −0.211, 256k −0.141; damping 0.1 fails
+at +0.054), and none of those is claimed as an improvement until wikitext
+agrees. **Qwen3's calibrated int4 experts pass the registered gate under
+it:** the full calibrated stack — calibrated experts + calibrated int4
+attention + folds + epilogue + glue — passes on both texts (wikitext
+−0.060 / c4val1 +0.035,
+`e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; that
+pack was calibrated all-at-once, and the streamed full stack is a separate
+follow-up lane, bo6c) and reads 158.0 tok/s at B=1 / 993.6 at B=16 on
+that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` / `.b16`
+— quoted with its box, no ratio: the lane has no NF4 speed arm). Granite
+stays NF4 (bo5: calibrated experts +0.387 ppl, not closable with this
+lever). Mixtral's calibrated int4-expert stack passes its first text
+(c4val1 +0.039,
+`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`);
+its second text and speed arms were still running at the snapshot and are
+filled in before merge. Qwen3's NF4 reference sits 0.006 nats from bo5's
+on the identical window while Mixtral's agree to 0.001 — that shift stays
+open, and no sub-0.01-nat number is compared across lanes.
+
 ---
 
 ## What changed — retired, superseded, corrected
