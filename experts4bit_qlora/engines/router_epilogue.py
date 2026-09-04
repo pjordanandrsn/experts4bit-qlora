@@ -110,13 +110,21 @@ def _structural(mod):
     if not (0 < k <= e):
         return None
     cands = []
+    try:
+        dims_ok = int(mod.num_experts) == e and int(mod.hidden_dim) == hidden
+    except Exception:
+        dims_ok = False
     if hasattr(mod, "norm_topk_prob"):
-        try:
-            ok = int(mod.num_experts) == e and int(mod.hidden_dim) == hidden
-        except Exception:
-            ok = False
-        if ok:
+        if dims_ok:
             cands.append(("softmax_topk", {"k": k, "e": e, "hidden": hidden, "norm": bool(mod.norm_topk_prob)}))
+    elif dims_ok:
+        # Mixtral's router (transformers 5.16) is softmax over all, top-k,
+        # ALWAYS renormalised, with no ``norm_topk_prob`` attribute to say
+        # so. Offer both renormalisation choices; the probe keeps the one
+        # the module's own forward computes (the validation lane refused
+        # Mixtral with "0 structurally matched" for want of this).
+        for norm in (True, False):
+            cands.append(("softmax_topk", {"k": k, "e": e, "hidden": hidden, "norm": norm}))
     bias = getattr(mod, "bias", None)
     if bias is None or (torch.is_tensor(bias) and tuple(bias.shape) == (e,)):
         cands.append(("topk_softmax", {"k": k, "e": e, "hidden": hidden, "bias": bias}))

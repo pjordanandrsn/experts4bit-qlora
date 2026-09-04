@@ -161,6 +161,26 @@ class GraniteLikeRouter(torch.nn.Module):
         return i, torch.softmax(top, dim=-1), logits
 
 
+class MixtralLikeRouter(torch.nn.Module):
+    """MixtralTopKRouter (transformers 5.16): softmax over all experts,
+    top-k, always renormalised; carries num_experts/hidden_dim but NO
+    norm_topk_prob. Returns (logits, scores, index)."""
+    def __init__(self):
+        super().__init__()
+        self.top_k = K
+        self.num_experts = E
+        self.hidden_dim = HID
+        self.weight = torch.nn.Parameter(torch.randn(E, HID))
+
+    def forward(self, x):
+        x = x.reshape(-1, HID)
+        logits = F.linear(x, self.weight)
+        probs = torch.softmax(logits.float(), dim=-1)
+        top, i = torch.topk(probs, self.top_k, dim=-1)
+        top = top / top.sum(dim=-1, keepdim=True)
+        return logits, top, i
+
+
 class _NoScaleRMSNorm(torch.nn.Module):
     def __init__(self, eps=1e-6):
         super().__init__()
@@ -192,7 +212,8 @@ class Gemma4TextRouter(torch.nn.Module):
 
 
 @pytest.mark.parametrize("cls,order", [(UnnormalisedTopkSoftmaxRouter, (0, 1, 2)), (GptOssLikeRouter, (0, 1, 2)),
-                                       (GraniteLikeRouter, (2, 1, 0)), (Gemma4TextRouter, (0, 1, 2))])
+                                       (GraniteLikeRouter, (2, 1, 0)), (Gemma4TextRouter, (0, 1, 2)),
+                                       (MixtralLikeRouter, (0, 1, 2))])
 def test_other_router_kinds_are_licensed_and_match_their_own_forward(monkeypatch, cls, order):
     """select-on-logits (with and without a bias, in either output order)
     and Gemma-4's normed/scaled router are patched and reproduce the
@@ -267,3 +288,16 @@ def test_missing_kernel_refuses_loudly(monkeypatch):
     m.gate = ToyRouter()
     with pytest.raises(RuntimeError, match="router_epilogue"):
         fuse_router_epilogue(m)
+
+
+def test_mixtral_router_is_offered_both_renormalisations_and_the_probe_picks():
+    """No norm_topk_prob on the module: the matcher offers softmax_topk
+    with and without renormalisation and the probe keeps the one the
+    forward computes (Mixtral renormalises)."""
+    from experts4bit_qlora.engines.router_epilogue import _probe_matches, _structural
+    torch.manual_seed(3)
+    mod = MixtralLikeRouter()
+    cands = _structural(mod)
+    assert [(k, s["norm"]) for k, s in cands if k == "softmax_topk"] == [("softmax_topk", True), ("softmax_topk", False)]
+    picked = [s["norm"] for k, s in cands if k == "softmax_topk" and _probe_matches(mod, k, s)]
+    assert picked == [True]
