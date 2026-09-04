@@ -1,0 +1,57 @@
+TP granite b16_all=2631.2 b16_int4exp=2201.3 b16_nf4=1436.2 b16_stack=2581.6 b1_all=275.7 b1_calib=216.7 b1_epi=198.3 b1_int4exp=259.5 b1_nf4=189.6 b1_r1=215.9 b1_r12=222.0 b1_stack=302.2 ppl_all=1.7016 ppl_calib=1.7003 ppl_epi=1.6749 ppl_int4exp=1.6859 ppl_nf4=1.6741 ppl_r1=1.6793 ppl_r12=1.6793 ppl_stack=1.6845
+TPLINE granite       5 ATTNINT4 calibrated: 128 projections (hessians from 8 batches of c4; model_type=granitemoe)
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=3.31ms compile=None recompiles=0 out=/root/bo3/granite_b1_stack.json
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=3.63ms compile=None recompiles=0 out=/root/bo3/granite_b1_all.json
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=3.85ms compile=None recompiles=0 out=/root/bo3/granite_b1_int4exp.json
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=4.51ms compile=None recompiles=0 out=/root/bo3/granite_b1_r12.json
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=4.62ms compile=None recompiles=0 out=/root/bo3/granite_b1_calib.json
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=4.63ms compile=None recompiles=0 out=/root/bo3/granite_b1_r1.json
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=5.04ms compile=None recompiles=0 out=/root/bo3/granite_b1_epi.json
+TPLINE granite       1 B1D_TIMED_GRAPH steps=127 step=5.27ms compile=None recompiles=0 out=/root/bo3/granite_b1_nf4.json
+TPLINE granite       1 BV3_GRAPH batch=16 steps=70 step=11.14ms agg=1436.2tok/s recompiles=0 out=/root/bo3/granite_b16_nf4.json
+TPLINE granite       1 BV3_GRAPH batch=16 steps=70 step=6.08ms agg=2631.2tok/s recompiles=0 out=/root/bo3/granite_b16_all.json
+TPLINE granite       1 BV3_GRAPH batch=16 steps=70 step=6.20ms agg=2581.6tok/s recompiles=0 out=/root/bo3/granite_b16_stack.json
+TPLINE granite       1 BV3_GRAPH batch=16 steps=70 step=7.27ms agg=2201.3tok/s recompiles=0 out=/root/bo3/granite_b16_int4exp.json
+TPLINE granite      11 INT4EXP enabled: 32 layers (model_type=granitemoe)
+gptoss/ppl_calib FAIL
+gptoss/ppl_all FAIL
+gptoss/b1_calib FAIL
+gptoss/b1_all FAIL
+gptoss/b16_all FAIL
+TP gptoss b16_int4exp=795.9 b16_nf4=726.2 b16_stack=833.9 b1_epi=124.4 b1_int4exp=152.8 b1_nf4=123.2 b1_r1=132.8 b1_r12=133.4 b1_stack=169.6 ppl_epi=6.3182 ppl_int4exp=6.9611 ppl_nf4=6.3354 ppl_r1=6.3844 ppl_r12=6.3844 ppl_stack=6.9513
+TPLINE gptoss       5     print("ATTNINT4 calibrated:", enable_serve_attn_int4_calib(model, hs),
+TPLINE gptoss       5     raise RuntimeError(
+TPLINE gptoss       5 ATTNINT4 REFUSED (model_type=gpt_oss): RuntimeError('E4B_SERVE_ATTN_INT4: projection carries a bias; this path stores weight-only int4 -- refusing rather than dropping it')
+TPLINE gptoss       1 B1D_TIMED_GRAPH steps=127 step=5.90ms compile=None recompiles=0 out=/root/bo3/gptoss_b1_stack.json
+TPLINE gptoss       1 B1D_TIMED_GRAPH steps=127 step=6.55ms compile=None recompiles=0 out=/root/bo3/gptoss_b1_int4exp.json
+TPLINE gptoss       1 B1D_TIMED_GRAPH steps=127 step=7.50ms compile=None recompiles=0 out=/root/bo3/gptoss_b1_r12.json
+TPLINE gptoss       1 B1D_TIMED_GRAPH steps=127 step=7.53ms compile=None recompiles=0 out=/root/bo3/gptoss_b1_r1.json
+TPLINE gptoss       1 B1D_TIMED_GRAPH steps=127 step=8.04ms compile=None recompiles=0 out=/root/bo3/gptoss_b1_epi.json
+TPLINE gptoss       1 B1D_TIMED_GRAPH steps=127 step=8.12ms compile=None recompiles=0 out=/root/bo3/gptoss_b1_nf4.json
+TPLINE gptoss       1 BV3_GRAPH batch=16 steps=70 step=19.19ms agg=833.9tok/s recompiles=0 out=/root/bo3/gptoss_b16_stack.json
+TPLINE gptoss       1 BV3_GRAPH batch=16 steps=70 step=20.10ms agg=795.9tok/s recompiles=0 out=/root/bo3/gptoss_b16_int4exp.json
+TPLINE gptoss       1 BV3_GRAPH batch=16 steps=70 step=22.03ms agg=726.2tok/s recompiles=0 out=/root/bo3/gptoss_b16_nf4.json
+TPLINE gptoss      11 INT4EXP enabled: 24 layers (model_type=gpt_oss)
+TPLINE gptoss       5 RuntimeError: E4B_SERVE_ATTN_INT4: projection carries a bias; this path stores weight-only int4 -- refusing rather than dropping it
+TP mixtral b16_all=373.4 b16_int4exp=367.2 b16_nf4=186.7 b16_stack=372.0 b1_all=110.0 b1_calib=107.3 b1_epi=48.5 b1_int4exp=99.5 b1_nf4=48.0 b1_r1=49.4 b1_r12=49.5 b1_stack=102.8 ppl_all=1.1941 ppl_calib=1.1916 ppl_epi=1.1778 ppl_int4exp=1.1690 ppl_nf4=1.1805 ppl_r1=1.1808 ppl_r12=1.1808 ppl_stack=1.1736
+TPLINE mixtral       5 ATTNINT4 calibrated: 128 projections (hessians from 8 batches of c4; model_type=mixtral)
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=10.05ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_int4exp.json
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=20.22ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_r12.json
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=20.25ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_r1.json
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=20.61ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_epi.json
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=20.83ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_nf4.json
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=9.09ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_all.json
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=9.32ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_calib.json
+TPLINE mixtral       1 B1D_TIMED_GRAPH steps=127 step=9.73ms compile=None recompiles=0 out=/root/bo3/mixtral_b1_stack.json
+TPLINE mixtral       1 BV3_GRAPH batch=16 steps=70 step=42.85ms agg=373.4tok/s recompiles=0 out=/root/bo3/mixtral_b16_all.json
+TPLINE mixtral       1 BV3_GRAPH batch=16 steps=70 step=43.01ms agg=372.0tok/s recompiles=0 out=/root/bo3/mixtral_b16_stack.json
+TPLINE mixtral       1 BV3_GRAPH batch=16 steps=70 step=43.57ms agg=367.2tok/s recompiles=0 out=/root/bo3/mixtral_b16_int4exp.json
+TPLINE mixtral       1 BV3_GRAPH batch=16 steps=70 step=85.69ms agg=186.7tok/s recompiles=0 out=/root/bo3/mixtral_b16_nf4.json
+TPLINE mixtral      11 INT4EXP enabled: 32 layers (model_type=mixtral)
+gemma4: DOWNLOAD FAILED
+TP qwen3 b16_all=1089.6 b1_all=156.1 b1_nf4=98.0 ppl_all=1.8505 ppl_nf4=1.8621
+TPLINE qwen3       3 ATTNINT4 calibrated: 192 projections (hessians from 8 batches of c4; model_type=qwen3_moe)
+TPLINE qwen3       1 B1D_TIMED_GRAPH steps=127 step=10.20ms compile=None recompiles=0 out=/root/bo3/qwen3_b1_nf4.json
+TPLINE qwen3       1 B1D_TIMED_GRAPH steps=127 step=6.41ms compile=None recompiles=0 out=/root/bo3/qwen3_b1_all.json
+TPLINE qwen3       1 BV3_GRAPH batch=16 steps=70 step=14.68ms agg=1089.6tok/s recompiles=0 out=/root/bo3/qwen3_b16_all.json
+TPLINE qwen3       3 INT4EXP enabled: 48 layers (model_type=qwen3_moe)

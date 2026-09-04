@@ -210,3 +210,50 @@ def test_retryable_set_excludes_every_4xx_verdict():
     assert 403 not in clc.RETRYABLE_STATUS
     assert 401 not in clc.RETRYABLE_STATUS
     assert {429, 503}.issubset(clc.RETRYABLE_STATUS)
+
+
+# ---------------------------------------------------------------- --map-ref --
+
+SELF = "https://github.com/o/r/"
+
+
+def test_map_ref_rewrites_the_tag_and_main_to_the_ref_for_self_repo_links_only():
+    """Under --map-ref the current tag AND `main` both resolve to the ref under
+    review, but ONLY for this repo's URLs: a third-party pin (upstream docs at
+    their own tag, or their own `main`) is theirs and must come back untouched
+    (Bugbot, e4b PR #31 round 4)."""
+    links = [
+        SELF + "blob/v1.2.0/docs/A.md",
+        SELF + "tree/main/kernel",
+        SELF + "blob/main/README.md",
+        SELF + "actions/workflows/ci.yml",                    # self-repo, no ref in it
+        "https://github.com/other/proj/blob/v1.2.0/x.md",   # same tag string, not ours
+        "https://github.com/other/proj/blob/main/y.md",
+        "https://pypi.org/project/r/",
+    ]
+    assert clc._map_targets(links, SELF, "v1.2.0", "abc123") == [
+        SELF + "blob/abc123/docs/A.md",
+        SELF + "tree/abc123/kernel",
+        SELF + "blob/abc123/README.md",
+        SELF + "actions/workflows/ci.yml",
+        "https://github.com/other/proj/blob/v1.2.0/x.md",
+        "https://github.com/other/proj/blob/main/y.md",
+        "https://pypi.org/project/r/",
+    ]
+
+
+def test_map_ref_makes_the_tag_and_main_forms_of_one_path_identical():
+    """main() de-duplicates AFTER mapping (dict.fromkeys), so the tag form and
+    the main form of one file must map to the same string -- otherwise the
+    checker HEADs the same URL twice, which is exactly the churn that got it
+    throttled."""
+    tag, main_ = SELF + "blob/v1.2.0/docs/A.md", SELF + "blob/main/docs/A.md"
+    a, b = clc._map_targets([tag, main_], SELF, "v1.2.0", "abc123")
+    assert a == b == SELF + "blob/abc123/docs/A.md"
+    assert list(dict.fromkeys([a, b])) == [a]
+
+
+def test_map_ref_leaves_the_list_untouched_when_nothing_matches():
+    links = ["https://github.com/other/proj/blob/main/y.md"]
+    assert clc._map_targets(links, SELF, "v9.9.9", "ref") == links
+    assert clc._map_targets([], SELF, "v9.9.9", "ref") == []

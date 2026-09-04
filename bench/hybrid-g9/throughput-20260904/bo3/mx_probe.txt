@@ -1,0 +1,11 @@
+raw shapes (32, 5760, 90, 16) (32, 5760, 90) (32, 2880, 90, 16) (32, 2880, 90) torch.uint8 torch.uint8
+store shapes (32, 5760, 1440) (32, 5760, 90) (32, 2880, 1440) (32, 2880, 90)
+PROBE A  kernel(store) vs dequant(raw)-deinterleaved:      rel=0.00164
+PROBE B  kernel(store) vs dequant(store bytes):            rel=0.00164
+PROBE B2 dequant(store) vs dequant(raw)-deinterleaved:     rel=0.00000
+PROBE C  kernel(nibble-swapped store) vs ref A:            rel=1.40115
+PROBE D  kernel(raw rows) then de-interleave output vs A:  rel=0.00164
+store contiguous: True True strides (8294400, 1440, 1) (518400, 90, 1)
+PROBE F  down: kernel(store) vs x @ dequant(raw) [I,H]:     rel=0.00175
+PROBE F2 down: kernel(store) vs x @ dequant(raw).T:         rel=1.43480
+PROBE G  two rows, experts (3,7): rel row0=0.00164 row1=0.00170

@@ -39,6 +39,10 @@ def verify_moe_4bit(model, *, strict=False):
     load actually quantized the experts. Detection is a heuristic keyed on transformers' fused-expert
     module naming plus a 3-D float parameter; a newly added MoE family may need its module class
     recognized here.
+    Use it after any 4-bit load as the observable check that no fused expert stack is still
+    high precision; ``strict=True`` raises ``RuntimeError`` naming the first offender, so a
+    quantisation that silently missed the experts cannot pass. Pure PyTorch, any device. See
+    ``docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md``.
     """
     quantized = []
     unquantized = []

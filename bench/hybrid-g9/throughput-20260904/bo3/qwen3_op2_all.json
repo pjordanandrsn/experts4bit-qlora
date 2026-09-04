@@ -1,0 +1,72 @@
+{
+ "b1d_loop": "eager",
+ "b1d_timed": true,
+ "n_steps": 31,
+ "mech": {
+  "dispatch": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "compute": {
+   "f32": 0,
+   "fp8": 1728
+  },
+  "window": "warmup+capture (graph) or the whole loop (eager); graph replays do not re-enter Python and cannot increment"
+ },
+ "tokens": [
+  220,
+  17,
+  15,
+  15,
+  16,
+  518,
+  279,
+  16194,
+  7154,
+  26221,
+  659,
+  1260,
+  1030,
+  264,
+  8640,
+  3476,
+  304,
+  279,
+  12425,
+  4013,
+  20207,
+  3757,
+  1581,
+  291,
+  304,
+  220,
+  17,
+  15,
+  15,
+  17,
+  659
+ ],
+ "step_ms_clean": 34.357919967741935,
+ "window_ms": 1065.095519,
+ "compile_layers": false,
+ "compile_moe_tier": false,
+ "compile_attn_tier": false,
+ "compile_mode": null,
+ "fuse_qkv": false,
+ "dyn_limits_env": [
+  "64",
+  "64"
+ ],
+ "dynamo_frames_before": {
+  "ok": 0,
+  "total": 0
+ },
+ "dynamo_frames_after": {
+  "ok": 0,
+  "total": 0
+ },
+ "recompiles_in_window": 0,
+ "router_probe": null
+}

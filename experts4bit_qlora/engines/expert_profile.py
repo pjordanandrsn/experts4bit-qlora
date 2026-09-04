@@ -243,6 +243,10 @@ def hot_sets_from_profile(path: str, hot_per_layer: int, *, key: str = "tokens_r
         ordered most-routed first. Layers with no routing rows yield an empty list rather
         than an arbitrary pick -- silently pinning experts 0..H-1 for an unprofiled layer
         would reintroduce exactly the by-index behaviour this function exists to replace.
+    Use it to choose which experts stay resident from a routing profile
+    (``E4B_EXPERT_PROFILE`` writes one), not by index. Returns one hot set per MoE layer in
+    module order, ready for the residency engines. See
+    ``docs/solutions/run-moe-larger-than-vram.md``.
     """
     n_experts, counts = {}, {}
     with open(path) as f:

@@ -528,6 +528,10 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
 
     Composes with ``enable_fast_train`` in either order, and requires gradient
     checkpointing — see :meth:`_ArenaExpertOffload.assert_rows_staged`.
+    Use it for training when the frozen NF4 experts do not fit host RAM. Refuses
+    ``hot_rows`` below the expert count at attach time and requires gradient checkpointing;
+    returns the number of ``ExpertsLoRA`` modules attached (assert > 0). Needs ``[fast]``, a
+    CUDA device, local NVMe. See ``docs/solutions/offload-moe-experts-to-cpu-or-nvme.md``.
     """
     # Named by SYMBOL, not by version number: the staging entry point ships with
     # this feature, so any version assertion here would be a forward reference to

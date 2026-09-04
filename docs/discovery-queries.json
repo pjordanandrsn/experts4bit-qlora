@@ -1,0 +1,509 @@
+{
+  "$comment": "Discoverability regression corpus: realistic user queries and the page that must answer each. Checked offline by scripts/check_discovery_contract.py; the optional BM25 report is a local proxy, never evidence of external ranking.",
+  "project": "experts4bit-qlora",
+  "minimum_queries": 30,
+  "bm25_corpus": [
+    "docs/solutions/*.md",
+    "docs/SOLUTIONS.md",
+    "README.md"
+  ],
+  "queries": [
+    {
+      "query": "bitsandbytes MoE still OOM after load_in_4bit",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+      "required_concepts": [
+        [
+          "load_in_4bit"
+        ],
+        [
+          "fused"
+        ],
+        [
+          "OOM",
+          "out of memory"
+        ],
+        [
+          "bitsandbytes"
+        ]
+      ]
+    },
+    {
+      "query": "Why does bitsandbytes load my MoE in 4-bit but still OOM?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+      "required_concepts": [
+        [
+          "load_in_4bit"
+        ],
+        [
+          "expert"
+        ],
+        [
+          "OOM",
+          "out of memory"
+        ]
+      ]
+    },
+    {
+      "query": "transformers 4-bit skips MoE experts",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+      "required_concepts": [
+        [
+          "nn.Linear"
+        ],
+        [
+          "3-D",
+          "three-dimensional",
+          "3D"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "quantize fused 3D expert tensor",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+      "required_concepts": [
+        [
+          "fused"
+        ],
+        [
+          "3-D",
+          "three-dimensional",
+          "3D"
+        ],
+        [
+          "NF4"
+        ]
+      ]
+    },
+    {
+      "query": "BitsAndBytesConfig leaves gate_up_proj in bf16",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+      "required_concepts": [
+        [
+          "gate_up_proj"
+        ],
+        [
+          "bf16"
+        ]
+      ]
+    },
+    {
+      "query": "QLoRA Qwen3 MoE on a 24 GB GPU",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "QLoRA"
+        ],
+        [
+          "Qwen3"
+        ],
+        [
+          "24 GB",
+          "24GB"
+        ]
+      ]
+    },
+    {
+      "query": "fine-tune fused MoE experts with LoRA",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "LoRA"
+        ],
+        [
+          "fused"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "Can I QLoRA-train fused MoE experts on a consumer GPU?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "QLoRA"
+        ],
+        [
+          "consumer"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "peft does not see MoE expert parameters",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "peft",
+          "PEFT"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "run a MoE larger than VRAM",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/run-moe-larger-than-vram.md",
+      "required_concepts": [
+        [
+          "VRAM"
+        ],
+        [
+          "residency",
+          "offload"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "How can I run a Mixture-of-Experts model larger than VRAM?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/run-moe-larger-than-vram.md",
+      "required_concepts": [
+        [
+          "VRAM"
+        ],
+        [
+          "Mixture-of-Experts",
+          "MoE"
+        ]
+      ]
+    },
+    {
+      "query": "offload MoE experts to system RAM",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
+      "required_concepts": [
+        [
+          "RAM",
+          "host memory"
+        ],
+        [
+          "offload",
+          "residency"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "serve MoE experts from NVMe",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
+      "required_concepts": [
+        [
+          "NVMe"
+        ],
+        [
+          "expert"
+        ],
+        [
+          "arena"
+        ]
+      ]
+    },
+    {
+      "query": "How do I offload MoE experts to RAM or NVMe?",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
+      "required_concepts": [
+        [
+          "NVMe"
+        ],
+        [
+          "RAM",
+          "host"
+        ]
+      ]
+    },
+    {
+      "query": "experts fit on NVMe but not in CPU RAM",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
+      "required_concepts": [
+        [
+          "NVMe"
+        ],
+        [
+          "CPU RAM",
+          "host RAM",
+          "host memory"
+        ]
+      ]
+    },
+    {
+      "query": "serve a 30B MoE on an RTX 5090",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "5090",
+          "consumer"
+        ],
+        [
+          "serve",
+          "serving"
+        ],
+        [
+          "MoE"
+        ]
+      ]
+    },
+    {
+      "query": "fast MoE inference on a consumer NVIDIA GPU with 4-bit experts",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "consumer"
+        ],
+        [
+          "4-bit",
+          "int4",
+          "NF4"
+        ],
+        [
+          "inference",
+          "serving"
+        ]
+      ]
+    },
+    {
+      "query": "paged KV cache decode for quantized MoE",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "paged"
+        ],
+        [
+          "KV"
+        ],
+        [
+          "decode"
+        ]
+      ]
+    },
+    {
+      "query": "gpt-oss MXFP4 experts training and residency",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/mxfp4-moe-training-and-residency.md",
+      "required_concepts": [
+        [
+          "MXFP4"
+        ],
+        [
+          "gpt-oss"
+        ]
+      ]
+    },
+    {
+      "query": "QLoRA on MXFP4 checkpoint",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/mxfp4-moe-training-and-residency.md",
+      "required_concepts": [
+        [
+          "MXFP4"
+        ],
+        [
+          "QLoRA"
+        ]
+      ]
+    },
+    {
+      "query": "how to choose between reference batched fused host-streamed and NVMe paths",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/run-moe-larger-than-vram.md",
+      "required_concepts": [
+        [
+          "NVMe"
+        ],
+        [
+          "fused"
+        ],
+        [
+          "host"
+        ]
+      ]
+    },
+    {
+      "query": "experts4bit-qlora vs grouped-nf4-gemm which one do I install",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/SOLUTIONS.md",
+      "required_concepts": [
+        [
+          "grouped-nf4-gemm"
+        ],
+        [
+          "experts4bit-qlora"
+        ],
+        [
+          "kernel"
+        ]
+      ]
+    },
+    {
+      "query": "MoE 4-bit training loss parity with bf16",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "loss"
+        ],
+        [
+          "parity",
+          "bf16"
+        ]
+      ]
+    },
+    {
+      "query": "enable_fast_train returns False",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "enable_fast_train"
+        ],
+        [
+          "return"
+        ]
+      ]
+    },
+    {
+      "query": "verify all fused experts are actually 4-bit after loading",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+      "required_concepts": [
+        [
+          "verify",
+          "check"
+        ],
+        [
+          "4-bit",
+          "NF4"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    },
+    {
+      "query": "grouped NF4 GEMM",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "grouped-nf4-gemm"
+        ],
+        [
+          "[fast]",
+          "fast"
+        ]
+      ]
+    },
+    {
+      "query": "compute directly on NF4 packed weights",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "grouped-nf4-gemm"
+        ],
+        [
+          "NF4"
+        ]
+      ]
+    },
+    {
+      "query": "MXFP4 expert inference kernel",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/mxfp4-moe-training-and-residency.md",
+      "required_concepts": [
+        [
+          "grouped-nf4-gemm"
+        ],
+        [
+          "MXFP4"
+        ]
+      ]
+    },
+    {
+      "query": "INT4 decode GEMV for MoE experts",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "grouped-nf4-gemm"
+        ],
+        [
+          "int4",
+          "INT4"
+        ]
+      ]
+    },
+    {
+      "query": "FP8 paged attention MoE serving",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "grouped-nf4-gemm"
+        ],
+        [
+          "fp8",
+          "FP8"
+        ],
+        [
+          "paged"
+        ]
+      ]
+    },
+    {
+      "query": "Is there an FP8 paged-attention path for quantized MoE serving?",
+      "expected_package": "grouped-nf4-gemm",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "FP8",
+          "fp8"
+        ],
+        [
+          "paged"
+        ]
+      ]
+    },
+    {
+      "query": "Mixtral 8x7B 4-bit experts on one GPU",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "Mixtral"
+        ],
+        [
+          "expert"
+        ]
+      ]
+    }
+  ]
+}

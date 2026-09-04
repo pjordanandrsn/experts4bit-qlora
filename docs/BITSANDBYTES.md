@@ -43,3 +43,42 @@ offload asserted bit-identical to resident execution, packed storage asserted un
 training steps), the fidelity-pinned N-bit storage matrix, the streaming loader + past-VRAM expert
 offload, and train/serve byte-identity (the served base is asserted `torch.equal` to the base the
 adapters were trained against).
+
+## Where bitsandbytes' own 4-bit execution stands (2026-09-04)
+
+Any sentence in this repository that reads as "bitsandbytes 4-bit
+dequantizes to bf16" is version-, workload- and shape-specific, and this
+is the section to read it against.
+
+1. **Ordinary 2-D inference on bitsandbytes ≥ 0.50.0 can run on the packed
+   bytes.** Upstream commit
+   [`5453368bed15d19cbcfba4426ed118de33dc3d94`](https://github.com/bitsandbytes-foundation/bitsandbytes/commit/5453368bed15d19cbcfba4426ed118de33dc3d94)
+   — "[CUDA] New 4bit GEMM kernels for inference (#1949)", committed
+   2026-05-21 — sits 75 commits after tag `0.49.2` and 44 commits before
+   tag `0.50.0`, so **0.50.0 is the first stable release** with a direct
+   packed-4-bit CUDA inference forward: `torch.ops.bitsandbytes.gemm_4bit`
+   for supported ordinary 2-D inference cells. It may fall back to a
+   dequantized path on unsupported shapes, devices or configurations.
+2. **Routed grouped MoE execution is a separate contract.** Many expert
+   matrices, variable group sizes, one launch — upstream establishes no
+   such contract. That contract is what `grouped-nf4-gemm` supplies
+   through `[fast]`, and it is why `enable_fast` and `enable_fast_train`
+   exist at all.
+3. **Training's input gradient is separate again.** The conventional
+   backward still dequantizes the weight for dX. This package's
+   `ExpertsLoRA` projection is dequantize-then-`linear` with
+   recompute-in-backward on every bitsandbytes release (the packaging note
+   in [`METHODOLOGY.md`](METHODOLOGY.md)); the fused training lane's dgrad
+   is `grouped-nf4-gemm`'s own kernel, not a bitsandbytes path.
+4. **Older releases and unsupported cells use dequantized paths.** On
+   ≤ 0.49.x, and on any cell the new kernels do not cover, the 4-bit
+   weight is decoded to the compute dtype and multiplied there.
+5. **Historical comparators stay what their receipts measured.**
+   `METHODOLOGY.md` §10's energy figures were made against
+   dequantize-then-`linear` and a bitsandbytes 0.50-dev *fork* build's
+   `matmul_4bit` routing on an RTX A2000; the receipt does not record the
+   build's commit. They are registered with that scope as
+   `e4b.train.energy-honest.scoped-a2000` and are not rewritten; the
+   earlier universal wording is `superseded` (`e4b.train.energy-honest`),
+   and the remeasure with a recorded version is
+   [#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392).

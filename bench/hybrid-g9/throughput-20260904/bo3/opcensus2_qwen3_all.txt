@@ -1,0 +1,253 @@
+profiled eager steps: 2
+traced aten dispatches: 11886 (5943/step)
+
+== by call site (dispatch-mode tracer; dispatches/step, apportioned device us/step, top ops; device time first) ==
+    864     596.3 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(140): gemv_int4_b32  [viewx288, sumx288, _to_copyx288]
+     96     485.7 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/router_epilogue.py(256): _fwd  [tx48, mmx48]
+      2     484.8 us  /root/bo3/step_decomp_op.py(1570): one_step  [viewx1, copy_x1]
+     96     166.1 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(731): kernel_args  [index_selectx96]
+     96      99.4 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(618): _forward_collapsed  [sumx48, _to_copyx48]
+     48      88.4 us  /opt/conda/lib/python3.11/site-packages/transformers/activations.py(103): forward  [silux48]
+     48      83.1 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(604): _forward_collapsed  [index_selectx48]
+    240      68.7 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(617): _forward_collapsed  [_to_copyx48, slicex48, unsqueezex48, mulx48]
+     48      68.7 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(318): _fused_over_stack  [mulx48]
+    144      41.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(682): append_graph_t1  [selectx48, slicex48, add_x48]
+     48      39.7 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(236): _fwd  [addx48]
+      7      10.1 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(659): forward  [slicex3, tx1, viewx1, mmx1]
+      1       5.4 us  /root/bo3/step_decomp_op.py(1569): one_step  [argmaxx1]
+      2       2.6 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(433): forward  [sinx1, mulx1]
+      2       2.6 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(432): forward  [cosx1, mulx1]
+      7       1.1 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(430): forward  [expandx2, viewx2, bmmx1, _unsafe_viewx1]
+      1       0.9 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(431): forward  [catx1]
+      1       0.9 us  /root/bo3/step_decomp_op.py(1571): one_step  [add_x1]
+    288       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(60): quant_x_rows  [emptyx288]
+    288       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(61): quant_x_rows  [emptyx288]
+    192       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/int4_attn.py(95): forward  [viewx192]
+    192       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/int4_attn.py(104): forward  [viewx192]
+    192       0.0 us  /opt/conda/lib/python3.11/site-packages/fp8_kv.py(298): fp8_kv_append_t1  [viewx96, detachx96]
+    192       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(732): kernel_args  [selectx96, viewx96]
+    192       0.0 us  /opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py(1377): fp8_paged_decode_attention  [viewx96, detachx96]
+    144       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_attention.py(205): paged_attention_forward  [slicex96, selectx48]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(553): rope_norm_heads  [emptyx96]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(403): _fwd  [viewx48, transposex48]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_attention.py(188): paged_attention_forward  [selectx48, permutex48]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_attention.py(189): paged_attention_forward  [selectx48, permutex48]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(675): append_graph_t1  [selectx48, slicex48]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/fp8_kv.py(276): fp8_kv_append_t1  [squeezex96]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(679): append_graph_t1  [selectx48, slicex48]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_attention.py(209): paged_attention_forward  [slicex48, unsqueezex48]
+     96       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(476): rmsnorm_resid_rows  [viewx96]
+     49       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(417): rmsnorm_rows  [viewx49]
+     49       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(418): rmsnorm_rows  [empty_likex49]
+     49       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(422): rmsnorm_rows  [viewx49]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(387): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(388): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(398): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(397): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(399): _fwd  [transposex48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(401): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(400): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(402): _fwd  [transposex48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(674): append_graph_t1  [selectx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(678): append_graph_t1  [selectx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fp8_paged_kv.py(717): kernel_args  [selectx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py(1355): fp8_paged_decode_attention  [empty_likex48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py(1357): fp8_paged_decode_attention  [emptyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py(1358): fp8_paged_decode_attention  [emptyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/fp8_paged_attn.py(1359): fp8_paged_decode_attention  [emptyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/glue_r2.py(416): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(467): rmsnorm_resid_rows  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(468): rmsnorm_resid_rows  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(469): rmsnorm_resid_rows  [empty_likex48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(470): rmsnorm_resid_rows  [empty_likex48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(278): forward  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/router_epilogue.py(253): _fwd  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/router_epilogue.py(257): _fwd  [_to_copyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(681): router_epilogue  [emptyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(682): router_epilogue  [emptyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/int4_b32.py(683): router_epilogue  [emptyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(517): forward  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(252): _fused_over_stack  [_to_copyx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(303): _fused_over_stack  [splitx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/hot_residency.py(616): _forward_collapsed  [viewx48]
+     48       0.0 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(281): forward  [viewx48]
+      4       0.0 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(423): forward  [unsqueezex2, slicex1, expandx1]
+      4       0.0 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(425): forward  [slicex2, unsqueezex1, _to_copyx1]
+      2       0.0 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(435): forward  [_to_copyx2]
+      2       0.0 us  /root/bo3/step_decomp_op.py(1568): one_step  [slicex1, selectx1]
+      1       0.0 us  /opt/conda/lib/python3.11/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py(476): forward  [embeddingx1]
+
+== by op (profiler; launch count) ==
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                             aten::view        22.96%      30.029ms        23.47%      30.694ms       7.239us       0.000us         0.00%       0.000us       0.000us          4240  
+                                       aten::as_strided         0.84%       1.099ms         0.84%       1.099ms       0.306us       0.000us         0.00%       0.000us       0.000us          3586  
+                                          aten::reshape         1.99%       2.597ms        18.09%      23.663ms       7.914us       0.000us         0.00%       0.000us       0.000us          2990  
+                                       cudaLaunchKernel         6.50%       8.494ms         6.50%       8.494ms       3.368us       0.000us         0.00%       0.000us       0.000us          2522  
+                                            aten::empty        14.04%      18.357ms        14.04%      18.357ms       8.306us       0.000us         0.00%       0.000us       0.000us          2210  
+                                               aten::to         0.86%       1.124ms        12.79%      16.724ms       8.674us       0.000us         0.00%     967.731us       0.502us          1928  
+                                       cuLaunchKernelEx         4.75%       6.208ms         4.75%       6.208ms       3.230us      97.894us         0.98%      97.894us       0.051us          1922  
+                                    aten::empty_strided         2.03%       2.659ms         2.03%       2.659ms       1.967us       0.000us         0.00%       0.000us       0.000us          1352  
+                                           aten::select         5.44%       7.117ms         5.65%       7.394ms       6.989us       0.000us         0.00%       0.000us       0.000us          1058  
+                                            aten::copy_         1.97%       2.582ms         4.26%       5.575ms       5.759us     969.683us         9.72%     969.683us       1.002us           968  
+                                         aten::_to_copy         6.32%       8.259ms        11.93%      15.600ms      16.149us       0.000us         0.00%     967.731us       1.002us           966  
+                                            aten::slice         4.54%       5.933ms         4.75%       6.213ms       7.076us       0.000us         0.00%       0.000us       0.000us           878  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us     569.870us         5.71%     569.870us       0.843us           676  
+                                              aten::sum         6.90%       9.019ms         8.79%      11.500ms      17.113us       1.391ms        13.95%       1.391ms       2.071us           672  
+void at::native::reduce_kernel<128, 4, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us       1.391ms        13.95%       1.391ms       2.071us           672  
+                                          _quant_x_rows         0.00%       0.000us         0.00%       0.000us       0.000us     491.429us         4.93%     491.429us       0.853us           576  
+                                         _gemv_int4_b32         0.00%       0.000us         0.00%       0.000us       0.000us       3.368ms        33.76%       3.368ms       5.847us           576  
+                                           aten::narrow         0.46%     606.104us         2.37%       3.103ms       6.464us       0.000us         0.00%       0.000us       0.000us           480  
+                                        aten::transpose         1.72%       2.254ms         1.84%       2.409ms       6.210us       0.000us         0.00%       0.000us       0.000us           388  
+                                       aten::empty_like         2.53%       3.308ms         3.16%       4.135ms      10.711us       0.000us         0.00%       0.000us       0.000us           386  
+                                           aten::detach         0.27%     353.518us         0.27%     353.518us       0.921us       0.000us         0.00%       0.000us       0.000us           384  
+                                     aten::index_select         2.64%       3.448ms         4.34%       5.680ms      19.587us     498.368us         5.00%     499.744us       1.723us           290  
+                                          aten::resize_         0.42%     552.236us         0.42%     552.236us       1.904us       0.000us         0.00%       0.000us       0.000us           290  
+                                        aten::unsqueeze         1.27%       1.665ms         1.32%       1.730ms       8.737us       0.000us         0.00%       0.000us       0.000us           198  
+                                              aten::mul         1.73%       2.268ms         2.23%       2.914ms      14.870us     280.572us         2.81%     280.572us       1.431us           196  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     306.182us         3.07%     306.182us       1.578us           194  
+                                       _rope_norm_heads         0.00%       0.000us         0.00%       0.000us       0.000us     223.332us         2.24%     223.332us       1.163us           192  
+                                          aten::permute         1.19%       1.551ms         1.22%       1.591ms       8.287us       0.000us         0.00%       0.000us       0.000us           192  
+                                          aten::squeeze         1.01%       1.320ms         1.04%       1.359ms       7.077us       0.000us         0.00%       0.000us       0.000us           192  
+                                    _fp8_append_t1_side         0.00%       0.000us         0.00%       0.000us       0.000us     261.567us         2.62%     261.567us       1.362us           192  
+                                          aten::flatten         0.18%     240.829us         1.21%       1.580ms       8.230us       0.000us         0.00%       0.000us       0.000us           192  
+                                           aten::matmul         0.14%     178.105us         2.28%       2.980ms      29.803us       0.000us         0.00%     993.974us       9.940us           100  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     274.431us         2.75%     274.431us       2.800us            98  
+                                          _rmsnorm_rows         0.00%       0.000us         0.00%       0.000us       0.000us     131.265us         1.32%     131.265us       1.339us            98  
+                                             aten::add_         1.17%       1.528ms         1.48%       1.935ms      19.745us      83.713us         0.84%      83.713us       0.854us            98  
+                                           aten::linear         0.19%     245.279us         3.02%       3.952ms      40.327us       0.000us         0.00%     991.734us      10.120us            98  
+                                                aten::t         0.59%     769.376us         0.73%     957.216us       9.768us       0.000us         0.00%       0.000us       0.000us            98  
+                                               aten::mm         1.62%       2.118ms         1.95%       2.552ms      26.037us     991.734us         9.94%     991.734us      10.120us            98  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     121.439us         1.22%     121.439us       1.265us            96  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     102.498us         1.03%     102.498us       1.068us            96  
+                          _fp8_paged_decode_split_f8dot         0.00%       0.000us         0.00%       0.000us       0.000us     606.206us         6.08%     606.206us       6.315us            96  
+                                    _rmsnorm_resid_rows         0.00%       0.000us         0.00%       0.000us       0.000us     130.878us         1.31%     130.878us       1.363us            96  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us     232.186us         2.33%     232.186us       2.419us            96  
+                                       _router_epilogue         0.00%       0.000us         0.00%       0.000us       0.000us     272.154us         2.73%     272.154us       2.835us            96  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us      91.679us         0.92%      91.679us       0.955us            96  
+                                            aten::chunk         0.16%     202.925us         1.55%       2.025ms      21.093us       0.000us         0.00%       0.000us       0.000us            96  
+                                            aten::split         1.00%       1.305ms         1.39%       1.822ms      18.979us       0.000us         0.00%       0.000us       0.000us            96  
+                                             aten::silu         1.01%       1.317ms         1.27%       1.657ms      17.264us     176.802us         1.77%     176.802us       1.842us            96  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     176.802us         1.77%     176.802us       1.842us            96  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     165.791us         1.66%     165.791us       1.727us            96  
+void at::native::elementwise_kernel<128, 2, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     111.452us         1.12%     111.452us       1.161us            96  
+                                              aten::add         0.91%       1.187ms         1.15%       1.502ms      15.645us      79.326us         0.80%      79.326us       0.826us            96  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      79.326us         0.80%      79.326us       0.826us            96  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us      39.133us         0.39%      39.133us       0.815us            48  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      21.381us         0.21%      21.381us       0.891us            24  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us      21.023us         0.21%      21.023us       0.876us            24  
+                                           aten::expand         0.06%      82.143us         0.06%      83.675us      13.946us       0.000us         0.00%       0.000us       0.000us             6  
+                                     aten::_unsafe_view         0.04%      50.956us         0.04%      50.956us      12.739us       0.000us         0.00%       0.000us       0.000us             4  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       3.329us         0.03%       3.329us       0.832us             4  
+                                        aten::embedding         0.10%     137.284us         0.25%     325.824us     162.912us       0.000us         0.00%       4.256us       2.128us             2  
+                                              aten::bmm         0.06%      77.725us         0.07%      92.507us      46.253us       2.240us         0.02%       2.240us       1.120us             2  
+void gemmk1_kernel<int, float, 256, 5, true, false, ...         0.00%       0.000us         0.00%       0.000us       0.000us       2.240us         0.02%       2.240us       1.120us             2  
+                                              aten::cat         0.04%      53.670us         0.05%      66.158us      33.079us       1.760us         0.02%       1.760us       0.880us             2  
+void at::native::(anonymous namespace)::CatArrayBatc...         0.00%       0.000us         0.00%       0.000us       0.000us       1.760us         0.02%       1.760us       0.880us             2  
+                                              aten::cos         0.03%      35.593us         0.03%      45.027us      22.514us       2.432us         0.02%       2.432us       1.216us             2  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       2.432us         0.02%       2.432us       1.216us             2  
+                                              aten::sin         0.02%      31.746us         0.03%      42.523us      21.262us       2.433us         0.02%       2.433us       1.217us             2  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       2.433us         0.02%       2.433us       1.217us             2  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us     759.548us         7.61%     759.548us     379.774us             2  
+                                           aten::argmax         0.04%      55.962us         0.07%      91.236us      45.618us      10.848us         0.11%      10.848us       5.424us             2  
+                                        cudaMemsetAsync         0.02%      23.305us         0.02%      23.305us      11.653us       0.000us         0.00%       0.000us       0.000us             2  
+                                        cudaMemcpyAsync         0.03%      36.664us         0.03%      36.664us      18.332us       0.000us         0.00%       0.000us       0.000us             2  
+                                        Memset (Device)         0.00%       0.000us         0.00%       0.000us       0.000us       0.512us         0.01%       0.512us       0.256us             2  
+void at::native::reduce_kernel<512, 1, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us      10.336us         0.10%      10.336us       5.168us             2  
+                         Memcpy DtoD (Device -> Device)         0.00%       0.000us         0.00%       0.000us       0.000us       1.952us         0.02%       1.952us       0.976us             2  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us       2.176us         0.02%       2.176us       1.088us             2  
+                                  cudaDeviceSynchronize         0.16%     202.951us         0.16%     202.951us     101.476us       0.000us         0.00%       0.000us       0.000us             2  
+                                Activity Buffer Request         0.07%      91.727us         0.07%      91.727us      91.727us       1.376us         0.01%       1.376us       1.376us             1  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 130.775ms
+Self CUDA time total: 9.976ms
+
+
+== by op + input shape (profiler; self device time) ==
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  -----------------------------------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls                               Input Shapes  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  -----------------------------------------  
+                                         _gemv_int4_b32         0.00%       0.000us         0.00%       0.000us       0.000us       3.368ms        33.76%       3.368ms       5.847us           576                                         []  
+void at::native::reduce_kernel<128, 4, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us       1.391ms        13.95%       1.391ms       2.071us           672                                         []  
+                                               aten::mm         0.03%      44.866us         0.04%      57.014us      28.507us     759.548us         7.61%     759.548us     379.774us             2                [[1, 2048], [2048, 151936]]  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us     759.548us         7.61%     759.548us     379.774us             2                                         []  
+                          _fp8_paged_decode_split_f8dot         0.00%       0.000us         0.00%       0.000us       0.000us     606.206us         6.08%     606.206us       6.315us            96                                         []  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us     569.870us         5.71%     569.870us       0.843us           676                                         []  
+                                          _quant_x_rows         0.00%       0.000us         0.00%       0.000us       0.000us     491.429us         4.93%     491.429us       0.853us           576                                         []  
+                                              aten::sum         1.68%       2.200ms         2.19%       2.861ms      14.901us     374.497us         3.75%     374.497us       1.951us           192                 [[16, 1, 512], [], [], []]  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     306.182us         3.07%     306.182us       1.578us           194                                         []  
+                                            aten::copy_         0.33%     434.468us         0.77%       1.006ms       5.239us     279.715us         2.80%     279.715us       1.457us           192                 [[8, 2048], [8, 2048], []]  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     274.431us         2.75%     274.431us       2.800us            98                                         []  
+                                       _router_epilogue         0.00%       0.000us         0.00%       0.000us       0.000us     272.154us         2.73%     272.154us       2.835us            96                                         []  
+                                     aten::index_select         0.98%       1.285ms         1.54%       2.020ms      21.042us     271.551us         2.72%     271.551us       2.829us            96                       [[1, 2048], [], [8]]  
+                                    _fp8_append_t1_side         0.00%       0.000us         0.00%       0.000us       0.000us     261.567us         2.62%     261.567us       1.362us           192                                         []  
+                                              aten::sum         1.13%       1.475ms         1.42%       1.851ms      19.281us     252.129us         2.53%     252.129us       2.626us            96                [[16, 8, 1536], [], [], []]  
+                                              aten::sum         1.29%       1.683ms         1.60%       2.090ms      21.767us     235.006us         2.36%     235.006us       2.448us            96                [[16, 1, 2048], [], [], []]  
+                                               aten::mm         1.59%       2.073ms         1.91%       2.495ms      25.986us     232.186us         2.33%     232.186us       2.419us            96                   [[1, 2048], [2048, 128]]  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us     232.186us         2.33%     232.186us       2.419us            96                                         []  
+                                       _rope_norm_heads         0.00%       0.000us         0.00%       0.000us       0.000us     223.332us         2.24%     223.332us       1.163us           192                                         []  
+                                              aten::sum         0.96%       1.254ms         1.23%       1.603ms      16.697us     195.686us         1.96%     195.686us       2.038us            96                 [[6, 8, 2048], [], [], []]  
+                                              aten::sum         0.98%       1.287ms         1.27%       1.657ms      17.265us     177.952us         1.78%     177.952us       1.854us            96                 [[8, 1, 4096], [], [], []]  
+                                             aten::silu         1.01%       1.317ms         1.27%       1.657ms      17.264us     176.802us         1.77%     176.802us       1.842us            96                                 [[8, 768]]  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     176.802us         1.77%     176.802us       1.842us            96                                         []  
+                                            aten::copy_         0.30%     385.901us         0.71%     932.706us       4.858us     174.553us         1.75%     174.553us       0.909us           192                   [[1, 512], [1, 512], []]  
+                                              aten::mul         0.93%       1.211ms         1.16%       1.514ms      15.766us     165.791us         1.66%     165.791us       1.727us            96                       [[8, 768], [8, 768]]  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     165.791us         1.66%     165.791us       1.727us            96                                         []  
+                                              aten::sum         0.86%       1.119ms         1.10%       1.438ms      14.981us     156.164us         1.57%     156.164us       1.627us            96                 [[1, 8, 2048], [], [], []]  
+                                            aten::copy_         0.44%     572.109us         0.88%       1.145ms       5.965us     152.063us         1.52%     152.063us       0.792us           192                 [[1, 2048], [1, 2048], []]  
+                                          _rmsnorm_rows         0.00%       0.000us         0.00%       0.000us       0.000us     131.265us         1.32%     131.265us       1.339us            98                                         []  
+                                    _rmsnorm_resid_rows         0.00%       0.000us         0.00%       0.000us       0.000us     130.878us         1.31%     130.878us       1.363us            96                                         []  
+                                     aten::index_select         0.96%       1.260ms         1.56%       2.035ms      21.193us     121.439us         1.22%     121.439us       1.265us            96                         [[1, 35], [], [1]]  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     121.439us         1.22%     121.439us       1.265us            96                                         []  
+                                              aten::mul         0.76%     989.159us         1.01%       1.317ms      13.717us     111.452us         1.12%     111.452us       1.161us            96                        [[8, 2048], [8, 1]]  
+void at::native::elementwise_kernel<128, 2, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     111.452us         1.12%     111.452us       1.161us            96                                         []  
+                                            aten::copy_         0.27%     356.513us         0.54%     701.494us       7.307us     105.697us         1.06%     105.697us       1.101us            96                   [[1, 128], [1, 128], []]  
+                                     aten::index_select         0.66%     867.604us         1.11%       1.447ms      15.072us     102.498us         1.03%     102.498us       1.068us            96                             [[1], [], [1]]  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     102.498us         1.03%     102.498us       1.068us            96                                         []  
+                                       cuLaunchKernelEx         4.75%       6.208ms         4.75%       6.208ms       3.230us      97.894us         0.98%      97.894us       0.051us          1922                                         []  
+                                            aten::copy_         0.23%     296.368us         0.48%     631.368us       6.577us      91.679us         0.92%      91.679us       0.955us            96                             [[8], [8], []]  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us      91.679us         0.92%      91.679us       0.955us            96                                         []  
+                                            aten::copy_         0.18%     235.221us         0.40%     516.829us       5.384us      82.267us         0.82%      82.267us       0.857us            96                 [[8, 1536], [8, 1536], []]  
+                                             aten::add_         1.14%       1.494ms         1.45%       1.891ms      19.700us      81.537us         0.82%      81.537us       0.849us            96                              [[1], [], []]  
+                                              aten::add         0.91%       1.187ms         1.15%       1.502ms      15.645us      79.326us         0.80%      79.326us       0.826us            96           [[1, 1, 2048], [1, 1, 2048], []]  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      79.326us         0.80%      79.326us       0.826us            96                                         []  
+                                            aten::copy_         0.19%     243.377us         0.40%     519.818us       5.415us      76.381us         0.77%      76.381us       0.796us            96                 [[1, 4096], [1, 4096], []]  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us      39.133us         0.39%      39.133us       0.815us            48                                         []  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      21.381us         0.21%      21.381us       0.891us            24                                         []  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us      21.023us         0.21%      21.023us       0.876us            24                                         []  
+                                           aten::argmax         0.04%      55.962us         0.07%      91.236us      45.618us      10.848us         0.11%      10.848us       5.424us             2                      [[1, 151936], [], []]  
+void at::native::reduce_kernel<512, 1, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us      10.336us         0.10%      10.336us       5.168us             2                                         []  
+                                              aten::mul         0.05%      68.280us         0.06%      84.034us      21.008us       3.329us         0.03%       3.329us       0.832us             4                          [[1, 1, 128], []]  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       3.329us         0.03%       3.329us       0.832us             4                                         []  
+                                            aten::copy_         0.01%      10.656us         0.02%      22.734us       5.683us       3.232us         0.03%       3.232us       0.808us             4             [[1, 1, 128], [1, 1, 128], []]  
+                                     aten::index_select         0.03%      34.321us         0.14%     178.726us      89.363us       2.880us         0.03%       4.256us       2.128us             2                  [[151936, 2048], [], [1]]  
+                                              aten::sin         0.02%      31.746us         0.03%      42.523us      21.262us       2.433us         0.02%       2.433us       1.217us             2                              [[1, 1, 128]]  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       2.433us         0.02%       2.433us       1.217us             2                                         []  
+                                              aten::cos         0.03%      35.593us         0.03%      45.027us      22.514us       2.432us         0.02%       2.432us       1.216us             2                              [[1, 1, 128]]  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       2.432us         0.02%       2.432us       1.216us             2                                         []  
+                                              aten::bmm         0.06%      77.725us         0.07%      92.507us      46.253us       2.240us         0.02%       2.240us       1.120us             2                    [[1, 64, 1], [1, 1, 1]]  
+void gemmk1_kernel<int, float, 256, 5, true, false, ...         0.00%       0.000us         0.00%       0.000us       0.000us       2.240us         0.02%       2.240us       1.120us             2                                         []  
+                                             aten::add_         0.03%      33.972us         0.03%      43.776us      21.888us       2.176us         0.02%       2.176us       1.088us             2                           [[1, 1], [], []]  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us       2.176us         0.02%       2.176us       1.088us             2                                         []  
+                                            aten::copy_         0.01%      17.587us         0.02%      31.808us      15.904us       2.144us         0.02%       2.144us       1.072us             2                 [[1, 1, 1], [1, 1, 1], []]  
+                                            aten::copy_         0.02%      30.186us         0.05%      66.850us      33.425us       1.952us         0.02%       1.952us       0.976us             2                       [[1, 1], [1, 1], []]  
+                         Memcpy DtoD (Device -> Device)         0.00%       0.000us         0.00%       0.000us       0.000us       1.952us         0.02%       1.952us       0.976us             2                                         []  
+                                              aten::cat         0.04%      53.670us         0.05%      66.158us      33.079us       1.760us         0.02%       1.760us       0.880us             2                                   [[], []]  
+void at::native::(anonymous namespace)::CatArrayBatc...         0.00%       0.000us         0.00%       0.000us       0.000us       1.760us         0.02%       1.760us       0.880us             2                                         []  
+                                Activity Buffer Request         0.07%      91.727us         0.07%      91.727us      91.727us       1.376us         0.01%       1.376us       1.376us             1                                         []  
+                                        Memset (Device)         0.00%       0.000us         0.00%       0.000us       0.000us       0.512us         0.01%       0.512us       0.256us             2                                         []  
+                                        aten::embedding         0.10%     137.284us         0.25%     325.824us     162.912us       0.000us         0.00%       4.256us       2.128us             2       [[151936, 2048], [1, 1], [], [], []]  
+                                          aten::reshape         0.00%       4.606us         0.01%       8.702us       4.351us       0.000us         0.00%       0.000us       0.000us             2                               [[1, 1], []]  
+                                             aten::view         0.00%       4.096us         0.00%       4.096us       2.048us       0.000us         0.00%       0.000us       0.000us             2                               [[1, 1], []]  
+                                            aten::empty        14.04%      18.357ms        14.04%      18.357ms       8.306us       0.000us         0.00%       0.000us       0.000us          2210                   [[], [], [], [], [], []]  
+                                          aten::resize_         0.42%     552.236us         0.42%     552.236us       1.904us       0.000us         0.00%       0.000us       0.000us           290                              [[0], [], []]  
+                                       cudaLaunchKernel         6.50%       8.494ms         6.50%       8.494ms       3.368us       0.000us         0.00%       0.000us       0.000us          2522                                         []  
+                                             aten::view         3.06%       3.998ms         3.06%       3.998ms       6.893us       0.000us         0.00%       0.000us       0.000us           580                            [[1, 2048], []]  
+                                        aten::unsqueeze         0.04%      47.260us         0.04%      50.164us      25.082us       0.000us         0.00%       0.000us       0.000us             2                                 [[64], []]  
+                                       aten::as_strided         0.00%       2.904us         0.00%       2.904us       1.452us       0.000us         0.00%       0.000us       0.000us             2                         [[64], [], [], []]  
+                                            aten::slice         0.03%      35.303us         0.03%      36.124us      18.062us       0.000us         0.00%       0.000us       0.000us             2                  [[1, 64], [], [], [], []]  
+                                       aten::as_strided         0.00%       1.473us         0.00%       1.473us       0.368us       0.000us         0.00%       0.000us       0.000us             4                      [[1, 64], [], [], []]  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  -----------------------------------------  
+Self CPU time total: 130.775ms
+Self CUDA time total: 9.976ms

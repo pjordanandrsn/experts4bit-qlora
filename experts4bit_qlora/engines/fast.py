@@ -290,6 +290,19 @@ def enable_fast(model, verbose: bool = False) -> int:
     Returns the number of modules patched. Modules whose class overrides
     ``forward`` (custom-activation experts) or whose storage is ineligible are
     skipped — pass ``verbose=True`` to print each skip reason once.
+    Use it for inference when the ``[fast]`` extra (grouped-nf4-gemm, Triton, NVIDIA sm_80+
+    under Linux) is installed and the per-expert loop is the bottleneck. Expects the modules
+    :func:`experts4bit_qlora.load_moe_4bit_streaming` installs. Assert the count is > 0,
+    because ``0`` and "still on the loop" look identical from the caller's side.
+
+    What the count does and does not tell you: this function does not check that the
+    kernel package is importable -- it patches every eligible module regardless, and the
+    ``from nf4_grouped import gemm_4bit_grouped`` happens inside the patched forward. So
+    ``0`` means no eligible module was found (not a missing kernel), and a missing
+    grouped-nf4-gemm surfaces as ``ImportError`` at the FIRST forward that reaches the fused
+    path (eval, no grad, bf16/fp16 compute), not here. Call :func:`fast_available` before
+    this if you need to detect the kernel package up front. See
+    ``docs/solutions/serve-large-moe-on-a-consumer-gpu.md``.
     """
     from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.lora import ExpertsLoRA
@@ -581,6 +594,11 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     Opt-in on purpose: it changes the expert summation ORDER (group-sorted vs
     ascending expert id), an ulp-level difference that should be a deliberate
     choice in a training run, not a silent one. Returns the number patched.
+    Use it for training when the ``[fast]`` extra is installed. Returns the number of
+    ``ExpertsLoRA`` wrappers patched (``0`` when ``nf4_qlora`` is unimportable -- assert it);
+    ``dgrad=True`` on a kernel cut below 0.7.0 is downgraded with a ``RuntimeWarning``.
+    Needs a CUDA device with Triton on sm_80+ (Linux). See
+    ``docs/solutions/qlora-fused-moe-experts.md``.
     """
     try:
         from nf4_qlora import fused_grouped_lora  # noqa: F401

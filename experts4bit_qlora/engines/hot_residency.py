@@ -53,6 +53,58 @@ DEVICE_GROUPING = [False]
 #: when kept, serve the call.
 _MXFP4_GEMV_ROWS = 16
 
+_SWIGLU = {}
+
+
+def _swiglu_kernel():
+    """The kernel side's ``swiglu_rows`` (silu(gate) * up over a
+    gate-block-then-up-block row, one launch) or None. Cached; the
+    ``E4B_FUSE_SWIGLU=0`` A/B arm disables it."""
+    if "k" not in _SWIGLU:
+        k = None
+        if os.environ.get("E4B_FUSE_SWIGLU", "1") == "1":
+            try:
+                from int4_b32 import swiglu_rows as k
+            except ImportError:
+                k = None
+        _SWIGLU["k"] = k
+    return _SWIGLU["k"]
+
+
+def _is_silu(act_fn):
+    if act_fn is torch.nn.functional.silu:
+        return True
+    return type(act_fn).__name__ in ("SiLU", "SiLUActivation")
+
+
+def _swiglu_or(act_fn, gu, gate, up):
+    """``silu(gate) * up`` through the fused kernel when the activation
+    IS silu, the rows are bf16 on a CUDA device and the kernel exists;
+    the torch chain (chunk, silu, mul: three launches) otherwise. The
+    kernel computes in fp32 and rounds once, like the chain."""
+    k = _swiglu_kernel()
+    if (k is not None and gu.is_cuda and gu.dtype == torch.bfloat16
+            and _is_silu(act_fn)):
+        return k(gu)
+    return act_fn(gate) * up
+
+
+_COMBINE = {}
+
+
+def _combine_kernel():
+    """The kernel side's ``combine_rows`` (top-k weight, sum, bf16 cast in
+    one launch) or None; ``E4B_FUSE_COMBINE=0`` is the A/B arm."""
+    if "k" not in _COMBINE:
+        k = None
+        if os.environ.get("E4B_FUSE_COMBINE", "1") == "1":
+            try:
+                from int4_b32 import combine_rows as k
+            except ImportError:
+                k = None
+        _COMBINE["k"] = k
+    return _COMBINE["k"]
+
 #: Calibration tap for the expert Hessians (engines/int4_experts):
 #: ``sink(gu_p, sorted_ids, x_sorted, h)`` is called once per MoE call
 #: with the gate/up input rows and the down-projection input rows, in
@@ -380,7 +432,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             up = up.clamp(min=-clamp_limit, max=clamp_limit)
             h = (act_fn(gate) * up).to(gu.dtype)
         else:
-            h = act_fn(gate) * up
+            h = _swiglu_or(act_fn, gu, gate, up)
         if _CALIB_SINK is not None:
             _CALIB_SINK(gu_p, sorted_ids, x_sorted, h)
         dn = _mm(h.contiguous(), dn_p, dn_a)
@@ -683,6 +735,13 @@ class _HotResidency:
                                int4_stores=getattr(self, "_int4_stores",
                                                    None))
         w = top_k_weights.reshape(-1).to(torch.float32)
+        ck = _combine_kernel()
+        if (ck is not None and dn.is_cuda and dn.dtype == torch.bfloat16
+                and input_dtype == torch.bfloat16
+                and dn.device == torch.device(input_dev)):
+            # one launch: fp32 weight-and-sum over the k slots, bf16 out
+            # (the same order and roundings as the chain below)
+            return ck(dn, w, k)
         out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)
 

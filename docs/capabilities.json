@@ -1,0 +1,506 @@
+{
+  "$schema": "./capabilities.schema.json",
+  "schema_version": "1.0",
+  "project": {
+    "name": "experts4bit-qlora",
+    "canonical_package": "experts4bit-qlora",
+    "repository": "https://github.com/pjordanandrsn/experts4bit-qlora",
+    "summary": "Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs.",
+    "role": "Owns model loading, quantization orchestration, adapters, training, residency integration and serving; the packed-expert kernels come from grouped-nf4-gemm through the [fast] extra.",
+    "aliases": [
+      "e4b",
+      "e4b-qlora",
+      "experts4bit",
+      "expertsnbit",
+      "experts-mxfp4"
+    ],
+    "import_names": [
+      "experts4bit_qlora"
+    ],
+    "related_projects": [
+      {
+        "name": "grouped-nf4-gemm",
+        "canonical_package": "grouped-nf4-gemm",
+        "repository": "https://github.com/pjordanandrsn/grouped-nf4-gemm",
+        "capabilities": "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json",
+        "relationship": "kernel side: experts4bit-qlora[fast] installs grouped-nf4-gemm, which owns the grouped NF4/MXFP4 GEMMs, the int4 decode GEMV, the FP8 paged attention and decode glue, and the host/NVMe arena primitives"
+      }
+    ],
+    "claims_file": "docs/claims.json",
+    "status_file": "docs/STATUS.md",
+    "non_goals": [
+      "dense (non-MoE) models: use bitsandbytes directly",
+      "a general-purpose serving engine or a vLLM replacement",
+      "models that already fit in bf16 and need no offload: 4-bit here is a memory trade, not a speed-up, and on the measured comparator it cost energy (claim e4b.train.energy-honest.scoped-a2000)",
+      "silent fallbacks: every enable_* returns a count or a non-empty handle list, or raises; callers must assert it",
+      "operating systems other than Linux, or GPUs without CUDA"
+    ]
+  },
+  "capabilities": [
+    {
+      "id": "quantize-fused-moe-experts",
+      "problem": "A Mixture-of-Experts model loaded with load_in_4bit still occupies bf16-sized VRAM and OOMs, because transformers stores its experts as one fused 3-D parameter per layer that bitsandbytes' nn.Linear walker never touches.",
+      "symptoms": [
+        "load_in_4bit=True but the model still OOMs",
+        "BitsAndBytesConfig leaves gate_up_proj / down_proj in bf16",
+        "4-bit loading skips MoE experts",
+        "fused 3-D expert tensor is not an nn.Linear",
+        "how do I verify the experts are actually 4-bit"
+      ],
+      "solution": "load_moe_4bit_streaming quantises exactly the fused expert stack on the way to the GPU (Experts4bit, the 4-bit face of ExpertsNbit), never materialising it in bf16; verify_moe_4bit(model, strict=True) raises if any stack is still high precision.",
+      "modes": [
+        "quantization",
+        "inference",
+        "training"
+      ],
+      "formats": [
+        "nf4",
+        "fp4",
+        "int8",
+        "fp8",
+        "bf16",
+        "fp16"
+      ],
+      "model_families": [
+        "olmoe",
+        "qwen3_moe",
+        "qwen3_5_moe",
+        "gemma4_text",
+        "granitemoe",
+        "gpt_oss",
+        "deepseek_v4 (Flash, Pro)",
+        "qwen3_next",
+        "deepseek_v2",
+        "mixtral"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
+        ],
+        "special_requirements": [
+          "torch>=2.2",
+          "bitsandbytes>=0.43",
+          "transformers>=5.0 for the streaming loader ([train] extra)"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "streaming loader + trainer",
+          "command": "pip install \"experts4bit-qlora[train]\""
+        }
+      ],
+      "entrypoints": [
+        "experts4bit_qlora.loader:load_moe_4bit_streaming",
+        "experts4bit_qlora.verify:verify_moe_4bit",
+        "experts4bit_qlora:Experts4bit",
+        "experts4bit_qlora:ExpertsNbit"
+      ],
+      "documentation": [
+        "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+        "docs/BITSANDBYTES.md",
+        "docs/ARCHITECTURE_SUPPORT.md",
+        "docs/STORAGE-MODES.md"
+      ],
+      "claim_ids": [
+        "e4b.train.olmoe-fits",
+        "e4b.serve.gptoss.loader-faithful",
+        "e4b.train.energy-honest.scoped-a2000"
+      ],
+      "limitations": [
+        "Unsupported model_type raises NotImplementedError; identity-expert families (LongCat-Flash) are refused by name",
+        "4-bit is a memory trade when the model already fits, and cost energy on the measured comparator (one card, one bitsandbytes development build): claim e4b.train.energy-honest.scoped-a2000",
+        "Dense (non-MoE) models are not the target; use bitsandbytes directly"
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "qlora-fused-moe-experts",
+      "problem": "Fine-tune (QLoRA / LoRA) a fused-expert MoE whose expert weights PEFT and the bitsandbytes walker never see.",
+      "symptoms": [
+        "QLoRA on a MoE trains only the attention",
+        "peft cannot find the expert parameters",
+        "LoRA on gate_up_proj of a fused MoE",
+        "train a 30B MoE on a 24 GB GPU"
+      ],
+      "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer.",
+      "modes": [
+        "training"
+      ],
+      "formats": [
+        "nf4"
+      ],
+      "model_families": [
+        "olmoe",
+        "qwen3_moe",
+        "gemma4_text"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
+        ],
+        "special_requirements": [
+          "torch>=2.2",
+          "bitsandbytes>=0.43",
+          "transformers>=5.0 for the streaming loader ([train] extra)"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "minimum/reference training",
+          "command": "pip install \"experts4bit-qlora[train]\""
+        },
+        {
+          "purpose": "accelerated grouped-kernel path",
+          "command": "pip install \"experts4bit-qlora[fast]\""
+        }
+      ],
+      "entrypoints": [
+        "experts4bit_qlora.lora:ExpertsLoRA",
+        "experts4bit_qlora.engines.fast:enable_fast_train",
+        "experts4bit_qlora.engines.batched:enable_batched_train",
+        "cli:python -m experts4bit_qlora.train"
+      ],
+      "documentation": [
+        "docs/solutions/qlora-fused-moe-experts.md",
+        "docs/CHOOSING.md",
+        "docs/METHODOLOGY.md",
+        "docs/support_matrix.md"
+      ],
+      "claim_ids": [
+        "e4b.train.olmoe-converges",
+        "e4b.train.fast-train-dgrad",
+        "e4b.train.flagship-matrix",
+        "e4b.train.ablation"
+      ],
+      "limitations": [
+        "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
+        "dgrad=True needs grouped-nf4-gemm>=0.7.0; on older cuts it is downgraded with a RuntimeWarning",
+        "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset"
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "run-moe-larger-than-vram",
+      "problem": "The quantised experts still do not fit the GPU: run a Mixture-of-Experts model larger than VRAM by keeping experts resident somewhere else and streaming them per layer.",
+      "symptoms": [
+        "MoE larger than VRAM",
+        "experts fit in CPU RAM but not on the GPU",
+        "which residency engine should I use",
+        "hot experts in VRAM, cold experts on the host"
+      ],
+      "solution": "load_moe_4bit_streaming(..., offload=True) homes each layer's frozen 4-bit experts in pinned host RAM and streams one layer at a time (prefetch=True overlaps); enable_dense_offload streams the dense side; hot_sets_from_profile picks the resident experts by routing frequency; enable_pipelined_residency trades spare VRAM for speed at serve time.",
+      "modes": [
+        "offload",
+        "inference",
+        "training",
+        "serving"
+      ],
+      "formats": [
+        "nf4"
+      ],
+      "model_families": [
+        "olmoe",
+        "qwen3_moe",
+        "qwen3_5_moe",
+        "gemma4_text",
+        "granitemoe",
+        "gpt_oss",
+        "deepseek_v4 (Flash, Pro)",
+        "qwen3_next",
+        "deepseek_v2",
+        "mixtral"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
+        ],
+        "special_requirements": [
+          "torch>=2.2",
+          "bitsandbytes>=0.43",
+          "transformers>=5.0 for the streaming loader ([train] extra)"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "host-RAM training route",
+          "command": "pip install \"experts4bit-qlora[train]\""
+        },
+        {
+          "purpose": "residency/NVMe/fast-kernel route",
+          "command": "pip install \"experts4bit-qlora[fast]\""
+        }
+      ],
+      "entrypoints": [
+        "experts4bit_qlora.loader:load_moe_4bit_streaming",
+        "experts4bit_qlora.engines.offload:enable_expert_offload",
+        "experts4bit_qlora.engines.dense_offload:enable_dense_offload",
+        "experts4bit_qlora.engines.expert_profile:hot_sets_from_profile",
+        "experts4bit_qlora.engines.pipelined:enable_pipelined_residency",
+        "flag:E4B_EXPERT_PROFILE"
+      ],
+      "documentation": [
+        "docs/solutions/run-moe-larger-than-vram.md",
+        "docs/CHOOSING.md",
+        "docs/RESIDENCY-ENGINES.md",
+        "docs/OFFLOAD-TRANSFER-NOTES.md"
+      ],
+      "claim_ids": [
+        "e4b.offload.fits-30b-class",
+        "e4b.serve.informed-hot-sets",
+        "e4b.host.ratios-travel-absolutes-do-not"
+      ],
+      "limitations": [
+        "enable_pipelined_residency patches an ExpertsLoRA wrapper's base and only runs when the wrapper delegates (eval mode, no_grad, an adapter that contributes nothing): assert the count and check the served path",
+        "enable_hot_residency is deprecated since 0.6.2",
+        "Speed absolutes depend on the host link; only ratios travel between hosts (claim e4b.host.ratios-travel-absolutes-do-not)"
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "offload-moe-experts-to-cpu-or-nvme",
+      "problem": "Experts do not even fit host RAM: serve or train from an on-disk expert arena (NVMe) with a pinned-DRAM hot tier.",
+      "symptoms": [
+        "offload MoE experts to NVMe",
+        "experts fit on NVMe but not in CPU RAM",
+        "expert arena",
+        "stream experts from disk during training"
+      ],
+      "solution": "Bake the experts into an arena with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the relocation bake for native MXFP4), then enable_nvme_residency (serving), enable_mxfp4_nvme_residency (native MXFP4 serving) or enable_nvme_train_residency (training, gradient checkpointing required) serve each layer's cold experts from the arena while hot_rows stay pinned in DRAM.",
+      "modes": [
+        "offload",
+        "serving",
+        "training",
+        "streaming"
+      ],
+      "formats": [
+        "nf4",
+        "mxfp4"
+      ],
+      "model_families": [
+        "qwen3_moe",
+        "olmoe",
+        "deepseek_v4 (Flash, Pro)",
+        "gpt_oss"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
+        ],
+        "special_requirements": [
+          "transformers>=5.0 for the streaming loader ([train] extra)",
+          "grouped-nf4-gemm>=0.28.0 ([fast] extra)",
+          "triton>=3.4 (Linux-only distribution)",
+          "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
+          "local NVMe or a fast block device; pinned host RAM for the hot tier"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "residency/NVMe/fast-kernel route",
+          "command": "pip install \"experts4bit-qlora[fast]\""
+        },
+        {
+          "purpose": "host-RAM training route",
+          "command": "pip install \"experts4bit-qlora[train]\""
+        }
+      ],
+      "entrypoints": [
+        "experts4bit_qlora.engines.nvme_experts:enable_nvme_residency",
+        "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency",
+        "experts4bit_qlora.engines.nvme_train:enable_nvme_train_residency"
+      ],
+      "documentation": [
+        "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
+        "docs/RESIDENCY-ENGINES.md",
+        "docs/DEEPSEEK-V4.md",
+        "docs/CHOOSING.md"
+      ],
+      "claim_ids": [
+        "e4b.offload.arena-vs-host-ram",
+        "e4b.serve.deepseek-v4"
+      ],
+      "limitations": [
+        "No shipped tool bakes the training arena from a bf16 checkpoint yet (docs/STATUS.md, open)",
+        "enable_nvme_train_residency refuses hot_rows below the expert count and requires gradient checkpointing",
+        "NVMe residency is a batch-throughput path; cold-expert latency is bounded by the device link"
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "serve-moe-on-consumer-gpu",
+      "problem": "Serve a large fused-expert MoE on one consumer NVIDIA GPU with the decode path measured against the model's own attention.",
+      "symptoms": [
+        "serve a 30B MoE on an RTX 5090 or 3090",
+        "paged KV cache for a 4-bit MoE",
+        "faster MoE decode than the per-expert loop",
+        "is the quantised serving path at parity with the model"
+      ],
+      "solution": "Two surfaces. The measured decode path is the paged runner (PagedModelRunner: paged fp8 KV cache and paged attention) with the experts on grouped-nf4-gemm's kernels -- NF4 experts on the grouped GEMM (enable_fast is the library entry point for that kernel; the harness attaches it through its residency engines), int4-b32 experts through enable_serve_experts_int4, and the opt-in calibrated int4 attention/head, fused glue rounds and router epilogue -- exercised by the in-tree bench harness bench/hybrid-g9/step_decomp.py, which produced the throughput and parity claims. The HTTP shim (python -m experts4bit_qlora.serve) is a reference-path deployment: load_moe_4bit_streaming with the experts streamed from pinned host RAM by default, stock model.generate, per-expert LoRA adapters hot-swapped per request; it attaches a kernel-backed engine only under E4B_RESIDENCY=pipelined and does not use the paged runner or enable_fast.",
+      "modes": [
+        "serving",
+        "inference"
+      ],
+      "formats": [
+        "nf4",
+        "int4",
+        "fp8"
+      ],
+      "model_families": [
+        "qwen3_moe",
+        "olmoe",
+        "granitemoe",
+        "gpt_oss",
+        "gemma4_text",
+        "mixtral"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
+        ],
+        "special_requirements": [
+          "grouped-nf4-gemm>=0.28.0 ([fast] extra)",
+          "triton>=3.4 (Linux-only distribution)"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "library fast path",
+          "command": "pip install \"experts4bit-qlora[fast]\""
+        },
+        {
+          "purpose": "HTTP shim (optional)",
+          "command": "pip install \"experts4bit-qlora[serve]\""
+        }
+      ],
+      "entrypoints": [
+        "experts4bit_qlora.engines.fast:enable_fast",
+        "cli:python -m experts4bit_qlora.serve",
+        "experts4bit_qlora.engines.paged_runner:PagedModelRunner",
+        "experts4bit_qlora.engines.int4_experts:enable_serve_experts_int4",
+        "experts4bit_qlora.engines.int4_attn_calib:enable_serve_attn_int4_calib",
+        "experts4bit_qlora.engines.capture:capture_decode"
+      ],
+      "documentation": [
+        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+        "docs/SERVING.md",
+        "docs/SERVING-THROUGHPUT.md",
+        "docs/SERVING-PARITY.md",
+        "docs/ARCHITECTURE_SUPPORT.md"
+      ],
+      "claim_ids": [
+        "e4b.serve.tp.qwen3.b1.5090.2026-09-04",
+        "e4b.serve.tp.qwen3.b16.5090.2026-09-04",
+        "e4b.serve.tp.olmoe.b1.5090.2026-09-04",
+        "e4b.serve.buildout.granite.b1.5090.2026-09-04",
+        "e4b.serve.buildout.granite.b16.5090.2026-09-04",
+        "e4b.serve.tp.gptoss.b1.5090.2026-09-04",
+        "e4b.serve.tp.gemma4.b1.5090.2026-09-04",
+        "e4b.serve.tp.mixtral.b1.5090.2026-09-04",
+        "e4b.parity.qwen3.paged-vs-own-attention",
+        "e4b.parity.granite.paged-vs-own-attention",
+        "e4b.parity.gptoss.paged-vs-own-attention",
+        "e4b.parity.moe-routing-flip-floor",
+        "e4b.serve.h2h.vllm.same-box",
+        "e4b.serve.cuda-graph-capture"
+      ],
+      "limitations": [
+        "Not a general-purpose vLLM replacement: on the same box vLLM is ahead (claim e4b.serve.h2h.vllm.same-box)",
+        "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
+        "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts (docs/STATUS.md)",
+        "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not"
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "mxfp4-moe-training-and-residency",
+      "problem": "Work with models whose experts are released as native MXFP4 (gpt-oss, DeepSeek-V4): load them faithfully, keep the released bytes in an NVMe arena, train on them, and serve them without re-quantisation.",
+      "symptoms": [
+        "gpt-oss MXFP4 experts",
+        "DeepSeek-V4 expert arena",
+        "QLoRA on an MXFP4 checkpoint",
+        "serve MXFP4 experts from the released bytes"
+      ],
+      "solution": "The loader dequantises MXFP4 (e2m1 blocks + e8m0 scales) bit-identically to the reference; enable_mxfp4_nvme_residency relocates the released bytes into an arena and serves them through grouped-nf4-gemm's native MXFP4 kernels; enable_nvme_train_residency trains against an MXFP4 arena; the native MXFP4 expert store for the paged engine is an opt-in lane.",
+      "modes": [
+        "inference",
+        "training",
+        "offload",
+        "serving"
+      ],
+      "formats": [
+        "mxfp4",
+        "nf4"
+      ],
+      "model_families": [
+        "gpt_oss",
+        "deepseek_v4 (Flash, Pro)"
+      ],
+      "environment": {
+        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+        "os": [
+          "Linux"
+        ],
+        "accelerator": [
+          "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
+        ],
+        "special_requirements": [
+          "grouped-nf4-gemm>=0.28.0 ([fast] extra)",
+          "triton>=3.4 (Linux-only distribution)",
+          "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
+          "local NVMe or a fast block device; pinned host RAM for the hot tier"
+        ]
+      },
+      "install": [
+        {
+          "purpose": "minimum/reference training",
+          "command": "pip install \"experts4bit-qlora[train]\""
+        },
+        {
+          "purpose": "residency/NVMe/fast-kernel route",
+          "command": "pip install \"experts4bit-qlora[fast]\""
+        }
+      ],
+      "entrypoints": [
+        "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency",
+        "experts4bit_qlora.engines.nvme_train:enable_nvme_train_residency",
+        "experts4bit_qlora.loader:load_moe_4bit_streaming",
+        "experts4bit_qlora.engines.int4_experts:enable_serve_experts_int4"
+      ],
+      "documentation": [
+        "docs/solutions/mxfp4-moe-training-and-residency.md",
+        "docs/DEEPSEEK-V4.md",
+        "docs/STATUS.md"
+      ],
+      "claim_ids": [
+        "e4b.serve.gptoss.loader-faithful",
+        "e4b.serve.deepseek-v4"
+      ],
+      "limitations": [
+        "A uniform int4 grid cannot hold e2m1 levels: re-quantising MXFP4 experts to int4-b32 fails the quality gate (docs/STATUS.md)",
+        "gpt-oss raw-text perplexity is not an instrument for ranking an exact arm against a noisy one; the native store's speed is quoted with its quality gate open (docs/SERVING-THROUGHPUT.md)",
+        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales); the [fast] floor is higher"
+      ],
+      "status": "experimental"
+    }
+  ]
+}

@@ -441,6 +441,10 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     Grad-enabled forwards take the single-slot synchronous path AND are not
     evicted afterwards, because backward still needs the weights. So a training
     step is correct but saves nothing; this module is for inference.
+    Use it when the dense (non-expert) side of the model is what does not fit: every decoder
+    layer's dense weights are pinned on the host and streamed per layer. Returns the list of
+    handles (assert it is non-empty). Composes with the expert residency engines. See
+    ``docs/solutions/run-moe-larger-than-vram.md``.
     """
     layers = decoder_layers(model)
     if not layers:
