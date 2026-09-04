@@ -329,9 +329,20 @@ def plan_moe_checkpoint(
     ignored = tuple(sorted(n for n in tree if any(r.search(n) for r in ignore_re)))
     claimable = tree - set(ignored)
 
+    # Towers a text-only build does not construct (Gemma-4's vision encoder):
+    # dropped only when the key has no home in this tree, and recorded.
+    dropped = ()
+    if conv.drop_re is not None:
+        dropped = tuple(k for k in checkpoint_keys
+                        if k not in claimable and conv.drop_re.search(k))
+        if dropped:
+            drop = set(dropped)
+            checkpoint_keys = [k for k in checkpoint_keys if k not in drop]
+            block_scales = {mk: v for mk, v in block_scales.items()
+                            if mk not in drop and not (set(v[1:]) & drop)}
     plan = MoELoadPlan(model_type=model_type, convention=conv.name,
                        ignored_params=ignored, scales=block_scales,
-                       skipped_keys=extra if skip_extra_layers else ())
+                       skipped_keys=(tuple(extra) if skip_extra_layers else ()) + dropped)
     # layer -> role -> {expert_idx: ckpt key}
     experts = defaultdict(lambda: defaultdict(dict))
     targets = {}
@@ -352,7 +363,9 @@ def plan_moe_checkpoint(
                 experts[layer][role][idx] = key
                 targets[layer] = (gu, dn)
                 continue
-        renamed = conv.rename(key)
+        # a key the tree already claims under its own name is never renamed
+        # (a multimodal tree keeps ``model.language_model.*`` as is)
+        renamed = key if key in claimable else conv.rename(key)
         if renamed in claimable:
             plan.passthrough[key] = renamed
             if conv.needs_transpose(key):
