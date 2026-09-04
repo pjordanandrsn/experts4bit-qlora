@@ -1003,7 +1003,7 @@ Register: [`../claims.json`](../claims.json). Per-family throughput, **measured*
         "e4b.host.ratios-travel-absolutes-do-not"
       ],
       "limitations": [
-        "enable_pipelined_residency raises NotImplementedError on the ExpertsLoRA wrapper the streaming loader installs (docs/CHOOSING.md)",
+        "enable_pipelined_residency patches an ExpertsLoRA wrapper's base and only runs when the wrapper delegates (eval mode, no_grad, an adapter that contributes nothing): assert the count and check the served path",
         "enable_hot_residency is deprecated since 0.6.2",
         "Speed absolutes depend on the host link; only ratios travel between hosts (claim e4b.host.ratios-travel-absolutes-do-not)"
       ],
@@ -1525,8 +1525,12 @@ Inference only; for training use `enable_fast_train`.
 `enable_pipelined_residency(model, hot_sets, k_slots=k)` (needs `[fast]`). Keeps K hot experts
 per layer resident and streams the cold tail; K=0 is pure streaming, K=all is fully resident,
 the middle is the dial. **Pick the hot sets from a routing histogram, not by index.**
-⚠️ Requires standalone `Experts4bit`/`ExpertsNbit` modules and raises `NotImplementedError`
-on the `ExpertsLoRA` wrapper that `load_moe_4bit_streaming` always produces.
+An `ExpertsLoRA` wrapper (what `load_moe_4bit_streaming` always produces) is a
+valid target: the engine patches its base, and the wrapper delegates to it in
+eval mode under `no_grad` when the adapter provably contributes nothing (the
+serve shim relies on this). Outside those conditions the patch installs and
+never runs — assert the returned count and check the served path. (Earlier
+notes said this raised `NotImplementedError`; the code no longer does.)
 
 **My GPU is small but my CPU is strong.**
 `enable_cold_engine(model, hot_sets, dequant="auto")` computes the cold experts on
@@ -1675,11 +1679,14 @@ Exported from `experts4bit_qlora` (see `__all__` in `__init__.py`):
 `enable_fast_train`, `enable_batched_train`, `enable_dense_offload`,
 `enable_nvme_residency`, `enable_mxfp4_nvme_residency`,
 `enable_nvme_train_residency`, `enable_pipelined_residency`,
-`hot_sets_from_profile`, `capture_decode` / `probe_capture`. Serving lanes
-reachable by environment flag (`E4B_SERVE_EXP_INT4`,
-`E4B_SERVE_ATTN_INT4_CALIB`, `E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`,
-`E4B_FUSE_ROUTER_EPI`) live in `engines/int4_*`, `engines/glue_*`,
-`engines/router_epilogue.py`. CLIs are module mains, configured by
+`hot_sets_from_profile`, `capture_decode` / `probe_capture`. Serving lanes live in
+`engines/int4_experts.py` (`enable_serve_experts_int4`),
+`engines/int4_attn_calib.py` (`calibrate_attention_hessians`,
+`enable_serve_attn_int4_calib`), `engines/glue_fuse.py`, `engines/glue_r2.py`
+and `engines/router_epilogue.py`; the fusion functions read
+`E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2` and `E4B_FUSE_ROUTER_EPI`, and
+`enable_from_env` reads `E4B_SERVE_ATTN_INT4_CALIB`. `E4B_SERVE_EXP_INT4` is
+consumed by the bench harness hook, not by the package. CLIs are module mains, configured by
 environment variables: `python -m experts4bit_qlora.{train,infer,serve,verify}`.
 Names with a leading underscore are internal. The machine-readable list is
 `docs/capabilities.json` (`entrypoints`).
