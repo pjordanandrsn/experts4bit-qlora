@@ -65,16 +65,30 @@ class ToyDecoderLayer(torch.nn.Module):
         return residual + hidden_states
 
 
-def _stub(monkeypatch, calls):
+def _stub(monkeypatch, calls, legacy=False):
+    """A kernel-side stand-in. ``legacy=True`` is the pre-0.27 cut:
+    no ``scale`` on the residual fold and no scaled residual add."""
     stub = types.ModuleType("int4_b32")
 
-    def rmsnorm_resid_rows(x, resid, w, eps):
+    def rmsnorm_resid_rows_legacy(x, resid, w, eps):
         calls["resid"] += 1
         s = (x.float() + resid.float()).to(torch.bfloat16)
         sf = s.float()
         out = (sf * torch.rsqrt(sf.pow(2).mean(-1, keepdim=True) + eps)
                * w.float()).to(torch.bfloat16)
         return out, s
+
+    def rmsnorm_resid_rows(x, resid, w, eps, scale=1.0):
+        if scale != 1.0:
+            calls["resid_scaled"] = calls.get("resid_scaled", 0) + 1
+            # upstream's two roundings: bf16 product, then bf16 sum
+            x = (x * scale)
+            assert x.dtype == torch.bfloat16
+        return rmsnorm_resid_rows_legacy(x, resid, w, eps)
+
+    def scaled_resid_add_rows(x, resid, scale):
+        calls["scaled_add"] = calls.get("scaled_add", 0) + 1
+        return resid + x * scale
 
     def rope_norm_heads(x, w, cos, sin, eps):
         # real formula, so a mis-paired cos/sin row shows up as a
@@ -92,7 +106,11 @@ def _stub(monkeypatch, calls):
         calls["rope_out"].append(out)
         return out
 
-    stub.rmsnorm_resid_rows = rmsnorm_resid_rows
+    if legacy:
+        stub.rmsnorm_resid_rows = rmsnorm_resid_rows_legacy
+    else:
+        stub.rmsnorm_resid_rows = rmsnorm_resid_rows
+        stub.scaled_resid_add_rows = scaled_resid_add_rows
     stub.rope_norm_heads = rope_norm_heads
     monkeypatch.setitem(sys.modules, "int4_b32", stub)
 
@@ -313,3 +331,131 @@ def test_structural_guard_is_what_refuses(monkeypatch):
     m.layer = Gemma4ShapedDecoderLayer()
     assert fuse_t1_glue_r2(m) == (1, 0), "with the guard gone the fold reaches the Gemma-shaped layer"
 
+
+
+class GraniteMoeShapedDecoderLayer(torch.nn.Module):
+    """GraniteMoe's actual layer shape (transformers 5.x): the four
+    pre-norm children with the MoE under ``block_sparse_moe``, and a
+    Python-float ``residual_multiplier`` scaling both residual adds.
+    The forward is upstream's, line for line."""
+    def __init__(self, multiplier=0.22, norm_cls=ToyRMSNorm):
+        super().__init__()
+        self.hidden_size = H
+        self.self_attn = ToyAttn()
+        self.input_layernorm = norm_cls()
+        self.post_attention_layernorm = norm_cls()
+        self.block_sparse_moe = torch.nn.Linear(H, H, bias=False,
+                                                dtype=torch.bfloat16)
+        if multiplier is not None:
+            self.residual_multiplier = multiplier
+
+    def forward(self, hidden_states, attention_mask=None,
+                past_key_values=None, position_embeddings=None, **kw):
+        m = getattr(self, "residual_multiplier", 1.0)
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states=hidden_states)
+        hidden_states = residual + hidden_states * m
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = residual + hidden_states * m
+        return hidden_states
+
+
+class NoisyAttn(torch.nn.Module):
+    """Deterministic non-zero attention so the scaled add is exercised
+    on real values (a zero attention output makes any scale pass)."""
+    def forward(self, hidden_states=None, **kw):
+        return torch.tanh(hidden_states.float() * 1.7).to(hidden_states.dtype), None
+
+
+def test_granite_shaped_layer_folds_and_matches(monkeypatch):
+    """The scaled body folds: residual + attn * m into the post-attention
+    norm, the tail into one scaled add; the result is the layer's own
+    forward to the bit (the stub reproduces upstream's two roundings),
+    and both fold calls are counted."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(5)
+    m = torch.nn.Module()
+    m.layer = GraniteMoeShapedDecoderLayer(0.22)
+    m.layer.self_attn = NoisyAttn()
+    x = (torch.randn(1, 1, H) * 2).to(torch.bfloat16)
+    want = m.layer(x)
+    assert fuse_t1_glue_r2(m) == (1, 0)
+    got = m.layer(x)
+    assert torch.equal(got, want), "scaled fold must reproduce upstream's roundings"
+    assert calls["resid"] == 1 and calls["resid_scaled"] == 1
+    assert calls["scaled_add"] == 1
+    # off decode shapes the original chain runs
+    big = (torch.randn(1, 65, H)).to(torch.bfloat16)
+    assert torch.equal(m.layer(big), GraniteMoeShapedDecoderLayer(0.22).__class__.forward(m.layer, big))
+    assert calls["resid"] == 1 and calls["scaled_add"] == 1
+
+
+def test_granite_shape_without_multiplier_is_the_plain_fold(monkeypatch):
+    """The same body with no multiplier (older Mixtral cuts) is the plain
+    fold under another child name: no scaled kernels needed, and the
+    legacy kernel cut serves it."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls, legacy=True)
+    torch.manual_seed(6)
+    m = torch.nn.Module()
+    m.layer = GraniteMoeShapedDecoderLayer(None)
+    m.layer.self_attn = NoisyAttn()
+    x = (torch.randn(1, 1, H) * 2).to(torch.bfloat16)
+    want = m.layer(x)
+    assert fuse_t1_glue_r2(m) == (1, 0)
+    assert torch.equal(m.layer(x), want)
+    assert calls["resid"] == 1 and "scaled_add" not in calls
+
+
+def test_scaled_layer_on_a_legacy_kernel_refuses_loudly(monkeypatch):
+    """A residual-scaled body on a kernel cut without the scaled fold is
+    an error naming the cut, never a quiet skip: the arm asked for the
+    fusion."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    _stub(monkeypatch, {"resid": 0, "rope": 0}, legacy=True)
+    m = torch.nn.Module()
+    m.layer = GraniteMoeShapedDecoderLayer(0.22)
+    with pytest.raises(RuntimeError, match="scaled residual fold"):
+        fuse_t1_glue_r2(m)
+
+
+def test_scaled_layer_guard_reads_structure(monkeypatch):
+    """Only a Python-float multiplier on the exact GraniteMoe child set is
+    licensed: a tensor multiplier, a Parameter (the older toy), an
+    integer, or an extra child all keep their own forward."""
+    from experts4bit_qlora.engines import glue_r2
+    assert glue_r2._layer_scale(GraniteMoeShapedDecoderLayer(0.22)) == 0.22
+    assert glue_r2._layer_scale(GraniteMoeShapedDecoderLayer(None)) == 1.0
+    assert glue_r2._layer_scale(GraniteShapedDecoderLayer()) is None
+    assert glue_r2._layer_scale(ToyDecoderLayer()) is None
+    for bad in (torch.tensor(0.22), 1, True):
+        layer = GraniteMoeShapedDecoderLayer(None)
+        layer.residual_multiplier = bad
+        assert glue_r2._layer_scale(layer) is None, repr(bad)
+    extra = GraniteMoeShapedDecoderLayer(0.22)
+    extra.pre_feedforward_layernorm = ToyRMSNorm()
+    assert glue_r2._layer_scale(extra) is None
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    calls = {"resid": 0, "rope": 0}
+    _stub(monkeypatch, calls)
+    m = torch.nn.Module()
+    m.tensor_scaled = GraniteMoeShapedDecoderLayer(None)
+    m.tensor_scaled.residual_multiplier = torch.tensor(0.22)
+    with pytest.raises(RuntimeError, match="patched nothing"):
+        fuse_t1_glue_r2(m)
+
+
+def test_scaled_fold_keeps_the_centered_norm_refusal(monkeypatch):
+    """The semantic norm probe applies to the scaled body too."""
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    _stub(monkeypatch, {"resid": 0, "rope": 0})
+    m = torch.nn.Module()
+    m.layer = GraniteMoeShapedDecoderLayer(0.22, norm_cls=CenteredRMSNorm)
+    with pytest.raises(RuntimeError, match="patched nothing"):
+        fuse_t1_glue_r2(m)
