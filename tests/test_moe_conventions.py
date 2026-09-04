@@ -15,7 +15,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.arch.moe_conventions import (
+from experts4bit_qlora.arch.moe_conventions import (  # noqa: E402
     CONVENTIONS,
     JAMBA,
     LFM2_MOE,
