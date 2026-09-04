@@ -15,7 +15,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from experts4bit_qlora.arch.moe_conventions import (  # noqa: E402
+from experts4bit_qlora.arch.moe_conventions import (
     CONVENTIONS,
     JAMBA,
     LFM2_MOE,
@@ -541,3 +541,24 @@ def test_expert_layout_for_sources_gate_from_the_convention():
     assert loader.expert_layout_for("nemotron_h") == ("mixer.experts", False)
     # a dedicated-quant special with no convention still resolves via the map
     assert loader.expert_layout_for("gemma4") == ("experts", True)
+
+
+def test_gemma4_is_a_prefused_convention_in_the_module_layout():
+    """Adjudicated against the released google/gemma-4-26B-A4B-it index and
+    Gemma4TextExperts.forward (P30): one stacked tensor per projection under
+    ``layer.experts``, gate rows first, no transpose, no per-expert keys."""
+    from experts4bit_qlora.arch.moe_conventions import convention_for
+    for mt in ("gemma4_text", "gemma4"):
+        c = convention_for(mt)
+        assert c.name == "gemma4" and c.fused_prefix == "experts"
+        assert c.transpose_re is None and c.roles == {} and c.renames == ()
+        assert c.expert_re.search("model.language_model.layers.0.experts.gate_up_proj") is None
+    # the int4 lane's pre-fused matcher sees these keys as layer 0's stacks
+    from experts4bit_qlora.engines.int4_experts import _FUSED_TARGET
+    m = _FUSED_TARGET.match("model.language_model.layers.0.experts.gate_up_proj")
+    assert m and m.group("layer") == "0" and m.group("role") == "gate_up_proj"
+    m = _FUSED_TARGET.match("model.language_model.layers.7.experts.down_proj")
+    assert m and m.group("layer") == "7" and m.group("role") == "down_proj"
+    # the DENSE mlp beside the experts is not an expert stack
+    assert _FUSED_TARGET.match("model.language_model.layers.0.mlp.gate_proj.weight") is None
+
