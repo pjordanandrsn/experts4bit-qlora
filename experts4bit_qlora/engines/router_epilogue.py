@@ -160,12 +160,30 @@ def _probe_matches(mod, kind, spec) -> bool:
     pos = _out_positions(out)
     if pos is None:
         return False
-    got_w, got_i = out[pos[1]], out[pos[2]]
+    got_f, got_w, got_i = out[pos[0]], out[pos[1]], out[pos[2]]
     with torch.no_grad():
-        _, ref_w, ref_i = _reference_for(mod, kind, spec, x)
+        ref_f, ref_w, ref_i = _reference_for(mod, kind, spec, x)
+        pre = _gemma4_pre(mod, x) if kind == "gemma4" else x
+        raw = torch.nn.functional.linear(pre, w)
     if got_i.shape != ref_i.shape or not torch.equal(got_i.cpu(), ref_i.cpu()):
         return False
     if not torch.allclose(got_w.float().cpu(), ref_w.float().cpu(), rtol=2 ** -8, atol=2 ** -12):
+        return False
+    # The FIRST slot is part of the module's contract too (callers that
+    # record router logits read it): it is either the kind's first output
+    # (Qwen3-MoE returns the softmax probabilities there; the
+    # select-on-logits kinds return the biased logits) or the RAW
+    # projection (Mixtral, Gemma-4). Record which, and refuse a module
+    # whose first slot is neither -- the fused path would hand it
+    # something else (review finding on #370).
+    def _same(a, b):
+        return (torch.is_tensor(a) and a.shape == b.shape
+                and torch.allclose(a.float().cpu(), b.float().cpu(), rtol=2 ** -6, atol=2 ** -8))
+    if _same(got_f, ref_f):
+        spec["first"] = "ref"
+    elif _same(got_f, raw):
+        spec["first"] = "raw"
+    else:
         return False
     spec["out_pos"] = pos
     return True
@@ -220,30 +238,33 @@ def fuse_router_epilogue(model) -> int:
         orig = mod.forward
         k, hidden, pos = spec["k"], spec["hidden"], spec["out_pos"]
 
+        raw_first = spec["first"] == "raw"
         if kind == "gemma4":
-            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos):
+            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _raw=raw_first):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(_gemma4_pre(_m, rows), _m.proj.weight)
                 probs, w, idx = router_epilogue(logits.float(), _k, True)
                 w = w * _m.per_expert_scale.float()[idx]
-                return _assemble(_pos, probs, w.to(hidden_states.dtype), idx)
+                return _assemble(_pos, logits if _raw else probs, w.to(hidden_states.dtype), idx)
         elif kind == "softmax_topk":
-            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _norm=spec["norm"]):
+            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _norm=spec["norm"], _raw=raw_first):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(rows, _m.weight)
-                return _assemble(_pos, *router_epilogue(logits.float(), _k, _norm))
+                first, w, idx = router_epilogue(logits.float(), _k, _norm)
+                return _assemble(_pos, logits if _raw else first, w, idx)
         else:
-            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _bias=spec["bias"]):
+            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _bias=spec["bias"], _raw=raw_first):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(rows, _m.weight)
-                return _assemble(_pos, *router_epilogue(logits.float(), _k, False,
-                                                        select_on_logits=True, bias=_bias))
+                first, w, idx = router_epilogue(logits.float(), _k, False,
+                                                select_on_logits=True, bias=_bias)
+                return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd
         n += 1
     if n == 0:
