@@ -14,6 +14,14 @@ small reductions and the rotary chain. Two folds take the bulk of it:
   ``apply_rotary_pos_emb`` chain (slice, negate, concat, two muls, an
   add) becomes one launch per projection.
 
+A second layer shape is folded the same way: GraniteMoe's body keeps
+the four pre-norm children but names its MoE ``block_sparse_moe`` and
+scales both residual adds by a Python-float ``residual_multiplier``
+(``resid + x * m``). That fold needs the kernel side's scaled residual
+fold (``rmsnorm_resid_rows(..., scale=)`` and ``scaled_resid_add_rows``,
+grouped-nf4-gemm >= 0.27) and refuses loudly on an older cut rather
+than silently skipping the layer.
+
 Both patches are licensed the way round 1's was: structure is checked,
 never assumed from a class name, and the norm modules must pass the
 same semantic probe that rejects centered ``x * (1 + w)`` variants.
@@ -27,6 +35,7 @@ Engagement is census PRESENCE of ``_rmsnorm_resid_rows`` and
 """
 from __future__ import annotations
 
+import inspect
 import os
 
 import torch
@@ -61,6 +70,107 @@ def _layer_is_plain(mod) -> bool:
         return False
     if any(True for _ in mod.named_buffers(recurse=False)):
         return False
+    return True
+
+
+_SCALED_LAYER_CHILDREN = frozenset(
+    {"input_layernorm", "self_attn", "post_attention_layernorm",
+     "block_sparse_moe"})
+
+
+def _layer_scale(mod):
+    """The residual multiplier of a GraniteMoe-shaped layer, or None when
+    the layer is not that shape: exactly the four pre-norm children with
+    the MoE under ``block_sparse_moe``, nothing else on the layer itself
+    (no parameters, no buffers), and ``residual_multiplier`` either
+    absent (1.0 -- the older Mixtral cut of the same body) or a Python
+    float. A tensor or integer multiplier is a body this fold has not
+    read and is refused."""
+    children = {n for n, _ in mod.named_children()}
+    if children != _SCALED_LAYER_CHILDREN:
+        return None
+    if any(True for _ in mod.named_parameters(recurse=False)):
+        return None
+    if any(True for _ in mod.named_buffers(recurse=False)):
+        return None
+    if "residual_multiplier" not in vars(mod):
+        return 1.0
+    m = vars(mod)["residual_multiplier"]
+    if type(m) is not float:
+        return None
+    return m
+
+
+def _kernel_has_scaled_fold(int4_b32) -> bool:
+    fn = getattr(int4_b32, "rmsnorm_resid_rows", None)
+    add = getattr(int4_b32, "scaled_resid_add_rows", None)
+    if fn is None or add is None:
+        return False
+    try:
+        return "scale" in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _patch_layer_scaled(mod, scale, int4_b32) -> bool:
+    """Fold GraniteMoe's ``resid + attn * m`` into the post-attention
+    norm and its tail ``resid + moe * m`` into one launch. Mirrors the
+    upstream forward (transformers 5.5 source) line for line; only the
+    two scaled add sites change. Requires the kernel cut with the
+    scaled fold when ``m != 1``; at ``m == 1`` the body is the plain
+    fold under another child name and the older cut suffices."""
+    ln = getattr(mod, "post_attention_layernorm", None)
+    if ln is None or not _is_rmsnorm(ln):
+        return False
+    eps = _norm_eps(ln)
+    if eps is None or not _probe_matches(ln, eps):
+        return False
+    scaled = scale != 1.0
+    if scaled and not _kernel_has_scaled_fold(int4_b32):
+        raise RuntimeError(
+            "E4B_FUSE_T1_GLUE_R2=1 on a residual-scaled layer body "
+            f"({type(mod).__name__}, residual_multiplier={scale}) needs "
+            "the kernel side's scaled residual fold "
+            "(rmsnorm_resid_rows(scale=) and scaled_resid_add_rows, "
+            "grouped-nf4-gemm >= 0.27); install the matching cut or "
+            "unset the flag")
+    rmsnorm_resid_rows = int4_b32.rmsnorm_resid_rows
+    scaled_add = int4_b32.scaled_resid_add_rows if scaled else None
+    orig = mod.forward
+    width = ln.weight.numel()
+
+    def _fwd(hidden_states, attention_mask=None, past_key_values=None,
+             position_embeddings=None, _m=mod, _ln=ln, _eps=eps,
+             _orig=orig, _w=width, _s=scale, _add=scaled_add, **kwargs):
+        if not _decode_rows(hidden_states, _w):
+            return _orig(hidden_states, attention_mask=attention_mask,
+                         past_key_values=past_key_values,
+                         position_embeddings=position_embeddings,
+                         **kwargs)
+        residual = hidden_states
+        hidden_states = _m.input_layernorm(hidden_states)
+        hidden_states, _ = _m.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        # residual + attn * m, then the post-attention norm: one launch
+        if _add is None:
+            hidden_states, residual = rmsnorm_resid_rows(
+                hidden_states, residual, _ln.weight, _eps)
+        else:
+            hidden_states, residual = rmsnorm_resid_rows(
+                hidden_states, residual, _ln.weight, _eps, scale=_s)
+        hidden_states = _m.block_sparse_moe(hidden_states)
+        if isinstance(hidden_states, tuple):
+            hidden_states = hidden_states[0]    # (out, router_logits) cuts
+        if _add is None:
+            return residual + hidden_states
+        return _add(hidden_states, residual, _s)
+
+    mod.forward = _fwd
     return True
 
 
@@ -116,6 +226,12 @@ def _patch_layer(mod, rmsnorm_resid_rows) -> bool:
         hidden_states, residual = rmsnorm_resid_rows(
             hidden_states, residual, _ln.weight, _eps)
         hidden_states = _m.mlp(hidden_states)
+        if isinstance(hidden_states, tuple):
+            # gpt-oss's MoE block returns (hidden, router_scores) and its
+            # layer unpacks ``hidden_states, _ = self.mlp(...)``; adding
+            # the tuple to the residual raised a TypeError on the
+            # validation lane. Mirror the unpack.
+            hidden_states = hidden_states[0]
         return residual + hidden_states
 
     mod.forward = _fwd
@@ -214,6 +330,7 @@ def fuse_t1_glue_r2(model) -> tuple[int, int]:
     if os.environ.get("E4B_FUSE_T1_GLUE_R2", "0") != "1":
         return (0, 0)
     try:
+        import int4_b32  # the module object is needed for the capability probe
         from int4_b32 import rmsnorm_resid_rows, rope_norm_heads
     except ImportError as e:
         raise RuntimeError(
@@ -225,7 +342,11 @@ def fuse_t1_glue_r2(model) -> tuple[int, int]:
     for mod in model.modules():
         name = type(mod).__name__
         if name.endswith("DecoderLayer"):
-            layers += bool(_patch_layer(mod, rmsnorm_resid_rows))
+            scale = _layer_scale(mod)
+            if scale is None:
+                layers += bool(_patch_layer(mod, rmsnorm_resid_rows))
+            else:
+                layers += bool(_patch_layer_scaled(mod, scale, int4_b32))
         elif name.endswith("Attention"):
             attns += bool(_patch_attention(mod, rope_norm_heads))
     if layers == 0 and attns == 0:
