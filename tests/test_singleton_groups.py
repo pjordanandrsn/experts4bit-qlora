@@ -150,3 +150,79 @@ def test_mxfp4_store_serves_gptoss_through_the_grouped_mxfp4_gemm(mock_gemm, mon
     assert got.shape == want.shape and got.dtype == torch.bfloat16
     assert torch.allclose(got.float(), want.float(), rtol=2 ** -7, atol=2 ** -6), \
         (got.float() - want.float()).abs().max()
+
+
+def _ref_quant_x_rows(x):
+    """int4-b32 activation quantisation, reference: int8 per 32-wide block."""
+    R, K = x.shape
+    xb = x.float().reshape(R, K // 32, 32)
+    s = xb.abs().amax(-1, keepdim=True) / 127.0
+    s = torch.where(s == 0, torch.ones_like(s), s)
+    xq = torch.round(xb / s).clamp(-127, 127).to(torch.int8).reshape(R, K)
+    return xq, s.reshape(R, K // 32).contiguous()
+
+
+def _ref_gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N, K, part=None):
+    from experts4bit_qlora.formats.mxfp4 import dequantize_mxfp4
+    E = blocks.shape[0]
+    w_kn = dequantize_mxfp4(blocks.reshape(E, N, K // 32, 16), scales, dtype=torch.float32)  # [E, K, N]
+    a = xq.float() * xs.repeat_interleave(32, dim=1)
+    return torch.stack([a[r] @ w_kn[int(eids[r])] for r in range(xq.shape[0])]).to(torch.bfloat16)
+
+
+def test_mxfp4_store_decode_rows_take_the_b32_gemv(mock_gemm, monkeypatch):
+    """With the kernel side's decode-grade GEMV present, decode rows on
+    the MXFP4 store go through it (quantised int8 rows, split-K), not
+    the v1 grouped GEMM; E4B_MXFP4_GEMV=0 forces v1 (the A/B arm), and
+    the two routes agree to the activation-quantisation tolerance."""
+    mx = sys.modules.get("mxfp4_grouped")
+    if mx is None:
+        mx = types.SimpleNamespace()
+        monkeypatch.setitem(sys.modules, "mxfp4_grouped", mx)
+    calls = {"gemv": 0, "gemm": 0}
+
+    def gemm(*a, **k):
+        calls["gemm"] += 1
+        return _mxfp4_reference_gemm(*a, **k)
+
+    def gemv(*a, **k):
+        calls["gemv"] += 1
+        return _ref_gemv_mxfp4_b32(*a, **k)
+    monkeypatch.setattr(mx, "gemm_mxfp4_grouped", gemm, raising=False)
+    monkeypatch.setattr(mx, "gemv_mxfp4_b32", gemv, raising=False)
+    monkeypatch.setitem(sys.modules, "int4_b32",
+                        types.SimpleNamespace(quant_x_rows=_ref_quant_x_rows))
+    g = torch.Generator().manual_seed(5)
+    E, H, inter = 3, 64, 32
+    gub = torch.randint(0, 256, (E, 2 * inter, H // 2), generator=g, dtype=torch.uint8)
+    gus = torch.randint(122, 128, (E, 2 * inter, H // 32), generator=g, dtype=torch.uint8)
+    dnb = torch.randint(0, 256, (E, H, inter // 2), generator=g, dtype=torch.uint8)
+    dns = torch.randint(122, 128, (E, H, inter // 32), generator=g, dtype=torch.uint8)
+    stores = {"kind": "mxfp4",
+              "gu": {"blocks": gub, "scales": gus, "N": 2 * inter, "K": H},
+              "dn": {"blocks": dnb, "scales": dns, "N": H, "K": inter}}
+    gu_b, dn_b = torch.randn(E, 2 * inter) * 0.1, torch.randn(E, H) * 0.1
+    x = (torch.randn(4, H) * 0.5).to(torch.bfloat16)
+    ids = torch.tensor([2, 0, 1, 2])
+    # distinct freed stacks: identity dispatch (`pk is gu_p`) names the slot
+    freed_gu, freed_dn = torch.empty(0, dtype=torch.uint8), torch.empty(0, dtype=torch.uint8)
+    kw = dict(has_gate=True, act_fn=torch.nn.functional.silu,
+              gptoss=(gu_b, dn_b, 1.702, 7.0), int4_stores=stores)
+    shapes = (2 * inter, H, H, inter)
+    monkeypatch.delenv("E4B_MXFP4_GEMV", raising=False)
+    got = _fused_over_stack(x, ids, freed_gu, None, freed_dn, None, shapes, **kw)
+    assert calls == {"gemv": 2, "gemm": 0}, calls
+    monkeypatch.setenv("E4B_MXFP4_GEMV", "0")
+    v1 = _fused_over_stack(x, ids, freed_gu, None, freed_dn, None, shapes, **kw)
+    assert calls == {"gemv": 2, "gemm": 2}, calls
+    # the two routes differ by the int8 per-32 activation quantisation of
+    # the decode GEMV (the kernel's own exactness is the kernel side's
+    # interpreter gate); here the check is that they compute the same
+    # projection, not the same rounding
+    rel = ((got.float() - v1.float()).norm() / v1.float().norm()).item()
+    assert rel < 0.05, rel
+    # a kernel cut without the GEMV falls back to v1 without a flag
+    monkeypatch.delenv("E4B_MXFP4_GEMV", raising=False)
+    monkeypatch.delattr(mx, "gemv_mxfp4_b32", raising=False)
+    _fused_over_stack(x, ids, freed_gu, None, freed_dn, None, shapes, **kw)
+    assert calls == {"gemv": 2, "gemm": 4}, calls

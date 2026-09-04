@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from typing import Sequence
 
+import os
+
 import torch
 
 
@@ -202,14 +204,32 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
     elif _mxfp4_store:
-        from mxfp4_grouped import gemm_mxfp4_grouped
+        import mxfp4_grouped
         _sizes_mx = [1] * x_rows.shape[0]           # host constant: capture-safe
         _eids_mx = local_ids.to(torch.int32)
+        # Decode rows go through the decode-grade GEMV when the kernel
+        # side has it (grouped-nf4-gemm >= 0.28, `gemv_mxfp4_b32`: the
+        # int4-b32 split-K structure on the MXFP4 bytes, int8 activation
+        # rows); the v1 grouped GEMM's M==1 reduction (one program per
+        # 64 rows, no split-K) measured SLOWER than NF4 at B=1 on
+        # gpt-oss. E4B_MXFP4_GEMV=0 forces the v1 route (the A/B arm).
+        _gemv_mx = getattr(mxfp4_grouped, "gemv_mxfp4_b32", None)
+        _use_gemv_mx = (_gemv_mx is not None and x_rows.shape[0] <= 256
+                        and os.environ.get("E4B_MXFP4_GEMV", "1") == "1")
+        if _use_gemv_mx:
+            from int4_b32 import quant_x_rows
 
-        def _mm(xr, pk, am):
-            st = int4_stores["gu" if pk is gu_p else "dn"]
-            return gemm_mxfp4_grouped(xr.to(torch.bfloat16).contiguous(),
-                                      st["blocks"], st["scales"], _sizes_mx, _eids_mx)
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                xq, xs = quant_x_rows(xr.to(torch.bfloat16).contiguous())
+                return _gemv_mx(xq, xs, st["blocks"], st["scales"],
+                                _eids_mx, st["N"], st["K"])
+        else:
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                return mxfp4_grouped.gemm_mxfp4_grouped(
+                    xr.to(torch.bfloat16).contiguous(),
+                    st["blocks"], st["scales"], _sizes_mx, _eids_mx)
     elif int4_stores is not None:
         # Opt-in uniform-int4 expert store (engines/int4_experts). The
         # NF4 stacks may already be FREED, so BOTH branches must serve
