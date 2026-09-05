@@ -1,6 +1,7 @@
 # Docs index — what each document is, and whether it is current
 
-Forty-two documents accumulated over two months of measured campaigns.
+48 documents accumulated over two months of measured campaigns (the count is
+the number of distinct documents this index links, held by `tests/test_docs_index_count.py`).
 This index says what each one is *for*, whether it is still the thing to
 read, and whether it is OpenTimestamps-anchored (**anchored** documents
 are never edited in place — they are superseded or archived, and their

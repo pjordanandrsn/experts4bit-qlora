@@ -16,6 +16,15 @@ offline (standard library only, no network):
    Outside the tables, every backticked id must exist, and an inactive one
    may only be cited on a line that says so.
 
+   The same id rules cover the position prose that quotes ids by name --
+   docs/STATUS.md, docs/SOLUTIONS.md and docs/solutions/*.md,
+   docs/SERVING-THROUGHPUT.md, docs/SERVING-PARITY.md, docs/METHODOLOGY.md,
+   docs/ARCHITECTURE_SUPPORT.md, docs/CHOOSING.md (``POSITION_DOCS``; anchored
+   documents are skipped): every backticked id exists, and a superseded or
+   retired id appears only on a line that says ``superseded`` / ``retired`` /
+   ``historical``. Before this, a STATUS paragraph could quote a withdrawn row
+   as the position and CI stayed green.
+
 2. **The release block is generated, not typed.** The text between
    ``<!-- release-block:start -->`` and ``<!-- release-block:end -->`` must be
    exactly what this script renders from the latest ``## <version> — <date>``
@@ -32,7 +41,6 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import json
 import os
 import re
 import sys
@@ -41,7 +49,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from check_readme_links import ReleaseVersionError, released_version  # noqa: E402
-from discovery_common import KNOWN_STATUSES, load_pyproject, read_text, self_slug, write_text  # noqa: E402
+from discovery_common import (  # noqa: E402
+    KNOWN_STATUSES, ContractError, load_claims, load_pyproject, read_text, self_slug, write_text,
+)
 
 README = "README.md"
 CLAIMS = "docs/claims.json"
@@ -60,9 +70,9 @@ _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?")
 
 
-class ContractError(Exception):
-    """The check cannot run (malformed input); exit 2, never a green pass."""
-
+#: The check cannot run (malformed input): ``discovery_common.ContractError`` -- the
+#: SAME class ``load_claims`` raises, so a malformed register takes the exit-2 path
+#: instead of escaping as a traceback (a local subclass of the same name did that).
 
 # ------------------------------------------------------------------ numbers --
 
@@ -319,20 +329,63 @@ def check_tables(text: str, claims: dict[str, dict]) -> list[str]:
     return findings
 
 
-def check_ids_outside_tables(text: str, claims: dict[str, dict]) -> list[str]:
-    """Every backticked id anywhere in the README exists; an inactive one is
-    cited only on a line that says it is (``superseded``/``retired``)."""
+def check_doc_ids(rel: str, text: str, claims: dict[str, dict]) -> list[str]:
+    """Every backticked id in the document exists; an inactive one is cited
+    only on a line whose PROSE says so (``superseded`` / ``retired``, or
+    ``historical`` for a dated record that names the old row as history) --
+    the backticked ids are stripped before the words are looked for, so an id
+    such as ``e4b.retired.13.47x-training-speedup`` cannot satisfy the rule
+    by its own name."""
     findings = []
     for ln, line in enumerate(text.splitlines(), 1):
         for ref in _ID.findall(line):
             found, missing = resolve_ids([ref], claims)
             if missing:
-                findings.append(f"README.md:{ln}: `{ref}` is not in {CLAIMS}")
+                findings.append(f"{rel}:{ln}: `{ref}` is not in {CLAIMS}")
+            prose = _ID.sub(" ", line).lower()           # the ids stripped: `e4b.retired.x` must not vouch for itself
             for cid, c in found.items():
                 st = c.get("status")
-                if st in INACTIVE and st not in line.lower():
-                    findings.append(f"README.md:{ln}: `{cid}` is {st} and the line does not say so")
+                if st in INACTIVE and st not in prose and "historical" not in prose:
+                    findings.append(f"{rel}:{ln}: `{cid}` is {st} and the line does not say so")
     return findings
+
+
+def check_ids_outside_tables(text: str, claims: dict[str, dict]) -> list[str]:
+    """Every backticked id anywhere in the README exists; an inactive one is
+    cited only on a line that says it is (``superseded``/``retired``)."""
+    return check_doc_ids(README, text, claims)
+
+
+#: Position prose that quotes claim ids by name: the same id rules as the README.
+POSITION_DOCS = ("docs/STATUS.md", "docs/SOLUTIONS.md", "docs/SERVING-THROUGHPUT.md", "docs/SERVING-PARITY.md",
+                 "docs/METHODOLOGY.md", "docs/ARCHITECTURE_SUPPORT.md", "docs/CHOOSING.md")
+SOLUTIONS_GLOB = "docs/solutions/*.md"
+ANCHOR_MARKER = "<!-- ots-attestation-footer -->"
+
+
+def position_documents(root: Path) -> list[str]:
+    """The documents the id rules cover, relative to ``root``: the fixed list plus
+    every solution page; anchored documents (a sibling ``.ots`` or the footer
+    marker) are skipped, because a finding there could only be fixed by editing
+    an anchored file."""
+    rels = [r for r in POSITION_DOCS if (root / r).is_file()]
+    rels += [p.relative_to(root).as_posix() for p in sorted(root.glob(SOLUTIONS_GLOB))]
+    out = []
+    for rel in rels:
+        p = root / rel
+        if p.with_name(p.name + ".ots").is_file() or ANCHOR_MARKER in read_text(p):
+            continue
+        out.append(rel)
+    return out
+
+
+def check_position_docs(root: Path, claims: dict[str, dict]) -> tuple[list[str], int]:
+    """``(findings, n_docs)`` over every position document."""
+    findings, n = [], 0
+    for rel in position_documents(root):
+        n += 1
+        findings += check_doc_ids(rel, read_text(root / rel), claims)
+    return findings, n
 
 
 # ------------------------------------------------------------ release block --
@@ -384,16 +437,16 @@ def check_release_block(text: str, block: str) -> list[str]:
 # --------------------------------------------------------------------- main --
 
 def load_claim_map(root: Path) -> dict[str, dict]:
-    doc = json.loads(read_text(root / CLAIMS))
-    claims = doc.get("claims") if isinstance(doc, dict) else doc
-    out = {}
-    for c in claims or []:
-        if not isinstance(c, dict) or "id" not in c:
-            raise ContractError(f"{CLAIMS}: a claim without an id")
-        out[c["id"]] = c
-    if not out:
+    """``{id: claim}`` through ``discovery_common.load_claims`` (unique ids, every
+    status in the file's vocabulary); any way the file cannot be read is a
+    ``ContractError`` -- exit 2, never a green pass and never a traceback."""
+    try:
+        claims, _vocab = load_claims(root, CLAIMS)
+    except (OSError, ValueError) as e:
+        raise ContractError(f"{CLAIMS}: {e}") from e
+    if not claims:
         raise ContractError(f"{CLAIMS}: no claims")
-    return out
+    return {c["id"]: c for c in claims}
 
 
 def expected_block(root: Path) -> str:
@@ -414,6 +467,7 @@ def check(root: Path, readme: str = README) -> list[str]:
     findings = check_release_block(text, expected_block(root))
     findings += check_tables(text, claims)
     findings += check_ids_outside_tables(text, claims)
+    findings += check_position_docs(root, claims)[0]
     return findings
 
 
@@ -445,8 +499,10 @@ def main() -> int:
               "from CHANGELOG.md")
         return 1
     n_tables = len(claim_tables(parse_tables(read_text(root / a.readme))))
+    n_docs = len(position_documents(root))
     print(f"OK: {a.readme} = current main -- release block generated, {n_tables} results table(s) hold the "
-          f"register's current values, no superseded/retired id, no private receipt presented as public")
+          f"register's current values, no superseded/retired id, no private receipt presented as public; "
+          f"{n_docs} position document(s) cite only ids that exist, inactive ones only where the line says so")
     return 0
 
 

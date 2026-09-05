@@ -24,7 +24,20 @@ Against this repository:
   * every invariant has a non-empty ``id``, ``statement`` and ``checked_by``,
     and ids are unique.
 
-``--sibling PATH`` (the kernel repository's checkout; never used in CI):
+The consumer's CI pin of the kernel package (``.github/workflows/ci.yml``,
+``pip install "grouped-nf4-gemm @ git+...@<sha>"``) against the manifest:
+  * the pinned sha is the commit of a RELEASE TAG of the kernel package --
+    the tag ``compatibility[current].consumer_ci_pin`` names (exact: OK), or a
+    later release (OK with a NOTE that the prose is behind); any other sha, or
+    a tag below the one named, FAILS. Tags are read with
+    ``git ls-remote --tags <repository>`` (annotated tags peeled); with no
+    network the check prints ``NOTE: ... skipped`` and never passes silently
+    as if it had run;
+  * every extra of pyproject that pins the kernel package (``fast``, ``test``,
+    ...) has a ``>=`` floor at or above the current record's floor.
+
+``--sibling PATH`` (the kernel repository's checkout; CI clones it at its
+latest release tag for this):
   * PATH/docs/system-manifest.json is byte-identical to ours;
   * the sibling's pyproject name is ``packages.kernels.package`` and its version
     satisfies every ``floor`` this manifest names for that package -- the
@@ -44,6 +57,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -53,6 +67,7 @@ from discovery_common import (  # noqa: E402
 )
 
 MANIFEST = "docs/system-manifest.json"
+CI_WORKFLOW = ".github/workflows/ci.yml"
 CAPABILITIES = "docs/capabilities.json"
 CLAIMS = "docs/claims.json"
 KERNEL_PACKAGE = "grouped-nf4-gemm"
@@ -278,6 +293,125 @@ def check_local(root: Path, manifest: dict, rep: Report) -> None:
         rep.ok(f"{len(manifest['invariants'])} invariants carry id, statement and checked_by; ids unique")
 
 
+# ------------------------------------------------------------------ CI pin --
+
+_PIN = re.compile(r"git\+https://github\.com/(?P<slug>[^/\s\"']+/[^/\s\"'@]+?)(?:\.git)?@(?P<sha>[0-9a-f]{7,40})\b")
+_TAG_LINE = re.compile(r"^(?P<sha>[0-9a-f]{40})\s+refs/tags/v?(?P<ver>\d+(?:\.\d+)*)(?P<peel>\^\{\})?$")
+_PIN_VERSION = re.compile(r"\bv?(\d+\.\d+\.\d+)\b")
+
+
+def ci_kernel_pin(text: str, package: str = KERNEL_PACKAGE) -> tuple[str, str] | None:
+    """``(repository slug, sha)`` of the ``pip install "<package> @ git+...@<sha>"``
+    line in the workflow text, or None when there is none."""
+    for line in text.splitlines():
+        if pep503_name(package) not in pep503_name(line):
+            continue
+        m = _PIN.search(line)
+        if m:
+            return m.group("slug"), m.group("sha")
+    return None
+
+
+def release_tags(repo_url: str, timeout: float = 60.0) -> dict[str, str] | None:
+    """``{version: commit sha}`` for every ``refs/tags/vX.Y.Z`` of the remote
+    (annotated tags peeled to the commit), or None when the network or git is
+    unavailable -- the caller prints a NOTE and skips, never passes."""
+    try:
+        p = subprocess.run(["git", "ls-remote", "--tags", repo_url], capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if p.returncode != 0:
+        return None
+    tags: dict[str, str] = {}
+    peeled: dict[str, str] = {}
+    for line in p.stdout.splitlines():
+        m = _TAG_LINE.match(line.strip())
+        if not m:
+            continue
+        (peeled if m.group("peel") else tags)[m.group("ver")] = m.group("sha")
+    tags.update(peeled)                      # the peeled commit wins over the tag object
+    return tags
+
+
+def check_ci_pin(root: Path, manifest: dict, rep: Report) -> None:
+    """The consumer CI pin is a release-tag commit at or above the tag the current
+    compatibility record's ``consumer_ci_pin`` names."""
+    ci = root / CI_WORKFLOW
+    if not ci.is_file():
+        rep.ok(f"no {CI_WORKFLOW}: the CI pin check does not apply")
+        return
+    py = load_pyproject(root)
+    hits, err = current_record(manifest, str(py.get("name", "")), str(py.get("version", "")))
+    if err or len(hits) != 1:
+        return                                   # check_local has already failed this
+    rec = hits[0]
+    prose = str(rec.get("consumer_ci_pin", ""))
+    pin = ci_kernel_pin(read_text(ci))
+    if not prose.strip():
+        rep.check(pin is None, "the current record names no consumer_ci_pin and CI pins no kernel commit",
+                  f"CI pins {pin}")
+        return
+    if not rep.check(pin is not None, f"{CI_WORKFLOW} pins {KERNEL_PACKAGE} at a git commit (consumer_ci_pin: {prose!r})"):
+        return
+    slug, sha = pin
+    m = _PIN_VERSION.search(prose)
+    if not rep.check(m is not None, f"consumer_ci_pin names a release version: {prose!r}"):
+        return
+    named = m.group(1)
+    kernels = manifest["packages"]["kernels"]
+    rep.check(_github_slug(slug) == _github_slug(kernels["repository"]),
+              f"the CI pin's repository {slug} is packages.kernels.repository", f"manifest says {kernels['repository']!r}")
+    tags = release_tags(kernels["repository"])
+    if tags is None:
+        print(f"NOTE: could not read release tags from {kernels['repository']} (no network?): the CI pin "
+              f"{sha[:12]} was NOT verified against tag v{named} -- skipped, not passed")
+        return
+    if not rep.check(named in tags, f"release tag v{named} (consumer_ci_pin) exists in {kernels['repository']}",
+                     f"tags seen: {sorted(tags)[-5:]}"):
+        return
+    pinned = [v for v, c in tags.items() if c.startswith(sha) or sha.startswith(c)]
+    if not rep.check(bool(pinned), f"CI pin {sha[:12]} is the commit of a release tag of {KERNEL_PACKAGE}",
+                     f"no tag's commit matches; v{named} is {tags[named][:12]}"):
+        return
+    pv = max(pinned, key=parse_version)
+    if parse_version(pv) == parse_version(named):
+        rep.ok(f"CI pin {sha[:12]} is the commit of v{named}, the tag consumer_ci_pin names")
+    elif parse_version(pv) > parse_version(named):
+        rep.ok(f"CI pin {sha[:12]} is the commit of v{pv}, a release above the v{named} that consumer_ci_pin names")
+        print(f"NOTE: consumer_ci_pin says {prose!r} but CI installs v{pv}; update the prose in both repositories' "
+              f"{MANIFEST} (the manifest is byte-identical across them)")
+    else:
+        rep.fail(f"CI pin {sha[:12]} is v{pv}, BELOW the v{named} that consumer_ci_pin names")
+
+
+def kernel_extras(pyproject: dict, package: str = KERNEL_PACKAGE) -> dict[str, str]:
+    """``{extra: requirement}`` for every optional-dependency extra that names the kernel package."""
+    out = {}
+    for extra in (pyproject.get("optional-dependencies") or {}):
+        fr = fast_requirement(pyproject, package, extra)
+        if fr is not None:
+            out[extra] = fr[0]
+    return out
+
+
+def check_extra_floors(root: Path, manifest: dict, rep: Report) -> None:
+    """Every extra that pins the kernel package has a ``>=`` floor at or above the current record's."""
+    py = load_pyproject(root)
+    hits, err = current_record(manifest, str(py.get("name", "")), str(py.get("version", "")))
+    if err or len(hits) != 1:
+        return
+    rec_floor = floor_of(str(hits[0].get("floor", "")))
+    if rec_floor is None:
+        return
+    for extra, req in sorted(kernel_extras(py).items()):
+        fl = floor_of(req.split(";", 1)[0].split("]", 1)[-1] if "[" in req.split(";", 1)[0] else re.sub(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*", "", req.split(";", 1)[0]))
+        if not rep.check(fl is not None, f"extra {extra!r} pins {KERNEL_PACKAGE} with a single >= floor ({req!r})"):
+            continue
+        rep.check(_cmp(parse_version(fl), parse_version(rec_floor)) >= 0,
+                  f"extra {extra!r} floor >= {fl} is at or above the current record's {rec_floor}",
+                  f"{req!r} is below the record's floor {hits[0].get('floor')!r}")
+
+
 def check_sibling(root: Path, sibling: Path, manifest: dict, rep: Report) -> None:
     ours = (root / MANIFEST).read_bytes()
     theirs_path = sibling / MANIFEST
@@ -337,6 +471,8 @@ def main() -> int:
         return 1
     try:
         check_local(root, manifest, rep)
+        check_extra_floors(root, manifest, rep)
+        check_ci_pin(root, manifest, rep)
         if a.sibling:
             check_sibling(root, Path(a.sibling).resolve(), manifest, rep)
     except (OSError, ValueError, KeyError, TypeError) as e:

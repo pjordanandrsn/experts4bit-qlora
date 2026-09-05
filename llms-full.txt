@@ -2632,9 +2632,10 @@ pytest tests/ -q                                 # GPU tests skip with a reason
 python -m build && python -m twine check dist/*
 python scripts/wheel_smoke.py                    # from outside the tree, against the wheel
 python scripts/check_readme_links.py             # README links are absolute; self-refs = v<version> or main
-python scripts/check_readme_claims.py            # README = current main: table numbers vs docs/claims.json; release block generated
+python scripts/check_claims_register.py          # docs/claims.json hygiene: evidence exists, dated rows, successors resolve, licence labels name their verdict row
+python scripts/check_readme_claims.py            # README = current main: table numbers vs docs/claims.json; release block generated; position docs cite only ids that exist
 python scripts/check_capabilities.py             # docs/capabilities.json vs schema, pyproject, source, claims
-python scripts/check_system_manifest.py          # docs/system-manifest.json vs pyproject, claims, capabilities; --sibling <kernel checkout>
+python scripts/check_system_manifest.py          # docs/system-manifest.json vs pyproject, claims, capabilities; kernel-pinning extras >= the floor; the CI kernel pin is a release-tag commit; --sibling <kernel checkout>
 python scripts/check_dependency_floor.py         # every current document states pyproject's [fast] floor
 python scripts/check_change_impact.py --base origin/main    # docs/change-impact.json: what must move together
 python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 30   # queries -> pages; the BM25 floor is a local proxy

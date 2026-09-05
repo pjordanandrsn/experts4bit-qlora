@@ -266,7 +266,7 @@ was released with a version is linked from the release block at the top.
 |---|---|
 | [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md) | what you get, what was retired, what is open — one page |
 | [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json) | every claim with value, hardware, status, evidence |
-| [`docs/INDEX.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md) | what each of the 42 documents is, and whether it is current |
+| [`docs/INDEX.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/INDEX.md) | what each document under `docs/` is, and whether it is current |
 | [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/CHOOSING.md) | which mode, and why |
 | [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/METHODOLOGY.md) | hosts, protocols, every measurement's provenance |
 | [`docs/SERVING-PARITY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-PARITY.md) | paged decode vs each model's own attention |
