@@ -1525,10 +1525,24 @@ it:** the full calibrated stack — calibrated experts + calibrated int4
 attention + folds + epilogue + glue — passes on both texts (wikitext
 −0.060 / c4val1 +0.035,
 `e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; that
-pack was calibrated all-at-once, and the streamed full stack is a separate
-follow-up lane, bo6c) and reads 158.0 tok/s at B=1 / 993.6 at B=16 on
-that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` / `.b16`
-— quoted with its box, no ratio: the lane has no NF4 speed arm). Granite
+pack was calibrated all-at-once) and reads 158.0 tok/s at B=1 / 993.6 at
+B=16 on that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` /
+`.b16` — quoted with its box, no ratio: the lane has no NF4 speed arm).
+**Qwen3-30B-A3B's licensed serving stack is the streamed one** (bo6c,
+2026-09-05, same box, receipt in the same bundle): sequentially calibrated
+int4 experts at 64k C4-validation tokens + C4-calibrated int4 attention +
+round-1/2 folds + router epilogue + decode glue — wikitext −0.053 /
+c4val1 −0.066 ppl (−0.0083 / −0.0040 nats, both inside the 0.0095-nat
+floor): pass on both texts as registered, **licensed under the unchanged
+gate**, at parity or better on both texts, no improvement claimed by a
+number
+(`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`).
+The 64k experts-only pack is at parity on wikitext (−0.0002) and −0.211
+in-domain (`e4b.serve.buildout.bo6c.qwen3.calibexp-streamed-64k.k8.2026-09-05`),
+and the streamed calibration is itself run-to-run deterministic
+(`e4b.serve.buildout.bo6c.qwen3.calib-deterministic.5090.2026-09-05`).
+That stack's speed is not on this lane — bo7 measures the calibrated stack
+at the hook's 16k-token default, not 64k. Granite
 stays NF4 (bo5: calibrated experts +0.387 ppl, not closable with this
 lever). **Sequential calibration closed Qwen3's gap and did not close
 Mixtral's:** its calibrated int4-expert stack passes the in-domain text
@@ -2073,6 +2087,9 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 glue -- a configuration that passes the registered K8 gate on both texts on this lane: 158.0 tok/s (6.33 ms/step), rental-measured on this box; no ratio (no NF4 speed arm on this lane).
 - e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) -- passes the registered K8 gate on both texts on this lane: 993.6 tok/s (16.10 ms/step), rental-measured on this box; no ratio.
 - e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 [measured]: mistralai/Mixtral-8x7B-Instruct-v0.1's int4-expert stack -- GPTQ-calibrated int4 experts calibrated SEQUENTIALLY (streamed, 8 GiB Hessian budget) + round-1/2 folds (rope-only fold) + router epilogue, no calibrated attention (bo5's `lic` with calibrated experts in place of RTN) -- reads wikitext +0.0771 ppl (+0.0234 nats; this family's floor is unmeasured) and c4val1 +0.0391 ppl (+0.0047 nats) against the same-cut NF4: FAIL as registered on wikitext (budget +0.05 on every text) -- measured, NOT licensed. Sequential calibration closed Qwen3's gap and did not close Mixtral's: the stack passes its in-domain text and fails the out-of-domain one, the mirror image of bo5's RTN stack.
+- e4b.serve.buildout.bo6c.qwen3.calib-deterministic.5090.2026-09-05 [measured]: Sequential (streamed) GPTQ calibration of Qwen/Qwen3-30B-A3B's int4 experts -- the Hessian tap, the GPU solve, the min_rows fallbacks, the packing and the K8 score -- is run-to-run deterministic on one box and cut: an exact repeat of the 16k-token streamed arm after a fresh NF4 bake reads c4val1 mean_nll 2.800114648339439 both times (ppl 16.44653), spread 0.0 nats.
+- e4b.serve.buildout.bo6c.qwen3.calibexp-streamed-64k.k8.2026-09-05 [measured]: Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 64k calibration tokens (E4B_CALIB_NSEQ=128) PASSES the registered K8 gate on both texts against the same-cut NF4: wikitext -0.0002 ppl (-0.00003 nats), c4val1 -0.2109 ppl (-0.0129 nats) -- the improvement clause is met on its letter (same sign on both texts), but the out-of-domain delta is inside the family's 0.0095-nat floor: parity on the out-of-domain text, -0.211 in-domain; no improvement is claimed by a number.
+- e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05 [measured]: Qwen/Qwen3-30B-A3B's full calibrated serving stack as it ships -- sequentially (streamed) GPTQ-calibrated int4 experts at 64k C4-validation tokens (e4b#384's mechanism, enable_serve_experts_int4_calibrated, 0.35.0) + C4-calibrated int4 attention (192 projections from the same 32 batches) + round-1/2 folds (rope-only fold) + router epilogue + #385 decode glue -- PASSES the registered K8 gate on both texts against the same-cut NF4: wikitext -0.0528 ppl (-0.0083 nats), c4val1 -0.0662 ppl (-0.0040 nats), both inside the family's 0.0095-nat floor: LICENSED under the unchanged gate, at parity or better on both texts; no improvement is claimed by a number.
 
 Open items (no evidence either way):
 
@@ -2080,4 +2097,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(62 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(65 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

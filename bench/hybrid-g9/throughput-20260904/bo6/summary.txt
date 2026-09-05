@@ -14,3 +14,7 @@ SUMMARY run_qwen3_ppl_calibexp_n128_c4val.log K8_PPL steps=2048 nll=2.79031 ppl=
 SUMMARY run_qwen3_ppl_calibexp_n512_c4val.log K8_PPL steps=2048 nll=2.79459 ppl=16.35598 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_n512_c4val.json
 SUMMARY run_mixtral_ppl_lic_calibexp_c4val.log K8_PPL steps=2048 nll=2.11447 ppl=8.28518 compute=fp8 sha=061534dadd4d out=/root/bo6/mixtral_ppl_lic_calibexp_c4val.json
 SUMMARY run_mixtral_ppl_lic_calibexp.log K8_PPL steps=2048 nll=1.20549 ppl=3.33841 compute=fp8 sha=31fd7d408809 out=/root/bo6/mixtral_ppl_lic_calibexp.json
+SUMMARY run_qwen3_ppl_calibexp_c4val_rep2.log K8_PPL steps=2048 nll=2.80011 ppl=16.44653 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_c4val_rep2.json
+SUMMARY run_qwen3_ppl_calibexp_n128.log K8_PPL steps=2048 nll=1.85936 ppl=6.41962 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_calibexp_n128.json
+SUMMARY run_qwen3_ppl_all_calibexp_n128.log K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_all_calibexp_n128.json
+SUMMARY run_qwen3_ppl_all_calibexp_n128_c4val.log K8_PPL steps=2048 nll=2.79916 ppl=16.43081 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_all_calibexp_n128_c4val.json

@@ -121,3 +121,28 @@ MIXTRAL SWEEP DONE
 [2026-09-05T01:25:01Z] bo6c: reinstall e4b @d286dd52a8b23222479fb9de880bbdd00f6bf671 (damp knob)
 bo6c tripwire OK: damp knob + hook v5
 [2026-09-05T01:25:13Z] bo6c: bake qwen3
+BAKE OK
+overlay         320G   89G  232G  28% /
+[2026-09-05T01:34:44Z] bo6c: K8 qwen3/calibexp_c4val_rep2 (exp=1 calib=0 fuse=0 src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 1834 gptq / 214 rtn (min_rows=32) over 8 layers
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.80011 ppl=16.44653 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_calibexp_c4val_rep2.json
+[2026-09-05T01:54:52Z] bo6c: K8 qwen3/calibexp_n128 (exp=1 calib=0 fuse=0 src=wikitext E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128)
+    INT4EXP calibrated experts: 1954 gptq / 94 rtn (min_rows=32) over 8 layers
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=1.85936 ppl=6.41962 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_calibexp_n128.json
+[2026-09-05T02:21:08Z] bo6c: K8 qwen3/all_calibexp_n128 (exp=1 calib=1 fuse=all src=wikitext E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128)
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_all_calibexp_n128.json
+[2026-09-05T02:50:01Z] bo6c: K8 qwen3/all_calibexp_n128_c4val (exp=1 calib=1 fuse=all src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128)
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.79916 ppl=16.43081 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_all_calibexp_n128_c4val.json
+QWEN3 STREAMED STACK DONE
+[2026-09-05T03:18:54Z] bo6c: freed qwen3 (disk: 319G free)
+[2026-09-05T03:18:54Z] bo6c: TP3_DONE

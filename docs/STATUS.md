@@ -159,10 +159,24 @@ it:** the full calibrated stack — calibrated experts + calibrated int4
 attention + folds + epilogue + glue — passes on both texts (wikitext
 −0.060 / c4val1 +0.035,
 `e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; that
-pack was calibrated all-at-once, and the streamed full stack is a separate
-follow-up lane, bo6c) and reads 158.0 tok/s at B=1 / 993.6 at B=16 on
-that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` / `.b16`
-— quoted with its box, no ratio: the lane has no NF4 speed arm). Granite
+pack was calibrated all-at-once) and reads 158.0 tok/s at B=1 / 993.6 at
+B=16 on that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` /
+`.b16` — quoted with its box, no ratio: the lane has no NF4 speed arm).
+**Qwen3-30B-A3B's licensed serving stack is the streamed one** (bo6c,
+2026-09-05, same box, receipt in the same bundle): sequentially calibrated
+int4 experts at 64k C4-validation tokens + C4-calibrated int4 attention +
+round-1/2 folds + router epilogue + decode glue — wikitext −0.053 /
+c4val1 −0.066 ppl (−0.0083 / −0.0040 nats, both inside the 0.0095-nat
+floor): pass on both texts as registered, **licensed under the unchanged
+gate**, at parity or better on both texts, no improvement claimed by a
+number
+(`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`).
+The 64k experts-only pack is at parity on wikitext (−0.0002) and −0.211
+in-domain (`e4b.serve.buildout.bo6c.qwen3.calibexp-streamed-64k.k8.2026-09-05`),
+and the streamed calibration is itself run-to-run deterministic
+(`e4b.serve.buildout.bo6c.qwen3.calib-deterministic.5090.2026-09-05`).
+That stack's speed is not on this lane — bo7 measures the calibrated stack
+at the hook's 16k-token default, not 64k. Granite
 stays NF4 (bo5: calibrated experts +0.387 ppl, not closable with this
 lever). **Sequential calibration closed Qwen3's gap and did not close
 Mixtral's:** its calibrated int4-expert stack passes the in-domain text

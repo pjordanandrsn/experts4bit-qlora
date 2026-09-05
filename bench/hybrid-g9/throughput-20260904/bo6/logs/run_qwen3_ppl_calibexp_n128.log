@@ -1,0 +1,19 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 2860.97it/s]
+[01:54:56]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[01:54:56]   quantized experts on 48/48 MoE layers (128 experts each)
+[01:54:56]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[01:54:57]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[01:55:11]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 2691.48it/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+INT4EXP calibrating (streamed): 32 batches of c4 budget GB 24
+INT4EXP calibrated experts: 2418 gptq / 142 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2394 gptq / 166 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2412 gptq / 148 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2334 gptq / 226 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 1954 gptq / 94 rtn (min_rows=32) over 8 layers
+INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+K8_PPL steps=2048 nll=1.85936 ppl=6.41962 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_calibexp_n128.json
