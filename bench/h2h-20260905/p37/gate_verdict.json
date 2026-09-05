@@ -1,0 +1,26 @@
+{
+ "rule": "ppl(all) - ppl(nf4) <= +0.05 on wikitext AND c4val1",
+ "texts": {
+  "wikitext": {
+   "nf4": 6.419839734124139,
+   "all": 6.396794593947453,
+   "delta": -0.02304514017668602,
+   "verdict": "PASS",
+   "sources": [
+    "ok",
+    "ok"
+   ]
+  },
+  "c4val1": {
+   "nf4": 16.497028406390328,
+   "all": 16.606311066523535,
+   "delta": 0.10928266013320709,
+   "verdict": "FAIL",
+   "sources": [
+    "ok",
+    "ok"
+   ]
+  }
+ },
+ "verdict": "NOT LICENSED (VOID stands)"
+}

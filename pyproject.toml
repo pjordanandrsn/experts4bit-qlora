@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.35.1"
+version = "0.35.2"
 description = "Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -104,7 +104,13 @@ serve = [
 # XFAILS (its marker is conditional on the installed gnf4). Green either way,
 # so a stale floor would leave CI permanently NOT exercising the V4-label path
 # while looking covered -- the failure mode this repo keeps relearning.
-test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.28.0"]
+# Raised to >=0.28.0 with `fast` (rope_heads, gemv_mxfp4_b32), then left behind
+# when `fast` moved to >=0.30.0 for #335's combine_rows and the decode glue:
+# the suite that exercises that glue could resolve a kernel below it.
+# Now >=0.30.0, held equal to or above `fast`'s floor by
+# scripts/check_system_manifest.py (every kernel-pinning extra >= the current
+# compatibility record's floor).
+test = ["pytest>=7", "transformers>=5.0", "accelerate>=0.30", "safetensors>=0.4", "fastapi>=0.110", "httpx>=0.27", "grouped-nf4-gemm>=0.30.0"]
 
 [project.urls]
 Homepage = "https://cerinamroth.com/ml/experts4bit-qlora/"

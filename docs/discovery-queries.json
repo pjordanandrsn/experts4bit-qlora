@@ -643,6 +643,85 @@
           "ExpertsLoRA"
         ]
       ]
+    },
+    {
+      "query": "experts4bit-qlora vs Unsloth QLoRA on Qwen3-30B end-to-end head-to-head",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "Unsloth"
+        ],
+        [
+          "head-to-head"
+        ],
+        [
+          "end-to-end"
+        ],
+        [
+          "QLoRA"
+        ]
+      ]
+    },
+    {
+      "query": "is Unsloth faster than e4b for 4-bit MoE LoRA fine-tuning on one GPU",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "Unsloth"
+        ],
+        [
+          "QLoRA",
+          "LoRA"
+        ],
+        [
+          "s/step",
+          "per step"
+        ],
+        [
+          "held-out"
+        ]
+      ]
+    },
+    {
+      "query": "Unsloth 4-bit MoE QLoRA comparison same box identical training problem peak VRAM energy",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "Unsloth"
+        ],
+        [
+          "peak VRAM"
+        ],
+        [
+          "identical"
+        ],
+        [
+          "head-to-head"
+        ]
+      ]
+    },
+    {
+      "query": "experts4bit-qlora vs vLLM on the same GPU: head-to-head decode throughput for a 4-bit MoE",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "vLLM"
+        ],
+        [
+          "head-to-head"
+        ],
+        [
+          "same box",
+          "same-box"
+        ],
+        [
+          "GPTQ"
+        ]
+      ]
     }
   ]
 }

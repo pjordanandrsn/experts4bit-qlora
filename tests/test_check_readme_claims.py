@@ -221,3 +221,71 @@ def test_value_numbers_keep_minus_signs_in_string_values():
     assert m.Decimal("0.0528") not in got
     assert m.number_matches(m.Decimal("-0.0528"), got)
     assert not m.number_matches(m.Decimal("0.0528"), got)
+
+
+# ------------------------------------------------------ the position documents --
+
+def test_doc_ids_must_exist_and_inactive_ones_must_say_so():
+    text = ("the position is `e4b.x.a`\n"
+            "the old row `e4b.x.old` — superseded by `e4b.x.a`\n"
+            "`e4b.x.gone` is retired\n"
+            "a historical table: `e4b.x.old`\n"
+            "still quoting `e4b.x.old` as current\n"
+            "and `e4b.x.nope` does not exist\n")
+    f = crc.check_doc_ids("docs/STATUS.md", text, CLAIMS)
+    assert f == ["docs/STATUS.md:5: `e4b.x.old` is superseded and the line does not say so",
+                 "docs/STATUS.md:6: `e4b.x.nope` is not in docs/claims.json"]
+
+
+def test_position_documents_cover_status_and_the_solution_pages_and_skip_anchored_ones(tmp_path):
+    (tmp_path / "docs" / "solutions").mkdir(parents=True)
+    (tmp_path / "docs" / "STATUS.md").write_text("`e4b.x.a`\n")
+    (tmp_path / "docs" / "solutions" / "a.md").write_text("`e4b.x.a`\n")
+    (tmp_path / "docs" / "solutions" / "old.md").write_text("<!-- ots-attestation-footer -->\n`e4b.x.gone`\n")
+    (tmp_path / "docs" / "METHODOLOGY.md").write_text("`e4b.x.gone`\n")
+    (tmp_path / "docs" / "METHODOLOGY.md.ots").write_bytes(b"proof")
+    assert crc.position_documents(tmp_path) == ["docs/STATUS.md", "docs/solutions/a.md"]
+    findings, n = crc.check_position_docs(tmp_path, CLAIMS)
+    assert n == 2 and findings == []
+
+
+def test_the_repository_position_documents_pass():
+    findings, n = crc.check_position_docs(ROOT, crc.load_claim_map(ROOT))
+    assert n >= 8
+    assert findings == []
+
+
+# ------------------------------------------- the two defects found on the kernel-side port --
+
+RETIRED_BY_NAME = dict(CLAIMS, **{"e4b.retired.by-name": {"status": "retired", "claim": "gone", "retired_reason": "r"},
+                                  "e4b.superseded.by-name": {"status": "superseded", "superseded_by": "e4b.x.a", "claim": "old"}})
+
+
+def test_an_ids_own_name_never_vouches_for_it():
+    """`e4b.retired.by-name` contains the word "retired"; only the prose around the id counts."""
+    f = crc.check_doc_ids("docs/STATUS.md", "the number is `e4b.retired.by-name`\n", RETIRED_BY_NAME)
+    assert f == ["docs/STATUS.md:1: `e4b.retired.by-name` is retired and the line does not say so"]
+    f = crc.check_doc_ids("docs/STATUS.md", "still current: `e4b.superseded.by-name`\n", RETIRED_BY_NAME)
+    assert f == ["docs/STATUS.md:1: `e4b.superseded.by-name` is superseded and the line does not say so"]
+    assert crc.check_doc_ids("README.md", "`e4b.retired.by-name` is retired\n", RETIRED_BY_NAME) == []
+    assert crc.check_ids_outside_tables("`e4b.retired.by-name` (retired)\n", RETIRED_BY_NAME) == []
+    assert crc.check_ids_outside_tables("`e4b.retired.by-name` as current\n", RETIRED_BY_NAME) != []
+
+
+def test_a_malformed_register_is_a_contract_error_not_a_traceback(tmp_path):
+    """load_claim_map goes through discovery_common.load_claims and raises ITS ContractError, the
+    class main() catches for exit 2 -- a local class of the same name let a duplicate id traceback."""
+    import discovery_common
+    assert crc.ContractError is discovery_common.ContractError
+    (tmp_path / "docs").mkdir()
+    reg = tmp_path / "docs" / "claims.json"
+    reg.write_text('{"status_vocabulary": {"measured": "m"}, "claims": [{"id": "e4b.a", "status": "measured"}, '
+                   '{"id": "e4b.a", "status": "measured"}]}')
+    with pytest.raises(crc.ContractError):
+        crc.load_claim_map(tmp_path)
+    reg.write_text('{"status_vocabulary": {"measured": "m"}, "claims": [{"id": "e4b.a", "status": "typo"}]}')
+    with pytest.raises(crc.ContractError):
+        crc.load_claim_map(tmp_path)
+    reg.write_text("{not json")
+    with pytest.raises(crc.ContractError):
+        crc.load_claim_map(tmp_path)

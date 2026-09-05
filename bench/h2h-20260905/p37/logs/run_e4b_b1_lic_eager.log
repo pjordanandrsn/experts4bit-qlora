@@ -1,0 +1,22 @@
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1490.61it/s]
+[19:22:12]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[19:22:12]   quantized experts on 48/48 MoE layers (128 experts each)
+[19:22:12]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[19:22:14]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[19:22:35]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 1131.54it/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+INT4EXP calibrating (streamed): 32 batches of c4 budget GB 24
+INT4EXP calibrated experts: 2418 gptq / 142 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2398 gptq / 162 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2412 gptq / 148 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2338 gptq / 222 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 1956 gptq / 92 rtn (min_rows=32) over 8 layers
+INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+B1D_TIMED_EAGER steps=127 step=81.99ms compile=None recompiles=0 out=/root/p37/e4b_b1_lic_eager.json

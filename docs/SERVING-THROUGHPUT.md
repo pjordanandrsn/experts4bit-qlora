@@ -1,6 +1,6 @@
 # Serving throughput — every supported family under the Qwen3-30B campaign's protocol
 
-*2026-09-04. Companion to [`SERVING-PARITY.md`](SERVING-PARITY.md) (quality) — this page is speed. Receipt: [`bench/hybrid-g9/throughput-20260904/`](../bench/hybrid-g9/throughput-20260904/README.md) (raw per-arm JSON, run logs, host forensics, the reduce script). Every row is an entry in [`claims.json`](claims.json) at tier **measured**.*
+*2026-09-05 (the 2026-09-04 protocol table, the bo3/bo5/bo6/bo6c build-out sections and the 2026-09-05 bo7 census; each section is dated). Companion to [`SERVING-PARITY.md`](SERVING-PARITY.md) (quality) — this page is speed. Receipt: [`bench/hybrid-g9/throughput-20260904/`](../bench/hybrid-g9/throughput-20260904/README.md) (raw per-arm JSON, run logs, host forensics, the reduce script). Every row is an entry in [`claims.json`](claims.json) at tier **measured**.*
 
 ## Protocol
 
@@ -29,7 +29,7 @@ Two lanes on two host classes, and **B=1 is host-bound**: OLMoE, Granite and gpt
 | Gemma-4-26B-A4B | 0.73× | 0.46× | 1.18× | 0.61× |
 | Mixtral-8x7B-Instruct | 0.49× | 0.69× | 0.38× | 0.39× |
 
-## What each family gets from the campaign's levers today (0.32.0)
+## What each family got from the campaign's levers at 0.32.0 (2026-09-04; historical — the current positions are the bo7 census below)
 
 - **Qwen3-30B-A3B (reference):** NF4 → full stack ×1.59 at B=1 (97 → 155); NF4 → int4 experts ×1.95 at B=16 (483 → 944). The campaign's 204.6 / 1,238 tok/s were a faster host and are quoted as measured-private in `STATUS.md`; this page is one host class, one day.
 - **OLMoE-1B-7B:** every lever licenses; ×1.83 at B=1 (248 → 452), ×1.86 at B=16.
@@ -172,31 +172,31 @@ for every family but Qwen3 and for every B=16 — no anchor-class measurement ex
 
 - **Granite-3.1-3B-A800M** — `r12epi`, NF4 experts + round-1/2 folds (rotary-only fold) + router epilogue (licensed:
   +0.019 ppl wikitext, pass, `e4b.serve.buildout.granite.b1.5090.2026-09-04`): **×1.341 at B=1 (3.28 ms = 304.9 tok/s;
-  NF4 4.40 ms = 227.3)** and **×1.160 at B=16 (1836.8; NF4 1583.2)** — `e4b.serve.census.bo7.granite.b1` / `.b16`.
+  NF4 4.40 ms = 227.3)** and **×1.160 at B=16 (1836.8; NF4 1583.2)** — `e4b.serve.census.bo7.granite.b1.5090.2026-09-05` / `e4b.serve.census.bo7.granite.b16.5090.2026-09-05`.
   Beside, with their boxes: bo3 259.1 / 1689.6, bo5 294.1 / 1736.1 (both EPYC 9755 hosts).
 - **OLMoE-1B-7B** — the position is **NF4** (×1.000: 3.54 ms = 282.5 tok/s B=1; 1347.5 B=16), because nothing above
   it is licensed on this register: the tp row's "best licensed" label predates the two-text clause's application to
   calibrated packs (#386), its calibrated attention is refused on this family (+0.60 ppl C4-val), and the folds alone
-  have no K8 — `e4b.serve.census.bo7.olmoe.b1` / `.b16`.
+  have no K8 — `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05` / `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`.
 - **gpt-oss-20b** — the quoted best is the lane's own reference arm, `nf4_r12` (NF4 experts + exact folds; no raw-text
-  instrument): ×1.000, **6.92 ms = 144.5 tok/s B=1, 761.6 B=16** — `e4b.serve.census.bo7.gptoss.b1` / `.b16`.
+  instrument): ×1.000, **6.92 ms = 144.5 tok/s B=1, 761.6 B=16** — `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`.
 - **Qwen3-30B-A3B** — the licensed configuration, the streamed **64k** calibrated pack + calibrated int4 attention +
   round-1/2 folds + router epilogue + glue (pass on both texts, bo6c,
   `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`), measured on this box under amendment 2
   (`calibexp_all_n128`, `E4B_CALIB_NSEQ=128`, after `TP_DONE`): **×2.067 at B=1 (4.20 ms = 238.1 tok/s; NF4 8.68 ms =
   115.2) — anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a PROJECTION from a class never certified — and ×2.602 at
-  B=16 (1327.5 tok/s; NF4 510.3; no anchor projection)** — `e4b.serve.census.bo7.qwen3.b1` / `.b16`. The lane's own
+  B=16 (1327.5 tok/s; NF4 510.3; no anchor projection)** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. The lane's own
   calibrated arm had run the hook's 16k default (`calibexp_all`, ×2.067 / ×2.624, measured, not the licensed pack); the
   64k arm's speed is identical to it (4.20 vs 4.20 ms; 1327.5 vs 1338.8, within 1%) and to the RTN stack: a calibrated
   pack's kernels do not depend on the calibration size, as the amendment predicted.
 - **Gemma-4-26B-A4B** — no K8 instrument exists for this family, so no arm carries a K8 licence; the register's position
   with that caveat is `r1epi` (the exact round-1 norm fold + router epilogue on NF4 experts): **×1.281 at B=1 (9.65 ms =
-  103.6 tok/s; NF4 12.36 ms = 80.9)** and **×1.106 at B=16 (675.8; NF4 611.2)** — `e4b.serve.census.bo7.gemma4.b1` /
-  `.b16`. The register's quoted best `int4_r1epi` (bo3's `stack`) reads ×1.705 / ×1.697 (137.9 / 1037.4) measured with no
+  103.6 tok/s; NF4 12.36 ms = 80.9)** and **×1.106 at B=16 (675.8; NF4 611.2)** — `e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05` /
+  `e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05`. The register's quoted best `int4_r1epi` (bo3's `stack`) reads ×1.705 / ×1.697 (137.9 / 1037.4) measured with no
   quality verdict — its claim text says "licensed configuration" and its notes say "no instrument"; the census reads the
   notes; beside, its box: bo3 121.1 / 962.8 (×1.69 / ×1.68). Calibrated attention on `r1epi` ×1.398 / ×1.120, no verdict.
 - **Mixtral-8x7B-Instruct** — the position is **NF4** (×1.000: 19.87 ms = 50.3 tok/s B=1; 191.4 B=16;
-  `e4b.serve.census.bo7.mixtral.b1` / `.b16`): `lic` and `all` FAIL as registered on bo5, the calibrated stack FAILS on
+  `e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05` / `e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05`): `lic` and `all` FAIL as registered on bo5, the calibrated stack FAILS on
   bo6b and was dropped from this lane, and the combined folds arm has no receipt. Measured, not licensed: the exact
   folds ×1.062 / ×1.018, `lic` ×2.329 / ×1.959 (117.2 / 374.9), `all` ×2.597 / ×1.962 (130.7 / 375.5); beside, with their
   boxes: bo3 102.8 / 372.0 and 110.0 / 373.4, bo5 112.0 / 376.5 and 123.3 / 377.3.

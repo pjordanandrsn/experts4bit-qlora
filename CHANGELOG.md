@@ -1,5 +1,136 @@
 # Changelog
 
+## 0.35.2 — 2026-09-05 — documentation: head-to-head receipts (same-box vLLM; Unsloth QLoRA end-to-end)
+
+Documentation and tooling only; no runtime change. The `fast` extra's floor (grouped-nf4-gemm >= 0.30.0), the CI
+`--requires` assertion and the `>=0.35.0` compatibility record in `docs/system-manifest.json` are unchanged (the
+manifest is byte-identical to 0.35.1's). This release exists so the first end-to-end head-to-head against Unsloth is
+in the repository with its pre-registration, every amendment and every attempt, and so the machine-readable surfaces
+the 2026-09-05 audit found unchecked -- claim sentences, evidence paths, successors, licence labels -- are held by a
+check from here on.
+
+### vLLM 0.28.0 head-to-head, same box, identical prompt token ids (lane p37, receipt `bench/h2h-20260905/p37/`)
+
+- One rented RTX 5090 (Vast 49975016, EPYC 7Q83 host), one session, decode-vs-decode on the same 512-token prompt ids
+  (dumped once from the e4b harness's own window function and fed to vLLM verbatim; the reducer refuses to divide
+  receipts that disagree on the prompt sha): vLLM 0.28.0 (torch 2.13.0+cu130, triton 3.7.1) serving Qwen's
+  `Qwen3-30B-A3B-GPTQ-Int4` (Marlin, default CUDA graphs, kv auto; eager and fp8-KV arms beside) against
+  experts4bit-qlora 0.35.0 + grouped-nf4-gemm 0.30.0 -- the NF4 control and the licensed recipe (bo7b's
+  `calibexp_all_n128`, the pack rebuilt on that box), bo7's harness pieces byte-identical, sixteen arms with
+  non-adjacent self-pairs, every knob in the receipts. Pre-registered before the box was rented (`PREREG.md`); three
+  amendments (a staging refusal; the comparator fetch hang left to its alarm and recovered in-lane, the guarded follow-up
+  ran as `NOT NEEDED`; the registered K8 gate on that box's pack, below); no threshold, arm, prompt set or knob changed.
+- **What is quoted** (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`, measured): vLLM 286.0 tok/s at B=1 (3.497
+  ms/step; fp8-KV 300.9; eager 20.8) and 2030.0 aggregate at B=16 (7.882 ms; fp8-KV 2206.5; eager 322.5) against the NF4
+  control's 113.4 / 500.1 -- **vLLM / e4b-NF4 2.52 and 4.06**, the only licence-free ratio the lane can produce (self-pairs
+  inside 1.03×). **What is not quoted:** the ratio against the licensed stack. Every licensed e4b arm on that box is VOID
+  under the pre-registered pack-fingerprint rule -- the streamed calibration there packed 11522 gptq / 766 rtn expert
+  matrices where the licensed pack reads 11512 / 776 (the same recipe, ten of 12,288 matrices across the `min_rows`
+  threshold, not the licensed bytes; speed cannot inherit a licence). The recipe's speed on that box (236.4 / 1305.3
+  tok/s, ×2.08 / ×2.61 over its NF4 control -- bo7's ×2.067 / ×2.602 reproduced within 1%) is registered per arm as
+  measured and unlicensed. **Amendment 3** (pre-registered after `TP_DONE`, the registered K8 gate on that box's own
+  pack, bo6c's `k8()` verbatim, `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`): wikitext Δ −0.0230 ppl PASS, C4
+  validation **Δ +0.1093 ppl FAIL** against the +0.05 budget (the licensed pack read −0.0662 on the same window; the two
+  boxes' NF4 references agree to 0.0002 ppl) -- **NOT LICENSED, VOID stands**: no ratio against the licensed stack exists
+  on that lane, and the streamed calibration recipe is shown not to reproduce its licence across hosts (an open item in
+  `docs/STATUS.md`, filed as #405; bo6c's licence stands on its box). `e4b.serve.h2h.vllm.same-box` (2026-09-03, ×1.47 / ×1.55,
+  a different box, the RTN stack, vLLM version unrecorded) is superseded for current-position use and stays as measured.
+  One row per arm (`…arm.<engine>.b<B>.<arm>`, sixteen). Quality quoted, never equated.
+- `docs/capabilities.json` (`serve-moe-on-consumer-gpu`: the claim and the limitation reworded), `docs/STATUS.md`
+  ("Serving speed", "What changed", an open item: the licensed pack does not reproduce bit-for-bit across boxes), the
+  README results table and "Do not use this when", `docs/solutions/serve-large-moe-on-a-consumer-gpu.md`, a routing
+  query, `llms-full.txt` regenerated; the capability carries the host-dependence as a limitation.
+
+### e4b vs Unsloth, QLoRA end-to-end, one identical training problem (lane p38, receipt `bench/h2h-20260905/p38/`)
+
+- One rented RTX 5090 (Vast 49975389, train-anchor class `pcie-full/launch-fast` recorded): Qwen3-30B-A3B at one pinned
+  revision, the registered `clinical` fixture tokenised ONCE into a sha-asserted file both frameworks train on, seq 512,
+  r 8 / α 16 on attention q/k/v/o and every expert (321,257,472 trainable parameters asserted in every arm, router
+  frozen), the same AdamW call, batch 1, loss over all tokens, the same held-out eval -- experts4bit-qlora 0.35.0 +
+  grouped-nf4-gemm 0.30.0 in the image python (the fused `dgrad` path with NF4 attention, the shipped `TRAIN_ATTN_4BIT`
+  mechanism; transformers 5.16.1, bitsandbytes 0.50.1) against Unsloth 2026.9.2 + unsloth_zoo 2026.9.1 in its own
+  venv (its 4-bit MoE path, `native_torch` backend; transformers 5.5.0, bitsandbytes 0.50.2, peft 0.20.0 -- the
+  transformers/peft difference between the two pythons is a recorded environment difference). Pre-registered before
+  the box was rented (`PREREG.md` in the bundle, verbatim); every failed attempt a row; four amendments, all
+  environment or instrument (the comparator venv's pins; the loader's `refs/main` and a `torchao` import; the Unsloth
+  branch's snapshot-directory resolution; the U8 predicate evaluated on PEFT's wrapper, proven on the innermost module
+  and re-reduced) -- no workload, fixture, threshold or knob changed.
+- **The position at 60 steps** (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`, measured): s/step ratio Unsloth/e4b
+  **1.413** (2.151 vs 1.522 s -- e4b faster per step at this workload), peak VRAM 21.371 vs 23.141 GB, 157.1 vs 224.7
+  J/step, time to a held-out loss of 0.32 92.5 vs 130.3 s; held-out loss comparable, 0.2923 vs 0.2975
+  (`…quality-n60`, |Δ| 0.0052 ≤ the pre-registered 0.05 reading threshold). **At 200 steps the curves separate in
+  Unsloth's favour: 0.2713 vs 0.2881** (`…curve-n200`) -- a measured row in Unsloth's favour, quoted beside the
+  position wherever it is quoted; candidate causes (eval schedule, checkpointing mode, the two stacks' transformers /
+  peft versions, the expert adapter's precision -- bf16 on this side because the loader passes the model dtype to
+  `ExpertsLoRA`, fp32 on Unsloth's) are not established. e4b's fused-vs-reference pair passes its band on that box
+  (`…e4b-internal-parity`: 0.00131 / 0.01138, ×2.92 per step; informational, tp1 owns the licence). One row per arm
+  (`…arm.<framework>.<arm>`, eight, all VALID). The pre-registration predicted the opposite sign at this workload
+  (Unsloth faster per step, lower peak) and shipped the finding either way. Nothing is superseded or licensed by this
+  lane; the 2026-08-26 "1.17× ahead" memory (never a claim) is disqualified as a comparison. Found on the way:
+  the loader does not honour a pinned revision (e4b#404).
+- `docs/capabilities.json` (`qlora-fused-moe-experts`: the four claims and a limitation that says the 200-step curve
+  favours Unsloth), `docs/STATUS.md` ("What you get today"), `docs/solutions/qlora-fused-moe-experts.md` (measured
+  result, limitation, evidence), the README results table, three routing queries in `docs/discovery-queries.json`,
+  `llms-full.txt` regenerated.
+
+### The register, after the 2026-09-05 machine-readable audit
+
+- **Superseded:** `e4b.serve.tp.qwen3.b1.5090.2026-09-04` and `.b16` -- their "best licensed" configuration class
+  (round-to-nearest int4 experts + calibrated attention) failed its second text on lane bo5 -- now point at the census
+  rows of the licensed stack, `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `.b16` (which name them under
+  `supersedes`); their values stand as measured. The other four families' 2026-09-04 rows keep their numbers with the
+  "best licensed" label withdrawn in the sentence (measured, not licensed), the NF4-position rows of gpt-oss and
+  Gemma-4 say what they are, and the Gemma-4 / gpt-oss build-out rows no longer call themselves licensed under a gate
+  their own notes say does not exist for the family. No number, gate, threshold or verdict changed.
+- **`licensed_by`** (new field, `docs/claims-schema.md`): every active claim whose sentence asserts a licence names the
+  claim whose receipt holds the K8 verdict -- the bo6c Qwen3 verdict row for Qwen3's census and census-row claims,
+  the bo3 Granite row (its own receipt carries the +0.019 ppl pass) for Granite's; a row whose own receipt carries the
+  verdict names itself.
+- **Retired by id:** the 2026-08 "vLLM 6.31× ahead" figure (`e4b.retired.vllm-6.31x-ahead`; template prompts, a
+  different box) so that `e4b.serve.h2h.vllm.same-box`'s supersession resolves; that head-to-head now carries full
+  `conditions` (the vLLM version is not recorded in its receipt; the e4b arm is the 2026-09-03 RTN-int4 class of
+  `e4b.serve.b16.qwen3-30b.int4.5090`, not the licensed stack) and a populated `quoted_in`.
+  `e4b.retired.13.47x-training-speedup` is `retired` (its "about 7.2×" restatement has no receipt and was never a
+  claim); `e4b.retired.inference-md-decode-grid` names its successor; two dangling `supersedes` pointers resolve or
+  are dropped with the reason in notes.
+- **Evidence resolves:** the three bo3 `measured` rows that named run logs never committed now name the K8 receipts
+  beside their speed receipts (`bo3/*_ppl_*.json`); annotated paths are bare paths with the annotation moved to
+  notes; the scratch probe of `e4b.serve.gptoss.loader-faithful` is dropped and said so; cross-repository and
+  issue evidence use the structured forms the schema now defines (`{"repository", "path"}`, `{"url"}`).
+- **`measured_on`** on the ten tp1 rows that lacked it and, from their receipts' own dates (stated in notes), on the
+  twelve older measured rows.
+- **Stale notes:** `e4b.train.flagship-matrix`, `e4b.serve.tp.granite.*` and nine other rows no longer say "pending"
+  for things measured since; each states what is measured, with ids.
+- Prose: `docs/solutions/serve-large-moe-on-a-consumer-gpu.md`'s "licensed configuration per family" is rewritten
+  from STATUS's current positions (Qwen3 = the bo6c streamed stack; OLMoE and Mixtral = NF4; Gemma-4 = `r1epi` on NF4
+  with no instrument; Granite = `r12epi`; gpt-oss = its NF4 reference arm), its Evidence lists the census rows first;
+  `docs/STATUS.md` "Serving speed" leads with the licensed position and says the 2026-09-03 RTN class failed its
+  second text and is not the licensed stack; `serve-moe-on-consumer-gpu` cites the bo7 census rows and the bo6c
+  licence; `docs/SERVING-THROUGHPUT.md` is dated by section; abbreviated ids in STATUS and SERVING-THROUGHPUT are
+  written in full; the document count in `docs/INDEX.md` is the number it links (held by a test) and the README no
+  longer repeats it.
+
+### Checks (tooling, not the package)
+
+- New `scripts/check_claims_register.py` (CI, discoverability job; `tests/test_check_claims_register.py`): every
+  `evidence[]` entry is a path that exists at HEAD or a structured cross-repository / issue entry (cross-repository
+  entries verified against `--sibling`); `measured_on` required and ISO on every measured row; a `superseded` row's
+  successor chain reaches an active row; `retired` rows carry `retired_reason`; `supersedes` and `quoted_in` resolve;
+  no "pending"/"TBD" on an active row; a licence label names its verdict row.
+- `scripts/check_readme_claims.py` applies its id rules to the position documents (`docs/STATUS.md`,
+  `docs/SOLUTIONS.md`, `docs/solutions/*.md`, `docs/SERVING-THROUGHPUT.md`, `docs/SERVING-PARITY.md`,
+  `docs/METHODOLOGY.md`, `docs/ARCHITECTURE_SUPPORT.md`, `docs/CHOOSING.md`): every backticked id exists, an inactive
+  one only on a line that says superseded / retired / historical.
+- `scripts/check_system_manifest.py`: the CI kernel pin (`git+…@<sha>` in `ci.yml`) is the commit of a release tag at
+  or above the tag `consumer_ci_pin` names (`git ls-remote --tags`; without network a visible NOTE, never a silent
+  pass), and every kernel-pinning extra (`fast`, `test`) floors at or above the current record's; CI now also clones
+  the kernel package at its latest release tag and runs `--sibling` (byte-identical manifest) and the register check's
+  cross-repository evidence.
+- `scripts/check_capabilities.py` warns (never fails) when a capability whose primary mode is `serving` cites none of
+  the newest serving lane `docs/STATUS.md` quotes as the position.
+- CI installs grouped-nf4-gemm from the v0.30.1 release commit (`d58b39fb…`; the comment now states the pin's real
+  reason); `pyproject.toml`'s `[test]` floor is `grouped-nf4-gemm>=0.30.0`, equal to `fast`'s.
+
 ## 0.35.1 — 2026-09-05 — documentation (the tp1 training parity matrix) and one behaviour change (#397 → #402)
 
 The training parity matrix on real weights (lane tp1) with its documentation, plus **one behaviour change** from the

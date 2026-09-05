@@ -21,20 +21,21 @@ jobs:
           # Adopt newer ruff deliberately, with its findings, as its own change.
           python -m pip install --upgrade pip "ruff==0.15.22"
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          # grouped-nf4-gemm comes from a pinned git SHA (a main-reachable
-          # squash), not the latest release: the int4 serve-lane modules
-          # (int4_b32 / int4_pack_ref) entered its packaging after v0.17.0
-          # was cut, and all three tests/test_int4_*.py suites importorskip
-          # on them — against the release they SKIP wholesale and CI reports
-          # green coverage that never executed (surfaced on #310, where one
-          # unguarded import failed where the guarded suites just skipped).
-          # Installed BEFORE .[test] so the extra's version floor sees it
-          # already satisfied; the floor itself stays a plain range because
-          # the published wheel's metadata cannot carry a direct URL. Pin a
+          # grouped-nf4-gemm comes from a pinned git SHA, installed BEFORE
+          # .[test] so the extra's version floor (grouped-nf4-gemm>=0.30.0,
+          # pyproject [test]) sees it already satisfied and pip never swaps in
+          # a different wheel; the floor itself stays a plain range because
+          # the published wheel's metadata cannot carry a direct URL. The SHA
+          # is the commit of a RELEASE TAG of the kernel package
+          # (scripts/check_system_manifest.py asserts it is the tag the
+          # manifest's consumer_ci_pin names, or a later release), so the
+          # suite exercises the released kernel: d58b39fb… = v0.30.1. Pin a
           # SHA, never a branch name — a deleted branch has broken this
-          # install form before. Drop this line for a raised floor once a
-          # release ships the int4 modules.
-          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@0de0195ed7557459050f3ca35a12051220ae3020"
+          # install form before — and never a tag name, which can be moved.
+          # The int4 tripwire below is why a plain `pip install .[test]` is
+          # not enough: tests/test_int4_*.py importorskip on the int4 modules
+          # and would report green coverage that never executed (#310).
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@d58b39fbb51f15721a32953a4dbd3808a5d1f3a6"
           pip install -e ".[test]"
       - name: int4 modules present (tripwire)
         # The int4 suites guard with importorskip, so a gnf4 build without
@@ -96,10 +97,22 @@ jobs:
           python-version: "3.11"
       - name: capability contract (schema, pyproject, source symbols, claims, install routes)
         run: python scripts/check_capabilities.py
-      - name: README = current main (results-table numbers are the register's current values; no superseded/retired id; the release block is generated from CHANGELOG.md)
+      - name: claims register hygiene (evidence paths exist at HEAD; measured_on ISO; superseded/retired rows resolve; quoted_in resolves; no pending active row; licence labels name their verdict row)
+        run: python scripts/check_claims_register.py
+      - name: README = current main (results-table numbers are the register's current values; no superseded/retired id; the release block is generated from CHANGELOG.md) and the position documents cite only ids that exist
         run: python scripts/check_readme_claims.py
-      - name: system manifest (byte-identical across the two repositories; floors, ownership and vocabulary vs pyproject, claims, capabilities)
+      - name: system manifest (floors, ownership and vocabulary vs pyproject, claims, capabilities; every kernel-pinning extra >= the current floor; the CI kernel pin is a release-tag commit at or above the tag consumer_ci_pin names)
         run: python scripts/check_system_manifest.py
+      - name: system manifest is byte-identical in the sibling repository at its latest release tag (clone the kernel package at that tag, run --sibling)
+        run: |
+          set -euo pipefail
+          REPO=$(python -c "import json; print(json.load(open('docs/system-manifest.json'))['packages']['kernels']['repository'])")
+          TAG=$(git ls-remote --tags "$REPO" 'refs/tags/v*' | sed -n 's#.*refs/tags/\(v[0-9][0-9.]*\)$#\1#p' | sort -t. -k1,1V -k2,2n -k3,3n | tail -1)
+          test -n "$TAG"
+          echo "sibling $REPO at $TAG"
+          git clone --quiet --depth 1 --branch "$TAG" "$REPO" /tmp/sibling
+          python scripts/check_system_manifest.py --sibling /tmp/sibling
+          python scripts/check_claims_register.py --sibling /tmp/sibling
       - name: dependency-floor drift (every current document states pyproject's [fast] floor; historical lines are listed, not failed)
         run: python scripts/check_dependency_floor.py
       - name: change-impact contract (pull requests only -- docs/change-impact.json, what must move together)

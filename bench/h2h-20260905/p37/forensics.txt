@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD EPYC 7Q83 64-Core Processor
+NUMA node(s):                            1
+               total        used        free      shared  buff/cache   available
+Mem:             251          11         107           0         132         237
+cgroup memory.max 183318347776
+Build cuda_12.9.r12.9/compiler.36037853_0

@@ -7,7 +7,7 @@
     "experts4bit-qlora integrates it behind a version guard or raises the `fast` floor in pyproject.toml to the release that ships it; the pyproject comment ladder records why.",
     "The same change updates docs/system-manifest.json (a new compatibility record, or the current one), docs/capabilities.json (install/environment text), the CI `--requires` assertion and the current solution documents; scripts/check_dependency_floor.py and scripts/check_system_manifest.py hold them equal.",
     "A public entry point that changes (signature, return value, refusal condition) updates its docstring, docs/capabilities.json entrypoints/limitations, the affected docs/solutions page and CHANGELOG.md.",
-    "A measured result enters docs/claims.json first, then docs/STATUS.md, then prose that quotes the claim ID; retired and superseded claims are kept, never deleted. README.md is current main: scripts/check_readme_claims.py holds its results table to the register's current values (CI, discoverability job).",
+    "A measured result enters docs/claims.json first, then docs/STATUS.md, then prose that quotes the claim ID; retired and superseded claims are kept, never deleted. README.md is current main: scripts/check_readme_claims.py holds its results table to the register's current values and every position document's ids to the register (CI, discoverability job); scripts/check_claims_register.py holds the register to its own structure -- evidence paths that exist at HEAD, an ISO measured_on on every dated row, successors that resolve, no 'pending' on an active row, a licensed_by verdict row behind every licence label.",
     "The llms bundle is regenerated (python scripts/build_llms_bundle.py) whenever a bundled document changed; --check is a CI gate.",
     "Releases are cut from main by the maintainer; the release note's first paragraph follows docs/RELEASE_NOTES_GUIDE.md."
   ],
@@ -52,6 +52,7 @@
       ],
       "must_consider": [
         "the receipt under bench/ (a number is not published before its receipt exists; private receipts are marked evidence_private)",
+        "docs/claims.json itself: scripts/check_claims_register.py -- evidence paths exist at HEAD (a receipt is committed before it is named), measured_on is set, a superseded row names its successor, a licence label names its K8 verdict row (licensed_by)",
         "docs/STATUS.md (what you get today / what changed / what is open)",
         "prose that quotes the claim id (README.md, docs/solutions/*.md, docs/SERVING-THROUGHPUT.md, docs/SERVING-PARITY.md)",
         "README.md's results table: scripts/check_readme_claims.py fails when a number there is no longer the named claim's current value, when a row names a superseded or retired id, or when a measured-private claim is presented as measured -- a value or status that moved in the register moves the README row in the same diff",

@@ -36,7 +36,15 @@ every failure in that run; exit 2 when the check itself cannot run. Checks:
     whose headline path is ``supported`` -- the list summarises one path,
     never a flat flag;
   * --related <path/to/other/capabilities.json>: the other project lists this
-    one back (reciprocity), when given.
+    one back (reciprocity), when given;
+  * WARN (never fail): a capability whose PRIMARY mode (``modes[0]``) is
+    ``serving`` cites no claim from the newest serving lane docs/STATUS.md
+    quotes -- the
+    ``area: serve`` claims STATUS names by id, grouped by ``measured_on``; the
+    latest date is the position, and a serving capability that cites none of
+    its ids is headlining an older lane (the 2026-09-05 audit found the
+    capability citing 2026-09-04 rows while STATUS called the bo7 census the
+    position).
 
 Run with --import to also import each ``module:Symbol`` (needs the runtime).
 """
@@ -44,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import fnmatch
 import json
 import os
 import re
@@ -258,6 +267,43 @@ def _code_ref_resolver(root: Path, py: dict, tree_of):
     return resolve
 
 
+_STATUS_ID = re.compile(r"`(e4b\.[A-Za-z0-9._+*-]+)`")
+
+
+def newest_serving_lane(status_text: str, by_id: dict) -> tuple[str | None, set[str]]:
+    """``(measured_on, ids)`` of the newest ``area: serve`` claims docs/STATUS.md
+    quotes by backticked id (globs expanded); ``(None, set())`` when it quotes none."""
+    quoted: set[str] = set()
+    for ref in _STATUS_ID.findall(status_text):
+        if "*" in ref:
+            quoted.update(k for k in by_id if fnmatch.fnmatchcase(k, ref))
+        elif ref in by_id:
+            quoted.add(ref)
+    dated = {cid: str(by_id[cid].get("measured_on")) for cid in quoted
+             if by_id[cid].get("area") == "serve" and by_id[cid].get("measured_on")
+             and by_id[cid].get("status") in ACTIVE_STATUSES}
+    if not dated:
+        return None, set()
+    newest = max(dated.values())
+    return newest, {cid for cid, d in dated.items() if d == newest}
+
+
+def serving_position_warnings(doc: dict, by_id: dict, status_text: str) -> list[str]:
+    newest, ids = newest_serving_lane(status_text, by_id)
+    if not ids:
+        return []
+    out = []
+    for cap in doc["capabilities"]:
+        modes = cap.get("modes") or []
+        if not modes or modes[0] != "serving":
+            continue                                     # the primary mode is the first one listed
+        if not set(cap.get("claim_ids", [])) & ids:
+            out.append(f"{cap['id']}: primary mode 'serving' but claim_ids cite none of the {len(ids)} serve claim(s) "
+                       f"measured {newest} that docs/STATUS.md quotes as the position (e.g. {sorted(ids)[0]}); "
+                       "the capability headlines an older lane")
+    return out
+
+
 def _check_numbers(cap: dict, cid: str, errors: list[str]) -> None:
     def walk(node, path: str) -> None:
         if isinstance(node, str):
@@ -403,6 +449,10 @@ def main() -> int:
         for e in errors:
             print("FAIL:", e)
         return 1
+    status_path = root / str(proj.get("status_file") or "docs/STATUS.md")
+    if status_path.is_file():
+        for w in serving_position_warnings(doc, by_id, read_text(status_path)):
+            print("WARN:", w)
     print(f"OK: {a.capabilities}: {len(doc['capabilities'])} capabilities, "
           f"{sum(len(c['claim_ids']) for c in doc['capabilities'])} claim references, canonical package {pname}")
     return 0

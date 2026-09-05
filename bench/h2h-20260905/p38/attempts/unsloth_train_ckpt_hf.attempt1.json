@@ -1,0 +1,8 @@
+{
+ "framework": "unsloth",
+ "arm": "unsloth",
+ "tag": "ckpt_hf",
+ "status": "install_failed",
+ "reason": "unsloth venv did not install/import (see logs/pip_unsloth.log, logs/tripwire_unsloth.log)",
+ "steps": 60
+}

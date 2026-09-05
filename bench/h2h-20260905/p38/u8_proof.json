@@ -1,0 +1,36 @@
+{
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "when": "2026-09-05T16:52:52Z",
+ "before_peft": {
+  "n_modules": 48,
+  "n_pred_true": 48,
+  "param_kinds": [
+   "Params4bit"
+  ],
+  "example": "model.layers.0.mlp.experts"
+ },
+ "after_peft_wrapper": {
+  "n_modules": 48,
+  "n_pred_true": 0,
+  "wrapper_cls": [
+   "ParamWrapper"
+  ],
+  "param_kinds": [
+   "NoneType"
+  ],
+  "example": "base_model.model.model.layers.0.mlp.experts"
+ },
+ "after_peft_innermost": {
+  "n_modules": 48,
+  "n_pred_true": 48,
+  "inner_cls": [
+   "Qwen3MoeExperts"
+  ],
+  "param_kinds": [
+   "Params4bit"
+  ],
+  "depth": null,
+  "wrap_depth": 2
+ },
+ "load_s": 10.6
+}

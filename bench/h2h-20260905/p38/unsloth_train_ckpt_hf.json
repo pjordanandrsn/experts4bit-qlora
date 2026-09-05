@@ -1,0 +1,776 @@
+{
+ "framework": "unsloth",
+ "fam": "qwen3",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "arm": "unsloth",
+ "tag": "ckpt_hf",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "optimizer": "torch.optim.AdamW(lr) torch defaults",
+ "grad_ckpt": "hf:True (via get_peft_model)",
+ "attn_4bit": false,
+ "n_attn4": 0,
+ "tokens": {
+  "path": "tokens_clinical.json",
+  "sha256": "81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583",
+  "n_train": 1200,
+  "eval_rows_used": 48,
+  "tokenizer_agree": true
+ },
+ "prereg": "h2h/P38-UNSLOTH-PREREG.md",
+ "harness": "p38_arm.py (tp1_train_smoke.py + U1-U10)",
+ "env": {
+  "framework": "unsloth",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.5.0",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-a3575b56-527d-91e3-dc1d-623b49165706",
+   "pci.bus_id": "00000000:01:00.0",
+   "pcie.link.gen.current": "5",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "600.00",
+   "clocks.max.sm": "3105",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.D4",
+   "driver_version": "595.84",
+   "cpu": "Intel(R) Core(TM) i9-14900K",
+   "cpu_threads": 32,
+   "host_mem_gib": 188.6,
+   "vast_instance_id": "49975389",
+   "container_host": "de4069ec5db6"
+  },
+  "anchor_json": null,
+  "box_class": null,
+  "unsloth_env": {
+   "UNSLOTH_ENABLE_LOGGING": "1"
+  },
+  "experts4bit-qlora": null,
+  "grouped-nf4-gemm": null,
+  "bitsandbytes": "0.50.2",
+  "peft": "0.20.0",
+  "unsloth": "2026.9.2",
+  "unsloth_zoo": "2026.9.1",
+  "triton": "3.4.0"
+ },
+ "load_s": 14.7,
+ "verify": {
+  "n_quantized": null,
+  "n_unquantized": null
+ },
+ "census": {
+  "Params4bit_expert_stacks": 96,
+  "Params4bit_other": 192,
+  "Linear4bit": 384,
+  "Linear_bf16": 1,
+  "Linear_fp32": 0,
+  "Experts4bit": 0,
+  "ExpertsLoRA": 0,
+  "LoRALinear": 0,
+  "router_gate": [
+   {
+    "name": "base_model.model.model.layers.0.mlp.gate",
+    "cls": "Qwen3MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.gate",
+    "cls": "Qwen3MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "n": 48
+   }
+  ],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": [
+   {
+    "name": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     201326592,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     100663296,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     201326592,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     100663296,
+     1
+    ]
+   }
+  ]
+ },
+ "engagement_banners": [
+  "==((====))==  Unsloth 2026.9.2: Fast Qwen3_MoE patching. Transformers: 5.5.0.",
+  "Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']"
+ ],
+ "unsloth_bnb4bit_modules": {
+  "n_experts_modules": 48,
+  "n_bnb4bit": 0,
+  "n_bnb4bit_unwrapped": 48,
+  "inner_param_types": [
+   "Params4bit"
+  ]
+ },
+ "trainable_params": 321257472,
+ "trainable_tensors": 576,
+ "adapter_dtypes_before": {
+  "torch.float32": 576
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 576
+ },
+ "lora_cast_to_fp32": 0,
+ "init_sha": "83332aed4cb565b9b2a2e0f2834beec231e4f12f59bf8187cdc635e51e30b82f",
+ "n_patched": 0,
+ "enable_reason": "",
+ "kernel_counter_key": "moe_bnb4bit_backend",
+ "kernel_calls_per_step": [
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96,
+  96
+ ],
+ "kernel_calls_per_step_min": 96,
+ "experts_forward_calls_per_step_min": 96,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 96,
+   "moe_bnb4bit_backend": 96
+  }
+ ],
+ "C1_tensors_hashed": 288,
+ "C1_bytes_hashed": 14948499456,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 3.65496,
+ "loss_last": 0.26056,
+ "loss_mean_last20": 0.31974,
+ "eval_loss_step0": 3.69676,
+ "eval_loss_final": 0.29753,
+ "eval_curve": [
+  {
+   "step": 0,
+   "heldout_loss": 3.69676,
+   "train_wall_s": 0.0
+  },
+  {
+   "step": 20,
+   "heldout_loss": 0.57976,
+   "train_wall_s": 43.77
+  },
+  {
+   "step": 40,
+   "heldout_loss": 0.36718,
+   "train_wall_s": 86.75
+  },
+  {
+   "step": 60,
+   "heldout_loss": 0.29753,
+   "train_wall_s": 130.06
+  }
+ ],
+ "target_loss": 0.32,
+ "time_to_target_s": 130.06,
+ "time_to_target_note": null,
+ "s_per_step": 3.4929,
+ "s_per_step_median_11plus": 2.1458,
+ "step_ms": [
+  3136.2,
+  2120.7,
+  2157.5,
+  2106.8,
+  2109.4,
+  2133.8,
+  2110.6,
+  2140.4,
+  2126.9,
+  2110.2,
+  2098.3,
+  2094.7,
+  2156.2,
+  2177.5,
+  2331.1,
+  2118.4,
+  2127.8,
+  2119.3,
+  2140.2,
+  2156.6,
+  2147.9,
+  2156.0,
+  2119.3,
+  2118.6,
+  2112.5,
+  2145.2,
+  2116.7,
+  2117.7,
+  2123.8,
+  2116.3,
+  2158.3,
+  2153.1,
+  2129.8,
+  2167.7,
+  2145.8,
+  2145.8,
+  2322.2,
+  2175.4,
+  2127.1,
+  2174.5,
+  2158.4,
+  2156.6,
+  2138.5,
+  2126.8,
+  2142.6,
+  2162.2,
+  2190.7,
+  2174.8,
+  2179.9,
+  2182.6,
+  2153.9,
+  2143.9,
+  2195.7,
+  2138.0,
+  2141.3,
+  2142.8,
+  2135.5,
+  2154.0,
+  2314.7,
+  2176.4
+ ],
+ "train_wall_s": 130.06,
+ "window_wall_s": 209.57,
+ "tokens_per_step": [
+  86,
+  85,
+  91,
+  84,
+  81,
+  91,
+  86,
+  88,
+  85,
+  82,
+  78,
+  84,
+  91,
+  93,
+  92,
+  82,
+  81,
+  82,
+  88,
+  91,
+  88,
+  93,
+  82,
+  82,
+  82,
+  88,
+  82,
+  81,
+  81,
+  82,
+  88,
+  87,
+  82,
+  91,
+  86,
+  84,
+  82,
+  93,
+  78,
+  94,
+  91,
+  88,
+  84,
+  82,
+  88,
+  88,
+  94,
+  90,
+  92,
+  93,
+  85,
+  82,
+  94,
+  85,
+  88,
+  82,
+  82,
+  82,
+  87,
+  91
+ ],
+ "tokens_total": 5175,
+ "tokens_per_s": 39.8,
+ "peak_vram_gb": 23.137,
+ "idle_w": 66.7,
+ "mean_w": 168.7,
+ "power_samples": 961,
+ "sampler": true,
+ "joules_per_step": 221.28,
+ "adapter": {
+  "path": "/root/p38/adapters/ckpt_hf",
+  "bytes": 1285115892,
+  "files": [
+   "README.md",
+   "adapter_config.json",
+   "adapter_model.safetensors"
+  ],
+  "tensors": 576,
+  "params": 321257472,
+  "dtypes": [
+   "F32"
+  ]
+ },
+ "losses": [
+  3.65496,
+  3.54376,
+  3.12575,
+  2.69738,
+  2.67788,
+  2.13224,
+  1.77052,
+  1.88341,
+  1.50949,
+  1.45272,
+  1.28296,
+  0.96179,
+  0.8287,
+  1.02267,
+  0.66235,
+  0.93642,
+  0.66987,
+  0.58829,
+  0.70822,
+  0.58771,
+  0.58853,
+  0.63104,
+  0.44357,
+  0.42887,
+  0.38829,
+  0.33773,
+  0.42808,
+  0.57901,
+  0.5669,
+  0.36219,
+  0.38568,
+  0.40726,
+  0.42271,
+  0.36802,
+  0.35531,
+  0.33985,
+  0.34993,
+  0.38384,
+  0.32343,
+  0.38742,
+  0.31994,
+  0.26364,
+  0.46173,
+  0.29925,
+  0.317,
+  0.28039,
+  0.29187,
+  0.42977,
+  0.29084,
+  0.31556,
+  0.28394,
+  0.3657,
+  0.25682,
+  0.38572,
+  0.2808,
+  0.32748,
+  0.30834,
+  0.34326,
+  0.31216,
+  0.26056
+ ]
+}

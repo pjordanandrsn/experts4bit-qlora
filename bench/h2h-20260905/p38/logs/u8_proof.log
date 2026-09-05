@@ -1,0 +1,46 @@
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+==((====))==  Unsloth 2026.9.2: Fast Qwen3_MoE patching. Transformers: 5.5.0.
+   \\   /|    NVIDIA GeForce RTX 5090. Num GPUs = 1. Max memory: 31.358 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.8.0+cu128. CUDA: 12.0. CUDA Toolkit: 12.8. Triton: 3.4.0
+\        /    Bfloat16 = TRUE. FA [Xformers = None. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Loading weights:   0%|          | 0/531 [00:00<?, ?it/s]Loading weights:   1%|          | 4/531 [00:00<00:18, 28.67it/s]Loading weights:   3%|▎         | 15/531 [00:00<00:07, 66.99it/s]Loading weights:   5%|▍         | 26/531 [00:00<00:06, 81.99it/s]Loading weights:   7%|▋         | 37/531 [00:00<00:05, 89.59it/s]Loading weights:   9%|▉         | 48/531 [00:00<00:05, 93.92it/s]Loading weights:  11%|█         | 59/531 [00:00<00:04, 96.59it/s]Loading weights:  13%|█▎        | 70/531 [00:00<00:04, 98.36it/s]Loading weights:  15%|█▌        | 81/531 [00:00<00:04, 99.53it/s]Loading weights:  17%|█▋        | 92/531 [00:01<00:04, 99.85it/s]Loading weights:  19%|█▉        | 103/531 [00:01<00:04, 100.53it/s]Loading weights:  21%|██▏       | 114/531 [00:01<00:04, 101.08it/s]Loading weights:  24%|██▎       | 125/531 [00:01<00:04, 101.42it/s]Loading weights:  26%|██▌       | 136/531 [00:01<00:03, 101.64it/s]Loading weights:  28%|██▊       | 147/531 [00:01<00:03, 101.67it/s]Loading weights:  30%|██▉       | 158/531 [00:01<00:03, 101.74it/s]Loading weights:  32%|███▏      | 169/531 [00:01<00:03, 101.76it/s]Loading weights:  34%|███▍      | 180/531 [00:01<00:03, 101.80it/s]Loading weights:  36%|███▌      | 191/531 [00:01<00:03, 101.62it/s]Loading weights:  38%|███▊      | 202/531 [00:02<00:03, 101.66it/s]Loading weights:  40%|████      | 213/531 [00:02<00:03, 101.79it/s]Loading weights:  42%|████▏     | 224/531 [00:02<00:03, 101.88it/s]Loading weights:  44%|████▍     | 235/531 [00:02<00:02, 101.94it/s]Loading weights:  46%|████▋     | 246/531 [00:02<00:02, 101.89it/s]Loading weights:  48%|████▊     | 257/531 [00:02<00:02, 101.86it/s]Loading weights:  50%|█████     | 268/531 [00:02<00:02, 101.89it/s]Loading weights:  53%|█████▎    | 279/531 [00:02<00:02, 101.96it/s]Loading weights:  55%|█████▍    | 290/531 [00:02<00:02, 101.38it/s]Loading weights:  57%|█████▋    | 301/531 [00:03<00:02, 101.56it/s]Loading weights:  59%|█████▉    | 312/531 [00:03<00:02, 101.42it/s]Loading weights:  61%|██████    | 323/531 [00:03<00:02, 101.40it/s]Loading weights:  63%|██████▎   | 334/531 [00:03<00:01, 101.54it/s]Loading weights:  65%|██████▍   | 345/531 [00:03<00:01, 101.74it/s]Loading weights:  67%|██████▋   | 356/531 [00:03<00:01, 101.88it/s]Loading weights:  69%|██████▉   | 367/531 [00:03<00:01, 102.04it/s]Loading weights:  71%|███████   | 378/531 [00:03<00:01, 102.14it/s]Loading weights:  73%|███████▎  | 389/531 [00:03<00:01, 101.91it/s]Loading weights:  75%|███████▌  | 400/531 [00:04<00:01, 101.82it/s]Loading weights:  77%|███████▋  | 411/531 [00:04<00:01, 101.92it/s]Loading weights:  79%|███████▉  | 422/531 [00:04<00:01, 101.97it/s]Loading weights:  82%|████████▏ | 433/531 [00:04<00:00, 102.13it/s]Loading weights:  84%|████████▎ | 444/531 [00:04<00:00, 102.18it/s]Loading weights:  86%|████████▌ | 455/531 [00:04<00:00, 102.18it/s]Loading weights:  88%|████████▊ | 466/531 [00:04<00:00, 102.17it/s]Loading weights:  90%|████████▉ | 477/531 [00:04<00:00, 102.13it/s]Loading weights:  92%|█████████▏| 488/531 [00:04<00:00, 102.05it/s]Loading weights:  94%|█████████▍| 499/531 [00:04<00:00, 101.71it/s]Loading weights:  96%|█████████▌| 510/531 [00:05<00:00, 101.75it/s]Loading weights:  98%|█████████▊| 521/531 [00:05<00:00, 101.78it/s]Loading weights: 100%|██████████| 531/531 [00:05<00:00, 100.41it/s]
+Unsloth: Explicit target_modules are constrained by the finetune_(vision|language|attention|mlp) filters; adapters attach only where both select.
+Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']
+{
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "when": "2026-09-05T16:52:52Z",
+ "before_peft": {
+  "n_modules": 48,
+  "n_pred_true": 48,
+  "param_kinds": [
+   "Params4bit"
+  ],
+  "example": "model.layers.0.mlp.experts"
+ },
+ "after_peft_wrapper": {
+  "n_modules": 48,
+  "n_pred_true": 0,
+  "wrapper_cls": [
+   "ParamWrapper"
+  ],
+  "param_kinds": [
+   "NoneType"
+  ],
+  "example": "base_model.model.model.layers.0.mlp.experts"
+ },
+ "after_peft_innermost": {
+  "n_modules": 48,
+  "n_pred_true": 48,
+  "inner_cls": [
+   "Qwen3MoeExperts"
+  ],
+  "param_kinds": [
+   "Params4bit"
+  ],
+  "depth": null,
+  "wrap_depth": 2
+ },
+ "load_s": 10.6
+}
