@@ -16,13 +16,63 @@ entry; CI can enforce that later.
   "measured_on": "2026-09-03",
   "status": "verified" | "measured" | "projected" | "retired" | "superseded" | "open",
   "tier": "confirmed" | "measured" | "projected",   // repo's existing evidence tiers
-  "evidence": ["bench/hybrid-g9/b1/RESULTS-b1-decomposition.md"],  // PUBLIC paths only
+  "evidence": ["bench/hybrid-g9/b1/RESULTS-b1-decomposition.md"],  // PUBLIC paths only; see "Evidence entries"
   "evidence_private": ["INT4B16/P25-PARITY.md"],    // exists but not in this repo -- reader cannot check it
   "supersedes": ["<id>"], "superseded_by": "<id>",
   "retired_reason": "why, in one sentence, with the measurement that retired it",
+  "licensed_by": "<id>",                             // the K8 verdict row behind a licence label; see below
   "quoted_in": ["README.md#L45", "docs/METHODOLOGY.md#13"]
 }
 ```
+
+## What the register check enforces (`scripts/check_claims_register.py`, CI)
+
+Added 2026-09-05 after an audit found every check keying on `status` alone.
+Each rule below is mechanical and fails the discoverability job.
+
+**Evidence entries.** Every element of `evidence[]` is one of:
+
+- a bare repository path that exists at HEAD, optionally with a `#fragment`
+  (`docs/METHODOLOGY.md#10`); no free text, globs or annotations -- what a
+  path was run with goes in `notes`, and a script that was never committed
+  is not evidence (say so in `notes` and drop it);
+- `{"repository": "owner/name", "path": "kernel/RESULTS.md"}` -- a file in
+  another repository (the kernel package's receipts); verified against a
+  checkout when the check is given `--sibling PATH` and that checkout's
+  slug matches, otherwise accepted by shape;
+- `{"url": "https://github.com/owner/name/issues/N"}` -- an issue or pull
+  request on github.com, for `open` items and refusals tracked there.
+
+**Dates.** `measured`, `measured-private`, `verified` and `confirmed` rows
+carry `measured_on` as `YYYY-MM-DD`. When the run's own date is not on
+record, the receipt's date is used and `notes` says so.
+
+**Successors.** A `superseded` row carries `superseded_by`; following it
+(through other superseded rows, never a cycle) reaches an ACTIVE row. A
+`retired` row carries `retired_reason`. Every `supersedes` id exists. A
+restatement with no receipt of its own is not a successor: the old row is
+`retired`, not `superseded`.
+
+**Quotes.** Each `quoted_in` entry is `<path>[#fragment][ free text]` and the
+path exists (`CHANGELOG.md 0.28.0`, `README.md (results table)`).
+
+**No pending on an active row.** `claim` and `notes` of an ACTIVE row never
+say "pending" or "TBD": state what is measured, with ids, or open a row.
+
+**Licence labels (`licensed_by`).** An ACTIVE row whose `claim` sentence
+asserts a licence -- the word "licensed", not disclaimed by "not licensed" /
+"never licensed" / "unlicensed" / "not a licensed" in the same sentence --
+carries `licensed_by`: the id of the ACTIVE claim whose receipt holds the K8
+verdict that licenses the configuration (the two-text pass for a calibrated
+pack, the one-text pass for an uncalibrated one, in the gate's own units).
+A row whose own receipt carries the verdict names itself (the bo3 Granite
+row's notes hold its +0.019 ppl pass; the bo6c Qwen3 row IS the verdict).
+A family with no instrument (Gemma-4, gpt-oss on raw text) has no verdict
+row, so no active sentence about it may say "licensed": it says "position
+with the no-instrument caveat" or "measured, not licensed". When a later
+row records FAIL for the same configuration class, the earlier sentence is
+reworded (numbers unchanged) or the row is superseded by the row of the
+configuration that is licensed -- never left saying "best licensed".
 
 Status meanings:
 - **verified** — reproduced under stated conditions, receipt public in this repo.

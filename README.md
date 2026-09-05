@@ -58,8 +58,8 @@ a version is reached from the release block at the top.
   or fit on NVMe but not host RAM (serve or train from an arena).
 - You want to train a 30B-class MoE on a 12–24 GB consumer GPU (expert
   offload; `e4b.offload.fits-30b-class`), or serve one on an RTX 5090 —
-  the only card the serving claims (`e4b.serve.tp.*`,
-  `e4b.serve.buildout.*`, `e4b.serve.census.*`) are measured on.
+  the only card the serving claims (`e4b.serve.census.bo7.*`, the position;
+  `e4b.serve.buildout.*` behind it) are measured on.
 - You are choosing between the reference per-expert path, the batched
   path, the fused kernel path, host-streamed residency and the NVMe tier —
   [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/CHOOSING.md) is the decision page.
@@ -180,11 +180,12 @@ the register moves here or the build goes red.
 | Expert offload trains 30B-class MoEs on 12 GB (`e4b.offload.fits-30b-class`) | Qwen3-30B-A3B peaks 7.16 GB, Gemma-4-26B-A4B 8.47 GB | measured |
 | Fused training path, two 30B MoEs × five datasets (`e4b.train.flagship-matrix`) | 1.52–1.81× per step at 0.75–0.81× VRAM, loss parity, frozen stack bit-identical over 16.31 GB | measured |
 | Training on real weights, per family, under the shipped code — the fused path vs the per-expert loop on one rented RTX 5090, verdicts in the registered units (`e4b.train.parity.tp1.granite.fused.2026-09-05`, `e4b.train.parity.tp1.olmoe.fused.2026-09-05`, `e4b.train.parity.tp1.qwen3.fused.2026-09-05`, `e4b.train.parity.tp1.gemma4.fused.2026-09-05`, `e4b.train.parity.tp1.mixtral.fused.2026-09-05`, `e4b.train.parity.tp1.granite.batched.2026-09-05`, `e4b.train.parity.tp1.mixtral.batched.2026-09-05`) | `enable_fast_train(dgrad=True)` PASS on every family that has one, \|Δ final train loss\| 0.01329 on Granite, 0.01327 on OLMoE, 0.01315 on Qwen3 (resident), 0.02385 on Gemma-4 (the `-it` checkpoint), 0.00953 on Mixtral (offload); `enable_batched_train` PASS 0.01553 on Granite and 0.00766 on Mixtral, VOID on OLMoE, Qwen3 and Gemma-4 (the kernel not reached on every layer); gpt-oss expert-LoRA REFUSED, its attention-only arm trains, its MXFP4 route experimental | measured |
+| Against Unsloth's 4-bit MoE QLoRA path, end-to-end, one identical training problem on one rented RTX 5090 — Qwen3-30B-A3B, the fused `dgrad` path + NF4 attention vs Unsloth 2026.9.2 (`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05`, `e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.quality-n60`, `e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200`, `e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.e4b-internal-parity`) | at 60 steps, s/step Unsloth/e4b 1.413 (2.151 vs 1.522 s — e4b faster per step at this workload), peak 21.371 vs 23.141 GB, 157.1 vs 224.7 J/step, time to a held-out loss of 0.32 92.5 vs 130.3 s, held-out comparable (0.2923 vs 0.2975, \|Δ\| 0.0052 ≤ 0.05); **at 200 steps Unsloth's held-out loss is lower, 0.2713 vs 0.2881 (Δ −0.017)** — quoted beside the position, causes not established; e4b fused vs its own reference PASS (0.00131 / 0.01138), 2.92× per step | measured |
 | Arena vs pinned host RAM, at a descending cap (`e4b.offload.arena-vs-host-ram`) | 2.56× / 3.80× / 6.40× less host RAM (OLMoE / Gemma-4 / Qwen3-30B) | measured |
 | Paged decode vs the model's own attention (`e4b.parity.*.paged-vs-own-attention`, `e4b.parity.gemma4.no-reference`, `e4b.parity.gemma4.fp8-share`) | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; Gemma-4 has no reference at this resolution — its own cached forward swings −0.107 … +0.271 nats across windows — and the paged path's one measured cost there is the fp8 cache, 0.046 nats ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
 | Serving: the licensed best per family under the shipped code, one rented RTX 5090, every ratio to that family's own NF4 arm on the same box (`e4b.serve.census.bo7.*.b1.5090.2026-09-05`, `e4b.serve.census.bo7.*.b16.5090.2026-09-05`) | Qwen3-30B-A3B ×2.067 at B=1 (238.1 tok/s on that box; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a projection) and ×2.602 at B=16 (1327.5 tok/s); Granite-3.1-3B ×1.341 (304.9) / ×1.160 (1836.8); Gemma-4-26B ×1.281 (103.6) / ×1.106 (675.8), exact arithmetic on NF4 because that family has no K8 instrument; OLMoE (282.5 / 1347.5), Mixtral (50.3 / 191.4) and gpt-oss (144.5 / 761.6) sit at ×1.000, their NF4 or reference arm — nothing above it is licensed; the measured-but-unlicensed arms are in [`SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-THROUGHPUT.md) | measured |
 | Qwen3-30B-A3B's licensed serving stack passes the registered K8 gate on both texts: streamed 64k-token GPTQ-calibrated int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue + decode glue (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) | −0.0528 ppl on wikitext and −0.0662 on C4 validation against the same-cut NF4, both inside the family's 0.0095-nat floor — at parity or better, licensed under the unchanged gate, no improvement claimed by a number | measured |
-| Same box, same prompts, against vLLM (GPTQ-Int4) (`e4b.serve.h2h.vllm.same-box`) | vLLM ahead 1.47× at B=1, 1.55× at B=16 | measured-private |
+| Same box, same prompts, against vLLM (GPTQ-Int4) (`e4b.serve.h2h.vllm.same-box`) | vLLM ahead 1.47× at B=1, 1.55× at B=16 — the e4b arm is the 2026-09-03 round-to-nearest int4 class, not the licensed stack, and the vLLM version is not recorded in the receipt | measured-private |
 | DeepSeek-V4-Flash (284B, 147 GB of experts on disk) (`e4b.serve.deepseek-v4`) | loads in ~10 s at 8.74 GiB peak VRAM and generates | measured |
 | Informed hot sets vs by-index, identical VRAM (`e4b.serve.informed-hot-sets`) | +37.1% on DeepSeek-V4-Flash; the gain is a property of the host | measured |
 
@@ -209,6 +210,13 @@ means:
   routed grouped MoE execution and training's input gradient are separate
   contracts ([`docs/BITSANDBYTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/BITSANDBYTES.md)).
   The measurement stands as its receipt made it.
+- **A head-to-head is one workload on one box.** The Unsloth row above is
+  ≈86 tokens per step at batch 1 on a resident 30B MoE; its 200-step curve
+  favours Unsloth and is quoted beside the 60-step position wherever that
+  position is quoted (`bench/h2h-20260905/p38/`, the pre-registration and
+  every amendment in the bundle). The vLLM row is the unlicensed 2026-09-03
+  stack; the licensed stack's head-to-head is lane P37, registered when its
+  receipt lands.
 - **Ratios travel; absolutes do not.** The 5090 class carries ~8.5%
   inter-box dispersion; the same config on two 4090s moved 8.6% in
   s/step. Quote the card, or quote a ratio.

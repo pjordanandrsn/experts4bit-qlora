@@ -102,6 +102,40 @@ README. The same reading, per family and per path:
 
 Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`. Row statuses in the tp1 receipt are one of OK / REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL with the parity verdict (PASS / FAIL / VOID) as a separate column.
 
+**Against Unsloth, end-to-end, on one identical training problem** (lane
+p38, 2026-09-05, one rented RTX 5090, box 49975389; **measured** — receipt
+[`bench/h2h-20260905/p38/`](../bench/h2h-20260905/p38/README.md), table in
+its [`RESULTS-p38.md`](../bench/h2h-20260905/p38/RESULTS-p38.md), the
+pre-registration verbatim as its `PREREG.md`; register
+`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05` with its `.quality-n60`,
+`.curve-n200` and `.e4b-internal-parity` rows and one row per arm).
+Qwen3-30B-A3B at one pinned revision, the registered `clinical` fixture
+tokenised once and asserted by sha in every arm, seq 512, r 8 / α 16 on
+attention q/k/v/o and every expert, the router frozen, 321,257,472
+trainable parameters asserted, the same optimizer, LR, batch, steps,
+precision and held-out eval on both sides — experts4bit-qlora 0.35.0 +
+grouped-nf4-gemm 0.30.0 (the fused `dgrad` path with NF4 attention, the
+shipped `TRAIN_ATTN_4BIT` mechanism) against Unsloth 2026.9.2 +
+unsloth_zoo 2026.9.1 (its 4-bit MoE path, `native_torch` backend; the two
+stacks' transformers/peft versions differ and are recorded). **At 60 steps:
+s/step ratio Unsloth/e4b 1.413** (2.151 vs 1.522 s — e4b faster per step at
+this workload), peak VRAM 21.371 vs 23.141 GB, 157.1 vs 224.7 J/step, time
+to a held-out loss of 0.32 92.5 vs 130.3 s, held-out loss comparable
+(0.2923 vs 0.2975, |Δ| 0.0052 ≤ the 0.05 reading threshold). **At 200 steps
+the curves separate in Unsloth's favour: 0.2713 vs 0.2881** — e4b's
+flattens near 0.29 from step 60 while Unsloth's keeps falling. That row is
+quoted beside the position wherever the position is quoted; its causes —
+the eval schedule, the checkpointing mode, the two stacks' transformers /
+peft versions, the expert adapter's precision (bf16 on this side, because
+the loader passes the model dtype to `ExpertsLoRA`; fp32 on Unsloth's) —
+are candidates, not established. e4b's own fused-vs-reference pair passes
+its band on that box (0.00131 / 0.01138, ×2.92 per step; informational,
+tp1 owns the licence). The pre-registration predicted the opposite sign at
+this workload and said the finding ships either way; it does. One workload
+(≈86 tokens per step, batch 1, resident), one box, one family: no general
+speed claim, nothing licensed, and the 2026-08-26 "1.17× ahead" memory
+(never a claim) is disqualified as a comparison.
+
 **Serving is at parity with the model's own attention on three of four
 families, and not on the fourth.** This is the part that changed most
 this week. Measured against a *chunk-free* reference — one full forward,
@@ -139,16 +173,32 @@ measured cost is the fp8 cache and dot: 0.046 nats, concentrated on the
 five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
 §13.2; numbers: SERVING-PARITY.
 
-**Serving speed**, single-stream Qwen3-30B-A3B on a rented RTX 5090:
-about 100 tok/s on the NF4 baseline, 204.6 tok/s with calibrated int4
-attention and int4 experts, and about 1,238 tok/s aggregate at B=16.
-On the 2026-09-04 validation box the same stack went from 156.1 to
-177.9 tok/s at B=1 (×1.14) when 0.34.0's round-2 fold started engaging
-on the calibrated int4 attention it had silently skipped (#375) —
-measured, receipt in the bo3 bundle below.
-The single-stream figures are **measured-private** (register: `e4b.serve.b1.*`); the B=16 figure carries a public receipt and is **measured** (`e4b.serve.b16.qwen3-30b.int4.5090`). On the same box, vLLM is ahead by
-1.47× at B=1 and 1.55× at B=16 with identical prompts — that comparison
-is the honest one and it is also measured-private.
+**Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed
+position is the census's, below — **×2.067 at B=1 (238.1 tok/s on box
+49916675) and ×2.602 at B=16 (1327.5 tok/s)**, the streamed-calibrated
+stack bo6c licensed on both texts
+(`e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` /
+`e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`, **measured**). The
+2026-09-03 numbers this paragraph used to lead with — about 100 tok/s on
+the NF4 baseline, 204.6 tok/s with calibrated int4 attention and
+round-to-nearest int4 experts, about 1,238 tok/s aggregate at B=16 — are
+real and stand as measured (`e4b.serve.b1.qwen3-30b.int4attn-calib.5090`,
+**measured-private**; `e4b.serve.b16.qwen3-30b.int4.5090`, **measured**),
+but **that RTN-int4 configuration class later FAILED the registered gate
+on its second text** (lane bo5, +0.063 ppl on C4 validation, below) and
+**is not the licensed stack**: quote them as the speed of an unlicensed
+configuration on its box, never as the position. On the 2026-09-04
+validation box the same class went from 156.1 to 177.9 tok/s at B=1
+(×1.14) when 0.34.0's round-2 fold started engaging on the calibrated int4
+attention it had silently skipped (#375) — measured, receipt in the bo3
+bundle below, the same caveat. On the same box as the 2026-09-03 stack,
+vLLM (GPTQ-Int4) is ahead by 1.47× at B=1 and 1.55× at B=16 with identical
+prompts (`e4b.serve.h2h.vllm.same-box`, **measured-private**): the honest
+comparison on record, with two limits its register entry now states — the
+vLLM version is not recorded in that receipt, and the e4b arm is the
+unlicensed RTN class, not the licensed stack. The comparison against the
+licensed stack with a recorded vLLM version is lane P37, registered when
+its receipt lands.
 
 **Per-family throughput is now measured in-repo** (2026-09-04): six
 families under one protocol on one rented 5090 class, with every refused
@@ -227,8 +277,8 @@ attention + folds + epilogue + glue — passes on both texts (wikitext
 −0.060 / c4val1 +0.035,
 `e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; that
 pack was calibrated all-at-once) and reads 158.0 tok/s at B=1 / 993.6 at
-B=16 on that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1` /
-`.b16` — quoted with its box, no ratio: the lane has no NF4 speed arm).
+B=16 on that Threadripper-hosted box (`e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04` /
+`e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04` — quoted with its box, no ratio: the lane has no NF4 speed arm).
 **Qwen3-30B-A3B's licensed serving stack is the streamed one** (bo6c,
 2026-09-05, same box, receipt in the same bundle): sequentially calibrated
 int4 experts at 64k C4-validation tokens + C4-calibrated int4 attention +
@@ -275,19 +325,19 @@ over NF4 on this box; rental-measured tok/s on this box; anchor-class
 projection — which exists only for Qwen3-30B at B=1 and is not computed
 here): **Granite's licensed stack** (NF4 experts + folds + epilogue) is
 ×1.341 at B=1 (304.9 tok/s) and ×1.160 at B=16 (1836.8;
-`e4b.serve.census.bo7.granite.b1` / `.b16`); **OLMoE's position is NF4**
-(282.5 / 1347.5, ×1.000) because nothing above it is licensed on this
+`e4b.serve.census.bo7.granite.b1.5090.2026-09-05` / `e4b.serve.census.bo7.granite.b16.5090.2026-09-05`); **OLMoE's position is NF4**
+(282.5 / 1347.5, ×1.000; `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05` / `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`) because nothing above it is licensed on this
 register — the tp row's "best licensed" label predates the two-text
 clause and its calibrated attention is refused on this family, so its full
 stack is ×2.070 / ×2.289 measured, not licensed; **gpt-oss's quoted best is
-its own reference arm** (NF4 + exact folds, 144.5 / 761.6) and the MXFP4
+its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970 with the quality gate open;
 **Qwen3's licensed stack** — the streamed 64k calibrated pack bo6c
 licensed on both texts — measured on the same box under the lane's
 amendment 2 (pre-registered 06:05Z, run after `TP_DONE`): **×2.067 at B=1
 (238.1 tok/s; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a
 projection from an uncertified class) and ×2.602 at B=16 (1327.5 tok/s;
-no anchor projection)** — `e4b.serve.census.bo7.qwen3.b1` / `.b16`. Its
+no anchor projection)** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. Its
 speed is identical to the lane's 16k arm (4.20 vs 4.20 ms; 1327.5 vs
 1338.8, within 1%) and to the RTN stack: a calibrated pack's kernels do
 not depend on the calibration size, as the amendment predicted — the pack
@@ -295,11 +345,11 @@ changes the values, not the kernel or the bytes. **Gemma-4 has no K8
 instrument, so no arm carries a K8 licence**; the register's position with
 that caveat is the exact round-1 fold + epilogue on NF4 (`r1epi`), ×1.281
 at B=1 (103.6 tok/s) and ×1.106 at B=16 (675.8;
-`e4b.serve.census.bo7.gemma4.b1` / `.b16`), and the quoted int4 best
+`e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05`), and the quoted int4 best
 (bo3's `stack`) reads ×1.705 / ×1.697 measured, no quality verdict —
 Gemma-4-it loaded on this host without the #344 fault. **Mixtral's position
-is NF4** (50.3 / 191.4, ×1.000; `e4b.serve.census.bo7.mixtral.b1` /
-`.b16`): the exact folds are ×1.062 / ×1.018 but unscored as a combined
+is NF4** (50.3 / 191.4, ×1.000; `e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05` /
+`e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05`): the exact folds are ×1.062 / ×1.018 but unscored as a combined
 arm, the RTN int4 stack ×2.329 / ×1.959 and the calibrated-attention stack
 ×2.597 / ×1.962 are measured, not licensed (bo5's second-text FAILs stand),
 and the calibrated-expert arms were dropped under the lane's amendment
@@ -315,6 +365,30 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
 
 ## What changed — retired, superseded, corrected
 
+- **The 2026-09-04 Qwen3 "best licensed" throughput rows are SUPERSEDED**
+  (2026-09-05): `e4b.serve.tp.qwen3.b1.5090.2026-09-04` (superseded) and
+  `e4b.serve.tp.qwen3.b16.5090.2026-09-04` (superseded) now point at the
+  census rows of the licensed stack
+  (`e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` /
+  `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`); the RTN-int4 class they
+  quoted failed its second text on bo5, and their numbers stand as measured.
+  The other four families' 2026-09-04 rows keep their numbers with the
+  "best licensed" label withdrawn in the sentence (measured, not licensed),
+  and every active claim whose sentence asserts a licence now names its K8
+  verdict row (`licensed_by`) — `scripts/check_claims_register.py` holds the
+  register to that and to its own structure (evidence paths that exist,
+  dated measured rows, successors that resolve, no "pending" on an active
+  row). The 2026-09-03 single-stream stack this page led with is the same
+  RTN class and is quoted above as unlicensed speed.
+- **The 2026-08 "vLLM 6.31× ahead" figure is RETIRED by id** — the
+  retired row is `e4b.retired.vllm-6.31x-ahead`: template prompts and a different box;
+  the same-box, same-prompt comparison (`e4b.serve.h2h.vllm.same-box`)
+  supersedes it and now names it, with its own two limits stated (vLLM
+  version unrecorded; the e4b arm is the unlicensed RTN class).
+- **`e4b.retired.13.47x-training-speedup` is `retired`, not `superseded`**:
+  the "about 7.2× against a current baseline" restatement has no receipt of
+  its own in this repository, so there was no successor row to name; the
+  correction below stands as written.
 - **"The fp8 paged KV cache costs +0.047 ppl on Qwen3" — RETIRED.** That
   is +0.0058 nats, below the model's own 0.0095-nat floor.
   Indistinguishable from reordering the arithmetic; not attributable to

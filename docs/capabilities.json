@@ -194,7 +194,11 @@
         "e4b.train.parity.tp1.qwen3.matrix.2026-09-05",
         "e4b.train.parity.tp1.gemma4.matrix.2026-09-05",
         "e4b.train.parity.tp1.mixtral.matrix.2026-09-05",
-        "e4b.train.parity.tp1.granite.fused.2026-09-05"
+        "e4b.train.parity.tp1.granite.fused.2026-09-05",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.quality-n60",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.e4b-internal-parity"
       ],
       "limitations": [
         "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
@@ -203,7 +207,8 @@
         "model_families is evidence-gated: a family is listed when its fast_train path -- the headline path, enable_fast_train -- PASSES the registered loss-parity criteria on real weights with a receipt in this repository (training_support is the per-path record; bench/train-parity-20260905/tp1/ is lane tp1, all six serving families). olmoe is confirmed on real weights and a registered text; qwen3_moe and gemma4_text carry tp1 PASSes beside their flagship matrices; mixtral entered on its tp1 fused PASS under offload; granitemoe entered on its corrected-counter re-run's PASS (its first attempt was a harness error, kept as its own row); gpt_oss is refused by every training enabler and stays out",
         "gpt_oss is not a training family here: the loader builds its experts bare (no ExpertsLoRA), and both enable_fast_train and enable_batched_train return zero on it -- REFUSED rows on tp1 (e4b.train.parity.tp1.gptoss.fused.2026-09-05, e4b.train.parity.tp1.gptoss.batched.2026-09-05). Attention-only QLoRA over its frozen experts trains (e4b.train.parity.tp1.gptoss.attn_only.2026-09-05); the only route that trains its experts is grouped-nf4-gemm's experimental mxfp4_qlora.ExpertsMxfp4LoRA under the mxfp4-moe-training-and-residency capability -- experimental, never licensed",
         "enable_batched_train falls back to the reference forward per call above _PAD_WASTE_LIMIT (engines/batched.py): the patch count stays positive while some or all layers run the per-expert loop on some steps. In the shipped code tp1 measured this fallback was uncounted, and three arms read VOID on exactly that -- OLMoE, Qwen3 and Gemma-4 (e4b.train.parity.tp1.olmoe.batched.2026-09-05, e4b.train.parity.tp1.qwen3.batched.2026-09-05, e4b.train.parity.tp1.gemma4.batched.2026-09-05); it engaged everywhere only on Mixtral's eight-expert and Granite's forty-expert shapes. As of the release carrying that bundle the fallback is countable: batched_fallback_stats(model) reports it (#402; those VOID rows are the reason it exists). Assert kernel engagement, not the return value alone",
-        "enable_fast, enable_fast_train and enable_batched_train refuse a wrapper whose base violates the stock-epilogue contract (EpilogueContractError, #402) instead of silently computing act(gate)*up over a base that applies biases, clamps or another gating rule -- a refusal is loud, a wrong epilogue is not; gpt-oss is the family this protects, and DeepSeek-V4 supplies its epilogue through _apply_gate and is admitted"
+        "enable_fast, enable_fast_train and enable_batched_train refuse a wrapper whose base violates the stock-epilogue contract (EpilogueContractError, #402) instead of silently computing act(gate)*up over a base that applies biases, clamps or another gating rule -- a refusal is loud, a wrong epilogue is not; gpt-oss is the family this protects, and DeepSeek-V4 supplies its epilogue through _apply_gate and is admitted",
+        "Head-to-head against Unsloth's 4-bit MoE QLoRA path on one identical training problem (lane p38, 2026-09-05, one rented RTX 5090, Qwen3-30B-A3B, the clinical fixture tokenised once, seq 512, r 8 / alpha 16, identical targets, optimizer, batch, steps, precision and eval; bench/h2h-20260905/p38/): the shipped fused dgrad path with NF4 attention is faster per step, lower in peak VRAM and lower in energy per step than Unsloth on that box, and the two are comparable on held-out loss at sixty steps (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05, ...quality-n60) -- BUT the two-hundred-step curve favours Unsloth: its held-out loss is lower at the end of the curve while e4b's flattens from step sixty (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200). Quote the position only beside that row. Candidate causes (the eval schedule, the checkpointing mode, the transformers/peft versions of the two stacks, the expert adapter's precision -- bf16 on this side, the loader passes the model dtype to ExpertsLoRA -- against fp32 on Unsloth's) are not established. One workload, one box, one family; nothing here licenses a path (tp1 does) and no general speed claim is made"
       ],
       "status": "supported",
       "training_support": {
@@ -675,8 +680,25 @@
         "docs/ARCHITECTURE_SUPPORT.md"
       ],
       "claim_ids": [
-        "e4b.serve.tp.qwen3.b1.5090.2026-09-04",
-        "e4b.serve.tp.qwen3.b16.5090.2026-09-04",
+        "e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05",
+        "e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05",
+        "e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05",
+        "e4b.serve.census.bo7.qwen3.census.5090.2026-09-05",
+        "e4b.serve.census.bo7.granite.b1.5090.2026-09-05",
+        "e4b.serve.census.bo7.granite.b16.5090.2026-09-05",
+        "e4b.serve.census.bo7.granite.census.5090.2026-09-05",
+        "e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05",
+        "e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05",
+        "e4b.serve.census.bo7.olmoe.census.5090.2026-09-05",
+        "e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05",
+        "e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05",
+        "e4b.serve.census.bo7.gptoss.census.5090.2026-09-05",
+        "e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05",
+        "e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05",
+        "e4b.serve.census.bo7.gemma4.census.5090.2026-09-05",
+        "e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05",
+        "e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05",
+        "e4b.serve.census.bo7.mixtral.census.5090.2026-09-05",
         "e4b.serve.tp.olmoe.b1.5090.2026-09-04",
         "e4b.serve.buildout.granite.b1.5090.2026-09-04",
         "e4b.serve.buildout.granite.b16.5090.2026-09-04",
@@ -693,7 +715,7 @@
       "limitations": [
         "Not a general-purpose vLLM replacement: on the same box vLLM is ahead (claim e4b.serve.h2h.vllm.same-box)",
         "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
-        "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts (docs/STATUS.md)",
+        "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts with the folds and epilogue (e4b.serve.census.bo7.granite.b1.5090.2026-09-05, licensed by e4b.serve.buildout.granite.b1.5090.2026-09-04); the per-family positions the census quotes are in docs/STATUS.md -- Qwen3's licensed stack is the streamed calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), OLMoE's and Mixtral's position is NF4, Gemma-4's is the exact round-1 fold on NF4 with no quality instrument, gpt-oss's is its NF4 reference arm",
         "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not"
       ],
       "status": "supported"
