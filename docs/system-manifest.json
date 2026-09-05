@@ -55,7 +55,7 @@
       "extra": "fast",
       "since": "2026-09-04",
       "why": "combine_rows (grouped-nf4-gemm#335) with the swiglu_rows / reduce_partials decode glue that experts4bit-qlora#385 integrates, and gptq_pack for the calibrated int4 expert store (experts4bit-qlora#384)",
-      "consumer_ci_pin": "the consumer's CI installs the kernel package from the git commit of the v0.30.0 release"
+      "consumer_ci_pin": "the consumer's CI installs the kernel package from the git commit of the v0.30.1 release"
     },
     {
       "consumer": "experts4bit-qlora",
