@@ -2,7 +2,7 @@
 
 **All 18 rows are in: `TP_DONE` 2026-09-05T15:22:26Z (the six families through the registered arms) and `TP2_DONE`
 15:33Z (Granite's `fused` corrected-counter re-run, `logs/tp1b.sh`, on the same box).** The table below is the verbatim
-output of `python tp1_reduce.py .` (reducer **v2**, this directory's copy; the copy that ran on the box is
+output of `python tp1_reduce.py .` (reducer **v2.1**, this directory's copy; the copy that ran on the box is
 [`logs/tp1_reduce.py`](logs/tp1_reduce.py), v1, whose table — [`logs/RESULTS.txt`](logs/RESULTS.txt), the box's own print
 at `TP_DONE`, before the re-run — it supersedes) over the artefacts in this directory. Box, cut, fixture, the five
 amendments, the verdict rule verbatim, the predictions and the layout: [`README.md`](README.md).
@@ -35,7 +35,7 @@ Row status ∈ {OK, REFUSED, HARNESS_ERROR, ALARM, OOM, NOT_RUN, EXPERIMENTAL}, 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | reference | 1/1 | **OK** | **REF** | 0 | 0 (0) | ok | 60 | 4.266 | 23.7 | 2.810 | 399.5 | 3.4176→0.2274 | 3.4311→0.2582 | — | — | — |
 | fused | 1/2 | **HARNESS_ERROR** | — | — | — (0) | — | — | — | — | — | — | —→— | —→— | — | — | rc=1; TypeError: _dequant_whole() got an unexpected keyword argument 'weights_fn' (innermost frame tp1_train_smoke.py, run_granite_fused.attempt1.log); no CELL line in summary.txt (the next arm's result shares its line) — amendment 3 (late-binding counter closure in the harness; patched in flight; re-run by tp1b) |
-| fused | 2/2 | **OK** | **PASS** (×5.86 faster, peak ×1.000, J ×0.197) | 32 | 128 (64) | ok | 60 | 0.728 | 138.7 | 2.810 | 78.6 | 3.4198→0.2407 | 3.4264→0.2631 (Δ vs ref +0.0050) | 0.01329 | 0.01270 | 1 earlier start line(s) without a result line at 2026-09-05T11:44:40Z (a launcher abort before the harness ran; outer.log) — amendment 3: the corrected-counter re-run (tp1b) -- the row that counts |
+| fused | 2/2 | **OK** | **PASS** (×5.86 faster, peak ×1.000, J ×0.197) | 32 | 128 (64) | ok | 60 | 0.728 | 138.7 | 2.810 | 78.6 | 3.4198→0.2407 | 3.4264→0.2631 (Δ vs ref +0.0050) | 0.01329 | 0.01270 | 1 earlier start line(s) without a result line at 2026-09-05T15:30:43Z (a launcher abort before the harness ran; outer.log) — amendment 3: the corrected-counter re-run (tp1b) -- the row that counts |
 | batched | 1/1 | **OK** | **PASS** (×3.93 faster, peak ×1.057, J ×0.303) | 32 | 132 (64) | ok | 60 | 1.086 | 93.0 | 2.971 | 121.2 | 3.4135→0.2429 | 3.4241→0.2637 (Δ vs ref +0.0055) | 0.01553 | 0.01681 | — |
 - init_sha (reference) `9da33dcfb11c4259`; dataset `ds_clinical.json` sha `76fb9036de80`; trainable 49807360 params in 384 tensors
 

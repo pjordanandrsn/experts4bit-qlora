@@ -8,7 +8,7 @@ verify failure; one HARNESS_ERROR (kept) and one launcher abort (amendment 5, li
 **Bundle shape (phase directive, 2026-09-05 14:45Z — applied to this bundle before the final snapshot so the
 finalisation is mechanical).** (1) Every row is exactly one of **OK, REFUSED, HARNESS_ERROR, ALARM, OOM, NOT_RUN,
 EXPERIMENTAL**, with the parity verdict (PASS / FAIL / VOID) as a separate column for OK rows; the reducer
-([`tp1_reduce.py`](tp1_reduce.py), **v2**) classifies mechanically from `summary.txt` (rc per attempt), the receipt or
+([`tp1_reduce.py`](tp1_reduce.py), **v2.1** — v2.1 pairs result lines with the start lines that produced harness output, so a launcher abort between two real attempts is attributed to the attempt it preceded; v2 paired positionally) classifies mechanically from `summary.txt` (rc per attempt), the receipt or
 stub, `logs/outer.log` and the run logs — never from a missing error; a missing receipt is NOT_RUN with the reason from
 `outer.log` (an alarm is ALARM). The copy that ran on the box (v1) is kept verbatim as [`logs/tp1_reduce.py`](logs/tp1_reduce.py);
 its table is superseded. Granite's first `fused` attempt is a HARNESS_ERROR row (its log

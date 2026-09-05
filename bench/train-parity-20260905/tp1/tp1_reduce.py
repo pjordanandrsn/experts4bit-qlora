@@ -118,15 +118,19 @@ def parse_summary(d):
 def parse_outer(d):
     """arm start lines, fetch lines, staged lines and the tp1b marker, each with its line index for ordering."""
     starts, fetches, staged, tp1b_idx, done = {}, {}, {}, None, []
+    cur = None  # the most recent arm start line; harness stdout is indented four spaces (LOAD/CELL/traceback lines)
     for i, ln in enumerate(read_lines(os.path.join(d, "logs", "outer.log"))):
         m = TS.match(ln)
         body = m.group(2) if m else ln
         ts = m.group(1) if m else None
-        if body.startswith("tp1b:") and tp1b_idx is None:
-            tp1b_idx = i
+        if body.startswith("tp1b:"):
+            if tp1b_idx is None:
+                tp1b_idx = i
+            cur = None
         mm = re.match(r"^arm (\w+)/(\w+) ", body)
         if mm:
-            starts.setdefault((mm.group(1), mm.group(2)), []).append({"idx": i, "ts": ts, "after_tp1b": tp1b_idx is not None})
+            cur = {"idx": i, "ts": ts, "after_tp1b": tp1b_idx is not None, "ran": False}
+            starts.setdefault((mm.group(1), mm.group(2)), []).append(cur)
             continue
         mm = re.match(r"^fetch (\w+) ", body)
         if mm:
@@ -138,6 +142,9 @@ def parse_outer(d):
             continue
         if re.match(r"^(TP_DONE|TP1B DONE|BOX_REFUSED|[A-Z0-9]+ DONE|GRANITE FUSED RERUN DONE)", body):
             done.append((ts, body))
+            continue
+        if cur is not None and ln.strip() and not (m or re.match(r"^\S+: line \d+: ", ln) or re.match(r"^\d+ MiB$", ln.strip())):
+            cur["ran"] = True  # something other than the launcher's own lines followed this start: the harness ran
     return {"starts": starts, "fetches": fetches, "staged": staged, "tp1b_idx": tp1b_idx, "done": done}
 
 
@@ -209,10 +216,20 @@ def classify(d, fam, arm, attempts, fetch_fail, outer, receipt):
     rows = []
     starts = outer["starts"].get((fam, arm), [])
     n = len(attempts)
-    # A start line without a result line is a launcher abort before the harness ran (tp1b's first start died on an
-    # unset shell variable): align result lines to the LAST n start lines and surface the extra starts, never drop them.
-    extra = starts[:-n] if n and len(starts) > n else ([] if n else starts)
-    aligned = starts[-n:] if n and len(starts) >= n else starts
+    # A start line without harness output after it is a launcher abort before the harness ran (tp1b's first start died
+    # on an unset shell variable). Result lines pair with the start lines that RAN, in order; the aborts are surfaced on
+    # the attempt that followed them (v2.1 -- v2 paired results with the last n starts, which mislabelled a real first
+    # attempt as the abort when the abort sat between two real attempts). Never drop a start line.
+    ran = [x for x in starts if x.get("ran")]
+    aborts = [x for x in starts if not x.get("ran")]
+    align_flag = None
+    if n and len(ran) == n:
+        aligned, extra = ran, aborts
+    else:  # counts disagree: fall back to positional pairing and say so on every row
+        extra = starts[:-n] if n and len(starts) > n else ([] if n else starts)
+        aligned = starts[-n:] if n and len(starts) >= n else starts
+        if n and starts:
+            align_flag = f"start lines paired positionally ({len(ran)} ran, {len(aborts)} without harness output, {n} result lines)"
     for k, att in enumerate(attempts, 1):
         rc = att["rc"]
         rec = receipt if k == n else None
@@ -247,9 +264,15 @@ def classify(d, fam, arm, attempts, fetch_fail, outer, receipt):
         else:
             row.update(status="NOT_RUN", reason=f"rc={rc} ({RC_MEANING.get(rc, 'unknown')}) with receipt status {st!r}: unreadable combination")
             row["flags"].append("unreadable rc/status combination")
-        if k == n and extra:
-            row["flags"].append(f"{len(extra)} earlier start line(s) without a result line at "
-                                + ", ".join(x["ts"] or "?" for x in extra) + " (a launcher abort before the harness ran; outer.log)")
+        mine = [x for x in extra if start is None or (x["idx"] < start["idx"] and (k == 1 or x["idx"] > aligned[k - 2]["idx"]))]
+        if k == n:
+            mine = mine or ([x for x in extra if start is not None and x["idx"] > start["idx"]] if not any(
+                x["idx"] < start["idx"] for x in extra) else mine) if start is not None else extra
+        if mine:
+            row["flags"].append(f"{len(mine)} earlier start line(s) without a result line at "
+                                + ", ".join(x["ts"] or "?" for x in mine) + " (a launcher abort before the harness ran; outer.log)")
+        if align_flag:
+            row["flags"].append(align_flag)
         rows.append(row)
     if not attempts:
         row = {"attempt": 1, "of": 1, "rc": None, "receipt": receipt, "log": attempt_log(d, fam, arm, 1, 1), "start": starts[0] if starts else None, "flags": []}
