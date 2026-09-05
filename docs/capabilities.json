@@ -172,18 +172,26 @@
         "docs/solutions/qlora-fused-moe-experts.md",
         "docs/CHOOSING.md",
         "docs/METHODOLOGY.md",
-        "docs/support_matrix.md"
+        "docs/support_matrix.md",
+        "docs/ARCHITECTURE_SUPPORT.md"
       ],
       "claim_ids": [
         "e4b.train.olmoe-converges",
         "e4b.train.fast-train-dgrad",
         "e4b.train.flagship-matrix",
-        "e4b.train.ablation"
+        "e4b.train.ablation",
+        "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
+        "e4b.train.parity.tp1.granite.batched.2026-09-05",
+        "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
+        "e4b.train.parity.tp1.granite.matrix.2026-09-05"
       ],
       "limitations": [
         "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
         "dgrad=True needs grouped-nf4-gemm>=0.7.0 (below the current [fast] floor in pyproject.toml, so any [fast] install has it); on older cuts it is downgraded with a RuntimeWarning",
-        "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset"
+        "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset",
+        "model_families is evidence-gated: a family is listed when an accelerated arm (enable_fast_train, or enable_batched_train) PASSES the registered loss-parity criteria on real weights with a receipt in this repository (bench/train-parity-20260905/tp1/, lane tp1). olmoe is confirmed on real weights and a registered text by tp1; qwen3_moe and gemma4_text rest on the flagship matrices until their tp1 rows land; granitemoe loads and verifies through the direct path and its batched arm passes on tp1, but it enters only when its fused re-run passes (pending); mixtral is pending its tp1 rows",
+        "gpt_oss is not a training family here: the loader builds its experts bare (no ExpertsLoRA), and both enable_fast_train and enable_batched_train return zero on it -- REFUSED rows on tp1 (e4b.train.parity.tp1.gptoss.fused.2026-09-05, e4b.train.parity.tp1.gptoss.batched.2026-09-05). Attention-only QLoRA over its frozen experts trains (e4b.train.parity.tp1.gptoss.attn_only.2026-09-05); the only route that trains its experts is grouped-nf4-gemm's experimental mxfp4_qlora.ExpertsMxfp4LoRA under the mxfp4-moe-training-and-residency capability -- experimental, never licensed",
+        "enable_batched_train falls back to the reference forward per call above _PAD_WASTE_LIMIT (engines/batched.py) without a counter: the patch count stays positive while some layers run the per-expert loop on some steps. Assert kernel engagement (whole-stack dequant calls per step at least twice the patch count), not the return value alone -- tp1's OLMoE batched arm read VOID on exactly this (e4b.train.parity.tp1.olmoe.batched.2026-09-05)"
       ],
       "status": "supported"
     },
@@ -493,12 +501,14 @@
       ],
       "claim_ids": [
         "e4b.serve.gptoss.loader-faithful",
-        "e4b.serve.deepseek-v4"
+        "e4b.serve.deepseek-v4",
+        "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
       ],
       "limitations": [
         "A uniform int4 grid cannot hold e2m1 levels: re-quantising MXFP4 experts to int4-b32 fails the quality gate (docs/STATUS.md)",
         "gpt-oss raw-text perplexity is not an instrument for ranking an exact arm against a noisy one; the native store's speed is quoted with its quality gate open (docs/SERVING-THROUGHPUT.md)",
-        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml"
+        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml",
+        "gpt-oss expert training is EXPERIMENTAL and unlicensed. Lane tp1 (bench/train-parity-20260905/tp1/) ran grouped-nf4-gemm's run_mxfp4_20b_qlora (mxfp4_qlora.ExpertsMxfp4LoRA over the released e2m1/e8m0 bytes, faithful clamped GLU and biases) on its own text: the step-0 canary against transformers' dequant path passed, provenance pre == post held over every native expert tensor, and the loss fell -- the row is e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05. No parity pair exists, the run is never compared to the e4b arms, and nothing licenses it; the e4b enablers refuse gpt-oss (zero patched), and the arena_train=True wrap of gpt-oss computes a generic epilogue without the per-expert biases and clamp -- do not train gpt-oss experts through it"
       ],
       "status": "experimental"
     }
