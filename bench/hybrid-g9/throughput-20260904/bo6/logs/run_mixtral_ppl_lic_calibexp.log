@@ -1,0 +1,45 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files: 100%|██████████| 26/26 [00:00<00:00, 2799.79it/s]
+[20:33:04]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[20:33:04]   quantized experts on 32/32 MoE layers (8 experts each)
+[20:33:04]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:33:05]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[20:33:05]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:33:24]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 25 files:   0%|          | 0/25 [00:00<?, ?it/s]Fetching 25 files: 100%|██████████| 25/25 [00:00<00:00, 2046.08it/s]
+INT4EXP calibrating (streamed): 8 batches of c4 budget GB 8
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+INT4EXP calibrated streaming: 32 layers in 32 passes of <= 1 layer(s)
+INT4EXP enabled: 32 layers (model_type=mixtral)
+K8_PPL steps=2048 nll=1.20549 ppl=3.33841 compute=fp8 sha=31fd7d408809 out=/root/bo6/mixtral_ppl_lic_calibexp.json

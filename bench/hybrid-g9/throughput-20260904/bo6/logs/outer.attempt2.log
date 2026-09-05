@@ -1,0 +1,27 @@
+[2026-09-04T13:27:23Z] install: gnf4 @0b25d1389701bb793d60075e5b870212c848e33a + e4b integration-8 @f42924d509ecb3f534f57a87976219986fe5b69f
+pip rc=0
+bo6 tripwire OK: integration-8 (calibrated experts + gpu solve, swiglu/combine) + gnf4 main; e4b 0.34.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.173.02
+Model name:                              AMD Ryzen Threadripper PRO 7975WX 32-Cores
+               total        used        free      shared  buff/cache   available
+Mem:             251          35         126           0          89         210
+cuda ok
+overlay         320G  781M  320G   1% /
+[2026-09-04T13:27:51Z] bake qwen3
+BAKE OK
+overlay         320G   89G  232G  28% /
+[2026-09-04T13:39:00Z] K8 qwen3/nf4 (exp=0 calib=0 fuse=0 src=wikitext )
+    K8_PPL steps=2048 nll=1.85939 ppl=6.41984 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_nf4.json
+[2026-09-04T13:40:53Z] K8 qwen3/nf4_c4val (exp=0 calib=0 fuse=0 src=c4val1 )
+    K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/bo6/qwen3_ppl_nf4_c4val.json
+[2026-09-04T13:42:41Z] K8 qwen3/calibexp_c4val (exp=1 calib=0 fuse=0 src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP hessians: 48 layers, 6050 (layer, expert) pairs from 8 batches of c4
+    INT4EXP REFUSED (model_type=qwen3_moe): RuntimeError('Expected all tensors to be on the same device, but got tensors is on cpu, different from other tensors on cuda:0 (when checking argument in method wrapper_CUDA_cat)')
+    RuntimeError: Expected all tensors to be on the same device, but got tensors is on cpu, different from other tensors on cuda:0 (when checking argument in method wrapper_CUDA_cat)
+[2026-09-04T13:45:54Z] K8 qwen3/all_calibexp (exp=1 calib=1 fuse=all src=wikitext E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP hessians: 48 layers, 6050 (layer, expert) pairs from 8 batches of c4
+    INT4EXP REFUSED (model_type=qwen3_moe): RuntimeError('Expected all tensors to be on the same device, but got tensors is on cpu, different from other tensors on cuda:0 (when checking argument in method wrapper_CUDA_cat)')
+    RuntimeError: Expected all tensors to be on the same device, but got tensors is on cpu, different from other tensors on cuda:0 (when checking argument in method wrapper_CUDA_cat)
+[2026-09-04T13:49:00Z] K8 qwen3/all_calibexp_c4val (exp=1 calib=1 fuse=all src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1)
+Terminated
+[2026-09-04T13:49:35Z] arm qwen3/all_calibexp (B=1 exp=1 calib=1 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)

@@ -1,0 +1,18 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files:   9%|▊         | 2/23 [00:00<00:02, 10.33it/s]Fetching 23 files:  13%|█▎        | 3/23 [00:19<00:01, 10.33it/s]Fetching 23 files:  17%|█▋        | 4/23 [04:00<22:23, 70.72s/it]Fetching 23 files:  22%|██▏       | 5/23 [04:04<15:18, 51.04s/it]Fetching 23 files:  26%|██▌       | 6/23 [04:04<10:10, 35.91s/it]Fetching 23 files:  30%|███       | 7/23 [05:03<11:20, 42.56s/it]Fetching 23 files:  35%|███▍      | 8/23 [05:04<07:35, 30.34s/it]Fetching 23 files:  39%|███▉      | 9/23 [05:06<05:05, 21.84s/it]Fetching 23 files:  43%|████▎     | 10/23 [05:08<03:25, 15.80s/it]Fetching 23 files:  48%|████▊     | 11/23 [05:23<03:08, 15.71s/it]Fetching 23 files:  52%|█████▏    | 12/23 [06:47<06:38, 36.20s/it]Fetching 23 files:  57%|█████▋    | 13/23 [06:48<04:14, 25.43s/it]Fetching 23 files:  61%|██████    | 14/23 [06:49<02:45, 18.36s/it]Fetching 23 files:  65%|██████▌   | 15/23 [06:50<01:43, 12.96s/it]Fetching 23 files:  70%|██████▉   | 16/23 [06:50<01:04,  9.21s/it]Fetching 23 files:  74%|███████▍  | 17/23 [08:04<02:52, 28.68s/it]Fetching 23 files:  78%|███████▊  | 18/23 [08:09<01:47, 21.42s/it]Fetching 23 files:  83%|████████▎ | 19/23 [08:09<01:00, 15.04s/it]Fetching 23 files:  87%|████████▋ | 20/23 [08:57<01:14, 24.83s/it]Fetching 23 files:  91%|█████████▏| 21/23 [08:57<00:34, 17.49s/it]Fetching 23 files:  96%|█████████▌| 22/23 [08:59<00:12, 12.68s/it]Fetching 23 files: 100%|██████████| 23/23 [09:05<00:00, 10.72s/it]Fetching 23 files: 100%|██████████| 23/23 [09:05<00:00, 23.70s/it]
+[16:53:05]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[16:53:14]   quantized experts on 48/48 MoE layers (128 experts each)
+[16:53:14]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=48 experts=128
+  shard 0/48  0.3 GiB  0s
+  shard 8/48  2.8 GiB  2s
+  shard 16/48  5.4 GiB  3s
+  shard 24/48  7.9 GiB  5s
+  shard 32/48  10.4 GiB  7s
+  shard 40/48  13.0 GiB  8s
+snapshot done 15.19 GiB in 10.1s
+expert-tensor bake: L=48 E=128 (baking 128) row=2654208 stride=2654208 total=16.3 GB workers=8
+  2048/6144 rows (5 GB, 1s)
+  4096/6144 rows (11 GB, 1s)
+  6144/6144 rows (16 GB, 2s)
+bake complete: 6144 rows (16.3 GB) in 3s
+BAKE OK

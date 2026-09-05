@@ -1,0 +1,16 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 2754.53it/s]
+[14:10:56]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[14:10:56]   quantized experts on 48/48 MoE layers (128 experts each)
+[14:10:56]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[14:10:58]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[14:11:12]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 2756.03it/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+INT4EXP hessians: 48 layers, 6050 (layer, expert) pairs from 8 batches of c4
+INT4EXP calibrated experts: 10826 gptq / 1462 rtn (min_rows=32) over 48 layers
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+K8_PPL steps=2048 nll=1.85005 ppl=6.36015 compute=fp8 sha=9ef10d760ad9 out=/root/bo6/qwen3_ppl_all_calibexp.json

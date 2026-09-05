@@ -873,7 +873,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps sha 9ef10d760ad9: nf4 1.86213, all 1.85053, all_rope 1.84944 (-0.081 ppl vs NF4, pass; -0.0011 nats vs all, inside the 0.0095-nat floor). The calibrated output head passes only inside this stack (allhead -0.020 ppl); alone it is +0.062 ppl and FAILS. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214, integration-6 = 0.34.0 + #372 + #384 + #385, the same configuration class plus #385's exact glue): c4val1 NF4 2.80923 (ppl 16.59705), all 2.81299 = +0.0627 ppl (+0.0038 nats) -- FAIL as registered (over +0.05). Attribution on that text: int4exp +0.0709 (FAIL), int4exp+calib attn +0.0476 (pass), exact folds alone -0.0730 (FAIL as registered by improving), int4exp+folds -0.0183 (pass); every arm inside the 0.0095-nat floor (+-0.158 ppl at that perplexity) and non-additive by 0.005 nats, so the +0.063 attributes to noise, not a component. The gate is not retuned; the configuration is NOT licensed under the rule as written pending the user's decision on re-registering it in nats against the measured floor. bo5 re-measured the stack on its box at 204.1 tok/s B=1 / 1251.6 B=16 (e4b.serve.buildout.bo5.qwen3.*). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
+      "notes": "K8 2048 steps sha 9ef10d760ad9: nf4 1.86213, all 1.85053, all_rope 1.84944 (-0.081 ppl vs NF4, pass; -0.0011 nats vs all, inside the 0.0095-nat floor). The calibrated output head passes only inside this stack (allhead -0.020 ppl); alone it is +0.062 ppl and FAILS. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214, integration-6 = 0.34.0 + #372 + #384 + #385, the same configuration class plus #385's exact glue): c4val1 NF4 2.80923 (ppl 16.59705), all 2.81299 = +0.0627 ppl (+0.0038 nats) -- FAIL as registered (over +0.05). Attribution on that text: int4exp +0.0709 (FAIL), int4exp+calib attn +0.0476 (pass), exact folds alone -0.0730 (FAIL as registered by improving), int4exp+folds -0.0183 (pass); every arm inside the 0.0095-nat floor (+-0.158 ppl at that perplexity) and non-additive by 0.005 nats, so the +0.063 attributes to noise, not a component. The gate is not retuned; the configuration is NOT licensed under the rule as written pending the user's decision on re-registering it in nats against the measured floor. bo5 re-measured the stack on its box at 204.1 tok/s B=1 / 1251.6 B=16 (e4b.serve.buildout.bo5.qwen3.*). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo6 (2026-09-04, box 49861751): the gap is closed by method, not by moving the gate -- GPTQ-calibrated int4 experts (e4b#384) in place of RTN: the full stack passes both texts against its own lane's NF4 (wikitext -0.0597 / c4val1 +0.0352; e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04), and calibration ORDER is the mechanism (all-at-once +0.1498 FAIL vs sequential -0.0505 on the same text, box and batches; e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04). The 'user decision pending' above is resolved that way; this RTN reading stands as measured."
     },
     {
       "id": "e4b.serve.buildout.granite.b1.5090.2026-09-04",
@@ -986,7 +986,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
+      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate; the int4-expert stack with sequentially GPTQ-calibrated experts reads c4val1 +0.0391 (pass) but wikitext +0.0771 ppl against its own lane's NF4 -- FAIL as registered, measured, NOT licensed (e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04): sequential calibration closed Qwen3's gap and did not close Mixtral's. This entry's readings stand as measured."
     },
     {
       "id": "e4b.serve.buildout.mixtral.b16.5090.2026-09-04",
@@ -1009,7 +1009,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "Same window and gate as the B=1 claim. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
+      "notes": "Same window and gate as the B=1 claim. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo6 (2026-09-04): see e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 (calibrated experts: c4val1 +0.0391 pass, wikitext +0.0771 FAIL -- FAIL as registered, not licensed)."
     },
     {
       "id": "e4b.serve.buildout.gptoss.b1.5090.2026-09-04",
@@ -1058,7 +1058,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "K8 2048 steps: wikitext all 1.84571 (ppl 6.33260; -0.105 ppl vs bo3's NF4 1.86213 on the same window sha 9ef10d760ad9); c4val1 (sha 4bcb55179b96) NF4 2.80923 (16.59705), all 2.81299 (16.65973) = +0.0627 ppl, +0.0038 nats -- FAIL as registered. Attribution on c4val1 (bo5b, integration-7): int4exp +0.0709 ppl FAIL; int4exp+calib attn +0.0476 pass; exact folds alone -0.0730 FAIL-by-improving; int4exp+folds -0.0183 pass -- every arm inside the 0.0095-nat floor (+-0.158 ppl at ppl 16.6), non-additive by 0.005 nats: the +0.063 is noise, not a component. NOT licensed under the rule as written; the gate is not retuned; user decision pending on re-registering in nats against the measured floor. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. No NF4 speed arm on this lane, so no in-lane ratio; bo3's same-class box had NF4 at 98.0 and this stack (without #385) at 177.9 -- different boxes, quote each with its box, never the ratio between them."
+      "notes": "K8 2048 steps: wikitext all 1.84571 (ppl 6.33260; -0.105 ppl vs bo3's NF4 1.86213 on the same window sha 9ef10d760ad9); c4val1 (sha 4bcb55179b96) NF4 2.80923 (16.59705), all 2.81299 (16.65973) = +0.0627 ppl, +0.0038 nats -- FAIL as registered. Attribution on c4val1 (bo5b, integration-7): int4exp +0.0709 ppl FAIL; int4exp+calib attn +0.0476 pass; exact folds alone -0.0730 FAIL-by-improving; int4exp+folds -0.0183 pass -- every arm inside the 0.0095-nat floor (+-0.158 ppl at ppl 16.6), non-additive by 0.005 nats: the +0.063 is noise, not a component. NOT licensed under the rule as written; the gate is not retuned; user decision pending on re-registering in nats against the measured floor. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. No NF4 speed arm on this lane, so no in-lane ratio; bo3's same-class box had NF4 at 98.0 and this stack (without #385) at 177.9 -- different boxes, quote each with its box, never the ratio between them. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate -- the rule stays in perplexity. With GPTQ-calibrated int4 experts in place of RTN the same stack class passes both texts against its own lane's NF4 (wikitext -0.0597 / c4val1 +0.0352, all-at-once pack; e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) and reads 158.0 / 993.6 tok/s on that box (e4b.serve.buildout.bo6.qwen3.b1 / .b16 -- a different host; quote each with its box). This entry's RTN reading stands as measured; what bo6 adds is the method that makes the stack pass."
     },
     {
       "id": "e4b.serve.buildout.bo5.qwen3.b16.5090.2026-09-04",
@@ -1082,7 +1082,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.qwen3.b1 (FAIL as registered on c4val1, +0.0627 ppl / +0.0038 nats, sub-floor). bo3's same-class box measured 1089.6 for the stack without #385's glue -- a different box; quote each with its box."
+      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.qwen3.b1 (FAIL as registered on c4val1, +0.0627 ppl / +0.0038 nats, sub-floor). bo3's same-class box measured 1089.6 for the stack without #385's glue -- a different box; quote each with its box. bo6 (2026-09-04): with GPTQ-calibrated int4 experts the same stack class passes both texts on its own lane (e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) and reads 993.6 tok/s on that box (e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04; different host, no cross-box ratio). This RTN reading stands as measured."
     },
     {
       "id": "e4b.serve.buildout.bo5.granite.b1.5090.2026-09-04",
@@ -1208,7 +1208,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "K8 2048 steps: wikitext NF4 control on integration-7 1.18105 (ppl 3.25778, sha 31fd7d408809), lic 1.16684 (3.21181, -0.046 ppl, pass); c4val1 (sha 061534dadd4d) NF4 2.11031 (8.25079), lic 2.11726 (8.30834) = +0.0575 ppl, +0.0070 nats -- FAIL as registered by 0.008 (uncalibrated rule |dppl| <= 0.05 on every text); this family's arithmetic-order floor is unmeasured, so the nats cannot be read against one. The 'licensed stack' label (P30; bo3's uncalibrated stack 102.8 / 372.0) is WITHDRAWN under the rule as written pending the user's decision on re-registering the gate in nats against a measured floor. The calibrated stack (all) fails the second text outright (+0.1157 ppl). lic_fq K8 1.16702 (+0.0002 nats vs lic). Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict."
+      "notes": "K8 2048 steps: wikitext NF4 control on integration-7 1.18105 (ppl 3.25778, sha 31fd7d408809), lic 1.16684 (3.21181, -0.046 ppl, pass); c4val1 (sha 061534dadd4d) NF4 2.11031 (8.25079), lic 2.11726 (8.30834) = +0.0575 ppl, +0.0070 nats -- FAIL as registered by 0.008 (uncalibrated rule |dppl| <= 0.05 on every text); this family's arithmetic-order floor is unmeasured, so the nats cannot be read against one. The 'licensed stack' label (P30; bo3's uncalibrated stack 102.8 / 372.0) is WITHDRAWN under the rule as written pending the user's decision on re-registering the gate in nats against a measured floor. The calibrated stack (all) fails the second text outright (+0.1157 ppl). lic_fq K8 1.16702 (+0.0002 nats vs lic). Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate. The same stack with sequentially GPTQ-calibrated int4 experts in place of RTN reads c4val1 +0.0391 (pass) but wikitext +0.0771 ppl (+0.0234 nats) against its own lane's NF4 -- FAIL as registered, the mirror image of this entry's RTN reading; measured, NOT licensed (e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04; its speed arms hit that lane's per-arm alarm during the streamed calibration and were not measured). Sequential calibration closed Qwen3's gap and did not close Mixtral's. This entry's RTN reading and the withdrawn label stand as measured."
     },
     {
       "id": "e4b.serve.buildout.bo5.mixtral.b16.5090.2026-09-04",
@@ -1232,7 +1232,298 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.mixtral.b1: FAIL as registered on c4val1 by 0.008 ppl (+0.0070 nats, floor unmeasured); NOT licensed pending the user's decision. Every Mixtral B=16 arm on this lane sits within 374.5-378.3."
+      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.mixtral.b1: FAIL as registered on c4val1 by 0.008 ppl (+0.0070 nats, floor unmeasured); NOT licensed pending the user's decision. Every Mixtral B=16 arm on this lane sits within 374.5-378.3. bo6 (2026-09-04): see e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 -- the calibrated-expert version of this stack passes c4val1 (+0.0391) and FAILS wikitext (+0.0771) -- FAIL as registered, measured, not licensed. This RTN reading stands as measured."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.k8-deterministic.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "The K8 instrument (teacher-forced NLL through the paged decode path, 2048 steps, fp8 paged KV) is run-to-run deterministic on one box and cut, bake included: Qwen3-30B-A3B's NF4 reference re-baked and re-scored reads bit-identical mean_nll three times on c4val1 (2.803180268104794) and twice on wikitext (1.85939315385821), spread 0.0 nats -- so a 0.006-nat difference between two lanes on the identical window is not run noise.",
+      "value": 0.0,
+      "unit": "nats (max spread of NF4 K8 mean_nll across a fresh bake and re-scores, same box + cut)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; arms: qwen3_ppl_nf4 / nf4_c4val (attempt 2, e4b integration-8 @f42924d, attempt-2 bake) vs nf4_rep1 / nf4_c4val_rep1 / nf4_c4val_rep2 (bo6b, @ae9dc122, re-bake)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_rep1.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val_rep1.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val_rep2.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "Instrument control for the calibrated-expert arms on this lane. What it settles: within one lane, sub-0.01-nat differences are arithmetic, not noise. What it leaves OPEN: the same window reads 2.80923 on bo5 (box 49841214, integration-6 + grouped-nf4-gemm @587eb7a) and 2.80318 here, 0.006 nats apart, while Mixtral's NF4 references agree across the same two lanes to 0.001 nats (1.18105/2.11031 vs 1.18214/2.10973); candidates are the install (bo5's kernel install was exposed to the stale build/lib race fixed by grouped-nf4-gemm#336, per file) or the box. Consequence: no sub-0.01-nat comparison is made against bo5 or any lane installed from a commit before grouped-nf4-gemm#336; within-lane and bo6/bo7 comparisons are."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.calibexp-allatonce.c4val1.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Qwen/Qwen3-30B-A3B with GPTQ-calibrated int4 experts alone, calibrated ALL-AT-ONCE (every layer's Hessian accumulated against the unquantised prefix, then every layer packed -- the two-step API, not the method that ships): c4val1 +0.1498 ppl (+0.0090 nats) against the same-cut NF4 -- FAIL as registered, three times the +0.05 budget.",
+      "value": 0.1498,
+      "unit": "ppl (delta vs NF4 on c4val1)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; e4b integration-8 @db2a070 (attempt 3, hook v4/v5 path: calibrate_expert_hessians + enable_serve_experts_int4(expert_hessians=)); 8 batches x 4 x 512 = 16k calibration tokens, damping 0.01; 6050 of 6144 (layer, expert) pairs saw rows, 10826 gptq / 1462 rtn packs; arm: qwen3_ppl_calibexp_c4val = 2.81222 (ppl 16.64678)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_calibexp_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_calibexp_c4val.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "VERDICT: FAIL as registered (c4val1 +0.1498; sub-floor in nats, which never changes the verdict). No better than bo5's RTN reading on its own lane (+0.0709; cited beside, not divided -- e4b.serve.buildout.bo5.qwen3.b1 notes). This is a verdict on the all-at-once METHOD: the same arm under sequential (streamed) calibration on the same box, batches and damping reads -0.0505 (e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04). Kept as measured; not retired -- the data stand, the method does not ship. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Qwen/Qwen3-30B-A3B with GPTQ-calibrated int4 experts alone, calibrated SEQUENTIALLY (streamed: each layer chunk packed before the next chunk's Hessians accumulate, so layer L is calibrated against the int4 outputs of layers < L -- the mechanism e4b#384 ships in 0.35.0), 16k calibration tokens, damping 0.01: c4val1 -0.0505 ppl (-0.0031 nats) against the same-cut NF4 -- PASS on this text as registered; the improvement is NOT claimed until wikitext (outside the calibration domain) agrees with the same sign.",
+      "value": -0.0505,
+      "unit": "ppl (delta vs NF4 on c4val1)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; e4b integration-8 @ae9dc122 (bo6b, hook v6: enable_serve_experts_int4_calibrated), E4B_INT4_HESSIAN_BUDGET_GB=24 -> 48 layers in 5 passes of <= 10; 8 batches x 4 x 512 = 16k calibration tokens, damping 0.01; 10820 gptq / 1468 rtn packs; arm: qwen3_ppl_calibexp_c4val_rep1 = 2.80011 (ppl 16.44653)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_calibexp_c4val_rep1.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_calibexp_c4val_rep1.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "VERDICT: pass on 1 text; NOT licensed as an improvement (the rule needs the same sign on wikitext -- lane bo6c, a separate bundle). Queued as an exact repeat of the all-at-once arm; the cut had changed method between the two, which is what the pair measures (e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04). The RTN-fallback count is the same as under all-at-once (1468 vs 1462), so the 0.200-ppl difference is the order, not the row count. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.calibexp-streamed-64k.c4val1.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 64k calibration tokens (E4B_CALIB_NSEQ=128, damping 0.01): c4val1 -0.2109 ppl (-0.0129 nats, 1.4x the family's floor) against the same-cut NF4 -- PASS on this text as registered; the best point of the size sweep, the improvement NOT claimed until wikitext agrees.",
+      "value": -0.2109,
+      "unit": "ppl (delta vs NF4 on c4val1)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; e4b integration-8 @ae9dc122 (bo6b), 24 GiB budget, 5 passes; 32 batches x 4 x 512 = 64k calibration tokens; 11512 gptq / 776 rtn packs; arm: qwen3_ppl_calibexp_n128_c4val = 2.79031 (ppl 16.28610)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_calibexp_n128_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_calibexp_n128_c4val.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "VERDICT: pass on 1 text; NOT licensed as an improvement. Sweep at one measurement per point: 16k -0.0505, 64k -0.2109, 256k -0.1410 -- non-monotonic, so 64k is the candidate size on evidence, not a law; more calibration text cuts the RTN fallbacks (1468 -> 776 -> 280 of 12288 packs). wikitext at this size and the full stack under the streamed method are bo6c. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.calibexp-streamed-256k.c4val1.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 256k calibration tokens (E4B_CALIB_NSEQ=512, damping 0.01): c4val1 -0.1410 ppl (-0.0086 nats) against the same-cut NF4 -- PASS on this text as registered; better than 16k, worse than 64k; the improvement NOT claimed until wikitext agrees.",
+      "value": -0.141,
+      "unit": "ppl (delta vs NF4 on c4val1)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; e4b integration-8 @ae9dc122 (bo6b), 24 GiB budget, 5 passes; 128 batches x 4 x 512 = 256k calibration tokens; 12008 gptq / 280 rtn packs; arm: qwen3_ppl_calibexp_n512_c4val = 2.79459 (ppl 16.35598)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_calibexp_n512_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_calibexp_n512_c4val.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "VERDICT: pass on 1 text; NOT licensed as an improvement. See e4b.serve.buildout.bo6.qwen3.calibexp-streamed-64k.c4val1.2026-09-04 for the sweep reading. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k-damp0.1.c4val1.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 16k calibration tokens and GPTQ damping 0.1 (E4B_INT4_GPTQ_DAMP=0.1, ten times the kernel default): c4val1 +0.0544 ppl (+0.0033 nats) against the same-cut NF4 -- FAIL as registered, by 0.004; heavier damping hurts.",
+      "value": 0.0544,
+      "unit": "ppl (delta vs NF4 on c4val1)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; e4b integration-8 @ae9dc122 (bo6b), 24 GiB budget, 5 passes; 8 batches x 4 x 512 = 16k calibration tokens, damping 0.1; 10820 gptq / 1468 rtn packs; arm: qwen3_ppl_calibexp_d01_c4val = 2.80647 (ppl 16.55145)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_calibexp_d01_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_calibexp_d01_c4val.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "VERDICT: FAIL as registered (c4val1 +0.0544; sub-floor in nats, which never changes the verdict). The same arm at the default damping 0.01 reads -0.0505 (e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04). Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Qwen/Qwen3-30B-A3B's full calibrated stack -- GPTQ-calibrated int4 experts + C4-calibrated int4 attention + round-1/2 folds (rope-only fold) + router epilogue + #385 glue, the experts calibrated ALL-AT-ONCE -- passes the registered K8 gate on both texts against the same-cut NF4: wikitext -0.0597 ppl (-0.0093 nats), c4val1 +0.0352 ppl (+0.0021 nats), both within +0.05; the wikitext improvement is NOT claimed (c4val1 carries the other sign).",
+      "value": 0.0352,
+      "unit": "ppl (delta vs NF4 on c4val1, the binding text; wikitext -0.0597)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; e4b integration-8 @db2a070 (attempt 3), all-at-once calibration, 16k calibration tokens, damping 0.01, 10826 gptq / 1462 rtn expert packs + 192 calibrated attention projections (same batches); arms: qwen3_ppl_all_calibexp = 1.85005 (ppl 6.36015), qwen3_ppl_all_calibexp_c4val = 2.80531 (16.53226)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_all_calibexp.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_all_calibexp_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_all_calibexp.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_all_calibexp_c4val.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "VERDICT: pass on 2 texts as registered (within +0.05; no same-sign improvement to claim). This closes the gap bo5 measured with RTN experts on the same stack class (c4val1 +0.0627, FAIL; e4b.serve.buildout.bo5.qwen3.b1 notes) -- on this lane's own NF4 reference, not bo5's. The pack was calibrated all-at-once (the two-step API); the full stack under the streamed method that ships (0.35.0) is scored by lane bo6c, a separate bundle. Speed of this stack on this box: e4b.serve.buildout.bo6.qwen3.b1 / .b16. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "The ORDER of calibration and packing is the mechanism: on the same box, the same 8 calibration batches (16k tokens), the same damping (0.01) and min_rows (32), Qwen/Qwen3-30B-A3B's calibrated-int4-experts-alone arm reads c4val1 +0.1498 ppl when every layer's Hessian is accumulated against the unquantised prefix and packed afterwards (all-at-once) and -0.0505 ppl when each layer chunk is packed before the next chunk's Hessians accumulate (sequential / streamed, GPTQ's own convention) -- a 0.200-ppl move (0.0121 nats, 1.3x the family's floor) that flips the registered verdict from FAIL to pass.",
+      "value": -0.2002,
+      "unit": "ppl (streamed minus all-at-once on c4val1; same box, batches, damping, min_rows)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; grouped-nf4-gemm main @0b25d13; NF4 reference re-scored on this box: wikitext 1.85939 (ppl 6.41984, sha 9ef10d760ad9), c4val1 2.80318 (16.49703, sha 4bcb55179b96); calibration text = C4 validation shard 00000 (disjoint documents from the c4val1 window, shard 00001), min_rows=32, E4B_INT4_GPTQ_DEVICE=cuda; all-at-once: e4b @db2a070, qwen3_ppl_calibexp_c4val = 16.64678 (10826 gptq / 1462 rtn); streamed: e4b @ae9dc122, 24 GiB budget, 5 passes, qwen3_ppl_calibexp_c4val_rep1 = 16.44653 (10820 gptq / 1468 rtn); NF4 16.49703 bit-identical across the two phases (e4b.serve.buildout.bo6.qwen3.k8-deterministic.5090.2026-09-04)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_calibexp_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_calibexp_c4val_rep1.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_calibexp_c4val.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_ppl_calibexp_c4val_rep1.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "One pair, one text, deterministic instrument (repeats bit-identical). The RTN-fallback count is the same under both methods, so calibration starvation (about 1k rows per expert against a 2048-wide Hessian under top-8-of-128 routing) is not the dominant effect; the size sweep measures the residual. Consequence: e4b#384 ships the sequential mechanism (enable_serve_experts_int4_calibrated, 0.35.0); the all-at-once path is the two-step API only. In nats the effect is of the order of the family's arithmetic-order floor; the gate is registered in perplexity by decision (2026-09-04 13:10Z: close the gap, not the gate) and is not retuned. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 glue -- a configuration that passes the registered K8 gate on both texts on this lane: 158.0 tok/s (6.33 ms/step), rental-measured on this box; no ratio (no NF4 speed arm on this lane).",
+      "value": 158.0,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, timed window (127 steps), --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-8 @db2a070 (main 0.34.0 + #385 + #388 + #384 + GPU-solve knob) + grouped-nf4-gemm main @0b25d13; E4B_SERVE_EXP_INT4=1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1; arm: qwen3_b1_all_calibexp = 6.33 ms",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_b1_all_calibexp.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_b1_all_calibexp.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "Quality on this lane: e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04 (pass on both texts as registered; the pack is the all-at-once one, the streamed full stack is bo6c). Quote with its box: bo5's RTN-expert all read 4.90 ms = 204.1 tok/s on an EPYC 9755 host and a different cut (e4b.serve.buildout.bo5.qwen3.b1) -- a different host, no same-box NF4 arm and no bandwidth probe here, so the difference is not read; bo7 measures the same-box ratio."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B on a rented RTX 5090 (Threadripper PRO host), the full calibrated stack with GPTQ-calibrated int4 experts (all-at-once pack) -- passes the registered K8 gate on both texts on this lane: 993.6 tok/s (16.10 ms/step), rental-measured on this box; no ratio.",
+      "value": 993.6,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-8 @db2a070 + grouped-nf4-gemm main @0b25d13; same environment as the B=1 arm; arm: qwen3_b16_all_calibexp = 993.6 (16.10 ms/step)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/qwen3_b16_all_calibexp.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_qwen3_b16_all_calibexp.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "Same window, gate and reading as e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04. bo5's RTN-expert all read 1251.6 on its EPYC box (e4b.serve.buildout.bo5.qwen3.b16); quote each with its box, never the ratio between them."
+    },
+    {
+      "id": "e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "mistralai/Mixtral-8x7B-Instruct-v0.1's int4-expert stack -- GPTQ-calibrated int4 experts calibrated SEQUENTIALLY (streamed, 8 GiB Hessian budget) + round-1/2 folds (rope-only fold) + router epilogue, no calibrated attention (bo5's `lic` with calibrated experts in place of RTN) -- reads wikitext +0.0771 ppl (+0.0234 nats; this family's floor is unmeasured) and c4val1 +0.0391 ppl (+0.0047 nats) against the same-cut NF4: FAIL as registered on wikitext (budget +0.05 on every text) -- measured, NOT licensed. Sequential calibration closed Qwen3's gap and did not close Mixtral's: the stack passes its in-domain text and fails the out-of-domain one, the mirror image of bo5's RTN stack.",
+      "value": 0.0771,
+      "unit": "ppl (delta vs NF4 on wikitext, the failing text; c4val1 +0.0391)",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper PRO 7975WX host (64 CPUs, 251 GB, container cgroup memory.max 170 GiB), Vast.ai instance 49861751; the 5090 class carries ~8.5% inter-box dispersion and measured memory-bandwidth heterogeneity (no bandwidth probe ran on this box) and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "K8 teacher-forced NLL through the paged decode path, 2048 steps, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, placement all-vram, transformers 5.16.1; e4b integration-8 @ae9dc122 (bo6b) + grouped-nf4-gemm main @0b25d13; E4B_INT4_HESSIAN_BUDGET_GB=8 -> 32 layers in 32 passes of 1; 8 batches x 4 x 512 = 16k calibration tokens (C4 validation shard 00000), damping 0.01, min_rows=32; 512 gptq / 0 rtn packs; NF4 reference re-scored on this box: wikitext 1.18214 (ppl 3.26135, sha 31fd7d408809), c4val1 2.10973 (8.24604, sha 061534dadd4d); arms: mixtral_ppl_lic_calibexp_c4val = 2.11447 (ppl 8.28518); mixtral_ppl_lic_calibexp (wikitext, sha 31fd7d408809 = bo5c's window) = 1.20549 (ppl 3.33841)",
+      "measured_on": "2026-09-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo6/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo6/mixtral_ppl_lic_calibexp_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/mixtral_ppl_nf4_c4val.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/mixtral_ppl_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_mixtral_ppl_lic_calibexp_c4val.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/outer.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/mixtral_ppl_lic_calibexp.json",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_mixtral_ppl_lic_calibexp.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_mixtral_b1_lic_calibexp.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_mixtral_b16_lic_calibexp.log",
+        "bench/hybrid-g9/throughput-20260904/bo6/logs/run_mixtral_ppl_lic_calibexp_n128_c4val.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P34 section)"
+      ],
+      "notes": "VERDICT: FAIL as registered (wikitext +0.0771 over the +0.05 budget; c4val1 +0.0391 within it) -- measured, NOT licensed; the gate is not retuned. Receipt: mixtral_ppl_lic_calibexp.json (K8 20:33-21:54Z on the box). The B=1 and B=16 speed arms and the 64k-token arm (lic_calibexp_n128_c4val) produced NO reading: each was killed by the lane's own per-arm alarm during the streamed calibration (B=1 and B=16 by the 3600-s arm alarm at pass 23 of 32 -- the 32-layer streamed calibration at an 8 GiB budget alone takes ~85 min; the 64k arm by the 5400-s K8 alarm at pass 20 of 32, ~4.5 min per layer). A harness limit, not a model result; no number is quoted for them. The Mixtral speed of the calibrated stack was NOT measured on this lane, and bo7 dropped those arms too (the stack is not licensed). Not a reference shift: the window sha 31fd7d408809 matches bo5c's and this lane's NF4 (1.18214) agrees with bo5c's (1.18105) to 0.001 nats. The mirror image of bo5's RTN lic on its own lane (wikitext -0.046 pass / c4val1 +0.0575 FAIL by 0.008; e4b.serve.buildout.bo5.mixtral.b1 notes; cited beside, not divided). Attempt 3's all-at-once Mixtral arms were OOM-killed by the 170 GiB container (about 230 GB of fp32 Hessians for 8 experts x (4096^2 + 14336^2) x 4 B x 32 layers) and produced no reading; the streamed mechanism is what fixed that and what ships. Next levers are not gate changes: a per-expert NF4 fallback for the experts with the largest GPTQ residual, or the 64k-token calibration set scored on wikitext (the queued lic_calibexp_n128 arm is c4val1-only). Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against the family's arithmetic-order floor (unmeasured for Mixtral) and never change the verdict."
     }
   ]
 }
