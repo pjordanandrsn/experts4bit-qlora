@@ -510,6 +510,91 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
     return True
 
 
+_FUSED_NONORM_CHILDREN = frozenset({"qkv_proj", "o_proj"})
+
+
+def _patch_attention_fused_rope_only(mod, int4_b32) -> bool:
+    """The rotary-only fold on the FUSED-qkv norm-less shape
+    (``qkv_fuse`` on GraniteMoe / Mixtral): exactly ``qkv_proj`` and
+    ``o_proj`` as children, the split sizes ``_fused_nq/_nk/_nv``, no
+    norms, nothing of the module's own. One qkv GEMM, ``rope_heads`` on
+    q and k, attention -- the two levers together."""
+    children = {n for n, _ in mod.named_children()}
+    if children != _FUSED_NONORM_CHILDREN:
+        return False
+    if any(True for _ in mod.named_parameters(recurse=False)):
+        return False
+    if any(True for _ in mod.named_buffers(recurse=False)):
+        return False
+    for attr in ("head_dim", "scaling", "layer_idx", "config",
+                 "attention_dropout", "_fused_nq", "_fused_nk", "_fused_nv"):
+        if not hasattr(mod, attr):
+            return False
+    d = int(mod.head_dim)
+    if d % 2:
+        return False
+    rope_heads = getattr(int4_b32, "rope_heads", None)
+    if rope_heads is None:
+        raise RuntimeError(
+            "E4B_FUSE_T1_GLUE_R2=1 on a fused norm-less attention "
+            f"({type(mod).__name__}) needs the kernel side's rope_heads "
+            "(grouped-nf4-gemm >= 0.28); install the matching cut or "
+            "unset the flag")
+    orig = mod.forward
+
+    def _fwd(hidden_states, position_embeddings=None,
+             attention_mask=None, past_key_values=None, _m=mod,
+             _orig=orig, _d=d, **kwargs):
+        rows = hidden_states.numel() // hidden_states.shape[-1]
+        if (position_embeddings is None
+                or hidden_states.dtype != torch.bfloat16
+                or rows > _MAX_DECODE_ROWS):
+            return _orig(hidden_states,
+                         position_embeddings=position_embeddings,
+                         attention_mask=attention_mask,
+                         past_key_values=past_key_values, **kwargs)
+        from transformers.models.qwen3_moe.modeling_qwen3_moe import (
+            ALL_ATTENTION_FUNCTIONS, eager_attention_forward)
+
+        input_shape = hidden_states.shape[:-1]
+        qkv = _m.qkv_proj(hidden_states)
+        q, k, v = qkv.split([_m._fused_nq, _m._fused_nk, _m._fused_nv],
+                            dim=-1)
+        cos, sin = position_embeddings
+        cos2 = cos.reshape(-1, _d)
+        sin2 = sin.reshape(-1, _d)
+        if cos2.shape[0] == 1 and rows > 1:
+            cos2 = cos2.expand(rows, _d)
+            sin2 = sin2.expand(rows, _d)
+        if cos2.shape[0] != rows or sin2.shape[0] != rows:
+            return _orig(hidden_states,
+                         position_embeddings=position_embeddings,
+                         attention_mask=attention_mask,
+                         past_key_values=past_key_values, **kwargs)
+        query_states = rope_heads(q.reshape(rows, -1, _d), cos2, sin2
+                                  ).reshape(*input_shape, -1, _d).transpose(1, 2)
+        key_states = rope_heads(k.reshape(rows, -1, _d), cos2, sin2
+                                ).reshape(*input_shape, -1, _d).transpose(1, 2)
+        value_states = v.reshape(*input_shape, -1, _d).transpose(1, 2)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(
+                key_states, value_states, _m.layer_idx)
+
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            _m.config._attn_implementation, eager_attention_forward)
+        attn_output, attn_weights = attention_interface(
+            _m, query_states, key_states, value_states, attention_mask,
+            dropout=0.0 if not _m.training else _m.attention_dropout,
+            scaling=_m.scaling,
+            sliding_window=getattr(_m, "sliding_window", None), **kwargs)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        return _m.o_proj(attn_output), attn_weights
+
+    mod.forward = _fwd
+    return True
+
+
 def fuse_t1_glue_r2(model) -> tuple[int, int]:
     """Apply the round-2 decode folds. Returns ``(layers, attentions)``.
 
@@ -538,7 +623,8 @@ def fuse_t1_glue_r2(model) -> tuple[int, int]:
         elif name.endswith("Attention"):
             attns += bool(_patch_attention(mod, rope_norm_heads)
                           or _patch_attention_unfused(mod, rope_norm_heads)
-                          or _patch_attention_rope_only(mod, int4_b32))
+                          or _patch_attention_rope_only(mod, int4_b32)
+                          or _patch_attention_fused_rope_only(mod, int4_b32))
     if layers == 0 and attns == 0:
         raise RuntimeError(
             "E4B_FUSE_T1_GLUE_R2=1 patched nothing (no structurally "

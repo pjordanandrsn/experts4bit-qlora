@@ -724,3 +724,34 @@ def test_norm_less_fold_refuses_sinks_and_needs_the_kernel(monkeypatch):
     m.attn = ToyNoNormAttention()
     with pytest.raises(RuntimeError, match="rope_heads"):
         fuse_t1_glue_r2(m)
+
+
+def test_qkv_fusion_licenses_norm_less_attention_and_the_fold_follows(monkeypatch):
+    """qkv_fuse now fuses the Llama-shaped attention (GraniteMoe, Mixtral)
+    by structure; under round-2 the rotary-only fold licenses that fused
+    shape too, and the whole thing matches the unfused module."""
+    from experts4bit_qlora.engines import glue_r2
+    from experts4bit_qlora.engines.qkv_fuse import _is_nonorm_attention, fuse_qkv
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE", "0")
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "0")
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "0")
+    calls = {"resid": 0, "rope": 0}
+    _stub_rope_only(monkeypatch, calls)
+    torch.manual_seed(31)
+    m = torch.nn.Module()
+    m.attn = ToyNoNormAttention()
+    x, pe = _rope_inputs(2, 3)
+    pe = (pe[0].to(torch.bfloat16), pe[1].to(torch.bfloat16))     # the model's rotary dtype
+    want, _ = m.attn(x, position_embeddings=pe)
+    assert _is_nonorm_attention(m.attn)
+    assert not _is_nonorm_attention(ToyNoNormAttention(extra_param=True))     # gpt-oss's sinks
+    assert fuse_qkv(m) == 1
+    assert {n for n, _ in m.attn.named_children()} == {"qkv_proj", "o_proj"}
+    fused, _ = m.attn(x, position_embeddings=pe)
+    assert torch.allclose(fused.float(), want.float(), rtol=2 ** -6, atol=2 ** -7)
+    monkeypatch.setenv("E4B_FUSE_T1_GLUE_R2", "1")
+    assert glue_r2.fuse_t1_glue_r2(m) == (0, 1)
+    got, _ = m.attn(x, position_embeddings=pe)
+    assert calls["rope_only"] == 2
+    assert torch.allclose(got.float(), want.float(), rtol=2 ** -6, atol=2 ** -7), \
+        (got.float() - want.float()).abs().max()
