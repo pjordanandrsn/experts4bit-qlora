@@ -1,0 +1,565 @@
+[unsloth.import_fixes|INFO]Unsloth: ROCm detection did not match any known hints.
+[unsloth.import_fixes|INFO]Unsloth: Patching protobuf.MessageFactory.GetPrototype
+[unsloth.import_fixes|INFO]Unsloth: torch==2.8.0 and torchvision==0.23.0 are compatible.
+/root/p38/venv-unsloth/lib/python3.11/site-packages/unsloth/__init__.py:1543: UserWarning: WARNING: Unsloth should be imported before [transformers] to ensure all optimizations are applied. Your code may run slower or encounter memory issues without these optimizations.
+
+Please restructure your imports with 'import unsloth' at the top of your file.
+  from ._gpu_init import *
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+[fla.utils._device|INFO]Blackwell detected: registering default global_scratch allocator.
+[unsloth_zoo.log|INFO]Unsloth: aliased recurrent_gated_delta_rule onto fla.ops.gated_delta_rule so the Triton decode kernel is reachable.
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `PretrainedConfig.__init_subclass__` so vLLM config classes with bare annotations still import
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `sdpa_mask` so a left-padded row that attends to nothing cannot return NaN (unsloth #9708)
+[unsloth.import_fixes|INFO]Unsloth: Patched triton CompiledKernel with num_ctas/cluster_dims for torch.compile compatibility.
+[unsloth.import_fixes|INFO]Unsloth: Patched torch.nn.init.trunc_normal_ for fp16/bf16 stability.
+[unsloth.import_fixes|INFO]Unsloth: Patched enable_input_require_grads for vision model compatibility
+[datasets|INFO]Disabling Tensorflow because USE_TORCH is set
+[unsloth_zoo.log|INFO]Unsloth: set VIDEO_TOTAL_PIXELS: 90316800
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched AutoHfQuantizer.merge_quantization_configs.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|WARNING]Unsloth: triton_kernels is not installed. MXFP4 GPT OSS will NOT be patched for LoRA.
+To train GPT OSS with LoRA, either:
+  1. Install triton_kernels from OpenAI (for native MXFP4), OR
+  2. Use Mxfp4Config(dequantize=True) when loading (dequantizes to bf16), OR
+  3. Use the BF16 model: 'unsloth/gpt-oss-20b-BF16'
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Could not find fbgemm_gpu.experimental.gemm.triton_gemm.fp8_gemm.triton_quantize_fp8_block
+[unsloth_zoo.log|INFO]Unsloth: Could not find torchao.prototype.blockwise_fp8_inference.blockwise_quantization.blockwise_fp8_gemm
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3NaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3MoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepSeekV3 MoE for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3ForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepSeekV3ForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4ForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4ForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Lfm2MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched LFM2 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched MixtralExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Mixtral MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Ernie4_5_MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Ernie4_5_VLMoeMoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4bitQuantize.convert.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4bitQuantize.convert for MoE expert parameter support
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.param_needs_quantization.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.param_needs_quantization for MoE expert parameters
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer._process_model_before_weight_loading.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.get_weight_conversions.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer._process_model_after_weight_loading.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers WeightConverter.__init__ to ignore unknown kwargs (peft 0.19 forward-compat)
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.get_param.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.merge.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.unmerge.
+[unsloth_zoo.log|INFO]Unsloth: routed transformers ALL_FP8_EXPERTS_FUNCTIONS through forward_moe_backend_fp8
+[unsloth_zoo.log|INFO]Unsloth: relaxed HF validate_quantization_for_training for FP8+LoRA
+========
+Switching to PyTorch attention since your Xformers is broken.
+========
+
+Unsloth: Xformers 0.0.32.post2 has a broken FA3 dispatch on SM 12.0 GPUs. Please upgrade to >= 0.0.33 or build from source via
+```
+pip install ninja
+pip install -v --no-build-isolation -U git+https://github.com/facebookresearch/xformers.git@main#egg=xformers
+```
+
+🦥 Unsloth Zoo will now patch everything to make training faster!
+[unsloth_zoo.log|INFO]Unsloth: Patching trl openenv with function: openenv_vllm_reload_weights
+[unsloth_zoo.log|INFO]Unsloth: Patching trl VLLMGeneration with function: vllm_generation_init_patch
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched 38 FLA autotune caches: fla.modules.fused_norm_gate.layer_norm_gated_bwd_kernel, fla.modules.fused_norm_gate.layer_norm_gated_bwd_kernel1, fla.modules.fused_norm_gate.layer_norm_gated_fwd_kernel, fla.modules.fused_norm_gate.layer_norm_gated_fwd_kernel1, fla.modules.l2norm.l2norm_bwd_kernel, fla.modules.l2norm.l2norm_bwd_kernel1, fla.modules.l2norm.l2norm_fwd_kernel, fla.modules.l2norm.l2norm_fwd_kernel1, fla.ops.common.chunk_delta_h.chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64, fla.ops.common.chunk_delta_h.chunk_gated_delta_rule_fwd_kernel_h_blockdim64, fla.ops.common.chunk_o.chunk_bwd_kernel_dqkwg, fla.ops.common.chunk_o.chunk_bwd_kernel_dv, fla.ops.common.chunk_o.chunk_bwd_kernel_dv_local, fla.ops.common.chunk_o.chunk_fwd_kernel_o, fla.ops.cp.chunk_delta_h.merge_fwd_bwd_kernel, fla.ops.cp.chunk_delta_h.pre_process_bwd_kernel_merged, fla.ops.cp.chunk_delta_h.pre_process_fwd_kernel_merged, fla.ops.gated_delta_rule.chunk_fwd.chunk_gated_delta_rule_fwd_kkt_solve_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_bwd_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_chunk_cumsum_scalar_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_fwd_kernel, fla.ops.gated_delta_rule.wy_fast.prepare_wy_repr_bwd_kernel, fla.ops.gated_delta_rule.wy_fast.recompute_w_u_fwd_kernel, fla.ops.utils.cumsum.chunk_global_cumsum_scalar_kernel, fla.ops.utils.cumsum.chunk_global_cumsum_vector_kernel, fla.ops.utils.cumsum.chunk_local_cumsum_scalar_kernel, fla.ops.utils.cumsum.chunk_local_cumsum_vector_kernel, fla.ops.utils.index.prepare_position_ids_kernel, fla.ops.utils.logsumexp.logsumexp_fwd_kernel, fla.ops.utils.matmul.matmul_kernel, fla.ops.utils.pack.packunpack_sequence_kernel, fla.ops.utils.pooling.mean_pooling_bwd_kernel, fla.ops.utils.pooling.mean_pooling_fwd_kernel, fla.ops.utils.softmax.softmax_bwd_kernel, fla.ops.utils.softmax.softmax_fwd_kernel, fla.ops.utils.solve_tril.merge_16x16_to_32x32_inverse_kernel, fla.ops.utils.solve_tril.merge_16x16_to_64x64_inverse_kernel, fla.ops.utils.solve_tril.solve_tril_16x16_kernel
+[unsloth_zoo.log|WARNING]TorchAO patching failed with exception = No module named 'torchao'
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.0.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.1.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.2.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.3.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.4.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.5.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.6.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.7.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.8.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.9.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.10.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.11.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.12.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.13.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.14.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.15.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.16.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.17.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.18.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.19.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.20.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.21.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.22.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.23.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.24.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.25.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.26.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.27.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.28.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.29.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.30.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.31.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.32.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.33.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.34.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.35.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.36.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.37.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.38.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.39.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.40.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.41.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.42.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.43.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.44.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.45.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.46.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.47.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+Loading weights:   0%|          | 0/531 [00:00<?, ?it/s]Loading weights:   1%|          | 4/531 [00:00<00:18, 28.44it/s]Loading weights:   3%|▎         | 15/531 [00:00<00:07, 66.54it/s]Loading weights:   5%|▍         | 26/531 [00:00<00:06, 81.70it/s]Loading weights:   7%|▋         | 37/531 [00:00<00:05, 89.44it/s]Loading weights:   9%|▉         | 48/531 [00:00<00:05, 93.90it/s]Loading weights:  11%|█         | 59/531 [00:00<00:04, 96.69it/s]Loading weights:  13%|█▎        | 70/531 [00:00<00:04, 98.51it/s]Loading weights:  15%|█▌        | 81/531 [00:00<00:04, 99.74it/s]Loading weights:  17%|█▋        | 92/531 [00:01<00:04, 100.45it/s]Loading weights:  19%|█▉        | 103/531 [00:01<00:04, 100.18it/s]Loading weights:  21%|██▏       | 114/531 [00:01<00:04, 100.47it/s]Loading weights:  24%|██▎       | 125/531 [00:01<00:04, 101.05it/s]Loading weights:  26%|██▌       | 136/531 [00:01<00:03, 101.34it/s]Loading weights:  28%|██▊       | 147/531 [00:01<00:03, 101.56it/s]Loading weights:  30%|██▉       | 158/531 [00:01<00:03, 101.63it/s]Loading weights:  32%|███▏      | 169/531 [00:01<00:03, 101.70it/s]Loading weights:  34%|███▍      | 180/531 [00:01<00:03, 101.79it/s]Loading weights:  36%|███▌      | 191/531 [00:01<00:03, 101.87it/s]Loading weights:  38%|███▊      | 202/531 [00:02<00:03, 101.38it/s]Loading weights:  40%|████      | 213/531 [00:02<00:03, 100.42it/s]Loading weights:  42%|████▏     | 224/531 [00:02<00:03, 100.79it/s]Loading weights:  44%|████▍     | 235/531 [00:02<00:02, 101.16it/s]Loading weights:  46%|████▋     | 246/531 [00:02<00:02, 101.35it/s]Loading weights:  48%|████▊     | 257/531 [00:02<00:02, 101.54it/s]Loading weights:  50%|█████     | 268/531 [00:02<00:02, 101.69it/s]Loading weights:  53%|█████▎    | 279/531 [00:02<00:02, 101.78it/s]Loading weights:  55%|█████▍    | 290/531 [00:02<00:02, 101.89it/s]Loading weights:  57%|█████▋    | 301/531 [00:03<00:02, 102.04it/s]Loading weights:  59%|█████▉    | 312/531 [00:03<00:02, 101.67it/s]Loading weights:  61%|██████    | 323/531 [00:03<00:02, 101.59it/s]Loading weights:  63%|██████▎   | 334/531 [00:03<00:01, 101.55it/s]Loading weights:  65%|██████▍   | 345/531 [00:03<00:01, 101.55it/s]Loading weights:  67%|██████▋   | 356/531 [00:03<00:01, 101.72it/s]Loading weights:  69%|██████▉   | 367/531 [00:03<00:01, 101.85it/s]Loading weights:  71%|███████   | 378/531 [00:03<00:01, 102.00it/s]Loading weights:  73%|███████▎  | 389/531 [00:03<00:01, 102.05it/s]Loading weights:  75%|███████▌  | 400/531 [00:04<00:01, 102.12it/s]Loading weights:  77%|███████▋  | 411/531 [00:04<00:01, 102.04it/s]Loading weights:  79%|███████▉  | 422/531 [00:04<00:01, 101.46it/s]Loading weights:  82%|████████▏ | 433/531 [00:04<00:00, 101.64it/s]Loading weights:  84%|████████▎ | 444/531 [00:04<00:00, 101.88it/s]Loading weights:  86%|████████▌ | 455/531 [00:04<00:00, 101.91it/s]Loading weights:  88%|████████▊ | 466/531 [00:04<00:00, 101.93it/s]Loading weights:  90%|████████▉ | 477/531 [00:04<00:00, 101.88it/s]Loading weights:  92%|█████████▏| 488/531 [00:04<00:00, 101.81it/s]Loading weights:  94%|█████████▍| 499/531 [00:05<00:00, 101.81it/s]Loading weights:  96%|█████████▌| 510/531 [00:05<00:00, 101.84it/s]Loading weights:  98%|█████████▊| 521/531 [00:05<00:00, 99.91it/s] Loading weights: 100%|██████████| 531/531 [00:05<00:00, 100.09it/s]
+[unsloth_zoo.log|INFO]Unsloth: Making `model.base_model.model.model` require gradients
+[unsloth_zoo.log|INFO]Unsloth: Registered output gradient hook on `model.base_model.model.model` input embeddings.
+Unsloth: Not an error, but could not optimize some PEFT modules.
+[]
+Unsloth: Will not compile SiglipEncoder since it looks like a vision encoder!
+Unsloth: Compiled module SiglipVisionEmbeddings.
+Unsloth: Compiled module SiglipTextEmbeddings.
+Unsloth: Compiled module SiglipMLP.
+Unsloth: Compiled module SiglipMultiheadAttentionPoolingHead.
+Unsloth: Fast Attention patch for SiglipAttention.
+Unsloth: Compiled function eager_attention_forward.
+Unsloth: Mega-cache loaded bundle for key 294674e9521cc64201109e3df5233418 (12794434 bytes)
+No module named 'causal_conv1d' No module named 'causal_conv1d'
+Unsloth: Failed compiling causal_conv1d
+Unsloth: Failed compiling mamba_ssm
+Unsloth: Patching LoRA to make it faster
+Unsloth: Not an error, but could not optimize some PEFT modules.
+Unsloth: Not an error, but could not optimize some PEFT modules.
+[]
+Unsloth: Will compile Qwen3MoeSparseMoeBlock without fullgraph since output capture hooks run inside it.
+Unsloth: Compiled module Qwen3MoeMLP.
+Unsloth: Compiled module Qwen3MoeExperts.
+Unsloth: Compiled module Qwen3MoeTopKRouter.
+Unsloth: Compiled module Qwen3MoeSparseMoeBlock.
+Unsloth: Compiled module Qwen3MoeRMSNorm.
+Unsloth: Compiled module Qwen3MoeRotaryEmbedding.
+Unsloth: Fast Attention patch for Qwen3MoeAttention.
+(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+(1) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+Unsloth: Compiled function rotate_half.
+Unsloth: Compiled function apply_rotary_pos_emb.
+Unsloth: Compiled function repeat_kv.
+Unsloth: Compiled function eager_attention_forward.
+Unsloth: Compiled function load_balancing_loss_func.
+==((====))==  Unsloth 2026.9.2: Fast Qwen3_MoE patching. Transformers: 5.5.0.
+   \\   /|    NVIDIA GeForce RTX 5090. Num GPUs = 1. Max memory: 31.358 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.8.0+cu128. CUDA: 12.0. CUDA Toolkit: 12.8. Triton: 3.4.0
+\        /    Bfloat16 = TRUE. FA [Xformers = None. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Explicit target_modules are constrained by the finetune_(vision|language|attention|mlp) filters; adapters attach only where both select.
+Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']
+LOAD OK {"framework": "unsloth", "load_s": 14.8, "verify": {"n_quantized": null, "n_unquantized": null}, "n_attn4": 0, "n_patched": 0, "trainable_params": 321257472, "trainable_tensors": 576, "dtypes_before": {"torch.float32": 576}, "dtypes_after": {"torch.float32": 576}, "lora_cast_to_fp32": 0, "non_adapter_trainable": [], "census": {"Params4bit_expert_stacks": 96, "Params4bit_other": 192, "Linear4bit": 384, "Linear_bf16": 1, "Linear_fp32": 0, "Experts4bit": 0, "ExpertsLoRA": 0, "LoRALinear": 0, "router_gate": [{"name": "base_model.model.model.layers.0.mlp.gate", "cls": "Qwen3MoeTopKRouter", "dtype": "torch.bfloat16"}, {"name": "base_model.model.model.layers.1.mlp.gate", "cls": "Qwen3MoeTopKRouter", "dtype": "torch.bfloat16"}, {"n": 48}], "lm_head": {"cls": "Linear", "dtype": "torch.bfloat16"}}, "tokenizer_agree": true, "ckpt": "unsloth"}
+ENGAGE ==((====))==  Unsloth 2026.9.2: Fast Qwen3_MoE patching. Transformers: 5.5.0.
+ENGAGE Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused__to_copy_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 2947.51it/s, triton_poi_fused__to_copy_cos_sin_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 2606.78it/s, triton_poi_fused__to_copy_cos_sin_1]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 2894.62it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 2543.54it/s, triton_per_fused__to_copy_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 1478.43it/s, triton_poi_fused_add_cat_mul_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 1630.12it/s, triton_poi_fused_add_cat_mul_1]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 3151.24it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_per_fused__softmax__to_copy_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 2790.62it/s, triton_red_fused_div_sum_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 3012.07it/s, triton_red_fused_div_sum_1]
+[unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit using dequantize-plus-native_torch loop.
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s, triton_red_fused__to_copy_0]Unsloth: Compiling kernels:  14%|█▍        | 1/7 [00:00<00:00, 2699.04it/s, triton_per_fused__to_copy_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00, 2566.11it/s, triton_red_fused__to_copy_2]Unsloth: Compiling kernels:  43%|████▎     | 3/7 [00:00<00:00, 26.27it/s, triton_red_fused__to_copy_2]  Unsloth: Compiling kernels:  43%|████▎     | 3/7 [00:00<00:00, 26.27it/s, triton_per_fused__to_copy_3]Unsloth: Compiling kernels:  57%|█████▋    | 4/7 [00:00<00:00, 26.27it/s, triton_red_fused_add_div_nll_loss_forward_4]Unsloth: Compiling kernels:  71%|███████▏  | 5/7 [00:00<00:00, 26.27it/s, triton_red_fused__log_softmax__log_softmax_backward_data__to_copy_div_nll_loss_backward_ones_like_5]Unsloth: Compiling kernels:  86%|████████▌ | 6/7 [00:00<00:00, 26.27it/s, triton_poi_fused_6]                                                                                 Unsloth: Compiling kernels: 100%|██████████| 7/7 [00:00<00:00, 59.69it/s, triton_poi_fused_6]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=77][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused__to_copy_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 3072.75it/s, triton_poi_fused__to_copy_cos_sin_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 2978.91it/s, triton_poi_fused__to_copy_cos_sin_1]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 2474.52it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_div_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 3184.74it/s, triton_red_fused__to_copy_add_div_mul_pow_sum_0]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s, triton_red_fused__to_copy_0]Unsloth: Compiling kernels:  14%|█▍        | 1/7 [00:00<00:00, 2531.26it/s, triton_per_fused__to_copy_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00, 2896.62it/s, triton_red_fused__to_copy_2]Unsloth: Compiling kernels:  43%|████▎     | 3/7 [00:00<00:00, 35.81it/s, triton_per_fused__to_copy_3]  Unsloth: Compiling kernels:  57%|█████▋    | 4/7 [00:00<00:00, 47.56it/s, triton_red_fused_add_div_nll_loss_forward_4]Unsloth: Compiling kernels:  71%|███████▏  | 5/7 [00:00<00:00, 59.22it/s, triton_red_fused__log_softmax__log_softmax_backward_data__to_copy_div_nll_loss_backward_ones_like_5]Unsloth: Compiling kernels:  86%|████████▌ | 6/7 [00:00<00:00, 70.80it/s, triton_poi_fused_6]                                                                                 Unsloth: Compiling kernels: 100%|██████████| 7/7 [00:00<00:00, 82.31it/s, triton_poi_fused_6]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 2598.70it/s, triton_per_fused__to_copy_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_div_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 3323.54it/s, triton_per_fused__to_copy_add_div_mul_pow_sum_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 1946.31it/s, triton_poi_fused_add_cat_mul_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 2298.25it/s, triton_poi_fused_add_cat_mul_1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_mul_neg_slice_backward_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 2826.35it/s, triton_poi_fused_add_mul_neg_slice_backward_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 3005.59it/s, triton_poi_fused_add_mul_neg_slice_backward_1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_per_fused__softmax__to_copy_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 2884.67it/s, triton_red_fused_div_sum_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 3040.45it/s, triton_red_fused_div_sum_1]
+Unsloth: Compiling kernels:   0%|          | 0/3 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/3 [00:00<?, ?it/s, triton_poi_fused_add_div_scatter_zeros_0]Unsloth: Compiling kernels:  33%|███▎      | 1/3 [00:00<00:00, 3650.40it/s, triton_red_fused_add_div_mul_neg_scatter_sum_zeros_1]Unsloth: Compiling kernels:  67%|██████▋   | 2/3 [00:00<00:00, 3113.81it/s, triton_per_fused__softmax_backward_data__to_copy_add_2]Unsloth: Compiling kernels: 100%|██████████| 3/3 [00:00<00:00, 3207.47it/s, triton_per_fused__softmax_backward_data__to_copy_add_2]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+    step 10/60 loss 1.45272 2107.9 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=92][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+    step 20/60 loss 0.58771 2158.6 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=77][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+    eval@20 heldout 0.57976 train_wall 43.8s
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+    step 30/60 loss 0.36219 2125.4 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=94][vocab_size=151936][n_chunks=1]
+    step 40/60 loss 0.38742 2175.0 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=77][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+    eval@40 heldout 0.36718 train_wall 86.9s
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=94][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=92][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+    step 50/60 loss 0.31556 2184.9 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=94][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+    step 60/60 loss 0.26056 2173.7 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=77][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=89][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+    eval@60 heldout 0.29753 train_wall 130.3s
+CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth", "status": "ok", "steps": 60, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "unsloth", "attn_4bit": false, "n_attn4": 0, "tokens": {"path": "tokens_clinical.json", "sha256": "81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583", "n_train": 1200, "eval_rows_used": 48, "tokenizer_agree": true}, "prereg": "h2h/P38-UNSLOTH-PREREG.md", "harness": "p38_arm.py (tp1_train_smoke.py + U1-U10)", "load_s": 14.8, "verify": {"n_quantized": null, "n_unquantized": null}, "engagement_banners": ["==((====))==  Unsloth 2026.9.2: Fast Qwen3_MoE patching. Transformers: 5.5.0.", "Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']"], "unsloth_bnb4bit_modules": {"n_experts_modules": 48, "n_bnb4bit": 0}, "trainable_params": 321257472, "trainable_tensors": 576, "adapter_dtypes_before": {"torch.float32": 576}, "adapter_dtypes_after": {"torch.float32": 576}, "lora_cast_to_fp32": 0, "init_sha": "83332aed4cb565b9b2a2e0f2834beec231e4f12f59bf8187cdc635e51e30b82f", "n_patched": 0, "enable_reason": "", "kernel_counter_key": "moe_bnb4bit_backend", "kernel_calls_per_step_min": 96, "experts_forward_calls_per_step_min": 96, "C1_tensors_hashed": 288, "C1_bytes_hashed": 14948499456, "C1_empties_skipped": 0, "C1_control_detects_flipped_byte": true, "C1_experts_changed": 0, "C1_bit_exact": true, "C1_changed_sample": [], "loss_first": 3.65496, "loss_last": 0.26056, "loss_mean_last20": 0.31974, "eval_loss_step0": 3.69676, "eval_loss_final": 0.29753, "target_loss": 0.32, "time_to_target_s": 130.28, "time_to_target_note": null, "s_per_step": 3.4994, "s_per_step_median_11plus": 2.1509, "train_wall_s": 130.28, "window_wall_s": 209.96, "tokens_total": 5175, "tokens_per_s": 39.7, "peak_vram_gb": 23.141, "idle_w": 65.3, "mean_w": 168.8, "power_samples": 964, "sampler": true, "joules_per_step": 224.66, "adapter": {"path": "/root/p38/adapters/ckpt_unsloth", "bytes": 1285115892, "files": ["README.md", "adapter_config.json", "adapter_model.safetensors"], "tensors": 576, "params": 321257472, "dtypes": ["F32"]}}
+Unsloth: Mega-cache saved bundle for key 294674e9521cc64201109e3df5233418 (12794434 bytes)

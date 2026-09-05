@@ -1,0 +1,926 @@
+{
+ "framework": "e4b",
+ "fam": "qwen3",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "arm": "reference",
+ "tag": "reference_attn4",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "optimizer": "torch.optim.AdamW(lr) torch defaults",
+ "grad_ckpt": "hf:use_reentrant=False",
+ "attn_4bit": true,
+ "n_attn4": 192,
+ "tokens": {
+  "path": "tokens_clinical.json",
+  "sha256": "81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583",
+  "n_train": 1200,
+  "eval_rows_used": 48,
+  "tokenizer_agree": true
+ },
+ "prereg": "h2h/P38-UNSLOTH-PREREG.md",
+ "harness": "p38_arm.py (tp1_train_smoke.py + U1-U10)",
+ "env": {
+  "framework": "e4b",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.16.1",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-a3575b56-527d-91e3-dc1d-623b49165706",
+   "pci.bus_id": "00000000:01:00.0",
+   "pcie.link.gen.current": "5",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "600.00",
+   "clocks.max.sm": "3105",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.D4",
+   "driver_version": "595.84",
+   "cpu": "Intel(R) Core(TM) i9-14900K",
+   "cpu_threads": 32,
+   "host_mem_gib": 188.6,
+   "vast_instance_id": "49975389",
+   "container_host": "de4069ec5db6"
+  },
+  "anchor_json": null,
+  "box_class": null,
+  "unsloth_env": {
+   "UNSLOTH_ENABLE_LOGGING": "1"
+  },
+  "experts4bit-qlora": "0.35.0",
+  "grouped-nf4-gemm": "0.30.0",
+  "bitsandbytes": "0.50.1",
+  "peft": null,
+  "unsloth": null,
+  "unsloth_zoo": null,
+  "triton": "3.4.0"
+ },
+ "load_s": 14.7,
+ "verify": {
+  "quantized": [
+   {
+    "module": "model.layers.0.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.1.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.2.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.3.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.4.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.5.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.6.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.7.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.8.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.9.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.10.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.11.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.12.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.13.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.14.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.15.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.16.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.17.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.18.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.19.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.20.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.21.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.22.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.23.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.24.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.25.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.26.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.27.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.28.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.29.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.30.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.31.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.32.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.33.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.34.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.35.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.36.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.37.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.38.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.39.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.40.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.41.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.42.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.43.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.44.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.45.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.46.mlp.experts.base",
+    "quant_type": "nf4"
+   },
+   {
+    "module": "model.layers.47.mlp.experts.base",
+    "quant_type": "nf4"
+   }
+  ],
+  "unquantized": [],
+  "n_quantized": 48,
+  "n_unquantized": 0
+ },
+ "census": {
+  "Params4bit_expert_stacks": 0,
+  "Params4bit_other": 192,
+  "Linear4bit": 192,
+  "Linear_bf16": 1,
+  "Linear_fp32": 0,
+  "Experts4bit": 48,
+  "ExpertsLoRA": 48,
+  "LoRALinear": 192,
+  "router_gate": [
+   {
+    "name": "model.layers.0.mlp.gate",
+    "cls": "Qwen3MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "name": "model.layers.1.mlp.gate",
+    "cls": "Qwen3MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "n": 48
+   }
+  ],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": []
+ },
+ "engagement_banners": [],
+ "unsloth_bnb4bit_modules": null,
+ "trainable_params": 321257472,
+ "trainable_tensors": 576,
+ "adapter_dtypes_before": {
+  "torch.float32": 384,
+  "torch.bfloat16": 192
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 384,
+  "torch.bfloat16": 192
+ },
+ "lora_cast_to_fp32": 0,
+ "init_sha": "2b362f7b19ad8830d01afaa62685dc284a673a71099e0570e966bcb4bf5f32d7",
+ "n_patched": 0,
+ "enable_reason": "",
+ "kernel_counter_key": "fused_grouped_lora",
+ "kernel_calls_per_step": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "kernel_calls_per_step_min": 0,
+ "experts_forward_calls_per_step_min": 0,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  }
+ ],
+ "C1_tensors_hashed": 384,
+ "C1_bytes_hashed": 16760438784,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 3.65348,
+ "loss_last": 0.26423,
+ "loss_mean_last20": 0.30983,
+ "eval_loss_step0": 3.70207,
+ "eval_loss_final": 0.29087,
+ "eval_curve": [
+  {
+   "step": 0,
+   "heldout_loss": 3.70207,
+   "train_wall_s": 0.0
+  },
+  {
+   "step": 20,
+   "heldout_loss": 0.35206,
+   "train_wall_s": 88.01
+  },
+  {
+   "step": 40,
+   "heldout_loss": 0.31954,
+   "train_wall_s": 176.72
+  },
+  {
+   "step": 60,
+   "heldout_loss": 0.29087,
+   "train_wall_s": 265.73
+  }
+ ],
+ "target_loss": 0.32,
+ "time_to_target_s": 176.72,
+ "time_to_target_note": null,
+ "s_per_step": 6.6074,
+ "s_per_step_median_11plus": 4.4367,
+ "step_ms": [
+  4270.3,
+  4285.9,
+  4330.3,
+  4258.9,
+  4343.6,
+  4407.2,
+  4430.6,
+  4439.6,
+  4375.2,
+  4514.6,
+  4330.8,
+  4453.7,
+  4431.3,
+  4536.3,
+  4462.5,
+  4461.9,
+  4396.1,
+  4375.3,
+  4472.5,
+  4428.5,
+  4526.2,
+  4433.8,
+  4473.9,
+  4366.7,
+  4464.1,
+  4439.1,
+  4355.3,
+  4432.0,
+  4317.5,
+  4426.7,
+  4436.8,
+  4378.2,
+  4502.3,
+  4431.9,
+  4480.4,
+  4402.9,
+  4488.2,
+  4455.4,
+  4360.9,
+  4547.3,
+  4413.1,
+  4495.8,
+  4410.1,
+  4353.8,
+  4507.3,
+  4424.9,
+  4570.4,
+  4436.7,
+  4533.6,
+  4474.6,
+  4392.1,
+  4460.3,
+  4467.1,
+  4471.0,
+  4423.5,
+  4487.5,
+  4367.9,
+  4463.3,
+  4434.3,
+  4415.0
+ ],
+ "train_wall_s": 265.73,
+ "window_wall_s": 396.45,
+ "tokens_per_step": [
+  86,
+  85,
+  91,
+  84,
+  81,
+  91,
+  86,
+  88,
+  85,
+  82,
+  78,
+  84,
+  91,
+  93,
+  92,
+  82,
+  81,
+  82,
+  88,
+  91,
+  88,
+  93,
+  82,
+  82,
+  82,
+  88,
+  82,
+  81,
+  81,
+  82,
+  88,
+  87,
+  82,
+  91,
+  86,
+  84,
+  82,
+  93,
+  78,
+  94,
+  91,
+  88,
+  84,
+  82,
+  88,
+  88,
+  94,
+  90,
+  92,
+  93,
+  85,
+  82,
+  94,
+  85,
+  88,
+  82,
+  82,
+  82,
+  87,
+  91
+ ],
+ "tokens_total": 5175,
+ "tokens_per_s": 19.5,
+ "peak_vram_gb": 21.371,
+ "idle_w": 63.7,
+ "mean_w": 124.2,
+ "power_samples": 1791,
+ "sampler": true,
+ "joules_per_step": 268.06,
+ "adapter": {
+  "path": "/root/p38/adapters/adapter_reference_attn4.pt",
+  "bytes": 656078495,
+  "tensors": 576,
+  "params": 321257472,
+  "dtypes": [
+   "torch.bfloat16",
+   "torch.float32"
+  ]
+ },
+ "losses": [
+  3.65348,
+  2.30806,
+  1.51082,
+  1.10198,
+  0.97462,
+  0.73205,
+  0.454,
+  0.8532,
+  0.418,
+  0.65017,
+  0.47991,
+  0.45738,
+  0.39062,
+  0.65497,
+  0.3444,
+  0.45341,
+  0.40561,
+  0.35035,
+  0.34912,
+  0.33482,
+  0.38262,
+  0.29375,
+  0.35418,
+  0.32363,
+  0.36322,
+  0.25856,
+  0.37813,
+  0.4059,
+  0.40383,
+  0.2841,
+  0.36916,
+  0.33659,
+  0.32467,
+  0.31042,
+  0.30042,
+  0.2806,
+  0.31563,
+  0.31994,
+  0.32725,
+  0.31582,
+  0.31907,
+  0.2769,
+  0.40451,
+  0.32514,
+  0.30017,
+  0.27896,
+  0.28259,
+  0.29745,
+  0.28512,
+  0.31407,
+  0.27788,
+  0.40489,
+  0.23621,
+  0.39593,
+  0.26868,
+  0.32611,
+  0.30977,
+  0.32042,
+  0.30854,
+  0.26423
+ ]
+}

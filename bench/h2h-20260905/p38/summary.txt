@@ -1,0 +1,34 @@
+ANCHOR rc=0 class=pcie-full/launch-fast
+DATASET clinical sha=76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791
+TOKENS clinical sha=81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583
+e4b/reference_attn4 rc=1 
+e4b/fused_attn4 rc=1 
+e4b/fused rc=1 
+e4b/fused_attn4_nosamp rc=1 
+unsloth/ckpt_unsloth INSTALL_FAILED
+unsloth/ckpt_hf INSTALL_FAILED
+e4b/fused_attn4_200 rc=1 
+unsloth/ckpt_unsloth_200 INSTALL_FAILED
+NO COMPARATOR: the Unsloth side did not install/import; e4b arms only -- not an H2H
+AMENDMENT 2: refs/main=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (cache pointer only; tp1 staged the same snapshot unpinned); torchao removed from venv-unsloth (0.18.0 needs torch>=2.9)
+TOKENS(p38c) /root/p38/tokens_clinical.json sha=81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583
+e4b/reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "reference", "tag": "reference_attn4", "status": "ok", "steps": 60, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "hf:use_reentrant=False", "attn_4bit": true, "n_attn4": 192, "tokens"
+
+e4b/fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused_attn4", "status": "ok", "steps": 60, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "hf:use_reentrant=False", "attn_4bit": true, "n_attn4": 192, "tokens": {"path
+
+e4b/fused rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused", "status": "ok", "steps": 60, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "hf:use_reentrant=False", "attn_4bit": false, "n_attn4": 0, "tokens": {"path": "tok
+
+e4b/fused_attn4_nosamp rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused_attn4_nosamp", "status": "ok", "steps": 20, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "hf:use_reentrant=False", "attn_4bit": true, "n_attn4": 192, "tokens":
+
+unsloth/ckpt_unsloth rc=1 
+unsloth/ckpt_hf rc=1 
+e4b/fused_attn4_200 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused_attn4_200", "status": "ok", "steps": 200, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "hf:use_reentrant=False", "attn_4bit": true, "n_attn4": 192, "tokens": {
+
+unsloth/ckpt_unsloth_200 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_200", "status": "ok", "steps": 200, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "unsloth", "attn_4bit": false, "n_attn4": 0, "tokens": {"path": "
+
+AMENDMENT 3 (p38d): Unsloth branch resolves the pinned snapshot dir directly; ckpt_unsloth + ckpt_hf re-run
+TOKENS(p38d) /root/p38/tokens_clinical.json sha=81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583
+unsloth/ckpt_unsloth rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth", "status": "ok", "steps": 60, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "unsloth", "attn_4bit": false, "n_attn4": 0, "tokens": {"path": "token
+
+unsloth/ckpt_hf rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_hf", "status": "ok", "steps": 60, "seq": 512, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": "hf:True (via get_peft_model)", "attn_4bit": false, "n_attn4": 0, "tokens":
+
