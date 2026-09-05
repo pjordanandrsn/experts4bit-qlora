@@ -1,0 +1,7 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1169.07it/s]
+[02:11:10]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[02:11:10]   quantized experts on 32/32 MoE layers (40 experts each)
+[02:11:10]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:11:11]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:11:12]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+BV3_GRAPH batch=16 steps=70 step=8.71ms agg=1836.8tok/s recompiles=0 out=/root/bo7/granite_b16_r12epi.json

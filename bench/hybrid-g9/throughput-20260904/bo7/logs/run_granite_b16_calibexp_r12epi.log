@@ -1,0 +1,13 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1399.71it/s]
+[02:12:11]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[02:12:11]   quantized experts on 32/32 MoE layers (40 experts each)
+[02:12:11]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:12:11]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:12:12]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 1222.58it/s]
+INT4EXP calibrating (streamed): 8 batches of c4 budget GB 24
+INT4EXP calibrated experts: 2524 gptq / 36 rtn (min_rows=32) over 32 layers
+INT4EXP calibrated streaming: 32 layers in 1 passes of <= 61 layer(s)
+INT4EXP enabled: 32 layers (model_type=granitemoe)
+BV3_GRAPH batch=16 steps=70 step=4.83ms agg=3313.8tok/s recompiles=0 out=/root/bo7/granite_b16_calibexp_r12epi.json

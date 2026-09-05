@@ -1,0 +1,7 @@
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 1320.00it/s]
+[02:33:38]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[02:33:38]   quantized experts on 24/24 MoE layers (32 experts each)
+[02:33:38]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:33:40]   experts deferred to the arena: 24 module(s), 120 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:33:50]   hybrid tier active on 24 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+BV3_GRAPH batch=16 steps=70 step=21.01ms agg=761.6tok/s recompiles=0 out=/root/bo7/gptoss_b16_nf4_r12.json

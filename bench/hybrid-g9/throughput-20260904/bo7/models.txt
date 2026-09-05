@@ -1,0 +1,5 @@
+ibm-granite/granite-3.1-3b-a800m-instruct granite
+openai/gpt-oss-20b gptoss
+mistralai/Mixtral-8x7B-Instruct-v0.1 mixtral
+google/gemma-4-26B-A4B-it gemma4
+Qwen/Qwen3-30B-A3B qwen3

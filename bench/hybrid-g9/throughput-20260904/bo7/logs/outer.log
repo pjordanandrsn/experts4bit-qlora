@@ -1,0 +1,116 @@
+[2026-09-05T02:00:46Z] install (amended cut, shipped code): gnf4 0.30.0 main @ddcb850e05c3595e2bb87813df70427f7e4bafce + e4b 0.35.0 main @f4b639fd2640bb603b6b7b63ea010312b0bb351d
+pip rc=0
+bo7 tripwire OK: e4b 0.35.0 main (streamed calibrated experts + gpu solve, swiglu/combine) + gnf4 0.30.0 main; e4b 0.35.0
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD EPYC 7Q83 64-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             251          44          56           0         150         204
+cuda ok
+overlay         320G  842M  320G   1% /
+[2026-09-05T02:01:32Z] bake granite
+BAKE OK
+overlay         320G   11G  310G   4% /
+[2026-09-05T02:02:51Z] arm granite/nf4 (B=1 exp=0 calib=0 fuse=0  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=4.40ms compile=None recompiles=0 out=/root/bo7/granite_b1_nf4.json
+[2026-09-05T02:03:21Z] arm granite/r12epi (B=1 exp=0 calib=0 fuse=all  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=3.28ms compile=None recompiles=0 out=/root/bo7/granite_b1_r12epi.json
+[2026-09-05T02:03:37Z] arm granite/int4_r12epi (B=1 exp=1 calib=0 fuse=all  alarm=3600)
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    B1D_TIMED_GRAPH steps=127 step=2.05ms compile=None recompiles=0 out=/root/bo7/granite_b1_int4_r12epi.json
+[2026-09-05T02:03:58Z] arm granite/calibexp_r12epi (B=1 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 alarm=5400)
+    INT4EXP calibrated streaming: 32 layers in 1 passes of <= 61 layer(s)
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    B1D_TIMED_GRAPH steps=127 step=2.04ms compile=None recompiles=0 out=/root/bo7/granite_b1_calibexp_r12epi.json
+[2026-09-05T02:10:32Z] arm granite/nf4 (B=16 exp=0 calib=0 fuse=0  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=10.11ms agg=1583.2tok/s recompiles=0 out=/root/bo7/granite_b16_nf4.json
+[2026-09-05T02:11:04Z] arm granite/r12epi (B=16 exp=0 calib=0 fuse=all  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=8.71ms agg=1836.8tok/s recompiles=0 out=/root/bo7/granite_b16_r12epi.json
+[2026-09-05T02:11:28Z] arm granite/int4_r12epi (B=16 exp=1 calib=0 fuse=all  alarm=3600)
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    BV3_GRAPH batch=16 steps=70 step=4.83ms agg=3315.0tok/s recompiles=0 out=/root/bo7/granite_b16_int4_r12epi.json
+[2026-09-05T02:12:05Z] arm granite/calibexp_r12epi (B=16 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 alarm=5400)
+    INT4EXP calibrated streaming: 32 layers in 1 passes of <= 61 layer(s)
+    INT4EXP enabled: 32 layers (model_type=granitemoe)
+    BV3_GRAPH batch=16 steps=70 step=4.83ms agg=3313.8tok/s recompiles=0 out=/root/bo7/granite_b16_calibexp_r12epi.json
+GRANITE DONE
+[2026-09-05T02:18:40Z] freed granite (disk: 320G free)
+[2026-09-05T02:18:40Z] bake olmoe
+BAKE OK
+overlay         320G   21G  300G   7% /
+[2026-09-05T02:20:17Z] arm olmoe/nf4 (B=1 exp=0 calib=0 fuse=0  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=3.54ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_nf4.json
+[2026-09-05T02:20:41Z] arm olmoe/folds (B=1 exp=0 calib=0 fuse=all  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=2.97ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_folds.json
+[2026-09-05T02:20:58Z] arm olmoe/calattn (B=1 exp=0 calib=1 fuse=all  alarm=3600)
+    ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=olmoe)
+    B1D_TIMED_GRAPH steps=127 step=2.91ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_calattn.json
+[2026-09-05T02:22:01Z] arm olmoe/int4all (B=1 exp=1 calib=1 fuse=all  alarm=3600)
+    INT4EXP enabled: 16 layers (model_type=olmoe)
+    ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=olmoe)
+    B1D_TIMED_GRAPH steps=127 step=1.71ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_int4all.json
+[2026-09-05T02:23:19Z] arm olmoe/nf4 (B=16 exp=0 calib=0 fuse=0  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=11.87ms agg=1347.5tok/s recompiles=0 out=/root/bo7/olmoe_b16_nf4.json
+[2026-09-05T02:23:49Z] arm olmoe/folds (B=16 exp=0 calib=0 fuse=all  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=10.98ms agg=1457.2tok/s recompiles=0 out=/root/bo7/olmoe_b16_folds.json
+[2026-09-05T02:24:11Z] arm olmoe/calattn (B=16 exp=0 calib=1 fuse=all  alarm=3600)
+    ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=olmoe)
+    BV3_GRAPH batch=16 steps=70 step=11.03ms agg=1450.8tok/s recompiles=0 out=/root/bo7/olmoe_b16_calattn.json
+[2026-09-05T02:25:18Z] arm olmoe/int4all (B=16 exp=1 calib=1 fuse=all  alarm=3600)
+    INT4EXP enabled: 16 layers (model_type=olmoe)
+    ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=olmoe)
+    BV3_GRAPH batch=16 steps=70 step=5.19ms agg=3084.0tok/s recompiles=0 out=/root/bo7/olmoe_b16_int4all.json
+OLMOE DONE
+[2026-09-05T02:26:46Z] freed olmoe (disk: 319G free)
+[2026-09-05T02:26:46Z] bake gptoss
+BAKE OK
+overlay         320G   47G  274G  15% /
+[2026-09-05T02:32:30Z] arm gptoss/nf4_r12 (B=1 exp=0 calib=0 fuse=r12  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=6.92ms compile=None recompiles=0 out=/root/bo7/gptoss_b1_nf4_r12.json
+[2026-09-05T02:33:01Z] arm gptoss/store_r12 (B=1 exp=1 calib=0 fuse=r12 E4B_INT4_KEEP_NF4=1 alarm=3600)
+    INT4EXP enabled: 24 layers (model_type=gpt_oss)
+    B1D_TIMED_GRAPH steps=127 step=5.35ms compile=None recompiles=0 out=/root/bo7/gptoss_b1_store_r12.json
+[2026-09-05T02:33:30Z] arm gptoss/nf4_r12 (B=16 exp=0 calib=0 fuse=r12  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=21.01ms agg=761.6tok/s recompiles=0 out=/root/bo7/gptoss_b16_nf4_r12.json
+[2026-09-05T02:34:10Z] arm gptoss/store_r12 (B=16 exp=1 calib=0 fuse=r12 E4B_INT4_KEEP_NF4=1 alarm=3600)
+    INT4EXP enabled: 24 layers (model_type=gpt_oss)
+    BV3_GRAPH batch=16 steps=70 step=21.65ms agg=739.0tok/s recompiles=0 out=/root/bo7/gptoss_b16_store_r12.json
+GPTOSS DONE
+[2026-09-05T02:34:52Z] freed gptoss (disk: 319G free)
+[2026-09-05T02:34:52Z] bake qwen3
+BAKE OK
+overlay         320G   89G  232G  28% /
+[2026-09-05T02:41:30Z] arm qwen3/nf4 (B=1 exp=0 calib=0 fuse=0  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=8.68ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_nf4.json
+[2026-09-05T02:42:11Z] arm qwen3/folds (B=1 exp=0 calib=0 fuse=all  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=6.16ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_folds.json
+[2026-09-05T02:42:49Z] arm qwen3/calattn (B=1 exp=0 calib=1 fuse=all  alarm=3600)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=6.01ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calattn.json
+[2026-09-05T02:46:32Z] arm qwen3/int4all (B=1 exp=1 calib=1 fuse=all  alarm=3600)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=4.20ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_int4all.json
+[2026-09-05T02:51:48Z] arm qwen3/calibexp_all (B=1 exp=1 calib=1 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 alarm=5400)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=4.20ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calibexp_all.json
+[2026-09-05T03:34:05Z] arm qwen3/calibexp_folds (B=1 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 alarm=5400)
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=4.34ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calibexp_folds.json
+[2026-09-05T04:13:04Z] arm qwen3/nf4 (B=16 exp=0 calib=0 fuse=0  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=31.36ms agg=510.3tok/s recompiles=0 out=/root/bo7/qwen3_b16_nf4.json
+[2026-09-05T04:14:12Z] arm qwen3/folds (B=16 exp=0 calib=0 fuse=all  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=27.75ms agg=576.5tok/s recompiles=0 out=/root/bo7/qwen3_b16_folds.json
+[2026-09-05T04:15:05Z] arm qwen3/calattn (B=16 exp=0 calib=1 fuse=all  alarm=3600)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    BV3_GRAPH batch=16 steps=70 step=28.48ms agg=561.7tok/s recompiles=0 out=/root/bo7/qwen3_b16_calattn.json
+[2026-09-05T04:18:58Z] arm qwen3/int4all (B=16 exp=1 calib=1 fuse=all  alarm=3600)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    BV3_GRAPH batch=16 steps=70 step=11.98ms agg=1335.4tok/s recompiles=0 out=/root/bo7/qwen3_b16_int4all.json
+[2026-09-05T04:24:08Z] arm qwen3/calibexp_all (B=16 exp=1 calib=1 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 alarm=5400)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+    BV3_GRAPH batch=16 steps=70 step=11.95ms agg=1338.8tok/s recompiles=0 out=/root/bo7/qwen3_b16_calibexp_all.json
+[2026-09-05T05:05:42Z] arm qwen3/calibexp_folds (B=16 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 alarm=5400)

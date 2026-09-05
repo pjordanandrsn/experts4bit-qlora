@@ -195,6 +195,41 @@ NF4 reference sits 0.006 nats from bo5's
 on the identical window while Mixtral's agree to 0.001 — that shift stays
 open, and no sub-0.01-nat number is compared across lanes.
 
+**The throughput census (2026-09-05, lane bo7; measured — receipt
+[`bench/hybrid-g9/throughput-20260904/bo7/`](../bench/hybrid-g9/throughput-20260904/bo7/README.md),
+table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md)).**
+Speed only, under the **shipped** code (0.35.0 + 0.30.0 at their `main`,
+hook v6 at its 16k default), all six families on one rented RTX 5090 (EPYC
+7Q83 host, instance 49916675), 48 arms at B=1 and B=16, every ratio to
+that family's own NF4 arm on that box and every licence label copied from
+this register — bo7 licenses nothing, and no bo3/bo5/bo6 number is divided
+into a bo7 number. What the box says, three axes per licensed best (ratio
+over NF4 on this box; rental-measured tok/s on this box; anchor-class
+projection — which exists only for Qwen3-30B at B=1 and is not computed
+here): **Granite's licensed stack** (NF4 experts + folds + epilogue) is
+×1.341 at B=1 (304.9 tok/s) and ×1.160 at B=16 (1836.8;
+`e4b.serve.census.bo7.granite.b1` / `.b16`); **OLMoE's position is NF4**
+(282.5 / 1347.5, ×1.000) because nothing above it is licensed on this
+register — the tp row's "best licensed" label predates the two-text
+clause and its calibrated attention is refused on this family, so its full
+stack is ×2.070 / ×2.289 measured, not licensed; **gpt-oss's quoted best is
+its own reference arm** (NF4 + exact folds, 144.5 / 761.6) and the MXFP4
+store under the route rule reads ×1.293 / ×0.970 with the quality gate open;
+**Qwen3's licensed stack's speed is not measured** — the lane ran the hook's
+16k default, not the licensed 64k pack, so `e4b.serve.census.bo7.qwen3.b1`
+/ `.b16` are **open**; the same stack with the 16k pack reads ×2.067 at B=1
+(238.1 tok/s) and ×2.624 at B=16 (1338.8) and is speed-identical to the RTN
+stack (same kernel, same bytes) — an expectation of equal speed for the 64k
+pack, not a measurement; a follow-up arm settles it. Two int4 facts the box
+adds: a calibrated int4-expert pack costs nothing over an RTN one in speed
+(Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs 4.204), and the streamed
+calibration's pack counts reproduce across hosts (Granite 2524/36, Qwen3
+10820/1468 — bo5's and bo6's counts). **Gemma-4 and Mixtral are pending**
+in the bundle's first snapshot (their 16 arms run after Qwen3's and land
+before merge); Mixtral's calibrated arms were dropped under the lane's
+amendment (FAIL as registered on bo6b, ~85-min calibration) and print as a
+row that says so.
+
 ---
 
 ## What changed — retired, superseded, corrected

@@ -1,0 +1,31 @@
+SUMMARY run_granite_b1_nf4.log B1D_TIMED_GRAPH steps=127 step=4.40ms compile=None recompiles=0 out=/root/bo7/granite_b1_nf4.json
+SUMMARY run_granite_b1_r12epi.log B1D_TIMED_GRAPH steps=127 step=3.28ms compile=None recompiles=0 out=/root/bo7/granite_b1_r12epi.json
+SUMMARY run_granite_b1_int4_r12epi.log B1D_TIMED_GRAPH steps=127 step=2.05ms compile=None recompiles=0 out=/root/bo7/granite_b1_int4_r12epi.json
+SUMMARY run_granite_b1_calibexp_r12epi.log B1D_TIMED_GRAPH steps=127 step=2.04ms compile=None recompiles=0 out=/root/bo7/granite_b1_calibexp_r12epi.json
+SUMMARY run_granite_b16_nf4.log BV3_GRAPH batch=16 steps=70 step=10.11ms agg=1583.2tok/s recompiles=0 out=/root/bo7/granite_b16_nf4.json
+SUMMARY run_granite_b16_r12epi.log BV3_GRAPH batch=16 steps=70 step=8.71ms agg=1836.8tok/s recompiles=0 out=/root/bo7/granite_b16_r12epi.json
+SUMMARY run_granite_b16_int4_r12epi.log BV3_GRAPH batch=16 steps=70 step=4.83ms agg=3315.0tok/s recompiles=0 out=/root/bo7/granite_b16_int4_r12epi.json
+SUMMARY run_granite_b16_calibexp_r12epi.log BV3_GRAPH batch=16 steps=70 step=4.83ms agg=3313.8tok/s recompiles=0 out=/root/bo7/granite_b16_calibexp_r12epi.json
+SUMMARY run_olmoe_b1_nf4.log B1D_TIMED_GRAPH steps=127 step=3.54ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_nf4.json
+SUMMARY run_olmoe_b1_folds.log B1D_TIMED_GRAPH steps=127 step=2.97ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_folds.json
+SUMMARY run_olmoe_b1_calattn.log B1D_TIMED_GRAPH steps=127 step=2.91ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_calattn.json
+SUMMARY run_olmoe_b1_int4all.log B1D_TIMED_GRAPH steps=127 step=1.71ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_int4all.json
+SUMMARY run_olmoe_b16_nf4.log BV3_GRAPH batch=16 steps=70 step=11.87ms agg=1347.5tok/s recompiles=0 out=/root/bo7/olmoe_b16_nf4.json
+SUMMARY run_olmoe_b16_folds.log BV3_GRAPH batch=16 steps=70 step=10.98ms agg=1457.2tok/s recompiles=0 out=/root/bo7/olmoe_b16_folds.json
+SUMMARY run_olmoe_b16_calattn.log BV3_GRAPH batch=16 steps=70 step=11.03ms agg=1450.8tok/s recompiles=0 out=/root/bo7/olmoe_b16_calattn.json
+SUMMARY run_olmoe_b16_int4all.log BV3_GRAPH batch=16 steps=70 step=5.19ms agg=3084.0tok/s recompiles=0 out=/root/bo7/olmoe_b16_int4all.json
+SUMMARY run_gptoss_b1_nf4_r12.log B1D_TIMED_GRAPH steps=127 step=6.92ms compile=None recompiles=0 out=/root/bo7/gptoss_b1_nf4_r12.json
+SUMMARY run_gptoss_b1_store_r12.log B1D_TIMED_GRAPH steps=127 step=5.35ms compile=None recompiles=0 out=/root/bo7/gptoss_b1_store_r12.json
+SUMMARY run_gptoss_b16_nf4_r12.log BV3_GRAPH batch=16 steps=70 step=21.01ms agg=761.6tok/s recompiles=0 out=/root/bo7/gptoss_b16_nf4_r12.json
+SUMMARY run_gptoss_b16_store_r12.log BV3_GRAPH batch=16 steps=70 step=21.65ms agg=739.0tok/s recompiles=0 out=/root/bo7/gptoss_b16_store_r12.json
+SUMMARY run_qwen3_b1_nf4.log B1D_TIMED_GRAPH steps=127 step=8.68ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_nf4.json
+SUMMARY run_qwen3_b1_folds.log B1D_TIMED_GRAPH steps=127 step=6.16ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_folds.json
+SUMMARY run_qwen3_b1_calattn.log B1D_TIMED_GRAPH steps=127 step=6.01ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calattn.json
+SUMMARY run_qwen3_b1_int4all.log B1D_TIMED_GRAPH steps=127 step=4.20ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_int4all.json
+SUMMARY run_qwen3_b1_calibexp_all.log B1D_TIMED_GRAPH steps=127 step=4.20ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calibexp_all.json
+SUMMARY run_qwen3_b1_calibexp_folds.log B1D_TIMED_GRAPH steps=127 step=4.34ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calibexp_folds.json
+SUMMARY run_qwen3_b16_nf4.log BV3_GRAPH batch=16 steps=70 step=31.36ms agg=510.3tok/s recompiles=0 out=/root/bo7/qwen3_b16_nf4.json
+SUMMARY run_qwen3_b16_folds.log BV3_GRAPH batch=16 steps=70 step=27.75ms agg=576.5tok/s recompiles=0 out=/root/bo7/qwen3_b16_folds.json
+SUMMARY run_qwen3_b16_calattn.log BV3_GRAPH batch=16 steps=70 step=28.48ms agg=561.7tok/s recompiles=0 out=/root/bo7/qwen3_b16_calattn.json
+SUMMARY run_qwen3_b16_int4all.log BV3_GRAPH batch=16 steps=70 step=11.98ms agg=1335.4tok/s recompiles=0 out=/root/bo7/qwen3_b16_int4all.json
+SUMMARY run_qwen3_b16_calibexp_all.log BV3_GRAPH batch=16 steps=70 step=11.95ms agg=1338.8tok/s recompiles=0 out=/root/bo7/qwen3_b16_calibexp_all.json

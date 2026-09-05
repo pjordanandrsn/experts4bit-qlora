@@ -1,0 +1,12 @@
+# forensics 2026-09-05T05:31:33Z
+NVIDIA GeForce RTX 5090, 595.84, 32607 MiB
+CPU(s):                                  128
+Model name:                              AMD EPYC 7Q83 64-Core Processor
+Mem:             251          51          70           1         128         196
+183318347776
+torch 2.8.0+cu128 transformers 5.16.1 bnb 0.50.1 triton 3.4.0
+Name: grouped-nf4-gemm
+Version: 0.30.0
+Name: experts4bit-qlora
+Version: 0.35.0
+instance

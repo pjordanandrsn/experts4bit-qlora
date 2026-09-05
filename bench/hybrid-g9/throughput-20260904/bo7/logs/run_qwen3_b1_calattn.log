@@ -1,0 +1,11 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1577.24it/s]
+[02:42:55]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[02:42:55]   quantized experts on 48/48 MoE layers (128 experts each)
+[02:42:55]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:42:57]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:43:17]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+B1D_TIMED_GRAPH steps=127 step=6.01ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calattn.json
