@@ -1,14 +1,46 @@
 # Changelog
 
-## Unreleased
+## 0.35.1 — 2026-09-05 — documentation: training parity matrix (tp1)
 
-### The stock-epilogue contract: `ExpertsLoRA` refuses what it cannot represent (#397)
+Documentation and receipts only — **no runtime change**: the package's code is 0.35.0's, byte for byte; the `fast`
+extra's floor (grouped-nf4-gemm >= 0.30.0), the CI `--requires` assertion and the `>=0.35.0` compatibility record in
+`docs/system-manifest.json` are unchanged. The release exists so that the repository, the PyPI project page (this
+README) and the site state the training matrix from evidence.
 
-- `ExpertsLoRA` re-implements the expert forward inline (the low-rank delta lands before the nonlinearity), so it owns the epilogue and can only represent the stock `down(act_fn(gate) * up)` or a module that hands its epilogue over through `_apply_gate`. gpt-oss's stack (per-expert biases, clamped sigmoid GLU, de-interleaved at load, no hook) was wrapped anyway by the arena loader under `arena_train=True` and trained against a plain SwiGLU with nothing raised. New: `experts4bit_qlora.assert_stock_epilogue(module)` decides on the module's STRUCTURE (bias buffers/parameters/tensor attributes, a non-stock `forward` without a hook, `alpha`/`limit`/`swiglu_*` scalars no hook consumes, a forward body that clamps or adds a bias itself, an interleaved-layout marker, a two-argument `act_fn`, a declared shape that is not `[2I, H]`/`[H, I]`) and raises `EpilogueContractError` (a `TypeError`) naming every offending attribute and the faithful route (grouped-nf4-gemm's `mxfp4_qlora.ExpertsMxfp4LoRA`, the `mxfp4-moe-training-and-residency` capability). Applied by `ExpertsLoRA.__init__`, the loader's `arena_train=True` branch, `enable_nvme_train_residency`'s pre-flight (before the tier opens), `enable_hybrid_train` (which used to refuse gpt-oss through the tier's own flag), and `enable_fast` / `enable_fast_train` / `enable_batched_train`, which now REFUSE a wrapper whose base violates the contract instead of skipping it (a skipped wrapper would have trained the same unfaithful reference forward). Stock SiLU, Gemma-4's gelu_tanh, non-gated stacks and DeepSeek-V4's hooked clamp are unaffected. Both new symbols are exported; `docs/capabilities.json` and the solution pages are updated by the release bundle that carries this entry.
-- `enable_mxfp4_nvme_residency` refuses a module that carries per-expert bias tensors: the binding passes no biases to the engine and defaults to the V4 epilogue, so gpt-oss would have been served through the wrong GLU with its biases dropped. The MXFP4-arena fused lane (`mxfp4_experts_forward`) keeps the module's own forward for any module the contract refuses.
-- `enable_batched_train`'s per-call fallbacks (pad waste past `_PAD_WASTE_LIMIT`, evicted storage, an empty batch) are counted on each patched module; `batched_fallback_stats(model)` (exported) reports `calls` / `batched` / `fallback_calls` / `by_reason` per module and in total, so an arm claiming the batched path can assert `fallback_calls == 0` (the tp1 lane read OLMoE's batched arm as void because layers fell back with nothing counting them).
-- The loader logs a one-time NOTE when a family's experts are built bare (no expert adapter; `r`/`alpha` do not apply), and `python -m experts4bit_qlora.train` refuses `TRAIN_EXPERTS=1` on a model with no expert adapter instead of training attention/router alone under that flag.
-- Audit of the public enable/load/train/serve entry points for the class "unsupported behaviour, plausible output, no refusal": `docs/audits/no-silent-fallback-2026-09-05.md`.
+### Training on real weights, per family, under the shipped code (lane tp1, receipt `bench/train-parity-20260905/tp1/`)
+
+- The six serving families through the shipped training path on one rented RTX 5090 (train-anchor class recorded):
+  the direct `load_moe_4bit_streaming` + `verify_moe_4bit(strict=True)` path on the real checkpoints, then
+  `reference` / `enable_fast_train(dgrad=True)` / `enable_batched_train` for 60 steps on the registered `clinical`
+  text, verdicts by `tp1_reduce.py` in the registered B2/C2 units (`|Δ final train loss| ≤ 0.05` and median
+  step-wise `|Δ| ≤ 0.05` against the family's own reference; VOID when the arm cannot be read), cost reported and
+  never gated. Every log, the amended lane script beside its pre-amendment copy, the patched harness and its patch,
+  the reducer, `RESULTS-tp1.md` (the reducer's output verbatim plus the reading) and a README with the three
+  amendments — the first box's 10 MB/s link, the fetch-by-short-sha false start and the ≈ 4.4 h it idled, the
+  harness's closure bug fixed in flight — and predictions P1–P7 scored.
+- Rows at this writing: OLMoE-1B-7B-Instruct fused **PASS** (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`) — the
+  first fused-vs-reference reading on a registered text with real weights for that family; Granite-3.1-3B-A800M loads
+  and verifies through the direct path for the first time and its batched arm **PASSES**
+  (`e4b.train.parity.tp1.granite.batched.2026-09-05`); OLMoE batched **VOID** — `enable_batched_train` falls back to
+  the reference forward per call above `_PAD_WASTE_LIMIT` with no counter, and the kernel was not reached on every
+  layer; gpt-oss fused / batched **REFUSED** (0 patched: the loader builds its experts bare), attention-only QLoRA
+  trains with the frozen stacks bit-exact, and grouped-nf4-gemm's experimental MXFP4 route trains its experts on its
+  own text with the canary passing — experimental, never licensed; Qwen3-30B-A3B loads resident on the 32 GB card.
+  **Pending at this writing and finalised before the tag:** Qwen3's three arms, Gemma-4's three, Mixtral's three
+  (`offload=True`), Granite's fused re-run — `open` placeholders in the register until the final snapshot lands.
+- `docs/claims.json`: one claim per family × arm (`e4b.train.parity.tp1.<family>.<arm>.2026-09-05`) plus a per-family
+  matrix claim; notes on `e4b.train.fast-train-dgrad` (the batched "no speed-up at real width" is a Qwen3-30B-width
+  reading — at Granite's width the batched path is the faster one measured), `e4b.train.flagship-matrix` and
+  `e4b.train.olmoe-converges`. Nothing superseded or retired.
+- `docs/capabilities.json`: `qlora-fused-moe-experts.model_families` is evidence-gated and unchanged this release —
+  `olmoe` confirmed on real weights, `granitemoe` enters when its fused re-run passes, `gpt_oss` stays out with the
+  refusal named and the experimental route pointed at; the batched-fallback VOID is a limitation; the
+  `mxfp4-moe-training-and-residency` capability carries the tp1 canary row and stays `experimental`.
+- `docs/STATUS.md` (the training position and three open items), `docs/ARCHITECTURE_SUPPORT.md` (a new dated section
+  "Training on real weights (tp1, 2026-09-05)"; the existing tables are untouched), `docs/SOLUTIONS.md` and
+  `docs/solutions/qlora-fused-moe-experts.md` (families from evidence; the refusal and the VOID as "what to check"),
+  the README's results table and scope, two routing queries in `docs/discovery-queries.json`, `llms-full.txt`
+  regenerated.
 
 ## 0.35.0 — 2026-09-04
 
