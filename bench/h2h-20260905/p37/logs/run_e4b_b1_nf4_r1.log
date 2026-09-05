@@ -1,0 +1,9 @@
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1526.07it/s]
+[16:25:37]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[16:25:37]   quantized experts on 48/48 MoE layers (128 experts each)
+[16:25:37]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[16:25:38]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[16:26:03]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+B1D_TIMED_GRAPH steps=127 step=8.82ms compile=None recompiles=0 out=/root/p37/e4b_b1_nf4_r1.json

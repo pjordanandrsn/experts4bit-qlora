@@ -1,0 +1,19 @@
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1476.55it/s]
+[16:04:34]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[16:04:49]   quantized experts on 48/48 MoE layers (128 experts each)
+[16:04:49]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=48 experts=128
+  shard 0/48  0.3 GiB  0s
+  shard 8/48  2.8 GiB  3s
+  shard 16/48  5.4 GiB  5s
+  shard 24/48  7.9 GiB  8s
+  shard 32/48  10.4 GiB  10s
+  shard 40/48  13.0 GiB  13s
+snapshot done 15.19 GiB in 14.7s
+expert-tensor bake: L=48 E=128 (baking 128) row=2654208 stride=2654208 total=16.3 GB workers=8
+  2048/6144 rows (5 GB, 2s)
+  4096/6144 rows (11 GB, 4s)
+  6144/6144 rows (16 GB, 7s)
+bake complete: 6144 rows (16.3 GB) in 29s
+BAKE OK

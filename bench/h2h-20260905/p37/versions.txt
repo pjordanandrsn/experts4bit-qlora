@@ -1,0 +1,9 @@
+e4b 0.35.0 @
+gnf4 0.30.0
+torch(e4b) 2.8.0+cu129
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+vllm 0.28.0
+torch(vllm) 2.13.0+cu130
+triton(vllm) 3.7.1

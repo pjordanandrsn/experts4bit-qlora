@@ -1,0 +1,35 @@
+PROMPTS B=1 corpus=298938 step=298426 sha=a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3
+PROMPTS B=16 corpus=298938 step=18651 sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+e4b/nf4_r1 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=8.82ms compile=None recompiles=0 out=/root/p37/e4b_b1_nf4_r1.json
+
+e4b/nf4_r1 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=31.99ms agg=500.1tok/s recompiles=0 out=/root/p37/e4b_b16_nf4_r1.json
+
+vllm/graph_r1 B=1 rc=0 P37VLLM {"arm": "graph_r1", "batch": 1, "decode_tok_s": 286.0, "decode_ms_per_step": 3.4967, "decode_tok_s_median": 286.1, "end_to_end_tok_s_long": 270.5, "vllm_version": "0.28.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+
+vllm/eager B=1 rc=0 P37VLLM {"arm": "eager", "batch": 1, "decode_tok_s": 20.8, "decode_ms_per_step": 48.1143, "decode_tok_s_median": 20.4, "end_to_end_tok_s_long": 20.7, "vllm_version": "0.28.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+
+vllm/fp8kv B=1 rc=0 P37VLLM {"arm": "fp8kv", "batch": 1, "decode_tok_s": 300.9, "decode_ms_per_step": 3.3229, "decode_tok_s_median": 301.1, "end_to_end_tok_s_long": 282.5, "vllm_version": "0.28.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+
+vllm/graph_r1 B=16 rc=0 P37VLLM {"arm": "graph_r1", "batch": 16, "decode_tok_s": 2030.0, "decode_ms_per_step": 7.8817, "decode_tok_s_median": 2023.7, "end_to_end_tok_s_long": 1595.9, "vllm_version": "0.28.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+
+vllm/eager B=16 rc=0 P37VLLM {"arm": "eager", "batch": 16, "decode_tok_s": 322.5, "decode_ms_per_step": 49.6157, "decode_tok_s_median": 322.4, "end_to_end_tok_s_long": 311.5, "vllm_version": "0.28.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+
+vllm/fp8kv B=16 rc=0 P37VLLM {"arm": "fp8kv", "batch": 16, "decode_tok_s": 2206.5, "decode_ms_per_step": 7.2512, "decode_tok_s_median": 2217.4, "end_to_end_tok_s_long": 1705.1, "vllm_version": "0.28.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+
+e4b/lic_r1 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.23ms compile=None recompiles=0 out=/root/p37/e4b_b1_lic_r1.json
+
+e4b/lic_r1 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=12.26ms agg=1305.3tok/s recompiles=0 out=/root/p37/e4b_b16_lic_r1.json
+
+e4b/nf4_r2 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=8.81ms compile=None recompiles=0 out=/root/p37/e4b_b1_nf4_r2.json
+
+e4b/nf4_r2 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=32.00ms agg=499.9tok/s recompiles=0 out=/root/p37/e4b_b16_nf4_r2.json
+
+vllm/graph_r2 B=1 rc=0 P37VLLM {"arm": "graph_r2", "batch": 1, "decode_tok_s": 286.0, "decode_ms_per_step": 3.4963, "decode_tok_s_median": 286.1, "end_to_end_tok_s_long": 270.5, "vllm_version": "0.28.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+
+vllm/graph_r2 B=16 rc=0 P37VLLM {"arm": "graph_r2", "batch": 16, "decode_tok_s": 2022.2, "decode_ms_per_step": 7.9124, "decode_tok_s_median": 2020.5, "end_to_end_tok_s_long": 1593.2, "vllm_version": "0.28.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+
+e4b/lic_r2 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.24ms compile=None recompiles=0 out=/root/p37/e4b_b1_lic_r2.json
+
+e4b/lic_eager B=1 rc=0 B1D_TIMED_EAGER steps=127 step=81.99ms compile=None recompiles=0 out=/root/p37/e4b_b1_lic_eager.json
+
+p37b: NOT NEEDED -- the comparator ran in-lane (no SKIPPED rows); nothing re-run
