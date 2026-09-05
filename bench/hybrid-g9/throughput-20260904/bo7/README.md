@@ -10,8 +10,8 @@ torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; insta
 `cuda ok`), Granite bake 02:01:32Z, its eight arms 02:02–02:18Z (`GRANITE DONE`); OLMoE bake 02:18Z, arms 02:20–02:26Z;
 gpt-oss bake 02:26Z (5-min download), arms 02:32–02:34Z; Qwen3 bake 02:34–02:41Z, arms 02:41Z → (the calibrated arms
 ~40 min each: 02:51 → 03:34Z, 03:34 → 04:13Z, 04:24 → 05:05Z); **this bundle is the 05:31Z snapshot — 31 of 48 arms**;
-Qwen3's last arm, then Gemma-4's eight and Mixtral's eight follow (`TP_DONE` expected ≈ 08:00Z) and land in this
-directory before merge. Rented 01:26Z on bo6's `TP2_DONE` (the image took ~35 min to load; ssh auth at try 79); a 10-h
+Qwen3's last arm, then Gemma-4's eight and Mixtral's eight follow (`TP_DONE` expected ≈ 08:00Z), then **amendment 2's
+two arms** (below; `TP2_DONE` ≈ 10:00Z) — all land in this directory before merge. Rented 01:26Z on bo6's `TP2_DONE` (the image took ~35 min to load; ssh auth at try 79); a 10-h
 hard-kill guard on the mini was armed before the first ssh (fires ≈ 12:05Z); bandwidth pre-flight 96 MB/s.
 **Cut — the shipped code, both packages at their `main` after the 0.35.0 / 0.30.0 releases** (the pip line in
 [`logs/bo7_run.sh`](logs/bo7_run.sh)):
@@ -53,6 +53,19 @@ pre-amendment copy kept for the record as [`logs/bo7_run.sh.pre-amend`](logs/bo7
 
 Reading rules (1)–(5) unchanged; speed only; the guard stays 10 h. The full text is in the private receipt
 (`INT4B16/P25-PARITY.md`, "P35 AMENDMENT 1" and "P35 log — bo7 launched").
+
+## Amendment 2 (P35 amendment 2, pre-registered 2026-09-05 06:05Z — before its arms ran)
+
+The lane as amended measured Qwen3's calibrated stack at the hook's **16k** default, while the configuration the
+register licenses is bo6c's streamed **64k** pack — so the licensed stack's speed would have stayed unmeasured on this
+box. Amendment 2 adds two arms **on this box after `TP_DONE`, same session and install**: `qwen3/calibexp_all_n128` at
+B=1 and B=16 — streamed GPTQ-calibrated int4 experts at 64k C4 tokens (`E4B_CALIB_NSEQ=128`) + C4-calibrated int4
+attention + round-1/2 folds + router epilogue + glue, the licensed Qwen3 configuration — run by `/root/bo7/bo7b.sh`
+(shipped as `logs/bo7b.sh` with the final snapshot) under 5400-s alarms, receipts `qwen3_b1_calibexp_all_n128.json` /
+`qwen3_b16_calibexp_all_n128.json`, marker `TP2_DONE` (≈ 10:00Z). Their ratios are to bo7's own `nf4` arms (rule 1
+holds: same box, same session); the licensed-best row then carries the three axes for real, the anchor projection
+(159.2 × the B=1 ratio, a projection) included. If they alarm out or refuse, they are `alarm` / `refused` rows and the
+Qwen3 census claims stay `open` with the cause. **Pending in this snapshot.**
 
 ## Protocol
 
@@ -116,7 +129,8 @@ ratios are to that arm and its quoted best is the reference itself.
 - **Qwen3-30B-A3B:** the licensed configuration is the **streamed 64k** full stack (bo6c,
   `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`). bo7's `calibexp_all` and `calibexp_folds`
   ran the 16k default → "measured; the licensed configuration is the 64k pack — the 16k streamed full stack has no
-  two-text verdict"; **the licensed stack's speed is therefore not yet measured** (a follow-up arm). `int4all` = bo5's
+  two-text verdict"; **the licensed stack's speed is amendment 2's `calibexp_all_n128` arm, pending in this snapshot**
+  (its label: "the licensed configuration (bo6c)"). `int4all` = bo5's
   RTN `all`, FAIL as registered (c4val1 +0.063); the exact `folds` carry bo5's verdict FAIL-by-improving (−0.073 ppl,
   sub-floor) — not a licensed position; `calattn` alone has no verdict on record.
 - **Gemma-4-26B-A4B:** no K8 instrument exists for this family (`e4b.parity.gemma4.no-reference`, #359), so the register
@@ -163,7 +177,8 @@ B=16 tok/s · ×NF4 · status), then the licensed best per family on the three a
 - [`logs/`](logs/) — [`bo7_run.sh`](logs/bo7_run.sh) (the amended lane script, the one that ran),
   [`bo7_run.sh.pre-amend`](logs/bo7_run.sh.pre-amend) (the pre-amendment copy, kept for the record),
   [`bo7_all.sh`](logs/bo7_all.sh) (the renter / guard / pre-flight / launcher on the mini),
-  [`bo7_queue.sh`](logs/bo7_queue.sh) (the queue behind bo6), the hook (`usercustomize.py` = v6, `hook/usercustomize.py`
+  [`bo7_queue.sh`](logs/bo7_queue.sh) (the queue behind bo6), `bo7b.sh` (amendment 2's two arms; ships with the final
+  snapshot), the hook (`usercustomize.py` = v6, `hook/usercustomize.py`
   its installed copy), `k8_bake.py`, `step_decomp.py`, the four bake logs, **every per-arm `run_*.log`** (the hook banners,
   the calibration pass lines, the result line) and the lane console `outer.log`. The logs are force-added past the
   repository's `*.log` ignore rule, as bo6's were. Nothing in this directory is edited: every file is the byte-for-byte
@@ -181,7 +196,8 @@ and run `logs/bo7_run.sh` (its `pip install` line pins both cuts; its tripwire r
 ## What is NOT in the table
 
 No K8 arm: no perplexity was scored on this lane, and no label here was decided by it. **The speed of Qwen3's licensed
-stack (the streamed 64k pack) is not measured** — the calibrated arms ran the hook's 16k default; a follow-up arm
-measures it. Mixtral's `calibexp_lic` was dropped (amendment 1) and is a row that says so. No anchor projection is
-computed on this page (the only arm one applies to has no measured ratio here). **In this snapshot Gemma-4 and Mixtral
-are pending** (16 arms) and Qwen3's `calibexp_folds` B=16 was running; they arrive before merge. No kernel census ran.
+stack (the streamed 64k pack) is amendment 2's arm, pending in this snapshot** — the lane's own calibrated arms ran the
+hook's 16k default. Mixtral's `calibexp_lic` was dropped (amendment 1) and is a row that says so. No anchor projection is
+computed in this snapshot (the only arm one applies to has no receipt yet; the reducer prints it, marked as a projection,
+when it does). **In this snapshot Gemma-4 and Mixtral are pending** (16 arms), Qwen3's `calibexp_folds` B=16 was
+running, and amendment 2's two arms had not started; all arrive before merge. No kernel census ran.

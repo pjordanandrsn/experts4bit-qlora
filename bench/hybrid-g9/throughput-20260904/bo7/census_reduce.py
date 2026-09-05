@@ -28,7 +28,10 @@ tok/s(NF4). gpt-oss's NF4 arm on this lane is `nf4_r12` (NF4 experts + the exact
 Status is read from logs/outer.log: an arm line with a receipt is `ok`; an arm line followed by `Alarm clock` is `alarm`
 (killed by its own per-arm alarm: 5400 s for calibrated arms, 3600 s otherwise -- a harness limit, not a model result);
 `REFUSED` / `Traceback` / `RuntimeError` is `refused` (with the sentence); a `BAKE FAILED` family is `bake failed`; an
-arm the script runs with no line yet is `pending (arrives before merge)`. What each arm ENGAGED is read from its run log
+arm the script runs with no line yet is `pending (arrives before merge)`. P35 amendment 2 (pre-registered 06:05Z) adds
+`qwen3/calibexp_all_n128` at B=1 and B=16 -- the LICENSED Qwen3 configuration (streamed 64k pack) -- run by `logs/bo7b.sh`
+after TP_DONE on the same box and install; its rows print `pending` until its receipts land, then the licensed-best row
+carries the three axes (the anchor projection included) for real. What each arm ENGAGED is read from its run log
 (the hook's `INT4EXP` / `ATTNINT4` banners; the E4B_FUSE_* fusions print no banner on this harness and refuse aloud when
 nothing matches, so an arm that ran to a receipt engaged them).
 """
@@ -45,7 +48,7 @@ NF4 = {"granite": "nf4", "olmoe": "nf4", "gptoss": "nf4_r12", "qwen3": "nf4", "g
 ORDER = {"granite": ["nf4", "r12epi", "int4_r12epi", "calibexp_r12epi"],
          "olmoe": ["nf4", "folds", "calattn", "int4all"],
          "gptoss": ["nf4_r12", "store_r12"],
-         "qwen3": ["nf4", "folds", "calattn", "int4all", "calibexp_all", "calibexp_folds"],
+         "qwen3": ["nf4", "folds", "calattn", "int4all", "calibexp_all", "calibexp_folds", "calibexp_all_n128"],
          "gemma4": ["nf4", "r1epi", "int4_r1epi", "calattn_r1epi"],
          "mixtral": ["nf4", "folds", "lic", "all"]}
 DROPPED = {"mixtral": [("calibexp_lic", "DROPPED under P35 amendment 1 before the box was rented: FAIL as registered on bo6b "
@@ -69,6 +72,7 @@ DESC = {
     ("qwen3", "int4all"): "RTN int4-b32 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 glue (bo5's `all`)",
     ("qwen3", "calibexp_all"): "streamed GPTQ-calibrated int4 experts at the hook's 16k default + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue",
     ("qwen3", "calibexp_folds"): "streamed GPTQ-calibrated int4 experts (16k) + round-1/2 folds + router epilogue, bf16 attention",
+    ("qwen3", "calibexp_all_n128"): "THE LICENSED CONFIGURATION (bo6c): streamed GPTQ-calibrated int4 experts at 64k C4 tokens (E4B_CALIB_NSEQ=128) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue -- run under P35 amendment 2 (pre-registered 06:05Z) after TP_DONE, same box, same install, `logs/bo7b.sh`, 5400-s alarms",
     ("gemma4", "nf4"): "NF4 experts, bf16 attention, no folds (this lane's reference)",
     ("gemma4", "r1epi"): "NF4 experts + round-1 norm fold + router epilogue (round 2 refuses by design on this family; exact arithmetic)",
     ("gemma4", "int4_r1epi"): "RTN int4-b32 experts + round-1 fold + router epilogue (bo3's `stack`)",
@@ -95,8 +99,9 @@ LICENCE = {
     ("qwen3", "folds"): "measured, not licensed as a position -- exact arithmetic (moves no weight); the verdict on record is bo5's: FAIL as registered on c4val1 by improving (-0.073 ppl, sub-floor; `e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04` notes)",
     ("qwen3", "calattn"): "no quality verdict on record for calibrated attention on NF4 experts alone (the register scores it inside int4-expert stacks: bo5 `calib` = int4 experts + calibrated attention, c4val1 +0.048, one text); a calibrated pack needs two texts; not licensed",
     ("qwen3", "int4all"): "measured, not licensed -- bo5's `all` (RTN experts): FAIL as registered on c4val1 +0.063 ppl (noise-attributed, not retuned; `e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04` / `.b16`)",
-    ("qwen3", "calibexp_all"): "measured; the LICENSED configuration is the streamed 64k pack (bo6c, `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) -- this arm ran the hook's 16k default, and the 16k streamed full stack has no two-text verdict (bo6's two-text pass is the all-at-once 16k pack, `e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; the streamed 16k experts-only pack passed c4val1 only, `e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04`); the licensed stack's speed is therefore NOT yet measured (a follow-up arm)",
+    ("qwen3", "calibexp_all"): "measured; the LICENSED configuration is the streamed 64k pack (bo6c, `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) -- this arm ran the hook's 16k default, and the 16k streamed full stack has no two-text verdict (bo6's two-text pass is the all-at-once 16k pack, `e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; the streamed 16k experts-only pack passed c4val1 only, `e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04`); the licensed stack's speed is amendment 2's `calibexp_all_n128` arm on this box (pending until its receipt lands)",
     ("qwen3", "calibexp_folds"): "measured, not licensed -- streamed 16k calibrated experts without calibrated attention: the 16k experts-only pack passed c4val1 (-0.0505) with wikitext unscored at 16k (`e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04`: pass on 1 text, needs 2); the 64k experts-only pack passes both texts (`e4b.serve.buildout.bo6c.qwen3.calibexp-streamed-64k.k8.2026-09-05`) but is not this arm's pack",
+    ("qwen3", "calibexp_all_n128"): "the licensed configuration (bo6c) -- pass on both texts under the unchanged gate, at parity or better, no improvement by a number (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); this arm is its speed on this box (amendment 2)",
     ("gemma4", "nf4"): "baseline (reference); no reference exists for this family at 0.1-nat / 512-token resolution (`e4b.parity.gemma4.no-reference`, #359)",
     ("gemma4", "r1epi"): "exact arithmetic on NF4 experts (round-1 norm fold + router epilogue; the fold's kernel matches the module within 1 ULP per SERVING-THROUGHPUT) -- no K8 instrument exists for Gemma-4, so the register carries NO verdict for any Gemma-4 arm; quoted as the position that quantises nothing beyond NF4, with the register's caveat",
     ("gemma4", "int4_r1epi"): "measured, no quality verdict (no instrument) -- the register's quoted best for this family (bo3 `stack`; `e4b.serve.buildout.gemma4.b1.5090.2026-09-04` / `.b16`: 'licensed configuration' in the claim text, 'NO quality instrument on this family' in its notes and in SERVING-THROUGHPUT's gate column); not licensed by a verdict",
@@ -112,11 +117,11 @@ LICENSED_BEST = {
     "granite": ("r12epi", "K8 verdict: +0.019 ppl wikitext, pass (`e4b.serve.buildout.granite.b1.5090.2026-09-04`)"),
     "olmoe": ("nf4", "nothing above NF4 is licensed on the register: the tp row's calibrated pack has one text (needs 2) and a +0.60 C4-val FAIL on record; the folds alone have no receipt"),
     "gptoss": ("nf4_r12", "the register's quoted best (`e4b.serve.buildout.gptoss.b1.5090.2026-09-04`); exact folds on NF4; no instrument on this family -- and it is this lane's reference arm"),
-    "qwen3": (None, "the licensed stack is bo6c's streamed 64k pack (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); bo7 ran the 16k default -- its speed is NOT measured on this box (follow-up arm)"),
+    "qwen3": ("calibexp_all_n128", "K8 verdict: pass on both texts, wikitext -0.053 / c4val1 -0.066 ppl, both sub-floor (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); the arm runs under P35 amendment 2 after TP_DONE"),
     "gemma4": ("r1epi", "exact arithmetic (round-1 fold + epilogue) on NF4 experts; no K8 instrument on this family -- no verdict exists, the register's caveat applies"),
     "mixtral": ("nf4", "nothing above NF4 is licensed on the register: `lic` and `all` FAIL as registered (bo5), the calibrated stack FAILS (bo6b), the combined folds arm has no receipt"),
 }
-NEAREST = {"qwen3": "calibexp_all"}  # the measured arm nearest the unmeasured licensed stack (same stack, 16k pack)
+NEAREST = {"qwen3": "calibexp_all"}  # printed beside the licensed row while the licensed arm has no receipt (same stack, 16k pack)
 PAT = re.compile(r"^(?P<fam>[a-z0-9]+)_(?P<kind>b1|b16)_(?P<arm>.+)\.json$")
 ARMLINE = re.compile(r"^\[(?P<at>[^\]]+)\] arm (?P<fam>\w+)/(?P<arm>\S+) \(B=(?P<b>\d+) (?P<rest>.*)\)\s*$")
 TS = re.compile(r"^\[[^\]]+\] ")
@@ -274,11 +279,8 @@ def main():
                   + "; NF4 GEMV dispatch " + ", ".join(f"`{arm}` {d or 'none (int4 / MXFP4 path)'}" for arm, d in sorted(disp.items())) + ".")
         # licensed best
         lb, basis = LICENSED_BEST[fam]
-        if lb is None:
-            near = fams.get(NEAREST.get(fam, ""), {})
-            best[fam] = {"arm": None, "basis": basis, "near": NEAREST.get(fam), "near_r": near}
-        else:
-            best[fam] = {"arm": lb, "basis": basis, "r": fams.get(lb, {})}
+        best[fam] = {"arm": lb, "basis": basis, "r": fams.get(lb, {}), "near": NEAREST.get(fam),
+                     "near_r": fams.get(NEAREST.get(fam, ""), {})}
     # ---- licensed best per family, three axes
     print("\n### Licensed best per family -- the three axes (rule 3)")
     print("Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this box (one RTX 5090, driver 595.84, on an AMD EPYC "
@@ -289,17 +291,20 @@ def main():
     for fam in FAMS:
         b = best[fam]
         no_anchor = "no anchor projection (no anchor-class measurement exists for this family)"
-        if b["arm"] is None:
+        r = b["r"]
+        arm = b["arm"]
+        if b.get("near") and not (r.get("b1_ms") and r.get("b16")):
             nr = b["near_r"]
-            print(f"| {NAME[fam]} | NOT MEASURED on this lane -- {b['basis']} | see the nearest measured arm below | pending a follow-up arm | pending | "
-                  f"not computed (rule: 159.2 x the licensed ratio; the licensed ratio is not measured on this box) | pending | pending | no anchor projection (B=16 has no anchor-class measurement) |")
+            print(f"| {NAME[fam]} | `{arm}` -- {DESC[(fam, arm)]} | {b['basis']} | {fmt(r.get('x1'), 3) if r.get('b1_ms') else 'pending (amendment 2)'} | "
+                  f"{fmt(r.get('tps'), 1) if r.get('b1_ms') else 'pending'} | "
+                  f"{('≈ %.0f tok/s (PROJECTION: 159.2 x %.3f; uncertified)' % (ANCHOR_NF4 * r['x1'], r['x1'])) if r.get('x1') else 'not computed until the licensed ratio is measured (rule: 159.2 x the B=1 ratio, a projection)'} | "
+                  f"{fmt(r.get('x16'), 3) if r.get('b16') else 'pending (amendment 2)'} | {fmt(r.get('b16'), 1) if r.get('b16') else 'pending'} | no anchor projection (B=16 has no anchor-class measurement) |")
             if nr:
                 print(f"| {NAME[fam]} (nearest measured arm, `{b['near']}` -- the same stack with the 16k pack: measured, NOT the licensed pack) | "
                       f"{DESC[(fam, b['near'])]} | measured, not the licensed configuration | {fmt(nr.get('x1'), 3)} | {fmt(nr.get('tps'), 1)} | "
                       f"not quoted (an unlicensed arm gets no projection) | {fmt(nr.get('x16'), 3)} | {fmt(nr.get('b16'), 1)} | no anchor projection (B=16) |")
+            legend.add("pending")
             continue
-        r = b["r"]
-        arm = b["arm"]
         pend = r.get("b1_ms") is None or r.get("b16") is None
         x1 = "1.000 (reference arm)" if arm == NF4[fam] and r.get("b1_ms") else fmt(r.get("x1"), 3)
         x16 = "1.000 (reference arm)" if arm == NF4[fam] and r.get("b16") else fmt(r.get("x16"), 3)
@@ -319,12 +324,9 @@ def main():
     for fam in FAMS:
         fams = {arm: r for (f, arm), r in rows.items() if f == fam}
         b = best[fam]
-        if b["arm"] is None:
-            lic = "not measured (licensed stack not on this lane)"
-        else:
-            r = b["r"]
-            lic = (f"{'1.000' if b['arm'] == NF4[fam] else fmt(r.get('x1'), 3)} / "
-                   f"{'1.000' if b['arm'] == NF4[fam] else fmt(r.get('x16'), 3)} (`{b['arm']}`)") if r.get("b1_ms") and r.get("b16") else "pending"
+        r = b["r"]
+        lic = (f"{'1.000' if b['arm'] == NF4[fam] else fmt(r.get('x1'), 3)} / "
+               f"{'1.000' if b['arm'] == NF4[fam] else fmt(r.get('x16'), 3)} (`{b['arm']}`)") if r.get("b1_ms") and r.get("b16") else f"pending (`{b['arm']}`)"
         # fastest arm by the receipt's unrounded step (ties in the rounded ms are broken by the raw value); the ratio
         # printed is the rounded-convention one from the family table
         have1 = [(r["b1_ms_raw"], arm) for arm, r in fams.items() if r.get("b1_ms_raw")]

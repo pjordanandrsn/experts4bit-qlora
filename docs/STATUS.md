@@ -215,12 +215,14 @@ clause and its calibrated attention is refused on this family, so its full
 stack is ×2.070 / ×2.289 measured, not licensed; **gpt-oss's quoted best is
 its own reference arm** (NF4 + exact folds, 144.5 / 761.6) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970 with the quality gate open;
-**Qwen3's licensed stack's speed is not measured** — the lane ran the hook's
-16k default, not the licensed 64k pack, so `e4b.serve.census.bo7.qwen3.b1`
-/ `.b16` are **open**; the same stack with the 16k pack reads ×2.067 at B=1
+**Qwen3's licensed stack's speed is pending** — the lane's own calibrated
+arms ran the hook's 16k default, not the licensed 64k pack, so
+`e4b.serve.census.bo7.qwen3.b1` / `.b16` are **open** until the lane's
+amendment 2 (pre-registered 06:05Z) runs the 64k stack on the same box
+after `TP_DONE`; the same stack with the 16k pack reads ×2.067 at B=1
 (238.1 tok/s) and ×2.624 at B=16 (1338.8) and is speed-identical to the RTN
 stack (same kernel, same bytes) — an expectation of equal speed for the 64k
-pack, not a measurement; a follow-up arm settles it. Two int4 facts the box
+pack, not a measurement; amendment 2's arm settles it. Two int4 facts the box
 adds: a calibrated int4-expert pack costs nothing over an RTN one in speed
 (Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs 4.204), and the streamed
 calibration's pack counts reproduce across hosts (Granite 2524/36, Qwen3

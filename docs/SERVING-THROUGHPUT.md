@@ -162,7 +162,9 @@ silent the label is "no quality verdict on record"; (3) three axes for every lic
 box, rental-measured tok/s on this box, and the anchor-class projection marked as a projection, which exists only for
 Qwen3-30B at B=1 (159.2 tok/s × the ratio; the class was never certified); (4) unlicensed arms are "measured, not
 licensed", never a position; (5) bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's. **First snapshot
-(05:31Z, 31 of 48 arms): Gemma-4 and Mixtral are pending and arrive before merge.**
+(05:31Z, 31 of 48 arms): Gemma-4 and Mixtral are pending and arrive before merge, as do the two arms of P35
+amendment 2 (pre-registered 06:05Z): `qwen3/calibexp_all_n128` at B=1 and B=16 — the licensed Qwen3 configuration
+(streamed 64k pack) — run on the same box and install after `TP_DONE`.**
 
 Licensed best per family, the three axes (tok/s = rental-measured on this box; the third axis is *no anchor projection*
 for every family but Qwen3 and for every B=16 — no anchor-class measurement exists there):
@@ -177,10 +179,11 @@ for every family but Qwen3 and for every B=16 — no anchor-class measurement ex
   have no K8 — `e4b.serve.census.bo7.olmoe.b1` / `.b16`.
 - **gpt-oss-20b** — the quoted best is the lane's own reference arm, `nf4_r12` (NF4 experts + exact folds; no raw-text
   instrument): ×1.000, **6.92 ms = 144.5 tok/s B=1, 761.6 B=16** — `e4b.serve.census.bo7.gptoss.b1` / `.b16`.
-- **Qwen3-30B-A3B** — **the licensed stack's speed is not measured**: the licensed configuration is the streamed **64k**
-  pack (bo6c) and the lane ran the hook's 16k default, whose streamed full stack has no two-text verdict, so
-  `e4b.serve.census.bo7.qwen3.b1` / `.b16` are **open** and no ratio, tok/s or projection is quoted for it; a follow-up
-  arm (`E4B_CALIB_NSEQ=128`) measures it. The nearest measured arm — the same stack with the 16k pack — reads ×2.067 at
+- **Qwen3-30B-A3B** — **the licensed stack's speed is pending (amendment 2)**: the licensed configuration is the streamed
+  **64k** pack (bo6c) and the lane's own calibrated arms ran the hook's 16k default, whose streamed full stack has no
+  two-text verdict, so `e4b.serve.census.bo7.qwen3.b1` / `.b16` are **open** and no ratio, tok/s or projection is quoted
+  for it until amendment 2's `calibexp_all_n128` arms (`E4B_CALIB_NSEQ=128`, same box, after `TP_DONE`) land — then the
+  three axes, the anchor projection included, are quoted for real. The nearest measured arm — the same stack with the 16k pack — reads ×2.067 at
   B=1 (4.20 ms = 238.1 tok/s; NF4 8.68 ms = 115.2) and ×2.624 at B=16 (1338.8; NF4 510.3): measured, not the licensed
   pack. The 64k pack differs only in the packed values, not the kernel or the bytes, so equal speed is the expectation —
   an expectation, not a measurement.
@@ -199,7 +202,7 @@ across families:
 | Granite-3.1-3B-A800M | `r12epi` ×1.341 / ×1.160 | = licensed best | — | `int4_r12epi` ×2.146 / ×2.094 (FAIL +0.063 ppl) | `calibexp_r12epi` ×2.157 / ×2.093 (FAIL c4val1 +0.387) | — |
 | OLMoE-1B-7B | NF4 ×1.000 | `folds` ×1.192 / ×1.081 (no verdict on record) | `calattn` ×1.216 / ×1.077 (refused: +0.60 C4-val) | `int4all` ×2.070 / ×2.289 (not licensed: one text, calibrated pack) | — | — |
 | gpt-oss-20b | `nf4_r12` ×1.000 (reference) | = reference | — | — | — | MXFP4 store, route rule `store_r12` ×1.293 / ×0.970 (gate open) |
-| Qwen3-30B-A3B | not measured (64k pack) | `folds` ×1.409 / ×1.130 (bo5: FAIL by improving, sub-floor) | `calattn` ×1.444 / ×1.101 (no verdict alone) | `int4all` ×2.067 / ×2.617 (FAIL c4val1 +0.063) | `calibexp_all` (16k) ×2.067 / ×2.624; `calibexp_folds` (16k, no calibrated attention) ×2.000 / pending | — |
+| Qwen3-30B-A3B | pending (`calibexp_all_n128`, amendment 2) | `folds` ×1.409 / ×1.130 (bo5: FAIL by improving, sub-floor) | `calattn` ×1.444 / ×1.101 (no verdict alone) | `int4all` ×2.067 / ×2.617 (FAIL c4val1 +0.063) | `calibexp_all` (16k) ×2.067 / ×2.624; `calibexp_folds` (16k, no calibrated attention) ×2.000 / pending; `calibexp_all_n128` (64k, licensed) pending | — |
 | Gemma-4-26B-A4B | pending | pending | pending | pending | — | — |
 | Mixtral-8x7B-Instruct | pending | pending | pending (`all`) | pending (`lic`) | dropped (amendment 1) | — |
 

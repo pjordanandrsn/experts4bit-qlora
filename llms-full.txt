@@ -1581,12 +1581,14 @@ clause and its calibrated attention is refused on this family, so its full
 stack is ×2.070 / ×2.289 measured, not licensed; **gpt-oss's quoted best is
 its own reference arm** (NF4 + exact folds, 144.5 / 761.6) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970 with the quality gate open;
-**Qwen3's licensed stack's speed is not measured** — the lane ran the hook's
-16k default, not the licensed 64k pack, so `e4b.serve.census.bo7.qwen3.b1`
-/ `.b16` are **open**; the same stack with the 16k pack reads ×2.067 at B=1
+**Qwen3's licensed stack's speed is pending** — the lane's own calibrated
+arms ran the hook's 16k default, not the licensed 64k pack, so
+`e4b.serve.census.bo7.qwen3.b1` / `.b16` are **open** until the lane's
+amendment 2 (pre-registered 06:05Z) runs the 64k stack on the same box
+after `TP_DONE`; the same stack with the 16k pack reads ×2.067 at B=1
 (238.1 tok/s) and ×2.624 at B=16 (1338.8) and is speed-identical to the RTN
 stack (same kernel, same bytes) — an expectation of equal speed for the 64k
-pack, not a measurement; a follow-up arm settles it. Two int4 facts the box
+pack, not a measurement; amendment 2's arm settles it. Two int4 facts the box
 adds: a calibrated int4-expert pack costs nothing over an RTN one in speed
 (Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs 4.204), and the streamed
 calibration's pack counts reproduce across hosts (Granite 2524/36, Qwen3
@@ -2141,7 +2143,7 @@ Open items (no evidence either way):
 - e4b.open.gemma4-load-fault [open]: OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 4 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
-- e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05 [open]: Throughput census (bo7): the single-stream (B=1) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack -- the streamed 64k-token calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) -- is NOT measured on this box: bo7's calibrated arms ran the hook's 16k default, whose streamed full stack has no two-text verdict. A follow-up arm measures it; until then no ratio, tok/s or anchor projection is quoted for the licensed stack.
-- e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05 [open]: Throughput census (bo7): the batched (B=16, aggregate) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack (the streamed 64k-token calibrated pack, bo6c) is NOT measured on this box -- bo7 ran the 16k default; a follow-up arm measures it.
+- e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05 [open]: Throughput census (bo7): the single-stream (B=1) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack -- the streamed 64k-token calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) -- is NOT measured on this box: bo7's calibrated arms ran the hook's 16k default, whose streamed full stack has no two-text verdict. P35 amendment 2 runs the licensed configuration on this box after TP_DONE (pending at the 05:31Z snapshot); until its receipt lands no ratio, tok/s or anchor projection is quoted for the licensed stack.
+- e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05 [open]: Throughput census (bo7): the batched (B=16, aggregate) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack (the streamed 64k-token calibrated pack, bo6c) is NOT measured on this box -- bo7's lane arms ran the 16k default; P35 amendment 2 runs it on this box after TP_DONE (pending at the 05:31Z snapshot).
 
 (75 active claims listed, 5 open, 0 projected; retired and superseded claims are omitted on purpose.)
