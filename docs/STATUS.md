@@ -222,15 +222,25 @@ amendment 2 (pre-registered 06:05Z) runs the 64k stack on the same box
 after `TP_DONE`; the same stack with the 16k pack reads ×2.067 at B=1
 (238.1 tok/s) and ×2.624 at B=16 (1338.8) and is speed-identical to the RTN
 stack (same kernel, same bytes) — an expectation of equal speed for the 64k
-pack, not a measurement; amendment 2's arm settles it. Two int4 facts the box
-adds: a calibrated int4-expert pack costs nothing over an RTN one in speed
-(Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs 4.204), and the streamed
-calibration's pack counts reproduce across hosts (Granite 2524/36, Qwen3
-10820/1468 — bo5's and bo6's counts). **Gemma-4 and Mixtral are pending**
-in the bundle's first snapshot (their 16 arms run after Qwen3's and land
-before merge); Mixtral's calibrated arms were dropped under the lane's
-amendment (FAIL as registered on bo6b, ~85-min calibration) and print as a
-row that says so.
+pack, not a measurement; amendment 2's arm settles it. **Gemma-4 has no K8
+instrument, so no arm carries a K8 licence**; the register's position with
+that caveat is the exact round-1 fold + epilogue on NF4 (`r1epi`), ×1.281
+at B=1 (103.6 tok/s) and ×1.106 at B=16 (675.8;
+`e4b.serve.census.bo7.gemma4.b1` / `.b16`), and the quoted int4 best
+(bo3's `stack`) reads ×1.705 / ×1.697 measured, no quality verdict —
+Gemma-4-it loaded on this host without the #344 fault. **Mixtral's position
+is NF4** (50.3 / 191.4, ×1.000; `e4b.serve.census.bo7.mixtral.b1` /
+`.b16`): the exact folds are ×1.062 / ×1.018 but unscored as a combined
+arm, the RTN int4 stack ×2.329 / ×1.959 and the calibrated-attention stack
+×2.597 / ×1.962 are measured, not licensed (bo5's second-text FAILs stand),
+and the calibrated-expert arms were dropped under the lane's amendment
+(FAIL as registered on bo6b, ~85-min calibration) and print as a row that
+says so. Two int4 facts the box adds: a calibrated int4-expert pack costs
+nothing over an RTN one in speed (Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs
+4.204), and the streamed calibration's pack counts reproduce across hosts
+(Granite 2524/36, Qwen3 10820/1468 — bo5's and bo6's counts). All 48 lane
+arms ran (`TP_DONE` 07:00Z, 5.0 h, no alarm or refusal); the only pending
+rows are amendment 2's two.
 
 ---
 

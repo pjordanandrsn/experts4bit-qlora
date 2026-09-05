@@ -11,3 +11,9 @@ INT4EXP calibrating (streamed): 8 batches of c4 budget GB 24
 INT4EXP calibrated experts: 2282 gptq / 278 rtn (min_rows=32) over 10 layers
 INT4EXP calibrated experts: 2254 gptq / 306 rtn (min_rows=32) over 10 layers
 INT4EXP calibrated experts: 2260 gptq / 300 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2190 gptq / 370 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 1834 gptq / 214 rtn (min_rows=32) over 8 layers
+INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+BV3_GRAPH batch=16 steps=70 step=11.93ms agg=1340.8tok/s recompiles=0 out=/root/bo7/qwen3_b16_calibexp_folds.json

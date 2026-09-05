@@ -1,0 +1,11 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 1057.00it/s]
+[06:05:32]   fusing + quantizing experts (up to 30x128) to nf4 (streaming)...
+[06:05:32]   quantized experts on 30/30 MoE layers (128 experts each)
+[06:05:32]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[06:05:34]   experts deferred to the arena: 30 module(s), 150 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[06:05:51]   hybrid tier active on 30 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 747.68it/s]
+INT4EXP enabled: 30 layers (model_type=gemma4_text)
+KV geometry varies per layer: [(2, 512), (8, 256)] -- the paged cache sizes rows for the largest and serves each layer in its own
+BV3_GRAPH batch=16 steps=70 step=15.42ms agg=1037.4tok/s recompiles=0 out=/root/bo7/gemma4_b16_int4_r1epi.json

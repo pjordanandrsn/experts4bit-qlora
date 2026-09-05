@@ -1,0 +1,12 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 26 files:   0%|          | 0/26 [00:00<?, ?it/s]Fetching 26 files: 100%|██████████| 26/26 [00:00<00:00, 1644.28it/s]
+[06:31:32]   fusing + quantizing experts (up to 32x8) to nf4 (streaming)...
+[06:31:32]   quantized experts on 32/32 MoE layers (8 experts each)
+[06:31:32]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[06:31:33]   applied 32 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[06:31:33]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[06:32:13]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 25 files:   0%|          | 0/25 [00:00<?, ?it/s]Fetching 25 files: 100%|██████████| 25/25 [00:00<00:00, 1530.97it/s]
+INT4EXP enabled: 32 layers (model_type=mixtral)
+ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+B1D_TIMED_GRAPH steps=127 step=7.65ms compile=None recompiles=0 out=/root/bo7/mixtral_b1_all.json

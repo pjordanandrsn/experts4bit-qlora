@@ -2,17 +2,20 @@
 
 **Box:** Vast.ai instance 49916675, RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host
 (128 CPUs, 251 GB RAM, container cgroup `memory.max` 183,318,347,776 B ≈ 170.7 GiB — [`forensics.txt`](forensics.txt) is
-the lane script's own probe at install, [`forensics2.txt`](forensics2.txt) the orchestrator's at the 05:31Z snapshot);
+the lane script's own probe at install, [`forensics2.txt`](forensics2.txt) the orchestrator's probe at 05:31Z);
 torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; installed `grouped-nf4-gemm 0.30.0`,
 `experts4bit-qlora 0.35.0` (`pip show`, in `forensics2.txt`). No memory-bandwidth probe ran on this box.
 **When:** 2026-09-05. Per [`logs/outer.log`](logs/outer.log): install 02:00:46Z (`pip rc=0`, tripwire
 `bo7 tripwire OK: e4b 0.35.0 main (streamed calibrated experts + gpu solve, swiglu/combine) + gnf4 0.30.0 main`,
 `cuda ok`), Granite bake 02:01:32Z, its eight arms 02:02–02:18Z (`GRANITE DONE`); OLMoE bake 02:18Z, arms 02:20–02:26Z;
-gpt-oss bake 02:26Z (5-min download), arms 02:32–02:34Z; Qwen3 bake 02:34–02:41Z, arms 02:41Z → (the calibrated arms
-~40 min each: 02:51 → 03:34Z, 03:34 → 04:13Z, 04:24 → 05:05Z); **this bundle is the 05:31Z snapshot — 31 of 48 arms**;
-Qwen3's last arm, then Gemma-4's eight and Mixtral's eight follow (`TP_DONE` expected ≈ 08:00Z), then **amendment 2's
-two arms** (below; `TP2_DONE` ≈ 10:00Z) — all land in this directory before merge. Rented 01:26Z on bo6's `TP2_DONE` (the image took ~35 min to load; ssh auth at try 79); a 10-h
-hard-kill guard on the mini was armed before the first ssh (fires ≈ 12:05Z); bandwidth pre-flight 96 MB/s.
+gpt-oss bake 02:26Z (5-min download), arms 02:32–02:34Z; Qwen3 bake 02:34–02:41Z, arms 02:41–05:44Z (the calibrated
+arms ~40 min each: 02:51 → 03:34Z, 03:34 → 04:13Z, 04:24 → 05:05Z, 05:05 → 05:44Z; `QWEN3 DONE`); Gemma-4 bake
+05:44–05:57Z (Gemma-4-it loaded without the #344 fault on this host), arms 05:57–06:10Z (`GEMMA4 DONE`); Mixtral bake
+06:10–06:24Z, arms 06:24–07:00Z (`MIXTRAL DONE`); **`TP_DONE` 2026-09-05T07:00:26Z — 48 of 48 arms, no alarm, no
+refusal, no traceback; wall 02:00Z → 07:00Z, 5.0 h.** Amendment 2's two arms (below; `logs/bo7b.sh`, started ≈ 07:01Z
+after `TP_DONE`, `TP2_DONE` ≈ 09:00Z; its console appends to the same `outer.log`) are the only rows still pending in
+this bundle. Rented 01:26Z on bo6's `TP2_DONE` (the image took ~35 min to load; ssh auth at try 79); a 10-h hard-kill
+guard on the mini was armed before the first ssh (fires ≈ 12:05Z); bandwidth pre-flight 96 MB/s.
 **Cut — the shipped code, both packages at their `main` after the 0.35.0 / 0.30.0 releases** (the pip line in
 [`logs/bo7_run.sh`](logs/bo7_run.sh)):
 
@@ -61,11 +64,11 @@ register licenses is bo6c's streamed **64k** pack — so the licensed stack's sp
 box. Amendment 2 adds two arms **on this box after `TP_DONE`, same session and install**: `qwen3/calibexp_all_n128` at
 B=1 and B=16 — streamed GPTQ-calibrated int4 experts at 64k C4 tokens (`E4B_CALIB_NSEQ=128`) + C4-calibrated int4
 attention + round-1/2 folds + router epilogue + glue, the licensed Qwen3 configuration — run by `/root/bo7/bo7b.sh`
-(shipped as `logs/bo7b.sh` with the final snapshot) under 5400-s alarms, receipts `qwen3_b1_calibexp_all_n128.json` /
-`qwen3_b16_calibexp_all_n128.json`, marker `TP2_DONE` (≈ 10:00Z). Their ratios are to bo7's own `nf4` arms (rule 1
+([`logs/bo7b.sh`](logs/bo7b.sh)) under 5400-s alarms, receipts `qwen3_b1_calibexp_all_n128.json` /
+`qwen3_b16_calibexp_all_n128.json`, marker `TP2_DONE` (started ≈ 07:01Z, expected ≈ 09:00Z). Their ratios are to bo7's own `nf4` arms (rule 1
 holds: same box, same session); the licensed-best row then carries the three axes for real, the anchor projection
 (159.2 × the B=1 ratio, a projection) included. If they alarm out or refuse, they are `alarm` / `refused` rows and the
-Qwen3 census claims stay `open` with the cause. **Pending in this snapshot.**
+Qwen3 census claims stay `open` with the cause. **Pending in this bundle — the only two rows that are.**
 
 ## Protocol
 
@@ -95,7 +98,7 @@ sm_80+), arms the 10-h hard-kill guard **before** the first ssh and verifies the
 runs a 15-s bandwidth pre-flight (re-roll under 15 MB/s), stages the scripts and launches `bo7_run.sh` under `setsid`.
 Alarms: **5400 s on calibrated arms, 3600 s otherwise**, sized from bo6b — a Qwen3 streamed 16k calibration takes
 ~40 min on this host (well inside 5400 s), a Mixtral one ~85 min (which is why those arms were dropped rather than given
-a longer alarm inside a 10-h guard). No alarm fired in this snapshot.
+a longer alarm inside a 10-h guard). No alarm fired on any of the 48 arms.
 
 ## Reading rules (pre-registered, P35; applied verbatim)
 
@@ -129,12 +132,13 @@ ratios are to that arm and its quoted best is the reference itself.
 - **Qwen3-30B-A3B:** the licensed configuration is the **streamed 64k** full stack (bo6c,
   `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`). bo7's `calibexp_all` and `calibexp_folds`
   ran the 16k default → "measured; the licensed configuration is the 64k pack — the 16k streamed full stack has no
-  two-text verdict"; **the licensed stack's speed is amendment 2's `calibexp_all_n128` arm, pending in this snapshot**
+  two-text verdict"; **the licensed stack's speed is amendment 2's `calibexp_all_n128` arm, pending in this bundle**
   (its label: "the licensed configuration (bo6c)"). `int4all` = bo5's
   RTN `all`, FAIL as registered (c4val1 +0.063); the exact `folds` carry bo5's verdict FAIL-by-improving (−0.073 ppl,
   sub-floor) — not a licensed position; `calattn` alone has no verdict on record.
 - **Gemma-4-26B-A4B:** no K8 instrument exists for this family (`e4b.parity.gemma4.no-reference`, #359), so the register
-  carries no verdict for any arm. `r1epi` is the exact-arithmetic position (round-1 norm fold + epilogue on NF4 experts);
+  carries no verdict for any arm. `r1epi` is the register's position with the no-instrument caveat — exact arithmetic
+  (round-1 norm fold + epilogue on NF4 experts), never a K8 licence;
   `int4_r1epi` is the register's quoted best (bo3 `stack`, `e4b.serve.buildout.gemma4.b1.5090.2026-09-04` — "licensed
   configuration" in the claim text, "NO quality instrument" in its notes) and `calattn_r1epi` a calibrated pack with an
   unreadable K8: both measured, no quality verdict.
@@ -145,11 +149,13 @@ ratios are to that arm and its quoted best is the reference itself.
 
 ## Instrument notes
 
-- **Receipts reproduce their console lines on all 31 arms** (step ms to 0.01, aggregate tok/s to 0.1, step counts —
+- **Receipts reproduce their console lines on all 48 arms** (step ms to 0.01, aggregate tok/s to 0.1, step counts —
   checked mechanically); `fuse_qkv: false` and `recompiles_in_window: 0` on every receipt.
 - **The decode-attention compute path is chosen per family, not per arm:** the receipts' `mech.compute` tally reads
-  `fp8` on OLMoE and Qwen3 and `f32` on Granite and gpt-oss, as bo5's and the tp lane's receipts do (an unset
-  `GNF4_ATTN_COMPUTE` selects capability-conditionally). Identical across every arm of a family, so ratios do not see it.
+  `fp8` on OLMoE, Qwen3, Gemma-4 and Mixtral and `f32` on Granite and gpt-oss, as bo5's and the tp lane's receipts do
+  (an unset `GNF4_ATTN_COMPUTE` selects capability-conditionally). Identical across every arm of a family, so ratios do
+  not see it. Likewise the NF4 GEMV dispatch: dot-pad on Qwen3's shape, scalar on Granite / OLMoE / gpt-oss / Gemma-4,
+  scalar + split-K on Mixtral's 8-expert shape — per family, not per arm.
 - **The fusions print no banner.** `E4B_FUSE_*` refuse aloud when nothing matches (#333) and are silent when they engage;
   their engagement is read from the step time. The int4 / calibrated arms print `INT4EXP` / `ATTNINT4` banners, which
   `RESULTS.md` reproduces in the `engaged` column.
@@ -177,10 +183,11 @@ B=16 tok/s · ×NF4 · status), then the licensed best per family on the three a
 - [`logs/`](logs/) — [`bo7_run.sh`](logs/bo7_run.sh) (the amended lane script, the one that ran),
   [`bo7_run.sh.pre-amend`](logs/bo7_run.sh.pre-amend) (the pre-amendment copy, kept for the record),
   [`bo7_all.sh`](logs/bo7_all.sh) (the renter / guard / pre-flight / launcher on the mini),
-  [`bo7_queue.sh`](logs/bo7_queue.sh) (the queue behind bo6), `bo7b.sh` (amendment 2's two arms; ships with the final
-  snapshot), the hook (`usercustomize.py` = v6, `hook/usercustomize.py`
-  its installed copy), `k8_bake.py`, `step_decomp.py`, the four bake logs, **every per-arm `run_*.log`** (the hook banners,
-  the calibration pass lines, the result line) and the lane console `outer.log`. The logs are force-added past the
+  [`bo7_queue.sh`](logs/bo7_queue.sh) (the queue behind bo6), [`bo7b.sh`](logs/bo7b.sh) (amendment 2's two arms),
+  the hook (`usercustomize.py` = v6, `hook/usercustomize.py`
+  its installed copy), `k8_bake.py`, `step_decomp.py`, the six bake logs, **every per-arm `run_*.log`** (the hook banners,
+  the calibration pass lines, the result line) and the lane console `outer.log` (through `TP_DONE`; the final copy,
+  with amendment 2's lines and `TP2_DONE`, replaces it when those arms land). The logs are force-added past the
   repository's `*.log` ignore rule, as bo6's were. Nothing in this directory is edited: every file is the byte-for-byte
   copy of the box's, except the four written here (`README.md`, `RESULTS.md`, `census_reduce.py`; `forensics2.txt` is the
   orchestrator's probe). The mini-side watcher scripts (`bo7_loop.sh`, `bo7watch.sh`), `pip.log` (a root-user warning
@@ -196,8 +203,8 @@ and run `logs/bo7_run.sh` (its `pip install` line pins both cuts; its tripwire r
 ## What is NOT in the table
 
 No K8 arm: no perplexity was scored on this lane, and no label here was decided by it. **The speed of Qwen3's licensed
-stack (the streamed 64k pack) is amendment 2's arm, pending in this snapshot** — the lane's own calibrated arms ran the
+stack (the streamed 64k pack) is amendment 2's arm, pending in this bundle** — the lane's own calibrated arms ran the
 hook's 16k default. Mixtral's `calibexp_lic` was dropped (amendment 1) and is a row that says so. No anchor projection is
-computed in this snapshot (the only arm one applies to has no receipt yet; the reducer prints it, marked as a projection,
-when it does). **In this snapshot Gemma-4 and Mixtral are pending** (16 arms), Qwen3's `calibexp_folds` B=16 was
-running, and amendment 2's two arms had not started; all arrive before merge. No kernel census ran.
+computed yet (the only arm one applies to has no receipt yet; the reducer prints it, marked as a projection, when it
+does). All 48 lane arms are in; **amendment 2's two `calibexp_all_n128` rows are the only pending ones** and arrive
+before merge. No kernel census ran.

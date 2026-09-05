@@ -161,10 +161,10 @@ of each arm is this register's at bundle time (bo3, bo5, bo6, bo6c) — bo7 lice
 silent the label is "no quality verdict on record"; (3) three axes for every licensed best — ratio ×N over NF4 on this
 box, rental-measured tok/s on this box, and the anchor-class projection marked as a projection, which exists only for
 Qwen3-30B at B=1 (159.2 tok/s × the ratio; the class was never certified); (4) unlicensed arms are "measured, not
-licensed", never a position; (5) bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's. **First snapshot
-(05:31Z, 31 of 48 arms): Gemma-4 and Mixtral are pending and arrive before merge, as do the two arms of P35
-amendment 2 (pre-registered 06:05Z): `qwen3/calibexp_all_n128` at B=1 and B=16 — the licensed Qwen3 configuration
-(streamed 64k pack) — run on the same box and install after `TP_DONE`.**
+licensed", never a position; (5) bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's. **All 48 lane arms ran
+(`TP_DONE` 2026-09-05T07:00:26Z, 5.0 h of wall, no alarm, refusal or traceback; Gemma-4-it loaded without the #344
+fault); the only pending rows are the two arms of P35 amendment 2 (pre-registered 06:05Z): `qwen3/calibexp_all_n128` at
+B=1 and B=16 — the licensed Qwen3 configuration (streamed 64k pack) — run on the same box and install after `TP_DONE`.**
 
 Licensed best per family, the three axes (tok/s = rental-measured on this box; the third axis is *no anchor projection*
 for every family but Qwen3 and for every B=16 — no anchor-class measurement exists there):
@@ -187,12 +187,17 @@ for every family but Qwen3 and for every B=16 — no anchor-class measurement ex
   B=1 (4.20 ms = 238.1 tok/s; NF4 8.68 ms = 115.2) and ×2.624 at B=16 (1338.8; NF4 510.3): measured, not the licensed
   pack. The 64k pack differs only in the packed values, not the kernel or the bytes, so equal speed is the expectation —
   an expectation, not a measurement.
-- **Gemma-4-26B-A4B** — `r1epi` (the exact round-1 fold + epilogue on NF4 experts; no K8 instrument exists for this
-  family, so no verdict does): **pending**. The register's quoted best `int4_r1epi` (bo3's `stack`) is measured with no
+- **Gemma-4-26B-A4B** — no K8 instrument exists for this family, so no arm carries a K8 licence; the register's position
+  with that caveat is `r1epi` (the exact round-1 norm fold + router epilogue on NF4 experts): **×1.281 at B=1 (9.65 ms =
+  103.6 tok/s; NF4 12.36 ms = 80.9)** and **×1.106 at B=16 (675.8; NF4 611.2)** — `e4b.serve.census.bo7.gemma4.b1` /
+  `.b16`. The register's quoted best `int4_r1epi` (bo3's `stack`) reads ×1.705 / ×1.697 (137.9 / 1037.4) measured with no
   quality verdict — its claim text says "licensed configuration" and its notes say "no instrument"; the census reads the
-  notes.
-- **Mixtral-8x7B-Instruct** — the position is **NF4** (`lic` and `all` FAIL as registered on bo5, the calibrated stack
-  FAILS on bo6b and was dropped from this lane, the combined folds arm has no receipt): **pending**.
+  notes; beside, its box: bo3 121.1 / 962.8 (×1.69 / ×1.68). Calibrated attention on `r1epi` ×1.398 / ×1.120, no verdict.
+- **Mixtral-8x7B-Instruct** — the position is **NF4** (×1.000: 19.87 ms = 50.3 tok/s B=1; 191.4 B=16;
+  `e4b.serve.census.bo7.mixtral.b1` / `.b16`): `lic` and `all` FAIL as registered on bo5, the calibrated stack FAILS on
+  bo6b and was dropped from this lane, and the combined folds arm has no receipt. Measured, not licensed: the exact
+  folds ×1.062 / ×1.018, `lic` ×2.329 / ×1.959 (117.2 / 374.9), `all` ×2.597 / ×1.962 (130.7 / 375.5); beside, with their
+  boxes: bo3 102.8 / 372.0 and 110.0 / 373.4, bo5 112.0 / 376.5 and 123.3 / 377.3.
 
 Ratios on this box, every arm to its family's NF4 (B=1 / B=16); labels are the register's — no absolute is compared
 across families:
@@ -202,17 +207,17 @@ across families:
 | Granite-3.1-3B-A800M | `r12epi` ×1.341 / ×1.160 | = licensed best | — | `int4_r12epi` ×2.146 / ×2.094 (FAIL +0.063 ppl) | `calibexp_r12epi` ×2.157 / ×2.093 (FAIL c4val1 +0.387) | — |
 | OLMoE-1B-7B | NF4 ×1.000 | `folds` ×1.192 / ×1.081 (no verdict on record) | `calattn` ×1.216 / ×1.077 (refused: +0.60 C4-val) | `int4all` ×2.070 / ×2.289 (not licensed: one text, calibrated pack) | — | — |
 | gpt-oss-20b | `nf4_r12` ×1.000 (reference) | = reference | — | — | — | MXFP4 store, route rule `store_r12` ×1.293 / ×0.970 (gate open) |
-| Qwen3-30B-A3B | pending (`calibexp_all_n128`, amendment 2) | `folds` ×1.409 / ×1.130 (bo5: FAIL by improving, sub-floor) | `calattn` ×1.444 / ×1.101 (no verdict alone) | `int4all` ×2.067 / ×2.617 (FAIL c4val1 +0.063) | `calibexp_all` (16k) ×2.067 / ×2.624; `calibexp_folds` (16k, no calibrated attention) ×2.000 / pending; `calibexp_all_n128` (64k, licensed) pending | — |
-| Gemma-4-26B-A4B | pending | pending | pending | pending | — | — |
-| Mixtral-8x7B-Instruct | pending | pending | pending (`all`) | pending (`lic`) | dropped (amendment 1) | — |
+| Qwen3-30B-A3B | pending (`calibexp_all_n128`, amendment 2) | `folds` ×1.409 / ×1.130 (bo5: FAIL by improving, sub-floor) | `calattn` ×1.444 / ×1.101 (no verdict alone) | `int4all` ×2.067 / ×2.617 (FAIL c4val1 +0.063) | `calibexp_all` (16k) ×2.067 / ×2.624; `calibexp_folds` (16k, no calibrated attention) ×2.000 / ×2.628; `calibexp_all_n128` (64k, licensed) pending | — |
+| Gemma-4-26B-A4B | `r1epi` ×1.281 / ×1.106 (position with the no-instrument caveat, not a K8 licence) | = position | `calattn_r1epi` ×1.398 / ×1.120 (no verdict: unreadable K8) | `int4_r1epi` ×1.705 / ×1.697 (no verdict: no instrument; the register's quoted best) | — | — |
+| Mixtral-8x7B-Instruct | NF4 ×1.000 | `folds` ×1.062 / ×1.018 (combined arm unscored) | `all` ×2.597 / ×1.962 (FAIL c4val1 +0.116) | `lic` ×2.329 / ×1.959 (FAIL c4val1 +0.0575; label withdrawn) | dropped (amendment 1) | — |
 
 What the box adds to the register: a calibrated int4-expert pack costs nothing in speed over an RTN one (Granite 2.04 vs
 2.05 ms, Qwen3 4.197 vs 4.204 unrounded; same kernel, same bytes, different values), and the streamed calibration's
 pack counts reproduce across hosts (Granite 2524 gptq / 36 rtn = bo5's; Qwen3 10820 / 1468 = bo6b's and bo6c's). The
-int4-expert lever reads ×2.07–2.16 at B=1 and ×2.09–2.62 at B=16 on the three families that ran it here and is licensed
-on exactly one (Qwen3, with the 64k pack this lane did not run). The decode-attention compute path the kernel tallied is
-`fp8` on OLMoE and Qwen3 and `f32` on Granite and gpt-oss — chosen per family, identical across a family's arms, as on
-bo5's receipts.
+int4-expert lever reads ×1.71–2.60 at B=1 and ×1.70–2.63 at B=16 across the five families that ran it here and is
+licensed on exactly one (Qwen3, with the 64k pack — amendment 2's arm). The decode-attention compute path the kernel
+tallied is `fp8` on OLMoE, Qwen3, Gemma-4 and Mixtral and `f32` on Granite and gpt-oss — chosen per family, identical
+across a family's arms, as on bo5's receipts.
 
 ## Reading the numbers
 

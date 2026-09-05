@@ -114,3 +114,61 @@ overlay         320G   89G  232G  28% /
     ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=qwen3_moe)
     BV3_GRAPH batch=16 steps=70 step=11.95ms agg=1338.8tok/s recompiles=0 out=/root/bo7/qwen3_b16_calibexp_all.json
 [2026-09-05T05:05:42Z] arm qwen3/calibexp_folds (B=16 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 alarm=5400)
+    INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    BV3_GRAPH batch=16 steps=70 step=11.93ms agg=1340.8tok/s recompiles=0 out=/root/bo7/qwen3_b16_calibexp_folds.json
+QWEN3 DONE
+[2026-09-05T05:44:57Z] freed qwen3 (disk: 319G free)
+[2026-09-05T05:44:57Z] bake gemma4
+BAKE OK
+overlay         320G   74G  247G  23% /
+[2026-09-05T05:57:51Z] arm gemma4/nf4 (B=1 exp=0 calib=0 fuse=0  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=12.36ms compile=None recompiles=0 out=/root/bo7/gemma4_b1_nf4.json
+[2026-09-05T05:58:38Z] arm gemma4/r1epi (B=1 exp=0 calib=0 fuse=r1epi  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=9.65ms compile=None recompiles=0 out=/root/bo7/gemma4_b1_r1epi.json
+[2026-09-05T05:59:16Z] arm gemma4/int4_r1epi (B=1 exp=1 calib=0 fuse=r1epi  alarm=3600)
+    INT4EXP enabled: 30 layers (model_type=gemma4_text)
+    B1D_TIMED_GRAPH steps=127 step=7.25ms compile=None recompiles=0 out=/root/bo7/gemma4_b1_int4_r1epi.json
+[2026-09-05T06:00:27Z] arm gemma4/calattn_r1epi (B=1 exp=0 calib=1 fuse=r1epi  alarm=3600)
+    ATTNINT4 calibrated: 115 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=gemma4_text)
+    B1D_TIMED_GRAPH steps=127 step=8.84ms compile=None recompiles=0 out=/root/bo7/gemma4_b1_calattn_r1epi.json
+[2026-09-05T06:03:41Z] arm gemma4/nf4 (B=16 exp=0 calib=0 fuse=0  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=26.18ms agg=611.2tok/s recompiles=0 out=/root/bo7/gemma4_b16_nf4.json
+[2026-09-05T06:04:33Z] arm gemma4/r1epi (B=16 exp=0 calib=0 fuse=r1epi  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=23.67ms agg=675.8tok/s recompiles=0 out=/root/bo7/gemma4_b16_r1epi.json
+[2026-09-05T06:05:24Z] arm gemma4/int4_r1epi (B=16 exp=1 calib=0 fuse=r1epi  alarm=3600)
+    INT4EXP enabled: 30 layers (model_type=gemma4_text)
+    BV3_GRAPH batch=16 steps=70 step=15.42ms agg=1037.4tok/s recompiles=0 out=/root/bo7/gemma4_b16_int4_r1epi.json
+[2026-09-05T06:06:51Z] arm gemma4/calattn_r1epi (B=16 exp=0 calib=1 fuse=r1epi  alarm=3600)
+    ATTNINT4 calibrated: 115 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=gemma4_text)
+    BV3_GRAPH batch=16 steps=70 step=23.38ms agg=684.4tok/s recompiles=0 out=/root/bo7/gemma4_b16_calattn_r1epi.json
+GEMMA4 DONE
+[2026-09-05T06:10:21Z] freed gemma4 (disk: 319G free)
+[2026-09-05T06:10:21Z] bake mixtral
+BAKE OK
+overlay         320G  136G  185G  43% /
+[2026-09-05T06:24:02Z] arm mixtral/nf4 (B=1 exp=0 calib=0 fuse=0  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=19.87ms compile=None recompiles=0 out=/root/bo7/mixtral_b1_nf4.json
+[2026-09-05T06:25:05Z] arm mixtral/folds (B=1 exp=0 calib=0 fuse=all  alarm=3600)
+    B1D_TIMED_GRAPH steps=127 step=18.71ms compile=None recompiles=0 out=/root/bo7/mixtral_b1_folds.json
+[2026-09-05T06:26:04Z] arm mixtral/lic (B=1 exp=1 calib=0 fuse=all  alarm=3600)
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    B1D_TIMED_GRAPH steps=127 step=8.53ms compile=None recompiles=0 out=/root/bo7/mixtral_b1_lic.json
+[2026-09-05T06:31:26Z] arm mixtral/all (B=1 exp=1 calib=1 fuse=all  alarm=3600)
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    B1D_TIMED_GRAPH steps=127 step=7.65ms compile=None recompiles=0 out=/root/bo7/mixtral_b1_all.json
+[2026-09-05T06:41:32Z] arm mixtral/nf4 (B=16 exp=0 calib=0 fuse=0  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=83.60ms agg=191.4tok/s recompiles=0 out=/root/bo7/mixtral_b16_nf4.json
+[2026-09-05T06:42:57Z] arm mixtral/folds (B=16 exp=0 calib=0 fuse=all  alarm=3600)
+    BV3_GRAPH batch=16 steps=70 step=82.10ms agg=194.9tok/s recompiles=0 out=/root/bo7/mixtral_b16_folds.json
+[2026-09-05T06:44:17Z] arm mixtral/lic (B=16 exp=1 calib=0 fuse=all  alarm=3600)
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    BV3_GRAPH batch=16 steps=70 step=42.68ms agg=374.9tok/s recompiles=0 out=/root/bo7/mixtral_b16_lic.json
+[2026-09-05T06:50:04Z] arm mixtral/all (B=16 exp=1 calib=1 fuse=all  alarm=3600)
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    ATTNINT4 calibrated: 128 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=mixtral)
+    BV3_GRAPH batch=16 steps=70 step=42.61ms agg=375.5tok/s recompiles=0 out=/root/bo7/mixtral_b16_all.json
+MIXTRAL DONE
+[2026-09-05T07:00:26Z] freed mixtral (disk: 319G free)
+[2026-09-05T07:00:26Z] TP_DONE

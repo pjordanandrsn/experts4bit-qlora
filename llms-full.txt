@@ -1588,15 +1588,25 @@ amendment 2 (pre-registered 06:05Z) runs the 64k stack on the same box
 after `TP_DONE`; the same stack with the 16k pack reads ×2.067 at B=1
 (238.1 tok/s) and ×2.624 at B=16 (1338.8) and is speed-identical to the RTN
 stack (same kernel, same bytes) — an expectation of equal speed for the 64k
-pack, not a measurement; amendment 2's arm settles it. Two int4 facts the box
-adds: a calibrated int4-expert pack costs nothing over an RTN one in speed
-(Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs 4.204), and the streamed
-calibration's pack counts reproduce across hosts (Granite 2524/36, Qwen3
-10820/1468 — bo5's and bo6's counts). **Gemma-4 and Mixtral are pending**
-in the bundle's first snapshot (their 16 arms run after Qwen3's and land
-before merge); Mixtral's calibrated arms were dropped under the lane's
-amendment (FAIL as registered on bo6b, ~85-min calibration) and print as a
-row that says so.
+pack, not a measurement; amendment 2's arm settles it. **Gemma-4 has no K8
+instrument, so no arm carries a K8 licence**; the register's position with
+that caveat is the exact round-1 fold + epilogue on NF4 (`r1epi`), ×1.281
+at B=1 (103.6 tok/s) and ×1.106 at B=16 (675.8;
+`e4b.serve.census.bo7.gemma4.b1` / `.b16`), and the quoted int4 best
+(bo3's `stack`) reads ×1.705 / ×1.697 measured, no quality verdict —
+Gemma-4-it loaded on this host without the #344 fault. **Mixtral's position
+is NF4** (50.3 / 191.4, ×1.000; `e4b.serve.census.bo7.mixtral.b1` /
+`.b16`): the exact folds are ×1.062 / ×1.018 but unscored as a combined
+arm, the RTN int4 stack ×2.329 / ×1.959 and the calibrated-attention stack
+×2.597 / ×1.962 are measured, not licensed (bo5's second-text FAILs stand),
+and the calibrated-expert arms were dropped under the lane's amendment
+(FAIL as registered on bo6b, ~85-min calibration) and print as a row that
+says so. Two int4 facts the box adds: a calibrated int4-expert pack costs
+nothing over an RTN one in speed (Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs
+4.204), and the streamed calibration's pack counts reproduce across hosts
+(Granite 2524/36, Qwen3 10820/1468 — bo5's and bo6's counts). All 48 lane
+arms ran (`TP_DONE` 07:00Z, 5.0 h, no alarm or refusal); the only pending
+rows are amendment 2's two.
 
 ---
 
@@ -2137,13 +2147,19 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of openai/gpt-oss-20b on one rented RTX 5090, the register's quoted best (`nf4_r12`), this lane's reference arm: 761.6 tok/s, x1.000 by construction.
 - e4b.serve.census.bo7.gptoss.census.5090.2026-09-05 [measured]: Throughput census (bo7): every gpt-oss-20b arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes (e4b.serve.census.bo7.gptoss.b1 / .b16 are the position).
 - e4b.serve.census.bo7.qwen3.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Qwen3-30B-A3B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; none of these rows is the licensed stack (e4b.serve.census.bo7.qwen3.b1 / .b16: not measured).
+- e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05 [measured]: Throughput census (bo7, the shipped 0.35.0 / 0.30.0 code): single-stream (B=1) paged decode of google/gemma-4-26B-A4B-it on one rented RTX 5090, the register's position for this family with its caveat -- `r1epi`, NF4 experts + the exact round-1 norm fold + router epilogue; no K8 instrument exists for Gemma-4, so this is exact arithmetic on NF4 and never a K8 licence: 103.6 tok/s (9.65 ms/step), x1.281 over the family's NF4 arm on the same box (12.36 ms = 80.9 tok/s).
+- e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of google/gemma-4-26B-A4B-it on one rented RTX 5090, the register's position with its caveat (`r1epi`, exact arithmetic on NF4; no K8 instrument on this family): 675.8 tok/s, x1.106 over the family's NF4 arm on the same box (611.2).
+- e4b.serve.census.bo7.gemma4.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Gemma-4-26B-A4B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's label -- the full row set is in notes; no arm carries a K8 verdict on this family (e4b.serve.census.bo7.gemma4.b1 / .b16 are the position with the no-instrument caveat).
+- e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05 [measured]: Throughput census (bo7): single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 under the shipped code -- the licensed position on the register is NF4 (nothing above it is licensed on this family): 50.3 tok/s (19.87 ms/step), x1.000 by definition.
+- e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 -- the licensed position is NF4: 191.4 tok/s, x1.000 by definition.
+- e4b.serve.census.bo7.mixtral.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Mixtral-8x7B-Instruct arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the position is NF4 (e4b.serve.census.bo7.mixtral.b1 / .b16).
 
 Open items (no evidence either way):
 
 - e4b.open.gemma4-load-fault [open]: OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 4 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
-- e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05 [open]: Throughput census (bo7): the single-stream (B=1) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack -- the streamed 64k-token calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) -- is NOT measured on this box: bo7's calibrated arms ran the hook's 16k default, whose streamed full stack has no two-text verdict. P35 amendment 2 runs the licensed configuration on this box after TP_DONE (pending at the 05:31Z snapshot); until its receipt lands no ratio, tok/s or anchor projection is quoted for the licensed stack.
-- e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05 [open]: Throughput census (bo7): the batched (B=16, aggregate) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack (the streamed 64k-token calibrated pack, bo6c) is NOT measured on this box -- bo7's lane arms ran the 16k default; P35 amendment 2 runs it on this box after TP_DONE (pending at the 05:31Z snapshot).
+- e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05 [open]: Throughput census (bo7): the single-stream (B=1) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack -- the streamed 64k-token calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) -- is NOT measured on this box: bo7's calibrated arms ran the hook's 16k default, whose streamed full stack has no two-text verdict. P35 amendment 2 runs the licensed configuration on this box after TP_DONE (bo7b.sh, started ~07:01Z; pending); until its receipt lands no ratio, tok/s or anchor projection is quoted for the licensed stack.
+- e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05 [open]: Throughput census (bo7): the batched (B=16, aggregate) speed of Qwen/Qwen3-30B-A3B's LICENSED serving stack (the streamed 64k-token calibrated pack, bo6c) is NOT measured on this box -- bo7's lane arms ran the 16k default; P35 amendment 2 runs it on this box after TP_DONE (bo7b.sh, started ~07:01Z; pending).
 
-(75 active claims listed, 5 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(81 active claims listed, 5 open, 0 projected; retired and superseded claims are omitted on purpose.)
