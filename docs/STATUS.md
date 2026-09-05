@@ -215,14 +215,16 @@ clause and its calibrated attention is refused on this family, so its full
 stack is ×2.070 / ×2.289 measured, not licensed; **gpt-oss's quoted best is
 its own reference arm** (NF4 + exact folds, 144.5 / 761.6) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970 with the quality gate open;
-**Qwen3's licensed stack's speed is pending** — the lane's own calibrated
-arms ran the hook's 16k default, not the licensed 64k pack, so
-`e4b.serve.census.bo7.qwen3.b1` / `.b16` are **open** until the lane's
-amendment 2 (pre-registered 06:05Z) runs the 64k stack on the same box
-after `TP_DONE`; the same stack with the 16k pack reads ×2.067 at B=1
-(238.1 tok/s) and ×2.624 at B=16 (1338.8) and is speed-identical to the RTN
-stack (same kernel, same bytes) — an expectation of equal speed for the 64k
-pack, not a measurement; amendment 2's arm settles it. **Gemma-4 has no K8
+**Qwen3's licensed stack** — the streamed 64k calibrated pack bo6c
+licensed on both texts — measured on the same box under the lane's
+amendment 2 (pre-registered 06:05Z, run after `TP_DONE`): **×2.067 at B=1
+(238.1 tok/s; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a
+projection from an uncertified class) and ×2.602 at B=16 (1327.5 tok/s;
+no anchor projection)** — `e4b.serve.census.bo7.qwen3.b1` / `.b16`. Its
+speed is identical to the lane's 16k arm (4.20 vs 4.20 ms; 1327.5 vs
+1338.8, within 1%) and to the RTN stack: a calibrated pack's kernels do
+not depend on the calibration size, as the amendment predicted — the pack
+changes the values, not the kernel or the bytes. **Gemma-4 has no K8
 instrument, so no arm carries a K8 licence**; the register's position with
 that caveat is the exact round-1 fold + epilogue on NF4 (`r1epi`), ×1.281
 at B=1 (103.6 tok/s) and ×1.106 at B=16 (675.8;
@@ -238,9 +240,9 @@ and the calibrated-expert arms were dropped under the lane's amendment
 says so. Two int4 facts the box adds: a calibrated int4-expert pack costs
 nothing over an RTN one in speed (Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs
 4.204), and the streamed calibration's pack counts reproduce across hosts
-(Granite 2524/36, Qwen3 10820/1468 — bo5's and bo6's counts). All 48 lane
-arms ran (`TP_DONE` 07:00Z, 5.0 h, no alarm or refusal); the only pending
-rows are amendment 2's two.
+(Granite 2524/36, Qwen3 10820/1468 — bo5's and bo6's counts). All 50 arms
+ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
+(`TP2_DONE` 08:52Z) — with no alarm, refusal or traceback.
 
 ---
 

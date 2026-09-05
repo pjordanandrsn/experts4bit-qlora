@@ -46,3 +46,5 @@ SUMMARY run_mixtral_b16_nf4.log BV3_GRAPH batch=16 steps=70 step=83.60ms agg=191
 SUMMARY run_mixtral_b16_folds.log BV3_GRAPH batch=16 steps=70 step=82.10ms agg=194.9tok/s recompiles=0 out=/root/bo7/mixtral_b16_folds.json
 SUMMARY run_mixtral_b16_lic.log BV3_GRAPH batch=16 steps=70 step=42.68ms agg=374.9tok/s recompiles=0 out=/root/bo7/mixtral_b16_lic.json
 SUMMARY run_mixtral_b16_all.log BV3_GRAPH batch=16 steps=70 step=42.61ms agg=375.5tok/s recompiles=0 out=/root/bo7/mixtral_b16_all.json
+SUMMARY run_qwen3_b1_calibexp_all_n128.log B1D_TIMED_GRAPH steps=127 step=4.20ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calibexp_all_n128.json
+SUMMARY run_qwen3_b16_calibexp_all_n128.log BV3_GRAPH batch=16 steps=70 step=12.05ms agg=1327.5tok/s recompiles=0 out=/root/bo7/qwen3_b16_calibexp_all_n128.json

@@ -12,9 +12,10 @@ gpt-oss bake 02:26Z (5-min download), arms 02:32–02:34Z; Qwen3 bake 02:34–02
 arms ~40 min each: 02:51 → 03:34Z, 03:34 → 04:13Z, 04:24 → 05:05Z, 05:05 → 05:44Z; `QWEN3 DONE`); Gemma-4 bake
 05:44–05:57Z (Gemma-4-it loaded without the #344 fault on this host), arms 05:57–06:10Z (`GEMMA4 DONE`); Mixtral bake
 06:10–06:24Z, arms 06:24–07:00Z (`MIXTRAL DONE`); **`TP_DONE` 2026-09-05T07:00:26Z — 48 of 48 arms, no alarm, no
-refusal, no traceback; wall 02:00Z → 07:00Z, 5.0 h.** Amendment 2's two arms (below; `logs/bo7b.sh`, started ≈ 07:01Z
-after `TP_DONE`, `TP2_DONE` ≈ 09:00Z; its console appends to the same `outer.log`) are the only rows still pending in
-this bundle. Rented 01:26Z on bo6's `TP2_DONE` (the image took ~35 min to load; ssh auth at try 79); a 10-h hard-kill
+refusal, no traceback; wall 02:00Z → 07:00Z, 5.0 h.** Then **amendment 2** (below): `logs/bo7b.sh` started 07:01Z on
+`TP_DONE` (its console appends to the same `outer.log`), Qwen3 re-baked, its two arms ran (B=1 ~50 min, B=16 ~55 min,
+each dominated by the 64k streamed calibration), **`BO7B COMPLETE` / `TP2_DONE` 2026-09-05T08:52:27Z — 50 of 50 arms**;
+the box was torn down after it and proven absent. Rented 01:26Z on bo6's `TP2_DONE` (the image took ~35 min to load; ssh auth at try 79); a 10-h hard-kill
 guard on the mini was armed before the first ssh (fires ≈ 12:05Z); bandwidth pre-flight 96 MB/s.
 **Cut — the shipped code, both packages at their `main` after the 0.35.0 / 0.30.0 releases** (the pip line in
 [`logs/bo7_run.sh`](logs/bo7_run.sh)):
@@ -64,11 +65,13 @@ register licenses is bo6c's streamed **64k** pack — so the licensed stack's sp
 box. Amendment 2 adds two arms **on this box after `TP_DONE`, same session and install**: `qwen3/calibexp_all_n128` at
 B=1 and B=16 — streamed GPTQ-calibrated int4 experts at 64k C4 tokens (`E4B_CALIB_NSEQ=128`) + C4-calibrated int4
 attention + round-1/2 folds + router epilogue + glue, the licensed Qwen3 configuration — run by `/root/bo7/bo7b.sh`
-([`logs/bo7b.sh`](logs/bo7b.sh)) under 5400-s alarms, receipts `qwen3_b1_calibexp_all_n128.json` /
-`qwen3_b16_calibexp_all_n128.json`, marker `TP2_DONE` (started ≈ 07:01Z, expected ≈ 09:00Z). Their ratios are to bo7's own `nf4` arms (rule 1
-holds: same box, same session); the licensed-best row then carries the three axes for real, the anchor projection
-(159.2 × the B=1 ratio, a projection) included. If they alarm out or refuse, they are `alarm` / `refused` rows and the
-Qwen3 census claims stay `open` with the cause. **Pending in this bundle — the only two rows that are.**
+([`logs/bo7b.sh`](logs/bo7b.sh), waited on by [`logs/bo7b_wait.sh`](logs/bo7b_wait.sh)) under 5400-s alarms, receipts
+`qwen3_b1_calibexp_all_n128.json` / `qwen3_b16_calibexp_all_n128.json`, marker `TP2_DONE` (started 07:01Z, done
+08:52:27Z). Their ratios are to bo7's own `nf4` arms (rule 1 holds: same box, same session), so the licensed-best row
+carries the three axes for real, the anchor projection (159.2 × the B=1 ratio, a projection) included. **Both arms ran
+to a receipt: ×2.067 at B=1 (4.20 ms = 238.1 tok/s; projection ≈ 329) and ×2.602 at B=16 (1327.5 tok/s).** The
+licensed 64k arm's speed is identical to the lane's 16k arm's (4.20 vs 4.20 ms; 1327.5 vs 1338.8 at B=16, within 1%):
+a calibrated pack's kernels do not depend on the calibration size, as the amendment predicted.
 
 ## Protocol
 
@@ -132,8 +135,8 @@ ratios are to that arm and its quoted best is the reference itself.
 - **Qwen3-30B-A3B:** the licensed configuration is the **streamed 64k** full stack (bo6c,
   `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`). bo7's `calibexp_all` and `calibexp_folds`
   ran the 16k default → "measured; the licensed configuration is the 64k pack — the 16k streamed full stack has no
-  two-text verdict"; **the licensed stack's speed is amendment 2's `calibexp_all_n128` arm, pending in this bundle**
-  (its label: "the licensed configuration (bo6c)"). `int4all` = bo5's
+  two-text verdict"; **the licensed stack's speed is amendment 2's `calibexp_all_n128` arm** (label: "the licensed
+  configuration (bo6c)"): ×2.067 / ×2.602 on this box. `int4all` = bo5's
   RTN `all`, FAIL as registered (c4val1 +0.063); the exact `folds` carry bo5's verdict FAIL-by-improving (−0.073 ppl,
   sub-floor) — not a licensed position; `calattn` alone has no verdict on record.
 - **Gemma-4-26B-A4B:** no K8 instrument exists for this family (`e4b.parity.gemma4.no-reference`, #359), so the register
@@ -149,7 +152,7 @@ ratios are to that arm and its quoted best is the reference itself.
 
 ## Instrument notes
 
-- **Receipts reproduce their console lines on all 48 arms** (step ms to 0.01, aggregate tok/s to 0.1, step counts —
+- **Receipts reproduce their console lines on all 50 arms** (step ms to 0.01, aggregate tok/s to 0.1, step counts —
   checked mechanically); `fuse_qkv: false` and `recompiles_in_window: 0` on every receipt.
 - **The decode-attention compute path is chosen per family, not per arm:** the receipts' `mech.compute` tally reads
   `fp8` on OLMoE, Qwen3, Gemma-4 and Mixtral and `f32` on Granite and gpt-oss, as bo5's and the tp lane's receipts do
@@ -159,9 +162,10 @@ ratios are to that arm and its quoted best is the reference itself.
 - **The fusions print no banner.** `E4B_FUSE_*` refuse aloud when nothing matches (#333) and are silent when they engage;
   their engagement is read from the step time. The int4 / calibrated arms print `INT4EXP` / `ATTNINT4` banners, which
   `RESULTS.md` reproduces in the `engaged` column.
-- **Calibration counts reproduce across hosts:** Granite 2524 gptq / 36 rtn (bo5's counts), Qwen3 10820 / 1468 (bo6b's
-  and bo6c's counts) — the calibration set and the `min_rows` fallbacks are host-independent at the count level; the
-  calibrated packs are speed-identical to RTN packs (same kernel, same bytes).
+- **Calibration counts reproduce across hosts:** Granite 2524 gptq / 36 rtn (bo5's counts), Qwen3 16k 10820 / 1468 and
+  64k 11512 / 776 (bo6b's and bo6c's counts) — the calibration set and the `min_rows` fallbacks are host-independent at
+  the count level; the calibrated packs are speed-identical to RTN packs and to each other across calibration sizes
+  (same kernel, same bytes; Qwen3 16k 4.1971 ms, 64k 4.1996 ms, RTN 4.2035 ms).
 - **No K8 arm ran on this lane.** Every verdict is the register's; nothing here licenses a ratio.
 
 ## The table
@@ -183,11 +187,12 @@ B=16 tok/s · ×NF4 · status), then the licensed best per family on the three a
 - [`logs/`](logs/) — [`bo7_run.sh`](logs/bo7_run.sh) (the amended lane script, the one that ran),
   [`bo7_run.sh.pre-amend`](logs/bo7_run.sh.pre-amend) (the pre-amendment copy, kept for the record),
   [`bo7_all.sh`](logs/bo7_all.sh) (the renter / guard / pre-flight / launcher on the mini),
-  [`bo7_queue.sh`](logs/bo7_queue.sh) (the queue behind bo6), [`bo7b.sh`](logs/bo7b.sh) (amendment 2's two arms),
-  the hook (`usercustomize.py` = v6, `hook/usercustomize.py`
-  its installed copy), `k8_bake.py`, `step_decomp.py`, the six bake logs, **every per-arm `run_*.log`** (the hook banners,
-  the calibration pass lines, the result line) and the lane console `outer.log` (through `TP_DONE`; the final copy,
-  with amendment 2's lines and `TP2_DONE`, replaces it when those arms land). The logs are force-added past the
+  [`bo7_queue.sh`](logs/bo7_queue.sh) (the queue behind bo6), [`bo7b.sh`](logs/bo7b.sh) (amendment 2's two arms) and
+  [`bo7b_wait.sh`](logs/bo7b_wait.sh) (its launcher, waiting on `TP_DONE`), the hook (`usercustomize.py` = v6, `hook/usercustomize.py`
+  its installed copy), `k8_bake.py`, `step_decomp.py`, the six census bake logs plus amendment 2's Qwen3 re-bake (`bake_qwen3.bo7b.log`,
+  a renamed verbatim copy — the box overwrote `bake_qwen3.log`, whose census copy is the one shipped under that name),
+  **every per-arm `run_*.log`** (the hook banners, the calibration pass lines, the result line) and the lane console
+  `outer.log` (through `TP2_DONE`; `bo7b.sh` appended to it). The logs are force-added past the
   repository's `*.log` ignore rule, as bo6's were. Nothing in this directory is edited: every file is the byte-for-byte
   copy of the box's, except the four written here (`README.md`, `RESULTS.md`, `census_reduce.py`; `forensics2.txt` is the
   orchestrator's probe). The mini-side watcher scripts (`bo7_loop.sh`, `bo7watch.sh`), `pip.log` (a root-user warning
@@ -197,14 +202,12 @@ B=16 tok/s · ×NF4 · status), then the licensed best per family on the three a
 
 Rent the class in `forensics.txt`, stage `logs/step_decomp.py`, `logs/k8_bake.py` and `logs/hook/usercustomize.py` under
 `/root/bo7/` with `calib.json` and `models.txt` beside them, put the Hugging Face token at `~/.cache/huggingface/token`,
-and run `logs/bo7_run.sh` (its `pip install` line pins both cuts; its tripwire refuses anything else). Then
-`python census_reduce.py .`.
+and run `logs/bo7_run.sh` (its `pip install` line pins both cuts; its tripwire refuses anything else), then
+`logs/bo7b.sh` after `TP_DONE`. Then `python census_reduce.py .`.
 
 ## What is NOT in the table
 
-No K8 arm: no perplexity was scored on this lane, and no label here was decided by it. **The speed of Qwen3's licensed
-stack (the streamed 64k pack) is amendment 2's arm, pending in this bundle** — the lane's own calibrated arms ran the
-hook's 16k default. Mixtral's `calibexp_lic` was dropped (amendment 1) and is a row that says so. No anchor projection is
-computed yet (the only arm one applies to has no receipt yet; the reducer prints it, marked as a projection, when it
-does). All 48 lane arms are in; **amendment 2's two `calibexp_all_n128` rows are the only pending ones** and arrive
-before merge. No kernel census ran.
+No K8 arm: no perplexity was scored on this lane, and no label here was decided by it. Mixtral's `calibexp_lic` was
+dropped (amendment 1) and is a row that says so. The one anchor projection on the page (Qwen3 B=1, ≈ 329 tok/s) is a
+projection from an uncertified class, never a measurement. Nothing is pending: 50 of 50 arms are in. No kernel census
+ran.

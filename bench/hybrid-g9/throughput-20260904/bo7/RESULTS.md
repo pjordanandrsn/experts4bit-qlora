@@ -1,6 +1,7 @@
 # bo7 — throughput census, results (2026-09-05, box 49916675, one RTX 5090 on an EPYC 7Q83 host)
 
-The tables below are the verbatim output of `python census_reduce.py .` over the JSON receipts in this directory (box, cut, the amendments, protocol, the reading rules and the layout: [`README.md`](README.md)). **bo7 measures speed only; it licenses nothing.** The `licence (register)` column is the register as it stood when this bundle was written — `docs/claims.json` and the K8 verdicts on record from bo3, bo5, bo6 and bo6c — with the claim id that carries each verdict; where the register is silent the cell says `no quality verdict on record`. Every ratio is to the family's own NF4 arm on this box in this session; bo3 / bo5 / bo6 numbers are cited beside, never divided into, these. All 48 lane arms are in (`TP_DONE` 07:00:26Z); the only `pending` rows are amendment 2's two `calibexp_all_n128` arms (`logs/bo7b.sh`, running after `TP_DONE`), which arrive before merge.
+The tables below are the verbatim output of `python census_reduce.py .` over the JSON receipts in this directory (box, cut, the amendments, protocol, the reading rules and the layout: [`README.md`](README.md)). **bo7 measures speed only; it licenses nothing.** The `licence (register)` column is the register as it stood when this bundle was written — `docs/claims.json` and the K8 verdicts on record from bo3, bo5, bo6 and bo6c — with the claim id that carries each verdict; where the register is silent the cell says `no quality verdict on record`. Every ratio is to the family's own NF4 arm on this box in this session; bo3 / bo5 / bo6 numbers are cited beside, never divided into, these. All 50 arms are in: the 48 lane arms (`TP_DONE` 07:00:26Z) and amendment 2's two `calibexp_all_n128` arms (`logs/bo7b.sh`, after `TP_DONE`; `TP2_DONE` 08:52:27Z).
+
 
 ### Granite-3.1-3B-A800M
 Ratios are to `nf4` on this box (NF4 experts, bf16 attention, no folds (this lane's reference)). B=1 tok/s = 1000 / the timed step (ms to 0.01, the logs' resolution); B=16 = aggregate tok/s over 70 graph steps at batch 16. The licence column is the register's, not this lane's.
@@ -41,11 +42,11 @@ Ratios are to `nf4` on this box (NF4 experts, bf16 attention, no folds (this lan
 | `folds` | NF4 experts + round-1/2 (rope-only) folds + router epilogue (exact arithmetic) | measured, not licensed as a position -- exact arithmetic (moves no weight); the verdict on record is bo5's: FAIL as registered on c4val1 by improving (-0.073 ppl, sub-floor; `e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04` notes) | — | 6.16 | 162.3 | 1.409 | 576.5 | 1.130 | ok |
 | `calattn` | NF4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue | no quality verdict on record for calibrated attention on NF4 experts alone (the register scores it inside int4-expert stacks: bo5 `calib` = int4 experts + calibrated attention, c4val1 +0.048, one text); a calibrated pack needs two texts; not licensed | ATTNINT4 192 projections | 6.01 | 166.4 | 1.444 | 561.7 | 1.101 | ok |
 | `int4all` | RTN int4-b32 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue + #385 glue (bo5's `all`) | measured, not licensed -- bo5's `all` (RTN experts): FAIL as registered on c4val1 +0.063 ppl (noise-attributed, not retuned; `e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04` / `.b16`) | INT4EXP 48 layers (qwen3_moe) · ATTNINT4 192 projections | 4.20 | 238.1 | 2.067 | 1335.4 | 2.617 | ok |
-| `calibexp_all` | streamed GPTQ-calibrated int4 experts at the hook's 16k default + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue | measured; the LICENSED configuration is the streamed 64k pack (bo6c, `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) -- this arm ran the hook's 16k default, and the 16k streamed full stack has no two-text verdict (bo6's two-text pass is the all-at-once 16k pack, `e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; the streamed 16k experts-only pack passed c4val1 only, `e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04`); the licensed stack's speed is amendment 2's `calibexp_all_n128` arm on this box (pending until its receipt lands) | streamed GPTQ 16k tok, 24 GiB budget, 5 passes, 10820 gptq / 1468 rtn · INT4EXP 48 layers (qwen3_moe) · ATTNINT4 192 projections | 4.20 | 238.1 | 2.067 | 1338.8 | 2.624 | ok |
+| `calibexp_all` | streamed GPTQ-calibrated int4 experts at the hook's 16k default + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue | measured; the LICENSED configuration is the streamed 64k pack (bo6c, `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) -- this arm ran the hook's 16k default, and the 16k streamed full stack has no two-text verdict (bo6's two-text pass is the all-at-once 16k pack, `e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04`; the streamed 16k experts-only pack passed c4val1 only, `e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04`); the licensed stack's speed is amendment 2's `calibexp_all_n128` arm on this box (x2.067 / x2.602; this 16k arm is speed-identical to it) | streamed GPTQ 16k tok, 24 GiB budget, 5 passes, 10820 gptq / 1468 rtn · INT4EXP 48 layers (qwen3_moe) · ATTNINT4 192 projections | 4.20 | 238.1 | 2.067 | 1338.8 | 2.624 | ok |
 | `calibexp_folds` | streamed GPTQ-calibrated int4 experts (16k) + round-1/2 folds + router epilogue, bf16 attention | measured, not licensed -- streamed 16k calibrated experts without calibrated attention: the 16k experts-only pack passed c4val1 (-0.0505) with wikitext unscored at 16k (`e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04`: pass on 1 text, needs 2); the 64k experts-only pack passes both texts (`e4b.serve.buildout.bo6c.qwen3.calibexp-streamed-64k.k8.2026-09-05`) but is not this arm's pack | streamed GPTQ 16k tok, 24 GiB budget, 5 passes, 10820 gptq / 1468 rtn · INT4EXP 48 layers (qwen3_moe) | 4.34 | 230.4 | 2.000 | 1340.8 | 2.628 | ok |
-| `calibexp_all_n128` | THE LICENSED CONFIGURATION (bo6c): streamed GPTQ-calibrated int4 experts at 64k C4 tokens (E4B_CALIB_NSEQ=128) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue -- run under P35 amendment 2 (pre-registered 06:05Z) after TP_DONE, same box, same install, `logs/bo7b.sh`, 5400-s alarms | the licensed configuration (bo6c) -- pass on both texts under the unchanged gate, at parity or better, no improvement by a number (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); this arm is its speed on this box (amendment 2) | — | — | — | — | — | — | B=1 pending; B=16 pending |
+| `calibexp_all_n128` | THE LICENSED CONFIGURATION (bo6c): streamed GPTQ-calibrated int4 experts at 64k C4 tokens (E4B_CALIB_NSEQ=128) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue -- run under P35 amendment 2 (pre-registered 06:05Z) after TP_DONE, same box, same install, `logs/bo7b.sh`, 5400-s alarms | the licensed configuration (bo6c) -- pass on both texts under the unchanged gate, at parity or better, no improvement by a number (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); this arm is its speed on this box (amendment 2) | streamed GPTQ 64k tok, 24 GiB budget, 5 passes, 11512 gptq / 776 rtn · INT4EXP 48 layers (qwen3_moe) · ATTNINT4 192 projections | 4.20 | 238.1 | 2.067 | 1327.5 | 2.602 | ok |
 
-Instrument (Qwen3-30B-A3B, from the B=1 receipts' `mech` tallies, counted at warmup + graph capture): decode-attention compute path {"f32": 0, "fp8": 192}; NF4 GEMV dispatch `calattn` {'dotpad': 384}, `calibexp_all` none (int4 / MXFP4 path), `calibexp_folds` none (int4 / MXFP4 path), `folds` {'dotpad': 384}, `int4all` none (int4 / MXFP4 path), `nf4` {'dotpad': 384}.
+Instrument (Qwen3-30B-A3B, from the B=1 receipts' `mech` tallies, counted at warmup + graph capture): decode-attention compute path {"f32": 0, "fp8": 192}; NF4 GEMV dispatch `calattn` {'dotpad': 384}, `calibexp_all` none (int4 / MXFP4 path), `calibexp_all_n128` none (int4 / MXFP4 path), `calibexp_folds` none (int4 / MXFP4 path), `folds` {'dotpad': 384}, `int4all` none (int4 / MXFP4 path), `nf4` {'dotpad': 384}.
 
 ### Gemma-4-26B-A4B
 Ratios are to `nf4` on this box (NF4 experts, bf16 attention, no folds (this lane's reference)). B=1 tok/s = 1000 / the timed step (ms to 0.01, the logs' resolution); B=16 = aggregate tok/s over 70 graph steps at batch 16. The licence column is the register's, not this lane's.
@@ -77,8 +78,7 @@ Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this bo
 | Granite-3.1-3B-A800M | `r12epi` -- NF4 experts + round-1 + round-2 (rotary-only) folds + router epilogue | K8 verdict: +0.019 ppl wikitext, pass (`e4b.serve.buildout.granite.b1.5090.2026-09-04`) | 1.341 | 304.9 | no anchor projection (no anchor-class measurement exists for this family) | 1.160 | 1836.8 | no anchor projection (B=16 has no anchor-class measurement) |
 | OLMoE-1B-7B | `nf4` -- NF4 experts, bf16 attention, no folds (this lane's reference) | nothing above NF4 is licensed on the register: the tp row's calibrated pack has one text (needs 2) and a +0.60 C4-val FAIL on record; the folds alone have no receipt | 1.000 (reference arm) | 282.5 | no anchor projection (no anchor-class measurement exists for this family) | 1.000 (reference arm) | 1347.5 | no anchor projection (B=16 has no anchor-class measurement) |
 | gpt-oss-20b | `nf4_r12` -- NF4 experts + round-1/2 folds, bf16 attention (this lane's reference) | the register's quoted best (`e4b.serve.buildout.gptoss.b1.5090.2026-09-04`); exact folds on NF4; no instrument on this family -- and it is this lane's reference arm | 1.000 (reference arm) | 144.5 | no anchor projection (no anchor-class measurement exists for this family) | 1.000 (reference arm) | 761.6 | no anchor projection (B=16 has no anchor-class measurement) |
-| Qwen3-30B-A3B | `calibexp_all_n128` -- THE LICENSED CONFIGURATION (bo6c): streamed GPTQ-calibrated int4 experts at 64k C4 tokens (E4B_CALIB_NSEQ=128) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue -- run under P35 amendment 2 (pre-registered 06:05Z) after TP_DONE, same box, same install, `logs/bo7b.sh`, 5400-s alarms | K8 verdict: pass on both texts, wikitext -0.053 / c4val1 -0.066 ppl, both sub-floor (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); the arm runs under P35 amendment 2 after TP_DONE | pending (amendment 2) | pending | not computed until the licensed ratio is measured (rule: 159.2 x the B=1 ratio, a projection) | pending (amendment 2) | pending | no anchor projection (B=16 has no anchor-class measurement) |
-| Qwen3-30B-A3B (nearest measured arm, `calibexp_all` -- the same stack with the 16k pack: measured, NOT the licensed pack) | streamed GPTQ-calibrated int4 experts at the hook's 16k default + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue | measured, not the licensed configuration | 2.067 | 238.1 | not quoted (an unlicensed arm gets no projection) | 2.624 | 1338.8 | no anchor projection (B=16) |
+| Qwen3-30B-A3B | `calibexp_all_n128` -- THE LICENSED CONFIGURATION (bo6c): streamed GPTQ-calibrated int4 experts at 64k C4 tokens (E4B_CALIB_NSEQ=128) + C4-calibrated int4 attention + round-1/2 folds + router epilogue + glue -- run under P35 amendment 2 (pre-registered 06:05Z) after TP_DONE, same box, same install, `logs/bo7b.sh`, 5400-s alarms | K8 verdict: pass on both texts, wikitext -0.053 / c4val1 -0.066 ppl, both sub-floor (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); the arm runs under P35 amendment 2 after TP_DONE | 2.067 | 238.1 | ≈ 329 tok/s (PROJECTION: 159.2 x 2.067; uncertified) | 2.602 | 1327.5 | no anchor projection (B=16 has no anchor-class measurement) |
 | Gemma-4-26B-A4B | `r1epi` -- NF4 experts + round-1 norm fold + router epilogue (round 2 refuses by design on this family; exact arithmetic) | exact arithmetic (round-1 fold + epilogue) on NF4 experts; no K8 instrument on this family -- no verdict exists, the register's caveat applies | 1.281 | 103.6 | no anchor projection (no anchor-class measurement exists for this family) | 1.106 | 675.8 | no anchor projection (B=16 has no anchor-class measurement) |
 | Mixtral-8x7B-Instruct | `nf4` -- NF4 experts, bf16 attention, no folds (this lane's reference) | nothing above NF4 is licensed on the register: `lic` and `all` FAIL as registered (bo5), the calibrated stack FAILS (bo6b), the combined folds arm has no receipt | 1.000 (reference arm) | 50.3 | no anchor projection (no anchor-class measurement exists for this family) | 1.000 (reference arm) | 191.4 | no anchor projection (B=16 has no anchor-class measurement) |
 
@@ -88,19 +88,18 @@ Ratio = the family's own NF4 arm on this box; tok/s = rental-measured on this bo
 | Granite-3.1-3B-A800M | 1.341 / 1.160 (`r12epi`) | 2.157 (`calibexp_r12epi`) | 2.094 (`int4_r12epi`) | measured, not licensed |
 | OLMoE-1B-7B | 1.000 / 1.000 (`nf4`) | 2.070 (`int4all`) | 2.289 (`int4all`) | measured, not licensed under the rule as written |
 | gpt-oss-20b | 1.000 / 1.000 (`nf4_r12`) | 1.293 (`store_r12`) | 1.000 (`nf4_r12`) | measured, not licensed |
-| Qwen3-30B-A3B | pending (`calibexp_all_n128`) | 2.067 (`calibexp_all`) | 2.628 (`calibexp_folds`) | measured; the LICENSED configuration is the streamed 64k pack (bo6c, `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) |
+| Qwen3-30B-A3B | 2.067 / 2.602 (`calibexp_all_n128`) | 2.067 (`calibexp_all`) | 2.628 (`calibexp_folds`) | measured; the LICENSED configuration is the streamed 64k pack (bo6c, `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) |
 | Gemma-4-26B-A4B | 1.281 / 1.106 (`r1epi`) | 1.705 (`int4_r1epi`) | 1.697 (`int4_r1epi`) | measured, no quality verdict (no instrument) |
 | Mixtral-8x7B-Instruct | 1.000 / 1.000 (`nf4`) | 2.597 (`all`) | 1.962 (`all`) | measured, not licensed |
 
 Every ratio above is to the family's own NF4 arm on this box in this session (rule 1). Labels are the register's (rule 2); `measured, not licensed` rows are speed of configurations the register does not license (rule 4) and are never quoted as a position. No number here is divided into a bo3 / bo5 / bo6 number (rule 5).
-`pending` = an arm the lane script runs whose receipt is not in this snapshot yet (arrives before merge).
 
 ## Reading it
 
-**All 48 lane arms are in** (`TP_DONE` 2026-09-05T07:00:26Z; no alarm, no refusal, no traceback). The only rows still
-`pending` are the two arms of **P35 amendment 2** (pre-registered 06:05Z): `qwen3/calibexp_all_n128` at B=1 and B=16,
-the licensed Qwen3 configuration, run on this box after `TP_DONE` by `logs/bo7b.sh` (same session, same install, 5400-s
-alarms; started ≈ 07:01Z, `TP2_DONE` ≈ 09:00Z). Every one of the 48 receipts reproduces its console line
+**All 50 arms are in**: the 48 lane arms (`TP_DONE` 2026-09-05T07:00:26Z) and the two arms of **P35 amendment 2**
+(pre-registered 06:05Z) — `qwen3/calibexp_all_n128` at B=1 and B=16, the licensed Qwen3 configuration, run on this box
+after `TP_DONE` by `logs/bo7b.sh` (same session, same install, 5400-s alarms; `BO7B COMPLETE` / `TP2_DONE`
+2026-09-05T08:52:27Z). No alarm, no refusal, no traceback on any of the 50. Every receipt reproduces its console line
 (`summary.txt` / `logs/outer.log`: step ms to 0.01, aggregate tok/s to 0.1, step counts) — no receipt contradicts its
 console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window: 0`.
 
@@ -126,12 +125,18 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
   rule (`store_r12`: `gemv_mxfp4_b32` for single rows, NF4 kept for batched rows) reads **×1.293 at B=1 (186.9 tok/s)
   and ×0.970 at B=16 (739.0)** — the same shape bo5 measured on its EPYC 9755 box (×1.270 / ×0.971, 173.3 / 719.7;
   cited beside, not divided). Its quality gate stays open (exact bytes, no raw-text instrument): measured, not licensed.
-- **Qwen3-30B-A3B — the licensed stack's speed is pending on this box (amendment 2).** The licensed configuration is
-  bo6c's streamed **64k**-token calibrated stack (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`);
-  bo7's `calibexp_all` ran the hook's 16k default (`E4B_CALIB_NSEQ` unset), whose streamed full stack has no two-text
-  verdict, and amendment 2 adds the 64k arm (`calibexp_all_n128`, `E4B_CALIB_NSEQ=128`) at B=1 and B=16 after
-  `TP_DONE` — `pending` in this snapshot; when it lands the licensed-best row carries its three axes for real, ratio
-  to this box's own `nf4` arms. What this box measures so far: NF4 8.68 ms = 115.2 tok/s B=1, 510.3 B=16; the exact folds ×1.409 / ×1.130 (bo5's
+- **Qwen3-30B-A3B — the licensed stack, three axes, on this box: ×2.067 at B=1 (8.68 → 4.20 ms, 238.1 tok/s;
+  anchor-class projection 159.2 × 2.067 ≈ 329 tok/s — a PROJECTION, the anchor class was never certified) and ×2.602
+  at B=16 (510.3 → 1327.5 tok/s; no anchor projection).** The licensed configuration is bo6c's streamed **64k**-token
+  calibrated stack (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); it ran here as amendment
+  2's `calibexp_all_n128` (`E4B_CALIB_NSEQ=128`; streamed calibration 11512 gptq / 776 rtn — bo6b's and bo6c's counts
+  for the 64k pack, reproduced on this host) after `TP_DONE`, same box, same session, same install, and its ratios are
+  to this box's own `nf4` arms (rule 1 holds). **Its speed is identical to the 16k arm's** — 4.20 vs 4.20 ms at B=1
+  (4.1996 vs 4.1971 unrounded), 1327.5 vs 1338.8 tok/s at B=16 (within 1%): a calibrated pack's kernels do not depend
+  on the calibration size, as the amendment predicted — the pack changes the values, not the kernel or the bytes.
+  bo7's lane arm `calibexp_all` had run the hook's 16k default (`E4B_CALIB_NSEQ` unset), whose streamed full stack has
+  no two-text verdict; it stays "measured, not the licensed configuration". What this box measures beside the licensed
+  stack: NF4 8.68 ms = 115.2 tok/s B=1, 510.3 B=16; the exact folds ×1.409 / ×1.130 (bo5's
   verdict on record: FAIL as registered on c4val1 by improving, −0.073 ppl, sub-floor); calibrated attention on top of
   the folds ×1.025 at B=1 (6.16 → 6.01 ms) and ×0.974 at B=16; RTN `int4all` (bo5's `all`) ×2.067 / ×2.617 — FAIL on
   c4val1 +0.063, measured, not licensed; the 16k streamed calibrated stack `calibexp_all` **×2.067 / ×2.624 (4.20 ms
@@ -141,9 +146,8 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
   at B=16, so calibrated int4 attention is worth ×1.033 on top of calibrated experts + folds at B=1 on this box and
   nothing at B=16 (1340.8 → 1338.8, ×0.999) — int4 attention is a B=1 lever only, as on Qwen3's earlier campaign. The 64k pack differs
   from the 16k one only in the packed values (11512 gptq / 776 rtn against 10820 / 1468 on bo6b/bo6c), not in the kernel
-  or the bytes read, so the *expectation* is that the licensed stack's speed equals the 16k arm's — an expectation, not a
-  measurement; amendment 2's arm measures it, and until it lands no ratio, tok/s or projection is quoted for the
-  licensed stack. Beside, each with its box and never divided into these: bo5's RTN `all` 204.1 / 1251.6 on an EPYC 9755 host
+  or the bytes read, so the expectation was that the licensed stack's speed equals the 16k arm's — amendment 2 measured
+  it and it does (above). Beside, each with its box and never divided into these: bo5's RTN `all` 204.1 / 1251.6 on an EPYC 9755 host
   (49841214), bo6's all-at-once calibrated stack 158.0 / 993.6 on a Threadripper PRO 7975WX host (49861751), bo3's
   177.9 / 1089.6 on 49817195 (EPYC 9755, without #385's glue). Instrument: the 16k streamed calibration on this EPYC
   7Q83 box packed 10820 gptq / 1468 rtn on both calibrated arms — the counts bo6b and bo6c reported on their Threadripper
@@ -172,16 +176,16 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
   calibration per arm) and is a row that says so. Instrument: decode-attention compute `fp8` (128); this is the one
   family whose NF4 GEMV dispatch tally shows split-K beside scalar (128 + 128) — the 8-expert, 14336-wide shape.
 - **Cross-family, ratios only.** NF4 → the register's position on this box: Granite ×1.341 / ×1.160 (licensed by K8);
-  OLMoE ×1.000 (NF4 is the position); gpt-oss ×1.000 (the reference arm is the quoted best); Qwen3 pending amendment 2
-  (its nearest measured arm, the same stack with the 16k pack, ×2.067 / ×2.624); Gemma-4 ×1.281 / ×1.106 (exact
+  OLMoE ×1.000 (NF4 is the position); gpt-oss ×1.000 (the reference arm is the quoted best); **Qwen3 ×2.067 / ×2.602
+  (licensed by K8 on both texts, bo6c; measured here under amendment 2)**; Gemma-4 ×1.281 / ×1.106 (exact
   arithmetic, no instrument — a position with a caveat, not a K8 licence); Mixtral ×1.000 (NF4 is the position; the
   exact folds ×1.062 / ×1.018 are unscored as a combined arm). The int4-expert lever itself reads ×1.71–2.60 at B=1 and
   ×1.70–2.63 at B=16 across the five families that ran it here and is licensed on exactly one of them (Qwen3, with the
-  64k streamed pack — amendment 2's arm).
+  64k streamed pack — amendment 2's arm, ×2.067 / ×2.602).
 - **Anchor axis.** An anchor-class projection exists only for Qwen3-30B at B=1 (159.2 tok/s × the ratio; the class was
-  never certified, 12 refusals). It is not computed in this snapshot: the only arm it applies to — the licensed stack,
-  amendment 2's `calibexp_all_n128` — has no receipt yet, and an unlicensed arm gets no projection. The reducer prints it,
-  marked as a projection, the moment that arm's B=1 receipt lands. Every other family and B=16: no anchor projection.
+  never certified, 12 refusals) and is quoted for exactly one arm, the licensed stack: **≈ 329 tok/s = 159.2 × 2.067 — a
+  projection, not a measurement.** An unlicensed arm gets no projection. Every other family and every B=16 cell: no
+  anchor projection (no anchor-class measurement exists there).
 
 ## Instrument notes
 
@@ -204,5 +208,7 @@ console line. Every receipt carries `fuse_qkv: false` and `recompiles_in_window:
 - **Speed only.** No K8 arm ran on this lane; every verdict in the `licence` column is copied from the register.
 - **Amendment 2 (pre-registered 06:05Z, before its arms ran).** Two arms on this box after `TP_DONE`, same session and
   install: `qwen3/calibexp_all_n128` at B=1 and B=16 — the licensed Qwen3 configuration (streamed 64k pack + calibrated
-  attention + folds + epilogue + glue), `logs/bo7b.sh`, 5400-s alarms, marker `TP2_DONE`. Their receipts, or their
-  `alarm` / `refused` rows, arrive with the final snapshot.
+  attention + folds + epilogue + glue), `logs/bo7b.sh` (its console appended to the same `outer.log`), 5400-s alarms,
+  Qwen3 re-baked (`logs/bake_qwen3.bo7b.log`; the census bake is `logs/bake_qwen3.log`), `TP2_DONE` 08:52:27Z. Both
+  arms ran to a receipt: 4.20 ms B=1, 12.05 ms / 1327.5 tok/s B=16; the 64k streamed calibration on this host packed
+  11512 gptq / 776 rtn (bo6b's and bo6c's counts).

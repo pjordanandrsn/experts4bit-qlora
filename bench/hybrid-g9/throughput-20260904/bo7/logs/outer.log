@@ -172,3 +172,18 @@ overlay         320G  136G  185G  43% /
 MIXTRAL DONE
 [2026-09-05T07:00:26Z] freed mixtral (disk: 319G free)
 [2026-09-05T07:00:26Z] TP_DONE
+[2026-09-05T07:01:27Z] bo7b: licensed Qwen3 stack (streamed 64k pack) speed arms
+[2026-09-05T07:01:27Z] bake qwen3
+BAKE OK
+overlay         320G   89G  232G  28% /
+[2026-09-05T07:08:03Z] arm qwen3/calibexp_all_n128 (B=1 exp=1 calib=1 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128 alarm=5400)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=4.20ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_calibexp_all_n128.json
+[2026-09-05T07:59:44Z] arm qwen3/calibexp_all_n128 (B=16 exp=1 calib=1 fuse=all E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128 alarm=5400)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    BV3_GRAPH batch=16 steps=70 step=12.05ms agg=1327.5tok/s recompiles=0 out=/root/bo7/qwen3_b16_calibexp_all_n128.json
+QWEN3 N128 DONE
+[2026-09-05T08:52:27Z] freed qwen3 (disk: 319G free)
+[2026-09-05T08:52:27Z] BO7B COMPLETE
