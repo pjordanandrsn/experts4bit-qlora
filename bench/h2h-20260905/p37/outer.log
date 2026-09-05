@@ -201,3 +201,27 @@ torch(vllm) 2.13.0+cu130
 triton(vllm) 3.7.1
 [2026-09-05T20:13:55Z] TP_DONE
 p37b: NOT NEEDED -- the comparator ran in-lane (no SKIPPED rows); nothing re-run
+AMENDMENT 3 (p37c): K8 gate on this box's re-derived pack; verdict = ppl(all)-ppl(nf4) <= +0.05 on wikitext AND c4val1
+[2026-09-05T20:21:13Z] p37c: K8 qwen3/nf4 (exp=0 calib=0 fuse=0 src=wikitext )
+    K8_PPL steps=2048 nll=1.85939 ppl=6.41984 compute=fp8 sha=9ef10d760ad9 out=/root/p37/qwen3_ppl_nf4_wikitext.json
+[2026-09-05T20:24:33Z] p37c: K8 qwen3/nf4 (exp=0 calib=0 fuse=0 src=c4val1 )
+    K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/p37/qwen3_ppl_nf4_c4val1.json
+[2026-09-05T20:27:58Z] p37c: K8 qwen3/all (exp=1 calib=1 fuse=all src=wikitext E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128)
+    INT4EXP calibrated experts: 2418 gptq / 142 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 2398 gptq / 162 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 2412 gptq / 148 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 2338 gptq / 222 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 1956 gptq / 92 rtn (min_rows=32) over 8 layers
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=1.85580 ppl=6.39679 compute=fp8 sha=9ef10d760ad9 out=/root/p37/qwen3_ppl_all_wikitext.json
+[2026-09-05T21:23:26Z] p37c: K8 qwen3/all (exp=1 calib=1 fuse=all src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128)
+    INT4EXP calibrated experts: 2418 gptq / 142 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 2398 gptq / 162 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 2412 gptq / 148 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 2338 gptq / 222 rtn (min_rows=32) over 10 layers
+    INT4EXP calibrated experts: 1956 gptq / 92 rtn (min_rows=32) over 8 layers
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    K8_PPL steps=2048 nll=2.80978 ppl=16.60631 compute=fp8 sha=4bcb55179b96 out=/root/p37/qwen3_ppl_all_c4val1.json
+[2026-09-05T22:18:07Z] p37c: verdict
+GATE {"rule": "ppl(all) - ppl(nf4) <= +0.05 on wikitext AND c4val1", "texts": {"wikitext": {"nf4": 6.419839734124139, "all": 6.396794593947453, "delta": -0.02304514017668602, "verdict": "PASS", "sources": ["ok", "ok"]}, "c4val1": {"nf4": 16.497028406390328, "all": 16.606311066523535, "delta": 0.10928266013320709, "verdict": "FAIL", "sources": ["ok", "ok"]}}, "verdict": "NOT LICENSED (VOID stands)"}
+[2026-09-05T22:18:07Z] p37c: P37C DONE

@@ -710,13 +710,15 @@
         "e4b.parity.gptoss.paged-vs-own-attention",
         "e4b.parity.moe-routing-flip-floor",
         "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05",
+        "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate",
         "e4b.serve.cuda-graph-capture"
       ],
       "limitations": [
-        "Not a general-purpose vLLM replacement: on the same box with identical prompt ids vLLM 0.28.0 is ahead of this package's NF4 control at both batch sizes (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05); the ratio against the licensed stack is not quoted on that lane because its licensed arms were void on that box under the pre-registered pack-fingerprint rule (the streamed calibration did not reproduce the licensed pack's expert-matrix counts), a gate run on that pack decides whether it becomes quotable, and the 2026-09-03 comparison is superseded",
+        "Not a general-purpose vLLM replacement: on the same box with identical prompt ids vLLM 0.28.0 is ahead of this package's NF4 control at both batch sizes (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05); the ratio against the licensed stack is not quoted on that lane because its licensed arms were void on that box under the pre-registered pack-fingerprint rule (the streamed calibration did not reproduce the licensed pack's expert-matrix counts), the registered K8 gate run on that box's pack failed its second text (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate), so the recipe's speed there stays unlicensed and the streamed calibration's host-dependence is an open item; the 2026-09-03 comparison is superseded",
         "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
         "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts with the folds and epilogue (e4b.serve.census.bo7.granite.b1.5090.2026-09-05, licensed by e4b.serve.buildout.granite.b1.5090.2026-09-04); the per-family positions the census quotes are in docs/STATUS.md -- Qwen3's licensed stack is the streamed calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), OLMoE's and Mixtral's position is NF4, Gemma-4's is the exact round-1 fold on NF4 with no quality instrument, gpt-oss's is its NF4 reference arm",
-        "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not"
+        "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not",
+        "The streamed 64k calibration recipe does not reproduce its licence across hosts: re-derived on another RTX 5090 host with the same checkpoint, text and knobs it produced a different pack (a handful of expert matrices classified differently at the min_rows threshold) that fails the registered gate on C4 validation (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate); the licence of e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05 stands on its box as measured, and a pack derived elsewhere carries no licence until gated on that box -- tracked as issue #405"
       ],
       "status": "supported"
     },

@@ -33,3 +33,13 @@ e4b/lic_r2 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.24ms compile=None recompile
 e4b/lic_eager B=1 rc=0 B1D_TIMED_EAGER steps=127 step=81.99ms compile=None recompiles=0 out=/root/p37/e4b_b1_lic_eager.json
 
 p37b: NOT NEEDED -- the comparator ran in-lane (no SKIPPED rows); nothing re-run
+AMENDMENT 3 (p37c): K8 gate on this box's re-derived pack; verdict = ppl(all)-ppl(nf4) <= +0.05 on wikitext AND c4val1
+k8 qwen3/nf4 src=wikitext rc=0 K8_PPL steps=2048 nll=1.85939 ppl=6.41984 compute=fp8 sha=9ef10d760ad9 out=/root/p37/qwen3_ppl_nf4_wikitext.json
+
+k8 qwen3/nf4 src=c4val1 rc=0 K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/p37/qwen3_ppl_nf4_c4val1.json
+
+k8 qwen3/all src=wikitext rc=0 K8_PPL steps=2048 nll=1.85580 ppl=6.39679 compute=fp8 sha=9ef10d760ad9 out=/root/p37/qwen3_ppl_all_wikitext.json
+
+k8 qwen3/all src=c4val1 rc=0 K8_PPL steps=2048 nll=2.80978 ppl=16.60631 compute=fp8 sha=4bcb55179b96 out=/root/p37/qwen3_ppl_all_c4val1.json
+
+GATE {"rule": "ppl(all) - ppl(nf4) <= +0.05 on wikitext AND c4val1", "texts": {"wikitext": {"nf4": 6.419839734124139, "all": 6.396794593947453, "delta": -0.02304514017668602, "verdict": "PASS", "sources": ["ok", "ok"]}, "c4val1": {"nf4": 16.497028406390328, "all": 16.606311066523535, "delta": 0.10928266013320709, "verdict": "FAIL", "sources": ["ok", "ok"]}}, "verdict": "NOT LICENSED (VOID stands)"}

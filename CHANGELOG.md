@@ -28,15 +28,18 @@ check from here on.
   matrices where the licensed pack reads 11512 / 776 (the same recipe, ten of 12,288 matrices across the `min_rows`
   threshold, not the licensed bytes; speed cannot inherit a licence). The recipe's speed on that box (236.4 / 1305.3
   tok/s, ×2.08 / ×2.61 over its NF4 control -- bo7's ×2.067 / ×2.602 reproduced within 1%) is registered per arm as
-  measured and unlicensed. Amendment 3, pre-registered after `TP_DONE`: the registered K8 gate on that box's own pack;
-  a pass on both texts licenses it and makes the ratio quotable from the same receipts (1.21 / 1.56), a fail leaves VOID
-  standing -- its verdict is registered when its receipts land. `e4b.serve.h2h.vllm.same-box` (2026-09-03, ×1.47 / ×1.55,
+  measured and unlicensed. **Amendment 3** (pre-registered after `TP_DONE`, the registered K8 gate on that box's own
+  pack, bo6c's `k8()` verbatim, `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`): wikitext Δ −0.0230 ppl PASS, C4
+  validation **Δ +0.1093 ppl FAIL** against the +0.05 budget (the licensed pack read −0.0662 on the same window; the two
+  boxes' NF4 references agree to 0.0002 ppl) -- **NOT LICENSED, VOID stands**: no ratio against the licensed stack exists
+  on that lane, and the streamed calibration recipe is shown not to reproduce its licence across hosts (an open item in
+  `docs/STATUS.md`, filed as #405; bo6c's licence stands on its box). `e4b.serve.h2h.vllm.same-box` (2026-09-03, ×1.47 / ×1.55,
   a different box, the RTN stack, vLLM version unrecorded) is superseded for current-position use and stays as measured.
   One row per arm (`…arm.<engine>.b<B>.<arm>`, sixteen). Quality quoted, never equated.
 - `docs/capabilities.json` (`serve-moe-on-consumer-gpu`: the claim and the limitation reworded), `docs/STATUS.md`
   ("Serving speed", "What changed", an open item: the licensed pack does not reproduce bit-for-bit across boxes), the
   README results table and "Do not use this when", `docs/solutions/serve-large-moe-on-a-consumer-gpu.md`, a routing
-  query, `llms-full.txt` regenerated.
+  query, `llms-full.txt` regenerated; the capability carries the host-dependence as a limitation.
 
 ### e4b vs Unsloth, QLoRA end-to-end, one identical training problem (lane p38, receipt `bench/h2h-20260905/p38/`)
 

@@ -213,12 +213,14 @@ recipe but not the licensed bytes, and speed cannot inherit a licence. The
 recipe's speed on that box — 236.4 tok/s at B=1 (repeat 235.8), 1305.3 at
 B=16, ×2.08 / ×2.61 over its own NF4 control, bo7's ×2.067 / ×2.602
 reproduced within 1% — is measured and **unlicensed**, an observation never
-divided into a position. Amendment 3 (pre-registered after `TP_DONE`) runs
-the registered K8 gate on that box's own pack; if `ppl(all) − ppl(nf4)` is
-within +0.05 on both texts the arms become VALID and the ratio is quotable
-from the same receipts (it would read 1.21 at B=1 and 1.56 at B=16); if
-either text fails, VOID stands. Its verdict is registered when its receipts
-land. The 2026-09-03 comparison (`e4b.serve.h2h.vllm.same-box` (superseded): ×1.47 /
+divided into a position. **Amendment 3 (pre-registered after `TP_DONE`)
+ran the registered K8 gate on that box's own pack and it FAILED**
+(`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`, measured): wikitext
+Δ −0.0230 ppl, pass; C4 validation **Δ +0.1093 ppl against the +0.05
+budget** — where the licensed pack read −0.0662 on the same window. VOID
+stands; no ratio against the licensed stack exists on that lane; the
+recipe re-derived on another host is a different pack with a different
+verdict (an open item, below). The 2026-09-03 comparison (`e4b.serve.h2h.vllm.same-box` (superseded): ×1.47 /
 ×1.55 on a different box against the 0.27.0/0.21.0 RTN stack, vLLM version
 unrecorded) is **superseded** for current-position use and stays true as
 measured. Quality is quoted, never equated: neither checkpoint is scored on
@@ -412,8 +414,9 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   against this package's NF4 control (2.52× / 4.06×) and, as pre-registered,
   quotes **no** ratio against the licensed stack because its arms were VOID on
   that box (the pack fingerprint 11522/766 against the licensed 11512/776).
-  What the head-to-head against the licensed stack reads depends on
-  amendment 3's gate verdict, registered when it lands.
+  Amendment 3's gate on that pack failed on C4 validation (+0.1093 ppl;
+  `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`), so no
+  head-to-head against the licensed stack exists on that lane.
 - **The 2026-08 "vLLM 6.31× ahead" figure is RETIRED by id** — the
   retired row is `e4b.retired.vllm-6.31x-ahead`: template prompts and a different box;
   the same-box, same-prompt comparison (`e4b.serve.h2h.vllm.same-box` (superseded))
@@ -498,11 +501,16 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   calibrated pack with the same recipe on another host and read 11522 gptq /
   766 rtn expert matrices against the licensed 11512 / 776 (bo6b, bo6c,
   bo7): ten of 12,288 matrices crossed the `min_rows` threshold the other
-  way. The pre-registered fingerprint rule therefore voids that box's
-  licensed arms; amendment 3 runs the registered K8 gate on that pack to
-  decide whether a same-recipe pack is licensed by the gate rather than by
-  the count. Open until that verdict is registered — and, separately, the
-  calibration's host-dependence is a reproducibility item of its own.
+  way — and the registered K8 gate run on that pack (amendment 3,
+  `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`) **fails on C4
+  validation: +0.1093 ppl against the +0.05 budget** (wikitext −0.0230,
+  pass), where the licensed pack read −0.0662 on the same window and the
+  two boxes' NF4 references agree to 0.0002 ppl. The reference travels; the
+  calibrated pack does not: the streamed calibration recipe does not
+  reproduce its licence across hosts. bo6c's licence stands on its box as
+  measured; what is open is the recipe's host-dependence — same checkpoint,
+  same text, same knobs, a different pack and a different verdict on
+  another host ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the

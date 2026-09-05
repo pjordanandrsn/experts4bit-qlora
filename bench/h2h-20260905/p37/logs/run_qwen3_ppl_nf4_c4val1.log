@@ -1,0 +1,10 @@
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1505.59it/s]
+[20:24:39]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[20:24:40]   quantized experts on 48/48 MoE layers (128 experts each)
+[20:24:40]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:24:41]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:25:02]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 53914.62 examples/s]Generating v split: 18275 examples [00:00, 52067.78 examples/s]Generating v split: 27432 examples [00:00, 49595.16 examples/s]Generating v split: 36604 examples [00:00, 48937.52 examples/s]Generating v split: 45576 examples [00:00, 49858.31 examples/s]Generating v split: 45576 examples [00:00, 50112.57 examples/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (866460 > 131072). Running this sequence through the model will result in indexing errors
+K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/p37/qwen3_ppl_nf4_c4val1.json

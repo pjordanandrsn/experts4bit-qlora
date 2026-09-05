@@ -8,10 +8,11 @@ licensed arm is **VOID under the pre-registered pack-fingerprint rule** — this
 recipe, ten of 12,288 matrices classified the other way at the `min_rows` threshold, therefore *not the licensed bytes*,
 and speed cannot inherit a licence. What IS quoted: vLLM 0.28.0's numbers (all six arms VALID), e4b's NF4 control (VALID,
 licence-free — nothing beyond NF4 is quantised) and the ratio vLLM / e4b-NF4 on this box; the e4b recipe arms' speed is
-reported as an **unlicensed observation**. **Amendment 3** (pre-registered 20:30Z, `p37c.sh`, ≈ 3 h on the same box)
-runs the registered K8 gate on this box's own pack; its verdict (`gate_verdict.json`) decides whether the fingerprint
-check is replaced for this lane and the licensed ratio becomes quotable — **that outcome is not in this bundle yet**
-(see "Amendment 3", below; the section is completed when its receipts land under this directory).
+reported as an **unlicensed observation**. **Amendment 3** (pre-registered 20:30Z, `p37c.sh`, `TP3_DONE` 22:18:07Z) ran
+the registered K8 gate on this box's own pack: **NOT LICENSED — wikitext Δ −0.0230 ppl PASS, c4val1 Δ +0.1093 ppl FAIL
+against the +0.05 budget** ([`gate_verdict.json`](gate_verdict.json)). **VOID stands**: no ratio against e4b's licensed
+stack is quoted on this lane, the recipe's speed rows stay measured-and-unlicensed, and the recipe is shown not to
+reproduce its licence across boxes. Box torn down 22:22Z (proven).
 
 **What was compared.** Qwen3-30B-A3B (48 layers, 128 experts top-8) through two engines on one box in one session,
 decode-vs-decode on **identical prompt token ids** (the e4b harness's own `step_decomp._k8_window` rows dumped once to
@@ -51,8 +52,9 @@ and recovered on its own, staged in 19.7 min at 16:25:30Z, inside the 1800-s ala
 `lic_r1` B=1 (≈ 50 min, the calibration inside it) → 17:31:59Z `lic_r1` B=16 → 18:25:37Z `nf4_r2` B=1 → B=16 → 18:27:14Z
 vLLM `graph_r2` B=1 → B=16 → 18:29:23Z e4b `lic_r2` B=1 → 19:22:06Z `lic_eager` B=1 → reduced and **`TP_DONE`
 20:13:55Z**; `p37b.sh` at 20:15Z: `NOT NEEDED` → `TP2_DONE`. **Lane wall 15:44Z → 20:14Z ≈ 4 h 30 min** against the
-pre-registration's ≈ 5.5 h. Snapshot of the speed lane taken 20:20Z; amendment 3 launched on the same box after it
-(the box is not torn down until its marker).
+pre-registration's ≈ 5.5 h. Snapshot of the speed lane taken 20:20Z; amendment 3 (`p37c.sh`) on the same box: `nf4` on wikitext 20:21:13Z →
+`nf4` on c4val1 20:24:33Z → `all` on wikitext 20:27:58Z (the pack rebuilt, ≈ 55 min) → `all` on c4val1 21:23:26Z → verdict
+and **`TP3_DONE` 22:18:07Z**; box torn down 22:22Z.
 
 ## The identical fixture (pre-registered; [`PREREG.md`](PREREG.md) is the full text, verbatim)
 
@@ -131,9 +133,23 @@ pre-registration's ≈ 5.5 h. Snapshot of the speed lane taken 20:20Z; amendment
    lic_r1` = 286.0 / 236.4 = 1.21; B=16 2030.0 / 1305.3 = 1.56; the fp8-KV secondary 1.27 / 1.69). **If either text fails,
    VOID stands, P37 quotes no e4b ratio, and the recipe's speed stays an unlicensed observation.** No threshold, arm,
    prompt set or knob changes; the speed receipts are not re-run. Marker `TP3_DONE`; cost ≈ 3 h of the same box (each
-   `all` arm recalibrates ≈ 50 min). **Outcome: not yet in this bundle.** When `gate_verdict.json`, the four K8 receipts
-   and `p37c.sh` land under this directory, this section records the two deltas and the verdict, and the register's rows
-   move accordingly (a licensed outcome adds the licensed-ratio row; a failed outcome adds the gate row as a FAIL).
+   `all` arm recalibrates ≈ 50 min). **Outcome (`TP3_DONE` 22:18:07Z; [`gate_verdict.json`](gate_verdict.json), the four
+   receipts `qwen3_ppl_{nf4,all}_{wikitext,c4val1}.json`, their logs, [`p37c.sh`](p37c.sh)): NOT LICENSED — VOID stands.**
+   wikitext: nf4 6.41984 → all 6.39679 ppl, **Δ −0.0230, PASS** (sha `9ef10d760ad9`); c4val1: nf4 16.49703 → all 16.60631 ppl,
+   **Δ +0.1093 against the +0.05 budget, FAIL** (sha `4bcb55179b96`); 2048 steps, eager, fp8 compute, this box's own NF4 as the
+   reference on both texts. The `all` arms rebuilt the same pack the speed arms had (2418/142, 2398/162, 2412/148, 2338/222,
+   1956/92 = **11522 / 766**; `INT4EXP enabled: 48 layers`, `ATTNINT4 calibrated: 192 projections`). In nats the c4val1 delta is
+   +0.0066, inside Qwen3's 0.0095-nat arithmetic-order floor — and the floor is not the budget: the registered gate is in
+   perplexity and reads FAIL. Beside it, never divided into: bo6c's licensed pack (11512 / 776, box 49861751) read c4val1
+   **−0.0662** against its own NF4, and this box's NF4 reference reproduces bo6c's to 0.0002 / 0.0000 ppl (6.41984 / 16.49703
+   there too) — the reference travels, the calibrated pack does not. **Reading:** ten of 12,288 expert matrices classified
+   differently at the `min_rows` threshold go with a real quality difference; the streamed calibration recipe does NOT
+   reproduce its licence across boxes. The fingerprint rule's proxy is confirmed by the gate, not replaced. Register:
+   `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate` (measured, FAIL); the four e4b licensed arms stay VOID; the
+   1.21 / 1.56 these receipts would give is not a position and is not quoted. Open: the calibration's host-dependence —
+   [e4b#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405) ("serve: the streamed int4 expert calibration
+   does not reproduce its K8 licence across boxes (11522/766 vs 11512/776; c4val1 +0.109 vs −0.066)"; docs/STATUS.md "What
+   is open").
 
 Full text: the private receipt `INT4B16/P25-PARITY.md` ("P37 / P38 launch log": amendments 1–3, the in-lane progress
 notes, the `TP_DONE` reading) and [`PREREG.md`](PREREG.md) here.
@@ -193,7 +209,8 @@ abbreviated here. vLLM's `memory.used` is a policy number: the comparable figure
   per-chunk lines 2418/142, 2398/162, 2412/148, 2338/222, 1956/92 against bo7's 2418/142, 2394/166, 2412/148, 2334/226,
   1954/94; total 12,288 either way). The recipe's speed on this box is **measured and unlicensed**: B=1 236.4 tok/s
   (4.23 ms; r2 235.8 / 4.24), B=16 1305.3 (12.26 ms), eager 12.2 (81.99 ms) — reported as an observation, never divided
-  into a position. Amendment 3 decides whether that changes.
+  into a position. Amendment 3 ran the registered gate on that pack and it **failed on c4val1 (+0.1093 ppl)**: that does
+  not change (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`).
 - **Secondary:** eager-vs-eager 1.705 (vLLM 20.8 vs e4b 12.2 at B=1); vLLM fp8-KV / kv-auto 1.052 at B=1, 1.087 at B=16.
 - **The old position** (`e4b.serve.h2h.vllm.same-box`, 2026-09-03, box 49702459, vLLM 0.28.0 vs the 0.27.0/0.21.0 RTN
   stack: ×1.47 / ×1.55) is **superseded** for current-position use by this lane's claim and stays true as measured; the
@@ -203,8 +220,8 @@ abbreviated here. vLLM's `memory.used` is a policy number: the comparable figure
 
 | | predicted | outcome |
 |---|---|---|
-| **P1** | B=1: vLLM ahead of the licensed stack, ratio 1.15–1.30 (central 1.24); vLLM ≈ 283 tok/s, e4b 220–240 | **Not scorable as registered** (the licensed arm is VOID). The absolutes fell inside the predicted ranges: vLLM 286.0, e4b recipe 236.4 (→ 1.21 *if* amendment 3 licenses the pack). |
-| **P2** | B=16: vLLM ahead, 1.15–1.45 (central 1.30); vLLM ≈ 1,900–2,000, e4b 1,300–1,700 | **Not scorable as registered.** vLLM 2030.0 (above the range), e4b recipe 1305.3 (inside) → 1.56 *if* licensed — outside P2's range. |
+| **P1** | B=1: vLLM ahead of the licensed stack, ratio 1.15–1.30 (central 1.24); vLLM ≈ 283 tok/s, e4b 220–240 | **Not scorable as registered** (the licensed arm is VOID, and amendment 3's gate confirmed it). The absolutes fell inside the predicted ranges: vLLM 286.0, e4b recipe 236.4 — an unlicensed observation, no ratio. |
+| **P2** | B=16: vLLM ahead, 1.15–1.45 (central 1.30); vLLM ≈ 1,900–2,000, e4b 1,300–1,700 | **Not scorable as registered.** vLLM 2030.0 (above the range), e4b recipe 1305.3 (inside) — an unlicensed observation, no ratio. |
 | **P3** | vLLM eager costs 1.5–3× at B=1 and 1.2–2× at B=16; e4b eager 1.5–2.5× at B=1 | **Wrong by an order of magnitude on both engines:** vLLM eager is 13.7× slower at B=1 (286.0 → 20.8) and 6.3× at B=16 (2030.0 → 322.5); e4b's eager loop 19.4× at B=1 (236.4 → 12.2). Neither changes a headline (secondary rows). |
 | **P4** | vLLM fp8 KV within ±5 % of kv-auto | **Held at B=1 (1.052), missed at B=16 (1.087).** |
 | **P5** | e4b's same-box ratio reproduces bo7's ±10 %; self-pairs inside 1.03×; the 64k pack counts read 11512 / 776 | **Two of three held, the third is the finding:** self-pairs 1.0011 / 1.0024 / 1.0000 (B=1) and 1.0003 / 1.0039 (B=16); the recipe's ratio over NF4 reads 2.08 / 2.61 (236.4 / 113.5; 1305.3 / 500.1) against bo7's 2.067 / 2.602 — inside 1 % — **but the pack counts read 11522 / 766**, so the arm is VOID as registered. |
@@ -217,7 +234,12 @@ abbreviated here. vLLM's `memory.used` is a policy number: the comparable figure
   prompt shas, the `p37b: NOT NEEDED` line); [`versions.txt`](versions.txt); [`prompts_b1.json`](prompts_b1.json) /
   [`prompts_b16.json`](prompts_b16.json) (the identical token ids, per-row and file shas); [`forensics.txt`](forensics.txt);
   [`staged.sha256`](staged.sha256) (the expected shas of the four bo7 pieces); the 16 `vram_<engine>_b<B>_<arm>.txt`
-  1-s `nvidia-smi` traces; the markers `TP_DONE` / `TP2_DONE`.
+  1-s `nvidia-smi` traces; the markers `TP_DONE` / `TP2_DONE` / `TP3_DONE`.
+- Amendment 3 (the gate on this box's pack): [`gate_verdict.json`](gate_verdict.json), the four K8 receipts
+  `qwen3_ppl_nf4_wikitext.json`, `qwen3_ppl_all_wikitext.json`, `qwen3_ppl_nf4_c4val1.json`, `qwen3_ppl_all_c4val1.json`
+  (2048 steps, `mean_nll`, `ppl`, the text sha, the mechanism tally), [`p37c.sh`](p37c.sh) (bo6c's `k8()` verbatim apart
+  from the log directory) and `logs/run_qwen3_ppl_*.log` (the pack lines, the `K8_PPL` result line); `summary.txt` and
+  `outer.log` are the snapshot's final copies (the `k8 …` and `GATE …` lines appended by `p37c.sh`).
 - Lane: [`p37_run.sh`](p37_run.sh) (the pre-registered lane script, the one that ran), [`p37_vllm.py`](p37_vllm.py) (the
   vLLM arm driver: P20's `h2h_vllm_wt.py` with the prompt ids fed verbatim and every knob read back),
   [`p37_reduce.py`](p37_reduce.py), [`p37b.sh`](p37b.sh) + [`p37b_wait.sh`](p37b_wait.sh) (amendment 2's guarded follow-up,
@@ -231,7 +253,7 @@ abbreviated here. vLLM's `memory.used` is a policy number: the comparable figure
   repository's `*.log` ignore rule, as tp1's and p38's were.
 - [`PREREG.md`](PREREG.md) — the pre-registration, verbatim from the private tree, added by this bundle.
 - Nothing in this directory is edited: every file is the byte-for-byte copy of the box's snapshot (checked with `cmp`
-  when the bundle was written) except the two written here, `README.md` and `PREREG.md`. Not shipped: the four pieces
+  when the bundle was written) except the two written here, `README.md` and `PREREG.md` (the amendment-3 files were added from the box's final snapshot, `cmp`-checked the same way). Not shipped: the four pieces
   staged verbatim from the bo7 receipt — `hook/usercustomize.py`, `step_decomp.py`, `k8_bake.py`, `calib.json` — whose
   bytes are already in this repository under
   [`../../hybrid-g9/throughput-20260904/bo7/`](../../hybrid-g9/throughput-20260904/bo7/README.md) (`logs/hook/`,
@@ -251,16 +273,19 @@ from the files). Then `python p37_reduce.py .`. Expect the pack-count fingerprin
 
 ## What is NOT claimed
 
-- **No ratio against e4b's licensed stack.** The reducer's verdict stands until amendment 3's gate verdict lands in this
-  directory; the recipe's speed (236.4 / 1305.3 tok/s on this box) is an unlicensed observation and is never quoted as a
-  position or divided into one.
+- **No ratio against e4b's licensed stack.** The reducer's verdict stands and amendment 3's gate confirmed it (c4val1
+  +0.1093 ppl, FAIL); the recipe's speed (236.4 / 1305.3 tok/s on this box) is an unlicensed observation and is never
+  quoted as a position or divided into one. The 1.21 / 1.56 these receipts would give against it is not quoted anywhere.
+- **No licence is withdrawn from bo6c.** The licensed pack's two-text pass on its box stands as measured; what this lane
+  shows is that the recipe re-derived on another host is a different pack with a different verdict.
 - **The NF4 ratio is not e4b's position.** 2.52 / 4.06 is vLLM against the one e4b configuration that needs no gate — its
   slowest; it is quoted because it is the only licence-free ratio this lane can produce.
 - **Quality is not equated.** The GPTQ checkpoint's quality is its author's; e4b's is the register's; neither is scored
   here, and no "at equal quality" is said or implied.
 - **No TTFT ratio, no server path, no other batch sizes, prompt lengths, checkpoints or engines** (pre-registered out of
   scope). No anchor-class projection is made for the recipe arms (a VOID arm has no axes).
-- **No cross-box number.** bo7's ×2.067 / ×2.602 and P20's ×1.47 / ×1.55 are cited beside, with their boxes and dates;
-  the recipe's same-box ratio over NF4 (2.08 / 2.61) is reported under rule 4 as an instrument reading, not a position.
+- **No cross-box number.** bo7's ×2.067 / ×2.602, bo6c's −0.0528 / −0.0662 ppl and P20's ×1.47 / ×1.55 are cited beside,
+  with their boxes and dates; the recipe's same-box ratio over NF4 (2.08 / 2.61) is reported under rule 4 as an instrument
+  reading, not a position.
 - **The prediction table is scored, not argued.** P3 was wrong by an order of magnitude on both engines; P1/P2 are not
-  scorable as registered; the lane ships them.
+  scorable as registered; P5's pack-count clause failed and the gate confirmed why it matters; the lane ships them.
