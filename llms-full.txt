@@ -185,7 +185,7 @@ statement that the page describes a capability without a measurement).
 | the problem | page |
 |---|---|
 | `load_in_4bit=True` loads my MoE but it still OOMs; the experts stay bf16 | [bitsandbytes-moe-load-in-4bit-still-ooms.md](solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md) |
-| I need QLoRA / LoRA on the fused experts themselves | [qlora-fused-moe-experts.md](solutions/qlora-fused-moe-experts.md) |
+| I need QLoRA / LoRA on the fused experts themselves — and which families have a training receipt on real weights, which refuse | [qlora-fused-moe-experts.md](solutions/qlora-fused-moe-experts.md) |
 | The quantised experts still do not fit VRAM | [run-moe-larger-than-vram.md](solutions/run-moe-larger-than-vram.md) |
 | The experts do not fit host RAM either: serve or train from NVMe | [offload-moe-experts-to-cpu-or-nvme.md](solutions/offload-moe-experts-to-cpu-or-nvme.md) |
 | Serve a large MoE on one consumer NVIDIA GPU | [serve-large-moe-on-a-consumer-gpu.md](solutions/serve-large-moe-on-a-consumer-gpu.md) |
@@ -227,7 +227,12 @@ what is measured-private and what is open, is [`STATUS.md`](STATUS.md).
   needs Triton on an sm_80+ GPU.
 - Nothing falls back silently: an unsupported family fails fast with a
   named error, and every `enable_*` returns a count or a non-empty handle
-  list, or raises — the caller asserts it.
+  list, or raises — the caller asserts it. One known exception, recorded
+  rather than hidden: `enable_batched_train`'s per-call fallback above
+  `_PAD_WASTE_LIMIT` keeps the count positive while some layers run the
+  reference loop; a batched training arm is read only with a kernel-call
+  counter (tp1's OLMoE row is VOID on this,
+  `e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
 - A model that already fits in bf16 with headroom gains nothing here:
   4-bit is a memory trade, and on the measured comparator it cost energy
   (`e4b.train.energy-honest.scoped-a2000`).
@@ -557,6 +562,8 @@ grouped forward (grouped-nf4-gemm)   +   optional dgrad (enable_fast_train(model
 
 Claim `e4b.train.flagship-matrix` (measured, receipts in this repository): across two 30B-class MoEs — Qwen3-30B-A3B and Gemma-4-26B-A4B — five datasets each, 200 steps per cell, the fused training path runs 1.52–1.81× faster per step at 0.75–0.81× peak VRAM and 0.86–0.92× energy per step, with held-out loss parity on both registered criteria and the frozen 4-bit stack verified bit-identical over 16.31 GB hashed. That ratio is fused-vs-reference with the same offload and checkpointing in both arms. A per-step multiple quoted against the per-expert Python loop on a smaller model (the OLMoE per-expert-loop comparison) has a different denominator and different models; it is not this number, and the two do not compose.
 
+Claim family `e4b.train.parity.tp1.*` (measured, receipts in [`../../bench/train-parity-20260905/tp1/`](../../bench/train-parity-20260905/tp1/README.md); lane tp1, 2026-09-05, the shipped code on one rented RTX 5090, real weights through the direct loader, 60 steps on the registered `clinical` text, verdicts in the same registered units, cost reported and never gated): OLMoE-1B-7B-Instruct `enable_fast_train(dgrad=True)` **PASSES** (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`) — the first fused-vs-reference reading on a registered text with real weights for that family; Granite-3.1-3B-A800M loads and verifies through the direct path for the first time and its `enable_batched_train` arm **PASSES** (`e4b.train.parity.tp1.granite.batched.2026-09-05`) while its fused arm is being re-run after a harness defect; OLMoE's batched arm is **VOID** (the kernel was not reached on every layer, below); gpt-oss's fused and batched arms are **REFUSED** (below). Qwen3-30B-A3B, Gemma-4-26B-A4B-it and Mixtral-8x7B rows are pending and arrive before merge. A PASS there is a PASS on one text; no convergence claim and no cross-family ratio is made.
+
 ## Symptoms
 
 - "QLoRA a Qwen3 MoE on a 24 GB GPU" / "fine-tune fused MoE experts with LoRA on a consumer GPU".
@@ -614,7 +621,7 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 OFFLOAD_EXPERTS=1 OUT=./out python -m experts4bit_
 
 ## Supported scope
 
-- Families: the trainer docstring names OLMoE, Qwen3-MoE and Gemma-4; the loader's families are in [`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md). DeepSeek-V4 is trainable: the base supplies its clamped epilogue via `_apply_gate` ([`../DEEPSEEK-V4.md`](../DEEPSEEK-V4.md)).
+- Families, from evidence (the capability's `model_families` in [`../capabilities.json`](../capabilities.json) lists a family only when an accelerated arm passes the registered loss-parity criteria on real weights with a receipt in this repository): **OLMoE** (`olmoe`; the dgrad-gate receipt and tp1's fused PASS on a registered text), **Qwen3-MoE** (`qwen3_moe`) and **Gemma-4** (`gemma4_text`; both from the flagship matrices, five datasets each). Admitted by the loader and by every training enabler but not yet listed: **GraniteMoe** (tp1: loads and verifies through the direct path, `batched` PASS; it enters when its `fused` re-run passes) and **Mixtral** (tp1 rows pending). **gpt-oss is refused** (Limitations). DeepSeek-V4 is trainable: the base supplies its clamped epilogue via `_apply_gate` ([`../DEEPSEEK-V4.md`](../DEEPSEEK-V4.md)). The per-family training table with its evidence is the tp1 section of [`../ARCHITECTURE_SUPPORT.md`](../ARCHITECTURE_SUPPORT.md); the loader's families are in [`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md).
 - Storage: nf4 is the benchmarked QLoRA default; fp4 / int8 / fp8 / bf16 / fp16 carry a tested LoRA-step contract only ([`../STORAGE-MODES.md`](../STORAGE-MODES.md)).
 - `OFFLOAD_EXPERTS=1` / `offload=True` is what makes a 30B-class MoE train on a 12 GB or 24 GB card ([`run-moe-larger-than-vram.md`](run-moe-larger-than-vram.md)).
 - Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. `[fast]` installs grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), which needs Triton (Linux-only) on an sm_80-or-newer GPU.
@@ -624,7 +631,9 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 OFFLOAD_EXPERTS=1 OUT=./out python -m experts4bit_
 - `enable_fast_train` returns `0` rather than raising when `nf4_qlora` is missing; `dgrad=True` on a kernel cut older than grouped-nf4-gemm 0.7.0 is turned off with a `RuntimeWarning`. Assert the count.
 - `train.main()` does not enable the fast path for you ([`../../CONTRIBUTING.md`](../../CONTRIBUTING.md)).
 - The fused path changes the expert summation order (opt-in on purpose) and its model-level accuracy is measured, not assumed (`engines/fast.py` docstring).
-- `enable_batched_train` wins only a toy microbench; at real width it gives no speed-up and the highest peak memory (`engines/batched.py`). It and `enable_fast_train` are mutually exclusive on a module.
+- `enable_batched_train` wins only a toy microbench; at Qwen3-30B width it gives no speed-up and the highest peak memory (`engines/batched.py`, `e4b.train.fast-train-dgrad`) — width-dependent: on tp1 it is the faster of the two paths measured at Granite-3B width (`e4b.train.parity.tp1.granite.batched.2026-09-05`). It and `enable_fast_train` are mutually exclusive on a module.
+- **What to check on a batched arm — engagement, not the count.** `enable_batched_train` falls back to the reference forward per call whenever the padded gather exceeds `_PAD_WASTE_LIMIT` (`engines/batched.py`), silently and with no counter, so its return value stays positive while some layers run the per-expert loop on some steps. Count the whole-stack dequant calls per step (wrap `engines.batched._dequant_whole`) and require at least two per patched layer; tp1's OLMoE batched arm is **VOID** on exactly this (`e4b.train.parity.tp1.olmoe.batched.2026-09-05`) — a VOID row carries no parity number, however its loss curve reads.
+- **What to check on gpt-oss — the count is zero, by design.** The loader builds its experts bare (no `ExpertsLoRA`), so `enable_fast_train` and `enable_batched_train` both return `0` — REFUSED rows on tp1 (`e4b.train.parity.tp1.gptoss.fused.2026-09-05`, `.batched`). Attention-only QLoRA over the frozen experts trains (`e4b.train.parity.tp1.gptoss.attn_only.2026-09-05`); the only route that trains its experts is the kernel package's experimental `ExpertsMxfp4LoRA` ([`mxfp4-moe-training-and-residency.md`](mxfp4-moe-training-and-residency.md)), never licensed.
 - Non-checkpointed offload training is unsupported and fails loudly; the trainer always enables gradient checkpointing.
 - gpt-oss: trainable LoRA over its biased, clamped experts needs a gpt-oss-aware adapter, which is a separate change (`arch/gptoss.py`).
 - The registered training speed-up claim is superseded: restated against a current baseline, roughly half of it is upstream's own fused loop (`e4b.retired.13.47x-training-speedup`; [`../STATUS.md`](../STATUS.md), "What changed").
@@ -643,6 +652,7 @@ Register: [`../claims.json`](../claims.json); all of these are **measured** with
 - `e4b.train.fast-train-dgrad` — `enable_fast_train(dgrad=True)` is the fastest lane at real width; the batched path wins only the microbench.
 - `e4b.train.flagship-matrix` — two 30B-class MoEs by five datasets: fused path faster per step at lower VRAM and energy, loss parity on the registered criteria, frozen stack bit-identical.
 - `e4b.offload.fits-30b-class` — with expert offload, Qwen3-30B-A3B and Gemma-4-26B-A4B QLoRA-train on 12 GB.
+- `e4b.train.parity.tp1.olmoe.fused.2026-09-05`, `e4b.train.parity.tp1.granite.batched.2026-09-05` — tp1 (real weights, the shipped code, one RTX 5090): the fused path passes on OLMoE and the batched path on Granite, in the registered units; `e4b.train.parity.tp1.<family>.matrix.2026-09-05` per family (load + verify + every arm's row, including the VOID and the refusals); the pending rows are `open` until the final snapshot lands.
 
 ## Source: docs/solutions/run-moe-larger-than-vram.md (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/run-moe-larger-than-vram.md)
 
@@ -1037,18 +1047,26 @@ Register: [`../claims.json`](../claims.json). Per-family throughput, **measured*
         "docs/solutions/qlora-fused-moe-experts.md",
         "docs/CHOOSING.md",
         "docs/METHODOLOGY.md",
-        "docs/support_matrix.md"
+        "docs/support_matrix.md",
+        "docs/ARCHITECTURE_SUPPORT.md"
       ],
       "claim_ids": [
         "e4b.train.olmoe-converges",
         "e4b.train.fast-train-dgrad",
         "e4b.train.flagship-matrix",
-        "e4b.train.ablation"
+        "e4b.train.ablation",
+        "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
+        "e4b.train.parity.tp1.granite.batched.2026-09-05",
+        "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
+        "e4b.train.parity.tp1.granite.matrix.2026-09-05"
       ],
       "limitations": [
         "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
         "dgrad=True needs grouped-nf4-gemm>=0.7.0 (below the current [fast] floor in pyproject.toml, so any [fast] install has it); on older cuts it is downgraded with a RuntimeWarning",
-        "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset"
+        "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset",
+        "model_families is evidence-gated: a family is listed when an accelerated arm (enable_fast_train, or enable_batched_train) PASSES the registered loss-parity criteria on real weights with a receipt in this repository (bench/train-parity-20260905/tp1/, lane tp1). olmoe is confirmed on real weights and a registered text by tp1; qwen3_moe and gemma4_text rest on the flagship matrices until their tp1 rows land; granitemoe loads and verifies through the direct path and its batched arm passes on tp1, but it enters only when its fused re-run passes (pending); mixtral is pending its tp1 rows",
+        "gpt_oss is not a training family here: the loader builds its experts bare (no ExpertsLoRA), and both enable_fast_train and enable_batched_train return zero on it -- REFUSED rows on tp1 (e4b.train.parity.tp1.gptoss.fused.2026-09-05, e4b.train.parity.tp1.gptoss.batched.2026-09-05). Attention-only QLoRA over its frozen experts trains (e4b.train.parity.tp1.gptoss.attn_only.2026-09-05); the only route that trains its experts is grouped-nf4-gemm's experimental mxfp4_qlora.ExpertsMxfp4LoRA under the mxfp4-moe-training-and-residency capability -- experimental, never licensed",
+        "enable_batched_train falls back to the reference forward per call above _PAD_WASTE_LIMIT (engines/batched.py) without a counter: the patch count stays positive while some layers run the per-expert loop on some steps. Assert kernel engagement (whole-stack dequant calls per step at least twice the patch count), not the return value alone -- tp1's OLMoE batched arm read VOID on exactly this (e4b.train.parity.tp1.olmoe.batched.2026-09-05)"
       ],
       "status": "supported"
     },
@@ -1358,12 +1376,14 @@ Register: [`../claims.json`](../claims.json). Per-family throughput, **measured*
       ],
       "claim_ids": [
         "e4b.serve.gptoss.loader-faithful",
-        "e4b.serve.deepseek-v4"
+        "e4b.serve.deepseek-v4",
+        "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
       ],
       "limitations": [
         "A uniform int4 grid cannot hold e2m1 levels: re-quantising MXFP4 experts to int4-b32 fails the quality gate (docs/STATUS.md)",
         "gpt-oss raw-text perplexity is not an instrument for ranking an exact arm against a noisy one; the native store's speed is quoted with its quality gate open (docs/SERVING-THROUGHPUT.md)",
-        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml"
+        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml",
+        "gpt-oss expert training is EXPERIMENTAL and unlicensed. Lane tp1 (bench/train-parity-20260905/tp1/) ran grouped-nf4-gemm's run_mxfp4_20b_qlora (mxfp4_qlora.ExpertsMxfp4LoRA over the released e2m1/e8m0 bytes, faithful clamped GLU and biases) on its own text: the step-0 canary against transformers' dequant path passed, provenance pre == post held over every native expert tensor, and the loss fell -- the row is e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05. No parity pair exists, the run is never compared to the e4b arms, and nothing licenses it; the e4b enablers refuse gpt-oss (zero patched), and the arena_train=True wrap of gpt-oss computes a generic epilogue without the per-expert biases and clamp -- do not train gpt-oss experts through it"
       ],
       "status": "experimental"
     }
@@ -1408,6 +1428,47 @@ MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at
 0.75–0.81× peak VRAM and 0.86–0.92× energy, with loss parity on both
 registered criteria and the frozen 4-bit stack bit-identical over
 16.31 GB hashed. Default to `enable_fast_train(model, dgrad=True)`.
+
+**Training on real weights is receipted per family** (lane tp1, 2026-09-05,
+one rented RTX 5090 under the shipped 0.35.0 / 0.30.0 code; **measured** —
+receipt [`bench/train-parity-20260905/tp1/`](../bench/train-parity-20260905/tp1/README.md),
+table in its [`RESULTS-tp1.md`](../bench/train-parity-20260905/tp1/RESULTS-tp1.md);
+register `e4b.train.parity.tp1.<family>.<arm>.2026-09-05`; **partial — the
+pending rows below arrive before merge**). Each family goes through the
+direct `load_moe_4bit_streaming` + `verify_moe_4bit(strict=True)` path on
+real weights, then `reference` (the per-expert loop), `fused`
+(`enable_fast_train(dgrad=True)`) and `batched` (`enable_batched_train`)
+for 60 steps on the registered `clinical` text, judged in the registered
+units — |Δ final train loss| ≤ 0.05 and median step-wise |Δ| ≤ 0.05 against
+the family's own reference, same box — with cost reported and never gated.
+**OLMoE-1B-7B-Instruct `fused` PASSES** (0.0133 / 0.0125; ×3.22 per step at
+×0.34 J/step, peak unchanged), the first fused-vs-reference reading on a
+registered text with real weights for this family.
+**Granite-3.1-3B-A800M loads through the direct path for the first time**
+(32/32, 2.35 GB) and its **`batched` arm PASSES** (0.0155 / 0.0168; ×3.93
+at ×0.30 J/step); its `fused` arm is a harness-error row being re-run
+(amendment 3 — a closure bug in the harness's kernel counter, not the
+shipped code; the re-run is the row that counts).
+**OLMoE `batched` is VOID**: `enable_batched_train` patched 16/16, but the
+kernel reached every layer on only some steps (a minimum of 24 calls
+against the 32 required) because `engines/batched.py` falls back to the
+reference forward per call above `_PAD_WASTE_LIMIT` with no counter — a
+VOID row carries no parity number, however its loss curve reads.
+**gpt-oss `fused` / `batched` are REFUSED** (0 patched: the loader builds
+its experts bare); attention-only QLoRA over its frozen experts trains with
+the stacks bit-exact (10.75 GB hashed), and the kernel package's
+experimental MXFP4 route trains its experts on its own text with the
+step-0 canary passing (top-1 0.906, KL 0.025) and provenance holding —
+experimental, never licensed. **Qwen3-30B-A3B loads resident on the 32 GB
+card** (48/48, 20.0 GB). **Pending, arriving before merge:** Qwen3's three
+arms, Gemma-4's three ([#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344)
+risk: a load fault is a row), Mixtral's three (`offload=True`), Granite's
+`fused` re-run. The capability list
+(`qlora-fused-moe-experts.model_families` in [`capabilities.json`](capabilities.json))
+moves only on a PASS on real weights with a receipt here: `olmoe` is
+confirmed; `granitemoe` enters if its re-run passes; `gpt_oss` stays out.
+No convergence claim, no cross-family ratio, no training throughput
+position; a PASS is a PASS on one text.
 
 **Serving is at parity with the model's own attention on three of four
 families, and not on the fourth.** This is the part that changed most
@@ -1692,6 +1753,25 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
 
 ## What is open
 
+- **tp1's pending rows** — Qwen3-30B-A3B `reference` / `fused` / `batched`,
+  Gemma-4-26B-A4B-it ×3, Mixtral-8x7B-Instruct ×3 (`offload=True`) and
+  Granite's `fused` re-run are `open` placeholders in `claims.json`
+  (`e4b.train.parity.tp1.*`) until the final snapshot lands; they arrive
+  before merge and this page is finalised with them.
+- **`enable_batched_train` has no engagement counter.** It falls back to
+  the reference forward per call above `_PAD_WASTE_LIMIT`
+  (`engines/batched.py`) and says nothing; a positive return value is a
+  patch count, not kernel engagement. tp1's OLMoE `batched` arm is VOID on
+  exactly this. Until the path counts its own fallbacks, a batched arm is
+  read only with an external call counter.
+- **gpt-oss has no expert-LoRA training path under the shipped e4b code.**
+  `enable_fast_train` and `enable_batched_train` refuse it (0 patched), by
+  design. The `arena_train=True` load wraps its bare experts in the generic
+  `ExpertsLoRA`, whose epilogue has no `_apply_gate` for the per-expert
+  biases and clamp — an unfaithful forward that `enable_nvme_train_residency`
+  would attach to without checking; not run by tp1, and the fix is to refuse
+  on structure the way `enable_fast_train` does. The kernel package's
+  `ExpertsMxfp4LoRA` route is the experimental alternative.
 - **#344 — Gemma-4 fails to load on 2 of 6 rented hosts** with
   `CUDA error: invalid argument`, after the experts quantise. A 2 GiB
   host-hop fix was merged and reverted the same day: the model's largest
@@ -1931,6 +2011,38 @@ pure eager and would charge that to capture).
 from experts4bit_qlora import probe_capture
 report = probe_capture(model, input_ids)   # captured / matches_eager / teacher_forced
 ```
+
+## Training on real weights (tp1, 2026-09-05)
+
+A different evidence bundle again — [`bench/train-parity-20260905/tp1/`](../bench/train-parity-20260905/tp1/README.md)
+(lane tp1: the shipped experts4bit-qlora 0.35.0 + grouped-nf4-gemm 0.30.0, one rented RTX 5090 on an EPYC 7Q83 host,
+train-anchor class `pcie-full/launch-fast`) — so it is a new dated section, not an edit to the tables above. Each of the
+six serving families is loaded through the direct `load_moe_4bit_streaming` path on its **real** checkpoint (the
+`-Instruct` / `-it` bytes the serving lanes use), `verify_moe_4bit(strict=True)` is run, and three training arms of 60
+steps on the registered `clinical` text are compared in the registered units: `reference` (the per-expert loop), `fused`
+(`enable_fast_train(model, dgrad=True)`), `batched` (`enable_batched_train(model)`). **PASS** = |Δ final train loss|
+≤ 0.05 and median step-wise |Δ| ≤ 0.05 against the family's own reference arm, same box, same session, with `init_sha`
+identical, the frozen stack bit-exact (C1) and the accelerated kernel reached on every layer; **VOID** = the row cannot
+be read (the reason is stated); **REFUSED** = the enabler patched nothing. Cost is reported per row in the bundle and
+never gated. Same taxonomy for the load column as the tables above; verdicts are the register's
+(`e4b.train.parity.tp1.<family>.<arm>.2026-09-05` in [`claims.json`](claims.json)).
+
+**Partial at this writing — the pending rows arrive before merge and this table is finalised with them.**
+
+| model_type | checkpoint | direct load + `verify(strict)` | `ExpertsLoRA` | `fused` | `batched` | notes |
+|---|---|---|---|---|---|---|
+| `granitemoe` | granite-3.1-3b-a800m-instruct | validated — **real weights**, 32/32 layers, 2.35 GB (this file's `granitemoe` row above was a fixture) | 32 | pending (first run a harness error, re-run queued) | **PASS** (0.01553 / 0.01681; ×3.93 per step, J ×0.303) | enters the training capability when the fused re-run passes |
+| `olmoe` | OLMoE-1B-7B-0924-Instruct | validated — **real weights**, 16/16, 4.70 GB | 16 | **PASS** (0.01327 / 0.01249; ×3.22, J ×0.339) | **VOID** — kernel reached on a minimum of 24 calls/step against 32 required: the `_PAD_WASTE_LIMIT` fallback engaged | first fused-vs-reference reading on a registered text with real weights |
+| `gpt_oss` | gpt-oss-20b | validated — **real weights**, 24/24 as bare `GptOssExperts4bit`, 14.36 GB (this file's `gpt_oss` row above was `not_tested`) | 0 (built bare) | **REFUSED** (0 patched) | **REFUSED** (0 patched) | attention-only QLoRA over the frozen experts trains, stacks bit-exact (NO-PAIR); grouped-nf4-gemm's experimental `ExpertsMxfp4LoRA` route trains the experts on its own text, canary passing — experimental, not licensed |
+| `qwen3_moe` | Qwen3-30B-A3B | validated — **real weights**, 48/48, **20.02 GB resident on a 32 GB card** | 48 | pending | pending | the reference arm was at step 20/60 at the snapshot |
+| `gemma4_text` | gemma-4-26B-A4B-it | pending (#344: a load fault is a row) | pending | pending | pending | |
+| `mixtral` | Mixtral-8x7B-Instruct-v0.1 | pending (`offload=True`; the first real-weight pass through the `w1/w3/w2` fusion) | pending | pending | pending | |
+
+**Read the verdict columns as rows, not as a family score.** A VOID is not a PASS however its loss curve reads, and a
+refusal is a row, not a zero. Nothing here is a convergence claim (60 steps rank two arms on one text), nothing is a
+cross-family ratio, and the s/step figures in the bundle are this box's, quoted with its anchor class. The one code
+finding the lane surfaced: `enable_batched_train` falls back to the reference forward per call above `_PAD_WASTE_LIMIT`
+with no counter of its own, so a batched arm is read only with an external kernel-call counter.
 
 ## Source: AGENTS.md (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/AGENTS.md)
 
@@ -2172,11 +2284,36 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05 [measured]: Throughput census (bo7): single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 under the shipped code -- the licensed position on the register is NF4 (nothing above it is licensed on this family): 50.3 tok/s (19.87 ms/step), x1.000 by definition.
 - e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 -- the licensed position is NF4: 191.4 tok/s, x1.000 by definition.
 - e4b.serve.census.bo7.mixtral.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Mixtral-8x7B-Instruct arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the position is NF4 (e4b.serve.census.bo7.mixtral.b1 / .b16).
+- e4b.train.parity.tp1.granite.reference.2026-09-05 [measured]: Training parity lane tp1 (the shipped 0.35.0 / 0.30.0 code, one rented RTX 5090): the reference per-expert-loop arm of ibm-granite/granite-3.1-3b-a800m-instruct -- the first real-weight pass through the direct load_moe_4bit_streaming + ExpertsLoRA path for this family -- loads and verifies 32/32 MoE layers (40 experts each, 2.351 GB) and trains 60 steps on the clinical text with the frozen 4-bit stack bit-identical (C1: 1,698,693,120 bytes hashed, 0 empties, byte-flip control fires); it is the family's REF row, not a verdict.
+- e4b.train.parity.tp1.granite.batched.2026-09-05 [measured]: Training parity lane tp1: enable_batched_train on ibm-granite/granite-3.1-3b-a800m-instruct PASSES the registered loss-parity criteria against the family's reference arm on the same box -- |delta final train loss| 0.01553 and median step-wise |delta| 0.01681 against the 0.05 band -- with 32/32 layers patched, the whole-stack dequant kernel reached on every layer on every step (minimum 132 calls/step against the 64 required), init_sha identical to the reference's and C1 bit-exact in both arms; cost on this box 3.93x faster per step than the per-expert loop (1.086 vs 4.266 s) at 1.057x peak VRAM (2.971 GB) and 0.303x the energy per step (121.2 vs 399.5 J).
+- e4b.train.parity.tp1.olmoe.reference.2026-09-05 [measured]: Training parity lane tp1: the reference per-expert-loop arm of allenai/OLMoE-1B-7B-0924-Instruct (the serving checkpoint) loads and verifies 16/16 MoE layers (64 experts each, 4.695 GB) through the direct path and trains 60 steps on the clinical text with the frozen 4-bit stack bit-identical (C1: 3,623,878,656 bytes hashed, control fires); the family's REF row, not a verdict.
+- e4b.train.parity.tp1.olmoe.fused.2026-09-05 [measured]: Training parity lane tp1: enable_fast_train(model, dgrad=True) on allenai/OLMoE-1B-7B-0924-Instruct PASSES the registered loss-parity criteria against the family's reference arm on the same box -- |delta final train loss| 0.01327 and median step-wise |delta| 0.01249 against the 0.05 band -- with 16/16 layers patched, nf4_qlora.fused_grouped_lora called 64 times on every step (32 required), init_sha identical to the reference's and C1 bit-exact in both arms; cost on this box 3.22x faster per step (0.939 vs 3.022 s) at identical peak VRAM (5.234 GB, 1.000x) and 0.339x the energy per step (100.0 vs 294.7 J). The first fused-vs-reference reading for this family on a registered text with real weights.
+- e4b.train.parity.tp1.olmoe.batched.2026-09-05 [measured]: Training parity lane tp1: enable_batched_train on allenai/OLMoE-1B-7B-0924-Instruct is VOID under the registered rule -- 16/16 layers patched, C1 bit-exact, init_sha identical, 60 steps, but the whole-stack dequant kernel was reached a minimum of 24 times per step against the 32 required (range 24-54): engines/batched.py falls back to the reference forward per call when the padded gather exceeds _PAD_WASTE_LIMIT, silently and with no counter, so on some layers on some steps the arm was the per-expert loop wearing a batched label. No parity number is quoted for a VOID row.
+- e4b.train.parity.tp1.gptoss.fused.2026-09-05 [measured]: Training parity lane tp1: enable_fast_train(model, dgrad=True) on openai/gpt-oss-20b is REFUSED -- it returns 0 ('[e4b.fast] fused TRAINING path on 0 ExpertsLoRA module(s) (dgrad kernel backward)') because the loader builds this family's experts bare, with no ExpertsLoRA to patch; under the shipped code there is no fused expert-LoRA training path for gpt-oss, and this is a refusal row, not a zero.
+- e4b.train.parity.tp1.gptoss.batched.2026-09-05 [measured]: Training parity lane tp1: enable_batched_train on openai/gpt-oss-20b is REFUSED -- it returns 0 ('[e4b.batched] batched training path on 0 ExpertsLoRA module(s)') for the same structural reason as the fused path: the experts are built bare; a refusal row, not a zero.
+- e4b.train.parity.tp1.gptoss.attn_only.2026-09-05 [measured]: Training parity lane tp1: attention-only QLoRA over openai/gpt-oss-20b's frozen bare NF4-requantised experts trains -- add_attention_lora wrapped 96 projections (q/k/v/o x 24 layers, the biased projections keeping their bias inside LoRALinear; 3,981,312 trainable fp32 parameters), train loss 5.1060 -> 0.3664 and held-out eval 5.1405 -> 0.3435 over 60 steps on the clinical text, with C1 on the bare expert stacks bit-exact (10,749,542,400 bytes hashed, 0 empties, control fires). NO-PAIR: no reference arm exists for it and it carries no parity verdict; it is never an expert-LoRA row.
+- e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05 [measured]: EXPERIMENTAL -- NOT LICENSED. Training parity lane tp1 ran grouped-nf4-gemm's run_mxfp4_20b_qlora (mxfp4_qlora.ExpertsMxfp4LoRA: LoRA over openai/gpt-oss-20b's released e2m1/e8m0 expert bytes with the faithful clamped GLU and per-expert biases, recompute-in-backward) on ITS OWN text (wikitext-2 train, the runner's seed-41 chunking) for 60 steps: the step-0 canary against transformers' dequant path reads top-1 0.906 over 32 compared positions and KL 0.02495 (own loss 4.9602 vs reference 4.9896), provenance pre == post holds over all 96 native expert tensors, train loss 5.461 -> 2.622 and eval 4.591 -> 2.184. No pair, no parity verdict, a different text and runner: it is never compared to the e4b arms and this lane licenses nothing on it.
+- e4b.train.parity.tp1.granite.matrix.2026-09-05 [measured]: Training matrix, ibm-granite/granite-3.1-3b-a800m-instruct (tp1, the shipped code, one RTX 5090): the direct load_moe_4bit_streaming path loads and quantises the real checkpoint (32/32 MoE layers, 2.351 GB), verify_moe_4bit(strict) passes, ExpertsLoRA is installed on every MoE layer, the reference arm trains with the frozen stack bit-exact, and the batched arm PASSES the registered parity criteria at 3.93x per step; the fused arm's verdict is pending its re-run (the first run was a harness error, not a shipped-code failure).
+- e4b.train.parity.tp1.olmoe.matrix.2026-09-05 [measured]: Training matrix, allenai/OLMoE-1B-7B-0924-Instruct (tp1): the direct path loads and verifies 16/16 (4.695 GB), ExpertsLoRA on every layer, the fused arm PASSES the registered parity criteria on the clinical text at 3.22x per step and 0.339x the energy, and the batched arm is VOID because the batched kernel was not reached on every layer (the silent _PAD_WASTE_LIMIT fallback).
+- e4b.train.parity.tp1.gptoss.matrix.2026-09-05 [measured]: Training matrix, openai/gpt-oss-20b (tp1): the direct path loads the released MXFP4 experts as 24 bare GptOssExperts4bit (14.359 GB) and verify_moe_4bit(strict) passes, but there is no ExpertsLoRA and both enable_fast_train and enable_batched_train return 0 (two REFUSED rows); attention-only QLoRA over the frozen experts trains with the stacks bit-exact (NO-PAIR); grouped-nf4-gemm's experimental MXFP4 route trains the experts on its own text with the step-0 canary passing and provenance holding -- EXPERIMENTAL, not licensed. gpt_oss is not a family of the qlora-fused-moe-experts capability.
+- e4b.train.parity.tp1.qwen3.matrix.2026-09-05 [measured]: Training matrix, Qwen/Qwen3-30B-A3B (tp1): the direct load_moe_4bit_streaming path loads and quantises the real checkpoint resident on a 32 GB card -- 48/48 MoE layers x 128 experts in 16.6 s from the staged snapshot, 20.019 GB, verify_moe_4bit(strict) 48/0, 48 ExpertsLoRA; the three arms (reference / fused / batched) are pending and arrive before merge.
 
 Open items (no evidence either way):
 
 - e4b.open.gemma4-load-fault [open]: OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 4 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
+- e4b.train.parity.tp1.granite.fused.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Granite-3.1-3B-A800M `fused` arm -- enable_fast_train(model, dgrad=True) vs the reference per-expert loop, 60 steps on the clinical text, registered B2/C2 verdict. Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.qwen3.reference.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Qwen3-30B-A3B `reference` arm -- the reference per-expert-loop arm, 60 steps on the clinical text (the family's REF row). Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.qwen3.fused.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Qwen3-30B-A3B `fused` arm -- enable_fast_train(model, dgrad=True) vs the reference arm, registered B2/C2 verdict (expected patch count 48 / 30 / 32 for Qwen3 / Gemma-4 / Mixtral, P1). Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.qwen3.batched.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Qwen3-30B-A3B `batched` arm -- enable_batched_train vs the reference arm, registered B2/C2 verdict; P2 predicts the _PAD_WASTE_LIMIT fallback may read VOID on the 128-expert families (Qwen3, Gemma-4) -- a VOID row, never a PASS. Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.gemma4.reference.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Gemma-4-26B-A4B-it `reference` arm -- the reference per-expert-loop arm, 60 steps on the clinical text (the family's REF row). Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.gemma4.fused.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Gemma-4-26B-A4B-it `fused` arm -- enable_fast_train(model, dgrad=True) vs the reference arm, registered B2/C2 verdict (expected patch count 48 / 30 / 32 for Qwen3 / Gemma-4 / Mixtral, P1). Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.gemma4.batched.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Gemma-4-26B-A4B-it `batched` arm -- enable_batched_train vs the reference arm, registered B2/C2 verdict; P2 predicts the _PAD_WASTE_LIMIT fallback may read VOID on the 128-expert families (Qwen3, Gemma-4) -- a VOID row, never a PASS. Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.mixtral.reference.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Mixtral-8x7B-Instruct-v0.1 `reference` arm -- the reference per-expert-loop arm, 60 steps on the clinical text (the family's REF row). Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.mixtral.fused.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Mixtral-8x7B-Instruct-v0.1 `fused` arm -- enable_fast_train(model, dgrad=True) vs the reference arm, registered B2/C2 verdict (expected patch count 48 / 30 / 32 for Qwen3 / Gemma-4 / Mixtral, P1). Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.mixtral.batched.2026-09-05 [open]: PENDING (arrives before merge): lane tp1's Mixtral-8x7B-Instruct-v0.1 `batched` arm -- enable_batched_train vs the reference arm, registered B2/C2 verdict; P2 predicts the _PAD_WASTE_LIMIT fallback may read VOID on the 128-expert families (Qwen3, Gemma-4) -- a VOID row, never a PASS. Not yet measured at the 12:49Z snapshot of 2026-09-05; this entry is replaced by the measured row (status measured, verdict in the claim sentence) when the final snapshot lands, and must not be merged as it stands.
+- e4b.train.parity.tp1.gemma4.matrix.2026-09-05 [open]: PENDING (arrives before merge): training matrix, google/gemma-4-26B-A4B-it (tp1) -- direct real-weight load + verify_moe_4bit(strict), ExpertsLoRA, reference / fused / batched on the clinical text. No receipt at the 12:49Z snapshot; e4b#344 may make the three arms load_fault rows (P6). Not to be merged as it stands.
+- e4b.train.parity.tp1.mixtral.matrix.2026-09-05 [open]: PENDING (arrives before merge): training matrix, mistralai/Mixtral-8x7B-Instruct-v0.1 (tp1) -- the first real-weight pass through the direct path (w1/w3/w2 fused gate-first into Experts4bit) + ExpertsLoRA, reference / fused / batched under offload=True on the clinical text. No receipt at the 12:49Z snapshot. Not to be merged as it stands.
 
-(83 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(96 active claims listed, 15 open, 0 projected; retired and superseded claims are omitted on purpose.)

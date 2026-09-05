@@ -10,7 +10,7 @@ statement that the page describes a capability without a measurement).
 | the problem | page |
 |---|---|
 | `load_in_4bit=True` loads my MoE but it still OOMs; the experts stay bf16 | [bitsandbytes-moe-load-in-4bit-still-ooms.md](solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md) |
-| I need QLoRA / LoRA on the fused experts themselves | [qlora-fused-moe-experts.md](solutions/qlora-fused-moe-experts.md) |
+| I need QLoRA / LoRA on the fused experts themselves — and which families have a training receipt on real weights, which refuse | [qlora-fused-moe-experts.md](solutions/qlora-fused-moe-experts.md) |
 | The quantised experts still do not fit VRAM | [run-moe-larger-than-vram.md](solutions/run-moe-larger-than-vram.md) |
 | The experts do not fit host RAM either: serve or train from NVMe | [offload-moe-experts-to-cpu-or-nvme.md](solutions/offload-moe-experts-to-cpu-or-nvme.md) |
 | Serve a large MoE on one consumer NVIDIA GPU | [serve-large-moe-on-a-consumer-gpu.md](solutions/serve-large-moe-on-a-consumer-gpu.md) |
@@ -52,7 +52,12 @@ what is measured-private and what is open, is [`STATUS.md`](STATUS.md).
   needs Triton on an sm_80+ GPU.
 - Nothing falls back silently: an unsupported family fails fast with a
   named error, and every `enable_*` returns a count or a non-empty handle
-  list, or raises — the caller asserts it.
+  list, or raises — the caller asserts it. One known exception, recorded
+  rather than hidden: `enable_batched_train`'s per-call fallback above
+  `_PAD_WASTE_LIMIT` keeps the count positive while some layers run the
+  reference loop; a batched training arm is read only with a kernel-call
+  counter (tp1's OLMoE row is VOID on this,
+  `e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
 - A model that already fits in bf16 with headroom gains nothing here:
   4-bit is a memory trade, and on the measured comparator it cost energy
   (`e4b.train.energy-honest.scoped-a2000`).

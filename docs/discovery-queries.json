@@ -601,6 +601,48 @@
           "grouped-nf4-gemm"
         ]
       ]
+    },
+    {
+      "query": "enable_batched_train return value positive but some layers still run the per-expert loop: count dequant calls per step",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "enable_batched_train"
+        ],
+        [
+          "_PAD_WASTE_LIMIT"
+        ],
+        [
+          "falls back",
+          "fallback"
+        ],
+        [
+          "per-expert loop"
+        ]
+      ]
+    },
+    {
+      "query": "QLoRA on fused experts: which families pass the loss-parity criteria on real weights, which family is refused",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "parity"
+        ],
+        [
+          "real weights"
+        ],
+        [
+          "families"
+        ],
+        [
+          "refused"
+        ],
+        [
+          "ExpertsLoRA"
+        ]
+      ]
     }
   ]
 }
