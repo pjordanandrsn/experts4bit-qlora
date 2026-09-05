@@ -208,3 +208,14 @@ def test_the_repository_readme_is_current_main():
     """The CI gate itself: README numbers are docs/claims.json's current values
     and the release block is CHANGELOG.md's latest release."""
     assert crc.check(ROOT) == []
+
+
+def test_value_numbers_keep_minus_signs_in_string_values():
+    """A register value stored as text ("-0.0528 wikitext / -0.0662 c4val1") must yield signed numbers,
+    so a README row quoting −0.0528 matches instead of reporting drift (Bugbot on #401)."""
+    import importlib
+    m = importlib.import_module("check_readme_claims")
+    got = m.value_numbers({"value": "-0.0528 wikitext / -0.0662 c4val1"})
+    assert [str(x) for x in got] == ["-0.0528", "-0.0662"], got
+    assert m.number_matches(m.Decimal("-0.0528"), got)
+    assert not m.number_matches(m.Decimal("0.0528"), got)
