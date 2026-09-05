@@ -95,3 +95,29 @@ overlay         320G  136G  185G  43% /
     INT4EXP enabled: 32 layers (model_type=mixtral)
     K8_PPL steps=2048 nll=2.11447 ppl=8.28518 compute=fp8 sha=061534dadd4d out=/root/bo6/mixtral_ppl_lic_calibexp_c4val.json
 [2026-09-04T20:33:00Z] bo6b: K8 mixtral/lic_calibexp (exp=1 calib=0 fuse=all src=wikitext E4B_SERVE_EXP_INT4_CALIB=1)
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated streaming: 32 layers in 32 passes of <= 1 layer(s)
+    INT4EXP enabled: 32 layers (model_type=mixtral)
+    K8_PPL steps=2048 nll=1.20549 ppl=3.33841 compute=fp8 sha=31fd7d408809 out=/root/bo6/mixtral_ppl_lic_calibexp.json
+[2026-09-04T21:54:29Z] bo6b: arm mixtral/lic_calibexp (B=1 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+./bo6b.sh: line 34: 22177 Alarm clock             env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E perl -e 'alarm 3600; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/${TAG}_b${B}_$ARM.json > run_${TAG}_b${B}_$ARM.log 2>&1
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+[2026-09-04T22:54:32Z] bo6b: arm mixtral/lic_calibexp (B=16 exp=1 calib=0 fuse=all E4B_SERVE_EXP_INT4_CALIB=1)
+./bo6b.sh: line 34: 23429 Alarm clock             env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E perl -e 'alarm 3600; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/${TAG}_b${B}_$ARM.json > run_${TAG}_b${B}_$ARM.log 2>&1
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+[2026-09-04T23:54:35Z] bo6b: K8 mixtral/lic_calibexp_n128_c4val (exp=1 calib=0 fuse=all src=c4val1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128)
+./bo6b.sh: line 27: 24619 Alarm clock             env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E perl -e 'alarm 5400; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source ${PPLSRC:-wikitext} --out $W/${TAG}_ppl_$ARM.json > run_${TAG}_ppl_$ARM.log 2>&1
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+    INT4EXP calibrated experts: 16 gptq / 0 rtn (min_rows=32) over 1 layers
+MIXTRAL SWEEP DONE
+[2026-09-05T01:24:40Z] bo6b: freed mixtral (disk: 319G free)
+[2026-09-05T01:24:40Z] bo6b: TP2_DONE
+[2026-09-05T01:25:01Z] bo6c: reinstall e4b @d286dd52a8b23222479fb9de880bbdd00f6bf671 (damp knob)
+bo6c tripwire OK: damp knob + hook v5
+[2026-09-05T01:25:13Z] bo6c: bake qwen3

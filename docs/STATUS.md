@@ -173,9 +173,11 @@ measured, not licensed
 the mirror image of bo5's RTN stack; not a reference shift (same window
 sha, NF4 agrees with bo5c to 0.001 nats). Next levers are not gate
 changes: a per-expert NF4 fallback for the largest-residual experts, or
-the 64k calibration set scored on wikitext. The wikitext receipt, the
-speed arms and the 64k arm land with the lane's final snapshot before
-merge. Qwen3's NF4 reference sits 0.006 nats from bo5's
+the 64k calibration set scored on wikitext. The lane's Mixtral speed
+arms and its 64k-token arm were killed by their own per-arm alarms
+during the ~85-min streamed calibration and were not measured — a
+harness limit, not a model result; bo7 dropped those arms too. Qwen3's
+NF4 reference sits 0.006 nats from bo5's
 on the identical window while Mixtral's agree to 0.001 — that shift stays
 open, and no sub-0.01-nat number is compared across lanes.
 

@@ -9,10 +9,12 @@ memory-bandwidth probe ran on this box.
 refused), attempt 3 13:50:05Z (`QWEN3 DONE` 15:39Z, Mixtral bake 15:39–15:54Z, Mixtral NF4 references 15:54–15:57Z,
 its four calibrated arms killed one after another, `TP_DONE` 16:43:25Z), bo6b 16:43:43Z (Qwen3 re-bake, the repeat
 controls and the sweep, `QWEN3 SWEEP DONE` 18:56Z; Mixtral re-bake 18:56–19:10Z; `lic_calibexp_c4val` 19:10–20:33Z;
-`lic_calibexp` on wikitext 20:33–21:54Z — its result reached the lane console after this snapshot, 21:03Z, and is
-read below; B=1 from 21:54Z). The receipts still pending when the snapshot was taken — Mixtral `lic_calibexp` on
-wikitext, its B=1 and B=16 arms, and `lic_calibexp_n128_c4val` — are marked **pending (arrives before merge)** in
-[`RESULTS.md`](RESULTS.md)'s table and are filled in from the final snapshot (after `TP2_DONE`).
+`lic_calibexp` on wikitext 20:33–21:54Z; then three arms that never produced a receipt — `lic_calibexp` B=1 21:54Z,
+killed by the `arm()` helper's own 3600-s alarm at 22:54Z at streamed-calibration pass 23 of 32; B=16 22:54Z, alarm
+23:54Z, pass 23 of 32; `lic_calibexp_n128_c4val` 23:54Z, killed by the `k8()` helper's 5400-s alarm at 01:24Z at pass
+20 of 32 — `MIXTRAL SWEEP DONE`, `TP2_DONE` 2026-09-05T01:24:40Z). The last lines of `outer.log` are bo6c starting
+(01:25Z), a separate lane. Those three arms print as **`alarm`** rows in [`RESULTS.md`](RESULTS.md): a harness limit,
+not a model result, and no number is quoted for them.
 **Lane:** the user's decision at 13:10Z — *close the gap rather than move the gate*. The registered K8 gate stays in
 perplexity: a calibrated pack passes when Δppl ≤ +0.05 against NF4 on **every** text scored, an improvement is
 claimable only with the same sign on ≥ 2 texts, and wikitext is the text outside the calibration domain. The
@@ -58,6 +60,13 @@ its metadata reports 0.29.0):
    before packing began. Mixtral's 8 experts × (4096² + 14336²) × 4 B ≈ 7.1 GB per layer × 32 layers ≈ 230 GB;
    Qwen3's 128 × (2048² + 768²) × 4 B ≈ 2.4 GB × 48 ≈ 115 GB had survived only because it fits under the limit. The
    fix is @ae9dc122's streaming; bo6b re-ran the Mixtral arms at an 8 GiB budget (32 passes of one layer).
+4. **bo6b's Mixtral speed arms and its 64k-token arm hit the lane's own per-arm alarms** (`Alarm clock` in
+   `outer.log`; the run logs stop mid-calibration). The `arm()` helper's 3600-s and the `k8()` helper's 5400-s alarms
+   were sized for bo5's RTN arms, which need no calibration; the streamed 32-pass Mixtral calibration at an 8 GiB
+   budget takes ~85 min before a timed window can start (B=1 and B=16 both died at pass 23 of 32), and the 64k-token
+   set makes each layer ~4.5 min (`lic_calibexp_n128_c4val` died at pass 20 of 32). The Mixtral speed of the
+   calibrated stack was therefore **not measured** on this lane, and neither was its 64k-token reading; bo7 dropped
+   those arms too (the stack is not licensed, below). A harness limit, not a model result.
 
 ## Protocol
 
@@ -121,12 +130,12 @@ calibration domain, the stronger reading. This lane ships its hook.
   −0.1410 at 256k on c4val1) — the rule needs wikitext with the same sign; that is bo6c's job.
 - **FAIL as registered, and recorded as such:** Qwen3 calibrated experts alone under the all-at-once method
   (+0.1498) and under streamed calibration with damping 0.1 (+0.0544); and **Mixtral `lic_calibexp`** — c4val1
-  +0.0391 (pass) but wikitext +0.0771 ppl (+0.0234 nats; floor unmeasured; from the lane console, receipt on the
-  final snapshot) — **measured, not licensed**. Sequential calibration closed Qwen3's gap and did not close
-  Mixtral's: the calibrated stack passes the in-domain text and fails the out-of-domain one, the mirror image of
-  bo5's RTN `lic`. Its B=1 / B=16 arms, when they land, are speed of an unlicensed configuration. Next levers are
-  not gate changes: a per-expert NF4 fallback for the largest-residual experts, or the 64k calibration set scored
-  on wikitext (the queued `lic_calibexp_n128` arm is c4val1-only).
+  +0.0391 (pass) but wikitext +0.0771 ppl (+0.0234 nats; floor unmeasured; receipt `mixtral_ppl_lic_calibexp.json`)
+  — **measured, not licensed**. Sequential calibration closed Qwen3's gap and did not close Mixtral's: the
+  calibrated stack passes the in-domain text and fails the out-of-domain one, the mirror image of bo5's RTN `lic`.
+  Its B=1 / B=16 speed was not measured (the arms alarmed, false start 4), and bo7 dropped those arms too. Next
+  levers are not gate changes: a per-expert NF4 fallback for the largest-residual experts, or the 64k calibration
+  set scored on wikitext (the `lic_calibexp_n128` arm that alarmed was c4val1-only).
 - **Not touched:** Granite (NF4 experts stay licensed; bo5's +0.387 is not closable by this lever), gpt-oss, Gemma-4,
   OLMoE. Nothing on this page licenses a *ratio*; nothing is compared across lanes.
 
@@ -174,12 +183,15 @@ sweep with the method effect at equal settings, and the speed rows with `ratio: 
   set-size knob), `k8_bake.py`, `step_decomp.py`, the two bake logs, **every per-arm `run_*.log`** (the method
   banners, calibration statistics and result lines), and the three lane consoles `outer.attempt1.log`,
   `outer.attempt2.log`, `outer.log`. The logs are force-added past the repository's `*.log` ignore rule, as bo5's
-  `outer.log` was. `run_mixtral_b1_lic_calibexp.log` / `run_mixtral_b16_lic_calibexp.log` are replaced by bo6b's
-  on the final snapshot (this snapshot's copies are attempt 3's OOM-killed runs).
+  `outer.log` was. `run_mixtral_b1_lic_calibexp.log`, `run_mixtral_b16_lic_calibexp.log` and
+  `run_mixtral_ppl_lic_calibexp_n128_c4val.log` are the alarmed bo6b runs (the lane overwrote attempt 3's OOM-killed
+  b1/b16 logs in place); they end mid-calibration with no result line. `bake_qwen3.log` is bo6b's re-bake, the one
+  that produced these receipts — bo6c's later re-bake overwrote the box's copy and is not shipped.
 - [`summary.txt`](summary.txt) (each run log's final result line, in lane order), [`models.txt`](models.txt),
   [`forensics.txt`](forensics.txt) (`nvidia-smi`, `lscpu`, `free`, the cgroup limit, the package versions).
   The lane's `TP_DONE` / `TP2_DONE` markers are empty files and are not shipped; nor are the pip logs (warnings
-  only), the watcher / restart scripts or the `.sha` pin files (their contents are the cut list above).
+  only, including bo6c's), the watcher / restart scripts or the `.sha` pin files (their contents are the cut list
+  above).
 
 ## Reproduce
 
@@ -194,6 +206,8 @@ per-arm environment (`E4B_SERVE_EXP_INT4`, `E4B_SERVE_EXP_INT4_CALIB`, `E4B_SERV
 
 ## What is NOT in the table
 
-Every K8 row is the 2048-step window; nothing was probed short. bo6c's arms (the streamed full stack, the 64k arm
-on wikitext, the streamed repeat) are a separate lane and bundle. Granite, gpt-oss, Gemma-4 and OLMoE were not run.
-No kernel census ran on this lane.
+Every K8 row is the 2048-step window; nothing was probed short. **Mixtral's calibrated-stack speed (B=1, B=16) and
+its 64k-token c4val1 reading are not measured** — the three arms were killed by their own alarms during the streamed
+calibration (false start 4) and print as `alarm` rows with no number. bo6c's arms (the streamed full stack, the 64k
+arm on wikitext, the streamed repeat) are a separate lane and bundle. Granite, gpt-oss, Gemma-4 and OLMoE were not
+run. No kernel census ran on this lane.

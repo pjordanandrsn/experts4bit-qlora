@@ -21,6 +21,11 @@ Method, per arm, is read from `logs/run_<fam>_ppl_<arm>.log` (the hook prints on
 Calibration tokens = N batches x 4 sequences x 512 tokens (the hook's `_calib_batches`); damping and the
 `E4B_CALIB_NSEQ` override come from the arm's line in `logs/outer.log` (default damping = the kernel's 0.01).
 
+An arm the lane script runs that has no receipt is read from `logs/outer.log`: a `... Alarm clock ...` line after the
+arm's own line means the arm was killed by the lane's per-arm alarm (`perl -e 'alarm N'`) and prints as an `alarm`
+row -- a harness limit, not a model result, and no number is quoted for it; a `... Killed ...` line is the container's
+OOM kill (attempt 3). Neither is a verdict.
+
 The registered rule (experts4bit_qlora.k8_gate): an UNCALIBRATED arm passes when |delta ppl| <= 0.05 on every
 text; a CALIBRATED pack passes when delta ppl <= +0.05 on every text, and an improvement may only be claimed
 when it holds with the same sign on >= 2 texts (one outside the calibration domain). B=1 tok/s is 1000 / the
@@ -73,7 +78,8 @@ DESC = {("qwen3", "nf4"): "NF4 experts, bf16 attention -- re-scored on this box 
         ("mixtral", "lic_calibexp"): "GPTQ-calibrated int4 experts + r1 + r2 (rope-only fold) + router epilogue, no calibrated attention -- bo5's `lic` with calibrated experts (bo6b, 8 GiB Hessian budget)",
         ("mixtral", "lic_calibexp_n128"): "lic_calibexp with 4x the calibration set (E4B_CALIB_NSEQ=128; bo6b)"}
 PAT = re.compile(r"^(?P<fam>[a-z0-9]+)_(?P<kind>ppl|b1|b16)_(?P<arm>.+)\.json$")
-OUTER = re.compile(r"\] (?:bo6[bc]: )?(?P<kind>K8|arm) (?P<fam>\w+)/(?P<arm>\S+) \((?P<env>.*)\)\s*$")
+OUTER = re.compile(r"^\[(?P<at>[^\]]+)\] (?:bo6[bc]: )?(?P<kind>K8|arm) (?P<fam>\w+)/(?P<arm>\S+) \((?P<env>.*)\)\s*$")
+FATE = re.compile(r"^\./\S+\.sh: line \d+: +\d+ (?P<fate>Alarm clock|Killed)\b.*?alarm (?P<secs>\d+); exec")
 
 
 def fmt(v, p, sign=False):
@@ -111,16 +117,44 @@ def load(d):
 
 
 def outer_env(d):
-    """(fam, arm-as-named-in-the-script) -> the env tokens on its `K8` / `arm` line in outer.log (last wins)."""
-    env = {}
+    """(fam, arm-as-named-in-the-script) -> the env tokens on its `K8` / `arm` line in outer.log (last wins), and
+    (fam, arm, kind) -> the fate of an arm that died (`Alarm clock` / `Killed`, the alarm seconds, when it started)."""
+    env, fates, last = {}, {}, None
     p = os.path.join(d, "logs", "outer.log")
     if not os.path.exists(p):
-        return env
+        return env, fates
     for ln in open(p, errors="replace"):
-        m = OUTER.search(ln)
+        m = OUTER.match(ln)
         if m:
-            env[(m.group("fam"), m.group("arm"))] = dict(t.split("=", 1) for t in m.group("env").split() if "=" in t)
-    return env
+            e = dict(t.split("=", 1) for t in m.group("env").split() if "=" in t)
+            env[(m.group("fam"), m.group("arm"))] = e
+            kind = "ppl" if m.group("kind") == "K8" else "b" + e.get("B", "?")
+            last = (m.group("fam"), m.group("arm"), kind, m.group("at"))
+            fates.pop(last[:3], None)  # a re-run supersedes an earlier fate; a receipt supersedes both
+            continue
+        f = FATE.match(ln)
+        if f and last:
+            fates[last[:3]] = {"fate": f.group("fate"), "secs": int(f.group("secs")), "at": last[3]}
+    return env, fates
+
+
+def fate_cell(d, fam, arm, kind, fates, long=False):
+    """The cell for an expected arm with no receipt: `alarm ...` / `killed ...` from outer.log, else pending."""
+    f = fates.get((fam, arm, kind))
+    if not f:
+        return "pending (arrives before merge)"
+    p = os.path.join(d, "logs", f"run_{fam}_{kind}_{arm}.log")
+    txt = open(p, errors="replace").read() if os.path.exists(p) else ""
+    passes = len(re.findall(r"INT4EXP calibrated experts:", txt))
+    ml = re.search(r"quantized experts on (\d+)/(\d+) MoE layers", txt)
+    layers = ml.group(2) if ml else "?"
+    if f["fate"] == "Killed":
+        return "killed (container OOM)"
+    at = f["at"]
+    if long:
+        return (f"NOT MEASURED -- killed by the arm's own {f['secs']}-s alarm (started {at}) at streamed-calibration pass "
+                f"{passes}/{layers}: a harness limit, not a model result; no number")
+    return f"alarm ({f['secs']} s, calibration pass {passes}/{layers})"
 
 
 def method(d, fam, arm, env):
@@ -162,7 +196,13 @@ def method_cell(m):
             s += f", {m['passes']} passes"
     if m["gptq"] or m["rtn"]:
         s += f" · {m['gptq']} gptq / {m['rtn']} rtn"
+    if not m.get("complete", True):
+        s += " (INCOMPLETE: the arm alarmed mid-calibration; the pack counts are the passes that finished)"
     return s
+
+
+def fails_in(ver):
+    return ver.startswith("FAIL")
 
 
 def verdict(fam, cfg, deltas, is_base, pending):
@@ -197,7 +237,8 @@ def main():
     ap.add_argument("dir")
     a = ap.parse_args()
     rows = load(a.dir)
-    env = outer_env(a.dir)
+    env, fates = outer_env(a.dir)
+    legend = set()
     for fam in FAMS:
         fams = {c: r for (f, c), r in rows.items() if f == fam}
         if not fams:
@@ -224,14 +265,18 @@ def main():
             if not r["ppl"] and not r.get("b1_ms") and not r.get("b16") and not exp:
                 continue
             is_base = cfg == K8_BASE[fam]
-            nll_s, d_s, deltas, pending, meth = {}, {}, {}, set(), None
+            nll_s, d_s, deltas, pending, dead, meth = {}, {}, {}, set(), set(), None
             for t in TEXTS:
                 p = r["ppl"].get(t)
                 if not p:
-                    nll_s[t] = "pending (arrives before merge)" if t in exp else "—"
                     d_s[t] = "—"
-                    if t in exp:
-                        pending.add(t)
+                    if t not in exp:
+                        nll_s[t] = "—"
+                        continue
+                    arm_t = cfg if t == "wikitext" else f"{cfg}_c4val"
+                    nll_s[t] = fate_cell(a.dir, fam, arm_t, "ppl", fates)
+                    (dead if (fam, arm_t, "ppl") in fates else pending).add(t)
+                    legend.add("alarm" if (fam, arm_t, "ppl") in fates else "pending")
                     continue
                 nll_s[t] = f"{p['nll']:.5f}"
                 mm = method(a.dir, fam, p["arm"], env)
@@ -255,14 +300,25 @@ def main():
                 for t in TEXTS:  # a pending arm whose log has started
                     meth = meth or method(a.dir, fam, cfg if t == "wikitext" else f"{cfg}_c4val", env)
             cells, ver = verdict(fam, cfg, deltas, is_base, pending)
+            if dead and deltas and not fails_in(ver):
+                ver += f" ({', '.join(sorted(dead))} not measured: alarm)"
             if not deltas and not is_base:
-                ver = "pending (arrives before merge)" if pending else "—"
+                ver = "pending (arrives before merge)" if pending else ("not measured (alarm)" if dead else "—")
             b1 = r.get("b1_ms")
             tps = 1000 / b1 if b1 else None
             b16 = r.get("b16")
-            b1_s = fmt(b1, 2) if b1 else ("pending" if "b1" in exp else "—")
-            tps_s = fmt(tps, 1) if tps else ("pending" if "b1" in exp else "—")
-            b16_s = fmt(b16, 1) if b16 else ("pending" if "b16" in exp else "—")
+
+            def speed_cell(kind, val, p):
+                if val is not None:
+                    return fmt(val, p)
+                if kind not in exp:
+                    return "—"
+                c = fate_cell(a.dir, fam, cfg, kind, fates)
+                legend.add("alarm" if (fam, cfg, kind) in fates else "pending")
+                return "pending" if c.startswith("pending") else c
+            b1_s = speed_cell("b1", b1, 2)
+            tps_s = speed_cell("b1", tps, 1)
+            b16_s = speed_cell("b16", b16, 1)
             print(f"| `{cfg}` | {DESC.get((fam, cfg), cfg)} | {method_cell(meth)} | {CUT.get((fam, cfg), '—')} | "
                   f"{nll_s['wikitext']} | {d_s['wikitext']} | {cells.get('wikitext', '—')} | {nll_s['c4val1']} | "
                   f"{d_s['c4val1']} | {cells.get('c4val1', '—')} | {ver} | {b1_s} | {tps_s} | {b16_s} |")
@@ -319,13 +375,20 @@ def main():
                   "B=1 = 1000 / timed graph step, B=16 = aggregate over 70 graph steps). Ratio: not measured on this lane (bo7 measures it).")
             for c, r in sp:
                 b1, b16 = r.get("b1_ms"), r.get("b16")
-                s = f"- `{c}`: B=1 " + (f"{b1:.2f} ms = {1000 / b1:.1f} tok/s ({r.get('b1_steps')} timed steps)" if b1 else "pending (arrives before merge)")
-                s += "; B=16 " + (f"{b16:.1f} tok/s ({r.get('b16_ms'):.2f} ms/step, {r.get('b16_steps')} steps)" if b16 else "pending (arrives before merge)")
+                s = f"- `{c}`: B=1 " + (f"{b1:.2f} ms = {1000 / b1:.1f} tok/s ({r.get('b1_steps')} timed steps)" if b1
+                                        else fate_cell(a.dir, fam, c, "b1", fates, long=True))
+                s += "; B=16 " + (f"{b16:.1f} tok/s ({r.get('b16_ms'):.2f} ms/step, {r.get('b16_steps')} steps)" if b16
+                                  else fate_cell(a.dir, fam, c, "b16", fates, long=True))
                 print(s)
     print("\nGate cells and the registered verdict are in perplexity, the registered unit; the nats beside them are read against the"
           " family's arithmetic-order floor and never change the verdict. `pass (1 text; ...)` = a calibrated pack within +0.05 ppl on"
-          " the one text scored; an improvement is claimable only with the same sign on wikitext (outside the calibration domain)."
-          "\n`pending (arrives before merge)` = an arm the lane script runs whose receipt is not in this snapshot yet.")
+          " the one text scored; an improvement is claimable only with the same sign on wikitext (outside the calibration domain).")
+    if "alarm" in legend:
+        print("`alarm (N s, calibration pass k/L)` = an arm the lane script runs that was killed by its own N-second alarm (`Alarm clock` in"
+              " `logs/outer.log`) after k of the L streamed-calibration passes, before it produced a receipt -- a harness limit, not a model"
+              " result; no number is quoted for it.")
+    if "pending" in legend:
+        print("`pending (arrives before merge)` = an arm the lane script runs whose receipt is not in this snapshot yet.")
 
 
 if __name__ == "__main__":
