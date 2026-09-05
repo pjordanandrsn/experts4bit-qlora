@@ -289,3 +289,29 @@ def test_a_malformed_register_is_a_contract_error_not_a_traceback(tmp_path):
     reg.write_text("{not json")
     with pytest.raises(crc.ContractError):
         crc.load_claim_map(tmp_path)
+
+
+# ------------------------------------------------- the review of #406: what the first version let through --
+
+def test_prose_words_never_come_from_links_comments_or_the_id_itself():
+    """Only backticked ids were stripped before the word test: a link fragment, an HTML comment or a bare repeat
+    of the id could say "superseded" for the line."""
+    for evasion in ("quoting `e4b.x.old` as current [see](docs/x.md#superseded)",
+                    "quoting `e4b.x.old` as current <!-- superseded -->",
+                    "quoting `e4b.x.old` e4b.x.old.superseded as current",
+                    "quoting `e4b.x.gone` as current [go](https://o/r/retired)"):
+        f = crc.check_doc_ids("docs/STATUS.md", evasion + "\n", CLAIMS)
+        assert len(f) == 1 and "the line does not say so" in f[0], (evasion, f)
+    assert crc.check_doc_ids("docs/STATUS.md", "`e4b.x.gone` -- [retired](docs/x.md)\n", CLAIMS) == []   # link TEXT is prose
+    prose = crc.prose_of("`e4b.x.old` [see](u#superseded) <!-- retired --> e4b.x.old.historical <code>e4b.x.gone</code>")
+    assert "see" in prose and not any(w in prose for w in ("superseded", "retired", "historical", "e4b"))
+
+
+def test_ids_in_code_tags_and_link_text_are_cited_ids():
+    """``<code>e4b.x</code>`` and ``[e4b.x](url)`` were invisible to the rule."""
+    for form in ("<code>e4b.x.gone</code>", "[e4b.x.gone](docs/x.md)", "[`e4b.x.gone`](docs/x.md)"):
+        f = crc.check_doc_ids("docs/STATUS.md", f"quoting {form} as current\n", CLAIMS)
+        assert f == ["docs/STATUS.md:1: `e4b.x.gone` is retired and the line does not say so"], form
+    assert crc.cited_ids("[`e4b.x.a`](u) and `e4b.x.a` and <code>e4b.x.b</code>") == ["e4b.x.a", "e4b.x.b"]
+    assert crc.check_doc_ids("docs/STATUS.md", "<code>e4b.x.nope</code>\n", CLAIMS) == [
+        "docs/STATUS.md:1: `e4b.x.nope` is not in docs/claims.json"]

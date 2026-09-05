@@ -40,3 +40,7 @@ def test_citing_any_row_of_the_newest_lane_or_not_being_primarily_serving_is_qui
                             {"id": "offload", "modes": ["offload", "serving"], "claim_ids": ["e4b.serve.old"]}]}
     assert cc.serving_position_warnings(doc, BY_ID, STATUS) == []
     assert cc.serving_position_warnings(doc, BY_ID, "no ids here") == []
+
+
+def test_a_warning_is_also_a_github_actions_annotation():
+    assert cc.warning_lines("serve: x") == ["WARN: serve: x", "::warning::serve: x"]

@@ -20,10 +20,14 @@ offline (standard library only, no network):
    docs/STATUS.md, docs/SOLUTIONS.md and docs/solutions/*.md,
    docs/SERVING-THROUGHPUT.md, docs/SERVING-PARITY.md, docs/METHODOLOGY.md,
    docs/ARCHITECTURE_SUPPORT.md, docs/CHOOSING.md (``POSITION_DOCS``; anchored
-   documents are skipped): every backticked id exists, and a superseded or
-   retired id appears only on a line that says ``superseded`` / ``retired`` /
-   ``historical``. Before this, a STATUS paragraph could quote a withdrawn row
-   as the position and CI stayed green.
+   documents are skipped): every cited id (backticked, ``<code>``-wrapped, or
+   the text of a link) exists, and a superseded or retired id appears only on
+   a line whose PROSE says ``superseded`` / ``retired`` / ``historical`` --
+   the words are looked for after links are reduced to their text, HTML
+   comments are removed and every claim id (in any form, or bare) is stripped,
+   so a link URL, a comment or the id's own name never vouches for it. Before
+   this, a STATUS paragraph could quote a withdrawn row as the position and CI
+   stayed green.
 
 2. **The release block is generated, not typed.** The text between
    ``<!-- release-block:start -->`` and ``<!-- release-block:end -->`` must be
@@ -64,6 +68,11 @@ INACTIVE = frozenset({"superseded", "retired"})
 _WEAKNESS = ("open", "projected", "measured-private", "measured", "confirmed", "verified")
 
 _ID = re.compile(r"`(e4b\.[A-Za-z0-9._+*-]+)`")
+_ID_CODE = re.compile(r"<code>\s*(e4b\.[A-Za-z0-9._+*-]+)\s*</code>")
+_ID_LINK_TEXT = re.compile(r"\[`?(e4b\.[A-Za-z0-9._+*-]+)`?\]\(")
+_ID_BARE = re.compile(r"\be4b\.[A-Za-z0-9._+*-]+")
+#: A closed comment, one opened on the line, or the tail of one opened on an earlier line.
+_HTML_COMMENT = re.compile(r"<!--.*?-->|<!--.*$|^(?:(?!<!--).)*?-->")
 _STATUS_WORD = re.compile(r"measured-private|measured|verified|confirmed|projected|superseded|retired|open")
 _LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -329,20 +338,45 @@ def check_tables(text: str, claims: dict[str, dict]) -> list[str]:
     return findings
 
 
+def cited_ids(line: str) -> list[str]:
+    """The claim ids (or globs) a line cites -- backticked, ``<code>``-wrapped,
+    or the text of a link -- in order of appearance, each once."""
+    hits = sorted((m.start(), m.group(1)) for rx in (_ID, _ID_CODE, _ID_LINK_TEXT) for m in rx.finditer(line))
+    out: list[str] = []
+    for _, ref in hits:
+        if ref not in out:
+            out.append(ref)
+    return out
+
+
+def prose_of(line: str) -> str:
+    """The line's own words, lower-cased, for the superseded / retired /
+    historical test: links reduced to their text (a URL or fragment is not
+    prose), HTML comments removed, and every claim id -- ``<code>``-wrapped,
+    backticked, or a bare ``e4b.…`` token -- stripped, so an id such as
+    ``e4b.retired.13.47x-training-speedup`` cannot vouch for itself."""
+    text = _LINK.sub(r"\1", line)
+    text = _HTML_COMMENT.sub(" ", text)
+    text = _ID_CODE.sub(" ", text)
+    text = _ID.sub(" ", text)
+    return _ID_BARE.sub(" ", text).lower()
+
+
 def check_doc_ids(rel: str, text: str, claims: dict[str, dict]) -> list[str]:
-    """Every backticked id in the document exists; an inactive one is cited
-    only on a line whose PROSE says so (``superseded`` / ``retired``, or
-    ``historical`` for a dated record that names the old row as history) --
-    the backticked ids are stripped before the words are looked for, so an id
-    such as ``e4b.retired.13.47x-training-speedup`` cannot satisfy the rule
-    by its own name."""
+    """Every cited id in the document (``cited_ids``) exists; an inactive one
+    is cited only on a line whose PROSE (``prose_of``) says so (``superseded``
+    / ``retired``, or ``historical`` for a dated record that names the old row
+    as history)."""
     findings = []
     for ln, line in enumerate(text.splitlines(), 1):
-        for ref in _ID.findall(line):
+        refs = cited_ids(line)
+        if not refs:
+            continue
+        prose = prose_of(line)
+        for ref in refs:
             found, missing = resolve_ids([ref], claims)
             if missing:
                 findings.append(f"{rel}:{ln}: `{ref}` is not in {CLAIMS}")
-            prose = _ID.sub(" ", line).lower()           # the ids stripped: `e4b.retired.x` must not vouch for itself
             for cid, c in found.items():
                 st = c.get("status")
                 if st in INACTIVE and st not in prose and "historical" not in prose:
@@ -351,8 +385,8 @@ def check_doc_ids(rel: str, text: str, claims: dict[str, dict]) -> list[str]:
 
 
 def check_ids_outside_tables(text: str, claims: dict[str, dict]) -> list[str]:
-    """Every backticked id anywhere in the README exists; an inactive one is
-    cited only on a line that says it is (``superseded``/``retired``)."""
+    """Every cited id anywhere in the README exists; an inactive one is cited
+    only on a line whose prose says it is (``superseded``/``retired``)."""
     return check_doc_ids(README, text, claims)
 
 
