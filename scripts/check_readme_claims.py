@@ -119,6 +119,20 @@ def result_numbers(cell: str) -> list[Decimal]:
     return out
 
 
+def _signed_numbers(text: str) -> list[Decimal]:
+    """Every number in ``text`` with its sign (a leading + or - not preceded by a digit)."""
+    out: list[Decimal] = []
+    for m in _NUMBER.finditer(text):
+        i = m.start()
+        before = text[i - 1] if i else " "
+        before2 = text[i - 2] if i >= 2 else " "
+        sign = before if before in "+-" and not before2.isdigit() else ""
+        d = _to_decimal(sign + m.group(0))
+        if d is not None:
+            out.append(d)
+    return out
+
+
 def claim_numbers(claim: dict) -> list[Decimal]:
     """Every number the claim states in its ``value``, ``unit`` and ``claim``
     fields. ``notes`` are excluded on purpose: they carry the measured-but-
@@ -136,15 +150,7 @@ def claim_numbers(claim: dict) -> list[Decimal]:
             parts.append(claim[k])
     text = _normalise(" ".join(parts))
     out = []
-    for m in _NUMBER.finditer(text):
-        i = m.start()
-        before = text[i - 1] if i else " "
-        before2 = text[i - 2] if i >= 2 else " "
-        sign = before if before in "+-" and not before2.isdigit() else ""
-        d = _to_decimal(sign + m.group(0))
-        if d is not None:
-            out.append(d)
-    return out
+    out = _signed_numbers(text)
 
 
 def value_numbers(claim: dict) -> list[Decimal]:
@@ -155,7 +161,9 @@ def value_numbers(claim: dict) -> list[Decimal]:
     if isinstance(v, (int, float)):
         return [Decimal(repr(v))]
     text = _normalise(str(v))
-    return [d for d in (_to_decimal(m.group(0)) for m in _NUMBER.finditer(text)) if d is not None]
+    # the same signed extraction as the row/claim text: a register value such as
+    # "-0.0528 wikitext / -0.0662 c4val1" keeps its minus signs
+    return _signed_numbers(text)
 
 
 def number_matches(n: Decimal, pool: list[Decimal]) -> bool:
