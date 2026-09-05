@@ -1,10 +1,31 @@
 # Training parity lane tp1 — 2026-09-05, one RTX 5090: the six serving families through the SHIPPED training path, verdicts in the registered units
 
-**Status at this snapshot: PARTIAL.** Granite (`reference`, `batched`; `fused` = harness_error, re-run queued), OLMoE
-(all three arms), gpt-oss (`attn_only`, the two refusal stubs, the experimental MXFP4 run) and Qwen3's load receipt are
-in. **Pending, arriving before merge:** Qwen3 ×3 (the reference arm was at step 20/60 when this snapshot was pulled),
-Gemma-4 ×3, Mixtral ×3, and Granite's `fused` re-run (`logs/tp1b.sh` → `TP2_DONE`). The final snapshot replaces the
-receipts, [`RESULTS-tp1.md`](RESULTS-tp1.md) and this page's pending lines; nothing already read here changes.
+**Status at this snapshot: PARTIAL.** Granite (`reference` OK, `batched` OK; `fused` attempt 1 = **HARNESS_ERROR**, kept,
+re-run queued), OLMoE (three arms OK), gpt-oss (`attn_only` OK, `fused` / `batched` REFUSED, `mxfp4` EXPERIMENTAL) and
+Qwen3's load receipt are in. **NOT_RUN at this snapshot, arriving before merge:** Qwen3 ×3 (the reference arm was at
+step 20/60 when this snapshot was pulled at ≈12:49Z; the private record says all three completed on the box at 13:27Z),
+Gemma-4 ×3 (amendment 4, below), Mixtral ×3, and Granite's `fused` corrected-counter re-run (`logs/tp1b.sh` →
+`TP2_DONE`). The final snapshot replaces the receipts, [`RESULTS-tp1.md`](RESULTS-tp1.md) and this page's pending
+lines; nothing already read here changes, and no attempt disappears: every attempt is a row.
+
+**Bundle shape (phase directive, 2026-09-05 14:45Z — applied to this bundle before the final snapshot so the
+finalisation is mechanical).** (1) Every row is exactly one of **OK, REFUSED, HARNESS_ERROR, ALARM, OOM, NOT_RUN,
+EXPERIMENTAL**, with the parity verdict (PASS / FAIL / VOID) as a separate column for OK rows; the reducer
+([`tp1_reduce.py`](tp1_reduce.py), **v2**) classifies mechanically from `summary.txt` (rc per attempt), the receipt or
+stub, `logs/outer.log` and the run logs — never from a missing error; a missing receipt is NOT_RUN with the reason from
+`outer.log` (an alarm is ALARM). The copy that ran on the box (v1) is kept verbatim as [`logs/tp1_reduce.py`](logs/tp1_reduce.py);
+its table is superseded. Granite's first `fused` attempt is a HARNESS_ERROR row (its log
+[`logs/run_granite_fused.attempt1.log`](logs/run_granite_fused.attempt1.log) — renamed from the box's
+`run_granite_fused.log`, bytes unchanged, so tp1b's re-run log lands under the original name; likewise
+[`logs/fetch_granite.attempt1.log`](logs/fetch_granite.attempt1.log)); the tp1b re-run is the row that counts and the
+reducer labels it "the corrected-counter re-run" from the `tp1b:` marker. Every amendment (1–4) stays on this page and
+is referenced from the rows it touched. The reducer's per-family matrix states, per family: reference / fused / batched
+support, the native-format route, the loss-parity result, s/step, peak VRAM, tok/s, the evidence tier and the
+limitations or refusal reason. (2) `docs/capabilities.json` states training support **per path** (`training_support.by_model_type`,
+keyed by model_type: quantize / reference_train / fast_train / batched_train / nvme_train / native_mxfp4_train, each
+`supported` / `refused` / `void` / `harness_error` / `not_tested` / `experimental` / `n/a` with its claim ids), and
+`model_families` is exactly the families whose `fast_train` is `supported`. (3) `granitemoe.fast_train` is decided by
+the tp1b re-run only; `batched_train` is `supported` (PASS). No gate, threshold or fixture text changed.
 
 **Box:** Vast.ai instance **49937730**, RTX 5090 (sm_120, driver 595.84, 32607 MiB, power limit 550 W, PCIe gen 4 ×16)
 on an AMD EPYC 7Q83 64-core host (128 CPUs, 251.5 GiB; [`forensics.txt`](forensics.txt) is the lane script's probe at
@@ -24,7 +45,8 @@ sha-verified 11:32:57Z (`DATASET clinical sha=76fb9036de80…`); Granite fetched
 `reference` → 11:44:40Z `fused` (TypeError, amendment 3) → 11:45:01Z `batched` → `GRANITE DONE` 11:46:51Z; OLMoE fetched
 (7.0 min), arms 11:53:52Z / 11:58:35Z / 12:00:26Z → `OLMOE DONE` 12:03:39Z; gpt-oss fetched (15.8 min), `attn_only`
 12:19:26Z, `mxfp4` 12:23:14Z → `GPTOSS DONE` 12:32:58Z; Qwen3 fetched (8.7 min), `reference` started 12:41:43Z — at the
-snapshot (≈12:49Z) step 20/60 at 12.8–13.0 s/step. Three families in 61 min against the pre-registration's 78-min
+snapshot (≈12:49Z) step 20/60 at 12.8–13.0 s/step; per the private record the three Qwen3 arms completed at 13:27Z
+and the Gemma-4 fetch started 13:27Z and hung at 13:46Z (amendment 4). Three families in 61 min against the pre-registration's 78-min
 estimate for them (P7's step times were wrong in both directions, below; no alarm fired). Hard-kill guard on the mini:
 re-armed to 20:00Z at the relaunch, then re-armed 12:50Z to 23:30Z before Qwen3's arms (Mixtral's offload arms may
 legitimately run to their 4200-s alarms). Teardown is manual after `TP2_DONE`, label-guarded, proven before the guard is
@@ -64,7 +86,7 @@ the idle baseline subtracted. Harness: [`logs/tp1_train_smoke.py`](logs/tp1_trai
 D1–D8 (named in its header). Order Granite → OLMoE → gpt-oss → Qwen3 → Gemma-4 → Mixtral, the checkpoint freed between
 families.
 
-## The three amendments, and why (each dated in the private record before the data it touches)
+## The four amendments, and why (each dated in the private record before the data it touches)
 
 1. **Amendment 1 (07:05Z, before any data) — the first box's link.** The queue fired on bo7's `TP_DONE` at 07:00:27Z
    and rented Vast **49937447** (machine 37675). It passed the renter's 15-s pre-flight at 20 MB/s (bo7's 15 MB/s floor)
@@ -101,7 +123,19 @@ families.
    `harness_error` row, kept (its log is the row — the process died before writing a JSON); the re-run is the row that
    counts. Fixture, criteria, verdict rule, predictions unchanged.
 
-Full text: the private receipt `INT4B16/P25-PARITY.md` (§P36, amendments 1–3, the launch and false-start logs) and
+4. **Amendment 4 (14:15Z) — the Gemma-4 fetch hang, left to its alarm; conditional redo.** The Gemma-4-26B-A4B-it
+   fetch (started 13:27Z on a ≥ 40 MB/s link, XET already disabled by the lane) hit `The read operation timed out` on
+   shard 1 of 2 at 13:46Z with 46 GB cached, and its resumed connection went silent. Decision: **no kill** — it is left
+   to its 4800-s fetch alarm (≈ 14:47Z), after which the lane continues with Mixtral; the first Gemma-4 attempt will
+   read **ALARM** (fetch) in `summary.txt` (`gemma4: FETCH FAILED rc=142`) and the reducer attaches this amendment to
+   those rows from that line. `logs/tp1b.sh` (the post-`TP_DONE` follow-up on the same box) now also **redoes any
+   family whose reference receipt is missing** — Gemma-4 (fetch 4800 s resuming the cached blobs, then
+   `reference` / `fused` / `batched` with the pre-registered alarms) and, should its fetch fail the same way, Mixtral —
+   before touching `TP2_DONE`; the redo's rows are labelled from the `tp1b:` marker. Worst-case `TP2_DONE` ≈ 20:30Z
+   against the 23:30Z guard. Fixture, criteria, verdict rule, predictions unchanged. The `tp1b.sh` shipped here is the
+   amendment-3 copy from the snapshot; the amended copy that runs the redo arrives with the final snapshot.
+
+Full text: the private receipt `INT4B16/P25-PARITY.md` (§P36, amendments 1–4, the launch and false-start logs) and
 `INT4B16/tp1/P36-PREREG.md`.
 
 ## Registered criteria (verbatim) and the verdict rule per arm
@@ -162,38 +196,60 @@ experts); licence labels for serving are the register's; the dataset sha and `in
 | **P3** | gpt-oss: `ExpertsLoRA` absent (0 wrapped, 24 bare); both enablers return 0 → two `refused` rows; `attn_only` trains with C1 holding on the bare stacks | **Held exactly.** 0 wrapped / 24 bare `GptOssExperts4bit`; `[e4b.fast] … on 0 ExpertsLoRA module(s)`, `[e4b.batched] … on 0 ExpertsLoRA module(s)`; `attn_only` 5.106 → 0.366 (eval 5.1405 → 0.3435), C1 10,749,542,400 B bit-exact, control fires. |
 | **P4** | gpt-oss `mxfp4`: canary passes (`top1` ≥ 0.9 over 32 positions, small `kl`), `pre_equals_post` true, loss falls; s/step reported without a prediction | **Held.** top-1 0.906 (by 0.006), KL 0.02495; `pre_equals_post` True (96 tensors); loss 5.461 → 2.622, eval 4.591 → 2.184; 5.16 s/step, peak 6.22 GB. Experimental, not licensed. |
 | **P5** | Mixtral offload arms run; the resident probe, if enabled, OOMs | Pending (probe off by default). |
-| **P6** | Gemma-4-it loads on this host or faults per #344; either is a row | Pending. |
+| **P6** | Gemma-4-it loads on this host or faults per #344; either is a row | Pending — and a third outcome arrived first: the fetch hung (amendment 4, ALARM), the load is untested until the tp1b redo. |
 | **P7** | Step-time assumptions (alarm sizing only): Granite ≈ 0.5–1 s, OLMoE ≈ 1–2 s, gpt-oss attention-only ≈ 3–5 s, Qwen3 reference ≈ 6–8 s / fused ≈ 3 s / batched ≈ 6–8 s, Gemma-4 ≈ Qwen3, Mixtral-offload reference ≈ 8–12 s / fused ≈ 4–6 s | **Wrong in both directions, harmlessly:** Granite reference 4.27 s (4–8× the assumption — the 40-expert per-expert loop is launch-bound), batched 1.09; OLMoE 3.02 / 0.94 / 1.91; gpt-oss attention-only 1.80 (under); Qwen3 reference 12.8–13.0 s in progress (≈ 1.7× the assumption; inside its 3000-s alarm). No alarm fired. The three families finished in 61 min against the estimate's 78. |
 
 ## What the matrix now says (from the receipts in this directory; the register's ids in `docs/claims.json`)
 
+The reducer's **per-family matrix** (the last table in [`RESULTS-tp1.md`](RESULTS-tp1.md)) is the ten-column statement
+the directive asks for — reference / fused / batched support, native-format route, loss-parity result, s/step, peak
+VRAM, tok/s, evidence tier, limitations or refusal reason — read from the LAST attempt of each arm with every earlier
+attempt listed in the last column. The per-path reading below is the same evidence in the capability vocabulary; the
+machine-readable form is `training_support` in `docs/capabilities.json`.
+
 | family | direct real-weight load + `verify(strict)` | `ExpertsLoRA` | `fused` (`enable_fast_train(dgrad=True)`) | `batched` (`enable_batched_train`) | other |
 |---|---|---|---|---|---|
-| Granite-3.1-3B-A800M | **measured** — 32/32, 2.351 GB (was: fixtures + the arena path only) | **measured** — 32 | **pending** (first run `harness_error`, amendment 3; re-run queued) | **PASS** 0.01553 / 0.01681 — ×3.93, peak ×1.057, J ×0.303 | — |
-| OLMoE-1B-7B-Instruct | measured — 16/16, 4.695 GB | measured — 16 | **PASS** 0.01327 / 0.01249 — ×3.22, peak ×1.000, J ×0.339 (first reading on a registered text with real weights) | **VOID** — `_PAD_WASTE_LIMIT` fallback engaged (min 24 < 32 kernel calls/step) | — |
-| gpt-oss-20b | measured — 24/24, bare, 14.359 GB | **unsupported** (built bare) | **REFUSED** (0 patched) | **REFUSED** (0 patched) | `attn_only` trains (NO-PAIR); `mxfp4` EXPERIMENTAL — canary 0.906 / 0.025, provenance holds, loss falls; not licensed |
-| Qwen3-30B-A3B | measured — 48/48, **20.019 GB resident on 32 GB** | measured — 48 | pending | pending | — |
-| Gemma-4-26B-A4B-it | pending (#344 risk) | pending | pending | pending | — |
-| Mixtral-8x7B-Instruct | pending (`offload=True`) | pending | pending | pending | — |
+| Granite-3.1-3B-A800M | **measured** — 32/32, 2.351 GB (was: fixtures + the arena path only) | **measured** — 32 | attempt 1 **HARNESS_ERROR** (amendment 3, kept); the corrected-counter re-run is NOT_RUN at this snapshot and decides `fast_train` | **OK · PASS** 0.01553 / 0.01681 — ×3.93, peak ×1.057, J ×0.303 | — |
+| OLMoE-1B-7B-Instruct | measured — 16/16, 4.695 GB | measured — 16 | **OK · PASS** 0.01327 / 0.01249 — ×3.22, peak ×1.000, J ×0.339 (first reading on a registered text with real weights) | **OK · VOID** — `_PAD_WASTE_LIMIT` fallback engaged (min 24 < 32 kernel calls/step) | — |
+| gpt-oss-20b | measured — 24/24, bare, 14.359 GB | **unsupported** (built bare) | **REFUSED** (0 patched) | **REFUSED** (0 patched) | `attn_only` **OK** (no pair); `mxfp4` **EXPERIMENTAL** — canary 0.906 / 0.025, provenance holds, loss falls; not licensed |
+| Qwen3-30B-A3B | measured — 48/48, **20.019 GB resident on 32 GB** | measured — 48 | NOT_RUN at the snapshot (completed on the box 13:27Z; receipt pending) | NOT_RUN at the snapshot (idem) | — |
+| Gemma-4-26B-A4B-it | NOT_RUN — amendment 4 (fetch hang → ALARM; tp1b redo); #344 risk at load | pending | pending | pending | — |
+| Mixtral-8x7B-Instruct | NOT_RUN — not reached (`offload=True`; amendment 4 redo rule) | pending | pending | pending | — |
 
-Read against `docs/capabilities.json` (`qlora-fused-moe-experts.model_families`): **`olmoe` is confirmed on real weights
-and a registered text** (it entered on the dgrad-gate's synthetic tokens); `qwen3_moe` and `gemma4_text` stay on the
-flagship receipts until their tp1 rows land; **`granitemoe` enters only if its `fused` re-run passes** (its `batched`
-arm already does — the bundle records that and does not promote on it alone); `mixtral` waits for its rows; **`gpt_oss`
-stays out** — every e4b training enabler refuses it, and the one route that trains its experts is the kernel package's
-experimental `ExpertsMxfp4LoRA`, which this lane exercised and did not license. The `batched` VOID is a limitation the
-capability now carries: `enable_batched_train` falls back per call above `_PAD_WASTE_LIMIT` with no counter, so a
-batched arm must assert kernel engagement, not the patch count.
+Per path (`training_support` in `docs/capabilities.json`; `model_families` = the families whose `fast_train` is `supported`):
+
+| model_type | quantize | reference_train | fast_train | batched_train | nvme_train | native_mxfp4_train |
+|---|---|---|---|---|---|---|
+| `olmoe` | supported | supported | **supported** (tp1 PASS) | void (tp1) | not_tested | n/a |
+| `qwen3_moe` | supported | supported (flagship) | **supported** (flagship; tp1 pending) | supported (dgrad-gate; tp1 pending) | not_tested | n/a |
+| `gemma4_text` | supported (base ckpt) | supported (flagship) | **supported** (flagship; tp1 pending, amendment 4) | not_tested | not_tested | n/a |
+| `granitemoe` | supported (tp1) | supported (tp1) | harness_error (attempt 1) → the re-run decides | supported (tp1 PASS) | not_tested | n/a |
+| `gpt_oss` | supported (bare) | refused | refused | refused | not_tested (unfaithful arena wrap, not run) | experimental (tp1 canary) |
+| `mixtral` | not_tested (pending) | not_tested | not_tested | not_tested | not_tested | n/a |
+
+**`olmoe` is confirmed on real weights and a registered text** (it entered on the dgrad-gate's synthetic tokens);
+`qwen3_moe` and `gemma4_text` stay on the flagship receipts until their tp1 rows land; **`granitemoe.fast_train` is
+decided by the tp1b re-run only** (its `batched_train` is `supported` on the PASS; the family enters `model_families`
+only on a fused PASS); `mixtral` waits for its rows; **`gpt_oss` stays out** — every e4b training enabler refuses it,
+and the one route that trains its experts is the kernel package's experimental `ExpertsMxfp4LoRA`, which this lane
+exercised and did not license. The `batched` VOID is a limitation the capability carries: `enable_batched_train` falls
+back per call above `_PAD_WASTE_LIMIT` with no counter, so a batched arm must assert kernel engagement, not the patch
+count.
 
 ## The table
 
-[`RESULTS-tp1.md`](RESULTS-tp1.md) is the verbatim output of [`tp1_reduce.py`](tp1_reduce.py) (`python tp1_reduce.py .`,
-stdlib only) followed by the reading. The reducer reads `<fam>_train_<arm>.json` (receipts and stubs) and the gpt-oss
-experimental envelope `gptoss_train_mxfp4.json`, prints per family the load row, the environment line, one row per
-arm (status · `n_patched` · kernel calls/step min against `2 × n_patched` · C1 · steps · s/step · tok/s · peak GB · J/step
-· loss first → last · eval 0 → final, labelled "not the band" · |Δ final| · median step-wise |Δ| · the verdict with the
-within-family cost ratios), the reference's `init_sha` and the dataset sha, and a cross-family summary of verdicts
-(never of absolutes).
+[`RESULTS-tp1.md`](RESULTS-tp1.md) is the verbatim output of [`tp1_reduce.py`](tp1_reduce.py) (v2; `python tp1_reduce.py .`,
+stdlib only) followed by the reading. The reducer reads `summary.txt` (one `rc` line per attempt, a family's `FETCH
+FAILED` lines), `<fam>_train_<arm>.json` (receipts and stubs), the gpt-oss experimental envelope
+`gptoss_train_mxfp4.json`, `logs/outer.log` (arm and fetch start lines, the `tp1b:` marker) and the per-attempt run
+logs (`run_<fam>_<arm>[.attempt<k>].log`), and prints per family the load row, the environment line, **one row per
+attempt of each arm** (attempt k/n · **row status** · **verdict** with the within-family cost ratios · `n_patched` ·
+kernel calls/step min against `2 × n_patched` · C1 · steps · s/step · tok/s · peak GB · J/step · loss first → last ·
+eval 0 → final, labelled "not the band" · |Δ final| · median step-wise |Δ| · the reason and the amendment that touched
+the row), the reference's `init_sha` and the dataset sha, and then the **per-family matrix** (reference / fused / batched
+support in the capability vocabulary, native-format route, loss-parity result, s/step, peak GB, tok/s, evidence tier,
+limitations / refusal reason — every earlier attempt listed). The classification rules are the reducer's docstring;
+the verdict rule is v1's, verbatim.
 
 ## Layout
 
@@ -209,13 +265,18 @@ within-family cost ratios), the reference's `init_sha` and the dataset sha, and 
   `diff` it), [`tp1_train_smoke.py`](logs/tp1_train_smoke.py) (the harness, patched copy),
   [`tp1_closure_patch.py`](logs/tp1_closure_patch.py) (amendment 3's patch as applied), [`tp1b.sh`](logs/tp1b.sh) +
   [`tp1b_wait.sh`](logs/tp1b_wait.sh) (the Granite fused re-run and its waiter), `pip.log`, `anchor.log`,
-  `anchor_gate.log`, `datasets.log`, the four `fetch_*.log`, **every per-arm `run_*.log`** (the load lines, `step k/60`
-  every 10 steps with the kernel-call counts, the result line; Granite's fused traceback; Qwen3's reference in progress),
+  `anchor_gate.log`, `datasets.log`, the four `fetch_*.log` (Granite's as `fetch_granite.attempt1.log`), **every per-arm
+  `run_*.log`** (the load lines, `step k/60` every 10 steps with the kernel-call counts, the result line; Granite's fused
+  attempt-1 traceback as `run_granite_fused.attempt1.log`; Qwen3's reference in progress), [`tp1_reduce.py`](logs/tp1_reduce.py)
+  (v1, the copy that ran on the box),
   the lane console [`outer.log`](logs/outer.log) and the false start's [`outer.attempt1.log`](logs/outer.attempt1.log).
   The logs are force-added past the repository's `*.log` ignore rule, as bo6's and bo7's were.
 - Nothing in this directory is edited: every file is the byte-for-byte copy of the box's snapshot (checked with `cmp`
-  when the bundle was written), except the three written here — `README.md`, `RESULTS-tp1.md`, and `tp1_reduce.py`,
-  which is the copy that ran (byte-identical to the box's) placed beside the table. Not shipped: the helper copies the
+  when the bundle was written), except the three written here — `README.md`, `RESULTS-tp1.md`, and `tp1_reduce.py`
+  (v2, written for the bundle under the 14:45Z directive; the box's v1 copy is [`logs/tp1_reduce.py`](logs/tp1_reduce.py),
+  byte-identical to the one that ran). Two verbatim files are renamed so the re-runs land under the original names:
+  `run_granite_fused.log` → [`logs/run_granite_fused.attempt1.log`](logs/run_granite_fused.attempt1.log) and
+  `fetch_granite.log` → [`logs/fetch_granite.attempt1.log`](logs/fetch_granite.attempt1.log) (bytes unchanged). Not shipped: the helper copies the
   lane fetched from the repository (`n9_datasets.py`, `train_anchor.py`, `train_anchor_gate.py` — byte-identical to
   `bench/flagship-matrix/drivers/` and `bench/train-anchor/` at `f4b639f`), the regenerated `data/ds_*.json` (their
   registered shas are in `ds_manifest.json`; the lane refuses a mismatch), the mini-side renter / queue / watcher
@@ -244,7 +305,9 @@ dataset whose sha is not the registered one), then `logs/tp1b.sh` after `TP_DONE
   never divided into them.
 - **Experimental ≠ licensed.** The gpt-oss `mxfp4` row is the kernel package's experimental route on its own text with
   its own runner; it licenses nothing, and gpt-oss rows never say the experts train under the shipped e4b path.
-- **A VOID row is not a PASS**, however its loss curve reads: OLMoE `batched` carries no parity number.
+- **A VOID row is not a PASS**, however its loss curve reads: OLMoE `batched` carries no parity number. **A
+  HARNESS_ERROR row is not a shipped-code failure and not a result**: Granite's first fused attempt is kept so the
+  re-run cannot read as a first run.
 - **A refusal is a row, not a zero**: gpt-oss `fused` / `batched` are build-out items.
 - **Cost is reported, never gated**, and a within-family ratio on this box is not a general one (P2's 30B-width speed
   statement stands as measured there; Granite's ×3.93 is Granite's on this box).

@@ -111,12 +111,30 @@ never gated. Same taxonomy for the load column as the tables above; verdicts are
 
 | model_type | checkpoint | direct load + `verify(strict)` | `ExpertsLoRA` | `fused` | `batched` | notes |
 |---|---|---|---|---|---|---|
-| `granitemoe` | granite-3.1-3b-a800m-instruct | validated — **real weights**, 32/32 layers, 2.35 GB (this file's `granitemoe` row above was a fixture) | 32 | pending (first run a harness error, re-run queued) | **PASS** (0.01553 / 0.01681; ×3.93 per step, J ×0.303) | enters the training capability when the fused re-run passes |
+| `granitemoe` | granite-3.1-3b-a800m-instruct | validated — **real weights**, 32/32 layers, 2.35 GB (this file's `granitemoe` row above was a fixture) | 32 | attempt 1 **HARNESS_ERROR** (amendment 3, kept); the corrected-counter re-run is pending and decides `fast_train` | **PASS** (0.01553 / 0.01681; ×3.93 per step, J ×0.303) | enters the training capability when the fused re-run passes |
 | `olmoe` | OLMoE-1B-7B-0924-Instruct | validated — **real weights**, 16/16, 4.70 GB | 16 | **PASS** (0.01327 / 0.01249; ×3.22, J ×0.339) | **VOID** — kernel reached on a minimum of 24 calls/step against 32 required: the `_PAD_WASTE_LIMIT` fallback engaged | first fused-vs-reference reading on a registered text with real weights |
 | `gpt_oss` | gpt-oss-20b | validated — **real weights**, 24/24 as bare `GptOssExperts4bit`, 14.36 GB (this file's `gpt_oss` row above was `not_tested`) | 0 (built bare) | **REFUSED** (0 patched) | **REFUSED** (0 patched) | attention-only QLoRA over the frozen experts trains, stacks bit-exact (NO-PAIR); grouped-nf4-gemm's experimental `ExpertsMxfp4LoRA` route trains the experts on its own text, canary passing — experimental, not licensed |
 | `qwen3_moe` | Qwen3-30B-A3B | validated — **real weights**, 48/48, **20.02 GB resident on a 32 GB card** | 48 | pending | pending | the reference arm was at step 20/60 at the snapshot |
 | `gemma4_text` | gemma-4-26B-A4B-it | pending (#344: a load fault is a row) | pending | pending | pending | |
 | `mixtral` | Mixtral-8x7B-Instruct-v0.1 | pending (`offload=True`; the first real-weight pass through the `w1/w3/w2` fusion) | pending | pending | pending | |
+
+**Row statuses and per-path support (phase directive 2026-09-05).** Every row in the bundle's `RESULTS-tp1.md` is
+exactly one of OK / REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL — classified by its reducer from
+`summary.txt` (rc per attempt), the receipt or stub, `outer.log` and the run logs, never from a missing error — with
+the parity verdict (PASS / FAIL / VOID) as a separate column for OK rows; Granite's first `fused` attempt is a
+HARNESS_ERROR row kept beside its corrected-counter re-run, and every amendment is referenced from the rows it touched.
+Read per path:
+
+| model_type | quantize | reference_train | fast_train (the headline path) | batched_train | nvme_train | native_mxfp4_train |
+|---|---|---|---|---|---|---|
+| `olmoe` | supported (tp1) | supported (tp1; `e4b.train.olmoe-converges`) | **supported** — tp1 OK · PASS on the registered text with real weights (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`) | **void** — tp1 OK · VOID: the `_PAD_WASTE_LIMIT` fallback engaged without a counter (`…olmoe.batched…`) | not_tested (the arena ladder is measured-private, no shipped bake) | n/a |
+| `qwen3_moe` | supported (flagship; tp1 load row) | supported (flagship) | **supported** — the flagship matrix, five datasets (`e4b.train.flagship-matrix`); tp1's row pending | supported (dgrad-gate trajectory); tp1's row pending — P2 predicts VOID on this 128-expert family | not_tested (measured-private) | n/a |
+| `gemma4_text` | supported (flagship, base checkpoint; the `-it` checkpoint faults on some hosts, #344) | supported (flagship) | **supported** — the model-2 flagship matrix (`e4b.train.flagship-matrix`); tp1's row pending (amendment 4) | not_tested (tp1 pending) | not_tested (measured-private) | n/a |
+| `granitemoe` | supported (tp1: the first direct real-weight load) | supported (tp1 OK) | **harness_error** — tp1 attempt 1 died in the harness's counter (`…granite.fused.attempt1…`, amendment 3); the corrected-counter re-run decides this path, and the family enters `model_families` only on its PASS | supported — tp1 OK · PASS (`…granite.batched…`) | not_tested | n/a |
+| `gpt_oss` | supported (bare `GptOssExperts4bit`; tp1) | refused — no `ExpertsLoRA`; attention-only QLoRA trains (`…gptoss.attn_only…`, OK · no pair) | refused — `enable_fast_train` returns 0 (`…gptoss.fused…`, REFUSED) | refused — `enable_batched_train` returns 0 (`…gptoss.batched…`, REFUSED) | not_tested — the `arena_train=True` wrap computes a generic epilogue (unfaithful); not run | **experimental** — grouped-nf4-gemm's `ExpertsMxfp4LoRA`; tp1 canary and provenance passed on its own text (`…gptoss.mxfp4…`, EXPERIMENTAL); never licensed |
+| `mixtral` | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested | n/a |
+
+Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`. Row statuses in the tp1 receipt are one of OK / REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL with the parity verdict (PASS / FAIL / VOID) as a separate column.
 
 **Read the verdict columns as rows, not as a family score.** A VOID is not a PASS however its loss curve reads, and a
 refusal is a row, not a zero. Nothing here is a convergence claim (60 steps rank two arms on one text), nothing is a

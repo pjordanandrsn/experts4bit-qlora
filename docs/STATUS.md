@@ -76,6 +76,25 @@ confirmed; `granitemoe` enters if its re-run passes; `gpt_oss` stays out.
 No convergence claim, no cross-family ratio, no training throughput
 position; a PASS is a PASS on one text.
 
+**Training support is stated per path, never as a flat flag** (phase directive
+2026-09-05): the tp1 receipt classifies every row as one of OK / REFUSED /
+HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL, mechanically from
+its artefacts, with the parity verdict as a separate column; Granite's
+first fused attempt stays a HARNESS_ERROR row beside its re-run, and every
+amendment stays visible in the bundle's README. The same reading, per
+family and per path:
+
+| model_type | quantize | reference_train | fast_train (the headline path) | batched_train | nvme_train | native_mxfp4_train |
+|---|---|---|---|---|---|---|
+| `olmoe` | supported (tp1) | supported (tp1; `e4b.train.olmoe-converges`) | **supported** — tp1 OK · PASS on the registered text with real weights (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`) | **void** — tp1 OK · VOID: the `_PAD_WASTE_LIMIT` fallback engaged without a counter (`…olmoe.batched…`) | not_tested (the arena ladder is measured-private, no shipped bake) | n/a |
+| `qwen3_moe` | supported (flagship; tp1 load row) | supported (flagship) | **supported** — the flagship matrix, five datasets (`e4b.train.flagship-matrix`); tp1's row pending | supported (dgrad-gate trajectory); tp1's row pending — P2 predicts VOID on this 128-expert family | not_tested (measured-private) | n/a |
+| `gemma4_text` | supported (flagship, base checkpoint; the `-it` checkpoint faults on some hosts, #344) | supported (flagship) | **supported** — the model-2 flagship matrix (`e4b.train.flagship-matrix`); tp1's row pending (amendment 4) | not_tested (tp1 pending) | not_tested (measured-private) | n/a |
+| `granitemoe` | supported (tp1: the first direct real-weight load) | supported (tp1 OK) | **harness_error** — tp1 attempt 1 died in the harness's counter (`…granite.fused.attempt1…`, amendment 3); the corrected-counter re-run decides this path, and the family enters `model_families` only on its PASS | supported — tp1 OK · PASS (`…granite.batched…`) | not_tested | n/a |
+| `gpt_oss` | supported (bare `GptOssExperts4bit`; tp1) | refused — no `ExpertsLoRA`; attention-only QLoRA trains (`…gptoss.attn_only…`, OK · no pair) | refused — `enable_fast_train` returns 0 (`…gptoss.fused…`, REFUSED) | refused — `enable_batched_train` returns 0 (`…gptoss.batched…`, REFUSED) | not_tested — the `arena_train=True` wrap computes a generic epilogue (unfaithful); not run | **experimental** — grouped-nf4-gemm's `ExpertsMxfp4LoRA`; tp1 canary and provenance passed on its own text (`…gptoss.mxfp4…`, EXPERIMENTAL); never licensed |
+| `mixtral` | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested | n/a |
+
+Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`. Row statuses in the tp1 receipt are one of OK / REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL with the parity verdict (PASS / FAIL / VOID) as a separate column.
+
 **Serving is at parity with the model's own attention on three of four
 families, and not on the fourth.** This is the part that changed most
 this week. Measured against a *chunk-free* reference — one full forward,

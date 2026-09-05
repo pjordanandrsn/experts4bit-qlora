@@ -5,80 +5,512 @@
   "description": "Machine-readable routing data for one project: which ordinary problems it solves, through which public entry points, with which limitations, and which claim IDs in docs/claims.json carry its measured numbers. Numbers never appear here; they live in docs/claims.json.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "schema_version", "project", "capabilities"],
+  "required": [
+    "$schema",
+    "schema_version",
+    "project",
+    "capabilities"
+  ],
   "properties": {
-    "$schema": {"type": "string"},
-    "schema_version": {"type": "string", "const": "1.0"},
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
     "project": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "canonical_package", "repository", "summary", "role", "aliases", "related_projects", "import_names", "claims_file", "status_file"],
+      "required": [
+        "name",
+        "canonical_package",
+        "repository",
+        "summary",
+        "role",
+        "aliases",
+        "related_projects",
+        "import_names",
+        "claims_file",
+        "status_file"
+      ],
       "properties": {
-        "name": {"type": "string"},
-        "canonical_package": {"type": "string", "description": "The PyPI distribution name. Must equal [project].name in pyproject.toml."},
-        "repository": {"type": "string", "format": "uri"},
-        "summary": {"type": "string"},
-        "role": {"type": "string", "description": "The division of responsibility this project owns, in one sentence."},
+        "name": {
+          "type": "string"
+        },
+        "canonical_package": {
+          "type": "string",
+          "description": "The PyPI distribution name. Must equal [project].name in pyproject.toml."
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "description": "The division of responsibility this project owns, in one sentence."
+        },
         "aliases": {
-          "type": "array", "items": {"type": "string"},
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
           "description": "PyPI lookup names that install this package. They are routes to the canonical package, never targets of an install command in these docs."
         },
-        "import_names": {"type": "array", "items": {"type": "string"}},
+        "import_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "related_projects": {
           "type": "array",
           "items": {
-            "type": "object", "additionalProperties": false,
-            "required": ["name", "canonical_package", "repository", "relationship"],
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "canonical_package",
+              "repository",
+              "relationship"
+            ],
             "properties": {
-              "name": {"type": "string"},
-              "canonical_package": {"type": "string"},
-              "repository": {"type": "string", "format": "uri"},
-              "capabilities": {"type": "string", "format": "uri"},
-              "relationship": {"type": "string"}
+              "name": {
+                "type": "string"
+              },
+              "canonical_package": {
+                "type": "string"
+              },
+              "repository": {
+                "type": "string",
+                "format": "uri"
+              },
+              "capabilities": {
+                "type": "string",
+                "format": "uri"
+              },
+              "relationship": {
+                "type": "string"
+              }
             }
           }
         },
-        "claims_file": {"type": "string"},
-        "status_file": {"type": "string"},
-        "non_goals": {"type": "array", "items": {"type": "string"}, "description": "Negative routing: what this project is not for."}
+        "claims_file": {
+          "type": "string"
+        },
+        "status_file": {
+          "type": "string"
+        },
+        "non_goals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Negative routing: what this project is not for."
+        }
       }
     },
     "capabilities": {
-      "type": "array", "minItems": 1,
+      "type": "array",
+      "minItems": 1,
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["id", "problem", "symptoms", "solution", "modes", "formats", "model_families", "environment", "install", "entrypoints", "documentation", "claim_ids", "limitations"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "problem",
+          "symptoms",
+          "solution",
+          "modes",
+          "formats",
+          "model_families",
+          "environment",
+          "install",
+          "entrypoints",
+          "documentation",
+          "claim_ids",
+          "limitations"
+        ],
         "properties": {
-          "id": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "Stable kebab-case identifier; never renamed for wording changes."},
-          "problem": {"type": "string"},
-          "symptoms": {"type": "array", "items": {"type": "string"}},
-          "solution": {"type": "string"},
-          "modes": {"type": "array", "items": {"type": "string", "enum": ["training", "inference", "offload", "quantization", "packing", "verification", "serving", "streaming", "calibration", "benchmark"]}},
-          "formats": {"type": "array", "items": {"type": "string", "enum": ["nf4", "mxfp4", "int4", "fp8", "bf16", "fp16", "int8", "fp4", "gguf", "awq", "gptq", "nvfp4"]}},
-          "model_families": {"type": "array", "items": {"type": "string"}},
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "description": "Stable kebab-case identifier; never renamed for wording changes."
+          },
+          "problem": {
+            "type": "string"
+          },
+          "symptoms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "solution": {
+            "type": "string"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "training",
+                "inference",
+                "offload",
+                "quantization",
+                "packing",
+                "verification",
+                "serving",
+                "streaming",
+                "calibration",
+                "benchmark"
+              ]
+            }
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "nf4",
+                "mxfp4",
+                "int4",
+                "fp8",
+                "bf16",
+                "fp16",
+                "int8",
+                "fp4",
+                "gguf",
+                "awq",
+                "gptq",
+                "nvfp4"
+              ]
+            }
+          },
+          "model_families": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "environment": {
-            "type": "object", "additionalProperties": false,
-            "required": ["python", "os", "accelerator", "special_requirements"],
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "python",
+              "os",
+              "accelerator",
+              "special_requirements"
+            ],
             "properties": {
-              "python": {"type": "string"},
-              "os": {"type": "array", "items": {"type": "string"}},
-              "accelerator": {"type": "array", "items": {"type": "string"}},
-              "special_requirements": {"type": "array", "items": {"type": "string"}}
+              "python": {
+                "type": "string"
+              },
+              "os": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "accelerator": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "special_requirements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "install": {
-            "type": "array", "minItems": 1,
-            "items": {"type": "object", "additionalProperties": false, "required": ["purpose", "command"],
-                      "properties": {"purpose": {"type": "string"}, "command": {"type": "string"}}}
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "purpose",
+                "command"
+              ],
+              "properties": {
+                "purpose": {
+                  "type": "string"
+                },
+                "command": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "entrypoints": {
-            "type": "array", "minItems": 1,
-            "items": {"type": "string", "description": "`module:Symbol` for a public Python symbol, `module` for a public module, `cli:name` for a console script, `flag:NAME` for a documented environment flag."}
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "description": "`module:Symbol` for a public Python symbol, `module` for a public module, `cli:name` for a console script, `flag:NAME` for a documented environment flag."
+            }
           },
-          "documentation": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-          "claim_ids": {"type": "array", "items": {"type": "string"}, "description": "Active IDs from docs/claims.json. Empty means the capability is described without a performance claim."},
-          "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-          "status": {"type": "string", "enum": ["supported", "experimental", "measured-private", "unsupported"], "description": "Support state of the capability itself, in the repository's own vocabulary."}
+          "documentation": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Active IDs from docs/claims.json. Empty means the capability is described without a performance claim."
+          },
+          "limitations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "experimental",
+              "measured-private",
+              "unsupported"
+            ],
+            "description": "Support state of the capability itself, in the repository's own vocabulary."
+          },
+          "training_support": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "headline_path",
+              "by_model_type"
+            ],
+            "description": "Per-path training support -- never a flat flag. by_model_type is keyed by transformers model_type; each entry carries the six paths (quantize, reference_train, fast_train, batched_train, nvme_train, native_mxfp4_train), each one of: supported (the path completed under the registered protocol with a PASS/OK receipt), refused (with the reason), void (ran, unreadable), harness_error, not_tested, experimental, n/a. supported / void / refused entries cite the claim id(s) in docs/claims.json that back them. headline_path names the path model_families summarises: when set, model_families must equal the model_types whose headline path is supported (scripts/check_capabilities.py enforces both); null means the list is the capability's own scope.",
+            "properties": {
+              "headline_path": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "quantize",
+                  "reference_train",
+                  "fast_train",
+                  "batched_train",
+                  "nvme_train",
+                  "native_mxfp4_train",
+                  null
+                ]
+              },
+              "by_model_type": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "quantize",
+                    "reference_train",
+                    "fast_train",
+                    "batched_train",
+                    "nvme_train",
+                    "native_mxfp4_train"
+                  ],
+                  "properties": {
+                    "quantize": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "refused",
+                            "void",
+                            "harness_error",
+                            "not_tested",
+                            "experimental",
+                            "n/a"
+                          ]
+                        },
+                        "claim_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "reference_train": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "refused",
+                            "void",
+                            "harness_error",
+                            "not_tested",
+                            "experimental",
+                            "n/a"
+                          ]
+                        },
+                        "claim_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "fast_train": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "refused",
+                            "void",
+                            "harness_error",
+                            "not_tested",
+                            "experimental",
+                            "n/a"
+                          ]
+                        },
+                        "claim_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "batched_train": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "refused",
+                            "void",
+                            "harness_error",
+                            "not_tested",
+                            "experimental",
+                            "n/a"
+                          ]
+                        },
+                        "claim_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "nvme_train": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "refused",
+                            "void",
+                            "harness_error",
+                            "not_tested",
+                            "experimental",
+                            "n/a"
+                          ]
+                        },
+                        "claim_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "native_mxfp4_train": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "status"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "supported",
+                            "refused",
+                            "void",
+                            "harness_error",
+                            "not_tested",
+                            "experimental",
+                            "n/a"
+                          ]
+                        },
+                        "claim_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }

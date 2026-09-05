@@ -36,6 +36,18 @@ README) and the site state the training matrix from evidence.
   `olmoe` confirmed on real weights, `granitemoe` enters when its fused re-run passes, `gpt_oss` stays out with the
   refusal named and the experimental route pointed at; the batched-fallback VOID is a limitation; the
   `mxfp4-moe-training-and-residency` capability carries the tp1 canary row and stays `experimental`.
+- Phase directive 2026-09-05 14:45Z, applied to the bundle's shape: every row of the receipt is exactly one of OK /
+  REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL, classified mechanically by the bundle's reducer (v2;
+  the box's v1 copy kept) with the parity verdict as a separate column, every attempt a row (Granite's first fused
+  attempt stays a HARNESS_ERROR row beside its re-run) and every amendment referenced from the rows it touched; the
+  `e4b.train.parity.tp1.*` claims carry `row_status` / `parity_verdict`. `docs/capabilities.json` states training
+  support **per path** — a `training_support` object (`headline_path`; `by_model_type` keyed by model_type: quantize / reference_train / fast_train /
+  batched_train / nvme_train / native_mxfp4_train, each `supported` / `refused` / `void` / `harness_error` /
+  `not_tested` / `experimental` / `n/a` with its claim ids) on `qlora-fused-moe-experts` and
+  `mxfp4-moe-training-and-residency`; `model_families` is exactly the families whose `fast_train` is `supported`.
+  Tooling, not the package: `docs/capabilities.schema.json` admits the object and `scripts/check_capabilities.py`
+  validates it (allowed values; `supported` / `void` / `refused` cite existing claim ids, `supported` ones active;
+  `refused` says why; the `model_families` rule), with `tests/test_check_capabilities_training_support.py`.
 - `docs/STATUS.md` (the training position and three open items), `docs/ARCHITECTURE_SUPPORT.md` (a new dated section
   "Training on real weights (tp1, 2026-09-05)"; the existing tables are untouched), `docs/SOLUTIONS.md` and
   `docs/solutions/qlora-fused-moe-experts.md` (families from evidence; the refusal and the VOID as "what to check"),

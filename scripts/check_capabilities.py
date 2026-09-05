@@ -24,6 +24,15 @@ every failure in that run; exit 2 when the check itself cannot run. Checks:
   * every install command's positional targets name the canonical package
     (or a related project's) and never an alias;
   * capability IDs are unique;
+  * ``training_support`` (when present): ``by_model_type`` is keyed by
+    model_type and each entry's six paths (quantize, reference_train,
+    fast_train, batched_train, nvme_train, native_mxfp4_train) carry a status
+    from the schema's enum; every ``supported`` / ``void`` / ``refused`` entry
+    cites at least one claim id that exists in docs/claims.json (``supported``
+    ones must be ACTIVE); ``refused`` entries carry a reason; and when
+    ``headline_path`` is set, ``model_families`` equals the set of model_types
+    whose headline path is ``supported`` -- the list summarises one path,
+    never a flat flag;
   * --related <path/to/other/capabilities.json>: the other project lists this
     one back (reciprocity), when given.
 
@@ -158,6 +167,66 @@ def _has_main_guard(tree: ast.Module) -> bool:
     return False
 
 
+TRAINING_PATHS = ("quantize", "reference_train", "fast_train", "batched_train", "nvme_train", "native_mxfp4_train")
+TRAINING_VALUES = frozenset({"supported", "refused", "void", "harness_error", "not_tested", "experimental", "n/a"})
+#: Statuses whose evidence is a receipt: they must cite a claim id that exists.
+TRAINING_CITED = frozenset({"supported", "void", "refused"})
+
+
+def check_training_support(cap: dict, cid: str, by_id: dict, errors: list[str]) -> None:
+    """Per-path training support is structured, never a flat flag: every path of every
+    model_type carries an allowed status; ``supported`` / ``void`` / ``refused``
+    cite claim ids that exist (``supported`` ones ACTIVE); ``refused`` says why;
+    and when ``headline_path`` is set, ``model_families`` is exactly the
+    model_types whose headline path is ``supported``. The schema check has
+    already enforced the shape and the enum; this is the cross-reference."""
+    ts = cap.get("training_support")
+    if ts is None:
+        return
+    by_mt = ts.get("by_model_type") if isinstance(ts, dict) else None
+    headline = ts.get("headline_path") if isinstance(ts, dict) else None
+    if not isinstance(by_mt, dict) or not by_mt:
+        errors.append(f"{cid}: training_support.by_model_type must be a non-empty object keyed by model_type")
+        return
+    if headline is not None and headline not in TRAINING_PATHS:
+        errors.append(f"{cid}: training_support.headline_path {headline!r} is not one of {TRAINING_PATHS}")
+        return
+    headline_supported = set()
+    for mt, paths in by_mt.items():
+        if not isinstance(paths, dict):
+            errors.append(f"{cid}: training_support[{mt!r}] must be an object")
+            continue
+        for path in TRAINING_PATHS:
+            entry = paths.get(path)
+            if not isinstance(entry, dict) or "status" not in entry:
+                errors.append(f"{cid}: training_support[{mt!r}].{path}: missing status")
+                continue
+            st = entry["status"]
+            if st not in TRAINING_VALUES:
+                errors.append(f"{cid}: training_support[{mt!r}].{path}: status {st!r} not in {sorted(TRAINING_VALUES)}")
+                continue
+            ids = entry.get("claim_ids") or []
+            if st in TRAINING_CITED and not ids:
+                errors.append(f"{cid}: training_support[{mt!r}].{path}: status {st!r} must cite at least one claim id")
+            for claim_id in ids:
+                c = by_id.get(claim_id)
+                if c is None:
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: claim id not in docs/claims.json: {claim_id}")
+                elif st == "supported" and c["status"] not in ACTIVE_STATUSES:
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: 'supported' cites {claim_id} with status "
+                                  f"{c['status']!r} -- only {sorted(ACTIVE_STATUSES)} can back a supported path")
+            if st == "refused" and not str(entry.get("reason", "")).strip():
+                errors.append(f"{cid}: training_support[{mt!r}].{path}: 'refused' must carry a reason")
+            if path == headline and st == "supported":
+                headline_supported.add(mt)
+    if headline is None:
+        return
+    listed = set(cap.get("model_families", []))
+    if listed != headline_supported:
+        errors.append(f"{cid}: model_families {sorted(listed)} must equal the model_types whose {headline} is 'supported' "
+                      f"{sorted(headline_supported)} (training_support is the source; the list summarises the headline path, not a flat flag)")
+
+
 def _check_numbers(cap: dict, cid: str, errors: list[str]) -> None:
     def walk(node, path: str) -> None:
         if isinstance(node, str):
@@ -229,6 +298,7 @@ def main() -> int:
             errors.append(f"{cid}: duplicate capability id")
         ids_seen.add(cid)
         _check_numbers(cap, cid, errors)
+        check_training_support(cap, cid, by_id, errors)
         for d in cap["documentation"]:
             if not (root / d).exists():
                 errors.append(f"{cid}: documentation path missing: {d}")

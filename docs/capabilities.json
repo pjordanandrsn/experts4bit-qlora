@@ -126,7 +126,7 @@
         "LoRA on gate_up_proj of a fused MoE",
         "train a 30B MoE on a 24 GB GPU"
       ],
-      "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer.",
+      "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer. model_families lists exactly the families whose fast_train path is `supported` in training_support (the headline path, enable_fast_train, with a PASS receipt on real weights); every other path is stated per family there, never as a flat flag.",
       "modes": [
         "training"
       ],
@@ -183,7 +183,8 @@
         "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
         "e4b.train.parity.tp1.granite.batched.2026-09-05",
         "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
-        "e4b.train.parity.tp1.granite.matrix.2026-09-05"
+        "e4b.train.parity.tp1.granite.matrix.2026-09-05",
+        "e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05"
       ],
       "limitations": [
         "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
@@ -193,7 +194,231 @@
         "gpt_oss is not a training family here: the loader builds its experts bare (no ExpertsLoRA), and both enable_fast_train and enable_batched_train return zero on it -- REFUSED rows on tp1 (e4b.train.parity.tp1.gptoss.fused.2026-09-05, e4b.train.parity.tp1.gptoss.batched.2026-09-05). Attention-only QLoRA over its frozen experts trains (e4b.train.parity.tp1.gptoss.attn_only.2026-09-05); the only route that trains its experts is grouped-nf4-gemm's experimental mxfp4_qlora.ExpertsMxfp4LoRA under the mxfp4-moe-training-and-residency capability -- experimental, never licensed",
         "enable_batched_train falls back to the reference forward per call above _PAD_WASTE_LIMIT (engines/batched.py) without a counter: the patch count stays positive while some layers run the per-expert loop on some steps. Assert kernel engagement (whole-stack dequant calls per step at least twice the patch count), not the return value alone -- tp1's OLMoE batched arm read VOID on exactly this (e4b.train.parity.tp1.olmoe.batched.2026-09-05)"
       ],
-      "status": "supported"
+      "status": "supported",
+      "training_support": {
+        "headline_path": "fast_train",
+        "by_model_type": {
+          "olmoe": {
+            "quantize": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
+                "e4b.train.parity.tp1.olmoe.reference.2026-09-05"
+              ]
+            },
+            "reference_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.olmoe.reference.2026-09-05",
+                "e4b.train.olmoe-converges"
+              ]
+            },
+            "fast_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
+                "e4b.train.fast-train-dgrad"
+              ],
+              "reason": "tp1: PASS on the registered clinical text with real -Instruct weights; the dgrad-gate receipt was synthetic tokens"
+            },
+            "batched_train": {
+              "status": "void",
+              "claim_ids": [
+                "e4b.train.parity.tp1.olmoe.batched.2026-09-05"
+              ],
+              "reason": "enable_batched_train patched every layer but the whole-stack dequant kernel was not reached on every layer on every step: the per-call fallback above _PAD_WASTE_LIMIT engaged without a counter (tp1); the dgrad-gate synthetic-token reading stands as measured there"
+            },
+            "nvme_train": {
+              "status": "not_tested",
+              "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+            },
+            "native_mxfp4_train": {
+              "status": "n/a",
+              "reason": "the checkpoint's experts are not native MXFP4"
+            }
+          },
+          "qwen3_moe": {
+            "quantize": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.flagship-matrix",
+                "e4b.train.parity.tp1.qwen3.matrix.2026-09-05"
+              ],
+              "reason": "tp1: the direct path loads the real checkpoint resident on a thirty-two-gigabyte-class card (load receipt); its three arms are pending"
+            },
+            "reference_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.flagship-matrix"
+              ],
+              "reason": "the flagship matrix (five datasets, offload=True); tp1's resident reference row is pending"
+            },
+            "fast_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.flagship-matrix",
+                "e4b.train.fast-train-dgrad"
+              ],
+              "reason": "the flagship matrix PASS on five datasets; tp1's row is pending and sits beside it, never divided into it"
+            },
+            "batched_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.fast-train-dgrad"
+              ],
+              "reason": "the dgrad-gate Alpaca trajectory PASS with the kernel engaged; tp1's row is pending -- prediction P2 says the _PAD_WASTE_LIMIT fallback may read VOID on this hundred-and-twenty-eight-expert family on short rows, which would be an engagement finding, not a parity one"
+            },
+            "nvme_train": {
+              "status": "not_tested",
+              "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+            },
+            "native_mxfp4_train": {
+              "status": "n/a",
+              "reason": "the checkpoint's experts are not native MXFP4"
+            }
+          },
+          "gemma4_text": {
+            "quantize": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.flagship-matrix"
+              ],
+              "reason": "the base checkpoint; the -it checkpoint faults at load on some rented hosts (e4b.open.gemma4-load-fault); tp1's rows are pending under amendment 4"
+            },
+            "reference_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.flagship-matrix"
+              ]
+            },
+            "fast_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.flagship-matrix"
+              ],
+              "reason": "the model-2 flagship matrix PASS on five datasets (base checkpoint); tp1's row is pending"
+            },
+            "batched_train": {
+              "status": "not_tested",
+              "reason": "no receipt: tp1's row is pending (amendment 4); expect the _PAD_WASTE_LIMIT fallback on short rows at this expert count"
+            },
+            "nvme_train": {
+              "status": "not_tested",
+              "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+            },
+            "native_mxfp4_train": {
+              "status": "n/a",
+              "reason": "the checkpoint's experts are not native MXFP4"
+            }
+          },
+          "granitemoe": {
+            "quantize": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.granite.matrix.2026-09-05",
+                "e4b.train.parity.tp1.granite.reference.2026-09-05"
+              ],
+              "reason": "tp1: the first real-weight pass through the direct path (before it: fixtures and the serving lanes' arena path only)"
+            },
+            "reference_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.granite.reference.2026-09-05"
+              ]
+            },
+            "fast_train": {
+              "status": "harness_error",
+              "claim_ids": [
+                "e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05"
+              ],
+              "reason": "tp1 attempt one died in the harness's kernel-call counter (amendment 3), not in the shipped code; the corrected-counter re-run by tp1b decides this path -- the family enters model_families only on its PASS"
+            },
+            "batched_train": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.granite.batched.2026-09-05"
+              ],
+              "reason": "tp1: PASS, the kernel reached on every layer on every step"
+            },
+            "nvme_train": {
+              "status": "not_tested",
+              "reason": "no receipt; the bake would need --moe block_sparse_moe on a pre-fused layout, unverified"
+            },
+            "native_mxfp4_train": {
+              "status": "n/a",
+              "reason": "the checkpoint's experts are not native MXFP4"
+            }
+          },
+          "gpt_oss": {
+            "quantize": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.matrix.2026-09-05",
+                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
+              ],
+              "reason": "the released MXFP4 blocks are dequantised bit-identically and re-quantised to NF4 as bare GptOssExperts4bit; verify_moe_4bit(strict) passes"
+            },
+            "reference_train": {
+              "status": "refused",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
+              ],
+              "reason": "the loader builds the experts bare (no ExpertsLoRA), so the reference path trains no expert adapter; attention-only QLoRA over the frozen experts trains (attn_only, no pair)"
+            },
+            "fast_train": {
+              "status": "refused",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.fused.2026-09-05"
+              ],
+              "reason": "enable_fast_train returns zero: no ExpertsLoRA to patch, and the fused path does not apply gpt-oss's per-expert biases and clamped GLU"
+            },
+            "batched_train": {
+              "status": "refused",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.batched.2026-09-05"
+              ],
+              "reason": "enable_batched_train returns zero for the same structural reason"
+            },
+            "nvme_train": {
+              "status": "not_tested",
+              "reason": "not run: enable_nvme_train_residency refuses bare modules, and the arena_train=True wrap computes a generic epilogue without the biases and clamp -- to be refused on structure, never trained through"
+            },
+            "native_mxfp4_train": {
+              "status": "experimental",
+              "reason": "grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA via run_mxfp4_20b_qlora, under the mxfp4-moe-training-and-residency capability: tp1's canary and provenance passed on its own text; never licensed",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
+              ]
+            }
+          },
+          "mixtral": {
+            "quantize": {
+              "status": "not_tested",
+              "reason": "tp1's rows are pending: the first real-weight pass through the direct path (w1/w3/w2 fused gate-first into Experts4bit) under offload=True"
+            },
+            "reference_train": {
+              "status": "not_tested",
+              "reason": "tp1 row pending"
+            },
+            "fast_train": {
+              "status": "not_tested",
+              "reason": "tp1 row pending"
+            },
+            "batched_train": {
+              "status": "not_tested",
+              "reason": "tp1 row pending"
+            },
+            "nvme_train": {
+              "status": "not_tested",
+              "reason": "no receipt"
+            },
+            "native_mxfp4_train": {
+              "status": "n/a",
+              "reason": "the checkpoint's experts are not native MXFP4"
+            }
+          }
+        }
+      }
     },
     {
       "id": "run-moe-larger-than-vram",
@@ -510,7 +735,82 @@
         "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml",
         "gpt-oss expert training is EXPERIMENTAL and unlicensed. Lane tp1 (bench/train-parity-20260905/tp1/) ran grouped-nf4-gemm's run_mxfp4_20b_qlora (mxfp4_qlora.ExpertsMxfp4LoRA over the released e2m1/e8m0 bytes, faithful clamped GLU and biases) on its own text: the step-0 canary against transformers' dequant path passed, provenance pre == post held over every native expert tensor, and the loss fell -- the row is e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05. No parity pair exists, the run is never compared to the e4b arms, and nothing licenses it; the e4b enablers refuse gpt-oss (zero patched), and the arena_train=True wrap of gpt-oss computes a generic epilogue without the per-expert biases and clamp -- do not train gpt-oss experts through it"
       ],
-      "status": "experimental"
+      "status": "experimental",
+      "training_support": {
+        "headline_path": null,
+        "by_model_type": {
+          "gpt_oss": {
+            "quantize": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.matrix.2026-09-05"
+              ],
+              "reason": "faithful dequant of the released MXFP4 bytes (e4b.serve.gptoss.loader-faithful), re-quantised to NF4 for the convenient path"
+            },
+            "reference_train": {
+              "status": "refused",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
+              ],
+              "reason": "no ExpertsLoRA over the bare experts under the e4b path; attention-only QLoRA trains"
+            },
+            "fast_train": {
+              "status": "refused",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.fused.2026-09-05"
+              ],
+              "reason": "enable_fast_train returns zero on gpt-oss"
+            },
+            "batched_train": {
+              "status": "refused",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.batched.2026-09-05"
+              ],
+              "reason": "enable_batched_train returns zero on gpt-oss"
+            },
+            "nvme_train": {
+              "status": "not_tested",
+              "reason": "the arena_train=True wrap of gpt-oss computes a generic epilogue without the per-expert biases and clamp; not run, to be refused on structure"
+            },
+            "native_mxfp4_train": {
+              "status": "experimental",
+              "reason": "tp1: grouped-nf4-gemm's run_mxfp4_20b_qlora over the released e2m1/e8m0 bytes on its own text -- step-zero canary against transformers' dequant path passed, provenance pre == post held, the loss fell; EXPERIMENTAL, never licensed, no parity pair",
+              "claim_ids": [
+                "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
+              ]
+            }
+          },
+          "deepseek_v4": {
+            "quantize": {
+              "status": "supported",
+              "claim_ids": [
+                "e4b.serve.deepseek-v4"
+              ],
+              "reason": "the MXFP4 experts and the FP8 dense side load faithfully (serving receipt); the direct quantising path is the same loader"
+            },
+            "reference_train": {
+              "status": "not_tested",
+              "reason": "no training receipt in the register"
+            },
+            "fast_train": {
+              "status": "not_tested",
+              "reason": "no training receipt; the base supplies its clamped epilogue via _apply_gate, so the fused path is admitted by structure"
+            },
+            "batched_train": {
+              "status": "not_tested",
+              "reason": "no training receipt"
+            },
+            "nvme_train": {
+              "status": "experimental",
+              "reason": "training against a relocated MXFP4 arena has a CPU spec and a bench directory (bench/mxfp4-arena-train/) but no entry in the claims register"
+            },
+            "native_mxfp4_train": {
+              "status": "not_tested",
+              "reason": "the kernel package's experimental runner is gpt-oss-specific"
+            }
+          }
+        }
+      }
     }
   ]
 }
