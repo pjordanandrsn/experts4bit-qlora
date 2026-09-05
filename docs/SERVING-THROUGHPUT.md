@@ -99,10 +99,11 @@ bo3's 177.9 / 1089.6 and bo5's 204.1 / 1251.6 for Qwen3 are different boxes of t
 dispersion; B=1 is host-bound) and different cuts (bo5 carries #385's glue, ×1.057 measured on the bo5 box):
 quote either with its box, never the ratio between them.
 
-## Closing the gap, not the gate (bo6), measured in-repo
+## Closing the gap, not the gate (bo6, bo6b, bo6c), measured in-repo
 
-Lane bo6 + bo6b — box 49861751, an RTX 5090 on a Threadripper PRO 7975WX host, 2026-09-04 13:25Z onward; e4b
-integration-8 @db2a070 (attempt 3) and @ae9dc122 (bo6b: streamed calibration), grouped-nf4-gemm main @0b25d13. The
+Lane bo6 + bo6b + bo6c — box 49861751, an RTX 5090 on a Threadripper PRO 7975WX host, 2026-09-04 13:25Z to
+2026-09-05 03:18Z; e4b integration-8 @db2a070 (attempt 3) and @ae9dc122 (bo6b and bo6c: streamed calibration; bo6c's
+cut and hook v6 verified live by its tripwire, 24 GiB Hessian budget), grouped-nf4-gemm main @0b25d13. The
 registered gate stayed in perplexity; the int4-expert arms bo5 had failed on their second text with RTN experts were
 re-run with per-expert GPTQ calibration (e4b#384), against NF4 **re-scored on this box** (Qwen3 wikitext 1.85939 /
 c4val1 2.80318 — repeated after a fresh bake, bit-identical; Mixtral 1.18214 / 2.10973). Receipt:
@@ -120,14 +121,18 @@ measures it).
 | Qwen3-30B-A3B | calibrated int4 experts + calibrated int4 attention + round-1/2 folds + epilogue + #385 glue (`all_calibexp`) | all-at-once, 16k tok | db2a070 | **158.0** | **993.6** | −0.060 / +0.035 ppl (−0.0093 / +0.0021 nats) | **pass on both texts**; the wikitext improvement is not claimed (signs differ) (`…bo6.qwen3.all-calibexp-allatonce.k8…`, `…bo6.qwen3.b1…`, `…bo6.qwen3.b16…`) |
 | Qwen3-30B-A3B | calibrated int4 experts alone (`calibexp_c4val_rep1`) | **streamed**, 16k tok, damp 0.01 | ae9dc122 | — | — | — / **−0.050** ppl (−0.0031 nats) | pass on 1 text; improvement not claimable until wikitext agrees (bo6c) (`…bo6.qwen3.calibexp-streamed-16k.c4val1…`); the order alone moves c4val1 by 0.200 ppl (`…bo6.qwen3.calibration-order.c4val1…`) |
 | Qwen3-30B-A3B | calibrated int4 experts alone, damping 0.1 (`calibexp_d01`) | streamed, 16k tok, damp 0.1 | ae9dc122 | — | — | — / +0.054 ppl (+0.0033 nats) | FAIL as registered by 0.004 (`…bo6.qwen3.calibexp-streamed-16k-damp0.1.c4val1…`) |
-| Qwen3-30B-A3B | calibrated int4 experts alone, 4× the calibration set (`calibexp_n128`) | streamed, 64k tok | ae9dc122 | — | — | — / **−0.211** ppl (−0.0129 nats, 1.4× floor) | pass on 1 text; the sweep's best point, improvement not claimable until wikitext agrees (`…bo6.qwen3.calibexp-streamed-64k.c4val1…`) |
+| Qwen3-30B-A3B | calibrated int4 experts alone, 4× the calibration set (`calibexp_n128`; wikitext from bo6c) | streamed, 64k tok | ae9dc122 | — | — | −0.0002 / **−0.211** ppl (−0.00003 / −0.0129 nats) | pass on both texts; the improvement clause met on its letter (same sign) but the out-of-domain delta is inside the floor — parity out of domain, −0.211 in-domain, no improvement by a number (`…bo6.qwen3.calibexp-streamed-64k.c4val1…`, `e4b.serve.buildout.bo6c.qwen3.calibexp-streamed-64k.k8.2026-09-05`) |
 | Qwen3-30B-A3B | calibrated int4 experts alone, 16× the calibration set (`calibexp_n512`) | streamed, 256k tok | ae9dc122 | — | — | — / −0.141 ppl (−0.0086 nats) | pass on 1 text; non-monotonic sweep at one measurement per point (`…bo6.qwen3.calibexp-streamed-256k.c4val1…`) |
+| Qwen3-30B-A3B | **the shipping stack**: streamed 64k calibrated int4 experts + calibrated int4 attention + round-1/2 folds + epilogue + #385 glue (`all_calibexp_n128`, bo6c) | **streamed**, 64k tok | ae9dc122 | not on this lane (bo7, at the 16k default) | not on this lane | **−0.053 / −0.066** ppl (−0.0083 / −0.0040 nats, both sub-floor) | **pass on both texts — LICENSED under the unchanged gate**; at parity or better on both texts, no improvement by a number (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`); streamed calibration is run-to-run deterministic (`…bo6c.qwen3.calib-deterministic…`) |
 | Mixtral-8x7B | calibrated int4 experts + round-1/2 folds + epilogue, no calibrated pack — bo5's `lic` with calibrated experts (`lic_calibexp`) | streamed, 16k tok, 8 GiB budget | ae9dc122 | not measured (alarm) | not measured (alarm) | **+0.077** / +0.039 ppl (+0.0234 / +0.0047 nats; floor unmeasured) | **FAIL as registered** on wikitext — measured, not licensed; the mirror image of bo5's RTN `lic`. B=1 / B=16: the arms were killed by the lane's 3600-s alarm at pass 23 of the 32-pass streamed calibration (~85 min) — a harness limit, no number; bo7 dropped them too (`e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04`) |
 
 What this settles: the gap closes by *method*, not by moving the gate. Attempt 3's "calibrated experts alone FAIL
 +0.150" is a verdict on all-at-once calibration; the streamed (sequential) method — what e4b#384 shipped — reads
-−0.050 on the same text, box and batches, and Qwen3's full calibrated stack passes both texts as registered. **It did
-not close Mixtral's:** the calibrated stack passes the in-domain text (+0.039) and fails the out-of-domain one
+−0.050 on the same text, box and batches, and Qwen3's full calibrated stack passes both texts as registered — under
+the all-at-once pack on bo6, and **under the shipping (streamed, 64k-token) pack on bo6c, which is Qwen3-30B-A3B's
+licensed serving configuration: at parity or better on both texts, both deltas inside the floor, no improvement
+claimed by a number.** Its speed is not on this lane: bo7 measures the calibrated stack at the hook's 16k-token
+default, not 64k. **It did not close Mixtral's:** the calibrated stack passes the in-domain text (+0.039) and fails the out-of-domain one
 (+0.077, over the +0.05 budget) — FAIL as registered, measured, not licensed; not a reference shift (same window sha as
 bo5c, NF4 within 0.001 nats); its speed was not measured on this lane (the arms alarmed mid-calibration) and bo7
 dropped those arms. Next levers are not gate changes: a per-expert NF4 fallback for the largest-residual experts, or

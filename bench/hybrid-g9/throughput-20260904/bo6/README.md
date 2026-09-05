@@ -1,4 +1,4 @@
-# Build-out validation lane bo6 — 2026-09-04, one RTX 5090: close the gap, not the gate
+# Build-out validation lane bo6 (+ bo6b, bo6c) — 2026-09-04/05, one RTX 5090: close the gap, not the gate
 
 **Box:** Vast.ai instance 49861751, RTX 5090 (sm_120, driver 580.173.02, 32607 MiB) on an AMD Ryzen Threadripper
 PRO 7975WX host (64 CPUs, 251 GB, container cgroup `memory.max` 183,093,952,512 B = 170 GiB — see
@@ -12,9 +12,14 @@ controls and the sweep, `QWEN3 SWEEP DONE` 18:56Z; Mixtral re-bake 18:56–19:10
 `lic_calibexp` on wikitext 20:33–21:54Z; then three arms that never produced a receipt — `lic_calibexp` B=1 21:54Z,
 killed by the `arm()` helper's own 3600-s alarm at 22:54Z at streamed-calibration pass 23 of 32; B=16 22:54Z, alarm
 23:54Z, pass 23 of 32; `lic_calibexp_n128_c4val` 23:54Z, killed by the `k8()` helper's 5400-s alarm at 01:24Z at pass
-20 of 32 — `MIXTRAL SWEEP DONE`, `TP2_DONE` 2026-09-05T01:24:40Z). The last lines of `outer.log` are bo6c starting
-(01:25Z), a separate lane. Those three arms print as **`alarm`** rows in [`RESULTS.md`](RESULTS.md): a harness limit,
-not a model result, and no number is quoted for them.
+20 of 32 — `MIXTRAL SWEEP DONE`, `TP2_DONE` 2026-09-05T01:24:40Z). Those three arms print as **`alarm`** rows in
+[`RESULTS.md`](RESULTS.md): a harness limit, not a model result, and no number is quoted for them. **bo6c** followed on
+the same box ([`logs/bo6c.sh`](logs/bo6c.sh)): reinstall 01:25:01Z — the console line says `reinstall e4b @d286dd5
+(damp knob)`, which is the stale plan message; the script's `pip install` line names **@ae9dc122** and the tripwire
+that passed asserts the streamed driver (`enable_serve_experts_int4_calibrated`) and hook v6 — so the cut and hook
+are verified live, with `E4B_INT4_HESSIAN_BUDGET_GB=24`; Qwen3 re-bake 01:25–01:34Z; `calibexp_c4val_rep2` 01:34Z;
+`calibexp_n128` on wikitext 01:54Z; `all_calibexp_n128` on wikitext 02:21Z and on c4val1 02:50Z; `QWEN3 STREAMED
+STACK DONE`, `TP3_DONE` 2026-09-05T03:18:54Z. The box was torn down after `TP3_DONE`.
 **Lane:** the user's decision at 13:10Z — *close the gap rather than move the gate*. The registered K8 gate stays in
 perplexity: a calibrated pack passes when Δppl ≤ +0.05 against NF4 on **every** text scored, an improvement is
 claimable only with the same sign on ≥ 2 texts, and wikitext is the text outside the calibration domain. The
@@ -44,8 +49,10 @@ its metadata reports 0.29.0):
   @ae9dc122, and the tripwire that follows asserts the streamed entry point that only @ae9dc122 has.
 - **@`ae9dc122e25216e8f8713c1631f5904e059efeb6`** — `enable_serve_experts_int4_calibrated`: **streamed** calibration
   and packing per layer chunk under `E4B_INT4_HESSIAN_BUDGET_GB`, with layer filters on both steps. bo6b
-  ([`logs/bo6b.sh`](logs/bo6b.sh)): the repeat controls, the Qwen3 sweep and every Mixtral `lic_calibexp` arm.
-  #384 with this mechanism is merged on main as 6bca732 and shipped in 0.35.0.
+  ([`logs/bo6b.sh`](logs/bo6b.sh)): the repeat controls, the Qwen3 sweep and every Mixtral `lic_calibexp` arm; and
+  **bo6c** ([`logs/bo6c.sh`](logs/bo6c.sh), 24 GiB budget): the calibration-determinism repeat, the 64k-token pack on
+  wikitext, and the shipping stack on both texts. #384 with this mechanism is merged on main as 6bca732 and shipped
+  in 0.35.0.
 
 ## The false starts
 
@@ -123,11 +130,23 @@ calibration domain, the stronger reading. This lane ships its hook.
 
 ## What is licensed by this lane, and what is not
 
-- **Licensed as registered:** Qwen3 `all_calibexp` (all-at-once pack) — Δppl −0.0597 on wikitext, +0.0352 on
-  c4val1, both within +0.05; *no improvement is claimed* (the signs differ). Its 158.0 / 993.6 tok/s are
-  rental-measured on this box, with no ratio (no NF4 speed arm here; bo7 measures it).
-- **Pass on one text, improvement not claimed:** the streamed Qwen3 expert arms (−0.0505 at 16k, −0.2109 at 64k,
-  −0.1410 at 256k on c4val1) — the rule needs wikitext with the same sign; that is bo6c's job.
+- **LICENSED as registered — the shipping stack (bo6c):** Qwen3 `all_calibexp_n128` = sequentially (streamed)
+  calibrated int4 experts at 64k C4-validation tokens + C4-calibrated int4 attention (192 projections from the same
+  32 batches) + round-1/2 folds + router epilogue + #385 glue: wikitext 1.85114 (6.36709) = −0.0528 ppl
+  (−0.0083 nats), c4val1 2.79916 (16.43081) = −0.0662 ppl (−0.0040 nats) — pass on both texts under the unchanged
+  gate, the same sign on both. Both deltas are inside the family's 0.0095-nat floor, so the reading is **at parity or
+  better on both texts**; no improvement is claimed by a number. Its speed is not on this lane: bo7 measures the
+  calibrated stack at B=1 / B=16 with the hook's 16k-token default, not the 64k pack scored here.
+- **Licensed as registered (all-at-once pack, the two-step API):** Qwen3 `all_calibexp` — Δppl −0.0597 on wikitext,
+  +0.0352 on c4val1, both within +0.05; *no improvement is claimed* (the signs differ). Its 158.0 / 993.6 tok/s are
+  rental-measured on this box, with no ratio (no NF4 speed arm here; bo7 measures it) — the speed of a different
+  pack from the shipping one.
+- **Pass on both texts, parity out of domain:** the streamed 64k experts-only pack (`calibexp_n128`) — c4val1
+  −0.2109 (bo6b), wikitext −0.0002 ppl / −0.00003 nats (bo6c). The improvement clause is met on its letter (same
+  sign on both texts), but the wikitext delta is inside the floor: *parity on the out-of-domain text, −0.211
+  in-domain*; no improvement is claimed by a number.
+- **Pass on one text, improvement not claimed:** the streamed 16k (−0.0505; repeated bit-identically by bo6c) and
+  256k (−0.1410) expert arms on c4val1 — wikitext was not scored at those sizes.
 - **FAIL as registered, and recorded as such:** Qwen3 calibrated experts alone under the all-at-once method
   (+0.1498) and under streamed calibration with damping 0.1 (+0.0544); and **Mixtral `lic_calibexp`** — c4val1
   +0.0391 (pass) but wikitext +0.0771 ppl (+0.0234 nats; floor unmeasured; receipt `mixtral_ppl_lic_calibexp.json`)
@@ -139,14 +158,16 @@ calibration domain, the stronger reading. This lane ships its hook.
 - **Not touched:** Granite (NF4 experts stay licensed; bo5's +0.387 is not closable by this lever), gpt-oss, Gemma-4,
   OLMoE. Nothing on this page licenses a *ratio*; nothing is compared across lanes.
 
-**bo6c is a separate follow-up lane** (queued on this box behind bo6b: the streamed 16k arm repeated for calibration
-determinism, the 64k arm on wikitext, and the full stack at 64k under the streamed method on both texts —
-[`logs/bo6c.sh`](logs/bo6c.sh) is shipped for the record). This bundle does not wait for it and quotes nothing from it.
+**bo6c ran on this box behind bo6b** (01:25–03:18Z, 2026-09-05): the streamed 16k arm repeated for calibration
+determinism, the 64k arm on wikitext, and the full stack at 64k under the streamed method on both texts. Its four
+receipts are in this directory and its rows are in the table.
 
 ## Instrument notes
 
 - **Deterministic on one box and cut.** bo6b re-baked Qwen3 and re-scored NF4 three times (c4val1 ×2, wikitext ×1):
-  bit-identical `mean_nll` at full float precision (the repeat-controls table in `RESULTS.md`). Any sub-0.01-nat
+  bit-identical `mean_nll` at full float precision (the repeat-controls table in `RESULTS.md`). bo6c re-baked again
+  and repeated the streamed 16k calibrated-expert arm end to end (Hessian tap, GPU solve, `min_rows` fallbacks,
+  packing, K8): `calibexp_c4val_rep2` = `calibexp_c4val_rep1` bit-identically (2.800114648339439). Any sub-0.01-nat
   difference *within* this lane is real arithmetic, not run noise.
 - **The cross-lane 0.006-nat shift stays OPEN.** Qwen3's NF4 c4val1 reads 2.80318 here and 2.80923 on bo5 (box
   49841214, integration-6 + grouped-nf4-gemm @587eb7a) on the identical window sha, while Mixtral's NF4 references
@@ -175,7 +196,9 @@ sweep with the method effect at equal settings, and the speed rows with `ratio: 
 ## Layout
 
 - `<family>_ppl_<arm>.json` — K8 receipt (`mean_nll`, `ppl`, `ppl_source`, `text_sha`); `_c4val` on the arm name =
-  the second text; `_rep1` / `_rep2` = repeat controls; `_d01` / `_n128` / `_n512` = the sweep. `<family>_b1_<arm>.json`
+  the second text; `_rep1` / `_rep2` = repeat controls; `_d01` / `_n128` / `_n512` = the sweep; bo6c's four are
+  `qwen3_ppl_calibexp_c4val_rep2`, `qwen3_ppl_calibexp_n128` (wikitext) and `qwen3_ppl_all_calibexp_n128[_c4val]`.
+  `<family>_b1_<arm>.json`
   — timed graph window (`step_ms_clean`); `<family>_b16_<arm>.json` — B=16 (`aggregate_tok_s`).
   [`calib.json`](calib.json) is the attention-calibration manifest, byte-identical to bo5's and bo3's.
 - [`logs/`](logs/) — the three lane scripts with their pip pins (`bo6_run.sh`, `bo6b.sh`, `bo6c.sh`), the hook
@@ -185,8 +208,10 @@ sweep with the method effect at equal settings, and the speed rows with `ratio: 
   `outer.attempt2.log`, `outer.log`. The logs are force-added past the repository's `*.log` ignore rule, as bo5's
   `outer.log` was. `run_mixtral_b1_lic_calibexp.log`, `run_mixtral_b16_lic_calibexp.log` and
   `run_mixtral_ppl_lic_calibexp_n128_c4val.log` are the alarmed bo6b runs (the lane overwrote attempt 3's OOM-killed
-  b1/b16 logs in place); they end mid-calibration with no result line. `bake_qwen3.log` is bo6b's re-bake, the one
-  that produced these receipts — bo6c's later re-bake overwrote the box's copy and is not shipped.
+  b1/b16 logs in place); they end mid-calibration with no result line. `bake_qwen3.log` is bo6b's re-bake (the one
+  behind the repeat controls and the sweep); bo6c's re-bake overwrote the box's copy and is shipped as
+  `bake_qwen3.bo6c.log` (a renamed verbatim copy — the bake behind bo6c's four receipts). `outer.log` runs through
+  `TP3_DONE`; `summary.txt` holds all 20 result lines.
 - [`summary.txt`](summary.txt) (each run log's final result line, in lane order), [`models.txt`](models.txt),
   [`forensics.txt`](forensics.txt) (`nvidia-smi`, `lscpu`, `free`, the cgroup limit, the package versions).
   The lane's `TP_DONE` / `TP2_DONE` markers are empty files and are not shipped; nor are the pip logs (warnings
@@ -198,7 +223,8 @@ sweep with the method effect at equal settings, and the speed rows with `ratio: 
 Rent the class in `forensics.txt` (a container whose cgroup allows ≥ 170 GiB, or set
 `E4B_INT4_HESSIAN_BUDGET_GB` lower), stage `logs/step_decomp.py`, `logs/k8_bake.py` and `logs/hook/usercustomize.py`
 under `/root/bo6/`, put `calib.json` beside them, and run `logs/bo6_run.sh` (its `pip install` line pins the cuts),
-then `logs/bo6b.sh` (waits on `TP_DONE`). Every arm is one `step_decomp.py` invocation; the `k8()` / `arm()` helpers
+then `logs/bo6b.sh` (waits on `TP_DONE`), then `logs/bo6c.sh` (waits on `TP2_DONE`). Every arm is one
+`step_decomp.py` invocation; the `k8()` / `arm()` helpers
 carry the flags, `fenv` maps `0 / all` to `E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`, `E4B_FUSE_ROUTER_EPI`, and the
 per-arm environment (`E4B_SERVE_EXP_INT4`, `E4B_SERVE_EXP_INT4_CALIB`, `E4B_SERVE_ATTN_INT4_CALIB`,
 `E4B_INT4_GPTQ_DAMP`, `E4B_CALIB_NSEQ`, `E4B_INT4_HESSIAN_BUDGET_GB`) is on each arm's line in `outer.log`. Then
@@ -208,6 +234,7 @@ per-arm environment (`E4B_SERVE_EXP_INT4`, `E4B_SERVE_EXP_INT4_CALIB`, `E4B_SERV
 
 Every K8 row is the 2048-step window; nothing was probed short. **Mixtral's calibrated-stack speed (B=1, B=16) and
 its 64k-token c4val1 reading are not measured** — the three arms were killed by their own alarms during the streamed
-calibration (false start 4) and print as `alarm` rows with no number. bo6c's arms (the streamed full stack, the 64k
-arm on wikitext, the streamed repeat) are a separate lane and bundle. Granite, gpt-oss, Gemma-4 and OLMoE were not
-run. No kernel census ran on this lane.
+calibration (false start 4) and print as `alarm` rows with no number. **The licensed Qwen3 stack's speed is not on
+this lane** (bo7 measures the calibrated stack at the hook's 16k default, not 64k). The streamed 16k and 256k expert
+packs were not scored on wikitext. Granite, gpt-oss, Gemma-4 and OLMoE were not run. No kernel census ran on this
+lane.
