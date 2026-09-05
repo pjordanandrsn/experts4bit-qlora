@@ -1,0 +1,11 @@
+[2026-09-05T07:05:35Z] install: gnf4 @ddcb850e05c3 + e4b @f4b639fd2640
+pip rc=0
+tp1 tripwire OK: e4b 0.35.0 gnf4 0.30.0 (no usercustomize hook: training lane)
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD EPYC 7Q83 64-Core Processor
+MemTotal:       263726004 kB
+cuda ok
+overlay         320G  842M  320G   1% /
+[2026-09-05T07:06:17Z] fetching repo helpers at e4b @f4b639fd2640
+fatal: couldn't find remote ref f4b639fd2640
+SRC FETCH FAIL

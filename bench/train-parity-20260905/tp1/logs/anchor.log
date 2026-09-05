@@ -1,0 +1,39 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "flops": {
+  "tflops": {
+   "median": 184.36,
+   "min": 184.28,
+   "max": 185.5,
+   "spread": 1.0066
+  },
+  "ms_per_gemm": {
+   "median": 0.7455,
+   "min": 0.7409,
+   "max": 0.7458,
+   "spread": 1.0066
+  }
+ },
+ "launch": {
+  "launches_per_s": {
+   "median": 186947,
+   "min": 185434,
+   "max": 187879,
+   "spread": 1.0132
+  },
+  "us_per_launch": {
+   "median": 5.349,
+   "min": 5.323,
+   "max": 5.393,
+   "spread": 1.0132
+  }
+ },
+ "h2d": {
+  "h2d_gb_s": {
+   "median": 25.93,
+   "min": 25.78,
+   "max": 26.0,
+   "spread": 1.0085
+  }
+ }
+}

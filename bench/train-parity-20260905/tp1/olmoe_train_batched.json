@@ -1,0 +1,586 @@
+{
+ "fam": "olmoe",
+ "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+ "model_type": "olmoe",
+ "arm": "batched",
+ "tag": "batched",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "offload": false,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "dataset": {
+  "path": "ds_clinical.json",
+  "sha256": "76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791",
+  "n_train_rows": 1200,
+  "eval_rows_used": 48
+ },
+ "prereg": "tp1/P36-PREREG.md",
+ "harness": "tp1_train_smoke.py (n17_cell.py + D1-D8)",
+ "env": {
+  "e4b": "0.35.0",
+  "e4b_dist": "0.35.0",
+  "gnf4": "0.30.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.16.1",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-10339cdb-8c2b-901b-591e-3f872639797a",
+   "pci.bus_id": "00000000:C1:00.0",
+   "pcie.link.gen.current": "1",
+   "pcie.link.gen.max": "4",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "550.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.80.51",
+   "driver_version": "595.84",
+   "cpu": "AMD EPYC 7Q83 64-Core Processor",
+   "cpu_threads": 128,
+   "host_mem_gib": 251.5,
+   "vast_instance_id": "49937730",
+   "container_host": "a7bece36dda7"
+  },
+  "anchor_json": "/root/tp1/anchor.json",
+  "box_class": "pcie-full/launch-fast"
+ },
+ "load_s": 4.1,
+ "verify": {
+  "n_quantized": 16,
+  "n_unquantized": 0
+ },
+ "n_lora_wrapped": 16,
+ "n_bare_experts": 0,
+ "expert_classes": {
+  "Experts4bit": 16
+ },
+ "n_attn_lora": 64,
+ "trainable_tensors": 192,
+ "trainable_params": 60817408,
+ "init_sha": "b14ec24782b3eb8a6bf0335ce5d3afb816046fb846a93accdd59c1379b36d5cd",
+ "init_tensors": 192,
+ "n_patched": 16,
+ "enable_reason": "[e4b.batched] batched training path on 16 ExpertsLoRA module(s)",
+ "probes": {},
+ "kernel_counter_key": "batched_dequant_whole",
+ "kernel_calls_per_step": [
+  48,
+  54,
+  42,
+  54,
+  54,
+  48,
+  48,
+  54,
+  54,
+  42,
+  48,
+  48,
+  48,
+  42,
+  48,
+  54,
+  54,
+  54,
+  54,
+  42,
+  48,
+  36,
+  36,
+  42,
+  54,
+  36,
+  42,
+  30,
+  30,
+  42,
+  30,
+  30,
+  36,
+  30,
+  36,
+  30,
+  42,
+  36,
+  30,
+  24,
+  30,
+  30,
+  42,
+  30,
+  48,
+  42,
+  30,
+  36,
+  30,
+  30,
+  30,
+  36,
+  30,
+  30,
+  42,
+  42,
+  24,
+  30,
+  36,
+  30
+ ],
+ "kernel_calls_per_step_min": 24,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 54
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 24
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 48
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 42
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 24
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 36
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 30
+  }
+ ],
+ "C1_tensors_hashed": 64,
+ "C1_bytes_hashed": 3623878656,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 4.15407,
+ "loss_last": 0.28212,
+ "loss_mean_last20": 0.33049,
+ "eval_loss_step0": 4.0159,
+ "eval_loss_final": 0.31969,
+ "eval_rel_improvement": 0.07961,
+ "s_per_step": 1.9108,
+ "step_ms": [
+  1778.2,
+  1438.8,
+  1959.0,
+  1409.6,
+  1428.1,
+  1749.7,
+  1594.5,
+  1428.6,
+  1585.3,
+  1778.8,
+  1790.4,
+  1604.1,
+  1630.0,
+  1998.3,
+  1646.1,
+  1425.6,
+  1594.8,
+  1441.1,
+  1434.4,
+  1953.4,
+  1618.7,
+  2139.2,
+  1980.0,
+  1965.6,
+  1403.7,
+  1950.0,
+  1923.0,
+  2136.7,
+  2289.1,
+  1763.4,
+  2277.2,
+  2137.0,
+  2088.7,
+  2122.0,
+  2097.2,
+  2139.9,
+  1914.3,
+  1949.9,
+  2304.3,
+  2318.0,
+  2282.0,
+  2145.6,
+  1771.0,
+  2293.6,
+  1635.4,
+  1951.3,
+  2130.0,
+  2137.8,
+  2166.2,
+  2248.6,
+  2025.7,
+  2055.5,
+  2067.5,
+  2244.4,
+  1734.9,
+  1744.3,
+  2389.1,
+  2052.8,
+  2051.5,
+  2324.9
+ ],
+ "tokens_per_step": [
+  83,
+  83,
+  89,
+  81,
+  79,
+  89,
+  83,
+  86,
+  83,
+  81,
+  76,
+  81,
+  89,
+  91,
+  89,
+  81,
+  81,
+  81,
+  87,
+  89,
+  86,
+  93,
+  81,
+  81,
+  80,
+  87,
+  80,
+  79,
+  79,
+  81,
+  87,
+  85,
+  80,
+  89,
+  83,
+  82,
+  80,
+  93,
+  77,
+  91,
+  89,
+  86,
+  81,
+  79,
+  87,
+  87,
+  91,
+  87,
+  89,
+  93,
+  83,
+  80,
+  91,
+  85,
+  87,
+  81,
+  79,
+  80,
+  86,
+  89
+ ],
+ "tokens_total": 5066,
+ "tokens_per_s": 44.2,
+ "peak_vram_gb": 6.211,
+ "idle_w": 17.1,
+ "mean_w": 122.5,
+ "power_samples": 489,
+ "joules_per_step": 201.53,
+ "losses": [
+  4.15407,
+  2.16659,
+  1.23995,
+  0.93205,
+  0.81775,
+  0.73471,
+  0.44068,
+  0.98334,
+  0.37855,
+  0.80089,
+  0.52797,
+  0.36574,
+  0.40227,
+  0.78092,
+  0.36427,
+  0.42469,
+  0.40955,
+  0.38803,
+  0.36181,
+  0.4265,
+  0.42296,
+  0.35616,
+  0.33777,
+  0.3277,
+  0.43664,
+  0.26045,
+  0.40513,
+  0.46865,
+  0.46919,
+  0.32326,
+  0.38686,
+  0.34647,
+  0.39042,
+  0.35246,
+  0.33279,
+  0.33271,
+  0.3733,
+  0.3345,
+  0.34275,
+  0.39259,
+  0.35294,
+  0.31301,
+  0.42369,
+  0.36773,
+  0.31265,
+  0.30715,
+  0.31162,
+  0.29087,
+  0.28158,
+  0.34308,
+  0.31497,
+  0.42287,
+  0.24582,
+  0.40762,
+  0.29998,
+  0.35732,
+  0.33468,
+  0.33974,
+  0.30044,
+  0.28212
+ ]
+}

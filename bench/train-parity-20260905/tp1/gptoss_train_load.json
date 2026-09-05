@@ -1,0 +1,66 @@
+{
+ "fam": "gptoss",
+ "model": "openai/gpt-oss-20b",
+ "model_type": "gpt_oss",
+ "arm": "load",
+ "status": "ok",
+ "load_s": 6.0,
+ "offload": false,
+ "verify": {
+  "n_quantized": 24,
+  "n_unquantized": 0
+ },
+ "geometry": {
+  "hidden_size": 2880,
+  "intermediate_size": 2880,
+  "moe_intermediate_size": null,
+  "num_hidden_layers": 24,
+  "num_experts": 32,
+  "num_local_experts": 32,
+  "num_experts_per_tok": 4,
+  "vocab_size": 201088,
+  "hidden_act": "silu",
+  "hidden_activation": null,
+  "tie_word_embeddings": false,
+  "attention_bias": true
+ },
+ "loaded_gb": 14.359,
+ "env": {
+  "e4b": "0.35.0",
+  "e4b_dist": "0.35.0",
+  "gnf4": "0.30.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.16.1",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-10339cdb-8c2b-901b-591e-3f872639797a",
+   "pci.bus_id": "00000000:C1:00.0",
+   "pcie.link.gen.current": "1",
+   "pcie.link.gen.max": "4",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "550.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.80.51",
+   "driver_version": "595.84",
+   "cpu": "AMD EPYC 7Q83 64-Core Processor",
+   "cpu_threads": 128,
+   "host_mem_gib": 251.5,
+   "vast_instance_id": "49937730",
+   "container_host": "a7bece36dda7"
+  },
+  "anchor_json": "/root/tp1/anchor.json",
+  "box_class": "pcie-full/launch-fast"
+ },
+ "written_by_arm": "attn_only",
+ "n_lora_wrapped": 0,
+ "n_bare_experts": 24,
+ "expert_classes": {
+  "GptOssExperts4bit (bare)": 24
+ }
+}

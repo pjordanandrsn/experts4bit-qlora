@@ -1,0 +1,83 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1180.35it/s]
+[11:44:47]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[11:44:49]   quantized experts on 32/32 MoE layers (40 experts each)
+[11:44:49]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+LOAD OK {"fam": "granite", "model": "ibm-granite/granite-3.1-3b-a800m-instruct", "model_type": "granitemoe", "arm": "load", "status": "ok", "load_s": 3.1, "offload": false, "verify": {"n_quantized": 32, "n_unquantized": 0}, "geometry": {"hidden_size": 1536, "intermediate_size": 512, "moe_intermediate_size": null, "num_hidden_layers": 32, "num_experts": null, "num_local_experts": 40, "num_experts_per_tok": 8, "vocab_size": 49155, "hidden_act": "silu", "hidden_activation": null, "tie_word_embeddings": true, "attention_bias": false}, "loaded_gb": 2.351, "written_by_arm": "fused", "n_lora_wrapped": 32, "n_bare_experts": 0, "expert_classes": {"Experts4bit": 32}}
+/root/tp1/tp1_train_smoke.py:280: RuntimeWarning: [e4b.fast] dgrad=True ignored: the installed grouped-nf4-gemm has no `dgrad_kernel` argument (it landed in 0.7.0). Upgrade with `pip install -U 'grouped-nf4-gemm>=0.14.0'`; the fused training path still runs, with its per-expert decode backward.
+  n = fn(*args, **kw)
+Traceback (most recent call last):
+  File "/root/tp1/tp1_train_smoke.py", line 528, in <module>
+    main()
+  File "/root/tp1/tp1_train_smoke.py", line 433, in main
+    ev0 = eval_loss(model, ev, a.eval_n)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tp1/tp1_train_smoke.py", line 144, in eval_loss
+    tot += float(model(input_ids=x, labels=x).loss)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/utils/generic.py", line 939, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/granitemoe/modeling_granitemoe.py", line 610, in forward
+    outputs = self.model(
+              ^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/utils/generic.py", line 1068, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/utils/output_capturing.py", line 262, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/granitemoe/modeling_granitemoe.py", line 463, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/modeling_layers.py", line 114, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/granitemoe/modeling_granitemoe.py", line 371, in forward
+    hidden_states = self.block_sparse_moe(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/transformers/models/granitemoe/modeling_granitemoe.py", line 199, in forward
+    layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fast.py", line 672, in <lambda>
+    lambda self, hs, tki, tkw: fused_experts_train_forward(self, hs, tki, tkw),
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/fast.py", line 532, in fused_experts_train_forward
+    proj = fused_grouped_lora(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/tp1/tp1_train_smoke.py", line 234, in w
+    return orig(*a, **k)
+           ^^^^^^^^^^^^^
+TypeError: _dequant_whole() got an unexpected keyword argument 'weights_fn'
