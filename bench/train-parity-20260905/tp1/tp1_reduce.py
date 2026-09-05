@@ -230,6 +230,11 @@ def classify(d, fam, arm, attempts, fetch_fail, outer, receipt):
         aligned = starts[-n:] if n and len(starts) >= n else starts
         if n and starts:
             align_flag = f"start lines paired positionally ({len(ran)} ran, {len(aborts)} without harness output, {n} result lines)"
+    # Every abort lands in exactly one row: the attempt whose start line follows it, or the last attempt when none does.
+    abort_rows = {}
+    for x in extra:
+        k_to = next((j + 1 for j, a in enumerate(aligned) if a["idx"] > x["idx"]), n)
+        abort_rows.setdefault(max(k_to, 1), []).append(x)
     for k, att in enumerate(attempts, 1):
         rc = att["rc"]
         rec = receipt if k == n else None
@@ -264,13 +269,14 @@ def classify(d, fam, arm, attempts, fetch_fail, outer, receipt):
         else:
             row.update(status="NOT_RUN", reason=f"rc={rc} ({RC_MEANING.get(rc, 'unknown')}) with receipt status {st!r}: unreadable combination")
             row["flags"].append("unreadable rc/status combination")
-        mine = [x for x in extra if start is None or (x["idx"] < start["idx"] and (k == 1 or x["idx"] > aligned[k - 2]["idx"]))]
-        if k == n:
-            mine = mine or ([x for x in extra if start is not None and x["idx"] > start["idx"]] if not any(
-                x["idx"] < start["idx"] for x in extra) else mine) if start is not None else extra
-        if mine:
-            row["flags"].append(f"{len(mine)} earlier start line(s) without a result line at "
-                                + ", ".join(x["ts"] or "?" for x in mine) + " (a launcher abort before the harness ran; outer.log)")
+        before = [x for x in abort_rows.get(k, []) if start is None or x["idx"] < start["idx"]]
+        after = [x for x in abort_rows.get(k, []) if start is not None and x["idx"] > start["idx"]]
+        if before:
+            row["flags"].append(f"{len(before)} earlier start line(s) without a result line at "
+                                + ", ".join(x["ts"] or "?" for x in before) + " (a launcher abort before the harness ran; outer.log)")
+        if after:
+            row["flags"].append(f"{len(after)} later start line(s) without a result line at "
+                                + ", ".join(x["ts"] or "?" for x in after) + " (a launcher abort after this attempt; outer.log)")
         if align_flag:
             row["flags"].append(align_flag)
         rows.append(row)
