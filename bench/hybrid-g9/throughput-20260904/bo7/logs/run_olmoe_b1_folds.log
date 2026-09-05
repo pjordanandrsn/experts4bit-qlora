@@ -1,0 +1,7 @@
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1282.71it/s]
+[02:20:47]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[02:20:47]   quantized experts on 16/16 MoE layers (64 experts each)
+[02:20:47]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:20:47]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:20:50]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+B1D_TIMED_GRAPH steps=127 step=2.97ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_folds.json

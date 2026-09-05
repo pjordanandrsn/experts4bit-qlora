@@ -1,0 +1,8 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1816.13it/s]
+[02:41:37]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[02:41:37]   quantized experts on 48/48 MoE layers (128 experts each)
+[02:41:37]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:41:40]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:42:00]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+B1D_TIMED_GRAPH steps=127 step=8.68ms compile=None recompiles=0 out=/root/bo7/qwen3_b1_nf4.json

@@ -1,0 +1,4 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD EPYC 7Q83 64-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             251          44          56           0         150         204

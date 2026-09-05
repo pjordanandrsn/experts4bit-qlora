@@ -1,0 +1,87 @@
+#!/bin/bash
+# Lane bo7 (2026-09-04): THROUGHPUT CENSUS, all six families. The registered K8 gate stays in ppl units. The int4-expert arms that
+# failed their second text (Qwen3 `all` +0.063 ppl, Mixtral licensed stack +0.058 ppl on c4val1) are re-run with per-expert
+# GPTQ calibration (#384 mechanism) in place of RTN. Cut: e4b integration-8 @db2a0703b803e50de1e3ac4d18b4705cb90c17fe
+# (main 7dcc16f = 0.34.0 + #385 + #388, plus #384 and the GPU-solve knob) + gnf4 main @0b25d1389701bb793d60075e5b870212c848e33a.
+set -uo pipefail
+LANE=bo7; W=/root/$LANE; mkdir -p $W; cd $W
+export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONPATH=$W/hook E4B_INT4_GPTQ_DEVICE=cuda
+say(){ echo "[$(date -u +%FT%TZ)] $*"; }
+say "install: gnf4 @0b25d1389701bb793d60075e5b870212c848e33a + e4b integration-8 @db2a0703b803e50de1e3ac4d18b4705cb90c17fe"
+perl -e 'alarm 1500; exec @ARGV' python -m pip install -q --no-input --prefer-binary "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@0b25d1389701bb793d60075e5b870212c848e33a" "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@db2a0703b803e50de1e3ac4d18b4705cb90c17fe" "transformers==5.16.1" "bitsandbytes==0.50.1" datasets accelerate sentencepiece tiktoken safetensors > pip.log 2>&1
+rc=$?; echo "pip rc=$rc"; [ $rc -ne 0 ] && { tail -4 pip.log; echo "PIP FAIL"; touch TP_DONE; exit 9; }
+python - <<'PYT' || { echo "TRIPWIRE FAIL"; touch TP_DONE; exit 9; }
+from int4_b32 import rope_heads, reduce_partials, combine_rows, swiglu_rows
+from gptq_pack import gptq_pack_int4_b32, HessianAccumulator
+from experts4bit_qlora.engines.int4_experts import calibrate_expert_hessians, _ExpertHessianSink
+from experts4bit_qlora.engines import int4_experts, hot_residency
+import inspect, os
+assert "E4B_INT4_GPTQ_DEVICE" in inspect.getsource(int4_experts), "gpu-solve knob missing"
+assert hasattr(hot_residency, "_CALIB_SINK") and hasattr(hot_residency, "_swiglu_or"), "tap or swiglu path missing"
+assert os.path.exists("/root/bo7/hook/usercustomize.py"), "hook missing"
+import usercustomize  # noqa: F401
+import experts4bit_qlora as e; print("bo7 tripwire OK: integration-8 (calibrated experts + gpu solve, swiglu/combine) + gnf4 main; e4b", e.__version__)
+PYT
+nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | tee forensics.txt
+lscpu | grep -E "Model name" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt
+python -c "import torch; assert torch.cuda.is_available(); print('cuda ok')" || { echo "DUD BOX"; touch TP_DONE; exit 10; }
+[ -s /root/.cache/huggingface/token ] || { echo "TOKEN MISSING"; touch TP_DONE; exit 8; }
+df -h /root | tail -1
+: > summary.txt
+fenv(){ case "$1" in 0) echo "0 0 0";; r1) echo "1 0 0";; r12) echo "1 1 0";; epi) echo "0 0 1";; r1epi) echo "1 0 1";; all) echo "1 1 1";; *) echo "0 0 0";; esac; }
+# k8 TAG ARM EXP CALIBATTN FUSE MODEL ARENA [extra env...]   (expert calibration is the extra env E4B_SERVE_EXP_INT4_CALIB=1)
+arm(){ local TAG=$1 ARM=$2 B=$3 EXP=$4 CA=$5 FU=$6 MID=$7 AR=$8; shift 8; read G R E <<<"$(fenv $FU)"
+  say "arm $TAG/$ARM (B=$B exp=$EXP calib=$CA fuse=$FU $*)"
+  env "$@" E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 E4B_MODEL_ID="$MID" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 \
+      E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E \
+    perl -e 'alarm 3600; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$AR" --calib $W/calib.json --placement-override all-vram --amort off \
+      --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/${TAG}_b${B}_$ARM.json > run_${TAG}_b${B}_$ARM.log 2>&1
+  grep -aE "B1D_TIMED|BV3_|INT4EXP|ATTNINT4|REFUSED|Error" run_${TAG}_b${B}_$ARM.log | tail -3 | sed "s/^/    /"; grep -aE "B1D_TIMED|BV3_" run_${TAG}_b${B}_$ARM.log | tail -1 | sed "s/^/SUMMARY run_${TAG}_b${B}_$ARM.log /" >> summary.txt; }
+bake(){ local MID=$1 TAG=$2; [ -e "$W/work_$TAG/nf4.arena" ] && { say "bake $TAG: arena present, kept"; return 0; }; say "bake $TAG"; mkdir -p $W/work_$TAG
+  K8_MODEL="$MID" K8_WORK="$W/work_$TAG" perl -e 'alarm 5400; exec @ARGV' python $W/k8_bake.py > bake_$TAG.log 2>&1 || { echo "$TAG: BAKE FAILED"; tail -3 bake_$TAG.log; return 1; }
+  grep -aE "arena|BAKE" bake_$TAG.log | tail -1; df -h /root | tail -1; }
+free_family(){ rm -rf $W/work_$1; rm -rf /root/.cache/huggingface/hub/models--${2}; say "freed $1 (disk: $(df -h /root | tail -1 | awk '{print $4}') free)"; }
+
+CAL="E4B_SERVE_EXP_INT4_CALIB=1"
+# ---------------- Granite-3.1-3B-A800M (6 GB): NF4, the licensed r12+epilogue stack, int4 RTN experts, calibrated experts
+GR=ibm-granite/granite-3.1-3b-a800m-instruct; bake $GR granite && { GA=$W/work_granite/nf4.arena
+  for B in 1 16; do
+    arm granite nf4 $B 0 0 0 $GR $GA; arm granite r12epi $B 0 0 all $GR $GA
+    arm granite int4_r12epi $B 1 0 all $GR $GA; arm granite calibexp_r12epi $B 1 0 all $GR $GA $CAL
+  done; echo "GRANITE DONE"; }
+free_family granite ibm-granite--granite-3.1-3b-a800m-instruct
+# ---------------- OLMoE-1B-7B (14 GB): NF4, folds+epilogue, calibrated int4 attention, int4 RTN experts (unlicensed on this family, for the record)
+OL=allenai/OLMoE-1B-7B-0924-Instruct; bake $OL olmoe && { OA=$W/work_olmoe/nf4.arena
+  for B in 1 16; do
+    arm olmoe nf4 $B 0 0 0 $OL $OA; arm olmoe folds $B 0 0 all $OL $OA
+    arm olmoe calattn $B 0 1 all $OL $OA; arm olmoe int4all $B 1 1 all $OL $OA
+  done; echo "OLMOE DONE"; }
+free_family olmoe allenai--OLMoE-1B-7B-0924-Instruct
+# ---------------- gpt-oss-20b (13 GB): NF4 store + r12, and the MXFP4 store route (GEMV for single rows, NF4 kept for batched rows)
+GO=openai/gpt-oss-20b; bake $GO gptoss && { OA2=$W/work_gptoss/nf4.arena
+  for B in 1 16; do
+    arm gptoss nf4_r12 $B 0 0 r12 $GO $OA2; arm gptoss store_r12 $B 1 0 r12 $GO $OA2 E4B_INT4_KEEP_NF4=1
+  done; echo "GPTOSS DONE"; }
+free_family gptoss openai--gpt-oss-20b
+# ---------------- Qwen3-30B-A3B (60 GB): NF4, folds+epilogue, calibrated attention, int4 RTN (the former `all`), calibrated experts with and without calibrated attention
+Q=Qwen/Qwen3-30B-A3B; bake $Q qwen3 && { QA=$W/work_qwen3/nf4.arena
+  for B in 1 16; do
+    arm qwen3 nf4 $B 0 0 0 $Q $QA; arm qwen3 folds $B 0 0 all $Q $QA; arm qwen3 calattn $B 0 1 all $Q $QA
+    arm qwen3 int4all $B 1 1 all $Q $QA; arm qwen3 calibexp_all $B 1 1 all $Q $QA $CAL; arm qwen3 calibexp_folds $B 1 0 all $Q $QA $CAL
+  done; echo "QWEN3 DONE"; }
+free_family qwen3 Qwen--Qwen3-30B-A3B
+# ---------------- Gemma-4-26B-A4B (52 GB): NF4, the licensed r1+epilogue stack (round 2 refuses by design), int4 RTN, calibrated attention
+GM=google/gemma-4-26B-A4B-it; bake $GM gemma4 && { GMA=$W/work_gemma4/nf4.arena
+  for B in 1 16; do
+    arm gemma4 nf4 $B 0 0 0 $GM $GMA; arm gemma4 r1epi $B 0 0 r1epi $GM $GMA
+    arm gemma4 int4_r1epi $B 1 0 r1epi $GM $GMA; arm gemma4 calattn_r1epi $B 0 1 r1epi $GM $GMA
+  done; echo "GEMMA4 DONE"; }
+free_family gemma4 google--gemma-4-26B-A4B-it
+# ---------------- Mixtral-8x7B (93 GB, last): NF4, folds+epilogue, int4 RTN licensed-candidate, calibrated experts, and the failed calibrated-attention `all`
+MX=mistralai/Mixtral-8x7B-Instruct-v0.1; bake $MX mixtral && { MA=$W/work_mixtral/nf4.arena
+  for B in 1 16; do
+    arm mixtral nf4 $B 0 0 0 $MX $MA; arm mixtral folds $B 0 0 all $MX $MA; arm mixtral lic $B 1 0 all $MX $MA
+    arm mixtral calibexp_lic $B 1 0 all $MX $MA $CAL; arm mixtral all $B 1 1 all $MX $MA
+  done; echo "MIXTRAL DONE"; }
+free_family mixtral mistralai--Mixtral-8x7B-Instruct-v0.1
+say "TP_DONE"; touch TP_DONE

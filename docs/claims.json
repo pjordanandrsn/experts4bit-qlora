@@ -651,7 +651,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.9380, int4exp=1.9337, calib=1.9295. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.9380, int4exp=1.9337, calib=1.9295. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: the full stack (int4all) 1.71 ms = 584.8 tok/s, x2.070 over that box's NF4 (3.54 ms = 282.5); folds alone 336.7 (x1.192), + calibrated attention 343.6 (x1.216) -- e4b.serve.census.bo7.olmoe.*. NOTE at bo7 bundle time (2026-09-05): this entry's 'best licensed' label predates the application of the calibrated rule's two-text clause (#386) -- the calibrated attention pack in this stack has one text on record here and a +0.60 ppl C4-val FAIL on a private receipt (e4b.serve.b1.qwen3-30b.int4attn-calib.5090 notes), so under the rule as written the stack is measured, not licensed; the census quotes NF4 as this family's position. This entry's value and status are unchanged."
     },
     {
       "id": "e4b.serve.tp.olmoe.b16.5090.2026-09-04",
@@ -673,7 +673,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.9380, int4exp=1.9337, calib=1.9295. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.9380, int4exp=1.9337, calib=1.9295. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: int4all 3084.0 tok/s, x2.289 over that box's NF4 (1347.5) -- e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05, labelled measured, not licensed under the rule as written (see the B=1 entry's note). Unchanged."
     },
     {
       "id": "e4b.serve.tp.granite.b1.5090.2026-09-04",
@@ -695,7 +695,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. CORRECTION 2026-09-04: int4exp − nf4 = +0.0118 nats = +0.063 ppl, over the registered 0.05-ppl uncalibrated gate (experts4bit_qlora.k8_gate); this row is the speed of a configuration that FAILS quality on this family (int4-b32 experts cost ~1.2-1.8% ppl at <=1B active), not a licensed best. The licensed Granite stack keeps NF4 experts; its number is pending on the validation lane."
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.6741, int4exp=1.6859, calib=1.7003. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. CORRECTION 2026-09-04: int4exp − nf4 = +0.0118 nats = +0.063 ppl, over the registered 0.05-ppl uncalibrated gate (experts4bit_qlora.k8_gate); this row is the speed of a configuration that FAILS quality on this family (int4-b32 experts cost ~1.2-1.8% ppl at <=1B active), not a licensed best. The licensed Granite stack keeps NF4 experts; its number is pending on the validation lane. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: RTN int4 experts + folds + epilogue 2.05 ms = 487.8 tok/s, x2.146 over that box's NF4 -- measured, not licensed, the same verdict as this CORRECTION (e4b.serve.census.bo7.granite.census.5090.2026-09-05). Unchanged."
     },
     {
       "id": "e4b.serve.tp.granite.b16.5090.2026-09-04",
@@ -783,7 +783,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=4.8103. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=4.8103. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: NF4 12.36 ms = 80.9 tok/s; the build-out arms r1epi 103.6 (x1.281, exact arithmetic), int4_r1epi 137.9 (x1.705, no quality verdict) -- e4b.serve.census.bo7.gemma4.census.5090.2026-09-05. Unchanged."
     },
     {
       "id": "e4b.serve.tp.gemma4.b16.5090.2026-09-04",
@@ -827,7 +827,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.1805, int4exp=1.1690, calib=1.1916. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date."
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.1805, int4exp=1.1690, calib=1.1916. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: NF4 19.87 ms = 50.3 tok/s; int4 experts + folds + epilogue 117.2 (x2.329), + calibrated attention 130.7 (x2.597) -- measured, not licensed (bo5's second-text FAILs stand; e4b.serve.census.bo7.mixtral.census.5090.2026-09-05). Unchanged."
     },
     {
       "id": "e4b.serve.tp.mixtral.b16.5090.2026-09-04",
@@ -896,7 +896,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps sha 5281b7c3df28: nf4 1.67407, nf4_r12epi_new 1.67767 (+0.019 ppl, pass). The int4-expert rows (int4exp +0.063 ppl, stack +0.056) FAIL the registered 0.05-ppl gate and are retracted as a parity claim (#381); the fold's own delta on the int4 stack is x1.156 (stackr2_old 3.19 ms -> stackr2_new 2.76 ms, control flat). Lane bo5 (2026-09-04, box 49841214, integration-6) re-measured this licensed stack at 294.1 tok/s B=1 / 1736.1 B=16 (e4b.serve.buildout.bo5.granite.*) and scored the C4-calibrated int4 experts route (#384 draft; 2524 gptq / 36 rtn): wikitext +0.0140 ppl (pass, sub-floor) but c4val1 2.48148 (ppl 11.95897) vs NF4 2.44857 (11.57180) = +0.3872 ppl, 10x the 0.0033-nat floor -- FAIL; its 409.8 / 3050.1 is measured and refused. Uncalibrated int4 experts reproduce the retraction (+0.0634 ppl, FAIL). #387's fused qkv + fused rope-only fold is quality-clean (-0.0011 nats) and x0.968 at B=1 -- draft. Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
+      "notes": "K8 2048 steps sha 5281b7c3df28: nf4 1.67407, nf4_r12epi_new 1.67767 (+0.019 ppl, pass). The int4-expert rows (int4exp +0.063 ppl, stack +0.056) FAIL the registered 0.05-ppl gate and are retracted as a parity claim (#381); the fold's own delta on the int4 stack is x1.156 (stackr2_old 3.19 ms -> stackr2_new 2.76 ms, control flat). Lane bo5 (2026-09-04, box 49841214, integration-6) re-measured this licensed stack at 294.1 tok/s B=1 / 1736.1 B=16 (e4b.serve.buildout.bo5.granite.*) and scored the C4-calibrated int4 experts route (#384 draft; 2524 gptq / 36 rtn): wikitext +0.0140 ppl (pass, sub-floor) but c4val1 2.48148 (ppl 11.95897) vs NF4 2.44857 (11.57180) = +0.3872 ppl, 10x the 0.0033-nat floor -- FAIL; its 409.8 / 3050.1 is measured and refused. Uncalibrated int4 experts reproduce the retraction (+0.0634 ppl, FAIL). #387's fused qkv + fused rope-only fold is quality-clean (-0.0011 nats) and x0.968 at B=1 -- draft. Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: r12epi 3.28 ms = 304.9 tok/s, x1.341 over that box's NF4 (4.40 ms) -- e4b.serve.census.bo7.granite.b1.5090.2026-09-05; quote each with its box, never the ratio between them. This entry's value and status are unchanged."
     },
     {
       "id": "e4b.serve.buildout.granite.b16.5090.2026-09-04",
@@ -918,7 +918,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "Same window and gate as the B=1 claim; the int4-expert B=16 rows (2201-2869 tok/s) fail quality and are not licensed. Lane bo5 (box 49841214) re-measured the licensed stack at 1736.1 tok/s B=16 (e4b.serve.buildout.bo5.granite.b16); the C4-calibrated int4 experts route (#384 draft) reaches 3050.1 but FAILS the second text (+0.3872 ppl on c4val1) and is refused; #387 fused qkv 1748.4 vs 1724.6 unfused on integration-7 (x1.014, one pair). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
+      "notes": "Same window and gate as the B=1 claim; the int4-expert B=16 rows (2201-2869 tok/s) fail quality and are not licensed. Lane bo5 (box 49841214) re-measured the licensed stack at 1736.1 tok/s B=16 (e4b.serve.buildout.bo5.granite.b16); the C4-calibrated int4 experts route (#384 draft) reaches 3050.1 but FAILS the second text (+0.3872 ppl on c4val1) and is refused; #387 fused qkv 1748.4 vs 1724.6 unfused on integration-7 (x1.014, one pair). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: r12epi 1836.8 tok/s, x1.160 over that box's NF4 (1583.2) -- e4b.serve.census.bo7.granite.b16.5090.2026-09-05; quote each with its box. This entry's value and status are unchanged."
     },
     {
       "id": "e4b.serve.buildout.gemma4.b1.5090.2026-09-04",
@@ -940,7 +940,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "NO quality instrument on this family (SERVING-PARITY: the same tokens move +-0.1-0.27 nats under arithmetically equivalent forwards); the quoted best is the arm with no calibrated pack. The calibrated attention (x1.075) and head (x1.078 on top) are measured speed with an unreadable K8; the dense MLP (#378) is x1.010."
+      "notes": "NO quality instrument on this family (SERVING-PARITY: the same tokens move +-0.1-0.27 nats under arithmetically equivalent forwards); the quoted best is the arm with no calibrated pack. The calibrated attention (x1.075) and head (x1.078 on top) are measured speed with an unreadable K8; the dense MLP (#378) is x1.010. NOTE at bo7 bundle time (2026-09-05): this entry's claim text says 'licensed configuration under the registered K8 gate' while its notes (and SERVING-THROUGHPUT's gate column) say NO quality instrument exists on this family -- the census reads the notes: the quoted best is measured with no quality verdict, not licensed by a verdict; bo7's Gemma-4 rows (pending at the 05:31Z snapshot) carry that label. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: int4_r1epi (this stack) 7.25 ms = 137.9 tok/s, x1.705 over that box's NF4 (12.36 ms = 80.9) -- measured, no quality verdict; the exact r1epi 9.65 ms = 103.6 (x1.281) is the census's position with the no-instrument caveat -- e4b.serve.census.bo7.gemma4.*; quote each with its box. Gemma-4-it loaded without the #344 fault there. This entry's value and status are unchanged."
     },
     {
       "id": "e4b.serve.buildout.gemma4.b16.5090.2026-09-04",
@@ -962,7 +962,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "No quality instrument on this family; calibrated attention adds nothing at B=16 (960.7)."
+      "notes": "No quality instrument on this family; calibrated attention adds nothing at B=16 (960.7). NOTE at bo7 bundle time (2026-09-05): read with the B=1 entry's note -- no quality instrument on this family; the census labels this stack measured, no quality verdict. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: int4_r1epi 1037.4 tok/s (x1.697 over that box's NF4 611.2), r1epi 675.8 (x1.106) -- e4b.serve.census.bo7.gemma4.*; quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.mixtral.b1.5090.2026-09-04",
@@ -986,7 +986,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate; the int4-expert stack with sequentially GPTQ-calibrated experts reads c4val1 +0.0391 (pass) but wikitext +0.0771 ppl against its own lane's NF4 -- FAIL as registered, measured, NOT licensed (e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04): sequential calibration closed Qwen3's gap and did not close Mixtral's. This entry's readings stand as measured."
+      "notes": "K8 2048 steps: nf4 1.18048, int4exp 1.16898 (-0.037 ppl, pass), all 1.19408 (+0.045 ppl, one-sided pass on ONE text; the second, out-of-domain text has not been scored). The rotary-only fold (#379) applies to Mixtral's norm-less attention and is not yet measured on it. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate; the int4-expert stack with sequentially GPTQ-calibrated experts reads c4val1 +0.0391 (pass) but wikitext +0.0771 ppl against its own lane's NF4 -- FAIL as registered, measured, NOT licensed (e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04): sequential calibration closed Qwen3's gap and did not close Mixtral's. This entry's readings stand as measured. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: all (this stack) 7.65 ms = 130.7 tok/s, x2.597 over that box's NF4 (19.87 ms = 50.3); lic 8.53 = 117.2 (x2.329); the exact folds 18.71 = 53.4 (x1.062) -- all measured, not licensed, the census's position for this family is NF4 (e4b.serve.census.bo7.mixtral.*); quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.mixtral.b16.5090.2026-09-04",
@@ -1009,7 +1009,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "Same window and gate as the B=1 claim. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo6 (2026-09-04): see e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 (calibrated experts: c4val1 +0.0391 pass, wikitext +0.0771 FAIL -- FAIL as registered, not licensed)."
+      "notes": "Same window and gate as the B=1 claim. LICENSING (second text measured on lane bo5, 2026-09-04, box 49841214): all on wikitext 1.19051 (+0.0328 ppl vs P30 NF4 1.18048, pass), on c4val1 2.12424 (ppl 8.36651) vs NF4 2.11031 (8.25079) = +0.1157 ppl -- FAIL as registered. bo5 re-measured all at 123.3 tok/s B=1 / 377.3 B=16 on its box (the rope-only fold is x1.062 at B=1 there). WITHDRAWN: the uncalibrated int4-expert stack this entry called licensed on one text (stack 102.8 / 372.0; bo5c's lic = int4 experts + r1 + r2 + epilogue) scores -0.046 ppl on wikitext but +0.0575 ppl on c4val1 (+0.0070 nats; this family's floor is unmeasured) -- FAIL as registered by 0.008, so the 'licensed stack' label is withdrawn under the rule as written, pending the user's decision on re-registering the gate in nats against a measured floor; not retuned (e4b.serve.buildout.bo5.mixtral.*, NOT licensed). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo6 (2026-09-04): see e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 (calibrated experts: c4val1 +0.0391 pass, wikitext +0.0771 FAIL -- FAIL as registered, not licensed). bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: all 375.5 tok/s (x1.962 over that box's NF4 191.4), lic 374.9 (x1.959), folds 194.9 (x1.018) -- e4b.serve.census.bo7.mixtral.*; quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.gptoss.b1.5090.2026-09-04",
@@ -1032,7 +1032,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P32 sections)"
       ],
-      "notes": "gpt-oss has no ppl instrument on raw text (ppl ~560, OOD-flattery regime: its NF4 arm scores better than bf16 upstream and every noisier arm scores 'better'); the folds' +0.049 nats is above the family's 0.0176-nat floor and cannot be read against the ppl budget. The native MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o) and ~10%/row from the NF4 path (NF4's own error); 151.1 tok/s is quoted as SPEED with the quality gate open, pending a KL against the model's own MXFP4 forward on harmony text. Lane bo5 (2026-09-04, box 49841214, integration-6 with #372): the route rule -- gemv_mxfp4_b32 for single rows, NF4 kept for batched rows (E4B_INT4_KEEP_NF4=1) -- measures 173.3 tok/s B=1 (x1.270 vs r12 136.4 on that box) and 719.7 B=16 (x0.971 vs 741.4), recovering the GEMV-everywhere route's x0.81 at B=16; still no K8 arm (exact bytes, bo3q) and the quality gate stays open on this family (e4b.serve.buildout.bo5.gptoss.*). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md."
+      "notes": "gpt-oss has no ppl instrument on raw text (ppl ~560, OOD-flattery regime: its NF4 arm scores better than bf16 upstream and every noisier arm scores 'better'); the folds' +0.049 nats is above the family's 0.0176-nat floor and cannot be read against the ppl budget. The native MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o) and ~10%/row from the NF4 path (NF4's own error); 151.1 tok/s is quoted as SPEED with the quality gate open, pending a KL against the model's own MXFP4 forward on harmony text. Lane bo5 (2026-09-04, box 49841214, integration-6 with #372): the route rule -- gemv_mxfp4_b32 for single rows, NF4 kept for batched rows (E4B_INT4_KEEP_NF4=1) -- measures 173.3 tok/s B=1 (x1.270 vs r12 136.4 on that box) and 719.7 B=16 (x0.971 vs 741.4), recovering the GEMV-everywhere route's x0.81 at B=16; still no K8 arm (exact bytes, bo3q) and the quality gate stays open on this family (e4b.serve.buildout.bo5.gptoss.*). Receipt: bench/hybrid-g9/throughput-20260904/bo5/RESULTS.md. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: nf4_r12 6.92 ms = 144.5 tok/s (that lane's reference arm) and the MXFP4 store under the route rule 5.35 ms = 186.9 (x1.293, gate open) -- e4b.serve.census.bo7.gptoss.*; quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.qwen3.b1.5090.2026-09-04",
@@ -1058,7 +1058,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "K8 2048 steps: wikitext all 1.84571 (ppl 6.33260; -0.105 ppl vs bo3's NF4 1.86213 on the same window sha 9ef10d760ad9); c4val1 (sha 4bcb55179b96) NF4 2.80923 (16.59705), all 2.81299 (16.65973) = +0.0627 ppl, +0.0038 nats -- FAIL as registered. Attribution on c4val1 (bo5b, integration-7): int4exp +0.0709 ppl FAIL; int4exp+calib attn +0.0476 pass; exact folds alone -0.0730 FAIL-by-improving; int4exp+folds -0.0183 pass -- every arm inside the 0.0095-nat floor (+-0.158 ppl at ppl 16.6), non-additive by 0.005 nats: the +0.063 is noise, not a component. NOT licensed under the rule as written; the gate is not retuned; user decision pending on re-registering in nats against the measured floor. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. No NF4 speed arm on this lane, so no in-lane ratio; bo3's same-class box had NF4 at 98.0 and this stack (without #385) at 177.9 -- different boxes, quote each with its box, never the ratio between them. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate -- the rule stays in perplexity. With GPTQ-calibrated int4 experts in place of RTN the same stack class passes both texts against its own lane's NF4 (wikitext -0.0597 / c4val1 +0.0352, all-at-once pack; e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) and reads 158.0 / 993.6 tok/s on that box (e4b.serve.buildout.bo6.qwen3.b1 / .b16 -- a different host; quote each with its box). This entry's RTN reading stands as measured; what bo6 adds is the method that makes the stack pass. bo6c (2026-09-05): the streamed 64k-token calibrated stack IS licensed under the unchanged gate (wikitext -0.0528 / c4val1 -0.0662 ppl, both sub-floor: at parity or better on both texts; e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05). This entry's value and status are unchanged; bo7 measures the calibrated stack's speed at the hook's 16k default."
+      "notes": "K8 2048 steps: wikitext all 1.84571 (ppl 6.33260; -0.105 ppl vs bo3's NF4 1.86213 on the same window sha 9ef10d760ad9); c4val1 (sha 4bcb55179b96) NF4 2.80923 (16.59705), all 2.81299 (16.65973) = +0.0627 ppl, +0.0038 nats -- FAIL as registered. Attribution on c4val1 (bo5b, integration-7): int4exp +0.0709 ppl FAIL; int4exp+calib attn +0.0476 pass; exact folds alone -0.0730 FAIL-by-improving; int4exp+folds -0.0183 pass -- every arm inside the 0.0095-nat floor (+-0.158 ppl at ppl 16.6), non-additive by 0.005 nats: the +0.063 is noise, not a component. NOT licensed under the rule as written; the gate is not retuned; user decision pending on re-registering in nats against the measured floor. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. No NF4 speed arm on this lane, so no in-lane ratio; bo3's same-class box had NF4 at 98.0 and this stack (without #385) at 177.9 -- different boxes, quote each with its box, never the ratio between them. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate -- the rule stays in perplexity. With GPTQ-calibrated int4 experts in place of RTN the same stack class passes both texts against its own lane's NF4 (wikitext -0.0597 / c4val1 +0.0352, all-at-once pack; e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) and reads 158.0 / 993.6 tok/s on that box (e4b.serve.buildout.bo6.qwen3.b1 / .b16 -- a different host; quote each with its box). This entry's RTN reading stands as measured; what bo6 adds is the method that makes the stack pass. bo6c (2026-09-05): the streamed 64k-token calibrated stack IS licensed under the unchanged gate (wikitext -0.0528 / c4val1 -0.0662 ppl, both sub-floor: at parity or better on both texts; e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05). This entry's value and status are unchanged; bo7 measures the calibrated stack's speed at the hook's 16k default. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: the RTN stack (int4all) 4.20 ms = 238.1 tok/s, x2.067 over that box's NF4 (8.68 ms = 115.2), and the streamed 16k-calibrated stack (calibexp_all) 4.20 ms = 238.1, x2.067 -- speed-identical, same kernel and bytes -- e4b.serve.census.bo7.qwen3.census.5090.2026-09-05; the LICENSED (64k) stack's speed is not measured there either (e4b.serve.census.bo7.qwen3.b1, measured under amendment 2 after TP_DONE: 238.1 tok/s, x2.067 over that box's NF4). Quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.qwen3.b16.5090.2026-09-04",
@@ -1082,7 +1082,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.qwen3.b1 (FAIL as registered on c4val1, +0.0627 ppl / +0.0038 nats, sub-floor). bo3's same-class box measured 1089.6 for the stack without #385's glue -- a different box; quote each with its box. bo6 (2026-09-04): with GPTQ-calibrated int4 experts the same stack class passes both texts on its own lane (e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) and reads 993.6 tok/s on that box (e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04; different host, no cross-box ratio). This RTN reading stands as measured. bo6c (2026-09-05): the streamed 64k-token calibrated stack IS licensed under the unchanged gate (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); this entry's value and status are unchanged."
+      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.qwen3.b1 (FAIL as registered on c4val1, +0.0627 ppl / +0.0038 nats, sub-floor). bo3's same-class box measured 1089.6 for the stack without #385's glue -- a different box; quote each with its box. bo6 (2026-09-04): with GPTQ-calibrated int4 experts the same stack class passes both texts on its own lane (e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) and reads 993.6 tok/s on that box (e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04; different host, no cross-box ratio). This RTN reading stands as measured. bo6c (2026-09-05): the streamed 64k-token calibrated stack IS licensed under the unchanged gate (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); this entry's value and status are unchanged. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: int4all 1335.4 tok/s (x2.617 over that box's NF4 510.3), calibexp_all (16k) 1338.8 (x2.624) -- e4b.serve.census.bo7.qwen3.census.5090.2026-09-05; the licensed 64k stack not measured (e4b.serve.census.bo7.qwen3.b16, measured under amendment 2 after TP_DONE: 1327.5 tok/s, x2.602 over that box's NF4). Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.granite.b1.5090.2026-09-04",
@@ -1108,7 +1108,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "K8 2048 steps: wikitext nf4_r12epi 1.67304 (ppl 5.32834, sha 5281b7c3df28; bo3: +0.019 ppl vs plain NF4, pass), c4val1 2.44857 (11.57180, sha 549ca209af16) -- this lane's baseline. C4-calibrated int4 experts (#384 draft, 2524 gptq / 36 rtn): wikitext +0.0140 ppl (+0.0026 nats, sub-floor, pass) but c4val1 +0.3872 ppl (+0.0329 nats, 10x the 0.0033-nat floor) -- FAIL as registered; refused. RTN int4 experts +0.0634 ppl FAIL (bo3's retraction reproduced). #387 fused qkv + fused rope-only fold: K8 1.67198 (-0.0011 nats, pass), x0.968 B=1 across three pairs, census Self CUDA 27.099 -> 26.031 ms per 8 steps (-4%) with wall +3% -- buys nothing, draft. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict."
+      "notes": "K8 2048 steps: wikitext nf4_r12epi 1.67304 (ppl 5.32834, sha 5281b7c3df28; bo3: +0.019 ppl vs plain NF4, pass), c4val1 2.44857 (11.57180, sha 549ca209af16) -- this lane's baseline. C4-calibrated int4 experts (#384 draft, 2524 gptq / 36 rtn): wikitext +0.0140 ppl (+0.0026 nats, sub-floor, pass) but c4val1 +0.3872 ppl (+0.0329 nats, 10x the 0.0033-nat floor) -- FAIL as registered; refused. RTN int4 experts +0.0634 ppl FAIL (bo3's retraction reproduced). #387 fused qkv + fused rope-only fold: K8 1.67198 (-0.0011 nats, pass), x0.968 B=1 across three pairs, census Self CUDA 27.099 -> 26.031 ms per 8 steps (-4%) with wall +3% -- buys nothing, draft. Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: r12epi 304.9 tok/s (x1.341 over its own NF4); the calibrated-expert arm 490.2 (x2.157) and RTN 487.8 (x2.146), both measured and not licensed as here -- e4b.serve.census.bo7.granite.*; quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.granite.b16.5090.2026-09-04",
@@ -1132,7 +1132,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "Same window and gate as the B=1 claim; the calibrated-expert B=16 row (3050.1) fails the second text (+0.3872 ppl on c4val1) and is not licensed. #387 at B=16 is x1.014 on one pair (1724.6 -> 1748.4)."
+      "notes": "Same window and gate as the B=1 claim; the calibrated-expert B=16 row (3050.1) fails the second text (+0.3872 ppl on c4val1) and is not licensed. #387 at B=16 is x1.014 on one pair (1724.6 -> 1748.4). bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: r12epi 1836.8 (x1.160), calibrated experts 3313.8 (x2.093, not licensed) -- e4b.serve.census.bo7.granite.*; quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.gptoss.b1.5090.2026-09-04",
@@ -1157,7 +1157,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "No K8 arm on this lane: the MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o/bo3q) and gpt-oss has no raw-text ppl instrument (OOD-flattery regime), so the quality gate stays open as in e4b.serve.buildout.gptoss.b1. Census (store_r12_cen): Self CUDA 42.989 ms per 8 replayed steps, 1288 launches/step."
+      "notes": "No K8 arm on this lane: the MXFP4 store is exact against the checkpoint's own bytes on every row (bo3o/bo3q) and gpt-oss has no raw-text ppl instrument (OOD-flattery regime), so the quality gate stays open as in e4b.serve.buildout.gptoss.b1. Census (store_r12_cen): Self CUDA 42.989 ms per 8 replayed steps, 1288 launches/step. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: store_r12 5.35 ms = 186.9 tok/s, x1.293 over that box's nf4_r12 (6.92 ms = 144.5) -- e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05; the same shape as this entry's x1.270; quote each with its box, never the ratio between them. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.gptoss.b16.5090.2026-09-04",
@@ -1182,7 +1182,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "Batched rows stay on the NF4 path by the route rule, so the residual x0.971 is the route's dispatch cost, not the MXFP4 GEMV re-streaming weights per row (bo3's 589.7 vs 726.2). Same open quality gate as the B=1 claim."
+      "notes": "Batched rows stay on the NF4 path by the route rule, so the residual x0.971 is the route's dispatch cost, not the MXFP4 GEMV re-streaming weights per row (bo3's 589.7 vs 726.2). Same open quality gate as the B=1 claim. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: store_r12 739.0 tok/s, x0.970 of that box's nf4_r12 (761.6) -- e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05; the same shape as this entry's x0.971. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.mixtral.b1.5090.2026-09-04",
@@ -1208,7 +1208,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "K8 2048 steps: wikitext NF4 control on integration-7 1.18105 (ppl 3.25778, sha 31fd7d408809), lic 1.16684 (3.21181, -0.046 ppl, pass); c4val1 (sha 061534dadd4d) NF4 2.11031 (8.25079), lic 2.11726 (8.30834) = +0.0575 ppl, +0.0070 nats -- FAIL as registered by 0.008 (uncalibrated rule |dppl| <= 0.05 on every text); this family's arithmetic-order floor is unmeasured, so the nats cannot be read against one. The 'licensed stack' label (P30; bo3's uncalibrated stack 102.8 / 372.0) is WITHDRAWN under the rule as written pending the user's decision on re-registering the gate in nats against a measured floor. The calibrated stack (all) fails the second text outright (+0.1157 ppl). lic_fq K8 1.16702 (+0.0002 nats vs lic). Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate. The same stack with sequentially GPTQ-calibrated int4 experts in place of RTN reads c4val1 +0.0391 (pass) but wikitext +0.0771 ppl (+0.0234 nats) against its own lane's NF4 -- FAIL as registered, the mirror image of this entry's RTN reading; measured, NOT licensed (e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04; its speed arms hit that lane's per-arm alarm during the streamed calibration and were not measured). Sequential calibration closed Qwen3's gap and did not close Mixtral's. This entry's RTN reading and the withdrawn label stand as measured."
+      "notes": "K8 2048 steps: wikitext NF4 control on integration-7 1.18105 (ppl 3.25778, sha 31fd7d408809), lic 1.16684 (3.21181, -0.046 ppl, pass); c4val1 (sha 061534dadd4d) NF4 2.11031 (8.25079), lic 2.11726 (8.30834) = +0.0575 ppl, +0.0070 nats -- FAIL as registered by 0.008 (uncalibrated rule |dppl| <= 0.05 on every text); this family's arithmetic-order floor is unmeasured, so the nats cannot be read against one. The 'licensed stack' label (P30; bo3's uncalibrated stack 102.8 / 372.0) is WITHDRAWN under the rule as written pending the user's decision on re-registering the gate in nats against a measured floor. The calibrated stack (all) fails the second text outright (+0.1157 ppl). lic_fq K8 1.16702 (+0.0002 nats vs lic). Registered gate (k8_gate) applied in its own units, perplexity, on every text scored: uncalibrated |dppl| <= 0.05; calibrated dppl <= +0.05 on every text, an improvement claimable only with the same sign on >= 2 texts; nats beside it never change the verdict. bo6 (2026-09-04, box 49861751): the user decided to close the gap, not the gate. The same stack with sequentially GPTQ-calibrated int4 experts in place of RTN reads c4val1 +0.0391 (pass) but wikitext +0.0771 ppl (+0.0234 nats) against its own lane's NF4 -- FAIL as registered, the mirror image of this entry's RTN reading; measured, NOT licensed (e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04; its speed arms hit that lane's per-arm alarm during the streamed calibration and were not measured). Sequential calibration closed Qwen3's gap and did not close Mixtral's. This entry's RTN reading and the withdrawn label stand as measured. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: lic 8.53 ms = 117.2 tok/s (x2.329 over its own NF4), all 7.65 = 130.7 (x2.597), the exact folds on NF4 x1.062 -- e4b.serve.census.bo7.mixtral.*, the same verdicts (measured, not licensed; NF4 is the position); quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo5.mixtral.b16.5090.2026-09-04",
@@ -1232,7 +1232,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30-P33 sections)"
       ],
-      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.mixtral.b1: FAIL as registered on c4val1 by 0.008 ppl (+0.0070 nats, floor unmeasured); NOT licensed pending the user's decision. Every Mixtral B=16 arm on this lane sits within 374.5-378.3. bo6 (2026-09-04): see e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 -- the calibrated-expert version of this stack passes c4val1 (+0.0391) and FAILS wikitext (+0.0771) -- FAIL as registered, measured, not licensed. This RTN reading stands as measured."
+      "notes": "Same window, gate and licensing reading as e4b.serve.buildout.bo5.mixtral.b1: FAIL as registered on c4val1 by 0.008 ppl (+0.0070 nats, floor unmeasured); NOT licensed pending the user's decision. Every Mixtral B=16 arm on this lane sits within 374.5-378.3. bo6 (2026-09-04): see e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04 -- the calibrated-expert version of this stack passes c4val1 (+0.0391) and FAILS wikitext (+0.0771) -- FAIL as registered, measured, not licensed. This RTN reading stands as measured. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box: lic 374.9 (x1.959), all 375.5 (x1.962), folds 194.9 (x1.018) -- e4b.serve.census.bo7.mixtral.*; quote each with its box. Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo6.qwen3.k8-deterministic.5090.2026-09-04",
@@ -1466,7 +1466,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P34 section)"
       ],
-      "notes": "Quality on this lane: e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04 (pass on both texts as registered; the pack is the all-at-once one, the streamed full stack is bo6c). Quote with its box: bo5's RTN-expert all read 4.90 ms = 204.1 tok/s on an EPYC 9755 host and a different cut (e4b.serve.buildout.bo5.qwen3.b1) -- a different host, no same-box NF4 arm and no bandwidth probe here, so the difference is not read; bo7 measures the same-box ratio. The licensed stack is bo6c's streamed 64k pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), not this all-at-once one; its speed is not on this lane -- bo7 measures the calibrated stack at the hook's 16k default, not 64k."
+      "notes": "Quality on this lane: e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04 (pass on both texts as registered; the pack is the all-at-once one, the streamed full stack is bo6c). Quote with its box: bo5's RTN-expert all read 4.90 ms = 204.1 tok/s on an EPYC 9755 host and a different cut (e4b.serve.buildout.bo5.qwen3.b1) -- a different host, no same-box NF4 arm and no bandwidth probe here, so the difference is not read; bo7 measures the same-box ratio. The licensed stack is bo6c's streamed 64k pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), not this all-at-once one; its speed is not on this lane -- bo7 measures the calibrated stack at the hook's 16k default, not 64k. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box class with the streamed 16k pack: calibexp_all 4.20 ms = 238.1 tok/s, x2.067 over that box's NF4 (e4b.serve.census.bo7.qwen3.census.5090.2026-09-05) -- a different host and pack method; quote each with its box. The licensed 64k stack's speed is still not measured (e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05, measured under amendment 2 after TP_DONE: 238.1 tok/s, x2.067 over that box's NF4). Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo6.qwen3.b16.5090.2026-09-04",
@@ -1491,7 +1491,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P34 section)"
       ],
-      "notes": "Same window, gate and reading as e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04. bo5's RTN-expert all read 1251.6 on its EPYC box (e4b.serve.buildout.bo5.qwen3.b16); quote each with its box, never the ratio between them. The licensed stack is bo6c's streamed 64k pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); bo7 measures the calibrated stack's speed at the hook's 16k default, not 64k."
+      "notes": "Same window, gate and reading as e4b.serve.buildout.bo6.qwen3.b1.5090.2026-09-04. bo5's RTN-expert all read 1251.6 on its EPYC box (e4b.serve.buildout.bo5.qwen3.b16); quote each with its box, never the ratio between them. The licensed stack is bo6c's streamed 64k pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); bo7 measures the calibrated stack's speed at the hook's 16k default, not 64k. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same stack on its box class with the streamed 16k pack: calibexp_all 1338.8 tok/s, x2.624 over that box's NF4 (e4b.serve.census.bo7.qwen3.census.5090.2026-09-05); the licensed 64k stack's speed is not measured (e4b.serve.census.bo7.qwen3.b16, measured under amendment 2 after TP_DONE: 1327.5 tok/s, x2.602 over that box's NF4). Unchanged."
     },
     {
       "id": "e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04",
@@ -1523,7 +1523,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P34 section)"
       ],
-      "notes": "VERDICT: FAIL as registered (wikitext +0.0771 over the +0.05 budget; c4val1 +0.0391 within it) -- measured, NOT licensed; the gate is not retuned. Receipt: mixtral_ppl_lic_calibexp.json (K8 20:33-21:54Z on the box). The B=1 and B=16 speed arms and the 64k-token arm (lic_calibexp_n128_c4val) produced NO reading: each was killed by the lane's own per-arm alarm during the streamed calibration (B=1 and B=16 by the 3600-s arm alarm at pass 23 of 32 -- the 32-layer streamed calibration at an 8 GiB budget alone takes ~85 min; the 64k arm by the 5400-s K8 alarm at pass 20 of 32, ~4.5 min per layer). A harness limit, not a model result; no number is quoted for them. The Mixtral speed of the calibrated stack was NOT measured on this lane, and bo7 dropped those arms too (the stack is not licensed). Not a reference shift: the window sha 31fd7d408809 matches bo5c's and this lane's NF4 (1.18214) agrees with bo5c's (1.18105) to 0.001 nats. The mirror image of bo5's RTN lic on its own lane (wikitext -0.046 pass / c4val1 +0.0575 FAIL by 0.008; e4b.serve.buildout.bo5.mixtral.b1 notes; cited beside, not divided). Attempt 3's all-at-once Mixtral arms were OOM-killed by the 170 GiB container (about 230 GB of fp32 Hessians for 8 experts x (4096^2 + 14336^2) x 4 B x 32 layers) and produced no reading; the streamed mechanism is what fixed that and what ships. Next levers are not gate changes: a per-expert NF4 fallback for the experts with the largest GPTQ residual, or the 64k-token calibration set scored on wikitext (the queued lic_calibexp_n128 arm is c4val1-only). Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against the family's arithmetic-order floor (unmeasured for Mixtral) and never change the verdict."
+      "notes": "VERDICT: FAIL as registered (wikitext +0.0771 over the +0.05 budget; c4val1 +0.0391 within it) -- measured, NOT licensed; the gate is not retuned. Receipt: mixtral_ppl_lic_calibexp.json (K8 20:33-21:54Z on the box). The B=1 and B=16 speed arms and the 64k-token arm (lic_calibexp_n128_c4val) produced NO reading: each was killed by the lane's own per-arm alarm during the streamed calibration (B=1 and B=16 by the 3600-s arm alarm at pass 23 of 32 -- the 32-layer streamed calibration at an 8 GiB budget alone takes ~85 min; the 64k arm by the 5400-s K8 alarm at pass 20 of 32, ~4.5 min per layer). A harness limit, not a model result; no number is quoted for them. The Mixtral speed of the calibrated stack was NOT measured on this lane, and bo7 dropped those arms too (the stack is not licensed). Not a reference shift: the window sha 31fd7d408809 matches bo5c's and this lane's NF4 (1.18214) agrees with bo5c's (1.18105) to 0.001 nats. The mirror image of bo5's RTN lic on its own lane (wikitext -0.046 pass / c4val1 +0.0575 FAIL by 0.008; e4b.serve.buildout.bo5.mixtral.b1 notes; cited beside, not divided). Attempt 3's all-at-once Mixtral arms were OOM-killed by the 170 GiB container (about 230 GB of fp32 Hessians for 8 experts x (4096^2 + 14336^2) x 4 B x 32 layers) and produced no reading; the streamed mechanism is what fixed that and what ships. Next levers are not gate changes: a per-expert NF4 fallback for the experts with the largest GPTQ residual, or the 64k-token calibration set scored on wikitext (the queued lic_calibexp_n128 arm is c4val1-only). Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against the family's arithmetic-order floor (unmeasured for Mixtral) and never change the verdict. bo7 (2026-09-05, box 49916675) dropped the calibrated Mixtral arms under P35 amendment 1 (this FAIL; ~85-min streamed calibration per arm) and measured the RTN lic at 8.53 ms = 117.2 tok/s (x2.329 over that box's NF4) and 374.9 tok/s B=16 -- measured, not licensed; the calibrated stack's speed stays unmeasured (e4b.serve.census.bo7.mixtral.census.5090.2026-09-05)."
     },
     {
       "id": "e4b.serve.buildout.bo6c.qwen3.calib-deterministic.5090.2026-09-05",
@@ -1607,7 +1607,507 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P34 section)"
       ],
-      "notes": "VERDICT: pass on 2 texts -- LICENSED as registered (same sign on both; both sub-floor -> at parity or better, no improvement by a number). This is Qwen3-30B-A3B's licensed serving configuration; it supersedes no measurement -- the RTN-expert stacks of bo3/bo5 (e4b.serve.buildout.qwen3.b1 / .bo5.qwen3.*) remain measured speed of configurations that fail the second text, and the all-at-once stack of bo6 (e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) remains a two-text pass of a pack that does not ship. SPEED is NOT on this lane: bo7 measures the calibrated stack (calibexp_all) at B=1 / B=16 with the hook's 16k-token default (E4B_CALIB_NSEQ unset), not the 64k pack scored here; bo6's 158.0 / 993.6 tok/s on this box are the all-at-once pack's. Calibration (e4b.serve.buildout.bo6c.qwen3.calib-deterministic.5090.2026-09-05) and K8 (…bo6.qwen3.k8-deterministic…) are run-to-run deterministic on this box + cut. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict -- a delta inside the floor is called parity, never an improvement by a number."
+      "notes": "VERDICT: pass on 2 texts -- LICENSED as registered (same sign on both; both sub-floor -> at parity or better, no improvement by a number). This is Qwen3-30B-A3B's licensed serving configuration; it supersedes no measurement -- the RTN-expert stacks of bo3/bo5 (e4b.serve.buildout.qwen3.b1 / .bo5.qwen3.*) remain measured speed of configurations that fail the second text, and the all-at-once stack of bo6 (e4b.serve.buildout.bo6.qwen3.all-calibexp-allatonce.k8.2026-09-04) remains a two-text pass of a pack that does not ship. SPEED is NOT on this lane: bo7 measures the calibrated stack (calibexp_all) at B=1 / B=16 with the hook's 16k-token default (E4B_CALIB_NSEQ unset), not the 64k pack scored here; bo6's 158.0 / 993.6 tok/s on this box are the all-at-once pack's. Calibration (e4b.serve.buildout.bo6c.qwen3.calib-deterministic.5090.2026-09-05) and K8 (…bo6.qwen3.k8-deterministic…) are run-to-run deterministic on this box + cut. Registered gate (experts4bit_qlora.k8_gate) applied in its own units, perplexity, on every text scored: a calibrated pack passes when dppl <= +0.05 on every text, an improvement is claimable only with the same sign on >= 2 texts (wikitext = outside the calibration domain); nats beside it are read against Qwen3's 0.0095-nat arithmetic-order floor and never change the verdict -- a delta inside the floor is called parity, never an improvement by a number. bo7 (2026-09-05, box 49916675) ran the calibrated stack at the hook's 16k default, not this 64k pack: 4.20 ms = 238.1 tok/s B=1 (x2.067 over that box's NF4) and 1338.8 tok/s B=16 (x2.624) -- measured, not this licensed configuration; THIS STACK'S SPEED, measured on that box under P35 amendment 2 (calibexp_all_n128, E4B_CALIB_NSEQ=128, after TP_DONE, same session): 4.20 ms = 238.1 tok/s at B=1 (x2.067 over that box's NF4 8.68 ms; anchor projection about 329 = 159.2 x 2.067, a projection) and 1327.5 tok/s at B=16 (x2.602) -- e4b.serve.census.bo7.qwen3.b1 / .b16; identical to the 16k arm's speed (4.20 / 1338.8), so the calibration size does not touch the kernels. The 64k pack differs from the 16k one only in the packed values, not in the kernel or the bytes, so equal speed is the expectation, not a measurement."
+    },
+    {
+      "id": "e4b.serve.census.bo7.granite.b1.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7, the shipped 0.35.0 / 0.30.0 code): single-stream (B=1) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct, the licensed stack (NF4 experts + round-1/2 folds with the rotary-only fold + router epilogue, `r12epi`) on one rented RTX 5090: 304.9 tok/s (3.28 ms/step), x1.341 over the family's NF4 arm on the same box (4.40 ms = 227.3 tok/s).",
+      "value": 304.9,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=1 ms): nf4=4.40, r12epi=3.28, int4_r12epi=2.05, calibexp_r12epi=2.04",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b1_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.341 over NF4 on this box; rental-measured 304.9 tok/s on this box (one RTX 5090, EPYC 7Q83 host); no anchor projection (no anchor-class measurement exists for this family). LICENCE: the register's -- K8 +0.019 ppl vs NF4 on wikitext, pass under the uncalibrated rule (e4b.serve.buildout.granite.b1.5090.2026-09-04); bo7 licenses nothing. Beside, each with its box and never divided into this: bo3 259.1 (instance 49817195, EPYC 9755), bo5 294.1 (49841214, EPYC 9755). The int4-expert arms on this box are measured and NOT licensed: RTN int4_r12epi 2.05 ms = 487.8 tok/s (x2.146; +0.063 ppl FAIL, retracted #381) and calibrated calibexp_r12epi 2.04 ms = 490.2 (x2.157; c4val1 +0.387 ppl FAIL, bo5) -- speed-identical to each other (same kernel, same bytes; the streamed calibration packed 2524 gptq / 36 rtn, bo5's counts). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.granite.b16.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): batched (B=16, aggregate) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct, the licensed stack `r12epi`, on one rented RTX 5090: 1836.8 tok/s, x1.160 over the family's NF4 arm on the same box (1583.2).",
+      "value": 1836.8,
+      "unit": "tok/s",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=16 tok/s): nf4=1583.2, r12epi=1836.8, int4_r12epi=3315.0, calibexp_r12epi=3313.8",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b16_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.160 over NF4 on this box; rental-measured 1836.8 tok/s on this box; no anchor projection (B=16 has no anchor-class measurement). LICENCE: the register's (e4b.serve.buildout.granite.b16.5090.2026-09-04, +0.019 ppl pass). Beside, with their boxes: bo3 1689.6 (49817195), bo5 1736.1 (49841214). Measured, NOT licensed on this box: int4_r12epi 3315.0 (x2.094), calibexp_r12epi 3313.8 (x2.093). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.granite.census.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): every Granite-3.1-3B-A800M arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; only the licensed stack is a position (e4b.serve.census.bo7.granite.b1 / .b16).",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; 8 arms, all ok",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b1_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b1_int4_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b1_calibexp_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b16_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b16_int4_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/granite_b16_calibexp_r12epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "ROWS (arm: B=1 ms = tok/s, xNF4; B=16 tok/s, xNF4; label): nf4: 4.40 = 227.3, x1.000; 1583.2, x1.000; baseline (reference). r12epi: 3.28 = 304.9, x1.341; 1836.8, x1.160; LICENSED (K8 +0.019 ppl wikitext pass, e4b.serve.buildout.granite.b1.5090.2026-09-04). int4_r12epi: 2.05 = 487.8, x2.146; 3315.0, x2.094; measured, not licensed (RTN int4 experts +0.063 ppl FAIL as registered, retracted #381). calibexp_r12epi: 2.04 = 490.2, x2.157; 3313.8, x2.093; measured, not licensed (calibrated experts c4val1 +0.387 ppl FAIL, e4b.serve.buildout.bo5.granite.b1.5090.2026-09-04 notes); engaged: streamed GPTQ 16k tok, 1 pass, 2524 gptq / 36 rtn. Instrument: decode-attention compute path f32 on this family (the kernel's own tally; the same on every arm and on bo5's receipts). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): single-stream (B=1) paged decode of allenai/OLMoE-1B-7B-0924-Instruct on one rented RTX 5090 under the shipped code -- the licensed position on the register is NF4 (nothing above it is licensed on this family): 282.5 tok/s (3.54 ms/step), x1.000 by definition.",
+      "value": 282.5,
+      "unit": "tok/s",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=1 ms): nf4=3.54, folds=2.97, calattn=2.91, int4all=1.71",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b1_int4all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.000 (NF4 is the position); rental-measured 282.5 tok/s on this box; no anchor projection (no anchor-class measurement exists for this family). LICENCE: the register carries no licensed configuration above NF4 for OLMoE at bundle time -- e4b.serve.tp.olmoe.b1.5090.2026-09-04 called the full stack 'best licensed' on ONE wikitext text before the two-text clause was applied to calibrated packs (#386); the calibrated attention in it is refused on quality on this family (+0.60 ppl C4-val, e4b.serve.b1.qwen3-30b.int4attn-calib.5090 notes: Qwen3-specific); int4-b32 experts at <=1B active are the class STATUS records at ~1.2-1.8% ppl; the folds alone have no K8 on record. Measured on this box, NOT licensed: folds 2.97 ms = 336.7 tok/s (x1.192; no quality verdict on record), calattn 2.91 = 343.6 (x1.216), int4all 1.71 = 584.8 (x2.070). Beside, its box only (Ryzen 9 9900X host): the tp lane's 247.7 NF4 and 452.5 for the full stack. Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): batched (B=16, aggregate) paged decode of allenai/OLMoE-1B-7B-0924-Instruct on one rented RTX 5090 -- the licensed position is NF4: 1347.5 tok/s, x1.000 by definition.",
+      "value": 1347.5,
+      "unit": "tok/s",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=16 tok/s): nf4=1347.5, folds=1457.2, calattn=1450.8, int4all=3084.0",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b16_int4all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.000; rental-measured 1347.5 tok/s on this box; no anchor projection (B=16). Measured, NOT licensed on this box: folds 1457.2 (x1.081), calattn 1450.8 (x1.077), int4all 3084.0 (x2.289) -- see e4b.serve.census.bo7.olmoe.b1 for why nothing above NF4 is licensed on this family. Beside, its box only: the tp lane's 1294.0 NF4 / 2412.5 int4 experts (Ryzen host). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.olmoe.census.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): every OLMoE-1B-7B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the position is NF4 (e4b.serve.census.bo7.olmoe.b1 / .b16).",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; 8 arms, all ok",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b1_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b1_calattn.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b1_int4all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b16_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b16_calattn.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/olmoe_b16_int4all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "ROWS (arm: B=1 ms = tok/s, xNF4; B=16 tok/s, xNF4; label): nf4: 3.54 = 282.5, x1.000; 1347.5, x1.000; baseline (reference, the position). folds: 2.97 = 336.7, x1.192; 1457.2, x1.081; no quality verdict on record (exact arithmetic; never scored on this family). calattn: 2.91 = 343.6, x1.216; 1450.8, x1.077; measured, not licensed (calibrated int4 attention +0.60 ppl C4-val on OLMoE, e4b.serve.b1.qwen3-30b.int4attn-calib.5090 notes); engaged: ATTNINT4 64 projections. int4all: 1.71 = 584.8, x2.070; 3084.0, x2.289; measured, not licensed under the rule as written (e4b.serve.tp.olmoe.b1.5090.2026-09-04: one text, calibrated pack needs two; the +0.60 FAIL above); engaged: INT4EXP 16 layers + ATTNINT4 64 projections. Calibrated attention on top of the folds is x1.021 at B=1 and x0.996 at B=16 on this box. Instrument: decode-attention compute path fp8 on this family. Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): single-stream (B=1) paged decode of openai/gpt-oss-20b on one rented RTX 5090 under the shipped code, the register's quoted best (NF4 experts + round-1/2 folds, `nf4_r12`; no raw-text instrument on this family) -- this lane's reference arm: 144.5 tok/s (6.92 ms/step), x1.000 by construction.",
+      "value": 144.5,
+      "unit": "tok/s",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=1 ms): nf4_r12=6.92, store_r12=5.35 (E4B_INT4_KEEP_NF4=1)",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b1_nf4_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b1_store_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.000 (the quoted best is the family's NF4 arm on this lane -- NF4 experts + the exact folds); rental-measured 144.5 tok/s on this box; no anchor projection (no anchor-class measurement exists for this family). LICENCE: the register's -- e4b.serve.buildout.gptoss.b1.5090.2026-09-04 ('licensed configuration' in its claim text; its notes: no ppl instrument on this family, the folds' +0.049 nats cannot be read against the budget); bo7 licenses nothing. Measured on this box, NOT licensed (quality gate open, no instrument; the MXFP4 store is exact against the checkpoint's own bytes): store_r12 -- gemv_mxfp4_b32 for single rows, NF4 kept for batched rows -- 5.35 ms = 186.9 tok/s, x1.293 over nf4_r12 on this box. Beside, its box only (EPYC 9755, 49841214): bo5's r12 136.4 and store_r12 173.3 (x1.270 there). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): batched (B=16, aggregate) paged decode of openai/gpt-oss-20b on one rented RTX 5090, the register's quoted best (`nf4_r12`), this lane's reference arm: 761.6 tok/s, x1.000 by construction.",
+      "value": 761.6,
+      "unit": "tok/s",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=16 tok/s): nf4_r12=761.6, store_r12=739.0",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b16_nf4_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b16_store_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.000; rental-measured 761.6 tok/s on this box; no anchor projection (B=16). Measured, NOT licensed (gate open): store_r12 739.0 = x0.970 -- batched rows stay on the NF4 path by the route rule, so the residual is the route's dispatch cost; bo5 read x0.971 on its box (741.4 -> 719.7; cited beside, not divided). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.gptoss.census.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): every gpt-oss-20b arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes (e4b.serve.census.bo7.gptoss.b1 / .b16 are the position).",
+      "model": "openai/gpt-oss-20b",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; 4 arms, all ok",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b1_nf4_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b1_store_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b16_nf4_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gptoss_b16_store_r12.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "ROWS (arm: B=1 ms = tok/s, xNF4; B=16 tok/s, xNF4; label): nf4_r12: 6.92 = 144.5, x1.000; 761.6, x1.000; the register's quoted best and this lane's reference (no instrument on this family). store_r12: 5.35 = 186.9, x1.293; 739.0, x0.970; measured, not licensed -- quality gate OPEN (e4b.serve.buildout.bo5.gptoss.b1/.b16 notes); engaged: INT4EXP 24 layers (gpt_oss; the MXFP4 store). Instrument: decode-attention compute path f32 on this family (the kernel's own tally, the same on every arm and on bo5's receipts); the NF4 GEMV dispatch tally is scalar on nf4_r12 and zero on store_r12 (the MXFP4 GEMV is another kernel). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7, the shipped 0.35.0 / 0.30.0 code): single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's LICENSED serving stack -- streamed GPTQ-calibrated int4 experts at 64k C4-validation tokens + C4-calibrated int4 attention + round-1/2 folds + router epilogue + decode glue, the configuration bo6c licensed on both texts (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) -- on one rented RTX 5090: 238.1 tok/s (4.20 ms/step), x2.067 over the family's NF4 arm on the same box (8.68 ms = 115.2 tok/s); anchor-class projection 159.2 x 2.067 = about 329 tok/s, a PROJECTION from a class that was never certified.",
+      "value": 238.1,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 with E4B_CALIB_NSEQ=128 (32 batches x 4 x 512 = 64k C4-validation tokens, damping 0.01, min_rows=32, 24 GiB Hessian budget, GPU solve), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; E4B_SERVE_EXP_INT4=1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1; arm: qwen3_b1_calibexp_all_n128 = 4.20 ms (4.1996 unrounded); the census's own arms (B=1 ms): nf4=8.68, folds=6.16, calattn=6.01, int4all=4.20, calibexp_all (16k)=4.20, calibexp_folds (16k)=4.34; streamed calibration packed 11512 gptq / 776 rtn (bo6b's and bo6c's counts for the 64k pack)",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_calibexp_all_n128.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/run_qwen3_b1_calibexp_all_n128.log",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/bo7b.sh",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x2.067 over NF4 on this box; rental-measured 238.1 tok/s on this box (one RTX 5090, driver 595.84, EPYC 7Q83 host); anchor-class projection about 329 tok/s = 159.2 x 2.067 -- a PROJECTION marked as such (the anchor class was never certified: 12 refusals; 159.2 is the certified single-stream NF4 ceiling on that class). LICENCE: the register's -- pass on both texts under the unchanged gate, wikitext -0.0528 / c4val1 -0.0662 ppl, both sub-floor, at parity or better, no improvement by a number (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); bo7 licenses nothing, it measures the licensed stack's speed. Ran under P35 AMENDMENT 2 (pre-registered 2026-09-05 06:05Z) after TP_DONE, same box, same session, same install (logs/bo7b.sh, 5400-s alarm; Qwen3 re-baked, logs/bake_qwen3.bo7b.log; TP2_DONE 08:52:27Z), ratio to bo7's own nf4 arm of the census (rule 1 holds). The licensed 64k arm's speed is identical to the census's 16k arm (calibexp_all: 4.20 vs 4.20 ms; 4.1996 vs 4.1971 unrounded) and to the RTN stack (int4all 4.2035): a calibrated pack's kernels do not depend on the calibration size -- the pack changes the values, not the kernel or the bytes read -- as the amendment predicted. Beside, each with its box and never divided into this: bo5's RTN all 204.1 (49841214, EPYC 9755), bo6's all-at-once calibrated stack 158.0 (49861751, Threadripper PRO 7975WX), bo3's 177.9 (49817195). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's LICENSED serving stack (the streamed 64k-token calibrated pack, bo6c) on one rented RTX 5090: 1327.5 tok/s (12.05 ms/step), x2.602 over the family's NF4 arm on the same box (510.3).",
+      "value": 1327.5,
+      "unit": "tok/s",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 with E4B_CALIB_NSEQ=128 (32 batches x 4 x 512 = 64k C4-validation tokens, damping 0.01, min_rows=32, 24 GiB Hessian budget, GPU solve), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; E4B_SERVE_EXP_INT4=1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1; arm: qwen3_b16_calibexp_all_n128 = 1327.5 tok/s (12.05 ms/step); the census's own arms (B=16 tok/s): nf4=510.3, folds=576.5, calattn=561.7, int4all=1335.4, calibexp_all (16k)=1338.8, calibexp_folds (16k)=1340.8",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_calibexp_all_n128.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/run_qwen3_b16_calibexp_all_n128.log",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/bo7b.sh",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x2.602 over NF4 on this box; rental-measured 1327.5 tok/s on this box; no anchor projection (B=16 has no anchor-class measurement). LICENCE: the register's (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); bo7 licenses nothing. Ran under P35 AMENDMENT 2 (pre-registered 2026-09-05 06:05Z) after TP_DONE, same box, same session, same install (logs/bo7b.sh, 5400-s alarm; Qwen3 re-baked, logs/bake_qwen3.bo7b.log; TP2_DONE 08:52:27Z), ratio to bo7's own nf4 arm of the census (rule 1 holds). Identical within 1% to the census's 16k arm (calibexp_all 1338.8) and to the RTN stack (int4all 1335.4): the calibration size does not touch the kernels; int4 attention is a B=1 lever only (calibexp_folds without it 1340.8). Beside, with their boxes: bo5's RTN all 1251.6 (49841214), bo6's all-at-once calibrated stack 993.6 (49861751), bo3's 1089.6 (49817195). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.qwen3.census.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): every Qwen3-30B-A3B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the licensed stack is the amendment-2 row calibexp_all_n128 (e4b.serve.census.bo7.qwen3.b1 / .b16).",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; 12 lane arms, all ok (TP_DONE 07:00:26Z); plus amendment 2's calibexp_all_n128 at B=1 and B=16 (the licensed 64k stack, after TP_DONE; TP2_DONE 08:52:27Z), both ok -- 14 arms",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_calattn.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_int4all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_calibexp_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_calibexp_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_calattn.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_calibexp_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_int4all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_calibexp_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b1_calibexp_all_n128.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/qwen3_b16_calibexp_all_n128.json"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "ROWS (arm: B=1 ms = tok/s, xNF4; B=16 tok/s, xNF4; label): nf4: 8.68 = 115.2, x1.000; 510.3, x1.000; baseline (reference; paged decode at parity with the model's own attention, e4b.parity.qwen3.paged-vs-own-attention). folds: 6.16 = 162.3, x1.409; 576.5, x1.130; measured, not licensed as a position (exact arithmetic; bo5's verdict on record: FAIL as registered on c4val1 by improving, -0.073 ppl, sub-floor). calattn: 6.01 = 166.4, x1.444; 561.7, x1.101; no quality verdict on record for calibrated attention on NF4 experts alone (a calibrated pack needs two texts); engaged: ATTNINT4 192 projections. int4all: 4.20 = 238.1, x2.067; 1335.4, x2.617; measured, not licensed (bo5's RTN all: c4val1 +0.063 ppl FAIL, e4b.serve.buildout.bo5.qwen3.b1/.b16); engaged: INT4EXP 48 layers + ATTNINT4 192. calibexp_all: 4.20 = 238.1, x2.067; 1338.8, x2.624; measured -- the licensed configuration is the 64k pack (bo6c), this arm ran the 16k default, the 16k streamed full stack has no two-text verdict; engaged: streamed GPTQ 16k tok, 24 GiB budget, 5 passes, 10820 gptq / 1468 rtn (bo6b's and bo6c's counts, reproduced on this EPYC host) + INT4EXP 48 + ATTNINT4 192. calibexp_folds: 4.34 = 230.4, x2.000; 1340.8, x2.628; calibexp_all_n128 (THE LICENSED CONFIGURATION, bo6c; amendment 2, after TP_DONE): 4.20 = 238.1, x2.067; 1327.5, x2.602; licensed (pass on both texts, e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); engaged: streamed GPTQ 64k tok, 24 GiB budget, 5 passes, 11512 gptq / 776 rtn + INT4EXP 48 + ATTNINT4 192; anchor projection (B=1 only) about 329 tok/s = 159.2 x 2.067, a projection; measured, not licensed (the 16k experts-only pack passed c4val1 only, e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04: one text, needs two); so calibrated int4 attention is x1.033 on top of calibrated experts + folds at B=1 on this box and x0.999 at B=16 (a B=1 lever only), and the exact folds x1.409 / x1.130, calibrated attention on top of them x1.025 / x0.974. Instrument: decode-attention compute path fp8 on this family; NF4 GEMV dispatch dot-pad (384) on the NF4-expert arms, zero on the int4 arms. Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7, the shipped 0.35.0 / 0.30.0 code): single-stream (B=1) paged decode of google/gemma-4-26B-A4B-it on one rented RTX 5090, the register's position for this family with its caveat -- `r1epi`, NF4 experts + the exact round-1 norm fold + router epilogue; no K8 instrument exists for Gemma-4, so this is exact arithmetic on NF4 and never a K8 licence: 103.6 tok/s (9.65 ms/step), x1.281 over the family's NF4 arm on the same box (12.36 ms = 80.9 tok/s).",
+      "value": 103.6,
+      "unit": "tok/s",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=1 ms): nf4=12.36, r1epi=9.65, int4_r1epi=7.25, calattn_r1epi=8.84; round 2 refuses by design on this family and was not run; Gemma-4-it loaded without the #344 fault on this host (bake 05:44-05:57Z)",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b1_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.281 over NF4 on this box; rental-measured 103.6 tok/s on this box (one RTX 5090, EPYC 7Q83 host); no anchor projection (no anchor-class measurement exists for this family). LICENCE: the register carries NO K8 verdict for any Gemma-4 arm (e4b.parity.gemma4.no-reference, #359: no reference at 0.1-nat / 512-token resolution) -- r1epi is quoted as the position that quantises nothing beyond NF4, with that caveat, not as a licensed configuration; bo7 licenses nothing. Measured on this box, no quality verdict (no instrument): the register's quoted best int4_r1epi (bo3's stack; e4b.serve.buildout.gemma4.b1.5090.2026-09-04 -- 'licensed configuration' in its claim text, 'NO quality instrument' in its notes; the census reads the notes) 7.25 ms = 137.9 tok/s, x1.705; calattn_r1epi (calibrated int4 attention on r1epi, 115 projections, an unreadable K8) 8.84 ms = 113.1, x1.398 (x1.092 over r1epi). Beside, its box only (49817195, EPYC 9755): bo3's NF4 71.6 -> stack 121.1 (x1.69), the same shape -- cited, not divided. Instrument: decode-attention compute path fp8 (120), NF4 GEMV dispatch scalar (240) on this family. Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): batched (B=16, aggregate) paged decode of google/gemma-4-26B-A4B-it on one rented RTX 5090, the register's position with its caveat (`r1epi`, exact arithmetic on NF4; no K8 instrument on this family): 675.8 tok/s, x1.106 over the family's NF4 arm on the same box (611.2).",
+      "value": 675.8,
+      "unit": "tok/s",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=16 tok/s): nf4=611.2, r1epi=675.8, int4_r1epi=1037.4, calattn_r1epi=684.4",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b16_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.106 over NF4 on this box; rental-measured 675.8 tok/s on this box; no anchor projection (B=16 has no anchor-class measurement). LICENCE: none exists on this family (no instrument) -- see e4b.serve.census.bo7.gemma4.b1. Measured, no quality verdict: int4_r1epi 1037.4 (x1.697; bo3 read x1.68 on its box, 962.8 -- cited beside), calattn_r1epi 684.4 (x1.120; x1.013 over r1epi: calibrated attention buys nothing at B=16 here, as on bo3). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.gemma4.census.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): every Gemma-4-26B-A4B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's label -- the full row set is in notes; no arm carries a K8 verdict on this family (e4b.serve.census.bo7.gemma4.b1 / .b16 are the position with the no-instrument caveat).",
+      "model": "google/gemma-4-26B-A4B-it",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; 8 arms, all ok; Gemma-4-it loaded without the #344 fault",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b1_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b1_int4_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b1_calattn_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b16_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b16_int4_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/gemma4_b16_calattn_r1epi.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "ROWS (arm: B=1 ms = tok/s, xNF4; B=16 tok/s, xNF4; label): nf4: 12.36 = 80.9, x1.000; 611.2, x1.000; baseline (reference; no reference exists for this family at 0.1-nat resolution, e4b.parity.gemma4.no-reference). r1epi: 9.65 = 103.6, x1.281; 675.8, x1.106; exact arithmetic on NF4 (round-1 norm fold + router epilogue) -- the register's position with the no-instrument caveat, never a K8 licence. int4_r1epi: 7.25 = 137.9, x1.705; 1037.4, x1.697; measured, no quality verdict (no instrument) -- the register's quoted best (bo3 stack, e4b.serve.buildout.gemma4.b1/.b16.5090.2026-09-04); engaged: INT4EXP 30 layers (gemma4_text). calattn_r1epi: 8.84 = 113.1, x1.398; 684.4, x1.120; measured, no quality verdict (a calibrated pack with an unreadable K8); engaged: ATTNINT4 115 projections. Round 2 refuses by design and was not run. Instrument: decode-attention compute path fp8 on this family; NF4 GEMV dispatch scalar. Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 under the shipped code -- the licensed position on the register is NF4 (nothing above it is licensed on this family): 50.3 tok/s (19.87 ms/step), x1.000 by definition.",
+      "value": 50.3,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=1 ms): nf4=19.87, folds=18.71, lic=8.53, all=7.65; calibexp_lic dropped under P35 amendment 1 (not run)",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b1_lic.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b1_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.000 (NF4 is the position); rental-measured 50.3 tok/s on this box (one RTX 5090, EPYC 7Q83 host); no anchor projection (no anchor-class measurement exists for this family). LICENCE: nothing above NF4 is licensed on the register at bundle time -- lic (RTN int4 experts + folds + epilogue) FAILS as registered on c4val1 +0.0575 ppl and the P30 'licensed stack' label is withdrawn (e4b.serve.buildout.bo5.mixtral.b1.5090.2026-09-04); all (+ calibrated int4 attention) FAILS c4val1 +0.116 (e4b.serve.buildout.mixtral.b1.5090.2026-09-04 notes); the calibrated-expert stack FAILS wikitext +0.077 (e4b.serve.buildout.bo6.mixtral.lic-calibexp-streamed.k8.2026-09-04) and its arms were dropped here; the combined folds arm has no receipt (bo3 scored r12 +0.0009 and the epilogue -0.0087 ppl separately, one text each). Measured on this box, NOT licensed: folds 18.71 ms = 53.4 tok/s (x1.062; exact arithmetic, unscored as a combined arm), lic 8.53 = 117.2 (x2.329), all 7.65 = 130.7 (x2.597; calibrated attention x1.115 over lic at B=1). Beside, each with its box and never divided into these: bo3 stack 102.8 / all 110.0 (49817195), bo5 lic 112.0 / all 123.3 (49841214), both EPYC 9755 hosts. Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 -- the licensed position is NF4: 191.4 tok/s, x1.000 by definition.",
+      "value": 191.4,
+      "unit": "tok/s",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; arms (B=16 tok/s): nf4=191.4, folds=194.9, lic=374.9, all=375.5",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b16_lic.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b16_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "THREE AXES: ratio x1.000; rental-measured 191.4 tok/s on this box; no anchor projection (B=16). Measured, NOT licensed on this box: folds 194.9 (x1.018), lic 374.9 (x1.959), all 375.5 (x1.962; calibrated attention x1.002 over lic at B=16 -- a B=1 lever only, as on bo5) -- see e4b.serve.census.bo7.mixtral.b1 for why nothing above NF4 is licensed on this family. Beside, with their boxes: bo3 372.0 / 373.4 (49817195), bo5 376.5 / 377.3 (49841214). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
+    },
+    {
+      "id": "e4b.serve.census.bo7.mixtral.census.5090.2026-09-05",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Throughput census (bo7): every Mixtral-8x7B-Instruct arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the position is NF4 (e4b.serve.census.bo7.mixtral.b1 / .b16).",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 32607 MiB) on an AMD EPYC 7Q83 64-core host (128 CPUs, 251 GB, container cgroup memory.max 183,318,347,776 B = 170.7 GiB), Vast.ai instance 49916675; the 5090 class carries ~8.5% inter-box dispersion and B=1 is host-bound, so cross-host ratios are indicative only",
+      "conditions": "B=1, 512-token prompt, 128 generated, graph loop, 127 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; B=16, 512-token prompt, 128 generated, graph loop, 70 timed steps, --no-fuse-qkv, fp8 paged KV, placement all-vram; e4b main @f4b639fd2640 (= 0.35.0 + #396 docs; #384 streamed calibration, #385, #388) + grouped-nf4-gemm main @ddcb850e05c3 (= 0.30.0 + #341 docs); hook v6 at its 16k-token default (E4B_CALIB_NSEQ unset), torch 2.8.0+cu128, transformers 5.16.1, bitsandbytes 0.50.1, triton 3.4.0; 8 arms, all ok; calibexp_lic (2 arms) dropped under P35 amendment 1 before the box was rented",
+      "measured_on": "2026-09-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/hybrid-g9/throughput-20260904/bo7/README.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b1_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b1_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b1_lic.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b1_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b16_nf4.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b16_folds.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b16_lic.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/mixtral_b16_all.json",
+        "bench/hybrid-g9/throughput-20260904/bo7/summary.txt",
+        "bench/hybrid-g9/throughput-20260904/bo7/logs/outer.log"
+      ],
+      "evidence_private": [
+        "INT4B16/P25-PARITY.md (P35 section, amendment 1, launch log)"
+      ],
+      "notes": "ROWS (arm: B=1 ms = tok/s, xNF4; B=16 tok/s, xNF4; label): nf4: 19.87 = 50.3, x1.000; 191.4, x1.000; baseline (reference, the position). folds: 18.71 = 53.4, x1.062; 194.9, x1.018; no quality verdict on record for the combined arm (exact arithmetic; bo3 scored the pieces separately: r12 +0.0009, epilogue -0.0087 ppl, wikitext); not licensed as a position. lic: 8.53 = 117.2, x2.329; 374.9, x1.959; measured, not licensed (FAIL as registered c4val1 +0.0575, label withdrawn; e4b.serve.buildout.bo5.mixtral.b1/.b16); engaged: INT4EXP 32 layers (mixtral). all: 7.65 = 130.7, x2.597; 375.5, x1.962; measured, not licensed (FAIL as registered c4val1 +0.116; e4b.serve.buildout.mixtral.b1/.b16); engaged: INT4EXP 32 + ATTNINT4 128 projections. calibexp_lic: DROPPED under amendment 1 (FAIL as registered on bo6b, wikitext +0.077; ~85-min streamed calibration per arm) -- not run, no number. Instrument: decode-attention compute path fp8 on this family; NF4 GEMV dispatch scalar + split-K (128 + 128) -- the only family whose tally shows split-K. Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's."
     }
   ]
 }

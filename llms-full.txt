@@ -1561,6 +1561,55 @@ NF4 reference sits 0.006 nats from bo5's
 on the identical window while Mixtral's agree to 0.001 — that shift stays
 open, and no sub-0.01-nat number is compared across lanes.
 
+**The throughput census (2026-09-05, lane bo7; measured — receipt
+[`bench/hybrid-g9/throughput-20260904/bo7/`](../bench/hybrid-g9/throughput-20260904/bo7/README.md),
+table in its [`RESULTS.md`](../bench/hybrid-g9/throughput-20260904/bo7/RESULTS.md)).**
+Speed only, under the **shipped** code (0.35.0 + 0.30.0 at their `main`,
+hook v6 at its 16k default), all six families on one rented RTX 5090 (EPYC
+7Q83 host, instance 49916675), 48 arms at B=1 and B=16, every ratio to
+that family's own NF4 arm on that box and every licence label copied from
+this register — bo7 licenses nothing, and no bo3/bo5/bo6 number is divided
+into a bo7 number. What the box says, three axes per licensed best (ratio
+over NF4 on this box; rental-measured tok/s on this box; anchor-class
+projection — which exists only for Qwen3-30B at B=1 and is not computed
+here): **Granite's licensed stack** (NF4 experts + folds + epilogue) is
+×1.341 at B=1 (304.9 tok/s) and ×1.160 at B=16 (1836.8;
+`e4b.serve.census.bo7.granite.b1` / `.b16`); **OLMoE's position is NF4**
+(282.5 / 1347.5, ×1.000) because nothing above it is licensed on this
+register — the tp row's "best licensed" label predates the two-text
+clause and its calibrated attention is refused on this family, so its full
+stack is ×2.070 / ×2.289 measured, not licensed; **gpt-oss's quoted best is
+its own reference arm** (NF4 + exact folds, 144.5 / 761.6) and the MXFP4
+store under the route rule reads ×1.293 / ×0.970 with the quality gate open;
+**Qwen3's licensed stack** — the streamed 64k calibrated pack bo6c
+licensed on both texts — measured on the same box under the lane's
+amendment 2 (pre-registered 06:05Z, run after `TP_DONE`): **×2.067 at B=1
+(238.1 tok/s; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a
+projection from an uncertified class) and ×2.602 at B=16 (1327.5 tok/s;
+no anchor projection)** — `e4b.serve.census.bo7.qwen3.b1` / `.b16`. Its
+speed is identical to the lane's 16k arm (4.20 vs 4.20 ms; 1327.5 vs
+1338.8, within 1%) and to the RTN stack: a calibrated pack's kernels do
+not depend on the calibration size, as the amendment predicted — the pack
+changes the values, not the kernel or the bytes. **Gemma-4 has no K8
+instrument, so no arm carries a K8 licence**; the register's position with
+that caveat is the exact round-1 fold + epilogue on NF4 (`r1epi`), ×1.281
+at B=1 (103.6 tok/s) and ×1.106 at B=16 (675.8;
+`e4b.serve.census.bo7.gemma4.b1` / `.b16`), and the quoted int4 best
+(bo3's `stack`) reads ×1.705 / ×1.697 measured, no quality verdict —
+Gemma-4-it loaded on this host without the #344 fault. **Mixtral's position
+is NF4** (50.3 / 191.4, ×1.000; `e4b.serve.census.bo7.mixtral.b1` /
+`.b16`): the exact folds are ×1.062 / ×1.018 but unscored as a combined
+arm, the RTN int4 stack ×2.329 / ×1.959 and the calibrated-attention stack
+×2.597 / ×1.962 are measured, not licensed (bo5's second-text FAILs stand),
+and the calibrated-expert arms were dropped under the lane's amendment
+(FAIL as registered on bo6b, ~85-min calibration) and print as a row that
+says so. Two int4 facts the box adds: a calibrated int4-expert pack costs
+nothing over an RTN one in speed (Granite 2.04 vs 2.05 ms, Qwen3 4.197 vs
+4.204), and the streamed calibration's pack counts reproduce across hosts
+(Granite 2524/36, Qwen3 10820/1468 — bo5's and bo6's counts). All 50 arms
+ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
+(`TP2_DONE` 08:52Z) — with no alarm, refusal or traceback.
+
 ---
 
 ## What changed — retired, superseded, corrected
@@ -2090,6 +2139,24 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.buildout.bo6c.qwen3.calib-deterministic.5090.2026-09-05 [measured]: Sequential (streamed) GPTQ calibration of Qwen/Qwen3-30B-A3B's int4 experts -- the Hessian tap, the GPU solve, the min_rows fallbacks, the packing and the K8 score -- is run-to-run deterministic on one box and cut: an exact repeat of the 16k-token streamed arm after a fresh NF4 bake reads c4val1 mean_nll 2.800114648339439 both times (ppl 16.44653), spread 0.0 nats.
 - e4b.serve.buildout.bo6c.qwen3.calibexp-streamed-64k.k8.2026-09-05 [measured]: Qwen/Qwen3-30B-A3B with sequentially (streamed) GPTQ-calibrated int4 experts alone at 64k calibration tokens (E4B_CALIB_NSEQ=128) PASSES the registered K8 gate on both texts against the same-cut NF4: wikitext -0.0002 ppl (-0.00003 nats), c4val1 -0.2109 ppl (-0.0129 nats) -- the improvement clause is met on its letter (same sign on both texts), but the out-of-domain delta is inside the family's 0.0095-nat floor: parity on the out-of-domain text, -0.211 in-domain; no improvement is claimed by a number.
 - e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05 [measured]: Qwen/Qwen3-30B-A3B's full calibrated serving stack as it ships -- sequentially (streamed) GPTQ-calibrated int4 experts at 64k C4-validation tokens (e4b#384's mechanism, enable_serve_experts_int4_calibrated, 0.35.0) + C4-calibrated int4 attention (192 projections from the same 32 batches) + round-1/2 folds (rope-only fold) + router epilogue + #385 decode glue -- PASSES the registered K8 gate on both texts against the same-cut NF4: wikitext -0.0528 ppl (-0.0083 nats), c4val1 -0.0662 ppl (-0.0040 nats), both inside the family's 0.0095-nat floor: LICENSED under the unchanged gate, at parity or better on both texts; no improvement is claimed by a number.
+- e4b.serve.census.bo7.granite.b1.5090.2026-09-05 [measured]: Throughput census (bo7, the shipped 0.35.0 / 0.30.0 code): single-stream (B=1) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct, the licensed stack (NF4 experts + round-1/2 folds with the rotary-only fold + router epilogue, `r12epi`) on one rented RTX 5090: 304.9 tok/s (3.28 ms/step), x1.341 over the family's NF4 arm on the same box (4.40 ms = 227.3 tok/s).
+- e4b.serve.census.bo7.granite.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of ibm-granite/granite-3.1-3b-a800m-instruct, the licensed stack `r12epi`, on one rented RTX 5090: 1836.8 tok/s, x1.160 over the family's NF4 arm on the same box (1583.2).
+- e4b.serve.census.bo7.granite.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Granite-3.1-3B-A800M arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; only the licensed stack is a position (e4b.serve.census.bo7.granite.b1 / .b16).
+- e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05 [measured]: Throughput census (bo7): single-stream (B=1) paged decode of allenai/OLMoE-1B-7B-0924-Instruct on one rented RTX 5090 under the shipped code -- the licensed position on the register is NF4 (nothing above it is licensed on this family): 282.5 tok/s (3.54 ms/step), x1.000 by definition.
+- e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of allenai/OLMoE-1B-7B-0924-Instruct on one rented RTX 5090 -- the licensed position is NF4: 1347.5 tok/s, x1.000 by definition.
+- e4b.serve.census.bo7.olmoe.census.5090.2026-09-05 [measured]: Throughput census (bo7): every OLMoE-1B-7B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the position is NF4 (e4b.serve.census.bo7.olmoe.b1 / .b16).
+- e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05 [measured]: Throughput census (bo7): single-stream (B=1) paged decode of openai/gpt-oss-20b on one rented RTX 5090 under the shipped code, the register's quoted best (NF4 experts + round-1/2 folds, `nf4_r12`; no raw-text instrument on this family) -- this lane's reference arm: 144.5 tok/s (6.92 ms/step), x1.000 by construction.
+- e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of openai/gpt-oss-20b on one rented RTX 5090, the register's quoted best (`nf4_r12`), this lane's reference arm: 761.6 tok/s, x1.000 by construction.
+- e4b.serve.census.bo7.gptoss.census.5090.2026-09-05 [measured]: Throughput census (bo7): every gpt-oss-20b arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes (e4b.serve.census.bo7.gptoss.b1 / .b16 are the position).
+- e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05 [measured]: Throughput census (bo7, the shipped 0.35.0 / 0.30.0 code): single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's LICENSED serving stack -- streamed GPTQ-calibrated int4 experts at 64k C4-validation tokens + C4-calibrated int4 attention + round-1/2 folds + router epilogue + decode glue, the configuration bo6c licensed on both texts (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) -- on one rented RTX 5090: 238.1 tok/s (4.20 ms/step), x2.067 over the family's NF4 arm on the same box (8.68 ms = 115.2 tok/s); anchor-class projection 159.2 x 2.067 = about 329 tok/s, a PROJECTION from a class that was never certified.
+- e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's LICENSED serving stack (the streamed 64k-token calibrated pack, bo6c) on one rented RTX 5090: 1327.5 tok/s (12.05 ms/step), x2.602 over the family's NF4 arm on the same box (510.3).
+- e4b.serve.census.bo7.qwen3.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Qwen3-30B-A3B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the licensed stack is the amendment-2 row calibexp_all_n128 (e4b.serve.census.bo7.qwen3.b1 / .b16).
+- e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05 [measured]: Throughput census (bo7, the shipped 0.35.0 / 0.30.0 code): single-stream (B=1) paged decode of google/gemma-4-26B-A4B-it on one rented RTX 5090, the register's position for this family with its caveat -- `r1epi`, NF4 experts + the exact round-1 norm fold + router epilogue; no K8 instrument exists for Gemma-4, so this is exact arithmetic on NF4 and never a K8 licence: 103.6 tok/s (9.65 ms/step), x1.281 over the family's NF4 arm on the same box (12.36 ms = 80.9 tok/s).
+- e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of google/gemma-4-26B-A4B-it on one rented RTX 5090, the register's position with its caveat (`r1epi`, exact arithmetic on NF4; no K8 instrument on this family): 675.8 tok/s, x1.106 over the family's NF4 arm on the same box (611.2).
+- e4b.serve.census.bo7.gemma4.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Gemma-4-26B-A4B arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's label -- the full row set is in notes; no arm carries a K8 verdict on this family (e4b.serve.census.bo7.gemma4.b1 / .b16 are the position with the no-instrument caveat).
+- e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05 [measured]: Throughput census (bo7): single-stream (B=1) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 under the shipped code -- the licensed position on the register is NF4 (nothing above it is licensed on this family): 50.3 tok/s (19.87 ms/step), x1.000 by definition.
+- e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05 [measured]: Throughput census (bo7): batched (B=16, aggregate) paged decode of mistralai/Mixtral-8x7B-Instruct-v0.1 on one rented RTX 5090 -- the licensed position is NF4: 191.4 tok/s, x1.000 by definition.
+- e4b.serve.census.bo7.mixtral.census.5090.2026-09-05 [measured]: Throughput census (bo7): every Mixtral-8x7B-Instruct arm the lane ran on one rented RTX 5090 under the shipped code, B=1 and B=16, with the register's licence label -- the full row set is in notes; the position is NF4 (e4b.serve.census.bo7.mixtral.b1 / .b16).
 
 Open items (no evidence either way):
 
@@ -2097,4 +2164,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(65 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(83 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

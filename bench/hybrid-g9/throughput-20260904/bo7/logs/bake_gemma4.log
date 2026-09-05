@@ -1,0 +1,14 @@
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files:  25%|██▌       | 2/8 [00:00<00:00, 12.20it/s]Fetching 8 files:  62%|██████▎   | 5/8 [00:00<00:00, 14.98it/s]Fetching 8 files:  88%|████████▊ | 7/8 [00:19<00:03,  3.75s/it]Fetching 8 files: 100%|██████████| 8/8 [11:58<00:00, 156.47s/it]Fetching 8 files: 100%|██████████| 8/8 [11:58<00:00, 89.84s/it] 
+[05:57:02]   fusing + quantizing experts (up to 30x128) to nf4 (streaming)...
+[05:57:13]   quantized experts on 30/30 MoE layers (128 experts each)
+[05:57:13]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=30 experts=128
+  shard 0/30  0.4 GiB  0s
+  shard 8/30  3.6 GiB  3s
+  shard 16/30  6.8 GiB  5s
+  shard 24/30  10.0 GiB  8s
+snapshot done 11.96 GiB in 9.5s
+expert-tensor bake: L=30 E=128 (baking 128) row=3345408 stride=3346432 total=12.9 GB workers=8
+  2048/3840 rows (7 GB, 1s)
+bake complete: 3840 rows (12.9 GB) in 22s
+BAKE OK

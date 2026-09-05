@@ -1,0 +1,11 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1129.76it/s]
+[02:22:07]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[02:22:07]   quantized experts on 16/16 MoE layers (64 experts each)
+[02:22:07]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:22:07]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:22:11]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1090.15it/s]
+INT4EXP enabled: 16 layers (model_type=olmoe)
+ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 8 batches of c4; model_type=olmoe)
+B1D_TIMED_GRAPH steps=127 step=1.71ms compile=None recompiles=0 out=/root/bo7/olmoe_b1_int4all.json

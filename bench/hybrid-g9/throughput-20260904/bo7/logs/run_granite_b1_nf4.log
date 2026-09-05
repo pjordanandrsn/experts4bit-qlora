@@ -1,0 +1,10 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1184.35it/s]
+[02:02:57]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[02:02:57]   quantized experts on 32/32 MoE layers (40 experts each)
+[02:02:57]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:02:58]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:03:02]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 435447.43 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 712702.48 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 530174.92 examples/s]
+B1D_TIMED_GRAPH steps=127 step=4.40ms compile=None recompiles=0 out=/root/bo7/granite_b1_nf4.json
