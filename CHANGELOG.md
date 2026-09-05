@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.35.1 — 2026-09-05 — documentation: training parity matrix (tp1)
+## 0.35.1 — 2026-09-05 — documentation (the tp1 training parity matrix) and one behaviour change (#397 → #402)
 
 The training parity matrix on real weights (lane tp1) with its documentation, plus **one behaviour change** from the
 parallel #397 fix (#402, below) — **this release is not docs-only**. The `fast` extra's floor (grouped-nf4-gemm >=
@@ -8,13 +8,14 @@ parallel #397 fix (#402, below) — **this release is not docs-only**. The `fast
 unchanged. The release exists so that the repository, the PyPI project page and the site state the training matrix
 from evidence, and so that the refusals that matrix argued for ship with it.
 
-### Refusals and a fallback counter (#397 → #402)
+### The stock-epilogue contract: `ExpertsLoRA` refuses what it cannot represent (#397)
 
-- `enable_mxfp4_nvme_residency` refuses bias-carrying (gpt-oss-shaped) modules: it passed no biases and defaulted to
-  the DeepSeek-V4 epilogue (#397). `enable_fast`, `enable_fast_train` and `enable_batched_train` refuse a wrapper whose
-  base violates the stock-epilogue contract (`EpilogueContractError`). `batched_fallback_stats(model)` counts
-  `enable_batched_train`'s per-call fallback above `_PAD_WASTE_LIMIT` — the three VOID batched rows of tp1 (OLMoE, Qwen3,
-  Gemma-4) are the reason it exists. (#402's own entry is folded here at the rebase.)
+- `ExpertsLoRA` re-implements the expert forward inline (the low-rank delta lands before the nonlinearity), so it owns the epilogue and can only represent the stock `down(act_fn(gate) * up)` or a module that hands its epilogue over through `_apply_gate`. gpt-oss's stack (per-expert biases, clamped sigmoid GLU, de-interleaved at load, no hook) was wrapped anyway by the arena loader under `arena_train=True` and trained against a plain SwiGLU with nothing raised. New: `experts4bit_qlora.assert_stock_epilogue(module)` decides on the module's STRUCTURE (bias buffers/parameters/tensor attributes, a non-stock `forward` without a hook, `alpha`/`limit`/`swiglu_*` scalars no hook consumes, a forward body that clamps or adds a bias itself, an interleaved-layout marker, a two-argument `act_fn`, a declared shape that is not `[2I, H]`/`[H, I]`) and raises `EpilogueContractError` (a `TypeError`) naming every offending attribute and the faithful route (grouped-nf4-gemm's `mxfp4_qlora.ExpertsMxfp4LoRA`, the `mxfp4-moe-training-and-residency` capability). Applied by `ExpertsLoRA.__init__`, the loader's `arena_train=True` branch, `enable_nvme_train_residency`'s pre-flight (before the tier opens), `enable_hybrid_train` (which used to refuse gpt-oss through the tier's own flag), and `enable_fast` / `enable_fast_train` / `enable_batched_train`, which now REFUSE a wrapper whose base violates the contract instead of skipping it (a skipped wrapper would have trained the same unfaithful reference forward). Stock SiLU, Gemma-4's gelu_tanh, non-gated stacks and DeepSeek-V4's hooked clamp are unaffected. Both new symbols are exported; `docs/capabilities.json` and the solution pages are updated by the release bundle that carries this entry.
+- `enable_mxfp4_nvme_residency` refuses a module that carries per-expert bias tensors: the binding passes no biases to the engine and defaults to the V4 epilogue, so gpt-oss would have been served through the wrong GLU with its biases dropped. The MXFP4-arena fused lane (`mxfp4_experts_forward`) keeps the module's own forward for any module the contract refuses.
+- `enable_batched_train`'s per-call fallbacks (pad waste past `_PAD_WASTE_LIMIT`, evicted storage, an empty batch) are counted on each patched module; `batched_fallback_stats(model)` (exported) reports `calls` / `batched` / `fallback_calls` / `by_reason` per module and in total, so an arm claiming the batched path can assert `fallback_calls == 0` (the tp1 lane read OLMoE's batched arm as void because layers fell back with nothing counting them).
+- The loader logs a one-time NOTE when a family's experts are built bare (no expert adapter; `r`/`alpha` do not apply), and `python -m experts4bit_qlora.train` refuses `TRAIN_EXPERTS=1` on a model with no expert adapter instead of training attention/router alone under that flag.
+- Audit of the public enable/load/train/serve entry points for the class "unsupported behaviour, plausible output, no refusal": `docs/audits/no-silent-fallback-2026-09-05.md`.
+- Folded under this release from `## Unreleased` at the bundle's rebase; the capability contract and the solution page carry the refusal (`EpilogueContractError`), the MXFP4 NVMe-residency refusal of bias-carrying modules and `batched_fallback_stats` as limitations, and `training_support.gpt_oss.nvme_train` is `refused` with that code reference.
 
 ### Training on real weights, per family, under the shipped code (lane tp1, receipt `bench/train-parity-20260905/tp1/`)
 
