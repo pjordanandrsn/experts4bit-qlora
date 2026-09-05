@@ -278,6 +278,25 @@ def _scatter_combine(down, w, order, token_rows, tokens, k, hidden, device, out_
     return buf.view(tokens, k, hidden).sum(1).to(out_dtype)
 
 
+def _refuse_wrapped(mod, entry: str) -> None:
+    """Raise when an ``ExpertsLoRA``'s base violates the stock-epilogue contract.
+
+    Shared by the wrapper loops of :func:`enable_fast`, :func:`enable_fast_train`
+    and ``enable_batched_train``: for a WRAPPED base there is no faithful forward
+    to fall back to (the wrapper re-implements the epilogue the kernel would), so
+    "skip" would mean "train or serve the wrong function quietly".
+    """
+    from experts4bit_qlora.lora import EpilogueContractError, assert_stock_epilogue
+
+    try:
+        assert_stock_epilogue(mod.base)
+    except EpilogueContractError as exc:
+        raise EpilogueContractError(
+            f"{entry}: an ExpertsLoRA wraps a base it cannot represent, so neither the "
+            f"fused path nor the wrapper's own reference forward is faithful -- {exc}"
+        ) from exc
+
+
 def enable_fast(model, verbose: bool = False) -> int:
     """Patch every eligible ``ExpertsNbit`` under ``model`` (or ``model`` itself).
 
@@ -287,9 +306,13 @@ def enable_fast(model, verbose: bool = False) -> int:
     model. A wrapped base is skipped rather than patched twice: its forward is
     never called.
 
-    Returns the number of modules patched. Modules whose class overrides
-    ``forward`` (custom-activation experts) or whose storage is ineligible are
-    skipped — pass ``verbose=True`` to print each skip reason once.
+    Returns the number of modules patched. Bare modules whose forward the grouped
+    path cannot reproduce (per-expert biases, an epilogue not exposed as
+    ``_apply_gate``: :func:`experts4bit_qlora.assert_stock_epilogue`) or whose storage
+    is ineligible are skipped — pass ``verbose=True`` to print each skip reason once.
+    An ``ExpertsLoRA`` whose BASE violates that contract is refused
+    (``EpilogueContractError``) rather than skipped: its reference forward is the
+    same re-implementation and is unfaithful too.
     Use it for inference when the ``[fast]`` extra (grouped-nf4-gemm, Triton, NVIDIA sm_80+
     under Linux) is installed and the per-expert loop is the bottleneck. Expects the modules
     :func:`experts4bit_qlora.load_moe_4bit_streaming` installs. Assert the count is > 0,
@@ -304,10 +327,9 @@ def enable_fast(model, verbose: bool = False) -> int:
     this if you need to detect the kernel package up front. See
     ``docs/solutions/serve-large-moe-on-a-consumer-gpu.md``.
     """
-    from experts4bit_qlora import Experts4bit, ExpertsNbit
-    from experts4bit_qlora.lora import ExpertsLoRA
+    from experts4bit_qlora import ExpertsNbit
+    from experts4bit_qlora.lora import EpilogueContractError, ExpertsLoRA, assert_stock_epilogue
 
-    stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     mods = list(model.modules()) if hasattr(model, "modules") else [model]
     patched = 0
 
@@ -319,22 +341,19 @@ def enable_fast(model, verbose: bool = False) -> int:
             if verbose:
                 print(f"[e4b.fast] skip {type(mod).__name__}: custom forward")
             continue
+        # A wrapped base whose forward this path cannot reproduce is not SKIPPED: the
+        # wrapper's own reference forward re-implements the same epilogue (`_epilogue`
+        # covers a custom activation via `_apply_gate`, never per-expert biases), so a
+        # violating base is unfaithful on EVERY path and there is no correct forward
+        # to leave it on. The constructor refuses it; a base swapped in afterwards is
+        # refused here through the same structural contract (#397) -- BEFORE the
+        # storage eligibility test, which is about whether the kernel can run, not
+        # about whether anything here is faithful.
+        _refuse_wrapped(mod, "enable_fast")
         reason = _eligible(mod.base)
         if reason is not None:
             if verbose:
                 print(f"[e4b.fast] skip {type(mod).__name__}: {reason}")
-            continue
-        # A base whose forward this path cannot reproduce must be SKIPPED, not fused.
-        # `_epilogue` covers a custom *activation* (V4's clamps) via `_apply_gate`; it
-        # cannot cover gpt-oss, whose forward also adds per-expert biases the grouped
-        # path never applies. The bare-module loop below already makes this check --
-        # the wrapper loop only checked the WRAPPER's forward, so a custom base reached
-        # the kernel whenever it was LoRA-wrapped, which is how V4 loads.
-        if (type(mod.base).forward not in stock_forwards
-                and not hasattr(mod.base, "_apply_gate")):
-            if verbose:
-                print(f"[e4b.fast] skip {type(mod).__name__}: base "
-                      f"{type(mod.base).__name__} has a custom forward")
             continue
         if hasattr(mod, "_e4b_fast_ref"):
             continue  # already enabled; idempotent
@@ -350,13 +369,16 @@ def enable_fast(model, verbose: bool = False) -> int:
                 print(f"[e4b.fast] skip {type(mod).__name__}: wrapped by a patched "
                       "ExpertsLoRA (its forward is never called)")
             continue
-        # Same rule as the wrapper loop above: a custom forward is fine when it is only
-        # a custom ACTIVATION, because `fused_experts_forward` now calls `_epilogue`.
+        # A BARE module keeps its own forward, which is faithful by definition; what the
+        # grouped path can reproduce is exactly the stock-epilogue contract (a custom
+        # ACTIVATION via `_apply_gate` is fine, per-expert biases are not), so a
+        # violating bare module is skipped -- not fused -- with the contract's reason.
         # Without this a BARE V4 module was skipped while the LoRA-wrapped one was fused.
-        if (type(mod).forward not in stock_forwards
-                and not hasattr(mod, "_apply_gate")):
+        try:
+            assert_stock_epilogue(mod)
+        except EpilogueContractError as exc:
             if verbose:
-                print(f"[e4b.fast] skip {type(mod).__name__}: custom forward")
+                print(f"[e4b.fast] skip {type(mod).__name__}: {exc}")
             continue
         reason = _eligible(mod)
         if reason is not None:
@@ -596,6 +618,8 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     choice in a training run, not a silent one. Returns the number patched.
     Use it for training when the ``[fast]`` extra is installed. Returns the number of
     ``ExpertsLoRA`` wrappers patched (``0`` when ``nf4_qlora`` is unimportable -- assert it);
+    refuses (``EpilogueContractError``) a wrapper whose base violates the stock-epilogue
+    contract (:func:`experts4bit_qlora.assert_stock_epilogue`) instead of skipping it;
     ``dgrad=True`` on a kernel cut below 0.7.0 is downgraded with a ``RuntimeWarning``.
     Needs a CUDA device with Triton on sm_80+ (Linux). See
     ``docs/solutions/qlora-fused-moe-experts.md``.
@@ -606,7 +630,6 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
         if verbose:
             print("[e4b.fast] grouped-nf4-gemm has no nf4_qlora: need >= 0.2.4")
         return 0
-    from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.lora import ExpertsLoRA
 
     if dgrad and not _dgrad_supported():
@@ -619,7 +642,6 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
             RuntimeWarning, stacklevel=2)
         dgrad = False
 
-    stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
     patched = 0
     for mod in model.modules():
         if isinstance(mod, ExpertsLoRA) and hasattr(mod, "_e4b_train_ref"):
@@ -649,13 +671,10 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
                           "module; call disable_batched_train first")
                 continue
             # Same bargain as `enable_fast`; this loop had no eligibility gate at all,
-            # so every ExpertsLoRA was fused regardless of what its base computes.
-            if (type(mod.base).forward not in stock_forwards
-                    and not hasattr(mod.base, "_apply_gate")):
-                if verbose:
-                    print(f"[e4b.fast] skip {type(mod).__name__}: base "
-                          f"{type(mod.base).__name__} has a custom forward")
-                continue
+            # so every ExpertsLoRA was fused regardless of what its base computes. A
+            # violating wrapped base is REFUSED, never skipped: the reference forward
+            # it would be left on is the same unfaithful re-implementation (#397).
+            _refuse_wrapped(mod, "enable_fast_train")
             # An MXFP4-arena base passes every check above -- it is `quant_type="nf4"`
             # by class and carries `_apply_gate` (V4) -- and then dies inside the
             # forward on `gate_up_absmax.view(E, n1, k1 // 64)`, because e8m0 scales

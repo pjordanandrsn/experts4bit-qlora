@@ -104,6 +104,45 @@ def test_router_skew_falls_back_to_the_reference():
     assert torch.equal(got, ref)
 
 
+def test_fallbacks_are_counted_per_reason():
+    """A fallback is correct and invisible from the output, which is exactly why it has
+    to be COUNTED: tp1 read a batched arm as void because some layers fell back on pad
+    waste with nothing recording it. The count says which modules are patched; this says
+    what ran."""
+    from experts4bit_qlora import batched_fallback_stats
+
+    mod = _build()
+    assert batched_fallback_stats(mod)["modules"] == 0, "not enabled yet: nothing to report"
+    assert enable_batched_train(mod) == 1
+    st = batched_fallback_stats(mod)
+    assert st["modules"] == 1 and st["calls"] == st["batched"] == st["fallback_calls"] == 0
+
+    mod(*_inputs())                              # balanced routing: batched
+    mod(*_inputs(n_tok=64, hot_expert=True))     # skewed past the guard: reference
+    st = batched_fallback_stats(mod)
+    assert (st["calls"], st["batched"], st["fallback_calls"]) == (2, 1, 1)
+    assert st["by_reason"] == {"evicted_storage": 0, "empty_batch": 0, "pad_waste": 1}
+    assert st["per_module"][0]["fallback_calls"] == 1
+
+    # evicted storage is its own reason -- counted even though the reference then does
+    # whatever the unpatched module does with a placeholder (it raises; see
+    # `test_evicted_expert_storage_falls_back`), because the COUNT is the record that
+    # this call never ran batched.
+    real = mod.base.gate_up_proj.data
+    mod.base.gate_up_proj.data = real.new_empty(0)
+    try:
+        with pytest.raises(Exception):
+            mod(*_inputs())
+    finally:
+        mod.base.gate_up_proj.data = real
+    assert batched_fallback_stats(mod)["by_reason"]["evicted_storage"] == 1
+
+    # the counters leave with the patch
+    assert disable_batched_train(mod) == 1
+    assert batched_fallback_stats(mod)["modules"] == 0
+    assert not hasattr(mod, "_e4b_batched_stats")
+
+
 def test_evicted_expert_storage_falls_back():
     """Under offload the packed buffers are 0-element placeholders between forwards.
     Entering the whole-stack dequant with one yields a shaped-but-empty stack rather
@@ -139,9 +178,14 @@ def test_evicted_expert_storage_falls_back():
     assert rel < 1.5e-2, rel
 
 
-def test_declines_a_base_whose_forward_it_cannot_reproduce():
-    """gpt-oss adds per-expert biases that nothing in this path applies. A base with a
-    custom forward and no `_apply_gate` hook is skipped, not silently accelerated."""
+def test_refuses_a_base_whose_forward_it_cannot_reproduce():
+    """gpt-oss adds per-expert biases that nothing in this path applies. A WRAPPED base
+    with a custom forward and no `_apply_gate` hook is refused, not skipped: the
+    wrapper's own reference forward is the same re-implementation, so "skip" would
+    leave it training the wrong function quietly (#397). The constructor already
+    refuses such a base; swapping the class afterwards is the only way to reach this."""
+    from experts4bit_qlora import EpilogueContractError
+
     mod = _build()
 
     class _CustomForward(type(mod.base)):
@@ -150,7 +194,9 @@ def test_declines_a_base_whose_forward_it_cannot_reproduce():
 
     mod.base.__class__ = _CustomForward
     assert not hasattr(mod.base, "_apply_gate")
-    assert enable_batched_train(mod) == 0
+    with pytest.raises(EpilogueContractError, match="enable_batched_train"):
+        enable_batched_train(mod)
+    assert not hasattr(mod, "_e4b_batched_ref")
 
 
 def test_declines_non_4bit_storage():

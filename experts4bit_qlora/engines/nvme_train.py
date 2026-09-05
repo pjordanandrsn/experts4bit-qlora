@@ -530,8 +530,12 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
     checkpointing — see :meth:`_ArenaExpertOffload.assert_rows_staged`.
     Use it for training when the frozen NF4 experts do not fit host RAM. Refuses
     ``hot_rows`` below the expert count at attach time and requires gradient checkpointing;
-    returns the number of ``ExpertsLoRA`` modules attached (assert > 0). Needs ``[fast]``, a
-    CUDA device, local NVMe. See ``docs/solutions/offload-moe-experts-to-cpu-or-nvme.md``.
+    refuses (``EpilogueContractError``, in the pre-flight, before the tier opens) any module
+    whose expert forward the wrapper cannot represent -- per-expert biases, a clamp or GLU
+    scalar no ``_apply_gate`` hook consumes, an interleaved layout (gpt-oss; see
+    :func:`experts4bit_qlora.assert_stock_epilogue`). Returns the number of ``ExpertsLoRA``
+    modules attached (assert > 0). Needs ``[fast]``, a CUDA device, local NVMe. See
+    ``docs/solutions/offload-moe-experts-to-cpu-or-nvme.md``.
     """
     # Named by SYMBOL, not by version number: the staging entry point ships with
     # this feature, so any version assertion here would be a forward reference to
@@ -554,7 +558,7 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
         ) from exc
 
     from .hot_residency import target_modules
-    from ..lora import ExpertsLoRA
+    from ..lora import EpilogueContractError, ExpertsLoRA, assert_stock_epilogue
 
     mods = target_modules(model)
     if not mods:
@@ -646,6 +650,18 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
 
     for i, base in enumerate(mods):
         check_arena_geometry(base, index, lay[i])
+        # The wrapper's forward is what trains here, and it is only faithful for the
+        # stock epilogue (or one the base hands over via `_apply_gate`). The
+        # constructor already refuses anything else, but a wrapper can be reached
+        # without it (a base swapped in after construction), and this attach is the
+        # last seam before a run -- so the contract is asserted per module, in the
+        # pre-flight, where a refusal opens nothing (#397).
+        try:
+            assert_stock_epilogue(base)
+        except EpilogueContractError as exc:
+            raise EpilogueContractError(
+                f"module {i}: arena-backed training would optimise an adapter against "
+                f"an unfaithful expert forward -- {exc}") from exc
         existing = getattr(wrapper_of[id(base)], "_offload", None)
         if existing is not None:
             raise RuntimeError(

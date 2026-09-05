@@ -41,7 +41,7 @@ from .arch.deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
 from .arch.deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
 from .formats.fp8_blocks import convert_to_fp8_blocks
 from .arch.gptoss import GPTOSS_ALPHA, GPTOSS_LIMIT, GptOssExperts4bit
-from .lora import ExpertsLoRA
+from .lora import EpilogueContractError, ExpertsLoRA, assert_stock_epilogue
 from .formats.mxfp4 import dequantize_mxfp4
 from .engines.offload import enable_expert_offload, enable_inference_prefetch
 from .util import log
@@ -546,13 +546,18 @@ def load_moe_4bit_streaming(
     Expects a Hugging Face model id or local snapshot of a family in
     ``docs/ARCHITECTURE_SUPPORT.md``; returns ``(model, config)`` with each fused expert
     stack an :class:`Experts4bit` base under an :class:`ExpertsLoRA` wrapper, with two
-    exceptions: gpt-oss stacks are built bare (``GptOssExperts4bit``, no wrapper --
-    gpt-oss-aware training LoRA is a separate change), and an ``arena=`` load builds bare
-    meta-backed stacks unless ``arena_train=True`` (verify with
-    :func:`experts4bit_qlora.verify_moe_4bit` ``strict=True``). Refuses an unsupported
-    ``model_type`` (``NotImplementedError``), identity-expert families, and ``prefetch``
-    without ``offload`` (``ValueError``). Needs a CUDA device, the ``[train]`` extra
-    (transformers >= 5.0) and network access to the checkpoint. See
+    exceptions: gpt-oss stacks are built bare (``GptOssExperts4bit``, no wrapper, a
+    one-time NOTE in the log -- the generic adapter cannot represent its biased, clamped
+    GLU; expert LoRA for that family is grouped-nf4-gemm's ``mxfp4_qlora.ExpertsMxfp4LoRA``),
+    and an ``arena=`` load builds bare meta-backed stacks unless ``arena_train=True``
+    (verify with :func:`experts4bit_qlora.verify_moe_4bit` ``strict=True``). Refuses an
+    unsupported ``model_type`` (``NotImplementedError``), identity-expert families,
+    ``prefetch`` without ``offload`` (``ValueError``), and ``arena_train=True`` over an
+    expert stack whose forward the adapter cannot re-implement
+    (``EpilogueContractError``, decided on the module's STRUCTURE by
+    :func:`experts4bit_qlora.assert_stock_epilogue` -- gpt-oss's biases and clamp, never
+    a family name). Needs a CUDA device, the ``[train]`` extra (transformers >= 5.0) and
+    network access to the checkpoint. See
     ``docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md``.
     """
     # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
@@ -778,6 +783,7 @@ def load_moe_4bit_streaming(
     expert_keys = set()
     narrowed = []                  # tensors `_fit` had to narrow, reported after the walk
     meta_expert_prefixes = []      # arena mode: modules whose buffers stay on meta
+    bare_logged = False            # the one-time NOTE for a family built without an adapter
     offload_handles = []
     n_moe = 0
     for i in range(n_layers):
@@ -880,6 +886,21 @@ def load_moe_4bit_streaming(
             # expert storage independent of model size — and moving a meta tensor
             # to CUDA raises. Only the adapter, which is real, is moved.
             if arena_train:
+                # The wrapper re-implements the expert forward, so it is only
+                # faithful for the stock epilogue (or one the base hands over via
+                # `_apply_gate`, as V4 does). gpt-oss's meta stack -- biases +
+                # clamped GLU, no hook -- used to be wrapped here regardless, and
+                # trained against a plain SwiGLU with nothing raised (#397).
+                # `ExpertsLoRA.__init__` refuses that by STRUCTURE; this adds the
+                # layer and family to the message so the refusal reads as a
+                # loader decision, not a stray TypeError from inside a constructor.
+                try:
+                    assert_stock_epilogue(experts)
+                except EpilogueContractError as exc:
+                    raise EpilogueContractError(
+                        f"layer {i} ({model_type!r}): arena_train=True asked for an "
+                        f"ExpertsLoRA over this layer's arena-backed experts, but {exc}"
+                    ) from exc
                 experts = ExpertsLoRA(experts, r=r, alpha=alpha, dtype=dtype)
                 for _n in ("gate_up_lora_A", "gate_up_lora_B",
                            "down_lora_A", "down_lora_B"):
@@ -909,6 +930,18 @@ def load_moe_4bit_streaming(
             experts = GptOssExperts4bit.from_gptoss(
                 gate_up, gu_bias, down, dn_bias, quant_type=quant_type, compute_dtype=dtype
             ).to(device)
+            if not bare_logged:
+                # Said once, at load: `r`/`alpha` are required positionals and every
+                # other family gets an expert adapter, so a caller training this model
+                # would otherwise learn from the trainable-parameter count (attention
+                # LoRA only) that the experts were never wrapped.
+                bare_logged = True
+                log(f"  NOTE: {model_type!r} experts are built BARE (GptOssExperts4bit, no "
+                    "ExpertsLoRA): r/alpha do not apply to the expert stacks. The generic "
+                    "adapter cannot represent this epilogue (biases + clamped GLU; "
+                    "ExpertsLoRA refuses it structurally); expert LoRA for this family is "
+                    "grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA "
+                    "(docs/solutions/mxfp4-moe-training-and-residency.md).")
             if offload:
                 # Bare-module offload: packed experts stream from (pinned) CPU one layer at a
                 # time; the small biases stay resident. Lets gpt-oss-20b (~11 GB NF4) load and
