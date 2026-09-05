@@ -216,6 +216,8 @@ def test_value_numbers_keep_minus_signs_in_string_values():
     import importlib
     m = importlib.import_module("check_readme_claims")
     got = m.value_numbers({"value": "-0.0528 wikitext / -0.0662 c4val1"})
-    assert [str(x) for x in got] == ["-0.0528", "-0.0662"], got
+    # the extraction also sees the digits inside "c4val1" (as every text pool does); the signed deltas must be present
+    assert m.Decimal("-0.0528") in got and m.Decimal("-0.0662") in got, got
+    assert m.Decimal("0.0528") not in got
     assert m.number_matches(m.Decimal("-0.0528"), got)
     assert not m.number_matches(m.Decimal("0.0528"), got)

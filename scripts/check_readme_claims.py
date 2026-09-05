@@ -149,8 +149,7 @@ def claim_numbers(claim: dict) -> list[Decimal]:
         if isinstance(claim.get(k), str):
             parts.append(claim[k])
     text = _normalise(" ".join(parts))
-    out = []
-    out = _signed_numbers(text)
+    return _signed_numbers(text)
 
 
 def value_numbers(claim: dict) -> list[Decimal]:
