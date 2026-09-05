@@ -52,6 +52,12 @@ both repositories and validated by `scripts/check_system_manifest.py`.
 - **Dependency floors: `pyproject.toml` wins**; the manifest's `compatibility`
   records say which version needs which kernel release and why, and
   `scripts/check_dependency_floor.py` holds every current document to it.
+- **README = current `main`**: its links point at `main`, every number in
+  its results table is the current value of the claim the row names
+  (`scripts/check_readme_claims.py` fails on drift, a superseded or retired
+  id, or a private receipt presented as public), and the release block at
+  its top is generated from `CHANGELOG.md`'s latest release heading
+  (`--write-release-block`), never typed.
 
 Evidence words: the manifest's `evidence_vocabulary`; these rules: its `invariants`. Point there.
 
@@ -83,6 +89,7 @@ pytest tests/ -q                                 # GPU tests skip with a reason
 python -m build && python -m twine check dist/*
 python scripts/wheel_smoke.py                    # from outside the tree, against the wheel
 python scripts/check_readme_links.py             # README links are absolute; self-refs = v<version> or main
+python scripts/check_readme_claims.py            # README = current main: table numbers vs docs/claims.json; release block generated
 python scripts/check_capabilities.py             # docs/capabilities.json vs schema, pyproject, source, claims
 python scripts/check_system_manifest.py          # docs/system-manifest.json vs pyproject, claims, capabilities; --sibling <kernel checkout>
 python scripts/check_dependency_floor.py         # every current document states pyproject's [fast] floor

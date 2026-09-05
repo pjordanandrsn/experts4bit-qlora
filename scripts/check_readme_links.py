@@ -38,6 +38,53 @@ import urllib.request
 
 SKIP_SUBSTRINGS = ()
 
+#: A CHANGELOG release heading: ``## 1.2.3 — 2026-09-04`` (anything may follow
+#: the date). ``## Unreleased``, ``## Corrections to 1.2.3 — ...`` and every
+#: other heading are not releases and are skipped.
+_RELEASE_HEADING = re.compile(r"^## (?P<ver>\d+\.\d+\.\d+)\s+[—–-]\s+(?P<date>\d{4}-\d{2}-\d{2})", re.M)
+
+
+class ReleaseVersionError(RuntimeError):
+    """CHANGELOG.md and pyproject.toml disagree about the latest release, or
+    one of them cannot say -- a release-recipe error, never something to guess
+    past (docs/RELEASE_NOTES_GUIDE.md)."""
+
+
+def released_version(root: str = ".") -> str:
+    """The latest released version, as a bare string (``0.35.0``).
+
+    Read from the top-most ``## <version> — <date>`` heading of CHANGELOG.md
+    (newest first; an ``## Unreleased`` section above it is skipped) and
+    cross-checked against ``project.version`` in pyproject.toml. The README's
+    release block and this script's tag pin are derived from it, never typed
+    by hand: the two files disagreeing is exactly the state a release must not
+    ship in, so it raises instead of picking one.
+
+    Raises FileNotFoundError when pyproject.toml is absent (callers that treat
+    a missing pyproject as "nothing to check" keep doing so) and
+    ReleaseVersionError for a missing CHANGELOG, no release heading, or a
+    mismatch.
+    """
+    import tomllib
+    with open(os.path.join(root, "pyproject.toml"), "rb") as f:
+        want = str(tomllib.load(f)["project"]["version"])
+    try:
+        text = open(os.path.join(root, "CHANGELOG.md"), encoding="utf-8").read()
+    except FileNotFoundError as e:
+        raise ReleaseVersionError("CHANGELOG.md is missing; the released version is derived from its "
+                                  "latest '## <version> — <date>' heading") from e
+    m = _RELEASE_HEADING.search(text)
+    if m is None:
+        raise ReleaseVersionError("CHANGELOG.md has no '## <version> — <date>' heading to derive the "
+                                  "released version from")
+    got = m.group("ver")
+    if got != want:
+        raise ReleaseVersionError(
+            f"CHANGELOG.md's latest release heading says {got} but pyproject.toml says {want}; "
+            "a release adds the CHANGELOG section and bumps pyproject in the same change "
+            "(docs/RELEASE_NOTES_GUIDE.md)")
+    return got
+
 #: Statuses that mean "the server did not answer the question", not "no".
 #: 429 = explicit rate limit; 5xx = server-side. Anything else, including 404,
 #: is a verdict and is taken at face value.
@@ -209,8 +256,9 @@ def main() -> int:
     # ref-consistency (SELF-repo links only): every pinned blob/tree ref must be
     # the CURRENT version's tag, else a bump ships docs pointing at the old tag.
     try:
-        import tomllib
-        want = "v" + tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+        # Derived, not typed: CHANGELOG's latest release heading, cross-checked
+        # against pyproject (a mismatch raises -- it is the release recipe's bug).
+        want = "v" + released_version()
         refs = set(re.findall(
             re.escape(self_prefix) + r"(?:blob|tree)/([^/]+)/", text))
         stale = refs - {want, "main"}

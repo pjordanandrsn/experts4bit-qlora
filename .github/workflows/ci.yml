@@ -96,6 +96,8 @@ jobs:
           python-version: "3.11"
       - name: capability contract (schema, pyproject, source symbols, claims, install routes)
         run: python scripts/check_capabilities.py
+      - name: README = current main (results-table numbers are the register's current values; no superseded/retired id; the release block is generated from CHANGELOG.md)
+        run: python scripts/check_readme_claims.py
       - name: system manifest (byte-identical across the two repositories; floors, ownership and vocabulary vs pyproject, claims, capabilities)
         run: python scripts/check_system_manifest.py
       - name: dependency-floor drift (every current document states pyproject's [fast] floor; historical lines are listed, not failed)
