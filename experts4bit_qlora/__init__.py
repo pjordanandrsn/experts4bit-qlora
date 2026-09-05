@@ -55,7 +55,13 @@ else:
 # hence the E402s. normalize_quant_type is package-owned regardless of which implementation is
 # adopted: the canonical scheme names and their accepted aliases are this package's contract.
 from ._vendor.experts import normalize_quant_type  # noqa: E402
-from .lora import ExpertsLoRA, LoRALinear, add_attention_lora  # noqa: E402
+from .lora import (  # noqa: E402
+    EpilogueContractError,
+    ExpertsLoRA,
+    LoRALinear,
+    add_attention_lora,
+    assert_stock_epilogue,
+)
 from .engines.offload import (  # noqa: E402
     enable_decode_stack,
     offload_handles,
@@ -81,6 +87,7 @@ from .engines.fast import (  # noqa: E402
     fast_available,
 )
 from .engines.batched import (  # noqa: E402
+    batched_fallback_stats,
     batched_train_available,
     disable_batched_train,
     enable_batched_train,
@@ -152,6 +159,8 @@ __all__ = [
     "Experts4bit",
     "ExpertsNbit",
     "ExpertsLoRA",
+    "EpilogueContractError",
+    "assert_stock_epilogue",
     "LoRALinear",
     "add_attention_lora",
     "cold_engine_available",
@@ -200,6 +209,7 @@ __all__ = [
     "enable_batched_train",
     "disable_batched_train",
     "batched_train_available",
+    "batched_fallback_stats",
     "disable_fast_train",
     "enable_dense_offload",
     "dense_offload_report",

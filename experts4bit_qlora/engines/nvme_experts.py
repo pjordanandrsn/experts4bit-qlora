@@ -360,6 +360,17 @@ def _redeclare_for_mxfp4_arena(mod, index) -> bool:
     #     available and legal, and to the module's own forward otherwise.
     mod._e4b_mxfp4_arena = True
     mod._dequantize_expert = types.MethodType(_mxfp4_dequantize_expert, mod)
+    # The fused lane below applies the epilogue through `lora._epilogue`, which
+    # represents the stock forward or an `_apply_gate` hook and nothing else. A
+    # module outside that contract (per-expert biases, a GLU nothing hands over)
+    # keeps the REFERENCE lane -- its own forward, correct by definition -- rather
+    # than getting a plain SwiGLU with the right shapes (#397 audit).
+    from ..lora import EpilogueContractError, assert_stock_epilogue
+    try:
+        assert_stock_epilogue(mod)
+        mod._e4b_mxfp4_fused_ok = True
+    except EpilogueContractError:
+        mod._e4b_mxfp4_fused_ok = False
     # Capture the PRISTINE forward once. A second `build_meta_experts` over the
     # same module would otherwise save our own router as the reference and make
     # the reference lane recurse.
@@ -624,6 +635,28 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
                 f"(first at index {busy[0]}). The engines are mutually exclusive — "
                 f"disable it before enabling mxfp4 NVMe residency.")
 
+    # The engine OWNS the epilogue and this binding hands it no per-expert biases:
+    # `engine_cls` defaults to the V4 engine (clamped SwiGLU, bias-free) and the
+    # constructor call below passes `limit` only. A module that carries bias
+    # tensors (gpt-oss's `gate_up_bias`/`down_bias`) would therefore be served
+    # with its biases dropped and -- under the default engine -- the wrong GLU:
+    # right bytes, plausible logits, nothing raised. Refused on the module's
+    # STRUCTURE, before any engine or tier is built; the routes that carry the
+    # gpt-oss epilogue are named. (Audit: no-silent-fallback-2026-09-05.)
+    from ..lora import describe_epilogue_structure
+    for i, mod in enumerate(mods):
+        biased = describe_epilogue_structure(mod)["bias_tensors"]
+        if biased:
+            raise RuntimeError(
+                f"module {i} ({type(mod).__name__}) carries per-expert bias tensors "
+                f"{biased}, and this binding passes no biases to `{engine_cls.__name__}` "
+                "(its default epilogue is DeepSeek-V4's bias-free clamped SwiGLU) -- the "
+                "engine would serve the released bytes through the wrong epilogue with "
+                "nothing raised. Serve a biased family from an NF4 arena with "
+                "`enable_nvme_residency` (the residency state carries the biases) or "
+                "from VRAM through the paged engine's native MXFP4 store "
+                "(`enable_serve_experts_int4`).")
+
     engines = []
     for i, mod in enumerate(mods):
         lim = limit if limit is not None else getattr(mod, "limit", None)
@@ -798,7 +831,10 @@ def mxfp4_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
 
     The epilogue is the base's own in both lanes: the reference lane reaches it by
     being the base's forward, the fused lane through ``lora._epilogue`` — the same
-    hook, so the two cannot drift onto different activations.
+    hook, so the two cannot drift onto different activations. A module whose
+    epilogue ``_epilogue`` cannot represent at all (the stock-epilogue contract,
+    :func:`experts4bit_qlora.assert_stock_epilogue`; recorded on the module as
+    ``_e4b_mxfp4_fused_ok`` when the arena is attached) never takes the fused lane.
     """
     ref = mod._e4b_mxfp4_arena_ref
     cd = mod.compute_dtype if mod.compute_dtype is not None else hidden_states.dtype
@@ -809,6 +845,10 @@ def mxfp4_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     ):
         return ref(hidden_states, top_k_index, top_k_weights)
     if not _mxfp4_grouped_available(hidden_states.device):
+        return ref(hidden_states, top_k_index, top_k_weights)
+    if not getattr(mod, "_e4b_mxfp4_fused_ok", False):
+        # Decided at `_redeclare_for_mxfp4_arena` time by the stock-epilogue
+        # contract: the fused lane's `_epilogue` cannot represent this module.
         return ref(hidden_states, top_k_index, top_k_weights)
     return _mxfp4_fused_forward(mod, hidden_states, top_k_index, top_k_weights)
 

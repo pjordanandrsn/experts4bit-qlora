@@ -87,9 +87,11 @@ ascending expert id, an ulp-level reordering — the same class of difference
 
 Usage::
 
-    from experts4bit_qlora import enable_batched_train
+    from experts4bit_qlora import batched_fallback_stats, enable_batched_train
     n = enable_batched_train(model)     # assert n > 0, or you are on the loop
     ...                                 # train
+    st = batched_fallback_stats(model)  # the count says PATCHED; this says what RAN
+    assert st["fallback_calls"] == 0, st["by_reason"]   # or record it on the receipt
     disable_batched_train(model)
 """
 from __future__ import annotations
@@ -168,22 +170,46 @@ def _lora_delta_padded(x_pad, lora_A, lora_B, eids, scaling):
     return (scaling * d).to(x_pad.dtype)
 
 
+#: The per-call fallback reasons this path records, in the order they are tested.
+#: Every fallback lands on the reference forward -- correct, and invisible from
+#: the output -- so the COUNT is the only evidence a caller has that an arm ran
+#: batched at all. (tp1 read OLMoE's batched arm as VOID because some layers fell
+#: back on pad waste with nothing counting them.)
+FALLBACK_REASONS = ("evicted_storage", "empty_batch", "pad_waste")
+
+
+def _fresh_stats() -> dict:
+    return {"calls": 0, "batched": 0, "fallback_calls": 0,
+            "by_reason": {r: 0 for r in FALLBACK_REASONS}}
+
+
+def _fallback(mod, reason: str, reference, *args):
+    st = mod._e4b_batched_stats
+    st["fallback_calls"] += 1
+    st["by_reason"][reason] += 1
+    return reference(*args)
+
+
 def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights):
     """Batched replacement for ``ExpertsLoRA.forward``. Falls back to the reference
     forward — not to a slower version of itself — whenever the batched shape would be
-    wasteful or the storage is not there."""
+    wasteful or the storage is not there. Every call is counted on
+    ``mod._e4b_batched_stats`` (``calls``, ``batched``, ``fallback_calls``,
+    ``by_reason``); read them through :func:`batched_fallback_stats`."""
     from ..lora import _epilogue
 
     base = mod.base
     reference = mod._e4b_batched_ref
     input_dtype = hidden_states.dtype
     compute_dtype = base.compute_dtype if base.compute_dtype is not None else input_dtype
+    mod._e4b_batched_stats["calls"] += 1
+    args = (hidden_states, top_k_index, top_k_weights)
 
     # Under expert offload the packed buffers are 0-element placeholders between
     # forwards. Entering the dequant with one produces a shaped-but-empty stack rather
     # than an error, so check before, not after.
     if base.gate_up_proj.numel() == 0 or base.down_proj.numel() == 0:
-        return reference(hidden_states, top_k_index, top_k_weights)
+        return _fallback(mod, "evicted_storage", reference, *args)
 
     hs = hidden_states.to(compute_dtype)
     tokens, hidden = hs.shape
@@ -202,11 +228,12 @@ def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights
     if n_grp == 0:
         # No token routed anywhere — an empty batch. `sizes.max()` would raise on the
         # empty tensor, where the reference simply returns its zero accumulator.
-        return reference(hidden_states, top_k_index, top_k_weights)
+        return _fallback(mod, "empty_batch", reference, *args)
     widest = int(sizes.max())
     total = int(sizes.sum())
     if n_grp * widest > _PAD_WASTE_LIMIT * total:
-        return reference(hidden_states, top_k_index, top_k_weights)
+        return _fallback(mod, "pad_waste", reference, *args)
+    mod._e4b_batched_stats["batched"] += 1
 
     grp = torch.repeat_interleave(torch.arange(n_grp, device=dev), sizes)
     slot = torch.arange(total, device=dev) - (torch.cumsum(sizes, 0) - sizes)[grp]
@@ -263,14 +290,26 @@ def enable_batched_train(model, verbose: bool = False) -> int:
     fallbacks — pad-waste, evicted storage — land on the fused forward instead of the
     reference, which is not what "fall back" is supposed to mean. Call
     ``disable_fast_train`` first if you want to switch lanes.
+
+    The count says which modules are PATCHED, not which calls ran batched: every
+    forward may still fall back to the reference (pad waste past ``_PAD_WASTE_LIMIT``,
+    evicted storage under offload, an empty batch), and a fallback is correct and
+    invisible from the output. Each patched module counts its calls; read
+    :func:`batched_fallback_stats` after a run and assert ``fallback_calls`` is what
+    the arm expected (``0`` for a "batched" receipt).
+
+    Refuses (``EpilogueContractError``) a wrapper whose base violates the
+    stock-epilogue contract (:func:`experts4bit_qlora.assert_stock_epilogue`): a
+    biased or clamped expert stack is unfaithful on the reference path too, so
+    there is nothing correct to leave it on.
     Use it as the no-extras training path (torch + bitsandbytes only) when ``[fast]`` will
     not build; it costs peak memory for a decoded stack. See
     ``docs/solutions/qlora-fused-moe-experts.md``.
     """
-    from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.lora import ExpertsLoRA
 
-    stock_forwards = {ExpertsNbit.forward, Experts4bit.forward}
+    from .fast import _refuse_wrapped
+
     patched = 0
     for mod in model.modules():
         if not isinstance(mod, ExpertsLoRA) or hasattr(mod, "_e4b_batched_ref"):
@@ -283,25 +322,49 @@ def enable_batched_train(model, verbose: bool = False) -> int:
                       "module; call disable_fast_train first")
             continue
         base = mod.base
-        # Same bargain as enable_fast/enable_fast_train: a base whose forward this
-        # path cannot reproduce is SKIPPED, not silently mis-accelerated. gpt-oss
-        # lands here — its forward adds per-expert biases that nothing below applies.
-        if type(base).forward not in stock_forwards and not hasattr(base, "_apply_gate"):
-            if verbose:
-                print(f"[e4b.batched] skip: base {type(base).__name__} has a custom forward")
-            continue
+        # Same bargain as enable_fast/enable_fast_train, decided by the shared
+        # structural contract: a wrapped base whose forward this path cannot
+        # reproduce (per-expert biases, an epilogue not exposed as `_apply_gate`) is
+        # REFUSED, never skipped -- the wrapper's reference forward is the same
+        # re-implementation and would be just as wrong (#397).
+        _refuse_wrapped(mod, "enable_batched_train")
         if getattr(base, "bits", None) != 4:
             if verbose:
                 print(f"[e4b.batched] skip: {getattr(base, 'bits', '?')}-bit storage, "
                       "the whole-stack dequant is 4-bit only")
             continue
         mod._e4b_batched_ref = mod.forward
+        mod._e4b_batched_stats = _fresh_stats()
         mod.forward = types.MethodType(
             lambda self, hs, tki, tkw: batched_experts_train_forward(self, hs, tki, tkw), mod)
         patched += 1
     if verbose:
         print(f"[e4b.batched] batched training path on {patched} ExpertsLoRA module(s)")
     return patched
+
+
+def batched_fallback_stats(model) -> dict:
+    """Per-call counters for every module :func:`enable_batched_train` patched.
+
+    Returns ``{"modules", "calls", "batched", "fallback_calls", "by_reason",
+    "per_module"}``: the totals across modules, the breakdown by reason
+    (``evicted_storage``, ``empty_batch``, ``pad_waste`` -- see ``FALLBACK_REASONS``)
+    and one dict per module in ``model.modules()`` order. ``modules == 0`` means the
+    path is not enabled on this model. A fallback lands on the reference forward,
+    so nothing in the OUTPUT distinguishes a batched call from one that fell back;
+    this is the instrument, and an arm claiming the batched path asserts
+    ``fallback_calls == 0`` (or records the count on the receipt).
+    """
+    per_module = [dict(m._e4b_batched_stats, by_reason=dict(m._e4b_batched_stats["by_reason"]))
+                  for m in model.modules() if hasattr(m, "_e4b_batched_stats")]
+    out = {"modules": len(per_module), "calls": 0, "batched": 0, "fallback_calls": 0,
+           "by_reason": {r: 0 for r in FALLBACK_REASONS}, "per_module": per_module}
+    for st in per_module:
+        for k in ("calls", "batched", "fallback_calls"):
+            out[k] += st[k]
+        for r in FALLBACK_REASONS:
+            out["by_reason"][r] += st["by_reason"][r]
+    return out
 
 
 def disable_batched_train(model) -> int:
@@ -332,5 +395,9 @@ def disable_batched_train(model) -> int:
             continue
         mod.forward = ref
         del mod._e4b_batched_ref
+        # The counters go with the patch: a re-enable starts from zero, and
+        # `batched_fallback_stats` reports only modules the path is live on.
+        if hasattr(mod, "_e4b_batched_stats"):
+            del mod._e4b_batched_stats
         n += 1
     return n

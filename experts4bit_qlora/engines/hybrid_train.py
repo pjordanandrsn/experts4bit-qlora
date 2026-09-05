@@ -274,21 +274,28 @@ def enable_hybrid_train(model, arena_path: str, manifest, **kw) -> int:
     modules get it with zero deltas. Inference calls (no grad, or nothing
     requiring grad) pass through untouched. Returns the tier patch count."""
     from .hybrid import enable_hybrid_tier
-    from ..lora import ExpertsLoRA
+    from ..lora import EpilogueContractError, ExpertsLoRA, assert_stock_epilogue
 
     n = enable_hybrid_tier(model, arena_path, manifest, **kw)
     targets = set(map(id, target_modules(model)))
     lora_of = {id(m.base): m for _, m in model.named_modules()
                if isinstance(m, ExpertsLoRA) and id(m.base) in targets}
 
-    for mod in target_modules(model):
+    for i, mod in enumerate(target_modules(model)):
         st = mod._hot_residency
-        if st.gptoss:
+        # `_glu` above reproduces the stock epilogue plus the V4 clamp it reads off
+        # the tier state; a module carrying anything else (per-expert biases, a GLU
+        # scalar nothing here consumes) is refused BY STRUCTURE through the same
+        # contract the adapter and every training enabler apply (#397). gpt-oss
+        # lands here -- it used to be refused by the tier's `gptoss` flag alone.
+        try:
+            assert_stock_epilogue(mod)
+        except EpilogueContractError as exc:
             from .hybrid import disable_hybrid_tier
             disable_hybrid_tier(model)
-            raise NotImplementedError(
-                "hybrid train does not ship the gpt-oss biased epilogue "
-                "yet — refusing rather than running it unexercised")
+            raise EpilogueContractError(
+                f"module {i}: hybrid train does not ship this epilogue -- refusing "
+                f"rather than running it unexercised: {exc}") from exc
         lora = lora_of.get(id(mod))
         host = lora if lora is not None else mod
         serve = host.forward

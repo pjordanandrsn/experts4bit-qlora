@@ -29,6 +29,7 @@ Inference (``no_grad``) additions, both default-on with env kill-switches for A/
 from __future__ import annotations
 
 import functools
+import inspect
 import os
 from typing import TYPE_CHECKING
 
@@ -128,6 +129,210 @@ def _epilogue(base, proj):
     return base.act_fn(proj)
 
 
+# --------------------------------------------------------------------------- #
+# The STOCK EPILOGUE CONTRACT (#397)
+#
+# `ExpertsLoRA` never calls `base.forward`: it re-implements the expert math so
+# the low-rank delta lands BEFORE the nonlinearity, which makes it the owner of
+# the epilogue. What it can represent is exactly one of two things:
+#
+#   * the stock forward, `down(act_fn(gate) * up)` (or `down(act_fn(up))` when
+#     `has_gate` is False) over a gate-block-then-up-block `gate_up_proj`, with
+#     no per-expert bias and no clamp; or
+#   * a module that hands the whole epilogue over through an `_apply_gate` hook
+#     (`_epilogue` above; DeepSeek-V4's clamped SwiGLU is the shipped case).
+#
+# Anything else -- per-expert bias tensors, a clamp or GLU scalar nothing
+# consumes, an interleaved gate/up layout, a forward that overrides the epilogue
+# without exposing it -- is a module the adapter would SUBSTITUTE a plain SwiGLU
+# for: right shapes, plausible numbers, falling loss, wrong function. gpt-oss is
+# the shipped example (`arch/gptoss.py`: biases + clamped GLU + de-interleave at
+# load, no hook), and the arena loader wrapped it anyway (#397).
+#
+# The check below reads STRUCTURE only (buffers, parameters, attributes, the
+# class's own `forward` identity and the names its code object references),
+# never a class or family name, so it fails for gpt-oss BY CONSTRUCTION and for
+# any future family that carries the same structure.
+# --------------------------------------------------------------------------- #
+
+class EpilogueContractError(TypeError):
+    """The expert module's forward is not one :class:`ExpertsLoRA` can represent.
+
+    A ``TypeError`` on purpose: the module handed in has the wrong SHAPE for the
+    adapter. It is deliberately not a ``NotImplementedError``/``RuntimeError`` --
+    the test guards that skip on an absent quantizer swallow those, and this
+    refusal must never read as a green skip.
+    """
+
+
+#: The faithful route for the biased, clamped, interleaved expert stack.
+STOCK_EPILOGUE_ROUTE = (
+    "grouped-nf4-gemm's `mxfp4_qlora.ExpertsMxfp4LoRA` (interleaved clamped GLU + "
+    "per-expert biases), the `experimental` row of the `mxfp4-moe-training-and-residency` "
+    "capability (docs/solutions/mxfp4-moe-training-and-residency.md)")
+
+#: Attribute names that are epilogue SCALARS. A module may carry one only when an
+#: `_apply_gate` hook consumes it; on a stock forward nothing does, and the
+#: serving engines (`hot_residency`) DO read `limit`, so the two paths would
+#: disagree about what the module computes.
+_EPILOGUE_SCALARS = ("alpha", "limit", "swiglu_alpha", "swiglu_limit")
+
+#: Attribute names a module may use to declare that its gate_up rows are
+#: interleaved (gate/up alternating) rather than gate-block-then-up-block. No
+#: shipped class sets one -- `from_gptoss` de-interleaves at load -- so this
+#: exists so a class that DOES declare it is refused rather than `chunk(2)`-ed.
+_INTERLEAVE_MARKERS = ("interleaved", "gate_up_interleaved", "_e4b_interleaved")
+
+#: Names in a forward's code object that mean "this forward owns an epilogue the
+#: adapter does not": the clamp, the gpt-oss sigmoid GLU, any bias.
+_EPILOGUE_CODE_NAMES = ("clamp", "clamp_", "sigmoid")
+
+
+def _stock_forwards() -> frozenset:
+    """The forwards `_epilogue` reproduces exactly: the resolved primitive's (upstream
+    bitsandbytes when it satisfies the contract, else vendored) AND the vendored one,
+    because `arch/*` subclasses always derive from the vendored classes."""
+    from . import Experts4bit, ExpertsNbit
+    from ._vendor import experts as _vendored
+
+    return frozenset({ExpertsNbit.forward, Experts4bit.forward,
+                      _vendored.ExpertsNbit.forward, _vendored.Experts4bit.forward})
+
+
+def _code_names(fn) -> frozenset:
+    code = getattr(fn, "__code__", None)
+    return frozenset(code.co_names) if code is not None else frozenset()
+
+
+def _act_fn_required_positionals(act_fn):
+    """How many positional arguments ``act_fn`` REQUIRES, or ``None`` when the
+    signature is not introspectable (a C builtin). The stock epilogue applies it to
+    one tensor; a callable that needs two is a GLU in disguise."""
+    try:
+        sig = inspect.signature(act_fn)
+    except (TypeError, ValueError):
+        return None
+    positional = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    return sum(1 for p in sig.parameters.values()
+               if p.default is p.empty and p.kind in positional)
+
+
+def describe_epilogue_structure(module) -> dict:
+    """Enumerate what :func:`assert_stock_epilogue` inspects, as data.
+
+    Reads no tensor DATA (a ``meta``-backed arena module is fine): registered
+    buffers and parameters by name, plain tensor attributes by name, the epilogue
+    scalars and interleave markers by presence, the class's ``forward`` by identity
+    and by the names its code object references, ``act_fn`` by arity, the declared
+    layout by shape. The dict is what the refusal message and the tests read.
+    """
+    cls = type(module)
+    fwd = getattr(cls, "forward", None)
+    hook = getattr(module, "_apply_gate", None)
+    tensors = set(module._buffers) | set(module._parameters)
+    plain = {n for n, v in vars(module).items()
+             if isinstance(v, torch.Tensor) and n not in ("_buffers", "_parameters")}
+    act_fn = getattr(module, "act_fn", None)
+    has_gate = bool(getattr(module, "has_gate", True))
+    inter = getattr(module, "intermediate_dim", None)
+    hidden = getattr(module, "hidden_dim", None)
+    return {
+        "class": cls.__name__,
+        "forward": (f"{fwd.__module__}.{fwd.__qualname__}" if fwd is not None else None),
+        "stock_forward": fwd in _stock_forwards(),
+        "apply_gate_hook": callable(hook),
+        "bias_tensors": sorted(n for n in tensors | plain if "bias" in n),
+        "epilogue_scalars": sorted(n for n in _EPILOGUE_SCALARS
+                                   if getattr(module, n, None) is not None),
+        "forward_references": sorted(n for n in _code_names(fwd)
+                                     if n in _EPILOGUE_CODE_NAMES or "bias" in n),
+        "interleave_markers": sorted(n for n in _INTERLEAVE_MARKERS if getattr(module, n, False)),
+        "act_fn": (type(act_fn).__name__ if not hasattr(act_fn, "__name__")
+                   else act_fn.__name__) if act_fn is not None else None,
+        "act_fn_required_positionals": (_act_fn_required_positionals(act_fn)
+                                        if act_fn is not None else None),
+        "has_gate": has_gate,
+        "gate_up_shape": tuple(getattr(module, "_gate_up_shape", ()) or ()),
+        "down_shape": tuple(getattr(module, "_down_shape", ()) or ()),
+        "expected_gate_up_rows": ((2 * inter if has_gate else inter) if inter is not None else None),
+        "expected_down_shape": ((hidden, inter) if None not in (hidden, inter) else None),
+    }
+
+
+def assert_stock_epilogue(module) -> None:
+    """Refuse, by STRUCTURE, an expert module whose forward :class:`ExpertsLoRA` cannot
+    re-implement; return ``None`` when it can.
+
+    Passes: the vendored/upstream ``ExpertsNbit``/``Experts4bit`` (any ``act_fn``
+    of one tensor -- SiLU, Gemma-4's gelu_tanh -- gated or not) and any subclass
+    whose only departure from the stock forward is exposed through an
+    ``_apply_gate`` hook (``DeepseekV4Experts4bit``). Raises
+    :class:`EpilogueContractError` naming every offending attribute and the
+    faithful route for: per-expert bias tensors (``gate_up_bias``/``down_bias``,
+    ``*_proj_bias``, any ``*bias*`` buffer, parameter or tensor attribute); a
+    non-stock ``forward`` with no hook; an epilogue scalar (``alpha``, ``limit``,
+    ``swiglu_*``) no hook consumes; a forward body that clamps, applies a sigmoid
+    GLU or adds a bias itself (its code object names them) instead of leaving the
+    epilogue to the hook; an interleaved-layout marker; an ``act_fn`` that needs
+    more than one positional argument; a declared ``gate_up``/``down`` shape that
+    is not the gate-block-then-up-block ``[2I, H]`` / ``[H, I]`` the adapter
+    ``chunk(2)``-splits.
+
+    Every path that wraps, trains over or attaches to an ``ExpertsLoRA`` calls this
+    (``ExpertsLoRA.__init__``, the loader's ``arena_train=True`` branch,
+    ``enable_nvme_train_residency``, ``enable_fast``/``enable_fast_train``/
+    ``enable_batched_train``, ``enable_hybrid_train``), so the loader cannot be
+    bypassed through another entry point.
+    """
+    d = describe_epilogue_structure(module)
+    problems = []
+    if d["bias_tensors"]:
+        problems.append(
+            f"per-expert bias tensors {d['bias_tensors']} (the adapter's epilogue adds no bias)")
+    if not d["stock_forward"] and not d["apply_gate_hook"]:
+        problems.append(
+            f"a non-stock forward ({d['forward']}) and no `_apply_gate` hook to reproduce it")
+    if d["epilogue_scalars"] and not d["apply_gate_hook"]:
+        problems.append(
+            f"epilogue scalars {d['epilogue_scalars']} that no `_apply_gate` hook consumes "
+            "(the stock epilogue ignores them; the serving engines do not)")
+    if d["forward_references"] and not d["stock_forward"]:
+        problems.append(
+            f"a forward whose own body references {d['forward_references']} -- an epilogue "
+            "computed outside any `_apply_gate` hook")
+    if d["interleave_markers"]:
+        problems.append(
+            f"an interleaved gate/up layout ({d['interleave_markers']}); the adapter "
+            "`chunk(2)`-splits gate-block-then-up-block rows")
+    if d["act_fn"] is None:
+        problems.append("no `act_fn`")
+    elif (d["act_fn_required_positionals"] or 0) > 1:
+        problems.append(
+            f"an `act_fn` ({d['act_fn']}) that requires {d['act_fn_required_positionals']} "
+            "positional arguments; the stock epilogue applies it to the gate alone")
+    rows = d["gate_up_shape"][0] if d["gate_up_shape"] else None
+    if d["expected_gate_up_rows"] is not None and rows != d["expected_gate_up_rows"]:
+        problems.append(
+            f"a declared gate_up shape {d['gate_up_shape']} whose row count is not "
+            f"{d['expected_gate_up_rows']} ({'2*' if d['has_gate'] else ''}intermediate_dim)")
+    if d["expected_down_shape"] is not None and d["down_shape"] != d["expected_down_shape"]:
+        problems.append(
+            f"a declared down shape {d['down_shape']}, not {d['expected_down_shape']} "
+            "([hidden, intermediate])")
+    if not problems:
+        return None
+    raise EpilogueContractError(
+        f"{d['class']} cannot be wrapped in ExpertsLoRA: the adapter re-implements the "
+        "expert forward inline (the low-rank delta lands BEFORE the nonlinearity), so it "
+        "owns the epilogue and can represent only the stock `down(act_fn(gate) * up)` or "
+        "a module that exposes its own epilogue as `_apply_gate`. This module carries "
+        + "; ".join(problems)
+        + ". Wrapping it would train adapters against a function the frozen base does not "
+        "compute -- shapes agree, the loss falls, nothing raises. The faithful route for "
+        f"this structure is {STOCK_EPILOGUE_ROUTE}; a family whose departure is a custom "
+        "ACTIVATION alone exposes it as `_apply_gate` (arch/deepseek_v4.py).")
+
+
 class ExpertsLoRA(nn.Module):
     """Per-expert LoRA adapters over a frozen :class:`Experts4bit` base.
 
@@ -136,6 +341,12 @@ class ExpertsLoRA(nn.Module):
 
       * ``gate_up``: ``A[e]`` is ``[r, hidden]``, ``B[e]`` is ``[gate_up_out, r]``
       * ``down``:    ``A[e]`` is ``[r, intermediate]``, ``B[e]`` is ``[hidden, r]``
+
+    Refuses (``EpilogueContractError``) a base whose forward it cannot re-implement:
+    :func:`assert_stock_epilogue` is applied to ``base`` at construction, so a biased,
+    clamped or interleaved expert stack (gpt-oss) is never wrapped and never trained
+    against a substituted SwiGLU. A custom activation exposed as ``_apply_gate``
+    (DeepSeek-V4) is accepted.
     """
 
     def __init__(
@@ -146,6 +357,10 @@ class ExpertsLoRA(nn.Module):
         dtype: torch.dtype = torch.float32,
     ):
         super().__init__()
+        # Before anything else: the wrapper is only faithful for the stock epilogue
+        # (or one handed over through `_apply_gate`). Refused here, at the seam every
+        # constructor of this class goes through, rather than in each loader branch.
+        assert_stock_epilogue(base)
         self.base = base
         for p in self.base.parameters():
             p.requires_grad_(False)

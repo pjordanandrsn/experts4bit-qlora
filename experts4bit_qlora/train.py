@@ -342,6 +342,19 @@ def main():
         else:
             p.requires_grad_(False)
     trainable = lora_params + router_params
+    if TRAIN_EXPERTS and not any("experts" in n for n, p in model.named_parameters()
+                                 if p.requires_grad and "lora" in n):
+        # A family the loader builds BARE (gpt-oss: ExpertsLoRA refuses its epilogue by
+        # structure) has no expert adapter to train. Attention LoRA alone would keep the
+        # trainable count nonzero and the run would report a loss curve under a flag that
+        # says the experts were trained. TRAIN_EXPERTS=1 is the default, so say so.
+        raise SystemExit(
+            "TRAIN_EXPERTS=1 but the loaded model carries no expert adapter: its expert "
+            "stacks are built bare (the generic ExpertsLoRA cannot represent this family's "
+            "epilogue -- see the loader's NOTE). Refusing to train attention/router only "
+            "under a flag that says otherwise. Set TRAIN_EXPERTS=0 to train what is "
+            "wrapped, or train the experts with grouped-nf4-gemm's "
+            "mxfp4_qlora.ExpertsMxfp4LoRA (docs/solutions/mxfp4-moe-training-and-residency.md).")
     torch.cuda.synchronize()
     log(
         f"loaded. trainable: {sum(p.numel() for p in trainable):,} "
