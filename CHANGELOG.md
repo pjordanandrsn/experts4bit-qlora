@@ -1,14 +1,42 @@
 # Changelog
 
-## 0.35.2 — 2026-09-05 — documentation: head-to-head receipts (Unsloth QLoRA end-to-end; same-box vLLM to follow in this release)
+## 0.35.2 — 2026-09-05 — documentation: head-to-head receipts (same-box vLLM; Unsloth QLoRA end-to-end)
 
 Documentation and tooling only; no runtime change. The `fast` extra's floor (grouped-nf4-gemm >= 0.30.0), the CI
 `--requires` assertion and the `>=0.35.0` compatibility record in `docs/system-manifest.json` are unchanged (the
 manifest is byte-identical to 0.35.1's). This release exists so the first end-to-end head-to-head against Unsloth is
 in the repository with its pre-registration, every amendment and every attempt, and so the machine-readable surfaces
 the 2026-09-05 audit found unchecked -- claim sentences, evidence paths, successors, licence labels -- are held by a
-check from here on. The same-box vLLM head-to-head against the licensed stack (lane P37) is registered in this release
-when its receipt lands.
+check from here on.
+
+### vLLM 0.28.0 head-to-head, same box, identical prompt token ids (lane p37, receipt `bench/h2h-20260905/p37/`)
+
+- One rented RTX 5090 (Vast 49975016, EPYC 7Q83 host), one session, decode-vs-decode on the same 512-token prompt ids
+  (dumped once from the e4b harness's own window function and fed to vLLM verbatim; the reducer refuses to divide
+  receipts that disagree on the prompt sha): vLLM 0.28.0 (torch 2.13.0+cu130, triton 3.7.1) serving Qwen's
+  `Qwen3-30B-A3B-GPTQ-Int4` (Marlin, default CUDA graphs, kv auto; eager and fp8-KV arms beside) against
+  experts4bit-qlora 0.35.0 + grouped-nf4-gemm 0.30.0 -- the NF4 control and the licensed recipe (bo7b's
+  `calibexp_all_n128`, the pack rebuilt on that box), bo7's harness pieces byte-identical, sixteen arms with
+  non-adjacent self-pairs, every knob in the receipts. Pre-registered before the box was rented (`PREREG.md`); three
+  amendments (a staging refusal; the comparator fetch hang left to its alarm and recovered in-lane, the guarded follow-up
+  ran as `NOT NEEDED`; the registered K8 gate on that box's pack, below); no threshold, arm, prompt set or knob changed.
+- **What is quoted** (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`, measured): vLLM 286.0 tok/s at B=1 (3.497
+  ms/step; fp8-KV 300.9; eager 20.8) and 2030.0 aggregate at B=16 (7.882 ms; fp8-KV 2206.5; eager 322.5) against the NF4
+  control's 113.4 / 500.1 -- **vLLM / e4b-NF4 2.52 and 4.06**, the only licence-free ratio the lane can produce (self-pairs
+  inside 1.03×). **What is not quoted:** the ratio against the licensed stack. Every licensed e4b arm on that box is VOID
+  under the pre-registered pack-fingerprint rule -- the streamed calibration there packed 11522 gptq / 766 rtn expert
+  matrices where the licensed pack reads 11512 / 776 (the same recipe, ten of 12,288 matrices across the `min_rows`
+  threshold, not the licensed bytes; speed cannot inherit a licence). The recipe's speed on that box (236.4 / 1305.3
+  tok/s, ×2.08 / ×2.61 over its NF4 control -- bo7's ×2.067 / ×2.602 reproduced within 1%) is registered per arm as
+  measured and unlicensed. Amendment 3, pre-registered after `TP_DONE`: the registered K8 gate on that box's own pack;
+  a pass on both texts licenses it and makes the ratio quotable from the same receipts (1.21 / 1.56), a fail leaves VOID
+  standing -- its verdict is registered when its receipts land. `e4b.serve.h2h.vllm.same-box` (2026-09-03, ×1.47 / ×1.55,
+  a different box, the RTN stack, vLLM version unrecorded) is superseded for current-position use and stays as measured.
+  One row per arm (`…arm.<engine>.b<B>.<arm>`, sixteen). Quality quoted, never equated.
+- `docs/capabilities.json` (`serve-moe-on-consumer-gpu`: the claim and the limitation reworded), `docs/STATUS.md`
+  ("Serving speed", "What changed", an open item: the licensed pack does not reproduce bit-for-bit across boxes), the
+  README results table and "Do not use this when", `docs/solutions/serve-large-moe-on-a-consumer-gpu.md`, a routing
+  query, `llms-full.txt` regenerated.
 
 ### e4b vs Unsloth, QLoRA end-to-end, one identical training problem (lane p38, receipt `bench/h2h-20260905/p38/`)
 

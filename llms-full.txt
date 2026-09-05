@@ -86,8 +86,12 @@ a version is reached from the release block at the top.
   one card and one bitsandbytes development build, not a statement about
   every 4-bit path).
 - You expect a general-purpose serving engine or a vLLM replacement: on
-  the same box vLLM is ahead (`e4b.serve.h2h.vllm.same-box`); this is a
-  measured 4-bit path for models that otherwise do not run at all.
+  the same box, with identical prompt ids, vLLM 0.28.0 is 2.52× ahead of
+  this package's NF4 stack at B=1 and 4.06× at B=16
+  (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`; the ratio against
+  the licensed stack is not quoted on that lane — its arms were void on
+  that box); this is a measured 4-bit path for models that otherwise do
+  not run at all.
 - You need Windows, macOS, ROCm or a non-CUDA accelerator.
 - The model family or expert layout is not in
   [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md)
@@ -872,7 +876,7 @@ Six families measured under one protocol on a rented RTX 5090 class: Qwen3-30B-A
 
 ## Limitations
 
-- Not a vLLM replacement: on the same box with identical prompts vLLM is ahead (claim `e4b.serve.h2h.vllm.same-box`, measured-private — the e4b arm of that comparison is the 2026-09-03 round-to-nearest int4 class, not the licensed stack, and the vLLM version is not recorded in its receipt; the comparison against the licensed stack is lane P37, registered when its receipt lands).
+- Not a vLLM replacement. The same-box **head-to-head** (lane p37, 2026-09-05, one RTX 5090, identical prompt token ids, decode-vs-decode; claim `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`, measured, receipt `bench/h2h-20260905/p37/`): vLLM 0.28.0 serving Qwen's GPTQ-Int4 checkpoint is ahead of this package's NF4 control by 2.52× at B=1 and 4.06× at B=16. The ratio against the licensed stack is **not quoted** on that lane: its licensed arms were void on that box under the pre-registered pack-fingerprint rule (the streamed calibration packed 11522/766 expert matrices against the licensed 11512/776 — the same recipe, not the licensed bytes), the recipe's speed there (236.4 / 1305.3 tok/s) is an unlicensed observation, and a K8 gate on that box's pack (amendment 3) decides whether it becomes quotable. The 2026-09-03 comparison (`e4b.serve.h2h.vllm.same-box`, superseded: ×1.47 / ×1.55 on a different box, the 0.27.0/0.21.0 RTN stack, vLLM version unrecorded) is history.
 - **Granite's int4-expert row is retracted** ([`../STATUS.md`](../STATUS.md), "What changed"): those experts fail the registered K8 budget (`experts4bit_qlora.k8_gate`; the `e4b.serve.tp.granite.*` claims' notes carry the numbers); the licensed Granite stack keeps NF4 experts (`e4b.serve.census.bo7.granite.b1.5090.2026-09-05`).
 - Gemma-4 has no parity reference at 512-token resolution ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) and fails to load on some rented hosts ([#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344)). gpt-oss raw-text perplexity cannot rank arms, and a uniform int4 grid cannot hold its MXFP4 experts.
 - Calibrated int4 attention is a Qwen-specific win, refused on quality elsewhere (notes on `e4b.serve.b1.qwen3-30b.int4attn-calib.5090`).
@@ -886,7 +890,7 @@ Six families measured under one protocol on a rented RTX 5090 class: Qwen3-30B-A
 
 ## Evidence
 
-Register: [`../claims.json`](../claims.json). The position, **measured** (receipt `bench/hybrid-g9/throughput-20260904/bo7/`, the 2026-09-05 census under the shipped code): `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05`, `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`, `e4b.serve.census.bo7.granite.b1.5090.2026-09-05`, `e4b.serve.census.bo7.granite.b16.5090.2026-09-05`, `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05`, `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`, `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05`, `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`, `e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05`, `e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05`, `e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05`, `e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05`, with every arm the lane ran in `e4b.serve.census.bo7.<family>.census.5090.2026-09-05`; the licence behind Qwen3's position, **measured** (receipt `bench/hybrid-g9/throughput-20260904/bo6/`): `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`. Behind them, each quoted with its own box and never divided into a census number — the 2026-09-04 protocol table, **measured** (receipt `bench/hybrid-g9/throughput-20260904/`): `e4b.serve.tp.olmoe.b1.5090.2026-09-04`, `e4b.serve.tp.olmoe.b16.5090.2026-09-04`, `e4b.serve.tp.granite.b1.5090.2026-09-04`, `e4b.serve.tp.granite.b16.5090.2026-09-04` (fastest arms, not licensed), `e4b.serve.tp.gptoss.b1.5090.2026-09-04`, `e4b.serve.tp.gptoss.b16.5090.2026-09-04`, `e4b.serve.tp.gemma4.b1.5090.2026-09-04`, `e4b.serve.tp.gemma4.b16.5090.2026-09-04`, `e4b.serve.tp.mixtral.b1.5090.2026-09-04`, `e4b.serve.tp.mixtral.b16.5090.2026-09-04`; that table's Qwen3 rows, `e4b.serve.tp.qwen3.b1.5090.2026-09-04` and `e4b.serve.tp.qwen3.b16.5090.2026-09-04`, are superseded by the census rows above (their round-to-nearest int4 class failed its second text). Build-out validation, **measured** (receipt `bench/hybrid-g9/throughput-20260904/bo3/`): `e4b.serve.buildout.qwen3.b1.5090.2026-09-04`, `e4b.serve.buildout.granite.b1.5090.2026-09-04`, `e4b.serve.buildout.granite.b16.5090.2026-09-04`, `e4b.serve.buildout.gemma4.b1.5090.2026-09-04`, `e4b.serve.buildout.gemma4.b16.5090.2026-09-04`, `e4b.serve.buildout.mixtral.b1.5090.2026-09-04`, `e4b.serve.buildout.mixtral.b16.5090.2026-09-04`, `e4b.serve.buildout.gptoss.b1.5090.2026-09-04`. Quality, **measured-private**: `e4b.parity.qwen3.paged-vs-own-attention`, `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-vs-own-attention` (indistinguishable from the model's own attention), `e4b.parity.gemma4.no-reference`; the per-model routing-flip floor they are read against, **measured**: `e4b.parity.moe-routing-flip-floor`. Qwen3 single-stream speed and the head-to-head, **measured-private**: `e4b.serve.b1.qwen3-30b.nf4.5090.2026-09`, `e4b.serve.b1.qwen3-30b.int4attn-calib.5090`, `e4b.serve.h2h.vllm.same-box` (the round-to-nearest int4 class of 2026-09-03, unlicensed; vLLM version unrecorded); Qwen3 batched speed of that class, **measured** (receipt `bench/hybrid-g9/b16close/`): `e4b.serve.b16.qwen3-30b.int4.5090`. CUDA-graph capture, **measured**: `e4b.serve.cuda-graph-capture`.
+Register: [`../claims.json`](../claims.json). The position, **measured** (receipt `bench/hybrid-g9/throughput-20260904/bo7/`, the 2026-09-05 census under the shipped code): `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05`, `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`, `e4b.serve.census.bo7.granite.b1.5090.2026-09-05`, `e4b.serve.census.bo7.granite.b16.5090.2026-09-05`, `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05`, `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`, `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05`, `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`, `e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05`, `e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05`, `e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05`, `e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05`, with every arm the lane ran in `e4b.serve.census.bo7.<family>.census.5090.2026-09-05`; the licence behind Qwen3's position, **measured** (receipt `bench/hybrid-g9/throughput-20260904/bo6/`): `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`. Behind them, each quoted with its own box and never divided into a census number — the 2026-09-04 protocol table, **measured** (receipt `bench/hybrid-g9/throughput-20260904/`): `e4b.serve.tp.olmoe.b1.5090.2026-09-04`, `e4b.serve.tp.olmoe.b16.5090.2026-09-04`, `e4b.serve.tp.granite.b1.5090.2026-09-04`, `e4b.serve.tp.granite.b16.5090.2026-09-04` (fastest arms, not licensed), `e4b.serve.tp.gptoss.b1.5090.2026-09-04`, `e4b.serve.tp.gptoss.b16.5090.2026-09-04`, `e4b.serve.tp.gemma4.b1.5090.2026-09-04`, `e4b.serve.tp.gemma4.b16.5090.2026-09-04`, `e4b.serve.tp.mixtral.b1.5090.2026-09-04`, `e4b.serve.tp.mixtral.b16.5090.2026-09-04`; that table's Qwen3 rows, `e4b.serve.tp.qwen3.b1.5090.2026-09-04` and `e4b.serve.tp.qwen3.b16.5090.2026-09-04`, are superseded by the census rows above (their round-to-nearest int4 class failed its second text). Build-out validation, **measured** (receipt `bench/hybrid-g9/throughput-20260904/bo3/`): `e4b.serve.buildout.qwen3.b1.5090.2026-09-04`, `e4b.serve.buildout.granite.b1.5090.2026-09-04`, `e4b.serve.buildout.granite.b16.5090.2026-09-04`, `e4b.serve.buildout.gemma4.b1.5090.2026-09-04`, `e4b.serve.buildout.gemma4.b16.5090.2026-09-04`, `e4b.serve.buildout.mixtral.b1.5090.2026-09-04`, `e4b.serve.buildout.mixtral.b16.5090.2026-09-04`, `e4b.serve.buildout.gptoss.b1.5090.2026-09-04`. Quality, **measured-private**: `e4b.parity.qwen3.paged-vs-own-attention`, `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-vs-own-attention` (indistinguishable from the model's own attention), `e4b.parity.gemma4.no-reference`; the per-model routing-flip floor they are read against, **measured**: `e4b.parity.moe-routing-flip-floor`. The same-box head-to-head against vLLM 0.28.0, **measured** (receipt `bench/h2h-20260905/p37/`): `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05` (vLLM against the NF4 control; no licensed-stack ratio quoted, its arms void on that box) with one row per arm under `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.*`; its 2026-09-03 predecessor `e4b.serve.h2h.vllm.same-box` is superseded (the round-to-nearest int4 class, a different box, vLLM version unrecorded). Qwen3 single-stream speed of that 2026-09-03 class, **measured-private**: `e4b.serve.b1.qwen3-30b.nf4.5090.2026-09`, `e4b.serve.b1.qwen3-30b.int4attn-calib.5090`; its batched speed, **measured** (receipt `bench/hybrid-g9/b16close/`): `e4b.serve.b16.qwen3-30b.int4.5090`. CUDA-graph capture, **measured**: `e4b.serve.cuda-graph-capture`.
 
 ## Source: docs/capabilities.json (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json)
 
@@ -1601,11 +1605,11 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
         "e4b.parity.granite.paged-vs-own-attention",
         "e4b.parity.gptoss.paged-vs-own-attention",
         "e4b.parity.moe-routing-flip-floor",
-        "e4b.serve.h2h.vllm.same-box",
+        "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05",
         "e4b.serve.cuda-graph-capture"
       ],
       "limitations": [
-        "Not a general-purpose vLLM replacement: on the same box vLLM is ahead (claim e4b.serve.h2h.vllm.same-box)",
+        "Not a general-purpose vLLM replacement: on the same box with identical prompt ids vLLM 0.28.0 is ahead of this package's NF4 control at both batch sizes (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05); the ratio against the licensed stack is not quoted on that lane because its licensed arms were void on that box under the pre-registered pack-fingerprint rule (the streamed calibration did not reproduce the licensed pack's expert-matrix counts), a gate run on that pack decides whether it becomes quotable, and the 2026-09-03 comparison is superseded",
         "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
         "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts with the folds and epilogue (e4b.serve.census.bo7.granite.b1.5090.2026-09-05, licensed by e4b.serve.buildout.granite.b1.5090.2026-09-04); the per-family positions the census quotes are in docs/STATUS.md -- Qwen3's licensed stack is the streamed calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), OLMoE's and Mixtral's position is NF4, Gemma-4's is the exact round-1 fold on NF4 with no quality instrument, gpt-oss's is its NF4 reference arm",
         "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not"
@@ -1960,14 +1964,38 @@ configuration on its box, never as the position. On the 2026-09-04
 validation box the same class went from 156.1 to 177.9 tok/s at B=1
 (×1.14) when 0.34.0's round-2 fold started engaging on the calibrated int4
 attention it had silently skipped (#375) — measured, receipt in the bo3
-bundle below, the same caveat. On the same box as the 2026-09-03 stack,
-vLLM (GPTQ-Int4) is ahead by 1.47× at B=1 and 1.55× at B=16 with identical
-prompts (`e4b.serve.h2h.vllm.same-box`, **measured-private**): the honest
-comparison on record, with two limits its register entry now states — the
-vLLM version is not recorded in that receipt, and the e4b arm is the
-unlicensed RTN class, not the licensed stack. The comparison against the
-licensed stack with a recorded vLLM version is lane P37, registered when
-its receipt lands.
+bundle below, the same caveat.
+
+**Against vLLM, same box, same session, identical prompt token ids** (lane
+p37, 2026-09-05, Vast 49975016, an RTX 5090 on an EPYC 7Q83 host;
+**measured** — receipt [`bench/h2h-20260905/p37/`](../bench/h2h-20260905/p37/README.md),
+table in its [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
+the pre-registration verbatim as its `PREREG.md`; register
+`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05` and one row per arm):
+vLLM 0.28.0 serving Qwen's GPTQ-Int4 checkpoint (Marlin, default CUDA
+graphs) decodes at **286.0 tok/s at B=1 and 2030.0 aggregate at B=16**
+(fp8-KV arm 300.9 / 2206.5; eager 20.8 / 322.5); this package's NF4 control
+on the same box reads 113.4 / 500.1 (repeats 113.5 / 499.9) — **vLLM /
+e4b-NF4 2.52 at B=1 and 4.06 at B=16**, the only licence-free ratio the lane
+can quote, and it is against the slowest configuration this package ships.
+**The ratio against the licensed stack is not quoted:** every licensed e4b
+arm on that box is VOID under the pre-registered pack-fingerprint rule —
+the streamed calibration there packed 11522 gptq / 766 rtn expert matrices
+where the licensed pack (bo6b, bo6c, bo7) reads 11512 / 776, the same
+recipe but not the licensed bytes, and speed cannot inherit a licence. The
+recipe's speed on that box — 236.4 tok/s at B=1 (repeat 235.8), 1305.3 at
+B=16, ×2.08 / ×2.61 over its own NF4 control, bo7's ×2.067 / ×2.602
+reproduced within 1% — is measured and **unlicensed**, an observation never
+divided into a position. Amendment 3 (pre-registered after `TP_DONE`) runs
+the registered K8 gate on that box's own pack; if `ppl(all) − ppl(nf4)` is
+within +0.05 on both texts the arms become VALID and the ratio is quotable
+from the same receipts (it would read 1.21 at B=1 and 1.56 at B=16); if
+either text fails, VOID stands. Its verdict is registered when its receipts
+land. The 2026-09-03 comparison (`e4b.serve.h2h.vllm.same-box` (superseded): ×1.47 /
+×1.55 on a different box against the 0.27.0/0.21.0 RTN stack, vLLM version
+unrecorded) is **superseded** for current-position use and stays true as
+measured. Quality is quoted, never equated: neither checkpoint is scored on
+that lane.
 
 **Per-family throughput is now measured in-repo** (2026-09-04): six
 families under one protocol on one rented 5090 class, with every refused
@@ -2149,9 +2177,19 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   dated measured rows, successors that resolve, no "pending" on an active
   row). The 2026-09-03 single-stream stack this page led with is the same
   RTN class and is quoted above as unlicensed speed.
+- **The 2026-09-03 same-box vLLM comparison is SUPERSEDED** (2026-09-05):
+  `e4b.serve.h2h.vllm.same-box` (superseded; ×1.47 / ×1.55 on box 49702459,
+  the 0.27.0/0.21.0 RTN stack, vLLM version unrecorded) points at
+  `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05` — lane p37, vLLM 0.28.0
+  pinned, identical prompt ids, every knob recorded — which quotes vLLM
+  against this package's NF4 control (2.52× / 4.06×) and, as pre-registered,
+  quotes **no** ratio against the licensed stack because its arms were VOID on
+  that box (the pack fingerprint 11522/766 against the licensed 11512/776).
+  What the head-to-head against the licensed stack reads depends on
+  amendment 3's gate verdict, registered when it lands.
 - **The 2026-08 "vLLM 6.31× ahead" figure is RETIRED by id** — the
   retired row is `e4b.retired.vllm-6.31x-ahead`: template prompts and a different box;
-  the same-box, same-prompt comparison (`e4b.serve.h2h.vllm.same-box`)
+  the same-box, same-prompt comparison (`e4b.serve.h2h.vllm.same-box` (superseded))
   supersedes it and now names it, with its own two limits stated (vLLM
   version unrecorded; the e4b arm is the unlicensed RTN class).
 - **`e4b.retired.13.47x-training-speedup` is `retired`, not `superseded`**:
@@ -2228,6 +2266,16 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
 
 ## What is open
 
+- **The licensed serving pack does not reproduce bit-for-bit across boxes.**
+  Lane p37 (`bench/h2h-20260905/p37/`) re-derived Qwen3's streamed 64k
+  calibrated pack with the same recipe on another host and read 11522 gptq /
+  766 rtn expert matrices against the licensed 11512 / 776 (bo6b, bo6c,
+  bo7): ten of 12,288 matrices crossed the `min_rows` threshold the other
+  way. The pre-registered fingerprint rule therefore voids that box's
+  licensed arms; amendment 3 runs the registered K8 gate on that pack to
+  decide whether a same-recipe pack is licensed by the gate rather than by
+  the count. Open until that verdict is registered — and, separately, the
+  calibration's host-dependence is a reproducibility item of its own.
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the
@@ -2294,9 +2342,11 @@ bytes. That discrepancy is older than this cleanup and is **not** fixed
 here, because fixing it means editing an anchored document. It is
 recorded so a reader is not surprised by a failing check.
 
-**`measured-private` is not a synonym for measured.** The serving speed
-numbers, the calibrated-int4 quality numbers and the head-to-head against
-vLLM come from a private audit tree. They are real runs with real
+**`measured-private` is not a synonym for measured.** The 2026-09-03
+single-stream serving speed numbers and the calibrated-int4 quality numbers
+come from a private audit tree (the same-box head-to-head against vLLM is
+now in this repository, `bench/h2h-20260905/p37/`; its 2026-09-03
+predecessor was private and is superseded). They are real runs with real
 receipts that this repository does not carry, and they are labelled that
 way in `claims.json`. Treat them as you would any number you cannot
 check.
@@ -2700,7 +2750,6 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.b1.qwen3-30b.nf4.5090.2026-09 [measured-private] (receipt private): Single-stream (B=1) paged decode of Qwen3-30B-A3B with NF4 experts and the fp8 paged KV cache runs at roughly 100 tok/s on a rented RTX 5090.
 - e4b.serve.b1.qwen3-30b.int4attn-calib.5090 [measured-private] (receipt private): With calibrated int4 attention (E4B_SERVE_ATTN_INT4_CALIB=1) and int4 experts, Qwen3-30B-A3B single-stream decode reaches 204.6 tok/s on the same 5090 class, x1.93 over the NF4 baseline.
 - e4b.serve.b16.qwen3-30b.int4.5090 [measured]: Batched (B=16) decode of Qwen3-30B-A3B with int4 experts reaches about 1,238 tok/s aggregate on a 5090, x2.50 over the NF4 batched baseline of about 490.
-- e4b.serve.h2h.vllm.same-box [measured-private] (receipt private): On the same 5090, vLLM serving Qwen3-30B-A3B-GPTQ-Int4 is ahead of this stack by x1.47 at B=1 and x1.55 at B=16 with natural distinct prompts (1,917 vs 1,234 tok/s aggregate).
 - e4b.parity.granite.paged-vs-own-attention [measured-private] (receipt private): Granite-3.1-3B-A800M's paged decode is indistinguishable from the model's own attention: 0.00229 nats from a chunk-free full-forward reference, below the model's own 0.00330-nat arithmetic-order floor.
 - e4b.parity.gptoss.paged-vs-own-attention [measured-private] (receipt private): gpt-oss-20b's paged decode (sinks + alternating sliding windows) is indistinguishable from the model's own attention: 0.00288 nats from a chunk-free full-forward reference, below its 0.01758-nat floor.
 - e4b.parity.qwen3.paged-vs-own-attention [measured-private] (receipt private): Qwen3-30B-A3B's paged decode is indistinguishable from the model's own attention: 0.00173 nats from a chunk-free full-forward reference, below the model's own 0.00641-nat arithmetic-order floor (512-step window). Its 8192-step delta against the chunked oracle (+0.0058 nats) also sits below the 8192-window floor of 0.0095.
@@ -2816,6 +2865,23 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.arm.unsloth.ckpt_hf [measured]: [OK · VALID] Head-to-head lane p38 (2026-09-05, one rented RTX 5090): unsloth arm ckpt_hf -- Unsloth with HF checkpointing (use_gradient_checkpointing=True), the semantic match to e4b's mode -- N=60: 2.146 s/step (median of steps 11..N; mean 3.493), 39.8 tok/s over 5,175 tokens, peak 23.137 GB, 221.3 J/step, train loss 3.6550 -> 0.2606, held-out 3.6968 -> 0.2975, time-to-0.32 130.1 s, adapter 1285.1 MB (F32); 321,257,472 trainable in 576 tensors, init_sha 83332aed4cb5, C1 bit-exact over 14,948,499,456 bytes (control fires); engagement: Params4bit expert stacks 96, forward_moe_backend_bnb4bit 96 calls per step on every step, the 'Enabling LoRA on MoE parameters' banner, U8 innermost-module predicate 48/48 (amendment-4 harness).
 - e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.arm.e4b.fused_attn4_200 [measured]: [OK · VALID] Head-to-head lane p38 (2026-09-05, one rented RTX 5090): e4b arm fused_attn4_200 -- the 200-step loss curve, e4b primary configuration -- N=200: 1.515 s/step (median of steps 11..N; mean 2.035), 56.6 tok/s over 17,173 tokens, peak 21.372 GB, 177.7 J/step, train loss 3.6282 -> 0.3017, held-out 3.7022 -> 0.2881, time-to-0.32 91.5 s, adapter 656.1 MB (torch.bfloat16, torch.float32); 321,257,472 trainable in 576 tensors, init_sha 2b362f7b19ad, C1 bit-exact over 16,760,438,784 bytes (control fires); engagement: n_patched 48, fused_grouped_lora 192 calls per step on every step, 192 NF4 attention projections.
 - e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.arm.unsloth.ckpt_unsloth_200 [measured]: [OK · VALID] Head-to-head lane p38 (2026-09-05, one rented RTX 5090): unsloth arm ckpt_unsloth_200 -- the 200-step loss curve, Unsloth primary configuration -- N=200: 2.157 s/step (median of steps 11..N; mean 3.522), 39.2 tok/s over 17,173 tokens, peak 23.141 GB, 258.3 J/step, train loss 3.6550 -> 0.2795, held-out 3.6968 -> 0.2713, time-to-0.32 135.9 s, adapter 1285.1 MB (F32); 321,257,472 trainable in 576 tensors, init_sha 83332aed4cb5, C1 bit-exact over 14,948,499,456 bytes (control fires); engagement: Params4bit expert stacks 96, forward_moe_backend_bnb4bit 96 calls per step on every step, the 'Enabling LoRA on MoE parameters' banner, U8 judged by the amendment-4 proof + this receipt's census and counter (written before the amendment).
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 [measured]: Same box (one RTX 5090, Vast 49975016, EPYC 7Q83 host), same session, IDENTICAL prompt token ids on both engines, decode-vs-decode: vLLM 0.28.0 (torch 2.13.0+cu130, triton 3.7.1) serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e43 (MarlinExperts, default CUDA graphs, kv auto) decodes at 286.0 tok/s at B=1 (3.497 ms/step; repeat 286.0; fp8-KV arm 300.9; eager 20.8) and 2030.0 tok/s aggregate at B=16 (7.882 ms; repeat 2022.2; fp8-KV 2206.5; eager 322.5), against experts4bit-qlora 0.35.0 + grouped-nf4-gemm 0.30.0's NF4 control (NF4 experts, bf16 attention, no folds, graph loop -- the one e4b configuration that quantises nothing beyond NF4 and needs no gate) at 113.4 / 113.5 tok/s at B=1 (8.82 / 8.81 ms; the two readings) and 500.1 / 499.9 at B=16: ratio vLLM / e4b-NF4 2.52 at B=1 and 4.06 at B=16 (self-pairs 1.0011 / 1.0000 and 1.0003 / 1.0039, inside the 1.03 rule). NO RATIO IS QUOTED AGAINST e4b's LICENSED STACK: every licensed e4b arm on this box is VOID under the pre-registered pack-fingerprint rule -- this box's streamed calibration packed 11522 gptq / 766 rtn expert matrices against the licensed pack's 11512 / 776 (the same recipe; ten of 12,288 matrices classified the other way at the min_rows threshold; not the licensed bytes) -- and the recipe's own speed on this box, 236.4 tok/s at B=1 (4.23 ms; repeat 235.8) and 1305.3 at B=16 (12.26 ms), is measured and unlicensed, an observation never divided into a position; secondary rows: eager-vs-eager 1.705, vLLM fp8-KV / kv-auto 1.052 at B=1 and 1.087 at B=16. Supersedes the 2026-09-03 x1.47 / x1.55 (a different box, the 0.27.0/0.21.0 RTN stack, vLLM version unrecorded), which stays true as measured.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b1.nf4_r1 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm nf4_r1 at B=1 -- the same-box NF4 control (NF4 experts, bf16 attention, no folds), graph loop, 127 timed steps; licence-free -- 113.4 tok/s (8.82 ms/step), nvidia-smi peak 18.91 GB; prompts_sha a8e6ea1d7d140dbe; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b1.nf4_r2 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm nf4_r2 at B=1 -- the NF4 control repeated non-adjacently (self-pair 1.0011) -- 113.5 tok/s (8.81 ms/step), nvidia-smi peak 18.86 GB; prompts_sha a8e6ea1d7d140dbe; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b1.lic_r1 [measured]: [VOID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm lic_r1 at B=1 -- the licensed recipe (calibexp_all_n128) re-derived on this box -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776); measured, never a position -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776): 236.4 tok/s (4.23 ms/step), nvidia-smi peak 19.9 GB; prompts_sha a8e6ea1d7d140dbe; VOID under the pre-registered pack-fingerprint rule: the log carries INT4EXP 48 layers and ATTNINT4 192 projections but its pack counts read 11522 gptq / 766 rtn, not the licensed 11512 / 776 -- the same recipe, not the licensed bytes; speed cannot inherit a licence, so this number is measured and unlicensed, never a position. Amendment 3 (the registered K8 gate on this box's pack) decides whether it becomes VALID; recorded here when its verdict lands.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b1.lic_r2 [measured]: [VOID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm lic_r2 at B=1 -- the recipe repeated non-adjacently (self-pair 1.0024) -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776) -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776): 235.8 tok/s (4.24 ms/step), nvidia-smi peak 19.9 GB; prompts_sha a8e6ea1d7d140dbe; VOID under the pre-registered pack-fingerprint rule: the log carries INT4EXP 48 layers and ATTNINT4 192 projections but its pack counts read 11522 gptq / 766 rtn, not the licensed 11512 / 776 -- the same recipe, not the licensed bytes; speed cannot inherit a licence, so this number is measured and unlicensed, never a position. Amendment 3 (the registered K8 gate on this box's pack) decides whether it becomes VALID; recorded here when its verdict lands.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b1.lic_eager [measured]: [VOID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm lic_eager at B=1 -- the recipe with --b1d-loop eager (the eager pairing for vLLM's eager arm) -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776) -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776): 12.2 tok/s (81.99 ms/step), nvidia-smi peak 19.99 GB; prompts_sha a8e6ea1d7d140dbe; VOID under the pre-registered pack-fingerprint rule: the log carries INT4EXP 48 layers and ATTNINT4 192 projections but its pack counts read 11522 gptq / 766 rtn, not the licensed 11512 / 776 -- the same recipe, not the licensed bytes; speed cannot inherit a licence, so this number is measured and unlicensed, never a position. Amendment 3 (the registered K8 gate on this box's pack) decides whether it becomes VALID; recorded here when its verdict lands.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b16.nf4_r1 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm nf4_r1 at B=16 -- the same-box NF4 control at B=16, BV3_GRAPH 70 steps, aggregate; licence-free -- 500.1 tok/s (31.99 ms/step), nvidia-smi peak 19.41 GB; prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b16.nf4_r2 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm nf4_r2 at B=16 -- the NF4 control repeated non-adjacently (self-pair 1.0003) -- 499.9 tok/s (32.0 ms/step), nvidia-smi peak 19.41 GB; prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.e4b.b16.lic_r1 [measured]: [VOID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): e4b 0.35.0 + grouped-nf4-gemm 0.30.0 arm lic_r1 at B=16 -- the licensed recipe re-derived on this box at B=16 -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776); not repeated at B=16 (pre-registered) -- UNLICENSED on this box (fingerprint 11522/766 vs 11512/776): 1305.3 tok/s (12.26 ms/step), nvidia-smi peak 20.11 GB; prompts_sha f67e7e4d592b002b; VOID under the pre-registered pack-fingerprint rule: the log carries INT4EXP 48 layers and ATTNINT4 192 projections but its pack counts read 11522 gptq / 766 rtn, not the licensed 11512 / 776 -- the same recipe, not the licensed bytes; speed cannot inherit a licence, so this number is measured and unlicensed, never a position. Amendment 3 (the registered K8 gate on this box's pack) decides whether it becomes VALID; recorded here when its verdict lands.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b1.graph_r1 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm graph_r1 at B=1 -- PRIMARY vLLM arm: default CUDA graphs (FULL_AND_PIECEWISE), kv auto; median-of-3 286.1; end-to-end incl. prefill 270.5 -- 286.0 tok/s (3.497 ms/step), nvidia-smi peak 30.39 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha a8e6ea1d7d140dbe; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b1.graph_r2 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm graph_r2 at B=1 -- the primary vLLM arm repeated non-adjacently, fresh engine (self-pair 1.0000); median-of-3 286.1 -- 286.0 tok/s (3.496 ms/step), nvidia-smi peak 30.39 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha a8e6ea1d7d140dbe; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b1.eager [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm eager at B=1 -- enforce_eager=True, kv auto (secondary); median-of-3 20.4; 0.073 of the graph arm -- 20.8 tok/s (48.114 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha a8e6ea1d7d140dbe; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b1.fp8kv [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm fp8kv at B=1 -- default graphs, kv_cache_dtype fp8 -- e4b's cache class (secondary); median-of-3 301.1; 1.052 of the graph arm -- 300.9 tok/s (3.323 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha a8e6ea1d7d140dbe; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b16.graph_r1 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm graph_r1 at B=16 -- PRIMARY vLLM arm at B=16; median-of-3 2023.7; end-to-end incl. prefill 1595.9 -- 2030.0 tok/s (7.882 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b16.graph_r2 [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm graph_r2 at B=16 -- the primary vLLM arm repeated (self-pair 1.0039); median-of-3 2020.5 -- 2022.2 tok/s (7.912 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b16.eager [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm eager at B=16 -- enforce_eager=True at B=16 (secondary); median-of-3 322.4; 0.159 of the graph arm -- 322.5 tok/s (49.616 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
+- e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b16.fp8kv [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm fp8kv at B=16 -- default graphs, kv fp8 at B=16 (secondary); median-of-3 2217.4; 1.087 of the graph arm -- 2206.5 tok/s (7.251 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
 
 Open items (no evidence either way):
 
@@ -2823,4 +2889,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(119 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(135 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

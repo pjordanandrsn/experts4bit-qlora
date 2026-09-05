@@ -191,14 +191,38 @@ configuration on its box, never as the position. On the 2026-09-04
 validation box the same class went from 156.1 to 177.9 tok/s at B=1
 (×1.14) when 0.34.0's round-2 fold started engaging on the calibrated int4
 attention it had silently skipped (#375) — measured, receipt in the bo3
-bundle below, the same caveat. On the same box as the 2026-09-03 stack,
-vLLM (GPTQ-Int4) is ahead by 1.47× at B=1 and 1.55× at B=16 with identical
-prompts (`e4b.serve.h2h.vllm.same-box`, **measured-private**): the honest
-comparison on record, with two limits its register entry now states — the
-vLLM version is not recorded in that receipt, and the e4b arm is the
-unlicensed RTN class, not the licensed stack. The comparison against the
-licensed stack with a recorded vLLM version is lane P37, registered when
-its receipt lands.
+bundle below, the same caveat.
+
+**Against vLLM, same box, same session, identical prompt token ids** (lane
+p37, 2026-09-05, Vast 49975016, an RTX 5090 on an EPYC 7Q83 host;
+**measured** — receipt [`bench/h2h-20260905/p37/`](../bench/h2h-20260905/p37/README.md),
+table in its [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
+the pre-registration verbatim as its `PREREG.md`; register
+`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05` and one row per arm):
+vLLM 0.28.0 serving Qwen's GPTQ-Int4 checkpoint (Marlin, default CUDA
+graphs) decodes at **286.0 tok/s at B=1 and 2030.0 aggregate at B=16**
+(fp8-KV arm 300.9 / 2206.5; eager 20.8 / 322.5); this package's NF4 control
+on the same box reads 113.4 / 500.1 (repeats 113.5 / 499.9) — **vLLM /
+e4b-NF4 2.52 at B=1 and 4.06 at B=16**, the only licence-free ratio the lane
+can quote, and it is against the slowest configuration this package ships.
+**The ratio against the licensed stack is not quoted:** every licensed e4b
+arm on that box is VOID under the pre-registered pack-fingerprint rule —
+the streamed calibration there packed 11522 gptq / 766 rtn expert matrices
+where the licensed pack (bo6b, bo6c, bo7) reads 11512 / 776, the same
+recipe but not the licensed bytes, and speed cannot inherit a licence. The
+recipe's speed on that box — 236.4 tok/s at B=1 (repeat 235.8), 1305.3 at
+B=16, ×2.08 / ×2.61 over its own NF4 control, bo7's ×2.067 / ×2.602
+reproduced within 1% — is measured and **unlicensed**, an observation never
+divided into a position. Amendment 3 (pre-registered after `TP_DONE`) runs
+the registered K8 gate on that box's own pack; if `ppl(all) − ppl(nf4)` is
+within +0.05 on both texts the arms become VALID and the ratio is quotable
+from the same receipts (it would read 1.21 at B=1 and 1.56 at B=16); if
+either text fails, VOID stands. Its verdict is registered when its receipts
+land. The 2026-09-03 comparison (`e4b.serve.h2h.vllm.same-box` (superseded): ×1.47 /
+×1.55 on a different box against the 0.27.0/0.21.0 RTN stack, vLLM version
+unrecorded) is **superseded** for current-position use and stays true as
+measured. Quality is quoted, never equated: neither checkpoint is scored on
+that lane.
 
 **Per-family throughput is now measured in-repo** (2026-09-04): six
 families under one protocol on one rented 5090 class, with every refused
@@ -380,9 +404,19 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   dated measured rows, successors that resolve, no "pending" on an active
   row). The 2026-09-03 single-stream stack this page led with is the same
   RTN class and is quoted above as unlicensed speed.
+- **The 2026-09-03 same-box vLLM comparison is SUPERSEDED** (2026-09-05):
+  `e4b.serve.h2h.vllm.same-box` (superseded; ×1.47 / ×1.55 on box 49702459,
+  the 0.27.0/0.21.0 RTN stack, vLLM version unrecorded) points at
+  `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05` — lane p37, vLLM 0.28.0
+  pinned, identical prompt ids, every knob recorded — which quotes vLLM
+  against this package's NF4 control (2.52× / 4.06×) and, as pre-registered,
+  quotes **no** ratio against the licensed stack because its arms were VOID on
+  that box (the pack fingerprint 11522/766 against the licensed 11512/776).
+  What the head-to-head against the licensed stack reads depends on
+  amendment 3's gate verdict, registered when it lands.
 - **The 2026-08 "vLLM 6.31× ahead" figure is RETIRED by id** — the
   retired row is `e4b.retired.vllm-6.31x-ahead`: template prompts and a different box;
-  the same-box, same-prompt comparison (`e4b.serve.h2h.vllm.same-box`)
+  the same-box, same-prompt comparison (`e4b.serve.h2h.vllm.same-box` (superseded))
   supersedes it and now names it, with its own two limits stated (vLLM
   version unrecorded; the e4b arm is the unlicensed RTN class).
 - **`e4b.retired.13.47x-training-speedup` is `retired`, not `superseded`**:
@@ -459,6 +493,16 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
 
 ## What is open
 
+- **The licensed serving pack does not reproduce bit-for-bit across boxes.**
+  Lane p37 (`bench/h2h-20260905/p37/`) re-derived Qwen3's streamed 64k
+  calibrated pack with the same recipe on another host and read 11522 gptq /
+  766 rtn expert matrices against the licensed 11512 / 776 (bo6b, bo6c,
+  bo7): ten of 12,288 matrices crossed the `min_rows` threshold the other
+  way. The pre-registered fingerprint rule therefore voids that box's
+  licensed arms; amendment 3 runs the registered K8 gate on that pack to
+  decide whether a same-recipe pack is licensed by the gate rather than by
+  the count. Open until that verdict is registered — and, separately, the
+  calibration's host-dependence is a reproducibility item of its own.
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the
@@ -525,9 +569,11 @@ bytes. That discrepancy is older than this cleanup and is **not** fixed
 here, because fixing it means editing an anchored document. It is
 recorded so a reader is not surprised by a failing check.
 
-**`measured-private` is not a synonym for measured.** The serving speed
-numbers, the calibrated-int4 quality numbers and the head-to-head against
-vLLM come from a private audit tree. They are real runs with real
+**`measured-private` is not a synonym for measured.** The 2026-09-03
+single-stream serving speed numbers and the calibrated-int4 quality numbers
+come from a private audit tree (the same-box head-to-head against vLLM is
+now in this repository, `bench/h2h-20260905/p37/`; its 2026-09-03
+predecessor was private and is superseded). They are real runs with real
 receipts that this repository does not carry, and they are labelled that
 way in `claims.json`. Treat them as you would any number you cannot
 check.

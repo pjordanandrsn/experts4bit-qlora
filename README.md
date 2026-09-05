@@ -77,8 +77,12 @@ a version is reached from the release block at the top.
   one card and one bitsandbytes development build, not a statement about
   every 4-bit path).
 - You expect a general-purpose serving engine or a vLLM replacement: on
-  the same box vLLM is ahead (`e4b.serve.h2h.vllm.same-box`); this is a
-  measured 4-bit path for models that otherwise do not run at all.
+  the same box, with identical prompt ids, vLLM 0.28.0 is 2.52× ahead of
+  this package's NF4 stack at B=1 and 4.06× at B=16
+  (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`; the ratio against
+  the licensed stack is not quoted on that lane — its arms were void on
+  that box); this is a measured 4-bit path for models that otherwise do
+  not run at all.
 - You need Windows, macOS, ROCm or a non-CUDA accelerator.
 - The model family or expert layout is not in
   [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md)
@@ -185,7 +189,7 @@ the register moves here or the build goes red.
 | Paged decode vs the model's own attention (`e4b.parity.*.paged-vs-own-attention`, `e4b.parity.gemma4.no-reference`, `e4b.parity.gemma4.fp8-share`) | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; Gemma-4 has no reference at this resolution — its own cached forward swings −0.107 … +0.271 nats across windows — and the paged path's one measured cost there is the fp8 cache, 0.046 nats ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
 | Serving: the licensed best per family under the shipped code, one rented RTX 5090, every ratio to that family's own NF4 arm on the same box (`e4b.serve.census.bo7.*.b1.5090.2026-09-05`, `e4b.serve.census.bo7.*.b16.5090.2026-09-05`) | Qwen3-30B-A3B ×2.067 at B=1 (238.1 tok/s on that box; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a projection) and ×2.602 at B=16 (1327.5 tok/s); Granite-3.1-3B ×1.341 (304.9) / ×1.160 (1836.8); Gemma-4-26B ×1.281 (103.6) / ×1.106 (675.8), exact arithmetic on NF4 because that family has no K8 instrument; OLMoE (282.5 / 1347.5), Mixtral (50.3 / 191.4) and gpt-oss (144.5 / 761.6) sit at ×1.000, their NF4 or reference arm — nothing above it is licensed; the measured-but-unlicensed arms are in [`SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-THROUGHPUT.md) | measured |
 | Qwen3-30B-A3B's licensed serving stack passes the registered K8 gate on both texts: streamed 64k-token GPTQ-calibrated int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue + decode glue (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) | −0.0528 ppl on wikitext and −0.0662 on C4 validation against the same-cut NF4, both inside the family's 0.0095-nat floor — at parity or better, licensed under the unchanged gate, no improvement claimed by a number | measured |
-| Same box, same prompts, against vLLM (GPTQ-Int4) (`e4b.serve.h2h.vllm.same-box`) | vLLM ahead 1.47× at B=1, 1.55× at B=16 — the e4b arm is the 2026-09-03 round-to-nearest int4 class, not the licensed stack, and the vLLM version is not recorded in the receipt | measured-private |
+| Same box, same session, identical prompt ids, against vLLM 0.28.0 (Qwen's GPTQ-Int4, Marlin, default CUDA graphs) on one rented RTX 5090 (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`) | vLLM 286.0 tok/s at B=1 and 2030.0 aggregate at B=16 against this package's NF4 control 113.4 / 500.1 — vLLM/e4b-NF4 2.52 and 4.06; **no ratio against the licensed stack is quoted**: its arms on that box are void under the pre-registered pack-fingerprint rule (the streamed calibration packed 11522 expert matrices GPTQ where the licensed pack has 11512), and the recipe's speed there, 236.4 / 1305.3 tok/s, is an unlicensed observation; a K8 gate on that box's pack (amendment 3) is measured next | measured |
 | DeepSeek-V4-Flash (284B, 147 GB of experts on disk) (`e4b.serve.deepseek-v4`) | loads in ~10 s at 8.74 GiB peak VRAM and generates | measured |
 | Informed hot sets vs by-index, identical VRAM (`e4b.serve.informed-hot-sets`) | +37.1% on DeepSeek-V4-Flash; the gain is a property of the host | measured |
 
@@ -214,9 +218,13 @@ means:
   ≈86 tokens per step at batch 1 on a resident 30B MoE; its 200-step curve
   favours Unsloth and is quoted beside the 60-step position wherever that
   position is quoted (`bench/h2h-20260905/p38/`, the pre-registration and
-  every amendment in the bundle). The vLLM row is the unlicensed 2026-09-03
-  stack; the licensed stack's head-to-head is lane P37, registered when its
-  receipt lands.
+  every amendment in the bundle). The vLLM row (`bench/h2h-20260905/p37/`)
+  quotes vLLM against this package's slowest, licence-free configuration
+  because that is the only ratio the lane could quote: the licensed arms
+  were void on that box (a pack fingerprint that did not reproduce), so the
+  number a reader wants — vLLM against the licensed stack — is not there
+  until the gate run on that box's pack is in the bundle. The 2026-09-03
+  comparison (×1.47 / ×1.55) is superseded and stays as history.
 - **Ratios travel; absolutes do not.** The 5090 class carries ~8.5%
   inter-box dispersion; the same config on two 4090s moved 8.6% in
   s/step. Quote the card, or quote a ratio.

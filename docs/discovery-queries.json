@@ -702,6 +702,26 @@
           "head-to-head"
         ]
       ]
+    },
+    {
+      "query": "experts4bit-qlora vs vLLM on the same GPU: head-to-head decode throughput for a 4-bit MoE",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+      "required_concepts": [
+        [
+          "vLLM"
+        ],
+        [
+          "head-to-head"
+        ],
+        [
+          "same box",
+          "same-box"
+        ],
+        [
+          "GPTQ"
+        ]
+      ]
     }
   ]
 }
