@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.35.1 — 2026-09-05 — documentation (the tp1 training parity matrix) and one behaviour change (#397 → #402)
+
+The training parity matrix on real weights (lane tp1) with its documentation, plus **one behaviour change** from the
+parallel #397 fix (#402, below) — **this release is not docs-only**. The `fast` extra's floor (grouped-nf4-gemm >=
+0.30.0), the CI `--requires` assertion and the `>=0.35.0` compatibility record in `docs/system-manifest.json` are
+unchanged. The release exists so that the repository, the PyPI project page and the site state the training matrix
+from evidence, and so that the refusals that matrix argued for ship with it.
 
 ### The stock-epilogue contract: `ExpertsLoRA` refuses what it cannot represent (#397)
 
@@ -9,6 +15,61 @@
 - `enable_batched_train`'s per-call fallbacks (pad waste past `_PAD_WASTE_LIMIT`, evicted storage, an empty batch) are counted on each patched module; `batched_fallback_stats(model)` (exported) reports `calls` / `batched` / `fallback_calls` / `by_reason` per module and in total, so an arm claiming the batched path can assert `fallback_calls == 0` (the tp1 lane read OLMoE's batched arm as void because layers fell back with nothing counting them).
 - The loader logs a one-time NOTE when a family's experts are built bare (no expert adapter; `r`/`alpha` do not apply), and `python -m experts4bit_qlora.train` refuses `TRAIN_EXPERTS=1` on a model with no expert adapter instead of training attention/router alone under that flag.
 - Audit of the public enable/load/train/serve entry points for the class "unsupported behaviour, plausible output, no refusal": `docs/audits/no-silent-fallback-2026-09-05.md`.
+- Folded under this release from `## Unreleased` at the bundle's rebase; the capability contract and the solution page carry the refusal (`EpilogueContractError`), the MXFP4 NVMe-residency refusal of bias-carrying modules and `batched_fallback_stats` as limitations, and `training_support.gpt_oss.nvme_train` is `refused` with that code reference.
+
+### Training on real weights, per family, under the shipped code (lane tp1, receipt `bench/train-parity-20260905/tp1/`)
+
+- The six serving families through the shipped training path on one rented RTX 5090 (train-anchor class recorded):
+  the direct `load_moe_4bit_streaming` + `verify_moe_4bit(strict=True)` path on the real checkpoints, then
+  `reference` / `enable_fast_train(dgrad=True)` / `enable_batched_train` for 60 steps on the registered `clinical`
+  text, verdicts by `tp1_reduce.py` in the registered B2/C2 units (`|Δ final train loss| ≤ 0.05` and median
+  step-wise `|Δ| ≤ 0.05` against the family's own reference; VOID when the arm cannot be read), cost reported and
+  never gated. Every log, the amended lane script beside its pre-amendment copy, the patched harness and its patch,
+  the reducer, `RESULTS-tp1.md` (the reducer's output verbatim plus the reading) and a README with the three
+  amendments — the first box's 10 MB/s link, the fetch-by-short-sha false start and the ≈ 4.4 h it idled, the
+  harness's closure bug fixed in flight — and predictions P1–P7 scored.
+- Rows (`TP_DONE` 2026-09-05T15:22Z, all six families through the registered arms): the fused path **PASSES** on every
+  family that has one — OLMoE-1B-7B-Instruct (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`, the first reading on a
+  registered text with real weights for that family), Qwen3-30B-A3B resident on the 32 GB card (`…qwen3.fused…`),
+  Gemma-4-26B-A4B-it — the `-it` checkpoint, loaded without #344 on that host — with the step-wise median inside the
+  band by a small margin (`…gemma4.fused…`), and Mixtral-8x7B-Instruct under `offload=True` at half the reference
+  loop's peak VRAM (`…mixtral.fused…`; the family enters `model_families` on it); the batched path **PASSES** on
+  Granite-3.1-3B-A800M (`…granite.batched…`; the family's first direct real-weight load) and Mixtral, and is **VOID** on
+  OLMoE, Qwen3 and Gemma-4 — `enable_batched_train` falls back to the reference forward per call above
+  `_PAD_WASTE_LIMIT` with no counter, and the kernel was not reached on every layer; gpt-oss fused / batched
+  **REFUSED** (0 patched: the loader builds its experts bare), attention-only QLoRA trains with the frozen stacks
+  bit-exact, and grouped-nf4-gemm's experimental MXFP4 route trains its experts on its own text with the canary passing
+  — experimental, never licensed. Granite's fused arm **PASSES** on its corrected-counter re-run (`…granite.fused…`,
+  `TP2_DONE` 15:33Z; attempt 1 is a kept HARNESS_ERROR row, `…granite.fused.attempt1…` — a closure bug in the harness's
+  kernel counter, not the shipped code; the follow-up script's own abort between them is amendment 5). Every attempt a
+  row, 18 result lines, nothing pending.
+- `docs/claims.json`: one claim per family × arm (`e4b.train.parity.tp1.<family>.<arm>.2026-09-05`) plus a per-family
+  matrix claim; notes on `e4b.train.fast-train-dgrad` (the batched "no speed-up at real width" is a Qwen3-30B-width
+  reading — at Granite's width the batched path is the faster one measured), `e4b.train.flagship-matrix` and
+  `e4b.train.olmoe-converges`. Nothing superseded or retired.
+- `docs/capabilities.json`: `qlora-fused-moe-experts.model_families` is evidence-gated —
+  `olmoe`, `qwen3_moe` and `gemma4_text` confirmed on tp1 rows, **`mixtral` and `granitemoe` added** (Mixtral's fused
+  PASS under offload; Granite's on the corrected-counter re-run), `gpt_oss` stays out with the refusal named and the
+  experimental route pointed at; the batched-fallback VOID (three families), the `EpilogueContractError` refusal and
+  `batched_fallback_stats` are limitations; `training_support.gpt_oss.nvme_train` is `refused` with a code reference; the
+  `mxfp4-moe-training-and-residency` capability carries the tp1 canary row and stays `experimental`.
+- Phase directive 2026-09-05 14:45Z, applied to the bundle's shape: every row of the receipt is exactly one of OK /
+  REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL, classified mechanically by the bundle's reducer (v2;
+  the box's v1 copy kept) with the parity verdict as a separate column, every attempt a row (Granite's first fused
+  attempt stays a HARNESS_ERROR row beside its re-run) and every amendment referenced from the rows it touched; the
+  `e4b.train.parity.tp1.*` claims carry `row_status` / `parity_verdict`. `docs/capabilities.json` states training
+  support **per path** — a `training_support` object (`headline_path`; `by_model_type` keyed by model_type: quantize / reference_train / fast_train /
+  batched_train / nvme_train / native_mxfp4_train, each `supported` / `refused` / `void` / `harness_error` /
+  `not_tested` / `experimental` / `n/a` with its claim ids) on `qlora-fused-moe-experts` and
+  `mxfp4-moe-training-and-residency`; `model_families` is exactly the families whose `fast_train` is `supported`.
+  Tooling, not the package: `docs/capabilities.schema.json` admits the object and `scripts/check_capabilities.py`
+  validates it (allowed values; `supported` / `void` / `refused` cite existing claim ids, `supported` ones active;
+  `refused` says why; the `model_families` rule), with `tests/test_check_capabilities_training_support.py`.
+- `docs/STATUS.md` (the training position and three open items), `docs/ARCHITECTURE_SUPPORT.md` (a new dated section
+  "Training on real weights (tp1, 2026-09-05)"; the existing tables are untouched), `docs/SOLUTIONS.md` and
+  `docs/solutions/qlora-fused-moe-experts.md` (families from evidence; the refusal and the VOID as "what to check"),
+  the README's results table and scope, two routing queries in `docs/discovery-queries.json`, `llms-full.txt`
+  regenerated.
 
 ## 0.35.0 — 2026-09-04
 

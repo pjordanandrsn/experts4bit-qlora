@@ -1,0 +1,6 @@
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files:  12%|█▎        | 1/8 [00:00<00:01,  5.54it/s]Fetching 8 files:  75%|███████▌  | 6/8 [00:01<00:00,  5.22it/s]Fetching 8 files:  88%|████████▊ | 7/8 [00:46<00:09,  9.34s/it]Error while downloading from https://huggingface.co/google/gemma-4-26B-A4B-it/resolve/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/model-00001-of-00002.safetensors: The read operation timed out
+Trying to resume download...
+Error while downloading from https://huggingface.co/google/gemma-4-26B-A4B-it/resolve/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/model-00001-of-00002.safetensors: The read operation timed out
+Trying to resume download...
+Fetching 8 files: 100%|██████████| 8/8 [47:03<00:00, 625.32s/it]Fetching 8 files: 100%|██████████| 8/8 [47:03<00:00, 352.99s/it]
+staged in 47.1 min at /root/.cache/huggingface/hub/models--google--gemma-4-26B-A4B-it/snapshots/4d7ae4984b7db7de8f8457170b3f1a419ee76d52

@@ -1,0 +1,18 @@
+{
+ "fam": "gptoss",
+ "model": "openai/gpt-oss-20b",
+ "model_type": "gpt_oss",
+ "arm": "batched",
+ "status": "refused",
+ "reason": "0 patched: [e4b.batched] batched training path on 0 ExpertsLoRA module(s)",
+ "n_patched": 0,
+ "probed_by": "attn_only",
+ "steps": 60,
+ "seq": 512,
+ "offload": false,
+ "n_lora_wrapped": 0,
+ "n_bare_experts": 24,
+ "expert_classes": {
+  "GptOssExperts4bit (bare)": 24
+ }
+}

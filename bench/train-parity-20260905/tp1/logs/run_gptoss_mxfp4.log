@@ -1,0 +1,89 @@
+[12:23:17] snapshot /root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 414071.60 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 675460.98 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 454824.45 examples/s]
+[12:23:24] data: 60 train + 8 eval chunks of 512
+Loading weights:   0%|          | 0/411 [00:00<?, ?it/s]Loading weights:   1%|          | 5/411 [00:01<01:30,  4.50it/s]Loading weights:   2%|▏         | 7/411 [00:03<03:38,  1.85it/s]Loading weights:   5%|▌         | 22/411 [00:04<01:05,  5.92it/s]Loading weights:   6%|▌         | 24/411 [00:06<01:52,  3.43it/s]Loading weights:   9%|▉         | 39/411 [00:07<01:01,  6.09it/s]Loading weights:  10%|▉         | 41/411 [00:09<01:35,  3.87it/s]Loading weights:  14%|█▎        | 56/411 [00:11<00:57,  6.15it/s]Loading weights:  14%|█▍        | 58/411 [00:13<01:27,  4.04it/s]Loading weights:  18%|█▊        | 73/411 [00:14<00:54,  6.16it/s]Loading weights:  18%|█▊        | 75/411 [00:16<01:21,  4.12it/s]Loading weights:  22%|██▏       | 90/411 [00:17<00:51,  6.17it/s]Loading weights:  22%|██▏       | 92/411 [00:19<01:16,  4.16it/s]Loading weights:  26%|██▌       | 107/411 [00:20<00:49,  6.18it/s]Loading weights:  27%|██▋       | 109/411 [00:23<01:12,  4.18it/s]Loading weights:  30%|███       | 124/411 [00:24<00:46,  6.19it/s]Loading weights:  31%|███       | 126/411 [00:26<01:07,  4.20it/s]Loading weights:  34%|███▍      | 141/411 [00:27<00:43,  6.19it/s]Loading weights:  35%|███▍      | 143/411 [00:29<01:04,  4.18it/s]Loading weights:  38%|███▊      | 158/411 [00:30<00:40,  6.19it/s]Loading weights:  39%|███▉      | 160/411 [00:33<00:59,  4.19it/s]Loading weights:  43%|████▎     | 175/411 [00:34<00:38,  6.19it/s]Loading weights:  43%|████▎     | 177/411 [00:36<00:55,  4.19it/s]Loading weights:  47%|████▋     | 192/411 [00:37<00:35,  6.19it/s]Loading weights:  47%|████▋     | 194/411 [00:39<00:51,  4.20it/s]Loading weights:  51%|█████     | 209/411 [00:40<00:32,  6.19it/s]Loading weights:  51%|█████▏    | 211/411 [00:43<00:47,  4.20it/s]Loading weights:  55%|█████▍    | 226/411 [00:44<00:29,  6.19it/s]Loading weights:  55%|█████▌    | 228/411 [00:46<00:43,  4.19it/s]Loading weights:  59%|█████▉    | 243/411 [00:47<00:27,  6.19it/s]Loading weights:  60%|█████▉    | 245/411 [00:49<00:39,  4.19it/s]Loading weights:  63%|██████▎   | 260/411 [00:50<00:24,  6.19it/s]Loading weights:  64%|██████▎   | 262/411 [00:52<00:35,  4.21it/s]Loading weights:  67%|██████▋   | 277/411 [00:54<00:21,  6.21it/s]Loading weights:  68%|██████▊   | 279/411 [00:56<00:31,  4.21it/s]Loading weights:  72%|███████▏  | 294/411 [00:57<00:18,  6.20it/s]Loading weights:  72%|███████▏  | 296/411 [00:59<00:27,  4.19it/s]Loading weights:  76%|███████▌  | 311/411 [01:00<00:16,  6.18it/s]Loading weights:  76%|███████▌  | 313/411 [01:02<00:23,  4.19it/s]Loading weights:  80%|███████▉  | 328/411 [01:04<00:13,  6.19it/s]Loading weights:  80%|████████  | 330/411 [01:06<00:19,  4.20it/s]Loading weights:  84%|████████▍ | 345/411 [01:07<00:10,  6.19it/s]Loading weights:  84%|████████▍ | 347/411 [01:09<00:15,  4.20it/s]Loading weights:  88%|████████▊ | 362/411 [01:10<00:07,  6.18it/s]Loading weights:  89%|████████▊ | 364/411 [01:12<00:11,  4.20it/s]Loading weights:  92%|█████████▏| 379/411 [01:13<00:05,  6.20it/s]Loading weights:  93%|█████████▎| 381/411 [01:16<00:07,  4.20it/s]Loading weights:  96%|█████████▋| 396/411 [01:17<00:02,  6.18it/s]Loading weights:  97%|█████████▋| 398/411 [01:19<00:03,  4.20it/s]Loading weights: 100%|██████████| 411/411 [01:19<00:00,  5.17it/s]
+[12:24:45] dequant model loaded on CPU in 80s rss=48.6GB
+[12:25:16] canary (dequant bf16, GPU layer-shuttle): loss=4.9896 rss=43.1GB cuda_peak=4.06GB
+[12:25:18] layer 0 patched rss=41.9GB
+[12:25:24] layer 6 patched rss=35.2GB
+[12:25:30] layer 12 patched rss=28.4GB
+[12:25:36] layer 18 patched rss=21.6GB
+[12:25:41] all 24 layers patched + provenance-verified (96 native tensors) rss=16.0GB
+[12:26:01] on cuda: loaded=3.97GB rss=13.8GB
+[12:26:03] canary (native, GPU): loss=4.9602 vs ref 4.9896 | KL=0.0250 top1=0.906
+[12:26:03] training 96 adapter tensors, 88.5M params
+[12:26:15] eval@0 4.5906
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+/opt/conda/lib/python3.11/site-packages/run_mxfp4_20b_qlora.py:412: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  rec = dict(step=step, loss=float(loss), dt=round(dt, 2),
+[12:26:21] step 0 loss=5.4611 dt=5.3s peak=5.52GB
+[12:26:26] step 1 loss=5.1495 dt=5.1s peak=6.12GB
+[12:26:31] step 2 loss=3.8523 dt=5.4s peak=6.12GB
+[12:26:37] step 3 loss=2.3747 dt=5.3s peak=6.12GB
+[12:26:42] step 4 loss=1.9923 dt=5.4s peak=6.12GB
+[12:26:47] step 5 loss=3.0995 dt=5.2s peak=6.12GB
+[12:26:53] step 6 loss=1.4728 dt=5.4s peak=6.12GB
+[12:26:58] step 7 loss=2.0217 dt=5.0s peak=6.12GB
+[12:27:03] step 8 loss=2.8012 dt=5.2s peak=6.12GB
+[12:27:08] step 9 loss=2.8813 dt=5.1s peak=6.12GB
+[12:27:20] eval@10 2.3048
+[12:27:26] step 10 loss=1.8219 dt=5.1s peak=6.22GB
+[12:27:31] step 11 loss=2.9932 dt=5.1s peak=6.22GB
+[12:27:36] step 12 loss=2.3308 dt=5.3s peak=6.22GB
+[12:27:41] step 13 loss=2.3268 dt=5.1s peak=6.22GB
+[12:27:46] step 14 loss=1.5075 dt=5.3s peak=6.22GB
+[12:27:51] step 15 loss=2.2026 dt=5.0s peak=6.22GB
+[12:27:56] step 16 loss=2.5966 dt=4.9s peak=6.22GB
+[12:28:02] step 17 loss=2.1018 dt=5.2s peak=6.22GB
+[12:28:07] step 18 loss=2.4956 dt=5.4s peak=6.22GB
+[12:28:12] step 19 loss=2.5577 dt=5.3s peak=6.22GB
+[12:28:25] eval@20 2.2619
+[12:28:30] step 20 loss=2.9547 dt=5.1s peak=6.22GB
+[12:28:35] step 21 loss=2.7046 dt=4.9s peak=6.22GB
+[12:28:40] step 22 loss=2.2941 dt=5.2s peak=6.22GB
+[12:28:45] step 23 loss=2.3896 dt=5.4s peak=6.22GB
+[12:28:51] step 24 loss=2.2900 dt=5.3s peak=6.22GB
+[12:28:56] step 25 loss=2.4360 dt=4.9s peak=6.22GB
+[12:29:01] step 26 loss=1.8578 dt=5.6s peak=6.22GB
+[12:29:06] step 27 loss=2.2177 dt=5.2s peak=6.22GB
+[12:29:11] step 28 loss=2.8130 dt=5.1s peak=6.22GB
+[12:29:16] step 29 loss=2.5941 dt=5.0s peak=6.22GB
+[12:29:29] eval@30 2.2377
+[12:29:34] step 30 loss=2.0867 dt=5.3s peak=6.22GB
+[12:29:39] step 31 loss=2.6813 dt=5.1s peak=6.22GB
+[12:29:44] step 32 loss=2.1805 dt=5.1s peak=6.22GB
+[12:29:49] step 33 loss=1.9118 dt=5.1s peak=6.22GB
+[12:29:55] step 34 loss=2.1607 dt=5.2s peak=6.22GB
+[12:30:00] step 35 loss=2.1421 dt=5.1s peak=6.22GB
+[12:30:05] step 36 loss=1.8111 dt=5.3s peak=6.22GB
+[12:30:10] step 37 loss=2.4946 dt=4.8s peak=6.22GB
+[12:30:15] step 38 loss=2.4327 dt=5.1s peak=6.22GB
+[12:30:20] step 39 loss=1.8460 dt=5.3s peak=6.22GB
+[12:30:33] eval@40 2.2066
+[12:30:38] step 40 loss=2.2342 dt=5.4s peak=6.22GB
+[12:30:43] step 41 loss=2.3591 dt=4.9s peak=6.22GB
+[12:30:48] step 42 loss=2.1936 dt=5.1s peak=6.22GB
+[12:30:53] step 43 loss=1.6897 dt=5.2s peak=6.22GB
+[12:30:58] step 44 loss=2.9540 dt=5.1s peak=6.22GB
+[12:31:04] step 45 loss=2.1350 dt=5.3s peak=6.22GB
+[12:31:09] step 46 loss=2.1332 dt=5.4s peak=6.22GB
+[12:31:14] step 47 loss=1.7511 dt=5.0s peak=6.22GB
+[12:31:19] step 48 loss=2.0402 dt=5.2s peak=6.22GB
+[12:31:25] step 49 loss=2.2406 dt=5.2s peak=6.22GB
+[12:31:37] eval@50 2.1979
+[12:31:42] step 50 loss=2.4602 dt=4.9s peak=6.22GB
+[12:31:47] step 51 loss=2.2034 dt=5.0s peak=6.22GB
+[12:31:52] step 52 loss=1.9095 dt=5.2s peak=6.22GB
+[12:31:57] step 53 loss=2.2379 dt=4.9s peak=6.22GB
+[12:32:02] step 54 loss=2.3952 dt=5.1s peak=6.22GB
+[12:32:08] step 55 loss=2.8069 dt=5.4s peak=6.22GB
+[12:32:12] step 56 loss=2.8495 dt=4.9s peak=6.22GB
+[12:32:17] step 57 loss=2.3084 dt=5.0s peak=6.22GB
+[12:32:23] step 58 loss=1.9482 dt=5.2s peak=6.22GB
+[12:32:27] step 59 loss=2.6220 dt=4.8s peak=6.22GB
+[12:32:40] eval@60 2.1841 (was 4.5906)
+[12:32:54] post-training module hashes identical: True
+[12:32:54] DONE — artifact written

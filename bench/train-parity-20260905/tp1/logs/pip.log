@@ -1,0 +1,3 @@
+  WARNING: Did not find branch or tag 'ddcb850e05c3', assuming revision or ref.
+  WARNING: Did not find branch or tag 'f4b639fd2640', assuming revision or ref.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.

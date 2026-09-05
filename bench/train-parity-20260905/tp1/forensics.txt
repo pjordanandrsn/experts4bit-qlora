@@ -1,0 +1,3 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD EPYC 7Q83 64-Core Processor
+MemTotal:       263726004 kB
