@@ -1,0 +1,71 @@
+# tp1 — training parity table (/root/tp1)
+Verdict rule: PASS iff |Δ final train loss| ≤ 0.05 AND median step-wise |Δ| ≤ 0.05 vs the family's reference arm (PREREG-flagship-matrix B2 / -model2 C2); VOID when the arm cannot be read (init_sha, C1, n_patched, kernel engagement, steps). Cost is reported, not gated. Eval deltas are not the band. No cross-family, cross-lane or cross-card ratio appears here.
+
+### Granite-3.1-3B-A800M (`granite`)
+- load: status=ok model_type=granitemoe load_s=3.2 loaded_gb=2.351 verify={'n_quantized': 32, 'n_unquantized': 0} wrapped=32 bare=0 classes={'Experts4bit': 32} offload=False geometry(H/I/L/E/k)=1536/512/32/40/8
+- env: e4b 0.35.0 gnf4 0.30.0 torch 2.8.0+cu128 transformers 5.16.1 gpu NVIDIA GeForce RTX 5090 box_class pcie-full/launch-fast host_mem_gib 251.5
+| arm | status | n_patched | kcalls/step min (need) | C1 | steps | s/step | tok/s | peak GB | J/step | loss first→last | eval 0→final (not the band) | Δ final train | median step \|Δ\| | verdict (registered units) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| reference | ok | 0 | 0 (0) | ok | 60 | 4.266 | 23.7 | 2.810 | 399.5 | 3.4176→0.2274 | 3.4311→0.2582 | — | — | **REF** |
+| batched | ok | 32 | 132 (64) | ok | 60 | 1.086 | 93.0 | 2.971 | 121.2 | 3.4135→0.2429 | 3.4241→0.2637 (Δ vs ref +0.0055) | 0.01553 | 0.01681 | **PASS** (×3.93 faster, peak ×1.057, J ×0.303) |
+- init_sha (reference) `9da33dcfb11c4259`; dataset `ds_clinical.json` sha `76fb9036de80`; trainable 49807360 params in 384 tensors
+
+### OLMoE-1B-7B-0924-Instruct (`olmoe`)
+- load: status=ok model_type=olmoe load_s=3.9 loaded_gb=4.695 verify={'n_quantized': 16, 'n_unquantized': 0} wrapped=16 bare=0 classes={'Experts4bit': 16} offload=False geometry(H/I/L/E/k)=2048/1024/16/64/8
+- env: e4b 0.35.0 gnf4 0.30.0 torch 2.8.0+cu128 transformers 5.16.1 gpu NVIDIA GeForce RTX 5090 box_class pcie-full/launch-fast host_mem_gib 251.5
+| arm | status | n_patched | kcalls/step min (need) | C1 | steps | s/step | tok/s | peak GB | J/step | loss first→last | eval 0→final (not the band) | Δ final train | median step \|Δ\| | verdict (registered units) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| reference | ok | 0 | 0 (0) | ok | 60 | 3.022 | 27.9 | 5.234 | 294.7 | 4.1678→0.2995 | 4.0130→0.3241 | — | — | **REF** |
+| fused | ok | 16 | 64 (32) | ok | 60 | 0.939 | 89.9 | 5.234 | 100.0 | 4.1626→0.2863 | 4.0159→0.3203 (Δ vs ref -0.0038) | 0.01327 | 0.01249 | **PASS** (×3.22 faster, peak ×1.000, J ×0.339) |
+| batched | ok | 16 | 24 (32) | ok | 60 | 1.911 | 44.2 | 6.211 | 201.5 | 4.1541→0.2821 | 4.0159→0.3197 (Δ vs ref -0.0045) | — | — | **VOID** (×1.58 faster, peak ×1.187, J ×0.684) — kernel calls/step min 24 < 2*n_patched=32 (not engaged on every layer) |
+- init_sha (reference) `b14ec24782b3eb8a`; dataset `ds_clinical.json` sha `76fb9036de80`; trainable 60817408 params in 192 tensors
+
+### gpt-oss-20b (`gptoss`)
+- load: status=ok model_type=gpt_oss load_s=6.0 loaded_gb=14.359 verify={'n_quantized': 24, 'n_unquantized': 0} wrapped=0 bare=24 classes={'GptOssExperts4bit (bare)': 24} offload=False geometry(H/I/L/E/k)=2880/2880/24/32/4
+- env: e4b 0.35.0 gnf4 0.30.0 torch 2.8.0+cu128 transformers 5.16.1 gpu NVIDIA GeForce RTX 5090 box_class pcie-full/launch-fast host_mem_gib 251.5
+| arm | status | n_patched | kcalls/step min (need) | C1 | steps | s/step | tok/s | peak GB | J/step | loss first→last | eval 0→final (not the band) | Δ final train | median step \|Δ\| | verdict (registered units) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| fused | refused | 0 | — (0) | — | 0 | — | — | — | — | —→— | —→— | — | — | **REFUSED** — 0 patched: [e4b.fast] fused TRAINING path on 0 ExpertsLoRA module(s) (dgrad kernel backward) |
+| batched | refused | 0 | — (0) | — | 0 | — | — | — | — | —→— | —→— | — | — | **REFUSED** — 0 patched: [e4b.batched] batched training path on 0 ExpertsLoRA module(s) |
+| attn_only | ok | 0 | 0 (0) | ok | 60 | 1.802 | 44.9 | 14.687 | 223.4 | 5.1060→0.3664 | 5.1405→0.3435 | — | — | **NO-PAIR** |
+| mxfp4 (gnf4 ExpertsMxfp4LoRA, own text) | ok | — | — | prov pre==post: True | 60 | 5.160 | — | 6.221 | — | 5.461→2.622 | 4.591→2.184 | — | — | **EXPERIMENTAL — NOT LICENSED** (canary top1=0.906 kl=0.02495) |
+
+### Qwen3-30B-A3B (`qwen3`)
+- load: status=ok model_type=qwen3_moe load_s=16.6 loaded_gb=20.019 verify={'n_quantized': 48, 'n_unquantized': 0} wrapped=48 bare=0 classes={'Experts4bit': 48} offload=False geometry(H/I/L/E/k)=2048/768/48/128/8
+- env: e4b 0.35.0 gnf4 0.30.0 torch 2.8.0+cu128 transformers 5.16.1 gpu NVIDIA GeForce RTX 5090 box_class pcie-full/launch-fast host_mem_gib 251.5
+| arm | status | n_patched | kcalls/step min (need) | C1 | steps | s/step | tok/s | peak GB | J/step | loss first→last | eval 0→final (not the band) | Δ final train | median step \|Δ\| | verdict (registered units) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| reference | ok | 0 | 0 (0) | ok | 60 | 12.797 | 6.7 | 22.716 | 1219.8 | 3.6093→0.2732 | 3.7459→0.2859 | — | — | **REF** |
+| fused | ok | 48 | 192 (96) | ok | 60 | 5.003 | 17.2 | 22.715 | 496.2 | 3.6185→0.2600 | 3.7362→0.2884 (Δ vs ref +0.0024) | 0.01315 | 0.01050 | **PASS** (×2.56 faster, peak ×1.000, J ×0.407) |
+| batched | ok | 48 | 12 (96) | ok | 60 | 11.885 | 7.3 | 23.629 | 1116.0 | 3.6460→0.2677 | 3.7444→0.2915 (Δ vs ref +0.0056) | — | — | **VOID** (×1.08 faster, peak ×1.040, J ×0.915) — kernel calls/step min 12 < 2*n_patched=96 (not engaged on every layer) |
+- init_sha (reference) `2b362f7b19ad8830`; dataset `ds_clinical.json` sha `76fb9036de80`; trainable 321257472 params in 576 tensors
+
+### Gemma-4-26B-A4B-it (`gemma4`)
+- load: status=ok model_type=gemma4 load_s=14.7 loaded_gb=18.113 verify={'n_quantized': 30, 'n_unquantized': 0} wrapped=30 bare=0 classes={'Experts4bit': 30} offload=False geometry(H/I/L/E/k)=2816/704/30/128/None
+- env: e4b 0.35.0 gnf4 0.30.0 torch 2.8.0+cu128 transformers 5.16.1 gpu NVIDIA GeForce RTX 5090 box_class pcie-full/launch-fast host_mem_gib 251.5
+| arm | status | n_patched | kcalls/step min (need) | C1 | steps | s/step | tok/s | peak GB | J/step | loss first→last | eval 0→final (not the band) | Δ final train | median step \|Δ\| | verdict (registered units) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| reference | ok | 0 | 0 (0) | ok | 60 | 7.344 | 12.3 | 20.179 | 704.8 | 8.2431→0.2879 | 8.7561→0.3022 | — | — | **REF** |
+| fused | ok | 30 | 120 (60) | ok | 60 | 3.101 | 29.1 | 20.179 | 336.1 | 8.3132→0.2640 | 7.7324→0.3044 (Δ vs ref +0.0022) | 0.02385 | 0.04742 | **PASS** (×2.37 faster, peak ×1.000, J ×0.477) |
+| batched | ok | 30 | 0 (60) | ok | 60 | 7.259 | 12.4 | 21.623 | 703.9 | 8.2350→0.2773 | 8.8105→0.2944 (Δ vs ref -0.0078) | — | — | **VOID** (×1.01 faster, peak ×1.072, J ×0.999) — kernel calls/step min 0 < 2*n_patched=60 (not engaged on every layer) |
+- init_sha (reference) `a059fa05b41f1c32`; dataset `ds_clinical.json` sha `76fb9036de80`; trainable 242606080 params in 320 tensors
+
+### Mixtral-8x7B-Instruct-v0.1 (`mixtral`)
+- load: status=ok model_type=mixtral load_s=50.9 loaded_gb=3.421 verify={'n_quantized': 32, 'n_unquantized': 0} wrapped=32 bare=0 classes={'Experts4bit': 32} offload=True geometry(H/I/L/E/k)=4096/14336/32/8/2
+- env: e4b 0.35.0 gnf4 0.30.0 torch 2.8.0+cu128 transformers 5.16.1 gpu NVIDIA GeForce RTX 5090 box_class pcie-full/launch-fast host_mem_gib 251.5
+| arm | status | n_patched | kcalls/step min (need) | C1 | steps | s/step | tok/s | peak GB | J/step | loss first→last | eval 0→final (not the band) | Δ final train | median step \|Δ\| | verdict (registered units) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| reference | ok | 0 | 0 (0) | ok | 60 | 3.073 | 32.8 | 10.562 | 482.6 | 3.0157→0.2170 | 2.9904→0.2501 | — | — | **REF** |
+| fused | ok | 32 | 128 (64) | ok | 60 | 2.429 | 41.5 | 5.215 | 354.4 | 3.0192→0.2266 | 2.9898→0.2508 (Δ vs ref +0.0007) | 0.00953 | 0.00945 | **PASS** (×1.26 faster, peak ×0.494, J ×0.734) |
+| batched | ok | 32 | 192 (64) | ok | 60 | 2.412 | 41.8 | 8.466 | 471.1 | 3.0165→0.2247 | 2.9894→0.2572 (Δ vs ref +0.0072) | 0.00766 | 0.01057 | **PASS** (×1.27 faster, peak ×0.802, J ×0.976) |
+- init_sha (reference) `46ea74b4d8860671`; dataset `ds_clinical.json` sha `76fb9036de80`; trainable 111673344 params in 384 tensors
+
+## Cross-family summary (verdicts in registered units; cost ratios within family, this box)
+| family | reference | fused | batched | other rows |
+|---|---|---|---|---|
+| Granite-3.1-3B-A800M | ok 4.27 s/step, 2.81 GB | not run | **PASS** (0.0155/0.0168; ×3.93) | — |
+| OLMoE-1B-7B-0924-Instruct | ok 3.02 s/step, 5.23 GB | **PASS** (0.0133/0.0125; ×3.22) | **VOID** | — |
+| gpt-oss-20b | not run | **REFUSED** | **REFUSED** | attn_only: ok; mxfp4: ok EXPERIMENTAL |
+| Qwen3-30B-A3B | ok 12.80 s/step, 22.72 GB | **PASS** (0.0131/0.0105; ×2.56) | **VOID** | — |
+| Gemma-4-26B-A4B-it | ok 7.34 s/step, 20.18 GB | **PASS** (0.0239/0.0474; ×2.37) | **VOID** | — |
+| Mixtral-8x7B-Instruct-v0.1 | ok 3.07 s/step, 10.56 GB | **PASS** (0.0095/0.0095; ×1.26) | **PASS** (0.0077/0.0106; ×1.27) | — |

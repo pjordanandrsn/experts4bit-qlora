@@ -27,9 +27,11 @@ every failure in that run; exit 2 when the check itself cannot run. Checks:
   * ``training_support`` (when present): ``by_model_type`` is keyed by
     model_type and each entry's six paths (quantize, reference_train,
     fast_train, batched_train, nvme_train, native_mxfp4_train) carry a status
-    from the schema's enum; every ``supported`` / ``void`` / ``refused`` entry
-    cites at least one claim id that exists in docs/claims.json (``supported``
-    ones must be ACTIVE); ``refused`` entries carry a reason; and when
+    from the schema's enum; every ``supported`` / ``void`` entry cites at
+    least one claim id that exists in docs/claims.json (``supported`` ones
+    must be ACTIVE); a ``refused`` entry carries a reason and cites either a
+    claim id (a measured refusal row) or a ``code_ref`` (``module:Symbol`` of
+    the refusing code, which must resolve in the tree); and when
     ``headline_path`` is set, ``model_families`` equals the set of model_types
     whose headline path is ``supported`` -- the list summarises one path,
     never a flat flag;
@@ -170,14 +172,17 @@ def _has_main_guard(tree: ast.Module) -> bool:
 TRAINING_PATHS = ("quantize", "reference_train", "fast_train", "batched_train", "nvme_train", "native_mxfp4_train")
 TRAINING_VALUES = frozenset({"supported", "refused", "void", "harness_error", "not_tested", "experimental", "n/a"})
 #: Statuses whose evidence is a receipt: they must cite a claim id that exists.
-TRAINING_CITED = frozenset({"supported", "void", "refused"})
+TRAINING_CITED = frozenset({"supported", "void"})
+_CODE_REF = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*):([A-Za-z_][A-Za-z0-9_]*)$")
 
 
-def check_training_support(cap: dict, cid: str, by_id: dict, errors: list[str]) -> None:
+def check_training_support(cap: dict, cid: str, by_id: dict, errors: list[str], resolve_code_ref=None) -> None:
     """Per-path training support is structured, never a flat flag: every path of every
-    model_type carries an allowed status; ``supported`` / ``void`` / ``refused``
-    cite claim ids that exist (``supported`` ones ACTIVE); ``refused`` says why;
-    and when ``headline_path`` is set, ``model_families`` is exactly the
+    model_type carries an allowed status; ``supported`` / ``void`` cite claim ids
+    that exist (``supported`` ones ACTIVE); ``refused`` says why and cites a
+    claim id or a ``code_ref`` (``module:Symbol``; ``resolve_code_ref(ref)``
+    returns an error string or None when the caller can resolve it against the
+    tree); and when ``headline_path`` is set, ``model_families`` is exactly the
     model_types whose headline path is ``supported``. The schema check has
     already enforced the shape and the enum; this is the cross-reference."""
     ts = cap.get("training_support")
@@ -215,8 +220,19 @@ def check_training_support(cap: dict, cid: str, by_id: dict, errors: list[str]) 
                 elif st == "supported" and c["status"] not in ACTIVE_STATUSES:
                     errors.append(f"{cid}: training_support[{mt!r}].{path}: 'supported' cites {claim_id} with status "
                                   f"{c['status']!r} -- only {sorted(ACTIVE_STATUSES)} can back a supported path")
-            if st == "refused" and not str(entry.get("reason", "")).strip():
-                errors.append(f"{cid}: training_support[{mt!r}].{path}: 'refused' must carry a reason")
+            if st == "refused":
+                if not str(entry.get("reason", "")).strip():
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: 'refused' must carry a reason")
+                ref = entry.get("code_ref")
+                if not ids and not ref:
+                    errors.append(f"{cid}: training_support[{mt!r}].{path}: 'refused' must cite a claim id or a code_ref")
+                if ref is not None:
+                    if not _CODE_REF.match(str(ref)):
+                        errors.append(f"{cid}: training_support[{mt!r}].{path}: code_ref {ref!r} is not module:Symbol")
+                    elif resolve_code_ref is not None:
+                        problem = resolve_code_ref(str(ref))
+                        if problem:
+                            errors.append(f"{cid}: training_support[{mt!r}].{path}: code_ref {ref}: {problem}")
             if path == headline and st == "supported":
                 headline_supported.add(mt)
     if headline is None:
@@ -225,6 +241,21 @@ def check_training_support(cap: dict, cid: str, by_id: dict, errors: list[str]) 
     if listed != headline_supported:
         errors.append(f"{cid}: model_families {sorted(listed)} must equal the model_types whose {headline} is 'supported' "
                       f"{sorted(headline_supported)} (training_support is the source; the list summarises the headline path, not a flat flag)")
+
+
+def _code_ref_resolver(root: Path, py: dict, tree_of):
+    """``module:Symbol`` must be a shipped module in the tree binding the symbol at module level."""
+    def resolve(ref: str) -> str | None:
+        mod, sym = ref.split(":", 1)
+        f = module_file(root, mod, py)
+        if not module_shipped(mod, py):
+            return "module is not shipped by pyproject (py-modules / packages)"
+        if f is None:
+            return "module not found in the tree"
+        if sym not in _module_bindings(tree_of(f)):
+            return f"symbol not bound at module level in {f.relative_to(root)}"
+        return None
+    return resolve
 
 
 def _check_numbers(cap: dict, cid: str, errors: list[str]) -> None:
@@ -298,7 +329,7 @@ def main() -> int:
             errors.append(f"{cid}: duplicate capability id")
         ids_seen.add(cid)
         _check_numbers(cap, cid, errors)
-        check_training_support(cap, cid, by_id, errors)
+        check_training_support(cap, cid, by_id, errors, resolve_code_ref=_code_ref_resolver(root, py, tree_of))
         for d in cap["documentation"]:
             if not (root / d).exists():
                 errors.append(f"{cid}: documentation path missing: {d}")

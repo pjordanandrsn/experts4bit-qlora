@@ -295,7 +295,7 @@
               "headline_path",
               "by_model_type"
             ],
-            "description": "Per-path training support -- never a flat flag. by_model_type is keyed by transformers model_type; each entry carries the six paths (quantize, reference_train, fast_train, batched_train, nvme_train, native_mxfp4_train), each one of: supported (the path completed under the registered protocol with a PASS/OK receipt), refused (with the reason), void (ran, unreadable), harness_error, not_tested, experimental, n/a. supported / void / refused entries cite the claim id(s) in docs/claims.json that back them. headline_path names the path model_families summarises: when set, model_families must equal the model_types whose headline path is supported (scripts/check_capabilities.py enforces both); null means the list is the capability's own scope.",
+            "description": "Per-path training support -- never a flat flag. by_model_type is keyed by transformers model_type; each entry carries the six paths (quantize, reference_train, fast_train, batched_train, nvme_train, native_mxfp4_train), each one of: supported (the path completed under the registered protocol with a PASS/OK receipt), refused (with the reason), void (ran, unreadable), harness_error, not_tested, experimental, n/a. supported / void entries cite the claim id(s) in docs/claims.json that back them; a refused entry cites either claim id(s) (a measured refusal row) or a code_ref (module:Symbol of the refusing code) and always carries its reason. headline_path names the path model_families summarises: when set, model_families must equal the model_types whose headline path is supported (scripts/check_capabilities.py enforces both); null means the list is the capability's own scope.",
             "properties": {
               "headline_path": {
                 "type": [
@@ -353,6 +353,11 @@
                         },
                         "reason": {
                           "type": "string"
+                        },
+                        "code_ref": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+                          "description": "module:Symbol of the shipped code that refuses (for a `refused` entry backed by a contract in code rather than a receipt); must resolve in the tree."
                         }
                       }
                     },
@@ -383,6 +388,11 @@
                         },
                         "reason": {
                           "type": "string"
+                        },
+                        "code_ref": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+                          "description": "module:Symbol of the shipped code that refuses (for a `refused` entry backed by a contract in code rather than a receipt); must resolve in the tree."
                         }
                       }
                     },
@@ -413,6 +423,11 @@
                         },
                         "reason": {
                           "type": "string"
+                        },
+                        "code_ref": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+                          "description": "module:Symbol of the shipped code that refuses (for a `refused` entry backed by a contract in code rather than a receipt); must resolve in the tree."
                         }
                       }
                     },
@@ -443,6 +458,11 @@
                         },
                         "reason": {
                           "type": "string"
+                        },
+                        "code_ref": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+                          "description": "module:Symbol of the shipped code that refuses (for a `refused` entry backed by a contract in code rather than a receipt); must resolve in the tree."
                         }
                       }
                     },
@@ -473,6 +493,11 @@
                         },
                         "reason": {
                           "type": "string"
+                        },
+                        "code_ref": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+                          "description": "module:Symbol of the shipped code that refuses (for a `refused` entry backed by a contract in code rather than a receipt); must resolve in the tree."
                         }
                       }
                     },
@@ -503,6 +528,11 @@
                         },
                         "reason": {
                           "type": "string"
+                        },
+                        "code_ref": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$",
+                          "description": "module:Symbol of the shipped code that refuses (for a `refused` entry backed by a contract in code rather than a receipt); must resolve in the tree."
                         }
                       }
                     }

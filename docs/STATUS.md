@@ -39,59 +39,66 @@ registered criteria and the frozen 4-bit stack bit-identical over
 one rented RTX 5090 under the shipped 0.35.0 / 0.30.0 code; **measured** —
 receipt [`bench/train-parity-20260905/tp1/`](../bench/train-parity-20260905/tp1/README.md),
 table in its [`RESULTS-tp1.md`](../bench/train-parity-20260905/tp1/RESULTS-tp1.md);
-register `e4b.train.parity.tp1.<family>.<arm>.2026-09-05`; **partial — the
-pending rows below arrive before merge**). Each family goes through the
-direct `load_moe_4bit_streaming` + `verify_moe_4bit(strict=True)` path on
-real weights, then `reference` (the per-expert loop), `fused`
+register `e4b.train.parity.tp1.<family>.<arm>.2026-09-05`; all six families
+through the registered arms, 18 result lines, every attempt a row, nothing
+pending). Each family goes through the direct
+`load_moe_4bit_streaming` + `verify_moe_4bit(strict=True)` path on real
+weights, then `reference` (the per-expert loop), `fused`
 (`enable_fast_train(dgrad=True)`) and `batched` (`enable_batched_train`)
 for 60 steps on the registered `clinical` text, judged in the registered
 units — |Δ final train loss| ≤ 0.05 and median step-wise |Δ| ≤ 0.05 against
 the family's own reference, same box — with cost reported and never gated.
-**OLMoE-1B-7B-Instruct `fused` PASSES** (0.0133 / 0.0125; ×3.22 per step at
-×0.34 J/step, peak unchanged), the first fused-vs-reference reading on a
-registered text with real weights for this family.
-**Granite-3.1-3B-A800M loads through the direct path for the first time**
-(32/32, 2.35 GB) and its **`batched` arm PASSES** (0.0155 / 0.0168; ×3.93
-at ×0.30 J/step); its `fused` arm is a harness-error row being re-run
-(amendment 3 — a closure bug in the harness's kernel counter, not the
-shipped code; the re-run is the row that counts).
-**OLMoE `batched` is VOID**: `enable_batched_train` patched 16/16, but the
-kernel reached every layer on only some steps (a minimum of 24 calls
-against the 32 required) because `engines/batched.py` falls back to the
-reference forward per call above `_PAD_WASTE_LIMIT` with no counter — a
-VOID row carries no parity number, however its loss curve reads.
-**gpt-oss `fused` / `batched` are REFUSED** (0 patched: the loader builds
-its experts bare); attention-only QLoRA over its frozen experts trains with
-the stacks bit-exact (10.75 GB hashed), and the kernel package's
-experimental MXFP4 route trains its experts on its own text with the
-step-0 canary passing (top-1 0.906, KL 0.025) and provenance holding —
-experimental, never licensed. **Qwen3-30B-A3B loads resident on the 32 GB
-card** (48/48, 20.0 GB). **Pending, arriving before merge:** Qwen3's three
-arms, Gemma-4's three ([#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344)
-risk: a load fault is a row), Mixtral's three (`offload=True`), Granite's
-`fused` re-run. The capability list
-(`qlora-fused-moe-experts.model_families` in [`capabilities.json`](capabilities.json))
-moves only on a PASS on real weights with a receipt here: `olmoe` is
-confirmed; `granitemoe` enters if its re-run passes; `gpt_oss` stays out.
-No convergence claim, no cross-family ratio, no training throughput
-position; a PASS is a PASS on one text.
+**The fused path PASSES on every family that has one:** Granite-3.1-3B-A800M
+(0.01329 / 0.01270; ×5.86 per step at ×0.20 J/step — on the corrected-counter
+re-run after a HARNESS_ERROR first attempt, a closure bug in the harness's
+kernel counter, amendment 3, not the shipped code; the family's first direct
+real-weight load and first training receipt), OLMoE-1B-7B-Instruct
+(0.01327 / 0.01249; ×3.22 per step at ×0.34 J/step — the first reading on a
+registered text with real weights for that family), Qwen3-30B-A3B resident
+on the 32 GB card (0.01315 / 0.01050; ×2.56, ×0.41 J/step), Gemma-4-26B-A4B-it
+— the `-it` checkpoint, loaded on that host without the #344 fault —
+(0.02385 / 0.04742: inside the band by 0.0026, the tightest cell, read with
+that margin; ×2.37, ×0.48 J/step) and Mixtral-8x7B-Instruct under
+`offload=True` (0.00953 / 0.00945; ×1.26 at ×0.49 the reference loop's peak
+VRAM — its first training receipt, and the family enters the capability's
+list on it). **The batched path PASSES where its kernel engages and is VOID
+where it does not:** PASS on Granite-3.1-3B-A800M (0.01553 / 0.01681;
+×3.93 — the family's first direct real-weight load) and Mixtral
+(0.00766 / 0.01057; ×1.27); VOID on OLMoE, Qwen3 and Gemma-4 —
+`enable_batched_train` patched every layer, but `engines/batched.py` falls
+back to the reference forward per call above `_PAD_WASTE_LIMIT` with no
+counter, and on ≈100-token rows over 64 or 128 experts the kernel was
+reached on only some layers (Gemma-4: on 9 of 60 steps on none) — a VOID
+row carries no parity number, however its loss curve reads. **gpt-oss
+`fused` / `batched` are REFUSED** (0 patched: the loader builds its experts
+bare); attention-only QLoRA over its frozen experts trains with the stacks
+bit-exact (10.75 GB hashed), and the kernel package's experimental MXFP4
+route trains its experts on its own text with the step-0 canary passing
+(top-1 0.906, KL 0.025) and provenance holding — experimental, never
+licensed. The capability list (`qlora-fused-moe-experts.model_families` in
+[`capabilities.json`](capabilities.json)) is exactly the families whose
+`fast_train` is `supported`: `olmoe`, `qwen3_moe`, `gemma4_text`, `mixtral`,
+`granitemoe` — the last two entered on this lane; `gpt_oss` stays out. No
+convergence claim, no cross-family ratio, no training throughput position;
+a PASS is a PASS on one text.
 
 **Training support is stated per path, never as a flat flag** (phase directive
 2026-09-05): the tp1 receipt classifies every row as one of OK / REFUSED /
 HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL, mechanically from
 its artefacts, with the parity verdict as a separate column; Granite's
-first fused attempt stays a HARNESS_ERROR row beside its re-run, and every
-amendment stays visible in the bundle's README. The same reading, per
-family and per path:
+first fused attempt stays a HARNESS_ERROR row beside its re-run (and the
+follow-up script's own abort between them, amendment 5, is listed in the
+re-run's reason), and every amendment stays visible in the bundle's
+README. The same reading, per family and per path:
 
 | model_type | quantize | reference_train | fast_train (the headline path) | batched_train | nvme_train | native_mxfp4_train |
 |---|---|---|---|---|---|---|
 | `olmoe` | supported (tp1) | supported (tp1; `e4b.train.olmoe-converges`) | **supported** — tp1 OK · PASS on the registered text with real weights (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`) | **void** — tp1 OK · VOID: the `_PAD_WASTE_LIMIT` fallback engaged without a counter (`…olmoe.batched…`) | not_tested (the arena ladder is measured-private, no shipped bake) | n/a |
-| `qwen3_moe` | supported (flagship; tp1 load row) | supported (flagship) | **supported** — the flagship matrix, five datasets (`e4b.train.flagship-matrix`); tp1's row pending | supported (dgrad-gate trajectory); tp1's row pending — P2 predicts VOID on this 128-expert family | not_tested (measured-private) | n/a |
-| `gemma4_text` | supported (flagship, base checkpoint; the `-it` checkpoint faults on some hosts, #344) | supported (flagship) | **supported** — the model-2 flagship matrix (`e4b.train.flagship-matrix`); tp1's row pending (amendment 4) | not_tested (tp1 pending) | not_tested (measured-private) | n/a |
-| `granitemoe` | supported (tp1: the first direct real-weight load) | supported (tp1 OK) | **harness_error** — tp1 attempt 1 died in the harness's counter (`…granite.fused.attempt1…`, amendment 3); the corrected-counter re-run decides this path, and the family enters `model_families` only on its PASS | supported — tp1 OK · PASS (`…granite.batched…`) | not_tested | n/a |
-| `gpt_oss` | supported (bare `GptOssExperts4bit`; tp1) | refused — no `ExpertsLoRA`; attention-only QLoRA trains (`…gptoss.attn_only…`, OK · no pair) | refused — `enable_fast_train` returns 0 (`…gptoss.fused…`, REFUSED) | refused — `enable_batched_train` returns 0 (`…gptoss.batched…`, REFUSED) | not_tested — the `arena_train=True` wrap computes a generic epilogue (unfaithful); not run | **experimental** — grouped-nf4-gemm's `ExpertsMxfp4LoRA`; tp1 canary and provenance passed on its own text (`…gptoss.mxfp4…`, EXPERIMENTAL); never licensed |
-| `mixtral` | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested (tp1 pending) | not_tested | n/a |
+| `qwen3_moe` | supported (tp1, resident on a 32 GB card; flagship) | supported (tp1; flagship) | **supported** — tp1 OK · PASS resident on one 5090 (`…qwen3.fused…`), beside the flagship's five datasets (`e4b.train.flagship-matrix`) | **void** — tp1 OK · VOID: the kernel reached on a fraction of the layers every step (`…qwen3.batched…`); the dgrad-gate trajectory stands on its own fixture | not_tested (measured-private) | n/a |
+| `gemma4_text` | supported (tp1: the `-it` checkpoint loaded on this host, no #344; flagship: base) | supported (tp1; flagship) | **supported** — tp1 OK · PASS with the step-wise median inside the band by a small margin (`…gemma4.fused…`), beside the model-2 flagship (`e4b.train.flagship-matrix`) | **void** — tp1 OK · VOID: on some steps no layer reached the kernel (`…gemma4.batched…`) | not_tested (measured-private) | n/a |
+| `granitemoe` | supported (tp1: the first direct real-weight load) | supported (tp1 OK) | **supported** — tp1 OK · PASS on the corrected-counter re-run (`…granite.fused…`; attempt 1 a kept HARNESS_ERROR of the harness's counter, `…granite.fused.attempt1…`, amendment 3) — **entered `model_families` on it** | supported — tp1 OK · PASS (`…granite.batched…`) | not_tested | n/a |
+| `gpt_oss` | supported (bare `GptOssExperts4bit`; tp1) | refused — no `ExpertsLoRA`; attention-only QLoRA trains (`…gptoss.attn_only…`, OK · no pair) | refused — `enable_fast_train` returns 0 (`…gptoss.fused…`, REFUSED) | refused — `enable_batched_train` returns 0 (`…gptoss.batched…`, REFUSED) | refused — `enable_mxfp4_nvme_residency` refuses bias-carrying modules (#402; it had defaulted to the V4 epilogue, #397), `enable_nvme_train_residency` refuses bare modules, and the `arena_train=True` wrap is refused on structure | **experimental** — grouped-nf4-gemm's `ExpertsMxfp4LoRA`; tp1 canary and provenance passed on its own text (`…gptoss.mxfp4…`, EXPERIMENTAL); never licensed |
+| `mixtral` | supported (tp1: the first real-weight pass through the `w1/w3/w2` fusion, `offload=True`) | supported (tp1, offload) | **supported** — tp1 OK · PASS under offload at half the reference loop's peak VRAM (`…mixtral.fused…`); **entered `model_families` on this row** | supported — tp1 OK · PASS, the kernel reached everywhere (the 8-expert shape; `…mixtral.batched…`) | not_tested | n/a |
 
 Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`. Row statuses in the tp1 receipt are one of OK / REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL with the parity verdict (PASS / FAIL / VOID) as a separate column.
 
@@ -378,25 +385,24 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
 
 ## What is open
 
-- **tp1's pending rows** — Qwen3-30B-A3B `reference` / `fused` / `batched`,
-  Gemma-4-26B-A4B-it ×3, Mixtral-8x7B-Instruct ×3 (`offload=True`) and
-  Granite's `fused` re-run are `open` placeholders in `claims.json`
-  (`e4b.train.parity.tp1.*`) until the final snapshot lands; they arrive
-  before merge and this page is finalised with them.
-- **`enable_batched_train` has no engagement counter.** It falls back to
-  the reference forward per call above `_PAD_WASTE_LIMIT`
-  (`engines/batched.py`) and says nothing; a positive return value is a
-  patch count, not kernel engagement. tp1's OLMoE `batched` arm is VOID on
-  exactly this. Until the path counts its own fallbacks, a batched arm is
-  read only with an external call counter.
+- **`enable_batched_train`'s engagement envelope.** It falls back to the
+  reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
+  a positive return value is a patch count, not kernel engagement. In the
+  code tp1 measured (0.35.0) the fallback was silent: OLMoE's, Qwen3's and
+  Gemma-4's `batched` arms are VOID on exactly this (on 9 of 60 Gemma-4
+  steps no layer reached the kernel); it engaged everywhere only on
+  Mixtral's 8-expert and Granite's 40-expert shapes. 0.35.1 (#402) makes the
+  fallback countable — `batched_fallback_stats(model)` — so a batched arm can
+  be read from the path itself; the envelope (which shapes engage) is still
+  open and is measured, not tuned.
 - **gpt-oss has no expert-LoRA training path under the shipped e4b code.**
   `enable_fast_train` and `enable_batched_train` refuse it (0 patched), by
-  design. The `arena_train=True` load wraps its bare experts in the generic
-  `ExpertsLoRA`, whose epilogue has no `_apply_gate` for the per-expert
-  biases and clamp — an unfaithful forward that `enable_nvme_train_residency`
-  would attach to without checking; not run by tp1, and the fix is to refuse
-  on structure the way `enable_fast_train` does. The kernel package's
-  `ExpertsMxfp4LoRA` route is the experimental alternative.
+  design, and 0.35.1 (#402) makes the refusal a contract: a wrapper whose
+  base breaks the stock epilogue raises `EpilogueContractError`, and
+  `enable_mxfp4_nvme_residency` refuses bias-carrying modules (it had
+  defaulted to the V4 epilogue, #397). What stays open is a gpt-oss-aware
+  adapter; the kernel package's `ExpertsMxfp4LoRA` route is the experimental
+  alternative (tp1: canary and provenance pass, never licensed).
 - **#344 — Gemma-4 fails to load on 2 of 6 rented hosts** with
   `CUDA error: invalid argument`, after the experts quantise. A 2 GiB
   host-hop fix was merged and reverted the same day: the model's largest

@@ -209,11 +209,15 @@ def classify(d, fam, arm, attempts, fetch_fail, outer, receipt):
     rows = []
     starts = outer["starts"].get((fam, arm), [])
     n = len(attempts)
+    # A start line without a result line is a launcher abort before the harness ran (tp1b's first start died on an
+    # unset shell variable): align result lines to the LAST n start lines and surface the extra starts, never drop them.
+    extra = starts[:-n] if n and len(starts) > n else ([] if n else starts)
+    aligned = starts[-n:] if n and len(starts) >= n else starts
     for k, att in enumerate(attempts, 1):
         rc = att["rc"]
         rec = receipt if k == n else None
         log = attempt_log(d, fam, arm, k, n)
-        start = starts[k - 1] if k - 1 < len(starts) else None
+        start = aligned[k - 1] if k - 1 < len(aligned) else None
         st = rec.get("status") if rec else None
         row = {"attempt": k, "of": n, "rc": rc, "receipt": rec, "log": log, "start": start, "flags": []}
         if att.get("shared_line") and not att["rest"]:
@@ -243,6 +247,9 @@ def classify(d, fam, arm, attempts, fetch_fail, outer, receipt):
         else:
             row.update(status="NOT_RUN", reason=f"rc={rc} ({RC_MEANING.get(rc, 'unknown')}) with receipt status {st!r}: unreadable combination")
             row["flags"].append("unreadable rc/status combination")
+        if k == n and extra:
+            row["flags"].append(f"{len(extra)} earlier start line(s) without a result line at "
+                                + ", ".join(x["ts"] or "?" for x in extra) + " (a launcher abort before the harness ran; outer.log)")
         rows.append(row)
     if not attempts:
         row = {"attempt": 1, "of": 1, "rc": None, "receipt": receipt, "log": attempt_log(d, fam, arm, 1, 1), "start": starts[0] if starts else None, "flags": []}

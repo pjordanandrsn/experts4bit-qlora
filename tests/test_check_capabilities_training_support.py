@@ -90,6 +90,21 @@ def test_void_and_refused_cite_a_claim_and_refused_says_why():
     assert any("'refused' must carry a reason" in e for e in _errors(cap))
 
 
+def test_refused_may_cite_a_code_ref_instead_of_a_claim():
+    cap = _cap()
+    entry = _paths(cap)["bare_moe"]["nvme_train"]
+    entry.update({"status": "refused", "reason": "refuses bias-carrying modules"})
+    assert any("must cite a claim id or a code_ref" in e for e in _errors(cap))
+    entry["code_ref"] = "pkg.engines.nvme_experts:enable_mxfp4_nvme_residency"
+    assert _errors(cap) == []
+    entry["code_ref"] = "not a ref"
+    assert any("is not module:Symbol" in e for e in _errors(cap))
+    entry["code_ref"] = "pkg.engines.nvme_experts:enable_mxfp4_nvme_residency"
+    errors = []
+    cc.check_training_support(cap, cap["id"], BY_ID, errors, resolve_code_ref=lambda ref: "module not found in the tree")
+    assert any("module not found in the tree" in e for e in errors)
+
+
 def test_model_families_equals_fast_train_supported():
     cap = _cap()
     cap["model_families"] = ["good_moe", "bare_moe"]          # a flat promotion with no supported fast_train

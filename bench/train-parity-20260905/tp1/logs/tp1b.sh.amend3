@@ -8,11 +8,6 @@ export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOK
 E4B_SHA=${E4B_SHA:-f4b639fd2640}; GNF4_SHA=${GNF4_SHA:-ddcb850e05c3}
 STEPS=${TP1_STEPS:-60}; SEQ=${TP1_SEQ:-512}
 DATASET=${TP1_DATASET:-clinical}          # the fused-train-gate's text; sha-verified against ds_manifest.json
-# amendment 5 (15:50Z): the dataset + anchor variables the arm() helper needs (the lane's dataset block was not copied; run 1 died on `DATA: unbound variable`)
-DATA=$W/data/ds_$DATASET.json
-DATA_SHA=$(python -c "import json,sys; print(json.load(open('$W/ds_manifest.json'))['$DATASET']['sha256'])")
-GOT_SHA=$(sha256sum $DATA | awk '{print $1}'); [ "$GOT_SHA" = "$DATA_SHA" ] || { echo "DATASET MISMATCH: $GOT_SHA != $DATA_SHA"; touch TP2_DONE; exit 13; }
-export TP1_ANCHOR_JSON=$W/anchor.json TP1_BOX_CLASS="$(grep -E '^\s*class ' $W/logs/anchor_gate.log 2>/dev/null | awk '{print $2}')"
 ANCHOR_STRICT=${TP1_ANCHOR_STRICT:-1}      # 1 = a box the train anchor REFUSES ends the lane (exit 12) so the queue re-rents
 MIXTRAL_RESIDENT_PROBE=${TP1_MIXTRAL_RESIDENT_PROBE:-0}
 SKIP=${TP1_SKIP:-}                         # space-separated family tags to skip, e.g. "gemma4"
@@ -53,12 +48,4 @@ python3 -c "import ast,sys; t=open('$W/tp1_train_smoke.py').read(); assert '_ori
 GR=ibm-granite/granite-3.1-3b-a800m-instruct
 fetch $GR granite 2400 && { arm granite fused 1200 $GR 0; echo "GRANITE FUSED RERUN DONE"; }
 free_family granite ibm-granite--granite-3.1-3b-a800m-instruct 2>/dev/null || true
-
-# amendment 4 (14:15Z): redo any family whose reference receipt is missing (a fetch that alarmed out), XET disabled, same fixture and alarms
-if [ ! -s $W/gemma4_train_reference.json ]; then say "tp1b: Gemma-4 redo (no reference receipt)"; GM=google/gemma-4-26B-A4B-it
-  fetch $GM gemma4 4800 && { arm gemma4 reference 3000 $GM 0; arm gemma4 fused 2400 $GM 0; arm gemma4 batched 3000 $GM 0; echo "GEMMA4 DONE"; }
-  free_family gemma4 google--gemma-4-26B-A4B-it 2>/dev/null || true; fi
-if [ ! -s $W/mixtral_train_reference.json ]; then say "tp1b: Mixtral redo (no reference receipt)"; MX=mistralai/Mixtral-8x7B-Instruct-v0.1
-  fetch $MX mixtral 7200 && { arm mixtral reference 4200 $MX 1; arm mixtral fused 3600 $MX 1; arm mixtral batched 4200 $MX 1; echo "MIXTRAL DONE"; }
-  free_family mixtral mistralai--Mixtral-8x7B-Instruct-v0.1 2>/dev/null || true; fi
 say "TP1B DONE"; touch TP2_DONE

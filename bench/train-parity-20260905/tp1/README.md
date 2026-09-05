@@ -1,12 +1,9 @@
 # Training parity lane tp1 — 2026-09-05, one RTX 5090: the six serving families through the SHIPPED training path, verdicts in the registered units
 
-**Status at this snapshot: PARTIAL.** Granite (`reference` OK, `batched` OK; `fused` attempt 1 = **HARNESS_ERROR**, kept,
-re-run queued), OLMoE (three arms OK), gpt-oss (`attn_only` OK, `fused` / `batched` REFUSED, `mxfp4` EXPERIMENTAL) and
-Qwen3's load receipt are in. **NOT_RUN at this snapshot, arriving before merge:** Qwen3 ×3 (the reference arm was at
-step 20/60 when this snapshot was pulled at ≈12:49Z; the private record says all three completed on the box at 13:27Z),
-Gemma-4 ×3 (amendment 4, below), Mixtral ×3, and Granite's `fused` corrected-counter re-run (`logs/tp1b.sh` →
-`TP2_DONE`). The final snapshot replaces the receipts, [`RESULTS-tp1.md`](RESULTS-tp1.md) and this page's pending
-lines; nothing already read here changes, and no attempt disappears: every attempt is a row.
+**Status: complete — `TP_DONE` 2026-09-05T15:22:26Z (the six families through the registered arms, 24 receipts incl.
+the six load receipts) and `TP2_DONE` 15:33Z (Granite's `fused` corrected-counter re-run, `logs/tp1b.sh`, same box).**
+18 result lines, every attempt a row, nothing pending. Every arm ran to a receipt: no alarm, no OOM, no load fault, no
+verify failure; one HARNESS_ERROR (kept) and one launcher abort (amendment 5, listed in the re-run's reason).
 
 **Bundle shape (phase directive, 2026-09-05 14:45Z — applied to this bundle before the final snapshot so the
 finalisation is mechanical).** (1) Every row is exactly one of **OK, REFUSED, HARNESS_ERROR, ALARM, OOM, NOT_RUN,
@@ -44,13 +41,24 @@ repository's archive tarball 11:32:43Z (amendment 2); train anchor 11:32:53Z →
 sha-verified 11:32:57Z (`DATASET clinical sha=76fb9036de80…`); Granite fetched 11:32:57Z (5.5 min), arms 11:38:26Z
 `reference` → 11:44:40Z `fused` (TypeError, amendment 3) → 11:45:01Z `batched` → `GRANITE DONE` 11:46:51Z; OLMoE fetched
 (7.0 min), arms 11:53:52Z / 11:58:35Z / 12:00:26Z → `OLMOE DONE` 12:03:39Z; gpt-oss fetched (15.8 min), `attn_only`
-12:19:26Z, `mxfp4` 12:23:14Z → `GPTOSS DONE` 12:32:58Z; Qwen3 fetched (8.7 min), `reference` started 12:41:43Z — at the
-snapshot (≈12:49Z) step 20/60 at 12.8–13.0 s/step; per the private record the three Qwen3 arms completed at 13:27Z
-and the Gemma-4 fetch started 13:27Z and hung at 13:46Z (amendment 4). Three families in 61 min against the pre-registration's 78-min
-estimate for them (P7's step times were wrong in both directions, below; no alarm fired). Hard-kill guard on the mini:
-re-armed to 20:00Z at the relaunch, then re-armed 12:50Z to 23:30Z before Qwen3's arms (Mixtral's offload arms may
-legitimately run to their 4200-s alarms). Teardown is manual after `TP2_DONE`, label-guarded, proven before the guard is
-killed.
+12:19:26Z, `mxfp4` 12:23:14Z → `GPTOSS DONE` 12:32:58Z; Qwen3 fetched (8.7 min), arms 12:41:43Z / 13:01:01Z /
+13:09:19Z → `QWEN3 DONE` 13:27:26Z; Gemma-4 fetched 13:27:26Z — **staged in 47.1 min** (the resumed connection
+recovered inside the 4800-s alarm; amendment 4's trigger never fired), arms 14:14:30Z / 14:26:03Z / 14:31:35Z →
+`GEMMA4 DONE` 14:42:57Z; Mixtral fetched 14:42:57Z (15.6 min), arms under `offload=1` 14:58:31Z / 15:07:00Z / 15:14:43Z
+→ `MIXTRAL DONE` 15:22:26Z; the box's own reducer print ([`logs/RESULTS.txt`](logs/RESULTS.txt)) and **`TP_DONE`
+15:22:26Z**. **Lane wall 11:32Z → 15:22Z = 3 h 50 min** against the pre-registration's ≈ 5.5 h estimate (P7's step
+times were wrong in both directions, below); no arm or fetch alarm fired on any of the 17 result lines. Then
+`logs/tp1b.sh` on `TP_DONE`: `tp1b: Granite fused arm re-run on the patched harness` 15:23:13Z, `harness patched OK`,
+Granite re-fetched (its conditional Gemma-4 / Mixtral redo, amendment 4, found both reference receipts present and
+did not run); its first `arm granite/fused` start at 15:30:43Z died on the follow-up script's own `DATA: unbound
+variable` before the harness ran (amendment 5), the fixed script's start at 15:31:49Z is the re-run → `GRANITE FUSED
+RERUN DONE`, **`TP1B DONE` / `TP2_DONE` 15:33:13Z**. **Wall on this box for the six families plus the re-run: 11:32Z →
+15:33Z = 4 h 01 min** against the pre-registration's ≈ 5.5 h. **Honest box time and cost:** the first box (49937447)
+≈ 5 min before amendment 1 destroyed it; this box rented ≈ 07:05Z, **≈ 4.4 h of it idle** after the fetch-by-sha false
+start (amendment 2, ≈ $3.4), the lane and re-run ≈ 4.0 h, `TP2_DONE` at 15:33Z — **≈ 8.5 h ≈ $6.8 at ~$0.8/h, of which
+the measurements themselves ≈ $3.2**; teardown follows `TP2_DONE` (label-guarded, proven before the guard is killed).
+Hard-kill guard on the mini: re-armed to 20:00Z at the relaunch, then 12:50Z to 23:30Z before Qwen3's arms; it did not
+fire.
 
 **Cut — the shipped code, both packages at their `main` after the 0.35.0 / 0.30.0 releases** (the `pip install` line in
 [`logs/tp1_run.sh`](logs/tp1_run.sh); [`logs/pip.log`](logs/pip.log) shows pip resolving both as revisions, not tags):
@@ -86,7 +94,7 @@ the idle baseline subtracted. Harness: [`logs/tp1_train_smoke.py`](logs/tp1_trai
 D1–D8 (named in its header). Order Granite → OLMoE → gpt-oss → Qwen3 → Gemma-4 → Mixtral, the checkpoint freed between
 families.
 
-## The four amendments, and why (each dated in the private record before the data it touches)
+## The five amendments, and why (each dated in the private record before the data it touches)
 
 1. **Amendment 1 (07:05Z, before any data) — the first box's link.** The queue fired on bo7's `TP_DONE` at 07:00:27Z
    and rented Vast **49937447** (machine 37675). It passed the renter's 15-s pre-flight at 20 MB/s (bo7's 15 MB/s floor)
@@ -121,7 +129,8 @@ families.
    is re-run after `TP_DONE` on the same box, same install, same fixture by [`logs/tp1b.sh`](logs/tp1b.sh)** (waiter
    [`logs/tp1b_wait.sh`](logs/tp1b_wait.sh); Granite re-fetched; marker `TP2_DONE`). The first receipt is a
    `harness_error` row, kept (its log is the row — the process died before writing a JSON); the re-run is the row that
-   counts. Fixture, criteria, verdict rule, predictions unchanged.
+   counts. Fixture, criteria, verdict rule, predictions unchanged. **The re-run PASSED** (attempt 2/2 in the table:
+   0.01329 / 0.01270, ×5.86, J ×0.197, 128 kernel calls every step); its own launcher hiccup is amendment 5.
 
 4. **Amendment 4 (14:15Z) — the Gemma-4 fetch hang, left to its alarm; conditional redo.** The Gemma-4-26B-A4B-it
    fetch (started 13:27Z on a ≥ 40 MB/s link, XET already disabled by the lane) hit `The read operation timed out` on
@@ -132,10 +141,25 @@ families.
    family whose reference receipt is missing** — Gemma-4 (fetch 4800 s resuming the cached blobs, then
    `reference` / `fused` / `batched` with the pre-registered alarms) and, should its fetch fail the same way, Mixtral —
    before touching `TP2_DONE`; the redo's rows are labelled from the `tp1b:` marker. Worst-case `TP2_DONE` ≈ 20:30Z
-   against the 23:30Z guard. Fixture, criteria, verdict rule, predictions unchanged. The `tp1b.sh` shipped here is the
-   amendment-3 copy from the snapshot; the amended copy that runs the redo arrives with the final snapshot.
+   against the 23:30Z guard. Fixture, criteria, verdict rule, predictions unchanged. **Outcome:** the trigger never
+   fired — the fetch's resumed connection recovered and the checkpoint staged at 47.1 min (`outer.log` line 89), inside
+   the 4800-s alarm; `summary.txt` carries no `FETCH FAILED` line, all three Gemma-4 arms ran on the lane itself, and
+   `tp1b.sh`'s redo (conditional on a missing reference receipt) did not run. The amended `tp1b.sh` as of `TP_DONE` is
+   shipped as [`logs/tp1b.sh`](logs/tp1b.sh) (its redo block is the diff against [`logs/tp1b.sh.amend3`](logs/tp1b.sh.amend3),
+   the amendment-3 copy). Gemma-4-it also loaded on this host **without the #344 fault** (P6's load-succeeds branch).
+5. **Amendment 5 (15:50Z in the private record; the event at 15:30:43Z) — the follow-up script's unset variable.**
+   `tp1b.sh` reuses `tp1_run.sh`'s `arm` helper, which reads the dataset path (`DATA`, `DATA_SHA`) that the lane script
+   sets in its dataset step; the follow-up never set them, so under `set -u` its first `arm granite/fused` start
+   (15:30:43Z, `outer.log` line 220) died with `/root/tp1/tp1b.sh: line 32: DATA: unbound variable` before the harness
+   ran — a defect of the follow-up script, not a lane arm and not the harness. Fixed by setting the dataset variables
+   (and re-verifying the registered sha; a mismatch would have refused with exit 13) and the anchor class at the top of
+   the script: [`logs/tp1b.sh`](logs/tp1b.sh) is that copy, the one that ran the re-run; the `TP_DONE`-time copy with
+   the defect is [`logs/tp1b.sh.amend4`](logs/tp1b.sh.amend4). The aborted start is an `arm` line in `outer.log` with
+   no result line; the reducer aligns result lines to the last start lines and prints the extra start in the re-run's
+   reason, so it cannot be mistaken for an attempt of the harness. Fixture, criteria, verdict rule, predictions
+   unchanged.
 
-Full text: the private receipt `INT4B16/P25-PARITY.md` (§P36, amendments 1–4, the launch and false-start logs) and
+Full text: the private receipt `INT4B16/P25-PARITY.md` (§P36, amendments 1–5, the launch and false-start logs) and
 `INT4B16/tp1/P36-PREREG.md`.
 
 ## Registered criteria (verbatim) and the verdict rule per arm
@@ -191,13 +215,13 @@ experts); licence labels for serving are the register's; the dataset sha and `in
 
 | | predicted | so far |
 |---|---|---|
-| **P1** | Granite, OLMoE, Qwen3, Gemma-4, Mixtral: `verify_moe_4bit(strict=True)` passes; `enable_fast_train(dgrad=True)` patches exactly the MoE-layer count (32 / 16 / 48 / 30 / 32); `fused` PASSES both criteria; C1 holds in every arm | **Held on OLMoE** (verify 16/0; 16/16 patched; PASS 0.01327 / 0.01249; C1 clean in all three arms). Granite: verify 32/0 and C1 clean in `reference` and `batched`; its `fused` count and verdict are the pending re-run. Qwen3: verify 48/0 (load receipt); arms pending. Gemma-4, Mixtral pending. |
-| **P2** | `enable_batched_train` patches the same counts, PASSES parity where it engages, is slower than `fused` at 30B width with the highest peak VRAM; *stated risk:* on the 128-expert families (Qwen3, Gemma-4) `_PAD_WASTE_LIMIT` falls back on some or all layers → VOID (not engaged), a finding about the batched path's engagement envelope, not about parity | **Counts held** (32/32, 16/16). **PASS where it engaged** (Granite, 0.01553 / 0.01681). **Highest peak held** (OLMoE 6.211 vs 5.234; Granite 2.971 vs 2.810). **The stated risk fired — on the 64-expert family, not the 128-expert ones:** OLMoE `batched` VOID, kernel calls/step min 24 < 32. The 30B-width speed clause is pending (Qwen3). *Not predicted:* at Granite's width the batched path is ×3.93 over the per-expert loop — the register's "no speed-up at real width (1.05×)" is a 30B-width statement, not a general one. |
+| **P1** | Granite, OLMoE, Qwen3, Gemma-4, Mixtral: `verify_moe_4bit(strict=True)` passes; `enable_fast_train(dgrad=True)` patches exactly the MoE-layer count (32 / 16 / 48 / 30 / 32); `fused` PASSES both criteria; C1 holds in every arm | **Held on all five:** verify 32/0, 16/0, 48/0, 30/0, 32/0; patched 32/32, 16/16, 48/48, 30/30, 32/32; fused PASS 0.01329 / 0.01270 (Granite, on the corrected-counter re-run — attempt 1 was a HARNESS_ERROR of the harness, not of the shipped code), 0.01327 / 0.01249 (OLMoE), 0.01315 / 0.01050 (Qwen3), 0.02385 / 0.04742 (Gemma-4 — inside the band by 0.0026), 0.00953 / 0.00945 (Mixtral, offload); C1 clean in every OK arm of every family. |
+| **P2** | `enable_batched_train` patches the same counts, PASSES parity where it engages, is slower than `fused` at 30B width with the highest peak VRAM; *stated risk:* on the 128-expert families (Qwen3, Gemma-4) `_PAD_WASTE_LIMIT` falls back on some or all layers → VOID (not engaged), a finding about the batched path's engagement envelope, not about parity | **Counts held** (32 / 16 / 48 / 30 / 32). **PASS where it engaged** (Granite 0.01553 / 0.01681; Mixtral 0.00766 / 0.01057, the 8-expert shape engaged 192 calls every step). **Slower than fused at 30B width held** (Qwen3 11.885 vs 5.003 s; Gemma-4 7.259 vs 3.101). **Highest peak held resident** (Qwen3 23.629, Gemma-4 21.623, OLMoE 6.211, Granite 2.971 — each the family's highest); *not* under offload (Mixtral batched 8.466 < reference 10.562). **The stated risk fired on both 128-expert families as predicted — Qwen3 VOID (min 12 < 96), Gemma-4 VOID (min 0 < 60; 9 of 60 steps with no kernel call at all) — and on the 64-expert one it did not name (OLMoE VOID, min 24 < 32).** *Not predicted:* at Granite's width the batched path is ×3.93 over the per-expert loop — the register's "no speed-up at real width (1.05×)" is a 30B-width statement (Qwen3 here reads ×1.08 on the mixed path), not a general one. |
 | **P3** | gpt-oss: `ExpertsLoRA` absent (0 wrapped, 24 bare); both enablers return 0 → two `refused` rows; `attn_only` trains with C1 holding on the bare stacks | **Held exactly.** 0 wrapped / 24 bare `GptOssExperts4bit`; `[e4b.fast] … on 0 ExpertsLoRA module(s)`, `[e4b.batched] … on 0 ExpertsLoRA module(s)`; `attn_only` 5.106 → 0.366 (eval 5.1405 → 0.3435), C1 10,749,542,400 B bit-exact, control fires. |
 | **P4** | gpt-oss `mxfp4`: canary passes (`top1` ≥ 0.9 over 32 positions, small `kl`), `pre_equals_post` true, loss falls; s/step reported without a prediction | **Held.** top-1 0.906 (by 0.006), KL 0.02495; `pre_equals_post` True (96 tensors); loss 5.461 → 2.622, eval 4.591 → 2.184; 5.16 s/step, peak 6.22 GB. Experimental, not licensed. |
-| **P5** | Mixtral offload arms run; the resident probe, if enabled, OOMs | Pending (probe off by default). |
-| **P6** | Gemma-4-it loads on this host or faults per #344; either is a row | Pending — and a third outcome arrived first: the fetch hung (amendment 4, ALARM), the load is untested until the tp1b redo. |
-| **P7** | Step-time assumptions (alarm sizing only): Granite ≈ 0.5–1 s, OLMoE ≈ 1–2 s, gpt-oss attention-only ≈ 3–5 s, Qwen3 reference ≈ 6–8 s / fused ≈ 3 s / batched ≈ 6–8 s, Gemma-4 ≈ Qwen3, Mixtral-offload reference ≈ 8–12 s / fused ≈ 4–6 s | **Wrong in both directions, harmlessly:** Granite reference 4.27 s (4–8× the assumption — the 40-expert per-expert loop is launch-bound), batched 1.09; OLMoE 3.02 / 0.94 / 1.91; gpt-oss attention-only 1.80 (under); Qwen3 reference 12.8–13.0 s in progress (≈ 1.7× the assumption; inside its 3000-s alarm). No alarm fired. The three families finished in 61 min against the estimate's 78. |
+| **P5** | Mixtral offload arms run; the resident probe, if enabled, OOMs | **Held:** all three `offload=True` arms ran to OK (3.421 GB on the GPU at load, peaks 10.562 / 5.215 / 8.466 GB); the probe stayed off, so the OOM clause is untested. |
+| **P6** | Gemma-4-it loads on this host or faults per #344; either is a row | **Held (the load-succeeds branch):** loaded in 14.7 s, 30/30, 18.113 GB, no `CUDA error: invalid argument`. The fetch hang (amendment 4) resolved itself at 47.1 min; no ALARM row. |
+| **P7** | Step-time assumptions (alarm sizing only): Granite ≈ 0.5–1 s, OLMoE ≈ 1–2 s, gpt-oss attention-only ≈ 3–5 s, Qwen3 reference ≈ 6–8 s / fused ≈ 3 s / batched ≈ 6–8 s, Gemma-4 ≈ Qwen3, Mixtral-offload reference ≈ 8–12 s / fused ≈ 4–6 s | **Wrong in both directions, harmlessly:** Granite reference 4.27 s (4–8× the assumption — the 40-expert per-expert loop is launch-bound), batched 1.09; OLMoE 3.02 / 0.94 / 1.91; gpt-oss attention-only 1.80 (under); Qwen3 12.80 / 5.00 / 11.89 (reference ≈ 1.7× over); Gemma-4 7.34 / 3.10 / 7.26 (under Qwen3, not ≈); Mixtral-offload 3.07 / 2.43 / 2.41 (≈ 3× under). No alarm fired on any of the 17 result lines; the lane took 3 h 50 min against the ≈ 5.5 h estimate. |
 
 ## What the matrix now says (from the receipts in this directory; the register's ids in `docs/claims.json`)
 
@@ -209,32 +233,34 @@ machine-readable form is `training_support` in `docs/capabilities.json`.
 
 | family | direct real-weight load + `verify(strict)` | `ExpertsLoRA` | `fused` (`enable_fast_train(dgrad=True)`) | `batched` (`enable_batched_train`) | other |
 |---|---|---|---|---|---|
-| Granite-3.1-3B-A800M | **measured** — 32/32, 2.351 GB (was: fixtures + the arena path only) | **measured** — 32 | attempt 1 **HARNESS_ERROR** (amendment 3, kept); the corrected-counter re-run is NOT_RUN at this snapshot and decides `fast_train` | **OK · PASS** 0.01553 / 0.01681 — ×3.93, peak ×1.057, J ×0.303 | — |
+| Granite-3.1-3B-A800M | **measured** — 32/32, 2.351 GB (was: fixtures + the arena path only) | **measured** — 32 | **OK · PASS** 0.01329 / 0.01270 — ×5.86, peak ×1.000, J ×0.197 (attempt 2/2, the corrected-counter re-run; attempt 1 a kept HARNESS_ERROR, amendment 3; the launcher abort between them, amendment 5) | **OK · PASS** 0.01553 / 0.01681 — ×3.93, peak ×1.057, J ×0.303 | — |
 | OLMoE-1B-7B-Instruct | measured — 16/16, 4.695 GB | measured — 16 | **OK · PASS** 0.01327 / 0.01249 — ×3.22, peak ×1.000, J ×0.339 (first reading on a registered text with real weights) | **OK · VOID** — `_PAD_WASTE_LIMIT` fallback engaged (min 24 < 32 kernel calls/step) | — |
 | gpt-oss-20b | measured — 24/24, bare, 14.359 GB | **unsupported** (built bare) | **REFUSED** (0 patched) | **REFUSED** (0 patched) | `attn_only` **OK** (no pair); `mxfp4` **EXPERIMENTAL** — canary 0.906 / 0.025, provenance holds, loss falls; not licensed |
-| Qwen3-30B-A3B | measured — 48/48, **20.019 GB resident on 32 GB** | measured — 48 | NOT_RUN at the snapshot (completed on the box 13:27Z; receipt pending) | NOT_RUN at the snapshot (idem) | — |
-| Gemma-4-26B-A4B-it | NOT_RUN — amendment 4 (fetch hang → ALARM; tp1b redo); #344 risk at load | pending | pending | pending | — |
-| Mixtral-8x7B-Instruct | NOT_RUN — not reached (`offload=True`; amendment 4 redo rule) | pending | pending | pending | — |
+| Qwen3-30B-A3B | measured — 48/48, **20.019 GB resident on 32 GB** | measured — 48 | **OK · PASS** 0.01315 / 0.01050 — ×2.56, peak ×1.000, J ×0.407 | **OK · VOID** — fallback on most layers every step (min 12 < 96 kernel calls/step) | — |
+| Gemma-4-26B-A4B-it | measured — 30/30, 18.113 GB resident; **no #344 fault on this host** (amendment 4's fetch hang recovered at 47.1 min) | measured — 30 | **OK · PASS** 0.02385 / 0.04742 (inside the band by 0.0026) — ×2.37, peak ×1.000, J ×0.477 | **OK · VOID** — 9 of 60 steps with no kernel call (min 0 < 60) | — |
+| Mixtral-8x7B-Instruct | measured — 32/32 through the `w1/w3/w2` fusion, `offload=True`, 3.421 GB on the GPU (25.37 GB of NF4 experts pinned in host RAM) | measured — 32 | **OK · PASS** 0.00953 / 0.00945 — ×1.26, peak ×0.494, J ×0.734 | **OK · PASS** 0.00766 / 0.01057 — ×1.27, peak ×0.802, J ×0.976 (engaged 192 calls every step) | — |
 
 Per path (`training_support` in `docs/capabilities.json`; `model_families` = the families whose `fast_train` is `supported`):
 
 | model_type | quantize | reference_train | fast_train | batched_train | nvme_train | native_mxfp4_train |
 |---|---|---|---|---|---|---|
 | `olmoe` | supported | supported | **supported** (tp1 PASS) | void (tp1) | not_tested | n/a |
-| `qwen3_moe` | supported | supported (flagship) | **supported** (flagship; tp1 pending) | supported (dgrad-gate; tp1 pending) | not_tested | n/a |
-| `gemma4_text` | supported (base ckpt) | supported (flagship) | **supported** (flagship; tp1 pending, amendment 4) | not_tested | not_tested | n/a |
-| `granitemoe` | supported (tp1) | supported (tp1) | harness_error (attempt 1) → the re-run decides | supported (tp1 PASS) | not_tested | n/a |
-| `gpt_oss` | supported (bare) | refused | refused | refused | not_tested (unfaithful arena wrap, not run) | experimental (tp1 canary) |
-| `mixtral` | not_tested (pending) | not_tested | not_tested | not_tested | not_tested | n/a |
+| `qwen3_moe` | supported (tp1 resident on 32 GB) | supported (tp1; flagship) | **supported** (tp1 PASS; flagship 5/5) | void (tp1; the dgrad-gate trajectory stands on its own fixture) | not_tested | n/a |
+| `gemma4_text` | supported (tp1: the `-it` checkpoint on this host; flagship: base) | supported (tp1; flagship) | **supported** (tp1 PASS, median inside the band by 0.0026; flagship 5/5) | void (tp1: 9 steps with no kernel call) | not_tested | n/a |
+| `granitemoe` | supported (tp1) | supported (tp1) | **supported** (tp1 PASS on the corrected-counter re-run; attempt 1 a kept harness_error) → enters `model_families` | supported (tp1 PASS) | not_tested | n/a |
+| `gpt_oss` | supported (bare) | refused | refused | refused | refused (`enable_mxfp4_nvme_residency` refuses bias-carrying modules, #402; the training-arena wrap is refused on structure) | experimental (tp1 canary) |
+| `mixtral` | supported (tp1, offload) | supported (tp1) | **supported** (tp1 PASS) → enters `model_families` | supported (tp1 PASS) | not_tested | n/a |
 
 **`olmoe` is confirmed on real weights and a registered text** (it entered on the dgrad-gate's synthetic tokens);
-`qwen3_moe` and `gemma4_text` stay on the flagship receipts until their tp1 rows land; **`granitemoe.fast_train` is
-decided by the tp1b re-run only** (its `batched_train` is `supported` on the PASS; the family enters `model_families`
-only on a fused PASS); `mixtral` waits for its rows; **`gpt_oss` stays out** — every e4b training enabler refuses it,
-and the one route that trains its experts is the kernel package's experimental `ExpertsMxfp4LoRA`, which this lane
-exercised and did not license. The `batched` VOID is a limitation the capability carries: `enable_batched_train` falls
-back per call above `_PAD_WASTE_LIMIT` with no counter, so a batched arm must assert kernel engagement, not the patch
-count.
+**`qwen3_moe` and `gemma4_text` are confirmed on this lane** beside their flagship receipts (never divided into them);
+**`mixtral` enters `model_families` on its fused PASS** — under offload, the first real-weight pass through its
+`w1/w3/w2` fusion — and **`granitemoe` enters on its corrected-counter re-run's PASS** (its `batched_train` was already
+`supported`); **`gpt_oss` stays out** — every e4b training enabler refuses it, and the one route that trains its
+experts is the kernel package's experimental `ExpertsMxfp4LoRA`, which this lane exercised and did not license. The
+three `batched` VOIDs (OLMoE, Qwen3, Gemma-4) are one limitation the capability carries: in the shipped 0.35.0 code
+`enable_batched_train` falls back per call above `_PAD_WASTE_LIMIT` with no counter, so a batched arm must assert kernel
+engagement, not the patch count; it engaged everywhere only on the 8-expert (Mixtral) and 40-expert (Granite) shapes.
+The release that carries this bundle adds `batched_fallback_stats(model)` for exactly this (#402).
 
 ## The table
 
@@ -255,7 +281,7 @@ the verdict rule is v1's, verbatim.
 
 - `<family>_train_<arm>.json` — one receipt per arm (`reference` / `fused` / `batched` / `attn_only` / `mxfp4`; refusal
   stubs for gpt-oss `fused` / `batched`); `<family>_train_load.json` — the load-stage receipt written by the first arm
-  that passed `verify_moe_4bit` (Qwen3's is in; its arms are pending). [`gptoss_mxfp4/`](gptoss_mxfp4/) — the
+  that passed `verify_moe_4bit` (six of them). [`gptoss_mxfp4/`](gptoss_mxfp4/) — the
   experimental runner's `run_artifact.json` (canary, provenance hashes, eval every 10 steps) and `steps.jsonl` (per-step
   loss, dt, peak). [`anchor.json`](anchor.json) (the train-anchor probes), [`ds_manifest.json`](ds_manifest.json) (the
   registered dataset shas), [`forensics.txt`](forensics.txt), [`summary.txt`](summary.txt) (one line per arm, in lane
@@ -263,13 +289,18 @@ the verdict rule is v1's, verbatim.
 - [`logs/`](logs/) — [`tp1_run.sh`](logs/tp1_run.sh) (the amended lane script, the one that ran),
   [`tp1_run.sh.pre-amend`](logs/tp1_run.sh.pre-amend) (the pre-registered copy: fetch-by-sha, un-doubled fetch alarms —
   `diff` it), [`tp1_train_smoke.py`](logs/tp1_train_smoke.py) (the harness, patched copy),
-  [`tp1_closure_patch.py`](logs/tp1_closure_patch.py) (amendment 3's patch as applied), [`tp1b.sh`](logs/tp1b.sh) +
-  [`tp1b_wait.sh`](logs/tp1b_wait.sh) (the Granite fused re-run and its waiter), `pip.log`, `anchor.log`,
-  `anchor_gate.log`, `datasets.log`, the four `fetch_*.log` (Granite's as `fetch_granite.attempt1.log`), **every per-arm
-  `run_*.log`** (the load lines, `step k/60` every 10 steps with the kernel-call counts, the result line; Granite's fused
-  attempt-1 traceback as `run_granite_fused.attempt1.log`; Qwen3's reference in progress), [`tp1_reduce.py`](logs/tp1_reduce.py)
-  (v1, the copy that ran on the box),
-  the lane console [`outer.log`](logs/outer.log) and the false start's [`outer.attempt1.log`](logs/outer.attempt1.log).
+  [`tp1_closure_patch.py`](logs/tp1_closure_patch.py) (amendment 3's patch as applied),
+  [`tp1b_wait.sh`](logs/tp1b_wait.sh) (the post-`TP_DONE` waiter), `pip.log`, `anchor.log`,
+  `anchor_gate.log`, `datasets.log`, the six `fetch_*.log` (Granite's lane fetch as `fetch_granite.attempt1.log`, tp1b's
+  re-fetch as `fetch_granite.log`), **every per-arm `run_*.log`** (the load lines, `step k/60` every 10 steps with the
+  kernel-call counts, the result line; Granite's fused attempt-1 traceback as `run_granite_fused.attempt1.log`, the
+  re-run as `run_granite_fused.log`), [`tp1_reduce.py`](logs/tp1_reduce.py) (v1, the copy that ran on the
+  box) and [`RESULTS.txt`](logs/RESULTS.txt) (its print at `TP_DONE`, the box's own table — superseded by this
+  directory's v2 output), [`tp1b.sh`](logs/tp1b.sh) (the amendment-5 copy that ran the re-run) beside
+  [`tp1b.sh.amend4`](logs/tp1b.sh.amend4) (the `TP_DONE`-time copy, the unset-variable defect) and
+  [`tp1b.sh.amend3`](logs/tp1b.sh.amend3) (the amendment-3 copy),
+  the lane console [`outer.log`](logs/outer.log) (through `TP1B DONE`; `tp1b.sh` appended to it, including the
+  amendment-5 abort line) and the false start's [`outer.attempt1.log`](logs/outer.attempt1.log).
   The logs are force-added past the repository's `*.log` ignore rule, as bo6's and bo7's were.
 - Nothing in this directory is edited: every file is the byte-for-byte copy of the box's snapshot (checked with `cmp`
   when the bundle was written), except the three written here — `README.md`, `RESULTS-tp1.md`, and `tp1_reduce.py`
@@ -282,7 +313,8 @@ the verdict rule is v1's, verbatim.
   registered shas are in `ds_manifest.json`; the lane refuses a mismatch), the mini-side renter / queue / watcher
   scripts (the copy of the renter in the receipt tree predates amendment 1's 40 MB/s floor and is not the one that ran,
   so it is not offered as evidence), the empty `tp1b_wait.log`, `INSTANCE_ID` (49937730, also in every receipt's
-  `env.host.vast_instance_id`), the `TP_DONE` marker and `__pycache__`.
+  `env.host.vast_instance_id`), the box's `RESULTS-tp1.md` (byte-identical to `logs/RESULTS.txt`), the `TP_DONE`
+  marker and `__pycache__`.
 
 ## Reproduce
 
@@ -298,7 +330,9 @@ dataset whose sha is not the registered one), then `logs/tp1b.sh` after `TP_DONE
 - **No convergence claim.** 60 steps rank two arms against each other on one text; they do not train a model, and the
   eval column is "not the band". The register's convergence claims (`e4b.train.olmoe-converges`) are different runs and
   are neither superseded nor extended by this lane.
-- **PASS means PASS on one text.** The flagship matrices needed five datasets; tp1 ran the registered `clinical` set only.
+- **PASS means PASS on one text.** The flagship matrices needed five datasets; tp1 ran the registered `clinical` set only;
+  Gemma-4's fused median sits 0.0026 inside the band.
+- **Nothing is pending.** 18 result lines, 24 receipts; the register carries no placeholder.
 - **No cross-family, cross-lane or cross-card ratio**, and no training throughput position: s/step and tok/s are this
   box's, quoted with its anchor class; no anchor-class projection is made for training. tp1's Qwen3 and Gemma-4 rows,
   when they land, sit beside `bench/flagship-matrix` and `bench/flagship-matrix-model2` (a 4090, `offload=True`) and are
@@ -312,4 +346,4 @@ dataset whose sha is not the registered one), then `logs/tp1b.sh` after `TP_DONE
 - **Cost is reported, never gated**, and a within-family ratio on this box is not a general one (P2's 30B-width speed
   statement stands as measured there; Granite's ×3.93 is Granite's on this box).
 - **No gate was changed, no threshold retuned, no umbrella claim** ("training parity across six families") is made: the
-  register carries one claim per (family × arm) with this receipt, and the pending rows are `open` until they land.
+  register carries one claim per (family × arm) with this receipt — 26 entries, all `measured`, no placeholder.
