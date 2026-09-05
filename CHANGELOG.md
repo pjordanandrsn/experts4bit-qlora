@@ -130,6 +130,21 @@ check from here on.
   the newest serving lane `docs/STATUS.md` quotes as the position.
 - CI installs grouped-nf4-gemm from the v0.30.1 release commit (`d58b39fb…`; the comment now states the pin's real
   reason); `pyproject.toml`'s `[test]` floor is `grouped-nf4-gemm>=0.30.0`, equal to `fast`'s.
+- Checks hardened after review: `check_claims_register.py` reads evidence from the git tree (`git ls-files` -- an
+  untracked or gitignored receipt log, a directory, an absolute path or `..` is a finding; outside a checkout the
+  working tree stands in and the output says so), applies the licence rule per occurrence (one "unlicensed" no longer
+  excuses a bare "licensed stack" beside it; the citation form ``licensed by `<id>` `` refers to another row's licence
+  and is resolved -- the id must carry `licensed_by` -- rather than labelled: eleven sentences reworded with no number
+  changed, the p37 rows citing the bo6c verdict), follows every `superseded_by` to an active row and refuses one on an
+  active row, allows `retired_reason` on retired rows only (`e4b.retired.inference-md-decode-grid` drops the field it
+  carried beside `superseded`; `e4b.retired.vllm-6.31x-ahead` names the current successor), and exits 2 for a
+  `--sibling` whose slug cannot be resolved instead of skipping its entries; `check_readme_claims.py` reads the
+  superseded / retired / historical words from the line's prose alone (links reduced to their text, HTML comments and
+  every claim id in any form stripped) and treats ids in `<code>` or link text as citations; `check_system_manifest.py`
+  gains `--require-tags` (CI: an unreadable tag list is exit 2, not a NOTE on a green run), reads `consumer_ci_pin` as
+  the last `vX.Y.Z` in its prose and ignores comment and non-`pip install` lines; `check_capabilities.py` warnings are
+  also `::warning::` annotations; `docs/claims-schema.md` documents `validity`, `row_status`, `parity_verdict`;
+  `tests/test_docs_index_count.py` counts links through `md_links`.
 
 ## 0.35.1 — 2026-09-05 — documentation (the tp1 training parity matrix) and one behaviour change (#397 → #402)
 

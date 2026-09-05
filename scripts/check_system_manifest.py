@@ -2,8 +2,10 @@
 """Validate docs/system-manifest.json -- the cross-repository system manifest --
 against THIS repository, and optionally against the sibling repository.
 
-Standard library only; no network. Prints one ``OK:`` or ``FAIL:`` line per
-check; exit 1 when any check failed, 2 when the check itself cannot run.
+Standard library only. One network read: ``git ls-remote --tags`` of the
+kernel repository, for the CI pin check below. Prints one ``OK:`` or ``FAIL:``
+line per check; exit 1 when any check failed, 2 when the check itself cannot
+run.
 
 Against this repository:
   * the manifest parses and carries every top-level table the scripts read
@@ -32,7 +34,12 @@ The consumer's CI pin of the kernel package (``.github/workflows/ci.yml``,
     a tag below the one named, FAILS. Tags are read with
     ``git ls-remote --tags <repository>`` (annotated tags peeled); with no
     network the check prints ``NOTE: ... skipped`` and never passes silently
-    as if it had run;
+    as if it had run -- and under ``--require-tags`` (CI, where the network
+    is there) an unreadable tag list is exit 2, so the pin is never left
+    unverified on a green run. The version ``consumer_ci_pin`` names is the
+    last ``vX.Y.Z`` in its prose (the last bare ``X.Y.Z`` when none carries
+    a ``v``), so prose that says what it moved from still names what it
+    moved to; the pin line is a non-comment ``pip install`` line;
   * every extra of pyproject that pins the kernel package (``fast``, ``test``,
     ...) has a ``>=`` floor at or above the current record's floor.
 
@@ -297,13 +304,28 @@ def check_local(root: Path, manifest: dict, rep: Report) -> None:
 
 _PIN = re.compile(r"git\+https://github\.com/(?P<slug>[^/\s\"']+/[^/\s\"'@]+?)(?:\.git)?@(?P<sha>[0-9a-f]{7,40})\b")
 _TAG_LINE = re.compile(r"^(?P<sha>[0-9a-f]{40})\s+refs/tags/v?(?P<ver>\d+(?:\.\d+)*)(?P<peel>\^\{\})?$")
-_PIN_VERSION = re.compile(r"\bv?(\d+\.\d+\.\d+)\b")
+_PIN_VERSION = re.compile(r"\b(v?)(\d+\.\d+\.\d+)\b")
+_PIP_INSTALL = re.compile(r"\bpip3?\s+install\b")
+
+
+def pin_version(prose: str) -> str | None:
+    """The release ``consumer_ci_pin`` names: the LAST ``vX.Y.Z`` in the prose,
+    or the last bare ``X.Y.Z`` when none is v-prefixed -- the prose may name the
+    version it moved from before the one it moved to."""
+    hits = _PIN_VERSION.findall(prose)
+    if not hits:
+        return None
+    tagged = [ver for v, ver in hits if v]
+    return (tagged or [ver for _, ver in hits])[-1]
 
 
 def ci_kernel_pin(text: str, package: str = KERNEL_PACKAGE) -> tuple[str, str] | None:
     """``(repository slug, sha)`` of the ``pip install "<package> @ git+...@<sha>"``
-    line in the workflow text, or None when there is none."""
+    line in the workflow text, or None when there is none. Comment lines and
+    lines that do not ``pip install`` (an echo, a note) are not pins."""
     for line in text.splitlines():
+        if line.lstrip().startswith("#") or not _PIP_INSTALL.search(line):
+            continue
         if pep503_name(package) not in pep503_name(line):
             continue
         m = _PIN.search(line)
@@ -333,31 +355,31 @@ def release_tags(repo_url: str, timeout: float = 60.0) -> dict[str, str] | None:
     return tags
 
 
-def check_ci_pin(root: Path, manifest: dict, rep: Report) -> None:
+def check_ci_pin(root: Path, manifest: dict, rep: Report) -> bool:
     """The consumer CI pin is a release-tag commit at or above the tag the current
-    compatibility record's ``consumer_ci_pin`` names."""
+    compatibility record's ``consumer_ci_pin`` names. Returns False only when the
+    release tags could not be read (the pin is then unverified, not passed)."""
     ci = root / CI_WORKFLOW
     if not ci.is_file():
         rep.ok(f"no {CI_WORKFLOW}: the CI pin check does not apply")
-        return
+        return True
     py = load_pyproject(root)
     hits, err = current_record(manifest, str(py.get("name", "")), str(py.get("version", "")))
     if err or len(hits) != 1:
-        return                                   # check_local has already failed this
+        return True                              # check_local has already failed this
     rec = hits[0]
     prose = str(rec.get("consumer_ci_pin", ""))
     pin = ci_kernel_pin(read_text(ci))
     if not prose.strip():
         rep.check(pin is None, "the current record names no consumer_ci_pin and CI pins no kernel commit",
                   f"CI pins {pin}")
-        return
+        return True
     if not rep.check(pin is not None, f"{CI_WORKFLOW} pins {KERNEL_PACKAGE} at a git commit (consumer_ci_pin: {prose!r})"):
-        return
+        return True
     slug, sha = pin
-    m = _PIN_VERSION.search(prose)
-    if not rep.check(m is not None, f"consumer_ci_pin names a release version: {prose!r}"):
-        return
-    named = m.group(1)
+    named = pin_version(prose)
+    if not rep.check(named is not None, f"consumer_ci_pin names a release version: {prose!r}"):
+        return True
     kernels = manifest["packages"]["kernels"]
     rep.check(_github_slug(slug) == _github_slug(kernels["repository"]),
               f"the CI pin's repository {slug} is packages.kernels.repository", f"manifest says {kernels['repository']!r}")
@@ -365,14 +387,14 @@ def check_ci_pin(root: Path, manifest: dict, rep: Report) -> None:
     if tags is None:
         print(f"NOTE: could not read release tags from {kernels['repository']} (no network?): the CI pin "
               f"{sha[:12]} was NOT verified against tag v{named} -- skipped, not passed")
-        return
+        return False
     if not rep.check(named in tags, f"release tag v{named} (consumer_ci_pin) exists in {kernels['repository']}",
                      f"tags seen: {sorted(tags)[-5:]}"):
-        return
+        return True
     pinned = [v for v, c in tags.items() if c.startswith(sha) or sha.startswith(c)]
     if not rep.check(bool(pinned), f"CI pin {sha[:12]} is the commit of a release tag of {KERNEL_PACKAGE}",
                      f"no tag's commit matches; v{named} is {tags[named][:12]}"):
-        return
+        return True
     pv = max(pinned, key=parse_version)
     if parse_version(pv) == parse_version(named):
         rep.ok(f"CI pin {sha[:12]} is the commit of v{named}, the tag consumer_ci_pin names")
@@ -382,6 +404,7 @@ def check_ci_pin(root: Path, manifest: dict, rep: Report) -> None:
               f"{MANIFEST} (the manifest is byte-identical across them)")
     else:
         rep.fail(f"CI pin {sha[:12]} is v{pv}, BELOW the v{named} that consumer_ci_pin names")
+    return True
 
 
 def kernel_extras(pyproject: dict, package: str = KERNEL_PACKAGE) -> dict[str, str]:
@@ -404,7 +427,7 @@ def check_extra_floors(root: Path, manifest: dict, rep: Report) -> None:
     if rec_floor is None:
         return
     for extra, req in sorted(kernel_extras(py).items()):
-        fl = floor_of(req.split(";", 1)[0].split("]", 1)[-1] if "[" in req.split(";", 1)[0] else re.sub(r"^\s*[A-Za-z0-9][A-Za-z0-9._-]*", "", req.split(";", 1)[0]))
+        fl = floor_of(fast_requirement(py, KERNEL_PACKAGE, extra)[1])
         if not rep.check(fl is not None, f"extra {extra!r} pins {KERNEL_PACKAGE} with a single >= floor ({req!r})"):
             continue
         rep.check(_cmp(parse_version(fl), parse_version(rec_floor)) >= 0,
@@ -458,6 +481,9 @@ def main() -> int:
     ap.add_argument("--root", default=".", help="this repository's root")
     ap.add_argument("--sibling", default=None, metavar="PATH",
                     help="the sibling repository's checkout (byte-identical manifest, kernel-first floors)")
+    ap.add_argument("--require-tags", action="store_true",
+                    help="exit 2 when the kernel repository's release tags cannot be read (CI: the pin must be verified, "
+                         "never skipped)")
     a = ap.parse_args()
     root = Path(a.root).resolve()
     rep = Report()
@@ -472,7 +498,7 @@ def main() -> int:
     try:
         check_local(root, manifest, rep)
         check_extra_floors(root, manifest, rep)
-        check_ci_pin(root, manifest, rep)
+        pin_verified = check_ci_pin(root, manifest, rep)
         if a.sibling:
             check_sibling(root, Path(a.sibling).resolve(), manifest, rep)
     except (OSError, ValueError, KeyError, TypeError) as e:
@@ -481,6 +507,10 @@ def main() -> int:
     if rep.failed:
         print(f"FAIL: {rep.failed} check(s) failed")
         return 1
+    if not pin_verified and a.require_tags:
+        print(f"FAIL: --require-tags: the release tags of {KERNEL_PACKAGE} could not be read, so the CI pin is "
+              "unverified -- the check cannot run")
+        return 2
     print(f"OK: {MANIFEST} agrees with pyproject.toml, {CLAIMS} and {CAPABILITIES}"
           + (" and with the sibling" if a.sibling else ""))
     return 0

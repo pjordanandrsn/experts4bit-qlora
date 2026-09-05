@@ -304,6 +304,12 @@ def serving_position_warnings(doc: dict, by_id: dict, status_text: str) -> list[
     return out
 
 
+def warning_lines(w: str) -> list[str]:
+    """A warning as the log line and as a GitHub Actions ``::warning::`` annotation,
+    so CI surfaces it on the run instead of leaving it in a green step's log."""
+    return [f"WARN: {w}", f"::warning::{w}"]
+
+
 def _check_numbers(cap: dict, cid: str, errors: list[str]) -> None:
     def walk(node, path: str) -> None:
         if isinstance(node, str):
@@ -452,7 +458,8 @@ def main() -> int:
     status_path = root / str(proj.get("status_file") or "docs/STATUS.md")
     if status_path.is_file():
         for w in serving_position_warnings(doc, by_id, read_text(status_path)):
-            print("WARN:", w)
+            for line in warning_lines(w):
+                print(line)
     print(f"OK: {a.capabilities}: {len(doc['capabilities'])} capabilities, "
           f"{sum(len(c['claim_ids']) for c in doc['capabilities'])} claim references, canonical package {pname}")
     return 0

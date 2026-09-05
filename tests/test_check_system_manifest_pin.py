@@ -67,3 +67,39 @@ def test_the_repository_extras_are_at_or_above_the_fast_floor():
         fl = csm.floor_of(csm.fast_requirement(py, csm.KERNEL_PACKAGE, extra)[1])
         assert fl is not None, (extra, req)
         assert csm.parse_version(fl) >= csm.parse_version(fast), f"extra {extra!r} floors {fl} below fast's {fast}"
+
+
+# ------------------------------------------------- the review of #406: what the first version let through --
+
+def test_ci_kernel_pin_skips_comments_and_lines_that_do_not_pip_install():
+    sha = "d58b39fbb51f15721a32953a4dbd3808a5d1f3a6"
+    pin = f"grouped-nf4-gemm @ git+https://github.com/o/grouped-nf4-gemm.git@{sha}"
+    assert csm.ci_kernel_pin(f'          # was: pip install "{pin}"\n') is None
+    assert csm.ci_kernel_pin(f'          echo "{pin}"\n') is None
+    assert csm.ci_kernel_pin(f'          # a note\n          python -m pip install "{pin}"\n') == ("o/grouped-nf4-gemm", sha)
+
+
+def test_pin_version_takes_the_v_prefixed_or_last_version_in_the_prose():
+    assert csm.pin_version("installs the kernel package from the git commit of the v0.30.1 release") == "0.30.1"
+    assert csm.pin_version("pinned at 0.30.0, moved to v0.30.1") == "0.30.1"
+    assert csm.pin_version("v0.30.1 (was 0.30.0)") == "0.30.1"
+    assert csm.pin_version("0.30.0 then 0.30.1") == "0.30.1"
+    assert csm.pin_version("no version here") is None
+
+
+def test_unreadable_tags_are_a_note_locally_and_exit_2_under_require_tags(monkeypatch, capsys):
+    """Offline, the pin check skips with a NOTE and main() exits 0; CI passes --require-tags, under which the
+    unverified pin is exit 2 -- before, a failed ls-remote left CI green with the pin unchecked."""
+    monkeypatch.setattr(csm, "release_tags", lambda *a, **k: None)
+    monkeypatch.setattr(csm.sys, "argv", ["check_system_manifest.py", "--root", str(ROOT)])
+    assert csm.main() == 0
+    assert "NOTE: could not read release tags" in capsys.readouterr().out
+    monkeypatch.setattr(csm.sys, "argv", ["check_system_manifest.py", "--root", str(ROOT), "--require-tags"])
+    assert csm.main() == 2
+    out = capsys.readouterr().out
+    assert "FAIL: --require-tags" in out and "unverified" in out
+
+
+def test_the_repository_workflow_passes_require_tags():
+    text = (ROOT / csm.CI_WORKFLOW).read_text(encoding="utf-8")
+    assert "python scripts/check_system_manifest.py --require-tags" in text
