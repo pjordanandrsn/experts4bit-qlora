@@ -7,8 +7,13 @@
 # 4096 probe); the grid seq-ascending, rank-ascending, the (512, 8) anchor first, fused_attn4 (PRIMARY) then reference_attn4 per cell;
 # alpha = 2r; --expect-trainable = (r/8) x the tp2 anchor count; --attn-4bit 1 with the structural census (tp3 T10); one process, one
 # JSON, one `perl alarm` per arm from the planning curve; every non-run is a stub row. STOP rules (PREREG): STOP-1 anchor +-10 % of tp2's
-# fused s/step; STOP-4 projected spend > 1.5 x estimate; STOP-5 at 80 % of the guard (P41_DEADLINE_EPOCH, from the launcher's
-# E4B_RENT_DEADLINE_EPOCH). `--plan` prints the arm plan and exits (no box needed; the controller's tests read it).
+# fused s/step; STOP-2 an OOM at a sweep cell ends the family's ascent at that seq; STOP-3 two VOIDs of one class in a family;
+# STOP-4 projected spend > 1.5 x the approved estimate (rate + estimate from the launcher's approval line, mandatory); STOP-5 at
+# 80 % of the guard (P41_DEADLINE_EPOCH = the launcher's E4B_RENT_DEADLINE_EPOCH). Every arm's receipt passes the admission rules
+# in p41_admit.py (steps, tokens sha, trainable count, attn4 census, engagement, C1) or is rewritten as a VOID row; the p41c probe
+# yields its own footprint row. The box is refused unless it is the registered class; the exact machine is recorded (box.json).
+# Helpers come from the repository archive at a COMMIT (never a tag), each file sha256-verified before anything runs.
+# `--plan` prints the arm plan and exits (no box needed; the controller's tests read it).
 set -uo pipefail
 PLAN=0; [ "${1:-}" = "--plan" ] && PLAN=1
 LANE=p41; W=${P41_WORKDIR:-/root/$LANE}
@@ -20,8 +25,13 @@ LR=${P41_LR:-1e-4}; ACCUM=${P41_ACCUM:-1}; AUTOCAST=${P41_AUTOCAST:-0}; SEED=${P
 DATASET=${P41_DATASET:-clinical}; PREREG=${P41_PREREG:-p41/P41-PREREG.md}
 E4B_VER=${P41_E4B_VER:-0.35.3}; GNF4_VER=${P41_GNF4_VER:-0.30.2}            # the shipped cut from PyPI at launch (recorded)
 TF_VER=${P41_TRANSFORMERS_VER:-5.16.1}; BNB_VER=${P41_BNB_VER:-0.50.1}       # tp1/P38's e4b-side pins, as tp2 ran them
-E4B_SRC_REF=${P41_E4B_SRC_REF:-v$E4B_VER}
-DEADLINE=${P41_DEADLINE_EPOCH:-0}; RATE=${P41_USD_PER_HOUR:-0}; EST=${P41_EST_USD:-0}
+E4B_SRC_REF=${P41_E4B_SRC_REF:-0c2a256dcdc2cb0a83cf7692224a8aa716f61ecd}   # = tag v0.35.3 resolved to its commit (tags move; commits do not)
+# the four helper files at that commit, sha256 (git show v0.35.3:<path> | sha256sum on the controller, 2026-09-06); a mismatch refuses the run
+HELPER_SHAS="bench/flagship-matrix/drivers/n9_datasets.py=7c6653bf6dd94c307112567638f2dcc0905b71cbde5667cf3ca859f5f6793544 bench/flagship-matrix/ds_manifest.json=38b3508f2d0bb51c7217cfd6768a4866a5b300a158631a7803016c1f9883a9e3 bench/train-anchor/train_anchor.py=139aa3eccb3a5dc2bb67627f70c07677927ecbfaec03ea91a608b2c69cde9b7f bench/train-anchor/train_anchor_gate.py=171fde58ad9451e27ba1268828deb47d089bf9168febf6baaa6fc0cb69de948e"
+DATASET_SHA_REG=${P41_DATASET_SHA:-76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791}   # the registered clinical set (PREREG "Fixture")
+GPU_CLASS=${P41_GPU_CLASS:-"RTX 5090"}                                       # the registered box class (PREREG "Box class"); anything else is refused
+INSTANCE_ID=${P41_INSTANCE_ID:-UNKNOWN}; PROVIDER=${P41_PROVIDER:-UNKNOWN}; WALLCLOCK_S=${P41_WALLCLOCK_S:-0}   # from the launcher (e4b#464)
+DEADLINE=${P41_DEADLINE_EPOCH:-0}; RATE=${P41_USD_PER_HOUR:-0}; EST=${P41_EST_USD:-0}   # STOP-4/5 inputs: the approval line's, via the launcher
 ARM_OVERHEAD=${P41_ARM_OVERHEAD_S:-900}; ALARM_FACTOR=${P41_ALARM_FACTOR:-1.5}; CURVE_EXP=${P41_CURVE_EXP:-1.2}   # planning curve: 60 x s512 x (seq/512)^1.2, x1.5, + load/evals
 ANCHOR_STRICT=${P41_ANCHOR_STRICT:-1}; STOP1_TOL=${P41_STOP1_TOL:-0.10}
 T_START=$(date +%s)
@@ -62,7 +72,8 @@ export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOK
 : > summary.txt; : > versions.txt; touch STARTED; echo "$T_START" > STARTED
 echo "RUN $RUN_ID prereg=$PREREG families=$FAMILIES seqs=$SEQS ranks=$RANKS probe=$PROBE_SEQ steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N lr=$LR accum=$ACCUM autocast=$AUTOCAST seed=$SEED dataset=$DATASET deadline_epoch=$DEADLINE rate_usd_h=$RATE est_usd=$EST" | tee -a summary.txt
 plan | tee -a summary.txt
-[ -s $W/tp3_arm.py ] || { echo "STAGE MISSING: tp3_arm.py"; touch TP_DONE; exit 9; }
+[ -s $W/tp3_arm.py ] && [ -s $W/p41_admit.py ] || { echo "STAGE MISSING: tp3_arm.py / p41_admit.py" | tee -a summary.txt; touch TP_DONE; exit 9; }
+{ [ "$RATE" != "0" ] && [ "$EST" != "0" ] && [ "$DEADLINE" -gt 0 ]; } || { echo "REFUSED: no rate / estimate / deadline (P41_USD_PER_HOUR=$RATE P41_EST_USD=$EST P41_DEADLINE_EPOCH=$DEADLINE) -- STOP-4/5 would be blind; the launcher passes the approval line's numbers" | tee -a summary.txt; touch TP_DONE; exit 9; }
 say "install e4b (image python, PyPI): experts4bit-qlora==$E4B_VER grouped-nf4-gemm==$GNF4_VER transformers==$TF_VER bitsandbytes==$BNB_VER"
 perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --prefer-binary \
   "experts4bit-qlora==$E4B_VER" "grouped-nf4-gemm==$GNF4_VER" "transformers==$TF_VER" "bitsandbytes==$BNB_VER" \
@@ -81,16 +92,37 @@ assert transformers.__version__ == os.environ["TF_VER"], transformers.__version_
 print("p41 tripwire OK (e4b):", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__, "triton", triton.__version__, "transformers", transformers.__version__, "bnb", bitsandbytes.__version__)
 open("versions.txt", "a").write(f"e4b {e.__version__} (PyPI)\ngnf4 {md.version('grouped-nf4-gemm')} (PyPI)\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {bitsandbytes.__version__}\n")
 PYT
-nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | tee forensics.txt
+nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,pci.bus_id,serial --format=csv,noheader | tee forensics.txt
 lscpu | grep -E "Model name|NUMA node\(s\)" | tee -a forensics.txt; grep MemTotal /proc/meminfo | tee -a forensics.txt; df -h /root | tail -1 | tee -a forensics.txt
+echo "hostname=$(hostname) instance_id=$INSTANCE_ID provider=$PROVIDER kernel=$(uname -r) image_python=$(python -V 2>&1)" | tee -a forensics.txt
 python -c "import torch; assert torch.cuda.is_available(); print('cuda ok')" || { echo "DUD BOX" | tee -a summary.txt; touch TP_DONE; exit 10; }
+# box identity (PREREG "Box class"; the CSO's read): the registered GPU class, exactly one of it, or the box is refused -- a working ssh host is not equivalence
+GPU_NAMES=$(nvidia-smi --query-gpu=name --format=csv,noheader); GPU_N=$(echo "$GPU_NAMES" | grep -c .)
+if [ "$GPU_N" != "1" ] || ! echo "$GPU_NAMES" | grep -q "$GPU_CLASS"; then echo "BOX REFUSED: gpu '$GPU_NAMES' x$GPU_N is not the registered class '$GPU_CLASS' x1" | tee -a summary.txt; touch BOX_REFUSED TP_DONE; exit 12; fi
+python3 - "$W" "$INSTANCE_ID" "$PROVIDER" "$GPU_CLASS" "$RUN_ID" <<'PYB'
+import json, subprocess, sys, os, socket
+W, iid, prov, cls, run_id = sys.argv[1:6]
+q = subprocess.run(["nvidia-smi", "--query-gpu=name,uuid,pci.bus_id,serial,memory.total,driver_version", "--format=csv,noheader"], capture_output=True, text=True).stdout.strip().split(", ")
+box = {"run_id": run_id, "instance_id": iid, "provider": prov, "registered_gpu_class": cls, "gpu_name": q[0], "gpu_uuid": q[1], "pci_bus_id": q[2], "gpu_serial": q[3],
+       "gpu_memory_total": q[4], "driver": q[5], "hostname": socket.gethostname(), "cpu": [l for l in open("/proc/cpuinfo") if l.startswith("model name")][:1],
+       "mem_total": [l.strip() for l in open("/proc/meminfo") if l.startswith("MemTotal")][:1], "written_by": "p41_run.sh"}
+json.dump(box, open(os.path.join(W, "box.json"), "w"), indent=1)
+open(os.path.join(W, "summary.txt"), "a").write("BOX " + json.dumps({k: box[k] for k in ("instance_id", "provider", "gpu_name", "gpu_uuid", "hostname")}) + "\n")
+print("BOX", box["instance_id"], box["gpu_name"], box["gpu_uuid"], box["hostname"])
+PYB
 # helpers at the cut (archive tarball: tp1 amendment 2), the train anchor gate, the registered text (sha-verified)
-case "$E4B_SRC_REF" in *[!0-9a-f]*|"") SRC_URL="https://github.com/pjordanandrsn/experts4bit-qlora/archive/refs/tags/$E4B_SRC_REF.tar.gz";; *) SRC_URL="https://github.com/pjordanandrsn/experts4bit-qlora/archive/$E4B_SRC_REF.tar.gz";; esac
+# Warden MEDIUM on #466: a commit, never a tag; no shell string built from the ref; every helper file sha256-verified before it runs as root
+case "$E4B_SRC_REF" in *[!0-9a-f]*|"") echo "REFUSED: P41_E4B_SRC_REF '$E4B_SRC_REF' is not a 40-hex commit" | tee -a summary.txt; touch TP_DONE; exit 9;; esac
+[ ${#E4B_SRC_REF} -eq 40 ] || { echo "REFUSED: P41_E4B_SRC_REF is not 40 hex chars" | tee -a summary.txt; touch TP_DONE; exit 9; }
+SRC_URL="https://github.com/pjordanandrsn/experts4bit-qlora/archive/$E4B_SRC_REF.tar.gz"
 say "fetching repo helpers from $SRC_URL"
-rm -rf $W/e4b-src && mkdir -p $W/e4b-src && perl -e 'alarm 600; exec @ARGV' bash -c "curl -sL $SRC_URL | tar xz -C $W/e4b-src --strip-components=1"; rc=$?
-{ [ $rc -ne 0 ] || [ ! -s $W/e4b-src/bench/flagship-matrix/ds_manifest.json ]; } && { echo "SRC FETCH FAIL ($SRC_URL)" | tee -a summary.txt; touch TP_DONE; exit 9; }
-cp $W/e4b-src/bench/flagship-matrix/drivers/n9_datasets.py $W/e4b-src/bench/flagship-matrix/ds_manifest.json $W/e4b-src/bench/train-anchor/train_anchor.py $W/e4b-src/bench/train-anchor/train_anchor_gate.py $W/
-echo "HELPERS e4b-src ref=$E4B_SRC_REF ds_manifest sha=$(sha256sum $W/ds_manifest.json | awk '{print $1}')" | tee -a summary.txt
+rm -rf $W/e4b-src && mkdir -p $W/e4b-src
+perl -e 'alarm 600; exec @ARGV' curl -fsSL --retry 3 -o $W/e4b-src.tar.gz "$SRC_URL" && tar xzf $W/e4b-src.tar.gz -C $W/e4b-src --strip-components=1; rc=$?
+[ $rc -ne 0 ] && { echo "SRC FETCH FAIL rc=$rc ($SRC_URL)" | tee -a summary.txt; touch TP_DONE; exit 9; }
+for kv in $HELPER_SHAS; do f=${kv%%=*}; want=${kv#*=}; got=$(sha256sum "$W/e4b-src/$f" 2>/dev/null | awk '{print $1}')
+  [ "$got" = "$want" ] || { echo "HELPER MISMATCH $f: $got != pinned $want -- nothing from the archive runs" | tee -a summary.txt; touch TP_DONE; exit 9; }
+  cp "$W/e4b-src/$f" $W/; echo "HELPER OK $f sha=$want" >> summary.txt; done
+echo "HELPERS e4b-src commit=$E4B_SRC_REF (4 files sha256-verified against the pins)" | tee -a summary.txt
 say "train anchor"
 ANCHOR_OUT=$W/anchor.json perl -e 'alarm 900; exec @ARGV' python $W/train_anchor.py > logs/anchor.log 2>&1; tail -3 logs/anchor.log
 python $W/train_anchor_gate.py $W/anchor.json | tee logs/anchor_gate.log; arc=${PIPESTATUS[0]}
@@ -101,8 +133,9 @@ say "dataset: $DATASET (n9_datasets.py, sha-verified against ds_manifest.json)"
 mkdir -p $W/data && (cd $W/data && python $W/n9_datasets.py $W/data > $W/logs/datasets.log 2>&1); tail -2 logs/datasets.log
 DATA=$W/data/ds_$DATASET.json
 DATA_SHA=$(python -c "import json; print(json.load(open('$W/ds_manifest.json'))['$DATASET']['sha256'])")
+[ "$DATA_SHA" = "$DATASET_SHA_REG" ] || { echo "DATASET NOT THE REGISTERED FIXTURE: manifest says $DATA_SHA, the pre-registration says $DATASET_SHA_REG" | tee -a summary.txt; touch TP_DONE; exit 13; }
 GOT_SHA=$(sha256sum $DATA | awk '{print $1}'); [ "$GOT_SHA" = "$DATA_SHA" ] || { echo "DATASET MISMATCH: $GOT_SHA != $DATA_SHA" | tee -a summary.txt; touch TP_DONE; exit 13; }
-echo "DATASET $DATASET sha=$DATA_SHA" | tee -a summary.txt
+echo "DATASET $DATASET sha=$DATA_SHA (== the registered fixture sha)" | tee -a summary.txt
 
 # ---------------------------------------------------------------- helpers
 vram_start(){ ( while :; do echo "$(date -u +%s) $(nvidia-smi --query-gpu=memory.used,utilization.gpu,power.draw --format=csv,noheader,nounits)"; sleep 1; done ) > $W/vram_$1.txt 2>/dev/null & echo $!; }
@@ -112,12 +145,23 @@ stubw(){ python3 - "$W" "$STEPS" "$ACCUM" "$PREREG" "$@" <<'PYS'
 import json, os, sys
 W, steps, accum, prereg, fam, tag, arm, status, reason, seq, r = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], *sys.argv[5:12]
 rec = {"framework": "e4b", "fam": fam, "arm": arm, "tag": tag, "status": status, "reason": reason[:800], "steps": steps, "seq": int(seq), "r": int(r), "alpha": 2 * int(r), "accum": accum,
-       "written_by": "p41_run.sh", "prereg": prereg}
+       "admitted": False, "written_by": "p41_run.sh", "prereg": prereg}
 json.dump(rec, open(os.path.join(W, f"{fam}_e4b_{tag}.json"), "w"), indent=1)
 print(f"STUB {status.upper()} {fam}/e4b/{tag}: {reason[:160]}")
 PYS
   echo "$1/e4b/$2 STUB $4: $5" | cut -c1-300 >> summary.txt; }
 elapsed(){ echo $(( $(date +%s) - T_START )); }
+# the STOP state machine (PREREG "STOP rules"): one file per rule fired + stop_state.json; a stop is reported, never worked around
+stop_now(){ local RULE=$1 FAM=$2 REASON=$3; STOPPED="$RULE: $REASON"; echo "$STOPPED" | tee -a summary.txt; touch ${RULE//-/}
+  python3 - "$W" "$RULE" "$FAM" "$REASON" "$(elapsed)" "$DEADLINE" "$T_START" "$RATE" "$EST" <<'PYX'
+import json, os, sys, datetime
+W, rule, fam, reason, el, dl, t0, rate, est = sys.argv[1:10]
+p = os.path.join(W, "stop_state.json"); st = json.load(open(p)) if os.path.exists(p) else {"stops": []}
+st["stops"].append({"rule": rule, "family": fam, "reason": reason[:600], "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "elapsed_s": int(el), "guard_s": int(dl) - int(t0), "rate_usd_h": rate, "est_usd": est, "effect": "remaining cells NOT_RUN with the reason; continuing needs a new approval" if rule in ("STOP-4", "STOP-5") else "the family's remaining cells NOT_RUN; the cause is the finding"})
+json.dump(st, open(p, "w"), indent=1)
+PYX
+}
 stop5_due(){ [ "$DEADLINE" -gt 0 ] || return 1; local now; now=$(date +%s); [ $(( now - T_START )) -ge $(( (DEADLINE - T_START) * 80 / 100 )) ]; }
 stop4_due(){ [ "$RATE" != "0" ] && [ "$EST" != "0" ] || return 1
   python3 -c "import sys; el,rate,est,rem=map(float,sys.argv[1:]); proj=(el+rem)/3600.0*rate; sys.exit(0 if proj > 1.5*est else 1)" "$(elapsed)" "$RATE" "$EST" "$1"; }
@@ -155,10 +199,20 @@ arm(){ local FAM=$1 TAG=$2 ARM=$3 SEQ=$4 R=$5 AL=$6 EXP=$7 MID=$8 REV=$9 OFF=${1
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $EVAL_EVERY --eval-n $EVAL_N --expect-trainable $EXP --prereg $PREREG \
       --out $W --adapter-dir $W/adapters > logs/run_${FAM}_e4b_$TAG.log 2>&1
   local rc=$?; vram_stop $sp
-  if [ $rc -eq 142 ] && [ ! -s $W/${FAM}_e4b_$TAG.json ]; then stubw $FAM $TAG $ARM alarm "arm alarm $AL s (SIGALRM; the process could not write its own stub)" $SEQ $R; fi
+  if [ ! -s $W/${FAM}_e4b_$TAG.json ]; then   # the harness left no receipt: the row is the lane's (alarm, or a harness error with the exit code)
+    if [ $rc -eq 142 ]; then stubw $FAM $TAG $ARM alarm "arm alarm $AL s (SIGALRM; the process could not write its own stub)" $SEQ $R
+    else stubw $FAM $TAG $ARM harness_error "no receipt; exit $rc; $(tail -c 300 logs/run_${FAM}_e4b_$TAG.log | tr '\n' ' ')" $SEQ $R; fi
+  fi
   grep -aE "^CELL |^LOAD OK|^ENGAGE|^STUB|Error|error:" logs/run_${FAM}_e4b_$TAG.log | tail -3 | cut -c1-300 | sed "s/^/    /"
   { echo -n "$FAM/e4b/$TAG rc=$rc "; grep -aE "^CELL " logs/run_${FAM}_e4b_$TAG.log | tail -1 | cut -c1-400; echo; } >> summary.txt
   python -c "import torch; torch.cuda.empty_cache()" 2>/dev/null; nvidia-smi --query-gpu=memory.used --format=csv,noheader; }
+# admit FAM TAG ARM SEQ R EXP NL A4: the validity rules on the receipt (p41_admit.py) -> ADMIT_RC 0 ok / 1 void (rewritten) / 2 the harness's own row / 3 none;
+# ADMIT_CLASS = the VOID class (STOP-3 counts them per family); ADMIT_STATUS = the receipt's status
+admit(){ local FAM=$1 TAG=$2 ARM=$3 SEQ=$4 R=$5 EXP=$6 NL=$7 A4=$8; local f=$W/${FAM}_e4b_$TAG.json
+  local TOK_SHA; TOK_SHA=$(python3 -c "import json; print(json.load(open('$W/tokens_${FAM}_s${SEQ}.json'))['sha256'])" 2>/dev/null || echo none)
+  local line; line=$(python3 $W/p41_admit.py admit "$f" --steps $STEPS --tokens-sha "$TOK_SHA" --expect-trainable $EXP --n-layers $NL --attn4-census $A4 --arm $ARM); ADMIT_RC=$?
+  echo "$line" | cut -c1-300 | tee -a summary.txt
+  ADMIT_CLASS=$(echo "$line" | grep -o 'class=[a-z0-9]*' | head -1 | cut -d= -f2); ADMIT_STATUS=$(python3 -c "import json; print(json.load(open('$f')).get('status'))" 2>/dev/null || echo none); }
 # STOP-1: the (512, 8) fused anchor vs tp2's fused s/step, +-10 % (P40's anchor rule); a disagreement halts the family's remaining cells
 stop1_check(){ local FAM=$1 FS=$2; local f=$W/${FAM}_e4b_fused_attn4_s512_r8.json
   python3 - "$f" "$FS" "$STOP1_TOL" <<'PY1'
@@ -166,7 +220,7 @@ import json, sys
 p, ref, tol = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
 try: r = json.load(open(p))
 except Exception as e: print(f"STOP-1 UNDECIDED: anchor receipt unreadable ({e})"); sys.exit(2)
-if r.get("status") != "ok": print(f"STOP-1 UNDECIDED: anchor status {r.get('status')}"); sys.exit(2)
+if r.get("status") != "ok" or r.get("admitted") is not True: print(f"STOP-1 UNDECIDED: anchor status {r.get('status')} admitted={r.get('admitted')} -- not comparable"); sys.exit(2)
 s = float(r.get("s_per_step_median_11plus", 0) or 0); d = (s - ref) / ref
 print(f"ANCHOR fused s512 r8 = {s:.3f} s/step vs tp2 {ref:.3f} ({d*100:+.1f} %)")
 sys.exit(0 if abs(d) <= tol else 1)
@@ -178,7 +232,7 @@ STOPPED=""
 for FAM in $FAMILIES; do
   row=$(family_row $FAM) || { echo "UNKNOWN FAMILY $FAM (no row in the pre-registration's table; nothing run)" | tee -a summary.txt; continue; }
   read -r MID REV FS RS EX NL A4 OFF FAL <<< "$row"
-  say "===== family $FAM ($MID @ $REV; offload=$OFF; fused anchor $FS s, reference anchor $RS s)"
+  say "===== family $FAM ($MID @ $REV; offload=$OFF; fused anchor $FS s, reference anchor $RS s; n_layers $NL, attn4 census $A4)"
   FETCH_REASON=""; fetch $FAM $MID $REV $FAL; frc=$?
   if [ $frc -ne 0 ]; then st=not_run; [ $frc -eq 2 ] && st=load_fault
     for SEQ in $SEQS; do for R in $RANKS; do stubw $FAM fused_attn4_s${SEQ}_r${R} fused $st "$FETCH_REASON" $SEQ $R; stubw $FAM reference_attn4_s${SEQ}_r${R} reference $st "$FETCH_REASON" $SEQ $R; done; done
@@ -189,27 +243,45 @@ for FAM in $FAMILIES; do
       && echo "TOKENS $FAM seq=$SEQ sha=$(python3 -c "import json; print(json.load(open('$W/tokens_${FAM}_s${SEQ}.json'))['sha256'])")" | tee -a summary.txt \
       || { tail -2 logs/prepare_${FAM}_s${SEQ}.log; echo "$FAM: TOKENS FAIL seq=$SEQ" | tee -a summary.txt; }
   done
+  OOM_SEQ=0; declare -A VOIDS=()      # STOP-2: the seq at which an OOM ended the ascent; STOP-3: VOID count per class, this family
   for SEQ in $SEQS; do for R in $RANKS; do
     EXP=$(expect_for $EX $R); FAL_F=$(alarm_for $FS $SEQ); FAL_R=$(alarm_for $RS $SEQ)
     for ARM in fused reference; do
       TAG=${ARM}_attn4_s${SEQ}_r${R}; AL=$FAL_F; [ $ARM = reference ] && AL=$FAL_R
       if [ -n "$STOPPED" ]; then stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
-      if stop5_due; then STOPPED="STOP-5: 80 % of the guard reached ($(elapsed) s of $((DEADLINE - T_START)) s); remaining cells NOT_RUN, a new run needs a new approval"; echo "$STOPPED" | tee -a summary.txt; touch STOP5; stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
-      if stop4_due "$(remaining_alarm_sum $FAM)"; then STOPPED="STOP-4: projected spend > 1.5 x the estimate (elapsed $(elapsed) s at \$$RATE/h, estimate \$$EST); remaining cells NOT_RUN, continuing needs a new approval"; echo "$STOPPED" | tee -a summary.txt; touch STOP4; stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
+      if [ "$OOM_SEQ" -gt 0 ] && [ "$SEQ" -ge "$OOM_SEQ" ]; then stubw $FAM $TAG $ARM not_run "STOP-2: OOM at seq $OOM_SEQ ended this family's ascent; seq $SEQ >= $OOM_SEQ NOT_RUN (no workload weakening)" $SEQ $R; continue; fi
+      if stop5_due; then stop_now STOP-5 $FAM "80 % of the guard reached ($(elapsed) s of $((DEADLINE - T_START)) s); remaining cells NOT_RUN, a new run needs a new approval"; stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
+      if stop4_due "$(remaining_alarm_sum $FAM)"; then stop_now STOP-4 $FAM "projected spend > 1.5 x the approved estimate (elapsed $(elapsed) s at \$$RATE/h, estimate \$$EST, remaining planning-curve $(remaining_alarm_sum $FAM) s); remaining cells NOT_RUN, continuing needs a new approval"; stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
       arm $FAM $TAG $ARM $SEQ $R $AL $EXP "$MID" $REV $OFF
+      admit $FAM $TAG $ARM $SEQ $R $EXP $NL $A4
+      if [ "$ADMIT_STATUS" = "oom" ]; then OOM_SEQ=$SEQ; touch STOP2; echo "STOP-2: OOM at ($SEQ, r$R, $ARM) -- this family's ascent ends at seq $SEQ; cells at seq >= $SEQ NOT_RUN, the OOM is a row" | tee -a summary.txt
+        python3 - "$W" "$FAM" "$SEQ" "$R" "$ARM" <<'PY2'
+import json, os, sys, datetime
+W, fam, seq, r, arm = sys.argv[1:6]; p = os.path.join(W, "stop_state.json"); st = json.load(open(p)) if os.path.exists(p) else {"stops": []}
+st["stops"].append({"rule": "STOP-2", "family": fam, "reason": f"OOM at seq {seq} r {r} {arm}; the family's ascent ends at that seq", "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "effect": f"cells at seq >= {seq} NOT_RUN; the probe still runs (p41c's own product)"})
+json.dump(st, open(p, "w"), indent=1)
+PY2
+      fi
+      if [ "$ADMIT_RC" = "1" ] && [ -n "$ADMIT_CLASS" ]; then VOIDS[$ADMIT_CLASS]=$(( ${VOIDS[$ADMIT_CLASS]:-0} + 1 ))
+        if [ "${VOIDS[$ADMIT_CLASS]}" -ge 2 ]; then stop_now STOP-3 $FAM "two VOID arms of class '$ADMIT_CLASS' in $FAM (the second: $TAG) -- the family halts; the cause is reported on the issue"; fi
+      fi
       if [ $SEQ = 512 ] && [ $R = 8 ] && [ $ARM = fused ]; then
         stop1_check $FAM $FS | tee -a summary.txt; s1=${PIPESTATUS[0]}
-        if [ "$s1" = "1" ] && [ "$ANCHOR_STRICT" = "1" ]; then STOPPED="STOP-1: the (512, 8) fused anchor disagrees with tp2 beyond +-10 % -- the box/stack is not comparable; remaining $FAM cells NOT_RUN"; echo "$STOPPED" | tee -a summary.txt; touch STOP1; fi
+        if [ "$s1" = "1" ] && [ "$ANCHOR_STRICT" = "1" ]; then stop_now STOP-1 $FAM "the (512, 8) fused anchor disagrees with tp2 beyond +-10 % -- the box/stack is not comparable; remaining $FAM cells NOT_RUN"; fi
+        [ "$s1" = "2" ] && [ "$ANCHOR_STRICT" = "1" ] && stop_now STOP-1 $FAM "the (512, 8) fused anchor did not produce an admitted receipt -- nothing to compare against tp2; remaining $FAM cells NOT_RUN"
       fi
     done
   done; done
+  # p41c: one probe cell at seq 4096, r 8, batch 1 -- its own footprint row (fit, never speed); it runs after STOP-2 (an OOM is its product), not after STOP-1/3/4/5
   TAG=fused_attn4_s${PROBE_SEQ}_r8_probe
   if [ -n "$STOPPED" ]; then stubw $FAM $TAG fused not_run "$STOPPED" $PROBE_SEQ 8
-  elif stop5_due; then echo "STOP-5 before the probe" | tee -a summary.txt; touch STOP5; stubw $FAM $TAG fused not_run "STOP-5: 80 % of the guard reached before the p41c probe" $PROBE_SEQ 8
-  else arm $FAM $TAG fused $PROBE_SEQ 8 $(alarm_for $FS $PROBE_SEQ) $(expect_for $EX 8) "$MID" $REV $OFF; fi
+  elif stop5_due; then stop_now STOP-5 $FAM "80 % of the guard reached before the p41c probe"; stubw $FAM $TAG fused not_run "$STOPPED" $PROBE_SEQ 8
+  else arm $FAM $TAG fused $PROBE_SEQ 8 $(alarm_for $FS $PROBE_SEQ) $(expect_for $EX 8) "$MID" $REV $OFF
+       admit $FAM $TAG fused $PROBE_SEQ 8 $(expect_for $EX 8) $NL $A4; fi
+  python3 $W/p41_admit.py footprint $W/${FAM}_e4b_$TAG.json --fam $FAM --seq $PROBE_SEQ --r 8 --vram $W/vram_${FAM}_e4b_$TAG.txt --out $W/${FAM}_p41c_footprint.json | tee -a summary.txt
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}
-  [ -n "$STOPPED" ] && case "$STOPPED" in STOP-1*) STOPPED="";; esac   # STOP-1 halts one family; the next family gets its own anchor
+  [ -n "$STOPPED" ] && case "$STOPPED" in STOP-1*|STOP-3*) STOPPED="";; esac   # STOP-1/STOP-3 halt one family; the next family gets its own anchor and its own count
 done
 echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"; cat versions.txt
 say "TP_DONE elapsed=$(elapsed)s"; touch TP_DONE

@@ -1,15 +1,23 @@
 """bench/p41 drivers (P41 R1, e4b#433): the lane script's plan is the pre-registration's grid, in its order, with its numbers;
-the controller driver refuses to run blind and stages exactly the harness + lane script. No box, no network, no compute."""
+the controller driver refuses to run blind and stages exactly the harness + lane script + admission rules; the admission rules
+turn a receipt that fails a validity rule into a VOID row and the p41c probe into a footprint row. No box, no network, no compute."""
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 RUN = REPO / "bench" / "p41" / "p41_run.sh"
 DRIVE = REPO / "bench" / "p41" / "p41_drive.sh"
+ADMIT = REPO / "bench" / "p41" / "p41_admit.py"
+sys.path.insert(0, str(ADMIT.parent))
+import p41_admit  # noqa: E402
 
 
 def _bash(*args: str, env: dict | None = None) -> subprocess.CompletedProcess:
@@ -92,6 +100,9 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
             "E4B_RENT_RUN_DIR",
             "E4B_RENT_RUN_ID",
             "E4B_RENT_DEADLINE_EPOCH",
+            "E4B_RENT_USD_PER_HOUR",
+            "E4B_RENT_EST_USD",
+            "E4B_RENT_INSTANCE_ID",
         )
     }
     out = _bash(str(DRIVE), env=env)
@@ -102,11 +113,15 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
         "E4B_RENT_RUN_DIR": "/tmp/run",
         "E4B_RENT_RUN_ID": "p41-r1-granite",
         "E4B_RENT_DEADLINE_EPOCH": "1788800000",
-        "E4B_RENT_INSTANCE_ID": "1",
+        "E4B_RENT_INSTANCE_ID": "50059999",
+        "E4B_RENT_PROVIDER": "vast:verified-secure",
         "P41_DRIVE_DRYRUN": "1",
-        "P41_RATE_USD_H": "0.60",
-        "P41_EST_USD": "1.98",
     }
+    out = _bash(str(DRIVE), env=env)
+    assert out.returncode == 78 and "E4B_RENT_USD_PER_HOUR is not set" in out.stdout, (
+        "no rate/estimate from the launcher → STOP-4 would be blind → refuse"
+    )
+    env.update({"E4B_RENT_USD_PER_HOUR": "0.66", "E4B_RENT_EST_USD": "1.98"})
     out = _bash(str(DRIVE), env=env)
     assert out.returncode == 0, out.stdout + out.stderr
     lines = out.stdout.splitlines()
@@ -114,6 +129,7 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
         ln.startswith("DRYRUN stage:")
         and "bench/tp3/tp3_arm.py" in ln
         and "bench/p41/p41_run.sh" in ln
+        and "bench/p41/p41_admit.py" in ln
         and "root@ssh5.vast.ai:/root/p41/" in ln
         for ln in lines
     )
@@ -121,8 +137,10 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
         ln.startswith("DRYRUN start:")
         and "P41_RUN_ID=p41-r1-granite" in ln
         and "P41_DEADLINE_EPOCH=1788800000" in ln
-        and "P41_USD_PER_HOUR=0.60" in ln
+        and "P41_USD_PER_HOUR=0.66" in ln
         and "P41_EST_USD=1.98" in ln
+        and "P41_INSTANCE_ID=50059999" in ln
+        and "P41_PROVIDER=vast:verified-secure" in ln
         for ln in lines
     )
     assert any(ln.startswith("DRYRUN fetch:") and "/tmp/run/p41/" in ln and "excluding adapters" in ln for ln in lines)
@@ -130,7 +148,7 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
 
 
 def test_lane_script_never_calls_the_provider_and_names_no_credential():
-    text = RUN.read_text() + DRIVE.read_text()
+    text = RUN.read_text() + DRIVE.read_text() + ADMIT.read_text()
     # the drivers drive a box the launcher already rented; they never touch the provider API, a key file or a token
     for forbidden in (
         "vast_provider",
@@ -145,9 +163,212 @@ def test_lane_script_never_calls_the_provider_and_names_no_credential():
         "sk-ant-",
     ):
         assert forbidden not in text, forbidden
-    assert (
-        "TP_DONE" in RUN.read_text()
-        and "STOP-5" in RUN.read_text()
-        and "STOP-1" in RUN.read_text()
-        and "STOP-4" in RUN.read_text()
+    run = RUN.read_text()
+    assert "TP_DONE" in run and all(f"STOP-{n}" in run for n in (1, 2, 3, 4, 5))
+    # the helpers come from a COMMIT, never a tag, each file pinned by sha256 and verified before anything runs (Warden MEDIUM on #466)
+    assert "refs/tags" not in run and 'bash -c "curl' not in run
+    import re
+
+    default_ref = re.search(r"E4B_SRC_REF=\$\{P41_E4B_SRC_REF:-([0-9a-f]+)\}", run).group(1)
+    assert len(default_ref) == 40
+    pins = dict(kv.split("=") for kv in re.search(r'HELPER_SHAS="([^"]+)"', run).group(1).split())
+    assert set(pins) == {
+        "bench/flagship-matrix/drivers/n9_datasets.py",
+        "bench/flagship-matrix/ds_manifest.json",
+        "bench/train-anchor/train_anchor.py",
+        "bench/train-anchor/train_anchor_gate.py",
+    }
+    assert all(len(v) == 64 for v in pins.values())
+    # the registered fixture sha is asserted, not narrated (PREREG "Fixture")
+    assert "76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791" in run
+    # the registered box class is refused if absent; the exact machine is recorded
+    assert 'GPU_CLASS=${P41_GPU_CLASS:-"RTX 5090"}' in run and "BOX_REFUSED" in run and "box.json" in run
+
+
+# ---- the admission rules (bench/p41/p41_admit.py): the harness's receipt vs the pre-registration's validity rules
+GRANITE = dict(steps=60, tokens_sha="a" * 64, expect_trainable=49_807_360, n_layers=32, attn4_census=128)
+
+
+def _ok_receipt(**over) -> dict:
+    rec = {
+        "framework": "e4b",
+        "fam": "granite",
+        "arm": "fused",
+        "tag": "fused_attn4_s512_r8",
+        "status": "ok",
+        "steps": 60,
+        "seq": 512,
+        "r": 8,
+        "alpha": 16,
+        "step_ms": [641.0] * 60,
+        "tokens": {"sha256": "a" * 64, "n_train": 1200},
+        "trainable_params": 49_807_360,
+        "trainable_mismatch": None,
+        "n_attn4": 128,
+        "structural_expected_n_attn4": 128,
+        "n_patched": 32,
+        "kernel_calls_per_step_min": 64,
+        "engagement_banners": ["[e4b] fast train: fused_grouped_lora on 32 layers"],
+        "C1_bit_exact": True,
+        "C1_experts_changed": 0,
+        "s_per_step_median_11plus": 0.641,
+        "peak_vram_gb": 2.511,
+        "eval_loss_final": 0.31,
+        "offload": False,
+        "grad_ckpt": "hf-nonreentrant",
+        "tokens_per_step": [512] * 60,
+        "prereg": "p41/P41-PREREG.md",
+    }
+    rec.update(over)
+    return rec
+
+
+def _admit(tmp_path: Path, rec: dict, arm: str = "fused", **over) -> tuple[int, dict]:
+    p = tmp_path / f"granite_e4b_{rec['tag']}.json"
+    p.write_text(json.dumps(rec))
+    kw = {**GRANITE, **over}
+    rc = p41_admit.main(
+        [
+            "admit",
+            str(p),
+            "--steps",
+            str(kw["steps"]),
+            "--tokens-sha",
+            kw["tokens_sha"],
+            "--expect-trainable",
+            str(kw["expect_trainable"]),
+            "--n-layers",
+            str(kw["n_layers"]),
+            "--attn4-census",
+            str(kw["attn4_census"]),
+            "--arm",
+            arm,
+        ]
     )
+    return rc, json.loads(p.read_text())
+
+
+def test_admission_admits_a_receipt_that_meets_every_registered_rule(tmp_path: Path):
+    rc, rec = _admit(tmp_path, _ok_receipt())
+    assert rc == 0 and rec["admitted"] is True and rec["status"] == "ok"
+    rc, rec = _admit(
+        tmp_path,
+        _ok_receipt(
+            arm="reference",
+            tag="reference_attn4_s512_r8",
+            n_patched=0,
+            kernel_calls_per_step_min=0,
+            engagement_banners=[],
+        ),
+        arm="reference",
+    )
+    assert rc == 0 and rec["admitted"] is True, (
+        "the fused-only rules (n_patched, kernel calls, banner) do not apply to the reference arm"
+    )
+
+
+@pytest.mark.parametrize(
+    "over,cls",
+    [
+        ({"step_ms": [641.0] * 59}, "steps"),
+        ({"tokens": {"sha256": "b" * 64}}, "tokens"),
+        (
+            {"trainable_params": 49_807_361, "trainable_mismatch": {"expected": 49_807_360, "got": 49_807_361}},
+            "trainable",
+        ),
+        ({"n_attn4": 127}, "attn4"),
+        ({"n_patched": 31}, "engagement"),
+        ({"kernel_calls_per_step_min": 63}, "engagement"),
+        ({"engagement_banners": ["NO '[e4b] fast train' banner on stdout (the census below decides)"]}, "engagement"),
+        ({"C1_bit_exact": False, "C1_experts_changed": 3}, "c1"),
+    ],
+)
+def test_admission_rewrites_a_rule_failure_as_a_void_row(tmp_path: Path, over: dict, cls: str):
+    rc, rec = _admit(tmp_path, _ok_receipt(**over))
+    assert rc == 1 and rec["status"] == "void" and rec["status_harness"] == "ok" and rec["admitted"] is False
+    assert rec["void_class"] == cls and cls in rec["void_reason"]
+    assert "s_per_step_median_11plus" in rec, "the measurement stays in the row; it just never enters a reading"
+
+
+def test_admission_leaves_the_harness_own_rows_and_names_a_harness_void_class(tmp_path: Path):
+    rc, rec = _admit(tmp_path, _ok_receipt(status="oom", reason="CUDA out of memory"))
+    assert rc == 2 and rec["status"] == "oom" and rec["admitted"] is False
+    rc, rec = _admit(tmp_path, _ok_receipt(status="void_trainable", reason="non-adapter trainables"))
+    assert rc == 1 and rec["status"] == "void_trainable" and rec["void_class"] == "trainable"
+    assert (
+        p41_admit.main(
+            [
+                "admit",
+                str(tmp_path / "absent.json"),
+                "--steps",
+                "60",
+                "--tokens-sha",
+                "x",
+                "--expect-trainable",
+                "1",
+                "--n-layers",
+                "1",
+                "--attn4-census",
+                "1",
+                "--arm",
+                "fused",
+            ]
+        )
+        == 3
+    )
+
+
+def test_footprint_row_states_fit_never_speed(tmp_path: Path):
+    probe = tmp_path / "granite_e4b_fused_attn4_s4096_r8_probe.json"
+    probe.write_text(
+        json.dumps(
+            _ok_receipt(tag="fused_attn4_s4096_r8_probe", seq=4096, peak_vram_gb=19.42, tokens_per_step=[4096] * 60)
+        )
+    )
+    vram = tmp_path / "vram.txt"
+    vram.write_text(
+        "1788700000 21000, 99, 410.2\n1788700001 25123, 100, 420.0\n1788700002 24000, 98, 400.0\nbad line\n"
+    )
+    out = tmp_path / "granite_p41c_footprint.json"
+    assert (
+        p41_admit.main(
+            [
+                "footprint",
+                str(probe),
+                "--fam",
+                "granite",
+                "--seq",
+                "4096",
+                "--r",
+                "8",
+                "--vram",
+                str(vram),
+                "--out",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    row = json.loads(out.read_text())
+    assert (
+        row["fit_status"] == "OK"
+        and row["peak_vram_gb_allocator"] == 19.42
+        and row["peak_vram_gb_nvsmi"] == round(25123 / 1024, 3)
+    )
+    assert (
+        row["seq_probe"] == 4096
+        and row["batch"] == 1
+        and row["offload_design"] == "none"
+        and row["tokens_per_step"] == 4096
+    )
+    assert (
+        "never speed" in row["feeds"]
+        and "s_per_step_median" not in json.dumps(row)
+        and "joules" not in json.dumps(row)
+    )
+    probe.write_text(
+        json.dumps(_ok_receipt(tag="fused_attn4_s4096_r8_probe", seq=4096, status="oom", reason="CUDA out of memory"))
+    )
+    assert p41_admit.main(["footprint", str(probe), "--fam", "granite", "--seq", "4096", "--out", str(out)]) == 0
+    row = json.loads(out.read_text())
+    assert row["fit_status"] == "OOM" and row["peak_vram_gb_nvsmi"] is None and "out of memory" in row["reason"]
