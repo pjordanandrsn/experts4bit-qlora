@@ -408,3 +408,184 @@ def test_guard_survives_parent_death(tmp_path: Path):
     body = json.loads(proof.read_text())
     assert body["complete"] is True and body["reason"] == "wallclock"
     assert iid not in FakeProvider(fake).list_ids()
+
+
+# ---------------------------------------------------------------- #446 follow-ups (LOWs from Warden, PR #440)
+
+def _guard_args(module_args: list[str]) -> dict[str, str]:
+    """Parse key-value pairs from guard module_args.
+
+    ``--guard-worker`` is the only boolean (no-value) flag in the guard's argv; every other
+    ``--flag value`` pair is recorded.  Values that look like flags (start with ``--``) are
+    left associated with their key so the caller can detect them, but in practice the guard
+    module_args only ever carry absolute paths and numbers as values.
+    """
+    result: dict[str, str] = {}
+    it = iter(module_args)
+    for tok in it:
+        if tok == "--guard-worker":  # the only boolean flag; skip it
+            continue
+        if not tok.startswith("--"):
+            continue  # unexpected positional; skip
+        val = next(it, None)
+        if val is not None:
+            result[tok] = val
+    return result
+
+
+def _arming_guard_spawn(module_args: list[str], extra_code: str = "") -> subprocess.Popen:
+    """Spawn a guard stub that writes the armed marker then runs extra_code (items 1–3 shared helper)."""
+    args_map = _guard_args(module_args)
+    proof_str = args_map.get("--proof", "")
+    iid_str = args_map.get("--instance-id", "")
+    code = (
+        "import sys, json, os\nfrom pathlib import Path\n"
+        f"proof_path = Path({proof_str!r})\n"
+        f"iid = {iid_str!r}\n"
+        "armed = proof_path.with_name('guard-armed.json')\n"
+        "armed.parent.mkdir(parents=True, exist_ok=True)\n"
+        "armed.write_text(json.dumps({'pid': os.getpid(), 'at': '2026-01-01T00:00:00Z', 'instance_id': iid}))\n"
+        + extra_code
+    )
+    return subprocess.Popen(
+        [sys.executable, "-c", code], start_new_session=True,
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
+def test_guard_liveness_early_exit_recorded_in_notes(tmp_path: Path, monkeypatch):
+    """Item 1 (#446): a guard that arms then crashes is recorded in notes and environment;
+    result stays 'pass' because the launcher itself destroyed a live instance."""
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    def _spawn(*, python, module_args, log_path):
+        # Arm, then exit with rc=5 (simulate crash after arming)
+        return _arming_guard_spawn(module_args, "sys.exit(5)\n")
+
+    monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
+    # Small command so the guard has time to exit before the liveness check
+    rc = main(_cli(tmp_path, "rent-liveness-1",
+                   "--command", f"{sys.executable} -c 'import time; time.sleep(0.15)'"))
+    rec = _receipt(tmp_path)
+    # Guard exited early -- the note must say so
+    assert "guard exited 5" in rec["notes"], rec["notes"]
+    assert rec["environment"].get("guard_exited_early") == "5"
+    # The launcher tore down a live instance, so result is still pass (the guard miss is noted, not fatal)
+    assert rec["result"] == "pass" and rec["status"] == "OK"
+
+
+def test_guard_is_joined_after_sigterm(tmp_path: Path, monkeypatch):
+    """Item 2 (#446): guard.wait(timeout=2) is called after SIGTERM so the guard finishes any
+    sidecar write before the launcher exits; without the wait the guard process is still running
+    when main() returns and captured_guard.poll() is None."""
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    captured: list[subprocess.Popen] = []
+
+    def _spawn(*, python, module_args, log_path):
+        args_map = _guard_args(module_args)
+        proof_str = args_map.get("--proof", "")
+        iid_str = args_map.get("--instance-id", "")
+        # Arms, then sleeps 0.5 s after SIGTERM before exiting (simulates slow sidecar write).
+        # Without guard.wait(timeout=2) in the launcher, poll() is None when main() returns.
+        code = (
+            "import sys, signal, json, os, time\nfrom pathlib import Path\n"
+            f"armed = Path({proof_str!r}).with_name('guard-armed.json')\n"
+            "armed.parent.mkdir(parents=True, exist_ok=True)\n"
+            f"armed.write_text(json.dumps({{'pid': os.getpid(), 'at': '2026-01-01T00:00:00Z', 'instance_id': {iid_str!r}}}))\n"
+            "def on_sigterm(sig, frame):\n"
+            "    time.sleep(0.5)\n"
+            "    sys.exit(0)\n"
+            "signal.signal(signal.SIGTERM, on_sigterm)\n"
+            "time.sleep(60)\n"
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", code], start_new_session=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        captured.append(proc)
+        return proc
+
+    monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
+    rc = main(_cli(tmp_path, "rent-join-1"))
+    assert len(captured) == 1
+    # With guard.wait(timeout=2): the guard has been waited on; poll() is not None.
+    assert captured[0].poll() is not None, (
+        "guard process is still running after main() returned -- guard.wait() was not called"
+    )
+
+
+def test_guard_firing_marker_prevents_launcher_pass(tmp_path: Path, monkeypatch):
+    """Item 3 (#446): TOCTOU residual -- a guard that writes guard-firing.json before its own destroy
+    prevents the launcher from writing 'pass'; the receipt is ALARM even when the instance appears live
+    at the time of the launcher's teardown check."""
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    def _spawn(*, python, module_args, log_path):
+        args_map = _guard_args(module_args)
+        proof_str = args_map.get("--proof", "")
+        fake_state_str = args_map.get("--fake-state", "")
+        iid_str = args_map.get("--instance-id", "")
+        # 1. Arms.  2. Writes guard-firing.json (before destroy -- the TOCTOU marker).
+        # 3. Brief delay so the launcher can reach its teardown check while the instance is still live.
+        # 4. Destroys the fake instance.  5. Writes the proof.
+        code = (
+            "import sys, json, os, time\nfrom pathlib import Path\n"
+            f"proof_path = Path({proof_str!r})\n"
+            f"fake_state = Path({fake_state_str!r})\n"
+            f"iid = {iid_str!r}\n"
+            "armed = proof_path.with_name('guard-armed.json')\n"
+            "armed.parent.mkdir(parents=True, exist_ok=True)\n"
+            "armed.write_text(json.dumps({'pid': os.getpid(), 'at': '2026-01-01T00:00:00Z', 'instance_id': iid}))\n"
+            # Write firing marker before destroy
+            "firing = proof_path.with_name('guard-firing.json')\n"
+            "firing.write_text(json.dumps({'reason': 'wallclock', 'pid': os.getpid(), 'instance_id': iid}))\n"
+            # Sleep so the launcher hits its teardown while the instance is still live (TOCTOU window)
+            "time.sleep(0.05)\n"
+            # Destroy the fake instance
+            "if fake_state.is_file():\n"
+            "    st = json.loads(fake_state.read_text())\n"
+            "    st['live'] = [x for x in (st.get('live') or []) if x != iid]\n"
+            "    fake_state.write_text(json.dumps(st) + '\\n')\n"
+            # Write the real proof so the launcher's wait finds it quickly
+            "proof_path.write_text(json.dumps({'method': 'fake-destroy', 'reason': 'wallclock', "
+            "'evidence': json.dumps({'instance_absent': True}), 'complete': True}))\n"
+        )
+        return subprocess.Popen(
+            [sys.executable, "-c", code], start_new_session=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+    monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
+    rc = main(_cli(tmp_path, "rent-toctou-1"))
+    rec = _receipt(tmp_path)
+    # The guard was firing; the receipt must be ALARM, never pass.
+    assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid", rec
+    # The reason from the guard's proof (wallclock) must reach the receipt.
+    assert rec["teardown_proof"]["reason"] == "wallclock", rec["teardown_proof"]
+
+
+def test_fallback_validator_checks_teardown_proof_complete_and_reason(tmp_path: Path, monkeypatch):
+    """Item 4 (#446): the no-jsonschema fallback rejects teardown_proof.complete that is not bool,
+    and teardown_proof.reason that is not in the allowed vocabulary."""
+    import sys as _sys
+    # Block jsonschema so validate_receipt falls back to the manual checks.
+    monkeypatch.setitem(_sys.modules, "jsonschema", None)
+
+    rc = main(_cli(tmp_path, "rent-fb-1"))
+    assert rc == 0
+    rec = _receipt(tmp_path)
+
+    # complete must be bool when present in teardown_proof
+    bad_complete = dict(rec, teardown_proof=dict(rec["teardown_proof"], complete="true"))
+    with pytest.raises(ReceiptInvalid, match="complete"):
+        validate_receipt(bad_complete, SCHEMA)
+
+    # reason must be in the valid vocabulary when present
+    bad_reason = dict(rec, teardown_proof=dict(rec["teardown_proof"], reason="not-a-real-reason"))
+    with pytest.raises(ReceiptInvalid, match="reason"):
+        validate_receipt(bad_reason, SCHEMA)
+
+    # A valid complete+reason pair passes the fallback
+    good = dict(rec, teardown_proof=dict(rec["teardown_proof"], complete=True, reason="completion"))
+    validate_receipt(good, SCHEMA)  # must not raise
