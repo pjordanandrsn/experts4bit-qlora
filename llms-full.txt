@@ -2914,12 +2914,38 @@ host-bound: absolutes do not travel between hosts, ratios do.
 
 ## 10. Working with other agents
 
-Three agents touch this repository: Claude Code (the maintainer's session:
-orchestration, releases, the merge gate), Cursor Cloud Agents (a bounded code
-task that starts from an issue and ends as a pull request) and ChatGPT
-(review, research, repo-state reports; read-only). The record is GitHub; the
-Slack channel `#ml-packages` is only the live channel, and every handoff
-posted there is also written on the issue.
+Six agents touch this repository, coordinated through GitHub (the record) and
+Slack channel `#ml-packages` (live handoffs). The live board — role chart,
+blocking issues, handover protocol — is the Slack canvas "ML packages — live
+board" in #ml-packages; `@Name` mentions in threads are answered with
+`ACK <repo>#<issue>`, `DONE <repo>#<issue> -> <link>`, or `BLOCKED <repo>#<issue> - <reason>`.
+
+**Jordan — Chair / Owner**: the maintainer (final decisions, account access,
+rulings).
+
+**Claude Code — CEO**: orchestration, releases, the merge gate.
+
+**Cursor — CTO**: a bounded code task that starts from an issue and ends as a
+pull request (substantive implementation); Bugbot (under the CTO) is QA.
+
+**ChatGPT — Chief Science Officer**: review, research, repo-state reports;
+read-only.
+
+**Scout — Chief Evidence Officer**: read-only verification (claims vs receipts,
+prior art, upstream behaviour at a pinned revision); cites `file:line` / URLs;
+never edits.
+
+**Forge — COO**: mechanical repository work from issues on branches like
+`forge/<issue>-<slug>`; single PR per issue; no merges; restricted from
+touching gates, thresholds, floors, registered claims, or documents with an
+OpenTimestamps footer.
+
+**Warden — Chief Risk Officer**: read-only review: correctness, silent
+fallbacks, gate / threshold drift, claims outrunning receipts, security;
+findings as `file:line — claim — why — severity` + what was not checked; hands
+fixes to Forge.
+
+Every handoff posted in Slack is also written on the issue.
 
 - A task is an issue opened from the **Agent task** template (goal, acceptance
   criteria, evidence required, constraints) carrying exactly one of
@@ -2927,11 +2953,14 @@ posted there is also written on the issue.
   for the agent named in the last comment; `blocked:user` means the maintainer
   must act (decision, credential, account link).
 - The taking agent acknowledges on the issue, works on a branch, opens a pull
-  request that cites the issue, and stops. Nobody merges their own pull
-  request. The merge gate is green checks + Bugbot success + zero unresolved
-  review threads, with section 8's companions in the same diff. Receipts and
-  code ship in separate pull requests; a pull request too large for Bugbot to
-  review is a finding, not a pass.
+  request that cites the issue, and stops. Every PR gets one independent review
+  before merge — Cursor Bugbot or a Claude Code review, chosen per PR by need
+  (Bugbot by default for code; Claude Code when Bugbot is unavailable or for
+  docs / register changes) — and Claude Code holds the merge gate: checks green
+  + that review + zero unresolved threads, with section 8's companions in the
+  same diff. Nobody merges their own PR. Receipts
+  and code ship in separate pull requests; a pull request too large for Bugbot
+  to review is a finding, not a pass.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
   registered claim; if the task needs one, the agent stops and says so on the
   issue.
