@@ -425,6 +425,9 @@ def _list_or_unknown(prov) -> set[str] | None:
         return None
 
 
+GUARD_BACKOFF_CAP_S = 15.0   # #480: the longest a blind guard waits before asking again
+
+
 def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None,
                  wallclock_s: float, heartbeat_path: str, proof_path: str,
                  heartbeat_timeout_s: float) -> int:
@@ -459,7 +462,13 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
             if stale:
                 reason = "heartbeat-loss"
                 break
+            # #480: at 21:46Z two controllers rate-limited each other and this loop asked a declining API ten
+            # times a second for six minutes, which is both useless and part of why it kept declining. Back off
+            # geometrically, capped, and reset on the first answer. The deadline and the heartbeat check are
+            # unchanged, so a box is still torn down on time and on heartbeat loss during the outage.
+            time.sleep(min(GUARD_BACKOFF_CAP_S, poll * (2 ** min(list_errors, 6))))
             continue
+        list_errors = 0          # an answer clears the backoff
         if instance_id not in live:
             reason = "already-gone"
             break

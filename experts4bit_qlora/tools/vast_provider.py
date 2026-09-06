@@ -45,8 +45,23 @@ DEFAULT_KEY_PATH = Path.home() / ".vast" / "secrets.env"
 KIND = "vast:verified-secure"
 
 
+_DECLINED_STATUS = (429, 502, 503, 504)   # the provider declined; the question is unanswered, not answered "no"
+_MISSING = object()
+
 class BackendUnavailable(RuntimeError):
     """The provider did not answer with the shape the call requires. Never interpreted as 'nothing there'."""
+
+
+class BackendBusy(BackendUnavailable):
+    """The provider DECLINED to answer — a rate limit, not a fact about the thing asked for (#480).
+
+    Two controllers on one account rate-limited each other at 2026-09-06T21:46Z. Vast answered the instance
+    endpoint with HTTP 200 and `{"instances": null}`, and the pre-flight reported `instance 50101728 record has
+    the wrong shape: {instances: NoneType}` — which reads as "the provider said something nonsensical about that
+    instance" when what happened is that it said nothing at all. The run went to ALARM and the box was destroyed.
+    An error is not a record, and "ask again" is not "the answer is no": callers that can wait should retry this,
+    callers that cannot should say the provider declined rather than describe a malformed record.
+    """
 
 
 class VastRefused(RuntimeError):
@@ -297,8 +312,13 @@ class VastProvider:
         for page in range(1, self.MAX_PAGES + 1):
             query = {"next_token": str(token)} if token is not None else None
             status, body = self.t.request("GET", "/v1/instances/", query=query)
+            if status in _DECLINED_STATUS:
+                raise BackendBusy(f"instance list declined (page {page}): HTTP {status} — the provider did not answer")
             if status != 200 or not isinstance(body, dict):
                 raise BackendUnavailable(f"instance list unavailable (page {page}): HTTP {status}, body {_shape(body)}")
+            if body.get("instances", _MISSING) is None:
+                raise BackendBusy(f"instance list declined (page {page}): HTTP {status} with a null `instances` — "
+                                  f"the provider did not answer")
             if body.get("success") is False or "error" in body:
                 raise BackendUnavailable(f"instance list answered an error, not a list (page {page}): {_shape(body)} (false-zero refused)")
             inst = body.get("instances")
@@ -322,8 +342,13 @@ class VastProvider:
 
     def instance(self, instance_id: str) -> dict[str, Any]:
         status, body = self.t.request("GET", f"/v0/instances/{instance_id}/")
+        if status in _DECLINED_STATUS:
+            raise BackendBusy(f"instance {instance_id} declined: HTTP {status} — the provider did not answer")
         if status != 200 or not isinstance(body, dict):
             raise BackendUnavailable(f"instance {instance_id} unreadable: HTTP {status}, body {_shape(body)}")
+        if body.get("instances", _MISSING) is None:
+            raise BackendBusy(f"instance {instance_id} declined: HTTP {status} with a null `instances` — "
+                              f"the provider did not answer (this is what a rate limit looks like, #480)")
         rec = body.get("instances", body)
         if isinstance(rec, list):
             rec = rec[0] if rec else {}
@@ -365,8 +390,20 @@ class VastProvider:
         bounded by ssh_timeout_s); ≥ min MB/s."""
         t0 = self._clock()
         rec: dict[str, Any] = {}
+        declines = 0
         while True:
-            rec = self.instance(instance_id)
+            try:
+                rec = self.instance(instance_id)
+            except BackendBusy as e:
+                # #480: the provider declined, so we know nothing yet. The window is already bounded below;
+                # spend it asking again rather than destroying a box over an unanswered question.
+                declines += 1
+                if self._clock() - t0 > timeout_s:
+                    raise PreflightFailed(
+                        f"instance {instance_id}: the provider declined {declines} time(s) within {int(timeout_s)} s "
+                        f"and never answered ({e})") from e
+                self._sleep(poll_s)
+                continue
             st = str(rec.get("actual_status", "UNKNOWN"))
             if st == "running":
                 break
@@ -407,6 +444,7 @@ class VastProvider:
         return {"vast_preflight": "ok", "vast_ssh": f"{host}:{port}", "vast_actual_status": st,
                 "vast_disk_space_gb": f"{disk:.0f}", "vast_cpu_ram_mb": f"{ram_mb:.0f}", "vast_bandwidth_mb_s": f"{mbps:.1f}",
                 "vast_preflight_seconds": f"{self._clock() - t0:.0f}", "vast_ssh_attempts": str(tries),
+                "vast_provider_declines": str(declines),   # #480: how often the provider declined to answer
                 **({"vast_bandwidth_probe": json.dumps(bandwidth_probe, separators=(',', ':'), sort_keys=True)}
                    if bandwidth_probe else {}), **attached}
 
