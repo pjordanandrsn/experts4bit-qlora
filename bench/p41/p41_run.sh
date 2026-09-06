@@ -141,7 +141,10 @@ else
   rc=127
 fi
 echo "SRC FETCH TOOL $FETCH_TOOL rc=$rc" | tee -a summary.txt
-[ $rc -eq 0 ] && tar xzf $W/e4b-src.tar.gz -C $W/e4b-src --strip-components=1; rc=$?
+if [ $rc -eq 0 ]; then
+  tar xzf $W/e4b-src.tar.gz -C $W/e4b-src --strip-components=1
+  rc=$?
+fi
 [ $rc -ne 0 ] && { echo "SRC FETCH FAIL rc=$rc ($SRC_URL)" | tee -a summary.txt; touch TP_DONE; exit 9; }
 for kv in $HELPER_SHAS; do f=${kv%%=*}; want=${kv#*=}; got=$(sha256sum "$W/e4b-src/$f" 2>/dev/null | awk '{print $1}')
   [ "$got" = "$want" ] || { echo "HELPER MISMATCH $f: $got != pinned $want -- nothing from the archive runs" | tee -a summary.txt; touch TP_DONE; exit 9; }
