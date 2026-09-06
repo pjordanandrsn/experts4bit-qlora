@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Serving census rows name the comparator (#418)
+
+Register wording only; no value, status, gate, threshold or floor moved. Jordan's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.
+
+- Every `e4b.serve.census.bo7.*` speed row's `unit` and `claim` name the comparator as **vs e4b's own NF4 control on the same box**, never a bare ×N speedup. Granite, OLMoE, gpt-oss, Gemma-4 and Mixtral notes carry **no field comparator measured**. Qwen3 names the P37 vLLM 0.28.0 GPTQ-Int4 / MarlinExperts comparator (footprint not recorded) and scopes the licensed position to the bo6c pack artifact (11512 gptq / 776 rtn); #405 is a notes reproduction item, not a licence withdrawal. The P37 root row is bounded to graph decode at B=1 and B=16 on one box and one prompt set.
+- No structured `comparator` field (the register validator does not check one). `docs/STATUS.md` and `docs/SERVING-THROUGHPUT.md` hand-edited; README results table updated to the same wording.
+- `llms-full.txt` regenerated.
+
 ### Compute governance policy and run-receipt infrastructure (#429)
 
 Documentation and repository infrastructure only; no code, no version bump, no gate, threshold, floor or existing claim value moved.
