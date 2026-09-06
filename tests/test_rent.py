@@ -182,7 +182,7 @@ def test_ledger_check_applies_the_same_override():
         mod.check_approval_threshold(Path("r.json"), 20.0, _cto(20), th, overrides=ov, seat_executors=GROK)
     mod.check_approval_threshold(Path("r.json"), 20.0, _cto(20) + [_appr("CSO", "ChatGPT", 20)], th,
                                  overrides=ov, seat_executors=GROK)
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit):   # $30 is outside the override band: two-of applies whatever the seats say
         mod.check_approval_threshold(Path("r.json"), 30.0, _cto(30), th, overrides=ov, seat_executors=None)
     # Jordan in the ledger check: role AND agent "Jordan" with a valid permalink, nothing less
     mod.check_approval_threshold(Path("r.json"), 36.0, [_appr("Jordan", "Jordan", 36)], th, overrides=ov)

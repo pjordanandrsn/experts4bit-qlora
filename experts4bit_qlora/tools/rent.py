@@ -424,6 +424,9 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
             if not (isinstance(a, dict) and all(k in a for k in ("role", "agent", "usd_estimate", "slack_permalink"))):
                 problems.append("approvals[] items need role/agent/usd_estimate/slack_permalink")
                 break
+            if not _permalink_ok(a.get("slack_permalink")):
+                problems.append("approvals[].slack_permalink must be a #ml-packages permalink")
+                break
         tp = receipt.get("teardown_proof")
         if not (isinstance(tp, dict) and isinstance(tp.get("method"), str) and tp["method"] and isinstance(tp.get("evidence"), str)):
             problems.append("teardown_proof needs string method and evidence")
