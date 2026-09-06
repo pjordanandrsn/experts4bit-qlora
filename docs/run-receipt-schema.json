@@ -319,6 +319,22 @@
           "type": "string",
           "description": "Evidence of teardown (command output, API response, etc.)",
           "minLength": 1
+        },
+        "reason": {
+          "type": "string",
+          "description": "Why teardown was triggered",
+          "enum": [
+            "completion",
+            "heartbeat-loss",
+            "wallclock",
+            "already-gone",
+            "torn-down-externally",
+            "guard-not-armed"
+          ]
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "True when the launcher itself destroyed the instance; false when the instance was found already gone"
         }
       },
       "additionalProperties": true

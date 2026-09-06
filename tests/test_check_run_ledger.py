@@ -1,20 +1,31 @@
 """Tests for scripts/check_run_ledger.py
 
-Four fixtures:
+Seven fixtures:
   1. One passing receipt (valid, within ceilings, proper approvals)
   2. One over-ceiling day (exceeds role daily ceiling)
   3. One missing approval (insufficient approvals for the cost threshold)
   4. One global-daily-budget violation (two roles within their ceilings, over $100 together)
+  5. started_at: 'yesterday' rejected by BOTH paths (ISO-8601 loop is outside the else:)
+  6. A receipt missing a required field (caught by schema validation)
+  7. A receipt with an invalid teardown_proof.reason (caught by schema enum)
 """
 from __future__ import annotations
 
+import copy
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-# Compute absolute path to the script
+# Compute absolute paths to the script and the real schema
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_run_ledger.py"
+REAL_SCHEMA = Path(__file__).resolve().parents[1] / "docs" / "run-receipt-schema.json"
+
+
+def _write_schema(tmp_path: Path) -> None:
+    """Copy docs/run-receipt-schema.json into tmp_path/docs/ (dir must already exist)."""
+    shutil.copy(REAL_SCHEMA, tmp_path / "docs" / "run-receipt-schema.json")
 
 
 def test_passing_receipt(tmp_path: Path) -> None:
@@ -37,6 +48,7 @@ def test_passing_receipt(tmp_path: Path) -> None:
     }
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "compute-policy.json").write_text(json.dumps(policy))
+    _write_schema(tmp_path)
 
     # Create a valid receipt with all required fields
     receipt = {
@@ -135,6 +147,7 @@ def test_over_ceiling_day(tmp_path: Path) -> None:
     }
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "compute-policy.json").write_text(json.dumps(policy))
+    _write_schema(tmp_path)
 
     # Create two receipts totaling $12 (over the $10 ceiling)
     for i, cost in enumerate([6.0, 6.5], start=1):
@@ -238,6 +251,7 @@ def test_missing_approval(tmp_path: Path) -> None:
     }
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "compute-policy.json").write_text(json.dumps(policy))
+    _write_schema(tmp_path)
 
     # Receipt with $15 estimate but only self-approval (COO)
     receipt = {
@@ -344,6 +358,7 @@ def test_global_daily_budget_violation(tmp_path):
     }
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "compute-policy.json").write_text(json.dumps(policy))
+    _write_schema(tmp_path)
 
     # Two receipts that together exceed the global budget ($100)
     receipt1 = {
@@ -510,3 +525,178 @@ def test_global_daily_budget_violation(tmp_path):
     assert result.returncode == 1, "Check should fail on global budget violation"
     assert "global daily total" in result.stderr.lower()
     assert "$101.5" in result.stderr or "$101.50" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by the new schema-driven tests
+# ---------------------------------------------------------------------------
+
+_BASE_POLICY = {
+    "approval_thresholds": [
+        {"max_usd": 2, "approver": "requesting-agent"},
+        {"max_usd": 20, "approver": "one-of:CTO,CSO"},
+        {"max_usd": 50, "approver": "two-of:CEO,CTO,CSO"},
+        {"max_usd": None, "approver": "Jordan"},
+    ],
+    "per_run_hard_cap_usd": 35,
+    "role_daily_ceiling_usd": {"CTO": 50},
+    "global_daily_budget_usd": 100,
+}
+
+_BASE_RECEIPT: dict = {
+    "experiment_id": "exp-schema-001",
+    "work_id": "experts4bit-qlora#999",
+    "requested_by": "CTO/Cursor",
+    "executed_by": "CTO/Cursor",
+    "reviewed_by": None,
+    "hypothesis": "Schema validation is exercised by the check script",
+    "expected_result": "Script validates receipt successfully",
+    "success_criteria": "Receipt passes all validation checks",
+    "failure_criteria": "Receipt fails validation",
+    "preregistration": "https://example.com/prereg",
+    "approvals": [
+        {
+            "role": "CTO",
+            "agent": "Cursor",
+            "usd_estimate": 1.0,
+            "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181999001",
+        }
+    ],
+    "repo": "pjordanandrsn/experts4bit-qlora",
+    "commit_sha": "abc123def456",
+    "branch": "main",
+    "dirty_tree": False,
+    "container_image": "pytorch/pytorch:latest",
+    "dependencies": {"torch": "2.0.0"},
+    "command": "python train.py",
+    "environment": {},
+    "provider": "vast:verified-secure",
+    "instance_id": "inst-schema-001",
+    "gpu_model": "RTX 5090",
+    "gpu_count": 1,
+    "cpu": "Intel Xeon 16 cores",
+    "ram": "64GB",
+    "storage": "500GB NVMe SSD",
+    "started_at": "2026-09-11T10:00:00Z",
+    "finished_at": "2026-09-11T11:00:00Z",
+    "runtime_seconds": 3600,
+    "cost_usd": {"estimated": 1.0, "actual": 0.90},
+    "dataset": "test-dataset",
+    "dataset_hash": None,
+    "model": "test-model",
+    "model_revision": "main",
+    "model_hash": None,
+    "seed": None,
+    "configuration": {},
+    "metrics": {},
+    "artifacts": [{"path": "out.json", "sha256": "a" * 64, "bytes": 128}],
+    "teardown_proof": {
+        "method": "vast-cli-destroy",
+        "evidence": "Instance destroyed",
+        "reason": "completion",
+        "complete": True,
+    },
+    "status": "OK",
+    "result": "pass",
+    "decision": "adopt https://github.com/pjordanandrsn/experts4bit-qlora/issues/999",
+    "notes": "Schema-driven test baseline",
+}
+
+_BASE_LEDGER_LINE = json.dumps(
+    {"run_id": "exp-schema-001", "date_utc": "2026-09-11", "role": "CTO", "cost_usd": 0.90}
+)
+
+
+def _setup_schema_test(tmp_path: Path, receipt: dict) -> None:
+    """Write policy, schema, receipt and ledger into tmp_path."""
+    runs = tmp_path / "bench" / "runs"
+    runs.mkdir(parents=True)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "compute-policy.json").write_text(json.dumps(_BASE_POLICY))
+    _write_schema(tmp_path)
+    date_dir = runs / "2026-09-11" / receipt["experiment_id"]
+    date_dir.mkdir(parents=True)
+    (date_dir / "receipt.json").write_text(json.dumps(receipt, indent=2))
+    (runs / "ledger.jsonl").write_text(f"# Ledger\n{_BASE_LEDGER_LINE}\n")
+
+
+# ---------------------------------------------------------------------------
+# Test 5: ISO-8601 timestamp is caught in BOTH paths (not just the fallback)
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_started_at_rejected_by_both_paths(tmp_path: Path) -> None:
+    """started_at: 'yesterday' must fail in both the strict and fallback paths.
+
+    Draft 2020-12 does not enforce format: date-time without an explicit format
+    checker, so the fromisoformat() loop must live outside the else: block.
+    """
+    receipt = copy.deepcopy(_BASE_RECEIPT)
+    receipt["started_at"] = "yesterday"
+    _setup_schema_test(tmp_path, receipt)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, (
+        f"Expected failure on started_at='yesterday'; got returncode 0\n{result.stdout}"
+    )
+    assert "started_at" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Test 6: missing required field is caught by schema validation
+# ---------------------------------------------------------------------------
+
+
+def test_missing_required_field(tmp_path: Path) -> None:
+    """A receipt missing a schema-required field fails; removed from REQUIRED_FIELDS
+    would not have caught this after schema drift — the schema is now the source."""
+    receipt = copy.deepcopy(_BASE_RECEIPT)
+    del receipt["hypothesis"]  # 'hypothesis' is required in run-receipt-schema.json
+    _setup_schema_test(tmp_path, receipt)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, f"Expected failure on missing field; got:\n{result.stderr}"
+    # Both the jsonschema path and the manual fallback report the missing field
+    assert "hypothesis" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Test 7: invalid teardown_proof.reason is caught via the schema enum
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_teardown_proof_reason(tmp_path: Path) -> None:
+    """A receipt whose teardown_proof.reason is not in the schema enum fails.
+
+    The schema (docs/run-receipt-schema.json) defines the valid reasons;
+    check_run_ledger.py reads the enum from the schema in both the
+    Draft202012Validator path and the manual fallback, so this is caught
+    without any hardcoded vocabulary in the check script.
+    """
+    receipt = copy.deepcopy(_BASE_RECEIPT)
+    receipt["teardown_proof"]["reason"] = "not-a-valid-reason"
+    _setup_schema_test(tmp_path, receipt)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, (
+        f"Expected failure on invalid teardown_proof.reason; got:\n{result.stderr}"
+    )
+    assert "reason" in result.stderr.lower()
