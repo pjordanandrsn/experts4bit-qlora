@@ -470,22 +470,36 @@ def _ssh_run(host: str, port: int, command: str, timeout_s: float) -> tuple[int,
         return 124, f"ssh timed out after {timeout_s} s"
 
 
-BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=20000000", "http://speedtest.tele2.net/100MB.zip")
+BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=75000000", "http://speedtest.tele2.net/100MB.zip")
 BANDWIDTH_MIN_BYTES = 5_000_000
 BANDWIDTH_WINDOW_S = 45
 
 
-def _bandwidth_reading(out: str) -> tuple[float, float, float, str]:
-    """Return (MB/s, bytes, seconds, HTTP status), rejecting error bodies and undersized transfers."""
+def _bandwidth_reading(out: str) -> tuple[float, float, float, str, float, float]:
+    """Return rate and timing evidence, measuring from first byte through completion.
+
+    The input is ``<bytes> <request-seconds> <first-byte-seconds> <HTTP status>``.  Request setup must
+    not count against the registered link-rate floor: on a small sample DNS/TCP/TLS time can turn a
+    healthy box into a false refusal (#475).  The larger 75 MB primary sample also amortises residual
+    timing noise while remaining below Cloudflare's observed 100 MB rejection ceiling.
+    """
     parts = out.strip().split()
-    if len(parts) < 3:
-        raise ValueError(f"no <bytes> <seconds> <status> line: {out.strip()[:120]!r}")
-    size, secs, code = float(parts[0]), float(parts[1]), parts[2]
+    if len(parts) < 4:
+        raise ValueError(
+            f"no <bytes> <request-seconds> <first-byte-seconds> <status> line: {out.strip()[:120]!r}"
+        )
+    size, request_secs, first_byte_secs, code = float(parts[0]), float(parts[1]), float(parts[2]), parts[3]
     if code != "200":
         raise ValueError(f"HTTP {code} after {size:.0f} B — an error body is not a measurement")
     if size < BANDWIDTH_MIN_BYTES:
         raise ValueError(f"only {size:.0f} B transferred (< {BANDWIDTH_MIN_BYTES} B floor)")
-    return size / max(secs, 1e-9) / 1e6, size, secs, code
+    transfer_secs = request_secs - first_byte_secs
+    if transfer_secs <= 0:
+        raise ValueError(
+            f"non-positive transfer window {transfer_secs:.9f} s "
+            f"(request {request_secs:.9f} s, first byte {first_byte_secs:.9f} s)"
+        )
+    return size / transfer_secs / 1e6, size, transfer_secs, code, request_secs, first_byte_secs
 
 
 def _bandwidth_over_ssh(host: str, port: int) -> float:
@@ -501,7 +515,7 @@ def _bandwidth_over_ssh(host: str, port: int) -> float:
 
 def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
                                       stop_at_mb_s: float | None = None) -> tuple[float, dict[str, Any]]:
-    """Measure a 100 MB download on the box and retain bounded, non-secret evidence for every attempt.
+    """Measure a large download on the box and retain bounded, non-secret evidence for every attempt.
 
     Each endpoint is tried twice before the next one.  A positive result below ``stop_at_mb_s`` does not suppress
     the fallback endpoint; the first result that clears the registered floor may return immediately.  Without a
@@ -533,26 +547,28 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
 
         def command(url: str) -> str:
             return ("curl --location --fail --silent --show-error -o /dev/null "
-                    f"-w '%{{size_download}} %{{time_total}} %{{http_code}}' "
+                    f"-w '%{{size_download}} %{{time_total}} %{{time_starttransfer}} %{{http_code}}' "
                     f"--max-time {BANDWIDTH_WINDOW_S} {shlex.quote(url)}")
     elif "wget" in capabilities and "python3" in capabilities:
         tool = "wget"
-        wget_code = ("import subprocess,sys,time;t=time.monotonic();"
+        wget_code = ("import subprocess,sys,time;t0=time.monotonic();"
                      f"p=subprocess.Popen(['wget','-q','-O','-','--timeout={BANDWIDTH_WINDOW_S}',sys.argv[1]],"
                      "stdout=subprocess.PIPE);"
-                     "n=sum(map(len,iter(lambda:p.stdout.read(1048576),b'')));rc=p.wait();"
-                     "print(n,time.monotonic()-t,200);raise SystemExit(rc)")
+                     "b=p.stdout.read(1);t1=time.monotonic();n=len(b)\nwhile b:\n b=p.stdout.read(1048576)\n n+=len(b)\n"
+                     f" if time.monotonic()-t0>{BANDWIDTH_WINDOW_S}:p.terminate();break\n"
+                     "rc=p.wait();t2=time.monotonic();"
+                     "print(n,t2-t0,t1-t0,200);raise SystemExit(rc)")
 
         def command(url: str) -> str:
             return f"python3 -c {shlex.quote(wget_code)} {shlex.quote(url)}"
     elif "python3" in capabilities:
         tool = "python3"
-        python_code = ("import sys,time,urllib.request as u;t=time.monotonic();"
+        python_code = ("import sys,time,urllib.request as u;t0=time.monotonic();"
                        "q=u.Request(sys.argv[1],headers={'User-Agent':'curl/8'});"
                        f"r=u.urlopen(q,timeout={BANDWIDTH_WINDOW_S});"
-                       "n=0\nwhile True:\n b=r.read(1048576)\n if not b:break\n n+=len(b)\n"
-                       f" if time.monotonic()-t>{BANDWIDTH_WINDOW_S}:break\n"
-                       "print(n,time.monotonic()-t,r.status);r.close()")
+                       "b=r.read(1);t1=time.monotonic();n=len(b)\nwhile b:\n b=r.read(1048576)\n n+=len(b)\n"
+                       f" if time.monotonic()-t0>{BANDWIDTH_WINDOW_S}:break\n"
+                       "t2=time.monotonic();print(n,t2-t0,t1-t0,r.status);r.close()")
 
         def command(url: str) -> str:
             return f"python3 -c {shlex.quote(python_code)} {shlex.quote(url)}"
@@ -573,7 +589,7 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
                 attempts.append(item)
                 continue
             try:
-                measured, size, secs, code = _bandwidth_reading(out)
+                measured, size, transfer_secs, code, request_secs, first_byte_secs = _bandwidth_reading(out)
             except (ValueError, IndexError) as e:
                 item["result"] = "invalid-reading"
                 item["error"] = str(e)[:160]
@@ -582,7 +598,9 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
             best = max(best, measured)
             item["mb_s"] = f"{measured:.1f}"
             item["bytes"] = f"{size:.0f}"
-            item["seconds"] = f"{secs:.3f}"
+            item["request_seconds"] = f"{request_secs:.3f}"
+            item["starttransfer_seconds"] = f"{first_byte_secs:.3f}"
+            item["transfer_seconds"] = f"{transfer_secs:.3f}"
             item["http_status"] = code
             item["result"] = "ok"
             attempts.append(item)
