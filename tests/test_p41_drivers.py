@@ -112,18 +112,18 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
     lines = out.stdout.splitlines()
     assert any(
         l.startswith("DRYRUN stage:")
-        and "bench/tp3/tp3_arm.py" in l
-        and "bench/p41/p41_run.sh" in l
-        and "root@ssh5.vast.ai:/root/p41/" in l
-        for l in lines
+        and "bench/tp3/tp3_arm.py" in ln
+        and "bench/p41/p41_run.sh" in ln
+        and "root@ssh5.vast.ai:/root/p41/" in ln
+        for ln in lines
     )
     assert any(
         l.startswith("DRYRUN start:")
-        and "P41_RUN_ID=p41-r1-granite" in l
-        and "P41_DEADLINE_EPOCH=1788800000" in l
-        and "P41_USD_PER_HOUR=0.60" in l
-        and "P41_EST_USD=1.98" in l
-        for l in lines
+        and "P41_RUN_ID=p41-r1-granite" in ln
+        and "P41_DEADLINE_EPOCH=1788800000" in ln
+        and "P41_USD_PER_HOUR=0.60" in ln
+        and "P41_EST_USD=1.98" in ln
+        for ln in lines
     )
     assert any(ln.startswith("DRYRUN fetch:") and "/tmp/run/p41/" in ln and "excluding adapters" in ln for ln in lines)
     assert not any("ssh-add" in ln or "PRIVATE" in ln for ln in lines)
