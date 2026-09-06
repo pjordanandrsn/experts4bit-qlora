@@ -36,13 +36,8 @@
   ],
   "approval_overrides": [
     {
-      "while_role_executor": {
-        "CTO": "cursor-desktop-mini/grok"
-      },
-      "band_usd": [
-        2,
-        20
-      ],
+      "while_role_executor": {"CTO": "cursor-desktop-mini/grok"},
+      "band_usd": [2, 20],
       "approver": "all-of:CTO,CSO",
       "status": "confirmed",
       "confirmed_by": "Jordan",
@@ -61,8 +56,8 @@
     "CSO": 20,
     "CDO": 20,
     "COO": 10,
-    "CXO": 100,
-    "CXO_note": "shares the global daily budget — no separate ceiling (Jordan, chat, 2026-09-06: \"Cxo shares the budget\"; relayed on experts4bit-qlora#433 comment 5560139193 at 2026-09-06T15:11:17Z); the row equals global_daily_budget_usd so the launcher and the ledger check accept the role; the global sum still binds",
+    "CXO": 50,
+    "CXO_note": "shares the CTO figure — owner, 2026-09-06: 'Cxo shares the budget' (relayed on experts4bit-qlora#433, comment 5560139193, 2026-09-06T15:11:17Z; the CEO's stricter reading, comment 5560146772); the global daily budget binds both",
     "Scout": 0,
     "Warden": 0,
     "status": "confirmed",

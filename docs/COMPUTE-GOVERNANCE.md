@@ -47,7 +47,7 @@ retrospectively invalid — the approvals satisfied the policy at launch time.
   - CSO: $20 USD/day
   - CDO: $20 USD/day
   - COO: $10 USD/day
-  - CXO: shares the global daily budget — no separate ceiling (Jordan, 2026-09-06: "Cxo shares the budget"; the policy row carries the global figure so the role is accepted; the $100/day global sum binds)
+  - CXO: shares the CTO figure — $50 USD/day from the same figure as the CTO, the global $100/day binding both (owner, 2026-09-06: "Cxo shares the budget"; the CEO's stricter reading until the owner widens it)
   - Scout: $0 (read-only, no experiments)
   - Warden: $0 (read-only, no experiments)
 - **Global daily budget**: $100 USD/day across all agents and all runs.
