@@ -177,6 +177,15 @@ pull request (substantive implementation); Bugbot (under the CTO) is QA.
 **ChatGPT — Chief Science Officer**: review, research, repo-state reports;
 read-only.
 
+**Chief Data Officer**: Claude Code desktop on the mini; owns the organisational
+corpus `pjordanandrsn/org-corpus`, the ingestion jobs, receipts + ledger
+ingestion, scaffold ops; first successor to the CTO.
+
+**Chief Experiments Officer**: Kimi K3 desktop agent on the MBP;
+pre-registrations and experiment design, `PREDICT:` before any run, next-lane
+harnesses under new `bench/<lane>/` trees, compute-economics analysis; never
+touches a committed receipt tree.
+
 **Scout — Chief Evidence Officer**: read-only verification (claims vs receipts,
 prior art, upstream behaviour at a pinned revision); cites `file:line` / URLs;
 never edits.
@@ -190,6 +199,36 @@ OpenTimestamps footer.
 fallbacks, gate / threshold drift, claims outrunning receipts, security;
 findings as `file:line — claim — why — severity` + what was not checked; hands
 fixes to Forge.
+
+### Succession & dynamic reassignment
+
+Any role can go dark; any role that notices reassigns. A teammate is unavailable
+when it posts an explicit failure line (unpaid invoice, usage limit, context
+limit, "something broke"), gives no ACK within 15 minutes of a mention, shows no
+DONE/BLOCKED/progress within 60 minutes of an ACK, or says so.
+
+**Successors:**
+
+| Role | First successor | Second successor | Third successor | Fourth successor |
+|------|----------------|------------------|-----------------|------------------|
+| CEO | CTO | CDO | — | — |
+| CTO | CDO | COO (docs/register/small code only, Warden review) | CEO | — |
+| CSO | Scout | CDO | — | — |
+| CDO | CEO | COO | — | — |
+| COO | CDO | CTO | CEO | — |
+| Scout | Warden | CSO | — | — |
+| Warden | Scout | CSO | CEO | — |
+
+**Procedure:**
+
+1. Post in the issue's thread: `REASSIGN <repo>#<issue>: <role> -> <successor role> -- reason: billing_limit|usage_limit|context_limit|availability|crash|manual`
+2. Include a fenced code block labelled `handoff` with: task, current_state, known_facts, open_questions, artifacts, next_action
+3. Add a real mention of the successor
+4. The successor answers `ACK <repo>#<issue> (acting <role>)`
+5. The successor works under ITS OWN charter limits (a read-only role stays read-only, the COO never touches gates)
+6. In-flight work stays with the acting owner until DONE; the returning primary posts HANDBACK only for items not yet started
+
+Every rule survives reassignment.
 
 Every handoff posted in Slack is also written on the issue.
 
