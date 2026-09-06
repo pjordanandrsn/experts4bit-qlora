@@ -47,6 +47,7 @@ retrospectively invalid — the approvals satisfied the policy at launch time.
   - CSO: $20 USD/day
   - CDO: $20 USD/day
   - COO: $10 USD/day
+  - CXO: $20 USD/day — a separate ceiling on top of the shared global budget (owner, 2026-09-06: "Cxo seperate budget on top of the shared budget is $20/day")
   - Scout: $0 (read-only, no experiments)
   - Warden: $0 (read-only, no experiments)
 - **Global daily budget**: $100 USD/day across all agents and all runs.
