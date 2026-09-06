@@ -704,6 +704,47 @@
       ]
     },
     {
+      "query": "which MoE families does Unsloth train the experts of and which does e4b, per family comparison",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "Unsloth"
+        ],
+        [
+          "per family",
+          "per-family"
+        ],
+        [
+          "expert"
+        ],
+        [
+          "coverage",
+          "VOID"
+        ]
+      ]
+    },
+    {
+      "query": "train 4-bit Mixtral QLoRA on a 32 GB card with expert offload versus Unsloth resident footprint",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "Mixtral"
+        ],
+        [
+          "offload"
+        ],
+        [
+          "Unsloth"
+        ],
+        [
+          "footprint",
+          "peak VRAM"
+        ]
+      ]
+    },
+    {
       "query": "experts4bit-qlora vs vLLM on the same GPU: head-to-head decode throughput for a 4-bit MoE",
       "expected_package": "experts4bit-qlora",
       "expected_document": "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",

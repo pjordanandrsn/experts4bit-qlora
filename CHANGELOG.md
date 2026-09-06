@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+Documentation only; no runtime change, no version bump, no dependency floor move. This is the **claims half of the
+tp2 / P40 bundle**: the receipts landed first, on their own, in #414 (`bench/h2h-20260906/tp2/`), and this entry
+carries the register rows and the prose that quote them (#415) — receipts and claims in separate pull requests, so
+each is reviewable.
+
+### tp2 / P40 — e4b vs Unsloth per MoE family, one box, one fixture (2026-09-06)
+
+- `docs/claims.json`: 31 new rows under `e4b.train.h2h.unsloth.<family>.5090.2026-09-06`, every number copied from
+  `bench/h2h-20260906/tp2/`. One `.arm.*` row per attempt across the six families — including the refusals (gpt-oss on
+  both sides), the VOID Unsloth Granite arm, the OLMoE `HARNESS_ERROR` with no receipt and Gemma-4's two `VOID_ATTN4`
+  arms — plus the two positions the reducer quoted (`…qwen3…` **1.457** Unsloth/e4b s/step, agreeing with lane p38's
+  1.413 within the pre-registered ±10% on a different host; `…mixtral…` **0.361**, stated footprint-first), their
+  `.quality-n60` readings (COMPARABLE, Δ +0.0152 / −0.0087 against the 0.05 reading threshold), four
+  `.e4b-internal-parity` PASSes with attention in 4-bit on both sides (Granite ×5.59, OLMoE ×3.73, Qwen3 ×2.69,
+  Mixtral ×1.23), the Granite and OLMoE `.coverage` rows (the comparator could not train the experts: 2,621,440
+  trainable against e4b's 49,807,360, and a process that exited rc=1 before writing a receipt) and
+  `…mixtral….footprint` (3.223 GB under expert offload against 29.163 GB resident on one 32 GB card, quality
+  comparable). The p38 position row gains a `notes` cross-reference to the tp2 ratio and is **not** superseded — two
+  boxes, two measurements of one workload.
+- `docs/capabilities.json`: `training_support` records the **attention-4-bit** configuration of the training paths
+  per family from these receipts — `reference_train` / `fast_train` on `granitemoe`, `olmoe`, `qwen3_moe` and
+  `mixtral` now cite a tp2 arm and its internal-parity row; `gemma4_text` states that attention 4-bit is not
+  supported pending #412 (`quantize_attention_projections_4bit converted 100 projections, expected 120`) while the
+  paths without it stay as tp1 left them; `gpt_oss` states the refusal on bias-carrying projections. A new limitation
+  states the per-family comparison, including the two families where the comparator's row is a coverage result rather
+  than an "unsupported" flag. No path status changed; `model_families` is unchanged.
+- `docs/STATUS.md` and `docs/ARCHITECTURE_SUPPORT.md` gain dated tp2 sections quoting the claim ids;
+  `docs/solutions/qlora-fused-moe-experts.md` gains the per-family table, two limitations and the evidence rows; two
+  discovery queries route the per-family training head-to-head to that page; `llms-full.txt` regenerated.
+- Not in this entry, deliberately: no gate, threshold, `fast` floor or existing claim value moved, and the lane's
+  `outer.log` is not in the repository, so OLMoE's `IndexError` is not cited as evidence — the rows quote
+  `summary.txt`'s rc line and the reducer's reason instead.
+
 ## 0.35.2 — 2026-09-05 — documentation: head-to-head receipts (same-box vLLM; Unsloth QLoRA end-to-end)
 
 Documentation and tooling only; no runtime change. The `fast` extra's floor (grouped-nf4-gemm >= 0.30.0), the CI
