@@ -962,7 +962,7 @@ def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path
     private = tmp_path / "id_ed25519"
     private.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n")
     with pytest.raises(RentRefused, match="private key is refused"):
-        read_pubkey(private)
+        read_pubkey(privkey)
     with pytest.raises(RentRefused, match="no such file"):
         read_pubkey(tmp_path / "absent.pub")
     two = tmp_path / "two.pub"
@@ -972,7 +972,7 @@ def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path
     # through the CLI on the fake provider: the receipt records that a key was attached
     rc = main(_cli(tmp_path, "rent-key-1", "--ssh-pubkey", str(good)))
     assert rc == 0 and _receipt(tmp_path)["environment"]["ssh_pubkey_given"] == "yes"
-    rc = main(_cli(tmp_path / "b", "rent-key-2", "--ssh-pubkey", str(private)))
+    rc = main(_cli(tmp_path / "b", "rent-key-2", "--ssh-pubkey", str(privkey)))
     assert rc == 2, "a refused key is a refusal receipt, not a launch"
 
 
