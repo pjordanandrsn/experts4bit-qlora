@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Machine-readable compute governance policy for GPU rental experiments. All ceilings and budgets confirmed by Jordan on 2026-09-06T04:55Z.",
+  "status": "confirmed",
+  "confirmed_by": "Jordan",
+  "confirmed_at": "2026-09-06T04:55Z",
+  "approval_thresholds": [
+    {
+      "max_usd": 2,
+      "approver": "requesting-agent",
+      "status": "confirmed",
+      "confirmed_by": "Jordan",
+      "confirmed_at": "2026-09-06T04:55Z"
+    },
+    {
+      "max_usd": 20,
+      "approver": "one-of:CTO,CSO",
+      "status": "confirmed",
+      "confirmed_by": "Jordan",
+      "confirmed_at": "2026-09-06T04:55Z"
+    },
+    {
+      "max_usd": 50,
+      "approver": "two-of:CEO,CTO,CSO",
+      "status": "confirmed",
+      "confirmed_by": "Jordan",
+      "confirmed_at": "2026-09-06T04:55Z"
+    },
+    {
+      "max_usd": null,
+      "approver": "Jordan",
+      "status": "confirmed",
+      "confirmed_by": "Jordan",
+      "confirmed_at": "2026-09-06T04:55Z"
+    }
+  ],
+  "per_run_hard_cap_usd": 35,
+  "per_run_hard_cap_status": "confirmed",
+  "per_run_hard_cap_confirmed_by": "Jordan",
+  "per_run_hard_cap_confirmed_at": "2026-09-06T04:55Z",
+  "role_daily_ceiling_usd": {
+    "CEO": 50,
+    "CTO": 50,
+    "CSO": 20,
+    "CDO": 20,
+    "COO": 10,
+    "Scout": 0,
+    "Warden": 0,
+    "status": "confirmed",
+    "confirmed_by": "Jordan",
+    "confirmed_at": "2026-09-06T04:55Z"
+  },
+  "global_daily_budget_usd": 100,
+  "global_daily_budget_status": "confirmed",
+  "global_daily_budget_confirmed_by": "Jordan",
+  "global_daily_budget_confirmed_at": "2026-09-06T04:55Z",
+  "allowed_providers": [
+    "vast:verified-secure",
+    "runpod:secure"
+  ],
+  "allowed_gpus": [
+    "RTX 5090",
+    "RTX 4090",
+    "L40S",
+    "A100-80GB",
+    "H100"
+  ],
+  "teardown": {
+    "default_wallclock_h": 2,
+    "max_wallclock_h": 6,
+    "on": [
+      "completion",
+      "wallclock",
+      "heartbeat-loss"
+    ],
+    "proof_required": true
+  }
+}

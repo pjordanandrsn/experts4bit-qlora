@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/run-receipt-schema.json",
+  "title": "GPU Rental Run Receipt",
+  "description": "Schema for immutable experiment receipts stored at bench/runs/<UTC date>/<run-id>/receipt.json. All listed fields are required; additional properties are allowed. This schema aligns with the organisational corpus receipt schema (pjordanandrsn/org-corpus §6).",
+  "type": "object",
+  "required": [
+    "experiment_id",
+    "work_id",
+    "requested_by",
+    "executed_by",
+    "reviewed_by",
+    "hypothesis",
+    "expected_result",
+    "success_criteria",
+    "failure_criteria",
+    "preregistration",
+    "approvals",
+    "repo",
+    "commit_sha",
+    "branch",
+    "dirty_tree",
+    "container_image",
+    "dependencies",
+    "command",
+    "environment",
+    "provider",
+    "instance_id",
+    "gpu_model",
+    "gpu_count",
+    "cpu",
+    "ram",
+    "storage",
+    "started_at",
+    "finished_at",
+    "runtime_seconds",
+    "cost_usd",
+    "dataset",
+    "dataset_hash",
+    "model",
+    "model_revision",
+    "model_hash",
+    "seed",
+    "configuration",
+    "metrics",
+    "artifacts",
+    "teardown_proof",
+    "status",
+    "result",
+    "decision",
+    "notes"
+  ],
+  "properties": {
+    "experiment_id": {
+      "type": "string",
+      "description": "Unique identifier for this experiment (equivalent to run_id in local contexts)",
+      "minLength": 1
+    },
+    "work_id": {
+      "type": "string",
+      "description": "Parent work item or task identifier (e.g., GitHub issue number)",
+      "minLength": 1
+    },
+    "requested_by": {
+      "type": "string",
+      "description": "Role and agent that requested this run (e.g., 'CEO/Claude Code')",
+      "minLength": 1
+    },
+    "executed_by": {
+      "type": "string",
+      "description": "Role and agent that executed this run (e.g., 'CTO/Cursor')",
+      "minLength": 1
+    },
+    "reviewed_by": {
+      "type": ["string", "null"],
+      "description": "Role and agent that reviewed this run, or null if not yet reviewed"
+    },
+    "hypothesis": {
+      "type": "string",
+      "description": "Testable claim or research question this run addresses",
+      "minLength": 1
+    },
+    "expected_result": {
+      "type": "string",
+      "description": "What the requester expects to observe if the hypothesis is correct",
+      "minLength": 1
+    },
+    "success_criteria": {
+      "type": "string",
+      "description": "Concrete criteria that define a successful outcome",
+      "minLength": 1
+    },
+    "failure_criteria": {
+      "type": "string",
+      "description": "Concrete criteria that define a failed outcome",
+      "minLength": 1
+    },
+    "preregistration": {
+      "type": "string",
+      "description": "URL or path to the pre-registration document",
+      "minLength": 1
+    },
+    "approvals": {
+      "type": "array",
+      "description": "List of approvals obtained before launch, in chronological order",
+      "items": {
+        "type": "object",
+        "required": ["role", "agent", "usd_estimate", "slack_permalink"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Approving agent's role",
+            "minLength": 1
+          },
+          "agent": {
+            "type": "string",
+            "description": "Approving agent's name",
+            "minLength": 1
+          },
+          "usd_estimate": {
+            "type": "number",
+            "description": "Cost estimate (USD) at approval time",
+            "minimum": 0
+          },
+          "slack_permalink": {
+            "type": "string",
+            "description": "Permalink to the APPROVE message in Slack",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "repo": {
+      "type": "string",
+      "description": "Primary repository name (e.g., 'pjordanandrsn/experts4bit-qlora')",
+      "minLength": 1
+    },
+    "commit_sha": {
+      "type": "string",
+      "description": "Git commit SHA of the primary repository at run time",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "branch": {
+      "type": "string",
+      "description": "Git branch name",
+      "minLength": 1
+    },
+    "dirty_tree": {
+      "type": "boolean",
+      "description": "True if the working tree had uncommitted changes at run time"
+    },
+    "container_image": {
+      "type": "string",
+      "description": "Container or VM image used (e.g., 'pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel')",
+      "minLength": 1
+    },
+    "dependencies": {
+      "type": "object",
+      "description": "Map of dependency name to version string for key dependencies",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "command": {
+      "type": "string",
+      "description": "The exact command executed in this run",
+      "minLength": 1
+    },
+    "environment": {
+      "type": "object",
+      "description": "Key environment variables set for this run",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "provider": {
+      "type": "string",
+      "description": "Rental provider (e.g., 'vast:verified-secure', 'runpod:secure')",
+      "minLength": 1
+    },
+    "instance_id": {
+      "type": "string",
+      "description": "Provider-specific instance identifier",
+      "minLength": 1
+    },
+    "gpu_model": {
+      "type": "string",
+      "description": "GPU model (e.g., 'RTX 5090', 'A100-80GB')",
+      "minLength": 1
+    },
+    "gpu_count": {
+      "type": "integer",
+      "description": "Number of GPUs used",
+      "minimum": 1
+    },
+    "cpu": {
+      "type": "string",
+      "description": "CPU model and core count",
+      "minLength": 1
+    },
+    "ram": {
+      "type": "string",
+      "description": "System RAM (e.g., '128GB')",
+      "minLength": 1
+    },
+    "storage": {
+      "type": "string",
+      "description": "Storage configuration (e.g., '1TB NVMe SSD')",
+      "minLength": 1
+    },
+    "started_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp (UTC) when the run started",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp (UTC) when the run ended",
+      "format": "date-time"
+    },
+    "runtime_seconds": {
+      "type": "number",
+      "description": "Total runtime in seconds",
+      "minimum": 0
+    },
+    "cost_usd": {
+      "type": "object",
+      "description": "Cost in USD, both estimated (at approval) and actual (at completion)",
+      "required": ["estimated", "actual"],
+      "properties": {
+        "estimated": {
+          "type": "number",
+          "description": "Estimated cost at approval time (USD)",
+          "minimum": 0
+        },
+        "actual": {
+          "type": "number",
+          "description": "Actual cost incurred (USD)",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "dataset": {
+      "type": "string",
+      "description": "Dataset name or identifier used in this run",
+      "minLength": 1
+    },
+    "dataset_hash": {
+      "type": ["string", "null"],
+      "description": "Hash of the dataset, or null if not applicable"
+    },
+    "model": {
+      "type": "string",
+      "description": "Model name or identifier",
+      "minLength": 1
+    },
+    "model_revision": {
+      "type": "string",
+      "description": "Model revision or version (e.g., git commit, HF revision)",
+      "minLength": 1
+    },
+    "model_hash": {
+      "type": ["string", "null"],
+      "description": "Hash of the model weights, or null if not computed"
+    },
+    "seed": {
+      "type": ["integer", "null"],
+      "description": "Random seed used for reproducibility, or null if not set"
+    },
+    "configuration": {
+      "type": "object",
+      "description": "Run-specific configuration parameters (hyperparameters, flags, etc.)",
+      "additionalProperties": true
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Measured metrics and results from the run",
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "List of output artifacts produced by this run",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "bytes"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative path to the artifact within the run directory",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "description": "SHA-256 hash of the artifact",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "description": "Size of the artifact in bytes",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "teardown_proof": {
+      "type": "object",
+      "description": "Proof that the instance was torn down",
+      "required": ["method", "evidence"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "How teardown was performed (e.g., 'vast-cli-destroy', 'runpod-api-terminate')",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "string",
+          "description": "Evidence of teardown (command output, API response, etc.)",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "status": {
+      "type": "string",
+      "description": "Execution status from the harness vocabulary",
+      "enum": [
+        "OK",
+        "REFUSED",
+        "OOM",
+        "INSTALL_FAILED",
+        "LOAD_FAULT",
+        "HARNESS_ERROR",
+        "ALARM",
+        "NOT_RUN"
+      ]
+    },
+    "result": {
+      "type": "string",
+      "description": "Outcome classification",
+      "enum": ["pass", "fail", "inconclusive", "invalid"]
+    },
+    "decision": {
+      "type": "string",
+      "description": "What to do with this result, plus link to follow-up (formatted as 'merge|continue|revise|abandon|rerun <url>')",
+      "minLength": 1
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text notes about the run (observations, issues, context)",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": true
+}
