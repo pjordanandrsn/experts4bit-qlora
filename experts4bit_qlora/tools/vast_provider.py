@@ -473,22 +473,32 @@ def _ssh_run(host: str, port: int, command: str, timeout_s: float) -> tuple[int,
 BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=75000000", "http://speedtest.tele2.net/100MB.zip")
 BANDWIDTH_MIN_BYTES = 5_000_000
 BANDWIDTH_WINDOW_S = 45
+_BANDWIDTH_NUMBER = r"(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
+_BANDWIDTH_LINE_RE = re.compile(
+    rf"^[ \t]*({_BANDWIDTH_NUMBER})[ \t]+({_BANDWIDTH_NUMBER})[ \t]+"
+    rf"({_BANDWIDTH_NUMBER})[ \t]+(\d{{3}})(?!\d)",
+    re.MULTILINE,
+)
 
 
 def _bandwidth_reading(out: str) -> tuple[float, float, float, str, float, float]:
     """Return rate and timing evidence, measuring from first byte through completion.
 
-    The input is ``<bytes> <request-seconds> <first-byte-seconds> <HTTP status>``.  Request setup must
-    not count against the registered link-rate floor: on a small sample DNS/TCP/TLS time can turn a
-    healthy box into a false refusal (#475).  The larger 75 MB primary sample also amortises residual
-    timing noise while remaining below Cloudflare's observed 100 MB rejection ceiling.
+    Exactly one line must begin with ``<bytes> <request-seconds> <first-byte-seconds> <HTTP status>``.
+    Vast may concatenate its SSH banner directly after the three-digit status; only the four leading fields
+    are candidates, and multiple field-shaped lines are ambiguous and refused.  Request setup must not count
+    against the registered link-rate floor: on a small sample DNS/TCP/TLS time can turn a healthy box into a
+    false refusal (#475).  The larger 75 MB primary sample also amortises residual timing noise while remaining
+    below Cloudflare's observed 100 MB rejection ceiling.
     """
-    parts = out.strip().split()
-    if len(parts) < 4:
+    matches = list(_BANDWIDTH_LINE_RE.finditer(out))
+    if len(matches) != 1:
         raise ValueError(
-            f"no <bytes> <request-seconds> <first-byte-seconds> <status> line: {out.strip()[:120]!r}"
+            f"expected exactly one <bytes> <request-seconds> <first-byte-seconds> <status> line, "
+            f"found {len(matches)}: {out.strip()[:120]!r}"
         )
-    size, request_secs, first_byte_secs, code = float(parts[0]), float(parts[1]), float(parts[2]), parts[3]
+    size_s, request_s, first_byte_s, code = matches[0].groups()
+    size, request_secs, first_byte_secs = float(size_s), float(request_s), float(first_byte_s)
     if code != "200":
         raise ValueError(f"HTTP {code} after {size:.0f} B — an error body is not a measurement")
     if size < BANDWIDTH_MIN_BYTES:
@@ -547,7 +557,7 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
 
         def command(url: str) -> str:
             return ("curl --location --fail --silent --show-error -o /dev/null "
-                    f"-w '%{{size_download}} %{{time_total}} %{{time_starttransfer}} %{{http_code}}' "
+                    f"-w '%{{size_download}} %{{time_total}} %{{time_starttransfer}} %{{http_code}}\\n' "
                     f"--max-time {BANDWIDTH_WINDOW_S} {shlex.quote(url)}")
     elif "wget" in capabilities and "python3" in capabilities:
         tool = "wget"

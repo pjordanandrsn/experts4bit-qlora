@@ -250,6 +250,20 @@ def test_bandwidth_reading_rejects_http_error_bodies_and_tiny_transfers():
     assert reading[2:] == (1.5, "200", 2.0, 0.5)
 
 
+def test_bandwidth_reading_ignores_separate_or_concatenated_ssh_banner_but_rejects_ambiguity():
+    banner = ("Welcome to vast.ai. If authentication fails, try again after a few seconds, "
+              "and double check your ssh key. Have fun!")
+    reading = _bandwidth_reading(f"{banner}\n75000000 1.257431 0.400345 200\nConnection closed")
+    assert reading[0] == pytest.approx(87.5058, rel=1e-4)
+    assert reading[1] == 75_000_000.0
+    assert reading[2] == pytest.approx(0.857086)
+    assert reading[3:] == ("200", 1.257431, 0.400345)
+    fused = _bandwidth_reading(f"75000000 1.257431 0.400345 200{banner}")
+    assert fused == reading
+    with pytest.raises(ValueError, match="found 2"):
+        _bandwidth_reading("75000000 1.2 0.2 200\n75000000 1.1 0.1 200")
+
+
 def test_bandwidth_probe_tries_fallback_after_a_slow_positive(monkeypatch):
     from experts4bit_qlora.tools import vast_provider
     replies = iter([(0, "curl=/usr/bin/curl\n"), (0, "12000000 1.1 0.1 200"),
@@ -279,6 +293,7 @@ def test_bandwidth_probe_stops_after_a_result_clears_the_floor(monkeypatch):
     assert attempts[0]["transfer_seconds"] == "1.000"
     assert "bytes=75000000" in calls[-1][2]
     assert "%{time_starttransfer}" in calls[-1][2]
+    assert "%{http_code}\\n" in calls[-1][2]
 
 
 @pytest.mark.parametrize("capability,expected_tool", [
