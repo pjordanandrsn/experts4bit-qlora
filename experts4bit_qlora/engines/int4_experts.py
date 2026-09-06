@@ -653,6 +653,12 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
 
 def _attach_live_pack_provenance(model, installed, method_map, row_counts, *,
                                  min_rows, tot_gptq, tot_rtn):
+    """Fingerprint the pack that was just installed and hang the record on the model.
+
+    Cost: every packed/scales tensor is copied to the host and sha256'd once per enable
+    (seconds to tens of seconds for a 30B pack). This runs at enable time only and never
+    on the per-step path; it is what lets a receipt name the bytes it measured.
+    """
     from .pack_manifest import (
         PAYLOAD_DIR, attach_provenance, compute_pack_fingerprint,
         method_map_hash, payload_entry, provenance_record,
@@ -673,25 +679,37 @@ def _attach_live_pack_provenance(model, installed, method_map, row_counts, *,
     rows = [{"layer": la, "expert": e, "rows": r}
             for (la, e), r in sorted(row_counts.items())]
     cfg = getattr(model, "config", None)
+    revision = getattr(cfg, "_commit_hash", None)
+    extra = {"calibrated_counts": {"gptq": tot_gptq, "rtn": tot_rtn}}
+    if not revision:
+        # Said explicitly, never silently: this live pack cannot become a licensed artifact.
+        extra["model_revision_missing"] = True
     rec = provenance_record(
         pack_fingerprint=compute_pack_fingerprint(payloads),
         component_hashes=payloads,
         method_map_hash_value=method_map_hash(method_map) if method_map else None,
         row_count_vector_hash_value=row_count_vector_hash(rows) if rows else None,
         model_id=getattr(cfg, "_name_or_path", None),
-        model_revision=getattr(cfg, "_commit_hash", None),
+        model_revision=revision or None,
         min_rows=min_rows,
         damping=float(os.environ.get("E4B_INT4_GPTQ_DAMP", "0.01")),
         solve_device=os.environ.get("E4B_INT4_GPTQ_DEVICE", "cpu"),
-        extra={"calibrated_counts": {"gptq": tot_gptq, "rtn": tot_rtn}},
+        extra=extra,
     )
     attach_provenance(model, rec)
 
 
 def dump_calibrated_artifact(model, source_dir: str, artifact_dir: str, *,
-                             model_type: str | None = None) -> dict:
-    """Serialise the live int4 stores as a hash-pinned artifact (observation)."""
-    from .pack_manifest import provenance_from_model, write_artifact
+                             model_type: str | None = None,
+                             allow_unknown_revision: bool = False) -> dict:
+    """Serialise the live int4 stores as a hash-pinned artifact (observation).
+
+    Refuses when the checkpoint revision is unknown (``config._commit_hash`` missing):
+    such bytes could never pass the licensed loader, which requires the revision. Pass
+    ``allow_unknown_revision=True`` (or ``E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION=1``) to write an
+    observation pack that says so itself (``model_revision_missing: true``).
+    """
+    from .pack_manifest import provenance_from_model, require_model_revision, write_artifact
     _moe_plan, layer_ws = _expert_layers(model, source_dir, model_type, None)
     tensors = {}
     layers_meta = []
@@ -712,9 +730,13 @@ def dump_calibrated_artifact(model, source_dir: str, artifact_dir: str, *,
         raise RuntimeError("dump_calibrated_artifact: no int4 stores on the model")
     rec = provenance_from_model(model) or {}
     cfg = getattr(model, "config", None)
+    allow = allow_unknown_revision or os.environ.get("E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION", "0") == "1"
+    revision, revision_missing = require_model_revision(
+        rec.get("model_revision") or getattr(cfg, "_commit_hash", None), allow_unknown=allow)
     meta = {
         "model_id": rec.get("model") or getattr(cfg, "_name_or_path", None),
-        "model_revision": rec.get("model_revision") or getattr(cfg, "_commit_hash", None),
+        "model_revision": revision,
+        "model_revision_missing": True if revision_missing else None,
         "min_rows": rec.get("min_rows"),
         "damping": rec.get("damping"),
         "solve_device": rec.get("solve_device"),
@@ -736,8 +758,8 @@ def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir
     from int4_b32 import _plan
 
     from .pack_manifest import (
-        LAYOUT, PackManifestError, attach_provenance, load_payload_tensors,
-        provenance_record, verify_artifact,
+        LAYOUT, PackManifestError, attach_provenance, check_manifest_dims, int4_store_dims,
+        load_payload_tensors, provenance_record, verify_artifact,
     )
     cfg = getattr(model, "config", None)
     live_rev = getattr(cfg, "_commit_hash", None)
@@ -774,8 +796,15 @@ def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir
             raise RuntimeError(
                 f"layer {layer} is tiered; this lane is the all-VRAM "
                 "collapsed path -- use placement-override all-vram")
-        Ngu, Kgu = int(meta["Ngu"]), int(meta["Kgu"])
-        Ndn, Kdn = int(meta["Ndn"]), int(meta["Kdn"])
+        # N/K come from the HASHED bytes (packed [E, N, K//2] uint8, scales [E, N, K//32]), exactly as the
+        # recipe path takes them from the weight shapes; layers[] in the manifest is only a cross-check.
+        for name, tt in (("gu_packed", gu_p), ("dn_packed", dn_p)):
+            if tt.dtype != _torch.uint8:
+                raise PackManifestError(f"layer {layer}: {name} payload is {tt.dtype}, not uint8 -- not an int4_b32 store")
+        Ngu, Kgu = int4_store_dims(gu_p, gu_s)
+        Ndn, Kdn = int4_store_dims(dn_p, dn_s)
+        check_manifest_dims(layer, "gu", meta, Ngu, Kgu)
+        check_manifest_dims(layer, "dn", meta, Ndn, Kdn)
         _b, _w2, sk_gu, _k = _plan(Ngu, Kgu)
         _b, _w2, sk_dn, _k = _plan(Ndn, Kdn)
         dev = w.h_gu_p.device

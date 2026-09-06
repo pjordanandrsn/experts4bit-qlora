@@ -99,7 +99,11 @@ ratio and carries none).
 property of pack bytes, not of the calibration recipe (#405). When present,
 `pack_fingerprint` is `sha256:<64 lowercase hex>` -- the root hash of a
 canonical pack-manifest (`experts4bit_qlora.engines.pack_manifest`): ordered
-`(path, size, sha256)` of the packed tensors and scales. The register check
+`(path, size, sha256)` of the packed tensors and scales **and of the identity
+payload `payloads/identity.json`** (schema version, layout, model id, model
+revision, per-layer shapes), so the hash names which checkpoint the bytes
+belong to; a manifest whose top-level identity fields disagree with the hashed
+payload is refused. The register check
 regex-checks the format. An ACTIVE row with `licensed_by` is artifact-backed
 once either that row or its verdict carries the field: then both must carry
 it and they must be equal. Unlicensed / VOID observations may record the

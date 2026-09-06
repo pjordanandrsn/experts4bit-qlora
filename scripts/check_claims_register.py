@@ -42,14 +42,14 @@ register had withdrawn the licence. For every claim:
     excuse a bare "licensed stack" beside it. Every ``licensed_by`` resolves
     to an ACTIVE row.
     * the citation form ``licensed by `<id>` `` refers to ANOTHER row's licence
-    and asserts none of its own (the p37 head-to-head names the stack
-    licensed by the bo6c verdict it could not reproduce): the row needs no
-    ``licensed_by`` for it -- ``licensed_by`` says the row's OWN configuration
-    is licensed and never goes on a row whose configuration is not -- and
-    ``<id>`` must be a claim in the register that itself carries
-    ``licensed_by`` (a licensed row, or a verdict row, which names itself). A
-    citation of a missing id, or of a row with no ``licensed_by``, is a
-    finding, in ``claim`` and in ``notes``.
+      and asserts none of its own (the p37 head-to-head names the stack
+      licensed by the bo6c verdict it could not reproduce): the row needs no
+      ``licensed_by`` for it -- ``licensed_by`` says the row's OWN configuration
+      is licensed and never goes on a row whose configuration is not -- and
+      ``<id>`` must be a claim in the register that itself carries
+      ``licensed_by`` (a licensed row, or a verdict row, which names itself). A
+      citation of a missing id, or of a row with no ``licensed_by``, is a
+      finding, in ``claim`` and in ``notes``.
   * optional ``pack_fingerprint`` is ``sha256:<64 lowercase hex>`` when present.
     An ACTIVE row with ``licensed_by`` is artifact-backed once either side
     carries the field: then both the row and the verdict must carry it and

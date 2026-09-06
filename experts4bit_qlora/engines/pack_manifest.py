@@ -27,6 +27,12 @@ MANIFEST_NAME = "manifest.json"
 PAYLOAD_DIR = "payloads"
 FINGERPRINT_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 PROVENANCE_ATTR = "_e4b_pack_provenance"
+IDENTITY_PATH = f"{PAYLOAD_DIR}/identity.json"
+# The manifest fields that name WHICH checkpoint and layout the bytes belong to. They are
+# written a second time as a hashed payload (IDENTITY_PATH) so the root fingerprint covers
+# them; verify_artifact refuses a manifest whose top-level copy disagrees with the hashed one.
+IDENTITY_KEYS = ("schema_version", "layout", "model_id", "model_revision", "layers")
+BLOCK = 32
 
 
 class PackManifestError(RuntimeError):
@@ -139,7 +145,8 @@ def require_artifact_for_licensed_load(artifact_dir, expected_fingerprint) -> No
     if not artifact_dir:
         raise PackManifestError(
             "expected_fingerprint is set; refusing to rebuild the pack from the "
-            "calibration recipe -- pass artifact_dir of the licensed bytes")
+            "calibration recipe -- pass artifact_dir of the licensed bytes "
+            "(None and the empty string are both refused)")
 
 
 def write_json(path: str | os.PathLike, obj: dict) -> None:
@@ -207,9 +214,83 @@ def verify_artifact(artifact_dir: str | os.PathLike, *,
         if got != expected_model_revision:
             raise PackManifestError(
                 f"model_revision {got!r} != expected {expected_model_revision!r}")
+    # Identity is hashed: the manifest's top-level copy must equal the payload the fingerprint covers.
+    identity = read_identity_payload(root, payloads)
+    for key in IDENTITY_KEYS:
+        if man.get(key) != identity.get(key):
+            raise PackManifestError(
+                f"manifest {key!r} = {man.get(key)!r} differs from the hashed identity payload "
+                f"({identity.get(key)!r}) -- the manifest was edited after the bytes were fingerprinted; refusing")
     man = dict(man)
     man["pack_fingerprint"] = computed
     return man
+
+
+def identity_payload_bytes(man: Mapping[str, Any]) -> bytes:
+    """Canonical bytes of the identity fields, exactly as the manifest carries them (absent stays absent)."""
+    ident = {k: man[k] for k in IDENTITY_KEYS if k in man and man[k] is not None}
+    return json.dumps(ident, separators=(",", ":"), sort_keys=True, ensure_ascii=True).encode("utf-8")
+
+
+def read_identity_payload(root: Path, payloads: Sequence[Mapping]) -> dict:
+    """The hashed identity payload. Its absence is a refusal: no artifact this code reads was written without one."""
+    if not any(p.get("path") == IDENTITY_PATH for p in payloads):
+        raise PackManifestError(
+            f"artifact has no hashed identity payload ({IDENTITY_PATH}); the root fingerprint "
+            "does not cover model_revision / layout / layers -- refusing")
+    try:
+        ident = json.loads((root / IDENTITY_PATH).read_bytes().decode("utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise PackManifestError(f"identity payload unreadable: {e}") from e
+    if not isinstance(ident, dict):
+        raise PackManifestError("identity payload is not an object")
+    return ident
+
+
+def int4_store_dims(packed, scales) -> tuple[int, int]:
+    """(N, K) from the bytes of one int4_b32 store: ``packed [..., N, K//2] uint8``,
+    ``scales [..., N, K//32]`` (leading dim = experts). The manifest never decides N/K;
+    it may only agree with the payload."""
+    if getattr(packed, "dim", lambda: 0)() < 2 or getattr(scales, "dim", lambda: 0)() < 2:
+        raise PackManifestError("packed/scales payloads must be at least 2-D ([..., N, K//2] / [..., N, K//32])")
+    n, k_half = int(packed.shape[-2]), int(packed.shape[-1])
+    k = k_half * 2
+    n_s, k_blocks = int(scales.shape[-2]), int(scales.shape[-1])
+    if n_s != n or k_blocks * BLOCK != k:
+        raise PackManifestError(
+            f"packed and scales disagree: packed implies N={n} K={k}, scales imply N={n_s} K={k_blocks * BLOCK}")
+    if k % BLOCK:
+        raise PackManifestError(f"K={k} from the payload is not a multiple of {BLOCK}")
+    return n, k
+
+
+def check_manifest_dims(layer, role: str, meta: Mapping[str, Any], n: int, k: int) -> None:
+    """``layers[]`` is a cross-check of the hashed bytes, never their source of truth."""
+    try:
+        mn, mk = int(meta[f"N{role}"]), int(meta[f"K{role}"])
+    except (KeyError, TypeError, ValueError) as e:
+        raise PackManifestError(f"layer {layer} {role}: manifest layers[] lacks N/K: {e}") from e
+    if (mn, mk) != (n, k):
+        raise PackManifestError(
+            f"layer {layer} {role}: manifest layers[] says N={mn} K={mk} but the hashed payload "
+            f"bytes are N={n} K={k} -- refusing (layers[] is outside the tensor bytes)")
+
+
+def require_model_revision(revision, *, allow_unknown: bool = False) -> tuple[str | None, bool]:
+    """A pack without a pinned checkpoint revision can never be a licensed load.
+
+    Returns ``(revision, missing)``. Refuses when unknown unless ``allow_unknown``; then the
+    caller must record ``model_revision_missing: true`` so the observation pack says so itself.
+    """
+    if revision:
+        return str(revision), False
+    if not allow_unknown:
+        raise PackManifestError(
+            "model_revision is unknown (config._commit_hash missing): an artifact without a pinned "
+            "checkpoint revision can never become a licensed load -- refusing to dump it. Pass "
+            "allow_unknown_revision=True (or E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION=1) to write an "
+            "observation pack marked model_revision_missing.")
+    return None, True
 
 
 def write_artifact(artifact_dir: str | os.PathLike, *,
@@ -225,6 +306,11 @@ def write_artifact(artifact_dir: str | os.PathLike, *,
         data = tensor_payload_bytes(tensors[(layer, role, kind)])
         (root / rel).write_bytes(data)
         payloads.append(payload_entry(rel, data))
+    head = {"schema_version": SCHEMA_VERSION, "layout": LAYOUT,
+            **{k: v for k, v in meta.items() if v is not None}}
+    ident = identity_payload_bytes(head)
+    (root / IDENTITY_PATH).write_bytes(ident)
+    payloads.append(payload_entry(IDENTITY_PATH, ident))
     fp = compute_pack_fingerprint(payloads)
     man = {
         "schema_version": SCHEMA_VERSION,
@@ -243,6 +329,8 @@ def load_payload_tensors(artifact_dir: str | os.PathLike,
     out = {}
     for p in manifest["payloads"]:
         rel = p["path"]
+        if rel == IDENTITY_PATH:
+            continue  # hashed identity, not a tensor
         name = Path(rel).name
         # layer_0007_gu_packed.bin
         m = re.fullmatch(r"layer_(\d+)_(gu|dn)_(packed|scales)\.bin", name)
