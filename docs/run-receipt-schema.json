@@ -368,6 +368,11 @@
       "type": "string",
       "description": "Free-text notes about the run (observations, issues, context)",
       "minLength": 1
+    },
+    "incident": {
+      "type": "string",
+      "description": "Issue reference for a compute-governance incident that caused this run without prior approval (format: <owner>/<repo>#<n> or <repo>#<n>). When present: status must be ALARM, result must be invalid, decision must start with 'abandon'. The cost still counts toward the role's daily ceiling and the global budget.",
+      "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?#[0-9]+$"
     }
   },
   "additionalProperties": true
