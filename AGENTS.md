@@ -170,14 +170,18 @@ pull request (substantive implementation); Bugbot (under the CTO) is QA.
 read-only.
 
 **Scout — Chief Evidence Officer**: read-only verification (claims vs receipts,
-prior art); cites `file:line` / URLs; never edits.
+prior art, upstream behaviour at a pinned revision); cites `file:line` / URLs;
+never edits.
 
 **Forge — COO**: mechanical repository work from issues on branches like
 `forge/<issue>-<slug>`; single PR per issue; no merges; restricted from
-touching gates, thresholds, floors, or registered claims.
+touching gates, thresholds, floors, registered claims, or documents with an
+OpenTimestamps footer.
 
-**Warden — Chief Risk Officer**: read-only security review with findings
-formatted as `file:line — claim — why — severity`; escalates fixes to Forge.
+**Warden — Chief Risk Officer**: read-only review: correctness, silent
+fallbacks, gate / threshold drift, claims outrunning receipts, security;
+findings as `file:line — claim — why — severity` + what was not checked; hands
+fixes to Forge.
 
 Every handoff posted in Slack is also written on the issue.
 
