@@ -12,7 +12,7 @@ import pytest
 
 from experts4bit_qlora.tools.vast_provider import (
     BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
-    offer_filter, provider_from_env,
+    _bandwidth_over_ssh_with_evidence, _bandwidth_reading, offer_filter, provider_from_env,
 )
 
 KEY = "ab" * 20 + "0123456789abcdef"  # 56 hex chars, built at runtime so nothing key-shaped is at rest
@@ -213,6 +213,108 @@ def test_preflight_fails_on_stuck_loading_bad_disk_bad_ssh_and_slow_link():
         provider(tr, ssh_runner=lambda h, p, c, t: (255, "Permission denied")).preflight("7000123")
     with pytest.raises(PreflightFailed, match="bandwidth 12.0 MB/s"):
         provider(tr, bandwidth_probe=lambda h, p: 12.0).preflight("7000123")
+
+
+def test_bandwidth_probe_records_all_command_failures(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    replies = iter([(0, "curl=/usr/bin/curl\nwget=/usr/bin/wget\npython3=/usr/bin/python3\n")]
+                   + [(28, "curl: (28) Operation timed out")] * 4)
+    monkeypatch.setattr(vast_provider, "_ssh_run", lambda *args: next(replies))
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 0.0 and len(attempts) == 4
+    assert evidence["capability"]["tools"]["curl"] == "/usr/bin/curl"
+    assert [(a["endpoint"], a["attempt"]) for a in attempts] == [(1, 1), (1, 2), (2, 1), (2, 2)]
+    assert all(a["tool"] == "curl" and a["rc"] == 28 and a["result"] == "command-failed" for a in attempts)
+
+
+def test_bandwidth_probe_records_parse_failures(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    replies = iter([(0, "curl=/usr/bin/curl\n")] + [(0, "not-a-number")] * 4)
+    monkeypatch.setattr(vast_provider, "_ssh_run", lambda *args: next(replies))
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 0.0 and len(attempts) == 4
+    assert all(a["result"] == "invalid-reading" and a["sample"] == "not-a-number" for a in attempts)
+
+
+def test_bandwidth_reading_rejects_http_error_bodies_and_tiny_transfers():
+    with pytest.raises(ValueError, match="HTTP 403"):
+        _bandwidth_reading("1 0.05 403")
+    with pytest.raises(ValueError, match="only 900 B"):
+        _bandwidth_reading("900 0.05 200")
+    assert _bandwidth_reading("20000000 0.25 200")[0] == pytest.approx(80.0)
+
+
+def test_bandwidth_probe_tries_fallback_after_a_slow_positive(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    replies = iter([(0, "curl=/usr/bin/curl\n"), (0, "12000000 1 200"), (0, "11000000 1 200"),
+                    (0, "95000000 1 200")])
+    monkeypatch.setattr(vast_provider, "_ssh_run", lambda *args: next(replies))
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 95.0 and len(attempts) == 3
+    assert [a["endpoint"] for a in attempts] == [1, 1, 2]
+
+
+def test_bandwidth_probe_stops_after_a_result_clears_the_floor(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    calls = []
+
+    def fast(*args):
+        calls.append(args)
+        return (0, "curl=/usr/bin/curl\n") if len(calls) == 1 else (0, "95000000 1 200")
+
+    monkeypatch.setattr(vast_provider, "_ssh_run", fast)
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 95.0 and len(attempts) == 1 and len(calls) == 2
+    assert attempts[0]["result"] == "ok"
+
+
+@pytest.mark.parametrize("capability,expected_tool", [
+    ("wget=/usr/bin/wget\npython3=/usr/bin/python3\n", "wget"),
+    ("python3=/usr/bin/python3\n", "python3"),
+])
+def test_bandwidth_probe_falls_back_to_an_available_downloader(monkeypatch, capability, expected_tool):
+    from experts4bit_qlora.tools import vast_provider
+    commands = []
+    replies = iter([(0, capability), (0, "95000000 1 200")])
+
+    def run(host, port, command, timeout):
+        commands.append(command)
+        return next(replies)
+
+    monkeypatch.setattr(vast_provider, "_ssh_run", run)
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    assert mbps == 95.0 and evidence["attempts"][0]["tool"] == expected_tool
+    assert expected_tool in commands[-1]
+
+
+def test_live_preflight_carries_bandwidth_attempt_evidence_on_failure(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    evidence = {"capability": {"rc": 0, "tools": {"curl": "/usr/bin/curl"}},
+                "attempts": [{"endpoint": 1, "attempt": 1, "rc": 28, "sample": "curl timed out",
+                              "result": "command-failed"}]}
+    monkeypatch.setattr(vast_provider, "_bandwidth_over_ssh_with_evidence",
+                        lambda host, port, *, stop_at_mb_s: (0.0, evidence))
+    tr = FakeTransport(routes())
+    p = VastProvider(tr, run_label="test-run", ssh_runner=lambda *args: (0, ""), sleep=lambda s: None)
+    with pytest.raises(PreflightFailed, match=r'probe=\{"attempts":\[\{"attempt":1,"endpoint":1'):
+        p.preflight("7000123")
+
+
+def test_live_preflight_records_bandwidth_attempt_evidence_on_success(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    evidence = {"capability": {"rc": 0, "tools": {"curl": "/usr/bin/curl"}},
+                "attempts": [{"endpoint": 1, "attempt": 1, "rc": 0, "sample": "95000000", "mb_s": "95.0",
+                              "result": "ok"}]}
+    monkeypatch.setattr(vast_provider, "_bandwidth_over_ssh_with_evidence",
+                        lambda host, port, *, stop_at_mb_s: (95.0, evidence))
+    tr = FakeTransport(routes())
+    p = VastProvider(tr, run_label="test-run", ssh_runner=lambda *args: (0, ""), sleep=lambda s: None)
+    facts = p.preflight("7000123")
+    assert json.loads(facts["vast_bandwidth_probe"]) == evidence
 
 
 def test_the_ssh_probe_waits_for_sshd_and_records_the_attempts():

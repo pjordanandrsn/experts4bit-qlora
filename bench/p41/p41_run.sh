@@ -121,7 +121,30 @@ case "$E4B_SRC_REF" in *[!0-9a-f]*|"") echo "REFUSED: P41_E4B_SRC_REF '$E4B_SRC_
 SRC_URL="https://github.com/pjordanandrsn/experts4bit-qlora/archive/$E4B_SRC_REF.tar.gz"
 say "fetching repo helpers from $SRC_URL"
 rm -rf $W/e4b-src && mkdir -p $W/e4b-src
-perl -e 'alarm 600; exec @ARGV' curl -fsSL --retry 3 -o $W/e4b-src.tar.gz "$SRC_URL" && tar xzf $W/e4b-src.tar.gz -C $W/e4b-src --strip-components=1; rc=$?
+for tool in curl wget python3; do
+  if path=$(command -v "$tool" 2>/dev/null); then echo "SRC FETCH CAPABILITY $tool=$path"; else echo "SRC FETCH CAPABILITY $tool=absent"; fi
+done | tee -a summary.txt
+if command -v curl >/dev/null 2>&1; then
+  FETCH_TOOL=curl
+  perl -e 'alarm 600; exec @ARGV' curl -fsSL --retry 3 -o $W/e4b-src.tar.gz "$SRC_URL"
+  rc=$?
+elif command -v wget >/dev/null 2>&1; then
+  FETCH_TOOL=wget
+  perl -e 'alarm 600; exec @ARGV' wget -q --tries=3 --timeout=60 -O $W/e4b-src.tar.gz "$SRC_URL"
+  rc=$?
+elif command -v python3 >/dev/null 2>&1; then
+  FETCH_TOOL=python3
+  perl -e 'alarm 600; exec @ARGV' python3 -c 'import shutil,sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$SRC_URL" $W/e4b-src.tar.gz
+  rc=$?
+else
+  FETCH_TOOL=none
+  rc=127
+fi
+echo "SRC FETCH TOOL $FETCH_TOOL rc=$rc" | tee -a summary.txt
+if [ $rc -eq 0 ]; then
+  tar xzf $W/e4b-src.tar.gz -C $W/e4b-src --strip-components=1
+  rc=$?
+fi
 [ $rc -ne 0 ] && { echo "SRC FETCH FAIL rc=$rc ($SRC_URL)" | tee -a summary.txt; touch TP_DONE; exit 9; }
 for kv in $HELPER_SHAS; do f=${kv%%=*}; want=${kv#*=}; got=$(sha256sum "$W/e4b-src/$f" 2>/dev/null | awk '{print $1}')
   [ "$got" = "$want" ] || { echo "HELPER MISMATCH $f: $got != pinned $want -- nothing from the archive runs" | tee -a summary.txt; touch TP_DONE; exit 9; }
