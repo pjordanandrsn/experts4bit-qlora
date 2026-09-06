@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from experts4bit_qlora.tools.vast_provider import (
-    BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
+    BackendBusy, BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
     _bandwidth_over_ssh_with_evidence, _bandwidth_reading, offer_filter, provider_from_env,
 )
 
@@ -501,3 +501,49 @@ def test_launch_refuses_an_offer_priced_above_the_declared_rate():
     assert not any(c[0] == "PUT" for c in tr.calls), "no create was attempted"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.61) == "7000123"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img") == "7000123", "no ceiling given → no check (the launcher always gives one)"
+
+
+# ---- #480: an API error is not a record (two controllers rate-limited each other at 2026-09-06T21:46Z)
+
+def test_a_rate_limited_instance_read_says_the_provider_declined_not_that_the_record_is_malformed():
+    """The live message was `instance 50101728 record has the wrong shape: {instances: NoneType}`, which reads as
+    the provider saying something nonsensical about that instance. It had said nothing at all."""
+    for routes_extra in ({("GET", "/v0/instances/7000123/"): [(429, {"error": "rate limit"})]},
+                         {("GET", "/v0/instances/7000123/"): [(200, {"instances": None})]}):
+        tr = FakeTransport(routes(routes_extra))
+        with pytest.raises(BackendBusy, match="declined"):
+            provider(tr).instance("7000123")
+    # and it is still a BackendUnavailable, so every existing caller keeps its behaviour
+    assert issubclass(BackendBusy, BackendUnavailable)
+
+
+def test_a_rate_limited_listing_is_declined_never_an_empty_account():
+    for routes_extra in ({("GET", "/v1/instances/"): [(429, {"error": "rate limit"})]},
+                         {("GET", "/v1/instances/"): [(200, {"instances": None})]}):
+        tr = FakeTransport(routes(routes_extra))
+        with pytest.raises(BackendBusy, match="declined"):
+            provider(tr).list_instances()
+
+
+def test_a_malformed_record_is_still_a_malformed_record():
+    """The distinction only helps if the old message survives for the case it was written for."""
+    tr = FakeTransport(routes({("GET", "/v0/instances/7000123/"): [(200, {"instances": {"id": 999}})]}))
+    with pytest.raises(BackendUnavailable, match="wrong shape"):
+        provider(tr).instance("7000123")
+
+
+def test_the_preflight_waits_out_a_declining_provider_instead_of_destroying_the_box():
+    """A decline means the question is unanswered. The pre-flight's window is already bounded; spend it asking."""
+    running = _INSTANCE if (_INSTANCE := INSTANCE) else INSTANCE
+    tr = FakeTransport(routes({("GET", "/v0/instances/7000123/"): [
+        (429, {"error": "rate limit"}), (429, {"error": "rate limit"}), (200, {"instances": running})]}))
+    facts = provider(tr, ssh_pubkey="ssh-ed25519 AAAA test").preflight("7000123", timeout_s=60, poll_s=0.01)
+    assert facts["vast_preflight"] == "ok"
+    assert facts["vast_provider_declines"] == "2", facts
+
+
+def test_a_provider_that_only_ever_declines_fails_the_preflight_naming_that():
+    tr = FakeTransport(routes({("GET", "/v0/instances/7000123/"): [(429, {"error": "rate limit"})]}))
+    clock = iter([0.0, 0.0, 0.0, 99.0, 99.0, 99.0, 99.0])
+    with pytest.raises(PreflightFailed, match=r"declined \d+ time\(s\) within 60 s and never answered"):
+        provider(tr, clock=lambda: next(clock)).preflight("7000123", timeout_s=60, poll_s=0.01)
