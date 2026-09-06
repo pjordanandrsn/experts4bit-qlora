@@ -959,8 +959,8 @@ def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path
     good = tmp_path / "id_ed25519.pub"
     good.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderKeyMaterialForTheTestOnly0000000000 cdo@mini\n")
     assert read_pubkey(good).startswith("ssh-ed25519 AAAA")
-    private = tmp_path / "id_ed25519"
-    private.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n")
+    privkey = tmp_path / "id_ed25519"
+    privkey.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n")
     with pytest.raises(RentRefused, match="private key is refused"):
         read_pubkey(privkey)
     with pytest.raises(RentRefused, match="no such file"):
