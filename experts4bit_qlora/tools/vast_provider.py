@@ -483,6 +483,9 @@ BANDWIDTH_WINDOW_S = 45
 # first byte — 87.5 MB/s over the transfer window, more than twice the 40 MB/s floor — and the pre-flight refused it
 # as an error body, so the floor has still never been observed to pass. Both halves are fixed: the format now ends
 # in a newline, and this takes the numbers wherever they sit and ignores whatever the box printed around them.
+# EXACTLY ONE match is required (#482's guard, folded in per the CEO's read of #481): a blob holding two
+# measurement lines, or a banner that happens to carry four numeric fields ending in three digits at a line
+# start, is ambiguous — refusing beats quietly taking whichever came first.
 _READING_RE = re.compile(r"(?m)^[ \t]*(\d+(?:\.\d+)?)[ \t]+(\d+(?:\.\d+)?)[ \t]+(\d+(?:\.\d+)?)"
                          r"[ \t]+(\d{3})(?![0-9.])")
 
@@ -495,11 +498,13 @@ def _bandwidth_reading(out: str) -> tuple[float, float, float, str, float, float
     healthy box into a false refusal (#475).  The larger 75 MB primary sample also amortises residual
     timing noise while remaining below Cloudflare's observed 100 MB rejection ceiling.
     """
-    m = _READING_RE.search(out)
-    if not m:
+    found = list(_READING_RE.finditer(out))
+    if len(found) != 1:
         raise ValueError(
-            f"no <bytes> <request-seconds> <first-byte-seconds> <status> line: {' '.join(out.split())[:160]!r}"
+            f"expected exactly one <bytes> <request-seconds> <first-byte-seconds> <status> line, found "
+            f"{len(found)}: {' '.join(out.split())[:160]!r}"
         )
+    m = found[0]
     size, request_secs, first_byte_secs, code = float(m.group(1)), float(m.group(2)), float(m.group(3)), m.group(4)
     if code != "200":
         raise ValueError(f"HTTP {code} after {size:.0f} B — an error body is not a measurement")

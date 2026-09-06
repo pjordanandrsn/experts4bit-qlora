@@ -514,10 +514,23 @@ def test_the_reading_is_found_wherever_the_box_put_it():
         assert mbps == pytest.approx(87.5, abs=0.1), out[:60]
 
 
+def test_two_candidate_readings_are_ambiguous_and_refused_not_silently_first(): 
+    """#482's guard, folded in: a blob with two measurement lines — or a banner that happens to carry four numeric
+    fields ending in three digits at a line start — is ambiguous. Refusing beats taking whichever came first."""
+    two = "75000000 1.257431 0.400345 200\n75000000 9.999999 0.000001 200\n"
+    with pytest.raises(ValueError, match="found 2"):
+        vast_provider._bandwidth_reading(two)
+    with pytest.raises(ValueError, match="found 0"):
+        vast_provider._bandwidth_reading(_BANNER)
+    # the fused live line is still exactly one match and still parses
+    mbps, *_ = vast_provider._bandwidth_reading("75000000 1.257431 0.400345 200" + _BANNER)
+    assert mbps == pytest.approx(87.5, abs=0.1)
+
+
 def test_a_status_that_is_not_three_digits_is_still_not_a_reading():
-    with pytest.raises(ValueError, match="no <bytes>"):
+    with pytest.raises(ValueError, match="found 0"):
         vast_provider._bandwidth_reading("75000000 1.25 0.40 2000\n")
-    with pytest.raises(ValueError, match="no <bytes>"):
+    with pytest.raises(ValueError, match="found 0"):
         vast_provider._bandwidth_reading(_BANNER)
     with pytest.raises(ValueError, match="HTTP 403"):
         vast_provider._bandwidth_reading("1 0.05 0.04 403" + _BANNER)
