@@ -149,3 +149,33 @@ default). Gemma-4 fails to load on some rented hosts (#344) and has no
 quality instrument at 512-token resolution (#359); gpt-oss's raw-text
 perplexity cannot rank an exact arm against a noisy one. B=1 decode is
 host-bound: absolutes do not travel between hosts, ratios do.
+
+## 10. Working with other agents
+
+Three agents touch this repository: Claude Code (the maintainer's session:
+orchestration, releases, the merge gate), Cursor Cloud Agents (a bounded code
+task that starts from an issue and ends as a pull request) and ChatGPT
+(review, research, repo-state reports; read-only). The record is GitHub; the
+Slack channel `#ml-packages` is only the live channel, and every handoff
+posted there is also written on the issue.
+
+- A task is an issue opened from the **Agent task** template (goal, acceptance
+  criteria, evidence required, constraints) carrying exactly one of
+  `agent:cursor` / `agent:chatgpt` / `agent:claude`; `handoff` marks it ready
+  for the agent named in the last comment; `blocked:user` means the maintainer
+  must act (decision, credential, account link).
+- The taking agent acknowledges on the issue, works on a branch, opens a pull
+  request that cites the issue, and stops. Nobody merges their own pull
+  request. The merge gate is green checks + Bugbot success + zero unresolved
+  review threads, with section 8's companions in the same diff. Receipts and
+  code ship in separate pull requests; a pull request too large for Bugbot to
+  review is a finding, not a pass.
+- A task pull request never moves a gate, a threshold, the `[fast]` floor or a
+  registered claim; if the task needs one, the agent stops and says so on the
+  issue.
+- Sections 2–9 bind every agent equally: structure not names, counts or
+  raise, measured means a receipt in the repository, `llms-full.txt`
+  regenerated when a bundled document changed.
+- Documents that carry an OpenTimestamps footer are never edited in place: a
+  sibling file with errata, never the original.
+
