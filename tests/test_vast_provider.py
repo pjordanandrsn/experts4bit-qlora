@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from experts4bit_qlora.tools import vast_provider  # noqa: F401 — the module itself, for the probe-parser tests
 from experts4bit_qlora.tools.vast_provider import (
     BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
     _bandwidth_over_ssh_with_evidence, _bandwidth_reading, offer_filter, provider_from_env,
@@ -486,3 +487,50 @@ def test_launch_refuses_an_offer_priced_above_the_declared_rate():
     assert not any(c[0] == "PUT" for c in tr.calls), "no create was attempted"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.61) == "7000123"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img") == "7000123", "no ceiling given → no check (the launcher always gives one)"
+
+
+# ---- the box prints things around your output (p41-proving-1, instance 50101717, 2026-09-06T21:56Z)
+
+_BANNER = ("Welcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key. Have fun!")
+
+
+def test_the_login_banner_fused_to_the_status_does_not_lose_a_healthy_box():
+    """The exact line the proving rental produced. `_ssh_run` merges stderr into stdout and vast.ai's banner
+    arrives with no separator, so with a `-w` string that did not end in a newline the status read `200Welcome`
+    and an 87.5 MB/s box was refused as an error body. The floor had still never been observed to pass."""
+    out = "75000000 1.257431 0.400345 200" + _BANNER
+    mbps, size, secs, code, request_s, first_byte_s = vast_provider._bandwidth_reading(out)
+    assert code == "200" and size == 75000000
+    assert secs == pytest.approx(0.857086) and mbps == pytest.approx(87.5, abs=0.1)
+    assert request_s == pytest.approx(1.257431) and first_byte_s == pytest.approx(0.400345)
+
+
+def test_the_reading_is_found_wherever_the_box_put_it():
+    for out in ("75000000 1.257431 0.400345 200\n",
+                _BANNER + "\n75000000 1.257431 0.400345 200\n",
+                "some motd\n75000000 1.257431 0.400345 200" + _BANNER,
+                "\n\n  75000000 1.257431 0.400345 200  \n" + _BANNER):
+        mbps, *_ = vast_provider._bandwidth_reading(out)
+        assert mbps == pytest.approx(87.5, abs=0.1), out[:60]
+
+
+def test_a_status_that_is_not_three_digits_is_still_not_a_reading():
+    with pytest.raises(ValueError, match="no <bytes>"):
+        vast_provider._bandwidth_reading("75000000 1.25 0.40 2000\n")
+    with pytest.raises(ValueError, match="no <bytes>"):
+        vast_provider._bandwidth_reading(_BANNER)
+    with pytest.raises(ValueError, match="HTTP 403"):
+        vast_provider._bandwidth_reading("1 0.05 0.04 403" + _BANNER)
+
+
+def test_the_curl_format_ends_in_a_newline_so_nothing_can_fuse_to_the_status(monkeypatch):
+    seen = []
+
+    def run(host, port, command, timeout_s):
+        if command.startswith("for t in"):
+            return 0, "curl=/usr/bin/curl"
+        seen.append(command)
+        return 0, "75000000 1.257431 0.400345 200\n"
+    monkeypatch.setattr(vast_provider, "_ssh_run", run)
+    vast_provider._bandwidth_over_ssh_with_evidence("h", 1, stop_at_mb_s=1.0)
+    assert seen and seen[0].rstrip().endswith("'\\n' " + "'" + vast_provider.BANDWIDTH_URLS[0] + "'") or "\\n'" in seen[0], seen[0][:200]

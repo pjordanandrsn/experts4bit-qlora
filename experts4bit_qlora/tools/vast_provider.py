@@ -475,6 +475,18 @@ BANDWIDTH_MIN_BYTES = 5_000_000
 BANDWIDTH_WINDOW_S = 45
 
 
+# The measurement line, found by shape rather than by position. A rented box prints things around a command's
+# output that have nothing to do with it: `_ssh_run` merges stderr into stdout, and vast.ai's login banner
+# ("Welcome to vast.ai. If authentication fails…") arrives with no separator — so with curl's `-w` string having no
+# trailing newline, the banner fused to the status and a healthy box read as `HTTP 200Welcome`. Measured on
+# p41-proving-1 (instance 50101717, 2026-09-06T21:56Z): curl moved 75,000,000 B in 1.257431 s with 0.400345 s to
+# first byte — 87.5 MB/s over the transfer window, more than twice the 40 MB/s floor — and the pre-flight refused it
+# as an error body, so the floor has still never been observed to pass. Both halves are fixed: the format now ends
+# in a newline, and this takes the numbers wherever they sit and ignores whatever the box printed around them.
+_READING_RE = re.compile(r"(?m)^[ \t]*(\d+(?:\.\d+)?)[ \t]+(\d+(?:\.\d+)?)[ \t]+(\d+(?:\.\d+)?)"
+                         r"[ \t]+(\d{3})(?![0-9.])")
+
+
 def _bandwidth_reading(out: str) -> tuple[float, float, float, str, float, float]:
     """Return rate and timing evidence, measuring from first byte through completion.
 
@@ -483,12 +495,12 @@ def _bandwidth_reading(out: str) -> tuple[float, float, float, str, float, float
     healthy box into a false refusal (#475).  The larger 75 MB primary sample also amortises residual
     timing noise while remaining below Cloudflare's observed 100 MB rejection ceiling.
     """
-    parts = out.strip().split()
-    if len(parts) < 4:
+    m = _READING_RE.search(out)
+    if not m:
         raise ValueError(
-            f"no <bytes> <request-seconds> <first-byte-seconds> <status> line: {out.strip()[:120]!r}"
+            f"no <bytes> <request-seconds> <first-byte-seconds> <status> line: {' '.join(out.split())[:160]!r}"
         )
-    size, request_secs, first_byte_secs, code = float(parts[0]), float(parts[1]), float(parts[2]), parts[3]
+    size, request_secs, first_byte_secs, code = float(m.group(1)), float(m.group(2)), float(m.group(3)), m.group(4)
     if code != "200":
         raise ValueError(f"HTTP {code} after {size:.0f} B — an error body is not a measurement")
     if size < BANDWIDTH_MIN_BYTES:
@@ -547,7 +559,7 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
 
         def command(url: str) -> str:
             return ("curl --location --fail --silent --show-error -o /dev/null "
-                    f"-w '%{{size_download}} %{{time_total}} %{{time_starttransfer}} %{{http_code}}' "
+                    f"-w '%{{size_download}} %{{time_total}} %{{time_starttransfer}} %{{http_code}}\\n' "
                     f"--max-time {BANDWIDTH_WINDOW_S} {shlex.quote(url)}")
     elif "wget" in capabilities and "python3" in capabilities:
         tool = "wget"
