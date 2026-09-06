@@ -246,8 +246,9 @@ Every handoff posted in Slack is also written on the issue.
 - The taking agent acknowledges on the issue, works on a branch, opens a pull
   request that cites the issue, and stops. Every PR gets one independent review
   before merge — by a seat that did not author it: Warden's source read
-  (`file:line — claim — why — severity`), or a review by the CXO, CTO, CSO, CDO
-  or CEO; Cursor Bugbot and automated Claude Code review are retired (Jordan,
+  (`file:line — claim — why — severity`), or a review by the CXO (Chief
+  Experiments Officer), CTO, CSO, CDO or CEO; Cursor Bugbot and automated Claude
+  Code review are retired (Jordan,
   2026-09-06). Claude Code holds the merge gate: checks green on the head that
   carries the `ready-to-merge` label + that review + zero unresolved threads,
   with section 8's companions in the same diff. CI runs on `main` and on a pull
