@@ -21,6 +21,17 @@ ANCHOR_B1 = 159.2          # tok/s, the NF4 anchor-class ceiling -- a PROJECTION
 BO7 = {1: 2.067, 16: 2.602}  # bo7's same-box licensed/NF4 ratios, cited beside (rule 4), never divided into
 
 
+def fingerprint_mismatch_reason(observed, expected):
+    """Exact pack identity when the lane names an expected fingerprint; else None (legacy count banner)."""
+    if not expected:
+        return None
+    if not observed:
+        return "no pack_fingerprint in receipt (expected licensed bytes)"
+    if observed != expected:
+        return f"pack_fingerprint {observed} != expected {expected}"
+    return None
+
+
 def jload(p):
     try:
         return json.load(open(p))
@@ -61,13 +72,18 @@ def e4b_row(d, B, arm, log, vram):
     if d.get("n_steps") != need:
         why.append(f"n_steps {d.get('n_steps')} != {need}")
     if arm.startswith("lic"):
-        if not grep(log, r"INT4EXP.*48 layers"):
-            why.append("no INT4EXP 48-layer banner")
-        if not grep(log, r"ATTNINT4.*192"):
-            why.append("no ATTNINT4 192 banner")
-        counts = grep(log, r"11512 gptq / 776 rtn")
-        if not counts:
-            why.append("64k pack counts 11512/776 not in log (different pack or not calibrated)")
+        expected_fp = d.get("expected_pack_fingerprint") or os.environ.get("E4B_EXPECTED_PACK_FINGERPRINT")
+        mismatch = fingerprint_mismatch_reason(d.get("pack_fingerprint"), expected_fp)
+        if mismatch:
+            why.append(mismatch)
+        elif not expected_fp:
+            if not grep(log, r"INT4EXP.*48 layers"):
+                why.append("no INT4EXP 48-layer banner")
+            if not grep(log, r"ATTNINT4.*192"):
+                why.append("no ATTNINT4 192 banner")
+            counts = grep(log, r"11512 gptq / 776 rtn")
+            if not counts:
+                why.append("64k pack counts 11512/776 not in log (different pack or not calibrated)")
     else:
         if grep(log, r"INT4EXP|ATTNINT4"):
             why.append("control arm shows int4 banners")

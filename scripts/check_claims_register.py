@@ -41,15 +41,21 @@ register had withdrawn the licence. For every claim:
     is per occurrence: one "unlicensed" elsewhere in the sentence does not
     excuse a bare "licensed stack" beside it. Every ``licensed_by`` resolves
     to an ACTIVE row.
-  * the citation form ``licensed by `<id>` `` refers to ANOTHER row's licence
-    and asserts none of its own (the p37 head-to-head names the stack
-    licensed by the bo6c verdict it could not reproduce): the row needs no
-    ``licensed_by`` for it -- ``licensed_by`` says the row's OWN configuration
-    is licensed and never goes on a row whose configuration is not -- and
-    ``<id>`` must be a claim in the register that itself carries
-    ``licensed_by`` (a licensed row, or a verdict row, which names itself). A
-    citation of a missing id, or of a row with no ``licensed_by``, is a
-    finding, in ``claim`` and in ``notes``.
+    * the citation form ``licensed by `<id>` `` refers to ANOTHER row's licence
+      and asserts none of its own (the p37 head-to-head names the stack
+      licensed by the bo6c verdict it could not reproduce): the row needs no
+      ``licensed_by`` for it -- ``licensed_by`` says the row's OWN configuration
+      is licensed and never goes on a row whose configuration is not -- and
+      ``<id>`` must be a claim in the register that itself carries
+      ``licensed_by`` (a licensed row, or a verdict row, which names itself). A
+      citation of a missing id, or of a row with no ``licensed_by``, is a
+      finding, in ``claim`` and in ``notes``.
+  * optional ``pack_fingerprint`` is ``sha256:<64 lowercase hex>`` when present.
+    An ACTIVE row with ``licensed_by`` is artifact-backed once either side
+    carries the field: then both the row and the verdict must carry it and
+    they must match. Unlicensed / VOID observations may record an observed
+    fingerprint without ``licensed_by``. Existing licence rows without a
+    published artifact hash omit the field -- never invent one.
   * ids are unique and every status is in the file's vocabulary
     (``discovery_common.load_claims``).
 
@@ -77,6 +83,7 @@ CLAIMS = "docs/claims.json"
 DATED = frozenset({"measured", "measured-private", "verified", "confirmed"})
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _PENDING = re.compile(r"\b(pending|TBD)\b", re.I)
+_PACK_FP = re.compile(r"^sha256:[0-9a-f]{64}$")
 _LICENSED = re.compile(r"\blicensed\b", re.I)
 #: A negation that ends right before ONE occurrence of "licensed" disclaims that
 #: occurrence only (looked for in the ``_NEGATION_WINDOW`` characters before it).
@@ -275,6 +282,22 @@ def check_claims(root: Path, claims: list[dict], sibling: Path | None = None, si
                 findings.append(f"{cid}: licensed_by {lb!r} is not in the register")
             elif not active(lb):
                 findings.append(f"{cid}: licensed_by {lb!r} has status {by[lb].get('status')!r}; a licence comes from an active verdict row")
+        pf = c.get("pack_fingerprint")
+        if pf is not None:
+            if not isinstance(pf, str) or not _PACK_FP.fullmatch(pf):
+                findings.append(f"{cid}: pack_fingerprint {pf!r} is not sha256:<64 lowercase hex>")
+        if st in ACTIVE_STATUSES and lb and lb in by and active(lb):
+            row_fp = pf if isinstance(pf, str) else None
+            ver_fp = by[lb].get("pack_fingerprint")
+            if row_fp or ver_fp:
+                if not row_fp:
+                    findings.append(f"{cid}: licensed_by {lb} carries pack_fingerprint but this row does not "
+                                    "-- an artifact-backed licence names the same bytes on both rows")
+                elif not ver_fp:
+                    findings.append(f"{cid}: pack_fingerprint is set but licensed_by {lb} has none "
+                                    "-- the verdict row is the licence basis and must name the bytes")
+                elif row_fp != ver_fp:
+                    findings.append(f"{cid}: pack_fingerprint {row_fp} != licensed_by {lb}'s {ver_fp}")
     return findings
 
 
@@ -318,7 +341,8 @@ def main() -> int:
     tree = "the git tree" if tracked is not None else "the working tree (not a checkout)"
     print(f"OK: {a.claims}: {len(claims)} claims ({n_active} active) -- every evidence entry is a file in {tree} or a "
           f"structured entry, dated rows carry an ISO measured_on, superseded/retired rows resolve, quoted_in "
-          f"resolves, no active row is pending, {n_lic} licence label(s) name their verdict row"
+          f"resolves, no active row is pending, {n_lic} licence label(s) name their verdict row, "
+          f"pack_fingerprint format/licence-match when present"
           + (f"; cross-repository evidence checked against {sibling}" if sibling else ""))
     return 0
 

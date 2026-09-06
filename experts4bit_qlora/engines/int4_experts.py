@@ -422,6 +422,9 @@ def enable_serve_experts_int4(model, source_dir: str, *,
 
     n_layers = 0
     tot_gptq = tot_rtn = 0
+    method_map = []
+    row_counts = {}
+    installed = []
     only = set(layers) if layers is not None else None
     for layer in (plan.experts or prefused):
         if only is not None and layer not in only:
@@ -515,9 +518,16 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                     # same layer stay where the stack lives, and they are stacked together
                     p, c = p.to(stack.device), c.to(stack.device)
                     n_gptq += 1
+                    method = "gptq"
                 else:
                     p, c = pack_int4_b32(stack[e])
                     n_rtn += 1
+                    method = "rtn"
+                if expert_hessians is not None:
+                    method_map.append({"layer": layer, "expert": e,
+                                       "role": role, "method": method})
+                    if role == "gu" and hl is not None and e in hl:
+                        row_counts[(layer, e)] = int(hl[e][2])
                 pk.append(p)
                 sc.append(c)
             return (_torch.stack(pk).to(dev).contiguous(),
@@ -545,6 +555,7 @@ def enable_serve_experts_int4(model, source_dir: str, *,
             _torch.cuda.empty_cache()
         if expert_hessians is not None:
             w._int4_stores["calibrated"] = (n_gptq, n_rtn)
+        installed.append((layer, w))
         n_layers += 1
         tot_gptq += n_gptq
         tot_rtn += n_rtn
@@ -555,6 +566,9 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     if expert_hessians is not None:
         print(f"INT4EXP calibrated experts: {tot_gptq} gptq / {tot_rtn} rtn "
               f"(min_rows={min_rows}) over {n_layers} layers", flush=True)
+        _attach_live_pack_provenance(model, installed, method_map, row_counts,
+                                     min_rows=min_rows, tot_gptq=tot_gptq,
+                                     tot_rtn=tot_rtn)
     return n_layers
 
 
@@ -563,7 +577,10 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
                                          min_rows: int = 32,
                                          hessian_device="cpu",
                                          max_hessian_bytes: int | None = None,
-                                         layers_per_pass: int | None = None) -> int:
+                                         layers_per_pass: int | None = None,
+                                         artifact_dir: str | None = None,
+                                         expected_fingerprint: str | None = None,
+                                         dump_artifact_dir: str | None = None) -> int:
     """Calibrate AND pack layer by layer, so the host never holds more than
     one pass's Hessians: ``calibrate_expert_hessians`` returned every
     layer's fp32 Hessians before any packing began, which for Mixtral-8x7B
@@ -575,7 +592,25 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
     earlier layers already on the int4 path, which is the sequential
     convention GPTQ itself uses. ``E4B_INT4_HESSIAN_BUDGET_GB`` sets the
     per-pass budget when ``max_hessian_bytes`` is not given (default 24).
-    Returns the number of layers installed."""
+    Returns the number of layers installed.
+
+    ``expected_fingerprint`` pins a licensed pack by bytes (#405): the
+    artifact at ``artifact_dir`` is verified and installed, and a
+    mismatch **refuses** -- this function will not rebuild from ``batches``.
+    Recipe-derived packs remain available when no fingerprint is given;
+    they are unlicensed observations until their bytes pass K8 and are
+    published. ``dump_artifact_dir`` writes the just-built recipe pack
+    as an artifact (observation, not a licence).
+    """
+    from .pack_manifest import (
+        attach_provenance, provenance_from_model, require_artifact_for_licensed_load,
+        token_stream_sha,
+    )
+    require_artifact_for_licensed_load(artifact_dir, expected_fingerprint)
+    if expected_fingerprint is not None:
+        return enable_serve_experts_int4_from_artifact(
+            model, source_dir, artifact_dir,
+            expected_fingerprint=expected_fingerprint, model_type=model_type)
     import gc
     if max_hessian_bytes is None:
         max_hessian_bytes = int(float(os.environ.get("E4B_INT4_HESSIAN_BUDGET_GB", "24")) * (1 << 30))
@@ -607,5 +642,205 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
         del hs
         gc.collect()
     print(f"INT4EXP calibrated streaming: {total} layers in {n_pass} passes of <= {layers_per_pass} layer(s)", flush=True)
+    rec = provenance_from_model(model)
+    if rec is not None:
+        rec["calibration_token_stream_sha"] = token_stream_sha(batches)
+        attach_provenance(model, rec)
+    if dump_artifact_dir:
+        dump_calibrated_artifact(model, source_dir, dump_artifact_dir, model_type=model_type)
     return total
+
+
+def _attach_live_pack_provenance(model, installed, method_map, row_counts, *,
+                                 min_rows, tot_gptq, tot_rtn):
+    """Fingerprint the pack that was just installed and hang the record on the model.
+
+    Cost: every packed/scales tensor is copied to the host and sha256'd once per enable
+    (seconds to tens of seconds for a 30B pack). This runs at enable time only and never
+    on the per-step path; it is what lets a receipt name the bytes it measured.
+    """
+    from .pack_manifest import (
+        PAYLOAD_DIR, attach_provenance, compute_pack_fingerprint,
+        method_map_hash, payload_entry, provenance_record,
+        row_count_vector_hash, tensor_payload_bytes,
+    )
+    payloads = []
+    for layer, w in installed:
+        st = getattr(w, "_int4_stores", None)
+        if not st or "gu" not in st:
+            continue
+        for role in ("gu", "dn"):
+            for kind in ("packed", "scales"):
+                data = tensor_payload_bytes(st[role][kind])
+                payloads.append(payload_entry(
+                    f"{PAYLOAD_DIR}/layer_{int(layer):04d}_{role}_{kind}.bin", data))
+    if not payloads:
+        return
+    rows = [{"layer": la, "expert": e, "rows": r}
+            for (la, e), r in sorted(row_counts.items())]
+    cfg = getattr(model, "config", None)
+    revision = getattr(cfg, "_commit_hash", None)
+    extra = {"calibrated_counts": {"gptq": tot_gptq, "rtn": tot_rtn}}
+    if not revision:
+        # Said explicitly, never silently: this live pack cannot become a licensed artifact.
+        extra["model_revision_missing"] = True
+    rec = provenance_record(
+        pack_fingerprint=compute_pack_fingerprint(payloads),
+        component_hashes=payloads,
+        method_map_hash_value=method_map_hash(method_map) if method_map else None,
+        row_count_vector_hash_value=row_count_vector_hash(rows) if rows else None,
+        model_id=getattr(cfg, "_name_or_path", None),
+        model_revision=revision or None,
+        min_rows=min_rows,
+        damping=float(os.environ.get("E4B_INT4_GPTQ_DAMP", "0.01")),
+        solve_device=os.environ.get("E4B_INT4_GPTQ_DEVICE", "cpu"),
+        extra=extra,
+    )
+    attach_provenance(model, rec)
+
+
+def dump_calibrated_artifact(model, source_dir: str, artifact_dir: str, *,
+                             model_type: str | None = None,
+                             allow_unknown_revision: bool = False) -> dict:
+    """Serialise the live int4 stores as a hash-pinned artifact (observation).
+
+    Refuses when the checkpoint revision is unknown (``config._commit_hash`` missing):
+    such bytes could never pass the licensed loader, which requires the revision. Pass
+    ``allow_unknown_revision=True`` (or ``E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION=1``) to write an
+    observation pack that says so itself (``model_revision_missing: true``).
+    """
+    from .pack_manifest import provenance_from_model, require_model_revision, write_artifact
+    _moe_plan, layer_ws = _expert_layers(model, source_dir, model_type, None)
+    tensors = {}
+    layers_meta = []
+    for layer, w in layer_ws:
+        st = getattr(w, "_int4_stores", None)
+        if not st or "gu" not in st:
+            continue
+        for role in ("gu", "dn"):
+            for kind in ("packed", "scales"):
+                tensors[(layer, role, kind)] = st[role][kind]
+        layers_meta.append({
+            "index": int(layer),
+            "Ngu": int(st["gu"]["N"]), "Kgu": int(st["gu"]["K"]),
+            "Ndn": int(st["dn"]["N"]), "Kdn": int(st["dn"]["K"]),
+            "calibrated": list(st["calibrated"]) if st.get("calibrated") else None,
+        })
+    if not tensors:
+        raise RuntimeError("dump_calibrated_artifact: no int4 stores on the model")
+    rec = provenance_from_model(model) or {}
+    cfg = getattr(model, "config", None)
+    allow = allow_unknown_revision or os.environ.get("E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION", "0") == "1"
+    revision, revision_missing = require_model_revision(
+        rec.get("model_revision") or getattr(cfg, "_commit_hash", None), allow_unknown=allow)
+    meta = {
+        "model_id": rec.get("model") or getattr(cfg, "_name_or_path", None),
+        "model_revision": revision,
+        "model_revision_missing": True if revision_missing else None,
+        "min_rows": rec.get("min_rows"),
+        "damping": rec.get("damping"),
+        "solve_device": rec.get("solve_device"),
+        "method_map_hash": rec.get("method_map_hash"),
+        "row_count_vector_hash": rec.get("row_count_vector_hash"),
+        "calibration_token_stream_sha": rec.get("calibration_token_stream_sha"),
+        "toolchain": rec.get("toolchain"),
+        "layers": layers_meta,
+        "calibrated_counts": rec.get("calibrated_counts"),
+    }
+    return write_artifact(artifact_dir, tensors=tensors, meta=meta)
+
+
+def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir: str, *,
+                                            expected_fingerprint: str,
+                                            model_type: str | None = None) -> int:
+    """Install a hash-pinned pack. Mismatch refuses; there is no recipe fallback."""
+    import torch as _torch
+    from int4_b32 import _plan
+
+    from .pack_manifest import (
+        LAYOUT, PackManifestError, attach_provenance, check_manifest_dims, int4_store_dims,
+        load_payload_tensors, provenance_record, verify_artifact,
+    )
+    cfg = getattr(model, "config", None)
+    live_rev = getattr(cfg, "_commit_hash", None)
+    if not live_rev:
+        raise PackManifestError(
+            "licensed artifact load requires config._commit_hash on the live "
+            "model (the commit the loader recorded) -- refusing")
+    man = verify_artifact(
+        artifact_dir,
+        expected_fingerprint=expected_fingerprint,
+        expected_model_revision=live_rev,
+        expected_layout=LAYOUT,
+    )
+    tensors = load_payload_tensors(artifact_dir, man)
+    layers_meta = {int(row["index"]): row for row in (man.get("layers") or [])}
+    _moe_plan, layer_ws = _expert_layers(model, source_dir, model_type, None)
+    keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
+    n_layers = 0
+    R = _top_k(model)
+    for layer, w in layer_ws:
+        meta = layers_meta.get(int(layer))
+        if meta is None:
+            raise PackManifestError(
+                f"layer {layer}: not in the artifact manifest -- refusing a partial licensed load")
+        try:
+            gu_p = tensors[(layer, "gu", "packed")]
+            gu_s = tensors[(layer, "gu", "scales")]
+            dn_p = tensors[(layer, "dn", "packed")]
+            dn_s = tensors[(layer, "dn", "scales")]
+        except KeyError as e:
+            raise PackManifestError(
+                f"layer {layer}: artifact is missing a packed tensor {e}") from e
+        if not w._all_hot():
+            raise RuntimeError(
+                f"layer {layer} is tiered; this lane is the all-VRAM "
+                "collapsed path -- use placement-override all-vram")
+        # N/K come from the HASHED bytes (packed [E, N, K//2] uint8, scales [E, N, K//32]), exactly as the
+        # recipe path takes them from the weight shapes; layers[] in the manifest is only a cross-check.
+        for name, tt in (("gu_packed", gu_p), ("dn_packed", dn_p)):
+            if tt.dtype != _torch.uint8:
+                raise PackManifestError(f"layer {layer}: {name} payload is {tt.dtype}, not uint8 -- not an int4_b32 store")
+        Ngu, Kgu = int4_store_dims(gu_p, gu_s)
+        Ndn, Kdn = int4_store_dims(dn_p, dn_s)
+        check_manifest_dims(layer, "gu", meta, Ngu, Kgu)
+        check_manifest_dims(layer, "dn", meta, Ndn, Kdn)
+        _b, _w2, sk_gu, _k = _plan(Ngu, Kgu)
+        _b, _w2, sk_dn, _k = _plan(Ndn, Kdn)
+        dev = w.h_gu_p.device
+        w._int4_stores = {
+            "gu": {"packed": gu_p.to(dev), "scales": gu_s.to(dev),
+                   "N": Ngu, "K": Kgu,
+                   "part": _torch.empty(sk_gu * R, Ngu, dtype=_torch.float32, device=dev)},
+            "dn": {"packed": dn_p.to(dev), "scales": dn_s.to(dev),
+                   "N": Ndn, "K": Kdn,
+                   "part": _torch.empty(sk_dn * R, Ndn, dtype=_torch.float32, device=dev)},
+        }
+        if meta.get("calibrated"):
+            w._int4_stores["calibrated"] = tuple(meta["calibrated"])
+        if not keep_nf4:
+            for attr in ("h_gu_p", "h_gu_a", "h_dn_p", "h_dn_a"):
+                t = getattr(w, attr)
+                setattr(w, attr, t.new_empty((0,) * t.dim()))
+            _torch.cuda.empty_cache()
+        n_layers += 1
+    if n_layers == 0:
+        raise PackManifestError("artifact load installed no layers")
+    attach_provenance(model, provenance_record(
+        pack_fingerprint=man["pack_fingerprint"],
+        component_hashes=man["payloads"],
+        method_map_hash_value=man.get("method_map_hash"),
+        row_count_vector_hash_value=man.get("row_count_vector_hash"),
+        calibration_token_stream_sha=man.get("calibration_token_stream_sha"),
+        model_id=man.get("model_id"),
+        model_revision=man.get("model_revision"),
+        min_rows=man.get("min_rows"),
+        damping=man.get("damping"),
+        solve_device=man.get("solve_device"),
+        extra={"calibrated_counts": man.get("calibrated_counts"),
+               "loaded_from_artifact": True},
+    ))
+    print(f"INT4EXP licensed artifact {man['pack_fingerprint']} "
+          f"installed on {n_layers} layers", flush=True)
+    return n_layers
 
