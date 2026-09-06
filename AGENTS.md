@@ -195,7 +195,8 @@ Every handoff posted in Slack is also written on the issue.
   before merge — Cursor Bugbot or a Claude Code review, chosen per PR by need
   (Bugbot by default for code; Claude Code when Bugbot is unavailable or for
   docs / register changes) — and Claude Code holds the merge gate: checks green
-  + that review + zero unresolved threads. Nobody merges their own PR. Receipts
+  + that review + zero unresolved threads, with section 8's companions in the
+  same diff. Nobody merges their own PR. Receipts
   and code ship in separate pull requests; a pull request too large for Bugbot
   to review is a finding, not a pass.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
