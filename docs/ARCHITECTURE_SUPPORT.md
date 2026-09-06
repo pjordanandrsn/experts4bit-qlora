@@ -144,3 +144,38 @@ finding the lane surfaced: in the code it measured (0.35.0) `enable_batched_trai
 per call above `_PAD_WASTE_LIMIT` with no counter of its own — three VOID rows (OLMoE, Qwen3, Gemma-4) against two
 engaged ones (Granite, Mixtral) — so a batched arm was read only with an external kernel-call counter; 0.35.1 (#402)
 adds `batched_fallback_stats(model)` for exactly this.
+
+## Training head-to-head vs Unsloth, per family (tp2 / P40, 2026-09-06)
+
+A third evidence bundle — [`bench/h2h-20260906/tp2/`](../bench/h2h-20260906/tp2/README.md) (lane tp2, pre-registration
+`P40-PREREG.md` in the bundle: the shipped experts4bit-qlora 0.35.1 + grouped-nf4-gemm 0.30.2 from PyPI vs Unsloth
+2026.9.2 in its own venv, one rented RTX 5090 on a Ryzen 7 5700X3D host, Vast 50005568, train-anchor class
+`pcie-full/launch-fast`) — so it is a new dated section, not an edit to the tables above. P38's fixture exactly, per
+family: the sha-pinned clinical set tokenised once with that family's tokenizer, seq 512, r 8 / α 16, lr 1e-4, batch 1,
+accum 1, N=60, held-out every 20. The e4b arms are `reference_attn4` and `fused_attn4` (both with NF4 attention, the
+shipped `TRAIN_ATTN_4BIT` mechanism; Mixtral's under `offload=True`, tp1's setting), the Unsloth arm is
+`ckpt_unsloth` (plus `ckpt_hf` on Qwen3 and `attn_only` on gpt-oss). Every attempt is a row in the register —
+`e4b.train.h2h.unsloth.<family>.5090.2026-09-06[.arm.<framework>.<arm>]` in [`claims.json`](claims.json) — with its
+status from the reducer's pre-registered vocabulary; a position (s/step ratio Unsloth/e4b) exists only where both
+primary arms are VALID, with the quality reading beside it. VOID never enters a ratio; nothing is licensed.
+
+| family | e4b attn-4bit arms | Unsloth arm (the competitor observation, from the receipt) | position (Unsloth/e4b) |
+|---|---|---|---|
+| Granite-3.1-3B-A800M | OK · VALID (fused 0.641 s/step, ×5.59 its reference; parity PASS 0.00836 / 0.01914) | OK · **VOID** — it completed 60 steps but trained 2,621,440 attention-only parameters against e4b's 49,807,360 (by group: experts 0), 0 `Params4bit` expert stacks, no 'Enabling LoRA on MoE parameters' banner: its MoE-LoRA path never engaged on `granitemoe` (`…granite….arm.unsloth.ckpt_unsloth`) | not quoted (Unsloth VOID) |
+| OLMoE-1B-7B | OK · VALID (fused 0.708 s/step, ×3.73; parity PASS 0.02109 / 0.01803) | **HARNESS_ERROR** — rc=1 and no receipt: the process died before its first write, at MoE-LoRA engage (`…olmoe….arm.unsloth.ckpt_unsloth`) | not quoted (no Unsloth row to pair) |
+| gpt-oss-20b | **REFUSED** twice, as pre-registered: attention 4-bit refuses on structure (96 of 96 projections carry a bias) and the fused path patches nothing (tp1 re-proven); the `attn_only` secondary row trains, 1.464 s/step at 14.687 GB | **REFUSED** — its load fails on the MXFP4 weight conversion: `RuntimeError: We encountered some issues during automatic conversion of the weights…` (`…gptoss….arm.unsloth.ckpt_unsloth`) | not quoted (P5 held: no 4-bit ratio either way) |
+| Qwen3-30B-A3B | OK · VALID (fused 4.108 s/step; parity PASS 0.00215 / 0.00962, ×2.69) | OK · VALID — 96 expert stacks, the banner, 96 backend calls/step; 5.986 s/step at 23.141 GB (`…qwen3….arm.unsloth.ckpt_unsloth`; `ckpt_hf` 5.967) | **1.457** — e4b faster per step, quality COMPARABLE (Δ +0.0152); **+3.1% from P38's 1.413, inside the ±10% anchor band** |
+| Gemma-4-26B-A4B-it | **HARNESS_ERROR** (receipt status `void_attn4`) — both arms died on the converter's own count check, `quantize_attention_projections_4bit converted 100 projections, expected 120` ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)); the bf16-attention `fast_train` path stays as tp1 left it | OK · VALID — 60 expert stacks, the banner; 3.510 s/step at 20.824 GB (`…gemma4….arm.unsloth.ckpt_unsloth`) | not quoted (no e4b arm to pair) |
+| Mixtral-8x7B | OK · VALID under `offload=True` (fused 2.377 s/step at a **3.223 GB** peak; parity PASS 0.00462 / 0.01184, ×1.23 at ×0.376 the reference's peak) | OK · VALID — resident, its only mode: 0.858 s/step at **29.163 GB** (`…mixtral….arm.unsloth.ckpt_unsloth`); prediction P4's OOM falsified | **the footprint trade leads**: expert-offload **3.223 GB** vs resident **29.163 GB** at comparable quality (Δ −0.0087; the trainable-on-smaller-cards result, `…mixtral….footprint`), and what that VRAM buys Unsloth is speed per step — **0.361**, a footprint-vs-speed trade, not a kernel deficit |
+
+Read the Unsloth column as observations about Unsloth 2026.9.2 as installed on that box on that date, quoted from the
+receipts — statuses per attempt, never a flat "unsupported" flag for a family; the silent-fallback question on Granite
+is the receipt's own, recorded, not established (findings about other projects stay as notes here, per AGENTS.md §10).
+Coverage is registered as its own result where the comparator could not train the experts: Granite's attention-only
+LoRA and OLMoE's crash at engage are the rows `…granite….coverage` and `…olmoe….coverage` (no speed ratio in either),
+and Mixtral's 3.223-vs-29.163 GB reading is the row `…mixtral….footprint` beside its s/step position.
+The attention-4-bit configuration these receipts add per family is recorded in `training_support` in
+[`capabilities.json`](capabilities.json) — inside the per-path structure: supported with receipts on `granitemoe`,
+`olmoe`, `qwen3_moe`, `mixtral`; not supported on `gemma4_text` pending #412; refused on `gpt_oss` (bias-carrying
+projections). No tp1 verdict moved, no gate or threshold moved, and P38's 200-step curve row (Unsloth lower at N=200)
+still stands beside any Qwen3 position.

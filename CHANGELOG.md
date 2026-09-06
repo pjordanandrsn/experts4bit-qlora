@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### tp2 / P40 into the register: the per-family Unsloth head-to-head (claims + docs; the claims half of the tp2 bundle, receipts merged in #414)
+
+Documentation and register only; no code, no version bump, no gate, threshold, floor or existing claim value moved.
+The receipts landed separately as `bench/h2h-20260906/tp2/` (#414); this entry registers them (#415).
+
+- **31 rows under `e4b.train.h2h.unsloth.<family>.5090.2026-09-06`** (lane tp2 / P40, 2026-09-06, one rented RTX
+  5090, Vast 50005568 on a Ryzen 7 5700X3D host; the pre-registration verbatim as the bundle's `P40-PREREG.md`;
+  every number copied from `RESULTS-tp2.md` and the receipt JSONs; the `.coverage` and `.footprint` rows per the
+  spec amendment on #415): one row per attempt (`….arm.<framework>.<arm>` — including Granite's Unsloth VOID,
+  OLMoE's Unsloth HARNESS_ERROR, gpt-oss's three REFUSED rows and Gemma-4's two `void_attn4` rows, #412),
+  position + `.quality-n60` rows on Qwen3 and Mixtral, a `.footprint` row on Mixtral, `.coverage` rows on Granite
+  and OLMoE (the comparator could not train the experts there — attention-only LoRA / a crash at MoE-LoRA engage
+  — its own log lines quoted; no speed ratio in those rows), `.e4b-internal-parity` PASS rows on Granite, OLMoE,
+  Qwen3 and Mixtral. The positions: Qwen3-30B-A3B s/step Unsloth/e4b **1.457** (e4b faster per step; held-out
+  COMPARABLE, Δ +0.0152) — the cross-lane anchor, **+3.1% from P38's 1.413, inside the pre-registered ±10%**,
+  noted on the P38 row (neither supersedes the other); Mixtral-8x7B **0.361**, whose row leads with the footprint
+  trade: e4b trained under its registered expert-offload design at a **3.223 GB** peak (the
+  trainable-on-smaller-cards result, `….footprint`) against Unsloth resident at **29.163 GB**, its only mode, and
+  what that VRAM buys it is speed per step — a footprint-vs-speed trade, not a kernel deficit (held-out
+  COMPARABLE, Δ −0.0087; P4's OOM prediction falsified).
+- **`training_support` updated per family × path from these receipts only** (`docs/capabilities.json`, inside the
+  per-path structure — never a flat boolean): the attention-4-bit configuration (`TRAIN_ATTN_4BIT`,
+  `reference_attn4`/`fused_attn4`) now has receipts — supported on `granitemoe` / `olmoe` / `qwen3_moe` /
+  `mixtral` (the new claim ids cited per path); **not supported on `gemma4_text` pending #412**
+  (`quantize_attention_projections_4bit converted 100 projections, expected 120`; the bf16-attention `fast_train`
+  path stays exactly as tp1 left it); refused on `gpt_oss` (96 of 96 attention projections carry a bias).
+  `model_families` is unchanged.
+- `docs/STATUS.md` (a dated "tp2 / P40 (2026-09-06)" section and a #412 open item),
+  `docs/ARCHITECTURE_SUPPORT.md` (a dated per-family head-to-head section: what trained, what refused, the
+  competitor observation quoted from the receipt — statuses, never a flat flag),
+  `docs/solutions/qlora-fused-moe-experts.md` (the per-family measured-result paragraph, the attention-4-bit
+  scope note, evidence rows), two routing queries in `docs/discovery-queries.json`, `llms-full.txt` regenerated.
+  The README results table is unchanged: no existing claim's value or status moved.
+- **Serving-comparison rule applied** (the #415 spec amendment's third clause): prose touched by this change may
+  not quote a serving ×N against e4b's own NF4 control without the same-box vLLM figure, its weight precision and
+  its resident footprint in the same sentence (P37: vLLM 0.28.0 serving `Qwen3-30B-A3B-GPTQ-Int4`, footprint not
+  recorded in the receipts). No prose touched by this change quotes such a ×N, so no sentence needed the
+  annotation; the rule is recorded here for the next edit that does.
+
 ### The loader honours a pinned checkpoint revision (#404)
 
 - `load_moe_4bit_streaming(..., revision=<commit sha | branch | tag>)` threads the revision into both hub lookups the
