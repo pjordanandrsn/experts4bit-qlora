@@ -7,7 +7,11 @@ Enforces the compute policy from docs/COMPUTE-GOVERNANCE.md:
      (ledger uses run_id for backwards compat; experiment_id == run_id)
   3. Per-role daily sums <= role ceilings; global daily sums <= global budget
      (from docs/compute-policy.json)
-  4. Each receipt's approvals satisfy the threshold for its cost_usd.estimated
+  4. Each receipt's approvals satisfy the threshold for its cost_usd.estimated,
+     UNLESS the receipt carries incident: "<repo>#<n>" — in that case the threshold
+     check is replaced by the incident reference itself (format, and the required
+     status ALARM / result invalid / decision abandon constraints enforced in
+     validate_receipt). The cost still counts toward daily ceilings and global budget.
   5. Each receipt has non-empty teardown_proof
 
 Exit 1 with file:line-style messages on any violation; exit 0 with
@@ -38,6 +42,8 @@ RUNS_DIR = Path("bench/runs")
 LEDGER = RUNS_DIR / "ledger.jsonl"
 POLICY = Path("docs/compute-policy.json")
 PERMALINK_RE = re.compile(r"^https://cerin-amroth\.slack\.com/archives/C[A-Z0-9]{8,12}/p\d{16}(\?\S*)?$")
+# incident field format: <owner>/<repo>#<n> or <repo>#<n>
+INCIDENT_RE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?#[0-9]+$")
 SCHEMA = Path("docs/run-receipt-schema.json")
 
 STATUS_VALUES = {
@@ -79,8 +85,12 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     Manual fallback: derives required fields from schema["required"] so the schema
     file is the single source of truth; no hardcoded REQUIRED_FIELDS list.
     Business-logic constraints not expressed in the schema (Slack permalink pattern,
-    ISO-8601 timestamp format) are enforced in both paths; Draft 2020-12 does not
-    enforce format: date-time without a format checker.
+    ISO-8601 timestamp format, incident status/result/decision requirements) are
+    enforced in both paths; Draft 2020-12 does not enforce format: date-time without
+    a format checker.
+    Incident receipts: when incident is present the format is enforced by the schema
+    pattern (strict) or INCIDENT_RE (fallback); status ALARM, result invalid, and
+    decision starting with 'abandon' are required in both paths.
     """
     if not SCHEMA.exists():
         fail(SCHEMA, None, "run-receipt-schema.json not found; cannot validate receipts")
@@ -194,6 +204,15 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
         if not isinstance(data.get("decision"), str) or not data["decision"]:
             fail(path, 0, "decision must be a non-empty string")
 
+        # Validate incident format in the fallback path (strict path enforces via schema pattern)
+        if "incident" in data and not INCIDENT_RE.fullmatch(str(data["incident"])):
+            fail(
+                path,
+                0,
+                f"incident must match <repo>#<n> or <owner>/<repo>#<n>, "
+                f"got {data['incident']!r}",
+            )
+
     # ISO-8601 timestamp validation: run in both paths because Draft 2020-12 does not
     # enforce format: date-time without a format checker, so "yesterday" passes strict.
     for _ts_field in ["started_at", "finished_at"]:
@@ -215,6 +234,30 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
                     f"approvals[{i}].slack_permalink is not a #ml-packages permalink: "
                     f"{appr.get('slack_permalink')!r}",
                 )
+
+    # Incident receipt business-logic constraints (both paths): status ALARM, result invalid,
+    # decision starts with 'abandon'.  These are conditional constraints not expressible in
+    # Draft 2020-12 without if/then; enforced here so both the strict and fallback paths agree.
+    if "incident" in data:
+        if data.get("status") != "ALARM":
+            fail(
+                path,
+                0,
+                f"an incident receipt requires status ALARM, got {data.get('status')!r}",
+            )
+        if data.get("result") != "invalid":
+            fail(
+                path,
+                0,
+                f"an incident receipt requires result 'invalid', got {data.get('result')!r}",
+            )
+        if not isinstance(data.get("decision"), str) or not data["decision"].startswith("abandon"):
+            fail(
+                path,
+                0,
+                f"an incident receipt requires decision starting with 'abandon', "
+                f"got {data.get('decision')!r}",
+            )
 
 
 def select_approver_spec(
@@ -430,10 +473,16 @@ def main() -> None:
                         f"global daily total on {date_str}: ${total:.2f} exceeds budget ${global_budget}",
                     )
 
-    # Check approval thresholds
+    # Check approval thresholds.
+    # Incident receipts (those carrying incident: "<repo>#<n>") are exempt: the threshold
+    # check is replaced by the incident reference itself.  Format and required
+    # status/result/decision constraints have already been enforced by validate_receipt.
+    # The cost still counts toward daily ceilings and the global budget (handled above).
     thresholds = policy["approval_thresholds"]
     overrides = policy.get("approval_overrides") or []
     for path, data in receipts:
+        if "incident" in data:
+            continue  # approval threshold replaced by incident reference; validated above
         estimated = data["cost_usd"]["estimated"]
         approvals = data["approvals"]
         env = data.get("environment") if isinstance(data.get("environment"), dict) else {}

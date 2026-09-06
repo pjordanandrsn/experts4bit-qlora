@@ -1,6 +1,6 @@
 """Tests for scripts/check_run_ledger.py
 
-Eight fixtures:
+Twelve fixtures:
   1. One passing receipt (valid, within ceilings, proper approvals)
   2. One over-ceiling day (exceeds role daily ceiling)
   3. One missing approval (insufficient approvals for the cost threshold)
@@ -9,6 +9,10 @@ Eight fixtures:
   6. A receipt missing a required field (caught by schema validation)
   7. A receipt with an invalid teardown_proof.reason (caught by schema enum)
   8. Fallback path verified in-process via sys.modules["jsonschema"] = None patch
+  9. Incident receipt accepted (status ALARM, result invalid, decision abandon; no approval needed)
+  10. Incident receipt rejected: wrong status (status OK with incident field)
+  11. Incident receipt rejected: wrong result (result pass with incident field)
+  12. Incident receipt rejected: wrong decision (decision merge with incident field)
 """
 from __future__ import annotations
 
@@ -737,3 +741,123 @@ def test_fallback_path_rejects_missing_field(tmp_path: Path, monkeypatch) -> Non
     with pytest.raises(SystemExit) as exc_info:
         mod.validate_receipt(Path("receipt.json"), receipt)
     assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# Tests 9–12: incident receipt — accepted and rejected shapes
+# ---------------------------------------------------------------------------
+
+# An incident receipt: no prior approval, high estimated cost that would normally
+# require one-of:CTO,CSO, but the incident field exempts it from the threshold check.
+# The cost still counts toward the daily ceiling and global budget.
+_INCIDENT_RECEIPT: dict = {
+    **{k: v for k, v in _BASE_RECEIPT.items()},
+    "experiment_id": "exp-incident-459",
+    "incident": "pjordanandrsn/experts4bit-qlora#459",
+    # approvals is empty — threshold check bypassed for incident receipts
+    "approvals": [],
+    # cost_usd.estimated is $5 (would normally need one-of:CTO,CSO per _BASE_POLICY)
+    "cost_usd": {"estimated": 5.0, "actual": 0.09},
+    # incident-receipt required values
+    "status": "ALARM",
+    "result": "invalid",
+    "decision": "abandon pjordanandrsn/experts4bit-qlora#459",
+    "notes": "Governance incident 2026-09-06: test created a real instance without approval",
+}
+
+# Ledger line for the incident receipt (cost_usd must match actual)
+_INCIDENT_LEDGER_LINE = json.dumps(
+    {"run_id": "exp-incident-459", "date_utc": "2026-09-11", "role": "CTO", "cost_usd": 0.09}
+)
+
+
+def _setup_incident_test(tmp_path: Path, receipt: dict) -> None:
+    """Write policy, schema, receipt and ledger into tmp_path for incident receipt tests."""
+    runs = tmp_path / "bench" / "runs"
+    runs.mkdir(parents=True)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "compute-policy.json").write_text(json.dumps(_BASE_POLICY))
+    _write_schema(tmp_path)
+    date_dir = runs / "2026-09-11" / receipt["experiment_id"]
+    date_dir.mkdir(parents=True)
+    (date_dir / "receipt.json").write_text(json.dumps(receipt, indent=2))
+    (runs / "ledger.jsonl").write_text(f"# Ledger\n{_INCIDENT_LEDGER_LINE}\n")
+
+
+def test_incident_receipt_accepted(tmp_path: Path) -> None:
+    """An incident receipt passes without approval: threshold check bypassed by the incident field.
+
+    The receipt has cost_usd.estimated = $5 which would normally require one-of:CTO,CSO
+    approval under _BASE_POLICY.  With incident present and approvals = [], the script
+    accepts the receipt and counts the $0.09 actual toward the daily ceiling and budget.
+    """
+    _setup_incident_test(tmp_path, _INCIDENT_RECEIPT)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, (
+        f"Expected incident receipt to pass; got rc={result.returncode}\n{result.stderr}"
+    )
+    assert "OK: 1 receipts, 1 days" in result.stdout
+
+
+def test_incident_receipt_wrong_status(tmp_path: Path) -> None:
+    """An incident receipt with status != ALARM is rejected."""
+    receipt = copy.deepcopy(_INCIDENT_RECEIPT)
+    receipt["status"] = "OK"
+    _setup_incident_test(tmp_path, receipt)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, (
+        f"Expected failure on incident receipt with status OK; got rc=0\n{result.stdout}"
+    )
+    assert "alarm" in result.stderr.lower()
+
+
+def test_incident_receipt_wrong_result(tmp_path: Path) -> None:
+    """An incident receipt with result != invalid is rejected."""
+    receipt = copy.deepcopy(_INCIDENT_RECEIPT)
+    receipt["result"] = "pass"
+    _setup_incident_test(tmp_path, receipt)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, (
+        f"Expected failure on incident receipt with result pass; got rc=0\n{result.stdout}"
+    )
+    assert "invalid" in result.stderr.lower()
+
+
+def test_incident_receipt_wrong_decision(tmp_path: Path) -> None:
+    """An incident receipt whose decision does not start with 'abandon' is rejected."""
+    receipt = copy.deepcopy(_INCIDENT_RECEIPT)
+    receipt["decision"] = "merge pjordanandrsn/experts4bit-qlora#459"
+    _setup_incident_test(tmp_path, receipt)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, (
+        f"Expected failure on incident receipt with decision 'merge'; got rc=0\n{result.stdout}"
+    )
+    assert "abandon" in result.stderr.lower()
