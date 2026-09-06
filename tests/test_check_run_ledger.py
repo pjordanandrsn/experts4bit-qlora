@@ -322,3 +322,190 @@ def test_missing_approval(tmp_path: Path) -> None:
 
     assert result.returncode == 1, "Check should fail on missing approval"
     assert "requires one of" in result.stderr.lower()
+
+
+def test_global_daily_budget_violation(tmp_path):
+    """Test that the global daily budget is enforced."""
+    import sys
+
+    runs = tmp_path / "bench" / "runs"
+    runs.mkdir(parents=True)
+
+    # Policy with $100 global daily budget
+    policy = {
+        "approval_thresholds": [
+            {"max_usd": 2, "approver": "requesting-agent"},
+            {"max_usd": 50, "approver": "two-of:CEO,CTO,CSO"},
+        ],
+        "per_run_hard_cap_usd": 35,
+        "role_daily_ceiling_usd": {"CEO": 100, "CTO": 100},
+        "global_daily_budget_usd": 100,
+    }
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "compute-policy.json").write_text(json.dumps(policy))
+
+    # Two receipts that together exceed the global budget ($100)
+    receipt1 = {
+        "experiment_id": "exp-budget-1",
+        "work_id": "experts4bit-qlora#200",
+        "requested_by": "CEO/Claude",
+        "executed_by": "CEO/Claude",
+        "reviewed_by": None,
+        "hypothesis": "First run on the day",
+        "expected_result": "Completes successfully",
+        "success_criteria": "Under individual ceiling",
+        "failure_criteria": "Exceeds ceiling",
+        "preregistration": "https://example.com/prereg1",
+        "approvals": [
+            {
+                "role": "CEO",
+                "agent": "Claude",
+                "usd_estimate": 30.0,
+                "slack_permalink": "https://example.com/slack/10",
+            },
+            {
+                "role": "CTO",
+                "agent": "Cursor",
+                "usd_estimate": 30.0,
+                "slack_permalink": "https://example.com/slack/11",
+            },
+        ],
+        "repo": "pjordanandrsn/experts4bit-qlora",
+        "commit_sha": "aaa111",
+        "branch": "main",
+        "dirty_tree": False,
+        "container_image": "pytorch/pytorch:2.1",
+        "dependencies": {"torch": "2.1.0"},
+        "command": "python benchmark.py",
+        "environment": {"CUDA_VISIBLE_DEVICES": "0"},
+        "provider": "vast:verified-secure",
+        "instance_id": "vast-111",
+        "gpu_model": "RTX 5090",
+        "gpu_count": 1,
+        "cpu": "AMD Ryzen 16 cores",
+        "ram": "64GB",
+        "storage": "1TB NVMe",
+        "started_at": "2026-09-10T09:00:00Z",
+        "finished_at": "2026-09-10T11:00:00Z",
+        "runtime_seconds": 7200,
+        "cost_usd": {"estimated": 30.0, "actual": 28.5},
+        "dataset": "bench-dataset",
+        "dataset_hash": "g" * 64,
+        "model": "llama-13b",
+        "model_revision": "v1.0",
+        "model_hash": "h" * 64,
+        "seed": 1111,
+        "configuration": {"batch_size": 16},
+        "metrics": {"throughput": 120},
+        "artifacts": [{"path": "results.json", "sha256": "c" * 64, "bytes": 512}],
+        "teardown_proof": {"method": "vast-destroy", "evidence": "Instance terminated"},
+        "status": "OK",
+        "result": "pass",
+        "decision": "merge https://github.com/example/repo/pull/10",
+        "notes": "First run of the day",
+    }
+
+    receipt2 = {
+        "experiment_id": "exp-budget-2",
+        "work_id": "experts4bit-qlora#201",
+        "requested_by": "CTO/Cursor",
+        "executed_by": "CTO/Cursor",
+        "reviewed_by": None,
+        "hypothesis": "Second run on the day",
+        "expected_result": "Completes successfully",
+        "success_criteria": "Under individual ceiling",
+        "failure_criteria": "Exceeds ceiling",
+        "preregistration": "https://example.com/prereg2",
+        "approvals": [
+            {
+                "role": "CEO",
+                "agent": "Claude",
+                "usd_estimate": 35.0,
+                "slack_permalink": "https://example.com/slack/12",
+            },
+            {
+                "role": "CSO",
+                "agent": "ChatGPT",
+                "usd_estimate": 35.0,
+                "slack_permalink": "https://example.com/slack/13",
+            },
+        ],
+        "repo": "pjordanandrsn/experts4bit-qlora",
+        "commit_sha": "bbb222",
+        "branch": "main",
+        "dirty_tree": False,
+        "container_image": "pytorch/pytorch:2.1",
+        "dependencies": {"torch": "2.1.0"},
+        "command": "python train.py",
+        "environment": {"CUDA_VISIBLE_DEVICES": "0,1"},
+        "provider": "vast:verified-secure",
+        "instance_id": "vast-222",
+        "gpu_model": "RTX 5090",
+        "gpu_count": 2,
+        "cpu": "AMD Ryzen 32 cores",
+        "ram": "128GB",
+        "storage": "2TB NVMe",
+        "started_at": "2026-09-10T14:00:00Z",
+        "finished_at": "2026-09-10T17:00:00Z",
+        "runtime_seconds": 10800,
+        "cost_usd": {"estimated": 35.0, "actual": 73.0},
+        "dataset": "train-dataset",
+        "dataset_hash": "i" * 64,
+        "model": "llama-70b",
+        "model_revision": "v2.0",
+        "model_hash": "j" * 64,
+        "seed": 2222,
+        "configuration": {"batch_size": 32, "epochs": 5},
+        "metrics": {"final_loss": 0.8},
+        "artifacts": [{"path": "model.pt", "sha256": "d" * 64, "bytes": 4096}],
+        "teardown_proof": {"method": "vast-destroy", "evidence": "Instance terminated"},
+        "status": "OK",
+        "result": "pass",
+        "decision": "merge https://github.com/example/repo/pull/11",
+        "notes": "Second run of the day - pushes total to $101.5",
+    }
+
+    # Create receipt directories
+    date_dir1 = runs / "2026-09-10" / "exp-budget-1"
+    date_dir1.mkdir(parents=True)
+    (date_dir1 / "receipt.json").write_text(json.dumps(receipt1, indent=2))
+
+    date_dir2 = runs / "2026-09-10" / "exp-budget-2"
+    date_dir2.mkdir(parents=True)
+    (date_dir2 / "receipt.json").write_text(json.dumps(receipt2, indent=2))
+
+    # Ledger with both runs (total: $28.5 + $73.0 = $101.5, exceeds $100)
+    ledger = "\n".join(
+        [
+            "# Ledger",
+            json.dumps(
+                {
+                    "run_id": "exp-budget-1",
+                    "date_utc": "2026-09-10",
+                    "role": "CEO",
+                    "cost_usd": 28.5,
+                }
+            ),
+            json.dumps(
+                {
+                    "run_id": "exp-budget-2",
+                    "date_utc": "2026-09-10",
+                    "role": "CTO",
+                    "cost_usd": 73.0,
+                }
+            ),
+        ]
+    )
+    (runs / "ledger.jsonl").write_text(ledger + "\n")
+
+    # Run the check
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, "Check should fail on global budget violation"
+    assert "global daily total" in result.stderr.lower()
+    assert "$101.5" in result.stderr or "$101.50" in result.stderr

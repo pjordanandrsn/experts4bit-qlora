@@ -45,6 +45,7 @@ retrospectively invalid — the approvals satisfied the policy at launch time.
   - CEO: $50 USD/day
   - CTO: $50 USD/day
   - CSO: $20 USD/day
+  - CDO: $20 USD/day
   - COO: $10 USD/day
   - Scout: $0 (read-only, no experiments)
   - Warden: $0 (read-only, no experiments)

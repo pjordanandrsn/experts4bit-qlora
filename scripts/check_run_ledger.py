@@ -347,7 +347,7 @@ def main() -> None:
         if total > global_budget:
             # Find any receipt from that date to report
             for path, data in receipts:
-                start = datetime.fromisoformat(data["start_utc"].replace("Z", "+00:00"))
+                start = datetime.fromisoformat(data["started_at"].replace("Z", "+00:00"))
                 if start.strftime("%Y-%m-%d") == date_str:
                     fail(
                         path,
