@@ -210,11 +210,16 @@ class VastProvider:
         return offers
 
     # ---- lifecycle
-    def launch(self, *, gpu: str, wallclock_h: float, image: str) -> str:
+    def launch(self, *, gpu: str, wallclock_h: float, image: str, max_dph: float | None = None) -> str:
         offers = self.search_offers(gpu)
         if not offers:
             raise VastRefused(f"no verified rentable {gpu} offer with ≥{self.min_disk_gb} GB disk and ≥{self.min_ram_gb} GB RAM right now; refusing")
         offer = offers[0]
+        # e4b#464 (the money path): the approval line is `--usd-per-hour × cap`; an offer priced above the declared rate would make
+        # the receipt's estimate a lie. The cheapest verified offer must fit under the declared ceiling or nothing is created.
+        dph = offer.get("dph_total")
+        if max_dph is not None and (dph is None or float(dph) > float(max_dph)):
+            raise VastRefused(f"cheapest verified {gpu} offer is ${dph}/h, above the declared --usd-per-hour ${max_dph}/h the approval was given for; raise the ceiling (a new approval line) or wait — nothing created")
         body = {"client_id": "me", "image": image, "disk": self.min_disk_gb, "label": self.run_label,
                 "runtype": "ssh", "onstart": None}
         status, resp = self.t.request("PUT", f"/v0/asks/{offer['id']}/", body=body)
@@ -363,8 +368,10 @@ class VastProvider:
         host, port = rec.get("ssh_host"), rec.get("ssh_port")
         if not host or not port:
             raise PreflightFailed(f"instance {instance_id} has no ssh endpoint yet (ssh_host={host!r}, ssh_port={port!r})")
+        attached: dict[str, str] = {}
         if self.ssh_pubkey:
-            self.attach_ssh_key(instance_id, self.ssh_pubkey)
+            self.attach_ssh_key(instance_id, self.ssh_pubkey)   # raises on anything but a 200 → the pre-flight fails
+            attached["vast_ssh_key_attached"] = "yes"           # #465 MEDIUM-1: stated after the 200, never before
         rc, out = self._ssh(str(host), int(port), "true", ssh_timeout_s)
         if rc != 0:
             raise PreflightFailed(f"ssh to {host}:{port} did not authenticate within {int(ssh_timeout_s)} s (rc {rc}: {out.strip()[:120]})")
@@ -373,7 +380,7 @@ class VastProvider:
             raise PreflightFailed(f"download bandwidth {mbps:.1f} MB/s < {min_mb_per_s:.0f} MB/s on {host}:{port}")
         return {"vast_preflight": "ok", "vast_ssh": f"{host}:{port}", "vast_actual_status": st,
                 "vast_disk_space_gb": f"{disk:.0f}", "vast_cpu_ram_mb": f"{ram_mb:.0f}", "vast_bandwidth_mb_s": f"{mbps:.1f}",
-                "vast_preflight_seconds": f"{self._clock() - t0:.0f}"}
+                "vast_preflight_seconds": f"{self._clock() - t0:.0f}", **attached}
 
     # ---- cost
     def actual_cost(self, instance_id: str, runtime_s: float) -> tuple[float, str]:

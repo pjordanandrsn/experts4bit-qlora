@@ -172,6 +172,15 @@ def test_preflight_passes_and_records_the_box():
     facts = provider(tr, ssh_pubkey="ssh-ed25519 AAAA test").preflight("7000123", timeout_s=60)
     assert facts["vast_preflight"] == "ok" and facts["vast_ssh"] == "ssh5.vast.ai:12345" and facts["vast_bandwidth_mb_s"] == "95.0"
     assert any(c[:2] == ("POST", "/v0/instances/7000123/ssh/") for c in tr.calls)
+    assert facts["vast_ssh_key_attached"] == "yes"   # #465 MEDIUM-1: stated after the 200
+    assert "vast_ssh_key_attached" not in provider(FakeTransport(routes())).preflight("7000123", timeout_s=60), "no key → no fact"
+
+
+def test_preflight_fails_when_the_key_attach_is_refused_and_states_no_attach():
+    tr = FakeTransport(routes({("POST", "/v0/instances/7000123/ssh/"): [(500, {"success": False, "error": "nope"})]}))
+    with pytest.raises(BackendUnavailable, match="attaching the ssh key"):
+        provider(tr, ssh_pubkey="ssh-ed25519 AAAA test").preflight("7000123", timeout_s=60)
+    assert not any(c[:2] == ("DELETE", "/v0/instances/7000123/") for c in tr.calls), "the pre-flight reports; the launcher tears down"
 
 
 def test_preflight_fails_on_stuck_loading_bad_disk_bad_ssh_and_slow_link():
@@ -296,3 +305,14 @@ def test_a_child_process_inherits_the_no_live_guard(tmp_path: Path):
     out = subprocess.run([sys.executable, "-m", "experts4bit_qlora.tools.rent", "--live-list"], env=env,
                          capture_output=True, text=True, timeout=180)
     assert out.returncode == 2 and "E4B_NO_LIVE" in out.stderr, out.stderr[-400:]
+
+
+def test_launch_refuses_an_offer_priced_above_the_declared_rate():
+    """e4b#464: the approval line is --usd-per-hour × cap; an offer above the declared rate is refused before any create."""
+    tr = FakeTransport(routes())
+    with pytest.raises(VastRefused, match=r"above the declared --usd-per-hour \$0.5/h") as ei:
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.5)  # the cheapest verified offer is $0.61/h
+    assert "nothing created" in str(ei.value)
+    assert not any(c[0] == "PUT" for c in tr.calls), "no create was attempted"
+    assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.61) == "7000123"
+    assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img") == "7000123", "no ceiling given → no check (the launcher always gives one)"

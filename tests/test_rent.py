@@ -864,3 +864,128 @@ def test_guard_acts_on_a_lost_heartbeat_while_the_listing_is_down(tmp_path: Path
     assert data["reason"] == "heartbeat-loss" and took < 10, took
     assert data["complete"] is False, "absence stays unproven while the listing is down — destroyed, not proven"
     assert iid not in FakeProvider(fake).list_ids()
+
+
+# ---- e4b#464: the command is handed the box; the controller's public key is attached by shape
+def test_command_environment_carries_the_box_and_nothing_leaks(tmp_path: Path):
+    """E4B_RENT_* reach --command as its environment; the launcher's own process keeps none of them."""
+    out = tmp_path / "seen-env.json"
+    code = "import os, json, sys; json.dump({k: v for k, v in os.environ.items() if k.startswith('E4B_RENT_')}, open(sys.argv[1], 'w'))"
+    rc = main(_cli(tmp_path, "rent-env-1", "--command", f"{sys.executable} -c \"{code}\" {out}"))
+    rec = _receipt(tmp_path)
+    assert rc == 0 and rec["status"] == "OK"
+    seen = json.loads(out.read_text())
+    assert seen["E4B_RENT_RUN_ID"] == "rent-env-1"
+    assert seen["E4B_RENT_INSTANCE_ID"] == rec["instance_id"]
+    assert seen["E4B_RENT_RUN_DIR"].endswith("/rent-env-1") and Path(seen["E4B_RENT_RUN_DIR"]).is_dir()
+    assert seen["E4B_RENT_PROVIDER"] == "fake" and seen["E4B_RENT_WALLCLOCK_S"] == "3600.0"
+    now = int(time.time())
+    assert now <= int(seen["E4B_RENT_DEADLINE_EPOCH"]) <= now + 3600 + 5
+    assert "E4B_RENT_SSH" not in seen, "the fake reports no ssh endpoint → no placeholder, the key is absent"
+    rate, est = float(seen["E4B_RENT_USD_PER_HOUR"]), float(seen["E4B_RENT_EST_USD"])   # one source for a box-side budget rule
+    assert abs(est - rate * float(seen["E4B_RENT_WALLCLOCK_S"]) / 3600) < 1e-6 and rate > 0
+    for k in ("E4B_RENT_RUN_ID", "E4B_RENT_INSTANCE_ID", "E4B_RENT_RUN_DIR", "E4B_RENT_SSH"):
+        assert k not in os.environ, f"{k} exported into the launcher's own process"  # E4B_RENT_LIVE is the fixture's, not ours
+    assert rec["environment"]["ssh_pubkey_given"] == "no"
+
+
+def test_command_environment_has_the_ssh_endpoint_when_the_preflight_reports_one(tmp_path: Path, monkeypatch):
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class WithSsh(FakeProvider):
+        def preflight(self, instance_id, *, timeout_s=600.0):
+            return {"vast_preflight": "ok", "vast_ssh": "ssh5.vast.ai:12345"}
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: WithSsh(kw["fake_state"]))
+    out = tmp_path / "seen-env.json"
+    code = "import os, json, sys; json.dump({k: v for k, v in os.environ.items() if k.startswith('E4B_RENT_SSH')}, open(sys.argv[1], 'w'))"
+    rc = main(_cli(tmp_path, "rent-env-2", "--command", f"{sys.executable} -c \"{code}\" {out}"))
+    assert rc == 0
+    assert json.loads(out.read_text()) == {"E4B_RENT_SSH": "ssh5.vast.ai:12345", "E4B_RENT_SSH_HOST": "ssh5.vast.ai", "E4B_RENT_SSH_PORT": "12345"}
+
+
+def test_command_environment_drops_an_inherited_endpoint_and_dates_the_deadline_from_launch(tmp_path: Path, monkeypatch):
+    """Warden's two LOWs on #465: (1) an E4B_RENT_* key inherited from the caller's shell never reaches the command when this
+    run has no such fact; (2) E4B_RENT_DEADLINE_EPOCH is seeded from the launch (t0), so a slow pre-flight does not push the
+    command's deadline past the guard's."""
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    for k, v in {"E4B_RENT_SSH": "stale.example:1", "E4B_RENT_SSH_HOST": "stale.example", "E4B_RENT_SSH_PORT": "1",
+                 "E4B_RENT_RUN_ID": "someone-elses-run"}.items():
+        monkeypatch.setenv(k, v)
+    env = rent_mod.command_environment(run_id="rent-env-3", instance_id="i-1", run_dir=tmp_path, provider="fake",
+                                       wallclock_s=60.0, deadline_epoch=1, ssh=None)
+    assert env["E4B_RENT_RUN_ID"] == "rent-env-3"
+    assert not any(k.startswith("E4B_RENT_SSH") for k in env), "a stale endpoint from the parent shell leaked through"
+    env = rent_mod.command_environment(run_id="rent-env-3", instance_id="i-1", run_dir=tmp_path, provider="fake",
+                                       wallclock_s=60.0, deadline_epoch=1, ssh="ssh5.vast.ai:2")
+    assert (env["E4B_RENT_SSH"], env["E4B_RENT_SSH_HOST"], env["E4B_RENT_SSH_PORT"]) == ("ssh5.vast.ai:2", "ssh5.vast.ai", "2")
+
+    class SlowPreflight(FakeProvider):
+        def preflight(self, instance_id, *, timeout_s=600.0):
+            time.sleep(1.5)
+            return {"vast_preflight": "ok"}
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: SlowPreflight(kw["fake_state"]))
+    out = tmp_path / "seen-env.json"
+    code = "import os, json, sys; json.dump(dict(E4B_RENT_DEADLINE_EPOCH=os.environ['E4B_RENT_DEADLINE_EPOCH']), open(sys.argv[1], 'w'))"
+    before = time.time()
+    assert main(_cli(tmp_path, "rent-env-3", "--command", f"{sys.executable} -c \"{code}\" {out}")) == 0
+    deadline = int(json.loads(out.read_text())["E4B_RENT_DEADLINE_EPOCH"])
+    assert deadline <= int(before) + 3600 + 1, "the pre-flight's 1.5 s was added to the command's deadline"
+    assert deadline >= int(before) + 3600 - 1
+
+
+def test_a_failed_key_attach_leaves_no_attached_claim_in_the_receipt(tmp_path: Path, monkeypatch):
+    """#465 MEDIUM-1: the launcher records that a key was GIVEN; only a pre-flight that got the 200 records ATTACHED."""
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class AttachFails(FakeProvider):
+        def preflight(self, instance_id, *, timeout_s=600.0):
+            raise RuntimeError("attaching the ssh key to i failed: HTTP 500")
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: AttachFails(kw["fake_state"]))
+    pub = tmp_path / "k.pub"
+    pub.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQyMDI2LXRlc3Qta2V5LW5vdC1yZWFsLWJ5dGVz test@e4b\n")
+    rc = main(_cli(tmp_path, "rent-key-2", "--ssh-pubkey", str(pub), "--command", "true"))
+    rec = _receipt(tmp_path)
+    assert rc != 0 and rec["status"] != "OK" and rec["environment"]["vast_preflight"] == "failed"
+    assert rec["environment"]["ssh_pubkey_given"] == "yes"
+    assert "vast_ssh_key_attached" not in rec["environment"] and "ssh_pubkey_attached" not in rec["environment"]
+
+
+def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path):
+    from experts4bit_qlora.tools.rent import read_pubkey
+    good = tmp_path / "id_ed25519.pub"
+    good.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderKeyMaterialForTheTestOnly0000000000 cdo@mini\n")
+    assert read_pubkey(good).startswith("ssh-ed25519 AAAA")
+    privkey = tmp_path / "id_ed25519"
+    privkey.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n")
+    with pytest.raises(RentRefused, match="private key is refused"):
+        read_pubkey(privkey)
+    with pytest.raises(RentRefused, match="no such file"):
+        read_pubkey(tmp_path / "absent.pub")
+    two = tmp_path / "two.pub"
+    two.write_text("ssh-ed25519 AAAA1 a\nssh-ed25519 AAAA2 b\n")
+    with pytest.raises(RentRefused, match="single"):
+        read_pubkey(two)
+    # through the CLI on the fake provider: the receipt records that a key was attached
+    rc = main(_cli(tmp_path, "rent-key-1", "--ssh-pubkey", str(good)))
+    assert rc == 0 and _receipt(tmp_path)["environment"]["ssh_pubkey_given"] == "yes"
+    rc = main(_cli(tmp_path / "b", "rent-key-2", "--ssh-pubkey", str(privkey)))
+    assert rc == 2, "a refused key is a refusal receipt, not a launch"
+
+
+def test_launcher_passes_the_declared_rate_as_the_offer_ceiling(tmp_path: Path, monkeypatch):
+    """e4b#464: the launcher hands --usd-per-hour to launch() as max_dph, so the estimate on the approval line is the ceiling the offer must fit."""
+    from experts4bit_qlora.tools import rent as rent_mod
+    seen: dict = {}
+
+    class Recording(FakeProvider):
+        def launch(self, **kw):
+            seen.update(kw)
+            return super().launch(gpu=kw["gpu"], wallclock_h=kw["wallclock_h"], image=kw["image"])
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: Recording(kw["fake_state"]))
+    assert main(_cli(tmp_path, "rent-rate-1")) == 0
+    assert seen["max_dph"] == 0.4, "the fixture's --usd-per-hour 0.4 reaches the provider as the offer ceiling"

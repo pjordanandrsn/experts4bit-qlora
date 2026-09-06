@@ -263,7 +263,7 @@ class FakeProvider:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(st) + "\n")
 
-    def launch(self, *, gpu: str, wallclock_h: float, image: str) -> str:
+    def launch(self, *, gpu: str, wallclock_h: float, image: str, max_dph: float | None = None) -> str:
         st = self._load()
         iid = f"fake-{int(time.time())}-{os.getpid()}"
         live = list(st.get("live") or [])
@@ -293,7 +293,23 @@ class FakeProvider:
                 "remaining": live, "at": _utc()}
 
 
-def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = "e4b-rent"):
+PUBKEY_RE = re.compile(r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp\d+|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/=]+( .*)?$")
+
+
+def read_pubkey(path: Path | str) -> str:
+    """The controller's ssh PUBLIC key by shape (`ssh-ed25519 AAAA… comment`), attached to the instance so the pre-flight
+    and the workload can ssh (e4b#464). A private key, an empty file or anything else is refused — never attached, never
+    written anywhere."""
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise RentRefused(f"--ssh-pubkey {p}: no such file")
+    lines = [ln.strip() for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    if len(lines) != 1 or not PUBKEY_RE.match(lines[0]):
+        raise RentRefused(f"--ssh-pubkey {p}: not a single OpenSSH public key line (ssh-ed25519 / ssh-rsa / ecdsa …); a private key is refused")
+    return lines[0]
+
+
+def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = "e4b-rent", ssh_pubkey: str | None = None):
     """The provider for `kind`. Live Vast (#455) is armed only by E4B_RENT_LIVE=1 and a mode-600 key file
     (`~/.vast/secrets.env`, key read by shape, never echoed); every other live kind still refuses by name."""
     if kind == "fake":
@@ -303,7 +319,7 @@ def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = 
     if kind == "vast:verified-secure":
         from experts4bit_qlora.tools import vast_provider
         try:
-            return vast_provider.provider_from_env(run_label=run_label)
+            return vast_provider.provider_from_env(run_label=run_label, **({"ssh_pubkey": ssh_pubkey} if ssh_pubkey else {}))
         except (vast_provider.VastRefused, vast_provider.BackendUnavailable) as e:
             raise RentRefused(f"live provider {kind} refused: {e}") from e
     if kind == "runpod:secure":
@@ -311,6 +327,41 @@ def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = 
             f"live provider {kind} is not armed in this process; pass --dry-run "
             "(fake provider) — the RunPod adapter is a separate issue")
     raise RentRefused(f"unknown provider {kind!r}")
+
+
+COMMAND_ENV_KEYS = ("E4B_RENT_RUN_ID", "E4B_RENT_INSTANCE_ID", "E4B_RENT_RUN_DIR", "E4B_RENT_PROVIDER",
+                    "E4B_RENT_WALLCLOCK_S", "E4B_RENT_DEADLINE_EPOCH", "E4B_RENT_USD_PER_HOUR", "E4B_RENT_EST_USD",
+                    "E4B_RENT_SSH", "E4B_RENT_SSH_HOST", "E4B_RENT_SSH_PORT")
+
+
+def command_environment(*, run_id: str, instance_id: str, run_dir: Path, provider: str, wallclock_s: float,
+                        deadline_epoch: int, ssh: str | None, usd_per_hour: float | None = None,
+                        est_usd: float | None = None) -> dict[str, str]:
+    """The environment `--command` runs with (e4b#464): the controller's own plus E4B_RENT_* — run id, instance id, the
+    receipt directory (where the workload puts what the receipt should list), provider, the wall-clock cap in seconds,
+    the guard's deadline as an epoch (a box-side STOP rule reads it), and the ssh endpoint when the pre-flight reported
+    one (`host:port`, also split), and the approval line's rate ceiling and estimate (`E4B_RENT_USD_PER_HOUR`,
+    `E4B_RENT_EST_USD`) so a box-side budget rule (P41's STOP-4) works from the launcher's numbers, one source.
+    Absent facts are absent, never a placeholder."""
+    env = dict(os.environ)
+    for k in COMMAND_ENV_KEYS:  # Warden LOW-1 on #465: an inherited E4B_RENT_* (a caller's shell, a nested launcher) never
+        env.pop(k, None)        # reaches the command — every key the command sees is this run's, or absent
+    env.update({
+        "E4B_RENT_RUN_ID": run_id,
+        "E4B_RENT_INSTANCE_ID": str(instance_id),
+        "E4B_RENT_RUN_DIR": str(run_dir),
+        "E4B_RENT_PROVIDER": provider,
+        "E4B_RENT_WALLCLOCK_S": str(wallclock_s),
+        "E4B_RENT_DEADLINE_EPOCH": str(int(deadline_epoch)),
+    })
+    if usd_per_hour is not None:
+        env["E4B_RENT_USD_PER_HOUR"] = repr(float(usd_per_hour))
+    if est_usd is not None:
+        env["E4B_RENT_EST_USD"] = repr(float(est_usd))
+    if ssh and ":" in ssh:
+        host, port = ssh.rsplit(":", 1)
+        env.update({"E4B_RENT_SSH": ssh, "E4B_RENT_SSH_HOST": host, "E4B_RENT_SSH_PORT": port})
+    return env
 
 
 def spawn_guard(*, python: str, module_args: list[str],
@@ -715,6 +766,8 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--heartbeat-refresh-s", type=float, default=None,
                     help="how often the launcher refreshes the heartbeat while --command runs "
                          "(default: timeout / 3; 0 disables -- tests only)")
+    ap.add_argument("--ssh-pubkey", default=None, metavar="PATH",
+                    help="#464: the controller's ssh PUBLIC key file, attached to the instance so the pre-flight and --command can ssh (a private key is refused)")
     ap.add_argument("--preflight-timeout-s", type=float, default=600.0,
                     help="#455: how long a live instance may stay `loading` before the pre-flight fails it")
     ap.add_argument("--live-list", action="store_true",
@@ -847,13 +900,15 @@ def main(argv: list[str] | None = None) -> int:
             approvals=approvals, date_utc=date_utc, seat_executors=seat_executors)
         environment["approver_spec"] = str(spec) if spec else "unresolved"
         fake_state = Path(args.fake_state) if args.fake_state else rec_dir / "fake-state.json"
-        prov = provider_for(provider, fake_state=fake_state, run_label=run_id)  # MEDIUM-3: a live-provider refusal is a receipt too
+        ssh_pubkey = read_pubkey(args.ssh_pubkey) if args.ssh_pubkey else None  # #464: by shape, or a named refusal
+        environment["ssh_pubkey_given"] = "yes" if ssh_pubkey else "no"   # #465 MEDIUM-1: the attach itself is the pre-flight's fact (vast_ssh_key_attached)
+        prov = provider_for(provider, fake_state=fake_state, run_label=run_id, ssh_pubkey=ssh_pubkey)  # MEDIUM-3: a live-provider refusal is a receipt too
     except RentRefused as e:
         return refused(str(e), spec)
 
     rec_dir.mkdir(parents=True, exist_ok=True)
     try:
-        iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image)
+        iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image, max_dph=args.usd_per_hour)  # #464: the offer must fit the declared rate
     except Exception as e:  # noqa: BLE001 - #455: a create that fails at the provider is a refusal receipt, not a crash
         # CEO read (#460): a create the adapter could not parse is not a clean refusal. The adapter has already
         # swept by this run's label; what it proved decides the receipt: instances found and destroyed → ALARM,
@@ -915,9 +970,14 @@ def main(argv: list[str] | None = None) -> int:
                 notes = f"pre-flight failed: {e} (" + notes + "); command not run"
                 environment["vast_preflight"] = "failed"
     if args.command and status == "OK":
+        # #464: the command is handed the box — the ids, the receipt directory, the deadline and (when the pre-flight
+        # reported it) the ssh endpoint — as ITS environment; nothing is exported into the launcher's own process.
+        cmd_env = command_environment(run_id=run_id, instance_id=iid, run_dir=rec_dir, provider=prov.kind,
+                                      wallclock_s=wallclock_s, deadline_epoch=int(t0 + wallclock_s),  # Warden LOW-2: from launch, not command start
+                                      ssh=environment.get("vast_ssh"), usd_per_hour=args.usd_per_hour, est_usd=estimate)
         with HeartbeatRefresher(hb, refresh):  # HIGH-1: the heartbeat stays fresh for the whole command
             try:
-                subprocess.run(args.command, shell=True, check=True)
+                subprocess.run(args.command, shell=True, check=True, env=cmd_env)
             except subprocess.CalledProcessError as e:
                 status, result, notes = "HARNESS_ERROR", "fail", f"command exited {e.returncode}"
 
