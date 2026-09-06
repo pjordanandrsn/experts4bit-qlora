@@ -470,17 +470,35 @@ def _ssh_run(host: str, port: int, command: str, timeout_s: float) -> tuple[int,
         return 124, f"ssh timed out after {timeout_s} s"
 
 
-BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=20000000", "http://speedtest.tele2.net/100MB.zip")
+# Endpoint 1 is the largest size Cloudflare actually serves: 20/50/75 MB answer 200, 100 MB answers 403 with a
+# one-byte body (measured from the controller and independently by the CEO, 2026-09-06). A bigger sample makes
+# the handshake a smaller share of the window; the transfer-only timing below removes what is left of it.
+BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=75000000", "http://speedtest.tele2.net/100MB.zip")
 BANDWIDTH_MIN_BYTES = 5_000_000
 BANDWIDTH_WINDOW_S = 45
 
 
 def _bandwidth_reading(out: str) -> tuple[float, float, float, str]:
-    """Return (MB/s, bytes, seconds, HTTP status), rejecting error bodies and undersized transfers."""
+    """Return (MB/s, bytes, seconds, HTTP status), rejecting error bodies and undersized transfers.
+
+    Two shapes are accepted. `<bytes> <seconds> <status>` — the seconds are already transfer-only, which is what
+    the python3 and wget legs print, because they start their clock at the first byte. `<bytes> <total>
+    <starttransfer> <status>` — curl's, where `time_total` includes DNS, TCP and TLS setup; the link is
+    `size / (time_total - time_starttransfer)`. Timing the handshake understates a box: measured from the
+    controller on 2026-09-06, 20 MB read 7.01 MB/s naive against 8.29 MB/s transfer-only (18 % low) and 75 MB
+    read 40.6 against 42.7 (5 %). Against a 40 MB/s floor an 18 % understatement destroys a healthy box — the
+    same class of error as timing a 403 body, one level up (CEO read of #474, 2026-09-06T20:59Z). A
+    non-positive or absent transfer window falls back to the total rather than dividing by zero, and says so."""
     parts = out.strip().split()
     if len(parts) < 3:
         raise ValueError(f"no <bytes> <seconds> <status> line: {out.strip()[:120]!r}")
-    size, secs, code = float(parts[0]), float(parts[1]), parts[2]
+    if len(parts) >= 4:
+        size, total, start, code = float(parts[0]), float(parts[1]), float(parts[2]), parts[3]
+        secs = total - start
+        if secs <= 0:                     # a cached or instant body: the total is the only honest window left
+            secs = total
+    else:
+        size, secs, code = float(parts[0]), float(parts[1]), parts[2]
     if code != "200":
         raise ValueError(f"HTTP {code} after {size:.0f} B — an error body is not a measurement")
     if size < BANDWIDTH_MIN_BYTES:
@@ -533,26 +551,34 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
 
         def command(url: str) -> str:
             return ("curl --location --fail --silent --show-error -o /dev/null "
-                    f"-w '%{{size_download}} %{{time_total}} %{{http_code}}' "
+                    f"-w '%{{size_download}} %{{time_total}} %{{time_starttransfer}} %{{http_code}}' "
                     f"--max-time {BANDWIDTH_WINDOW_S} {shlex.quote(url)}")
     elif "wget" in capabilities and "python3" in capabilities:
         tool = "wget"
-        wget_code = ("import subprocess,sys,time;t=time.monotonic();"
+        wget_code = ("import subprocess,sys,time;"
                      f"p=subprocess.Popen(['wget','-q','-O','-','--timeout={BANDWIDTH_WINDOW_S}',sys.argv[1]],"
                      "stdout=subprocess.PIPE);"
-                     "n=sum(map(len,iter(lambda:p.stdout.read(1048576),b'')));rc=p.wait();"
-                     "print(n,time.monotonic()-t,200);raise SystemExit(rc)")
+                     "n=0;t=None\n"
+                     "while True:\n"
+                     " b=p.stdout.read(1048576)\n"
+                     " if not b:break\n"
+                     " if t is None:t=time.monotonic()\n"     # the clock starts at the first byte, not at connect
+                     " n+=len(b)\n"
+                     f" if time.monotonic()-t>{BANDWIDTH_WINDOW_S}:break\n"
+                     "rc=p.wait();print(n,(time.monotonic()-t) if t else 0.0,200);raise SystemExit(rc)")
 
         def command(url: str) -> str:
             return f"python3 -c {shlex.quote(wget_code)} {shlex.quote(url)}"
     elif "python3" in capabilities:
         tool = "python3"
-        python_code = ("import sys,time,urllib.request as u;t=time.monotonic();"
+        python_code = ("import sys,time,urllib.request as u;"
                        "q=u.Request(sys.argv[1],headers={'User-Agent':'curl/8'});"
                        f"r=u.urlopen(q,timeout={BANDWIDTH_WINDOW_S});"
-                       "n=0\nwhile True:\n b=r.read(1048576)\n if not b:break\n n+=len(b)\n"
+                       "n=0;t=None\nwhile True:\n b=r.read(1048576)\n if not b:break\n"
+                       " if t is None:t=time.monotonic()\n"   # the connect and TLS handshake are not the link
+                       " n+=len(b)\n"
                        f" if time.monotonic()-t>{BANDWIDTH_WINDOW_S}:break\n"
-                       "print(n,time.monotonic()-t,r.status);r.close()")
+                       "print(n,(time.monotonic()-t) if t else 0.0,r.status);r.close()")
 
         def command(url: str) -> str:
             return f"python3 -c {shlex.quote(python_code)} {shlex.quote(url)}"
