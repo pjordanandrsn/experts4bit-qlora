@@ -203,22 +203,47 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
             fail(path, 0, f"{field} must be a valid ISO 8601 timestamp")
 
 
-def check_approval_threshold(
-    path: Path, estimated: float, approvals: list[dict[str, Any]], thresholds: list[dict[str, Any]]
-) -> None:
-    """Check that approvals satisfy the threshold for the estimated cost."""
-    # Find the applicable threshold
+def select_approver_spec(
+    estimated: float,
+    thresholds: list[dict[str, Any]],
+    overrides: list[dict[str, Any]] | None = None,
+    seat_executors: dict[str, str] | None = None,
+) -> str | None:
+    """The approver spec for this estimate: the first threshold whose max_usd covers it, then any
+    approval_overrides entry whose while_role_executor seats all match seat_executors and whose
+    band_usd (lo, hi] contains the estimate. Same semantics as experts4bit_qlora.tools.rent."""
     applicable = None
     for th in thresholds:
         max_usd = th["max_usd"]
         if max_usd is None or estimated <= max_usd:
             applicable = th
             break
-
     if applicable is None:
-        fail(path, 0, f"no threshold found for estimated cost ${estimated}")
+        return None
+    spec = str(applicable["approver"])
+    seats = seat_executors or {}
+    for ov in overrides or []:
+        lo, hi = ov["band_usd"]
+        if not (float(lo) < estimated <= float(hi)):
+            continue
+        cond = ov.get("while_role_executor") or {}
+        if cond and all(seats.get(r) == ex for r, ex in cond.items()):
+            spec = str(ov["approver"])
+    return spec
 
-    approver_spec = applicable["approver"]
+
+def check_approval_threshold(
+    path: Path,
+    estimated: float,
+    approvals: list[dict[str, Any]],
+    thresholds: list[dict[str, Any]],
+    overrides: list[dict[str, Any]] | None = None,
+    seat_executors: dict[str, str] | None = None,
+) -> None:
+    """Check that approvals satisfy the threshold (and any executor-conditional override) for the estimated cost."""
+    approver_spec = select_approver_spec(estimated, thresholds, overrides, seat_executors)
+    if approver_spec is None:
+        fail(path, 0, f"no threshold found for estimated cost ${estimated}")
 
     # Self-approval case
     if approver_spec == "requesting-agent":
@@ -252,6 +277,19 @@ def check_approval_threshold(
                 path,
                 0,
                 f"estimated ${estimated} requires two of {required_roles}, got {approving_roles}",
+            )
+        return
+
+    # all-of:CTO,CSO case (executor-conditional override, e.g. while Grok holds the CTO seat)
+    if approver_spec.startswith("all-of:"):
+        required_roles = set(approver_spec.split(":", 1)[1].split(","))
+        approving_roles = {a.get("role") for a in approvals}
+        missing = required_roles - approving_roles
+        if missing:
+            fail(
+                path,
+                0,
+                f"estimated ${estimated} requires all of {sorted(required_roles)} (override), missing {sorted(missing)}",
             )
         return
 
@@ -325,8 +363,11 @@ def main() -> None:
 
     for role, dates in role_daily.items():
         ceiling = role_ceilings.get(role)
-        if ceiling is None:
-            # Unknown role; skip ceiling check
+        if not isinstance(ceiling, (int, float)) or isinstance(ceiling, bool):
+            # Fail closed: a role without a numeric ceiling row must not have rented (the launcher refuses it too)
+            for path, data in receipts:
+                if (data["requested_by"].split("/")[0] if "/" in data["requested_by"] else data["requested_by"]) == role:
+                    fail(path, 0, f"role {role!r} has no numeric row in role_daily_ceiling_usd")
             continue
         for date_str, total in dates.items():
             if total > ceiling:
@@ -357,10 +398,13 @@ def main() -> None:
 
     # Check approval thresholds
     thresholds = policy["approval_thresholds"]
+    overrides = policy.get("approval_overrides") or []
     for path, data in receipts:
         estimated = data["cost_usd"]["estimated"]
         approvals = data["approvals"]
-        check_approval_threshold(path, estimated, approvals, thresholds)
+        env = data.get("environment") if isinstance(data.get("environment"), dict) else {}
+        seat_executors = env.get("seat_executors") if isinstance(env.get("seat_executors"), dict) else None
+        check_approval_threshold(path, estimated, approvals, thresholds, overrides, seat_executors)
 
     # All checks passed
     num_days = len(global_daily) if global_daily else 0

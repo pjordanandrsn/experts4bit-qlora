@@ -120,31 +120,56 @@ instance exists:
 
 ```bash
 python -m experts4bit_qlora.tools.rent \
-  --role CTO --agent Cursor \
+  --role CTO --agent cursor-desktop-mini/grok \
+  --work-id experts4bit-qlora#433 --preregistration bench/p41/P41-PREREG.md \
+  --hypothesis "…" --expected-result "…" --success-criteria "…" --failure-criteria "…" \
   --gpu "RTX 5090" --usd-per-hour 0.40 --wallclock-h 2 \
-  --work-id experts4bit-qlora#NNN \
-  --approval 'CSO/ChatGPT=https://cerin-amroth.slack.com/archives/…/p…' \
-  --dry-run
-# live (Vast verified-secure / RunPod secure) is refused until E4B_RENT_LIVE
-# arms the API adapter; dry-run uses a fake provider and still writes a receipt.
+  --seat-executor CTO=cursor-desktop-mini/grok \
+  --approval 'CTO/cursor-desktop-mini=https://cerin-amroth.slack.com/archives/C0BV5028SGM/p<16 digits>' \
+  --approval 'CSO/ChatGPT=https://cerin-amroth.slack.com/archives/C0BV5028SGM/p<16 digits>' \
+  --command "python bench/…" --dry-run
+# live (Vast verified-secure / RunPod secure) is refused -- with a REFUSED receipt -- until
+# E4B_RENT_LIVE arms the API adapter; --dry-run uses a fake provider and still writes a receipt.
 ```
 
 `scripts/rent_run.py` is the same command. The launcher:
 
 1. Estimates `$ / h × wallclock` and refuses over-ceiling, over global daily
-   budget, disallowed GPU/provider, missing approvals, or a cap above the
-   $35 per-run hard cap without Jordan's approval.
-2. `--approval ROLE/AGENT=<slack-permalink>` is repeated as the threshold
-   demands (self-approval ≤ $2; one of CTO/CSO ≤ $20; two of CEO/CTO/CSO ≤ $50;
-   Jordan above, and Jordan also covers the hard cap).
+   budget, a role without a numeric ceiling row, disallowed GPU/provider,
+   missing approvals, or a cap above the $35 per-run hard cap without
+   Jordan's approval. Every refusal writes a `REFUSED` receipt and a ledger
+   line.
+2. `--approval ROLE/AGENT=<slack-permalink>` is repeated as the spec
+   demands: self-approval ≤ $2; one of CTO/CSO ≤ $20; two of CEO/CTO/CSO
+   ≤ $50; Jordan above (Jordan also covers the hard cap, as role *and* agent
+   `Jordan`). `approval_overrides` in `docs/compute-policy.json` tighten the
+   spec while a named executor holds a seat -- today, while
+   `CTO=cursor-desktop-mini/grok`, $2–$20 needs `all-of:CTO,CSO`; the
+   launcher learns the seats from `--seat-executor ROLE=EXECUTOR` and records
+   them in the receipt's `environment.seat_executors`, and
+   `scripts/check_run_ledger.py` applies the same override to the receipt.
+   Permalinks must be `https://cerin-amroth.slack.com/archives/C…/p<16
+   digits>`; the launcher cannot read Slack, so the receipt carries them for
+   the ledger check to resolve against the org-corpus raw layer.
 3. Arms a teardown **guard on the controller** (`start_new_session`, not on
-   the rented box). It destroys the instance on completion, wallclock, or
-   heartbeat loss, then proves teardown by listing the provider without that
-   instance id.
-4. Writes `bench/runs/<UTC date>/<run-id>/receipt.json` and appends
-   `bench/runs/ledger.jsonl` even on refusal or a failed command. A receipt
-   is `complete` only with teardown proof (or `not-launched` when refused
-   before create). Optional `E4B_SLACK_WEBHOOK` posts `LAUNCHED` / `DONE` /
+   the rented box) and refreshes the guard's heartbeat every `timeout / 3`
+   seconds for as long as `--command` runs. The guard destroys the instance
+   on wallclock or heartbeat loss and proves teardown by listing the provider
+   without that instance id; when the guard fires, the receipt says `status
+   ALARM`, `result invalid` -- never `pass`. On normal completion the
+   launcher tears down, writes the proof (`reason: completion`) and the guard
+   exits.
+4. Writes `bench/runs/<UTC date>/<run-id>/receipt.json` -- `commit_sha`,
+   `branch` and `dirty_tree` read from git, validated against
+   `docs/run-receipt-schema.json` before every write -- and appends
+   `bench/runs/ledger.jsonl`, on success, on a failed command and on
+   refusal. `--role`, `--agent`, `--work-id`, `--preregistration`,
+   `--hypothesis`, `--expected-result`, `--success-criteria` and
+   `--failure-criteria` have no defaults; `decision` is `pending review`
+   until a reviewer sets it; `cost_usd.actual` is the provider's billing
+   (the fake provider bills 0), never a copy of the estimate. A receipt is
+   `complete` only with teardown proof (or `not-launched` when refused before
+   create). Optional `E4B_SLACK_WEBHOOK` posts `LAUNCHED` / `DONE` /
    `TORN DOWN` / `REFUSED`.
 
 ## Check Script
