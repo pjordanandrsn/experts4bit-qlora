@@ -9,9 +9,11 @@ Enforces the compute policy from docs/COMPUTE-GOVERNANCE.md:
      (from docs/compute-policy.json)
   4. Each receipt's approvals satisfy the threshold for its cost_usd.estimated,
      UNLESS the receipt carries incident: "<repo>#<n>" — in that case the threshold
-     check is replaced by the incident reference itself (format, and the required
-     status ALARM / result invalid / decision abandon constraints enforced in
-     validate_receipt). The cost still counts toward daily ceilings and global budget.
+     check is replaced by the incident reference itself (format verified; in CI the
+     issue is resolved via the GitHub API and must have label 'incident' or title
+     starting with '[incident]'; locally a NOT VERIFIED line is printed to stderr —
+     never a silent pass; status ALARM / result invalid / decision abandon enforced
+     in validate_receipt). The cost still counts toward daily ceilings and global budget.
   5. Each receipt has non-empty teardown_proof
 
 Exit 1 with file:line-style messages on any violation; exit 0 with
@@ -31,8 +33,11 @@ so `started_at: "yesterday"` would otherwise pass the strict path.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -77,6 +82,69 @@ def load_json(path: Path) -> Any:
         fail(path, None, "file not found")
 
 
+def _verify_incident_exists(path: Path, incident: str) -> None:
+    """Verify the incident issue exists on GitHub and is labelled as an incident.
+
+    Owner-less form (``<repo>#<n>``) defaults to ``pjordanandrsn/``.
+
+    In CI (``GITHUB_TOKEN`` present and non-empty): calls the GitHub REST API.
+    The issue must have the label ``incident`` **or** a title starting with
+    ``[incident]``.  Any HTTP error (404, rate-limit, network timeout) causes
+    ``fail()``; never a silent pass.
+
+    Locally (``GITHUB_TOKEN`` absent or empty): prints a ``NOT VERIFIED`` line
+    to stderr and returns.  Operators must verify the reference manually.
+    """
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+
+    # Parse: <owner>/<repo>#<n>  or  <repo>#<n>
+    hash_idx = incident.rindex("#")
+    issue_num = incident[hash_idx + 1 :]
+    owner_repo_part = incident[:hash_idx]
+    owner_repo = owner_repo_part if "/" in owner_repo_part else f"pjordanandrsn/{owner_repo_part}"
+
+    if not token:
+        print(
+            f"{path} — NOT VERIFIED — incident {incident!r} not checked "
+            f"(GITHUB_TOKEN absent); verify manually before accepting",
+            file=sys.stderr,
+        )
+        return
+
+    api_url = f"https://api.github.com/repos/{owner_repo}/issues/{issue_num}"
+    req = urllib.request.Request(
+        api_url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            issue_data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        fail(
+            path,
+            0,
+            f"incident {incident!r}: GitHub API returned HTTP {exc.code} — "
+            f"issue not found or access denied",
+        )
+    except Exception as exc:  # noqa: BLE001
+        fail(path, 0, f"incident {incident!r}: GitHub API call failed: {exc}")
+
+    labels = {lbl.get("name", "") for lbl in issue_data.get("labels") or []}
+    title = str(issue_data.get("title", ""))
+    if "incident" not in labels and not title.startswith("[incident]"):
+        fail(
+            path,
+            0,
+            f"incident {incident!r}: issue #{issue_num} in {owner_repo!r} has neither "
+            f"label 'incident' nor title starting with '[incident]' "
+            f"(title={title!r}, labels={sorted(labels)!r})",
+        )
+
+
 def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     """Validate a single receipt against docs/run-receipt-schema.json.
 
@@ -89,8 +157,9 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     enforced in both paths; Draft 2020-12 does not enforce format: date-time without
     a format checker.
     Incident receipts: when incident is present the format is enforced by the schema
-    pattern (strict) or INCIDENT_RE (fallback); status ALARM, result invalid, and
-    decision starting with 'abandon' are required in both paths.
+    pattern (strict) or INCIDENT_RE (fallback); the issue is verified to exist via
+    _verify_incident_exists() (API in CI, NOT VERIFIED locally); status ALARM, result
+    invalid, and decision starting with 'abandon' are required in both paths.
     """
     if not SCHEMA.exists():
         fail(SCHEMA, None, "run-receipt-schema.json not found; cannot validate receipts")
@@ -235,10 +304,15 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
                     f"{appr.get('slack_permalink')!r}",
                 )
 
-    # Incident receipt business-logic constraints (both paths): status ALARM, result invalid,
-    # decision starts with 'abandon'.  These are conditional constraints not expressible in
-    # Draft 2020-12 without if/then; enforced here so both the strict and fallback paths agree.
+    # Incident receipt constraints (both paths):
+    # 1. Existence: the issue must exist on GitHub with label 'incident' or title
+    #    '[incident]…'; in CI this is verified via the API; locally NOT VERIFIED is
+    #    printed to stderr — never a silent pass.
+    # 2. Business logic: status ALARM, result invalid, decision starts with 'abandon'.
+    #    Conditional constraints not expressible in Draft 2020-12 without if/then;
+    #    enforced here so both the strict and fallback paths agree.
     if "incident" in data:
+        _verify_incident_exists(path, str(data["incident"]))
         if data.get("status") != "ALARM":
             fail(
                 path,

@@ -1,6 +1,6 @@
 """Tests for scripts/check_run_ledger.py
 
-Twelve fixtures:
+Fixtures:
   1. One passing receipt (valid, within ceilings, proper approvals)
   2. One over-ceiling day (exceeds role daily ceiling)
   3. One missing approval (insufficient approvals for the cost threshold)
@@ -9,19 +9,26 @@ Twelve fixtures:
   6. A receipt missing a required field (caught by schema validation)
   7. A receipt with an invalid teardown_proof.reason (caught by schema enum)
   8. Fallback path verified in-process via sys.modules["jsonschema"] = None patch
-  9. Incident receipt accepted (status ALARM, result invalid, decision abandon; no approval needed)
+  9. Incident receipt accepted (status ALARM, result invalid, decision abandon; no approval needed;
+     GITHUB_TOKEN stripped → NOT VERIFIED line in stderr)
   10. Incident receipt rejected: wrong status (status OK with incident field)
   11. Incident receipt rejected: wrong result (result pass with incident field)
   12. Incident receipt rejected: wrong decision (decision merge with incident field)
+  13. _verify_incident_exists: no token → NOT VERIFIED printed, no exception
+  14. _verify_incident_exists: API 404 → fail()
+  15. _verify_incident_exists: issue exists but no incident label/title → fail()
+  16. _verify_incident_exists: issue exists with incident label → no exception
 """
 from __future__ import annotations
 
 import copy
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
+import unittest.mock
 from pathlib import Path
 
 import pytest
@@ -784,12 +791,21 @@ def _setup_incident_test(tmp_path: Path, receipt: dict) -> None:
     (runs / "ledger.jsonl").write_text(f"# Ledger\n{_INCIDENT_LEDGER_LINE}\n")
 
 
+def _env_without_token() -> dict[str, str]:
+    """Return os.environ with GITHUB_TOKEN removed (deterministic in CI and locally)."""
+    return {k: v for k, v in os.environ.items() if k != "GITHUB_TOKEN"}
+
+
 def test_incident_receipt_accepted(tmp_path: Path) -> None:
     """An incident receipt passes without approval: threshold check bypassed by the incident field.
 
     The receipt has cost_usd.estimated = $5 which would normally require one-of:CTO,CSO
     approval under _BASE_POLICY.  With incident present and approvals = [], the script
     accepts the receipt and counts the $0.09 actual toward the daily ceiling and budget.
+
+    GITHUB_TOKEN is stripped from the subprocess env so the existence check takes the
+    NOT VERIFIED path deterministically (the incident value is a feature issue, not an
+    incident-labelled one).  The NOT VERIFIED line must appear in stderr.
     """
     _setup_incident_test(tmp_path, _INCIDENT_RECEIPT)
 
@@ -798,12 +814,16 @@ def test_incident_receipt_accepted(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        env=_env_without_token(),
     )
 
     assert result.returncode == 0, (
         f"Expected incident receipt to pass; got rc={result.returncode}\n{result.stderr}"
     )
     assert "OK: 1 receipts, 1 days" in result.stdout
+    assert "NOT VERIFIED" in result.stderr, (
+        f"Expected NOT VERIFIED in stderr when GITHUB_TOKEN absent; got: {result.stderr!r}"
+    )
 
 
 def test_incident_receipt_wrong_status(tmp_path: Path) -> None:
@@ -817,6 +837,7 @@ def test_incident_receipt_wrong_status(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        env=_env_without_token(),
     )
 
     assert result.returncode == 1, (
@@ -836,6 +857,7 @@ def test_incident_receipt_wrong_result(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        env=_env_without_token(),
     )
 
     assert result.returncode == 1, (
@@ -855,9 +877,104 @@ def test_incident_receipt_wrong_decision(tmp_path: Path) -> None:
         cwd=tmp_path,
         capture_output=True,
         text=True,
+        env=_env_without_token(),
     )
 
     assert result.returncode == 1, (
         f"Expected failure on incident receipt with decision 'merge'; got rc=0\n{result.stdout}"
     )
     assert "abandon" in result.stderr.lower()
+
+
+# ---------------------------------------------------------------------------
+# Tests 13–16: _verify_incident_exists in-process API path tests
+# ---------------------------------------------------------------------------
+
+def _load_ledger_module() -> object:
+    """Import check_run_ledger as a fresh module (not cached under its filename)."""
+    spec = importlib.util.spec_from_file_location("check_run_ledger_api", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_incident_no_token_prints_not_verified(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    """No GITHUB_TOKEN → NOT VERIFIED printed to stderr; no exception raised."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    mod = _load_ledger_module()
+    # Should not raise; must print NOT VERIFIED to stderr.
+    mod._verify_incident_exists(Path("receipt.json"), "pjordanandrsn/experts4bit-qlora#459")
+    captured = capsys.readouterr()
+    assert "NOT VERIFIED" in captured.err
+    assert "GITHUB_TOKEN" in captured.err
+
+
+def test_incident_api_404_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 from the GitHub API → fail() (sys.exit 1).
+
+    The existence check must be fail-closed: a missing issue must never silently pass.
+    """
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake_token_for_test")
+    mod = _load_ledger_module()
+
+    import urllib.error as _ue
+    http_error = _ue.HTTPError(
+        url="https://api.github.com/repos/pjordanandrsn/experts4bit-qlora/issues/459",
+        code=404,
+        msg="Not Found",
+        hdrs=None,  # type: ignore[arg-type]
+        fp=None,
+    )
+
+    with (
+        unittest.mock.patch.object(mod.urllib.request, "urlopen", side_effect=http_error),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        mod._verify_incident_exists(Path("receipt.json"), "pjordanandrsn/experts4bit-qlora#459")
+    assert exc_info.value.code == 1
+
+
+def test_incident_api_issue_not_labeled_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue exists but has neither label 'incident' nor title '[incident]…' → fail()."""
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake_token_for_test")
+    mod = _load_ledger_module()
+
+    # Simulate a real issue without the incident label (e.g. a feature request).
+    fake_response_body = json.dumps({
+        "number": 459,
+        "title": "feat: accept incident receipts",
+        "labels": [{"name": "enhancement"}, {"name": "approved"}],
+    }).encode()
+
+    mock_cm = unittest.mock.MagicMock()
+    mock_cm.__enter__ = lambda s: s
+    mock_cm.__exit__ = unittest.mock.MagicMock(return_value=False)
+    mock_cm.read = unittest.mock.MagicMock(return_value=fake_response_body)
+
+    with (
+        unittest.mock.patch.object(mod.urllib.request, "urlopen", return_value=mock_cm),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        mod._verify_incident_exists(Path("receipt.json"), "pjordanandrsn/experts4bit-qlora#459")
+    assert exc_info.value.code == 1
+
+
+def test_incident_api_success_with_label_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue with label 'incident' → no exception; existence check passes."""
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake_token_for_test")
+    mod = _load_ledger_module()
+
+    fake_response_body = json.dumps({
+        "number": 998,
+        "title": "Some incident",
+        "labels": [{"name": "incident"}, {"name": "critical"}],
+    }).encode()
+
+    mock_cm = unittest.mock.MagicMock()
+    mock_cm.__enter__ = lambda s: s
+    mock_cm.__exit__ = unittest.mock.MagicMock(return_value=False)
+    mock_cm.read = unittest.mock.MagicMock(return_value=fake_response_body)
+
+    # Should not raise.
+    with unittest.mock.patch.object(mod.urllib.request, "urlopen", return_value=mock_cm):
+        mod._verify_incident_exists(Path("receipt.json"), "pjordanandrsn/experts4bit-qlora#998")
