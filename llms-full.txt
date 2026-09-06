@@ -2973,13 +2973,16 @@ DONE/BLOCKED/progress within 60 minutes of an ACK, or says so.
 
 | Role | First successor | Second successor | Third successor | Fourth successor |
 |------|----------------|------------------|-----------------|------------------|
-| CEO | CTO | CDO | — | — |
+| CEO | CTO | CDO | CSO coordinates; Jordan | — |
 | CTO | CDO | COO (docs/register/small code only, Warden review) | CEO | — |
-| CSO | Scout | CDO | — | — |
+| Chief Science Officer | Scout | CDO | CEO | — |
 | CDO | CEO | COO | — | — |
 | COO | CDO | CTO | CEO | — |
-| Scout | Warden | CSO | — | — |
-| Warden | Scout | CSO | CEO | — |
+| Chief Evidence Officer | Warden | Chief Science Officer | — | — |
+| Chief Risk Officer | Scout | Chief Science Officer | CEO | — |
+| Chief Experiments Officer | Chief Science Officer | Warden | CEO | — |
+| QA: Bugbot | Claude Code review | — | — | — |
+| Chair / Owner | none (decisions wait, `blocked:user`) | — | — | — |
 
 **Procedure:**
 
