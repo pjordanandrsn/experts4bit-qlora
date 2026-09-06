@@ -324,6 +324,15 @@ def armed_path_for(proof_path: str | Path) -> Path:
     return Path(proof_path).with_name("guard-armed.json")
 
 
+def firing_path_for(proof_path: str | Path) -> Path:
+    """The guard's firing marker lives beside the teardown proof: ``<run dir>/guard-firing.json``.
+
+    Written by the guard *before* it calls ``destroy`` so the launcher can detect the TOCTOU window
+    (guard between firing and proof) and treat it as an ALARM without racing to destroy the same
+    instance (item 3, issue #446)."""
+    return Path(proof_path).with_name("guard-firing.json")
+
+
 def wait_for_guard_armed(armed_path: Path, guard: subprocess.Popen, *, timeout_s: float) -> dict[str, Any] | None:
     """Blocks until the guard has written its arm marker. ``None`` when the guard process exits without
     arming or ``timeout_s`` passes first -- the launcher then tears down without running the command."""
@@ -376,6 +385,11 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
                                                               "instance_absent": True}, sort_keys=True),
                                       "complete": True, "at": _utc()})
         return 0
+    # Item 3 (#446): write the firing marker *before* destroy so the launcher can detect the window
+    # between the guard's destroy and its proof write, and treat it as ALARM rather than racing to
+    # destroy the same instance a second time.
+    _write_proof(firing_path_for(proof_path), {"pid": os.getpid(), "instance_id": instance_id,
+                                               "reason": reason, "at": _utc()})
     evidence = prov.destroy(instance_id)
     remaining = prov.list_ids()
     gone = instance_id not in remaining
@@ -461,6 +475,23 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
         tp = receipt.get("teardown_proof")
         if not (isinstance(tp, dict) and isinstance(tp.get("method"), str) and tp["method"] and isinstance(tp.get("evidence"), str)):
             problems.append("teardown_proof needs string method and evidence")
+        # Item 4 (#446): harden the fallback: check complete and reason when present.
+        # The jsonschema path already catches these through Draft202012Validator on the full schema.
+        if isinstance(tp, dict):
+            if "complete" in tp and not isinstance(tp.get("complete"), bool):
+                problems.append("teardown_proof.complete must be a bool when present")
+            _valid_tp_reasons_fallback = {"completion", "heartbeat-loss", "wallclock", "already-gone",
+                                         "torn-down-externally", "guard-not-armed"}
+            try:
+                _schema_enum = (schema.get("properties", {}).get("teardown_proof", {})
+                                .get("properties", {}).get("reason", {}).get("enum"))
+                _valid_tp_reasons = set(_schema_enum) if _schema_enum else _valid_tp_reasons_fallback
+            except (TypeError, AttributeError):
+                _valid_tp_reasons = _valid_tp_reasons_fallback
+            if "reason" in tp and tp["reason"] not in _valid_tp_reasons:
+                problems.append(
+                    f"teardown_proof.reason must be one of {sorted(_valid_tp_reasons)} when present, "
+                    f"got {tp['reason']!r}")
         for k in ("started_at", "finished_at"):
             try:
                 datetime.fromisoformat(str(receipt.get(k, "")).replace("Z", "+00:00"))
@@ -772,6 +803,17 @@ def main(argv: list[str] | None = None) -> int:
             except subprocess.CalledProcessError as e:
                 status, result, notes = "HARNESS_ERROR", "fail", f"command exited {e.returncode}"
 
+    # Item 1 (#446): guard liveness after arming -- a guard that crashes after writing guard-armed.json
+    # leaves no watchdog alive for the whole command. Record it; do NOT downgrade `result` here because
+    # the launcher's own teardown (below) is what determines pass/fail -- a dead guard that lets the
+    # launcher destroy a live instance is still a correct teardown, just one the guard missed.
+    if own_reason != "guard-not-armed":
+        _grc = guard.poll()
+        if _grc is not None:
+            _guard_note = f"guard exited {_grc} during command"
+            notes = f"{notes}; {_guard_note}" if notes else _guard_note
+            environment["guard_exited_early"] = str(_grc)
+
     # Teardown. `pass` is written only when the launcher itself destroyed a live instance; an instance that
     # is already gone -- by the guard (heartbeat-loss / wallclock) or by anyone else -- is ALARM / invalid.
     def _read_proof() -> dict[str, Any] | None:
@@ -786,6 +828,26 @@ def main(argv: list[str] | None = None) -> int:
             proof = {"method": f"{prov.kind}-observed-absent", "reason": "torn-down-externally",
                      "evidence": json.dumps({"instance_absent": True, "list_after": sorted(prov.list_ids())},
                                             sort_keys=True), "complete": True, "at": _utc()}
+            _write_proof(proof_path, proof)
+    # Item 3 (#446): TOCTOU residual -- the guard may have written guard-firing.json *before* destroy but
+    # the instance is still live (or only just gone) when the launcher checks. Treat the marker like a
+    # proof: wait briefly for the guard's real proof, then synthesise one if it hasn't arrived yet.
+    # This ensures the launcher never writes pass when the guard is firing concurrently.
+    _firing = firing_path_for(proof_path)
+    if proof is None and _firing.is_file():
+        deadline = time.time() + 3
+        while time.time() < deadline and (proof := _read_proof()) is None:
+            time.sleep(0.05)
+        if proof is None:
+            _firing_data: dict[str, Any] = {}
+            try:
+                _firing_data = json.loads(_firing.read_text())
+            except (OSError, json.JSONDecodeError):
+                pass
+            _fr = _firing_data.get("reason", "torn-down-externally")
+            proof = {"method": f"{prov.kind}-guard-fired", "reason": _fr,
+                     "evidence": json.dumps({"firing": _firing_data, "guard_fired": True}, sort_keys=True),
+                     "complete": False, "at": _utc()}
             _write_proof(proof_path, proof)
     if proof is not None:
         reason = proof.get("reason") or "unknown"
@@ -807,6 +869,13 @@ def main(argv: list[str] | None = None) -> int:
         try:
             os.kill(guard.pid, signal.SIGTERM)
         except OSError:
+            pass
+        # Item 2 (#446): join the guard so it finishes any sidecar write before the launcher exits;
+        # without this the guard may write teardown-proof.guard.json after tmp_path teardown in tests
+        # (or after the receipt directory is no longer writable in production).
+        try:
+            guard.wait(timeout=2)
+        except subprocess.TimeoutExpired:
             pass
     gone = iid not in prov.list_ids()
     complete = gone and proof.get("method") not in (None, "pending")
