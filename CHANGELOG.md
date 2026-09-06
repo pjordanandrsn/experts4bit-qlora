@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Compute launcher enforces the policy at rent time (#430)
+
+`python -m experts4bit_qlora.tools.rent` (and `scripts/rent_run.py`) estimates `$ / h × wallclock`, refuses over-ceiling / disallowed GPU-provider / missing approvals / a cap above $35 without Jordan, arms a controller-side teardown guard (`start_new_session`; proves the instance is absent from the provider list), and writes a receipt + ledger line even on refusal or a failed command. Dry-run uses a fake provider (live Vast/RunPod create still refuses until `E4B_RENT_LIVE`). No gate, threshold, floor or claim value moved.
+
 ### Serving census rows name the comparator (#418)
 
 Register wording only; no value, status, gate, threshold or floor moved. Jordan's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.

@@ -113,6 +113,40 @@ each line is a JSON object with at minimum `{run_id, date_utc, role, cost_usd}`.
 The check script uses it for fast daily-sum queries without walking the entire
 receipt tree.
 
+## How to launch
+
+Agents rent through one entry point so the policy is checked *before* an
+instance exists:
+
+```bash
+python -m experts4bit_qlora.tools.rent \
+  --role CTO --agent Cursor \
+  --gpu "RTX 5090" --usd-per-hour 0.40 --wallclock-h 2 \
+  --work-id experts4bit-qlora#NNN \
+  --approval 'CSO/ChatGPT=https://cerin-amroth.slack.com/archives/…/p…' \
+  --dry-run
+# live (Vast verified-secure / RunPod secure) is refused until E4B_RENT_LIVE
+# arms the API adapter; dry-run uses a fake provider and still writes a receipt.
+```
+
+`scripts/rent_run.py` is the same command. The launcher:
+
+1. Estimates `$ / h × wallclock` and refuses over-ceiling, over global daily
+   budget, disallowed GPU/provider, missing approvals, or a cap above the
+   $35 per-run hard cap without Jordan's approval.
+2. `--approval ROLE/AGENT=<slack-permalink>` is repeated as the threshold
+   demands (self-approval ≤ $2; one of CTO/CSO ≤ $20; two of CEO/CTO/CSO ≤ $50;
+   Jordan above, and Jordan also covers the hard cap).
+3. Arms a teardown **guard on the controller** (`start_new_session`, not on
+   the rented box). It destroys the instance on completion, wallclock, or
+   heartbeat loss, then proves teardown by listing the provider without that
+   instance id.
+4. Writes `bench/runs/<UTC date>/<run-id>/receipt.json` and appends
+   `bench/runs/ledger.jsonl` even on refusal or a failed command. A receipt
+   is `complete` only with teardown proof (or `not-launched` when refused
+   before create). Optional `E4B_SLACK_WEBHOOK` posts `LAUNCHED` / `DONE` /
+   `TORN DOWN` / `REFUSED`.
+
 ## Check Script
 
 `scripts/check_run_ledger.py` enforces this policy:
@@ -128,10 +162,10 @@ on success. The check runs in CI on every pull request and push to `main`.
 
 ## Out of Scope
 
-This policy defines **what** can be approved and **who** approves it. The
-**launcher** (CTO, separate issue) will enforce the policy at rent time,
-implement the teardown guard, and emit receipts automatically. Until that
-tooling exists, agents manually create receipts and record approvals in Slack.
+Live Vast/RunPod API adapters behind `E4B_RENT_LIVE` (the dry-run fake provider
+and the controller-side guard are in-tree; a live create still refuses until
+that adapter is armed). Policy numbers, gates, thresholds and claims are not
+moved by the launcher.
 
 ---
 
