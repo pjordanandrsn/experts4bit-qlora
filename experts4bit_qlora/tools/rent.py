@@ -17,7 +17,9 @@ command runs and a guard-initiated teardown is recorded as ``ALARM`` /
 / ``branch`` / ``dirty_tree`` from git and a schema check before every write;
 no identity defaults on the command line; a live-provider refusal writes a
 receipt; a role without a ceiling row is refused; approval permalinks must be
-real Slack permalinks of the coordination channel.
+real Slack permalinks of the coordination channel. Round 3 (one CI failure on
+165ecb9): the launcher waits for the guard's arm marker before it runs anything
+-- the guard imports this package and can start seconds late on a cold box.
 """
 from __future__ import annotations
 
@@ -317,14 +319,43 @@ def _write_proof(proof_path: str | Path, proof: dict[str, Any]) -> None:
     os.replace(tmp, target)
 
 
+def armed_path_for(proof_path: str | Path) -> Path:
+    """The guard's arm marker lives beside the teardown proof: ``<run dir>/guard-armed.json``."""
+    return Path(proof_path).with_name("guard-armed.json")
+
+
+def wait_for_guard_armed(armed_path: Path, guard: subprocess.Popen, *, timeout_s: float) -> dict[str, Any] | None:
+    """Blocks until the guard has written its arm marker. ``None`` when the guard process exits without
+    arming or ``timeout_s`` passes first -- the launcher then tears down without running the command."""
+    deadline = time.time() + float(timeout_s)
+    while True:
+        if armed_path.is_file():
+            try:
+                return json.loads(armed_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                pass  # between tmp and replace; the next poll reads it
+        if guard.poll() is not None or time.time() >= deadline:
+            return None
+        time.sleep(0.05)
+
+
 def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None,
                  wallclock_s: float, heartbeat_path: str, proof_path: str,
                  heartbeat_timeout_s: float) -> int:
     """Controller-side teardown guard. Destroys the instance on wallclock or heartbeat loss and writes
     the proof with the reason; exits quietly (reason 'already-gone') once the launcher has torn down."""
     prov = provider_for(provider_kind, fake_state=Path(fake_state) if fake_state else None)
-    deadline = time.time() + wallclock_s
     hb = Path(heartbeat_path)
+    # Arm handshake (round 3): this process imports the package (torch and friends) and can start seconds
+    # after the launcher spawned it. Its clock starts here -- a fresh heartbeat, then the marker the
+    # launcher waits for before it runs anything -- so start-up latency is never a window with compute up
+    # and no guard, and never a reason a stalled heartbeat goes unnoticed.
+    hb.parent.mkdir(parents=True, exist_ok=True)
+    hb.write_text(_utc())
+    _write_proof(armed_path_for(proof_path), {"pid": os.getpid(), "instance_id": instance_id, "at": _utc(),
+                                               "wallclock_s": wallclock_s,
+                                               "heartbeat_timeout_s": heartbeat_timeout_s})
+    deadline = time.time() + wallclock_s
     poll = min(0.2, max(0.05, wallclock_s / 20))
     reason = "wallclock"
     while time.time() < deadline:
@@ -441,6 +472,11 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
                 break
         if not isinstance(receipt.get("gpu_count"), int) or isinstance(receipt.get("gpu_count"), bool):
             problems.append("gpu_count must be an integer")
+        elif receipt["gpu_count"] < 1:
+            problems.append("gpu_count must be >= 1")
+        env = receipt.get("environment")
+        if not isinstance(env, dict) or not all(isinstance(v, str) for v in env.values()):
+            problems.append("environment must be an object whose values are strings")
         if not isinstance(receipt.get("runtime_seconds"), (int, float)):
             problems.append("runtime_seconds must be a number")
         if not isinstance(receipt.get("dirty_tree"), bool):
@@ -602,6 +638,9 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--heartbeat-refresh-s", type=float, default=None,
                     help="how often the launcher refreshes the heartbeat while --command runs "
                          "(default: timeout / 3; 0 disables -- tests only)")
+    ap.add_argument("--guard-arm-timeout-s", type=float, default=60.0,
+                    help="how long the launcher waits for the guard's arm marker (guard-armed.json) before "
+                         "it tears down WITHOUT running --command (status HARNESS_ERROR, reason guard-not-armed)")
     ap.add_argument("--cpu", default="unknown", help="host cpu as the provider reports it")
     ap.add_argument("--ram", default="unknown", help="host ram as the provider reports it")
     ap.add_argument("--storage", default="unknown", help="host storage as the provider reports it")
@@ -647,20 +686,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSED (no receipt written -- the request itself is malformed): {e}", file=sys.stderr)
         return 2
 
-    environment: dict[str, Any] = {"seat_executors": seat_executors, "approver_spec": None,
-                                   "heartbeat_timeout_s": args.heartbeat_timeout_s, "python": sys.version.split()[0]}
+    # The schema types `environment` as an object of STRING values (round 3: the strict validator rejected the
+    # dict / float / None the earlier rounds wrote here and the fallback let through).
+    environment: dict[str, str] = {"seat_executors": json.dumps(seat_executors, sort_keys=True),
+                                   "approver_spec": "unresolved",
+                                   "heartbeat_timeout_s": str(args.heartbeat_timeout_s),
+                                   "python": sys.version.split()[0]}
     configuration = {"dry_run": bool(args.dry_run), "wallclock_h": args.wallclock_h,
                      "usd_per_hour": args.usd_per_hour, "gpu": args.gpu, "image": args.image}
 
     def refused(msg: str, spec: str | None) -> int:
-        environment["approver_spec"] = spec
+        environment["approver_spec"] = str(spec) if spec else "unresolved"
         rec = build_receipt(
             experiment_id=run_id, work_id=args.work_id, requested_by=who, executed_by=who,
             hypothesis=args.hypothesis, expected_result=args.expected_result,
             success_criteria=args.success_criteria, failure_criteria=args.failure_criteria,
             preregistration=args.preregistration, approvals=approvals, command=command_str,
             environment=environment, provider=provider, instance_id="none", gpu_model=args.gpu,
-            gpu_count=0, started_at=started_at, finished_at=_utc(), runtime_seconds=time.time() - t0,
+            # gpu_count is the REQUESTED count (schema minimum 1); the "not-launched" proof says none was rented.
+            gpu_count=1, started_at=started_at, finished_at=_utc(), runtime_seconds=time.time() - t0,
             cost_estimated=estimate, cost_actual=0.0,
             teardown_proof={"method": "not-launched", "evidence": f"refused before launch: {msg}"},
             status="REFUSED", result="invalid", notes=msg, configuration=configuration,
@@ -678,13 +722,13 @@ def main(argv: list[str] | None = None) -> int:
         spec: str | None = select_approver_spec(policy, estimate, seat_executors)
     except RentRefused:
         spec = None
-    environment["approver_spec"] = spec
+    environment["approver_spec"] = str(spec) if spec else "unresolved"
     try:
         spec = evaluate_launch(
             policy, ledger, role=args.role, estimate=estimate,
             provider=policy_provider, gpu=args.gpu, wallclock_h=args.wallclock_h,
             approvals=approvals, date_utc=date_utc, seat_executors=seat_executors)
-        environment["approver_spec"] = spec
+        environment["approver_spec"] = str(spec) if spec else "unresolved"
         fake_state = Path(args.fake_state) if args.fake_state else rec_dir / "fake-state.json"
         prov = provider_for(provider, fake_state=fake_state)  # MEDIUM-3: a live-provider refusal is a receipt too
     except RentRefused as e:
@@ -708,8 +752,20 @@ def main(argv: list[str] | None = None) -> int:
         ],
         log_path=rec_dir / "guard.log",
     )
-    status, result, notes = "OK", "pass", f"guard pid {guard.pid}"
-    if args.command:
+    # Round 3: nothing runs until the guard says it is armed (see guard_worker). A guard that never arms --
+    # slow import, crash, wrong interpreter -- means teardown without the command, never an OK receipt.
+    armed = wait_for_guard_armed(armed_path_for(proof_path), guard, timeout_s=args.guard_arm_timeout_s)
+    own_reason = "completion"
+    if armed is None:
+        exited = guard.poll()
+        status, result = "HARNESS_ERROR", "invalid"
+        own_reason = "guard-not-armed"
+        notes = (f"guard pid {guard.pid} did not arm within {args.guard_arm_timeout_s}s"
+                 + (f" (exited {exited})" if exited is not None else "") + "; command not run")
+    else:
+        environment["guard_armed_at"] = str(armed.get("at"))
+        status, result, notes = "OK", "pass", f"guard pid {guard.pid} armed at {armed.get('at')}"
+    if args.command and status == "OK":
         with HeartbeatRefresher(hb, refresh):  # HIGH-1: the heartbeat stays fresh for the whole command
             try:
                 subprocess.run(args.command, shell=True, check=True)
@@ -743,7 +799,7 @@ def main(argv: list[str] | None = None) -> int:
             status, result = "ALARM", "invalid"
             notes = f"teardown failed: {e!r} (" + notes + ")"
         remaining = prov.list_ids()
-        proof = {"method": evidence.get("method", f"{prov.kind}-destroy"), "reason": "completion",
+        proof = {"method": evidence.get("method", f"{prov.kind}-destroy"), "reason": own_reason,
                  "evidence": json.dumps({"destroy": evidence, "list_after": sorted(remaining),
                                          "instance_absent": iid not in remaining}, sort_keys=True),
                  "complete": iid not in remaining, "at": _utc()}

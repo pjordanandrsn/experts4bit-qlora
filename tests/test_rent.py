@@ -23,6 +23,12 @@ SCHEMA = REPO / "docs" / "run-receipt-schema.json"
 PERM = "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181409539"
 GROK = {"CTO": "cursor-desktop-mini/grok"}
 
+def _ledger_module():
+    spec = importlib.util.spec_from_file_location("check_run_ledger", REPO / "scripts" / "check_run_ledger.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
 
 def _appr(role, agent="x", usd=5.0, perm=PERM):
     return {"role": role, "agent": agent, "usd_estimate": usd, "slack_permalink": perm}
@@ -166,9 +172,7 @@ def test_ten_dollars_needs_cto_and_cso_while_grok_holds_the_seat():
 
 
 def test_ledger_check_applies_the_same_override():
-    spec = importlib.util.spec_from_file_location("check_run_ledger", REPO / "scripts" / "check_run_ledger.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    mod = _ledger_module()
     th, ov = POLICY["approval_thresholds"], POLICY["approval_overrides"]
     with pytest.raises(SystemExit):
         mod.check_approval_threshold(Path("r.json"), 10.0, _cto(10), th, overrides=ov, seat_executors=GROK)
@@ -212,7 +216,7 @@ def test_cli_refuses_ten_dollars_with_one_approval_while_grok_holds_the_seat(tmp
     rec = _receipt(tmp_path)
     assert rec["status"] == "REFUSED" and "requires all of" in rec["notes"]
     assert rec["environment"]["approver_spec"] == "all-of:CTO,CSO"
-    assert rec["environment"]["seat_executors"] == GROK
+    assert json.loads(rec["environment"]["seat_executors"]) == GROK
 
 
 def test_cli_undeclared_seat_is_not_a_loophole(tmp_path: Path):
@@ -221,7 +225,7 @@ def test_cli_undeclared_seat_is_not_a_loophole(tmp_path: Path):
     assert rc == 2
     rec = _receipt(tmp_path)
     assert rec["status"] == "REFUSED" and rec["environment"]["approver_spec"] == "all-of:CTO,CSO"
-    assert rec["environment"]["seat_executors"] == {}
+    assert json.loads(rec["environment"]["seat_executors"]) == {}
 
 
 def test_live_provider_refusal_writes_a_receipt(tmp_path: Path):
@@ -291,6 +295,80 @@ def test_external_teardown_during_the_command_is_an_alarm(tmp_path: Path):
     rec = _receipt(tmp_path)
     assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid"
     assert rec["teardown_proof"]["reason"] in ("already-gone", "torn-down-externally")
+
+
+def _guard_stub(code: str):
+    def spawn(*, python, module_args, log_path):
+        return subprocess.Popen([sys.executable, "-c", code], start_new_session=True,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return spawn
+
+
+def test_launcher_never_runs_the_command_before_the_guard_is_armed(tmp_path: Path, monkeypatch):
+    """Round 3: a guard that has not armed (slow import on a cold box) means teardown WITHOUT the command."""
+    import experts4bit_qlora.tools.rent as rent_mod
+    monkeypatch.setattr(rent_mod, "spawn_guard", _guard_stub("import time; time.sleep(30)"))
+    ran = tmp_path / "command-ran"
+    rc = main(_cli(tmp_path, "rent-arm-1", "--guard-arm-timeout-s", "0.5", "--command", f"touch {ran}"))
+    rec = _receipt(tmp_path)
+    assert rc == 1 and rec["status"] == "HARNESS_ERROR" and rec["result"] == "invalid"
+    assert not ran.exists(), "the command ran with no armed guard"
+    assert rec["teardown_proof"]["reason"] == "guard-not-armed"
+    assert "did not arm" in rec["notes"] and "guard_armed_at" not in rec["environment"]
+    assert rec["instance_id"] not in (json.loads((tmp_path / "rent-arm-1-fake.json").read_text()).get("live") or [])
+
+
+def test_guard_that_exits_before_arming_fails_fast(tmp_path: Path, monkeypatch):
+    import experts4bit_qlora.tools.rent as rent_mod
+    monkeypatch.setattr(rent_mod, "spawn_guard", _guard_stub("raise SystemExit(3)"))
+    ran = tmp_path / "command-ran"
+    t0 = time.time()
+    rc = main(_cli(tmp_path, "rent-arm-2", "--guard-arm-timeout-s", "30", "--command", f"touch {ran}"))
+    assert time.time() - t0 < 10, "a dead guard must not be waited on for the whole arm timeout"
+    rec = _receipt(tmp_path)
+    assert rc == 1 and rec["status"] == "HARNESS_ERROR" and rec["teardown_proof"]["reason"] == "guard-not-armed"
+    assert "(exited 3)" in rec["notes"] and not ran.exists()
+
+
+def test_armed_guard_is_recorded_and_the_marker_exists(tmp_path: Path):
+    rc = main(_cli(tmp_path, "rent-arm-3", "--command", "true"))
+    rec = _receipt(tmp_path)
+    assert rc == 0 and rec["status"] == "OK"
+    marker = json.loads((tmp_path / "rent-arm-3" / "guard-armed.json").read_text()) if (tmp_path / "rent-arm-3" / "guard-armed.json").is_file() else None
+    assert rec["environment"]["guard_armed_at"] and "armed at" in rec["notes"]
+    assert marker is None or marker["instance_id"] == rec["instance_id"]
+
+
+def test_receipt_environment_values_are_strings_and_the_validator_enforces_it(tmp_path: Path):
+    """Round 3: the schema types `environment` as an object of strings and `gpu_count >= 1`; the fallback
+    validator (no jsonschema) rejects both violations too."""
+    rc = main(_cli(tmp_path, "rent-env-1"))
+    rec = _receipt(tmp_path)
+    assert rc == 0 and all(isinstance(v, str) for v in rec["environment"].values())
+    assert json.loads(rec["environment"]["seat_executors"]) == {}
+    bad = dict(rec)
+    bad["environment"] = dict(rec["environment"], seat_executors={})
+    with pytest.raises(ReceiptInvalid, match="environment"):
+        validate_receipt(bad)
+    bad = dict(rec)
+    bad["gpu_count"] = 0
+    with pytest.raises(ReceiptInvalid, match="gpu_count"):
+        validate_receipt(bad)
+
+
+def test_refusal_receipt_satisfies_the_schema_minimums(tmp_path: Path):
+    rc = main(_cli(tmp_path, "rent-env-2", "--usd-per-hour", "20", "--wallclock-h", "2"))  # $40 > per-run cap
+    rec = _receipt(tmp_path)
+    assert rc == 2 and rec["status"] == "REFUSED" and rec["gpu_count"] == 1
+    assert rec["teardown_proof"]["method"] == "not-launched"
+
+
+def test_ledger_reads_seat_executors_from_the_json_string(tmp_path: Path):
+    ledger = _ledger_module()
+    assert ledger.seat_executors_from_env({"seat_executors": json.dumps(GROK)}) == GROK
+    assert ledger.seat_executors_from_env({"seat_executors": GROK}) == GROK
+    assert ledger.seat_executors_from_env({"seat_executors": "not json"}) is None
+    assert ledger.seat_executors_from_env({}) is None
 
 
 def test_validate_receipt_refuses_without_a_schema_file(tmp_path: Path):

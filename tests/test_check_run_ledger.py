@@ -1,9 +1,10 @@
 """Tests for scripts/check_run_ledger.py
 
-Three fixtures:
+Four fixtures:
   1. One passing receipt (valid, within ceilings, proper approvals)
   2. One over-ceiling day (exceeds role daily ceiling)
   3. One missing approval (insufficient approvals for the cost threshold)
+  4. One global-daily-budget violation (two roles within their ceilings, over $100 together)
 """
 from __future__ import annotations
 

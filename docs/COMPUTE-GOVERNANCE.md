@@ -155,7 +155,10 @@ python -m experts4bit_qlora.tools.rent \
    digits>`; the launcher cannot read Slack, so the receipt carries them for
    the ledger check to resolve against the org-corpus raw layer.
 3. Arms a teardown **guard on the controller** (`start_new_session`, not on
-   the rented box) and refreshes the guard's heartbeat every `timeout / 3`
+   the rented box), waits for the guard's arm marker (`guard-armed.json`;
+   `--guard-arm-timeout-s`, default 60 s -- no marker means the launcher tears
+   down WITHOUT running the command: `status HARNESS_ERROR`, `result invalid`,
+   `reason guard-not-armed`) and refreshes the guard's heartbeat every `timeout / 3`
    seconds for as long as `--command` runs. The guard destroys the instance
    on wallclock or heartbeat loss and proves teardown by listing the provider
    without that instance id; when the guard fires, the receipt says `status

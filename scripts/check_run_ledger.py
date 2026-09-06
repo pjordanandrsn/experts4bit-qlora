@@ -243,6 +243,20 @@ def select_approver_spec(
     return spec
 
 
+def seat_executors_from_env(env: dict) -> dict[str, str] | None:
+    """`environment.seat_executors` as the launcher writes it: a JSON string (the schema types environment
+    values as strings). A dict is accepted for older receipts; anything else is None (= undeclared)."""
+    raw = env.get("seat_executors") if isinstance(env, dict) else None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, dict):
+        return None
+    return {str(k): str(v) for k, v in raw.items()}
+
+
 def check_approval_threshold(
     path: Path,
     estimated: float,
@@ -415,8 +429,7 @@ def main() -> None:
         estimated = data["cost_usd"]["estimated"]
         approvals = data["approvals"]
         env = data.get("environment") if isinstance(data.get("environment"), dict) else {}
-        seat_executors = env.get("seat_executors") if isinstance(env.get("seat_executors"), dict) else None
-        check_approval_threshold(path, estimated, approvals, thresholds, overrides, seat_executors)
+        check_approval_threshold(path, estimated, approvals, thresholds, overrides, seat_executors_from_env(env))
 
     # All checks passed
     num_days = len(global_daily) if global_daily else 0
