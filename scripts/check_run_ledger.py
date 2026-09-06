@@ -15,8 +15,14 @@ Exit 1 with file:line-style messages on any violation; exit 0 with
 
     python scripts/check_run_ledger.py
 
-Standard library only (jsonschema is NOT used; we validate required fields manually
-to avoid a dependency just for this check).
+Schema validation uses jsonschema.Draft202012Validator when jsonschema is importable
+(true in lint-and-test via .[test]; the discoverability job also installs
+jsonschema>=4.18 before this step so the strict path runs there too).
+The manual fallback derives required fields from docs/run-receipt-schema.json["required"]
+so the schema is the single source of truth — the hardcoded REQUIRED_FIELDS set is gone.
+ISO-8601 timestamp format is always validated by a fromisoformat() loop run outside the
+if/else because Draft 2020-12 does not enforce format: date-time without a format checker,
+so `started_at: "yesterday"` would otherwise pass the strict path.
 """
 from __future__ import annotations
 
@@ -33,55 +39,6 @@ LEDGER = RUNS_DIR / "ledger.jsonl"
 POLICY = Path("docs/compute-policy.json")
 PERMALINK_RE = re.compile(r"^https://cerin-amroth\.slack\.com/archives/C[A-Z0-9]{8,12}/p\d{16}(\?\S*)?$")
 SCHEMA = Path("docs/run-receipt-schema.json")
-
-# Required fields per the schema (docs/run-receipt-schema.json)
-# Aligned with pjordanandrsn/org-corpus §6
-REQUIRED_FIELDS = {
-    "experiment_id",
-    "work_id",
-    "requested_by",
-    "executed_by",
-    "reviewed_by",
-    "hypothesis",
-    "expected_result",
-    "success_criteria",
-    "failure_criteria",
-    "preregistration",
-    "approvals",
-    "repo",
-    "commit_sha",
-    "branch",
-    "dirty_tree",
-    "container_image",
-    "dependencies",
-    "command",
-    "environment",
-    "provider",
-    "instance_id",
-    "gpu_model",
-    "gpu_count",
-    "cpu",
-    "ram",
-    "storage",
-    "started_at",
-    "finished_at",
-    "runtime_seconds",
-    "cost_usd",
-    "dataset",
-    "dataset_hash",
-    "model",
-    "model_revision",
-    "model_hash",
-    "seed",
-    "configuration",
-    "metrics",
-    "artifacts",
-    "teardown_proof",
-    "status",
-    "result",
-    "decision",
-    "notes",
-}
 
 STATUS_VALUES = {
     "OK",
@@ -115,98 +72,149 @@ def load_json(path: Path) -> Any:
 
 
 def validate_receipt(path: Path, data: dict[str, Any]) -> None:
-    """Validate a single receipt against the schema requirements."""
-    # Check required top-level fields
-    missing = REQUIRED_FIELDS - data.keys()
-    if missing:
-        fail(path, 0, f"missing required fields: {', '.join(sorted(missing))}")
+    """Validate a single receipt against docs/run-receipt-schema.json.
 
-    # Validate requested_by (now a string, not an object)
-    if not isinstance(data.get("requested_by"), str):
-        fail(path, 0, "requested_by must be a string")
-    if not data["requested_by"]:
-        fail(path, 0, "requested_by must not be empty")
+    Strict path (jsonschema importable): jsonschema.Draft202012Validator against
+    the full schema — catches required-field drift and enum violations automatically.
+    Manual fallback: derives required fields from schema["required"] so the schema
+    file is the single source of truth; no hardcoded REQUIRED_FIELDS list.
+    Business-logic constraints not expressed in the schema (Slack permalink pattern,
+    ISO-8601 timestamp format) are enforced in both paths; Draft 2020-12 does not
+    enforce format: date-time without a format checker.
+    """
+    if not SCHEMA.exists():
+        fail(SCHEMA, None, "run-receipt-schema.json not found; cannot validate receipts")
+    schema: dict[str, Any] = load_json(SCHEMA)
 
-    # Validate approvals array
-    if not isinstance(data.get("approvals"), list):
-        fail(path, 0, "approvals must be an array")
-    for i, appr in enumerate(data["approvals"]):
-        if not isinstance(appr, dict):
-            fail(path, 0, f"approvals[{i}] must be an object")
-        if not PERMALINK_RE.match(str(appr.get("slack_permalink", ""))):
-            fail(path, 0, f"approvals[{i}].slack_permalink is not a #ml-packages permalink: {appr.get('slack_permalink')!r}")
-        for field in ["role", "agent", "usd_estimate", "slack_permalink"]:
-            if field not in appr:
-                fail(path, 0, f"approvals[{i}] missing '{field}'")
-        if not isinstance(appr["usd_estimate"], (int, float)):
-            fail(path, 0, f"approvals[{i}].usd_estimate must be a number")
-        if appr["usd_estimate"] < 0:
-            fail(path, 0, f"approvals[{i}].usd_estimate must be >= 0")
+    try:
+        import jsonschema  # type: ignore[import-untyped]
+    except Exception:  # noqa: BLE001
+        jsonschema = None
 
-    # Validate repo and commit_sha
-    if not isinstance(data.get("repo"), str) or not data["repo"]:
-        fail(path, 0, "repo must be a non-empty string")
-    if not isinstance(data.get("commit_sha"), str) or not data["commit_sha"]:
-        fail(path, 0, "commit_sha must be a non-empty string")
+    if jsonschema is not None:
+        # Strict path: full Draft 2020-12 validation catches required fields,
+        # enum constraints (status, result, teardown_proof.reason, …) and types.
+        validator = jsonschema.Draft202012Validator(schema)
+        errs = sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.path])
+        if errs:
+            msgs = [
+                f"{'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
+                for e in errs[:8]
+            ]
+            fail(path, 0, "schema: " + "; ".join(msgs))
+    else:
+        # Manual fallback: required fields from the schema (single source of truth).
+        required = set(schema.get("required") or [])
+        missing = required - data.keys()
+        if missing:
+            fail(path, 0, f"missing required fields: {', '.join(sorted(missing))}")
 
-    if not re.fullmatch(r"[0-9a-f]{7,40}", str(data.get("commit_sha", ""))):
-        fail(path, 0, "commit_sha must be a hex sha (7-40 chars)")
-    # Validate cost_usd
-    if not isinstance(data.get("cost_usd"), dict):
-        fail(path, 0, "cost_usd must be an object")
-    cu = data["cost_usd"]
-    if "estimated" not in cu or "actual" not in cu:
-        fail(path, 0, "cost_usd must have 'estimated' and 'actual'")
-    if not isinstance(cu["estimated"], (int, float)) or cu["estimated"] < 0:
-        fail(path, 0, "cost_usd.estimated must be a number >= 0")
-    if not isinstance(cu["actual"], (int, float)) or cu["actual"] < 0:
-        fail(path, 0, "cost_usd.actual must be a number >= 0")
+        # Validate requested_by (string, non-empty)
+        if not isinstance(data.get("requested_by"), str) or not data["requested_by"]:
+            fail(path, 0, "requested_by must be a non-empty string")
 
-    # Validate status (harness vocabulary)
-    if data.get("status") not in STATUS_VALUES:
-        fail(
-            path,
-            0,
-            f"status must be one of {sorted(STATUS_VALUES)}, got {data.get('status')!r}",
-        )
+        # Validate approvals array items
+        if not isinstance(data.get("approvals"), list):
+            fail(path, 0, "approvals must be an array")
+        for i, appr in enumerate(data["approvals"]):
+            if not isinstance(appr, dict):
+                fail(path, 0, f"approvals[{i}] must be an object")
+            for field in ["role", "agent", "usd_estimate", "slack_permalink"]:
+                if field not in appr:
+                    fail(path, 0, f"approvals[{i}] missing '{field}'")
+            if not isinstance(appr["usd_estimate"], (int, float)):
+                fail(path, 0, f"approvals[{i}].usd_estimate must be a number")
+            if appr["usd_estimate"] < 0:
+                fail(path, 0, f"approvals[{i}].usd_estimate must be >= 0")
 
-    # Validate result (outcome classification)
-    if data.get("result") not in RESULT_VALUES:
-        fail(
-            path,
-            0,
-            f"result must be one of {sorted(RESULT_VALUES)}, got {data.get('result')!r}",
-        )
+        # Validate repo and commit_sha
+        if not isinstance(data.get("repo"), str) or not data["repo"]:
+            fail(path, 0, "repo must be a non-empty string")
+        if not re.fullmatch(r"[0-9a-f]{7,40}", str(data.get("commit_sha", ""))):
+            fail(path, 0, "commit_sha must be a hex sha (7-40 chars)")
 
-    # Validate artifacts
-    if not isinstance(data.get("artifacts"), list):
-        fail(path, 0, "artifacts must be an array")
-    for i, art in enumerate(data["artifacts"]):
-        if not isinstance(art, dict):
-            fail(path, 0, f"artifacts[{i}] must be an object")
-        for field in ["path", "sha256", "bytes"]:
-            if field not in art:
-                fail(path, 0, f"artifacts[{i}] missing '{field}'")
+        # Validate cost_usd
+        if not isinstance(data.get("cost_usd"), dict):
+            fail(path, 0, "cost_usd must be an object")
+        cu = data["cost_usd"]
+        if "estimated" not in cu or "actual" not in cu:
+            fail(path, 0, "cost_usd must have 'estimated' and 'actual'")
+        if not isinstance(cu["estimated"], (int, float)) or cu["estimated"] < 0:
+            fail(path, 0, "cost_usd.estimated must be a number >= 0")
+        if not isinstance(cu["actual"], (int, float)) or cu["actual"] < 0:
+            fail(path, 0, "cost_usd.actual must be a number >= 0")
 
-    # Validate teardown_proof
-    if not isinstance(data.get("teardown_proof"), dict):
-        fail(path, 0, "teardown_proof must be an object")
-    tp = data["teardown_proof"]
-    if "method" not in tp or "evidence" not in tp:
-        fail(path, 0, "teardown_proof must have 'method' and 'evidence'")
-    if not tp["method"] or not tp["evidence"]:
-        fail(path, 0, "teardown_proof.method and evidence must be non-empty")
+        # Validate status and result enums
+        if data.get("status") not in STATUS_VALUES:
+            fail(
+                path,
+                0,
+                f"status must be one of {sorted(STATUS_VALUES)}, got {data.get('status')!r}",
+            )
+        if data.get("result") not in RESULT_VALUES:
+            fail(
+                path,
+                0,
+                f"result must be one of {sorted(RESULT_VALUES)}, got {data.get('result')!r}",
+            )
 
-    # Validate decision (now a string like "merge <url>" or "abandon <url>")
-    if not isinstance(data.get("decision"), str) or not data["decision"]:
-        fail(path, 0, "decision must be a non-empty string")
+        # Validate artifacts array
+        if not isinstance(data.get("artifacts"), list):
+            fail(path, 0, "artifacts must be an array")
+        for i, art in enumerate(data["artifacts"]):
+            if not isinstance(art, dict):
+                fail(path, 0, f"artifacts[{i}] must be an object")
+            for field in ["path", "sha256", "bytes"]:
+                if field not in art:
+                    fail(path, 0, f"artifacts[{i}] missing '{field}'")
 
-    # Validate ISO 8601 timestamps
-    for field in ["started_at", "finished_at"]:
+        # Validate teardown_proof structure
+        if not isinstance(data.get("teardown_proof"), dict):
+            fail(path, 0, "teardown_proof must be an object")
+        tp = data["teardown_proof"]
+        if "method" not in tp or "evidence" not in tp:
+            fail(path, 0, "teardown_proof must have 'method' and 'evidence'")
+        if not tp["method"] or not tp["evidence"]:
+            fail(path, 0, "teardown_proof.method and evidence must be non-empty")
+        # teardown_proof.reason enum — read from schema (single source of truth)
+        if "reason" in tp:
+            _tp_props = (schema.get("properties") or {}).get("teardown_proof", {})
+            valid_reasons = set(
+                (_tp_props.get("properties") or {}).get("reason", {}).get("enum") or []
+            )
+            if valid_reasons and tp["reason"] not in valid_reasons:
+                fail(
+                    path,
+                    0,
+                    f"teardown_proof.reason must be one of {sorted(valid_reasons)}, "
+                    f"got {tp['reason']!r}",
+                )
+
+        # Validate decision (non-empty string)
+        if not isinstance(data.get("decision"), str) or not data["decision"]:
+            fail(path, 0, "decision must be a non-empty string")
+
+    # ISO-8601 timestamp validation: run in both paths because Draft 2020-12 does not
+    # enforce format: date-time without a format checker, so "yesterday" passes strict.
+    for _ts_field in ["started_at", "finished_at"]:
         try:
-            datetime.fromisoformat(data[field].replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            fail(path, 0, f"{field} must be a valid ISO 8601 timestamp")
+            datetime.fromisoformat(str(data.get(_ts_field, "")).replace("Z", "+00:00"))
+        except ValueError:
+            fail(path, 0, f"{_ts_field} must be a valid ISO 8601 timestamp")
+
+    # Business-logic constraint not expressible in the schema: Slack permalink pattern.
+    # Enforced in both paths because the schema only constrains minLength: 1.
+    if isinstance(data.get("approvals"), list):
+        for i, appr in enumerate(data["approvals"]):
+            if isinstance(appr, dict) and not PERMALINK_RE.match(
+                str(appr.get("slack_permalink", ""))
+            ):
+                fail(
+                    path,
+                    0,
+                    f"approvals[{i}].slack_permalink is not a #ml-packages permalink: "
+                    f"{appr.get('slack_permalink')!r}",
+                )
 
 
 def select_approver_spec(

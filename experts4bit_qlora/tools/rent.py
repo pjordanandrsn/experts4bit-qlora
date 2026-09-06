@@ -977,7 +977,7 @@ def main(argv: list[str] | None = None) -> int:
         environment=environment, provider=prov.kind, instance_id=iid, gpu_model=args.gpu, gpu_count=1,
         started_at=started_at, finished_at=_utc(), runtime_seconds=time.time() - t0,
         cost_estimated=estimate, cost_actual=actual_cost,
-        teardown_proof={k: v for k, v in proof.items() if k in ("method", "evidence", "reason", "at")},
+        teardown_proof={k: v for k, v in proof.items() if k in ("method", "evidence", "reason", "at", "complete")},
         status=status, result=result, notes=notes, configuration=configuration,
         dataset=args.dataset, dataset_hash=args.dataset_hash, model=args.model,
         model_revision=args.model_revision, model_hash=args.model_hash, seed=args.seed,
