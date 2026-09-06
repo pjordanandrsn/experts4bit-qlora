@@ -1,0 +1,19 @@
+{
+ "framework": "e4b",
+ "fam": "gemma4",
+ "model": "google/gemma-4-26B-A4B-it",
+ "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
+ "arm": "fused",
+ "tag": "fused_attn4",
+ "status": "void_attn4",
+ "reason": "quantize_attention_projections_4bit converted 100 projections, expected 120",
+ "steps": 60,
+ "seq": 512,
+ "accum": 1,
+ "offload": false,
+ "prereg": "tp2/P40-PREREG.md",
+ "harness": "tp2_arm.py (p38_arm.py as amended + T1-T9)",
+ "phase": "attn4",
+ "n_layers": 30,
+ "model_type": "gemma4"
+}

@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD Ryzen 7 5700X3D 8-Core Processor
+NUMA node(s):                            1
+MemTotal:       131803028 kB
+cgroup memory.max 129566244864

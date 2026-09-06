@@ -1,0 +1,16 @@
+e4b 0.35.1 (PyPI)
+gnf4 0.30.2 (PyPI)
+torch(e4b) 2.8.0+cu128
+triton(e4b) 3.4.0
+transformers(e4b) 5.16.1
+bitsandbytes(e4b) 0.50.1
+usercustomize_hook none
+unsloth 2026.9.2
+unsloth_zoo 2026.9.1
+torch(unsloth) 2.8.0+cu128
+triton(unsloth) 3.4.0
+transformers(unsloth) 5.5.0
+bitsandbytes(unsloth) 0.50.2
+peft 0.20.0
+torchao None
+moe_backend native_torch
