@@ -470,12 +470,33 @@ def _ssh_run(host: str, port: int, command: str, timeout_s: float) -> tuple[int,
         return 124, f"ssh timed out after {timeout_s} s"
 
 
-BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=100000000", "http://speedtest.tele2.net/100MB.zip")
+BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=20000000", "http://speedtest.tele2.net/100MB.zip")
+BANDWIDTH_MIN_BYTES = 5_000_000
+BANDWIDTH_WINDOW_S = 45
+
+
+def _bandwidth_reading(out: str) -> tuple[float, float, float, str]:
+    """Return (MB/s, bytes, seconds, HTTP status), rejecting error bodies and undersized transfers."""
+    parts = out.strip().split()
+    if len(parts) < 3:
+        raise ValueError(f"no <bytes> <seconds> <status> line: {out.strip()[:120]!r}")
+    size, secs, code = float(parts[0]), float(parts[1]), parts[2]
+    if code != "200":
+        raise ValueError(f"HTTP {code} after {size:.0f} B — an error body is not a measurement")
+    if size < BANDWIDTH_MIN_BYTES:
+        raise ValueError(f"only {size:.0f} B transferred (< {BANDWIDTH_MIN_BYTES} B floor)")
+    return size / max(secs, 1e-9) / 1e6, size, secs, code
 
 
 def _bandwidth_over_ssh(host: str, port: int) -> float:
     """Compatibility wrapper for callers that need only the measured MB/s."""
-    return _bandwidth_over_ssh_with_evidence(host, port)[0]
+    mbps, evidence = _bandwidth_over_ssh_with_evidence(host, port)
+    if mbps <= 0:
+        raise PreflightFailed(
+            f"download bandwidth could not be measured on {host}:{port}; "
+            f"probe={json.dumps(evidence, separators=(',', ':'), sort_keys=True)}"
+        )
+    return mbps
 
 
 def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
@@ -512,22 +533,26 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
 
         def command(url: str) -> str:
             return ("curl --location --fail --silent --show-error -o /dev/null "
-                    f"-w '%{{speed_download}}' --max-time 60 {shlex.quote(url)}")
+                    f"-w '%{{size_download}} %{{time_total}} %{{http_code}}' "
+                    f"--max-time {BANDWIDTH_WINDOW_S} {shlex.quote(url)}")
     elif "wget" in capabilities and "python3" in capabilities:
         tool = "wget"
         wget_code = ("import subprocess,sys,time;t=time.monotonic();"
-                     "p=subprocess.Popen(['wget','-q','-O','-','--timeout=60',sys.argv[1]],stdout=subprocess.PIPE);"
+                     f"p=subprocess.Popen(['wget','-q','-O','-','--timeout={BANDWIDTH_WINDOW_S}',sys.argv[1]],"
+                     "stdout=subprocess.PIPE);"
                      "n=sum(map(len,iter(lambda:p.stdout.read(1048576),b'')));rc=p.wait();"
-                     "print(n/(time.monotonic()-t));raise SystemExit(rc)")
+                     "print(n,time.monotonic()-t,200);raise SystemExit(rc)")
 
         def command(url: str) -> str:
             return f"python3 -c {shlex.quote(wget_code)} {shlex.quote(url)}"
     elif "python3" in capabilities:
         tool = "python3"
-        python_code = ("import sys,time,urllib.request;t=time.monotonic();"
-                       "r=urllib.request.urlopen(sys.argv[1],timeout=60);"
-                       "n=sum(map(len,iter(lambda:r.read(1048576),b'')));r.close();"
-                       "print(n/(time.monotonic()-t))")
+        python_code = ("import sys,time,urllib.request as u;t=time.monotonic();"
+                       "q=u.Request(sys.argv[1],headers={'User-Agent':'curl/8'});"
+                       f"r=u.urlopen(q,timeout={BANDWIDTH_WINDOW_S});"
+                       "n=0\nwhile True:\n b=r.read(1048576)\n if not b:break\n n+=len(b)\n"
+                       f" if time.monotonic()-t>{BANDWIDTH_WINDOW_S}:break\n"
+                       "print(n,time.monotonic()-t,r.status);r.close()")
 
         def command(url: str) -> str:
             return f"python3 -c {shlex.quote(python_code)} {shlex.quote(url)}"
@@ -548,14 +573,18 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
                 attempts.append(item)
                 continue
             try:
-                measured = float(out.strip().split()[0]) / 1e6
-            except (ValueError, IndexError):
-                item["result"] = "parse-failed"
+                measured, size, secs, code = _bandwidth_reading(out)
+            except (ValueError, IndexError) as e:
+                item["result"] = "invalid-reading"
+                item["error"] = str(e)[:160]
                 attempts.append(item)
                 continue
             best = max(best, measured)
             item["mb_s"] = f"{measured:.1f}"
-            item["result"] = "ok" if measured > 0 else "nonpositive"
+            item["bytes"] = f"{size:.0f}"
+            item["seconds"] = f"{secs:.3f}"
+            item["http_status"] = code
+            item["result"] = "ok"
             attempts.append(item)
             if stop_at_mb_s is not None and measured >= stop_at_mb_s:
                 return best, evidence
