@@ -16,9 +16,13 @@
   line `checkpoint: <id> @ <sha> (requested ...)`; a full-sha `revision` whose snapshot resolves to a different
   commit -- or a config and a snapshot from two different commits -- is refused with `ValueError` rather than
   loading other bytes. A local directory has no hub revision: noted, not verified. Default `None` still means
-  `main`; the only change for existing callers is that the resolved commit is now logged. Four loader tests cover
-  the threading, the refusal, the unpinned receipt and the local-directory case; no kernel, gate or threshold
-  changes.
+  `main`; for existing callers the resolved commit is now logged, and `config._commit_hash` may now be populated
+  where transformers left it empty (filled from the snapshot folder's basename). Nine loader tests cover the
+  threading, both refusal arms (a pinned sha that resolved elsewhere; a config and a snapshot from two different
+  commits), the unpinned receipt, the basename fallback, the local-directory case, the remote-code pinning
+  (same-repo and upstream-repo `auto_map`), and a real offline hub-cache regression -- `HF_HUB_OFFLINE` forced over
+  a staged `snapshots/<sha>/` cache with no `refs/`, both hub lookups untouched, the unpinned load shown to die
+  there and the pinned one to resolve; no kernel, gate or threshold changes.
 
 ## 0.35.2 — 2026-09-05 — documentation: head-to-head receipts (same-box vLLM; Unsloth QLoRA end-to-end)
 

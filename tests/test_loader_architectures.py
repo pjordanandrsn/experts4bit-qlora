@@ -15,7 +15,7 @@ import os
 
 import pytest
 
-from quant_guard import load_or_skip
+from quant_guard import load_or_skip, require_quantize
 
 torch = pytest.importorskip("torch")
 pytest.importorskip("bitsandbytes")
@@ -1448,12 +1448,14 @@ _PIN = "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"   # a real-shaped full sha (Qw
 _OTHER = "0" * 40
 
 
-def _route_hub_lookups_to(monkeypatch, tmp_path, *, commit_hash, remote_class_ref=None):
-    """Point the loader's two hub lookups at the tiny checkpoint in ``tmp_path`` while recording
-    the ``revision`` each was asked for. ``commit_hash`` plays the commit transformers would have
-    parsed from the cache path (``config._commit_hash``); the snapshot folder is ``tmp_path`` itself,
-    which has no sha in its name, so the config side is the only resolution -- exactly the
-    offline-cache case #404 describes. Nothing here touches the network."""
+def _route_hub_lookups_to(monkeypatch, snap_dir, *, commit_hash, remote_class_ref=None):
+    """Point the loader's two hub lookups at the tiny checkpoint in ``snap_dir`` while recording
+    the ``revision`` each was asked for. ``snap_dir`` is handed back as the snapshot folder: pass
+    ``tmp_path`` itself for a folder with no sha in its name (the config side is then the only
+    resolution), or ``tmp_path / <40-hex sha>`` for the standard hub-cache spelling, where the
+    basename IS the resolved commit. ``commit_hash`` plays the commit transformers would have
+    parsed from the cache path (``config._commit_hash``); ``None`` plays transformers leaving
+    that slot empty. Nothing here touches the network."""
     import experts4bit_qlora.loader as L
 
     seen = {}
@@ -1461,7 +1463,7 @@ def _route_hub_lookups_to(monkeypatch, tmp_path, *, commit_hash, remote_class_re
 
     def fake_config(model_id, **kw):
         seen["config"] = dict(kw)
-        cfg = real_from_pretrained(str(tmp_path), trust_remote_code=kw.get("trust_remote_code"))
+        cfg = real_from_pretrained(str(snap_dir), trust_remote_code=kw.get("trust_remote_code"))
         cfg._commit_hash = commit_hash
         if remote_class_ref is not None:
             cfg.auto_map = {"AutoModelForCausalLM": remote_class_ref}   # a trust_remote_code checkpoint
@@ -1469,7 +1471,7 @@ def _route_hub_lookups_to(monkeypatch, tmp_path, *, commit_hash, remote_class_re
 
     def fake_snapshot(model_id, **kw):
         seen["snapshot"] = dict(kw)
-        return str(tmp_path)
+        return str(snap_dir)
 
     real_from_config = L.AutoModelForCausalLM.from_config
 
@@ -1514,6 +1516,36 @@ def test_loader_refuses_a_snapshot_that_is_not_the_pinned_commit(tmp_path, monke
 
     with pytest.raises(ValueError, match=f"revision={_PIN} was requested but the snapshot resolved to commit {_OTHER}"):
         _load_or_skip("pinned/olmoe-fixture", r=4, alpha=8, revision=_PIN)
+
+
+def test_loader_refuses_a_config_and_a_snapshot_from_different_commits(tmp_path, monkeypatch):
+    """The config resolving to one commit and the snapshot folder to another is the OTHER
+    silent-wrong-bytes case: the shards do not belong to the config they would be loaded under.
+    The requested revision matches the config's side here, so only the cross-check between the
+    two resolutions -- not the pin check -- can catch it; the refusal names both commits."""
+    torch.manual_seed(0)
+    snap = tmp_path / _OTHER                              # the standard cache spelling: snapshots/<sha>/
+    snap.mkdir()
+    _write_ckpt(_olmoe(), str(snap), per_expert=True)
+    _route_hub_lookups_to(monkeypatch, snap, commit_hash=_PIN)
+
+    with pytest.raises(ValueError, match=f"config resolved to commit {_PIN} but the snapshot folder is {_OTHER}"):
+        _load_or_skip("mismatched/olmoe-fixture", r=4, alpha=8, revision=_PIN)
+
+
+def test_loader_fills_an_empty_commit_hash_from_the_snapshot_basename(tmp_path, monkeypatch):
+    """transformers can leave ``config._commit_hash`` empty (``None``); in the standard hub cache
+    the snapshot folder is named after the resolved commit, so the loader takes the receipt from
+    the basename -- and a pin against exactly that sha passes instead of reading as unresolved."""
+    torch.manual_seed(0)
+    snap = tmp_path / _PIN
+    snap.mkdir()
+    _write_ckpt(_olmoe(), str(snap), per_expert=True)
+    _route_hub_lookups_to(monkeypatch, snap, commit_hash=None)
+
+    _, cfg = _load_or_skip("basename/olmoe-fixture", r=4, alpha=8, revision=_PIN)
+
+    assert cfg._commit_hash == _PIN                       # the receipt, recovered from the folder name
 
 
 def test_loader_unpinned_load_still_records_the_resolved_commit(tmp_path, monkeypatch):
@@ -1571,3 +1603,64 @@ def test_loader_leaves_upstream_remote_code_unpinned(tmp_path, monkeypatch):
     _load_or_skip("pinned/upstream-code-fixture", r=4, alpha=8, revision=_PIN, trust_remote_code=True)
 
     assert "code_revision" not in seen["from_config"]
+
+
+def test_loader_pinned_sha_loads_from_an_offline_hub_cache_with_no_refs(tmp_path, monkeypatch):
+    """The REAL #404 case, with both hub lookups untouched: ``snapshot_download(model_id,
+    revision=<sha>)`` leaves ``snapshots/<sha>/`` (plus the per-commit ``trees/<sha>.json``
+    listing huggingface_hub >= 1.x writes at download time) and NO ``refs/`` directory --
+    ``main`` was never resolved, so nothing wrote ``refs/main``. This test stages exactly that
+    layout, forces offline mode, and drives ``load_moe_4bit_streaming`` through the real
+    ``transformers``/``huggingface_hub`` resolution.
+
+    Offline is forced on ``huggingface_hub.constants`` directly: ``HF_HUB_OFFLINE`` and
+    ``HF_HUB_CACHE`` are read from ``os.environ`` once, at import, so ``monkeypatch.setenv``
+    would be a no-op here; the hub reads the module attributes at call time, and transformers
+    5.x mirrors both through the same module (asserted below via ``is_offline_mode()``)."""
+    import huggingface_hub.constants as hub_constants
+    import transformers.utils.hub as transformers_hub
+    from huggingface_hub.errors import LocalEntryNotFoundError
+
+    from experts4bit_qlora.loader import load_moe_4bit_streaming
+
+    # Ask the bnb question up front so the loads below run UNGUARDED. `_load_or_skip` would
+    # report this regression -- an OSError out of the hub resolution -- as "bitsandbytes
+    # unavailable" and turn it into a green skip, and #404 IS an OSError the loader must not
+    # cause. On a loader that drops `revision`, the pinned load below fails loudly instead.
+    require_quantize(DEVICE)
+
+    model_id = "e4b-tests/olmoe-offline-fixture"
+    cache = tmp_path / "hub-cache"
+    repo_dir = cache / "models--e4b-tests--olmoe-offline-fixture"
+    snap = repo_dir / "snapshots" / _PIN
+    snap.mkdir(parents=True)
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(snap), per_expert=True)
+    (repo_dir / "trees").mkdir()
+    (repo_dir / "trees" / f"{_PIN}.json").write_text(json.dumps({
+        "format_version": 1,
+        "files": {
+            name: {"size": (snap / name).stat().st_size, "blob_id": "0" * 40}
+            for name in os.listdir(snap)
+        },
+    }))
+
+    monkeypatch.setattr(hub_constants, "HF_HUB_OFFLINE", True)
+    monkeypatch.setattr(hub_constants, "HF_HUB_CACHE", str(cache))
+    assert transformers_hub.is_offline_mode(), (
+        "transformers stopped reading offline mode through huggingface_hub.constants; "
+        "this test's offline forcing no longer reaches its hub lookups"
+    )
+
+    # The regression bites: with no `refs/`, the unpinned `main` lookup has nothing to resolve
+    # offline. huggingface_hub raises LocalEntryNotFoundError; transformers re-raises it as
+    # OSError -- and this is the exact failure the five 2026-09-05 training arms died with.
+    with pytest.raises((LocalEntryNotFoundError, OSError)):
+        load_moe_4bit_streaming(model_id, DEVICE, DTYPE, r=4, alpha=8)
+
+    # The fix: the pinned sha resolves offline, through the untouched hub code paths.
+    model, cfg = load_moe_4bit_streaming(model_id, DEVICE, DTYPE, r=4, alpha=8, revision=_PIN)
+
+    assert cfg._commit_hash == _PIN                       # the receipt, parsed from the cache path
+    assert not [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.is_meta]
+    assert not (repo_dir / "refs").exists()               # the load did not paper over the layout
