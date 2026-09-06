@@ -144,3 +144,44 @@ finding the lane surfaced: in the code it measured (0.35.0) `enable_batched_trai
 per call above `_PAD_WASTE_LIMIT` with no counter of its own — three VOID rows (OLMoE, Qwen3, Gemma-4) against two
 engaged ones (Granite, Mixtral) — so a batched arm was read only with an external kernel-call counter; 0.35.1 (#402)
 adds `batched_fallback_stats(model)` for exactly this.
+
+## Against Unsloth, per family, with attention in 4-bit (tp2, 2026-09-06)
+
+A third evidence bundle — [`bench/h2h-20260906/tp2/`](../bench/h2h-20260906/tp2/README.md)
+(lane tp2, pre-registration P40: the **shipped** experts4bit-qlora 0.35.1 + grouped-nf4-gemm 0.30.2 from PyPI against
+Unsloth 2026.9.2 + unsloth_zoo 2026.9.1, one rented RTX 5090 on a Ryzen 7 5700X3D host, Vast 50005568, train-anchor
+class `pcie-full/launch-fast`) — so again a new dated section rather than an edit to the tables above. Each of the six
+families goes through P38's fixture exactly (the registered `clinical` set tokenised once per family and asserted by
+sha, seq 512, r 8 / α 16 on attention and every expert, router frozen, lr 1e-4, batch 1, accum 1, N = 60 steps,
+held-out every 20) in three arms per family: e4b `reference_attn4` (the per-expert loop **with NF4 attention**), e4b
+`fused_attn4` (`enable_fast_train(dgrad=True)` **with NF4 attention**) and Unsloth `ckpt_unsloth`; Qwen3 adds Unsloth's
+`ckpt_hf`, gpt-oss e4b's `attn_only`. Verdicts are the register's
+(`e4b.train.h2h.unsloth.<family>.5090.2026-09-06` and its `.arm.*` rows in [`claims.json`](claims.json)); statuses are
+the lane's vocabulary (OK / REFUSED / OOM / INSTALL_FAILED / LOAD_FAULT / HARNESS_ERROR / ALARM / NOT_RUN) with
+VALID / VOID as a separate reading, and **every attempt is a row**.
+
+**What is new here for this file:** this is the first per-family evidence for the **attention-4-bit** configuration of
+the training paths (the shipped `TRAIN_ATTN_4BIT` mechanism beside the expert path), and the first per-family
+comparison against another framework.
+
+| model_type | what trained on the e4b side (attention 4-bit) | what the comparator did, from its own receipt | position |
+|---|---|---|---|
+| `granitemoe` | both arms **OK · VALID**, 128 projections converted, 49,807,360 trainable (experts 47,185,920); fused ×5.59 per step, internal parity PASS | Unsloth trained the **attention only** — 2,621,440 trainable, 0 `Params4bit` expert stacks, 0 expert forward calls per step, no "Enabling LoRA on MoE parameters" banner (its own log line: `Unsloth: Compiled module GraniteMoeMoE.`) → the arm is **VOID** under the lane's rules | none — coverage row (`…granite….coverage`) |
+| `olmoe` | both arms **OK · VALID**, 64 projections, 60,817,408 trainable; fused ×3.73, internal parity PASS | the process exited **rc=1 before writing a receipt** (`HARNESS_ERROR`; `summary.txt`: `olmoe/unsloth/ckpt_unsloth rc=1`) — the lane's `outer.log` is not in this repository, so nothing further is quoted | none — coverage row (`…olmoe….coverage`) |
+| `qwen3_moe` | both arms **OK · VALID**, 192 projections, 321,257,472 trainable; fused ×2.69, internal parity PASS | **OK · VALID** on its 4-bit MoE path (96 expert stacks, 96 backend calls per step, banner present); `ckpt_hf` reads within 0.02 s/step of `ckpt_unsloth` | **1.457** Unsloth/e4b, quality COMPARABLE |
+| `gemma4_text` | both arms **VOID_ATTN4** — `quantize_attention_projections_4bit converted 100 projections, expected 120`; no step ran ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)) | **OK · VALID** at 3.510 s/step, 247,188,480 trainable with LoRA on `experts.gate_up_proj` / `experts.down_proj` per its banner | none — no e4b arm to pair |
+| `gpt_oss` | `reference_attn4` and `fused_attn4` **REFUSED** (96 of 96 attention projections carry a bias; 0 modules patched, experts built bare); `attn_only` **OK · VALID** at 1.464 s/step in bf16 attention | **REFUSED at load**: `RuntimeError: We encountered some issues during automatic conversion of the weights.` | none — both sides refuse |
+| `mixtral` | both arms **OK · VALID** under expert CPU offload, 128 projections, 111,673,344 trainable; fused ×1.23 at ×0.376 the reference loop's peak, internal parity PASS | **OK · VALID** resident (64 expert stacks, banner present) and it did **not** OOM as P40 predicted | **0.361** Unsloth/e4b, read with the footprint row: 3.223 GB against 29.163 GB |
+
+**Per-path reading for this file.** `reference_train` and `fast_train` now carry an attention-4-bit receipt on
+`granitemoe`, `olmoe`, `qwen3_moe` and `mixtral` (the `.arm.e4b.*` rows above and each family's
+`…e4b-internal-parity`); on `gemma4_text` attention 4-bit is **not supported** pending #412 and the paths *without*
+it stay exactly as tp1 left them; on `gpt_oss` attention 4-bit **refuses** on bias-carrying projections, as the
+expert paths already refuse on structure. Nothing about `batched_train`, `nvme_train` or `native_mxfp4_train` moved:
+tp2 did not run them. The machine-readable form is still `training_support` in
+[`capabilities.json`](capabilities.json).
+
+**A competitor's row is its observation, never a flag.** Unsloth is not marked "unsupported" on any family here: on
+Granite it attached LoRA where it could and the lane read the coverage; on OLMoE one attempt on one box died; on
+gpt-oss it refused a checkpoint conversion; on Gemma-4 it engaged and trained. One box, one fixture, one attempt per
+cell — that is the whole scope of the comparison, and no cross-family or cross-box ratio is derived from it.

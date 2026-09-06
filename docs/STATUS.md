@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-05, version 0.35.2** (the version of record is
+**As of 2026-09-06, version 0.35.2** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -135,6 +135,113 @@ this workload and said the finding ships either way; it does. One workload
 (≈86 tokens per step, batch 1, resident), one box, one family: no general
 speed claim, nothing licensed, and the 2026-08-26 "1.17× ahead" memory
 (never a claim) is disqualified as a comparison.
+
+### tp2 / P40 (2026-09-06) — the same head-to-head, per family
+
+**Against Unsloth on every supported family, one box, one fixture** (lane
+tp2, pre-registration P40, 2026-09-06, one rented RTX 5090 on a Ryzen 7
+5700X3D host, Vast 50005568; **measured** — receipt
+[`bench/h2h-20260906/tp2/`](../bench/h2h-20260906/tp2/README.md), table in
+its [`RESULTS-tp2.md`](../bench/h2h-20260906/tp2/RESULTS-tp2.md), the
+pre-registration verbatim as its `P40-PREREG.md`; register
+`e4b.train.h2h.unsloth.<family>.5090.2026-09-06` — one row per attempt
+under `.arm.*`, the positions and their `.quality-n60`,
+`.e4b-internal-parity`, `.coverage` and `.footprint` companions). This is
+the training-side mirror of the serving per-family census: the *shipped*
+cut this time — experts4bit-qlora 0.35.1 + grouped-nf4-gemm 0.30.2 from
+PyPI — against Unsloth 2026.9.2 + unsloth_zoo 2026.9.1, six families, P38's
+fixture exactly (the `clinical` set tokenised once per family and asserted
+by sha, seq 512, r 8 / α 16 on attention and every expert, the router
+frozen, lr 1e-4, batch 1, accum 1, N=60, held-out every 20 steps), and
+every attempt a row.
+
+**Two families give a position; the other four say why.**
+
+| family | e4b primary | Unsloth primary | position (Unsloth/e4b s/step) | quality at N=60 | e4b internal parity |
+|---|---|---|---|---|---|
+| Qwen3-30B-A3B | OK · VALID | OK · VALID | **1.457** (5.986 vs 4.108 s — e4b faster per step) | COMPARABLE, Δ +0.0152 | PASS, ×2.69 |
+| Mixtral-8x7B-Instruct | OK · VALID (experts offloaded) | OK · VALID (resident) | **0.361** (0.858 vs 2.377 s — Unsloth faster per step) — read with the footprint row | COMPARABLE, Δ −0.0087 | PASS, ×1.23 |
+| Granite-3.1-3B-A800M | OK · VALID | OK · **VOID** | not quoted — coverage | — | PASS, ×5.59 |
+| OLMoE-1B-7B-Instruct | OK · VALID | **HARNESS_ERROR** | not quoted — coverage | — | PASS, ×3.73 |
+| gpt-oss-20b | **REFUSED** (both 4-bit arms) | **REFUSED** (at load) | not quoted | — | NO-ARM |
+| Gemma-4-26B-A4B-it | **VOID_ATTN4** ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)) | OK · VALID (3.510 s/step) | not quoted | — | NO-ARM |
+
+**Qwen3 reproduces the p38 position on a different box**
+(`e4b.train.h2h.unsloth.qwen3.5090.2026-09-06`, with
+`…quality-n60`): s/step ratio Unsloth/e4b **1.457** (5.986 vs 4.108 s),
+peak VRAM 21.371 vs 23.141 GB, 383.9 vs 561.4 J/step, 21.0 vs 14.1 tok/s,
+held-out comparable (0.2935 vs 0.3087, |Δ| 0.0152 ≤ the 0.05 reading
+threshold) — **+3.1% against p38's 1.413**, inside the pre-registered
+±10%, so P40's prediction P2 holds. The *ratio* travels between the two
+lanes and the absolutes do not: this host launches at about half p38's
+rate and its step times are roughly 2.7× p38's on the same configuration.
+p38 still owns the 200-step curves, which favour Unsloth
+(`e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200`), and that row is
+quoted beside this position wherever it is quoted.
+
+**Mixtral is a footprint result, and only then a speed one.** e4b trains
+it with the experts under CPU offload at a **3.223 GB** peak while Unsloth,
+which has no expert-offload mode, trains the same problem resident at
+**29.163 GB** on the same 32 GB card, at comparable held-out loss (0.2590
+vs 0.2502, |Δ| 0.0087) — ×9.05 less VRAM
+(`e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint`), which is what
+makes this family trainable on cards residency cannot fit. In *that*
+configuration Unsloth is faster per step, ratio **0.361**
+(`e4b.train.h2h.unsloth.mixtral.5090.2026-09-06`, with `…quality-n60`);
+e4b is still lower in energy (298.3 vs 350.2 J/step). That is a
+footprint-versus-speed trade under the registered design, not a kernel
+deficit, and it is never quoted as a kernel ratio at equal residency —
+nobody measured e4b resident on this family here. P40's prediction P4, that
+the resident Unsloth arm would OOM at seq 512 on 32 GB, is **falsified**:
+it fits, at nine times the footprint.
+
+**Coverage is a result, not an empty cell.** On Granite the comparator
+trained the attention only — 2,621,440 trainable parameters against e4b's
+49,807,360 with `ExpertsLoRA` on all 32 MoE layers, zero `Params4bit`
+expert stacks, zero expert forward calls per step and no "Enabling LoRA on
+MoE parameters" banner — so its arm is **VOID** and the two arms are not
+the same problem (`e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage`).
+On OLMoE the comparator's process exited rc=1 without writing a receipt
+while both e4b arms trained to N=60
+(`e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage`; the lane's
+`outer.log` is not in this repository, so what is citable is `summary.txt`'s
+rc line and the reducer's reason — the `IndexError` it recorded is not
+quoted here as though a reader could check it). Neither row carries a speed
+ratio.
+
+**gpt-oss is refused on both sides, as registered.** e4b's `fused_attn4`
+arm refuses on structure (no `ExpertsLoRA` to patch, re-probed on this box:
+0 patched) and its attention-4-bit arms refuse because 96 of 96 attention
+projections carry a bias; Unsloth raised on the released checkpoint's
+automatic weight conversion at load. Attention-only QLoRA over the frozen
+experts still trains on the e4b side
+(`e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.attn_only`, 1.464
+s/step) — a secondary row, no pair, no ratio. P40's prediction P5 holds.
+
+**Gemma-4's attention-4-bit arms are a defect row, not a comparison.**
+Both e4b arms were written `VOID_ATTN4`:
+`quantize_attention_projections_4bit converted 100 projections, expected
+120` on this 30-layer checkpoint, and no training step ran
+(`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.fused_attn4`,
+`…arm.e4b.reference_attn4`;
+[#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)).
+Attention 4-bit is therefore **not supported on `gemma4_text`** pending
+that issue, while the `fast_train` path *without* attention 4-bit stands
+exactly where tp1 left it (`e4b.train.parity.tp1.gemma4.fused.2026-09-05`).
+The comparator's arm on this family engaged and is VALID at 3.510 s/step —
+recorded as its observation, not as a position, and no cross-framework
+quality reading is attempted on a family with no instrument at this
+resolution ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)).
+
+**e4b's own fused-vs-reference pair passes on every family that has one,
+with attention in 4-bit on both sides** (informational; tp1 owns the
+licence): Granite 0.00836 / 0.01914 at ×5.59, OLMoE 0.02109 / 0.01803 at
+×3.73, Qwen3 0.00215 / 0.00962 at ×2.69, Mixtral 0.00462 / 0.01184 at ×1.23
+and ×0.376 the reference loop's peak VRAM under the same offload
+(`e4b.train.h2h.unsloth.<family>.5090.2026-09-06.e4b-internal-parity`), so
+P40's prediction P7 reads PARTIAL — four PASSes and two NO-ARMs. Nothing in
+this lane licenses anything, no cross-family ratio is taken, and a PASS is
+a PASS on one text at 60 steps.
 
 **Serving is at parity with the model's own attention on three of four
 families, and not on the fourth.** This is the part that changed most
