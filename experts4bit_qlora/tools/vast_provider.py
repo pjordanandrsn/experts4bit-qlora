@@ -453,26 +453,75 @@ def _ssh_run(host: str, port: int, command: str, timeout_s: float) -> tuple[int,
         return 124, f"ssh timed out after {timeout_s} s"
 
 
-BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=100000000", "http://speedtest.tele2.net/100MB.zip")
+# The pre-flight's download probe. R1 attempt 3 (private receipt p41-r1-granite-3, instance 50095430,
+# 2026-09-06T20:29:34Z) was NOT_RUN on "download bandwidth 0.0 MB/s" from a box advertising 3.6 Gbps. Two
+# defects, both reproduced from this machine on 2026-09-06:
+#   1. `speed.cloudflare.com/__down?bytes=100000000` answers **HTTP 403** (its served ceiling is lower; 20 MB
+#      returns 200 and ~69 MB/s). `curl -s` without `--fail` exits 0, writes the 1-byte error body to /dev/null
+#      and reports `speed_download=19` — a nonzero reading, so the old loop returned it at once and never tried
+#      the second endpoint. 19 B/s formats as "0.0 MB/s". This fires on every box, whatever its link.
+#   2. the official `pytorch/pytorch` images (the registered P41 image among them) install neither curl nor wget
+#      — their final stage adds only ca-certificates, libjpeg-dev, libpng-dev — so on that image curl exits 127
+#      and the old probe returned 0.0 with the reason discarded.
+# So: a reading is accepted only when the transfer answered HTTP 200 AND delivered at least
+# BANDWIDTH_MIN_BYTES; the tools are tried in order and a missing one is dropped; when nothing measures, the
+# probe raises with the last failure instead of answering 0.0 as if a link had been measured.
+BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=20000000", "http://speedtest.tele2.net/100MB.zip")
+BANDWIDTH_MIN_BYTES = 5_000_000
+BANDWIDTH_WINDOW_S = 45          # both tools stop transferring here; _ssh_run's own 90 s bound would kill a slow box
+
+# Each tool prints "<bytes> <seconds> <http-status>" on stdout.
+_CURL_DOWNLOAD = ("curl -s -o /dev/null --max-time 60 "
+                  "-w '%{{size_download}} %{{time_total}} %{{http_code}}' '{url}'")
+_PY_DOWNLOAD = ("python3 -c 'import sys,time,urllib.request as u\n"
+                "q=u.Request(sys.argv[1],headers={{\"User-Agent\":\"curl/8\"}})\n"
+                "t=time.monotonic();n=0\n"
+                "r=u.urlopen(q,timeout=60)\n"
+                "while True:\n b=r.read(1<<20)\n if not b: break\n n+=len(b)\n"
+                " if time.monotonic()-t>45: break\n"
+                "print(n,time.monotonic()-t,r.status)' '{url}'")
+BANDWIDTH_TOOLS: tuple[tuple[str, str], ...] = (("curl", _CURL_DOWNLOAD), ("python3", _PY_DOWNLOAD))
+_MISSING_TOOL = ("not found", "No such file")
+
+
+def _bandwidth_reading(out: str) -> float:
+    """MB/s from a tool's "<bytes> <seconds> <status>" line, or ValueError with why it is not a measurement."""
+    parts = out.strip().split()
+    if len(parts) < 3:
+        raise ValueError(f"no <bytes> <seconds> <status> line: {out.strip()[:120]!r}")
+    size, secs, code = float(parts[-3]), float(parts[-2]), parts[-1]
+    if code != "200":
+        raise ValueError(f"HTTP {code} after {size:.0f} B — an error body is not a measurement")
+    if size < BANDWIDTH_MIN_BYTES:
+        raise ValueError(f"only {size:.0f} B transferred (< {BANDWIDTH_MIN_BYTES} B floor)")
+    return size / max(secs, 1e-9) / 1e6
 
 
 def _bandwidth_over_ssh(host: str, port: int) -> float:
-    """MB/s of a 100 MB download measured ON the box (what the run will see), via curl over ssh. Each endpoint is
-    tried twice before the next one (Warden LOW, #460: one dead test server must not fail a good box); the best
-    reading wins; 0.0 only when every attempt failed."""
-    best = 0.0
+    """MB/s measured ON the box (what the run will see), over ssh. Each endpoint is tried twice per tool before
+    the next one (Warden LOW, #460: one dead test server must not fail a good box); a tool the box does not have
+    is dropped after its first attempt; the first accepted reading wins. Never answers 0.0: when nothing
+    measures it raises PreflightFailed carrying the last failure."""
+    missing: set[str] = set()
+    last = ""
     for url in BANDWIDTH_URLS:
-        for _attempt in range(2):
-            rc, out = _ssh_run(host, port, f"curl -s -o /dev/null -w '%{{speed_download}}' --max-time 60 '{url}'", 90)
-            if rc != 0:
+        for tool, template in BANDWIDTH_TOOLS:
+            if tool in missing:
                 continue
-            try:
-                best = max(best, float(out.strip().split()[-1]) / 1e6)
-            except (ValueError, IndexError):
-                continue
-            if best > 0:
-                return best
-    return best
+            for _attempt in range(2):
+                rc, out = _ssh_run(host, port, template.format(url=url), 90)
+                if rc != 0:
+                    last = f"{tool} rc {rc}: {out.strip()[:160]}"
+                    if rc == 127 or any(m in out for m in _MISSING_TOOL):
+                        missing.add(tool)
+                        break
+                    continue
+                try:
+                    return _bandwidth_reading(out)
+                except ValueError as e:
+                    last = f"{tool}: {e}"
+    raise PreflightFailed(f"download bandwidth could not be measured on {host}:{port} "
+                          f"(tools missing: {sorted(missing) or 'none'}; last failure: {last or 'none'})")
 
 
 def _under_test() -> bool:
