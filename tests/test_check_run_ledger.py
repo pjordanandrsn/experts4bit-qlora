@@ -1,12 +1,13 @@
 """Tests for scripts/check_run_ledger.py
 
-Six fixtures:
+Seven fixtures:
   1. One passing receipt (valid, within ceilings, proper approvals)
   2. One over-ceiling day (exceeds role daily ceiling)
   3. One missing approval (insufficient approvals for the cost threshold)
   4. One global-daily-budget violation (two roles within their ceilings, over $100 together)
-  5. A receipt missing a required field (caught by schema validation)
-  6. A receipt with an invalid teardown_proof.reason (caught by schema enum)
+  5. started_at: 'yesterday' rejected by BOTH paths (ISO-8601 loop is outside the else:)
+  6. A receipt missing a required field (caught by schema validation)
+  7. A receipt with an invalid teardown_proof.reason (caught by schema enum)
 """
 from __future__ import annotations
 
@@ -620,7 +621,35 @@ def _setup_schema_test(tmp_path: Path, receipt: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 5: missing required field is caught by schema validation
+# Test 5: ISO-8601 timestamp is caught in BOTH paths (not just the fallback)
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_started_at_rejected_by_both_paths(tmp_path: Path) -> None:
+    """started_at: 'yesterday' must fail in both the strict and fallback paths.
+
+    Draft 2020-12 does not enforce format: date-time without an explicit format
+    checker, so the fromisoformat() loop must live outside the else: block.
+    """
+    receipt = copy.deepcopy(_BASE_RECEIPT)
+    receipt["started_at"] = "yesterday"
+    _setup_schema_test(tmp_path, receipt)
+
+    result = subprocess.run(  # noqa: PLW1510
+        [sys.executable, str(SCRIPT)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1, (
+        f"Expected failure on started_at='yesterday'; got returncode 0\n{result.stdout}"
+    )
+    assert "started_at" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Test 6: missing required field is caught by schema validation
 # ---------------------------------------------------------------------------
 
 
@@ -644,7 +673,7 @@ def test_missing_required_field(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 6: invalid teardown_proof.reason is caught via the schema enum
+# Test 7: invalid teardown_proof.reason is caught via the schema enum
 # ---------------------------------------------------------------------------
 
 

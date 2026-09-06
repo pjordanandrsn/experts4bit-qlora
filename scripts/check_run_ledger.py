@@ -16,9 +16,13 @@ Exit 1 with file:line-style messages on any violation; exit 0 with
     python scripts/check_run_ledger.py
 
 Schema validation uses jsonschema.Draft202012Validator when jsonschema is importable
-(true in CI, which installs .[test]).  The manual fallback derives required fields
-from docs/run-receipt-schema.json["required"] so the schema is the single source of
-truth — the hardcoded REQUIRED_FIELDS set is gone.
+(true in lint-and-test via .[test]; the discoverability job also installs
+jsonschema>=4.18 before this step so the strict path runs there too).
+The manual fallback derives required fields from docs/run-receipt-schema.json["required"]
+so the schema is the single source of truth — the hardcoded REQUIRED_FIELDS set is gone.
+ISO-8601 timestamp format is always validated by a fromisoformat() loop run outside the
+if/else because Draft 2020-12 does not enforce format: date-time without a format checker,
+so `started_at: "yesterday"` would otherwise pass the strict path.
 """
 from __future__ import annotations
 
@@ -70,12 +74,13 @@ def load_json(path: Path) -> Any:
 def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     """Validate a single receipt against docs/run-receipt-schema.json.
 
-    Strict path (CI, .[test] installed): jsonschema.Draft202012Validator against
+    Strict path (jsonschema importable): jsonschema.Draft202012Validator against
     the full schema — catches required-field drift and enum violations automatically.
     Manual fallback: derives required fields from schema["required"] so the schema
     file is the single source of truth; no hardcoded REQUIRED_FIELDS list.
-    Business-logic constraints not expressed in the schema (Slack permalink pattern)
-    are enforced in both paths.
+    Business-logic constraints not expressed in the schema (Slack permalink pattern,
+    ISO-8601 timestamp format) are enforced in both paths; Draft 2020-12 does not
+    enforce format: date-time without a format checker.
     """
     if not SCHEMA.exists():
         fail(SCHEMA, None, "run-receipt-schema.json not found; cannot validate receipts")
@@ -189,12 +194,13 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
         if not isinstance(data.get("decision"), str) or not data["decision"]:
             fail(path, 0, "decision must be a non-empty string")
 
-        # Validate ISO 8601 timestamps
-        for field in ["started_at", "finished_at"]:
-            try:
-                datetime.fromisoformat(str(data.get(field, "")).replace("Z", "+00:00"))
-            except ValueError:
-                fail(path, 0, f"{field} must be a valid ISO 8601 timestamp")
+    # ISO-8601 timestamp validation: run in both paths because Draft 2020-12 does not
+    # enforce format: date-time without a format checker, so "yesterday" passes strict.
+    for _ts_field in ["started_at", "finished_at"]:
+        try:
+            datetime.fromisoformat(str(data.get(_ts_field, "")).replace("Z", "+00:00"))
+        except ValueError:
+            fail(path, 0, f"{_ts_field} must be a valid ISO 8601 timestamp")
 
     # Business-logic constraint not expressible in the schema: Slack permalink pattern.
     # Enforced in both paths because the schema only constrains minLength: 1.
