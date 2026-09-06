@@ -1448,7 +1448,7 @@ _PIN = "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"   # a real-shaped full sha (Qw
 _OTHER = "0" * 40
 
 
-def _route_hub_lookups_to(monkeypatch, tmp_path, *, commit_hash):
+def _route_hub_lookups_to(monkeypatch, tmp_path, *, commit_hash, remote_class_ref=None):
     """Point the loader's two hub lookups at the tiny checkpoint in ``tmp_path`` while recording
     the ``revision`` each was asked for. ``commit_hash`` plays the commit transformers would have
     parsed from the cache path (``config._commit_hash``); the snapshot folder is ``tmp_path`` itself,
@@ -1463,14 +1463,28 @@ def _route_hub_lookups_to(monkeypatch, tmp_path, *, commit_hash):
         seen["config"] = dict(kw)
         cfg = real_from_pretrained(str(tmp_path), trust_remote_code=kw.get("trust_remote_code"))
         cfg._commit_hash = commit_hash
+        if remote_class_ref is not None:
+            cfg.auto_map = {"AutoModelForCausalLM": remote_class_ref}   # a trust_remote_code checkpoint
         return cfg
 
     def fake_snapshot(model_id, **kw):
         seen["snapshot"] = dict(kw)
         return str(tmp_path)
 
+    real_from_config = L.AutoModelForCausalLM.from_config
+
+    def fake_from_config(config, **kw):
+        # Records what the loader asked for; then builds the LOCAL class (the recorder stands in
+        # for the remote-code fetch, which would need the network).
+        seen["from_config"] = dict(kw)
+        kw.pop("code_revision", None)
+        if hasattr(config, "auto_map"):
+            del config.auto_map
+        return real_from_config(config, **kw)
+
     monkeypatch.setattr(L.AutoConfig, "from_pretrained", fake_config)
     monkeypatch.setattr(L, "snapshot_download", fake_snapshot)
+    monkeypatch.setattr(L.AutoModelForCausalLM, "from_config", fake_from_config)
     return seen
 
 
@@ -1528,3 +1542,32 @@ def test_loader_local_directory_ignores_revision_and_never_downloads(tmp_path, m
     _, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8, revision=_PIN)
 
     assert getattr(cfg, "_commit_hash", None) is None
+
+
+def test_loader_pins_remote_modeling_code_to_the_revision(tmp_path, monkeypatch):
+    """A trust_remote_code checkpoint fetches its modeling module separately from its weights; the
+    loader pins that fetch to the same commit (transformers' ``code_revision``), otherwise a pinned
+    load would execute ``main``'s code against pinned weights (Bugbot on PR #410)."""
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    seen = _route_hub_lookups_to(monkeypatch, tmp_path, commit_hash=_PIN,
+                                 remote_class_ref="modeling_olmoe.OlmoeForCausalLM")
+
+    _load_or_skip("pinned/remote-code-fixture", r=4, alpha=8, revision=_PIN, trust_remote_code=True)
+
+    assert seen["from_config"]["code_revision"] == _PIN
+    assert seen["from_config"]["trust_remote_code"] is True
+
+
+def test_loader_leaves_upstream_remote_code_unpinned(tmp_path, monkeypatch):
+    """Remote code hosted in ANOTHER repository (``owner/repo--module.Class``) has its own history:
+    the weights' sha cannot pin it, so the loader must not pass it as ``code_revision`` (which would
+    fail or, worse, resolve a different commit there) -- it notes the gap instead."""
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    seen = _route_hub_lookups_to(monkeypatch, tmp_path, commit_hash=_PIN,
+                                 remote_class_ref="someone/upstream-code--modeling_x.XForCausalLM")
+
+    _load_or_skip("pinned/upstream-code-fixture", r=4, alpha=8, revision=_PIN, trust_remote_code=True)
+
+    assert "code_revision" not in seen["from_config"]

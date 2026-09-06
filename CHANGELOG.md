@@ -5,7 +5,9 @@
 ### The loader honours a pinned checkpoint revision (#404)
 
 - `load_moe_4bit_streaming(..., revision=<commit sha | branch | tag>)` threads the revision into both hub lookups the
-  loader makes (`AutoConfig.from_pretrained` and `snapshot_download`). A snapshot staged with
+  loader makes (`AutoConfig.from_pretrained` and `snapshot_download`), and pins a trust-remote-code checkpoint's modeling
+  module to the same commit (transformers' `code_revision`); remote code hosted in a different upstream repository cannot
+  be pinned by the weights' sha and is logged as unpinned. A snapshot staged with
   `snapshot_download(model_id, revision=<sha>)` writes no `refs/main`, so before this the unpinned `main` lookup had
   nothing to resolve offline (`LocalEntryNotFoundError` at load -- five training arms in a row on 2026-09-05) and
   online the loader streamed whatever `main` pointed to that day; every lane since P38 wrote `refs/main` by hand to

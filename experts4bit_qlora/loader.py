@@ -717,9 +717,21 @@ def load_moe_4bit_streaming(
                 f"the fused-expert GLU will use the module default. Verify numerics "
                 f"before trusting outputs from this checkpoint.")
 
+    # A trust_remote_code checkpoint fetches its modeling module separately from its weights; pin
+    # that fetch to the same commit (transformers' ``code_revision``), otherwise a pinned load runs
+    # ``main``'s code against pinned weights. Code hosted in a DIFFERENT upstream repository
+    # (``owner/repo--module.Class``) has its own history, so ``revision`` cannot pin it: say so.
+    remote_code_kwargs = {}
+    remote_ref = (getattr(lm_config, "auto_map", None) or {}).get("AutoModelForCausalLM")
+    if trust_remote_code and revision and remote_ref:
+        if "--" in remote_ref:
+            log(f"  NOTE: remote modeling code {remote_ref!r} lives in another repository; "
+                f"revision={revision!r} pins the weights, not that code")
+        else:
+            remote_code_kwargs["code_revision"] = revision
     with init_empty_weights():
         model = AutoModelForCausalLM.from_config(
-            lm_config, dtype=dtype, trust_remote_code=trust_remote_code)
+            lm_config, dtype=dtype, trust_remote_code=trust_remote_code, **remote_code_kwargs)
 
     snap = (
         model_id
