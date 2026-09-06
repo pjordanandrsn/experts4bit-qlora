@@ -2953,11 +2953,13 @@ Every handoff posted in Slack is also written on the issue.
   for the agent named in the last comment; `blocked:user` means the maintainer
   must act (decision, credential, account link).
 - The taking agent acknowledges on the issue, works on a branch, opens a pull
-  request that cites the issue, and stops. Nobody merges their own pull
-  request. The merge gate is green checks + Bugbot success + zero unresolved
-  review threads, with section 8's companions in the same diff. Receipts and
-  code ship in separate pull requests; a pull request too large for Bugbot to
-  review is a finding, not a pass.
+  request that cites the issue, and stops. Every PR gets one independent review
+  before merge — Cursor Bugbot or a Claude Code review, chosen per PR by need
+  (Bugbot by default for code; Claude Code when Bugbot is unavailable or for
+  docs / register changes) — and Claude Code holds the merge gate: checks green
+  + that review + zero unresolved threads. Nobody merges their own PR. Receipts
+  and code ship in separate pull requests; a pull request too large for Bugbot
+  to review is a finding, not a pass.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
   registered claim; if the task needs one, the agent stops and says so on the
   issue.
