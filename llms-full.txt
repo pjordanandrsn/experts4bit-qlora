@@ -2882,6 +2882,14 @@ catches a corpus that stopped routing its own queries.
   calibrated pack needs the same sign on two texts before it is licensed.
 - Do not publish a number before its receipt exists; if the receipt is
   private, the claim says `evidence_private`.
+- **GPU rental experiments follow the compute governance policy**:
+  approval thresholds (self-approval ≤ $2; one-of CTO/CSO ≤ $20;
+  two-of CEO/CTO/CSO ≤ $50; Jordan above), per-role daily ceilings,
+  a global daily budget, teardown proof required, immutable receipts
+  at `bench/runs/<date>/<run-id>/receipt.json` validated against
+  [`docs/run-receipt-schema.json`](docs/run-receipt-schema.json).
+  The policy is [`docs/COMPUTE-GOVERNANCE.md`](docs/COMPUTE-GOVERNANCE.md);
+  `scripts/check_run_ledger.py` enforces it in CI.
 
 ## 8. When you change something
 

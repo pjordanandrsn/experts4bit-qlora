@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Compute governance policy and run-receipt infrastructure (#429)
+
+Documentation and repository infrastructure only; no code, no version bump, no gate, threshold, floor or existing claim value moved.
+
+- **Compute governance policy** ([`docs/COMPUTE-GOVERNANCE.md`](docs/COMPUTE-GOVERNANCE.md)): approval thresholds for GPU rental experiments (self-approval ≤ $2; one-of CTO/CSO ≤ $20; two-of CEO/CTO/CSO ≤ $50; Jordan above $50), per-role daily ceilings (CEO/CTO $50, CSO/CDO $20, COO $10, Scout/Warden $0), global daily budget ($100), per-run hard cap ($35), allowed providers (Vast.ai verified-secure, RunPod secure), teardown requirements. All ceilings/budgets confirmed by Jordan on 2026-09-06T04:55Z. Receipts are ingested by the organisational corpus (`pjordanandrsn/org-corpus`); a result without provenance is observational only.
+- **Machine-readable policy** ([`docs/compute-policy.json`](docs/compute-policy.json)): the same policy in JSON format, consumed by the check script, with `status: "confirmed"`, `confirmed_by: "Jordan"`, `confirmed_at: "2026-09-06T04:55Z"`.
+- **Run receipt schema** ([`docs/run-receipt-schema.json`](docs/run-receipt-schema.json)): JSON Schema draft 2020-12 for immutable experiment receipts at `bench/runs/<UTC date>/<experiment-id>/receipt.json`, aligned with `pjordanandrsn/org-corpus` §6. Required fields: `experiment_id`, `work_id`, `requested_by`, `executed_by`, `reviewed_by`, `hypothesis`, `expected_result`, `success_criteria`, `failure_criteria`, `preregistration`, `approvals` (array with role, agent, estimate, Slack permalink), `repo`, `commit_sha`, `branch`, `dirty_tree`, `container_image`, `dependencies`, `command`, `environment`, `provider`, `instance_id`, `gpu_model`, `gpu_count`, `cpu`, `ram`, `storage`, `started_at`, `finished_at`, `runtime_seconds`, `cost_usd` (estimated + actual), `dataset`, `dataset_hash`, `model`, `model_revision`, `model_hash`, `seed`, `configuration`, `metrics`, `artifacts` (path, sha256, bytes), `teardown_proof` (method + evidence), `status` (harness vocabulary: OK/REFUSED/OOM/INSTALL_FAILED/LOAD_FAULT/HARNESS_ERROR/ALARM/NOT_RUN), `result` (pass/fail/inconclusive/invalid), `decision` (merge|continue|revise|abandon|rerun + link), `notes`. Additional properties allowed.
+- **Ledger and check script**: `bench/runs/ledger.jsonl` (append-only index, one JSON object per line), `bench/runs/README.md` (append-only policy, errata protocol), `scripts/check_run_ledger.py` (validates every receipt against the schema; checks ledger sync; enforces daily ceilings, global budget, approval thresholds, teardown proof; exit 1 on violations with `file:line` findings, exit 0 with `OK: N receipts, M days`). Unit tests in `tests/test_check_run_ledger.py` (three fixtures: passing receipt, over-ceiling day, missing approval). CI wiring in `.github/workflows/ci.yml` beside the other `check_*.py` calls.
+- **AGENTS.md** (§7): compute governance paragraph with approval thresholds, ceilings, schema link.
+- `llms-full.txt` regenerated (9 sources, 346886 bytes).
+
+**Out of scope** (CTO, separate issue): the launcher that enforces the policy at rent time, the teardown guard, and the receipt emitter.
+
 ## 0.35.3 — 2026-09-06 — the loader honours a pinned checkpoint revision (#404); tp2 / P40 into the register (#415)
 
 One behaviour change (the loader threads `revision` into both hub lookups, pins remote modeling code to the same commit,
