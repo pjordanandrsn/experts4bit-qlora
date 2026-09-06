@@ -521,9 +521,47 @@ def _place_unquantized_experts(model, epfx, layer, weight_map, get, n_exp, model
     return set(), []                      # unrecognized: unchanged, whatever the walk does
 
 
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _record_checkpoint_revision(model_id, revision, config, snap):
+    """Log which checkpoint commit is being loaded and refuse a pinned one that did not resolve.
+
+    transformers records the commit it resolved the config from on ``config._commit_hash`` (parsed
+    from the cache path ``snapshots/<sha>/``, so it is populated offline too); the snapshot folder's
+    basename is the same sha for the shards. Both are checked against each other and against a
+    full-sha ``revision``: the loader must never stream bytes from a commit the caller did not pin.
+    A local directory carries no hub revision -- recorded as such, nothing to verify (#404)."""
+    if os.path.isdir(model_id):
+        note = f" (revision={revision!r} noted, not verifiable for a local directory)" if revision else ""
+        log(f"  checkpoint: local directory {model_id}{note}")
+        return None
+    resolved = getattr(config, "_commit_hash", None)
+    snap_sha = os.path.basename(os.path.normpath(snap))
+    snap_sha = snap_sha if _FULL_SHA.fullmatch(snap_sha) else None
+    if resolved and snap_sha and resolved != snap_sha:
+        raise ValueError(
+            f"{model_id!r}: the config resolved to commit {resolved} but the snapshot folder is "
+            f"{snap_sha} -- two different commits; refusing to stream shards that do not belong to "
+            "the config they would be loaded under."
+        )
+    resolved = resolved or snap_sha
+    if revision and _FULL_SHA.fullmatch(revision) and resolved and resolved != revision:
+        raise ValueError(
+            f"{model_id!r}: revision={revision} was requested but the snapshot resolved to commit "
+            f"{resolved}. Refusing to load bytes the caller did not pin."
+        )
+    if resolved and getattr(config, "_commit_hash", None) is None:
+        config._commit_hash = resolved  # the receipt slot transformers uses; fill it from the snapshot
+    log(f"  checkpoint: {model_id} @ {resolved or 'unknown commit'} "
+        f"(requested {revision if revision else 'main, unpinned'})")
+    return resolved
+
+
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
+    revision=None,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -559,6 +597,15 @@ def load_moe_4bit_streaming(
     a family name). Needs a CUDA device, the ``[train]`` extra (transformers >= 5.0) and
     network access to the checkpoint. See
     ``docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md``.
+
+    ``revision`` pins the checkpoint (a commit sha, branch or tag). It reaches BOTH hub lookups --
+    the config and the snapshot -- so a snapshot staged with ``snapshot_download(model_id,
+    revision=<sha>)`` loads offline as-is (such a snapshot writes no ``refs/main``; the unpinned
+    lookup has nothing to resolve), and online the pinned bytes load rather than whatever ``main``
+    points to today. The commit actually loaded is recorded on ``config._commit_hash`` and in the
+    log; a full-sha ``revision`` whose snapshot resolves to a different commit is refused
+    (``ValueError``) instead of loading other bytes. A local directory has no hub revision: the
+    argument is noted and ignored there. Default ``None`` = ``main``, as before (#404).
     """
     # Validate + canonicalize the scheme FIRST: a bad quant_type must fail here, before any config
     # fetch, snapshot download, or shard read — and the Experts4bit-vs-ExpertsNbit class dispatch
@@ -587,7 +634,7 @@ def load_moe_4bit_streaming(
     # Opt-in only — executing repo code is the caller's decision, never a default.
     if trust_remote_code is None:
         trust_remote_code = os.environ.get("E4B_TRUST_REMOTE_CODE", "0") == "1"
-    config = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    config = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code, revision=revision)
     model_type = getattr(config, "model_type", None)
     if model_type not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(model_type):
         raise NotImplementedError(
@@ -680,8 +727,10 @@ def load_moe_4bit_streaming(
         else snapshot_download(
             model_id,
             allow_patterns=["*.safetensors", "*.json", "tokenizer*", "*.model", "*.txt"],
+            revision=revision,
         )
     )
+    _record_checkpoint_revision(model_id, revision, config, snap)
     index_path = os.path.join(snap, "model.safetensors.index.json")
     if os.path.exists(index_path):
         raw_map = json.load(open(index_path))["weight_map"]

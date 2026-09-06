@@ -1440,3 +1440,91 @@ def test_quantize_layers_leaves_placeable_layouts_to_the_weight_walk(keys):
     consumed, narrowed = _place_unquantized_experts(
         None, epfx, 1, weight_map, None, 8, "olmoe", {}, True)
     assert consumed == set() and narrowed == []
+
+
+# --- #404: the pinned revision reaches every hub lookup, and the loaded commit is a receipt ---------
+
+_PIN = "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"   # a real-shaped full sha (Qwen3-30B-A3B's, as pinned by the lanes)
+_OTHER = "0" * 40
+
+
+def _route_hub_lookups_to(monkeypatch, tmp_path, *, commit_hash):
+    """Point the loader's two hub lookups at the tiny checkpoint in ``tmp_path`` while recording
+    the ``revision`` each was asked for. ``commit_hash`` plays the commit transformers would have
+    parsed from the cache path (``config._commit_hash``); the snapshot folder is ``tmp_path`` itself,
+    which has no sha in its name, so the config side is the only resolution -- exactly the
+    offline-cache case #404 describes. Nothing here touches the network."""
+    import experts4bit_qlora.loader as L
+
+    seen = {}
+    real_from_pretrained = L.AutoConfig.from_pretrained
+
+    def fake_config(model_id, **kw):
+        seen["config"] = dict(kw)
+        cfg = real_from_pretrained(str(tmp_path), trust_remote_code=kw.get("trust_remote_code"))
+        cfg._commit_hash = commit_hash
+        return cfg
+
+    def fake_snapshot(model_id, **kw):
+        seen["snapshot"] = dict(kw)
+        return str(tmp_path)
+
+    monkeypatch.setattr(L.AutoConfig, "from_pretrained", fake_config)
+    monkeypatch.setattr(L, "snapshot_download", fake_snapshot)
+    return seen
+
+
+def test_loader_revision_threads_through_to_every_hub_lookup(tmp_path, monkeypatch):
+    """A pinned ``revision`` must reach BOTH lookups the loader makes -- the config and the snapshot.
+    Before #404 neither call received it: a sha-pinned snapshot (which writes no ``refs/main``)
+    failed offline, and online the loader streamed whatever ``main`` pointed to that day."""
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    seen = _route_hub_lookups_to(monkeypatch, tmp_path, commit_hash=_PIN)
+
+    model, cfg = _load_or_skip("pinned/olmoe-fixture", r=4, alpha=8, revision=_PIN)
+
+    assert seen["config"]["revision"] == _PIN
+    assert seen["snapshot"]["revision"] == _PIN
+    assert cfg._commit_hash == _PIN                       # the receipt: which commit was loaded
+    assert not [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.is_meta]
+
+
+def test_loader_refuses_a_snapshot_that_is_not_the_pinned_commit(tmp_path, monkeypatch):
+    """Pinning a full sha and getting a different commit back is the silent-wrong-bytes case: the
+    loader refuses (``ValueError``, outside the quant guard's catch set, so it cannot masquerade
+    as a missing backend) rather than streaming shards the caller did not pin."""
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    _route_hub_lookups_to(monkeypatch, tmp_path, commit_hash=_OTHER)
+
+    with pytest.raises(ValueError, match=f"revision={_PIN} was requested but the snapshot resolved to commit {_OTHER}"):
+        _load_or_skip("pinned/olmoe-fixture", r=4, alpha=8, revision=_PIN)
+
+
+def test_loader_unpinned_load_still_records_the_resolved_commit(tmp_path, monkeypatch):
+    """No ``revision`` = ``main``, as before -- but the commit ``main`` resolved to is now on the
+    receipt, so an unpinned load can at least be identified after the fact."""
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    seen = _route_hub_lookups_to(monkeypatch, tmp_path, commit_hash=_OTHER)
+
+    _, cfg = _load_or_skip("unpinned/olmoe-fixture", r=4, alpha=8)
+
+    assert seen["config"]["revision"] is None
+    assert seen["snapshot"]["revision"] is None
+    assert cfg._commit_hash == _OTHER
+
+
+def test_loader_local_directory_ignores_revision_and_never_downloads(tmp_path, monkeypatch):
+    """A local checkpoint directory has no hub revision: the argument is noted, nothing is
+    verified, and ``snapshot_download`` is never reached."""
+    import experts4bit_qlora.loader as L
+
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    monkeypatch.setattr(L, "snapshot_download", lambda *a, **k: pytest.fail("snapshot_download called for a local directory"))
+
+    _, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8, revision=_PIN)
+
+    assert getattr(cfg, "_commit_hash", None) is None

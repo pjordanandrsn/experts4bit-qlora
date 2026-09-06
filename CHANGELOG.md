@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### The loader honours a pinned checkpoint revision (#404)
+
+- `load_moe_4bit_streaming(..., revision=<commit sha | branch | tag>)` threads the revision into both hub lookups the
+  loader makes (`AutoConfig.from_pretrained` and `snapshot_download`). A snapshot staged with
+  `snapshot_download(model_id, revision=<sha>)` writes no `refs/main`, so before this the unpinned `main` lookup had
+  nothing to resolve offline (`LocalEntryNotFoundError` at load -- five training arms in a row on 2026-09-05) and
+  online the loader streamed whatever `main` pointed to that day; every lane since P38 wrote `refs/main` by hand to
+  work around it (P38 amendment 2, tp2). The commit actually loaded is recorded on `config._commit_hash`
+  (transformers' own receipt slot, filled from the snapshot folder when transformers left it empty) and in the log
+  line `checkpoint: <id> @ <sha> (requested ...)`; a full-sha `revision` whose snapshot resolves to a different
+  commit -- or a config and a snapshot from two different commits -- is refused with `ValueError` rather than
+  loading other bytes. A local directory has no hub revision: noted, not verified. Default `None` still means
+  `main`; the only change for existing callers is that the resolved commit is now logged. Four loader tests cover
+  the threading, the refusal, the unpinned receipt and the local-directory case; no kernel, gate or threshold
+  changes.
+
 ## 0.35.2 — 2026-09-05 — documentation: head-to-head receipts (same-box vLLM; Unsloth QLoRA end-to-end)
 
 Documentation and tooling only; no runtime change. The `fast` extra's floor (grouped-nf4-gemm >= 0.30.0), the CI

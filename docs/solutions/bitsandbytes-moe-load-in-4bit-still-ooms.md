@@ -42,6 +42,8 @@ report = verify_moe_4bit(model, strict=True)   # raises if any expert stack is s
 print(report["n_quantized"], report["n_unquantized"])
 ```
 
+To load a **pinned** checkpoint pass `revision=<commit sha>`: it reaches both the config and the snapshot lookup, so a snapshot staged at that sha loads offline as-is (no hand-written `refs/main`), the commit loaded is on `config._commit_hash`, and a snapshot that resolves to a different commit is refused rather than loaded.
+
 Needs: CPU-only. The same check on a model you loaded some other way:
 
 ```python
