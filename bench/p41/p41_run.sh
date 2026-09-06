@@ -31,7 +31,8 @@ HELPER_SHAS="bench/flagship-matrix/drivers/n9_datasets.py=7c6653bf6dd94c30711256
 DATASET_SHA_REG=${P41_DATASET_SHA:-76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791}   # the registered clinical set (PREREG "Fixture")
 GPU_CLASS=${P41_GPU_CLASS:-"RTX 5090"}                                       # the registered box class (PREREG "Box class"); anything else is refused
 INSTANCE_ID=${P41_INSTANCE_ID:-UNKNOWN}; PROVIDER=${P41_PROVIDER:-UNKNOWN}; WALLCLOCK_S=${P41_WALLCLOCK_S:-0}   # from the launcher (e4b#464)
-DEADLINE=${P41_DEADLINE_EPOCH:-0}; RATE=${P41_USD_PER_HOUR:-0}; EST=${P41_EST_USD:-0}   # STOP-4/5 inputs: the approval line's, via the launcher
+DEADLINE=${P41_DEADLINE_EPOCH:-0}; RATE=${P41_USD_PER_HOUR:-0}                          # STOP-5 / the rate: the approval line's, via the launcher
+EST=${P41_PLAN_EST_USD:-0}; APPROVAL_EST=${P41_APPROVAL_EST_USD:-0}                     # STOP-4 works from the run's amended PLANNING estimate (PREREG amendment, e4b#467); the approval line is the guard, recorded beside it
 ARM_OVERHEAD=${P41_ARM_OVERHEAD_S:-900}; ALARM_FACTOR=${P41_ALARM_FACTOR:-1.5}; CURVE_EXP=${P41_CURVE_EXP:-1.2}   # the alarm: the planning curve x1.5 + 900 s (P38's alarm rule)
 PLAN_OVERHEAD=${P41_PLAN_OVERHEAD_S:-120}   # the planning curve itself (PREREG "Run split"): N x s512 x (seq/512)^1.2 + load/evals -- what STOP-4 projects with, never the alarm
 ANCHOR_STRICT=${P41_ANCHOR_STRICT:-1}; STOP1_TOL=${P41_STOP1_TOL:-0.10}
@@ -73,10 +74,10 @@ if [ $PLAN = 1 ]; then plan; exit $?; fi
 mkdir -p $W $W/logs $W/adapters; cd $W || exit 9
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 : > summary.txt; : > versions.txt; touch STARTED; echo "$T_START" > STARTED
-echo "RUN $RUN_ID prereg=$PREREG families=$FAMILIES seqs=$SEQS ranks=$RANKS probe=$PROBE_SEQ steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N lr=$LR accum=$ACCUM autocast=$AUTOCAST seed=$SEED dataset=$DATASET deadline_epoch=$DEADLINE rate_usd_h=$RATE est_usd=$EST" | tee -a summary.txt
+echo "RUN $RUN_ID prereg=$PREREG families=$FAMILIES seqs=$SEQS ranks=$RANKS probe=$PROBE_SEQ steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N lr=$LR accum=$ACCUM autocast=$AUTOCAST seed=$SEED dataset=$DATASET deadline_epoch=$DEADLINE guard_t0=$GUARD_T0 rate_usd_h=$RATE plan_est_usd=$EST approval_est_usd=$APPROVAL_EST" | tee -a summary.txt
 plan | tee -a summary.txt
 [ -s $W/tp3_arm.py ] && [ -s $W/p41_admit.py ] || { echo "STAGE MISSING: tp3_arm.py / p41_admit.py" | tee -a summary.txt; touch TP_DONE; exit 9; }
-{ [ "$RATE" != "0" ] && [ "$EST" != "0" ] && [ "$DEADLINE" -gt 0 ]; } || { echo "REFUSED: no rate / estimate / deadline (P41_USD_PER_HOUR=$RATE P41_EST_USD=$EST P41_DEADLINE_EPOCH=$DEADLINE) -- STOP-4/5 would be blind; the launcher passes the approval line's numbers" | tee -a summary.txt; touch TP_DONE; exit 9; }
+{ [ "$RATE" != "0" ] && [ "$EST" != "0" ] && [ "$APPROVAL_EST" != "0" ] && [ "$DEADLINE" -gt 0 ]; } || { echo "REFUSED: no rate / planning estimate / approval line / deadline (P41_USD_PER_HOUR=$RATE P41_PLAN_EST_USD=$EST P41_APPROVAL_EST_USD=$APPROVAL_EST P41_DEADLINE_EPOCH=$DEADLINE) -- STOP-4/5 would be blind" | tee -a summary.txt; touch TP_DONE; exit 9; }
 say "install e4b (image python, PyPI): experts4bit-qlora==$E4B_VER grouped-nf4-gemm==$GNF4_VER transformers==$TF_VER bitsandbytes==$BNB_VER"
 perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --prefer-binary \
   "experts4bit-qlora==$E4B_VER" "grouped-nf4-gemm==$GNF4_VER" "transformers==$TF_VER" "bitsandbytes==$BNB_VER" \
@@ -156,12 +157,12 @@ PYS
 elapsed(){ echo $(( $(date +%s) - T_START )); }
 # the STOP state machine (PREREG "STOP rules"): one file per rule fired + stop_state.json; a stop is reported, never worked around
 stop_now(){ local RULE=$1 FAM=$2 REASON=$3; STOPPED="$RULE: $REASON"; echo "$STOPPED" | tee -a summary.txt; touch ${RULE//-/}
-  python3 - "$W" "$RULE" "$FAM" "$REASON" "$(elapsed)" "$DEADLINE" "$GUARD_T0" "$RATE" "$EST" <<'PYX'
+  python3 - "$W" "$RULE" "$FAM" "$REASON" "$(elapsed)" "$DEADLINE" "$GUARD_T0" "$RATE" "$EST" "$APPROVAL_EST" <<'PYX'
 import json, os, sys, datetime
-W, rule, fam, reason, el, dl, t0, rate, est = sys.argv[1:10]
+W, rule, fam, reason, el, dl, t0, rate, est, approval = sys.argv[1:11]
 p = os.path.join(W, "stop_state.json"); st = json.load(open(p)) if os.path.exists(p) else {"stops": []}
 st["stops"].append({"rule": rule, "family": fam, "reason": reason[:600], "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "elapsed_s": int(el), "guard_s": int(dl) - int(t0), "rate_usd_h": rate, "est_usd": est, "effect": "remaining cells NOT_RUN with the reason; continuing needs a new approval" if rule in ("STOP-4", "STOP-5") else "the family's remaining cells NOT_RUN; the cause is the finding"})
+                    "elapsed_s": int(el), "guard_s": int(dl) - int(t0), "rate_usd_h": rate, "plan_est_usd": est, "approval_est_usd": approval, "effect": "remaining cells NOT_RUN with the reason; continuing needs a new approval" if rule in ("STOP-4", "STOP-5") else "the family's remaining cells NOT_RUN; the cause is the finding"})
 json.dump(st, open(p, "w"), indent=1)
 PYX
 }
@@ -255,7 +256,7 @@ for FAM in $FAMILIES; do
       if [ -n "$STOPPED" ]; then stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
       if [ "$OOM_SEQ" -gt 0 ] && [ "$SEQ" -ge "$OOM_SEQ" ]; then stubw $FAM $TAG $ARM not_run "STOP-2: OOM at seq $OOM_SEQ ended this family's ascent; seq $SEQ >= $OOM_SEQ NOT_RUN (no workload weakening)" $SEQ $R; continue; fi
       if stop5_due; then stop_now STOP-5 $FAM "80 % of the guard reached ($(elapsed) s of $((DEADLINE - T_START)) s); remaining cells NOT_RUN, a new run needs a new approval"; stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
-      if stop4_due "$(remaining_plan_sum $FAM)"; then stop_now STOP-4 $FAM "projected spend > 1.5 x the approved estimate (elapsed $(elapsed) s at \$$RATE/h, estimate \$$EST, remaining cells at the planning curve $(remaining_plan_sum $FAM) s); remaining cells NOT_RUN, continuing needs a new approval"; stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
+      if stop4_due "$(remaining_plan_sum $FAM)"; then stop_now STOP-4 $FAM "projected spend > 1.5 x the run's planning estimate (elapsed $(elapsed) s at \$$RATE/h, planning estimate \$$EST, approval line \$$APPROVAL_EST, remaining cells at the planning curve $(remaining_plan_sum $FAM) s); remaining cells NOT_RUN, continuing needs a new approval"; stubw $FAM $TAG $ARM not_run "$STOPPED" $SEQ $R; continue; fi
       arm $FAM $TAG $ARM $SEQ $R $AL $EXP "$MID" $REV $OFF
       admit $FAM $TAG $ARM $SEQ $R $EXP $NL $A4
       if [ "$ADMIT_STATUS" = "oom" ]; then OOM_SEQ=$SEQ; touch STOP2; echo "STOP-2: OOM at ($SEQ, r$R, $ARM) -- this family's ascent ends at seq $SEQ; cells at seq >= $SEQ NOT_RUN, the OOM is a row" | tee -a summary.txt

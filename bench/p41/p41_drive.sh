@@ -4,20 +4,23 @@
 # harness (bench/tp3/tp3_arm.py) and p41_run.sh, starts the lane detached on the box, polls TP_DONE while the launcher keeps the
 # heartbeat fresh, then rsyncs the arm receipts, stubs, logs, forensics and versions into the run directory. Exit 0 = the lane finished
 # (TP_DONE, no BOX_REFUSED); anything else is HARNESS_ERROR in the receipt. Nothing here creates, destroys or approves compute.
-# The approval line's rate ceiling and estimate come from the launcher too (E4B_RENT_USD_PER_HOUR / E4B_RENT_EST_USD, e4b#465) -- one
-# source for the box's STOP-4; the driver refuses without them. P41_FAMILIES etc. pass through; P41_DRIVE_DRYRUN=1 prints the commands.
+# The approval line's rate ceiling and estimate come from the launcher (E4B_RENT_USD_PER_HOUR / E4B_RENT_EST_USD, e4b#465); the run's
+# amended PLANNING estimate comes from the controller's environment (P41_PLAN_EST_USD, set per run thread from the pre-registration's
+# amended table) and is what STOP-4 works from (P41-PREREG.md amendment, e4b#467) -- the approval line is the governance guard, recorded
+# beside it. Two numbers, two jobs; the driver refuses without either. P41_FAMILIES etc. pass through; P41_DRIVE_DRYRUN=1 prints the commands.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p41_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_USD_PER_HOUR E4B_RENT_EST_USD E4B_RENT_INSTANCE_ID; do
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_WALLCLOCK_S E4B_RENT_USD_PER_HOUR E4B_RENT_EST_USD E4B_RENT_INSTANCE_ID; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run this as rent.py --command after a live pre-flight (e4b#464)"; exit 78; }
 done
+[ -n "${P41_PLAN_EST_USD:-}" ] || { say "refusing: P41_PLAN_EST_USD is not set -- the run's amended planning estimate (P41-PREREG.md Amendments) is what STOP-4 works from; the approval line (E4B_RENT_EST_USD) is the guard, not the estimate"; exit 78; }
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 HARNESS=$REPO/bench/tp3/tp3_arm.py; RUNSH=$HERE/p41_run.sh; ADMIT=$HERE/p41_admit.py
 [ -s "$HARNESS" ] && [ -s "$RUNSH" ] && [ -s "$ADMIT" ] || { say "refusing: harness, lane script or admission rules missing ($HARNESS, $RUNSH, $ADMIT)"; exit 78; }
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
 SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
 POLL=${P41_POLL_S:-60}; W=/root/p41
-PASS="P41_RUN_ID=$RUN_ID P41_DEADLINE_EPOCH=$DEADLINE P41_USD_PER_HOUR=$E4B_RENT_USD_PER_HOUR P41_EST_USD=$E4B_RENT_EST_USD P41_INSTANCE_ID=$E4B_RENT_INSTANCE_ID P41_PROVIDER=${E4B_RENT_PROVIDER:-UNKNOWN} P41_WALLCLOCK_S=${E4B_RENT_WALLCLOCK_S:-0}"
+PASS="P41_RUN_ID=$RUN_ID P41_DEADLINE_EPOCH=$DEADLINE P41_USD_PER_HOUR=$E4B_RENT_USD_PER_HOUR P41_PLAN_EST_USD=$P41_PLAN_EST_USD P41_APPROVAL_EST_USD=$E4B_RENT_EST_USD P41_INSTANCE_ID=$E4B_RENT_INSTANCE_ID P41_PROVIDER=${E4B_RENT_PROVIDER:-UNKNOWN} P41_WALLCLOCK_S=$E4B_RENT_WALLCLOCK_S"
 for v in P41_FAMILIES P41_SEQS P41_RANKS P41_PROBE_SEQ P41_STEPS P41_E4B_VER P41_GNF4_VER P41_ANCHOR_STRICT; do [ -n "${!v:-}" ] && PASS="$PASS $v='${!v}'"; done
 if [ "${P41_DRIVE_DRYRUN:-0}" = "1" ]; then
   echo "DRYRUN stage: scp -P $PORT $HARNESS $RUNSH $ADMIT root@$HOST:$W/"

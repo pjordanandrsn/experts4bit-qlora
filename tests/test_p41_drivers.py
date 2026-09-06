@@ -113,6 +113,7 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
         "E4B_RENT_RUN_DIR": "/tmp/run",
         "E4B_RENT_RUN_ID": "p41-r1-granite",
         "E4B_RENT_DEADLINE_EPOCH": "1788800000",
+        "E4B_RENT_WALLCLOCK_S": "14400.0",
         "E4B_RENT_INSTANCE_ID": "50059999",
         "E4B_RENT_PROVIDER": "vast:verified-secure",
         "P41_DRIVE_DRYRUN": "1",
@@ -121,7 +122,12 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
     assert out.returncode == 78 and "E4B_RENT_USD_PER_HOUR is not set" in out.stdout, (
         "no rate/estimate from the launcher → STOP-4 would be blind → refuse"
     )
-    env.update({"E4B_RENT_USD_PER_HOUR": "0.66", "E4B_RENT_EST_USD": "1.98"})
+    env.update({"E4B_RENT_USD_PER_HOUR": "0.66", "E4B_RENT_EST_USD": "2.64"})
+    out = _bash(str(DRIVE), env=env)
+    assert out.returncode == 78 and "P41_PLAN_EST_USD is not set" in out.stdout, (
+        "the approval line is the guard, not STOP-4's estimate (PREREG amendment, #467) → refuse without the planning estimate"
+    )
+    env.update({"P41_PLAN_EST_USD": "1.87"})
     out = _bash(str(DRIVE), env=env)
     assert out.returncode == 0, out.stdout + out.stderr
     lines = out.stdout.splitlines()
@@ -138,7 +144,9 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
         and "P41_RUN_ID=p41-r1-granite" in ln
         and "P41_DEADLINE_EPOCH=1788800000" in ln
         and "P41_USD_PER_HOUR=0.66" in ln
-        and "P41_EST_USD=1.98" in ln
+        and "P41_PLAN_EST_USD=1.87" in ln
+        and "P41_APPROVAL_EST_USD=2.64" in ln
+        and "P41_WALLCLOCK_S=14400.0" in ln
         and "P41_INSTANCE_ID=50059999" in ln
         and "P41_PROVIDER=vast:verified-secure" in ln
         for ln in lines
@@ -197,19 +205,27 @@ def test_stop4_projects_the_remaining_cells_at_the_planning_curve_not_the_alarm_
         plan_sum
     )  # ≈ 6,500 s of steps + 19 × 120 s (the PR body's arithmetic), not 27,595 s of alarms
     rc = p41_admit.main(
-        ["budget", "--elapsed", "900", "--remaining", str(plan_sum), "--rate", "0.66", "--est", "1.98"]
+        ["budget", "--elapsed", "900", "--remaining", str(plan_sum), "--rate", "0.66", "--est", "1.87"]
     )
     assert rc == 1 and "STOP-4 ok" in capsys.readouterr().out
     rc = p41_admit.main(
-        ["budget", "--elapsed", "900", "--remaining", str(alarm_sum), "--rate", "0.66", "--est", "1.98"]
+        ["budget", "--elapsed", "900", "--remaining", str(alarm_sum), "--rate", "0.66", "--est", "1.87"]
     )
     assert rc == 0, "the alarm sum would have fired STOP-4 before the first arm -- that is why the lane never uses it"
     rc = p41_admit.main(
-        ["budget", "--elapsed", "900", "--remaining", str(plan_sum), "--rate", str(3 * 0.66), "--est", "1.98"]
+        ["budget", "--elapsed", "900", "--remaining", str(plan_sum), "--rate", str(3 * 0.66), "--est", "1.87"]
     )
     assert rc == 0 and "STOP-4 DUE" in capsys.readouterr().out
     run = RUN.read_text()
     assert "remaining_plan_sum" in run and "remaining_alarm_sum" not in run
+    # the amended R1 planning estimate ($1.87 at $0.66/h; PREREG amendment, #467) is STOP-4's estimate: it trips above 1.5 × 1.87 = $2.81,
+    # not above the approval line's 1.5 × 2.64 = $3.96 — a projection between the two is DUE on the estimate and would not have been on the line
+    rem = str(int(3.00 / 0.66 * 3600))
+    rc_plan = p41_admit.main(["budget", "--elapsed", "0", "--remaining", rem, "--rate", "0.66", "--est", "1.87"])
+    rc_line = p41_admit.main(["budget", "--elapsed", "0", "--remaining", rem, "--rate", "0.66", "--est", "2.64"])
+    assert (rc_plan, rc_line) == (0, 1) and "$2.81" in capsys.readouterr().out
+    assert "EST=${P41_PLAN_EST_USD:-0}" in run and "APPROVAL_EST=${P41_APPROVAL_EST_USD:-0}" in run
+    assert "plan_est_usd" in run and "approval_est_usd" in run, "both numbers in the RUN line and stop_state.json"
     assert "GUARD_T0" in run and "now - GUARD_T0" in run, "STOP-5 counts from the guard's start (CEO LOW-1)"
 
 
