@@ -594,8 +594,10 @@ def load_moe_4bit_streaming(
     expert stack whose forward the adapter cannot re-implement
     (``EpilogueContractError``, decided on the module's STRUCTURE by
     :func:`experts4bit_qlora.assert_stock_epilogue` -- gpt-oss's biases and clamp, never
-    a family name). Needs a CUDA device, the ``[train]`` extra (transformers >= 5.0) and
-    network access to the checkpoint. See
+    a family name). Needs a CUDA device and the ``[train]`` extra (transformers >= 5.0);
+    the checkpoint comes from the network on first fetch, from the hub cache after that --
+    offline included, when the load is pinned to the staged sha (next paragraph) -- or from
+    a local directory, which needs no hub at all. See
     ``docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md``.
 
     ``revision`` pins the checkpoint (a commit sha, branch or tag). It reaches BOTH hub lookups --
