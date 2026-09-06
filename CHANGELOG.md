@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### The loader honours a pinned checkpoint revision (#404)
+
+- `load_moe_4bit_streaming(..., revision=<commit sha | branch | tag>)` threads the revision into both hub lookups the
+  loader makes (`AutoConfig.from_pretrained` and `snapshot_download`), and pins a trust-remote-code checkpoint's modeling
+  module to the same commit (transformers' `code_revision`); remote code hosted in a different upstream repository cannot
+  be pinned by the weights' sha and is logged as unpinned. A snapshot staged with
+  `snapshot_download(model_id, revision=<sha>)` writes no `refs/main`, so before this the unpinned `main` lookup had
+  nothing to resolve offline (`LocalEntryNotFoundError` at load -- five training arms in a row on 2026-09-05) and
+  online the loader streamed whatever `main` pointed to that day; every lane since P38 wrote `refs/main` by hand to
+  work around it (P38 amendment 2, tp2). The commit actually loaded is recorded on `config._commit_hash`
+  (transformers' own receipt slot, filled from the snapshot folder when transformers left it empty) and in the log
+  line `checkpoint: <id> @ <sha> (requested ...)`; a full-sha `revision` whose snapshot resolves to a different
+  commit -- or a config and a snapshot from two different commits -- is refused with `ValueError` rather than
+  loading other bytes. A local directory has no hub revision: noted, not verified. Default `None` still means
+  `main`; for existing callers the resolved commit is now logged, and `config._commit_hash` may now be populated
+  where transformers left it empty (filled from the snapshot folder's basename). Nine loader tests cover the
+  threading, both refusal arms (a pinned sha that resolved elsewhere; a config and a snapshot from two different
+  commits), the unpinned receipt, the basename fallback, the local-directory case, the remote-code pinning
+  (same-repo and upstream-repo `auto_map`), and a real offline hub-cache regression -- `HF_HUB_OFFLINE` forced over
+  a staged `snapshots/<sha>/` cache with no `refs/`, both hub lookups untouched, the unpinned load shown to die
+  there and the pinned one to resolve; no kernel, gate or threshold changes.
+
 ## 0.35.2 — 2026-09-05 — documentation: head-to-head receipts (same-box vLLM; Unsloth QLoRA end-to-end)
 
 Documentation and tooling only; no runtime change. The `fast` extra's floor (grouped-nf4-gemm >= 0.30.0), the CI
