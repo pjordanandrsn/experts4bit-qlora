@@ -164,7 +164,7 @@ Six agents touch this repository, coordinated through GitHub (the record) and
 Slack channel `#ml-packages` (live handoffs). The live board — role chart,
 blocking issues, handover protocol — is the Slack canvas "ML packages — live
 board" in #ml-packages; `@Name` mentions in threads are answered with
-`ACK <repo>#<issue>`, `DONE <repo>#<issue> -> <link>`, or `BLOCKED <repo>#<issue> - <reason>`.
+`ACK <repo>#<issue>`, `DONE <repo>#<issue> -> <link>`, or `BLOCKED <repo>#<issue> - <reason>`. Seats without Slack (desktop agents) post `ACK <repo>#<issue>` / `DONE … -> <PR url>` / `BLOCKED … - <why>` as comments on the GitHub issue; review requests and fix lists for their PRs are posted on the issue as well as the PR; the CEO mirrors to #ml-packages.
 
 **Jordan — Chair / Owner**: the maintainer (final decisions, account access,
 rulings).
@@ -246,7 +246,7 @@ Every handoff posted in Slack is also written on the issue.
   (Bugbot by default for code; Claude Code when Bugbot is unavailable or for
   docs / register changes) — and Claude Code holds the merge gate: checks green
   + that review + zero unresolved threads, with section 8's companions in the
-  same diff. Nobody merges their own PR. Receipts
+  same diff. Nobody merges their own PR. The gate holder reads the PR's base branch before merging and confirms the squash commit is on `main` afterwards; a stacked PR is retargeted with `gh pr edit --base main` (or its base branch deleted) before merge. Receipts
   and code ship in separate pull requests; a pull request too large for Bugbot
   to review is a finding, not a pass.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
@@ -262,4 +262,5 @@ Every handoff posted in Slack is also written on the issue.
   `pjordanandrsn/*` (Unsloth, transformers, huggingface_hub, bitsandbytes, vLLM,
   ...). Findings about other projects stay as notes in this repository's receipts
   and issues until the maintainer decides.
+- Never invent an identifier, URL, hash, timestamp, title or number. If you do not have it, write UNKNOWN and say what would produce it. A placeholder is a fabrication.
 
