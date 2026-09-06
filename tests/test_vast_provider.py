@@ -215,6 +215,49 @@ def test_preflight_fails_on_stuck_loading_bad_disk_bad_ssh_and_slow_link():
         provider(tr, bandwidth_probe=lambda h, p: 12.0).preflight("7000123")
 
 
+def test_the_ssh_probe_waits_for_sshd_and_records_the_attempts():
+    """From R1 attempt 2's receipt (e4b#433, 2026-09-06): Vast reports `running` before the container's sshd accepts connections, so a
+    refused connect (rc 255, answered at once — ConnectTimeout never applies) killed the pre-flight after 35 s. The probe
+    now retries inside a bounded ready window."""
+    refusals = ["ssh: connect to host ssh7.vast.ai port 18800: Connection refused"] * 3
+    calls = []
+
+    def flaky(host, port, cmd, timeout):
+        calls.append((host, port))
+        return (255, refusals.pop(0)) if refusals else (0, "")
+
+    slept: list[float] = []
+    tr = FakeTransport(routes())
+    facts = provider(tr, ssh_runner=flaky, sleep=slept.append).preflight("7000123", timeout_s=60, ssh_ready_s=180)
+    assert facts["vast_preflight"] == "ok" and facts["vast_ssh_attempts"] == "4"
+    assert len(calls) == 4 and all(c == ("ssh5.vast.ai", 12345) for c in calls)
+    assert slept and max(slept) <= 5.0, "the wait between probes is short; the window is what bounds it"
+
+
+def test_the_ssh_probe_gives_up_when_the_ready_window_is_spent():
+    """The window bounds the wait: a box that never opens sshd fails the pre-flight with the attempt count, and the
+    launcher tears it down as before — waiting is bounded, not indefinite."""
+    clock = iter([0, 0, 30, 60, 90, 120, 150, 180, 210, 240])
+    tr = FakeTransport(routes())
+    with pytest.raises(PreflightFailed, match=r"did not authenticate within 180 s \(\d+ attempts"):
+        provider(tr, ssh_runner=lambda h, p, c, t: (255, "Connection refused"),
+                 clock=lambda: next(clock), sleep=lambda s: None).preflight("7000123", timeout_s=60, ssh_ready_s=180)
+
+
+def test_an_authentication_refusal_fails_at_once_and_does_not_burn_the_window():
+    """A key the box will never accept is not a box that is still booting: one attempt, immediate failure."""
+    calls = []
+
+    def denied(host, port, cmd, timeout):
+        calls.append(1)
+        return 255, "root@ssh5.vast.ai: Permission denied (publickey)."
+
+    tr = FakeTransport(routes())
+    with pytest.raises(PreflightFailed, match="1 attempt;"):
+        provider(tr, ssh_runner=denied, sleep=lambda s: None).preflight("7000123", timeout_s=60, ssh_ready_s=180)
+    assert len(calls) == 1, "an auth refusal is reported at once, never retried for three minutes"
+
+
 def test_nothing_in_this_module_creates_an_instance_on_import(monkeypatch):
     monkeypatch.delenv("E4B_RENT_LIVE", raising=False)
     tr = FakeTransport(routes())
