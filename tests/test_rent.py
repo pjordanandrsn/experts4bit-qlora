@@ -902,6 +902,38 @@ def test_command_environment_has_the_ssh_endpoint_when_the_preflight_reports_one
     assert json.loads(out.read_text()) == {"E4B_RENT_SSH": "ssh5.vast.ai:12345", "E4B_RENT_SSH_HOST": "ssh5.vast.ai", "E4B_RENT_SSH_PORT": "12345"}
 
 
+def test_command_environment_drops_an_inherited_endpoint_and_dates_the_deadline_from_launch(tmp_path: Path, monkeypatch):
+    """Warden's two LOWs on #465: (1) an E4B_RENT_* key inherited from the caller's shell never reaches the command when this
+    run has no such fact; (2) E4B_RENT_DEADLINE_EPOCH is seeded from the launch (t0), so a slow pre-flight does not push the
+    command's deadline past the guard's."""
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    for k, v in {"E4B_RENT_SSH": "stale.example:1", "E4B_RENT_SSH_HOST": "stale.example", "E4B_RENT_SSH_PORT": "1",
+                 "E4B_RENT_RUN_ID": "someone-elses-run"}.items():
+        monkeypatch.setenv(k, v)
+    env = rent_mod.command_environment(run_id="rent-env-3", instance_id="i-1", run_dir=tmp_path, provider="fake",
+                                       wallclock_s=60.0, deadline_epoch=1, ssh=None)
+    assert env["E4B_RENT_RUN_ID"] == "rent-env-3"
+    assert not any(k.startswith("E4B_RENT_SSH") for k in env), "a stale endpoint from the parent shell leaked through"
+    env = rent_mod.command_environment(run_id="rent-env-3", instance_id="i-1", run_dir=tmp_path, provider="fake",
+                                       wallclock_s=60.0, deadline_epoch=1, ssh="ssh5.vast.ai:2")
+    assert (env["E4B_RENT_SSH"], env["E4B_RENT_SSH_HOST"], env["E4B_RENT_SSH_PORT"]) == ("ssh5.vast.ai:2", "ssh5.vast.ai", "2")
+
+    class SlowPreflight(FakeProvider):
+        def preflight(self, instance_id, *, timeout_s=600.0):
+            time.sleep(1.5)
+            return {"vast_preflight": "ok"}
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: SlowPreflight(kw["fake_state"]))
+    out = tmp_path / "seen-env.json"
+    code = "import os, json, sys; json.dump(dict(E4B_RENT_DEADLINE_EPOCH=os.environ['E4B_RENT_DEADLINE_EPOCH']), open(sys.argv[1], 'w'))"
+    before = time.time()
+    assert main(_cli(tmp_path, "rent-env-3", "--command", f"{sys.executable} -c \"{code}\" {out}")) == 0
+    deadline = int(json.loads(out.read_text())["E4B_RENT_DEADLINE_EPOCH"])
+    assert deadline <= int(before) + 3600 + 1, "the pre-flight's 1.5 s was added to the command's deadline"
+    assert deadline >= int(before) + 3600 - 1
+
+
 def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path):
     from experts4bit_qlora.tools.rent import read_pubkey
     good = tmp_path / "id_ed25519.pub"

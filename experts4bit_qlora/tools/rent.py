@@ -329,6 +329,11 @@ def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = 
     raise RentRefused(f"unknown provider {kind!r}")
 
 
+COMMAND_ENV_KEYS = ("E4B_RENT_RUN_ID", "E4B_RENT_INSTANCE_ID", "E4B_RENT_RUN_DIR", "E4B_RENT_PROVIDER",
+                    "E4B_RENT_WALLCLOCK_S", "E4B_RENT_DEADLINE_EPOCH", "E4B_RENT_SSH", "E4B_RENT_SSH_HOST",
+                    "E4B_RENT_SSH_PORT")
+
+
 def command_environment(*, run_id: str, instance_id: str, run_dir: Path, provider: str, wallclock_s: float,
                         deadline_epoch: int, ssh: str | None) -> dict[str, str]:
     """The environment `--command` runs with (e4b#464): the controller's own plus E4B_RENT_* — run id, instance id, the
@@ -336,6 +341,8 @@ def command_environment(*, run_id: str, instance_id: str, run_dir: Path, provide
     the guard's deadline as an epoch (a box-side STOP rule reads it), and the ssh endpoint when the pre-flight reported
     one (`host:port`, also split). Absent facts are absent, never a placeholder."""
     env = dict(os.environ)
+    for k in COMMAND_ENV_KEYS:  # Warden LOW-1 on #465: an inherited E4B_RENT_* (a caller's shell, a nested launcher) never
+        env.pop(k, None)        # reaches the command — every key the command sees is this run's, or absent
     env.update({
         "E4B_RENT_RUN_ID": run_id,
         "E4B_RENT_INSTANCE_ID": str(instance_id),
@@ -959,7 +966,7 @@ def main(argv: list[str] | None = None) -> int:
         # #464: the command is handed the box — the ids, the receipt directory, the deadline and (when the pre-flight
         # reported it) the ssh endpoint — as ITS environment; nothing is exported into the launcher's own process.
         cmd_env = command_environment(run_id=run_id, instance_id=iid, run_dir=rec_dir, provider=prov.kind,
-                                      wallclock_s=wallclock_s, deadline_epoch=int(time.time() + wallclock_s),
+                                      wallclock_s=wallclock_s, deadline_epoch=int(t0 + wallclock_s),  # Warden LOW-2: from launch, not command start
                                       ssh=environment.get("vast_ssh"))
         with HeartbeatRefresher(hb, refresh):  # HIGH-1: the heartbeat stays fresh for the whole command
             try:
