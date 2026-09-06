@@ -22,6 +22,7 @@ entry; CI can enforce that later.
   "retired_reason": "why, in one sentence, with the measurement that retired it",
   "licensed_by": "<id>",                             // the K8 verdict row behind a licence label; see below
   "quoted_in": ["README.md#L45", "docs/METHODOLOGY.md#13"],
+  "pack_fingerprint": "sha256:<64 lowercase hex>",  // optional; identity of a calibrated pack artifact -- see below
   "validity": "VALID" | "VOID",                      // lane arms only; see "Lane fields"
   "row_status": "OK" | "HARNESS_ERROR" | "REFUSED" | "EXPERIMENTAL",
   "parity_verdict": "REF" | "PASS" | "VOID" | "no pair" | null,
@@ -93,6 +94,23 @@ FAIL row says "not licensed" / "unlicensed" of itself. `licensed_by` says
 the row's OWN configuration is licensed by that verdict; it never goes on a
 row whose configuration is not (the p37 head-to-head quotes no licensed
 ratio and carries none).
+
+**Pack identity (`pack_fingerprint`).** A calibrated serving licence is a
+property of pack bytes, not of the calibration recipe (#405). When present,
+`pack_fingerprint` is `sha256:<64 lowercase hex>` -- the root hash of a
+canonical pack-manifest (`experts4bit_qlora.engines.pack_manifest`): ordered
+`(path, size, sha256)` of the packed tensors and scales **and of the identity
+payload `payloads/identity.json`** (schema version, layout, model id, model
+revision, per-layer shapes), so the hash names which checkpoint the bytes
+belong to; a manifest whose top-level identity fields disagree with the hashed
+payload is refused. The register check
+regex-checks the format. An ACTIVE row with `licensed_by` is artifact-backed
+once either that row or its verdict carries the field: then both must carry
+it and they must be equal. Unlicensed / VOID observations may record the
+observed fingerprint without `licensed_by`. Existing licence rows omit the
+field until a real artifact is published and K8'd -- never invent a hash.
+Counts (GPTQ vs RTN) stay diagnostics. A licensed load given an expected
+fingerprint refuses a mismatch and never rebuilds from the recipe.
 
 **Citing another row's licence.** The form ``licensed by `<id>` `` is a
 citation, not an assertion: "no ratio against the stack licensed by

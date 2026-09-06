@@ -70,7 +70,7 @@ full schema. Required fields include:
 - **Outcome**: `result` (status enum + summary ≤ 2000 chars)
 - **Artifacts**: `artifacts` array with path, sha256, bytes
 - **Teardown**: `teardown_proof` (method + evidence)
-- **Decision**: `decision` (adopt/refute/void/pending + link)
+- **Decision**: `decision` (`merge|continue|revise|abandon|rerun <url>`; `pending <work-id or url>` before review)
 
 Additional properties are allowed for run-specific metadata.
 

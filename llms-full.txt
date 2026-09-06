@@ -2415,6 +2415,13 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   measured; what is open is the recipe's host-dependence — same checkpoint,
   same text, same knobs, a different pack and a different verdict on
   another host ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
+  The loader now pins licensed bytes: `enable_serve_experts_int4_calibrated`
+  given an `expected_fingerprint` loads a pack-manifest artifact and
+  **refuses** a mismatch — it never rebuilds from the recipe on that path.
+  No licensed artifact hash is in the register yet (the bo6c bytes were not
+  retained); existing licence rows carry no `pack_fingerprint` until a
+  replacement pack is pre-registered, K8'd, and published. Counts stay
+  diagnostics. `min_rows`, damping, and the K8 budget are unchanged.
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the
@@ -2942,7 +2949,7 @@ Six agents touch this repository, coordinated through GitHub (the record) and
 Slack channel `#ml-packages` (live handoffs). The live board — role chart,
 blocking issues, handover protocol — is the Slack canvas "ML packages — live
 board" in #ml-packages; `@Name` mentions in threads are answered with
-`ACK <repo>#<issue>`, `DONE <repo>#<issue> -> <link>`, or `BLOCKED <repo>#<issue> - <reason>`.
+`ACK <repo>#<issue>`, `DONE <repo>#<issue> -> <link>`, or `BLOCKED <repo>#<issue> - <reason>`. Seats without Slack (desktop agents) post `ACK <repo>#<issue>` / `DONE … -> <PR url>` / `BLOCKED … - <why>` as comments on the GitHub issue; review requests and fix lists for their PRs are posted on the issue as well as the PR; the CEO mirrors to #ml-packages.
 
 **Jordan — Chair / Owner**: the maintainer (final decisions, account access,
 rulings).
@@ -3024,7 +3031,7 @@ Every handoff posted in Slack is also written on the issue.
   (Bugbot by default for code; Claude Code when Bugbot is unavailable or for
   docs / register changes) — and Claude Code holds the merge gate: checks green
   + that review + zero unresolved threads, with section 8's companions in the
-  same diff. Nobody merges their own PR. Receipts
+  same diff. Nobody merges their own PR. The gate holder reads the PR's base branch before merging and confirms the squash commit is on `main` afterwards; a stacked PR is retargeted with `gh pr edit --base main` (or its base branch deleted) before merge. Receipts
   and code ship in separate pull requests; a pull request too large for Bugbot
   to review is a finding, not a pass.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
@@ -3040,6 +3047,7 @@ Every handoff posted in Slack is also written on the issue.
   `pjordanandrsn/*` (Unsloth, transformers, huggingface_hub, bitsandbytes, vLLM,
   ...). Findings about other projects stay as notes in this repository's receipts
   and issues until the maintainer decides.
+- Never invent an identifier, URL, hash, timestamp, title or number. If you do not have it, write UNKNOWN and say what would produce it. A placeholder is a fabrication.
 
 ## Source: docs/claims.json (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json)
 
