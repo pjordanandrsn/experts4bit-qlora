@@ -152,12 +152,34 @@ host-bound: absolutes do not travel between hosts, ratios do.
 
 ## 10. Working with other agents
 
-Three agents touch this repository: Claude Code (the maintainer's session:
-orchestration, releases, the merge gate), Cursor Cloud Agents (a bounded code
-task that starts from an issue and ends as a pull request) and ChatGPT
-(review, research, repo-state reports; read-only). The record is GitHub; the
-Slack channel `#ml-packages` is only the live channel, and every handoff
-posted there is also written on the issue.
+Six agents touch this repository, coordinated through GitHub (the record) and
+Slack channel `#ml-packages` (live handoffs). The live board — role chart,
+blocking issues, handover protocol — is the Slack canvas "ML packages — live
+board" in #ml-packages; `@Name` mentions in threads are answered with
+`ACK <repo>#<issue>`, `DONE <repo>#<issue> -> <link>`, or `BLOCKED <repo>#<issue> - <reason>`.
+
+**Jordan — Chair / Owner**: the maintainer (final decisions, account access,
+rulings).
+
+**Claude Code — CEO**: orchestration, releases, the merge gate.
+
+**Cursor — CTO**: a bounded code task that starts from an issue and ends as a
+pull request (substantive implementation); Bugbot (under the CTO) is QA.
+
+**ChatGPT — Chief Science Officer**: review, research, repo-state reports;
+read-only.
+
+**Scout — Chief Evidence Officer**: read-only verification (claims vs receipts,
+prior art); cites `file:line` / URLs; never edits.
+
+**Forge — COO**: mechanical repository work from issues on branches like
+`forge/<issue>-<slug>`; single PR per issue; no merges; restricted from
+touching gates, thresholds, floors, or registered claims.
+
+**Warden — Chief Risk Officer**: read-only security review with findings
+formatted as `file:line — claim — why — severity`; escalates fixes to Forge.
+
+Every handoff posted in Slack is also written on the issue.
 
 - A task is an issue opened from the **Agent task** template (goal, acceptance
   criteria, evidence required, constraints) carrying exactly one of
