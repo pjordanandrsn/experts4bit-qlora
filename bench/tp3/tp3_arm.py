@@ -18,8 +18,10 @@ evals, C1, stub codes, selftest scaffolding. The original tp2 docstring follows 
       ships one, else "<experts4bit_qlora version>+det:<sha256 of the detector source>[:12]" -- deterministic, no
       library change). Families: granite 128, olmoe 64, qwen3 192, mixtral 128 (exactly 4 x n_layers -- verdicts
       unchanged); Gemma-4 115 (25 x 4 + 5 x 3, the k_eq_v layers -- compares correctly for the first time); gpt-oss
-      still REFUSED on the bias rule, which fires after admission (#435 CHANGELOG). PREREG below stays P40's path --
-      the behaviour this copy implements -- until a tp3 lane registers its own.
+      still REFUSED on the bias rule, which fires after admission (#435 CHANGELOG). The pre-registration written into
+      every receipt is the `--prereg` argument: its default stays P40's path (the behaviour this copy implements, and
+      what a selftest receipt cites) -- a P41 run MUST pass `--prereg p41/P41-PREREG.md`, so no P41 receipt ever names
+      P40's document by accident (#434 follow-up, CEO/Warden review on PR #442).
 
 ----- the original tp2_arm.py docstring, unmodified -----
 
@@ -88,7 +90,7 @@ import types
 import torch
 import torch.nn as nn
 
-PREREG = "tp2/P40-PREREG.md"
+PREREG = "tp2/P40-PREREG.md"   # the --prereg default; a P41 run MUST pass --prereg p41/P41-PREREG.md
 HARNESS = "tp3_arm.py (copy of tp2_arm.py @ 769edb1d + T10: structural attn4 census, e4b#434)"
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
@@ -366,7 +368,7 @@ def trainable_sha(tr):
 def stub(a, status, reason, extra=None, code=None, fw=None, tag=None, arm=None):
     rec = {"framework": fw or a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "arm": arm or a.arm,
            "tag": tag or a.tag, "status": status, "reason": str(reason)[:800], "steps": a.steps, "seq": a.seq,
-           "accum": a.accum, "offload": bool(a.offload), "prereg": PREREG, "harness": HARNESS}
+           "accum": a.accum, "offload": bool(a.offload), "prereg": getattr(a, "prereg", None) or PREREG, "harness": HARNESS}
     if extra:
         rec.update(extra)
     write_json(receipt_path(a, fw, tag), rec)
@@ -544,7 +546,7 @@ def attn4_census_check(a, model, x, detect_fn, quantize_fn):
     except SystemExit as e:
         refusing = [n for n, m in model.named_modules()
                     if type(getattr(m, "q_proj", None)) is nn.Linear and type(getattr(m, "o_proj", None)) is nn.Linear
-                    and not type(getattr(m, "k_proj", None)) is nn.Linear]
+                    and type(getattr(m, "k_proj", None)) is not nn.Linear]
         stub(a, "refused", f"detect_attention_projections refused: {e}",
              {"phase": "attn4", "attn4_probe": x.get("attn4_probe"), "attn4_refusing_modules": refusing[:8],
               "n_layers": x["n_layers"], "model_type": x["model_type"]}, code=3)
@@ -880,7 +882,7 @@ def run_arm(a, load_fn, sampler=True):
         "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": x["ckpt_mode"], "attn_4bit": bool(a.attn_4bit), "n_attn4": n_attn4, "attn4_probe": x.get("attn4_probe"),
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),
         "tokens": {"path": os.path.basename(a.tokens), "sha256": tk["sha256"], "n_train": len(train), "eval_rows_used": len(ev), "tokenizer_agree": tokenizer_agree},
-        "prereg": PREREG, "harness": HARNESS, "env": env, "load_s": round(load_s, 1),
+        "prereg": getattr(a, "prereg", None) or PREREG, "harness": HARNESS, "env": env, "load_s": round(load_s, 1),
         "verify": x.get("verify"), "census": census, "engagement_banners": banner_lines, "unsloth_bnb4bit_modules": bnb4,
         "trainable_params": n_trainable, "trainable_tensors": len(tr), "trainable_by_group": groups,
         "expect_trainable": a.expect_trainable, "trainable_mismatch": trainable_mismatch,
@@ -1157,7 +1159,7 @@ def selftest(a):
     DEV = "cpu"
     _install_fake_modules()
     import tempfile
-    d = tempfile.mkdtemp(prefix="tp2_selftest_")
+    d = tempfile.mkdtemp(prefix="tp3_selftest_")
     os.makedirs(os.path.join(d, "data"))
     rows = [{"instruction": f"Q{i}: describe patient {i}", "output": f"Patient {i} is stable; plan {i % 5} continues. " * 2} for i in range(40)]
     ds = {"train": rows[:32], "eval": rows[32:]}
@@ -1245,6 +1247,12 @@ def selftest(a):
     a.framework, a.arm, a.tag, a.expect_trainable = "unsloth", "unsloth", "ckpt_unsloth_mismatch", e_ref["trainable_params"] + 1
     r = run_arm(a, _selftest_load_unsloth, sampler=False)
     assert r["status"] == "ok" and r["trainable_mismatch"]["expected"] == e_ref["trainable_params"] + 1 and r["trainable_mismatch"]["got"] == e_ref["trainable_params"]
+    # --prereg wiring (#434 follow-up): a P41 run's receipts name its own pre-registration, never P40's by accident
+    assert e_ref["prereg"] == PREREG and r["prereg"] == PREREG   # the default cites tp2's document (byte-for-byte behaviour)
+    a.framework, a.arm, a.tag, a.prereg, a.expect_trainable = "unsloth", "unsloth", "ckpt_unsloth_prereg", "p41/P41-PREREG.md", None
+    r = run_arm(a, _selftest_load_unsloth, sampler=False)
+    assert r["prereg"] == "p41/P41-PREREG.md", r["prereg"]
+    a.prereg = PREREG
     det = _selftest_detector(d, a)   # T10: the three dry-run tests against the REAL structural detector (#434)
     print(f"SELFTEST OK dir={d} receipts={sorted(R)} e4b ref/fused loss_last {e_ref['loss_last']}/{e_fu['loss_last']} unsloth {u1['loss_last']} "
           f"accum={a.accum} autocast={a.autocast} kcalls fused={e_fu['kernel_calls_per_step_min']} unsloth={u1['kernel_calls_per_step_min']} "
@@ -1282,6 +1290,7 @@ def main():
     ap.add_argument("--grad-ckpt", choices=["unsloth", "hf"], default="unsloth", help="Unsloth: use_gradient_checkpointing mode (U1)")
     ap.add_argument("--unsloth-loader", choices=["FastLanguageModel", "FastModel"], default="FastLanguageModel", help="T4: P38's loader; FastModel is an amendment")
     ap.add_argument("--expect-trainable", type=int, default=None, help="T6: the family's e4b trainable count; a mismatch is recorded")
+    ap.add_argument("--prereg", default=PREREG, help="the governing pre-registration path written into every receipt and stub; a P41 run MUST pass p41/P41-PREREG.md (default keeps tp2's byte-for-byte behaviour)")
     ap.add_argument("--no-sampler", type=int, default=0)
     ap.add_argument("--out", default="/root/tp2")
     ap.add_argument("--adapter-dir", default="/root/tp2/adapters")
