@@ -19,9 +19,10 @@ evals, C1, stub codes, selftest scaffolding. The original tp2 docstring follows 
       library change). Families: granite 128, olmoe 64, qwen3 192, mixtral 128 (exactly 4 x n_layers -- verdicts
       unchanged); Gemma-4 115 (25 x 4 + 5 x 3, the k_eq_v layers -- compares correctly for the first time); gpt-oss
       still REFUSED on the bias rule, which fires after admission (#435 CHANGELOG). The pre-registration written into
-      every receipt is the `--prereg` argument: its default stays P40's path (the behaviour this copy implements, and
-      what a selftest receipt cites) -- a P41 run MUST pass `--prereg p41/P41-PREREG.md`, so no P41 receipt ever names
-      P40's document by accident (#434 follow-up, CEO/Warden review on PR #442).
+      every receipt is the `--prereg` argument -- REQUIRED for a real run (main() refuses without it, before any cell
+      or stub), so no receipt can ever cite a pre-registration the run did not pass (P41: `--prereg p41/P41-PREREG.md`);
+      the selftest sets PREREG explicitly, keeping the byte-for-byte tp2 behaviour it verifies (#434 follow-up, CEO
+      review on PR #447).
 
 ----- the original tp2_arm.py docstring, unmodified -----
 
@@ -90,7 +91,7 @@ import types
 import torch
 import torch.nn as nn
 
-PREREG = "tp2/P40-PREREG.md"   # the --prereg default; a P41 run MUST pass --prereg p41/P41-PREREG.md
+PREREG = "tp2/P40-PREREG.md"   # selftest-only: real runs must pass --prereg (main() refuses otherwise; no default)
 HARNESS = "tp3_arm.py (copy of tp2_arm.py @ 769edb1d + T10: structural attn4 census, e4b#434)"
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
@@ -368,7 +369,7 @@ def trainable_sha(tr):
 def stub(a, status, reason, extra=None, code=None, fw=None, tag=None, arm=None):
     rec = {"framework": fw or a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "arm": arm or a.arm,
            "tag": tag or a.tag, "status": status, "reason": str(reason)[:800], "steps": a.steps, "seq": a.seq,
-           "accum": a.accum, "offload": bool(a.offload), "prereg": getattr(a, "prereg", None) or PREREG, "harness": HARNESS}
+           "accum": a.accum, "offload": bool(a.offload), "prereg": a.prereg, "harness": HARNESS}
     if extra:
         rec.update(extra)
     write_json(receipt_path(a, fw, tag), rec)
@@ -882,7 +883,7 @@ def run_arm(a, load_fn, sampler=True):
         "optimizer": "torch.optim.AdamW(lr) torch defaults", "grad_ckpt": x["ckpt_mode"], "attn_4bit": bool(a.attn_4bit), "n_attn4": n_attn4, "attn4_probe": x.get("attn4_probe"),
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),
         "tokens": {"path": os.path.basename(a.tokens), "sha256": tk["sha256"], "n_train": len(train), "eval_rows_used": len(ev), "tokenizer_agree": tokenizer_agree},
-        "prereg": getattr(a, "prereg", None) or PREREG, "harness": HARNESS, "env": env, "load_s": round(load_s, 1),
+        "prereg": a.prereg, "harness": HARNESS, "env": env, "load_s": round(load_s, 1),
         "verify": x.get("verify"), "census": census, "engagement_banners": banner_lines, "unsloth_bnb4bit_modules": bnb4,
         "trainable_params": n_trainable, "trainable_tensors": len(tr), "trainable_by_group": groups,
         "expect_trainable": a.expect_trainable, "trainable_mismatch": trainable_mismatch,
@@ -1157,6 +1158,7 @@ def _selftest_detector(d, a):
 def selftest(a):
     global DEV
     DEV = "cpu"
+    a.prereg = PREREG   # explicit: selftest receipts cite tp2's document; a real run must pass --prereg (no default)
     _install_fake_modules()
     import tempfile
     d = tempfile.mkdtemp(prefix="tp3_selftest_")
@@ -1290,7 +1292,7 @@ def main():
     ap.add_argument("--grad-ckpt", choices=["unsloth", "hf"], default="unsloth", help="Unsloth: use_gradient_checkpointing mode (U1)")
     ap.add_argument("--unsloth-loader", choices=["FastLanguageModel", "FastModel"], default="FastLanguageModel", help="T4: P38's loader; FastModel is an amendment")
     ap.add_argument("--expect-trainable", type=int, default=None, help="T6: the family's e4b trainable count; a mismatch is recorded")
-    ap.add_argument("--prereg", default=PREREG, help="the governing pre-registration path written into every receipt and stub; a P41 run MUST pass p41/P41-PREREG.md (default keeps tp2's byte-for-byte behaviour)")
+    ap.add_argument("--prereg", default=None, help="REQUIRED for a real run: the governing pre-registration path written into every receipt and stub (P41: p41/P41-PREREG.md). No default — a receipt must never cite a pre-registration the run did not pass")
     ap.add_argument("--no-sampler", type=int, default=0)
     ap.add_argument("--out", default="/root/tp2")
     ap.add_argument("--adapter-dir", default="/root/tp2/adapters")
@@ -1300,6 +1302,8 @@ def main():
         return selftest(a)
     if a.prepare:
         return prepare(a)
+    if not a.prereg:
+        ap.error("--prereg is required for a real run: a receipt must name the pre-registration it ran under (P41: p41/P41-PREREG.md)")
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     return run_arm(a, load_e4b if a.framework == "e4b" else load_unsloth, sampler=not a.no_sampler)
