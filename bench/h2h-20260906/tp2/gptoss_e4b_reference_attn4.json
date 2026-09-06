@@ -1,0 +1,29 @@
+{
+ "framework": "e4b",
+ "fam": "gptoss",
+ "model": "openai/gpt-oss-20b",
+ "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+ "arm": "reference",
+ "tag": "reference_attn4",
+ "status": "refused",
+ "reason": "TRAIN_ATTN_4BIT would refuse: 96 of 96 attention projections carry a bias (quantize_attention_projections_4bit raises SystemExit on a bias; e.g. ['model.layers.0.self_attn.q_proj', 'model.layers.0.self_attn.k_proj'])",
+ "steps": 60,
+ "seq": 512,
+ "accum": 1,
+ "offload": false,
+ "prereg": "tp2/P40-PREREG.md",
+ "harness": "tp2_arm.py (p38_arm.py as amended + T1-T9)",
+ "model_type": "gpt_oss",
+ "n_layers": 24,
+ "probed_by": "attn_only",
+ "n_patched": 0,
+ "attn4_probe": {
+  "n_projections": 96,
+  "n_biased": 96,
+  "would_refuse": true,
+  "sample": [
+   "model.layers.0.self_attn.q_proj",
+   "model.layers.0.self_attn.k_proj"
+  ]
+ }
+}

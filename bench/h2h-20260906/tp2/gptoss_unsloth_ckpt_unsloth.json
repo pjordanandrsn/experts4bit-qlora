@@ -1,0 +1,17 @@
+{
+ "framework": "unsloth",
+ "fam": "gptoss",
+ "model": "openai/gpt-oss-20b",
+ "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+ "arm": "unsloth",
+ "tag": "ckpt_unsloth",
+ "status": "refused",
+ "reason": "RuntimeError: We encountered some issues during automatic conversion of the weights. For details look at the `CONVERSION` entries of the above report!",
+ "steps": 60,
+ "seq": 512,
+ "accum": 1,
+ "offload": false,
+ "prereg": "tp2/P40-PREREG.md",
+ "harness": "tp2_arm.py (p38_arm.py as amended + T1-T9)",
+ "phase": "load"
+}

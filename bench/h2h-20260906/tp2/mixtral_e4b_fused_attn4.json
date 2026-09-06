@@ -1,0 +1,753 @@
+{
+ "framework": "e4b",
+ "fam": "mixtral",
+ "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+ "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
+ "model_type": "mixtral",
+ "n_layers": 32,
+ "snapshot_dir": null,
+ "arm": "fused",
+ "tag": "fused_attn4",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "accum": 1,
+ "autocast": false,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "offload": true,
+ "optimizer": "torch.optim.AdamW(lr) torch defaults",
+ "grad_ckpt": "hf:use_reentrant=False",
+ "attn_4bit": true,
+ "n_attn4": 128,
+ "attn4_probe": {
+  "n_projections": 128,
+  "n_biased": 0,
+  "would_refuse": false,
+  "sample": []
+ },
+ "tokens": {
+  "path": "tokens_mixtral.json",
+  "sha256": "2a7505f989f8e4c4f863d3a4446f212822b5cc3bd0adfa570d6abd80c15a48f0",
+  "n_train": 1200,
+  "eval_rows_used": 48,
+  "tokenizer_agree": true
+ },
+ "prereg": "tp2/P40-PREREG.md",
+ "harness": "tp2_arm.py (p38_arm.py as amended + T1-T9)",
+ "env": {
+  "framework": "e4b",
+  "torch": "2.8.0+cu128",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-25e4da5b-1340-0fa7-5dd3-df9f9f1df47f",
+   "pci.bus_id": "00000000:05:00.0",
+   "pcie.link.gen.current": "2",
+   "pcie.link.gen.max": "4",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "525.00",
+   "clocks.max.sm": "3210",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.C9",
+   "driver_version": "595.84",
+   "cpu": "AMD Ryzen 7 5700X3D 8-Core Processor",
+   "cpu_threads": 16,
+   "host_mem_gib": 125.7,
+   "vast_instance_id": "50005568",
+   "container_host": "080bb229fd33"
+  },
+  "anchor_json": "/root/tp2/anchor.json",
+  "box_class": "pcie-full/launch-fast",
+  "hf_hub_offline": "1",
+  "unsloth_loader": null,
+  "unsloth_env": {
+   "UNSLOTH_ENABLE_LOGGING": "1"
+  },
+  "transformers": "5.16.1",
+  "experts4bit-qlora": "0.35.1",
+  "grouped-nf4-gemm": "0.30.2",
+  "bitsandbytes": "0.50.1",
+  "peft": null,
+  "unsloth": null,
+  "unsloth_zoo": null,
+  "triton": "3.4.0",
+  "huggingface_hub": "1.30.0"
+ },
+ "load_s": 68.7,
+ "verify": {
+  "n_quantized": 32,
+  "n_unquantized": 0
+ },
+ "census": {
+  "Params4bit_expert_stacks": 0,
+  "Params4bit_other": 128,
+  "Linear4bit": 128,
+  "Linear_bf16": 1,
+  "Linear_fp32": 0,
+  "Experts4bit": 32,
+  "ExpertsLoRA": 32,
+  "LoRALinear": 128,
+  "experts_modules": 32,
+  "experts_module_classes": {
+   "ExpertsLoRA": 32
+  },
+  "router_gate": [
+   {
+    "name": "model.layers.0.mlp.gate",
+    "cls": "MixtralTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "name": "model.layers.1.mlp.gate",
+    "cls": "MixtralTopKRouter",
+    "dtype": "torch.bfloat16"
+   }
+  ],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": []
+ },
+ "engagement_banners": [],
+ "unsloth_bnb4bit_modules": null,
+ "trainable_params": 111673344,
+ "trainable_tensors": 384,
+ "trainable_by_group": {
+  "attention": 6815744,
+  "experts": 104857600,
+  "other": 0
+ },
+ "expect_trainable": 111673344,
+ "trainable_mismatch": null,
+ "adapter_dtypes_before": {
+  "torch.float32": 256,
+  "torch.bfloat16": 128
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 256,
+  "torch.bfloat16": 128
+ },
+ "lora_cast_to_fp32": 0,
+ "init_sha": "46ea74b4d8860671a32e3ad5a8b81b248884ceff21f43ff6d8ae1678c96c6b72",
+ "n_patched": 32,
+ "enable_reason": "[e4b.fast] fused TRAINING path on 32 ExpertsLoRA module(s) (dgrad kernel backward)",
+ "probes": {},
+ "kernel_counter_key": "fused_grouped_lora",
+ "kernel_calls_per_step": [
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128,
+  128
+ ],
+ "kernel_calls_per_step_min": 128,
+ "experts_forward_calls_per_step_min": 0,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 128,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  }
+ ],
+ "C1_tensors_hashed": 256,
+ "C1_bytes_hashed": 26038239232,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 3.01467,
+ "loss_last": 0.21855,
+ "loss_mean_last20": 0.26222,
+ "eval_loss_step0": 2.97612,
+ "eval_loss_final": 0.25897,
+ "eval_curve": [
+  {
+   "step": 0,
+   "heldout_loss": 2.97612,
+   "train_wall_s": 0.0
+  },
+  {
+   "step": 20,
+   "heldout_loss": 0.31985,
+   "train_wall_s": 47.9
+  },
+  {
+   "step": 40,
+   "heldout_loss": 0.26702,
+   "train_wall_s": 95.89
+  },
+  {
+   "step": 60,
+   "heldout_loss": 0.25897,
+   "train_wall_s": 143.85
+  }
+ ],
+ "s_per_step": 5.0223,
+ "s_per_step_median_11plus": 2.3774,
+ "step_ms": [
+  2569.3,
+  2366.5,
+  2376.8,
+  2364.0,
+  2366.1,
+  2363.0,
+  2371.7,
+  2370.9,
+  2360.9,
+  2360.4,
+  2367.3,
+  2392.3,
+  2528.1,
+  2407.7,
+  2377.9,
+  2472.6,
+  2361.6,
+  2366.9,
+  2380.5,
+  2376.8,
+  2550.7,
+  2428.3,
+  2362.2,
+  2372.6,
+  2376.3,
+  2373.1,
+  2370.8,
+  2371.9,
+  2373.7,
+  2369.0,
+  2379.6,
+  2483.4,
+  2362.3,
+  2379.4,
+  2377.9,
+  2518.3,
+  2409.1,
+  2379.4,
+  2371.7,
+  2382.2,
+  2408.7,
+  2370.6,
+  2375.7,
+  2513.0,
+  2413.4,
+  2373.6,
+  2480.1,
+  2381.9,
+  2371.8,
+  2378.8,
+  2367.1,
+  2361.5,
+  2376.5,
+  2378.8,
+  2375.2,
+  2364.7,
+  2371.9,
+  2368.1,
+  2508.1,
+  2413.3
+ ],
+ "train_wall_s": 143.85,
+ "window_wall_s": 301.34,
+ "tokens_per_step": [
+  99,
+  96,
+  105,
+  97,
+  100,
+  105,
+  99,
+  100,
+  96,
+  96,
+  97,
+  97,
+  103,
+  107,
+  106,
+  94,
+  93,
+  96,
+  103,
+  103,
+  100,
+  111,
+  96,
+  96,
+  95,
+  103,
+  95,
+  100,
+  100,
+  96,
+  101,
+  107,
+  93,
+  105,
+  99,
+  104,
+  95,
+  109,
+  98,
+  108,
+  105,
+  102,
+  95,
+  101,
+  103,
+  101,
+  106,
+  104,
+  106,
+  111,
+  96,
+  95,
+  106,
+  107,
+  103,
+  96,
+  101,
+  93,
+  103,
+  107
+ ],
+ "tokens_total": 6044,
+ "tokens_per_s": 42.0,
+ "peak_vram_gb": 3.223,
+ "idle_w": 34.5,
+ "mean_w": 158.9,
+ "power_samples": 1313,
+ "sampler": true,
+ "joules_per_step": 298.34,
+ "adapter": {
+  "path": "/root/tp2/adapters/adapter_mixtral_fused_attn4.pt",
+  "bytes": 237109495,
+  "tensors": 384,
+  "params": 111673344,
+  "dtypes": [
+   "torch.bfloat16",
+   "torch.float32"
+  ]
+ },
+ "losses": [
+  3.01467,
+  2.04028,
+  1.12936,
+  0.71045,
+  0.69588,
+  0.42286,
+  0.30546,
+  0.66329,
+  0.33356,
+  0.52269,
+  0.34586,
+  0.31445,
+  0.36699,
+  0.54305,
+  0.35106,
+  0.35021,
+  0.33996,
+  0.28154,
+  0.26453,
+  0.30158,
+  0.33727,
+  0.23978,
+  0.30281,
+  0.29048,
+  0.27049,
+  0.22498,
+  0.28995,
+  0.34655,
+  0.30642,
+  0.24206,
+  0.33434,
+  0.25799,
+  0.32255,
+  0.25457,
+  0.25293,
+  0.24067,
+  0.30025,
+  0.2783,
+  0.27532,
+  0.27811,
+  0.25599,
+  0.22849,
+  0.34821,
+  0.26765,
+  0.26705,
+  0.25806,
+  0.25715,
+  0.2486,
+  0.24156,
+  0.25825,
+  0.27776,
+  0.30972,
+  0.22043,
+  0.27827,
+  0.2453,
+  0.28558,
+  0.2317,
+  0.28646,
+  0.25965,
+  0.21855
+ ]
+}

@@ -1,0 +1,754 @@
+{
+ "framework": "unsloth",
+ "fam": "granite",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "model_type": "granitemoe",
+ "n_layers": 32,
+ "snapshot_dir": "/root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "arm": "unsloth",
+ "tag": "ckpt_unsloth",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "accum": 1,
+ "autocast": false,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "offload": false,
+ "optimizer": "torch.optim.AdamW(lr) torch defaults",
+ "grad_ckpt": "unsloth",
+ "attn_4bit": false,
+ "n_attn4": 0,
+ "attn4_probe": null,
+ "tokens": {
+  "path": "tokens_granite.json",
+  "sha256": "df16efaf2fa0cd0819df1a656774b693af26b6417579104cebc61ff89f8b132e",
+  "n_train": 1200,
+  "eval_rows_used": 48,
+  "tokenizer_agree": true
+ },
+ "prereg": "tp2/P40-PREREG.md",
+ "harness": "tp2_arm.py (p38_arm.py as amended + T1-T9)",
+ "env": {
+  "framework": "unsloth",
+  "torch": "2.8.0+cu128",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-25e4da5b-1340-0fa7-5dd3-df9f9f1df47f",
+   "pci.bus_id": "00000000:05:00.0",
+   "pcie.link.gen.current": "2",
+   "pcie.link.gen.max": "4",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "525.00",
+   "clocks.max.sm": "3210",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.C9",
+   "driver_version": "595.84",
+   "cpu": "AMD Ryzen 7 5700X3D 8-Core Processor",
+   "cpu_threads": 16,
+   "host_mem_gib": 125.7,
+   "vast_instance_id": "50005568",
+   "container_host": "080bb229fd33"
+  },
+  "anchor_json": "/root/tp2/anchor.json",
+  "box_class": "pcie-full/launch-fast",
+  "hf_hub_offline": "1",
+  "unsloth_loader": "FastLanguageModel",
+  "unsloth_env": {
+   "UNSLOTH_ENABLE_LOGGING": "1"
+  },
+  "transformers": "5.5.0",
+  "experts4bit-qlora": null,
+  "grouped-nf4-gemm": null,
+  "bitsandbytes": "0.50.2",
+  "peft": "0.20.0",
+  "unsloth": "2026.9.2",
+  "unsloth_zoo": "2026.9.1",
+  "triton": "3.4.0",
+  "huggingface_hub": "1.30.0"
+ },
+ "load_s": 12.5,
+ "verify": {
+  "n_quantized": null,
+  "n_unquantized": null
+ },
+ "census": {
+  "Params4bit_expert_stacks": 0,
+  "Params4bit_other": 128,
+  "Linear4bit": 256,
+  "Linear_bf16": 33,
+  "Linear_fp32": 0,
+  "Experts4bit": 0,
+  "ExpertsLoRA": 0,
+  "LoRALinear": 0,
+  "experts_modules": 0,
+  "experts_module_classes": {},
+  "router_gate": [],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": []
+ },
+ "engagement_banners": [
+  "Unsloth: Compiled module GraniteMoeMoE.",
+  "NO 'Enabling LoRA on MoE parameters' banner on stdout (the census below decides)"
+ ],
+ "unsloth_bnb4bit_modules": {
+  "n_experts_modules": 0,
+  "n_bnb4bit": 0,
+  "n_bnb4bit_unwrapped": 0,
+  "inner_param_types": [],
+  "wrap_depth": 0
+ },
+ "trainable_params": 2621440,
+ "trainable_tensors": 256,
+ "trainable_by_group": {
+  "attention": 2621440,
+  "experts": 0,
+  "other": 0
+ },
+ "expect_trainable": 49807360,
+ "trainable_mismatch": {
+  "expected": 49807360,
+  "got": 2621440,
+  "by_group": {
+   "attention": 2621440,
+   "experts": 0,
+   "other": 0
+  }
+ },
+ "adapter_dtypes_before": {
+  "torch.float32": 256
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 256
+ },
+ "lora_cast_to_fp32": 0,
+ "init_sha": "fbf5a3d6bc9a5d1c458b162d90e9bc679d56812beaf0475c39f6dbb2f12bda17",
+ "n_patched": 0,
+ "enable_reason": "",
+ "probes": {},
+ "kernel_counter_key": "moe_bnb4bit_backend",
+ "kernel_calls_per_step": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "kernel_calls_per_step_min": 0,
+ "experts_forward_calls_per_step_min": 0,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 0,
+   "moe_bnb4bit_backend": 0
+  }
+ ],
+ "C1_tensors_hashed": 128,
+ "C1_bytes_hashed": 100663296,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 3.23186,
+ "loss_last": 0.38696,
+ "loss_mean_last20": 0.4773,
+ "eval_loss_step0": 3.24899,
+ "eval_loss_final": 0.45456,
+ "eval_curve": [
+  {
+   "step": 0,
+   "heldout_loss": 3.24899,
+   "train_wall_s": 0.0
+  },
+  {
+   "step": 20,
+   "heldout_loss": 1.04009,
+   "train_wall_s": 20.84
+  },
+  {
+   "step": 40,
+   "heldout_loss": 0.52899,
+   "train_wall_s": 30.09
+  },
+  {
+   "step": 60,
+   "heldout_loss": 0.45456,
+   "train_wall_s": 39.3
+  }
+ ],
+ "s_per_step": 1.003,
+ "s_per_step_median_11plus": 0.4605,
+ "step_ms": [
+  12102.1,
+  461.6,
+  459.6,
+  464.0,
+  459.6,
+  463.4,
+  460.1,
+  464.0,
+  454.4,
+  459.4,
+  458.6,
+  458.3,
+  461.5,
+  457.2,
+  460.2,
+  457.8,
+  460.8,
+  459.8,
+  459.2,
+  458.7,
+  459.4,
+  464.7,
+  471.5,
+  461.7,
+  459.3,
+  462.7,
+  467.5,
+  470.1,
+  464.1,
+  460.5,
+  461.1,
+  461.2,
+  469.2,
+  458.3,
+  460.5,
+  460.4,
+  459.0,
+  460.7,
+  460.4,
+  462.4,
+  459.8,
+  458.2,
+  460.6,
+  459.7,
+  463.4,
+  462.7,
+  461.1,
+  463.5,
+  463.8,
+  460.8,
+  459.0,
+  461.0,
+  459.1,
+  459.6,
+  459.5,
+  461.0,
+  459.2,
+  461.7,
+  457.2,
+  459.2
+ ],
+ "train_wall_s": 39.3,
+ "window_wall_s": 60.18,
+ "tokens_per_step": [
+  99,
+  96,
+  105,
+  99,
+  100,
+  107,
+  99,
+  100,
+  96,
+  95,
+  97,
+  97,
+  103,
+  108,
+  108,
+  93,
+  92,
+  95,
+  102,
+  103,
+  100,
+  111,
+  97,
+  97,
+  95,
+  102,
+  95,
+  100,
+  100,
+  95,
+  100,
+  107,
+  93,
+  107,
+  99,
+  104,
+  95,
+  109,
+  97,
+  108,
+  106,
+  104,
+  95,
+  101,
+  102,
+  100,
+  106,
+  104,
+  108,
+  113,
+  96,
+  97,
+  106,
+  108,
+  102,
+  97,
+  101,
+  93,
+  106,
+  110
+ ],
+ "tokens_total": 6060,
+ "tokens_per_s": 154.2,
+ "peak_vram_gb": 6.462,
+ "idle_w": 29.6,
+ "mean_w": 121.9,
+ "power_samples": 265,
+ "sampler": true,
+ "joules_per_step": 60.48,
+ "adapter": {
+  "path": "/root/tp2/adapters/granite_ckpt_unsloth",
+  "bytes": 10526472,
+  "files": [
+   "README.md",
+   "adapter_config.json",
+   "adapter_model.safetensors"
+  ],
+  "tensors": 256,
+  "params": 2621440,
+  "dtypes": [
+   "F32"
+  ]
+ },
+ "losses": [
+  3.23186,
+  3.1188,
+  2.85029,
+  2.62087,
+  2.56763,
+  2.34682,
+  2.27145,
+  2.3674,
+  2.20112,
+  2.16558,
+  1.93874,
+  1.84609,
+  1.74881,
+  1.83513,
+  1.39114,
+  1.74765,
+  1.5499,
+  1.34923,
+  1.31363,
+  1.14399,
+  1.18666,
+  1.18422,
+  0.94142,
+  0.8563,
+  0.82189,
+  0.76345,
+  0.70058,
+  0.75837,
+  0.77615,
+  0.54588,
+  0.70311,
+  0.72072,
+  0.59677,
+  0.5682,
+  0.48549,
+  0.59446,
+  0.52821,
+  0.69912,
+  0.53353,
+  0.56148,
+  0.61792,
+  0.47457,
+  0.54815,
+  0.48728,
+  0.4263,
+  0.47516,
+  0.53473,
+  0.41899,
+  0.4383,
+  0.50052,
+  0.46578,
+  0.54788,
+  0.4328,
+  0.51371,
+  0.42278,
+  0.49152,
+  0.4188,
+  0.50395,
+  0.43989,
+  0.38696
+ ]
+}

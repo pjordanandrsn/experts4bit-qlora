@@ -1,0 +1,53 @@
+FIXTURE steps=60 seq=512 eval_every=20 eval_n=48 lr=1e-4 accum=1 autocast=0 r=8 alpha=16 seed=0 dataset=clinical
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from venv-unsloth after the tripwire failed on ScalingType
+HELPERS e4b-src ref=v0.35.1 ds_manifest sha=38b3508f2d0bb51c7217cfd6768a4866a5b300a158631a7803016c1f9883a9e3
+ANCHOR rc=0 class=pcie-full/launch-fast
+DATASET clinical sha=76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791
+PIN OK granite staged=a02780686e08a03fe0d2679a293b5c74a90efa89 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS granite sha=df16efaf2fa0cd0819df1a656774b693af26b6417579104cebc61ff89f8b132e
+granite/e4b/reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "ibm-granite/granite-3.1-3b-a800m-instruct", "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89", "model_type": "granitemoe", "n_layers": 32, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": fa
+
+granite/e4b/fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "ibm-granite/granite-3.1-3b-a800m-instruct", "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89", "model_type": "granitemoe", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "op
+
+granite/unsloth/ckpt_unsloth rc=0 CELL OK {"framework": "unsloth", "fam": "granite", "model": "ibm-granite/granite-3.1-3b-a800m-instruct", "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89", "model_type": "granitemoe", "n_layers": 32, "snapshot_dir": "/root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89", "arm": "unsloth", "tag": "ckpt_unsloth", "sta
+
+PIN OK olmoe staged=7f1c97f440f06ce36705e4f2b843edb5925f4498 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS olmoe sha=019e2d3f048f023b0547b25e61ed478eba91d139f462cff60066550d1fbbb44e
+olmoe/e4b/reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "olmoe", "model": "allenai/OLMoE-1B-7B-0924-Instruct", "revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498", "model_type": "olmoe", "n_layers": 16, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "optimizer
+
+olmoe/e4b/fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "olmoe", "model": "allenai/OLMoE-1B-7B-0924-Instruct", "revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498", "model_type": "olmoe", "n_layers": 16, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "optimizer": "torc
+
+olmoe/unsloth/ckpt_unsloth rc=1 
+PIN OK gptoss staged=6cee5e81ee83917806bbde320786a8fb61efebee == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS gptoss sha=9e958bf926de3eacc2938247b5fd47a02f76cd86441d44a6ea94a0297fc3de03
+gptoss/e4b/fused_attn4 STUB refused: SKIPPED as REFUSED: tp1 (P36) row cited -- enable_fast_train(dgrad=True) patched 0 modules on gpt-oss (experts built bare, no ExpertsLoRA: 'GPT-OSS-aware training LoRA is a separate change', loader.py); P40 arm 2: not run, attn_only is the secondary row
+gptoss/e4b/attn_only rc=0 CELL OK {"framework": "e4b", "fam": "gptoss", "model": "openai/gpt-oss-20b", "revision": "6cee5e81ee83917806bbde320786a8fb61efebee", "model_type": "gpt_oss", "n_layers": 24, "snapshot_dir": null, "arm": "attn_only", "tag": "attn_only", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "optimizer": "torch.optim.Ad
+
+gptoss/unsloth/ckpt_unsloth rc=3 CELL REFUSED {"framework": "unsloth", "fam": "gptoss", "model": "openai/gpt-oss-20b", "revision": "6cee5e81ee83917806bbde320786a8fb61efebee", "arm": "unsloth", "tag": "ckpt_unsloth", "status": "refused", "reason": "RuntimeError: We encountered some issues during automatic conversion of the weights. For details look at the `CONVERSION` entries of the above report!", "steps": 60, "seq": 512, "accum"
+
+PIN OK qwen3 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3 sha=81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583
+qwen3/e4b/reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "optimizer": "torch.o
+
+qwen3/e4b/fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "optimizer": "torch.optim.Ada
+
+qwen3/unsloth/ckpt_unsloth rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth", "status": "ok", "steps": 60, "seq": 512, "accum": 1, 
+
+qwen3/unsloth/ckpt_hf rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_hf", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "auto
+
+PIN OK gemma4 staged=4d7ae4984b7db7de8f8457170b3f1a419ee76d52 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS gemma4 sha=731db49a8ce4552dae53623c119e147532bea2d801741d3d02b941043bee93b9
+gemma4/e4b/reference_attn4 rc=3 CELL VOID_ATTN4 {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "arm": "reference", "tag": "reference_attn4", "status": "void_attn4", "reason": "quantize_attention_projections_4bit converted 100 projections, expected 120", "steps": 60, "seq": 512, "accum": 1, "offload": false, "prereg": "tp2/P40-PREREG.md", "harnes
+
+gemma4/e4b/fused_attn4 rc=3 CELL VOID_ATTN4 {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "arm": "fused", "tag": "fused_attn4", "status": "void_attn4", "reason": "quantize_attention_projections_4bit converted 100 projections, expected 120", "steps": 60, "seq": 512, "accum": 1, "offload": false, "prereg": "tp2/P40-PREREG.md", "harness": "tp2
+
+gemma4/unsloth/ckpt_unsloth rc=0 CELL OK {"framework": "unsloth", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": "/root/.cache/huggingface/hub/models--google--gemma-4-26B-A4B-it/snapshots/4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "arm": "unsloth", "tag": "ckpt_unsloth", "status": "ok", "steps": 60, "seq": 512, 
+
+PIN OK mixtral staged=eba92302a2861cdc0098cc54bc9f17cb2c47eb61 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS mixtral sha=2a7505f989f8e4c4f863d3a4446f212822b5cc3bd0adfa570d6abd80c15a48f0
+mixtral/e4b/reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": true, "opt
+
+mixtral/e4b/fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": true, "optimizer":
+
+mixtral/unsloth/ckpt_unsloth rc=0 CELL OK {"framework": "unsloth", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": "/root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "arm": "unsloth", "tag": "ckpt_unsloth", "status": "ok", "
+

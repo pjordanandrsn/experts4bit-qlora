@@ -1,0 +1,20 @@
+{
+ "framework": "e4b",
+ "fam": "gptoss",
+ "arm": "fused",
+ "tag": "fused_attn4",
+ "status": "refused",
+ "reason": "SKIPPED as REFUSED: tp1 (P36) row cited -- enable_fast_train(dgrad=True) patched 0 modules on gpt-oss (experts built bare, no ExpertsLoRA: 'GPT-OSS-aware training LoRA is a separate change', loader.py); P40 arm 2: not run, attn_only is the secondary row",
+ "steps": 60,
+ "seq": 512,
+ "accum": 1,
+ "written_by": "tp2_run.sh",
+ "prereg": "tp2/P40-PREREG.md",
+ "cited": "tp1",
+ "n_patched": 0,
+ "model_type": "gpt_oss",
+ "n_layers": 24,
+ "probed_by": "attn_only",
+ "probe_n_patched": 0,
+ "probe_reason": "enable_fast_train(dgrad=True) patched 0 modules on this box: [e4b.fast] fused TRAINING path on 0 ExpertsLoRA module(s) (dgrad kernel backward)"
+}
