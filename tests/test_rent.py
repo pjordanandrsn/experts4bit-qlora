@@ -87,7 +87,7 @@ def test_global_daily_budget_refuses():
 
 def test_role_without_ceiling_row_refuses():
     with pytest.raises(RentRefused, match="no numeric row"):
-        evaluate_launch(POLICY, [], role="CXO", estimate=1.0, provider="vast:verified-secure", gpu="RTX 5090",
+        evaluate_launch(POLICY, [], role="QA", estimate=1.0, provider="vast:verified-secure", gpu="RTX 5090",
                         wallclock_h=1.0, approvals=[], date_utc="2026-09-06")
 
 
