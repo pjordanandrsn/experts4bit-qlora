@@ -248,10 +248,11 @@ five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
 
 **Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed
 position is the census's, below — **×2.067 at B=1 (238.1 tok/s on box
-49916675) and ×2.602 at B=16 (1327.5 tok/s)**, the streamed-calibrated
-stack bo6c licensed on both texts
+49916675) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4 control on
+the same box**, the streamed-calibrated stack bo6c licensed on both texts
 (`e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` /
-`e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`, **measured**). The
+`e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`, **measured**). Those
+ratios are not a field-engine speedup. The
 2026-09-03 numbers this paragraph used to lead with — about 100 tok/s on
 the NF4 baseline, 204.6 tok/s with calibrated int4 attention and
 round-to-nearest int4 experts, about 1,238 tok/s aggregate at B=16 — are
@@ -272,12 +273,15 @@ p37, 2026-09-05, Vast 49975016, an RTX 5090 on an EPYC 7Q83 host;
 table in its [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
 the pre-registration verbatim as its `PREREG.md`; register
 `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05` and one row per arm):
-vLLM 0.28.0 serving Qwen's GPTQ-Int4 checkpoint (Marlin, default CUDA
+vLLM 0.28.0 serving Qwen's GPTQ-Int4 checkpoint (MarlinExperts, default CUDA
 graphs) decodes at **286.0 tok/s at B=1 and 2030.0 aggregate at B=16**
 (fp8-KV arm 300.9 / 2206.5; eager 20.8 / 322.5); this package's NF4 control
 on the same box reads 113.4 / 500.1 (repeats 113.5 / 499.9) — **vLLM /
 e4b-NF4 2.52 at B=1 and 4.06 at B=16**, the only licence-free ratio the lane
 can quote, and it is against the slowest configuration this package ships.
+**Bounded:** behind vLLM's graph decode at B=1 and B=16 on one RTX 5090 box
+with one prompt set (P37) — never a general position; other batch shapes,
+prefill/TTFT and vLLM's resident footprint were **not recorded**.
 **The ratio against the licensed stack is not quoted:** every licensed e4b
 arm on that box is VOID under the pre-registered pack-fingerprint rule —
 the streamed calibration there packed 11522 gptq / 766 rtn expert matrices
@@ -422,21 +426,25 @@ this register — bo7 licenses nothing, and no bo3/bo5/bo6 number is divided
 into a bo7 number. What the box says, three axes per licensed best (ratio
 over NF4 on this box; rental-measured tok/s on this box; anchor-class
 projection — which exists only for Qwen3-30B at B=1 and is not computed
-here): **Granite's licensed stack** (NF4 experts + folds + epilogue) is
+here; every ratio below is vs e4b's own NF4 control on the same box, never
+a field engine): **Granite's licensed stack** (NF4 experts + folds + epilogue) is
 ×1.341 at B=1 (304.9 tok/s) and ×1.160 at B=16 (1836.8;
-`e4b.serve.census.bo7.granite.b1.5090.2026-09-05` / `e4b.serve.census.bo7.granite.b16.5090.2026-09-05`); **OLMoE's position is NF4**
-(282.5 / 1347.5, ×1.000; `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05` / `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`) because nothing above it is licensed on this
+`e4b.serve.census.bo7.granite.b1.5090.2026-09-05` / `e4b.serve.census.bo7.granite.b16.5090.2026-09-05`; **no field comparator measured**); **OLMoE's position is NF4**
+(282.5 / 1347.5, ×1.000; `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05` / `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`; **no field comparator measured**) because nothing above it is licensed on this
 register — the tp row's "best licensed" label predates the two-text
 clause and its calibrated attention is refused on this family, so its full
 stack is ×2.070 / ×2.289 measured, not licensed; **gpt-oss's quoted best is
-its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
+its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`; **no field comparator measured**) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970 with the quality gate open;
-**Qwen3's licensed stack** — the streamed 64k calibrated pack bo6c
-licensed on both texts — measured on the same box under the lane's
+**Qwen3's licensed stack** — the streamed 64k calibrated pack artifact bo6c
+licensed on both texts (11512 gptq / 776 rtn) — measured on the same box under the lane's
 amendment 2 (pre-registered 06:05Z, run after `TP_DONE`): **×2.067 at B=1
 (238.1 tok/s; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a
 projection from an uncertified class) and ×2.602 at B=16 (1327.5 tok/s;
-no anchor projection)** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. Its
+no anchor projection) vs e4b's own NF4 control** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. The
+same-box field comparator is P37's vLLM 0.28.0 GPTQ-Int4 / MarlinExperts
+(286.0 / 2030.0 graph; footprint not recorded); #405 is the P37
+reproduction item (c4val1 FAIL), not a licence withdrawal. Its
 speed is identical to the lane's 16k arm (4.20 vs 4.20 ms; 1327.5 vs
 1338.8, within 1%) and to the RTN stack: a calibrated pack's kernels do
 not depend on the calibration size, as the amendment predicted — the pack
@@ -444,11 +452,11 @@ changes the values, not the kernel or the bytes. **Gemma-4 has no K8
 instrument, so no arm carries a K8 licence**; the register's position with
 that caveat is the exact round-1 fold + epilogue on NF4 (`r1epi`), ×1.281
 at B=1 (103.6 tok/s) and ×1.106 at B=16 (675.8;
-`e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05`), and the quoted int4 best
+`e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05`; **no field comparator measured**), and the quoted int4 best
 (bo3's `stack`) reads ×1.705 / ×1.697 measured, no quality verdict —
 Gemma-4-it loaded on this host without the #344 fault. **Mixtral's position
 is NF4** (50.3 / 191.4, ×1.000; `e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05` /
-`e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05`): the exact folds are ×1.062 / ×1.018 but unscored as a combined
+`e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05`; **no field comparator measured**): the exact folds are ×1.062 / ×1.018 but unscored as a combined
 arm, the RTN int4 stack ×2.329 / ×1.959 and the calibrated-attention stack
 ×2.597 / ×1.962 are measured, not licensed (bo5's second-text FAILs stand),
 and the calibrated-expert arms were dropped under the lane's amendment
