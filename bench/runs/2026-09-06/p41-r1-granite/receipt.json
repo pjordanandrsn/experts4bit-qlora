@@ -1,0 +1,103 @@
+{
+  "approvals": [
+    {
+      "agent": "claude-code-mac-ceo",
+      "role": "CTO",
+      "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788716306758789",
+      "usd_estimate": 2.64
+    },
+    {
+      "agent": "chatgpt-cso",
+      "role": "CSO",
+      "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788716464252609",
+      "usd_estimate": 2.64
+    }
+  ],
+  "artifacts": [
+    {
+      "bytes": 3987,
+      "path": "receipt.json",
+      "sha256": "79b0711c79586a5354d6b7e0705a7db09cbe0b3a9ba75e65a43f3972e2a803d7"
+    }
+  ],
+  "branch": "HEAD",
+  "command": "bash bench/p41/p41_drive.sh",
+  "commit_sha": "c24e89eead0a10e241dec18a98903986d776e855",
+  "complete": true,
+  "configuration": {
+    "dry_run": false,
+    "gpu": "RTX 5090",
+    "image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+    "usd_per_hour": 0.66,
+    "wallclock_h": 4.0
+  },
+  "container_image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+  "cost_usd": {
+    "actual": 0.0053,
+    "estimated": 2.64
+  },
+  "cpu": "unknown",
+  "dataset": "clinical",
+  "dataset_hash": "76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791",
+  "decision": "pending experts4bit-qlora#433",
+  "dependencies": {
+    "python": "3.14.6"
+  },
+  "dirty_tree": false,
+  "environment": {
+    "approver_spec": "all-of:CTO,CSO",
+    "cost_actual_method": "dph_total \u00d7 measured runtime (provider billing endpoint UNKNOWN; not an invoice)",
+    "guard_armed_at": "2026-09-06T18:00:25Z",
+    "heartbeat_timeout_s": "30.0",
+    "python": "3.14.6",
+    "seat_executors": "{}",
+    "ssh_pubkey_given": "yes",
+    "vast_contract_id": "50083410",
+    "vast_cpu_ram_mb": "128615",
+    "vast_created_at": "2026-09-06T18:00:23Z",
+    "vast_disk_space_gb": "2976.0",
+    "vast_dph_total": "0.5362962962962963",
+    "vast_gpu_name": "RTX 5090",
+    "vast_image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+    "vast_machine_id": "34373",
+    "vast_offer_id": "49976507",
+    "vast_preflight": "failed",
+    "vast_search_filter": "{\"cpu_ram\": {\"gte\": 100352}, \"disk_space\": {\"gte\": 320}, \"external\": {\"eq\": false}, \"gpu_name\": {\"eq\": \"RTX 5090\"}, \"num_gpus\": {\"eq\": 1}, \"order\": [[\"dph_total\", \"asc\"]], \"rentable\": {\"eq\": true}, \"type\": \"on-demand\", \"verified\": {\"eq\": true}}",
+    "vast_verification": "verified"
+  },
+  "executed_by": "CTO/claude-session-5c68525a",
+  "expected_result": "18 admitted cells + the p41c probe; anchor within +-10% of tp2's 0.641 s",
+  "experiment_id": "p41-r1-granite",
+  "failure_criteria": "a STOP fires or VOID rows appear -- reported as rows, never worked around",
+  "finished_at": "2026-09-06T18:00:57Z",
+  "gpu_count": 1,
+  "gpu_model": "RTX 5090",
+  "hypothesis": "P41 R1: the granite seq x rank surface under e4b fused_attn4 vs reference_attn4 (PP1-PP4, PP6)",
+  "instance_id": "50083410",
+  "metrics": {},
+  "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+  "model_hash": "none",
+  "model_revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+  "notes": "pre-flight failed: attaching the ssh key to 50083410 failed: HTTP 200, body {success: bool=False, msg: str='SSH key already associated with instance.'} (guard pid 31315 armed at 2026-09-06T18:00:25Z); command not run",
+  "preregistration": "bench/p41/P41-PREREG.md",
+  "provider": "vast:verified-secure",
+  "ram": "unknown",
+  "repo": "pjordanandrsn/experts4bit-qlora",
+  "requested_by": "CTO/claude-session-5c68525a",
+  "result": "invalid",
+  "reviewed_by": null,
+  "runtime_seconds": 35.41033387184143,
+  "seed": 0,
+  "started_at": "2026-09-06T18:00:22Z",
+  "status": "NOT_RUN",
+  "storage": "unknown",
+  "success_criteria": "every registered cell a row; anchor inside +-10%; no VOID; STOP rules not fired",
+  "teardown_proof": {
+    "at": "2026-09-06T18:00:57Z",
+    "complete": true,
+    "evidence": "{\"destroy\": {\"at\": \"2026-09-06T18:00:57Z\", \"http\": 200, \"instance_id\": \"50083410\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": []}",
+    "method": "vast-destroy",
+    "reason": "preflight-failed"
+  },
+  "work_id": "experts4bit-qlora#433"
+}

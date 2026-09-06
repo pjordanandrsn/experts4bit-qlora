@@ -1,2 +1,3 @@
 # Append-only ledger: one JSON object per line. Each entry: {"run_id": str, "date_utc": str, "role": str, "cost_usd": float}
 {"run_id": "rent-live-2", "date_utc": "2026-09-06", "role": "CTO", "cost_usd": 0.09}
+{"run_id": "p41-r1-granite", "date_utc": "2026-09-06", "role": "CTO", "cost_usd": 0.0053}

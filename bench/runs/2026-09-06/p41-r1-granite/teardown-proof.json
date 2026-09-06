@@ -1,0 +1,7 @@
+{
+  "method": "vast-destroy",
+  "reason": "preflight-failed",
+  "evidence": "{\"destroy\": {\"at\": \"2026-09-06T18:00:57Z\", \"http\": 200, \"instance_id\": \"50083410\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": []}",
+  "complete": true,
+  "at": "2026-09-06T18:00:57Z"
+}
