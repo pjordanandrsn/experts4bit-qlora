@@ -240,16 +240,20 @@ def test_bandwidth_probe_records_parse_failures(monkeypatch):
 
 def test_bandwidth_reading_rejects_http_error_bodies_and_tiny_transfers():
     with pytest.raises(ValueError, match="HTTP 403"):
-        _bandwidth_reading("1 0.05 403")
+        _bandwidth_reading("1 0.05 0.04 403")
     with pytest.raises(ValueError, match="only 900 B"):
-        _bandwidth_reading("900 0.05 200")
-    assert _bandwidth_reading("20000000 0.25 200")[0] == pytest.approx(80.0)
+        _bandwidth_reading("900 0.05 0.04 200")
+    with pytest.raises(ValueError, match="non-positive transfer window"):
+        _bandwidth_reading("75000000 0.25 0.25 200")
+    reading = _bandwidth_reading("75000000 2.0 0.5 200")
+    assert reading[0] == pytest.approx(50.0)
+    assert reading[2:] == (1.5, "200", 2.0, 0.5)
 
 
 def test_bandwidth_probe_tries_fallback_after_a_slow_positive(monkeypatch):
     from experts4bit_qlora.tools import vast_provider
-    replies = iter([(0, "curl=/usr/bin/curl\n"), (0, "12000000 1 200"), (0, "11000000 1 200"),
-                    (0, "95000000 1 200")])
+    replies = iter([(0, "curl=/usr/bin/curl\n"), (0, "12000000 1.1 0.1 200"),
+                    (0, "11000000 1.1 0.1 200"), (0, "95000000 1.1 0.1 200")])
     monkeypatch.setattr(vast_provider, "_ssh_run", lambda *args: next(replies))
     mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
     attempts = evidence["attempts"]
@@ -263,13 +267,18 @@ def test_bandwidth_probe_stops_after_a_result_clears_the_floor(monkeypatch):
 
     def fast(*args):
         calls.append(args)
-        return (0, "curl=/usr/bin/curl\n") if len(calls) == 1 else (0, "95000000 1 200")
+        return (0, "curl=/usr/bin/curl\n") if len(calls) == 1 else (0, "95000000 1.1 0.1 200")
 
     monkeypatch.setattr(vast_provider, "_ssh_run", fast)
     mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
     attempts = evidence["attempts"]
     assert mbps == 95.0 and len(attempts) == 1 and len(calls) == 2
     assert attempts[0]["result"] == "ok"
+    assert attempts[0]["request_seconds"] == "1.100"
+    assert attempts[0]["starttransfer_seconds"] == "0.100"
+    assert attempts[0]["transfer_seconds"] == "1.000"
+    assert "bytes=75000000" in calls[-1][2]
+    assert "%{time_starttransfer}" in calls[-1][2]
 
 
 @pytest.mark.parametrize("capability,expected_tool", [
@@ -279,7 +288,7 @@ def test_bandwidth_probe_stops_after_a_result_clears_the_floor(monkeypatch):
 def test_bandwidth_probe_falls_back_to_an_available_downloader(monkeypatch, capability, expected_tool):
     from experts4bit_qlora.tools import vast_provider
     commands = []
-    replies = iter([(0, capability), (0, "95000000 1 200")])
+    replies = iter([(0, capability), (0, "95000000 1.1 0.1 200")])
 
     def run(host, port, command, timeout):
         commands.append(command)
@@ -289,6 +298,7 @@ def test_bandwidth_probe_falls_back_to_an_available_downloader(monkeypatch, capa
     mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
     assert mbps == 95.0 and evidence["attempts"][0]["tool"] == expected_tool
     assert expected_tool in commands[-1]
+    assert "t1=time.monotonic()" in commands[-1]
 
 
 def test_live_preflight_carries_bandwidth_attempt_evidence_on_failure(monkeypatch):
