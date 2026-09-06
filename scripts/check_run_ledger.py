@@ -82,6 +82,28 @@ def load_json(path: Path) -> Any:
         fail(path, None, "file not found")
 
 
+def load_ledger_entries(path: Path) -> dict[str, dict[str, Any]]:
+    """Load the append-only ledger and reject duplicate run identities instead of collapsing them."""
+    entries: dict[str, dict[str, Any]] = {}
+    if not path.exists():
+        return entries
+    for line_no, line in enumerate(path.read_text().splitlines(), start=1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError as e:
+            fail(path, line_no, f"JSON parse error: {e.msg}")
+        if "run_id" not in entry:
+            fail(path, line_no, "ledger entry missing run_id")
+        run_id = entry["run_id"]
+        if run_id in entries:
+            fail(path, line_no, f"duplicate ledger run_id {run_id!r}")
+        entries[run_id] = entry
+    return entries
+
+
 def _verify_incident_exists(path: Path, incident: str) -> None:
     """Verify the incident issue exists on GitHub and is labelled as an incident.
 
@@ -282,6 +304,13 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
                 f"got {data['incident']!r}",
             )
 
+    # JSON Schema cannot express equality between two instance-id fields. Historical
+    # receipts may omit the nested id, but every nested id that is present must bind
+    # the teardown evidence to the receipt's top-level provider instance.
+    tp = data.get("teardown_proof")
+    if isinstance(tp, dict) and "instance_id" in tp and tp["instance_id"] != data.get("instance_id"):
+        fail(path, 0, "teardown_proof.instance_id must equal receipt instance_id")
+
     # ISO-8601 timestamp validation: run in both paths because Draft 2020-12 does not
     # enforce format: date-time without a format checker, so "yesterday" passes strict.
     for _ts_field in ["started_at", "finished_at"]:
@@ -462,19 +491,7 @@ def main() -> None:
             receipts.append((receipt_path, data))
 
     # Load ledger
-    ledger_entries: dict[str, dict[str, Any]] = {}
-    if LEDGER.exists():
-        for line_no, line in enumerate(LEDGER.read_text().splitlines(), start=1):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError as e:
-                fail(LEDGER, line_no, f"JSON parse error: {e.msg}")
-            if "run_id" not in entry:
-                fail(LEDGER, line_no, "ledger entry missing run_id")
-            ledger_entries[entry["run_id"]] = entry
+    ledger_entries = load_ledger_entries(LEDGER)
 
     # Check that each receipt appears in the ledger
     for path, data in receipts:

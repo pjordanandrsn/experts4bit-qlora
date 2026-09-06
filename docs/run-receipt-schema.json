@@ -310,6 +310,11 @@
       "description": "Proof that the instance was torn down",
       "required": ["method", "evidence"],
       "properties": {
+        "instance_id": {
+          "type": "string",
+          "description": "Provider instance id this teardown evidence is bound to, or 'none' before launch",
+          "minLength": 1
+        },
         "method": {
           "type": "string",
           "description": "How teardown was performed (e.g., 'vast-cli-destroy', 'runpod-api-terminate')",
@@ -330,6 +335,7 @@
             "already-gone",
             "torn-down-externally",
             "guard-not-armed",
+            "guard-spawn-failed",
             "preflight-failed"
           ]
         },

@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from experts4bit_qlora.tools.rent import (
-    FakeProvider, ReceiptInvalid, RentRefused, check_approvals, evaluate_launch, estimate_usd, git_facts,
-    main, select_approver_spec, validate_receipt,
+    FakeProvider, ReceiptInvalid, RentRefused, acquire_live_lock, check_approvals, evaluate_launch, estimate_usd,
+    git_facts, main, select_approver_spec, spawn_guard, validate_receipt,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -68,6 +68,227 @@ def _receipt(tmp_path: Path) -> dict:
 
 def test_estimate_is_rate_times_wallclock():
     assert estimate_usd(usd_per_hour=2.0, wallclock_h=3.0) == 6.0
+
+
+def test_live_lock_refuses_a_second_controller_and_releases_on_close(tmp_path: Path):
+    path = tmp_path / "rent-live.lock"
+    first = acquire_live_lock(run_id="proof-one", who="CDO/one", path=path)
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert json.loads(path.read_text())["run_id"] == "proof-one"
+    with pytest.raises(RentRefused, match=r"another live rental controller.*proof-one"):
+        acquire_live_lock(run_id="proof-two", who="CDO/two", path=path)
+    first.close()
+    second = acquire_live_lock(run_id="proof-two", who="CDO/two", path=path)
+    assert json.loads(path.read_text())["run_id"] == "proof-two"
+    second.close()
+
+
+def test_guard_inherits_the_live_lock_descriptor(tmp_path: Path, monkeypatch):
+    captured = {}
+
+    def popen(*args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+    spawn_guard(python=sys.executable, module_args=["--guard-worker"],
+                log_path=tmp_path / "guard.log", lock_fd=17)
+    assert captured["close_fds"] is True and captured["pass_fds"] == (17,)
+
+
+def test_live_lock_filesystem_failure_is_a_named_refusal(tmp_path: Path):
+    not_a_directory = tmp_path / "not-a-directory"
+    not_a_directory.write_text("x")
+    with pytest.raises(RentRefused, match=r"live controller lock unavailable"):
+        acquire_live_lock(run_id="proof-one", who="CDO/one", path=not_a_directory / "rent-live.lock")
+
+
+def test_live_lock_environment_cannot_split_the_production_lock_domain(tmp_path: Path, monkeypatch):
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    canonical = tmp_path / "canonical.lock"
+    alternate = tmp_path / "alternate.lock"
+    monkeypatch.setattr(rent_mod, "DEFAULT_LIVE_LOCK_PATH", canonical)
+    monkeypatch.setenv("E4B_RENT_LOCK_PATH", str(alternate))
+    handle = rent_mod.acquire_live_lock(run_id="proof-one", who="CDO/one")
+    try:
+        assert Path(handle.name) == canonical and canonical.is_file()
+        assert not alternate.exists()
+    finally:
+        handle.close()
+
+
+def test_live_lock_default_ignores_caller_home(monkeypatch):
+    import pwd
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    monkeypatch.setenv("HOME", "/tmp/controller-selected-home")
+    expected = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".adertha" / "rent-live.lock"
+    assert rent_mod.DEFAULT_LIVE_LOCK_PATH == expected
+
+
+def test_same_run_id_lock_loser_cannot_clobber_owner_receipt_or_duplicate_ledger_id(tmp_path: Path, monkeypatch):
+    from datetime import datetime, timezone
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    run_id = "same-run"
+    canonical = tmp_path / "canonical.lock"
+    monkeypatch.setattr(rent_mod, "DEFAULT_LIVE_LOCK_PATH", canonical)
+    owner = rent_mod.acquire_live_lock(run_id=run_id, who="CDO/owner")
+    date_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    owner_receipt = tmp_path / "runs" / date_utc / run_id / "receipt.json"
+    owner_receipt.parent.mkdir(parents=True)
+    owner_receipt.write_text("owner-in-progress\n")
+    try:
+        assert main(_cli(tmp_path, run_id, "--provider", "fake", dry_run=False)) == 2
+        assert main(_cli(tmp_path, run_id, "--provider", "fake", dry_run=False)) == 2
+    finally:
+        owner.close()
+
+    assert owner_receipt.read_text() == "owner-in-progress\n"
+    refused_paths = sorted((tmp_path / "runs" / date_utc).glob(f"{run_id}-refused-*/receipt.json"))
+    assert len(refused_paths) == 2
+    refused = [json.loads(path.read_text()) for path in refused_paths]
+    for rec in refused:
+        validate_receipt(rec, SCHEMA)
+        assert rec["status"] == "REFUSED" and rec["cost_usd"]["actual"] == 0
+        assert rec["environment"]["requested_run_id"] == run_id
+        assert rec["experiment_id"].startswith(f"{run_id}-refused-")
+    ledger_ids = [json.loads(line)["run_id"] for line in (tmp_path / "ledger.jsonl").read_text().splitlines()
+                  if line.strip() and not line.lstrip().startswith("#")]
+    assert len(ledger_ids) == len(set(ledger_ids)) == 2
+    assert run_id not in ledger_ids
+
+
+def test_sequential_live_reuse_of_run_id_is_refused_before_create(tmp_path: Path, monkeypatch):
+    from datetime import datetime, timezone
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    run_id = "sequential-run"
+    monkeypatch.setattr(rent_mod, "DEFAULT_LIVE_LOCK_PATH", tmp_path / "canonical.lock")
+    args = _cli(tmp_path, run_id, "--provider", "fake", "--command", "true", dry_run=False)
+    assert main(args) == 0
+    date_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    owner_path = tmp_path / "runs" / date_utc / run_id / "receipt.json"
+    owner_bytes = owner_path.read_bytes()
+    owner = json.loads(owner_bytes)
+    assert owner["status"] == "OK"
+
+    assert main(args) == 2
+    assert owner_path.read_bytes() == owner_bytes
+    refusal_paths = sorted((tmp_path / "runs" / date_utc).glob(f"{run_id}-refused-*/receipt.json"))
+    assert len(refusal_paths) == 1
+    refusal = json.loads(refusal_paths[0].read_text())
+    assert refusal["status"] == "REFUSED" and refusal["environment"]["requested_run_id"] == run_id
+    assert "already exists in the ledger" in refusal["notes"]
+    fake = tmp_path / f"{run_id}-fake.json"
+    assert not (json.loads(fake.read_text()).get("live") or [])
+    ledger_ids = [json.loads(line)["run_id"] for line in (tmp_path / "ledger.jsonl").read_text().splitlines()
+                  if line.strip() and not line.lstrip().startswith("#")]
+    assert len(ledger_ids) == len(set(ledger_ids)) == 2
+
+
+def test_sequential_dry_run_reuse_cannot_trust_stale_markers_or_overwrite_receipt(tmp_path: Path):
+    run_id = "dry-sequential"
+    command_count = tmp_path / "command-count"
+    command = f"echo ran >> {command_count}"
+    args = _cli(tmp_path, run_id, "--command", command)
+    assert main(args) == 0
+    owner = _receipt(tmp_path)
+    owner_path = next((tmp_path / "runs").rglob(f"{run_id}/receipt.json"))
+    owner_bytes = owner_path.read_bytes()
+    assert command_count.read_text().splitlines() == ["ran"]
+
+    assert main(args) == 2
+    assert owner_path.read_bytes() == owner_bytes and json.loads(owner_bytes) == owner
+    assert command_count.read_text().splitlines() == ["ran"], "stale arm marker authorized the repeated command"
+    receipts = list((tmp_path / "runs").rglob("receipt.json"))
+    assert len(receipts) == 2
+    ids = [json.loads(path.read_text())["experiment_id"] for path in receipts]
+    assert len(ids) == len(set(ids)) == 2
+
+
+def test_concurrent_first_ledger_appends_preserve_every_row(tmp_path: Path):
+    ledger = tmp_path / "new" / "ledger.jsonl"
+    barrier = tmp_path / "go"
+    code = (
+        "import importlib.util,sys,time; from pathlib import Path; "
+        "spec=importlib.util.spec_from_file_location('rent_under_test',sys.argv[4]); "
+        "rent=importlib.util.module_from_spec(spec); spec.loader.exec_module(rent); "
+        "barrier=Path(sys.argv[2]); "
+        "\nwhile not barrier.exists(): time.sleep(0.001)\n"
+        "rent.append_ledger(Path(sys.argv[1]), run_id=sys.argv[3], date_utc='2026-09-06', role='CDO', cost_usd=0.0)"
+    )
+    rent_source = REPO / "experts4bit_qlora" / "tools" / "rent.py"
+    procs = [subprocess.Popen([sys.executable, "-c", code, str(ledger), str(barrier), f"loser-{i}", str(rent_source)])
+             for i in range(24)]
+    barrier.touch()
+    assert all(proc.wait(timeout=30) == 0 for proc in procs)
+    rows = [json.loads(line) for line in ledger.read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")]
+    assert len(rows) == 24 and {row["run_id"] for row in rows} == {f"loser-{i}" for i in range(24)}
+
+
+def test_ledger_checker_rejects_duplicate_run_ids(tmp_path: Path, capsys):
+    ledger = tmp_path / "ledger.jsonl"
+    row = {"run_id": "duplicate", "date_utc": "2026-09-06", "role": "CDO", "cost_usd": 0.0}
+    ledger.write_text(json.dumps(row) + "\n" + json.dumps(row) + "\n")
+    with pytest.raises(SystemExit) as exc:
+        _ledger_module().load_ledger_entries(ledger)
+    assert exc.value.code == 1
+    assert "duplicate ledger run_id 'duplicate'" in capsys.readouterr().err
+
+
+def test_live_budget_snapshot_is_loaded_after_lock_acquisition(tmp_path: Path, monkeypatch):
+    from datetime import datetime, timezone
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    ledger = tmp_path / "ledger.jsonl"
+    date_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    rent_mod.append_ledger(ledger, run_id="earlier", date_utc=date_utc, role="CTO", cost_usd=49.4)
+    canonical = tmp_path / "canonical.lock"
+    real_acquire = rent_mod.acquire_live_lock
+
+    def acquire_after_prior_owner_finishes(*, run_id, who):
+        handle = real_acquire(run_id=run_id, who=who, path=canonical)
+        rent_mod.append_ledger(ledger, run_id="prior-owner", date_utc=date_utc, role="CTO", cost_usd=0.3)
+        return handle
+
+    monkeypatch.setattr(rent_mod, "acquire_live_lock", acquire_after_prior_owner_finishes)
+    rc = main(_cli(tmp_path, "fresh-budget", "--provider", "fake", dry_run=False))
+    rec = _receipt(tmp_path)
+    assert rc == 2 and rec["status"] == "REFUSED" and "exceeds ceiling" in rec["notes"]
+    fake = tmp_path / "fresh-budget-fake.json"
+    assert not fake.exists() or not (json.loads(fake.read_text()).get("live") or [])
+
+
+def test_ledger_reader_waits_for_writer_lock_and_reads_complete_row(tmp_path: Path):
+    import fcntl
+
+    ledger = tmp_path / "ledger.jsonl"
+    result = tmp_path / "result.json"
+    rent_source = REPO / "experts4bit_qlora" / "tools" / "rent.py"
+    code = (
+        "import importlib.util,json,sys; from pathlib import Path; "
+        "spec=importlib.util.spec_from_file_location('rent_under_test',sys.argv[3]); "
+        "rent=importlib.util.module_from_spec(spec); spec.loader.exec_module(rent); "
+        "Path(sys.argv[2]).write_text(json.dumps(rent.load_ledger(Path(sys.argv[1]))))"
+    )
+    with ledger.open("a+", encoding="utf-8") as writer:
+        fcntl.flock(writer.fileno(), fcntl.LOCK_EX)
+        writer.write("# ledger\n")
+        writer.flush()
+        reader = subprocess.Popen([sys.executable, "-c", code, str(ledger), str(result), str(rent_source)])
+        time.sleep(0.2)
+        assert reader.poll() is None, "reader ignored the writer's exclusive flock"
+        writer.write(json.dumps({"run_id": "prior", "date_utc": "2026-09-06", "role": "CTO", "cost_usd": 7.25}) + "\n")
+        writer.flush()
+        os.fsync(writer.fileno())
+        fcntl.flock(writer.fileno(), fcntl.LOCK_UN)
+    assert reader.wait(timeout=10) == 0
+    assert json.loads(result.read_text()) == [
+        {"run_id": "prior", "date_utc": "2026-09-06", "role": "CTO", "cost_usd": 7.25}
+    ]
 
 
 def test_over_ceiling_refuses_without_network():
@@ -332,6 +553,124 @@ def test_guard_that_exits_before_arming_fails_fast(tmp_path: Path, monkeypatch):
     assert "(exited 3)" in rec["notes"] and not ran.exists()
 
 
+def test_stale_arm_marker_for_another_instance_is_not_trusted(tmp_path: Path):
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    marker = tmp_path / "guard-armed.json"
+    marker.write_text(json.dumps({"pid": 1, "instance_id": "old-instance", "at": "2000-01-01T00:00:00Z"}))
+    guard = subprocess.Popen([sys.executable, "-c", "raise SystemExit(3)"], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+    armed = rent_mod.wait_for_guard_armed(marker, guard, timeout_s=5, instance_id="current-instance")
+    assert armed is None and guard.wait(timeout=2) == 3
+
+
+def test_guard_spawn_failure_tears_down_without_running_the_command(tmp_path: Path, monkeypatch):
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    def fail_to_spawn(**kwargs):
+        raise OSError("synthetic process-table failure")
+
+    monkeypatch.setattr(rent_mod, "spawn_guard", fail_to_spawn)
+    ran = tmp_path / "command-ran"
+    rc = main(_cli(tmp_path, "rent-arm-4", "--command", f"touch {ran}"))
+    rec = _receipt(tmp_path)
+    assert rc == 1 and rec["status"] == "HARNESS_ERROR" and rec["result"] == "invalid"
+    assert rec["complete"] is True and rec["teardown_proof"]["reason"] == "guard-spawn-failed"
+    assert "guard failed to start" in rec["notes"] and "command not run" in rec["notes"] and not ran.exists()
+    assert rec["instance_id"] not in (json.loads((tmp_path / "rent-arm-4-fake.json").read_text()).get("live") or [])
+
+
+def test_guard_spawn_and_first_destroy_failure_hold_lock_until_recovery(tmp_path: Path, monkeypatch):
+    import threading
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    first_failure = threading.Event()
+    allow_recovery = threading.Event()
+
+    class RecoveringProvider(FakeProvider):
+        destroy_calls = 0
+
+        def destroy(self, instance_id):
+            self.destroy_calls += 1
+            if self.destroy_calls == 1:
+                first_failure.set()
+                raise RuntimeError("synthetic first destroy failure")
+            assert allow_recovery.wait(timeout=10)
+            return super().destroy(instance_id)
+
+    canonical = tmp_path / "canonical.lock"
+    fake = tmp_path / "rent-arm-5-fake.json"
+    provider = RecoveringProvider(fake)
+    monkeypatch.setattr(rent_mod, "DEFAULT_LIVE_LOCK_PATH", canonical)
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kwargs: provider)
+    monkeypatch.setattr(rent_mod, "spawn_guard", lambda **kwargs: (_ for _ in ()).throw(OSError("spawn failed")))
+    ran = tmp_path / "command-ran"
+    result: dict[str, int] = {}
+    controller = threading.Thread(
+        target=lambda: result.setdefault(
+            "rc", main(_cli(tmp_path, "rent-arm-5", "--provider", "fake", "--command", f"touch {ran}", dry_run=False))
+        )
+    )
+    controller.start()
+    assert first_failure.wait(timeout=10)
+    contender_code = (
+        "import sys; from pathlib import Path; "
+        "from experts4bit_qlora.tools.rent import acquire_live_lock, RentRefused; "
+        "\ntry: acquire_live_lock(run_id='contender', who='CDO/two', path=Path(sys.argv[1]))\n"
+        "except RentRefused: raise SystemExit(0)\n"
+        "raise SystemExit(3)"
+    )
+    contender = subprocess.run([sys.executable, "-c", contender_code, str(canonical)], check=False)
+    assert contender.returncode == 0, "the recovery controller released its lock while the instance was still live"
+    allow_recovery.set()
+    controller.join(timeout=15)
+    assert not controller.is_alive() and result["rc"] == 1
+    rec = _receipt(tmp_path)
+    assert rec["status"] == "ALARM" and rec["result"] == "invalid" and rec["complete"] is True
+    assert rec["teardown_proof"]["reason"] == "guard-spawn-failed"
+    assert rec["environment"]["teardown_attempts"] == "2" and "command not run" in rec["notes"]
+    assert not ran.exists() and rec["instance_id"] not in provider.list_ids()
+    reacquired = acquire_live_lock(run_id="successor", who="CDO/two", path=canonical)
+    reacquired.close()
+
+
+def test_dead_unarmed_guard_and_incomplete_proof_cannot_bypass_teardown(tmp_path: Path, monkeypatch):
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    class FailDestroyOnce(FakeProvider):
+        destroy_calls = 0
+
+        def destroy(self, instance_id):
+            self.destroy_calls += 1
+            if self.destroy_calls == 1:
+                raise RuntimeError("first destroy failed")
+            return super().destroy(instance_id)
+
+    provider = FailDestroyOnce(tmp_path / "rent-arm-6-fake.json")
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kwargs: provider)
+
+    def dead_guard_with_incomplete_proof(*, python, module_args, log_path, **kwargs):
+        parsed = _guard_args(module_args)
+        proof = Path(parsed["--proof"])
+        iid = parsed["--instance-id"]
+        code = (
+            "import json; from pathlib import Path; "
+            f"Path({str(proof)!r}).write_text(json.dumps({{'method':'fake-destroy-failed','reason':'wallclock',"
+            f"'evidence':'failed','complete':False,'instance_id':{iid!r},'at':'2000-01-01T00:00:00Z'}})); "
+            "raise SystemExit(3)"
+        )
+        return subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    monkeypatch.setattr(rent_mod, "spawn_guard", dead_guard_with_incomplete_proof)
+    ran = tmp_path / "command-ran"
+    rc = main(_cli(tmp_path, "rent-arm-6", "--guard-arm-timeout-s", "5", "--command", f"touch {ran}"))
+    rec = _receipt(tmp_path)
+    assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid" and rec["complete"] is True
+    assert rec["teardown_proof"]["reason"] == "guard-not-armed" and provider.destroy_calls == 2
+    assert "ignored teardown proof without authenticated absence" in rec["notes"] and not ran.exists()
+    assert rec["instance_id"] not in provider.list_ids()
+
+
 def test_armed_guard_is_recorded_and_the_marker_exists(tmp_path: Path):
     rc = main(_cli(tmp_path, "rent-arm-3", "--command", "true"))
     rec = _receipt(tmp_path)
@@ -523,10 +862,9 @@ def test_guard_firing_marker_prevents_launcher_pass(tmp_path: Path, monkeypatch)
     """Item 3 (#446): TOCTOU residual -- deterministic variant.  The stub writes guard-firing.json and
     then holds (no destroy, no proof written) so the launcher *must* take the firing-marker branch:
     detect the marker, wait ~3 s for a proof that never arrives, synthesise one with
-    method='fake-guard-fired' and reason='wallclock', and return ALARM/invalid.  This test fails
-    without the TOCTOU fix regardless of timing, because the launcher never sees proof arrive and
-    must synthesise it; without the fix it falls through to prov.destroy() and writes 'pass'.
-    The instance is never destroyed by the launcher (it stays live in the fake state)."""
+    method='fake-guard-fired' and reason='wallclock'. Because that proof is incomplete, the launcher
+    must then destroy the instance itself, authenticate absence, and still return ALARM/invalid.
+    This test fails if an incomplete proof bypasses teardown or is allowed to produce a pass."""
     import experts4bit_qlora.tools.rent as rent_mod
 
     captured: list[subprocess.Popen] = []
@@ -556,7 +894,7 @@ def test_guard_firing_marker_prevents_launcher_pass(tmp_path: Path, monkeypatch)
 
     monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
     rc = main(_cli(tmp_path, "rent-toctou-det-1"))
-    # The launcher never sent SIGTERM on the firing-marker path; kill the orphaned guard.
+    # The launcher should join the guard after its own authenticated teardown; clean up defensively.
     for p in captured:
         try:
             p.kill()
@@ -564,17 +902,15 @@ def test_guard_firing_marker_prevents_launcher_pass(tmp_path: Path, monkeypatch)
             pass
     assert rc == 1
     rec = _receipt(tmp_path)
-    # Launcher detected the firing marker, waited 3 s, synthesised a proof -- never destroyed.
+    # Launcher detected the firing marker, rejected its incomplete proof, and tore down itself.
     assert rec["status"] == "ALARM" and rec["result"] == "invalid", rec
-    assert rec["teardown_proof"]["reason"] == "wallclock", rec["teardown_proof"]
-    assert rec["teardown_proof"]["method"] == "fake-guard-fired", rec["teardown_proof"]
-    # The launcher must not have destroyed the instance: it remains live in the fake state.
+    assert rec["teardown_proof"]["reason"] == "completion", rec["teardown_proof"]
+    assert rec["teardown_proof"]["method"] == "fake-destroy", rec["teardown_proof"]
     fake_state = tmp_path / "rent-toctou-det-1-fake.json"
     assert fake_state.is_file(), "fake state file expected"
     st = json.loads(fake_state.read_text())
-    assert rec["instance_id"] in (st.get("live") or []), (
-        "launcher must not have destroyed the instance when the guard was firing"
-    )
+    assert rec["instance_id"] not in (st.get("live") or [])
+    assert rec["complete"] is True and "ignored teardown proof without authenticated absence" in rec["notes"]
 
 
 def test_guard_firing_marker_race_window(tmp_path: Path, monkeypatch):
@@ -606,8 +942,8 @@ def test_guard_firing_marker_race_window(tmp_path: Path, monkeypatch):
             "    st = json.loads(fake_state.read_text())\n"
             "    st['live'] = [x for x in (st.get('live') or []) if x != iid]\n"
             "    fake_state.write_text(json.dumps(st) + '\\n')\n"
-            "proof_path.write_text(json.dumps({'method': 'fake-destroy', 'reason': 'wallclock', "
-            "'evidence': json.dumps({'instance_absent': True}), 'complete': True}))\n"
+                "proof_path.write_text(json.dumps({'method': 'fake-destroy', 'reason': 'wallclock', "
+                "'evidence': json.dumps({'instance_absent': True}), 'complete': True, 'instance_id': iid}))\n"
         )
         return subprocess.Popen(
             [sys.executable, "-c", code], start_new_session=True,
@@ -725,6 +1061,36 @@ def test_teardown_proof_carries_complete(tmp_path: Path) -> None:
     assert tp["complete"] is True, (
         f"FakeProvider teardown destroys the instance; expected complete=True, got {tp['complete']!r}"
     )
+    assert tp["instance_id"] == rec["instance_id"]
+    with pytest.raises(ReceiptInvalid, match="teardown_proof.instance_id must equal receipt instance_id"):
+        validate_receipt(dict(rec, teardown_proof=dict(tp, instance_id="another-instance")), SCHEMA)
+
+    historical_tp = dict(tp)
+    historical_tp.pop("instance_id")
+    validate_receipt(dict(rec, teardown_proof=historical_tp), SCHEMA)
+
+
+def test_ledger_checker_binds_optional_teardown_instance_id(tmp_path: Path, monkeypatch, capsys) -> None:
+    rc = main(_cli(tmp_path, "rent-proof-binding-1"))
+    assert rc == 0
+    rec = _receipt(tmp_path)
+    checker = _ledger_module()
+
+    historical_tp = dict(rec["teardown_proof"])
+    historical_tp.pop("instance_id")
+    checker.validate_receipt(tmp_path / "historical.json", dict(rec, teardown_proof=historical_tp))
+
+    contradictory = dict(rec, teardown_proof=dict(rec["teardown_proof"], instance_id="another-instance"))
+    with pytest.raises(SystemExit) as strict_exc:
+        checker.validate_receipt(tmp_path / "strict.json", contradictory)
+    assert strict_exc.value.code == 1
+    assert "teardown_proof.instance_id must equal receipt instance_id" in capsys.readouterr().err
+
+    monkeypatch.setitem(sys.modules, "jsonschema", None)
+    with pytest.raises(SystemExit) as fallback_exc:
+        checker.validate_receipt(tmp_path / "fallback.json", contradictory)
+    assert fallback_exc.value.code == 1
+    assert "teardown_proof.instance_id must equal receipt instance_id" in capsys.readouterr().err
 
 
 # ---- #460 reads: the launcher's pre-flight path, listing-or-unknown at teardown, orphan receipts, guard order
@@ -757,50 +1123,35 @@ def test_fake_preflight_runs_and_passes_on_an_ordinary_run(tmp_path: Path):
     assert rc == 0 and rec["status"] == "OK" and rec["environment"]["fake_preflight"] == "ok"
 
 
-def test_teardown_with_the_listing_down_is_unproven_alarm_and_the_guard_stays_alive(tmp_path: Path, monkeypatch):
-    """Warden MEDIUM-1: main()'s listings after destroy were bare list_ids(); a failure there lost the receipt.
-    Now a failed listing is UNKNOWN: complete=False, ALARM, and the guard is not killed."""
+def test_teardown_listing_outage_holds_lock_and_retries_until_absence(tmp_path: Path, monkeypatch):
+    """A transient listing outage cannot produce false absence or hand off through a guard-exit race."""
     from experts4bit_qlora.tools import rent as rent_mod
 
     class DeadAfterDestroy(FakeProvider):
+        failures_left = 0
+
         def destroy(self, instance_id):
             ev = super().destroy(instance_id)
-            self.state_path.with_suffix(".dead").write_text("x")
+            if not self.state_path.with_suffix(".dead").is_file():
+                self.state_path.with_suffix(".dead").write_text("x")
+                self.failures_left = 2
             return ev
 
         def list_ids(self):
-            if self.state_path.with_suffix(".dead").is_file():
+            if self.failures_left:
+                self.failures_left -= 1
                 raise RuntimeError("deprecated_endpoint (false zero refused)")
             return super().list_ids()
 
     monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: DeadAfterDestroy(kw["fake_state"]))
     rc = main(_cli(tmp_path, "rent-dead-1"))
     rec = _receipt(tmp_path)
-    pid = int(rec["environment"]["guard_left_alive"])
-    try:
-        assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid" and rec["complete"] is False
-        assert "teardown unproven" in rec["notes"] and f"guard pid {pid} left alive" in rec["notes"]
-        tp = rec["teardown_proof"]
-        assert tp["complete"] is False and tp["reason"] == "completion"
-        assert json.loads(tp["evidence"])["list_after"] == "UNKNOWN" and json.loads(tp["evidence"])["instance_absent"] is False
-        # the guard (a plain FakeProvider on the same state file) sees the instance gone and finishes on its own;
-        # this process is its parent, so reap it (a zombie still answers kill(pid, 0)).
-        deadline = time.time() + 15
-        while time.time() < deadline:
-            try:
-                wpid, _status = os.waitpid(pid, os.WNOHANG)
-            except ChildProcessError:
-                break  # already reaped by subprocess's own bookkeeping
-            if wpid == pid:
-                break
-            time.sleep(0.1)
-        else:
-            raise AssertionError("the guard did not finish on its own evidence")
-    finally:
-        try:
-            os.kill(pid, 15)
-        except OSError:
-            pass
+    assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid" and rec["complete"] is True
+    assert "holds the live lock until authenticated absence" in rec["notes"]
+    assert rec["environment"]["teardown_attempts"] == "3" and "guard_left_alive" not in rec["environment"]
+    tp = rec["teardown_proof"]
+    assert tp["complete"] is True and tp["reason"] == "completion"
+    assert json.loads(tp["evidence"])["list_after"] == [] and json.loads(tp["evidence"])["instance_absent"] is True
 
 
 def test_unparsed_create_with_nothing_provable_is_an_alarm_receipt(tmp_path: Path, monkeypatch):

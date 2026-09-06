@@ -9,6 +9,10 @@ on the *controller* (survives ssh/parent death), keeps that guard's heartbeat
 fresh while the command runs, proves the instance is gone, and writes a
 schema-valid receipt + ledger line even when the run fails or is refused.
 
+Live launches also hold one OS file lock per controller account. The teardown
+guard inherits its descriptor, so concurrent launchers refuse before create and
+a parent crash cannot unlock the account while that guard still owns teardown.
+
 No gate, threshold, floor or claim value is moved by this module.
 
 Review fixes (PR #440 review, 2026-09-06): the heartbeat is refreshed while the
@@ -24,9 +28,11 @@ real Slack permalinks of the coordination channel. Round 3 (one CI failure on
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
+import pwd
 import re
 import signal
 import subprocess
@@ -37,12 +43,15 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 PERMALINK_RE = re.compile(r"^https://cerin-amroth\.slack\.com/archives/C[A-Z0-9]{8,12}/p\d{16}(\?\S*)?$")
 KNOWN_ROLES = ("CEO", "CTO", "CSO", "CDO", "COO", "CXO", "Jordan")
 COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 SCHEMA_PATH = Path("docs/run-receipt-schema.json")
+# Resolve the account's home from the UID database, not caller-controlled HOME. Every process for the same
+# local account therefore reaches the same production inode.
+DEFAULT_LIVE_LOCK_PATH = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".adertha" / "rent-live.lock"
 STATUS_ENUM = ("OK", "REFUSED", "OOM", "INSTALL_FAILED", "LOAD_FAULT", "HARNESS_ERROR", "ALARM", "NOT_RUN")
 RESULT_ENUM = ("pass", "fail", "inconclusive", "invalid")
 
@@ -55,6 +64,45 @@ class ReceiptInvalid(RuntimeError):
     """A receipt that does not satisfy docs/run-receipt-schema.json (a launcher bug, never written)."""
 
 
+def acquire_live_lock(*, run_id: str, who: str, path: Path | None = None) -> TextIO:
+    """Atomically exclude a second live rental controller on this user account.
+
+    The open descriptor owns the lock and must remain alive for the launch.  The descriptor is also passed to
+    the teardown guard, so a parent crash does not unlock the controller while its rented instance is still
+    guarded.  Read-only live-list/live-offers calls and fake dry-runs do not take this lock.
+    """
+    # Production has exactly one lock domain. ``path`` exists only so isolated tests can avoid the user's
+    # real lock; callers cannot choose a second production lock with an environment variable.
+    lock_path = path or DEFAULT_LIVE_LOCK_PATH
+    handle: TextIO | None = None
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = lock_path.open("a+", encoding="utf-8")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as e:
+            handle.seek(0)
+            holder = " ".join(handle.read(500).split()) or "<unrecorded>"
+            handle.close()
+            handle = None
+            raise RentRefused(f"another live rental controller holds {lock_path}: {holder}") from e
+        os.chmod(lock_path, 0o600)
+        handle.seek(0)
+        handle.truncate()
+        json.dump({"pid": os.getpid(), "run_id": run_id, "who": who, "acquired_at": _utc()}, handle,
+                  sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+        return handle
+    except RentRefused:
+        raise
+    except OSError as e:
+        if handle is not None:
+            handle.close()
+        raise RentRefused(f"live controller lock unavailable at {lock_path}: {e}") from e
+
+
 def load_policy(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text())
 
@@ -62,8 +110,11 @@ def load_policy(path: Path) -> dict[str, Any]:
 def load_ledger(path: Path) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
+    with path.open("r", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+        lines = handle.read().splitlines()
     out = []
-    for line in path.read_text().splitlines():
+    for line in lines:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -365,17 +416,22 @@ def command_environment(*, run_id: str, instance_id: str, run_dir: Path, provide
 
 
 def spawn_guard(*, python: str, module_args: list[str],
-                log_path: Path) -> subprocess.Popen:
+                log_path: Path, lock_fd: int | None = None) -> subprocess.Popen:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = open(log_path, "ab")
-    return subprocess.Popen(
-        [python, "-m", "experts4bit_qlora.tools.rent", *module_args],
-        start_new_session=True,
-        stdin=subprocess.DEVNULL,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        close_fds=True,
-    )
+    try:
+        return subprocess.Popen(
+            [python, "-m", "experts4bit_qlora.tools.rent", *module_args],
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            close_fds=True,
+            pass_fds=(lock_fd,) if lock_fd is not None else (),
+        )
+    except Exception:
+        log.close()
+        raise
 
 
 def _write_proof(proof_path: str | Path, proof: dict[str, Any]) -> None:
@@ -401,14 +457,17 @@ def firing_path_for(proof_path: str | Path) -> Path:
     return Path(proof_path).with_name("guard-firing.json")
 
 
-def wait_for_guard_armed(armed_path: Path, guard: subprocess.Popen, *, timeout_s: float) -> dict[str, Any] | None:
+def wait_for_guard_armed(armed_path: Path, guard: subprocess.Popen, *, timeout_s: float,
+                         instance_id: str | None = None) -> dict[str, Any] | None:
     """Blocks until the guard has written its arm marker. ``None`` when the guard process exits without
     arming or ``timeout_s`` passes first -- the launcher then tears down without running the command."""
     deadline = time.time() + float(timeout_s)
     while True:
         if armed_path.is_file():
             try:
-                return json.loads(armed_path.read_text())
+                marker = json.loads(armed_path.read_text())
+                if instance_id is None or marker.get("instance_id") == instance_id:
+                    return marker
             except (OSError, json.JSONDecodeError):
                 pass  # between tmp and replace; the next poll reads it
         if guard.poll() is not None or time.time() >= deadline:
@@ -472,7 +531,7 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
             _write_proof(proof_path, {"method": f"{provider_kind}-observed-absent", "reason": reason,
                                       "evidence": json.dumps({"list_after": sorted(_list_or_unknown(prov)),
                                                               "instance_absent": True}, sort_keys=True),
-                                      "complete": True, "at": _utc()})
+                                      "complete": True, "instance_id": instance_id, "at": _utc()})
         return 0
     # Item 3 (#446): write the firing marker *before* destroy so the launcher can detect the window
     # between the guard's destroy and its proof write, and treat it as ALARM rather than racing to
@@ -491,6 +550,7 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
                                 "instance_absent": gone, "reason": reason}, sort_keys=True),
         "complete": gone,
         "reason": reason,
+        "instance_id": instance_id,
         "at": _utc(),
     }
     # The launcher's own proof (reason "completion") is never overwritten; a guard proof that lands
@@ -541,7 +601,7 @@ def _sha256_file(path: Path) -> str:
 #: Every value the launcher or the guard writes as teardown_proof.reason. The schema's enum
 #: (docs/run-receipt-schema.json) must list the same set; tests assert the two agree (Warden MEDIUM-2, #460).
 TEARDOWN_REASONS = ("completion", "heartbeat-loss", "wallclock", "already-gone", "torn-down-externally",
-                    "guard-not-armed", "preflight-failed")
+                    "guard-not-armed", "guard-spawn-failed", "preflight-failed")
 
 
 def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -> None:
@@ -623,6 +683,9 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
         for k in ("branch", "requested_by", "executed_by", "preregistration", "hypothesis", "notes", "decision"):
             if not isinstance(receipt.get(k), str) or not receipt[k]:
                 problems.append(f"{k} must be a non-empty string")
+    tp = receipt.get("teardown_proof")
+    if isinstance(tp, dict) and "instance_id" in tp and tp.get("instance_id") != receipt.get("instance_id"):
+        problems.append("teardown_proof.instance_id must equal receipt instance_id")
     if problems:
         raise ReceiptInvalid("receipt does not satisfy the schema: " + "; ".join(problems[:8]))
 
@@ -637,13 +700,20 @@ def write_receipt(dir_path: Path, receipt: dict[str, Any], *, schema_path: Path 
 
 def append_ledger(path: Path, *, run_id: str, date_utc: str, role: str, cost_usd: float) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        path.write_text(
-            "# Append-only ledger: one JSON object per line. "
-            'Each entry: {"run_id": str, "date_utc": str, "role": str, "cost_usd": float}\n')
-    with path.open("a") as f:
+    # Lock initialization and append as one critical section. Lock contenders write zero-cost refusal rows
+    # concurrently, including when the ledger does not exist yet; separate exists/write/open operations lose
+    # rows in that race.
+    with path.open("a+", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        f.seek(0, os.SEEK_END)
+        if f.tell() == 0:
+            f.write(
+                "# Append-only ledger: one JSON object per line. "
+                'Each entry: {"run_id": str, "date_utc": str, "role": str, "cost_usd": float}\n')
         f.write(json.dumps({"run_id": run_id, "date_utc": date_utc,
                             "role": role, "cost_usd": cost_usd}) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def build_receipt(*, experiment_id: str, work_id: str, requested_by: str, executed_by: str,
@@ -662,6 +732,8 @@ def build_receipt(*, experiment_id: str, work_id: str, requested_by: str, execut
     repository facts from git, the outcome from what happened. Fields that do not apply to a launch
     without a dataset or model say so ("none") -- they are not guesses; cpu/ram/storage are "unknown" until a
     live adapter reports them (override with --cpu/--ram/--storage)."""
+    bound_teardown_proof = dict(teardown_proof)
+    bound_teardown_proof["instance_id"] = instance_id
     return {
         "experiment_id": experiment_id, "work_id": work_id, "requested_by": requested_by,
         "executed_by": executed_by, "reviewed_by": None, "hypothesis": hypothesis,
@@ -676,7 +748,7 @@ def build_receipt(*, experiment_id: str, work_id: str, requested_by: str, execut
         "cost_usd": {"estimated": float(cost_estimated), "actual": float(cost_actual)},
         "dataset": dataset, "dataset_hash": dataset_hash, "model": model, "model_revision": model_revision,
         "model_hash": model_hash, "seed": int(seed), "configuration": configuration, "metrics": {},
-        "artifacts": [], "teardown_proof": teardown_proof, "status": status, "result": result,
+        "artifacts": [], "teardown_proof": bound_teardown_proof, "status": status, "result": result,
         # docs/COMPUTE-GOVERNANCE.md vocabulary: adopt|refute|void|pending + link -- a launch is never a decision
         "decision": decision if decision else f"pending {work_id}", "notes": notes, "complete": bool(complete),
     }
@@ -830,7 +902,6 @@ def main(argv: list[str] | None = None) -> int:
 
     schema_path = Path(args.schema)
     policy = load_policy(Path(args.policy))
-    ledger = load_ledger(Path(args.ledger))
     date_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     run_id = args.run_id or f"rent-{date_utc}-{os.getpid()}"
     who = f"{args.role}/{args.agent}"
@@ -865,10 +936,13 @@ def main(argv: list[str] | None = None) -> int:
                      "usd_per_hour": args.usd_per_hour, "gpu": args.gpu, "image": args.image}
 
     def refused(msg: str, spec: str | None, *, status: str = "REFUSED", method: str = "not-launched",
-                complete: bool = True) -> int:
+                complete: bool = True, record_run_id: str | None = None,
+                record_dir: Path | None = None) -> int:
+        receipt_run_id = record_run_id or run_id
+        receipt_dir = record_dir or rec_dir
         environment["approver_spec"] = str(spec) if spec else "unresolved"
         rec = build_receipt(
-            experiment_id=run_id, work_id=args.work_id, requested_by=who, executed_by=who,
+            experiment_id=receipt_run_id, work_id=args.work_id, requested_by=who, executed_by=who,
             hypothesis=args.hypothesis, expected_result=args.expected_result,
             success_criteria=args.success_criteria, failure_criteria=args.failure_criteria,
             preregistration=args.preregistration, approvals=approvals, command=command_str,
@@ -881,11 +955,18 @@ def main(argv: list[str] | None = None) -> int:
             dataset=args.dataset, dataset_hash=args.dataset_hash, model=args.model,
             model_revision=args.model_revision, model_hash=args.model_hash, seed=args.seed,
             container_image=args.image, cpu=args.cpu, ram=args.ram, storage=args.storage, complete=complete, **facts)
-        write_receipt(rec_dir, rec, schema_path=schema_path)
-        append_ledger(Path(args.ledger), run_id=run_id, date_utc=date_utc, role=args.role, cost_usd=0.0)
-        maybe_slack(f"{status} {run_id}: {msg}")
+        write_receipt(receipt_dir, rec, schema_path=schema_path)
+        append_ledger(Path(args.ledger), run_id=receipt_run_id, date_utc=date_utc, role=args.role, cost_usd=0.0)
+        maybe_slack(f"{status} {receipt_run_id}: {msg}")
         print(f"{status}: {msg}", file=sys.stderr)
         return 2
+
+    def refused_attempt(msg: str, spec: str | None) -> int:
+        """Record a pre-launch collision without ever writing under the requested canonical run identity."""
+        refusal_run_id = f"{run_id}-refused-{time.time_ns()}-{os.getpid()}"
+        environment["requested_run_id"] = run_id
+        return refused(msg, spec, record_run_id=refusal_run_id,
+                       record_dir=Path(args.runs_root) / date_utc / refusal_run_id)
 
     policy_provider = "vast:verified-secure" if provider == "fake" else provider
     try:  # the spec that applies is part of the record even when the run is refused
@@ -893,6 +974,28 @@ def main(argv: list[str] | None = None) -> int:
     except RentRefused:
         spec = None
     environment["approver_spec"] = str(spec) if spec else "unresolved"
+    _live_lock: TextIO | None = None
+    if not args.dry_run:
+        try:
+            _live_lock = acquire_live_lock(run_id=run_id, who=who)
+            environment["live_lock_path"] = str(Path(_live_lock.name))
+        except RentRefused as e:
+            # A contender may reuse the owner's requested --run-id. Its distinct attempt identity cannot
+            # overwrite the owner or collapse into a duplicate ledger key.
+            return refused_attempt(str(e), spec)
+    # Read the budget only after acquiring the live-controller lock. The previous owner writes its receipt and
+    # ledger row before releasing that lock, so this snapshot necessarily includes every completed predecessor.
+    ledger = load_ledger(Path(args.ledger))
+    if any(entry.get("run_id") == run_id for entry in ledger):
+        return refused_attempt(f"run id {run_id!r} already exists in the ledger", spec)
+    try:
+        # mkdir(exist_ok=False) is also the dry-run mutex: same-ID simulations cannot share stale markers,
+        # overwrite receipts or append duplicate ledger IDs even though they intentionally skip the live lock.
+        rec_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        return refused_attempt(f"run id {run_id!r} already has a receipt directory", spec)
+    except OSError as e:
+        return refused(f"cannot reserve run id {run_id!r}: {e}", spec)
     try:
         spec = evaluate_launch(
             policy, ledger, role=args.role, estimate=estimate,
@@ -932,29 +1035,40 @@ def main(argv: list[str] | None = None) -> int:
     wallclock_s = args.wallclock_h * 3600
     refresh = args.heartbeat_refresh_s if args.heartbeat_refresh_s is not None else args.heartbeat_timeout_s / 3
     hb.write_text(_utc())
-    guard = spawn_guard(
-        python=sys.executable,
-        module_args=[
+    guard_kwargs: dict[str, Any] = {
+        "python": sys.executable,
+        "module_args": [
             "--guard-worker", "--instance-id", iid, "--provider", prov.kind,
             "--fake-state", str(fake_state), "--wallclock-s", str(wallclock_s),
             "--heartbeat", str(hb), "--proof", str(proof_path),
             "--heartbeat-timeout-s", str(args.heartbeat_timeout_s),
         ],
-        log_path=rec_dir / "guard.log",
-    )
-    # Round 3: nothing runs until the guard says it is armed (see guard_worker). A guard that never arms --
-    # slow import, crash, wrong interpreter -- means teardown without the command, never an OK receipt.
-    armed = wait_for_guard_armed(armed_path_for(proof_path), guard, timeout_s=args.guard_arm_timeout_s)
+        "log_path": rec_dir / "guard.log",
+    }
+    if _live_lock is not None:
+        guard_kwargs["lock_fd"] = _live_lock.fileno()
+    guard: subprocess.Popen | None = None
     own_reason = "completion"
-    if armed is None:
-        exited = guard.poll()
+    try:
+        guard = spawn_guard(**guard_kwargs)
+    except Exception as e:  # noqa: BLE001 - an instance exists; synchronously tear it down below
         status, result = "HARNESS_ERROR", "invalid"
-        own_reason = "guard-not-armed"
-        notes = (f"guard pid {guard.pid} did not arm within {args.guard_arm_timeout_s}s"
-                 + (f" (exited {exited})" if exited is not None else "") + "; command not run")
-    else:
-        environment["guard_armed_at"] = str(armed.get("at"))
-        status, result, notes = "OK", "pass", f"guard pid {guard.pid} armed at {armed.get('at')}"
+        own_reason = "guard-spawn-failed"
+        notes = f"guard failed to start: {e!r}; command not run"
+    if guard is not None:
+        # Round 3: nothing runs until the guard says it is armed (see guard_worker). A guard that never arms --
+        # slow import, crash, wrong interpreter -- means teardown without the command, never an OK receipt.
+        armed = wait_for_guard_armed(armed_path_for(proof_path), guard, timeout_s=args.guard_arm_timeout_s,
+                                     instance_id=iid)
+        if armed is None:
+            exited = guard.poll()
+            status, result = "HARNESS_ERROR", "invalid"
+            own_reason = "guard-not-armed"
+            notes = (f"guard pid {guard.pid} did not arm within {args.guard_arm_timeout_s}s"
+                     + (f" (exited {exited})" if exited is not None else "") + "; command not run")
+        else:
+            environment["guard_armed_at"] = str(armed.get("at"))
+            status, result, notes = "OK", "pass", f"guard pid {guard.pid} armed at {armed.get('at')}"
     # #455: the pre-flight the pre-registration demands, after the guard is armed and before any command —
     # ssh authenticates in a bounded window, the image is up (not stuck loading), disk/RAM as ordered,
     # ≥ 40 MB/s to the box. A failure is NOT_RUN / invalid with the reason; the teardown below destroys.
@@ -985,7 +1099,7 @@ def main(argv: list[str] | None = None) -> int:
     # leaves no watchdog alive for the whole command. Record it; do NOT downgrade `result` here because
     # the launcher's own teardown (below) is what determines pass/fail -- a dead guard that lets the
     # launcher destroy a live instance is still a correct teardown, just one the guard missed.
-    if own_reason != "guard-not-armed":
+    if guard is not None and own_reason != "guard-not-armed":
         _grc = guard.poll()
         if _grc is not None:
             _guard_note = f"guard exited {_grc} during command"
@@ -995,8 +1109,21 @@ def main(argv: list[str] | None = None) -> int:
     # Teardown. `pass` is written only when the launcher itself destroyed a live instance; an instance that
     # is already gone -- by the guard (heartbeat-loss / wallclock) or by anyone else -- is ALARM / invalid.
     def _read_proof() -> dict[str, Any] | None:
-        return json.loads(proof_path.read_text()) if proof_path.is_file() else None
+        if not proof_path.is_file():
+            return None
+        try:
+            candidate = json.loads(proof_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        return candidate if candidate.get("instance_id") == iid else None
     proof = _read_proof()
+    if proof is not None:
+        _proof_live = _list_or_unknown(prov)
+        _proof_absent = _proof_live is not None and iid not in _proof_live
+        if proof.get("complete") is not True or not _proof_absent:
+            status, result = "ALARM", "invalid"
+            notes = "ignored teardown proof without authenticated absence for this instance (" + notes + ")"
+            proof = None
     # Warden MEDIUM-1 (#460): a listing that fails here is UNKNOWN — never "gone", never a proof, never
     # complete=True. `_list_or_unknown` (the guard's helper) answers None on any failure.
     _live0 = _list_or_unknown(prov) if proof is None else None
@@ -1011,7 +1138,7 @@ def main(argv: list[str] | None = None) -> int:
             proof = {"method": f"{prov.kind}-observed-absent", "reason": "torn-down-externally",
                      "evidence": json.dumps({"instance_absent": _absent,
                                              "list_after": sorted(_after) if _after is not None else "UNKNOWN"},
-                                            sort_keys=True), "complete": _absent, "at": _utc()}
+                                            sort_keys=True), "complete": _absent, "instance_id": iid, "at": _utc()}
             _write_proof(proof_path, proof)
     # Item 3 (#446): TOCTOU residual -- the guard may have written guard-firing.json *before* destroy but
     # the instance is still live (or only just gone) when the launcher checks. Treat the marker like a
@@ -1028,37 +1155,60 @@ def main(argv: list[str] | None = None) -> int:
                 _firing_data = json.loads(_firing.read_text())
             except (OSError, json.JSONDecodeError):
                 pass
-            _fr = _firing_data.get("reason", "torn-down-externally")
-            proof = {"method": f"{prov.kind}-guard-fired", "reason": _fr,
-                     "evidence": json.dumps({"firing": _firing_data, "guard_fired": True}, sort_keys=True),
-                     "complete": False, "at": _utc()}
-            _write_proof(proof_path, proof)
+            if _firing_data.get("instance_id") == iid:
+                _fr = _firing_data.get("reason", "torn-down-externally")
+                proof = {"method": f"{prov.kind}-guard-fired", "reason": _fr,
+                         "evidence": json.dumps({"firing": _firing_data, "guard_fired": True}, sort_keys=True),
+                         "complete": False, "instance_id": iid, "at": _utc()}
+                _write_proof(proof_path, proof)
+            else:
+                status, result = "ALARM", "invalid"
+                notes = "ignored guard-firing marker for a different instance (" + notes + ")"
+    # A proof may have appeared while either wait above was in progress. Treat it as final only when it names
+    # this instance, says complete, and a fresh authenticated listing independently proves the instance absent.
+    if proof is not None:
+        _proof_live = _list_or_unknown(prov)
+        _proof_absent = _proof_live is not None and iid not in _proof_live
+        if proof.get("instance_id") != iid or proof.get("complete") is not True or not _proof_absent:
+            status, result = "ALARM", "invalid"
+            notes = "ignored teardown proof without authenticated absence for this instance (" + notes + ")"
+            proof = None
     if proof is not None:
         reason = proof.get("reason") or "unknown"
         status, result = "ALARM", "invalid"
         notes = f"instance torn down before the launcher's own teardown: {reason} (" + notes + ")"
     else:
-        try:
-            evidence = prov.destroy(iid)
-        except Exception as e:  # noqa: BLE001 - a live adapter may raise; the receipt still records it (1b)
-            evidence = {"method": f"{prov.kind}-destroy-failed", "error": repr(e)}
+        destroy_attempts = 0
+        while True:
+            destroy_attempts += 1
+            try:
+                evidence = prov.destroy(iid)
+            except Exception as e:  # noqa: BLE001 - the controller keeps the lock and retries when no guard exists
+                evidence = {"method": f"{prov.kind}-destroy-failed", "error": repr(e)}
+                status, result = "ALARM", "invalid"
+                environment["last_teardown_error"] = repr(e)
+                if destroy_attempts == 1:
+                    notes = f"teardown attempt 1 failed: {e!r} (" + notes + ")"
+            remaining = _list_or_unknown(prov)
+            _absent = remaining is not None and iid not in remaining
+            if _absent:
+                break
+            # There is no atomic way to hand the lock back to a guard between poll() and its exit. Keep the
+            # parent and its descriptor alive until authenticated absence, regardless of guard liveness.
             status, result = "ALARM", "invalid"
-            notes = f"teardown failed: {e!r} (" + notes + ")"
-        remaining = _list_or_unknown(prov)
-        _absent = remaining is not None and iid not in remaining
+            if remaining is None:
+                environment["last_teardown_error"] = "authenticated instance listing unavailable"
+            if destroy_attempts == 1:
+                notes = "emergency teardown retry loop holds the live lock until authenticated absence (" + notes + ")"
+            time.sleep(1.0)
+        environment["teardown_attempts"] = str(destroy_attempts)
         proof = {"method": evidence.get("method", f"{prov.kind}-destroy"), "reason": own_reason,
                  "evidence": json.dumps({"destroy": evidence,
                                          "list_after": sorted(remaining) if remaining is not None else "UNKNOWN",
                                          "instance_absent": _absent}, sort_keys=True),
-                 "complete": _absent, "at": _utc()}
+                 "complete": _absent, "instance_id": iid, "at": _utc()}
         _write_proof(proof_path, proof)
-        if remaining is None:
-            # Absence unproven: the guard stays alive — it destroys again on heartbeat loss (the launcher's
-            # refresher stops here) or wallclock and writes its own proof. Nobody's box goes unwatched.
-            status, result = "ALARM", "invalid"
-            notes = f"teardown unproven: the instance listing was unavailable after destroy; guard pid {guard.pid} left alive to finish it (" + notes + ")"
-            environment["guard_left_alive"] = str(guard.pid)
-        else:
+        if guard is not None:
             try:
                 os.kill(guard.pid, signal.SIGTERM)
             except OSError:
