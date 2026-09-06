@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -390,24 +391,24 @@ class VastProvider:
         if rc != 0:
             raise PreflightFailed(f"ssh to {host}:{port} did not authenticate within {int(ssh_ready_s)} s "
                                   f"({tries} attempt{'s' if tries != 1 else ''}; last rc {rc}: {out.strip()[:120]})")
-        bandwidth_attempts: list[dict[str, str | int]] = []
+        bandwidth_probe: dict[str, Any] = {}
         if self._bandwidth is None:
-            mbps, bandwidth_attempts = _bandwidth_over_ssh_with_evidence(
+            mbps, bandwidth_probe = _bandwidth_over_ssh_with_evidence(
                 str(host), int(port), stop_at_mb_s=min_mb_per_s,
             )
         else:
             mbps = float(self._bandwidth(str(host), int(port)))
         if mbps < min_mb_per_s:
-            evidence = (f"; attempts={json.dumps(bandwidth_attempts, separators=(',', ':'), sort_keys=True)}"
-                        if bandwidth_attempts else "")
+            evidence = (f"; probe={json.dumps(bandwidth_probe, separators=(',', ':'), sort_keys=True)}"
+                        if bandwidth_probe else "")
             raise PreflightFailed(
                 f"download bandwidth {mbps:.1f} MB/s < {min_mb_per_s:.0f} MB/s on {host}:{port}{evidence}"
             )
         return {"vast_preflight": "ok", "vast_ssh": f"{host}:{port}", "vast_actual_status": st,
                 "vast_disk_space_gb": f"{disk:.0f}", "vast_cpu_ram_mb": f"{ram_mb:.0f}", "vast_bandwidth_mb_s": f"{mbps:.1f}",
                 "vast_preflight_seconds": f"{self._clock() - t0:.0f}", "vast_ssh_attempts": str(tries),
-                **({"vast_bandwidth_attempts": json.dumps(bandwidth_attempts, separators=(',', ':'), sort_keys=True)}
-                   if bandwidth_attempts else {}), **attached}
+                **({"vast_bandwidth_probe": json.dumps(bandwidth_probe, separators=(',', ':'), sort_keys=True)}
+                   if bandwidth_probe else {}), **attached}
 
     def _ssh_until_ready(self, host: str, port: int, *, ssh_timeout_s: float, ready_s: float,
                          poll_s: float) -> tuple[int, str, int]:
@@ -478,7 +479,7 @@ def _bandwidth_over_ssh(host: str, port: int) -> float:
 
 
 def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
-                                      stop_at_mb_s: float | None = None) -> tuple[float, list[dict[str, str | int]]]:
+                                      stop_at_mb_s: float | None = None) -> tuple[float, dict[str, Any]]:
     """Measure a 100 MB download on the box and retain bounded, non-secret evidence for every attempt.
 
     Each endpoint is tried twice before the next one.  A positive result below ``stop_at_mb_s`` does not suppress
@@ -488,17 +489,59 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
     """
     best = 0.0
     attempts: list[dict[str, str | int]] = []
+    cap_cmd = ('for t in curl wget python3; do p=$(command -v "$t" 2>/dev/null) || continue; '
+               'printf \'%s=%s\\n\' "$t" "$p"; done')
+    cap_rc, cap_out = _ssh_run(host, port, cap_cmd, 15)
+    capabilities = {}
+    for line in cap_out.splitlines():
+        tool, sep, path = line.partition("=")
+        if sep and tool in ("curl", "wget", "python3") and path.startswith("/"):
+            capabilities[tool] = path[:160]
+    evidence: dict[str, Any] = {
+        "capability": {"rc": cap_rc, "tools": capabilities,
+                       "sample": " ".join(cap_out.strip().split())[:160] or "<empty>"},
+        "attempts": attempts,
+    }
+    if cap_rc != 0 or not capabilities:
+        attempts.append({"endpoint": 0, "attempt": 0, "rc": cap_rc, "sample": "no measurable downloader",
+                         "result": "capability-failed"})
+        return best, evidence
+
+    if "curl" in capabilities:
+        tool = "curl"
+
+        def command(url: str) -> str:
+            return ("curl --location --fail --silent --show-error -o /dev/null "
+                    f"-w '%{{speed_download}}' --max-time 60 {shlex.quote(url)}")
+    elif "wget" in capabilities and "python3" in capabilities:
+        tool = "wget"
+        wget_code = ("import subprocess,sys,time;t=time.monotonic();"
+                     "p=subprocess.Popen(['wget','-q','-O','-','--timeout=60',sys.argv[1]],stdout=subprocess.PIPE);"
+                     "n=sum(map(len,iter(lambda:p.stdout.read(1048576),b'')));rc=p.wait();"
+                     "print(n/(time.monotonic()-t));raise SystemExit(rc)")
+
+        def command(url: str) -> str:
+            return f"python3 -c {shlex.quote(wget_code)} {shlex.quote(url)}"
+    elif "python3" in capabilities:
+        tool = "python3"
+        python_code = ("import sys,time,urllib.request;t=time.monotonic();"
+                       "r=urllib.request.urlopen(sys.argv[1],timeout=60);"
+                       "n=sum(map(len,iter(lambda:r.read(1048576),b'')));r.close();"
+                       "print(n/(time.monotonic()-t))")
+
+        def command(url: str) -> str:
+            return f"python3 -c {shlex.quote(python_code)} {shlex.quote(url)}"
+    else:
+        attempts.append({"endpoint": 0, "attempt": 0, "rc": 127, "sample": "wget has no python3 timer",
+                         "result": "capability-failed"})
+        return best, evidence
+
     for endpoint_index, url in enumerate(BANDWIDTH_URLS, start=1):
         for attempt in range(1, 3):
-            rc, out = _ssh_run(
-                host, port,
-                f"curl --location --fail --silent --show-error -o /dev/null "
-                f"-w '%{{speed_download}}' --max-time 60 '{url}'",
-                90,
-            )
+            rc, out = _ssh_run(host, port, command(url), 90)
             sample = " ".join(out.strip().split())[:160] or "<empty>"
             item: dict[str, str | int] = {
-                "endpoint": endpoint_index, "attempt": attempt, "rc": rc, "sample": sample,
+                "endpoint": endpoint_index, "attempt": attempt, "tool": tool, "rc": rc, "sample": sample,
             }
             if rc != 0:
                 item["result"] = "command-failed"
@@ -515,8 +558,8 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
             item["result"] = "ok" if measured > 0 else "nonpositive"
             attempts.append(item)
             if stop_at_mb_s is not None and measured >= stop_at_mb_s:
-                return best, attempts
-    return best, attempts
+                return best, evidence
+    return best, evidence
 
 
 def _under_test() -> bool:
