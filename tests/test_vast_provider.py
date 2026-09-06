@@ -10,10 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from experts4bit_qlora.tools import vast_provider
 from experts4bit_qlora.tools.vast_provider import (
     BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
-    offer_filter, provider_from_env,
+    _bandwidth_over_ssh_with_evidence, _bandwidth_reading, offer_filter, provider_from_env,
 )
 
 KEY = "ab" * 20 + "0123456789abcdef"  # 56 hex chars, built at runtime so nothing key-shaped is at rest
@@ -216,6 +215,108 @@ def test_preflight_fails_on_stuck_loading_bad_disk_bad_ssh_and_slow_link():
         provider(tr, bandwidth_probe=lambda h, p: 12.0).preflight("7000123")
 
 
+def test_bandwidth_probe_records_all_command_failures(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    replies = iter([(0, "curl=/usr/bin/curl\nwget=/usr/bin/wget\npython3=/usr/bin/python3\n")]
+                   + [(28, "curl: (28) Operation timed out")] * 4)
+    monkeypatch.setattr(vast_provider, "_ssh_run", lambda *args: next(replies))
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 0.0 and len(attempts) == 4
+    assert evidence["capability"]["tools"]["curl"] == "/usr/bin/curl"
+    assert [(a["endpoint"], a["attempt"]) for a in attempts] == [(1, 1), (1, 2), (2, 1), (2, 2)]
+    assert all(a["tool"] == "curl" and a["rc"] == 28 and a["result"] == "command-failed" for a in attempts)
+
+
+def test_bandwidth_probe_records_parse_failures(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    replies = iter([(0, "curl=/usr/bin/curl\n")] + [(0, "not-a-number")] * 4)
+    monkeypatch.setattr(vast_provider, "_ssh_run", lambda *args: next(replies))
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 0.0 and len(attempts) == 4
+    assert all(a["result"] == "invalid-reading" and a["sample"] == "not-a-number" for a in attempts)
+
+
+def test_bandwidth_reading_rejects_http_error_bodies_and_tiny_transfers():
+    with pytest.raises(ValueError, match="HTTP 403"):
+        _bandwidth_reading("1 0.05 403")
+    with pytest.raises(ValueError, match="only 900 B"):
+        _bandwidth_reading("900 0.05 200")
+    assert _bandwidth_reading("20000000 0.25 200")[0] == pytest.approx(80.0)
+
+
+def test_bandwidth_probe_tries_fallback_after_a_slow_positive(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    replies = iter([(0, "curl=/usr/bin/curl\n"), (0, "12000000 1 200"), (0, "11000000 1 200"),
+                    (0, "95000000 1 200")])
+    monkeypatch.setattr(vast_provider, "_ssh_run", lambda *args: next(replies))
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 95.0 and len(attempts) == 3
+    assert [a["endpoint"] for a in attempts] == [1, 1, 2]
+
+
+def test_bandwidth_probe_stops_after_a_result_clears_the_floor(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    calls = []
+
+    def fast(*args):
+        calls.append(args)
+        return (0, "curl=/usr/bin/curl\n") if len(calls) == 1 else (0, "95000000 1 200")
+
+    monkeypatch.setattr(vast_provider, "_ssh_run", fast)
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    attempts = evidence["attempts"]
+    assert mbps == 95.0 and len(attempts) == 1 and len(calls) == 2
+    assert attempts[0]["result"] == "ok"
+
+
+@pytest.mark.parametrize("capability,expected_tool", [
+    ("wget=/usr/bin/wget\npython3=/usr/bin/python3\n", "wget"),
+    ("python3=/usr/bin/python3\n", "python3"),
+])
+def test_bandwidth_probe_falls_back_to_an_available_downloader(monkeypatch, capability, expected_tool):
+    from experts4bit_qlora.tools import vast_provider
+    commands = []
+    replies = iter([(0, capability), (0, "95000000 1 200")])
+
+    def run(host, port, command, timeout):
+        commands.append(command)
+        return next(replies)
+
+    monkeypatch.setattr(vast_provider, "_ssh_run", run)
+    mbps, evidence = _bandwidth_over_ssh_with_evidence("ssh.vast.ai", 1234, stop_at_mb_s=40)
+    assert mbps == 95.0 and evidence["attempts"][0]["tool"] == expected_tool
+    assert expected_tool in commands[-1]
+
+
+def test_live_preflight_carries_bandwidth_attempt_evidence_on_failure(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    evidence = {"capability": {"rc": 0, "tools": {"curl": "/usr/bin/curl"}},
+                "attempts": [{"endpoint": 1, "attempt": 1, "rc": 28, "sample": "curl timed out",
+                              "result": "command-failed"}]}
+    monkeypatch.setattr(vast_provider, "_bandwidth_over_ssh_with_evidence",
+                        lambda host, port, *, stop_at_mb_s: (0.0, evidence))
+    tr = FakeTransport(routes())
+    p = VastProvider(tr, run_label="test-run", ssh_runner=lambda *args: (0, ""), sleep=lambda s: None)
+    with pytest.raises(PreflightFailed, match=r'probe=\{"attempts":\[\{"attempt":1,"endpoint":1'):
+        p.preflight("7000123")
+
+
+def test_live_preflight_records_bandwidth_attempt_evidence_on_success(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    evidence = {"capability": {"rc": 0, "tools": {"curl": "/usr/bin/curl"}},
+                "attempts": [{"endpoint": 1, "attempt": 1, "rc": 0, "sample": "95000000", "mb_s": "95.0",
+                              "result": "ok"}]}
+    monkeypatch.setattr(vast_provider, "_bandwidth_over_ssh_with_evidence",
+                        lambda host, port, *, stop_at_mb_s: (95.0, evidence))
+    tr = FakeTransport(routes())
+    p = VastProvider(tr, run_label="test-run", ssh_runner=lambda *args: (0, ""), sleep=lambda s: None)
+    facts = p.preflight("7000123")
+    assert json.loads(facts["vast_bandwidth_probe"]) == evidence
+
+
 def test_the_ssh_probe_waits_for_sshd_and_records_the_attempts():
     """From R1 attempt 2's receipt (e4b#433, 2026-09-06): Vast reports `running` before the container's sshd accepts connections, so a
     refused connect (rc 255, answered at once — ConnectTimeout never applies) killed the pre-flight after 35 s. The probe
@@ -375,89 +476,3 @@ def test_launch_refuses_an_offer_priced_above_the_declared_rate():
     assert not any(c[0] == "PUT" for c in tr.calls), "no create was attempted"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.61) == "7000123"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img") == "7000123", "no ceiling given → no check (the launcher always gives one)"
-
-
-# ---- the bandwidth probe itself (R1 attempt 3: "0.0 MB/s" from a 3.6 Gbps box)
-
-def _fake_ssh(answer):
-    calls = []
-
-    def run(host, port, command, timeout_s):
-        calls.append(command)
-        return answer(command, len([c for c in calls if c == command]))
-    run.calls = calls
-    return run
-
-
-def test_an_http_error_body_is_not_a_bandwidth_reading():
-    """The defect that made R1 attempt 3 NOT_RUN: the 100 MB Cloudflare URL answers 403, curl -s exits 0 and
-    reports the 1-byte error body's speed, and the old probe returned that as the measurement."""
-    with pytest.raises(ValueError, match="HTTP 403"):
-        vast_provider._bandwidth_reading("1 0.05 403")
-    with pytest.raises(ValueError, match="only 900 B transferred"):
-        vast_provider._bandwidth_reading("900 0.05 200")
-    assert vast_provider._bandwidth_reading("20000000 0.25 200") == pytest.approx(80.0)
-
-
-def test_the_probe_moves_past_a_403_to_the_next_tool_instead_of_reporting_zero(monkeypatch):
-    def answer(command, nth):
-        return (0, "1 0.05 403") if command.startswith("curl") else (0, "20000000 0.4 200")
-    run = _fake_ssh(answer)
-    monkeypatch.setattr(vast_provider, "_ssh_run", run)
-    assert vast_provider._bandwidth_over_ssh("ssh6.vast.ai", 15430) == pytest.approx(50.0)
-    assert sum(c.startswith("curl") for c in run.calls) == 2      # both attempts spent before the fallback
-    assert sum(c.startswith("python3") for c in run.calls) == 1
-
-
-def test_the_probe_falls_back_to_python_when_the_image_has_no_curl(monkeypatch):
-    """The official pytorch images (the registered P41 image) install neither curl nor wget."""
-    def answer(command, nth):
-        return (127, "bash: curl: command not found") if command.startswith("curl") else (0, "20000000 0.2 200")
-    run = _fake_ssh(answer)
-    monkeypatch.setattr(vast_provider, "_ssh_run", run)
-    assert vast_provider._bandwidth_over_ssh("h", 1) == pytest.approx(100.0)
-    assert sum(c.startswith("curl") for c in run.calls) == 1      # dropped after the first 127, not retried
-    assert sum(c.startswith("python3") for c in run.calls) == 1
-
-
-def test_curl_stays_the_first_reading_when_it_works(monkeypatch):
-    run = _fake_ssh(lambda command, nth: (0, "20000000 0.25 200"))
-    monkeypatch.setattr(vast_provider, "_ssh_run", run)
-    assert vast_provider._bandwidth_over_ssh("h", 1) == pytest.approx(80.0)
-    assert len(run.calls) == 1 and run.calls[0].startswith("curl")
-
-
-def test_the_probe_never_answers_zero_it_raises_with_the_reason(monkeypatch):
-    def answer(command, nth):
-        if command.startswith("curl"):
-            return 127, "sh: 1: curl: not found"
-        return 1, "urllib.error.URLError: <urlopen error [Errno -3] Temporary failure in name resolution>"
-    run = _fake_ssh(answer)
-    monkeypatch.setattr(vast_provider, "_ssh_run", run)
-    with pytest.raises(PreflightFailed, match=r"could not be measured on h:1 \(tools missing: \['curl'\]; last failure: python3 rc 1: urllib.error.URLError"):
-        vast_provider._bandwidth_over_ssh("h", 1)
-    assert sum(c.startswith("python3") for c in run.calls) == 4   # two attempts on each endpoint
-    assert sum(c.startswith("curl") for c in run.calls) == 1
-
-
-def test_a_dead_endpoint_costs_both_tools_then_the_loop_moves_on(monkeypatch):
-    seen = []
-
-    def run(host, port, command, timeout_s):
-        seen.append(command)
-        if vast_provider.BANDWIDTH_URLS[0] in command:
-            return 28, "curl: (28) Operation timed out"
-        return 0, "52000000 1.0 200"
-    monkeypatch.setattr(vast_provider, "_ssh_run", run)
-    assert vast_provider._bandwidth_over_ssh("h", 1) == pytest.approx(52.0)
-    assert sum(vast_provider.BANDWIDTH_URLS[0] in c for c in seen) == 4
-    assert sum(vast_provider.BANDWIDTH_URLS[1] in c for c in seen) == 1
-
-
-def test_preflight_reports_the_probe_failure_as_a_preflight_failure():
-    tr = FakeTransport(routes())
-
-    def probe(h, p):
-        raise PreflightFailed(f"download bandwidth could not be measured on {h}:{p} (tools missing: ['curl']; last failure: python3 rc 1: x)")
-    with pytest.raises(PreflightFailed, match="could not be measured on ssh5.vast.ai:12345"):
-        provider(tr, bandwidth_probe=probe).preflight("7000123")

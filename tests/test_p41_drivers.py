@@ -193,6 +193,21 @@ def test_lane_script_never_calls_the_provider_and_names_no_credential():
     assert 'GPU_CLASS=${P41_GPU_CLASS:-"RTX 5090"}' in run and "BOX_REFUSED" in run and "box.json" in run
 
 
+def test_helper_archive_fetch_survives_the_registered_images_without_curl():
+    """R1 attempt 3 proved the registered PyTorch image lacks curl; the lane must not pass preflight then die here."""
+    run = RUN.read_text()
+    start = run.index('for tool in curl wget python3; do')
+    end = run.index('for kv in $HELPER_SHAS;', start)
+    fetch = run[start:end]
+    assert fetch.index('command -v curl') < fetch.index('command -v wget') < fetch.index('command -v python3')
+    assert "urllib.request.urlretrieve" in fetch
+    assert 'SRC FETCH TOOL $FETCH_TOOL rc=$rc' in fetch
+    assert "if [ $rc -eq 0 ]; then" in fetch and "tar xzf" in fetch
+    assert '[ $rc -ne 0 ] && { echo "SRC FETCH FAIL rc=$rc' in fetch, (
+        "a failed downloader's rc is retained for the receipt and refusal rather than overwritten by the tar gate"
+    )
+
+
 def test_stop4_projects_the_remaining_cells_at_the_planning_curve_not_the_alarm_sum(capsys):
     """CEO HIGH-1 on #466: at arm 1 of R1 (≈ 900 s of setup elapsed, all 19 arms remaining) the projection at the registered
     planning curve must NOT trip STOP-4 for the approval line (rate $0.66/h, estimate $1.98); the alarm sum would have."""
