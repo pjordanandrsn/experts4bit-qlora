@@ -344,7 +344,7 @@
     },
     "decision": {
       "type": "string",
-      "description": "What to do with this result, plus link to follow-up (formatted as 'merge|continue|revise|abandon|rerun <url>')",
+      "description": "What to do with this result, plus link to follow-up (formatted as 'merge|continue|revise|abandon|rerun <url>'). A launcher-written receipt awaiting review uses 'pending <work-id or url>'.",
       "minLength": 1
     },
     "notes": {
