@@ -1,0 +1,133 @@
+## P41 — p41: TRAINING SEQ × RANK SWEEP, A DOWNSTREAM-TASK INSTRUMENT, AND THE 32 GB CAPABILITY-BOUNDARY FIXTURE (pre-registered 2026-09-06 05:08Z, before any box is rented)
+
+**Tasking:** issue [#433](https://github.com/pjordanandrsn/experts4bit-qlora/issues/433) (the living plan's next campaign), assigned to the CXO seat. **Design only — nothing is rented or run under this document.** The lane launches only after Warden read-only review + a Claude Code review on the PR and Jordan's `APPROVE P41` on #433. Structure copied from `bench/h2h-20260906/tp2/P40-PREREG.md` and `bench/h2h-20260905/p37/PREREG.md`; numbers are not. Every figure below that is not a design choice cites a receipt `path:line`. Amendments go at the end, dated, before the data they touch.
+
+P41 is three sub-lanes on one fixture lineage (P38's, generalised by P40):
+
+- **p41a — the seq × rank sweep.** P38 fixed one (seq, rank) cell on one family (`seq 512, r 8`: `bench/h2h-20260905/p38/PREREG.md:18`); P40 repeated that cell per family. What the register cannot yet say is how each family's training position moves across the working surface — sequence length and adapter rank are the two knobs a user actually turns. p41a walks seq ∈ {512, 1024, 2048} × rank ∈ {8, 16, 32} per family and registers the surface in P40's units.
+- **p41b — a downstream-task instrument.** The training register's quality readings are all nats (held-out loss, perplexity). p41b adds ONE task-based measure beside them, with a positive control that must fire before the instrument's readings may be quoted on any claim.
+- **p41c — the 32 GB capability-boundary fixture.** P40 produced the two endpoints of the footprint question on one card — Qwen3-30B QLoRA resident at 21.371 GB allocator peak (`bench/h2h-20260906/tp2/RESULTS-tp2.md:57-58`) and Mixtral under e4b expert CPU offload at 3.223 GB vs Unsloth resident at 29.163 GB (`bench/h2h-20260906/tp2/RESULTS-tp2.md:81-82`). p41c turns the sweep's peak-VRAM columns plus one probe cell per family into the registered statement of *what fits on a 32 GB card*, as `.footprint`-style rows (precedent: `docs/claims.json:4021`, `e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint`), never as speed ratios.
+
+### Claim under test
+
+Per family, in P40's registered units (s/step median of steps 11..N, GB allocator peak, tok/s, J/step, held-out loss in nats): (a) how the e4b primary path's cost and quality move over seq ∈ {512, 1024, 2048} × rank ∈ {8, 16, 32}, with the Unsloth position beside it on the families where Unsloth trains; (b) whether one task-based instrument separates a trained adapter from the base model and from a known-regression control, at a pre-registered floor; (c) where each family's training configuration stops fitting in 31.8 GiB. Nothing here licenses a training path (tp1 owns the licence — `bench/h2h-20260906/tp2/P40-PREREG.md:37`); P41 registers positions, an instrument, and footprint rows.
+
+### Families and their entry status (each status cites its receipt row)
+
+| family | registered n_layers | p41a status | basis |
+|---|---|---|---|
+| Qwen/Qwen3-30B-A3B @ `ad44e777` | 48 | full grid, both frameworks | both primary arms VALID at the anchor cell (`bench/h2h-20260906/tp2/RESULTS-tp2.md:57-59`); position 1.457 (`:62`) |
+| mistralai/Mixtral-8x7B-Instruct-v0.1 @ `eba92302` | 32 | full grid, both frameworks; e4b arms under expert CPU offload (tp1's registered design for this family) | both VALID (`bench/h2h-20260906/tp2/RESULTS-tp2.md:80-82`); position 0.361 (`:84`) |
+| ibm-granite/granite-3.1-3b-a800m-instruct @ `a0278068` | 32 | full grid, e4b only | Unsloth VOID at the anchor cell: 2,621,440 trainable vs e4b's 49,807,360 — no expert LoRA engaged (`bench/h2h-20260906/tp2/RESULTS-tp2.md:28`); re-running the identical cell adds nothing |
+| allenai/OLMoE-1B-7B-0924-Instruct @ `7f1c97f4` | 16 | full grid, e4b only | Unsloth HARNESS_ERROR at the anchor cell (`bench/h2h-20260906/tp2/RESULTS-tp2.md:38`) |
+| google/gemma-4-26b-a4b-it @ `4d7ae498` | 30 | **CONDITIONAL — in only if #426 has merged and the structural detector's expected count is available at launch** | e4b arms died at the name-based count (100 of 120 projections; `bench/h2h-20260906/tp2/RESULTS-tp2.md:70-71`); Unsloth VALID at 3.510 s/step, 20.824 GB (`:72`). If the condition is not met: one NOT_RUN row naming #426, no workaround, no name-based arm |
+| openai/gpt-oss-20b | 24 | **REFUSED — no arms** | both frameworks refused at the anchor cell (`bench/h2h-20260906/tp2/RESULTS-tp2.md:46-49`); P40's P5 HELD (`:105`) |
+
+Unsloth arms run only where the anchor cell was VALID (qwen3, mixtral). Granite and OLMoE get e4b-only grids; their Unsloth support rows are tp2's, cited, not re-run (P40's rule: a refusal is a row, never coerced — `bench/h2h-20260906/tp2/P40-PREREG.md:35`).
+
+### Fixture — P38's, generalised by P40, with exactly two moving knobs
+
+Everything as P40 ran it (`bench/h2h-20260906/tp2/P40-PREREG.md:19` as amended by `:50`): the registered **clinical** set, sha-pinned (`ds_manifest.json`; sha256 `76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791` — `bench/h2h-20260905/p38/PREREG.md:18`), tokenised once per family with that family's tokenizer at the pinned revision per target sequence length (`tokens_<fam>_s<seq>.json`, sha in every receipt); LoRA **α = 2r** (the r 8 / α 16 scaling of 2.0 held constant — `bench/h2h-20260905/p38/PREREG.md:20`), dropout 0, bias none, targets q/k/v/o + every expert's gate/up/down through each framework's MoE path, router frozen; AdamW lr 1e-4 (torch defaults), batch 1 × accum 1, bf16 compute, no autocast; `torch.manual_seed(0)`; **N = 60 steps**, held-out eval on the first 48 held-out rows at step 0 and every 20; gradient checkpointing on (e4b HF non-reentrant; Unsloth `use_gradient_checkpointing="unsloth"`). The two moving knobs and nothing else: **seq ∈ {512, 1024, 2048}** (the truncation ceiling — `bench/h2h-20260905/p38/PREREG.md:18`) and **rank ∈ {8, 16, 32}**.
+
+**Anchor cells.** The (seq 512, r 8) cell of each family IS the tp2 cell, re-run on this lane's box as the cross-lane anchor: per family the e4b fused s/step must agree with tp2's within **±10 %** (P40's anchor rule — `bench/h2h-20260906/tp2/P40-PREREG.md:38`; tp2's own anchor read +3.1 % against P38 — `bench/h2h-20260906/tp2/RESULTS-tp2.md:64`) or the lane STOPs (STOP-1 below). Anchor values: granite fused 0.641 s (`RESULTS-tp2.md:27`), olmoe 0.708 (`:36`), qwen3 4.108 (`:58`), mixtral 2.377 under offload (`:81`); qwen3 Unsloth 5.986 (`:59`), mixtral Unsloth 0.858 (`:82`).
+
+**Expected trainable counts (asserted per arm; a mismatch is a VOID arm — P38's rule).** LoRA parameters scale linearly in r, so expected(r) = (r/8) × the tp2 anchor count: granite 49,807,360 (`RESULTS-tp2.md:23`) → r16 99,614,720, r32 199,229,440; olmoe 60,817,408 (`:33`) → 121,634,816, 243,269,632; qwen3 321,257,472 (`:54`) → 642,514,944, 1,285,029,888; mixtral 111,673,344 (`:77`) → 223,346,688, 446,693,376. The harness asserts equality on both frameworks (P38: the count matched at 321,257,472 before any ratio — `bench/h2h-20260905/p38/PREREG.md:20`).
+
+### p41a — arms (each arm one process, one JSON `<fam>_<fw>_<arm>_s<seq>_r<rank>.json`, one alarm)
+
+Per family, per grid cell (9 cells):
+1. `e4b/fused_attn4` — PRIMARY (`enable_fast_train(dgrad=True)` + attention 4-bit; mixtral with `--offload 1`, tp1's setting — `bench/h2h-20260906/tp2/P40-PREREG.md:29`).
+2. `e4b/reference_attn4` — the internal parity control (tp1's rule: fused vs reference |Δ final| ≤ 0.05 and median step |Δ| ≤ 0.05, informational — `bench/h2h-20260906/tp2/P40-PREREG.md:37`).
+3. `unsloth/ckpt_unsloth` — qwen3 and mixtral only (see the family table).
+
+Order: family by family, small to large (granite, olmoe, mixtral, qwen3; gemma4 last if in), and within a family seq ascending, rank ascending, the (512, 8) anchor first. e4b before Unsloth within each cell (a comparator install failure cannot void the e4b arms — `bench/h2h-20260905/p37/PREREG.md:48`). Alarms per arm = the planning-curve step time × N × 1.5 plus load and evals (P38's alarm rule — `bench/h2h-20260905/p38/PREREG.md:42`); an alarmed arm is a row, never a retry inside the lane.
+
+**Environments.** e4b in the image python at the shipped cut from PyPI at launch (P40 ran 0.35.1 + gnf4 0.30.2 — `bench/h2h-20260906/tp2/README.md:3`; versions in every receipt). Unsloth in its own venv at the latest release at launch, no transformers/bnb/peft pins (P38 amendment 1, carried by P40 — `bench/h2h-20260906/tp2/P40-PREREG.md:22`), torchao removed if the tripwire fails on it (P38 amendment 2). Same snapshot bytes for both frameworks, `HF_HUB_OFFLINE=1` after the fetch (`bench/h2h-20260905/p38/PREREG.md:9`); the e4b loader's `refs/main` rule per P40 (`bench/h2h-20260906/tp2/P40-PREREG.md:22`).
+
+**Validity rules (VOID never enters a ratio — P40's set, unchanged).** e4b fused: `n_patched == n_layers`, `kernel_calls_per_step_min ≥ 2·n_layers`, `n_attn4 == 4·n_layers` (the registered counts granite 32, olmoe 16, qwen3 48, mixtral 32, gemma4 30 — `bench/h2h-20260906/tp2/RESULTS-tp2.md:2`); C1 frozen-bytes bit-exact. Unsloth: `Params4bit` expert stacks ≥ 2·n_layers, expert forward calls/step ≥ n_layers, `n_bnb4bit_unwrapped ≥ n_layers`, the MoE-LoRA banner (`bench/h2h-20260906/tp2/P40-PREREG.md:32`); C1 bit-exact. Both: step count == N, tokens sha == the cell's file, trainable == the expected count above. **Gemma-4, if in:** the expected attn-4bit count is read from the structural detector (#426's deliverable) and the detector version is recorded in the receipt — never the name-based count that voided tp2's gemma4 arms (`bench/h2h-20260906/tp2/RESULTS-tp2.md:70-71`).
+
+**Readings (pre-registered; reading thresholds, not gates).**
+- Per cell, both frameworks: s/step (median 11..60), peak VRAM (allocator peak; nvidia-smi max beside), tok/s, J/step, held-out at 0/20/40/60, adapter bytes. Cross-framework held-out |Δ| ≤ 0.05 nats reads COMPARABLE (P38's reading threshold — `bench/h2h-20260905/p38/PREREG.md:50`); outside it the cell's ratio carries the flag, as P40.
+- Per family: the position row at each cell where both primary arms are VALID = s/step ratio Unsloth/e4b, exactly P40's rule; the qwen3 cell (512, 8) is also read against P38's 1.413 (`bench/h2h-20260905/p38/RESULTS-p38.md:51`) and tp2's 1.457 (`bench/h2h-20260906/tp2/RESULTS-tp2.md:62`) — cited beside, never averaged (P40's rule: no cross-lane division).
+- The sweep surface, per framework per family: s/step as a function of seq at r 8 (the seq response) and s/step + held-out as functions of rank at each seq (the rank response), printed as the reduced table. No surface "model" is fit or claimed; the table is the product.
+
+### p41b — the downstream-task instrument (one measure, beside perplexity)
+
+**Measure.** After each (family, seq 512, r 8) e4b `fused_attn4` arm AND its Unsloth counterpart where it exists: greedy generation (`temperature 0`, `max_new_tokens 256`, batch 1, fixed for every arm and recorded in the receipt) of the response to each of the **48 held-out clinical instructions** (the same rows the loss evals use — the fixture's held-out split, `bench/h2h-20260905/p38/PREREG.md:19`), scored **ROUGE-L F1 against the reference responses**, reported as the mean over the 48 items with the per-item distribution. One dataset (the registered clinical set; sha above), one item count (48), one generation config, one scorer version pinned into the receipt. Why this measure: it needs no new dataset (no new pin to trust), it is deterministic at temperature 0, it scores the adapter's behaviour on the task distribution it was trained on rather than token likelihood, and its base-model reference is free — the step-0 eval is the pure 4-bit model in both frameworks because both inits have B = 0 (`bench/h2h-20260905/p38/PREREG.md:20`).
+
+**Pre-registered floors (reading thresholds, not gates).** (i) SEPARATION: trained-adapter mean ROUGE-L > step-0 (base) mean ROUGE-L on the same 48 items; (ii) SENSITIVITY (the positive control): the known-regression control adapter must score at or below **base + 0.25 × (trained − base)** — i.e. the instrument must place the control in the bottom quartile of the base→trained gap. An instrument run that fails either floor is INSTRUMENT-INVALID for that family: its readings are printed, flagged, and **never quoted on any claim**; a failed floor is a finding about the instrument, not about any framework.
+
+**Positive control (runs before any p41b reading is quoted).** The known-regression control = the family's trained (512, 8) adapter with its LoRA B matrices' rows permuted with a fixed seed (seed 1; recorded in the receipt) — same parameter count, same norm distribution, destroyed input→output correspondence. This is a regression by construction, not by measurement. The control is generated, scored, and checked against floor (ii) **in the same process, before the trained adapter's own score is read** (the scorer reads control first; the script refuses to print the trained score if the control check was skipped).
+
+**Batch-shape-dependent families.** Generation is batch 1, greedy, one fixed max_new_tokens for every family — there is no batch dimension for a family to be sensitive to, and the config is in the receipt either way. Gemma-4 specifically carries a known instrument gap at 512-token resolution (#359, named in `AGENTS.md:149-151`); if Gemma-4 enters P41 under the #426 condition, its p41b rows are **informational only** until #359's instrument question is resolved, and say so in the row.
+
+**Scope.** p41b runs at the anchor cell only (seq 512, r 8). Extending the instrument across the grid is a later registration; this lane registers the instrument and its control, not a surface.
+
+### p41c — the 32 GB capability-boundary fixture
+
+**Configuration.** The card is the lane's RTX 5090 (32,607 MiB = 31.8 GiB — `bench/h2h-20260905/p38/README.md:30`). Per family, the capability statement is assembled from measurements P41 already takes: the sweep cells' allocator peaks at seq 512/1024/2048 (p41a), plus **one probe cell per family at seq 4096, r 8, batch 1, e4b `fused_attn4`** (mixtral under offload; granite/olmoe resident; qwen3 resident — e4b has no registered training offload for it; gemma4 only under the #426 condition). The probe's product is a status in P40's vocabulary (OK / OOM / REFUSED / ALARM) plus the allocator peak and nvidia-smi max. **An OOM is a row, never a weakened workload** (`bench/h2h-20260905/p38/PREREG.md:42`).
+
+**The claim it would license.** One `.footprint`-style register row per family (precedent: `docs/claims.json:4021`; the footprint-led position style at `docs/claims.json:3966`): `e4b.train.capability.p41.<family>.32gb.5090.<date>.footprint` — "family F trains under configuration C (precision set, offload design, batch 1, checkpointing mode) at seq ≤ S within 31.8 GiB at allocator peak P GB" with the seq 4096 probe beside it. A footprint row states fit, never speed; no ratio is derived from p41c.
+
+**Receipt fields (beyond the p41a set):** `seq_probe`, `fit_status` (the vocabulary above), `peak_vram_gb_allocator`, `peak_vram_gb_nvsmi`, `offload_design` (none / expert-cpu), `checkpointing_mode`, `batch`, `tokens_per_step`, and the schema's required governance fields (below).
+
+### STOP rules (pre-registered; a stop is reported, not worked around)
+
+- **STOP-1 (anchor):** any family's (512, 8) e4b fused anchor disagrees with tp2 beyond ±10 % → the lane halts before that family's remaining cells; the box/stack is not comparable and that is the finding (P40's rule — `bench/h2h-20260906/tp2/P40-PREREG.md:38`). Other families already measured stand.
+- **STOP-2 (boundary):** OOM at a sweep cell ends that family's ascent at that seq (higher-seqs cells of that family read NOT_RUN, reason cited); the family continues at the remaining ranks of the seqs that fit. No workload weakening.
+- **STOP-3 (integrity):** a C1 failure or a trainable-count mismatch voids the arm (receipt written); two VOID arms in one family for the same class of cause halt that family and the cause is reported on the issue.
+- **STOP-4 (budget):** projected spend (actuals + remaining cells at the planning curve) exceeding the estimate by > 50 % halts the run after the current arm; remaining cells are NOT_RUN with the reason; continuing requires a new approval in the run's thread.
+- **STOP-5 (guard):** 80 % of the run's wallclock guard reached → finish the current arm, reduce, tear down. Remaining cells are a new run under a new approval, never a silent extension (the governance teardown ceiling is 6 h — `docs/COMPUTE-GOVERNANCE.md (PR #432):70-71`).
+
+### Pre-registered predictions (falsifiable; competitor estimates biased UP per the standing correction — `bench/h2h-20260906/tp2/P40-PREREG.md:40`)
+
+Format: `PREDICT: <claim> | direction | value/range | confidence`. Scored mechanically in the reducer's report, as P40's were (`bench/h2h-20260906/tp2/RESULTS-tp2.md:97-107`).
+
+- **PP1 — seq response (e4b fused, every family):** s/step grows super-linearly but sub-quadratically in seq. `PREDICT: s2048/s512 per family | up | [3.5, 5.5] | medium`. Basis: tokens/step scale linearly (batch 1) and attention cost adds a quadratic term that is small at ≤ 2048; qwen3 anchor 4.108 s at 512 (`RESULTS-tp2.md:58`).
+- **PP2 — rank response on speed (both frameworks):** LoRA is a small fraction of the step. `PREDICT: s/step(r32)/s/step(r8) per cell | flat | [0.95, 1.10] e4b, [0.95, 1.15] Unsloth | medium-high`.
+- **PP3 — rank response on quality:** higher rank converges further in 60 steps. `PREDICT: held-out(r32) − held-out(r8) at N=60 per family | down | [−0.08, −0.005] nats | low-medium` (P40's N=60 rows moved 3.0+ nats from init, e.g. qwen3 3.7022→0.2935 — `RESULTS-tp2.md:58`; the marginal rank effect is small against that).
+- **PP4 — anchors:** every family's (512, 8) e4b fused anchor reproduces tp2 within ±10 %. `PREDICT: anchor agreement | holds | all four families inside [0.90, 1.10] × tp2 | high` (tp2's own anchor read +3.1 % — `RESULTS-tp2.md:64`).
+- **PP5 — the Unsloth position across the grid:** qwen3's ratio stays near its two readings; mixtral's stays < 1. `PREDICT: Unsloth/e4b s/step, qwen3 cells | stable | [1.2, 1.7] | medium`; `PREDICT: Unsloth/e4b s/step, mixtral cells | stable | [0.30, 0.55] | medium` (anchors 1.457 / 0.361 — `RESULTS-tp2.md:62,84`).
+- **PP6 — the 32 GB boundary:** qwen3 resident OOMs at seq 4096 (21.371 GB at 512 — `RESULTS-tp2.md:57-58` — plus activations growing ~8× to seq 4096 lands past 31.8 GiB); mixtral under offload trains at 4096 (3.223 GB at 512 — `:81`); granite and olmoe train at 4096 (2.511 / 4.835 GB at 512 — `:26,:36`). `PREDICT: seq-4096 probe status | per family | qwen3 OOM; mixtral/granite/olmoe OK | medium`.
+- **PP7 — the instrument:** on qwen3 and mixtral the trained (512, 8) adapter beats its base on ROUGE-L (both frameworks, COMPARABLE-quality cells), and the control fires. `PREDICT: trained − base ROUGE-L | up | [+0.03, +0.20] | low-medium`; `PREDICT: control score ≤ base + 0.25×(trained − base) | holds | all instrument runs | medium-high` (a permutation control that does not separate would mean ROUGE-L is measuring style, not task content — itself the finding).
+- **PP8 — cost:** the campaign lands inside its estimate. `PREDICT: total actual spend | at or under | ≤ $24 (≤ 1.5 × the $16 estimate) | medium`.
+
+### Box, order, runs, cost (the governance bands)
+
+**Box class (every run):** one Vast.ai RTX 5090, verified + secure only (`docs/compute-policy.json (PR #432)` allowed providers), ≥ 320 GB disk, ≥ 98 GB host RAM, ≥ 40 MB/s pre-flight (tp1 amendment 1, carried by P40 — `bench/h2h-20260906/tp2/P40-PREREG.md:47`), image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel` (tp1/P38's — `bench/h2h-20260905/p38/PREREG.md:7`), train-anchor gate per run (a training receipt without its class is not a receipt — `bench/h2h-20260905/p38/PREREG.md:7`), hard-kill guard ≤ 6 h per run (`docs/COMPUTE-GOVERNANCE.md (PR #432):70-71`), proven teardown in every receipt.
+
+**Run split (each run inside the 6-h guard and the $35 hard cap — `docs/compute-policy.json (PR #432):37`).** Planning curve: per-family per-rank wall = 60 × s512 × (seq/512)^1.2 per arm (a planning assumption, replaced by measurements; the exponent is a design choice, not a claim), + load/eval overhead. Anchors from `RESULTS-tp2.md` (fused / reference / Unsloth s at 512): granite 0.641/3.587/— (`:26-28`), olmoe 0.708/2.644/— (`:36-38`), mixtral 2.377/2.929/0.858 (`:80-82`), qwen3 4.108/11.067/5.986 (`:57-59`).
+
+| run | contents | est. wall | est. cost (@ ≈$1/h) | band / approver |
+|---|---|---|---|---|
+| R1 | granite grid (18 e4b arms) + p41c probe | ≈ 2.0 h | ≈ $2 | ≤ $2 → requesting agent; launched via #430's launcher or the CEO |
+| R2 | olmoe grid (18 e4b arms) + p41c probe | ≈ 2.0 h | ≈ $2 | ≤ $2 → as R1 |
+| R3 | mixtral grid (18 e4b + 9 Unsloth arms) + p41c probe | ≈ 3.0 h | ≈ $3 | ≤ $20 → one of CTO/CSO (`docs/compute-policy.json (PR #432):16-17`); **while Grok holds the CTO seat: CTO + CSO co-sign** (the CXO charter's standing amendment) |
+| R4 | qwen3 seq 512 + 1024 cells (12 e4b + 6 Unsloth arms) + p41b instrument + controls | ≈ 3.5 h | ≈ $4 | ≤ $20 → as R3 |
+| R5 | qwen3 seq 2048 cells (6 e4b + 3 Unsloth arms) + p41c probe | ≈ 5.3 h | ≈ $6 | ≤ $20 → as R3 |
+| — | **campaign total** | ≈ 16 h | **≈ $17, worst case ≈ $24** | inside the $100/day global budget (`docs/compute-policy.json (PR #432):53`) even on one day |
+
+Every run falls ≤ $20; the $20–50 band (two of CEO/CTO/CSO — `:23-24`) and the > $50 band (Jordan — `:30-31`) are not touched. **Governance notes:** (1) the CXO seat designs and never launches (charter); execution is #430's launcher once it exists, else the CEO, with a receipt per `docs/run-receipt-schema.json` (landing via PR #432) into `bench/runs/<date>/<run-id>/receipt.json` (`docs/COMPUTE-GOVERNANCE.md (PR #432):85`) and a ledger line. (2) **Policy gap, flagged not assumed:** the confirmed `role_daily_ceiling_usd` table (`docs/compute-policy.json (PR #432):41`) names CEO/CTO/CSO/CDO/COO/Scout/Warden and no CXO row; P41's runs are requested by the CXO and executed under the CEO's ceiling ($50/day — `:44-46`) until Jordan assigns the seat a row. (3) Downloads per family, freed after the family (tp1's pattern — `bench/h2h-20260906/tp2/P40-PREREG.md:47`). (4) Jordan's `APPROVE P41` on #433 precedes the first approval request; each run then gets its own `APPROVE <run-id> $<est>` in its thread per the policy.
+
+### Reading rules (pre-registered)
+
+1. **Registered units only** (s/step median 11..N, GB allocator peak, tok/s, J/step, nats, ROUGE-L F1, adapter MB); no "%" positions, no cross-family, cross-lane or cross-box ratio — anchors are compared against their cited values and never averaged (P40's set).
+2. **Engagement before reading; a green skipped path is not evidence** on either side (P38 rule 3 — `bench/h2h-20260905/p38/PREREG.md:72`); a missing banner is VOID.
+3. **Every attempt is a row** in the vocabulary OK / REFUSED / OOM / INSTALL_FAILED / LOAD_FAULT / HARNESS_ERROR / ALARM / NOT_RUN; a refusal is a result, never coerced; the workload is never weakened.
+4. **FAIL stays FAIL; VOID stays VOID; an OOM is a row.** No re-registration out of dissatisfaction; a second lane is a second lane.
+5. **Quality beside speed, always** — no s/step ratio without the same-step held-out losses; the p41b instrument's readings are quoted only where both its floors passed.
+6. **Nothing here licenses a training path** — tp1 owns the licence; P41 registers positions, an instrument-with-control, and footprint rows. Proposed register ids: `e4b.train.sweep.p41.<family>.5090.<date>` (the surface), `e4b.train.instrument.p41.rougel-clinical48.<date>` (the instrument + control outcome), `e4b.train.capability.p41.<family>.32gb.5090.<date>.footprint` (p41c), all measured-private with conditions naming both frameworks' versions.
+7. **Every receipt carries** the fixture shas, trainable count, the 4-bit census, engagement counters, box class, forensics, versions, the governance fields (approvals, cost, teardown proof), and for p41c the boundary fields above.
+8. **Receipts and code/claims in separate PRs** (`bench/h2h-20260906/tp2/README.md:9`); this directory ships the pre-registration only.
+
+### Out of scope (stated so it is not read as omitted by accident)
+
+No gpt-oss arms (REFUSED — receipt cited); no Gemma-4 arms unless the #426 condition holds, and no name-based fallback if it does not; no batch/accum/optimizer/lr knobs (the sweep's two knobs are seq and rank); no 200-step curves (P38 owns them — `bench/h2h-20260906/tp2/P40-PREREG.md:44`); no time-to-target (no per-cell target is registrable without data — same line); no Unsloth re-probe on granite/olmoe (tp2's rows stand); no serving lanes; no gate, threshold, floor or registered-claim movement anywhere; no training of the instrument across the grid (anchor cell only).
+
+### Failure classes and what each writes
+
+P38's set, unchanged (`bench/h2h-20260905/p38/PREREG.md:89`): `PIP FAIL` / `TRIPWIRE FAIL` per python → exit 9, nothing measured (a comparator failure writes `NO COMPARATOR` and the e4b arms still run to receipts); `DUD BOX` (10), `DL FAIL` (11), `BOX_REFUSED` by the train anchor (12, re-rent), `DATASET MISMATCH` (13), `TOKENS MISMATCH` (14); per arm: 0 receipt, 3 refused, 4 `C1 FAIL`, 5 oom, 6 load_fault, 7 verify_failed, 15 void_trainable, 142 alarm stub. The p41b control-check refusal (scorer asked to print without the control) writes `INSTRUMENT-INVALID` for that family. `TP_DONE` is touched last, after the reducer; the reducer scores PP1–PP8 mechanically.
+
+### Amendments
+
+(none yet — anything changed after this text is dated here before it runs)
