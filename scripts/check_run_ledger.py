@@ -21,6 +21,7 @@ to avoid a dependency just for this check).
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -30,6 +31,7 @@ from typing import Any
 RUNS_DIR = Path("bench/runs")
 LEDGER = RUNS_DIR / "ledger.jsonl"
 POLICY = Path("docs/compute-policy.json")
+PERMALINK_RE = re.compile(r"^https://cerin-amroth\.slack\.com/archives/C[A-Z0-9]{8,12}/p\d{16}(\?\S*)?$")
 SCHEMA = Path("docs/run-receipt-schema.json")
 
 # Required fields per the schema (docs/run-receipt-schema.json)
@@ -131,6 +133,8 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     for i, appr in enumerate(data["approvals"]):
         if not isinstance(appr, dict):
             fail(path, 0, f"approvals[{i}] must be an object")
+        if not PERMALINK_RE.match(str(appr.get("slack_permalink", ""))):
+            fail(path, 0, f"approvals[{i}].slack_permalink is not a #ml-packages permalink: {appr.get('slack_permalink')!r}")
         for field in ["role", "agent", "usd_estimate", "slack_permalink"]:
             if field not in appr:
                 fail(path, 0, f"approvals[{i}] missing '{field}'")
@@ -145,6 +149,8 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     if not isinstance(data.get("commit_sha"), str) or not data["commit_sha"]:
         fail(path, 0, "commit_sha must be a non-empty string")
 
+    if not re.fullmatch(r"[0-9a-f]{7,40}", str(data.get("commit_sha", ""))):
+        fail(path, 0, "commit_sha must be a hex sha (7-40 chars)")
     # Validate cost_usd
     if not isinstance(data.get("cost_usd"), dict):
         fail(path, 0, "cost_usd must be an object")
@@ -203,33 +209,78 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
             fail(path, 0, f"{field} must be a valid ISO 8601 timestamp")
 
 
-def check_approval_threshold(
-    path: Path, estimated: float, approvals: list[dict[str, Any]], thresholds: list[dict[str, Any]]
-) -> None:
-    """Check that approvals satisfy the threshold for the estimated cost."""
-    # Find the applicable threshold
+def select_approver_spec(
+    estimated: float,
+    thresholds: list[dict[str, Any]],
+    overrides: list[dict[str, Any]] | None = None,
+    seat_executors: dict[str, str] | None = None,
+) -> str | None:
+    """The approver spec for this estimate: the first threshold whose max_usd covers it, then any
+    approval_overrides entry whose while_role_executor seats all match seat_executors and whose
+    band_usd (lo, hi] contains the estimate. Same semantics as experts4bit_qlora.tools.rent."""
     applicable = None
     for th in thresholds:
         max_usd = th["max_usd"]
         if max_usd is None or estimated <= max_usd:
             applicable = th
             break
-
     if applicable is None:
-        fail(path, 0, f"no threshold found for estimated cost ${estimated}")
+        return None
+    spec = str(applicable["approver"])
+    seats = seat_executors or {}
+    for ov in overrides or []:
+        lo, hi = ov["band_usd"]
+        if not (float(lo) < estimated <= float(hi)):
+            continue
+        cond = ov.get("while_role_executor") or {}
+        if not cond:
+            continue
+        # Fail closed (same rule as the launcher): the override is skipped only when every seat it names
+        # is declared in the receipt's environment.seat_executors AND held by someone else.
+        declared_elsewhere = all(r in seats and seats[r] != ex for r, ex in cond.items())
+        if not declared_elsewhere:
+            spec = str(ov["approver"])
+    return spec
 
-    approver_spec = applicable["approver"]
+
+def seat_executors_from_env(env: dict) -> dict[str, str] | None:
+    """`environment.seat_executors` as the launcher writes it: a JSON string (the schema types environment
+    values as strings). A dict is accepted for older receipts; anything else is None (= undeclared)."""
+    raw = env.get("seat_executors") if isinstance(env, dict) else None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, dict):
+        return None
+    return {str(k): str(v) for k, v in raw.items()}
+
+
+def check_approval_threshold(
+    path: Path,
+    estimated: float,
+    approvals: list[dict[str, Any]],
+    thresholds: list[dict[str, Any]],
+    overrides: list[dict[str, Any]] | None = None,
+    seat_executors: dict[str, str] | None = None,
+) -> None:
+    """Check that approvals satisfy the threshold (and any executor-conditional override) for the estimated cost."""
+    approver_spec = select_approver_spec(estimated, thresholds, overrides, seat_executors)
+    if approver_spec is None:
+        fail(path, 0, f"no threshold found for estimated cost ${estimated}")
 
     # Self-approval case
     if approver_spec == "requesting-agent":
         # No external approval needed
         return
 
-    # Jordan case
-    if approver_spec == "Jordan":
-        if not any(a.get("agent") == "Jordan" for a in approvals):
-            fail(path, 0, f"estimated ${estimated} requires Jordan approval, none found")
+    # Jordan's approval lifts any spec -- as role AND agent "Jordan" with a valid channel permalink (same as the launcher)
+    if any(a.get("role") == "Jordan" and a.get("agent") == "Jordan" and PERMALINK_RE.match(str(a.get("slack_permalink", "")))
+           for a in approvals):
         return
+    if approver_spec == "Jordan":
+        fail(path, 0, f"estimated ${estimated} requires Jordan approval (role and agent 'Jordan'), none found")
 
     # one-of:CTO,CSO case
     if approver_spec.startswith("one-of:"):
@@ -252,6 +303,19 @@ def check_approval_threshold(
                 path,
                 0,
                 f"estimated ${estimated} requires two of {required_roles}, got {approving_roles}",
+            )
+        return
+
+    # all-of:CTO,CSO case (executor-conditional override, e.g. while Grok holds the CTO seat)
+    if approver_spec.startswith("all-of:"):
+        required_roles = set(approver_spec.split(":", 1)[1].split(","))
+        approving_roles = {a.get("role") for a in approvals}
+        missing = required_roles - approving_roles
+        if missing:
+            fail(
+                path,
+                0,
+                f"estimated ${estimated} requires all of {sorted(required_roles)} (override), missing {sorted(missing)}",
             )
         return
 
@@ -325,8 +389,11 @@ def main() -> None:
 
     for role, dates in role_daily.items():
         ceiling = role_ceilings.get(role)
-        if ceiling is None:
-            # Unknown role; skip ceiling check
+        if not isinstance(ceiling, (int, float)) or isinstance(ceiling, bool):
+            # Fail closed: a role without a numeric ceiling row must not have rented (the launcher refuses it too)
+            for path, data in receipts:
+                if (data["requested_by"].split("/")[0] if "/" in data["requested_by"] else data["requested_by"]) == role:
+                    fail(path, 0, f"role {role!r} has no numeric row in role_daily_ceiling_usd")
             continue
         for date_str, total in dates.items():
             if total > ceiling:
@@ -357,10 +424,12 @@ def main() -> None:
 
     # Check approval thresholds
     thresholds = policy["approval_thresholds"]
+    overrides = policy.get("approval_overrides") or []
     for path, data in receipts:
         estimated = data["cost_usd"]["estimated"]
         approvals = data["approvals"]
-        check_approval_threshold(path, estimated, approvals, thresholds)
+        env = data.get("environment") if isinstance(data.get("environment"), dict) else {}
+        check_approval_threshold(path, estimated, approvals, thresholds, overrides, seat_executors_from_env(env))
 
     # All checks passed
     num_days = len(global_daily) if global_daily else 0

@@ -2909,7 +2909,10 @@ catches a corpus that stopped routing its own queries.
   at `bench/runs/<date>/<run-id>/receipt.json` validated against
   [`docs/run-receipt-schema.json`](docs/run-receipt-schema.json).
   The policy is [`docs/COMPUTE-GOVERNANCE.md`](docs/COMPUTE-GOVERNANCE.md);
-  `scripts/check_run_ledger.py` enforces it in CI.
+  `scripts/check_run_ledger.py` enforces it in CI. Rent through
+  `python -m experts4bit_qlora.tools.rent` (or `scripts/rent_run.py`): it
+  checks the ledger and approvals before create, arms a controller-side
+  teardown guard, and writes the receipt.
 
 ## 8. When you change something
 

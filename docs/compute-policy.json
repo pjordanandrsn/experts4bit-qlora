@@ -34,6 +34,18 @@
       "confirmed_at": "2026-09-06T04:55Z"
     }
   ],
+  "approval_overrides": [
+    {
+      "while_role_executor": {"CTO": "cursor-desktop-mini/grok"},
+      "band_usd": [2, 20],
+      "approver": "all-of:CTO,CSO",
+      "status": "confirmed",
+      "confirmed_by": "Jordan",
+      "confirmed_at": "2026-09-06 (Slack ruling; the CEO's stamp said 05:50Z on a clock that ran fast -- the exact ts is the raw Slack record)",
+      "source": "experts4bit-qlora#430 comment 04:41Z; board: 'while Grok holds the CTO seat: CTO APPROVE + CSO co-sign, both required'",
+      "semantics": "applies when every listed seat is held by the named executor (launcher --seat-executor ROLE=EXECUTOR; receipt environment.seat_executors) and lo < estimate <= hi; replaces the threshold's approver; only ever tightens"
+    }
+  ],
   "per_run_hard_cap_usd": 35,
   "per_run_hard_cap_status": "confirmed",
   "per_run_hard_cap_confirmed_by": "Jordan",

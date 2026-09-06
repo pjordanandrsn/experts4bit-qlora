@@ -113,6 +113,74 @@ each line is a JSON object with at minimum `{run_id, date_utc, role, cost_usd}`.
 The check script uses it for fast daily-sum queries without walking the entire
 receipt tree.
 
+## How to launch
+
+Agents rent through one entry point so the policy is checked *before* an
+instance exists:
+
+```bash
+python -m experts4bit_qlora.tools.rent \
+  --role CTO --agent cursor-desktop-mini/grok \
+  --work-id experts4bit-qlora#433 --preregistration bench/p41/P41-PREREG.md \
+  --hypothesis "…" --expected-result "…" --success-criteria "…" --failure-criteria "…" \
+  --gpu "RTX 5090" --usd-per-hour 0.40 --wallclock-h 2 \
+  --seat-executor CTO=cursor-desktop-mini/grok \
+  --approval 'CTO/cursor-desktop-mini=https://cerin-amroth.slack.com/archives/C0BV5028SGM/p<16 digits>' \
+  --approval 'CSO/ChatGPT=https://cerin-amroth.slack.com/archives/C0BV5028SGM/p<16 digits>' \
+  --command "python bench/…" --dry-run
+# live (Vast verified-secure / RunPod secure) is refused -- with a REFUSED receipt -- until
+# E4B_RENT_LIVE arms the API adapter; --dry-run uses a fake provider and still writes a receipt.
+```
+
+`scripts/rent_run.py` is the same command. The launcher:
+
+1. Estimates `$ / h × wallclock` and refuses over-ceiling, over global daily
+   budget, a role without a numeric ceiling row, disallowed GPU/provider,
+   missing approvals, or a cap above the $35 per-run hard cap without
+   Jordan's approval. Every refusal writes a `REFUSED` receipt and a ledger
+   line.
+2. `--approval ROLE/AGENT=<slack-permalink>` is repeated as the spec
+   demands: self-approval ≤ $2; one of CTO/CSO ≤ $20; two of CEO/CTO/CSO
+   ≤ $50; Jordan above (Jordan also covers the hard cap, as role *and* agent
+   `Jordan`). `approval_overrides` in `docs/compute-policy.json` tighten the
+   spec while a named executor holds a seat -- today, while
+   `CTO=cursor-desktop-mini/grok`, $2–$20 needs `all-of:CTO,CSO`; the
+   launcher learns the seats from `--seat-executor ROLE=EXECUTOR` and records
+   them in the receipt's `environment.seat_executors`, and
+   `scripts/check_run_ledger.py` applies the same override to the receipt.
+   **An undeclared seat is never the loophole:** the override applies unless
+   every seat it names is declared and held by someone else -- omitting
+   `--seat-executor` gets the stricter spec, in the launcher and in the check.
+   Permalinks must be `https://cerin-amroth.slack.com/archives/C…/p<16
+   digits>`; the launcher cannot read Slack, so the receipt carries them for
+   the ledger check to resolve against the org-corpus raw layer.
+3. Arms a teardown **guard on the controller** (`start_new_session`, not on
+   the rented box), waits for the guard's arm marker (`guard-armed.json`;
+   `--guard-arm-timeout-s`, default 60 s -- no marker means the launcher tears
+   down WITHOUT running the command: `status HARNESS_ERROR`, `result invalid`,
+   `reason guard-not-armed`) and refreshes the guard's heartbeat every `timeout / 3`
+   seconds for as long as `--command` runs. The guard destroys the instance
+   on wallclock or heartbeat loss and proves teardown by listing the provider
+   without that instance id; when the guard fires, the receipt says `status
+   ALARM`, `result invalid` -- never `pass`. On normal completion the
+   launcher tears down, writes the proof (`reason: completion`) and the guard
+   exits. `pass` is written only when the launcher itself destroyed a live
+   instance; an instance found already gone -- by the guard or by anyone else --
+   is `ALARM` / `invalid`.
+4. Writes `bench/runs/<UTC date>/<run-id>/receipt.json` -- `commit_sha`,
+   `branch` and `dirty_tree` read from git, validated against
+   `docs/run-receipt-schema.json` before every write -- and appends
+   `bench/runs/ledger.jsonl`, on success, on a failed command and on
+   refusal. `--role`, `--agent`, `--work-id`, `--preregistration`,
+   `--hypothesis`, `--expected-result`, `--success-criteria` and
+   `--failure-criteria` have no defaults; `decision` is `pending <work-id>`
+   (this document's vocabulary: `adopt|refute|void|pending` + link) until a
+   reviewer sets it; `cost_usd.actual` is the provider's billing
+   (the fake provider bills 0), never a copy of the estimate. A receipt is
+   `complete` only with teardown proof (or `not-launched` when refused before
+   create). Optional `E4B_SLACK_WEBHOOK` posts `LAUNCHED` / `DONE` /
+   `TORN DOWN` / `REFUSED`.
+
 ## Check Script
 
 `scripts/check_run_ledger.py` enforces this policy:
@@ -128,10 +196,10 @@ on success. The check runs in CI on every pull request and push to `main`.
 
 ## Out of Scope
 
-This policy defines **what** can be approved and **who** approves it. The
-**launcher** (CTO, separate issue) will enforce the policy at rent time,
-implement the teardown guard, and emit receipts automatically. Until that
-tooling exists, agents manually create receipts and record approvals in Slack.
+Live Vast/RunPod API adapters behind `E4B_RENT_LIVE` (the dry-run fake provider
+and the controller-side guard are in-tree; a live create still refuses until
+that adapter is armed). Policy numbers, gates, thresholds and claims are not
+moved by the launcher.
 
 ---
 

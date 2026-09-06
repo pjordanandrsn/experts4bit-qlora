@@ -1,9 +1,10 @@
 """Tests for scripts/check_run_ledger.py
 
-Three fixtures:
+Four fixtures:
   1. One passing receipt (valid, within ceilings, proper approvals)
   2. One over-ceiling day (exceeds role daily ceiling)
   3. One missing approval (insufficient approvals for the cost threshold)
+  4. One global-daily-budget violation (two roles within their ceilings, over $100 together)
 """
 from __future__ import annotations
 
@@ -54,7 +55,7 @@ def test_passing_receipt(tmp_path: Path) -> None:
                 "role": "CTO",
                 "agent": "Cursor",
                 "usd_estimate": 1.5,
-                "slack_permalink": "https://example.com/slack/1",
+                "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181000001",
             }
         ],
         "repo": "pjordanandrsn/experts4bit-qlora",
@@ -153,7 +154,7 @@ def test_over_ceiling_day(tmp_path: Path) -> None:
                     "role": "COO",
                     "agent": "Forge",
                     "usd_estimate": cost,
-                    "slack_permalink": f"https://example.com/slack/{i}",
+                    "slack_permalink": f"https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181{i:06d}",
                 }
             ],
             "repo": "pjordanandrsn/experts4bit-qlora",
@@ -255,7 +256,7 @@ def test_missing_approval(tmp_path: Path) -> None:
                 "role": "COO",
                 "agent": "Forge",
                 "usd_estimate": 15.0,
-                "slack_permalink": "https://example.com/slack/99",
+                "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181000099",
             }
         ],
         "repo": "pjordanandrsn/experts4bit-qlora",
@@ -361,17 +362,17 @@ def test_global_daily_budget_violation(tmp_path):
                 "role": "CEO",
                 "agent": "Claude",
                 "usd_estimate": 30.0,
-                "slack_permalink": "https://example.com/slack/10",
+                "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181000010",
             },
             {
                 "role": "CTO",
                 "agent": "Cursor",
                 "usd_estimate": 30.0,
-                "slack_permalink": "https://example.com/slack/11",
+                "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181000011",
             },
         ],
         "repo": "pjordanandrsn/experts4bit-qlora",
-        "commit_sha": "aaa111",
+        "commit_sha": "aaa1111",
         "branch": "main",
         "dirty_tree": False,
         "container_image": "pytorch/pytorch:2.1",
@@ -421,17 +422,17 @@ def test_global_daily_budget_violation(tmp_path):
                 "role": "CEO",
                 "agent": "Claude",
                 "usd_estimate": 35.0,
-                "slack_permalink": "https://example.com/slack/12",
+                "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181000012",
             },
             {
                 "role": "CSO",
                 "agent": "ChatGPT",
                 "usd_estimate": 35.0,
-                "slack_permalink": "https://example.com/slack/13",
+                "slack_permalink": "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181000013",
             },
         ],
         "repo": "pjordanandrsn/experts4bit-qlora",
-        "commit_sha": "bbb222",
+        "commit_sha": "bbb2222",
         "branch": "main",
         "dirty_tree": False,
         "container_image": "pytorch/pytorch:2.1",
