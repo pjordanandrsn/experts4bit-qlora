@@ -922,3 +922,18 @@ def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path
     assert rc == 0 and _receipt(tmp_path)["environment"]["ssh_pubkey_attached"] == "yes"
     rc = main(_cli(tmp_path / "b", "rent-key-2", "--ssh-pubkey", str(private)))
     assert rc == 2, "a refused key is a refusal receipt, not a launch"
+
+
+def test_launcher_passes_the_declared_rate_as_the_offer_ceiling(tmp_path: Path, monkeypatch):
+    """e4b#464: the launcher hands --usd-per-hour to launch() as max_dph, so the estimate on the approval line is the ceiling the offer must fit."""
+    from experts4bit_qlora.tools import rent as rent_mod
+    seen: dict = {}
+
+    class Recording(FakeProvider):
+        def launch(self, **kw):
+            seen.update(kw)
+            return super().launch(gpu=kw["gpu"], wallclock_h=kw["wallclock_h"], image=kw["image"])
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: Recording(kw["fake_state"]))
+    assert main(_cli(tmp_path, "rent-rate-1")) == 0
+    assert seen["max_dph"] == 0.4, "the fixture's --usd-per-hour 0.4 reaches the provider as the offer ceiling"

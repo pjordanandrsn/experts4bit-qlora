@@ -263,7 +263,7 @@ class FakeProvider:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps(st) + "\n")
 
-    def launch(self, *, gpu: str, wallclock_h: float, image: str) -> str:
+    def launch(self, *, gpu: str, wallclock_h: float, image: str, max_dph: float | None = None) -> str:
         st = self._load()
         iid = f"fake-{int(time.time())}-{os.getpid()}"
         live = list(st.get("live") or [])
@@ -894,7 +894,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rec_dir.mkdir(parents=True, exist_ok=True)
     try:
-        iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image)
+        iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image, max_dph=args.usd_per_hour)  # #464: the offer must fit the declared rate
     except Exception as e:  # noqa: BLE001 - #455: a create that fails at the provider is a refusal receipt, not a crash
         # CEO read (#460): a create the adapter could not parse is not a clean refusal. The adapter has already
         # swept by this run's label; what it proved decides the receipt: instances found and destroyed → ALARM,

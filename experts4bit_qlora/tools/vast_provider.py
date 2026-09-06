@@ -210,11 +210,16 @@ class VastProvider:
         return offers
 
     # ---- lifecycle
-    def launch(self, *, gpu: str, wallclock_h: float, image: str) -> str:
+    def launch(self, *, gpu: str, wallclock_h: float, image: str, max_dph: float | None = None) -> str:
         offers = self.search_offers(gpu)
         if not offers:
             raise VastRefused(f"no verified rentable {gpu} offer with ≥{self.min_disk_gb} GB disk and ≥{self.min_ram_gb} GB RAM right now; refusing")
         offer = offers[0]
+        # e4b#464 (the money path): the approval line is `--usd-per-hour × cap`; an offer priced above the declared rate would make
+        # the receipt's estimate a lie. The cheapest verified offer must fit under the declared ceiling or nothing is created.
+        dph = offer.get("dph_total")
+        if max_dph is not None and (dph is None or float(dph) > float(max_dph)):
+            raise VastRefused(f"cheapest verified {gpu} offer is ${dph}/h, above the declared --usd-per-hour ${max_dph}/h the approval was given for; raise the ceiling (a new approval line) or wait — nothing created")
         body = {"client_id": "me", "image": image, "disk": self.min_disk_gb, "label": self.run_label,
                 "runtype": "ssh", "onstart": None}
         status, resp = self.t.request("PUT", f"/v0/asks/{offer['id']}/", body=body)

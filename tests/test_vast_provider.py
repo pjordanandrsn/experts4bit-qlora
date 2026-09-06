@@ -296,3 +296,14 @@ def test_a_child_process_inherits_the_no_live_guard(tmp_path: Path):
     out = subprocess.run([sys.executable, "-m", "experts4bit_qlora.tools.rent", "--live-list"], env=env,
                          capture_output=True, text=True, timeout=180)
     assert out.returncode == 2 and "E4B_NO_LIVE" in out.stderr, out.stderr[-400:]
+
+
+def test_launch_refuses_an_offer_priced_above_the_declared_rate():
+    """e4b#464: the approval line is --usd-per-hour × cap; an offer above the declared rate is refused before any create."""
+    tr = FakeTransport(routes())
+    with pytest.raises(VastRefused, match=r"above the declared --usd-per-hour \$0.5/h") as ei:
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.5)  # the cheapest verified offer is $0.61/h
+    assert "nothing created" in str(ei.value)
+    assert not any(c[0] == "PUT" for c in tr.calls), "no create was attempted"
+    assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.61) == "7000123"
+    assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img") == "7000123", "no ceiling given → no check (the launcher always gives one)"
