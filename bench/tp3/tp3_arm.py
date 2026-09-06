@@ -1250,7 +1250,7 @@ def selftest(a):
     r = run_arm(a, _selftest_load_unsloth, sampler=False)
     assert r["status"] == "ok" and r["trainable_mismatch"]["expected"] == e_ref["trainable_params"] + 1 and r["trainable_mismatch"]["got"] == e_ref["trainable_params"]
     # --prereg wiring (#434 follow-up): a P41 run's receipts name its own pre-registration, never P40's by accident
-    assert e_ref["prereg"] == PREREG and r["prereg"] == PREREG   # the default cites tp2's document (byte-for-byte behaviour)
+    assert e_ref["prereg"] == PREREG and r["prereg"] == PREREG   # selftest sets a.prereg explicitly at :1161; there is no argparse default
     a.framework, a.arm, a.tag, a.prereg, a.expect_trainable = "unsloth", "unsloth", "ckpt_unsloth_prereg", "p41/P41-PREREG.md", None
     r = run_arm(a, _selftest_load_unsloth, sampler=False)
     assert r["prereg"] == "p41/P41-PREREG.md", r["prereg"]
