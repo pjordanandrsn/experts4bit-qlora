@@ -1,12 +1,19 @@
 name: CI
 
+# CI runs on `main` and on a pull request ONLY when the gate holder applies the
+# `ready-to-merge` label (or the PR leaves draft) -- never on every push
+# (Jordan, 2026-09-06). A head with no CI run is not green: remove and re-apply
+# the label after a new push. `workflow_dispatch` is the manual escape hatch.
 on:
   push:
     branches: [main]
   pull_request:
+    types: [labeled, ready_for_review]
+  workflow_dispatch:
 
 jobs:
   lint-and-test:
+    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +56,7 @@ jobs:
         run: pytest tests/ -q
 
   wheel-smoke:
+    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # Built-artifact gate (release-repair directive): README's promised surface
     # must equal the wheel's importable surface. scripts/wheel_smoke.py runs
     # from /tmp against a clean-venv wheel install; the link check maps the
@@ -87,6 +95,7 @@ jobs:
           python scripts/check_readme_links.py --map-ref "$TAG" "$REF"
 
   discoverability:
+    if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
     # CPU-only, deterministic: the machine-readable contracts and the
     # packaging metadata. Nothing here imports the kernels.
     runs-on: ubuntu-latest

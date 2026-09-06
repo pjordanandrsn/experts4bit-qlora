@@ -175,7 +175,7 @@ rulings).
 **Claude Code — CEO**: orchestration, releases, the merge gate.
 
 **Cursor — CTO**: a bounded code task that starts from an issue and ends as a
-pull request (substantive implementation); Bugbot (under the CTO) is QA.
+pull request (substantive implementation).
 
 **ChatGPT — Chief Science Officer**: review, research, repo-state reports;
 read-only.
@@ -222,7 +222,7 @@ DONE/BLOCKED/progress within 60 minutes of an ACK, or says so.
 | Chief Evidence Officer | Warden | Chief Science Officer | — | — |
 | Chief Risk Officer | Scout | Chief Science Officer | CEO | — |
 | Chief Experiments Officer | Chief Science Officer | Warden | CEO | — |
-| QA: Bugbot | Claude Code review | — | — | — |
+| Independent review | Warden (source read) | CXO / CTO / CSO / CDO (not the author) | CEO | — |
 | Chair / Owner | none (decisions wait, `blocked:user`) | — | — | — |
 
 **Procedure:**
@@ -245,13 +245,18 @@ Every handoff posted in Slack is also written on the issue.
   must act (decision, credential, account link).
 - The taking agent acknowledges on the issue, works on a branch, opens a pull
   request that cites the issue, and stops. Every PR gets one independent review
-  before merge — Cursor Bugbot or a Claude Code review, chosen per PR by need
-  (Bugbot by default for code; Claude Code when Bugbot is unavailable or for
-  docs / register changes) — and Claude Code holds the merge gate: checks green
-  + that review + zero unresolved threads, with section 8's companions in the
-  same diff. Nobody merges their own PR. The gate holder reads the PR's base branch before merging and confirms the squash commit is on `main` afterwards; a stacked PR is retargeted with `gh pr edit --base main` (or its base branch deleted) before merge. Receipts
-  and code ship in separate pull requests; a pull request too large for Bugbot
-  to review is a finding, not a pass.
+  before merge — by a seat that did not author it: Warden's source read
+  (`file:line — claim — why — severity`), or a review by the CXO, CTO, CSO, CDO
+  or CEO; Cursor Bugbot and automated Claude Code review are retired (Jordan,
+  2026-09-06). Claude Code holds the merge gate: checks green on the head that
+  carries the `ready-to-merge` label + that review + zero unresolved threads,
+  with section 8's companions in the same diff. CI runs on `main` and on a pull
+  request only when the gate holder applies `ready-to-merge` (or the PR leaves
+  draft), never on every push (Jordan, 2026-09-06); a head with no CI run is
+  not green — remove and re-apply the label after a new push. Nobody merges
+  their own PR. The gate holder reads the PR's base branch before merging and confirms the squash commit is on `main` afterwards; a stacked PR is retargeted with `gh pr edit --base main` (or its base branch deleted) before merge. Receipts
+  and code ship in separate pull requests; a pull request too large to review
+  in one read is a finding, not a pass.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
   registered claim; if the task needs one, the agent stops and says so on the
   issue.
