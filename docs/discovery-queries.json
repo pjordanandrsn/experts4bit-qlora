@@ -722,6 +722,42 @@
           "GPTQ"
         ]
       ]
+    },
+    {
+      "query": "Unsloth vs experts4bit-qlora MoE QLoRA head-to-head per family",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "Unsloth"
+        ],
+        [
+          "head-to-head"
+        ],
+        [
+          "family",
+          "families"
+        ]
+      ]
+    },
+    {
+      "query": "is Unsloth faster than e4b training Mixtral or Granite MoE in 4-bit",
+      "expected_package": "experts4bit-qlora",
+      "expected_document": "docs/solutions/qlora-fused-moe-experts.md",
+      "required_concepts": [
+        [
+          "Unsloth"
+        ],
+        [
+          "Mixtral"
+        ],
+        [
+          "Granite"
+        ],
+        [
+          "faster"
+        ]
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-05, version 0.35.2** (the version of record is
+**As of 2026-09-06, version 0.35.2** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -135,6 +135,79 @@ this workload and said the finding ships either way; it does. One workload
 (≈86 tokens per step, batch 1, resident), one box, one family: no general
 speed claim, nothing licensed, and the 2026-08-26 "1.17× ahead" memory
 (never a claim) is disqualified as a comparison.
+
+**tp2 / P40 (2026-09-06): the Unsloth head-to-head now covers all six
+families, one box, one fixture** (lane tp2 / P40, one rented RTX 5090, Vast
+box 50005568 on a Ryzen 7 5700X3D host, train-anchor class
+`pcie-full/launch-fast`; **measured** — receipt
+[`bench/h2h-20260906/tp2/`](../bench/h2h-20260906/tp2/README.md), reducer
+table in its [`RESULTS-tp2.md`](../bench/h2h-20260906/tp2/RESULTS-tp2.md),
+the pre-registration verbatim as its `P40-PREREG.md`; register
+`e4b.train.h2h.unsloth.<family>.5090.2026-09-06` — one row per attempt under
+`….arm.<framework>.<arm>`, position and `.quality-n60` rows on Qwen3 and
+Mixtral, a `.footprint` row on Mixtral, `.coverage` rows on Granite and
+OLMoE, `.e4b-internal-parity` rows on Granite, OLMoE, Qwen3 and Mixtral).
+P38's fixture exactly (seq 512, r 8 / α 16, lr 1e-4, accum 1, N=60, held-out
+every 20), tokenised once per family with that family's tokenizer; e4b at
+the shipped cut a user installs today — 0.35.1 + grouped-nf4-gemm 0.30.2
+from PyPI, NF4 attention via the shipped `TRAIN_ATTN_4BIT` mechanism —
+against Unsloth 2026.9.2 in its own venv. **Positions exist on two
+families; on the other four the statuses are the result.** Qwen3-30B-A3B:
+s/step ratio Unsloth/e4b **1.457** (5.986 vs 4.108 s — e4b faster per
+step), peak 21.371 vs 23.141 GB, 383.9 vs 561.4 J/step, held-out
+COMPARABLE (0.2935 vs 0.3087, Δ +0.0152 ≤ the 0.05 reading threshold;
+`e4b.train.h2h.unsloth.qwen3.5090.2026-09-06`, `….quality-n60`) — the
+cross-lane anchor: **+3.1% from P38's 1.413, inside the pre-registered
+±10%** (prediction P2 held: the sign and size of the per-step position
+reproduce on a second box; P38's 200-step curve row, in Unsloth's favour,
+still stands beside any position of this family). Mixtral-8x7B: **the
+footprint trade leads the row** — the e4b arm trained its experts under
+CPU offload at a **3.223 GB** peak (the registered design for this family,
+tp1's `offload=True`; a trainable-on-smaller-cards capability, its own row
+`e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint`) while Unsloth
+ran resident (its only mode) at **29.163 GB**, and what that VRAM buys it
+is speed per step: ratio **0.361** — a footprint-vs-speed trade under the
+registered design, not a kernel deficit; e4b's energy is lower (298.3 vs
+350.2 J/step); held-out COMPARABLE (0.2590 vs 0.2502, Δ −0.0087;
+`e4b.train.h2h.unsloth.mixtral.5090.2026-09-06`, `….quality-n60`);
+prediction P4 (Unsloth resident OOMs at seq 512 on 32 GB) **falsified**.
+No position on the other four, and the coverage rows are results, not
+empty cells: **Granite** — the comparator could not train the experts:
+Unsloth's arm completed but is **VOID** — it attached LoRA to the
+attention only, 2,621,440 trainable parameters against e4b's 49,807,360
+with `ExpertsLoRA` on all 32 MoE layers, 0 Params4bit expert stacks, no
+'Enabling LoRA on MoE parameters' banner — its MoE-LoRA path never engaged
+on `granitemoe`
+(`e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage`,
+`….arm.unsloth.ckpt_unsloth`); e4b's arms are VALID (fused 0.641 s/step,
+×5.59 its own reference). **OLMoE** — the comparator could not train the
+family at all: Unsloth's process died at MoE-LoRA engage, rc=1, before its
+first receipt write (HARNESS_ERROR;
+`e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage`,
+`….arm.unsloth.ckpt_unsloth`); e4b's arms are VALID (fused 0.708 s/step,
+×3.73). **gpt-oss** — three
+refusals, as pre-registered (P5 held): e4b's attention-4-bit refuses on
+structure (96 of 96 attention projections carry a bias), its fused path
+patches nothing (tp1's REFUSED row re-proven on this box), and Unsloth's
+load fails on the MXFP4 weight conversion
+(`e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.*`); the attention-only
+secondary row trains (1.464 s/step, 14.687 GB, `….arm.e4b.attn_only`).
+**Gemma-4** — both e4b attention-4-bit arms died on the converter's own
+count check (`quantize_attention_projections_4bit converted 100
+projections, expected 120` —
+[#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412); the
+bf16-attention `fast_train` path stays exactly as tp1 left it), while
+Unsloth's arm is OK · VALID at 3.510 s/step
+(`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.unsloth.ckpt_unsloth`)
+— recorded with the receipt. e4b's internal fused-vs-reference parity
+PASSES on all four families that ran both arms (×5.59 / ×3.73 / ×2.69 /
+×1.23 per step on Granite / OLMoE / Qwen3 / Mixtral,
+`e4b.train.h2h.unsloth.<family>.5090.2026-09-06.e4b-internal-parity`;
+informational, tp1 owns the licence). `training_support` in
+[`capabilities.json`](capabilities.json) now records the attention-4-bit
+configuration per family from these receipts — inside the per-path
+structure, never a flat flag. No gate, threshold or licence moved; nothing
+here supersedes P38 (two boxes, two measurements, never averaged).
 
 **Serving is at parity with the model's own attention on three of four
 families, and not on the fourth.** This is the part that changed most
@@ -529,6 +602,14 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   defaulted to the V4 epilogue, #397). What stays open is a gpt-oss-aware
   adapter; the kernel package's `ExpertsMxfp4LoRA` route is the experimental
   alternative (tp1: canary and provenance pass, never licensed).
+- **[#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412) —
+  Gemma-4 attention 4-bit: `quantize_attention_projections_4bit` converted
+  100 projections where 120 were expected**, so both e4b attention-4-bit
+  arms of lane tp2/P40 died on the converter's own count check before a
+  step ran (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.*`,
+  receipt status `void_attn4`). Attention-4-bit training on `gemma4_text`
+  has no receipt and is not supported pending it; the bf16-attention
+  `fast_train` path stays as tp1 left it.
 - **#344 — Gemma-4 fails to load on 2 of 6 rented hosts** with
   `CUDA error: invalid argument`, after the experts quantise. A 2 GiB
   host-hop fix was merged and reverted the same day: the model's largest

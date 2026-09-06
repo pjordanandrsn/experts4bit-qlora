@@ -198,7 +198,18 @@
         "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05",
         "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.quality-n60",
         "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.e4b-internal-parity"
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.e4b-internal-parity",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.quality-n60",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.e4b-internal-parity",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.quality-n60",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.e4b-internal-parity",
+        "e4b.train.h2h.unsloth.granite.5090.2026-09-06.e4b-internal-parity",
+        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity",
+        "e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage",
+        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint"
       ],
       "limitations": [
         "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
@@ -208,7 +219,8 @@
         "gpt_oss is not a training family here: the loader builds its experts bare (no ExpertsLoRA), and both enable_fast_train and enable_batched_train return zero on it -- REFUSED rows on tp1 (e4b.train.parity.tp1.gptoss.fused.2026-09-05, e4b.train.parity.tp1.gptoss.batched.2026-09-05). Attention-only QLoRA over its frozen experts trains (e4b.train.parity.tp1.gptoss.attn_only.2026-09-05); the only route that trains its experts is grouped-nf4-gemm's experimental mxfp4_qlora.ExpertsMxfp4LoRA under the mxfp4-moe-training-and-residency capability -- experimental, never licensed",
         "enable_batched_train falls back to the reference forward per call above _PAD_WASTE_LIMIT (engines/batched.py): the patch count stays positive while some or all layers run the per-expert loop on some steps. In the shipped code tp1 measured this fallback was uncounted, and three arms read VOID on exactly that -- OLMoE, Qwen3 and Gemma-4 (e4b.train.parity.tp1.olmoe.batched.2026-09-05, e4b.train.parity.tp1.qwen3.batched.2026-09-05, e4b.train.parity.tp1.gemma4.batched.2026-09-05); it engaged everywhere only on Mixtral's eight-expert and Granite's forty-expert shapes. As of the release carrying that bundle the fallback is countable: batched_fallback_stats(model) reports it (#402; those VOID rows are the reason it exists). Assert kernel engagement, not the return value alone",
         "enable_fast, enable_fast_train and enable_batched_train refuse a wrapper whose base violates the stock-epilogue contract (EpilogueContractError, #402) instead of silently computing act(gate)*up over a base that applies biases, clamps or another gating rule -- a refusal is loud, a wrong epilogue is not; gpt-oss is the family this protects, and DeepSeek-V4 supplies its epilogue through _apply_gate and is admitted",
-        "Head-to-head against Unsloth's 4-bit MoE QLoRA path on one identical training problem (lane p38, 2026-09-05, one rented RTX 5090, Qwen3-30B-A3B, the clinical fixture tokenised once, seq 512, r 8 / alpha 16, identical targets, optimizer, batch, steps, precision and eval; bench/h2h-20260905/p38/): the shipped fused dgrad path with NF4 attention is faster per step, lower in peak VRAM and lower in energy per step than Unsloth on that box, and the two are comparable on held-out loss at sixty steps (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05, ...quality-n60) -- BUT the two-hundred-step curve favours Unsloth: its held-out loss is lower at the end of the curve while e4b's flattens from step sixty (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200). Quote the position only beside that row. Candidate causes (the eval schedule, the checkpointing mode, the transformers/peft versions of the two stacks, the expert adapter's precision -- bf16 on this side, the loader passes the model dtype to ExpertsLoRA -- against fp32 on Unsloth's) are not established. One workload, one box, one family; nothing here licenses a path (tp1 does) and no general speed claim is made"
+        "Head-to-head against Unsloth's 4-bit MoE QLoRA path on one identical training problem (lane p38, 2026-09-05, one rented RTX 5090, Qwen3-30B-A3B, the clinical fixture tokenised once, seq 512, r 8 / alpha 16, identical targets, optimizer, batch, steps, precision and eval; bench/h2h-20260905/p38/): the shipped fused dgrad path with NF4 attention is faster per step, lower in peak VRAM and lower in energy per step than Unsloth on that box, and the two are comparable on held-out loss at sixty steps (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05, ...quality-n60) -- BUT the two-hundred-step curve favours Unsloth: its held-out loss is lower at the end of the curve while e4b's flattens from step sixty (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200). Quote the position only beside that row. Candidate causes (the eval schedule, the checkpointing mode, the transformers/peft versions of the two stacks, the expert adapter's precision -- bf16 on this side, the loader passes the model dtype to ExpertsLoRA -- against fp32 on Unsloth's) are not established. One workload, one box, one family; nothing here licenses a path (tp1 does) and no general speed claim is made",
+        "tp2/P40 (2026-09-06, one rented RTX 5090, receipts in bench/h2h-20260906/tp2/) extends the Unsloth head-to-head to all six families on one box and one fixture, and its rows are statuses, not one number: positions exist only for Qwen3-30B-A3B (s/step ratio Unsloth/e4b 1.457, e4b faster per step, quality COMPARABLE; it agrees with P38's 1.413 inside the pre-registered anchor band, e4b.train.h2h.unsloth.qwen3.5090.2026-09-06) and Mixtral-8x7B, whose row leads with the footprint trade: e4b trained its experts under CPU offload at roughly one-ninth of Unsloth's resident allocator peak (the registered design; the footprint row e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint -- a trainable-on-smaller-cards capability, quality COMPARABLE) while Unsloth ran resident, its only mode, and what that VRAM buys it is speed per step (s/step ratio 0.361, e4b.train.h2h.unsloth.mixtral.5090.2026-09-06 -- a footprint-vs-speed trade, not a kernel deficit). No position on the other four, and the coverage rows are results, not empty cells: on Granite the comparator attached LoRA to the attention only, a fraction of e4b's trainable count with ExpertsLoRA on every MoE layer (e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage), and on OLMoE it died at MoE-LoRA engage while both e4b arms trained (e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage); gpt-oss refuses on both sides (P5 held), and Gemma-4's e4b attention-4-bit arms died on the projection-count check (#412; the bf16-attention fast_train path stays as tp1 left it) while Unsloth's arm trained. P38's two-hundred-step curve row (Unsloth lower at the end of the curve) still stands beside any Qwen3 position; per-arm rows are e4b.train.h2h.unsloth.<family>.5090.2026-09-06.arm.*"
       ],
       "status": "supported",
       "training_support": {
@@ -226,16 +238,20 @@
               "status": "supported",
               "claim_ids": [
                 "e4b.train.parity.tp1.olmoe.reference.2026-09-05",
-                "e4b.train.olmoe-converges"
-              ]
+                "e4b.train.olmoe-converges",
+                "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.arm.e4b.reference_attn4"
+              ],
+              "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "fast_train": {
               "status": "supported",
               "claim_ids": [
                 "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
-                "e4b.train.fast-train-dgrad"
+                "e4b.train.fast-train-dgrad",
+                "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.arm.e4b.fused_attn4",
+                "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity"
               ],
-              "reason": "tp1: PASS on the registered clinical text with real -Instruct weights; the dgrad-gate receipt was synthetic tokens"
+              "reason": "tp1: PASS on the registered clinical text with real -Instruct weights; the dgrad-gate receipt was synthetic tokens. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "batched_train": {
               "status": "void",
@@ -267,17 +283,23 @@
               "status": "supported",
               "claim_ids": [
                 "e4b.train.parity.tp1.qwen3.reference.2026-09-05",
-                "e4b.train.flagship-matrix"
-              ]
+                "e4b.train.flagship-matrix",
+                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.arm.e4b.reference_attn4"
+              ],
+              "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 192 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "fast_train": {
               "status": "supported",
               "claim_ids": [
                 "e4b.train.parity.tp1.qwen3.fused.2026-09-05",
                 "e4b.train.flagship-matrix",
-                "e4b.train.fast-train-dgrad"
+                "e4b.train.fast-train-dgrad",
+                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.arm.e4b.fused_attn4",
+                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.e4b-internal-parity",
+                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06",
+                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.quality-n60"
               ],
-              "reason": "tp1: PASS resident on this card, beside the flagship matrix's five-dataset PASS and the dgrad-gate's A6000 reading -- never divided into them"
+              "reason": "tp1: PASS resident on this card, beside the flagship matrix's five-dataset PASS and the dgrad-gate's A6000 reading -- never divided into them. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 192 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "batched_train": {
               "status": "void",
@@ -309,16 +331,20 @@
               "status": "supported",
               "claim_ids": [
                 "e4b.train.parity.tp1.gemma4.reference.2026-09-05",
-                "e4b.train.flagship-matrix"
-              ]
+                "e4b.train.flagship-matrix",
+                "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4"
+              ],
+              "reason": "tp1 and the flagship, with bf16 attention. The attention-4-bit configuration is NOT supported pending #412 (tp2/P40: 'quantize_attention_projections_4bit converted 100 projections, expected 120'; e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4)."
             },
             "fast_train": {
               "status": "supported",
               "claim_ids": [
                 "e4b.train.parity.tp1.gemma4.fused.2026-09-05",
-                "e4b.train.flagship-matrix"
+                "e4b.train.flagship-matrix",
+                "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4",
+                "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.fused_attn4"
               ],
-              "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint"
+              "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4 / fused_attn4) is NOT supported on this family pending #412: on tp2/P40 (2026-09-06) both e4b attention-4-bit arms died on the converter's own projection-count check -- 'quantize_attention_projections_4bit converted 100 projections, expected 120' -- before a step ran (void_attn4 receipts, reduced as HARNESS_ERROR; the two .arm.e4b.* claim ids here). The fast_train path with bf16 attention stays exactly as tp1 left it: supported."
             },
             "batched_train": {
               "status": "void",
@@ -348,15 +374,19 @@
             "reference_train": {
               "status": "supported",
               "claim_ids": [
-                "e4b.train.parity.tp1.granite.reference.2026-09-05"
-              ]
+                "e4b.train.parity.tp1.granite.reference.2026-09-05",
+                "e4b.train.h2h.unsloth.granite.5090.2026-09-06.arm.e4b.reference_attn4"
+              ],
+              "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "fast_train": {
               "status": "supported",
               "claim_ids": [
-                "e4b.train.parity.tp1.granite.fused.2026-09-05"
+                "e4b.train.parity.tp1.granite.fused.2026-09-05",
+                "e4b.train.h2h.unsloth.granite.5090.2026-09-06.arm.e4b.fused_attn4",
+                "e4b.train.h2h.unsloth.granite.5090.2026-09-06.e4b-internal-parity"
               ],
-              "reason": "tp1: PASS on the corrected-counter re-run (tp1b, same box, install and fixture); attempt one is the kept HARNESS_ERROR row of the harness's own counter (e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05), not a shipped-code failure; the family enters model_families on the re-run"
+              "reason": "tp1: PASS on the corrected-counter re-run (tp1b, same box, install and fixture); attempt one is the kept HARNESS_ERROR row of the harness's own counter (e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05), not a shipped-code failure; the family enters model_families on the re-run. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "batched_train": {
               "status": "supported",
@@ -386,16 +416,19 @@
             "reference_train": {
               "status": "refused",
               "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
+                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05",
+                "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.reference_attn4",
+                "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.attn_only"
               ],
-              "reason": "the loader builds the experts bare (no ExpertsLoRA), so the reference path trains no expert adapter; attention-only QLoRA over the frozen experts trains (attn_only, no pair)"
+              "reason": "the loader builds the experts bare (no ExpertsLoRA), so the reference path trains no expert adapter; attention-only QLoRA over the frozen experts trains (attn_only, no pair); tp2/P40 (2026-09-06) re-receipts both halves on a second 5090: the attention-4-bit configuration REFUSES on structure -- 96 of 96 attention projections carry a bias and quantize_attention_projections_4bit refuses bias-carrying projections (the reference_attn4 REFUSED row) -- and attention-only bf16-adapter QLoRA over the frozen bare experts trains (the attn_only OK row, a secondary row; the experts train nothing)."
             },
             "fast_train": {
               "status": "refused",
               "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.fused.2026-09-05"
+                "e4b.train.parity.tp1.gptoss.fused.2026-09-05",
+                "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.fused_attn4"
               ],
-              "reason": "enable_fast_train returns zero: no ExpertsLoRA to patch, and the fused path does not apply gpt-oss's per-expert biases and clamped GLU"
+              "reason": "enable_fast_train returns zero: no ExpertsLoRA to patch, and the fused path does not apply gpt-oss's per-expert biases and clamped GLU; re-proven on tp2/P40 (2026-09-06): the zero-patch probe read 0 on that box too and the attention-4-bit half refuses on the family's bias-carrying projections (the fused_attn4 REFUSED row)."
             },
             "batched_train": {
               "status": "refused",
@@ -429,16 +462,21 @@
             "reference_train": {
               "status": "supported",
               "claim_ids": [
-                "e4b.train.parity.tp1.mixtral.reference.2026-09-05"
+                "e4b.train.parity.tp1.mixtral.reference.2026-09-05",
+                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.arm.e4b.reference_attn4"
               ],
-              "reason": "tp1: under offload=True, the frozen stack bit-exact from its CPU home"
+              "reason": "tp1: under offload=True, the frozen stack bit-exact from its CPU home. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "fast_train": {
               "status": "supported",
               "claim_ids": [
-                "e4b.train.parity.tp1.mixtral.fused.2026-09-05"
+                "e4b.train.parity.tp1.mixtral.fused.2026-09-05",
+                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.arm.e4b.fused_attn4",
+                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.e4b-internal-parity",
+                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06",
+                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.quality-n60"
               ],
-              "reason": "tp1: PASS under offload=True, at half the reference loop's peak VRAM; the family enters model_families on this row"
+              "reason": "tp1: PASS under offload=True, at half the reference loop's peak VRAM; the family enters model_families on this row. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
             },
             "batched_train": {
               "status": "supported",
