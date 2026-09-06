@@ -3,7 +3,9 @@
 * :class:`ExpertsLoRA` — per-expert low-rank adapters over a frozen :class:`Experts4bit` base
   (the QLoRA-on-fused-MoE piece).
 * :class:`LoRALinear` — the usual per-projection LoRA over a frozen ``nn.Linear`` (attention).
-* :func:`add_attention_lora` — wrap an OLMoE model's attention q/k/v/o projections in-place.
+* :func:`detect_attention_projections` — shared STRUCTURE detector for attention q/k/v/o
+  (``v_proj`` optional; expected count is ``len(candidates)``).
+* :func:`add_attention_lora` — wrap those projections in-place with :class:`LoRALinear`.
 
 In both, ``B`` is zero-initialised so the adapted module is identical to the frozen base at
 step 0 and only departs as the adapters train (standard LoRA initialisation).
@@ -31,6 +33,7 @@ from __future__ import annotations
 import functools
 import inspect
 import os
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import torch
@@ -702,11 +705,102 @@ class LoRALinear(nn.Module):
         return self.base(x) + delta.to(x.dtype)
 
 
+def _is_supported_linear(obj, *, exact: bool) -> bool:
+    """A projection we will convert or wrap.
+
+    ``exact=True`` (quantize): ``type is nn.Linear`` so an already-converted
+    ``Linear4bit`` (an ``nn.Linear`` subclass) is not re-quantised.
+    ``exact=False`` (LoRA): ``isinstance(..., nn.Linear)`` so ``Linear4bit``
+    after :func:`quantize_attention_projections_4bit` still wraps.
+    """
+    if obj is None:
+        return False
+    if exact:
+        return type(obj) is nn.Linear
+    return isinstance(obj, nn.Linear)
+
+
+def _attention_projection_names(mod, *, exact_linear: bool) -> list[str] | None:
+    """Candidate projection names on one module, or None if it is not an attention block.
+
+    STRUCTURE, never class/family names: ``q_proj`` and ``o_proj`` as supported
+    linears admit the block; ``k_proj`` must then also be a supported linear
+    (missing ``k_proj`` is true cross-layer KV reuse — refused, not guessed);
+    ``v_proj`` may be a supported linear or absent/``None``.
+    """
+    q = getattr(mod, "q_proj", None)
+    o = getattr(mod, "o_proj", None)
+    if not (
+        _is_supported_linear(q, exact=exact_linear)
+        and _is_supported_linear(o, exact=exact_linear)
+    ):
+        return None
+    k = getattr(mod, "k_proj", None)
+    if not _is_supported_linear(k, exact=exact_linear):
+        raise SystemExit(
+            "attention projections: module has q_proj and o_proj as supported "
+            "linears but k_proj is missing or not a supported linear; "
+            "cross-layer KV reuse is refused rather than guessed"
+        )
+    names = ["q_proj", "k_proj"]
+    v = getattr(mod, "v_proj", None)
+    if _is_supported_linear(v, exact=exact_linear):
+        names.append("v_proj")
+    names.append("o_proj")
+    return names
+
+
+@dataclass(frozen=True)
+class AttentionProjectionCensus:
+    """Snapshot of structurally detected attention projections.
+
+    ``expected_count`` is ``len(candidates)``. A harness compares a conversion
+    or wrap count to this, never to ``4 * n_layers``. Do not edit committed
+    receipt trees under ``bench/`` to change that assertion — the next lane
+    reads this count from the library.
+    """
+
+    candidates: tuple[tuple[nn.Module, str], ...]
+
+    @property
+    def expected_count(self) -> int:
+        return len(self.candidates)
+
+
+def detect_attention_projections(model, *, exact_linear: bool = False) -> AttentionProjectionCensus:
+    """Walk ``model.modules()`` and snapshot attention projections by STRUCTURE.
+
+    Both :func:`quantize_attention_projections_4bit` (``exact_linear=True``) and
+    :func:`add_attention_lora` (``exact_linear=False``) use this detector.
+    Snapshot before mutating: converting or wrapping changes the types the
+    predicate matches.
+
+    Returns:
+        :class:`AttentionProjectionCensus` whose ``expected_count`` is
+        ``len(candidates)``.
+    """
+    found: list[tuple[nn.Module, str]] = []
+    for mod in model.modules():
+        names = _attention_projection_names(mod, exact_linear=exact_linear)
+        if names is None:
+            continue
+        for name in names:
+            found.append((mod, name))
+    return AttentionProjectionCensus(candidates=tuple(found))
+
+
 def quantize_attention_projections_4bit(model) -> int:
     """Store the FROZEN attention q/k/v/o projections in bnb NF4 (opt-in,
     ``TRAIN_ATTN_4BIT=1``). Run BEFORE :func:`add_attention_lora`: bnb's
     ``Linear4bit`` is an ``nn.Linear`` subclass, so the structural detector
     still matches and ``LoRALinear`` wraps the 4-bit base unchanged.
+
+    Detection is :func:`detect_attention_projections` with ``exact_linear=True``:
+    ``q_proj``/``k_proj``/``o_proj`` must be exactly ``nn.Linear``; ``v_proj``
+    may be exactly ``nn.Linear`` or absent/``None``. The returned count equals
+    the census ``expected_count`` (``len(candidates)``) unless this raises.
+    A projection that carries a bias is refused (gpt-oss) rather than dropping
+    the bias. A layer lacking ``k_proj`` is refused.
 
     Why this is safe where serving-side NF4 attention is not: training's
     forward runs at M = seq x batch (hundreds of rows), the regime where
@@ -718,43 +812,46 @@ def quantize_attention_projections_4bit(model) -> int:
     and lm_head deliberately stay bf16 — they sit in the loss path even
     frozen, and NF4 there measured +0.40 ppl.
     """
+    census = detect_attention_projections(model, exact_linear=True)
+    for mod, name in census.candidates:
+        lin = getattr(mod, name)
+        if lin.bias is not None:
+            raise SystemExit(
+                f"TRAIN_ATTN_4BIT: {name} carries a bias; this "
+                f"path stores weight-only NF4 -- refusing rather "
+                f"than silently dropping the bias")
     import bitsandbytes as bnb
 
-    projs = ("q_proj", "k_proj", "v_proj", "o_proj")
     n = 0
-    for mod in model.modules():
-        if all(type(getattr(mod, p, None)) is nn.Linear for p in projs):
-            for name in projs:
-                lin = getattr(mod, name)
-                if lin.bias is not None:
-                    raise SystemExit(
-                        f"TRAIN_ATTN_4BIT: {name} carries a bias; this "
-                        f"path stores weight-only NF4 -- refusing rather "
-                        f"than silently dropping the bias")
-                dev = lin.weight.device
-                q = bnb.nn.Linear4bit(
-                    lin.in_features, lin.out_features, bias=False,
-                    compute_dtype=torch.bfloat16, quant_type="nf4")
-                q.weight = bnb.nn.Params4bit(
-                    lin.weight.data.to("cpu", torch.bfloat16).contiguous(),
-                    requires_grad=False, quant_type="nf4")
-                setattr(mod, name, q.to(dev))   # quantises on transfer
-                n += 1
+    for mod, name in census.candidates:
+        lin = getattr(mod, name)
+        dev = lin.weight.device
+        q = bnb.nn.Linear4bit(
+            lin.in_features, lin.out_features, bias=False,
+            compute_dtype=torch.bfloat16, quant_type="nf4")
+        q.weight = bnb.nn.Params4bit(
+            lin.weight.data.to("cpu", torch.bfloat16).contiguous(),
+            requires_grad=False, quant_type="nf4")
+        setattr(mod, name, q.to(dev))   # quantises on transfer
+        n += 1
     return n
 
 
 def add_attention_lora(model, r: int, alpha: int, dtype: torch.dtype) -> int:
-    """Wrap each attention q/k/v/o projection with a trainable LoRA adapter (base stays frozen).
+    """Wrap each structurally detected attention projection with a trainable LoRA adapter.
 
-    Detects attention blocks **structurally** — any module exposing ``q_proj``/``k_proj``/``v_proj``/
-    ``o_proj`` as ``nn.Linear`` — so it is architecture-agnostic (OLMoE, Qwen3-MoE, ...). Idempotent:
-    once wrapped, a projection is a ``LoRALinear`` (not ``nn.Linear``), so it is not re-wrapped.
+    Detection is :func:`detect_attention_projections` (same predicate as
+    :func:`quantize_attention_projections_4bit`, with ``isinstance`` so a
+    ``Linear4bit`` base still wraps). ``q_proj``/``k_proj``/``o_proj`` must be
+    supported linears; ``v_proj`` may be a supported linear or absent/``None``.
+    Architecture-agnostic (OLMoE, Qwen3-MoE, Mixtral, Granite, Gemma-4 k_eq_v).
+    Idempotent: once wrapped, a projection is a ``LoRALinear`` (not
+    ``nn.Linear``), so it is not re-wrapped. The returned count equals the
+    census ``expected_count``.
     """
-    projs = ("q_proj", "k_proj", "v_proj", "o_proj")
+    census = detect_attention_projections(model, exact_linear=False)
     n = 0
-    for mod in model.modules():
-        if all(isinstance(getattr(mod, p, None), nn.Linear) for p in projs):
-            for name in projs:
-                setattr(mod, name, LoRALinear(getattr(mod, name), r, alpha, dtype))
-                n += 1
+    for mod, name in census.candidates:
+        setattr(mod, name, LoRALinear(getattr(mod, name), r, alpha, dtype))
+        n += 1
     return n

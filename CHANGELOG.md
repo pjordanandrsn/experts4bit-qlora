@@ -15,6 +15,20 @@ Documentation and repository infrastructure only; no code, no version bump, no g
 
 **Out of scope** (CTO, separate issue): the launcher that enforces the policy at rent time, the teardown guard, and the receipt emitter.
 
+### Attention 4-bit + LoRA: detect projections by STRUCTURE (#426, #412)
+
+`quantize_attention_projections_4bit` and `add_attention_lora` now share one
+detector (`detect_attention_projections`). Admission is by module STRUCTURE,
+never family name: `q_proj`, `k_proj` and `o_proj` must be supported linears;
+`v_proj` may be a supported linear or absent/`None` (Gemma-4 `attention_k_eq_v`
+layers, where transformers sets `v_proj=None` and reuses `key_states` as V).
+The expected count is `len(candidates)` on the snapshot, never `4 * n_layers`.
+A layer with `q_proj`/`o_proj` but no `k_proj` is refused rather than guessed.
+The bias refusal still fires after admission, so gpt-oss's "96 of 96 attention
+projections carry a bias" REFUSED holds. `docs/capabilities.json` `gemma4_text`
+attention-4-bit stays "not supported pending #412"; the tp2 VOID rows stay VOID.
+No gate, threshold, floor or registered claim moved.
+
 ## 0.35.3 — 2026-09-06 — the loader honours a pinned checkpoint revision (#404); tp2 / P40 into the register (#415)
 
 One behaviour change (the loader threads `revision` into both hub lookups, pins remote modeling code to the same commit,

@@ -23,7 +23,7 @@ import sys
 import torch
 
 from .loader import load_moe_4bit_streaming
-from .lora import add_attention_lora, quantize_attention_projections_4bit
+from .lora import add_attention_lora, detect_attention_projections, quantize_attention_projections_4bit
 from .util import log
 
 MODEL = os.environ.get("MODEL", "allenai/OLMoE-1B-7B-0924")
@@ -318,11 +318,13 @@ def main():
     if not OFFLOAD_EXPERTS:
         model.to(DEVICE)
     if TRAIN_ATTN_4BIT:
+        expected_attn4 = detect_attention_projections(model, exact_linear=True).expected_count
         n_q4 = quantize_attention_projections_4bit(model)
         if n_q4 == 0:
             raise SystemExit("TRAIN_ATTN_4BIT=1 converted no projections "
                              "-- refusing a vacuous arm")
-        log(f"[attn-4bit] {n_q4} projections stored in NF4 (frozen base)")
+        log(f"[attn-4bit] {n_q4} projections stored in NF4 (frozen base); "
+            f"expected {expected_attn4}")
     n_attn = add_attention_lora(model, R, ALPHA, DTYPE) if TRAIN_ATTENTION else 0
     log(f"attn LoRA {n_attn} projs | train experts={TRAIN_EXPERTS} attn={TRAIN_ATTENTION} router={TRAIN_ROUTER}")
 
