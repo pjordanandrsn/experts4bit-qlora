@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.35.3 — 2026-09-06 — the loader honours a pinned checkpoint revision (#404); tp2 / P40 into the register (#415)
+
+One behaviour change (the loader threads `revision` into both hub lookups, pins remote modeling code to the same commit,
+records the commit actually loaded and refuses mismatches; #404 → #410) and the claims half of the tp2 bundle (31 rows,
+`training_support` per family × path from the receipts, companion docs; #415 → #419, receipts in #414). No gate, threshold,
+floor or existing claim value moved; the `fast` extra's floor (grouped-nf4-gemm >= 0.30.0) and the CI pin are unchanged.
 
 ### tp2 / P40 into the register: the per-family Unsloth head-to-head (claims + docs; the claims half of the tp2 bundle, receipts merged in #414)
 
