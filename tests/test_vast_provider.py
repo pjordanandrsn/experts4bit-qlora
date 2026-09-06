@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from experts4bit_qlora.tools.vast_provider import (
-    BackendUnavailable, FakeTransport, PreflightFailed, VastProvider, VastRefused, load_api_key, offer_filter, provider_from_env,
+    BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
+    offer_filter, provider_from_env,
 )
 
 KEY = "ab" * 20 + "0123456789abcdef"  # 56 hex chars, built at runtime so nothing key-shaped is at rest
@@ -83,6 +86,7 @@ def test_a_test_runner_can_never_go_live(tmp_path: Path, monkeypatch):
 def test_arming_rules_outside_a_test_runner(tmp_path: Path, monkeypatch):
     from experts4bit_qlora.tools import vast_provider
     monkeypatch.setattr(vast_provider, "_under_test", lambda: False)
+    monkeypatch.delenv("E4B_NO_LIVE", raising=False)  # the fixture's cross-process guard, lifted for the arming rules only
     monkeypatch.delenv("E4B_RENT_LIVE", raising=False)
     with pytest.raises(VastRefused, match="E4B_RENT_LIVE=1"):
         provider_from_env(run_label="x", key_path=key_file(tmp_path))
@@ -193,3 +197,102 @@ def test_nothing_in_this_module_creates_an_instance_on_import(monkeypatch):
     provider(tr)
     assert tr.calls == []
     assert os.environ.get("E4B_RENT_LIVE") is None
+
+
+# ---- #460 reads: pagination, the orphan sweep, destroy's "already gone", no email, E4B_NO_LIVE across processes
+def test_list_ids_follows_next_token_to_the_last_page():
+    """CEO MEDIUM-1: the real v1 body carries next_token; an instance on page two must never read as gone."""
+    page1 = {"success": True, "instances": [INSTANCE], "instances_found": 1, "total_instances": 2, "next_token": "tok-2", "label_counts": {}}
+    page2 = {"success": True, "instances": [dict(INSTANCE, id=7000124)], "instances_found": 1, "total_instances": 2, "next_token": None, "label_counts": {}}
+    tr = FakeTransport(routes({("GET", "/v1/instances/"): [(200, page1), (200, page2)]}))
+    assert provider(tr).list_ids() == {"7000123", "7000124"}
+    calls = [c for c in tr.calls if c[:2] == ("GET", "/v1/instances/")]
+    assert calls[0][2] is None and calls[1][2] == {"next_token": "tok-2"}
+
+
+def test_list_ids_refuses_a_page_walk_it_cannot_trust():
+    bad_total = {"instances": [INSTANCE], "instances_found": 1, "total_instances": 2, "next_token": None}
+    with pytest.raises(BackendUnavailable, match="total_instances=2"):
+        provider(FakeTransport(routes({("GET", "/v1/instances/"): [(200, bad_total)]}))).list_ids()
+    bad_found = {"instances": [INSTANCE], "instances_found": 3, "total_instances": 1, "next_token": None}
+    with pytest.raises(BackendUnavailable, match="instances_found=3"):
+        provider(FakeTransport(routes({("GET", "/v1/instances/"): [(200, bad_found)]}))).list_ids()
+    endless = {"instances": [INSTANCE], "next_token": "again"}
+    with pytest.raises(BackendUnavailable, match="did not end"):
+        provider(FakeTransport(routes({("GET", "/v1/instances/"): [(200, endless)]}))).list_ids()
+    # a second page that errors makes the WHOLE listing unknown — never "the first page"
+    tr = FakeTransport(routes({("GET", "/v1/instances/"): [(200, {"instances": [INSTANCE], "next_token": "t2"}),
+                                                          (200, {"success": False, "error": "deprecated_endpoint"})]}))
+    with pytest.raises(BackendUnavailable, match="page 2"):
+        provider(tr).list_ids()
+
+
+def test_unparsed_create_sweeps_by_label_and_is_never_a_clean_refusal():
+    """CEO MEDIUM-2: a create this code cannot parse may have committed server-side; nobody may own that box."""
+    mine = dict(INSTANCE, label="test-run")
+    other = dict(INSTANCE, id=7000999, label="someone-else")
+    # 200 without new_contract; the listing shows a box under this run's label → destroyed, absent after → OrphanSwept
+    tr = FakeTransport(routes({("PUT", "/v0/asks/42274235/"): [(200, {"success": True})],
+                              ("GET", "/v1/instances/"): [(200, {"instances": [mine, other]}), (200, {"instances": [other]})]}))
+    with pytest.raises(OrphanSwept, match="destroyed them, absent") as ei:
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    assert ei.value.swept == ["7000123"]
+    assert any(c[:2] == ("DELETE", "/v0/instances/7000123/") for c in tr.calls)
+    assert not any(c[:2] == ("DELETE", "/v0/instances/7000999/") for c in tr.calls), "another run's box is never touched"
+    # the listing fails: nothing provable → PossibleOrphan naming the label
+    tr = FakeTransport(routes({("PUT", "/v0/asks/42274235/"): [(500, "Internal Server Error")],
+                              ("GET", "/v1/instances/"): [(200, {"success": False, "error": "deprecated_endpoint"})]}))
+    with pytest.raises(PossibleOrphan, match="POSSIBLE ORPHAN — check the console for label 'test-run'"):
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    # the box stays present after destroy → PossibleOrphan too
+    tr = FakeTransport(routes({("PUT", "/v0/asks/42274235/"): [(200, {"success": True})],
+                              ("GET", "/v1/instances/"): [(200, {"instances": [mine]})]}))
+    with pytest.raises(PossibleOrphan, match=r"still present \['7000123'\]"):
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    # a clean listing with nothing under the label: nothing was created → the ordinary create failure
+    tr = FakeTransport(routes({("PUT", "/v0/asks/42274235/"): [(200, {"success": True})],
+                              ("GET", "/v1/instances/"): [(200, {"instances": [other]})]}))
+    with pytest.raises(BackendUnavailable, match="nothing was created") as ei:
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    assert not isinstance(ei.value, (OrphanSwept, PossibleOrphan))
+    # an understood refusal (success: false) never sweeps
+    tr = FakeTransport(routes({("PUT", "/v0/asks/42274235/"): [(200, {"success": False, "error": "insufficient_credit"})]}))
+    with pytest.raises(BackendUnavailable, match="create did not succeed"):
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    assert not any(c[:2] == ("GET", "/v1/instances/") for c in tr.calls)
+
+
+def test_destroy_treats_no_such_instance_as_already_gone():
+    tr = FakeTransport(routes({("DELETE", "/v0/instances/7000123/"): [(200, {"success": False, "error": "no_such_instance"})]}))
+    ev = provider(tr).destroy("7000123")
+    assert ev["http"] == 200 and "no_such_instance" in ev["note"] and "absence proven only by the listing" in ev["note"]
+
+
+def test_auth_probe_never_returns_the_account_email():
+    tr = FakeTransport(routes())
+    who = provider(tr).auth_probe()
+    assert "email" not in who and "x@example.com" not in json.dumps(who)
+
+
+def test_e4b_no_live_refuses_whatever_the_flag_says(tmp_path: Path, monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    monkeypatch.setattr(vast_provider, "_under_test", lambda: False)
+    monkeypatch.setenv("E4B_RENT_LIVE", "1")
+    monkeypatch.setenv("E4B_NO_LIVE", "1")
+    with pytest.raises(VastRefused, match="E4B_NO_LIVE"):
+        provider_from_env(run_label="x", key_path=key_file(tmp_path))
+
+
+def test_a_child_process_inherits_the_no_live_guard(tmp_path: Path):
+    """CEO MEDIUM-LOW: _under_test() stops at a process boundary; the fixture's E4B_NO_LIVE=1 does not. A child
+    spawned with E4B_RENT_LIVE=1 and no PYTEST_CURRENT_TEST still refuses by name. HOME points at tmp_path so no
+    real key file is reachable in the child either way (belt and braces)."""
+    env = {**os.environ, "E4B_RENT_LIVE": "1", "HOME": str(tmp_path)}
+    env.pop("PYTEST_CURRENT_TEST", None)
+    assert env.get("E4B_NO_LIVE") == "1"  # set by tests/conftest.py
+    code = "from experts4bit_qlora.tools.vast_provider import provider_from_env; provider_from_env(run_label='child')"
+    out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, timeout=180)
+    assert out.returncode != 0 and "E4B_NO_LIVE" in out.stderr, out.stderr[-400:]
+    out = subprocess.run([sys.executable, "-m", "experts4bit_qlora.tools.rent", "--live-list"], env=env,
+                         capture_output=True, text=True, timeout=180)
+    assert out.returncode == 2 and "E4B_NO_LIVE" in out.stderr, out.stderr[-400:]

@@ -275,6 +275,15 @@ class FakeProvider:
     def list_ids(self) -> set[str]:
         return set(self._load().get("live") or [])
 
+    def preflight(self, instance_id: str, *, timeout_s: float = 600.0) -> dict[str, str]:
+        """The fake's pre-flight: passes unless the state file says `{"preflight_fail": "<reason>"}` — so the
+        launcher's preflight-failure path (NOT_RUN / invalid / reason preflight-failed, box destroyed) runs
+        under test, which no FakeProvider run did before (Warden LOW, #460)."""
+        why = self._load().get("preflight_fail")
+        if why:
+            raise RuntimeError(f"fake pre-flight failed: {why}")
+        return {"fake_preflight": "ok"}
+
     def destroy(self, instance_id: str) -> dict[str, Any]:
         st = self._load()
         live = [x for x in (st.get("live") or []) if x != instance_id]
@@ -387,21 +396,25 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
     list_errors = 0
     while time.time() < deadline:
         time.sleep(poll)
+        # The heartbeat is read before the listing so a lost heartbeat is acted on during a provider outage
+        # too (CEO read, #460): the box is destroyed on the evidence the guard has, not after the API recovers.
+        stale = hb.is_file() and (time.time() - hb.stat().st_mtime) > heartbeat_timeout_s
         try:
             live = prov.list_ids()
         except Exception as e:  # noqa: BLE001 - #455: a listing that fails is unknown, never "gone"; keep watching
             list_errors += 1
             if list_errors in (1, 10, 100):
                 print(f"[guard] instance listing failed ({list_errors}x): {e!r}", file=sys.stderr)
+            if stale:
+                reason = "heartbeat-loss"
+                break
             continue
         if instance_id not in live:
             reason = "already-gone"
             break
-        if hb.is_file():
-            age = time.time() - hb.stat().st_mtime
-            if age > heartbeat_timeout_s:
-                reason = "heartbeat-loss"
-                break
+        if stale:
+            reason = "heartbeat-loss"
+            break
     if reason == "already-gone":
         # The launcher (or someone) destroyed it first; nothing to prove beyond the absence.
         if not Path(proof_path).is_file():
@@ -474,6 +487,12 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+#: Every value the launcher or the guard writes as teardown_proof.reason. The schema's enum
+#: (docs/run-receipt-schema.json) must list the same set; tests assert the two agree (Warden MEDIUM-2, #460).
+TEARDOWN_REASONS = ("completion", "heartbeat-loss", "wallclock", "already-gone", "torn-down-externally",
+                    "guard-not-armed", "preflight-failed")
+
+
 def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -> None:
     """Raise ReceiptInvalid unless the receipt satisfies docs/run-receipt-schema.json. Uses jsonschema
     when importable; otherwise the required keys, the commit_sha pattern, the string/number types the
@@ -508,8 +527,7 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
         if isinstance(tp, dict):
             if "complete" in tp and not isinstance(tp.get("complete"), bool):
                 problems.append("teardown_proof.complete must be a bool when present")
-            _valid_tp_reasons_fallback = {"completion", "heartbeat-loss", "wallclock", "already-gone",
-                                         "torn-down-externally", "guard-not-armed"}
+            _valid_tp_reasons_fallback = set(TEARDOWN_REASONS)
             try:
                 _schema_enum = (schema.get("properties", {}).get("teardown_proof", {})
                                 .get("properties", {}).get("reason", {}).get("enum"))
@@ -726,8 +744,10 @@ def _live_smoke(args) -> int:
         prov = vast_provider.provider_from_env(run_label="live-smoke")
         who = prov.auth_probe()
         print(f"auth: user {who['user_id']} balance={who['balance']} credit={who['credit']}")
-        ids = prov.list_ids()
-        print(f"instances (v1): {len(ids)} -> {sorted(ids) if ids else '[] (a genuine empty array)'}")
+        recs = prov.list_instances()  # every page; per-page and total counts are checked against the arrays
+        ids = sorted(str(r.get("id")) for r in recs if r.get("id") is not None)
+        print(f"instances (v1, all pages): {len(ids)} -> {ids if ids else '[] (a genuine empty array)'}"
+              + (f"; labels {sorted(str(r.get('label')) for r in recs)}" if recs else ""))
         if args.live_offers:
             offers = prov.search_offers(args.live_offers)
             print(f"offers ({args.live_offers}, verified, ≥{prov.min_disk_gb} GB disk, ≥{prov.min_ram_gb} GB RAM): {len(offers)}")
@@ -791,7 +811,8 @@ def main(argv: list[str] | None = None) -> int:
     configuration = {"dry_run": bool(args.dry_run), "wallclock_h": args.wallclock_h,
                      "usd_per_hour": args.usd_per_hour, "gpu": args.gpu, "image": args.image}
 
-    def refused(msg: str, spec: str | None) -> int:
+    def refused(msg: str, spec: str | None, *, status: str = "REFUSED", method: str = "not-launched",
+                complete: bool = True) -> int:
         environment["approver_spec"] = str(spec) if spec else "unresolved"
         rec = build_receipt(
             experiment_id=run_id, work_id=args.work_id, requested_by=who, executed_by=who,
@@ -802,15 +823,15 @@ def main(argv: list[str] | None = None) -> int:
             # gpu_count is the REQUESTED count (schema minimum 1); the "not-launched" proof says none was rented.
             gpu_count=1, started_at=started_at, finished_at=_utc(), runtime_seconds=time.time() - t0,
             cost_estimated=estimate, cost_actual=0.0,
-            teardown_proof={"method": "not-launched", "evidence": f"refused before launch: {msg}"},
-            status="REFUSED", result="invalid", notes=msg, configuration=configuration,
+            teardown_proof={"method": method, "evidence": f"refused before launch: {msg}", "complete": complete},
+            status=status, result="invalid", notes=msg, configuration=configuration,
             dataset=args.dataset, dataset_hash=args.dataset_hash, model=args.model,
             model_revision=args.model_revision, model_hash=args.model_hash, seed=args.seed,
-            container_image=args.image, cpu=args.cpu, ram=args.ram, storage=args.storage, complete=True, **facts)
+            container_image=args.image, cpu=args.cpu, ram=args.ram, storage=args.storage, complete=complete, **facts)
         write_receipt(rec_dir, rec, schema_path=schema_path)
         append_ledger(Path(args.ledger), run_id=run_id, date_utc=date_utc, role=args.role, cost_usd=0.0)
-        maybe_slack(f"REFUSED {run_id}: {msg}")
-        print(f"REFUSED: {msg}", file=sys.stderr)
+        maybe_slack(f"{status} {run_id}: {msg}")
+        print(f"{status}: {msg}", file=sys.stderr)
         return 2
 
     policy_provider = "vast:verified-secure" if provider == "fake" else provider
@@ -834,6 +855,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image)
     except Exception as e:  # noqa: BLE001 - #455: a create that fails at the provider is a refusal receipt, not a crash
+        # CEO read (#460): a create the adapter could not parse is not a clean refusal. The adapter has already
+        # swept by this run's label; what it proved decides the receipt: instances found and destroyed → ALARM,
+        # complete (money was spent, the box is gone); nothing provable → ALARM, complete=False, a human checks
+        # the console for the label. Only a listing that shows nothing under the label is a refusal.
+        swept = getattr(e, "swept", None)
+        if swept is not None:
+            return refused(f"ORPHAN SWEPT after an unparsed create: {e}", spec, status="ALARM",
+                           method=f"{prov.kind}-orphan-sweep", complete=True)
+        if type(e).__name__ == "PossibleOrphan":
+            return refused(f"POSSIBLE ORPHAN after an unparsed create: {e}", spec, status="ALARM",
+                           method=f"{prov.kind}-orphan-unproven", complete=False)
         return refused(f"launch failed at the provider before any instance existed: {e}", spec)
     # #455: what the provider accepted (offer id, contract id, machine id, $/h, the search filter verbatim) is
     # part of the record; environment values are strings by schema.
@@ -905,15 +937,21 @@ def main(argv: list[str] | None = None) -> int:
     def _read_proof() -> dict[str, Any] | None:
         return json.loads(proof_path.read_text()) if proof_path.is_file() else None
     proof = _read_proof()
-    if proof is None and iid not in prov.list_ids():
+    # Warden MEDIUM-1 (#460): a listing that fails here is UNKNOWN — never "gone", never a proof, never
+    # complete=True. `_list_or_unknown` (the guard's helper) answers None on any failure.
+    _live0 = _list_or_unknown(prov) if proof is None else None
+    if proof is None and _live0 is not None and iid not in _live0:
         # Gone without a proof: the guard may be between destroy and write (1a) -- give it a moment.
         deadline = time.time() + 3
         while time.time() < deadline and (proof := _read_proof()) is None:
             time.sleep(0.05)
         if proof is None:
+            _after = _list_or_unknown(prov)
+            _absent = _after is not None and iid not in _after
             proof = {"method": f"{prov.kind}-observed-absent", "reason": "torn-down-externally",
-                     "evidence": json.dumps({"instance_absent": True, "list_after": sorted(prov.list_ids())},
-                                            sort_keys=True), "complete": True, "at": _utc()}
+                     "evidence": json.dumps({"instance_absent": _absent,
+                                             "list_after": sorted(_after) if _after is not None else "UNKNOWN"},
+                                            sort_keys=True), "complete": _absent, "at": _utc()}
             _write_proof(proof_path, proof)
     # Item 3 (#446): TOCTOU residual -- the guard may have written guard-firing.json *before* destroy but
     # the instance is still live (or only just gone) when the launcher checks. Treat the marker like a
@@ -946,24 +984,34 @@ def main(argv: list[str] | None = None) -> int:
             evidence = {"method": f"{prov.kind}-destroy-failed", "error": repr(e)}
             status, result = "ALARM", "invalid"
             notes = f"teardown failed: {e!r} (" + notes + ")"
-        remaining = prov.list_ids()
+        remaining = _list_or_unknown(prov)
+        _absent = remaining is not None and iid not in remaining
         proof = {"method": evidence.get("method", f"{prov.kind}-destroy"), "reason": own_reason,
-                 "evidence": json.dumps({"destroy": evidence, "list_after": sorted(remaining),
-                                         "instance_absent": iid not in remaining}, sort_keys=True),
-                 "complete": iid not in remaining, "at": _utc()}
+                 "evidence": json.dumps({"destroy": evidence,
+                                         "list_after": sorted(remaining) if remaining is not None else "UNKNOWN",
+                                         "instance_absent": _absent}, sort_keys=True),
+                 "complete": _absent, "at": _utc()}
         _write_proof(proof_path, proof)
-        try:
-            os.kill(guard.pid, signal.SIGTERM)
-        except OSError:
-            pass
-        # Item 2 (#446): join the guard so it finishes any sidecar write before the launcher exits;
-        # without this the guard may write teardown-proof.guard.json after tmp_path teardown in tests
-        # (or after the receipt directory is no longer writable in production).
-        try:
-            guard.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            pass
-    gone = iid not in prov.list_ids()
+        if remaining is None:
+            # Absence unproven: the guard stays alive — it destroys again on heartbeat loss (the launcher's
+            # refresher stops here) or wallclock and writes its own proof. Nobody's box goes unwatched.
+            status, result = "ALARM", "invalid"
+            notes = f"teardown unproven: the instance listing was unavailable after destroy; guard pid {guard.pid} left alive to finish it (" + notes + ")"
+            environment["guard_left_alive"] = str(guard.pid)
+        else:
+            try:
+                os.kill(guard.pid, signal.SIGTERM)
+            except OSError:
+                pass
+            # Item 2 (#446): join the guard so it finishes any sidecar write before the launcher exits;
+            # without this the guard may write teardown-proof.guard.json after tmp_path teardown in tests
+            # (or after the receipt directory is no longer writable in production).
+            try:
+                guard.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+    _final = _list_or_unknown(prov)
+    gone = _final is not None and iid not in _final
     complete = gone and proof.get("method") not in (None, "pending")
     actual_cost = 0.0  # fake provider bills nothing; a live adapter must read the provider's billing, never copy the estimate
     if hasattr(prov, "actual_cost"):

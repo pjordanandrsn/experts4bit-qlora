@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import time
@@ -654,6 +655,7 @@ def test_vast_is_refused_by_name_when_not_armed_and_runpod_still_refuses(monkeyp
     with pytest.raises(RentRefused, match="test runner"):
         provider_for("vast:verified-secure")  # under pytest: refused before anything else
     monkeypatch.setattr(vast_provider, "_under_test", lambda: False)  # the arming rules, as outside a runner
+    monkeypatch.delenv("E4B_NO_LIVE", raising=False)  # the fixture's cross-process guard, lifted for the arming rules only
     monkeypatch.delenv("E4B_RENT_LIVE", raising=False)
     with pytest.raises(RentRefused, match="E4B_RENT_LIVE=1"):
         provider_for("vast:verified-secure")
@@ -723,3 +725,142 @@ def test_teardown_proof_carries_complete(tmp_path: Path) -> None:
     assert tp["complete"] is True, (
         f"FakeProvider teardown destroys the instance; expected complete=True, got {tp['complete']!r}"
     )
+
+
+# ---- #460 reads: the launcher's pre-flight path, listing-or-unknown at teardown, orphan receipts, guard order
+def test_teardown_reason_vocabulary_matches_the_schema():
+    """Warden MEDIUM-2: the fallback validator, the schema enum and check_run_ledger read one set."""
+    from experts4bit_qlora.tools.rent import TEARDOWN_REASONS
+    enum = json.loads(SCHEMA.read_text())["properties"]["teardown_proof"]["properties"]["reason"]["enum"]
+    assert set(enum) == set(TEARDOWN_REASONS) and "preflight-failed" in enum
+
+
+def test_preflight_failure_is_not_run_invalid_and_destroys_the_box(tmp_path: Path, monkeypatch):
+    """Warden LOW: no test ran the launcher's pre-flight block before; the fake now has one."""
+    fake = tmp_path / "rent-pf-1-fake.json"
+    fake.write_text(json.dumps({"live": [], "preflight_fail": "stuck loading"}) + "\n")
+    rc = main(_cli(tmp_path, "rent-pf-1", "--command", "true"))
+    rec = _receipt(tmp_path)
+    assert rc == 1
+    assert rec["status"] == "NOT_RUN" and rec["result"] == "invalid" and "stuck loading" in rec["notes"] and "command not run" in rec["notes"]
+    assert rec["teardown_proof"]["reason"] == "preflight-failed" and rec["teardown_proof"]["complete"] is True
+    assert rec["environment"]["vast_preflight"] == "failed"
+    assert rec["instance_id"] not in (json.loads(fake.read_text()).get("live") or [])
+    # the same receipt passes the fallback validator (no jsonschema): one vocabulary in both paths (Warden MEDIUM-2)
+    monkeypatch.setitem(sys.modules, "jsonschema", None)
+    validate_receipt(rec, SCHEMA)
+
+
+def test_fake_preflight_runs_and_passes_on_an_ordinary_run(tmp_path: Path):
+    rc = main(_cli(tmp_path, "rent-pf-ok-1"))
+    rec = _receipt(tmp_path)
+    assert rc == 0 and rec["status"] == "OK" and rec["environment"]["fake_preflight"] == "ok"
+
+
+def test_teardown_with_the_listing_down_is_unproven_alarm_and_the_guard_stays_alive(tmp_path: Path, monkeypatch):
+    """Warden MEDIUM-1: main()'s listings after destroy were bare list_ids(); a failure there lost the receipt.
+    Now a failed listing is UNKNOWN: complete=False, ALARM, and the guard is not killed."""
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class DeadAfterDestroy(FakeProvider):
+        def destroy(self, instance_id):
+            ev = super().destroy(instance_id)
+            self.state_path.with_suffix(".dead").write_text("x")
+            return ev
+
+        def list_ids(self):
+            if self.state_path.with_suffix(".dead").is_file():
+                raise RuntimeError("deprecated_endpoint (false zero refused)")
+            return super().list_ids()
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: DeadAfterDestroy(kw["fake_state"]))
+    rc = main(_cli(tmp_path, "rent-dead-1"))
+    rec = _receipt(tmp_path)
+    pid = int(rec["environment"]["guard_left_alive"])
+    try:
+        assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid" and rec["complete"] is False
+        assert "teardown unproven" in rec["notes"] and f"guard pid {pid} left alive" in rec["notes"]
+        tp = rec["teardown_proof"]
+        assert tp["complete"] is False and tp["reason"] == "completion"
+        assert json.loads(tp["evidence"])["list_after"] == "UNKNOWN" and json.loads(tp["evidence"])["instance_absent"] is False
+        # the guard (a plain FakeProvider on the same state file) sees the instance gone and finishes on its own;
+        # this process is its parent, so reap it (a zombie still answers kill(pid, 0)).
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            try:
+                wpid, _status = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                break  # already reaped by subprocess's own bookkeeping
+            if wpid == pid:
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("the guard did not finish on its own evidence")
+    finally:
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
+
+
+def test_unparsed_create_with_nothing_provable_is_an_alarm_receipt(tmp_path: Path, monkeypatch):
+    """CEO MEDIUM-2 through the CLI: a PossibleOrphan from the adapter is ALARM / complete=False, not a clean refusal."""
+    from experts4bit_qlora.tools import rent as rent_mod, vast_provider
+
+    class Orphaning(FakeProvider):
+        def launch(self, **kw):
+            raise vast_provider.PossibleOrphan("create answered a shape this code does not understand; "
+                                               "POSSIBLE ORPHAN — check the console for label 'rent-orphan-1'")
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: Orphaning(kw["fake_state"]))
+    rc = main(_cli(tmp_path, "rent-orphan-1"))
+    rec = _receipt(tmp_path)
+    assert rc == 2 and rec["status"] == "ALARM" and rec["result"] == "invalid" and rec["complete"] is False
+    assert rec["teardown_proof"]["method"] == "fake-orphan-unproven" and rec["teardown_proof"]["complete"] is False
+    assert "POSSIBLE ORPHAN" in rec["notes"] and "label 'rent-orphan-1'" in rec["notes"] and rec["instance_id"] == "none"
+
+
+def test_unparsed_create_whose_orphans_were_swept_is_an_alarm_receipt(tmp_path: Path, monkeypatch):
+    from experts4bit_qlora.tools import rent as rent_mod, vast_provider
+
+    class Swept(FakeProvider):
+        def launch(self, **kw):
+            raise vast_provider.OrphanSwept("create answered a shape this code does not understand; the sweep found "
+                                            "['7000123'] under label 'rent-orphan-2', destroyed them, absent in the listing after",
+                                            ["7000123"])
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: Swept(kw["fake_state"]))
+    rc = main(_cli(tmp_path, "rent-orphan-2"))
+    rec = _receipt(tmp_path)
+    assert rc == 2 and rec["status"] == "ALARM" and rec["complete"] is True
+    assert rec["teardown_proof"]["method"] == "fake-orphan-sweep" and rec["teardown_proof"]["complete"] is True
+    assert "ORPHAN SWEPT" in rec["notes"] and "7000123" in rec["notes"]
+
+
+def test_guard_acts_on_a_lost_heartbeat_while_the_listing_is_down(tmp_path: Path):
+    """CEO LOW: the heartbeat is judged before the listing, so an API outage does not defer a heartbeat-loss teardown."""
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class Blind(FakeProvider):
+        def list_ids(self):
+            raise RuntimeError("deprecated_endpoint (false zero refused)")
+
+    fake = tmp_path / "blind.json"
+    prov = Blind(fake)
+    iid = prov.launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    saved = rent_mod.provider_for
+    rent_mod.provider_for = lambda kind, **kw: prov
+    try:
+        proof = tmp_path / "proof.json"
+        hb = tmp_path / "hb"
+        hb.write_text("x")
+        t0 = time.time()
+        rent_mod.guard_worker(instance_id=iid, provider_kind="fake", fake_state=str(fake), wallclock_s=30,
+                              heartbeat_path=str(hb), proof_path=str(proof), heartbeat_timeout_s=0.5)
+        took = time.time() - t0
+    finally:
+        rent_mod.provider_for = saved
+    data = json.loads(proof.read_text())
+    assert data["reason"] == "heartbeat-loss" and took < 10, took
+    assert data["complete"] is False, "absence stays unproven while the listing is down — destroyed, not proven"
+    assert iid not in FakeProvider(fake).list_ids()

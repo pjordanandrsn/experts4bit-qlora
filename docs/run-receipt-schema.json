@@ -329,7 +329,8 @@
             "wallclock",
             "already-gone",
             "torn-down-externally",
-            "guard-not-armed"
+            "guard-not-armed",
+            "preflight-failed"
           ]
         },
         "complete": {

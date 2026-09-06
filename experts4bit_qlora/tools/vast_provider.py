@@ -56,6 +56,21 @@ class PreflightFailed(RuntimeError):
     """The instance exists but is unusable; the caller destroys it and writes an ``invalid`` receipt."""
 
 
+class OrphanSwept(BackendUnavailable):
+    """A create answered a shape this code does not understand, and the sweep found instance(s) carrying this
+    run's label, destroyed them and saw them absent. Money was spent: the caller's receipt is ALARM, complete."""
+
+    def __init__(self, msg: str, swept: list[str]):
+        super().__init__(msg)
+        self.swept = swept
+
+
+class PossibleOrphan(BackendUnavailable):
+    """A create answered a shape this code does not understand and the sweep could NOT prove nothing is running
+    under this run's label (the listing failed, a destroy failed, or an id stayed present). Never a clean refusal:
+    the caller's receipt is ALARM, complete=False, and a human checks the console for the label."""
+
+
 # ---------------------------------------------------------------------------------------------- key
 def load_api_key(path: Path | str = DEFAULT_KEY_PATH) -> str:
     """The key by shape from a mode-600 file. The returned value must never be printed or stored."""
@@ -179,7 +194,8 @@ class VastProvider:
         status, body = self.t.request("GET", "/v0/users/current/")
         if status != 200 or not isinstance(body, dict) or "id" not in body:
             raise VastRefused(f"Vast auth probe failed: HTTP {status}, body {_shape(body)} — the key was not accepted")
-        return {"user_id": str(body.get("id")), "email": str(body.get("email", "UNKNOWN")),
+        # No `email`: it is personal data one `environment[...] = str(v)` away from a receipt in the corpus (CEO read, #460).
+        return {"user_id": str(body.get("id")),
                 "balance": str(body.get("balance", "UNKNOWN")), "credit": str(body.get("credit", "UNKNOWN"))}
 
     # ---- offers
@@ -202,8 +218,14 @@ class VastProvider:
         body = {"client_id": "me", "image": image, "disk": self.min_disk_gb, "label": self.run_label,
                 "runtype": "ssh", "onstart": None}
         status, resp = self.t.request("PUT", f"/v0/asks/{offer['id']}/", body=body)
-        if status != 200 or not isinstance(resp, dict) or not resp.get("success") or "new_contract" not in resp:
+        if status == 200 and isinstance(resp, dict) and resp.get("success") is False:
+            # Understood: the provider refused and nothing was created (insufficient_credit, offer gone, …).
             raise BackendUnavailable(f"create did not succeed: HTTP {status}, body {_shape(resp)}")
+        if status != 200 or not isinstance(resp, dict) or not resp.get("success") or "new_contract" not in resp:
+            # NOT understood (a 5xx after the contract committed, a 200 without `new_contract`, a non-JSON body):
+            # the contract may exist server-side with nobody holding its id. Sweep by this run's label — labels
+            # are per run — and never let this become a clean refusal receipt (CEO read, #460 MEDIUM-2).
+            self._sweep_orphans(f"create answered a shape this code does not understand: HTTP {status}, body {_shape(resp)}")
         iid = str(resp["new_contract"])
         self._dph = float(offer.get("dph_total")) if offer.get("dph_total") is not None else None
         q = offer_filter(gpu, min_disk_gb=self.min_disk_gb, min_ram_gb=self.min_ram_gb)
@@ -225,18 +247,68 @@ class VastProvider:
     def launch_facts(self) -> dict[str, str]:
         return dict(self._facts)
 
+    def _sweep_orphans(self, why: str) -> None:
+        """After a create this code could not parse: list every instance carrying this run's label, destroy
+        each, and prove absence with a fresh listing. Raises OrphanSwept (something was running and is now
+        gone), PossibleOrphan (nothing can be proven), or BackendUnavailable (the listing is clean: nothing
+        under the label ever existed). Never returns normally — the create is failed either way."""
+        console = f"POSSIBLE ORPHAN — check the console for label {self.run_label!r}"
+        try:
+            mine = [str(r.get("id")) for r in self.list_instances() if str(r.get("label", "")) == self.run_label and r.get("id") is not None]
+        except BackendUnavailable as e:
+            raise PossibleOrphan(f"{why}; the sweep could not list instances ({e}); {console}") from e
+        if not mine:
+            raise BackendUnavailable(f"{why}; a fresh v1 listing shows nothing under label {self.run_label!r}, so nothing was created")
+        failures: list[str] = []
+        for iid in mine:
+            try:
+                self.destroy(iid)
+            except BackendUnavailable as e:
+                failures.append(f"{iid}: {e}")
+        try:
+            after = self.list_ids()
+        except BackendUnavailable as e:
+            raise PossibleOrphan(f"{why}; swept {mine} by label but the listing after destroy failed ({e}); {console}") from e
+        still = sorted(i for i in mine if i in after)
+        if failures or still:
+            raise PossibleOrphan(f"{why}; swept {mine} by label: destroy failed for {failures or 'none'}, still present {still or 'none'}; {console}")
+        raise OrphanSwept(f"{why}; the sweep found {mine} under label {self.run_label!r}, destroyed them, absent in the listing after", mine)
+
+    MAX_PAGES = 50
+
+    def list_instances(self) -> list[dict[str, Any]]:
+        """Every live instance record from v1, following `next_token` to the end. An error body, a deprecated-endpoint
+        body, a missing `instances` key, a page count beyond MAX_PAGES, or per-page / total counts that disagree with
+        the arrays raise — the result is never a partial or empty list on an error. (The real v1 body carries
+        `instances, instances_found, label_counts, next_token, success, total_instances` — CEO read 2026-09-06; a
+        running instance on a second page read as "gone" is the one false-negative this module promises never to make.)"""
+        out: list[dict[str, Any]] = []
+        token: Any = None
+        for page in range(1, self.MAX_PAGES + 1):
+            query = {"next_token": str(token)} if token is not None else None
+            status, body = self.t.request("GET", "/v1/instances/", query=query)
+            if status != 200 or not isinstance(body, dict):
+                raise BackendUnavailable(f"instance list unavailable (page {page}): HTTP {status}, body {_shape(body)}")
+            if body.get("success") is False or "error" in body:
+                raise BackendUnavailable(f"instance list answered an error, not a list (page {page}): {_shape(body)} (false-zero refused)")
+            inst = body.get("instances")
+            if not isinstance(inst, list):
+                raise BackendUnavailable(f"instance list has no `instances` array (page {page}): {_shape(body)} (false-zero refused)")
+            found = body.get("instances_found")
+            if isinstance(found, int) and not isinstance(found, bool) and found != len(inst):
+                raise BackendUnavailable(f"instance list page {page}: instances_found={found} but the array holds {len(inst)} — refusing to trust it")
+            out.extend(r for r in inst if isinstance(r, dict))
+            token = body.get("next_token")
+            if token in (None, "", 0, False):
+                total = body.get("total_instances")
+                if isinstance(total, int) and not isinstance(total, bool) and total != len(out):
+                    raise BackendUnavailable(f"instance list: total_instances={total} but {len(out)} record(s) were read across {page} page(s) — refusing to trust it")
+                return out
+        raise BackendUnavailable(f"instance list did not end within {self.MAX_PAGES} pages (next_token still non-null) — refusing to trust it")
+
     def list_ids(self) -> set[str]:
-        """Live instance ids from v1. An error body, a deprecated-endpoint body or a missing `instances` key
-        raises — it is never an empty set."""
-        status, body = self.t.request("GET", "/v1/instances/")
-        if status != 200 or not isinstance(body, dict):
-            raise BackendUnavailable(f"instance list unavailable: HTTP {status}, body {_shape(body)}")
-        if body.get("success") is False or "error" in body:
-            raise BackendUnavailable(f"instance list answered an error, not a list: {_shape(body)} (false-zero refused)")
-        inst = body.get("instances")
-        if not isinstance(inst, list):
-            raise BackendUnavailable(f"instance list has no `instances` array: {_shape(body)} (false-zero refused)")
-        return {str(i.get("id")) for i in inst if isinstance(i, dict) and i.get("id") is not None}
+        """Live instance ids from v1 across every page. Raises rather than answering empty on any error."""
+        return {str(r.get("id")) for r in self.list_instances() if r.get("id") is not None}
 
     def instance(self, instance_id: str) -> dict[str, Any]:
         status, body = self.t.request("GET", f"/v0/instances/{instance_id}/")
@@ -255,6 +327,9 @@ class VastProvider:
         if status == 404:
             # v1 404s on destroy and a wrong id 404s too: not proof of anything — the caller's fresh v1 listing is.
             return {"method": "vast-destroy", "instance_id": instance_id, "http": 404, "note": "404 on v0 destroy — absence proven only by the listing", "at": _utc()}
+        if status == 200 and isinstance(body, dict) and body.get("success") is False and str(body.get("error", "")) == "no_such_instance":
+            # The provider saying "already gone" (the incident's own 12:48:54Z answer) — like the 404, the listing decides.
+            return {"method": "vast-destroy", "instance_id": instance_id, "http": 200, "note": "no_such_instance on v0 destroy — absence proven only by the listing", "at": _utc()}
         if not ok:
             raise BackendUnavailable(f"destroy {instance_id} did not succeed: HTTP {status}, body {_shape(body)}")
         return {"method": "vast-destroy", "instance_id": instance_id, "http": status, "at": _utc()}
@@ -328,15 +403,26 @@ def _ssh_run(host: str, port: int, command: str, timeout_s: float) -> tuple[int,
         return 124, f"ssh timed out after {timeout_s} s"
 
 
+BANDWIDTH_URLS = ("https://speed.cloudflare.com/__down?bytes=100000000", "http://speedtest.tele2.net/100MB.zip")
+
+
 def _bandwidth_over_ssh(host: str, port: int) -> float:
-    """MB/s of a 100 MB download measured ON the box (what the run will see), via curl over ssh."""
-    rc, out = _ssh_run(host, port, "curl -s -o /dev/null -w '%{speed_download}' --max-time 60 https://speed.cloudflare.com/__down?bytes=100000000", 90)
-    if rc != 0:
-        return 0.0
-    try:
-        return float(out.strip().split()[-1]) / 1e6
-    except (ValueError, IndexError):
-        return 0.0
+    """MB/s of a 100 MB download measured ON the box (what the run will see), via curl over ssh. Each endpoint is
+    tried twice before the next one (Warden LOW, #460: one dead test server must not fail a good box); the best
+    reading wins; 0.0 only when every attempt failed."""
+    best = 0.0
+    for url in BANDWIDTH_URLS:
+        for _attempt in range(2):
+            rc, out = _ssh_run(host, port, f"curl -s -o /dev/null -w '%{{speed_download}}' --max-time 60 '{url}'", 90)
+            if rc != 0:
+                continue
+            try:
+                best = max(best, float(out.strip().split()[-1]) / 1e6)
+            except (ValueError, IndexError):
+                continue
+            if best > 0:
+                return best
+    return best
 
 
 def _under_test() -> bool:
@@ -348,11 +434,19 @@ def _under_test() -> bool:
             or argv0 in ("pytest", "py.test") or any(a in ("pytest", "unittest") for a in sys.argv[:2]))
 
 
+def _no_live_env() -> bool:
+    """E4B_NO_LIVE crosses a process boundary where _under_test() cannot: the test fixture sets it, a subprocess a
+    test spawns inherits it, and provider_from_env refuses on it whatever E4B_RENT_LIVE says (CEO read, #460)."""
+    return os.environ.get("E4B_NO_LIVE", "") not in ("", "0")
+
+
 def provider_from_env(*, run_label: str, key_path: Path | str | None = None, **kw: Any) -> VastProvider:
     """The launcher's factory: armed only by E4B_RENT_LIVE=1 and a readable key file; the auth probe runs first.
     Refuses under a test runner whatever the environment says — a live adapter in a test is a rented box."""
     if _under_test():
         raise VastRefused("live provider refused: this process is a test runner (tests never rent; use FakeTransport)")
+    if _no_live_env():
+        raise VastRefused("live provider refused: E4B_NO_LIVE is set in this environment (a test fixture sets it and every child inherits it; tests never rent)")
     if os.environ.get("E4B_RENT_LIVE") != "1":
         raise VastRefused("live provider vast:verified-secure is not armed in this process: set E4B_RENT_LIVE=1 (a fake run is --dry-run)")
     key = load_api_key(DEFAULT_KEY_PATH if key_path is None else key_path)  # read at call time, never bound at import

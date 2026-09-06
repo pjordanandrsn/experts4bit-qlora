@@ -163,6 +163,9 @@ def pytest_report_collectionfinish(config, items):
 @pytest.fixture(autouse=True)
 def _never_rent_in_tests(monkeypatch, tmp_path):
     monkeypatch.setenv("E4B_RENT_LIVE", "0")
+    # E4B_NO_LIVE crosses a process boundary where _under_test() cannot: a subprocess a test spawns inherits it
+    # and provider_from_env refuses on it whatever E4B_RENT_LIVE says in the child (CEO read, #460).
+    monkeypatch.setenv("E4B_NO_LIVE", "1")
     try:
         from experts4bit_qlora.tools import vast_provider
         monkeypatch.setattr(vast_provider, "DEFAULT_KEY_PATH", tmp_path / "no-such-secrets.env")
