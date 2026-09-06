@@ -644,3 +644,24 @@ def test_fallback_validator_checks_teardown_proof_complete_and_reason(tmp_path: 
     # A valid complete+reason pair passes the fallback
     good = dict(rec, teardown_proof=dict(rec["teardown_proof"], complete=True, reason="completion"))
     validate_receipt(good, SCHEMA)  # must not raise
+
+
+def test_teardown_proof_carries_complete(tmp_path: Path) -> None:
+    """teardown_proof.complete is now included in the receipt (#457 fix to rent.py:891).
+
+    The launcher proof dict always carries 'complete' (True when the teardown succeeded,
+    False when the instance was found already gone); the filter previously dropped it so
+    the schema's teardown_proof.complete field was never populated by any receipt the
+    launcher wrote.  After the fix, a successful FakeProvider teardown yields complete=True.
+    """
+    rc = main(_cli(tmp_path, "rent-complete-1"))
+    assert rc == 0
+    rec = _receipt(tmp_path)
+    tp = rec["teardown_proof"]
+    assert "complete" in tp, f"teardown_proof.complete missing from receipt after fix; got keys: {list(tp)}"
+    assert isinstance(tp["complete"], bool), (
+        f"teardown_proof.complete must be bool, got {type(tp['complete'])!r}: {tp['complete']!r}"
+    )
+    assert tp["complete"] is True, (
+        f"FakeProvider teardown destroys the instance; expected complete=True, got {tp['complete']!r}"
+    )
