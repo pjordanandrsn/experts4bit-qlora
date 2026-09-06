@@ -111,14 +111,14 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
     assert out.returncode == 0, out.stdout + out.stderr
     lines = out.stdout.splitlines()
     assert any(
-        l.startswith("DRYRUN stage:")
+        ln.startswith("DRYRUN stage:")
         and "bench/tp3/tp3_arm.py" in ln
         and "bench/p41/p41_run.sh" in ln
         and "root@ssh5.vast.ai:/root/p41/" in ln
         for ln in lines
     )
     assert any(
-        l.startswith("DRYRUN start:")
+        ln.startswith("DRYRUN start:")
         and "P41_RUN_ID=p41-r1-granite" in ln
         and "P41_DEADLINE_EPOCH=1788800000" in ln
         and "P41_USD_PER_HOUR=0.60" in ln
