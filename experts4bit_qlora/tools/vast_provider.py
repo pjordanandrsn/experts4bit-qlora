@@ -339,10 +339,18 @@ class VastProvider:
             raise BackendUnavailable(f"destroy {instance_id} did not succeed: HTTP {status}, body {_shape(body)}")
         return {"method": "vast-destroy", "instance_id": instance_id, "http": status, "at": _utc()}
 
-    def attach_ssh_key(self, instance_id: str, pubkey: str) -> None:
+    def attach_ssh_key(self, instance_id: str, pubkey: str) -> str:
+        """Attach the controller's public key to the instance. Returns "yes" on a 200 with success, "already" when the
+        API reports the key is already associated (e4b#468: an account key is attached to every new instance by Vast
+        itself, so the per-instance attach is an idempotent no-op that the API reports as success=False with that
+        message — R1 attempt 1 went NOT_RUN on it); anything else raises (#465 MEDIUM-1: attached is never assumed)."""
         status, body = self.t.request("POST", f"/v0/instances/{instance_id}/ssh/", body={"ssh_key": pubkey})
-        if status != 200 or (isinstance(body, dict) and body.get("success") is False):
-            raise BackendUnavailable(f"attaching the ssh key to {instance_id} failed: HTTP {status}, body {_shape(body)}")
+        if status == 200 and isinstance(body, dict):
+            if body.get("success") is not False:
+                return "yes"
+            if "already associated" in str(body.get("msg", "")).lower():
+                return "already"
+        raise BackendUnavailable(f"attaching the ssh key to {instance_id} failed: HTTP {status}, body {_shape(body)}")
 
     # ---- pre-flight
     def preflight(self, instance_id: str, *, timeout_s: float = 600.0, ssh_timeout_s: float = 30.0,
@@ -370,8 +378,8 @@ class VastProvider:
             raise PreflightFailed(f"instance {instance_id} has no ssh endpoint yet (ssh_host={host!r}, ssh_port={port!r})")
         attached: dict[str, str] = {}
         if self.ssh_pubkey:
-            self.attach_ssh_key(instance_id, self.ssh_pubkey)   # raises on anything but a 200 → the pre-flight fails
-            attached["vast_ssh_key_attached"] = "yes"           # #465 MEDIUM-1: stated after the 200, never before
+            # raises on anything but a 200 → the pre-flight fails; "already" = the account key Vast attached itself (#468)
+            attached["vast_ssh_key_attached"] = self.attach_ssh_key(instance_id, self.ssh_pubkey)   # #465 MEDIUM-1: after the 200
         rc, out = self._ssh(str(host), int(port), "true", ssh_timeout_s)
         if rc != 0:
             raise PreflightFailed(f"ssh to {host}:{port} did not authenticate within {int(ssh_timeout_s)} s (rc {rc}: {out.strip()[:120]})")

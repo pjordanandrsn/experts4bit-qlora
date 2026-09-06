@@ -176,6 +176,21 @@ def test_preflight_passes_and_records_the_box():
     assert "vast_ssh_key_attached" not in provider(FakeTransport(routes())).preflight("7000123", timeout_s=60), "no key → no fact"
 
 
+def test_preflight_treats_an_already_associated_key_as_attached_and_records_it():
+    """e4b#468 — R1 attempt 1's body, verbatim shape: Vast attaches an account key to every new instance itself, so the
+    per-instance attach answers success=False + 'SSH key already associated with instance.' — attached, not a failure."""
+    already = {"success": False, "msg": "SSH key already associated with instance."}
+    tr = FakeTransport(routes({("POST", "/v0/instances/7000123/ssh/"): [(200, already)]}))
+    facts = provider(tr, ssh_pubkey="ssh-ed25519 AAAA test").preflight("7000123", timeout_s=60)
+    assert facts["vast_preflight"] == "ok" and facts["vast_ssh_key_attached"] == "already"
+    assert not any(c[:2] == ("DELETE", "/v0/instances/7000123/") for c in tr.calls)
+    # any other success=False on a 200 is still a refusal (the MEDIUM-1 rule unchanged)
+    other = {"success": False, "msg": "Instance not found."}
+    tr = FakeTransport(routes({("POST", "/v0/instances/7000123/ssh/"): [(200, other)]}))
+    with pytest.raises(BackendUnavailable, match="attaching the ssh key"):
+        provider(tr, ssh_pubkey="ssh-ed25519 AAAA test").preflight("7000123", timeout_s=60)
+
+
 def test_preflight_fails_when_the_key_attach_is_refused_and_states_no_attach():
     tr = FakeTransport(routes({("POST", "/v0/instances/7000123/ssh/"): [(500, {"success": False, "error": "nope"})]}))
     with pytest.raises(BackendUnavailable, match="attaching the ssh key"):
