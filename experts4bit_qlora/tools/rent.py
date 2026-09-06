@@ -480,8 +480,14 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
         if isinstance(tp, dict):
             if "complete" in tp and not isinstance(tp.get("complete"), bool):
                 problems.append("teardown_proof.complete must be a bool when present")
-            _valid_tp_reasons = {"completion", "heartbeat-loss", "wallclock", "already-gone",
-                                 "torn-down-externally", "guard-not-armed"}
+            _valid_tp_reasons_fallback = {"completion", "heartbeat-loss", "wallclock", "already-gone",
+                                         "torn-down-externally", "guard-not-armed"}
+            try:
+                _schema_enum = (schema.get("properties", {}).get("teardown_proof", {})
+                                .get("properties", {}).get("reason", {}).get("enum"))
+                _valid_tp_reasons = set(_schema_enum) if _schema_enum else _valid_tp_reasons_fallback
+            except (TypeError, AttributeError):
+                _valid_tp_reasons = _valid_tp_reasons_fallback
             if "reason" in tp and tp["reason"] not in _valid_tp_reasons:
                 problems.append(
                     f"teardown_proof.reason must be one of {sorted(_valid_tp_reasons)} when present, "
@@ -804,7 +810,8 @@ def main(argv: list[str] | None = None) -> int:
     if own_reason != "guard-not-armed":
         _grc = guard.poll()
         if _grc is not None:
-            notes = notes + f"; guard exited {_grc} during command"
+            _guard_note = f"guard exited {_grc} during command"
+            notes = f"{notes}; {_guard_note}" if notes else _guard_note
             environment["guard_exited_early"] = str(_grc)
 
     # Teardown. `pass` is written only when the launcher itself destroyed a live instance; an instance that

@@ -466,6 +466,7 @@ def test_guard_liveness_early_exit_recorded_in_notes(tmp_path: Path, monkeypatch
     # Small command so the guard has time to exit before the liveness check
     rc = main(_cli(tmp_path, "rent-liveness-1",
                    "--command", f"{sys.executable} -c 'import time; time.sleep(0.15)'"))
+    assert rc == 0
     rec = _receipt(tmp_path)
     # Guard exited early -- the note must say so
     assert "guard exited 5" in rec["notes"], rec["notes"]
@@ -508,6 +509,7 @@ def test_guard_is_joined_after_sigterm(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
     rc = main(_cli(tmp_path, "rent-join-1"))
+    assert rc == 0
     assert len(captured) == 1
     # With guard.wait(timeout=2): the guard has been waited on; poll() is not None.
     assert captured[0].poll() is not None, (
@@ -516,9 +518,69 @@ def test_guard_is_joined_after_sigterm(tmp_path: Path, monkeypatch):
 
 
 def test_guard_firing_marker_prevents_launcher_pass(tmp_path: Path, monkeypatch):
-    """Item 3 (#446): TOCTOU residual -- a guard that writes guard-firing.json before its own destroy
-    prevents the launcher from writing 'pass'; the receipt is ALARM even when the instance appears live
-    at the time of the launcher's teardown check."""
+    """Item 3 (#446): TOCTOU residual -- deterministic variant.  The stub writes guard-firing.json and
+    then holds (no destroy, no proof written) so the launcher *must* take the firing-marker branch:
+    detect the marker, wait ~3 s for a proof that never arrives, synthesise one with
+    method='fake-guard-fired' and reason='wallclock', and return ALARM/invalid.  This test fails
+    without the TOCTOU fix regardless of timing, because the launcher never sees proof arrive and
+    must synthesise it; without the fix it falls through to prov.destroy() and writes 'pass'.
+    The instance is never destroyed by the launcher (it stays live in the fake state)."""
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    captured: list[subprocess.Popen] = []
+
+    def _spawn(*, python, module_args, log_path):
+        args_map = _guard_args(module_args)
+        proof_str = args_map.get("--proof", "")
+        iid_str = args_map.get("--instance-id", "")
+        # Arms, writes guard-firing.json, then holds indefinitely -- no destroy, no proof.
+        code = (
+            "import json, os, time\nfrom pathlib import Path\n"
+            f"proof_path = Path({proof_str!r})\n"
+            f"iid = {iid_str!r}\n"
+            "armed = proof_path.with_name('guard-armed.json')\n"
+            "armed.parent.mkdir(parents=True, exist_ok=True)\n"
+            "armed.write_text(json.dumps({'pid': os.getpid(), 'at': '2026-01-01T00:00:00Z', 'instance_id': iid}))\n"
+            "firing = proof_path.with_name('guard-firing.json')\n"
+            "firing.write_text(json.dumps({'reason': 'wallclock', 'pid': os.getpid(), 'instance_id': iid}))\n"
+            "time.sleep(60)\n"
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", code], start_new_session=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        captured.append(proc)
+        return proc
+
+    monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
+    rc = main(_cli(tmp_path, "rent-toctou-det-1"))
+    # The launcher never sent SIGTERM on the firing-marker path; kill the orphaned guard.
+    for p in captured:
+        try:
+            p.kill()
+        except OSError:
+            pass
+    assert rc == 1
+    rec = _receipt(tmp_path)
+    # Launcher detected the firing marker, waited 3 s, synthesised a proof -- never destroyed.
+    assert rec["status"] == "ALARM" and rec["result"] == "invalid", rec
+    assert rec["teardown_proof"]["reason"] == "wallclock", rec["teardown_proof"]
+    assert rec["teardown_proof"]["method"] == "fake-guard-fired", rec["teardown_proof"]
+    # The launcher must not have destroyed the instance: it remains live in the fake state.
+    fake_state = tmp_path / "rent-toctou-det-1-fake.json"
+    assert fake_state.is_file(), "fake state file expected"
+    st = json.loads(fake_state.read_text())
+    assert rec["instance_id"] in (st.get("live") or []), (
+        "launcher must not have destroyed the instance when the guard was firing"
+    )
+
+
+def test_guard_firing_marker_race_window(tmp_path: Path, monkeypatch):
+    """Item 3 (#446): race-window variant.  The guard writes guard-firing.json, waits briefly, then
+    destroys and writes a real proof.  When the launcher arrives *after* the destroy+proof write the
+    existing 'proof present → ALARM' path catches it; when it arrives *before*, the firing-marker
+    branch catches it.  Both paths produce ALARM -- this test is not by itself a sufficient acceptance
+    criterion (timing-dependent) but documents that neither path emits 'pass'."""
     import experts4bit_qlora.tools.rent as rent_mod
 
     def _spawn(*, python, module_args, log_path):
@@ -526,28 +588,22 @@ def test_guard_firing_marker_prevents_launcher_pass(tmp_path: Path, monkeypatch)
         proof_str = args_map.get("--proof", "")
         fake_state_str = args_map.get("--fake-state", "")
         iid_str = args_map.get("--instance-id", "")
-        # 1. Arms.  2. Writes guard-firing.json (before destroy -- the TOCTOU marker).
-        # 3. Brief delay so the launcher can reach its teardown check while the instance is still live.
-        # 4. Destroys the fake instance.  5. Writes the proof.
+        # 1. Arms.  2. Writes guard-firing.json.  3. Brief delay.  4. Destroys.  5. Writes proof.
         code = (
-            "import sys, json, os, time\nfrom pathlib import Path\n"
+            "import json, os, time\nfrom pathlib import Path\n"
             f"proof_path = Path({proof_str!r})\n"
             f"fake_state = Path({fake_state_str!r})\n"
             f"iid = {iid_str!r}\n"
             "armed = proof_path.with_name('guard-armed.json')\n"
             "armed.parent.mkdir(parents=True, exist_ok=True)\n"
             "armed.write_text(json.dumps({'pid': os.getpid(), 'at': '2026-01-01T00:00:00Z', 'instance_id': iid}))\n"
-            # Write firing marker before destroy
             "firing = proof_path.with_name('guard-firing.json')\n"
             "firing.write_text(json.dumps({'reason': 'wallclock', 'pid': os.getpid(), 'instance_id': iid}))\n"
-            # Sleep so the launcher hits its teardown while the instance is still live (TOCTOU window)
             "time.sleep(0.05)\n"
-            # Destroy the fake instance
             "if fake_state.is_file():\n"
             "    st = json.loads(fake_state.read_text())\n"
             "    st['live'] = [x for x in (st.get('live') or []) if x != iid]\n"
             "    fake_state.write_text(json.dumps(st) + '\\n')\n"
-            # Write the real proof so the launcher's wait finds it quickly
             "proof_path.write_text(json.dumps({'method': 'fake-destroy', 'reason': 'wallclock', "
             "'evidence': json.dumps({'instance_absent': True}), 'complete': True}))\n"
         )
@@ -559,9 +615,8 @@ def test_guard_firing_marker_prevents_launcher_pass(tmp_path: Path, monkeypatch)
     monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
     rc = main(_cli(tmp_path, "rent-toctou-1"))
     rec = _receipt(tmp_path)
-    # The guard was firing; the receipt must be ALARM, never pass.
+    # Regardless of which path caught it, the receipt must be ALARM, never pass.
     assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid", rec
-    # The reason from the guard's proof (wallclock) must reach the receipt.
     assert rec["teardown_proof"]["reason"] == "wallclock", rec["teardown_proof"]
 
 
