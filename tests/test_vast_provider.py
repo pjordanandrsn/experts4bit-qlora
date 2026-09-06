@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from experts4bit_qlora.tools import vast_provider  # noqa: F401 — the module itself, for the probe tests
 from experts4bit_qlora.tools.vast_provider import (
     BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
     _bandwidth_over_ssh_with_evidence, _bandwidth_reading, offer_filter, provider_from_env,
@@ -476,3 +477,62 @@ def test_launch_refuses_an_offer_priced_above_the_declared_rate():
     assert not any(c[0] == "PUT" for c in tr.calls), "no create was attempted"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.61) == "7000123"
     assert provider(FakeTransport(routes())).launch(gpu="RTX 5090", wallclock_h=1, image="img") == "7000123", "no ceiling given → no check (the launcher always gives one)"
+
+
+# ---- the measurement window (CEO read of #474, 2026-09-06T20:59Z): time the transfer, not the handshake
+
+def test_curls_four_field_line_is_timed_from_the_first_byte_not_from_connect():
+    """`time_total` carries DNS + TCP + TLS. Dividing by it measures the link plus a fixed handshake, and at a
+    small sample the handshake dominates: 20 MB read 7.01 MB/s naive vs 8.29 transfer-only (18 % low). Against a
+    40 MB/s floor that margin destroys a healthy box — the same class of error as timing a 403 body."""
+    mbps, size, secs, code = vast_provider._bandwidth_reading("75000000 1.846 0.090 200")
+    assert secs == pytest.approx(1.756) and code == "200" and size == 75000000
+    assert mbps == pytest.approx(75000000 / 1.756 / 1e6)      # 42.7, not the naive 40.6
+    naive = 75000000 / 1.846 / 1e6
+    assert mbps > naive and naive < 41 < mbps
+
+
+def test_a_three_field_line_is_already_transfer_only():
+    """python3 and wget start their clock at the first byte, so their seconds need no correction."""
+    mbps, _size, secs, _code = vast_provider._bandwidth_reading("20000000 0.4 200")
+    assert secs == pytest.approx(0.4) and mbps == pytest.approx(50.0)
+
+
+def test_an_instant_or_cached_body_falls_back_to_the_total_instead_of_dividing_by_zero():
+    mbps, _size, secs, _code = vast_provider._bandwidth_reading("20000000 0.5 0.5 200")
+    assert secs == pytest.approx(0.5) and mbps == pytest.approx(40.0)
+    mbps2, _s, secs2, _c = vast_provider._bandwidth_reading("20000000 0.5 0.9 200")   # starttransfer > total
+    assert secs2 == pytest.approx(0.5) and mbps2 == pytest.approx(40.0)
+
+
+def test_the_four_field_form_still_refuses_an_error_body_and_a_short_transfer():
+    with pytest.raises(ValueError, match="HTTP 403"):
+        vast_provider._bandwidth_reading("1 0.05 0.04 403")
+    with pytest.raises(ValueError, match="only 900 B"):
+        vast_provider._bandwidth_reading("900 0.05 0.01 200")
+
+
+def test_the_first_endpoint_is_a_size_cloudflare_actually_serves():
+    """100 MB answers 403 with a one-byte body — the defect this PR exists for. 75 MB answers 200."""
+    assert "bytes=75000000" in vast_provider.BANDWIDTH_URLS[0]
+    assert "bytes=100000000" not in vast_provider.BANDWIDTH_URLS[0]
+
+
+def test_every_downloader_leg_starts_its_clock_at_the_first_byte(monkeypatch):
+    """The generated commands themselves, not just the parser: curl reports time_starttransfer, and the two
+    python-driven legs bind their start time inside the read loop."""
+    seen = {}
+
+    def run(host, port, command, timeout_s):
+        if command.startswith("for t in"):
+            return 0, seen["cap"]
+        seen.setdefault("cmds", []).append(command)
+        return 0, "75000000 1.0 200"
+    monkeypatch.setattr(vast_provider, "_ssh_run", run)
+    for cap, needle in (("curl=/usr/bin/curl", "%{time_starttransfer}"),
+                        ("wget=/usr/bin/wget\npython3=/usr/bin/python3", "if t is None:t=time.monotonic()"),
+                        ("python3=/usr/bin/python3", "if t is None:t=time.monotonic()")):
+        seen.clear()
+        seen["cap"] = cap
+        vast_provider._bandwidth_over_ssh_with_evidence("h", 1, stop_at_mb_s=1.0)
+        assert needle in seen["cmds"][0], (cap, seen["cmds"][0][:200])
