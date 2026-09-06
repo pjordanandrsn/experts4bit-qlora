@@ -185,6 +185,34 @@ def test_lane_script_never_calls_the_provider_and_names_no_credential():
     assert 'GPU_CLASS=${P41_GPU_CLASS:-"RTX 5090"}' in run and "BOX_REFUSED" in run and "box.json" in run
 
 
+def test_stop4_projects_the_remaining_cells_at_the_planning_curve_not_the_alarm_sum(capsys):
+    """CEO HIGH-1 on #466: at arm 1 of R1 (≈ 900 s of setup elapsed, all 19 arms remaining) the projection at the registered
+    planning curve must NOT trip STOP-4 for the approval line (rate $0.66/h, estimate $1.98); the alarm sum would have."""
+    rows = _plan()
+    total = rows[-1]["total"]
+    plan_sum, alarm_sum = int(total["plan_sum_s"]), int(total["alarm_sum_s"])
+    assert sum(int(r["plan"]) for r in rows[:-1]) == plan_sum and plan_sum < alarm_sum
+    assert all(int(r["plan"]) < int(r["alarm"]) for r in rows[:-1])
+    assert 8000 < plan_sum < 11000, (
+        plan_sum
+    )  # ≈ 6,500 s of steps + 19 × 120 s (the PR body's arithmetic), not 27,595 s of alarms
+    rc = p41_admit.main(
+        ["budget", "--elapsed", "900", "--remaining", str(plan_sum), "--rate", "0.66", "--est", "1.98"]
+    )
+    assert rc == 1 and "STOP-4 ok" in capsys.readouterr().out
+    rc = p41_admit.main(
+        ["budget", "--elapsed", "900", "--remaining", str(alarm_sum), "--rate", "0.66", "--est", "1.98"]
+    )
+    assert rc == 0, "the alarm sum would have fired STOP-4 before the first arm -- that is why the lane never uses it"
+    rc = p41_admit.main(
+        ["budget", "--elapsed", "900", "--remaining", str(plan_sum), "--rate", str(3 * 0.66), "--est", "1.98"]
+    )
+    assert rc == 0 and "STOP-4 DUE" in capsys.readouterr().out
+    run = RUN.read_text()
+    assert "remaining_plan_sum" in run and "remaining_alarm_sum" not in run
+    assert "GUARD_T0" in run and "now - GUARD_T0" in run, "STOP-5 counts from the guard's start (CEO LOW-1)"
+
+
 # ---- the admission rules (bench/p41/p41_admit.py): the harness's receipt vs the pre-registration's validity rules
 GRANITE = dict(steps=60, tokens_sha="a" * 64, expect_trainable=49_807_360, n_layers=32, attn4_census=128)
 

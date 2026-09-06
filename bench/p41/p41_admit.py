@@ -203,6 +203,19 @@ def footprint(a) -> int:
     return 0
 
 
+def budget(a) -> int:
+    """STOP-4 (PREREG "STOP rules"): projected spend = (actual elapsed + the remaining cells AT THE PLANNING CURVE) x the rate;
+    due when it exceeds 1.5 x the approved estimate. Never the alarm sum (the alarms carry x1.5 and 900 s each and would fire
+    STOP-4 before the first arm at any honest estimate -- CEO HIGH-1 on e4b#466). Prints one line; exit 0 = due, 1 = not due."""
+    proj = (a.elapsed + a.remaining) / 3600.0 * a.rate
+    limit = 1.5 * a.est
+    due = proj > limit
+    print(
+        f"STOP-4 {'DUE' if due else 'ok'}: projected ${proj:.2f} (elapsed {a.elapsed:.0f} s + remaining at the planning curve {a.remaining:.0f} s at ${a.rate}/h) vs 1.5 x estimate ${a.est} = ${limit:.2f}"
+    )
+    return 0 if due else 1
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -223,6 +236,12 @@ def main(argv=None) -> int:
     f.add_argument("--vram", default=None)
     f.add_argument("--out", required=True)
     f.set_defaults(fn=footprint)
+    b = sub.add_parser("budget")
+    b.add_argument("--elapsed", type=float, required=True)
+    b.add_argument("--remaining", type=float, required=True)
+    b.add_argument("--rate", type=float, required=True)
+    b.add_argument("--est", type=float, required=True)
+    b.set_defaults(fn=budget)
     a = p.parse_args(argv)
     return a.fn(a)
 
