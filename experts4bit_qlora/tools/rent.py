@@ -143,9 +143,11 @@ def check_ceilings(policy: dict[str, Any], ledger: list[dict[str, Any]], *,
 def select_approver_spec(policy: dict[str, Any], estimate: float,
                          seat_executors: dict[str, str] | None = None) -> str:
     """The approver spec for this estimate: the first threshold whose max_usd covers it, then any
-    ``approval_overrides`` entry whose ``while_role_executor`` seats all match ``seat_executors``
-    and whose ``band_usd`` (lo, hi] contains the estimate. Overrides only ever tighten; a matching
-    override replaces the spec (e.g. ``one-of:CTO,CSO`` -> ``all-of:CTO,CSO``)."""
+    ``approval_overrides`` entry whose ``band_usd`` (lo, hi] contains the estimate and whose
+    ``while_role_executor`` seats are either undeclared or held by the named executor. Overrides only
+    ever tighten; a matching override replaces the spec (e.g. ``one-of:CTO,CSO`` -> ``all-of:CTO,CSO``).
+    Declaring a seat with a different holder (``--seat-executor CTO=<other>``) is the only way to the
+    base spec -- omitting the declaration is not (PR #440 Warden read, finding 2a)."""
     applicable = None
     for th in policy["approval_thresholds"]:
         max_usd = th["max_usd"]
@@ -161,7 +163,12 @@ def select_approver_spec(policy: dict[str, Any], estimate: float,
         if not (float(lo) < estimate <= float(hi)):
             continue
         cond = ov.get("while_role_executor") or {}
-        if cond and all(seats.get(r) == ex for r, ex in cond.items()):
+        if not cond:
+            continue
+        # Fail closed: an undeclared seat is never the loophole. The override is skipped only when every
+        # seat it names is declared (--seat-executor) AND held by someone other than the named executor.
+        declared_elsewhere = all(r in seats and seats[r] != ex for r, ex in cond.items())
+        if not declared_elsewhere:
             spec = str(ov["approver"])
     return spec
 
@@ -302,8 +309,12 @@ def spawn_guard(*, python: str, module_args: list[str],
 
 
 def _write_proof(proof_path: str | Path, proof: dict[str, Any]) -> None:
-    Path(proof_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(proof_path).write_text(json.dumps(proof, indent=2) + "\n")
+    """Atomic write (tmp + os.replace) so a SIGTERM mid-write never leaves a truncated proof."""
+    target = Path(proof_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + f".{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(proof, indent=2) + "\n")
+    os.replace(tmp, target)
 
 
 def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None,
@@ -337,14 +348,18 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
     evidence = prov.destroy(instance_id)
     remaining = prov.list_ids()
     gone = instance_id not in remaining
-    _write_proof(proof_path, {
+    proof = {
         "method": evidence.get("method", f"{provider_kind}-destroy"),
         "evidence": json.dumps({"destroy": evidence, "list_after": sorted(remaining),
                                 "instance_absent": gone, "reason": reason}, sort_keys=True),
         "complete": gone,
         "reason": reason,
         "at": _utc(),
-    })
+    }
+    # The launcher's own proof (reason "completion") is never overwritten; a guard proof that lands
+    # second goes to a sidecar so the on-disk trail stays consistent with the receipt.
+    target = Path(proof_path)
+    _write_proof(target if not target.is_file() else target.with_name(target.stem + ".guard.json"), proof)
     return 0 if gone else 1
 
 
@@ -390,18 +405,43 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
     """Raise ReceiptInvalid unless the receipt satisfies docs/run-receipt-schema.json. Uses jsonschema
     when importable; otherwise the required keys, the commit_sha pattern, the string/number types the
     ledger check relies on, and the status/result enums."""
-    schema = json.loads(Path(schema_path).read_text()) if Path(schema_path).is_file() else None
+    if not Path(schema_path).is_file():
+        # Refuse rather than degrade: without the schema there is no statement of what a receipt is.
+        raise ReceiptInvalid(f"receipt schema not found at {schema_path}; refusing to write an unvalidated receipt")
+    schema = json.loads(Path(schema_path).read_text())
     problems: list[str] = []
     try:
         import jsonschema  # type: ignore
     except Exception:  # noqa: BLE001 - optional dependency
         jsonschema = None
-    if schema is not None and jsonschema is not None:
+    if jsonschema is not None:
         validator = jsonschema.Draft202012Validator(schema)
         problems = [f"{'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}" for e in validator.iter_errors(receipt)]
     else:
-        required = (schema or {}).get("required") or []
+        required = schema.get("required") or []
         problems += [f"missing required field {k!r}" for k in required if k not in receipt]
+        for a in receipt.get("approvals") or []:
+            if not (isinstance(a, dict) and all(k in a for k in ("role", "agent", "usd_estimate", "slack_permalink"))):
+                problems.append("approvals[] items need role/agent/usd_estimate/slack_permalink")
+                break
+        tp = receipt.get("teardown_proof")
+        if not (isinstance(tp, dict) and isinstance(tp.get("method"), str) and tp["method"] and isinstance(tp.get("evidence"), str)):
+            problems.append("teardown_proof needs string method and evidence")
+        for k in ("started_at", "finished_at"):
+            try:
+                datetime.fromisoformat(str(receipt.get(k, "")).replace("Z", "+00:00"))
+            except ValueError:
+                problems.append(f"{k} must be an ISO-8601 timestamp")
+        for art in receipt.get("artifacts") or []:
+            if not (isinstance(art, dict) and all(k in art for k in ("path", "sha256", "bytes"))):
+                problems.append("artifacts[] items need path/sha256/bytes")
+                break
+        if not isinstance(receipt.get("gpu_count"), int) or isinstance(receipt.get("gpu_count"), bool):
+            problems.append("gpu_count must be an integer")
+        if not isinstance(receipt.get("runtime_seconds"), (int, float)):
+            problems.append("runtime_seconds must be a number")
+        if not isinstance(receipt.get("dirty_tree"), bool):
+            problems.append("dirty_tree must be a boolean")
         if not COMMIT_SHA_RE.match(str(receipt.get("commit_sha", ""))):
             problems.append("commit_sha must match ^[0-9a-f]{7,40}$")
         if not isinstance(receipt.get("command"), str) or not receipt["command"]:
@@ -448,11 +488,13 @@ def build_receipt(*, experiment_id: str, work_id: str, requested_by: str, execut
                   teardown_proof: dict[str, Any], status: str, result: str, notes: str,
                   configuration: dict[str, Any], dataset: str = "none", dataset_hash: str = "none",
                   model: str = "none", model_revision: str = "none", model_hash: str = "none",
-                  seed: int = 0, container_image: str = "none", decision: str = "pending review",
+                  seed: int = 0, container_image: str = "none", decision: str | None = None,
+                  cpu: str = "unknown", ram: str = "unknown", storage: str = "unknown",
                   complete: bool = False) -> dict[str, Any]:
     """A receipt with no identity defaults: who/what/why come from the caller (the command line), the
     repository facts from git, the outcome from what happened. Fields that do not apply to a launch
-    without a dataset or model say so ("none") -- they are not guesses."""
+    without a dataset or model say so ("none") -- they are not guesses; cpu/ram/storage are "unknown" until a
+    live adapter reports them (override with --cpu/--ram/--storage)."""
     return {
         "experiment_id": experiment_id, "work_id": work_id, "requested_by": requested_by,
         "executed_by": executed_by, "reviewed_by": None, "hypothesis": hypothesis,
@@ -462,13 +504,14 @@ def build_receipt(*, experiment_id: str, work_id: str, requested_by: str, execut
         "branch": branch, "dirty_tree": bool(dirty_tree), "container_image": container_image,
         "dependencies": {"python": sys.version.split()[0]}, "command": command, "environment": environment,
         "provider": provider, "instance_id": instance_id, "gpu_model": gpu_model, "gpu_count": int(gpu_count),
-        "cpu": "unknown", "ram": "unknown", "storage": "unknown",
+        "cpu": cpu, "ram": ram, "storage": storage,
         "started_at": started_at, "finished_at": finished_at, "runtime_seconds": float(runtime_seconds),
         "cost_usd": {"estimated": float(cost_estimated), "actual": float(cost_actual)},
         "dataset": dataset, "dataset_hash": dataset_hash, "model": model, "model_revision": model_revision,
         "model_hash": model_hash, "seed": int(seed), "configuration": configuration, "metrics": {},
         "artifacts": [], "teardown_proof": teardown_proof, "status": status, "result": result,
-        "decision": decision, "notes": notes, "complete": bool(complete),
+        # docs/COMPUTE-GOVERNANCE.md vocabulary: adopt|refute|void|pending + link -- a launch is never a decision
+        "decision": decision if decision else f"pending {work_id}", "notes": notes, "complete": bool(complete),
     }
 
 
@@ -556,6 +599,9 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--heartbeat-refresh-s", type=float, default=None,
                     help="how often the launcher refreshes the heartbeat while --command runs "
                          "(default: timeout / 3; 0 disables -- tests only)")
+    ap.add_argument("--cpu", default="unknown", help="host cpu as the provider reports it")
+    ap.add_argument("--ram", default="unknown", help="host ram as the provider reports it")
+    ap.add_argument("--storage", default="unknown", help="host storage as the provider reports it")
     ap.add_argument("--dataset", default="none")
     ap.add_argument("--dataset-hash", default="none")
     ap.add_argument("--model", default="none")
@@ -617,7 +663,7 @@ def main(argv: list[str] | None = None) -> int:
             status="REFUSED", result="invalid", notes=msg, configuration=configuration,
             dataset=args.dataset, dataset_hash=args.dataset_hash, model=args.model,
             model_revision=args.model_revision, model_hash=args.model_hash, seed=args.seed,
-            container_image=args.image, complete=True, **facts)
+            container_image=args.image, cpu=args.cpu, ram=args.ram, storage=args.storage, complete=True, **facts)
         write_receipt(rec_dir, rec, schema_path=schema_path)
         append_ledger(Path(args.ledger), run_id=run_id, date_utc=date_utc, role=args.role, cost_usd=0.0)
         maybe_slack(f"REFUSED {run_id}: {msg}")
@@ -667,13 +713,32 @@ def main(argv: list[str] | None = None) -> int:
             except subprocess.CalledProcessError as e:
                 status, result, notes = "HARNESS_ERROR", "fail", f"command exited {e.returncode}"
 
-    # Teardown: if the guard already fired, its reason is the truth about this run.
-    proof: dict[str, Any] | None = json.loads(proof_path.read_text()) if proof_path.is_file() else None
-    if proof is not None and proof.get("reason") in ("heartbeat-loss", "wallclock"):
+    # Teardown. `pass` is written only when the launcher itself destroyed a live instance; an instance that
+    # is already gone -- by the guard (heartbeat-loss / wallclock) or by anyone else -- is ALARM / invalid.
+    def _read_proof() -> dict[str, Any] | None:
+        return json.loads(proof_path.read_text()) if proof_path.is_file() else None
+    proof = _read_proof()
+    if proof is None and iid not in prov.list_ids():
+        # Gone without a proof: the guard may be between destroy and write (1a) -- give it a moment.
+        deadline = time.time() + 3
+        while time.time() < deadline and (proof := _read_proof()) is None:
+            time.sleep(0.05)
+        if proof is None:
+            proof = {"method": f"{prov.kind}-observed-absent", "reason": "torn-down-externally",
+                     "evidence": json.dumps({"instance_absent": True, "list_after": sorted(prov.list_ids())},
+                                            sort_keys=True), "complete": True, "at": _utc()}
+            _write_proof(proof_path, proof)
+    if proof is not None:
+        reason = proof.get("reason") or "unknown"
         status, result = "ALARM", "invalid"
-        notes = f"guard tore the instance down: {proof['reason']} (" + notes + ")"
+        notes = f"instance torn down before the launcher's own teardown: {reason} (" + notes + ")"
     else:
-        evidence = prov.destroy(iid)
+        try:
+            evidence = prov.destroy(iid)
+        except Exception as e:  # noqa: BLE001 - a live adapter may raise; the receipt still records it (1b)
+            evidence = {"method": f"{prov.kind}-destroy-failed", "error": repr(e)}
+            status, result = "ALARM", "invalid"
+            notes = f"teardown failed: {e!r} (" + notes + ")"
         remaining = prov.list_ids()
         proof = {"method": evidence.get("method", f"{prov.kind}-destroy"), "reason": "completion",
                  "evidence": json.dumps({"destroy": evidence, "list_after": sorted(remaining),
@@ -699,7 +764,7 @@ def main(argv: list[str] | None = None) -> int:
         status=status, result=result, notes=notes, configuration=configuration,
         dataset=args.dataset, dataset_hash=args.dataset_hash, model=args.model,
         model_revision=args.model_revision, model_hash=args.model_hash, seed=args.seed,
-        container_image=args.image, complete=complete, **facts)
+        container_image=args.image, cpu=args.cpu, ram=args.ram, storage=args.storage, complete=complete, **facts)
     rec_path = write_receipt(rec_dir, rec, schema_path=schema_path)
     rec["artifacts"] = [{"path": "receipt.json", "sha256": _sha256_file(rec_path), "bytes": rec_path.stat().st_size}]
     write_receipt(rec_dir, rec, schema_path=schema_path)

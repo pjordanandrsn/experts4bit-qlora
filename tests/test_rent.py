@@ -85,9 +85,11 @@ def test_role_without_ceiling_row_refuses():
 
 
 def test_missing_approval_refuses():
-    with pytest.raises(RentRefused, match="requires one of"):
-        evaluate_launch(POLICY, [], role="CTO", estimate=10.0, provider="vast:verified-secure", gpu="RTX 5090",
-                        wallclock_h=1.0, approvals=[], date_utc="2026-09-06")
+    kw = dict(provider="vast:verified-secure", gpu="RTX 5090", wallclock_h=1.0, date_utc="2026-09-06")
+    with pytest.raises(RentRefused, match="requires all of"):      # undeclared CTO seat -> the override applies
+        evaluate_launch(POLICY, [], role="CTO", estimate=10.0, approvals=[], **kw)
+    with pytest.raises(RentRefused, match="requires one of"):      # seat declared and held elsewhere -> base spec
+        evaluate_launch(POLICY, [], role="CTO", estimate=10.0, approvals=[], seat_executors={"CTO": "cursor-cloud-agent"}, **kw)
 
 
 def test_two_of_band():
@@ -144,8 +146,9 @@ def test_self_approval_under_two_passes():
 
 def test_override_selects_all_of_while_grok_holds_the_cto_seat():
     assert select_approver_spec(POLICY, 10.0, GROK) == "all-of:CTO,CSO"
-    assert select_approver_spec(POLICY, 10.0, {"CTO": "cursor-cloud-agent"}) == "one-of:CTO,CSO"
-    assert select_approver_spec(POLICY, 10.0, None) == "one-of:CTO,CSO"
+    assert select_approver_spec(POLICY, 10.0, {"CTO": "cursor-cloud-agent"}) == "one-of:CTO,CSO"   # declared, held elsewhere
+    assert select_approver_spec(POLICY, 10.0, None) == "all-of:CTO,CSO"     # undeclared seat: fail closed (Warden 2a)
+    assert select_approver_spec(POLICY, 10.0, {"CSO": "chatgpt"}) == "all-of:CTO,CSO"   # the CTO seat still undeclared
     assert select_approver_spec(POLICY, 2.0, GROK) == "requesting-agent"   # band is (2, 20]
     assert select_approver_spec(POLICY, 20.0, GROK) == "all-of:CTO,CSO"
     assert select_approver_spec(POLICY, 20.5, GROK) == "two-of:CEO,CTO,CSO"
@@ -156,7 +159,10 @@ def test_ten_dollars_needs_cto_and_cso_while_grok_holds_the_seat():
         check_approvals(POLICY, 10.0, _cto(10), role="CTO", seat_executors=GROK)
     assert check_approvals(POLICY, 10.0, _cto(10) + [_appr("CSO", "ChatGPT", 10)], role="CTO",
                            seat_executors=GROK) == "all-of:CTO,CSO"
-    assert check_approvals(POLICY, 10.0, _cto(10), role="CTO", seat_executors=None) == "one-of:CTO,CSO"
+    with pytest.raises(RentRefused, match="requires all of"):   # omitting --seat-executor is not the loophole
+        check_approvals(POLICY, 10.0, _cto(10), role="CTO", seat_executors=None)
+    assert check_approvals(POLICY, 10.0, _cto(10), role="CTO",
+                           seat_executors={"CTO": "cursor-cloud-agent"}) == "one-of:CTO,CSO"
 
 
 def test_ledger_check_applies_the_same_override():
@@ -168,9 +174,22 @@ def test_ledger_check_applies_the_same_override():
         mod.check_approval_threshold(Path("r.json"), 10.0, _cto(10), th, overrides=ov, seat_executors=GROK)
     mod.check_approval_threshold(Path("r.json"), 10.0, _cto(10) + [_appr("CSO", "ChatGPT", 10)], th,
                                  overrides=ov, seat_executors=GROK)
-    mod.check_approval_threshold(Path("r.json"), 10.0, _cto(10), th, overrides=ov, seat_executors=None)
+    with pytest.raises(SystemExit):   # undeclared seat -> the override applies in the ledger check too
+        mod.check_approval_threshold(Path("r.json"), 10.0, _cto(10), th, overrides=ov, seat_executors=None)
+    mod.check_approval_threshold(Path("r.json"), 10.0, _cto(10), th, overrides=ov,
+                                 seat_executors={"CTO": "cursor-cloud-agent"})
+    with pytest.raises(SystemExit):   # hi boundary: 20.0 is inside (2, 20]
+        mod.check_approval_threshold(Path("r.json"), 20.0, _cto(20), th, overrides=ov, seat_executors=GROK)
+    mod.check_approval_threshold(Path("r.json"), 20.0, _cto(20) + [_appr("CSO", "ChatGPT", 20)], th,
+                                 overrides=ov, seat_executors=GROK)
     with pytest.raises(SystemExit):
         mod.check_approval_threshold(Path("r.json"), 30.0, _cto(30), th, overrides=ov, seat_executors=None)
+    # Jordan in the ledger check: role AND agent "Jordan" with a valid permalink, nothing less
+    mod.check_approval_threshold(Path("r.json"), 36.0, [_appr("Jordan", "Jordan", 36)], th, overrides=ov)
+    with pytest.raises(SystemExit):
+        mod.check_approval_threshold(Path("r.json"), 36.0, [_appr("CEO", "Jordan", 36)], th, overrides=ov)
+    with pytest.raises(SystemExit):
+        mod.check_approval_threshold(Path("r.json"), 36.0, [_appr("Jordan", "Jordan", 36, perm="https://slack.com/x")], th, overrides=ov)
 
 
 # ---------------------------------------------------------------- receipts on every path
@@ -196,6 +215,15 @@ def test_cli_refuses_ten_dollars_with_one_approval_while_grok_holds_the_seat(tmp
     assert rec["environment"]["seat_executors"] == GROK
 
 
+def test_cli_undeclared_seat_is_not_a_loophole(tmp_path: Path):
+    rc = main(_cli(tmp_path, "rent-cosign-2", "--usd-per-hour", "5", "--wallclock-h", "2",
+                   "--approval", f"CTO/cursor-desktop-mini={PERM}"))   # no --seat-executor at all
+    assert rc == 2
+    rec = _receipt(tmp_path)
+    assert rec["status"] == "REFUSED" and rec["environment"]["approver_spec"] == "all-of:CTO,CSO"
+    assert rec["environment"]["seat_executors"] == {}
+
+
 def test_live_provider_refusal_writes_a_receipt(tmp_path: Path):
     rc = main(_cli(tmp_path, "rent-live-1", "--provider", "vast:verified-secure", dry_run=False))
     assert rc == 2
@@ -210,15 +238,16 @@ def test_cli_dry_run_writes_complete_receipt(tmp_path: Path):
     assert rec["status"] == "OK" and rec["result"] == "pass" and rec["complete"] is True
     assert rec["teardown_proof"]["reason"] == "completion" and rec["instance_id"] != "none"
     assert rec["cost_usd"] == {"estimated": 0.4, "actual": 0.0}
-    assert rec["decision"] == "pending review" and rec["environment"]["approver_spec"] == "requesting-agent"
+    assert rec["decision"] == "pending experts4bit-qlora#430" and rec["environment"]["approver_spec"] == "requesting-agent"
+    assert rec["cpu"] == "unknown" and rec["teardown_proof"]["method"] == "fake-destroy"
     assert rec["artifacts"][0]["path"] == "receipt.json"
 
 
 def test_failed_command_still_receipts_and_tears_down(tmp_path: Path):
     fake = tmp_path / "rent-fail-1-fake.json"
-    rc = main(_cli(tmp_path, "rent-fail-1", "--command", "python -c 'raise SystemExit(7)'"))
+    rc = main(_cli(tmp_path, "rent-fail-1", "--command", f"{sys.executable} -c 'raise SystemExit(7)'"))
     rec = _receipt(tmp_path)
-    assert rec["status"] == "HARNESS_ERROR" and rec["result"] == "fail"
+    assert rec["status"] == "HARNESS_ERROR" and rec["result"] == "fail" and "command exited 7" in rec["notes"]
     assert rec["teardown_proof"]["reason"] == "completion"
     assert rec["instance_id"] not in (json.loads(fake.read_text()).get("live") or [])
     assert rc == 1
@@ -252,6 +281,21 @@ def test_stalled_heartbeat_is_an_alarm_not_a_pass(tmp_path: Path):
     assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid"
     assert rec["teardown_proof"]["reason"] == "heartbeat-loss"
     assert rec["instance_id"] not in (json.loads((tmp_path / "rent-hb-2-fake.json").read_text()).get("live") or [])
+
+
+def test_external_teardown_during_the_command_is_an_alarm(tmp_path: Path):
+    """1a: the instance disappears before the launcher's own teardown and no guard proof exists yet -> never pass."""
+    fake = tmp_path / "rent-ext-1-fake.json"
+    wipe = f"{sys.executable} -c \"import json; p={str(fake)!r}; d=json.load(open(p)); d['live']=[]; json.dump(d, open(p,'w'))\""
+    rc = main(_cli(tmp_path, "rent-ext-1", "--heartbeat-timeout-s", "30", "--command", wipe))
+    rec = _receipt(tmp_path)
+    assert rc == 1 and rec["status"] == "ALARM" and rec["result"] == "invalid"
+    assert rec["teardown_proof"]["reason"] in ("already-gone", "torn-down-externally")
+
+
+def test_validate_receipt_refuses_without_a_schema_file(tmp_path: Path):
+    with pytest.raises(ReceiptInvalid, match="schema not found"):
+        validate_receipt({"commit_sha": "abc1234"}, tmp_path / "missing.json")
 
 
 def test_guard_survives_parent_death(tmp_path: Path):

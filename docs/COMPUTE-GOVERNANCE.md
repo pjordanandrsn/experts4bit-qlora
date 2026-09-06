@@ -148,6 +148,9 @@ python -m experts4bit_qlora.tools.rent \
    launcher learns the seats from `--seat-executor ROLE=EXECUTOR` and records
    them in the receipt's `environment.seat_executors`, and
    `scripts/check_run_ledger.py` applies the same override to the receipt.
+   **An undeclared seat is never the loophole:** the override applies unless
+   every seat it names is declared and held by someone else -- omitting
+   `--seat-executor` gets the stricter spec, in the launcher and in the check.
    Permalinks must be `https://cerin-amroth.slack.com/archives/C…/p<16
    digits>`; the launcher cannot read Slack, so the receipt carries them for
    the ledger check to resolve against the org-corpus raw layer.
@@ -158,15 +161,18 @@ python -m experts4bit_qlora.tools.rent \
    without that instance id; when the guard fires, the receipt says `status
    ALARM`, `result invalid` -- never `pass`. On normal completion the
    launcher tears down, writes the proof (`reason: completion`) and the guard
-   exits.
+   exits. `pass` is written only when the launcher itself destroyed a live
+   instance; an instance found already gone -- by the guard or by anyone else --
+   is `ALARM` / `invalid`.
 4. Writes `bench/runs/<UTC date>/<run-id>/receipt.json` -- `commit_sha`,
    `branch` and `dirty_tree` read from git, validated against
    `docs/run-receipt-schema.json` before every write -- and appends
    `bench/runs/ledger.jsonl`, on success, on a failed command and on
    refusal. `--role`, `--agent`, `--work-id`, `--preregistration`,
    `--hypothesis`, `--expected-result`, `--success-criteria` and
-   `--failure-criteria` have no defaults; `decision` is `pending review`
-   until a reviewer sets it; `cost_usd.actual` is the provider's billing
+   `--failure-criteria` have no defaults; `decision` is `pending <work-id>`
+   (this document's vocabulary: `adopt|refute|void|pending` + link) until a
+   reviewer sets it; `cost_usd.actual` is the provider's billing
    (the fake provider bills 0), never a copy of the estimate. A receipt is
    `complete` only with teardown proof (or `not-launched` when refused before
    create). Optional `E4B_SLACK_WEBHOOK` posts `LAUNCHED` / `DONE` /

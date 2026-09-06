@@ -21,6 +21,7 @@ to avoid a dependency just for this check).
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -30,6 +31,7 @@ from typing import Any
 RUNS_DIR = Path("bench/runs")
 LEDGER = RUNS_DIR / "ledger.jsonl"
 POLICY = Path("docs/compute-policy.json")
+PERMALINK_RE = re.compile(r"^https://cerin-amroth\.slack\.com/archives/C[A-Z0-9]{8,12}/p\d{16}(\?\S*)?$")
 SCHEMA = Path("docs/run-receipt-schema.json")
 
 # Required fields per the schema (docs/run-receipt-schema.json)
@@ -131,6 +133,8 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     for i, appr in enumerate(data["approvals"]):
         if not isinstance(appr, dict):
             fail(path, 0, f"approvals[{i}] must be an object")
+        if not PERMALINK_RE.match(str(appr.get("slack_permalink", ""))):
+            fail(path, 0, f"approvals[{i}].slack_permalink is not a #ml-packages permalink: {appr.get('slack_permalink')!r}")
         for field in ["role", "agent", "usd_estimate", "slack_permalink"]:
             if field not in appr:
                 fail(path, 0, f"approvals[{i}] missing '{field}'")
@@ -227,7 +231,12 @@ def select_approver_spec(
         if not (float(lo) < estimated <= float(hi)):
             continue
         cond = ov.get("while_role_executor") or {}
-        if cond and all(seats.get(r) == ex for r, ex in cond.items()):
+        if not cond:
+            continue
+        # Fail closed (same rule as the launcher): the override is skipped only when every seat it names
+        # is declared in the receipt's environment.seat_executors AND held by someone else.
+        declared_elsewhere = all(r in seats and seats[r] != ex for r, ex in cond.items())
+        if not declared_elsewhere:
             spec = str(ov["approver"])
     return spec
 
@@ -250,11 +259,12 @@ def check_approval_threshold(
         # No external approval needed
         return
 
-    # Jordan case
-    if approver_spec == "Jordan":
-        if not any(a.get("agent") == "Jordan" for a in approvals):
-            fail(path, 0, f"estimated ${estimated} requires Jordan approval, none found")
+    # Jordan's approval lifts any spec -- as role AND agent "Jordan" with a valid channel permalink (same as the launcher)
+    if any(a.get("role") == "Jordan" and a.get("agent") == "Jordan" and PERMALINK_RE.match(str(a.get("slack_permalink", "")))
+           for a in approvals):
         return
+    if approver_spec == "Jordan":
+        fail(path, 0, f"estimated ${estimated} requires Jordan approval (role and agent 'Jordan'), none found")
 
     # one-of:CTO,CSO case
     if approver_spec.startswith("one-of:"):
