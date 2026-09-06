@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Pack-manifest: licensed int4 experts are bytes, not a recipe (#405)
+
+Code and register contract; no gate, threshold, floor, `min_rows`, damping, or existing claim value moved. Qwen3 licensed 238.1 / 1327.5 stay. No `pack_fingerprint` hashes invented for existing licence rows (the bo6c bytes were not retained).
+
+- **`experts4bit_qlora.engines.pack_manifest`**: canonical JSON manifest, per-payload sha256/size, root `pack_fingerprint = sha256:<64 hex>` over ordered `(path, size, sha256)`. Serialize/load packed tensors + scales. Verify refuses corruption, missing files, wrong model revision / layout / fingerprint.
+- **`enable_serve_experts_int4_calibrated`**: an `expected_fingerprint` loads the artifact and **refuses** a mismatch — no recipe fallback. Recipe builds remain observations; `dump_artifact_dir` writes them. Live calibrated packs attach observed provenance (`pack_fingerprint`, component hashes, method-map hash, row-count-vector hash, calibration-token SHA, toolchain) onto the model for decode receipts (`step_decomp.py`).
+- **p37 reducer**: when a lane names `expected_pack_fingerprint` / `E4B_EXPECTED_PACK_FINGERPRINT`, licensed arms VOID on exact fingerprint mismatch; legacy count-banner VOID stays for receipts without an expected hash. Anchored P37/bo6/bo7 receipts untouched.
+- **Claims contract**: optional `pack_fingerprint` in `docs/claims-schema.md`; `scripts/check_claims_register.py` regex-checks the format and requires the field to match across an ACTIVE `licensed_by` pair once either side carries it. Step (4) determinism lane is not this PR.
+
 ### Serving census rows name the comparator (#418)
 
 Register wording only; no value, status, gate, threshold or floor moved. Jordan's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.

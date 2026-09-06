@@ -37,6 +37,16 @@ PROF = {"attn_host_ns": 0, "attn_calls": 0, "attn_events": [],
 COMPILE_GRAPH_STEP = [False]
 
 
+def _merge_pack_provenance(rep, model):
+    """Copy observed pack identity onto a decode receipt when the enable attached it (#405)."""
+    rec = getattr(model, "_e4b_pack_provenance", None)
+    if rec:
+        for k, v in rec.items():
+            if k not in rep:
+                rep[k] = v
+    return rep
+
+
 def _materialize_from_arena(mods, arena_path):
     """R1 mechanics (PREREG-b1): the streaming loader leaves module
     expert tensors as META stubs (the bytes live in the gnf4 arena), and
@@ -1123,6 +1133,7 @@ def _bv3_stage(a, model, runner, sched, kv):
             _frames_after["total"] - _frames_before["total"]
             if _frames_before and _frames_after else None),
     }
+    _merge_pack_provenance(rep, model)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(rep, indent=1))
     print(f"BV3_GRAPH batch={B} steps={n_steps} "
@@ -2182,6 +2193,7 @@ def _b1d_stage_a(a, model, runner, sched, kv, ppl_ids=None,
             "router_probe": (probe.report(kv.L)
                              if probe else None),
         }
+        _merge_pack_provenance(rep, model)
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(rep, indent=1))
         print(f"B1D_TIMED_{a.b1d_loop.upper()} steps={n_steps} "

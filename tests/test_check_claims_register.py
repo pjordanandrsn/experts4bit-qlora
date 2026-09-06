@@ -132,6 +132,40 @@ def test_a_licence_label_needs_its_verdict_row():
     assert any("a licence comes from an active verdict row" in x for x in f)
 
 
+def test_pack_fingerprint_is_optional_until_an_artifact_exists():
+    ok = [_claim("e4b.gate", claim="LICENSED under the gate: -0.05 ppl", licensed_by="e4b.gate"),
+          _claim("e4b.a", claim="the licensed stack: 304.9 tok/s", licensed_by="e4b.gate")]
+    assert _findings(*ok) == []
+    voided = _claim("e4b.void", claim="measured, not licensed: 236.4 tok/s",
+                    pack_fingerprint="sha256:" + "a" * 64)
+    assert _findings(voided) == []
+
+
+def test_pack_fingerprint_format_and_licence_match():
+    f = _findings(_claim("e4b.a", pack_fingerprint="not-a-hash"))
+    assert any("pack_fingerprint" in x and "sha256" in x for x in f)
+    fp = "sha256:" + "b" * 64
+    other = "sha256:" + "c" * 64
+    f = _findings(_claim("e4b.gate", claim="LICENSED under the gate", licensed_by="e4b.gate",
+                         pack_fingerprint=fp),
+                  _claim("e4b.a", claim="the licensed stack", licensed_by="e4b.gate"))
+    assert any("carries pack_fingerprint but this row does not" in x for x in f)
+    f = _findings(_claim("e4b.gate", claim="LICENSED under the gate", licensed_by="e4b.gate"),
+                  _claim("e4b.a", claim="the licensed stack", licensed_by="e4b.gate",
+                         pack_fingerprint=fp))
+    assert any("licensed_by e4b.gate has none" in x for x in f)
+    f = _findings(_claim("e4b.gate", claim="LICENSED under the gate", licensed_by="e4b.gate",
+                         pack_fingerprint=fp),
+                  _claim("e4b.a", claim="the licensed stack", licensed_by="e4b.gate",
+                         pack_fingerprint=other))
+    assert any("!= licensed_by" in x for x in f)
+    ok = [_claim("e4b.gate", claim="LICENSED under the gate", licensed_by="e4b.gate",
+                 pack_fingerprint=fp),
+          _claim("e4b.a", claim="the licensed stack", licensed_by="e4b.gate",
+                 pack_fingerprint=fp)]
+    assert _findings(*ok) == []
+
+
 def test_the_repository_register_passes():
     p = subprocess.run([sys.executable, str(_SCRIPT), "--root", str(ROOT)], capture_output=True, text=True)
     assert p.returncode == 0, p.stdout + p.stderr
