@@ -103,7 +103,7 @@ is observational only. Required fields include:
   `INSTALL_FAILED`, `LOAD_FAULT`, `HARNESS_ERROR`, `ALARM`, `NOT_RUN`)
 - `artifacts`: array of `{path, sha256, bytes}` for outputs
 - `teardown_proof`: `{method, evidence}`
-- `decision`: `adopt|refute|void|pending` + link to follow-up issue/PR
+- `decision`: `merge|continue|revise|abandon|rerun <url>` — a launcher-written receipt before any reviewer has decided uses `pending <work-id or url>`
 
 Receipts are **append-only**. Corrections go in sibling errata files, never by
 editing the original receipt.
