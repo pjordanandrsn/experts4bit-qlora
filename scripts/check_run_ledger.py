@@ -147,10 +147,10 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     if not isinstance(data.get("repo"), str) or not data["repo"]:
         fail(path, 0, "repo must be a non-empty string")
     if not isinstance(data.get("commit_sha"), str) or not data["commit_sha"]:
-    if not re.fullmatch(r"[0-9a-f]{7,40}", str(data.get("commit_sha", ""))):
-        fail(path, 0, "commit_sha must be a hex sha (7-40 chars)")
         fail(path, 0, "commit_sha must be a non-empty string")
 
+    if not re.fullmatch(r"[0-9a-f]{7,40}", str(data.get("commit_sha", ""))):
+        fail(path, 0, "commit_sha must be a hex sha (7-40 chars)")
     # Validate cost_usd
     if not isinstance(data.get("cost_usd"), dict):
         fail(path, 0, "cost_usd must be an object")
