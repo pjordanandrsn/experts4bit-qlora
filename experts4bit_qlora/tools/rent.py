@@ -330,16 +330,19 @@ def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = 
 
 
 COMMAND_ENV_KEYS = ("E4B_RENT_RUN_ID", "E4B_RENT_INSTANCE_ID", "E4B_RENT_RUN_DIR", "E4B_RENT_PROVIDER",
-                    "E4B_RENT_WALLCLOCK_S", "E4B_RENT_DEADLINE_EPOCH", "E4B_RENT_SSH", "E4B_RENT_SSH_HOST",
-                    "E4B_RENT_SSH_PORT")
+                    "E4B_RENT_WALLCLOCK_S", "E4B_RENT_DEADLINE_EPOCH", "E4B_RENT_USD_PER_HOUR", "E4B_RENT_EST_USD",
+                    "E4B_RENT_SSH", "E4B_RENT_SSH_HOST", "E4B_RENT_SSH_PORT")
 
 
 def command_environment(*, run_id: str, instance_id: str, run_dir: Path, provider: str, wallclock_s: float,
-                        deadline_epoch: int, ssh: str | None) -> dict[str, str]:
+                        deadline_epoch: int, ssh: str | None, usd_per_hour: float | None = None,
+                        est_usd: float | None = None) -> dict[str, str]:
     """The environment `--command` runs with (e4b#464): the controller's own plus E4B_RENT_* — run id, instance id, the
     receipt directory (where the workload puts what the receipt should list), provider, the wall-clock cap in seconds,
     the guard's deadline as an epoch (a box-side STOP rule reads it), and the ssh endpoint when the pre-flight reported
-    one (`host:port`, also split). Absent facts are absent, never a placeholder."""
+    one (`host:port`, also split), and the approval line's rate ceiling and estimate (`E4B_RENT_USD_PER_HOUR`,
+    `E4B_RENT_EST_USD`) so a box-side budget rule (P41's STOP-4) works from the launcher's numbers, one source.
+    Absent facts are absent, never a placeholder."""
     env = dict(os.environ)
     for k in COMMAND_ENV_KEYS:  # Warden LOW-1 on #465: an inherited E4B_RENT_* (a caller's shell, a nested launcher) never
         env.pop(k, None)        # reaches the command — every key the command sees is this run's, or absent
@@ -351,6 +354,10 @@ def command_environment(*, run_id: str, instance_id: str, run_dir: Path, provide
         "E4B_RENT_WALLCLOCK_S": str(wallclock_s),
         "E4B_RENT_DEADLINE_EPOCH": str(int(deadline_epoch)),
     })
+    if usd_per_hour is not None:
+        env["E4B_RENT_USD_PER_HOUR"] = repr(float(usd_per_hour))
+    if est_usd is not None:
+        env["E4B_RENT_EST_USD"] = repr(float(est_usd))
     if ssh and ":" in ssh:
         host, port = ssh.rsplit(":", 1)
         env.update({"E4B_RENT_SSH": ssh, "E4B_RENT_SSH_HOST": host, "E4B_RENT_SSH_PORT": port})
@@ -894,7 +901,7 @@ def main(argv: list[str] | None = None) -> int:
         environment["approver_spec"] = str(spec) if spec else "unresolved"
         fake_state = Path(args.fake_state) if args.fake_state else rec_dir / "fake-state.json"
         ssh_pubkey = read_pubkey(args.ssh_pubkey) if args.ssh_pubkey else None  # #464: by shape, or a named refusal
-        environment["ssh_pubkey_attached"] = "yes" if ssh_pubkey else "no"
+        environment["ssh_pubkey_given"] = "yes" if ssh_pubkey else "no"   # #465 MEDIUM-1: the attach itself is the pre-flight's fact (vast_ssh_key_attached)
         prov = provider_for(provider, fake_state=fake_state, run_label=run_id, ssh_pubkey=ssh_pubkey)  # MEDIUM-3: a live-provider refusal is a receipt too
     except RentRefused as e:
         return refused(str(e), spec)
@@ -967,7 +974,7 @@ def main(argv: list[str] | None = None) -> int:
         # reported it) the ssh endpoint — as ITS environment; nothing is exported into the launcher's own process.
         cmd_env = command_environment(run_id=run_id, instance_id=iid, run_dir=rec_dir, provider=prov.kind,
                                       wallclock_s=wallclock_s, deadline_epoch=int(t0 + wallclock_s),  # Warden LOW-2: from launch, not command start
-                                      ssh=environment.get("vast_ssh"))
+                                      ssh=environment.get("vast_ssh"), usd_per_hour=args.usd_per_hour, est_usd=estimate)
         with HeartbeatRefresher(hb, refresh):  # HIGH-1: the heartbeat stays fresh for the whole command
             try:
                 subprocess.run(args.command, shell=True, check=True, env=cmd_env)

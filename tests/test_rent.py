@@ -882,9 +882,11 @@ def test_command_environment_carries_the_box_and_nothing_leaks(tmp_path: Path):
     now = int(time.time())
     assert now <= int(seen["E4B_RENT_DEADLINE_EPOCH"]) <= now + 3600 + 5
     assert "E4B_RENT_SSH" not in seen, "the fake reports no ssh endpoint → no placeholder, the key is absent"
+    rate, est = float(seen["E4B_RENT_USD_PER_HOUR"]), float(seen["E4B_RENT_EST_USD"])   # one source for a box-side budget rule
+    assert abs(est - rate * float(seen["E4B_RENT_WALLCLOCK_S"]) / 3600) < 1e-6 and rate > 0
     for k in ("E4B_RENT_RUN_ID", "E4B_RENT_INSTANCE_ID", "E4B_RENT_RUN_DIR", "E4B_RENT_SSH"):
         assert k not in os.environ, f"{k} exported into the launcher's own process"  # E4B_RENT_LIVE is the fixture's, not ours
-    assert rec["environment"]["ssh_pubkey_attached"] == "no"
+    assert rec["environment"]["ssh_pubkey_given"] == "no"
 
 
 def test_command_environment_has_the_ssh_endpoint_when_the_preflight_reports_one(tmp_path: Path, monkeypatch):
@@ -934,6 +936,24 @@ def test_command_environment_drops_an_inherited_endpoint_and_dates_the_deadline_
     assert deadline >= int(before) + 3600 - 1
 
 
+def test_a_failed_key_attach_leaves_no_attached_claim_in_the_receipt(tmp_path: Path, monkeypatch):
+    """#465 MEDIUM-1: the launcher records that a key was GIVEN; only a pre-flight that got the 200 records ATTACHED."""
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class AttachFails(FakeProvider):
+        def preflight(self, instance_id, *, timeout_s=600.0):
+            raise RuntimeError("attaching the ssh key to i failed: HTTP 500")
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: AttachFails(kw["fake_state"]))
+    pub = tmp_path / "k.pub"
+    pub.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGQyMDI2LXRlc3Qta2V5LW5vdC1yZWFsLWJ5dGVz test@e4b\n")
+    rc = main(_cli(tmp_path, "rent-key-2", "--ssh-pubkey", str(pub), "--command", "true"))
+    rec = _receipt(tmp_path)
+    assert rc != 0 and rec["status"] != "OK" and rec["environment"]["vast_preflight"] == "failed"
+    assert rec["environment"]["ssh_pubkey_given"] == "yes"
+    assert "vast_ssh_key_attached" not in rec["environment"] and "ssh_pubkey_attached" not in rec["environment"]
+
+
 def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path):
     from experts4bit_qlora.tools.rent import read_pubkey
     good = tmp_path / "id_ed25519.pub"
@@ -951,7 +971,7 @@ def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path
         read_pubkey(two)
     # through the CLI on the fake provider: the receipt records that a key was attached
     rc = main(_cli(tmp_path, "rent-key-1", "--ssh-pubkey", str(good)))
-    assert rc == 0 and _receipt(tmp_path)["environment"]["ssh_pubkey_attached"] == "yes"
+    assert rc == 0 and _receipt(tmp_path)["environment"]["ssh_pubkey_given"] == "yes"
     rc = main(_cli(tmp_path / "b", "rent-key-2", "--ssh-pubkey", str(private)))
     assert rc == 2, "a refused key is a refusal receipt, not a launch"
 

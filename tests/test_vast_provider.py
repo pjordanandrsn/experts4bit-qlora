@@ -172,6 +172,15 @@ def test_preflight_passes_and_records_the_box():
     facts = provider(tr, ssh_pubkey="ssh-ed25519 AAAA test").preflight("7000123", timeout_s=60)
     assert facts["vast_preflight"] == "ok" and facts["vast_ssh"] == "ssh5.vast.ai:12345" and facts["vast_bandwidth_mb_s"] == "95.0"
     assert any(c[:2] == ("POST", "/v0/instances/7000123/ssh/") for c in tr.calls)
+    assert facts["vast_ssh_key_attached"] == "yes"   # #465 MEDIUM-1: stated after the 200
+    assert "vast_ssh_key_attached" not in provider(FakeTransport(routes())).preflight("7000123", timeout_s=60), "no key → no fact"
+
+
+def test_preflight_fails_when_the_key_attach_is_refused_and_states_no_attach():
+    tr = FakeTransport(routes({("POST", "/v0/instances/7000123/ssh/"): [(500, {"success": False, "error": "nope"})]}))
+    with pytest.raises(BackendUnavailable, match="attaching the ssh key"):
+        provider(tr, ssh_pubkey="ssh-ed25519 AAAA test").preflight("7000123", timeout_s=60)
+    assert not any(c[:2] == ("DELETE", "/v0/instances/7000123/") for c in tr.calls), "the pre-flight reports; the launcher tears down"
 
 
 def test_preflight_fails_on_stuck_loading_bad_disk_bad_ssh_and_slow_link():

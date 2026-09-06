@@ -368,8 +368,10 @@ class VastProvider:
         host, port = rec.get("ssh_host"), rec.get("ssh_port")
         if not host or not port:
             raise PreflightFailed(f"instance {instance_id} has no ssh endpoint yet (ssh_host={host!r}, ssh_port={port!r})")
+        attached: dict[str, str] = {}
         if self.ssh_pubkey:
-            self.attach_ssh_key(instance_id, self.ssh_pubkey)
+            self.attach_ssh_key(instance_id, self.ssh_pubkey)   # raises on anything but a 200 → the pre-flight fails
+            attached["vast_ssh_key_attached"] = "yes"           # #465 MEDIUM-1: stated after the 200, never before
         rc, out = self._ssh(str(host), int(port), "true", ssh_timeout_s)
         if rc != 0:
             raise PreflightFailed(f"ssh to {host}:{port} did not authenticate within {int(ssh_timeout_s)} s (rc {rc}: {out.strip()[:120]})")
@@ -378,7 +380,7 @@ class VastProvider:
             raise PreflightFailed(f"download bandwidth {mbps:.1f} MB/s < {min_mb_per_s:.0f} MB/s on {host}:{port}")
         return {"vast_preflight": "ok", "vast_ssh": f"{host}:{port}", "vast_actual_status": st,
                 "vast_disk_space_gb": f"{disk:.0f}", "vast_cpu_ram_mb": f"{ram_mb:.0f}", "vast_bandwidth_mb_s": f"{mbps:.1f}",
-                "vast_preflight_seconds": f"{self._clock() - t0:.0f}"}
+                "vast_preflight_seconds": f"{self._clock() - t0:.0f}", **attached}
 
     # ---- cost
     def actual_cost(self, instance_id: str, runtime_s: float) -> tuple[float, str]:
