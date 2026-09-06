@@ -1,6 +1,6 @@
 """Tests for scripts/check_run_ledger.py
 
-Seven fixtures:
+Eight fixtures:
   1. One passing receipt (valid, within ceilings, proper approvals)
   2. One over-ceiling day (exceeds role daily ceiling)
   3. One missing approval (insufficient approvals for the cost threshold)
@@ -8,15 +8,19 @@ Seven fixtures:
   5. started_at: 'yesterday' rejected by BOTH paths (ISO-8601 loop is outside the else:)
   6. A receipt missing a required field (caught by schema validation)
   7. A receipt with an invalid teardown_proof.reason (caught by schema enum)
+  8. Fallback path verified in-process via sys.modules["jsonschema"] = None patch
 """
 from __future__ import annotations
 
 import copy
+import importlib.util
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 # Compute absolute paths to the script and the real schema
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_run_ledger.py"
@@ -700,3 +704,36 @@ def test_invalid_teardown_proof_reason(tmp_path: Path) -> None:
         f"Expected failure on invalid teardown_proof.reason; got:\n{result.stderr}"
     )
     assert "reason" in result.stderr.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 8: fallback path verified in-process via sys.modules patch
+# ---------------------------------------------------------------------------
+
+
+def test_fallback_path_rejects_missing_field(tmp_path: Path, monkeypatch) -> None:
+    """The manual fallback path (sys.modules["jsonschema"] = None) catches a missing required field.
+
+    Tests 6 and 7 run the script as a subprocess, which always exercises the strict
+    Draft202012Validator path (jsonschema is installed in the test environment).
+    This test loads check_run_ledger in-process and patches sys.modules to force the
+    fallback, verifying both paths reject the same receipt without needing a second
+    subprocess invocation.
+    """
+    # Hide jsonschema so the fallback path runs inside validate_receipt
+    monkeypatch.setitem(sys.modules, "jsonschema", None)
+
+    spec = importlib.util.spec_from_file_location("check_run_ledger_fb", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # SCHEMA is a module-level relative Path; patch it to the real absolute schema file
+    monkeypatch.setattr(mod, "SCHEMA", REAL_SCHEMA)
+
+    receipt = copy.deepcopy(_BASE_RECEIPT)
+    del receipt["hypothesis"]  # same missing field as test 6; required in run-receipt-schema.json
+
+    # validate_receipt in check_run_ledger.py calls fail() → sys.exit(1) on any violation
+    with pytest.raises(SystemExit) as exc_info:
+        mod.validate_receipt(Path("receipt.json"), receipt)
+    assert exc_info.value.code == 1

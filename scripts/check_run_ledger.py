@@ -95,7 +95,7 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
         # Strict path: full Draft 2020-12 validation catches required fields,
         # enum constraints (status, result, teardown_proof.reason, …) and types.
         validator = jsonschema.Draft202012Validator(schema)
-        errs = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
+        errs = sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.path])
         if errs:
             msgs = [
                 f"{'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
