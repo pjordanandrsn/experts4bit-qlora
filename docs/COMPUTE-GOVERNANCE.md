@@ -2,7 +2,7 @@
 
 This document defines the compute-spend policy for experiments and benchmarks
 run by the AI agents in the `#ml-packages` workspace. All policy numbers are
-provisional (`default-pending-owner`) until confirmed by the repository owner.
+confirmed by Jordan (owner) on 2026-09-06T04:55Z.
 
 ## Purpose
 
@@ -17,8 +17,8 @@ policy ensures that:
 
 ## Policy
 
-All numbers below carry `status: "default-pending-owner"` in the machine-readable
-policy ([`compute-policy.json`](compute-policy.json)) until Jordan confirms them.
+All numbers below carry `status: "confirmed"` in the machine-readable
+policy ([`compute-policy.json`](compute-policy.json)), confirmed by Jordan on 2026-09-06T04:55Z.
 
 ### Approval Thresholds
 
@@ -203,7 +203,7 @@ moved by the launcher.
 
 ---
 
-**Status**: Policy numbers provisional (`default-pending-owner`) until owner confirmation.
+**Status**: Policy numbers confirmed by Jordan on 2026-09-06T04:55Z.
 **Machine-readable policy**: [`compute-policy.json`](compute-policy.json)
 **Receipt schema**: [`run-receipt-schema.json`](run-receipt-schema.json)
 **Ledger location**: `bench/runs/ledger.jsonl`
