@@ -284,15 +284,23 @@ class FakeProvider:
                 "remaining": live, "at": _utc()}
 
 
-def provider_for(kind: str, *, fake_state: Path | None = None):
+def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = "e4b-rent"):
+    """The provider for `kind`. Live Vast (#455) is armed only by E4B_RENT_LIVE=1 and a mode-600 key file
+    (`~/.vast/secrets.env`, key read by shape, never echoed); every other live kind still refuses by name."""
     if kind == "fake":
         if fake_state is None:
             raise RentRefused("fake provider needs --fake-state")
         return FakeProvider(fake_state)
-    if kind in ("vast:verified-secure", "runpod:secure"):
+    if kind == "vast:verified-secure":
+        from experts4bit_qlora.tools import vast_provider
+        try:
+            return vast_provider.provider_from_env(run_label=run_label)
+        except (vast_provider.VastRefused, vast_provider.BackendUnavailable) as e:
+            raise RentRefused(f"live provider {kind} refused: {e}") from e
+    if kind == "runpod:secure":
         raise RentRefused(
             f"live provider {kind} is not armed in this process; pass --dry-run "
-            "(fake provider) or implement the API adapter behind E4B_RENT_LIVE=1")
+            "(fake provider) — the RunPod adapter is a separate issue")
     raise RentRefused(f"unknown provider {kind!r}")
 
 
@@ -348,12 +356,21 @@ def wait_for_guard_armed(armed_path: Path, guard: subprocess.Popen, *, timeout_s
         time.sleep(0.05)
 
 
+def _list_or_unknown(prov) -> set[str] | None:
+    """A listing, or None when the backend did not answer with one (#455: never an empty set)."""
+    try:
+        return prov.list_ids()
+    except Exception as e:  # noqa: BLE001
+        print(f"[rent] instance listing unavailable: {e!r}", file=sys.stderr)
+        return None
+
+
 def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None,
                  wallclock_s: float, heartbeat_path: str, proof_path: str,
                  heartbeat_timeout_s: float) -> int:
     """Controller-side teardown guard. Destroys the instance on wallclock or heartbeat loss and writes
     the proof with the reason; exits quietly (reason 'already-gone') once the launcher has torn down."""
-    prov = provider_for(provider_kind, fake_state=Path(fake_state) if fake_state else None)
+    prov = provider_for(provider_kind, fake_state=Path(fake_state) if fake_state else None, run_label=f"guard-{instance_id}")
     hb = Path(heartbeat_path)
     # Arm handshake (round 3): this process imports the package (torch and friends) and can start seconds
     # after the launcher spawned it. Its clock starts here -- a fresh heartbeat, then the marker the
@@ -367,9 +384,17 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
     deadline = time.time() + wallclock_s
     poll = min(0.2, max(0.05, wallclock_s / 20))
     reason = "wallclock"
+    list_errors = 0
     while time.time() < deadline:
         time.sleep(poll)
-        if instance_id not in prov.list_ids():
+        try:
+            live = prov.list_ids()
+        except Exception as e:  # noqa: BLE001 - #455: a listing that fails is unknown, never "gone"; keep watching
+            list_errors += 1
+            if list_errors in (1, 10, 100):
+                print(f"[guard] instance listing failed ({list_errors}x): {e!r}", file=sys.stderr)
+            continue
+        if instance_id not in live:
             reason = "already-gone"
             break
         if hb.is_file():
@@ -381,7 +406,7 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
         # The launcher (or someone) destroyed it first; nothing to prove beyond the absence.
         if not Path(proof_path).is_file():
             _write_proof(proof_path, {"method": f"{provider_kind}-observed-absent", "reason": reason,
-                                      "evidence": json.dumps({"list_after": sorted(prov.list_ids()),
+                                      "evidence": json.dumps({"list_after": sorted(_list_or_unknown(prov)),
                                                               "instance_absent": True}, sort_keys=True),
                                       "complete": True, "at": _utc()})
         return 0
@@ -390,12 +415,15 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
     # destroy the same instance a second time.
     _write_proof(firing_path_for(proof_path), {"pid": os.getpid(), "instance_id": instance_id,
                                                "reason": reason, "at": _utc()})
-    evidence = prov.destroy(instance_id)
-    remaining = prov.list_ids()
-    gone = instance_id not in remaining
+    try:
+        evidence = prov.destroy(instance_id)
+    except Exception as e:  # noqa: BLE001 - #455: record the failure; the proof says complete=False
+        evidence = {"method": f"{provider_kind}-destroy-failed", "error": repr(e)}
+    remaining = _list_or_unknown(prov)
+    gone = remaining is not None and instance_id not in remaining
     proof = {
         "method": evidence.get("method", f"{provider_kind}-destroy"),
-        "evidence": json.dumps({"destroy": evidence, "list_after": sorted(remaining),
+        "evidence": json.dumps({"destroy": evidence, "list_after": sorted(remaining) if remaining is not None else "UNKNOWN",
                                 "instance_absent": gone, "reason": reason}, sort_keys=True),
         "complete": gone,
         "reason": reason,
@@ -669,6 +697,12 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--heartbeat-refresh-s", type=float, default=None,
                     help="how often the launcher refreshes the heartbeat while --command runs "
                          "(default: timeout / 3; 0 disables -- tests only)")
+    ap.add_argument("--preflight-timeout-s", type=float, default=600.0,
+                    help="#455: how long a live instance may stay `loading` before the pre-flight fails it")
+    ap.add_argument("--live-list", action="store_true",
+                    help="#455 read-only smoke: auth probe + v1 instance listing on the live account; no receipt, nothing created")
+    ap.add_argument("--live-offers", metavar="GPU",
+                    help="#455 read-only smoke: search offers in the policy class for GPU; no receipt, nothing created")
     ap.add_argument("--guard-arm-timeout-s", type=float, default=60.0,
                     help="how long the launcher waits for the guard's arm marker (guard-armed.json) before "
                          "it tears down WITHOUT running --command (status HARNESS_ERROR, reason guard-not-armed)")
@@ -684,10 +718,41 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
+def _live_smoke(args) -> int:
+    """#455 read-only smoke from the host that holds the key: nothing is created, no receipt is written,
+    the key is never printed. A false-zero body is reported as BACKEND_UNAVAILABLE, never as 'no instances'."""
+    from experts4bit_qlora.tools import vast_provider
+    try:
+        prov = vast_provider.provider_from_env(run_label="live-smoke")
+        who = prov.auth_probe()
+        print(f"auth: user {who['user_id']} balance={who['balance']} credit={who['credit']}")
+        ids = prov.list_ids()
+        print(f"instances (v1): {len(ids)} -> {sorted(ids) if ids else '[] (a genuine empty array)'}")
+        if args.live_offers:
+            offers = prov.search_offers(args.live_offers)
+            print(f"offers ({args.live_offers}, verified, ≥{prov.min_disk_gb} GB disk, ≥{prov.min_ram_gb} GB RAM): {len(offers)}")
+            for o in offers[:5]:
+                print(f"  offer {o.get('id')} machine {o.get('machine_id')} ${o.get('dph_total')}/h disk {o.get('disk_space')} GB ram {int(float(o.get('cpu_ram', 0)) / 1024)} GB down {o.get('inet_down')} Mbps {o.get('verification')}")
+        return 0
+    except vast_provider.VastRefused as e:
+        print(f"REFUSED: {e}", file=sys.stderr)
+        return 2
+    except vast_provider.BackendUnavailable as e:
+        print(f"BACKEND_UNAVAILABLE: {e}", file=sys.stderr)
+        return 3
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--guard-worker" in argv:
         return _guard_main(argv)
+    if argv and ("--live-list" in argv or "--live-offers" in argv):
+        # #455 read-only smoke: its own tiny parser, so the identity/approval arguments a launch needs are not
+        # demanded for a listing that creates nothing and writes nothing.
+        sp = argparse.ArgumentParser(prog="rent --live-*")
+        sp.add_argument("--live-list", action="store_true")
+        sp.add_argument("--live-offers", metavar="GPU")
+        return _live_smoke(sp.parse_args(argv))
     args = _parser().parse_args(argv)
 
     schema_path = Path(args.schema)
@@ -761,12 +826,19 @@ def main(argv: list[str] | None = None) -> int:
             approvals=approvals, date_utc=date_utc, seat_executors=seat_executors)
         environment["approver_spec"] = str(spec) if spec else "unresolved"
         fake_state = Path(args.fake_state) if args.fake_state else rec_dir / "fake-state.json"
-        prov = provider_for(provider, fake_state=fake_state)  # MEDIUM-3: a live-provider refusal is a receipt too
+        prov = provider_for(provider, fake_state=fake_state, run_label=run_id)  # MEDIUM-3: a live-provider refusal is a receipt too
     except RentRefused as e:
         return refused(str(e), spec)
 
     rec_dir.mkdir(parents=True, exist_ok=True)
-    iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image)
+    try:
+        iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image)
+    except Exception as e:  # noqa: BLE001 - #455: a create that fails at the provider is a refusal receipt, not a crash
+        return refused(f"launch failed at the provider before any instance existed: {e}", spec)
+    # #455: what the provider accepted (offer id, contract id, machine id, $/h, the search filter verbatim) is
+    # part of the record; environment values are strings by schema.
+    for k, v in (getattr(prov, "launch_facts", lambda: {})() or {}).items():
+        environment[k] = str(v)
     maybe_slack(f"LAUNCHED {run_id} instance={iid}")
     hb = rec_dir / "heartbeat"
     proof_path = rec_dir / "teardown-proof.json"
@@ -796,6 +868,20 @@ def main(argv: list[str] | None = None) -> int:
     else:
         environment["guard_armed_at"] = str(armed.get("at"))
         status, result, notes = "OK", "pass", f"guard pid {guard.pid} armed at {armed.get('at')}"
+    # #455: the pre-flight the pre-registration demands, after the guard is armed and before any command —
+    # ssh authenticates in a bounded window, the image is up (not stuck loading), disk/RAM as ordered,
+    # ≥ 40 MB/s to the box. A failure is NOT_RUN / invalid with the reason; the teardown below destroys.
+    if status == "OK" and hasattr(prov, "preflight"):
+        with HeartbeatRefresher(hb, refresh):
+            try:
+                pf = prov.preflight(iid, timeout_s=float(args.preflight_timeout_s))
+                for k, v in pf.items():
+                    environment[k] = str(v)
+            except Exception as e:  # noqa: BLE001 - PreflightFailed or a backend error: both mean "do not run"
+                status, result = "NOT_RUN", "invalid"
+                own_reason = "preflight-failed"
+                notes = f"pre-flight failed: {e} (" + notes + "); command not run"
+                environment["vast_preflight"] = "failed"
     if args.command and status == "OK":
         with HeartbeatRefresher(hb, refresh):  # HIGH-1: the heartbeat stays fresh for the whole command
             try:
@@ -880,6 +966,9 @@ def main(argv: list[str] | None = None) -> int:
     gone = iid not in prov.list_ids()
     complete = gone and proof.get("method") not in (None, "pending")
     actual_cost = 0.0  # fake provider bills nothing; a live adapter must read the provider's billing, never copy the estimate
+    if hasattr(prov, "actual_cost"):
+        actual_cost, cost_method = prov.actual_cost(iid, time.time() - t0)
+        environment["cost_actual_method"] = str(cost_method)
     rec = build_receipt(
         experiment_id=run_id, work_id=args.work_id, requested_by=who, executed_by=who,
         hypothesis=args.hypothesis, expected_result=args.expected_result,

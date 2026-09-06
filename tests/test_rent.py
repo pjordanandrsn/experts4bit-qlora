@@ -232,7 +232,8 @@ def test_live_provider_refusal_writes_a_receipt(tmp_path: Path):
     rc = main(_cli(tmp_path, "rent-live-1", "--provider", "vast:verified-secure", dry_run=False))
     assert rc == 2
     rec = _receipt(tmp_path)
-    assert rec["status"] == "REFUSED" and "not armed" in rec["notes"] and rec["instance_id"] == "none"
+    # #455: inside a test runner the live seam refuses before it looks at E4B_RENT_LIVE or the key (tests never rent)
+    assert rec["status"] == "REFUSED" and "test runner" in rec["notes"] and rec["instance_id"] == "none"
 
 
 def test_cli_dry_run_writes_complete_receipt(tmp_path: Path):
@@ -644,3 +645,60 @@ def test_fallback_validator_checks_teardown_proof_complete_and_reason(tmp_path: 
     # A valid complete+reason pair passes the fallback
     good = dict(rec, teardown_proof=dict(rec["teardown_proof"], complete=True, reason="completion"))
     validate_receipt(good, SCHEMA)  # must not raise
+
+
+# ---- #455: the live seam
+def test_vast_is_refused_by_name_when_not_armed_and_runpod_still_refuses(monkeypatch):
+    from experts4bit_qlora.tools import vast_provider
+    from experts4bit_qlora.tools.rent import provider_for
+    with pytest.raises(RentRefused, match="test runner"):
+        provider_for("vast:verified-secure")  # under pytest: refused before anything else
+    monkeypatch.setattr(vast_provider, "_under_test", lambda: False)  # the arming rules, as outside a runner
+    monkeypatch.delenv("E4B_RENT_LIVE", raising=False)
+    with pytest.raises(RentRefused, match="E4B_RENT_LIVE=1"):
+        provider_for("vast:verified-secure")
+    monkeypatch.setenv("E4B_RENT_LIVE", "1")
+    with pytest.raises(RentRefused, match="no Vast key file"):
+        provider_for("vast:verified-secure")  # conftest points DEFAULT_KEY_PATH at a file that does not exist
+    with pytest.raises(RentRefused, match="RunPod adapter is a separate issue"):
+        provider_for("runpod:secure")
+
+
+def test_armed_vast_under_a_test_runner_is_refused_with_a_receipt(tmp_path: Path, monkeypatch):
+    """The live seam through the CLI: inside pytest it refuses before any HTTP, and the refusal is a receipt."""
+    monkeypatch.setenv("E4B_RENT_LIVE", "1")
+    rc = main(_cli(tmp_path, "rent-live-2", "--provider", "vast:verified-secure", dry_run=False))
+    assert rc == 2
+    rec = _receipt(tmp_path)
+    assert rec["status"] == "REFUSED" and "test runner" in rec["notes"] and rec["instance_id"] == "none"
+
+
+def test_guard_keeps_watching_when_the_listing_fails_and_never_calls_it_gone(tmp_path: Path):
+    """#455: a provider whose list_ids raises (false-zero refused) must not make the guard write 'already-gone'."""
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class Flaky(FakeProvider):
+        calls = 0
+
+        def list_ids(self):
+            Flaky.calls += 1
+            if Flaky.calls <= 3:
+                raise RuntimeError("deprecated_endpoint (false zero refused)")
+            return super().list_ids()
+
+    fake = tmp_path / "flaky.json"
+    prov = Flaky(fake)
+    iid = prov.launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    saved = rent_mod.provider_for
+    rent_mod.provider_for = lambda kind, **kw: prov
+    try:
+        proof = tmp_path / "proof.json"
+        hb = tmp_path / "hb"
+        hb.write_text("x")
+        rc = rent_mod.guard_worker(instance_id=iid, provider_kind="fake", fake_state=str(fake), wallclock_s=0.6,
+                                   heartbeat_path=str(hb), proof_path=str(proof), heartbeat_timeout_s=60)
+    finally:
+        rent_mod.provider_for = saved
+    data = json.loads(proof.read_text())
+    assert data["reason"] == "wallclock" and data["complete"] is True and rc == 0
+    assert iid not in prov.list_ids()

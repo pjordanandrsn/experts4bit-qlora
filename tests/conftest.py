@@ -30,6 +30,8 @@ recommendation.
 """
 from __future__ import annotations
 
+import pytest
+
 import ast
 import importlib.util
 from pathlib import Path
@@ -152,3 +154,24 @@ def pytest_report_collectionfinish(config, items):
     lines.append("  add `pytest.importorskip(...)` to these so they report as "
                  "SKIPPED rather than disappearing.")
     return lines
+
+# e4b#455 — tests never rent. On 2026-09-06 a test reached the live Vast API and created an instance; this fixture
+# and vast_provider._under_test() make that impossible from now on: the live flag is off, the key path points at a
+# file that does not exist, and the real transport cannot be constructed under a test runner.
+
+
+@pytest.fixture(autouse=True)
+def _never_rent_in_tests(monkeypatch, tmp_path):
+    monkeypatch.setenv("E4B_RENT_LIVE", "0")
+    try:
+        from experts4bit_qlora.tools import vast_provider
+        monkeypatch.setattr(vast_provider, "DEFAULT_KEY_PATH", tmp_path / "no-such-secrets.env")
+        monkeypatch.setattr(vast_provider, "UrllibTransport", _RefuseTransport)
+    except ImportError:
+        pass
+    yield
+
+
+class _RefuseTransport:
+    def __init__(self, *a, **k):
+        raise RuntimeError("a real HTTP transport was constructed inside a test — tests never rent")
