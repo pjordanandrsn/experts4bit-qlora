@@ -155,11 +155,17 @@ python -m experts4bit_qlora.tools.rent \
    Permalinks must be `https://cerin-amroth.slack.com/archives/C…/p<16
    digits>`; the launcher cannot read Slack, so the receipt carries them for
    the ledger check to resolve against the org-corpus raw layer.
+   For a live run, the launcher takes the account lock before loading the
+   budget ledger. Ledger readers and appenders use matching file locks. Every
+   run, including a dry run, rejects an id already present in the ledger and
+   atomically reserves its canonical receipt directory before provider create.
+   Refused contenders receive unique attempt ids and cannot overwrite it.
 3. Arms a teardown **guard on the controller** (`start_new_session`, not on
    the rented box), waits for the guard's arm marker (`guard-armed.json`;
    `--guard-arm-timeout-s`, default 60 s -- no marker means the launcher tears
    down WITHOUT running the command: `status HARNESS_ERROR`, `result invalid`,
-   `reason guard-not-armed`) and refreshes the guard's heartbeat every `timeout / 3`
+   `reason guard-not-armed`; a process-start failure is recorded as
+   `reason guard-spawn-failed` after synchronous teardown) and refreshes the guard's heartbeat every `timeout / 3`
    seconds for as long as `--command` runs. The guard destroys the instance
    on wallclock or heartbeat loss and proves teardown by listing the provider
    without that instance id; when the guard fires, the receipt says `status
@@ -168,6 +174,19 @@ python -m experts4bit_qlora.tools.rent \
    exits. `pass` is written only when the launcher itself destroyed a live
    instance; an instance found already gone -- by the guard or by anyone else --
    is `ALARM` / `invalid`.
+   Arm, firing and teardown files are accepted only when they name the current
+   instance. A teardown proof is final only when it says complete and a fresh
+   authenticated provider listing also proves that instance absent. The receipt
+   schema defines an optional nested instance id for compatibility with historical
+   receipts. New launcher receipts always include it, and both the launcher and
+   canonical ledger checker validate that it equals the receipt's top-level
+   `instance_id` whenever present.
+   If synchronous teardown is not proven, the controller retains the account
+   lock and retries destroy until an authenticated listing proves the instance
+   absent; it never hands the lock back through a racy guard-liveness check. Do
+   not kill that recovery controller. An abrupt OS or power loss in the interval between provider create
+   and guard start remains a residual; before any subsequent launch, authenticate
+   the provider inventory and manually destroy the recorded run label if present.
 4. Writes `bench/runs/<UTC date>/<run-id>/receipt.json` -- `commit_sha`,
    `branch` and `dirty_tree` read from git, validated against
    `docs/run-receipt-schema.json` before every write -- and appends
