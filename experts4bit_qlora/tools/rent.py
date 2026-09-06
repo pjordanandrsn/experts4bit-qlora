@@ -293,7 +293,23 @@ class FakeProvider:
                 "remaining": live, "at": _utc()}
 
 
-def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = "e4b-rent"):
+PUBKEY_RE = re.compile(r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp\d+|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/=]+( .*)?$")
+
+
+def read_pubkey(path: Path | str) -> str:
+    """The controller's ssh PUBLIC key by shape (`ssh-ed25519 AAAA… comment`), attached to the instance so the pre-flight
+    and the workload can ssh (e4b#464). A private key, an empty file or anything else is refused — never attached, never
+    written anywhere."""
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise RentRefused(f"--ssh-pubkey {p}: no such file")
+    lines = [ln.strip() for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    if len(lines) != 1 or not PUBKEY_RE.match(lines[0]):
+        raise RentRefused(f"--ssh-pubkey {p}: not a single OpenSSH public key line (ssh-ed25519 / ssh-rsa / ecdsa …); a private key is refused")
+    return lines[0]
+
+
+def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = "e4b-rent", ssh_pubkey: str | None = None):
     """The provider for `kind`. Live Vast (#455) is armed only by E4B_RENT_LIVE=1 and a mode-600 key file
     (`~/.vast/secrets.env`, key read by shape, never echoed); every other live kind still refuses by name."""
     if kind == "fake":
@@ -303,7 +319,7 @@ def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = 
     if kind == "vast:verified-secure":
         from experts4bit_qlora.tools import vast_provider
         try:
-            return vast_provider.provider_from_env(run_label=run_label)
+            return vast_provider.provider_from_env(run_label=run_label, **({"ssh_pubkey": ssh_pubkey} if ssh_pubkey else {}))
         except (vast_provider.VastRefused, vast_provider.BackendUnavailable) as e:
             raise RentRefused(f"live provider {kind} refused: {e}") from e
     if kind == "runpod:secure":
@@ -311,6 +327,27 @@ def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = 
             f"live provider {kind} is not armed in this process; pass --dry-run "
             "(fake provider) — the RunPod adapter is a separate issue")
     raise RentRefused(f"unknown provider {kind!r}")
+
+
+def command_environment(*, run_id: str, instance_id: str, run_dir: Path, provider: str, wallclock_s: float,
+                        deadline_epoch: int, ssh: str | None) -> dict[str, str]:
+    """The environment `--command` runs with (e4b#464): the controller's own plus E4B_RENT_* — run id, instance id, the
+    receipt directory (where the workload puts what the receipt should list), provider, the wall-clock cap in seconds,
+    the guard's deadline as an epoch (a box-side STOP rule reads it), and the ssh endpoint when the pre-flight reported
+    one (`host:port`, also split). Absent facts are absent, never a placeholder."""
+    env = dict(os.environ)
+    env.update({
+        "E4B_RENT_RUN_ID": run_id,
+        "E4B_RENT_INSTANCE_ID": str(instance_id),
+        "E4B_RENT_RUN_DIR": str(run_dir),
+        "E4B_RENT_PROVIDER": provider,
+        "E4B_RENT_WALLCLOCK_S": str(wallclock_s),
+        "E4B_RENT_DEADLINE_EPOCH": str(int(deadline_epoch)),
+    })
+    if ssh and ":" in ssh:
+        host, port = ssh.rsplit(":", 1)
+        env.update({"E4B_RENT_SSH": ssh, "E4B_RENT_SSH_HOST": host, "E4B_RENT_SSH_PORT": port})
+    return env
 
 
 def spawn_guard(*, python: str, module_args: list[str],
@@ -715,6 +752,8 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--heartbeat-refresh-s", type=float, default=None,
                     help="how often the launcher refreshes the heartbeat while --command runs "
                          "(default: timeout / 3; 0 disables -- tests only)")
+    ap.add_argument("--ssh-pubkey", default=None, metavar="PATH",
+                    help="#464: the controller's ssh PUBLIC key file, attached to the instance so the pre-flight and --command can ssh (a private key is refused)")
     ap.add_argument("--preflight-timeout-s", type=float, default=600.0,
                     help="#455: how long a live instance may stay `loading` before the pre-flight fails it")
     ap.add_argument("--live-list", action="store_true",
@@ -847,7 +886,9 @@ def main(argv: list[str] | None = None) -> int:
             approvals=approvals, date_utc=date_utc, seat_executors=seat_executors)
         environment["approver_spec"] = str(spec) if spec else "unresolved"
         fake_state = Path(args.fake_state) if args.fake_state else rec_dir / "fake-state.json"
-        prov = provider_for(provider, fake_state=fake_state, run_label=run_id)  # MEDIUM-3: a live-provider refusal is a receipt too
+        ssh_pubkey = read_pubkey(args.ssh_pubkey) if args.ssh_pubkey else None  # #464: by shape, or a named refusal
+        environment["ssh_pubkey_attached"] = "yes" if ssh_pubkey else "no"
+        prov = provider_for(provider, fake_state=fake_state, run_label=run_id, ssh_pubkey=ssh_pubkey)  # MEDIUM-3: a live-provider refusal is a receipt too
     except RentRefused as e:
         return refused(str(e), spec)
 
@@ -915,9 +956,14 @@ def main(argv: list[str] | None = None) -> int:
                 notes = f"pre-flight failed: {e} (" + notes + "); command not run"
                 environment["vast_preflight"] = "failed"
     if args.command and status == "OK":
+        # #464: the command is handed the box — the ids, the receipt directory, the deadline and (when the pre-flight
+        # reported it) the ssh endpoint — as ITS environment; nothing is exported into the launcher's own process.
+        cmd_env = command_environment(run_id=run_id, instance_id=iid, run_dir=rec_dir, provider=prov.kind,
+                                      wallclock_s=wallclock_s, deadline_epoch=int(time.time() + wallclock_s),
+                                      ssh=environment.get("vast_ssh"))
         with HeartbeatRefresher(hb, refresh):  # HIGH-1: the heartbeat stays fresh for the whole command
             try:
-                subprocess.run(args.command, shell=True, check=True)
+                subprocess.run(args.command, shell=True, check=True, env=cmd_env)
             except subprocess.CalledProcessError as e:
                 status, result, notes = "HARNESS_ERROR", "fail", f"command exited {e.returncode}"
 

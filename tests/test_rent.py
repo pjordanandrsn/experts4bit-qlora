@@ -864,3 +864,61 @@ def test_guard_acts_on_a_lost_heartbeat_while_the_listing_is_down(tmp_path: Path
     assert data["reason"] == "heartbeat-loss" and took < 10, took
     assert data["complete"] is False, "absence stays unproven while the listing is down — destroyed, not proven"
     assert iid not in FakeProvider(fake).list_ids()
+
+
+# ---- e4b#464: the command is handed the box; the controller's public key is attached by shape
+def test_command_environment_carries_the_box_and_nothing_leaks(tmp_path: Path):
+    """E4B_RENT_* reach --command as its environment; the launcher's own process keeps none of them."""
+    out = tmp_path / "seen-env.json"
+    code = "import os, json, sys; json.dump({k: v for k, v in os.environ.items() if k.startswith('E4B_RENT_')}, open(sys.argv[1], 'w'))"
+    rc = main(_cli(tmp_path, "rent-env-1", "--command", f"{sys.executable} -c \"{code}\" {out}"))
+    rec = _receipt(tmp_path)
+    assert rc == 0 and rec["status"] == "OK"
+    seen = json.loads(out.read_text())
+    assert seen["E4B_RENT_RUN_ID"] == "rent-env-1"
+    assert seen["E4B_RENT_INSTANCE_ID"] == rec["instance_id"]
+    assert seen["E4B_RENT_RUN_DIR"].endswith("/rent-env-1") and Path(seen["E4B_RENT_RUN_DIR"]).is_dir()
+    assert seen["E4B_RENT_PROVIDER"] == "fake" and seen["E4B_RENT_WALLCLOCK_S"] == "3600.0"
+    now = int(time.time())
+    assert now <= int(seen["E4B_RENT_DEADLINE_EPOCH"]) <= now + 3600 + 5
+    assert "E4B_RENT_SSH" not in seen, "the fake reports no ssh endpoint → no placeholder, the key is absent"
+    for k in ("E4B_RENT_RUN_ID", "E4B_RENT_INSTANCE_ID", "E4B_RENT_RUN_DIR", "E4B_RENT_SSH"):
+        assert k not in os.environ, f"{k} exported into the launcher's own process"  # E4B_RENT_LIVE is the fixture's, not ours
+    assert rec["environment"]["ssh_pubkey_attached"] == "no"
+
+
+def test_command_environment_has_the_ssh_endpoint_when_the_preflight_reports_one(tmp_path: Path, monkeypatch):
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class WithSsh(FakeProvider):
+        def preflight(self, instance_id, *, timeout_s=600.0):
+            return {"vast_preflight": "ok", "vast_ssh": "ssh5.vast.ai:12345"}
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kw: WithSsh(kw["fake_state"]))
+    out = tmp_path / "seen-env.json"
+    code = "import os, json, sys; json.dump({k: v for k, v in os.environ.items() if k.startswith('E4B_RENT_SSH')}, open(sys.argv[1], 'w'))"
+    rc = main(_cli(tmp_path, "rent-env-2", "--command", f"{sys.executable} -c \"{code}\" {out}"))
+    assert rc == 0
+    assert json.loads(out.read_text()) == {"E4B_RENT_SSH": "ssh5.vast.ai:12345", "E4B_RENT_SSH_HOST": "ssh5.vast.ai", "E4B_RENT_SSH_PORT": "12345"}
+
+
+def test_ssh_pubkey_is_read_by_shape_and_a_private_key_is_refused(tmp_path: Path):
+    from experts4bit_qlora.tools.rent import read_pubkey
+    good = tmp_path / "id_ed25519.pub"
+    good.write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderKeyMaterialForTheTestOnly0000000000 cdo@mini\n")
+    assert read_pubkey(good).startswith("ssh-ed25519 AAAA")
+    private = tmp_path / "id_ed25519"
+    private.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n")
+    with pytest.raises(RentRefused, match="private key is refused"):
+        read_pubkey(private)
+    with pytest.raises(RentRefused, match="no such file"):
+        read_pubkey(tmp_path / "absent.pub")
+    two = tmp_path / "two.pub"
+    two.write_text("ssh-ed25519 AAAA1 a\nssh-ed25519 AAAA2 b\n")
+    with pytest.raises(RentRefused, match="single"):
+        read_pubkey(two)
+    # through the CLI on the fake provider: the receipt records that a key was attached
+    rc = main(_cli(tmp_path, "rent-key-1", "--ssh-pubkey", str(good)))
+    assert rc == 0 and _receipt(tmp_path)["environment"]["ssh_pubkey_attached"] == "yes"
+    rc = main(_cli(tmp_path / "b", "rent-key-2", "--ssh-pubkey", str(private)))
+    assert rc == 2, "a refused key is a refusal receipt, not a launch"
