@@ -42,6 +42,9 @@ def _write(path: str, obj) -> None:
     os.replace(tmp, path)
 
 
+E4B_FUSED_MARKER = "fused TRAINING path"   # what e4b's loader prints when the fused path engages (#494)
+
+
 def rules(
     rec: dict, *, steps: int, tokens_sha: str, expect_trainable: int, n_layers: int, attn4_census: int, arm: str
 ) -> list[tuple[str, str]]:
@@ -69,15 +72,38 @@ def rules(
             )
         )
     if arm == "fused":
-        banners = rec.get("engagement_banners") or []
-        missing = [b for b in banners if str(b).startswith("NO '")]
+        # Engagement evidence is per FRAMEWORK, which is what P38-PREREG.md:72 says in terms: "e4b's arm shows
+        # the same engagement as tp1 (enable_fast_train … patched, the kernel counter …); Unsloth's arm shows its
+        # OWN banners (`Enabling LoRA on MoE parameters`, the `Unsloth: MoE bnb4bit …` backend line …)". The
+        # banner is Unsloth's console line and e4b never prints it. Requiring it of e4b's fused arm voided the
+        # only arm that ever reached admission (R1 attempt 10, 2026-09-07) — with n_patched 32 == n_layers, the
+        # fused counter at 128 calls on all 60 steps, the exact trainable count and C1 bit-exact — and would void
+        # every fused arm in the campaign by construction. The same cell in tp2, which IS in the register, has
+        # engagement_banners [] with identical counters and was admitted. #494.
+        framework = str(rec.get("framework") or "")
         if rec.get("n_patched") != n_layers:
             fails.append(("engagement", f"n_patched {rec.get('n_patched')} != n_layers {n_layers}"))
         kmin = rec.get("kernel_calls_per_step_min") or 0
         if kmin < 2 * n_layers:
             fails.append(("engagement", f"kernel_calls_per_step_min {kmin} < 2 x n_layers {2 * n_layers}"))
-        if not banners or missing:
-            fails.append(("engagement", "engagement banner missing (a green skipped path is not evidence)"))
+        if framework == "unsloth":
+            banners = rec.get("engagement_banners") or []
+            missing = [b for b in banners if str(b).startswith("NO '")]
+            if not banners or missing:
+                fails.append(("engagement", "engagement banner missing (a green skipped path is not evidence)"))
+        else:
+            # e4b's third piece of evidence, in place of the banner it cannot emit: the loader must SAY it took
+            # the fused training path. A silent fallback to the reference path is exactly what the banner rule
+            # was defending against, so this keeps the defence rather than dropping it.
+            # Match the loader's own marker, not the word "fused": a reason reading "no fused kernel" contains
+            # it. The observed string on an engaged arm is
+            #   "[e4b.fast] fused TRAINING path on 32 ExpertsLoRA module(s) (dgrad kernel backward)"
+            # and a reference arm records "" — so the marker separates them, and a negation cannot sneak past.
+            why = str(rec.get("enable_reason") or "")
+            if E4B_FUSED_MARKER not in why:
+                fails.append(("engagement",
+                              f"enable_reason does not carry {E4B_FUSED_MARKER!r} (a green skipped path is not "
+                              f"evidence): {why[:120]!r}"))
     if rec.get("C1_bit_exact") is not True:
         fails.append(("c1", f"C1 not bit-exact ({rec.get('C1_experts_changed')} frozen tensors changed)"))
     return fails
