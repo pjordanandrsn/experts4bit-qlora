@@ -38,6 +38,9 @@ EST=${P41_PLAN_EST_USD:-0}; APPROVAL_EST=${P41_APPROVAL_EST_USD:-0}             
 ARM_OVERHEAD=${P41_ARM_OVERHEAD_S:-900}; ALARM_FACTOR=${P41_ALARM_FACTOR:-1.5}; CURVE_EXP=${P41_CURVE_EXP:-1.2}   # the alarm: the planning curve x1.5 + 900 s (P38's alarm rule)
 PLAN_OVERHEAD=${P41_PLAN_OVERHEAD_S:-120}   # the planning curve itself (PREREG "Run split"): N x s512 x (seq/512)^1.2 + load/evals -- what STOP-4 projects with, never the alarm
 ANCHOR_STRICT=1; STOP1_TOL=0.10
+# The e4b cut tp2 measured the anchors on (its receipts record 0.35.1). STOP-1's +-10 % band binds only when
+# the run installs this same version; otherwise the delta is recorded and the family proceeds (#498).
+ANCHOR_E4B_VER=${P41_ANCHOR_E4B_VER:-0.35.1}; export P41_ANCHOR_E4B_VER="$ANCHOR_E4B_VER"
 T_START=$(date +%s)
 GUARD_T0=$T_START; [ "$WALLCLOCK_S" -gt 0 ] 2>/dev/null && [ "$DEADLINE" -gt 0 ] && GUARD_T0=$((DEADLINE - WALLCLOCK_S))   # the guard's own start (CEO LOW-1): STOP-5 counts from it, not from this script's
 say(){ echo "[$(date -u +%FT%TZ)] $*"; }
@@ -292,13 +295,28 @@ admit(){ local FAM=$1 TAG=$2 ARM=$3 SEQ=$4 R=$5 EXP=$6 NL=$7 A4=$8; local f=$W/$
 # STOP-1: the (512, 8) fused anchor vs tp2's fused s/step, +-10 % (P40's anchor rule); a disagreement halts the family's remaining cells
 stop1_check(){ local FAM=$1 FS=$2; local f=$W/${FAM}_e4b_fused_attn4_s512_r8.json
   python3 - "$f" "$FS" "$STOP1_TOL" <<'PY1'
-import json, sys
+import json, os, sys
 p, ref, tol = sys.argv[1], float(sys.argv[2]), float(sys.argv[3])
 try: r = json.load(open(p))
 except Exception as e: print(f"STOP-1 UNDECIDED: anchor receipt unreadable ({e})"); sys.exit(2)
 if r.get("status") != "ok" or r.get("admitted") is not True: print(f"STOP-1 UNDECIDED: anchor status {r.get('status')} admitted={r.get('admitted')} -- not comparable"); sys.exit(2)
 s = float(r.get("s_per_step_median_11plus", 0) or 0); d = (s - ref) / ref
-print(f"ANCHOR fused s512 r8 = {s:.3f} s/step vs tp2 {ref:.3f} ({d*100:+.1f} %)")
+# #498, prospective: the cross-lane anchor is an absolute s/step from the cut tp2 measured. It answers
+# "is this box comparable to tp2's box" ONLY while the code is the same. When the installed e4b differs
+# from the anchor's, a disagreement means the STACK changed, which is the thing this campaign exists to
+# measure -- halting on it would make the experiment unable to observe its own subject. So: the band is
+# binding only on the anchor's own version; on any other version the delta is RECORDED, loudly, and the
+# family proceeds. Declared before the run reads it, not after seeing a number anyone liked.
+anchor_ver = os.environ.get("P41_ANCHOR_E4B_VER", "").strip()
+run_ver = str(((r.get("env") or {}).get("experts4bit-qlora")) or "").strip()
+same_stack = bool(anchor_ver) and bool(run_ver) and anchor_ver == run_ver
+print(f"ANCHOR fused s512 r8 = {s:.3f} s/step vs tp2 {ref:.3f} ({d*100:+.1f} %) "
+      f"[anchor e4b {anchor_ver or 'UNKNOWN'} vs run e4b {run_ver or 'UNKNOWN'}: "
+      f"{'same stack, band binding' if same_stack else 'different stack, band informational (#498)'}]")
+if not same_stack:
+    print(f"ANCHOR CROSS-VERSION DELTA {d*100:+.1f} % -- recorded, not a STOP; the stack changed, so an "
+          f"absolute cross-lane band cannot separate a wrong box from improved code")
+    sys.exit(0)
 sys.exit(0 if abs(d) <= tol else 1)
 PY1
 }
