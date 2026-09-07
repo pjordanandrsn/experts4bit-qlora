@@ -26,6 +26,7 @@ What this module promises (every line is a rule that cost money before it was a 
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shlex
@@ -189,7 +190,7 @@ class VastProvider:
     kind = KIND
 
     def __init__(self, transport: Transport, *, run_label: str, min_disk_gb: int = 320, min_ram_gb: int = 98,
-                 ssh_pubkey: str | None = None,
+                 ssh_pubkey: str | None = None, excluded_machine_ids: set[str] | None = None,
                  ssh_runner: Callable[[str, int, str, float], tuple[int, str]] | None = None,
                  bandwidth_probe: Callable[[str, int], float] | None = None,
                  clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep):
@@ -198,6 +199,7 @@ class VastProvider:
         self.min_disk_gb = min_disk_gb
         self.min_ram_gb = min_ram_gb
         self.ssh_pubkey = ssh_pubkey
+        self.excluded_machine_ids = {str(machine_id) for machine_id in (excluded_machine_ids or set())}
         self._ssh = ssh_runner or _ssh_run
         # Keep injected probes as the small float-returning test seam.  The live
         # probe uses the evidence-returning path so a conservative 0.0 refusal
@@ -206,7 +208,7 @@ class VastProvider:
         self._bandwidth = bandwidth_probe
         self._clock = clock
         self._sleep = sleep
-        self._facts: dict[str, str] = {}
+        self._facts: dict[str, str] = {"vast_excluded_machine_ids": json.dumps(sorted(self.excluded_machine_ids))}
         self._dph: float | None = None
 
     # ---- auth
@@ -225,7 +227,39 @@ class VastProvider:
         if status != 200 or not isinstance(body, dict) or not isinstance(body.get("offers"), list):
             raise BackendUnavailable(f"offer search did not answer with offers: HTTP {status}, body {_shape(body)}")
         # The payload's key is `verification`, not `verified` (2026-07-30 trap) — check it client-side too.
-        offers = [o for o in body["offers"] if o.get("verification") == "verified" and o.get("rentable", True)]
+        offers: list[dict[str, Any]] = []
+        suppressed: list[dict[str, str]] = []
+        for offer in body["offers"]:
+            if not isinstance(offer, dict):
+                raise BackendUnavailable("offer search returned a non-object offer; refusing before create")
+            if offer.get("verification") != "verified" or not offer.get("rentable", True):
+                continue
+            machine_id = str(offer.get("machine_id", ""))
+            offer_id = str(offer.get("id", ""))
+            if self.excluded_machine_ids and (not machine_id.isdigit() or not offer_id.isdigit()):
+                raise BackendUnavailable(
+                    "verified rentable offer lacks numeric offer/machine identity; refusing before create"
+                )
+            if self.excluded_machine_ids and machine_id in self.excluded_machine_ids:
+                suppressed.append({
+                    "offer_id": offer_id,
+                    "machine_id": machine_id,
+                    "dph_total": str(offer.get("dph_total", "UNKNOWN")),
+                })
+                continue
+            raw_dph = offer.get("dph_total")
+            if type(raw_dph) not in (int, float):
+                raise BackendUnavailable("verified rentable offer lacks a numeric hourly rate; refusing before create")
+            dph = float(raw_dph)
+            if not math.isfinite(dph) or dph < 0:
+                raise BackendUnavailable("verified rentable offer has a non-finite or negative hourly rate; refusing before create")
+            offers.append(offer)
+        suppressed.sort(key=lambda item: (item["machine_id"], item["offer_id"], item["dph_total"]))
+        self._facts.update({
+            "vast_search_filter": json.dumps(q, sort_keys=True),
+            "vast_excluded_machine_ids": json.dumps(sorted(self.excluded_machine_ids)),
+            "vast_excluded_offers": json.dumps(suppressed, sort_keys=True),
+        })
         offers.sort(key=lambda o: float(o.get("dph_total", 1e9)))
         return offers
 
@@ -233,8 +267,21 @@ class VastProvider:
     def launch(self, *, gpu: str, wallclock_h: float, image: str, max_dph: float | None = None) -> str:
         offers = self.search_offers(gpu)
         if not offers:
-            raise VastRefused(f"no verified rentable {gpu} offer with ≥{self.min_disk_gb} GB disk and ≥{self.min_ram_gb} GB RAM right now; refusing")
+            suffix = f" after excluding machines {sorted(self.excluded_machine_ids)}" if self.excluded_machine_ids else ""
+            raise VastRefused(f"no verified rentable {gpu} offer with ≥{self.min_disk_gb} GB disk and ≥{self.min_ram_gb} GB RAM right now{suffix}; refusing")
         offer = offers[0]
+        q = offer_filter(gpu, min_disk_gb=self.min_disk_gb, min_ram_gb=self.min_ram_gb)
+        self._facts.update({
+            "vast_offer_id": str(offer.get("id")),
+            "vast_machine_id": str(offer.get("machine_id", "UNKNOWN")),
+            "vast_dph_total": str(offer.get("dph_total", "UNKNOWN")),
+            "vast_gpu_name": str(offer.get("gpu_name", "UNKNOWN")),
+            "vast_disk_space_gb": str(offer.get("disk_space", "UNKNOWN")),
+            "vast_cpu_ram_mb": str(offer.get("cpu_ram", "UNKNOWN")),
+            "vast_verification": str(offer.get("verification", "UNKNOWN")),
+            "vast_search_filter": json.dumps(q, sort_keys=True),
+            "vast_image": image,
+        })
         # e4b#464 (the money path): the approval line is `--usd-per-hour × cap`; an offer priced above the declared rate would make
         # the receipt's estimate a lie. The cheapest verified offer must fit under the declared ceiling or nothing is created.
         dph = offer.get("dph_total")
@@ -253,20 +300,10 @@ class VastProvider:
             self._sweep_orphans(f"create answered a shape this code does not understand: HTTP {status}, body {_shape(resp)}")
         iid = str(resp["new_contract"])
         self._dph = float(offer.get("dph_total")) if offer.get("dph_total") is not None else None
-        q = offer_filter(gpu, min_disk_gb=self.min_disk_gb, min_ram_gb=self.min_ram_gb)
-        self._facts = {
-            "vast_offer_id": str(offer.get("id")),
-            "vast_machine_id": str(offer.get("machine_id", "UNKNOWN")),
+        self._facts.update({
             "vast_contract_id": iid,
-            "vast_dph_total": str(offer.get("dph_total", "UNKNOWN")),
-            "vast_gpu_name": str(offer.get("gpu_name", "UNKNOWN")),
-            "vast_disk_space_gb": str(offer.get("disk_space", "UNKNOWN")),
-            "vast_cpu_ram_mb": str(offer.get("cpu_ram", "UNKNOWN")),
-            "vast_verification": str(offer.get("verification", "UNKNOWN")),
-            "vast_search_filter": json.dumps(q, sort_keys=True),
-            "vast_image": image,
             "vast_created_at": _utc(),
-        }
+        })
         return iid
 
     def launch_facts(self) -> dict[str, str]:

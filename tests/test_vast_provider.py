@@ -142,6 +142,84 @@ def test_launch_picks_the_cheapest_verified_offer_and_records_facts():
     assert cost == 0.61 and "UNKNOWN" in method
 
 
+def test_launch_skips_explicitly_excluded_machine_and_records_the_exclusion():
+    rotated = dict(OFFER, id=42274234, machine_id=12345, dph_total=0.59)
+    replacement = dict(OFFER, id=42274237, machine_id=67890, dph_total=0.62)
+    tr = FakeTransport(routes({
+        ("GET", "/v0/bundles/"): [(200, {"offers": [OFFER, replacement, rotated]})],
+        ("PUT", "/v0/asks/42274237/"): [(200, {"success": True, "new_contract": 7000124})],
+    }))
+    p = provider(tr, excluded_machine_ids={"12345"})
+    assert p.launch(gpu="RTX 5090", wallclock_h=2.0, image="img") == "7000124"
+    assert [c for c in tr.calls if c[0] == "PUT"][0][1] == "/v0/asks/42274237/"
+    facts = p.launch_facts()
+    assert facts["vast_machine_id"] == "67890"
+    assert json.loads(facts["vast_excluded_machine_ids"]) == ["12345"]
+    assert json.loads(facts["vast_excluded_offers"]) == [
+        {"dph_total": "0.59", "machine_id": "12345", "offer_id": "42274234"},
+        {"dph_total": "0.61", "machine_id": "12345", "offer_id": "42274235"},
+    ]
+
+
+def test_launch_refuses_when_every_verified_machine_is_excluded():
+    tr = FakeTransport(routes())
+    p = provider(tr, excluded_machine_ids={"12345"})
+    with pytest.raises(VastRefused, match="no verified rentable"):
+        p.launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    assert not [call for call in tr.calls if call[0] == "PUT"]
+    assert json.loads(p.launch_facts()["vast_excluded_offers"])[0]["machine_id"] == "12345"
+
+
+@pytest.mark.parametrize("bad_offer", [dict(OFFER, machine_id=None), {k: v for k, v in OFFER.items() if k != "machine_id"}])
+def test_launch_refuses_verified_offer_without_machine_identity_before_put(bad_offer):
+    tr = FakeTransport(routes({("GET", "/v0/bundles/"): [(200, {"offers": [bad_offer]})]}))
+    with pytest.raises(BackendUnavailable, match="lacks numeric offer/machine identity"):
+        provider(tr, excluded_machine_ids={"144661"}).launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    assert not [call for call in tr.calls if call[0] == "PUT"]
+
+
+def test_offer_without_machine_identity_keeps_the_no_exclusion_baseline():
+    missing = {k: v for k, v in OFFER.items() if k != "machine_id"}
+    tr = FakeTransport(routes({("GET", "/v0/bundles/"): [(200, {"offers": [missing]})]}))
+    p = provider(tr)
+    assert p.launch(gpu="RTX 5090", wallclock_h=1, image="img") == "7000123"
+    assert p.launch_facts()["vast_machine_id"] == "UNKNOWN"
+
+
+def test_excluded_cheapest_then_over_cap_replacement_records_candidate_without_put():
+    replacement = dict(OFFER, id=42274237, machine_id=67890, dph_total=0.70)
+    tr = FakeTransport(routes({("GET", "/v0/bundles/"): [(200, {"offers": [OFFER, replacement]})]}))
+    p = provider(tr, excluded_machine_ids={"12345"})
+    with pytest.raises(VastRefused, match="above the declared"):
+        p.launch(gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.66)
+    assert not [call for call in tr.calls if call[0] == "PUT"]
+    facts = p.launch_facts()
+    assert facts["vast_offer_id"] == "42274237"
+    assert facts["vast_machine_id"] == "67890"
+    assert facts["vast_dph_total"] == "0.7"
+    assert json.loads(facts["vast_excluded_offers"])[0]["machine_id"] == "12345"
+
+
+def test_active_exclusion_refuses_nan_rate_replacement_before_put():
+    replacement = dict(OFFER, id=42274237, machine_id=67890, dph_total=float("nan"))
+    tr = FakeTransport(routes({("GET", "/v0/bundles/"): [(200, {"offers": [OFFER, replacement]})]}))
+    with pytest.raises(BackendUnavailable, match="non-finite or negative hourly rate"):
+        provider(tr, excluded_machine_ids={"12345"}).launch(
+            gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.66,
+        )
+    assert not [call for call in tr.calls if call[0] == "PUT"]
+
+
+def test_active_exclusion_refuses_boolean_rate_replacement_before_put():
+    replacement = dict(OFFER, id=42274237, machine_id=67890, dph_total=False)
+    tr = FakeTransport(routes({("GET", "/v0/bundles/"): [(200, {"offers": [OFFER, replacement]})]}))
+    with pytest.raises(BackendUnavailable, match="lacks a numeric hourly rate"):
+        provider(tr, excluded_machine_ids={"12345"}).launch(
+            gpu="RTX 5090", wallclock_h=1, image="img", max_dph=0.66,
+        )
+    assert not [call for call in tr.calls if call[0] == "PUT"]
+
+
 def test_launch_refuses_when_no_verified_offer_and_when_create_fails():
     tr = FakeTransport(routes({("GET", "/v0/bundles/"): [(200, {"offers": [UNVERIFIED]})]}))
     with pytest.raises(VastRefused, match="no verified rentable"):
