@@ -782,3 +782,31 @@ def test_a_run_of_taken_asks_refuses_rather_than_shopping_forever():
     extra[("GET", "/v0/bundles/")] = [(200, {"offers": offers})]
     with pytest.raises(VastRefused, match="already taken between search and create"):
         provider(FakeTransport(routes(extra))).launch(gpu="RTX 5090", wallclock_h=1.0, image="img", max_dph=0.66)
+
+
+def test_a_transfer_that_ran_out_of_window_is_a_slow_box_not_an_unmeasurable_one(monkeypatch):
+    """R1 attempt 23 (machine 28759): 60,594,311 B moved inside the 45 s window — about 1.4 MB/s — and curl exited
+    28 on its own --max-time, so the reading was discarded and the receipt said 0.0 MB/s could not be measured.
+    We had the number. The box is refused either way; the record should say WHY."""
+    real = ("60594311 45.000761 2.358548 200 Welcome to vast.ai. If authentication fails, try again after a few "
+            "seconds, and double check your ssh key. Have fun!")
+
+    def run(host, port, command, timeout_s):
+        if command.startswith("for t in"):
+            return 0, "curl=/usr/bin/curl"
+        return vast_provider.CURL_TIMEOUT_RC, real
+    monkeypatch.setattr(vast_provider, "_ssh_run", run)
+    mbps, evidence = vast_provider._bandwidth_over_ssh_with_evidence("h", 1)
+    assert mbps == pytest.approx(1.42, abs=0.02), mbps
+    ok = [a for a in evidence["attempts"] if a.get("result") == "ok"]
+    assert ok and ok[0]["bytes"] == "60594311", evidence
+
+
+def test_a_timeout_with_no_usable_reading_is_still_a_failure(monkeypatch):
+    def run(host, port, command, timeout_s):
+        if command.startswith("for t in"):
+            return 0, "curl=/usr/bin/curl"
+        return vast_provider.CURL_TIMEOUT_RC, "curl: (28) Operation timed out after 45000 ms with 0 bytes received"
+    monkeypatch.setattr(vast_provider, "_ssh_run", run)
+    with pytest.raises(PreflightFailed):
+        vast_provider._bandwidth_over_ssh("h", 1)

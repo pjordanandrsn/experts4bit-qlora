@@ -164,6 +164,7 @@ class FakeTransport:
 
 
 # ---------------------------------------------------------------------------------------------- provider
+CURL_TIMEOUT_RC = 28         # curl's --max-time: the transfer ran out of window, not out of bytes (#474 shape)
 STALE_ASK_MAX_SKIPS = 4      # how many already-taken asks to walk past before refusing (#488-class, R1 17/18)
 _STALE_ASK_RE = re.compile(r"no_such_ask|is not available", re.I)
 
@@ -739,6 +740,18 @@ def _bandwidth_over_ssh_with_evidence(host: str, port: int, *,
         for attempt in range(1, 3):
             rc, out = _ssh_run(host, port, command(url), 90)
             sample = " ".join(out.strip().split())[:160] or "<empty>"
+            # A transfer that hit its own time cap is a SLOW BOX, not an unmeasurable one. R1 attempt 23
+            # (machine 28759, 2026-09-07T07:23Z) moved 60,594,311 B in the 45 s window — about 1.4 MB/s — and
+            # curl exited 28 (--max-time), so the reading was discarded and the receipt said "0.0 MB/s … could
+            # not be measured". We had the number and threw it away, which is the #474 shape again: a value that
+            # is not what its name says. If the tool timed out but still printed an acceptable reading, use it.
+            if rc == CURL_TIMEOUT_RC:
+                try:
+                    measured, size, secs, code, request_s, first_byte_s = _bandwidth_reading(out)
+                except (ValueError, IndexError):
+                    pass
+                else:
+                    rc = 0
             item: dict[str, str | int] = {
                 "endpoint": endpoint_index, "attempt": attempt, "tool": tool, "rc": rc, "sample": sample,
             }
