@@ -428,8 +428,13 @@ class VastProvider:
             poll_s=min(poll_s, 5.0), retry_attached_key=bool(attached),
         )
         if rc != 0:
+            # Warden's addendum on #485, confirmed by R1 attempt 8 (instance 50114346, 2026-09-07T01:48Z): the
+            # 120-character slice was filled by the vast.ai login banner and the known-hosts notice, so 29 failed
+            # attempts reported "…double check your ssh key. Have fun! roo" and the actual error was cut off.
+            # Strip the transport's noise first — the same two notices #485 already strips — then keep more of it.
+            _why = " ".join(VAST_SSH_BANNER_RE.sub("", KNOWN_HOST_ADDED_RE.sub("", out)).split())[:400] or "<no output>"
             raise PreflightFailed(f"ssh to {host}:{port} did not authenticate within {int(ssh_ready_s)} s "
-                                  f"({tries} attempt{'s' if tries != 1 else ''}; last rc {rc}: {out.strip()[:120]})")
+                                  f"({tries} attempt{'s' if tries != 1 else ''}; last rc {rc}: {_why})")
         bandwidth_probe: dict[str, Any] = {}
         if self._bandwidth is None:
             mbps, bandwidth_probe = _bandwidth_over_ssh_with_evidence(
