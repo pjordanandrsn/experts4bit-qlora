@@ -1,9 +1,11 @@
 #!/bin/bash
 # bench/p41/p41_drive.sh -- lane P41, controller-side driver: the launcher's --command (experts4bit_qlora/tools/rent.py, e4b#464).
 # Reads the box from the launcher's environment (E4B_RENT_SSH_HOST / _PORT, _RUN_DIR, _RUN_ID, _DEADLINE_EPOCH, _WALLCLOCK_S), stages the
-# harness (bench/tp3/tp3_arm.py) and p41_run.sh, starts the lane detached on the box, polls TP_DONE while the launcher keeps the
-# heartbeat fresh, then rsyncs the arm receipts, stubs, logs, forensics and versions into the run directory. Exit 0 = the lane finished
-# (TP_DONE, no BOX_REFUSED); anything else is HARNESS_ERROR in the receipt. Nothing here creates, destroys or approves compute.
+# harness (bench/tp3/tp3_arm.py) and p41_run.sh, starts the lane detached on the box, polls terminal marker TP_DONE while the launcher
+# keeps the heartbeat fresh, then rsyncs the arm receipts, stubs, logs, forensics and versions into the run directory. p41_run writes
+# P41_EXIT_CODE atomically before TP_DONE on every normal shell exit and writes P41_SUCCESS only at successful completion. The driver
+# returns 0 only for numeric remote rc 0 plus P41_SUCCESS; missing, malformed or nonzero remote status is HARNESS_ERROR in the receipt.
+# Nothing here creates, destroys or approves compute.
 # The approval line's rate ceiling and estimate come from the launcher (E4B_RENT_USD_PER_HOUR / E4B_RENT_EST_USD, e4b#465); the run's
 # amended PLANNING estimate comes from the controller's environment (P41_PLAN_EST_USD, set per run thread from the pre-registration's
 # amended table) and is what STOP-4 works from (P41-PREREG.md amendment, e4b#467) -- the approval line is the governance guard, recorded
@@ -46,22 +48,15 @@ mkdir -p "$RUN_DIR/p41"
 rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude adapters --exclude e4b-src --exclude data --exclude 'venv*' "root@$HOST:$W/" "$RUN_DIR/p41/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p41" | wc -l | tr -d ' ') entries into $RUN_DIR/p41"
 [ -f "$RUN_DIR/p41/TP_DONE" ] || { say "lane did not finish (no TP_DONE)"; exit 23; }
-[ -f "$RUN_DIR/p41/BOX_REFUSED" ] && { say "box refused by the train anchor (BOX_REFUSED)"; exit 12; }
+RC_FILE="$RUN_DIR/p41/P41_EXIT_CODE"
+[ -f "$RC_FILE" ] || { say "lane terminal marker has no P41_EXIT_CODE"; exit 24; }
+[ "$(wc -l < "$RC_FILE" | tr -d ' ')" = "1" ] || { say "malformed P41_EXIT_CODE (expected one line)"; exit 24; }
+LANE_RC=$(cat "$RC_FILE")
+case "$LANE_RC" in ""|*[!0-9]*) say "malformed P41_EXIT_CODE '$LANE_RC'"; exit 24;; esac
+[ "$LANE_RC" -le 255 ] 2>/dev/null || { say "malformed P41_EXIT_CODE '$LANE_RC'"; exit 24; }
+[ "$LANE_RC" -eq 0 ] || { say "lane failed with remote rc=$LANE_RC"; exit "$LANE_RC"; }
+[ -f "$RUN_DIR/p41/BOX_REFUSED" ] && { say "box refused despite remote rc=0 (BOX_REFUSED)"; exit 12; }
+[ -f "$RUN_DIR/p41/P41_SUCCESS" ] || { say "remote rc=0 without P41_SUCCESS"; exit 24; }
 for m in STOP1 STOP2 STOP3 STOP4 STOP5; do [ -f "$RUN_DIR/p41/$m" ] && say "lane reports $m (a row, not a failure of the driver; stop_state.json has the reason)"; done
-SUM="$RUN_DIR/p41/summary.txt"
-# `grep -c` PRINTS 0 and EXITS 1 when it matches nothing, so `|| echo 0` appends a second zero and the count
-# becomes the two-line string "0\n0" — which then fails `[ "$A" -eq 0 ]` with "too many arguments" and the guard
-# below never fires. Caught by testing this against attempt 4's real summary before shipping it. Use `|| :`.
-ADMITTED=$(grep -c '^ADMIT OK' "$SUM" 2>/dev/null || :)
-VOIDED=$(grep -c '^ADMIT VOID' "$SUM" 2>/dev/null || :)
-STUBS=$(grep -c 'STUB ' "$SUM" 2>/dev/null || :)
-ADMITTED=${ADMITTED:-0}; VOIDED=${VOIDED:-0}; STUBS=${STUBS:-0}
-say "admission: $ADMITTED admitted, $VOIDED VOID, $STUBS stubs"
-# e4b#489: attempt 4 planned 19 arms, admitted 0, exited 0, and the launcher recorded OK/pass/complete with
-# empty metrics. Every other gate was working and all of them certified a run that produced no data. A lane
-# that admits nothing has not run, and must say so in its exit code — the only question none of the gates asked.
-if [ "$ADMITTED" -eq 0 ] && [ "$VOIDED" -eq 0 ]; then
-  say "REFUSED: 0 arms admitted and 0 VOID — the lane produced no rows at all; see $SUM"
-  exit 8
-fi
+say "admission: $(grep -c '^ADMIT OK' "$RUN_DIR/p41/summary.txt" 2>/dev/null) admitted, $(grep -c '^ADMIT VOID' "$RUN_DIR/p41/summary.txt" 2>/dev/null) VOID, $(grep -c 'STUB ' "$RUN_DIR/p41/summary.txt" 2>/dev/null) stubs"
 say "done"; exit 0

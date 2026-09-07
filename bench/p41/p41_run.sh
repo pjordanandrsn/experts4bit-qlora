@@ -1,9 +1,9 @@
 #!/bin/bash
 # bench/p41/p41_run.sh -- lane P41, box-side driver (pre-registration: bench/p41/P41-PREREG.md, verbatim; R1 = the granite grid + p41c probe).
 # Form: tp2_run.sh (bench/h2h-20260906/tp2), e4b side only for the e4b-only families (granite, olmoe: Unsloth VOID/HARNESS_ERROR at the tp2
-# anchor -> no Unsloth arm, PREREG "Families"). e4b = the shipped cut from PyPI in the image python (versions recorded in every receipt);
-# helpers (train anchor, datasets, manifest) from the archive tarball at that cut; the harness is bench/tp3/tp3_arm.py staged by the
-# controller. Per family: fetch UNPINNED, prove staged == pin, write refs/main from the pin; tokenise once per seq (512/1024/2048 + the
+# anchor -> no Unsloth arm, PREREG "Families"). e4b = an integrity-bound source archive at the registered detector commit (package
+# version 0.35.3); helpers (train anchor, datasets, manifest) come from that same archive. The harness is bench/tp3/tp3_arm.py staged
+# by the controller. Per family: fetch UNPINNED, prove staged == pin, write refs/main from the pin; tokenise once per seq (512/1024/2048 + the
 # 4096 probe); the grid seq-ascending, rank-ascending, the (512, 8) anchor first, fused_attn4 (PRIMARY) then reference_attn4 per cell;
 # alpha = 2r; --expect-trainable = (r/8) x the tp2 anchor count; --attn-4bit 1 with the structural census (tp3 T10); one process, one
 # JSON, one `perl alarm` per arm from the planning curve; every non-run is a stub row. STOP rules (PREREG): STOP-1 anchor +-10 % of tp2's
@@ -23,21 +23,10 @@ SEQS=${P41_SEQS:-"512 1024 2048"}; RANKS=${P41_RANKS:-"8 16 32"}; PROBE_SEQ=${P4
 STEPS=${P41_STEPS:-60}; EVAL_EVERY=${P41_EVAL_EVERY:-20}; EVAL_N=${P41_EVAL_N:-48}
 LR=${P41_LR:-1e-4}; ACCUM=${P41_ACCUM:-1}; AUTOCAST=${P41_AUTOCAST:-0}; SEED=${P41_SEED:-0}   # P40's fixture as run (PREREG "Fixture")
 DATASET=${P41_DATASET:-clinical}; PREREG=${P41_PREREG:-p41/P41-PREREG.md}
-E4B_VER=${P41_E4B_VER:-0.35.3}; GNF4_VER=${P41_GNF4_VER:-0.30.2}            # the shipped cut from PyPI at launch (recorded)
-# e4b#488: `0.35.3` names two different code states. The wheel on PyPI predates #435, which added
-# `detect_attention_projections` — and tp3_arm.py needs it in seven places, so the lane CANNOT run against the
-# version it pinned. R1 attempt 4 (2026-09-07T01:23Z) proved it on a rented box: TRIPWIRE FAIL, 0 of 19 arms.
-# Install the exact commit instead of a version string: a commit is a pin, a version is a promise someone kept.
-# Override with P41_E4B_PIN to go back to a released wheel once one exists that carries the API.
-E4B_COMMIT=${P41_E4B_COMMIT:-66c540f0fc69c9cde0f5d4151d5a96869e619671}
-# Install from the GitHub source ARCHIVE, not `git+https`. Attempt 5 (2026-09-07T01:37Z) proved pip's git path
-# fails on this image: `git fetch -q https://github.com/… <sha>` exits 128 — fetching a bare commit needs the
-# server to allow it and git to be configured for it, and neither is true here. The archive URL is the same
-# mechanism the lane already uses for its helper tarball, over plain HTTPS, and it has fetched 87 MB and matched
-# four sha256 hashes on every box tonight. Use what is already proven on the box.
-E4B_PIN=${P41_E4B_PIN:-https://github.com/pjordanandrsn/experts4bit-qlora/archive/$E4B_COMMIT.tar.gz}
+E4B_VER=${P41_E4B_VER:-0.35.3}; GNF4_VER=${P41_GNF4_VER:-0.30.2}            # package metadata + grouped kernel release (recorded)
 TF_VER=${P41_TRANSFORMERS_VER:-5.16.1}; BNB_VER=${P41_BNB_VER:-0.50.1}       # tp1/P38's e4b-side pins, as tp2 ran them
-E4B_SRC_REF=${P41_E4B_SRC_REF:-0c2a256dcdc2cb0a83cf7692224a8aa716f61ecd}   # = tag v0.35.3 resolved to its commit (tags move; commits do not)
+E4B_SRC_REF=${P41_E4B_SRC_REF:-5dad2a7fe7020ced76df0ddd0cfc548627223496}   # detector-bearing commit; package metadata remains 0.35.3
+E4B_ARCHIVE_SHA256=${P41_E4B_ARCHIVE_SHA256:-8c2562d23a213ae5773ed8f01170b7807e1cf6551f1f54fa5f694d7ae573e479}
 # the four helper files at that commit, sha256 (git show v0.35.3:<path> | sha256sum on the controller, 2026-09-06); a mismatch refuses the run
 HELPER_SHAS="bench/flagship-matrix/drivers/n9_datasets.py=7c6653bf6dd94c307112567638f2dcc0905b71cbde5667cf3ca859f5f6793544 bench/flagship-matrix/ds_manifest.json=38b3508f2d0bb51c7217cfd6768a4866a5b300a158631a7803016c1f9883a9e3 bench/train-anchor/train_anchor.py=139aa3eccb3a5dc2bb67627f70c07677927ecbfaec03ea91a608b2c69cde9b7f bench/train-anchor/train_anchor_gate.py=171fde58ad9451e27ba1268828deb47d089bf9168febf6baaa6fc0cb69de948e"
 DATASET_SHA_REG=${P41_DATASET_SHA:-76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791}   # the registered clinical set (PREREG "Fixture")
@@ -83,38 +72,85 @@ plan(){ local n=0 total=0 ptotal=0
 if [ $PLAN = 1 ]; then plan; exit $?; fi
 
 # ---------------------------------------------------------------- box setup (tp2's form)
-mkdir -p $W $W/logs $W/adapters; cd $W || exit 9
+mkdir -p "$W" "$W/logs" "$W/adapters" || exit 9
+cd "$W" || exit 9
+# TP_DONE is a terminal marker, not a success marker. Every normal shell exit writes its numeric rc atomically
+# before TP_DONE; a hard kill writes neither, so the controller also fails closed on a missing marker.
+rm -f TP_DONE P41_EXIT_CODE .P41_EXIT_CODE.* P41_SUCCESS
+finish_lane(){
+  local rc=$?
+  trap - EXIT
+  local tmp="$W/.P41_EXIT_CODE.$$"
+  printf '%s\n' "$rc" > "$tmp" || exit 125
+  mv "$tmp" "$W/P41_EXIT_CODE" || { rm -f "$tmp"; exit 125; }
+  touch "$W/TP_DONE" || exit 125
+  exit "$rc"
+}
+trap finish_lane EXIT
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 : > summary.txt; : > versions.txt; touch STARTED; echo "$T_START" > STARTED
 echo "RUN $RUN_ID prereg=$PREREG families=$FAMILIES seqs=$SEQS ranks=$RANKS probe=$PROBE_SEQ steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N lr=$LR accum=$ACCUM autocast=$AUTOCAST seed=$SEED dataset=$DATASET deadline_epoch=$DEADLINE guard_t0=$GUARD_T0 rate_usd_h=$RATE plan_est_usd=$EST approval_est_usd=$APPROVAL_EST" | tee -a summary.txt
 plan | tee -a summary.txt
-[ -s $W/tp3_arm.py ] && [ -s $W/p41_admit.py ] || { echo "STAGE MISSING: tp3_arm.py / p41_admit.py" | tee -a summary.txt; touch TP_DONE; exit 9; }
-{ [ "$RATE" != "0" ] && [ "$EST" != "0" ] && [ "$APPROVAL_EST" != "0" ] && [ "$DEADLINE" -gt 0 ]; } || { echo "REFUSED: no rate / planning estimate / approval line / deadline (P41_USD_PER_HOUR=$RATE P41_PLAN_EST_USD=$EST P41_APPROVAL_EST_USD=$APPROVAL_EST P41_DEADLINE_EPOCH=$DEADLINE) -- STOP-4/5 would be blind" | tee -a summary.txt; touch TP_DONE; exit 9; }
-say "install e4b (image python): $E4B_PIN grouped-nf4-gemm==$GNF4_VER transformers==$TF_VER bitsandbytes==$BNB_VER"
+[ -s "$W/tp3_arm.py" ] && [ -s "$W/p41_admit.py" ] || { echo "STAGE MISSING: tp3_arm.py / p41_admit.py" | tee -a summary.txt; exit 9; }
+{ [ "$RATE" != "0" ] && [ "$EST" != "0" ] && [ "$APPROVAL_EST" != "0" ] && [ "$DEADLINE" -gt 0 ]; } || { echo "REFUSED: no rate / planning estimate / approval line / deadline (P41_USD_PER_HOUR=$RATE P41_PLAN_EST_USD=$EST P41_APPROVAL_EST_USD=$APPROVAL_EST P41_DEADLINE_EPOCH=$DEADLINE) -- STOP-4/5 would be blind" | tee -a summary.txt; exit 9; }
+case "$E4B_SRC_REF" in *[!0-9a-f]*|"") echo "REFUSED: P41_E4B_SRC_REF '$E4B_SRC_REF' is not a 40-hex commit" | tee -a summary.txt; exit 9;; esac
+[ ${#E4B_SRC_REF} -eq 40 ] || { echo "REFUSED: P41_E4B_SRC_REF is not 40 hex chars" | tee -a summary.txt; exit 9; }
+case "$E4B_ARCHIVE_SHA256" in *[!0-9a-f]*|"") echo "REFUSED: P41_E4B_ARCHIVE_SHA256 is not lowercase hex" | tee -a summary.txt; exit 9;; esac
+[ ${#E4B_ARCHIVE_SHA256} -eq 64 ] || { echo "REFUSED: P41_E4B_ARCHIVE_SHA256 is not 64 hex chars" | tee -a summary.txt; exit 9; }
+SRC_URL="https://github.com/pjordanandrsn/experts4bit-qlora/archive/$E4B_SRC_REF.tar.gz"
+say "fetching integrity-bound e4b source from $SRC_URL"
+rm -f "$W/e4b-src.tar.gz"
+for tool in curl wget python3; do
+  if path=$(command -v "$tool" 2>/dev/null); then echo "SRC FETCH CAPABILITY $tool=$path"; else echo "SRC FETCH CAPABILITY $tool=absent"; fi
+done | tee -a summary.txt
+if command -v curl >/dev/null 2>&1; then
+  FETCH_TOOL=curl
+  perl -e 'alarm 600; exec @ARGV' curl -fsSL --retry 3 -o "$W/e4b-src.tar.gz" "$SRC_URL"; rc=$?
+elif command -v wget >/dev/null 2>&1; then
+  FETCH_TOOL=wget
+  perl -e 'alarm 600; exec @ARGV' wget -q --tries=3 --timeout=60 -O "$W/e4b-src.tar.gz" "$SRC_URL"; rc=$?
+elif command -v python3 >/dev/null 2>&1; then
+  FETCH_TOOL=python3
+  perl -e 'alarm 600; exec @ARGV' python3 -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$SRC_URL" "$W/e4b-src.tar.gz"; rc=$?
+else
+  FETCH_TOOL=none; rc=127
+fi
+echo "SRC FETCH TOOL $FETCH_TOOL rc=$rc" | tee -a summary.txt
+[ "$rc" -eq 0 ] || { echo "SRC FETCH FAIL rc=$rc ($SRC_URL)" | tee -a summary.txt; exit 9; }
+GOT_ARCHIVE_SHA=$(sha256sum "$W/e4b-src.tar.gz" | awk '{print $1}')
+[ "$GOT_ARCHIVE_SHA" = "$E4B_ARCHIVE_SHA256" ] || { echo "SOURCE ARCHIVE MISMATCH: $GOT_ARCHIVE_SHA != pinned $E4B_ARCHIVE_SHA256" | tee -a summary.txt; exit 9; }
+echo "SOURCE BIND commit=$E4B_SRC_REF archive_sha256=$GOT_ARCHIVE_SHA package_version=$E4B_VER" | tee -a summary.txt
+say "install e4b source commit=$E4B_SRC_REF archive_sha256=$E4B_ARCHIVE_SHA256; dependencies: grouped-nf4-gemm==$GNF4_VER transformers==$TF_VER bitsandbytes==$BNB_VER"
 perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --prefer-binary \
-  "$E4B_PIN" "grouped-nf4-gemm==$GNF4_VER" "transformers==$TF_VER" "bitsandbytes==$BNB_VER" \
+  "grouped-nf4-gemm==$GNF4_VER" "transformers==$TF_VER" "bitsandbytes==$BNB_VER" \
   datasets accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken rouge-score > logs/pip_e4b.log 2>&1
-rc=$?; echo "pip(e4b) rc=$rc"; [ $rc -ne 0 ] && { tail -4 logs/pip_e4b.log; echo "PIP FAIL (e4b)" | tee -a summary.txt; touch TP_DONE; exit 9; }
-E4B_VER="$E4B_VER" GNF4_VER="$GNF4_VER" TF_VER="$TF_VER" python - <<'PYT' || { echo "TRIPWIRE FAIL (e4b)" | tee -a summary.txt; touch TP_DONE; exit 9; }
+rc=$?
+if [ "$rc" -eq 0 ]; then
+  perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --no-deps --force-reinstall "$W/e4b-src.tar.gz" >> logs/pip_e4b.log 2>&1; rc=$?
+fi
+echo "pip(e4b-source) rc=$rc"; [ "$rc" -ne 0 ] && { tail -4 logs/pip_e4b.log; echo "PIP FAIL (e4b source)" | tee -a summary.txt; exit 9; }
+E4B_VER="$E4B_VER" E4B_SRC_REF="$E4B_SRC_REF" E4B_ARCHIVE_SHA256="$E4B_ARCHIVE_SHA256" GNF4_VER="$GNF4_VER" TF_VER="$TF_VER" python - <<'PYT' || { echo "TRIPWIRE FAIL (e4b)" | tee -a summary.txt; exit 9; }
 import importlib.metadata as md, inspect, os
 import experts4bit_qlora as e, torch, triton, transformers, bitsandbytes
 from experts4bit_qlora import enable_fast_train, ExpertsLoRA, load_moe_4bit_streaming, verify_moe_4bit
 from experts4bit_qlora.lora import add_attention_lora, quantize_attention_projections_4bit, detect_attention_projections   # the structural census (e4b#435)
 from nf4_qlora import fused_grouped_lora
+assert callable(detect_attention_projections)
 assert "dgrad_kernel" in inspect.signature(fused_grouped_lora).parameters
 assert e.__version__ == os.environ["E4B_VER"], (e.__version__, os.environ["E4B_VER"])
 assert md.version("grouped-nf4-gemm") == os.environ["GNF4_VER"], md.version("grouped-nf4-gemm")
 assert transformers.__version__ == os.environ["TF_VER"], transformers.__version__
-print("p41 tripwire OK (e4b):", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__, "triton", triton.__version__, "transformers", transformers.__version__, "bnb", bitsandbytes.__version__)
-open("versions.txt", "a").write(f"e4b {e.__version__} (PyPI)\ngnf4 {md.version('grouped-nf4-gemm')} (PyPI)\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {bitsandbytes.__version__}\n")
+source = f"commit {os.environ['E4B_SRC_REF']} archive_sha256 {os.environ['E4B_ARCHIVE_SHA256']}"
+print("p41 tripwire OK (e4b):", e.__version__, source, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__, "triton", triton.__version__, "transformers", transformers.__version__, "bnb", bitsandbytes.__version__)
+open("versions.txt", "a").write(f"e4b {e.__version__} (source {source})\ngnf4 {md.version('grouped-nf4-gemm')} (PyPI)\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {bitsandbytes.__version__}\n")
 PYT
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,pci.bus_id,serial --format=csv,noheader | tee forensics.txt
 lscpu | grep -E "Model name|NUMA node\(s\)" | tee -a forensics.txt; grep MemTotal /proc/meminfo | tee -a forensics.txt; df -h /root | tail -1 | tee -a forensics.txt
 echo "hostname=$(hostname) instance_id=$INSTANCE_ID provider=$PROVIDER kernel=$(uname -r) image_python=$(python -V 2>&1)" | tee -a forensics.txt
-python -c "import torch; assert torch.cuda.is_available(); print('cuda ok')" || { echo "DUD BOX" | tee -a summary.txt; touch TP_DONE; exit 10; }
+python -c "import torch; assert torch.cuda.is_available(); print('cuda ok')" || { echo "DUD BOX" | tee -a summary.txt; exit 10; }
 # box identity (PREREG "Box class"; the CSO's read): the registered GPU class, exactly one of it, or the box is refused -- a working ssh host is not equivalence
 GPU_NAMES=$(nvidia-smi --query-gpu=name --format=csv,noheader); GPU_N=$(echo "$GPU_NAMES" | grep -c .)
-if [ "$GPU_N" != "1" ] || ! echo "$GPU_NAMES" | grep -q "$GPU_CLASS"; then echo "BOX REFUSED: gpu '$GPU_NAMES' x$GPU_N is not the registered class '$GPU_CLASS' x1" | tee -a summary.txt; touch BOX_REFUSED TP_DONE; exit 12; fi
+if [ "$GPU_N" != "1" ] || ! echo "$GPU_NAMES" | grep -q "$GPU_CLASS"; then echo "BOX REFUSED: gpu '$GPU_NAMES' x$GPU_N is not the registered class '$GPU_CLASS' x1" | tee -a summary.txt; touch BOX_REFUSED; exit 12; fi
 python3 - "$W" "$INSTANCE_ID" "$PROVIDER" "$GPU_CLASS" "$RUN_ID" <<'PYB'
 import json, subprocess, sys, os, socket
 W, iid, prov, cls, run_id = sys.argv[1:6]
@@ -126,40 +162,12 @@ json.dump(box, open(os.path.join(W, "box.json"), "w"), indent=1)
 open(os.path.join(W, "summary.txt"), "a").write("BOX " + json.dumps({k: box[k] for k in ("instance_id", "provider", "gpu_name", "gpu_uuid", "hostname")}) + "\n")
 print("BOX", box["instance_id"], box["gpu_name"], box["gpu_uuid"], box["hostname"])
 PYB
-# helpers at the cut (archive tarball: tp1 amendment 2), the train anchor gate, the registered text (sha-verified)
-# Warden MEDIUM on #466: a commit, never a tag; no shell string built from the ref; every helper file sha256-verified before it runs as root
-case "$E4B_SRC_REF" in *[!0-9a-f]*|"") echo "REFUSED: P41_E4B_SRC_REF '$E4B_SRC_REF' is not a 40-hex commit" | tee -a summary.txt; touch TP_DONE; exit 9;; esac
-[ ${#E4B_SRC_REF} -eq 40 ] || { echo "REFUSED: P41_E4B_SRC_REF is not 40 hex chars" | tee -a summary.txt; touch TP_DONE; exit 9; }
-SRC_URL="https://github.com/pjordanandrsn/experts4bit-qlora/archive/$E4B_SRC_REF.tar.gz"
-say "fetching repo helpers from $SRC_URL"
-rm -rf $W/e4b-src && mkdir -p $W/e4b-src
-for tool in curl wget python3; do
-  if path=$(command -v "$tool" 2>/dev/null); then echo "SRC FETCH CAPABILITY $tool=$path"; else echo "SRC FETCH CAPABILITY $tool=absent"; fi
-done | tee -a summary.txt
-if command -v curl >/dev/null 2>&1; then
-  FETCH_TOOL=curl
-  perl -e 'alarm 600; exec @ARGV' curl -fsSL --retry 3 -o $W/e4b-src.tar.gz "$SRC_URL"
-  rc=$?
-elif command -v wget >/dev/null 2>&1; then
-  FETCH_TOOL=wget
-  perl -e 'alarm 600; exec @ARGV' wget -q --tries=3 --timeout=60 -O $W/e4b-src.tar.gz "$SRC_URL"
-  rc=$?
-elif command -v python3 >/dev/null 2>&1; then
-  FETCH_TOOL=python3
-  perl -e 'alarm 600; exec @ARGV' python3 -c 'import shutil,sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])' "$SRC_URL" $W/e4b-src.tar.gz
-  rc=$?
-else
-  FETCH_TOOL=none
-  rc=127
-fi
-echo "SRC FETCH TOOL $FETCH_TOOL rc=$rc" | tee -a summary.txt
-if [ $rc -eq 0 ]; then
-  tar xzf $W/e4b-src.tar.gz -C $W/e4b-src --strip-components=1
-  rc=$?
-fi
-[ $rc -ne 0 ] && { echo "SRC FETCH FAIL rc=$rc ($SRC_URL)" | tee -a summary.txt; touch TP_DONE; exit 9; }
+# Extract the already-verified source archive and take every helper from those same bytes.
+rm -rf "$W/e4b-src" && mkdir -p "$W/e4b-src"
+tar xzf "$W/e4b-src.tar.gz" -C "$W/e4b-src" --strip-components=1; rc=$?
+[ "$rc" -eq 0 ] || { echo "SRC EXTRACT FAIL rc=$rc ($SRC_URL)" | tee -a summary.txt; exit 9; }
 for kv in $HELPER_SHAS; do f=${kv%%=*}; want=${kv#*=}; got=$(sha256sum "$W/e4b-src/$f" 2>/dev/null | awk '{print $1}')
-  [ "$got" = "$want" ] || { echo "HELPER MISMATCH $f: $got != pinned $want -- nothing from the archive runs" | tee -a summary.txt; touch TP_DONE; exit 9; }
+  [ "$got" = "$want" ] || { echo "HELPER MISMATCH $f: $got != pinned $want -- nothing from the archive runs" | tee -a summary.txt; exit 9; }
   cp "$W/e4b-src/$f" $W/; echo "HELPER OK $f sha=$want" >> summary.txt; done
 echo "HELPERS e4b-src commit=$E4B_SRC_REF (4 files sha256-verified against the pins)" | tee -a summary.txt
 say "train anchor"
@@ -167,13 +175,13 @@ ANCHOR_OUT=$W/anchor.json perl -e 'alarm 900; exec @ARGV' python $W/train_anchor
 python $W/train_anchor_gate.py $W/anchor.json | tee logs/anchor_gate.log; arc=${PIPESTATUS[0]}
 export TP2_ANCHOR_JSON=$W/anchor.json TP2_BOX_CLASS="$(grep -E '^\s*class ' logs/anchor_gate.log | awk '{print $2}')"
 echo "ANCHOR rc=$arc class=$TP2_BOX_CLASS" | tee -a summary.txt
-if [ "$arc" -ne 0 ] && [ "$ANCHOR_STRICT" = "1" ]; then echo "BOX REFUSED by train anchor (rc=$arc)" | tee -a summary.txt; touch BOX_REFUSED TP_DONE; exit 12; fi
+if [ "$arc" -ne 0 ] && [ "$ANCHOR_STRICT" = "1" ]; then echo "BOX REFUSED by train anchor (rc=$arc)" | tee -a summary.txt; touch BOX_REFUSED; exit 12; fi
 say "dataset: $DATASET (n9_datasets.py, sha-verified against ds_manifest.json)"
 mkdir -p $W/data && (cd $W/data && python $W/n9_datasets.py $W/data > $W/logs/datasets.log 2>&1); tail -2 logs/datasets.log
 DATA=$W/data/ds_$DATASET.json
 DATA_SHA=$(python -c "import json; print(json.load(open('$W/ds_manifest.json'))['$DATASET']['sha256'])")
-[ "$DATA_SHA" = "$DATASET_SHA_REG" ] || { echo "DATASET NOT THE REGISTERED FIXTURE: manifest says $DATA_SHA, the pre-registration says $DATASET_SHA_REG" | tee -a summary.txt; touch TP_DONE; exit 13; }
-GOT_SHA=$(sha256sum $DATA | awk '{print $1}'); [ "$GOT_SHA" = "$DATA_SHA" ] || { echo "DATASET MISMATCH: $GOT_SHA != $DATA_SHA" | tee -a summary.txt; touch TP_DONE; exit 13; }
+[ "$DATA_SHA" = "$DATASET_SHA_REG" ] || { echo "DATASET NOT THE REGISTERED FIXTURE: manifest says $DATA_SHA, the pre-registration says $DATASET_SHA_REG" | tee -a summary.txt; exit 13; }
+GOT_SHA=$(sha256sum $DATA | awk '{print $1}'); [ "$GOT_SHA" = "$DATA_SHA" ] || { echo "DATASET MISMATCH: $GOT_SHA != $DATA_SHA" | tee -a summary.txt; exit 13; }
 echo "DATASET $DATASET sha=$DATA_SHA (== the registered fixture sha)" | tee -a summary.txt
 
 # ---------------------------------------------------------------- helpers
@@ -324,4 +332,4 @@ PY2
   [ -n "$STOPPED" ] && case "$STOPPED" in STOP-1*|STOP-3*) STOPPED="";; esac   # STOP-1/STOP-3 halt one family; the next family gets its own anchor and its own count
 done
 echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"; cat versions.txt
-say "TP_DONE elapsed=$(elapsed)s"; touch TP_DONE
+say "P41 SUCCESS elapsed=$(elapsed)s"; touch P41_SUCCESS

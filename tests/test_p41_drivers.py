@@ -4,10 +4,12 @@ turn a receipt that fails a validity rule into a VOID row and the p41c probe int
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -197,15 +199,168 @@ def test_helper_archive_fetch_survives_the_registered_images_without_curl():
     """R1 attempt 3 proved the registered PyTorch image lacks curl; the lane must not pass preflight then die here."""
     run = RUN.read_text()
     start = run.index('for tool in curl wget python3; do')
-    end = run.index('for kv in $HELPER_SHAS;', start)
+    end = run.index('GOT_ARCHIVE_SHA=', start)
     fetch = run[start:end]
     assert fetch.index('command -v curl') < fetch.index('command -v wget') < fetch.index('command -v python3')
     assert "urllib.request.urlretrieve" in fetch
     assert 'SRC FETCH TOOL $FETCH_TOOL rc=$rc' in fetch
-    assert "if [ $rc -eq 0 ]; then" in fetch and "tar xzf" in fetch
-    assert '[ $rc -ne 0 ] && { echo "SRC FETCH FAIL rc=$rc' in fetch, (
+    assert '[ "$rc" -eq 0 ] || { echo "SRC FETCH FAIL rc=$rc' in fetch, (
         "a failed downloader's rc is retained for the receipt and refusal rather than overwritten by the tar gate"
     )
+    assert 'GOT_ARCHIVE_SHA=$(sha256sum "$W/e4b-src.tar.gz"' in run
+    assert "SOURCE ARCHIVE MISMATCH" in run
+    assert run.index('tar xzf "$W/e4b-src.tar.gz"') > run.index("pip(e4b-source)"), (
+        "the exact archive is verified and installed before its byte-identical helpers are extracted"
+    )
+
+
+def _write_executable(path: Path, text: str) -> None:
+    path.write_text(text)
+    path.chmod(0o755)
+
+
+def _fake_driver(tmp_path: Path, remote: Path) -> subprocess.CompletedProcess:
+    fake_bin = tmp_path / "driver-bin"
+    fake_bin.mkdir(exist_ok=True)
+    _write_executable(
+        fake_bin / "ssh",
+        """#!/bin/bash
+cmd=""
+for arg in "$@"; do cmd=$arg; done
+case "$cmd" in
+  *"test -f /root/p41/TP_DONE"*) test -f "$FAKE_REMOTE/TP_DONE" ;;
+  *"tail -n 1 /root/p41/summary.txt"*) tail -n 1 "$FAKE_REMOTE/summary.txt" 2>/dev/null || true ;;
+  *) exit 0 ;;
+esac
+""",
+    )
+    _write_executable(fake_bin / "scp", "#!/bin/bash\nexit 0\n")
+    _write_executable(
+        fake_bin / "rsync",
+        """#!/bin/bash
+dest=""
+for arg in "$@"; do dest=$arg; done
+mkdir -p "$dest"
+cp -R "$FAKE_REMOTE"/. "$dest"/
+""",
+    )
+    run_dir = tmp_path / "driver-run"
+    env = {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "FAKE_REMOTE": str(remote),
+        "E4B_RENT_SSH_HOST": "fake.vast.invalid",
+        "E4B_RENT_SSH_PORT": "12345",
+        "E4B_RENT_RUN_DIR": str(run_dir),
+        "E4B_RENT_RUN_ID": "p41-no-gpu-regression",
+        "E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 60),
+        "E4B_RENT_WALLCLOCK_S": "60",
+        "E4B_RENT_USD_PER_HOUR": "0.66",
+        "E4B_RENT_EST_USD": "2.64",
+        "E4B_RENT_INSTANCE_ID": "50000000",
+        "E4B_RENT_PROVIDER": "vast:verified-secure",
+        "P41_PLAN_EST_USD": "1.87",
+        "P41_POLL_S": "1",
+    }
+    return _bash(str(DRIVE), env=env)
+
+
+def test_exact_tripwire_failure_is_terminal_nonzero_and_propagates_through_driver(tmp_path: Path):
+    work = tmp_path / "remote-p41"
+    work.mkdir()
+    (work / "tp3_arm.py").write_text("# staged\n")
+    (work / "p41_admit.py").write_text("# staged\n")
+    archive = tmp_path / "detector-source.tar.gz"
+    archive.write_bytes(b"no-gpu source archive fixture")
+    fake_bin = tmp_path / "lane-bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "curl",
+        """#!/bin/bash
+out=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "-o" ]; then shift; out=$1; fi
+  shift
+done
+cp "$P41_TEST_ARCHIVE" "$out"
+""",
+    )
+    _write_executable(
+        fake_bin / "python",
+        """#!/bin/bash
+if [ "${1:-}" = "-m" ] && [ "${2:-}" = "pip" ]; then exit 0; fi
+if [ "${1:-}" = "-" ]; then
+  cat >/dev/null
+  echo "ImportError: cannot import name 'detect_attention_projections' from 'experts4bit_qlora.lora'" >&2
+  exit 1
+fi
+exec python3 "$@"
+""",
+    )
+    env = {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "P41_TEST_ARCHIVE": str(archive),
+        "P41_WORKDIR": str(work),
+        "P41_USD_PER_HOUR": "0.66",
+        "P41_PLAN_EST_USD": "1.87",
+        "P41_APPROVAL_EST_USD": "2.64",
+        "P41_DEADLINE_EPOCH": str(int(time.time()) + 600),
+        "P41_E4B_ARCHIVE_SHA256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+    }
+    lane = _bash(str(RUN), env=env)
+    assert lane.returncode == 9
+    assert "TRIPWIRE FAIL (e4b)" in lane.stdout
+    assert "ImportError: cannot import name 'detect_attention_projections'" in lane.stderr
+    assert (work / "P41_EXIT_CODE").read_text() == "9\n"
+    assert (work / "P41_EXIT_CODE").stat().st_mtime_ns <= (work / "TP_DONE").stat().st_mtime_ns
+    assert not (work / "P41_SUCCESS").exists()
+
+    driven = _fake_driver(tmp_path, work)
+    assert driven.returncode == 9, driven.stdout + driven.stderr
+    assert "lane failed with remote rc=9" in driven.stdout
+    assert "admission:" not in driven.stdout and "[p41_drive] done" not in driven.stdout
+
+
+@pytest.mark.parametrize(
+    ("rc_text", "success", "expected_rc", "message"),
+    [
+        (None, False, 24, "no P41_EXIT_CODE"),
+        ("not-a-number\n", False, 24, "malformed P41_EXIT_CODE"),
+        ("0\n1\n", False, 24, "expected one line"),
+        ("999\n", False, 24, "malformed P41_EXIT_CODE"),
+        ("7\n", False, 7, "remote rc=7"),
+        ("0\n", False, 24, "without P41_SUCCESS"),
+        ("0\n", True, 0, "done"),
+    ],
+)
+def test_driver_requires_exact_remote_exit_and_success_marker(
+    tmp_path: Path, rc_text: str | None, success: bool, expected_rc: int, message: str
+):
+    remote = tmp_path / "remote-result"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "summary.txt").write_text("")
+    if rc_text is not None:
+        (remote / "P41_EXIT_CODE").write_text(rc_text)
+    if success:
+        (remote / "P41_SUCCESS").touch()
+    out = _fake_driver(tmp_path, remote)
+    assert out.returncode == expected_rc, out.stdout + out.stderr
+    assert message in out.stdout
+    if expected_rc:
+        assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
+
+
+def test_source_install_and_prereg_amendment_bind_the_detector_commit():
+    run = RUN.read_text()
+    prereg = (REPO / "bench" / "p41" / "P41-PREREG.md").read_text()
+    commit = "5dad2a7fe7020ced76df0ddd0cfc548627223496"
+    archive_sha = "8c2562d23a213ae5773ed8f01170b7807e1cf6551f1f54fa5f694d7ae573e479"
+    assert f"E4B_SRC_REF=${{P41_E4B_SRC_REF:-{commit}}}" in run
+    assert f"E4B_ARCHIVE_SHA256=${{P41_E4B_ARCHIVE_SHA256:-{archive_sha}}}" in run
+    assert '--force-reinstall "$W/e4b-src.tar.gz"' in run
+    assert "e4b {e.__version__} (source {source})" in run and "e4b {e.__version__} (PyPI)" not in run
+    assert "P41_EXIT_CODE" in run and "P41_SUCCESS" in run
+    assert commit in prereg and archive_sha in prereg and "terminal-status amendment" in prereg
 
 
 def test_stop4_projects_the_remaining_cells_at_the_planning_curve_not_the_alarm_sum(capsys):
