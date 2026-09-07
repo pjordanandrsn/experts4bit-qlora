@@ -456,10 +456,19 @@ def test_driver_rejects_success_without_bound_outcome_manifest(tmp_path: Path):
     assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
 
 
+HARNESS_VOID_CLASSES = {
+    "void_trainable": "trainable",
+    "void_attn4": "attn4",
+    "tokens_mismatch": "tokens",
+    "c1_failed": "c1",
+}
+
+
 def _write_valid_outcome(path: Path, *, void_status: str | None = None) -> None:
     for index in range(19):
         if index == 0 and void_status is not None:
-            receipt = {"admitted": False, "status": void_status}
+            void_class = HARNESS_VOID_CLASSES.get(void_status, "engagement")
+            receipt = {"admitted": False, "status": void_status, "void_class": void_class}
         else:
             receipt = {"admitted": index == 0, "status": "ok" if index == 0 else "not_run"}
         (path / f"granite_e4b_fixture_{index:02d}.json").write_text(json.dumps(receipt))
@@ -475,19 +484,35 @@ def _write_valid_outcome(path: Path, *, void_status: str | None = None) -> None:
     (path / "P41_OUTCOME_COUNTS.json").write_text(json.dumps(manifest) + "\n")
 
 
-def test_void_trainable_counts_as_a_real_void_outcome(tmp_path: Path):
-    remote = tmp_path / "remote-void-trainable"
+@pytest.mark.parametrize("void_status", ["void", *HARNESS_VOID_CLASSES])
+def test_every_registered_void_status_counts_as_a_real_void_outcome(tmp_path: Path, void_status: str):
+    remote = tmp_path / f"remote-{void_status}"
     remote.mkdir()
     (remote / "TP_DONE").touch()
     (remote / "P41_EXIT_CODE").write_text("0\n")
     (remote / "P41_SUCCESS").touch()
     (remote / "summary.txt").write_text("ADMIT VOID class=trainable\n")
-    _write_valid_outcome(remote, void_status="void_trainable")
+    _write_valid_outcome(remote, void_status=void_status)
 
     out = _fake_driver(tmp_path, remote)
 
     assert out.returncode == 0, out.stdout + out.stderr
     assert "19 rows: 0 admitted, 1 VOID, 18 other" in out.stdout
+
+
+def test_unregistered_void_prefix_cannot_satisfy_the_outcome_gate(tmp_path: Path):
+    remote = tmp_path / "remote-voidbogus"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_text("0\n")
+    (remote / "P41_SUCCESS").touch()
+    (remote / "summary.txt").write_text("ADMIT VOID bogus\n")
+    _write_valid_outcome(remote, void_status="voidbogus")
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == 24, out.stdout + out.stderr
+    assert "invalid P41 outcome evidence" in out.stdout
 
 
 def _terminal_result(path: Path, rc: int, *, success: bool, summary: str) -> Path:
@@ -582,6 +607,37 @@ def test_zero_row_lane_is_terminal_failure_and_cannot_publish_success(tmp_path: 
     assert (work / f"TP_DONE.{nonce}").exists()
     assert not (work / f"P41_SUCCESS.{nonce}").exists()
     assert not (work / f"P41_OUTCOME_COUNTS.{nonce}.json").exists()
+
+
+def test_terminal_publication_ignores_a_signal_after_the_done_marker_is_created(tmp_path: Path):
+    work = tmp_path / "signal-finalizer-p41"
+    fake_bin = tmp_path / "signal-bin"
+    fake_bin.mkdir()
+    nonce = "3" * 64
+    _write_executable(
+        fake_bin / "touch",
+        """#!/bin/bash
+/usr/bin/touch "$@"
+case "$*" in *"TP_DONE."*) kill -TERM "$PPID";; esac
+""",
+    )
+    env = {
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "P41_WORKDIR": str(work),
+        "P41_FAMILIES": "gptoss",
+        "P41_RUN_NONCE": nonce,
+        "P41_USD_PER_HOUR": "0.66",
+        "P41_PLAN_EST_USD": "1.87",
+        "P41_APPROVAL_EST_USD": "2.64",
+        "P41_DEADLINE_EPOCH": str(int(time.time()) + 600),
+    }
+
+    lane = _bash(str(RUN), env=env)
+
+    assert lane.returncode == 9, lane.stdout + lane.stderr
+    assert (work / f"P41_EXIT_CODE.{nonce}").read_bytes() == b"9\n"
+    assert (work / f"TP_DONE.{nonce}").exists()
+    assert not (work / f"P41_SUCCESS.{nonce}").exists()
 
 
 def test_source_install_and_prereg_amendment_bind_the_detector_commit():

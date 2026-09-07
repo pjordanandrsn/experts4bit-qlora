@@ -88,6 +88,9 @@ SUCCESS_MARKER="$W/P41_SUCCESS.$RUN_NONCE"
 OUTCOME_MARKER="$W/P41_OUTCOME_COUNTS.$RUN_NONCE.json"
 finish_lane(){
   local rc=$?
+  # A queued signal before this command runs invokes its handler and re-enters with that signal rc. Once signal
+  # delivery is ignored, the process cannot change its real exit status after publishing the captured status.
+  trap '' HUP INT QUIT TERM
   trap - EXIT
   local tmp="$W/.P41_EXIT_CODE.$$"
   printf '%s\n' "$rc" > "$tmp" || exit 125
@@ -371,8 +374,15 @@ for path in paths:
         print(f"OUTCOME FAIL unreadable {os.path.basename(path)}: {type(exc).__name__}: {exc}")
         rec = {}
     records.append(rec)
+void_classes = {"steps", "tokens", "trainable", "attn4", "engagement", "c1"}
+harness_voids = {"void_trainable": "trainable", "void_attn4": "attn4", "tokens_mismatch": "tokens", "c1_failed": "c1"}
+def is_void(rec):
+    status, void_class = rec.get("status"), rec.get("void_class")
+    return (status == "void" and void_class in void_classes) or (
+        status in harness_voids and harness_voids[status] == void_class
+    )
 admitted = sum(rec.get("admitted") is True for rec in records)
-void = sum(str(rec.get("status", "")).startswith("void") for rec in records)
+void = sum(is_void(rec) for rec in records)
 other = len(records) - admitted - void
 gate_pass = len(records) == expected and admitted + void > 0 and all(type(rec.get("admitted")) is bool for rec in records)
 manifest = {"run_nonce": nonce, "expected": expected, "actual": len(records), "admitted": admitted, "void": void, "other": other, "gate_pass": gate_pass}

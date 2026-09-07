@@ -111,8 +111,15 @@ for path in paths:
         records.append(json.load(open(path)))
     except Exception as exc:
         raise SystemExit(f"outcome receipt unreadable {os.path.basename(path)}: {type(exc).__name__}: {exc}")
+void_classes = {"steps", "tokens", "trainable", "attn4", "engagement", "c1"}
+harness_voids = {"void_trainable": "trainable", "void_attn4": "attn4", "tokens_mismatch": "tokens", "c1_failed": "c1"}
+def is_void(rec):
+    status, void_class = rec.get("status"), rec.get("void_class")
+    return (status == "void" and void_class in void_classes) or (
+        status in harness_voids and harness_voids[status] == void_class
+    )
 admitted = sum(rec.get("admitted") is True for rec in records)
-void = sum(str(rec.get("status", "")).startswith("void") for rec in records)
+void = sum(is_void(rec) for rec in records)
 other = len(records) - admitted - void
 expected = int(sys.argv[4])
 observed = {"expected": expected, "actual": len(records), "admitted": admitted, "void": void, "other": other}
