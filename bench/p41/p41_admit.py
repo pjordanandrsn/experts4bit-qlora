@@ -42,6 +42,7 @@ def _write(path: str, obj) -> None:
     os.replace(tmp, path)
 
 
+
 def rules(
     rec: dict, *, steps: int, tokens_sha: str, expect_trainable: int, n_layers: int, attn4_census: int, arm: str
 ) -> list[tuple[str, str]]:
@@ -69,15 +70,15 @@ def rules(
             )
         )
     if arm == "fused":
-        banners = rec.get("engagement_banners") or []
-        missing = [b for b in banners if str(b).startswith("NO '")]
+        # P41 is an e4b-only lane. Its registered engagement evidence is the
+        # patched-module count plus the per-step kernel-call floor. The former
+        # banner check required an Unsloth-only console line and therefore
+        # VOIDed every valid e4b fused receipt by construction (#494).
         if rec.get("n_patched") != n_layers:
             fails.append(("engagement", f"n_patched {rec.get('n_patched')} != n_layers {n_layers}"))
         kmin = rec.get("kernel_calls_per_step_min") or 0
         if kmin < 2 * n_layers:
             fails.append(("engagement", f"kernel_calls_per_step_min {kmin} < 2 x n_layers {2 * n_layers}"))
-        if not banners or missing:
-            fails.append(("engagement", "engagement banner missing (a green skipped path is not evidence)"))
     if rec.get("C1_bit_exact") is not True:
         fails.append(("c1", f"C1 not bit-exact ({rec.get('C1_experts_changed')} frozen tensors changed)"))
     return fails

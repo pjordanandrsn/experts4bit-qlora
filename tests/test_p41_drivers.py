@@ -715,7 +715,9 @@ def _ok_receipt(**over) -> dict:
         "structural_expected_n_attn4": 128,
         "n_patched": 32,
         "kernel_calls_per_step_min": 64,
-        "engagement_banners": ["[e4b] fast train: fused_grouped_lora on 32 layers"],
+        # #494: real e4b records have no Unsloth engagement banner. The
+        # registered e4b evidence is n_patched plus kernel calls per step.
+        "engagement_banners": [],
         "C1_bit_exact": True,
         "C1_experts_changed": 0,
         "s_per_step_median_11plus": 0.641,
@@ -786,7 +788,6 @@ def test_admission_admits_a_receipt_that_meets_every_registered_rule(tmp_path: P
         ({"n_attn4": 127}, "attn4"),
         ({"n_patched": 31}, "engagement"),
         ({"kernel_calls_per_step_min": 63}, "engagement"),
-        ({"engagement_banners": ["NO '[e4b] fast train' banner on stdout (the census below decides)"]}, "engagement"),
         ({"C1_bit_exact": False, "C1_experts_changed": 3}, "c1"),
     ],
 )
@@ -879,3 +880,18 @@ def test_footprint_row_states_fit_never_speed(tmp_path: Path):
     assert p41_admit.main(["footprint", str(probe), "--fam", "granite", "--seq", "4096", "--out", str(out)]) == 0
     row = json.loads(out.read_text())
     assert row["fit_status"] == "OOM" and row["peak_vram_gb_nvsmi"] is None and "out of memory" in row["reason"]
+
+
+def test_empty_banner_e4b_receipt_passes_every_registered_rule():
+    """Regression for #494: the complete real e4b receipt shape admits."""
+    assert p41_admit.rules(_ok_receipt(), arm="fused", **GRANITE) == []
+
+
+def test_unregistered_banner_and_enable_reason_do_not_change_p41_admission():
+    """P41 never registered console text as an e4b validity gate."""
+    for extra in (
+        {"engagement_banners": []},
+        {"engagement_banners": ["NO 'Unsloth: MoE bnb4bit'"], "enable_reason": ""},
+        {"enable_reason": "[e4b] reference path (no fused kernel)"},
+    ):
+        assert p41_admit.rules(_ok_receipt(**extra), arm="fused", **GRANITE) == []
