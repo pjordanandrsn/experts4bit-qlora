@@ -423,8 +423,10 @@ class VastProvider:
         if self.ssh_pubkey:
             # raises on anything but a 200 → the pre-flight fails; "already" = the account key Vast attached itself (#468)
             attached["vast_ssh_key_attached"] = self.attach_ssh_key(instance_id, self.ssh_pubkey)   # #465 MEDIUM-1: after the 200
-        rc, out, tries = self._ssh_until_ready(str(host), int(port), ssh_timeout_s=ssh_timeout_s, ready_s=ssh_ready_s,
-                                                poll_s=min(poll_s, 5.0))
+        rc, out, tries = self._ssh_until_ready(
+            str(host), int(port), ssh_timeout_s=ssh_timeout_s, ready_s=ssh_ready_s,
+            poll_s=min(poll_s, 5.0), retry_attached_key=bool(attached),
+        )
         if rc != 0:
             raise PreflightFailed(f"ssh to {host}:{port} did not authenticate within {int(ssh_ready_s)} s "
                                   f"({tries} attempt{'s' if tries != 1 else ''}; last rc {rc}: {out.strip()[:120]})")
@@ -449,13 +451,14 @@ class VastProvider:
                    if bandwidth_probe else {}), **attached}
 
     def _ssh_until_ready(self, host: str, port: int, *, ssh_timeout_s: float, ready_s: float,
-                         poll_s: float) -> tuple[int, str, int]:
-        """A rented box reports `running` before its container's sshd accepts connections, so a single probe is a
-        race the launcher loses: a refused connect answers at once (rc 255) and `ConnectTimeout` never applies.
-        R1 attempt 2 (private receipt p41-r1-granite-2, 2026-09-06T19:00:58Z: `connect to host … port …: Connection refused`, 35 s):
-        probe until sshd answers or the ready window is spent, and record how many attempts it took. Each attempt
-        keeps its own bound; the window is what changed, not the per-attempt timeout. An authentication REFUSAL
-        (rc 255 with a permission/auth message) is not a not-yet-up box — it fails immediately, as before."""
+                         poll_s: float, retry_attached_key: bool = False) -> tuple[int, str, int]:
+        """Wait for the rented box's SSH service inside the bounded ready window.
+
+        Vast can report ``running`` before sshd accepts connections. It can also answer ``Permission denied
+        (publickey)`` briefly after its API has confirmed the requested key attachment. That post-attach denial is
+        a readiness/propagation state, so retry it only when this pre-flight itself received a successful attach
+        response. Without that proof, or for client/host-key failures, authentication still fails immediately.
+        """
         t0 = self._clock()
         tries = 0
         while True:
@@ -463,11 +466,16 @@ class VastProvider:
             rc, out = self._ssh(host, port, "true", ssh_timeout_s)
             if rc == 0:
                 return rc, out, tries
-            if _is_auth_refusal(out):
+            if _is_auth_refusal(out) and not (
+                retry_attached_key and _is_retryable_key_propagation_refusal(out, host)
+            ):
                 return rc, out, tries
+            elapsed = self._clock() - t0
+            if elapsed >= ready_s:
+                return rc, out, tries
+            self._sleep(min(poll_s, max(0.0, ready_s - elapsed)))
             if self._clock() - t0 >= ready_s:
                 return rc, out, tries
-            self._sleep(poll_s)
 
     # ---- cost
     def actual_cost(self, instance_id: str, runtime_s: float) -> tuple[float, str]:
@@ -489,13 +497,41 @@ def _shape(body: Any) -> str:
 
 # What "the box is not up yet" looks like versus "this box will never let us in". The first is worth waiting for; the
 # second is a refusal the pre-flight must report at once, so a misconfigured key never burns the whole ready window.
-AUTH_REFUSAL = ("permission denied", "publickey", "authentication failed", "too many authentication failures",
-                "host key verification failed", "no matching host key")
-
-
+AUTH_REFUSAL = (
+    "permission denied",
+    "publickey",
+    "authentication failed",
+    "too many authentication failures",
+    "host key verification failed",
+    "no matching host key",
+    "load key ",
+    "error in libcrypto",
+    "unprotected private key file",
+    "bad permissions",
+    "agent refused operation",
+    "identity file ",
+    "identity_sign ",
+)
+VAST_SSH_BANNER_RE = re.compile(
+    r"Welcome to vast\.ai\. If authentication fails, try again after a few seconds, "
+    r"and double check your ssh key\.\s+Have fun!"
+)
+KNOWN_HOST_ADDED_RE = re.compile(
+    r"(?m)^Warning: Permanently added .+ to the list of known hosts\.\r?\n?"
+)
 def _is_auth_refusal(out: str) -> bool:
     low = out.lower()
     return any(m in low for m in AUTH_REFUSAL)
+
+
+def _is_retryable_key_propagation_refusal(out: str, host: str) -> bool:
+    """True only for the exact transient remote denial observed after Vast confirms attachment.
+
+    Strip the two deterministic transport notices seen on a first connection. Anything else — including a local
+    agent/key error followed by the same remote denial — fails closed instead of being hidden by a denylist gap.
+    """
+    cleaned = VAST_SSH_BANNER_RE.sub("", KNOWN_HOST_ADDED_RE.sub("", out)).strip()
+    return cleaned == f"root@{host}: Permission denied (publickey)."
 
 
 def _ssh_run(host: str, port: int, command: str, timeout_s: float) -> tuple[int, str]:

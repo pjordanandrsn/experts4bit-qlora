@@ -385,6 +385,115 @@ def test_an_authentication_refusal_fails_at_once_and_does_not_burn_the_window():
     assert len(calls) == 1, "an auth refusal is reported at once, never retried for three minutes"
 
 
+def test_a_confirmed_key_attachment_retries_a_transient_publickey_denial():
+    """p41-proving-4: the same controller key had just authenticated on another box, but a new instance returned
+    Permission denied once immediately after Vast confirmed attachment. The attachment makes that denial a bounded
+    propagation/readiness state; it must not discard the rest of the ready window."""
+    replies = [(
+        255,
+        "Warning: Permanently added '[ssh5.vast.ai]:12345' (ED25519) to the list of known hosts.\n"
+        "Welcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\n"
+        "Have fun!\n"
+        "root@ssh5.vast.ai: Permission denied (publickey).",
+    ), (0, "")]
+    calls = []
+
+    def propagating(host, port, cmd, timeout):
+        calls.append(1)
+        return replies.pop(0)
+
+    slept: list[float] = []
+    tr = FakeTransport(routes())
+    facts = provider(tr, ssh_pubkey="ssh-ed25519 AAAA test", ssh_runner=propagating,
+                     sleep=slept.append).preflight("7000123", timeout_s=60, ssh_ready_s=180)
+    assert facts["vast_preflight"] == "ok" and facts["vast_ssh_attempts"] == "2"
+    assert facts["vast_ssh_key_attached"] == "yes"
+    assert len(calls) == 2 and slept == [5.0]
+
+
+def test_a_confirmed_attachment_still_bounds_repeated_publickey_denials():
+    """The propagation exception changes retryability, never the existing wall-clock bound."""
+    clock = iter([0, 0, 20, 40, 60])
+    calls = []
+
+    def denied(host, port, cmd, timeout):
+        calls.append(1)
+        return 255, "root@ssh5.vast.ai: Permission denied (publickey)."
+
+    tr = FakeTransport(routes())
+    with pytest.raises(PreflightFailed, match=r"did not authenticate within 60 s \(2 attempts"):
+        provider(tr, ssh_pubkey="ssh-ed25519 AAAA test", ssh_runner=denied,
+                 clock=lambda: next(clock), sleep=lambda s: None).preflight(
+                     "7000123", timeout_s=60, ssh_ready_s=60,
+                 )
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("terminal", [
+    "Host key verification failed.",
+    "Load key '/tmp/id': error in libcrypto",
+    "WARNING: UNPROTECTED PRIVATE KEY FILE! Bad permissions",
+    "sign_and_send_pubkey: signing failed for ED25519: agent refused operation",
+    "Warning: Identity file /tmp/missing not accessible: No such file or directory.",
+    "identity_sign: private key contents do not match public",
+])
+def test_a_confirmed_attachment_does_not_mask_terminal_ssh_errors(terminal):
+    calls = []
+
+    def denied(host, port, cmd, timeout):
+        calls.append(1)
+        return 255, f"{terminal}\nroot@ssh5.vast.ai: Permission denied (publickey)."
+
+    tr = FakeTransport(routes())
+    with pytest.raises(PreflightFailed, match="1 attempt;"):
+        provider(tr, ssh_pubkey="ssh-ed25519 AAAA test", ssh_runner=denied,
+                 sleep=lambda s: None).preflight("7000123", timeout_s=60, ssh_ready_s=180)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("denial", [
+    "ubuntu@ssh5.vast.ai: Permission denied (publickey).",
+    "root@bastion.example: Permission denied (publickey).",
+])
+def test_a_confirmed_attachment_binds_propagation_denial_to_root_and_expected_host(denial):
+    calls = []
+
+    def denied(host, port, cmd, timeout):
+        calls.append(1)
+        return 255, denial
+
+    tr = FakeTransport(routes())
+    with pytest.raises(PreflightFailed, match="1 attempt;"):
+        provider(tr, ssh_pubkey="ssh-ed25519 AAAA test", ssh_runner=denied,
+                 sleep=lambda s: None).preflight("7000123", timeout_s=60, ssh_ready_s=180)
+    assert len(calls) == 1
+
+
+def test_ssh_retry_never_starts_an_attempt_after_the_ready_deadline():
+    now = 0.0
+    starts = []
+
+    def clock():
+        return now
+
+    def sleep(seconds):
+        nonlocal now
+        now += seconds
+
+    def denied(host, port, cmd, timeout):
+        nonlocal now
+        starts.append(now)
+        now += 0.1
+        return 255, "root@ssh5.vast.ai: Permission denied (publickey)."
+
+    tr = FakeTransport(routes())
+    with pytest.raises(PreflightFailed, match=r"did not authenticate within 6 s \(2 attempts"):
+        provider(tr, ssh_pubkey="ssh-ed25519 AAAA test", ssh_runner=denied,
+                 clock=clock, sleep=sleep).preflight("7000123", timeout_s=60, ssh_ready_s=6, poll_s=5)
+    assert starts == [0.0, 5.1]
+    assert now == pytest.approx(6.0)
+
+
 def test_nothing_in_this_module_creates_an_instance_on_import(monkeypatch):
     monkeypatch.delenv("E4B_RENT_LIVE", raising=False)
     tr = FakeTransport(routes())
