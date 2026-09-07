@@ -24,6 +24,13 @@ STEPS=${P41_STEPS:-60}; EVAL_EVERY=${P41_EVAL_EVERY:-20}; EVAL_N=${P41_EVAL_N:-4
 LR=${P41_LR:-1e-4}; ACCUM=${P41_ACCUM:-1}; AUTOCAST=${P41_AUTOCAST:-0}; SEED=${P41_SEED:-0}   # P40's fixture as run (PREREG "Fixture")
 DATASET=${P41_DATASET:-clinical}; PREREG=${P41_PREREG:-p41/P41-PREREG.md}
 E4B_VER=${P41_E4B_VER:-0.35.3}; GNF4_VER=${P41_GNF4_VER:-0.30.2}            # the shipped cut from PyPI at launch (recorded)
+# e4b#488: `0.35.3` names two different code states. The wheel on PyPI predates #435, which added
+# `detect_attention_projections` — and tp3_arm.py needs it in seven places, so the lane CANNOT run against the
+# version it pinned. R1 attempt 4 (2026-09-07T01:23Z) proved it on a rented box: TRIPWIRE FAIL, 0 of 19 arms.
+# Install the exact commit instead of a version string: a commit is a pin, a version is a promise someone kept.
+# Override with P41_E4B_PIN to go back to a released wheel once one exists that carries the API.
+E4B_COMMIT=${P41_E4B_COMMIT:-0a0b2136e3cc5ea3d7d80c1f6b83f0acf34a5e5f}
+E4B_PIN=${P41_E4B_PIN:-experts4bit-qlora@git+https://github.com/pjordanandrsn/experts4bit-qlora@$E4B_COMMIT}
 TF_VER=${P41_TRANSFORMERS_VER:-5.16.1}; BNB_VER=${P41_BNB_VER:-0.50.1}       # tp1/P38's e4b-side pins, as tp2 ran them
 E4B_SRC_REF=${P41_E4B_SRC_REF:-0c2a256dcdc2cb0a83cf7692224a8aa716f61ecd}   # = tag v0.35.3 resolved to its commit (tags move; commits do not)
 # the four helper files at that commit, sha256 (git show v0.35.3:<path> | sha256sum on the controller, 2026-09-06); a mismatch refuses the run
@@ -78,9 +85,9 @@ echo "RUN $RUN_ID prereg=$PREREG families=$FAMILIES seqs=$SEQS ranks=$RANKS prob
 plan | tee -a summary.txt
 [ -s $W/tp3_arm.py ] && [ -s $W/p41_admit.py ] || { echo "STAGE MISSING: tp3_arm.py / p41_admit.py" | tee -a summary.txt; touch TP_DONE; exit 9; }
 { [ "$RATE" != "0" ] && [ "$EST" != "0" ] && [ "$APPROVAL_EST" != "0" ] && [ "$DEADLINE" -gt 0 ]; } || { echo "REFUSED: no rate / planning estimate / approval line / deadline (P41_USD_PER_HOUR=$RATE P41_PLAN_EST_USD=$EST P41_APPROVAL_EST_USD=$APPROVAL_EST P41_DEADLINE_EPOCH=$DEADLINE) -- STOP-4/5 would be blind" | tee -a summary.txt; touch TP_DONE; exit 9; }
-say "install e4b (image python, PyPI): experts4bit-qlora==$E4B_VER grouped-nf4-gemm==$GNF4_VER transformers==$TF_VER bitsandbytes==$BNB_VER"
+say "install e4b (image python): $E4B_PIN grouped-nf4-gemm==$GNF4_VER transformers==$TF_VER bitsandbytes==$BNB_VER"
 perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --prefer-binary \
-  "experts4bit-qlora==$E4B_VER" "grouped-nf4-gemm==$GNF4_VER" "transformers==$TF_VER" "bitsandbytes==$BNB_VER" \
+  "$E4B_PIN" "grouped-nf4-gemm==$GNF4_VER" "transformers==$TF_VER" "bitsandbytes==$BNB_VER" \
   datasets accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken rouge-score > logs/pip_e4b.log 2>&1
 rc=$?; echo "pip(e4b) rc=$rc"; [ $rc -ne 0 ] && { tail -4 logs/pip_e4b.log; echo "PIP FAIL (e4b)" | tee -a summary.txt; touch TP_DONE; exit 9; }
 E4B_VER="$E4B_VER" GNF4_VER="$GNF4_VER" TF_VER="$TF_VER" python - <<'PYT' || { echo "TRIPWIRE FAIL (e4b)" | tee -a summary.txt; touch TP_DONE; exit 9; }
