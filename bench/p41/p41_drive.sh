@@ -112,7 +112,7 @@ for path in paths:
     except Exception as exc:
         raise SystemExit(f"outcome receipt unreadable {os.path.basename(path)}: {type(exc).__name__}: {exc}")
 admitted = sum(rec.get("admitted") is True for rec in records)
-void = sum(rec.get("status") == "void" for rec in records)
+void = sum(str(rec.get("status", "")).startswith("void") for rec in records)
 other = len(records) - admitted - void
 expected = int(sys.argv[4])
 observed = {"expected": expected, "actual": len(records), "admitted": admitted, "void": void, "other": other}

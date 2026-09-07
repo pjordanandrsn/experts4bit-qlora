@@ -456,20 +456,38 @@ def test_driver_rejects_success_without_bound_outcome_manifest(tmp_path: Path):
     assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
 
 
-def _write_valid_outcome(path: Path) -> None:
+def _write_valid_outcome(path: Path, *, void_status: str | None = None) -> None:
     for index in range(19):
-        receipt = {"admitted": index == 0, "status": "ok" if index == 0 else "not_run"}
+        if index == 0 and void_status is not None:
+            receipt = {"admitted": False, "status": void_status}
+        else:
+            receipt = {"admitted": index == 0, "status": "ok" if index == 0 else "not_run"}
         (path / f"granite_e4b_fixture_{index:02d}.json").write_text(json.dumps(receipt))
     manifest = {
         "run_nonce": "replaced-by-fake-ssh",
         "expected": 19,
         "actual": 19,
-        "admitted": 1,
-        "void": 0,
+        "admitted": 0 if void_status is not None else 1,
+        "void": 1 if void_status is not None else 0,
         "other": 18,
         "gate_pass": True,
     }
     (path / "P41_OUTCOME_COUNTS.json").write_text(json.dumps(manifest) + "\n")
+
+
+def test_void_trainable_counts_as_a_real_void_outcome(tmp_path: Path):
+    remote = tmp_path / "remote-void-trainable"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_text("0\n")
+    (remote / "P41_SUCCESS").touch()
+    (remote / "summary.txt").write_text("ADMIT VOID class=trainable\n")
+    _write_valid_outcome(remote, void_status="void_trainable")
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "19 rows: 0 admitted, 1 VOID, 18 other" in out.stdout
 
 
 def _terminal_result(path: Path, rc: int, *, success: bool, summary: str) -> Path:

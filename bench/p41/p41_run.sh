@@ -372,7 +372,7 @@ for path in paths:
         rec = {}
     records.append(rec)
 admitted = sum(rec.get("admitted") is True for rec in records)
-void = sum(rec.get("status") == "void" for rec in records)
+void = sum(str(rec.get("status", "")).startswith("void") for rec in records)
 other = len(records) - admitted - void
 gate_pass = len(records) == expected and admitted + void > 0 and all(type(rec.get("admitted")) is bool for rec in records)
 manifest = {"run_nonce": nonce, "expected": expected, "actual": len(records), "admitted": admitted, "void": void, "other": other, "gate_pass": gate_pass}
