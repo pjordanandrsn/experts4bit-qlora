@@ -715,12 +715,9 @@ def _ok_receipt(**over) -> dict:
         "structural_expected_n_attn4": 128,
         "n_patched": 32,
         "kernel_calls_per_step_min": 64,
-        # #494: the real shape, copied from tp2's admitted granite fused arm and from R1 attempt 10 — e4b emits
-        # NO banner (that line is Unsloth's) and records its engagement in enable_reason and the counters. The
-        # fixture used to invent a banner no run has ever produced, which is why the rule passed here and voided
-        # every real arm.
+        # #494: real e4b records have no Unsloth engagement banner. The
+        # registered e4b evidence is n_patched plus kernel calls per step.
         "engagement_banners": [],
-        "enable_reason": "[e4b.fast] fused TRAINING path on 32 ExpertsLoRA module(s) (dgrad kernel backward)",
         "C1_bit_exact": True,
         "C1_experts_changed": 0,
         "s_per_step_median_11plus": 0.641,
@@ -791,9 +788,6 @@ def test_admission_admits_a_receipt_that_meets_every_registered_rule(tmp_path: P
         ({"n_attn4": 127}, "attn4"),
         ({"n_patched": 31}, "engagement"),
         ({"kernel_calls_per_step_min": 63}, "engagement"),
-        ({"enable_reason": ""}, "engagement"),                                    # a silent fallback
-        ({"enable_reason": "[e4b] reference path (no fused kernel)"}, "engagement"),  # names it only to deny it
-        ({"framework": "unsloth", "engagement_banners": []}, "engagement"),        # unsloth still needs its banner
         ({"C1_bit_exact": False, "C1_experts_changed": 3}, "c1"),
     ],
 )
@@ -888,57 +882,16 @@ def test_footprint_row_states_fit_never_speed(tmp_path: Path):
     assert row["fit_status"] == "OOM" and row["peak_vram_gb_nvsmi"] is None and "out of memory" in row["reason"]
 
 
-# ---- #494: engagement evidence is per framework (R1 attempt 10 voided the only arm that ever reached admission)
-
-def _e4b_fused_record(**over):
-    """The real shape from R1 attempt 10 and from tp2's granite fused arm, which IS in the register."""
-    rec = {
-        "framework": "e4b", "arm": "fused",
-        "engagement_banners": [],                    # e4b never emits Unsloth's banner
-        "enable_reason": "[e4b.fast] fused TRAINING path on 32 ExpertsLoRA module(s) (dgrad kernel backward)",
-        "n_patched": 32, "kernel_calls_per_step_min": 128,
-        "steps": 60, "trainable_params": 49807360, "trainable_mismatch": None,
-        "n_attn4": 128, "structural_expected_n_attn4": 128, "C1_bit_exact": True,
-    }
-    rec.update(over)
-    return rec
+def test_empty_banner_e4b_receipt_passes_every_registered_rule():
+    """Regression for #494: the complete real e4b receipt shape admits."""
+    assert p41_admit.rules(_ok_receipt(), arm="fused", **GRANITE) == []
 
 
-def _checks(rec, **kw):
-    import p41_admit
-    args = dict(steps=60, tokens_sha=None, expect_trainable=49807360, n_layers=32, attn4_census=128, arm="fused")
-    args.update(kw)
-    return p41_admit.rules(rec, **args)
-
-
-def test_an_engaged_e4b_fused_arm_is_not_voided_for_lacking_unsloths_banner():
-    """The banner is Unsloth's console line (P38-PREREG.md:72). Requiring it of e4b's fused arm voided attempt
-    10 — n_patched 32 == n_layers, the fused counter at 128 on all 60 steps, exact trainable count, C1 bit-exact
-    — and would void every fused arm in the campaign. tp2's identical record is in the register."""
-    fails = [f for f in _checks(_e4b_fused_record()) if f[0] == "engagement"]
-    assert fails == [], fails
-
-
-def test_a_silent_fallback_is_still_void_for_e4b():
-    """The defence the banner rule was providing is kept, not dropped: e4b must SAY it took the fused path."""
-    # a reference arm records "" — that is the real silent-fallback shape
-    assert any(f[0] == "engagement" for f in _checks(_e4b_fused_record(enable_reason="")))
-    # and a reason that merely CONTAINS the word must not pass: "no fused kernel" is not engagement
-    rec = _e4b_fused_record(enable_reason="[e4b] reference path (no fused kernel)")
-    assert any(f[0] == "engagement" and "fused TRAINING path" in f[1] for f in _checks(rec)), _checks(rec)
-
-
-def test_the_structural_engagement_checks_still_bite():
-    assert any("n_patched" in f[1] for f in _checks(_e4b_fused_record(n_patched=31)))
-    assert any("kernel_calls_per_step_min" in f[1] for f in _checks(_e4b_fused_record(kernel_calls_per_step_min=63)))
-
-
-def test_an_unsloth_fused_arm_still_needs_its_own_banner():
-    rec = _e4b_fused_record(framework="unsloth", enable_reason="")
-    assert any(f[0] == "engagement" and "banner" in f[1] for f in _checks(rec))
-    rec = _e4b_fused_record(framework="unsloth", engagement_banners=["Enabling LoRA on MoE parameters: [...]"],
-                            enable_reason="")
-    assert [f for f in _checks(rec) if f[0] == "engagement"] == []
-    rec = _e4b_fused_record(framework="unsloth", engagement_banners=["NO 'Enabling LoRA on MoE parameters'"],
-                            enable_reason="")
-    assert any(f[0] == "engagement" and "banner" in f[1] for f in _checks(rec))
+def test_unregistered_banner_and_enable_reason_do_not_change_p41_admission():
+    """P41 never registered console text as an e4b validity gate."""
+    for extra in (
+        {"engagement_banners": []},
+        {"engagement_banners": ["NO 'Unsloth: MoE bnb4bit'"], "enable_reason": ""},
+        {"enable_reason": "[e4b] reference path (no fused kernel)"},
+    ):
+        assert p41_admit.rules(_ok_receipt(**extra), arm="fused", **GRANITE) == []
