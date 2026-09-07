@@ -1,21 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/run-receipt-schema.json",
-  "title": "GPU Rental Run Receipt",
-  "description": "Schema for immutable experiment receipts stored at bench/runs/<UTC date>/<run-id>/receipt.json. All listed fields are required; additional properties are allowed. This schema aligns with the organisational corpus receipt schema (pjordanandrsn/org-corpus §6).",
+  "$id": "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/benchmark-receipt-schema.json",
+  "title": "Benchmark evidence receipt",
+  "description": "Schema for the benchmark-evidence receipt a lane writes beside its results: what code, model, data and hardware produced a number, and whether the arm is valid. Reproducibility only. Rental administration -- who approved the spend, what it cost, which instance was destroyed and how that was proven -- is operational and lives in the private control plane, not here.",
   "type": "object",
   "required": [
     "experiment_id",
     "work_id",
-    "requested_by",
-    "executed_by",
-    "reviewed_by",
     "hypothesis",
     "expected_result",
     "success_criteria",
     "failure_criteria",
     "preregistration",
-    "approvals",
     "repo",
     "commit_sha",
     "branch",
@@ -25,7 +21,6 @@
     "command",
     "environment",
     "provider",
-    "instance_id",
     "gpu_model",
     "gpu_count",
     "cpu",
@@ -34,7 +29,6 @@
     "started_at",
     "finished_at",
     "runtime_seconds",
-    "cost_usd",
     "dataset",
     "dataset_hash",
     "model",
@@ -44,10 +38,8 @@
     "configuration",
     "metrics",
     "artifacts",
-    "teardown_proof",
     "status",
     "result",
-    "decision",
     "notes"
   ],
   "properties": {
@@ -60,20 +52,6 @@
       "type": "string",
       "description": "Parent work item or task identifier (e.g., GitHub issue number)",
       "minLength": 1
-    },
-    "requested_by": {
-      "type": "string",
-      "description": "Role and agent that requested this run (e.g., 'CEO/Claude Code')",
-      "minLength": 1
-    },
-    "executed_by": {
-      "type": "string",
-      "description": "Role and agent that executed this run (e.g., 'CTO/Cursor')",
-      "minLength": 1
-    },
-    "reviewed_by": {
-      "type": ["string", "null"],
-      "description": "Role and agent that reviewed this run, or null if not yet reviewed"
     },
     "hypothesis": {
       "type": "string",
@@ -99,37 +77,6 @@
       "type": "string",
       "description": "URL or path to the pre-registration document",
       "minLength": 1
-    },
-    "approvals": {
-      "type": "array",
-      "description": "List of approvals obtained before launch, in chronological order",
-      "items": {
-        "type": "object",
-        "required": ["role", "agent", "usd_estimate", "slack_permalink"],
-        "properties": {
-          "role": {
-            "type": "string",
-            "description": "Approving agent's role",
-            "minLength": 1
-          },
-          "agent": {
-            "type": "string",
-            "description": "Approving agent's name",
-            "minLength": 1
-          },
-          "usd_estimate": {
-            "type": "number",
-            "description": "Cost estimate (USD) at approval time",
-            "minimum": 0
-          },
-          "slack_permalink": {
-            "type": "string",
-            "description": "Permalink to the APPROVE message in Slack",
-            "minLength": 1
-          }
-        },
-        "additionalProperties": true
-      }
     },
     "repo": {
       "type": "string",
@@ -179,11 +126,6 @@
       "description": "Rental provider (e.g., 'vast:verified-secure', 'runpod:secure')",
       "minLength": 1
     },
-    "instance_id": {
-      "type": "string",
-      "description": "Provider-specific instance identifier",
-      "minLength": 1
-    },
     "gpu_model": {
       "type": "string",
       "description": "GPU model (e.g., 'RTX 5090', 'A100-80GB')",
@@ -224,31 +166,16 @@
       "description": "Total runtime in seconds",
       "minimum": 0
     },
-    "cost_usd": {
-      "type": "object",
-      "description": "Cost in USD, both estimated (at approval) and actual (at completion)",
-      "required": ["estimated", "actual"],
-      "properties": {
-        "estimated": {
-          "type": "number",
-          "description": "Estimated cost at approval time (USD)",
-          "minimum": 0
-        },
-        "actual": {
-          "type": "number",
-          "description": "Actual cost incurred (USD)",
-          "minimum": 0
-        }
-      },
-      "additionalProperties": true
-    },
     "dataset": {
       "type": "string",
       "description": "Dataset name or identifier used in this run",
       "minLength": 1
     },
     "dataset_hash": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Hash of the dataset, or null if not applicable"
     },
     "model": {
@@ -262,11 +189,17 @@
       "minLength": 1
     },
     "model_hash": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Hash of the model weights, or null if not computed"
     },
     "seed": {
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "description": "Random seed used for reproducibility, or null if not set"
     },
     "configuration": {
@@ -284,7 +217,11 @@
       "description": "List of output artifacts produced by this run",
       "items": {
         "type": "object",
-        "required": ["path", "sha256", "bytes"],
+        "required": [
+          "path",
+          "sha256",
+          "bytes"
+        ],
         "properties": {
           "path": {
             "type": "string",
@@ -305,47 +242,6 @@
         "additionalProperties": true
       }
     },
-    "teardown_proof": {
-      "type": "object",
-      "description": "Proof that the instance was torn down",
-      "required": ["method", "evidence"],
-      "properties": {
-        "instance_id": {
-          "type": "string",
-          "description": "Provider instance id this teardown evidence is bound to, or 'none' before launch",
-          "minLength": 1
-        },
-        "method": {
-          "type": "string",
-          "description": "How teardown was performed (e.g., 'vast-cli-destroy', 'runpod-api-terminate')",
-          "minLength": 1
-        },
-        "evidence": {
-          "type": "string",
-          "description": "Evidence of teardown (command output, API response, etc.)",
-          "minLength": 1
-        },
-        "reason": {
-          "type": "string",
-          "description": "Why teardown was triggered",
-          "enum": [
-            "completion",
-            "heartbeat-loss",
-            "wallclock",
-            "already-gone",
-            "torn-down-externally",
-            "guard-not-armed",
-            "guard-spawn-failed",
-            "preflight-failed"
-          ]
-        },
-        "complete": {
-          "type": "boolean",
-          "description": "True when the launcher itself destroyed the instance; false when the instance was found already gone"
-        }
-      },
-      "additionalProperties": true
-    },
     "status": {
       "type": "string",
       "description": "Execution status from the harness vocabulary",
@@ -363,22 +259,17 @@
     "result": {
       "type": "string",
       "description": "Outcome classification",
-      "enum": ["pass", "fail", "inconclusive", "invalid"]
-    },
-    "decision": {
-      "type": "string",
-      "description": "What to do with this result, plus link to follow-up (formatted as 'merge|continue|revise|abandon|rerun <url>'). A launcher-written receipt awaiting review uses 'pending <work-id or url>'.",
-      "minLength": 1
+      "enum": [
+        "pass",
+        "fail",
+        "inconclusive",
+        "invalid"
+      ]
     },
     "notes": {
       "type": "string",
       "description": "Free-text notes about the run (observations, issues, context)",
       "minLength": 1
-    },
-    "incident": {
-      "type": "string",
-      "description": "Issue reference for a compute-governance incident that caused this run without prior approval (format: <owner>/<repo>#<n> or <repo>#<n>). When present: status must be ALARM, result must be invalid, decision must start with 'abandon'. The cost still counts toward the role's daily ceiling and the global budget.",
-      "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?#[0-9]+$"
     }
   },
   "additionalProperties": true
