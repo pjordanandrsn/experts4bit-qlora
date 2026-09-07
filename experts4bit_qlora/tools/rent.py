@@ -754,6 +754,9 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
     poll = min(0.2, max(0.05, wallclock_s / 20))
     reason = "wallclock"
     list_errors = 0
+    # #510: the listing in which the instance was observed absent. It is the evidence the
+    # "already-gone" conclusion rests on, so the proof records THAT set rather than asking again.
+    absent_in: set[str] | None = None
     while time.time() < deadline:
         time.sleep(poll)
         # The heartbeat is read before the listing so a lost heartbeat is acted on during a provider outage
@@ -777,15 +780,23 @@ def guard_worker(*, instance_id: str, provider_kind: str, fake_state: str | None
         list_errors = 0          # an answer clears the backoff
         if instance_id not in live:
             reason = "already-gone"
+            absent_in = live
             break
         if stale:
             reason = "heartbeat-loss"
             break
     if reason == "already-gone":
-        # The launcher (or someone) destroyed it first; nothing to prove beyond the absence.
+        # The launcher (or someone) destroyed it first; nothing to prove beyond the absence -- and the
+        # absence was already proven, by the loop's own listing, which ANSWERED and did not contain the
+        # instance. #510: this branch used to call `_list_or_unknown(prov)` again. That is a second,
+        # independently failable request the conclusion does not need: the helper answers None when the
+        # backend declines (#455's "never an empty set"), and `sorted(None)` raises inside the dict being
+        # built for `_write_proof` -- so a declining API destroyed the proof of a teardown the guard had
+        # already observed. #480 records six minutes of such declines. Reusing `absent_in` also makes the
+        # evidence the listing the conclusion actually rests on, rather than a later one that may differ.
         if not Path(proof_path).is_file():
             _write_proof(proof_path, {"method": f"{provider_kind}-observed-absent", "reason": reason,
-                                      "evidence": json.dumps({"list_after": sorted(_list_or_unknown(prov)),
+                                      "evidence": json.dumps({"list_after": sorted(absent_in) if absent_in is not None else "UNKNOWN",
                                                               "instance_absent": True}, sort_keys=True),
                                       "complete": True, "instance_id": instance_id, "at": _utc()})
         return 0

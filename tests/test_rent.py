@@ -1358,6 +1358,83 @@ def test_guard_keeps_watching_when_the_listing_fails_and_never_calls_it_gone(tmp
     assert iid not in prov.list_ids()
 
 
+def _guard_on(prov, rent_mod, tmp_path: Path, iid: str, fake: Path):
+    """Run guard_worker against `prov` with a fresh heartbeat; return (rc, proof dict)."""
+    saved = rent_mod.provider_for
+    rent_mod.provider_for = lambda kind, **kw: prov
+    try:
+        proof = tmp_path / "proof.json"
+        hb = tmp_path / "hb"
+        hb.write_text("x")
+        rc = rent_mod.guard_worker(instance_id=iid, provider_kind="fake", fake_state=str(fake), wallclock_s=0.6,
+                                   heartbeat_path=str(hb), proof_path=str(proof), heartbeat_timeout_s=60)
+    finally:
+        rent_mod.provider_for = saved
+    return rc, json.loads(proof.read_text())
+
+
+def test_the_already_gone_branch_never_asks_for_a_second_listing(tmp_path: Path):
+    """#510: the absence is established by the loop's own listing, so no second request is made.
+
+    The branch used to call `_list_or_unknown(prov)` again. That helper answers None when the
+    backend declines (#455: never an empty set), and `sorted(None)` raises inside the dict being
+    built for `_write_proof` -- so a declining API destroyed the proof of a teardown the guard had
+    already observed, and the run ended ALARM/invalid for want of a listing incidental to the
+    conclusion.  This provider raises on any listing after the decisive one, so on the old code the
+    guard died with a TypeError and wrote nothing.
+    """
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class AbsentThenBroken(FakeProvider):
+        calls = 0
+
+        def list_ids(self):
+            AbsentThenBroken.calls += 1
+            if AbsentThenBroken.calls > 1:
+                raise AssertionError("#510: the already-gone branch must not request a second listing")
+            return {"someone-elses-box"}
+
+    fake = tmp_path / "gone.json"
+    prov = AbsentThenBroken(fake)
+    iid = prov.launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    rc, data = _guard_on(prov, rent_mod, tmp_path, iid, fake)
+
+    assert AbsentThenBroken.calls == 1, "the decisive listing is the only one the branch needs"
+    assert rc == 0
+    assert data["reason"] == "already-gone" and data["complete"] is True
+    assert json.loads(data["evidence"])["instance_absent"] is True
+
+
+def test_the_already_gone_proof_records_the_listing_that_established_the_absence(tmp_path: Path):
+    """#510: `list_after` is the set the instance was observed absent from, not a later re-read.
+
+    Calibrated to actually detect the defect: the second listing returns a DIFFERENT set, so the
+    old code (which re-read) records `["box-c"]` and the fixed code records the decisive
+    `["box-a", "box-b"]`.  An identical second listing would have passed either way -- which is
+    what an earlier draft of this test did, and it proved nothing.
+    """
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    class AbsentThenDifferent(FakeProvider):
+        calls = 0
+
+        def list_ids(self):
+            AbsentThenDifferent.calls += 1
+            if AbsentThenDifferent.calls == 1:
+                return {"box-b", "box-a"}      # the listing that establishes the absence
+            return {"box-c"}                    # any later listing: a different, irrelevant world
+
+    fake = tmp_path / "gone2.json"
+    prov = AbsentThenDifferent(fake)
+    iid = prov.launch(gpu="RTX 5090", wallclock_h=1, image="img")
+    rc, data = _guard_on(prov, rent_mod, tmp_path, iid, fake)
+
+    assert rc == 0 and data["reason"] == "already-gone"
+    ev = json.loads(data["evidence"])
+    assert ev["list_after"] == ["box-a", "box-b"], "sorted, and the listing the conclusion rests on"
+    assert ev["instance_absent"] is True
+
+
 def test_teardown_proof_carries_complete(tmp_path: Path) -> None:
     """teardown_proof.complete is now included in the receipt (#457 fix to rent.py:891).
 
