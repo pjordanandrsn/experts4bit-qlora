@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from experts4bit_qlora.tools import vast_provider  # noqa: F401 — the module, for predicate tests
 from experts4bit_qlora.tools.vast_provider import (
     BackendBusy, BackendUnavailable, FakeTransport, OrphanSwept, PossibleOrphan, PreflightFailed, VastProvider, VastRefused, load_api_key,
     _bandwidth_over_ssh_with_evidence, _bandwidth_reading, offer_filter, provider_from_env,
@@ -734,3 +735,50 @@ def test_a_provider_that_only_ever_declines_fails_the_preflight_naming_that():
     clock = iter([0.0, 0.0, 0.0, 99.0, 99.0, 99.0, 99.0])
     with pytest.raises(PreflightFailed, match=r"declined \d+ time\(s\) within 60 s and never answered"):
         provider(tr, clock=lambda: next(clock)).preflight("7000123", timeout_s=60, poll_s=0.01)
+
+
+# ---- a taken ask is ordinary market behaviour (R1 attempts 7, 11, 17, 18)
+
+_TAKEN = (400, {"success": False, "error": "invalid_args",
+                "msg": "error 404/3603: no_such_ask  Instance type by id 42274235 is not available.", "ask_id": 1})
+
+
+def test_a_taken_ask_is_recognised_and_a_real_refusal_is_not():
+    assert vast_provider._is_stale_ask(*_TAKEN) is True
+    assert vast_provider._is_stale_ask(400, {"error": "insufficient_credit", "msg": "balance too low"}) is False
+    assert vast_provider._is_stale_ask(200, {"success": False, "error": "no_such_ask"}) is False   # not a 400
+    assert vast_provider._is_stale_ask(400, "not json") is False
+
+
+def test_launch_walks_past_a_taken_ask_to_the_next_offer():
+    """Attempts 17 and 18 died on the SAME stale offer minutes apart, so retrying the launch loops forever.
+    The create is the only test of whether an ask is still there, so each candidate gets one."""
+    second = dict(OFFER, id=42274236, dph_total=0.62)
+    tr = FakeTransport(routes({
+        ("GET", "/v0/bundles/"): [(200, {"offers": [OFFER, second]})],
+        ("PUT", "/v0/asks/42274235/"): [_TAKEN],
+        ("PUT", "/v0/asks/42274236/"): [(200, {"success": True, "new_contract": 7000123})],
+    }))
+    p = provider(tr)
+    assert p.launch(gpu="RTX 5090", wallclock_h=1.0, image="img", max_dph=0.66) == "7000123"
+    skipped = json.loads(p.facts()["vast_skipped_stale_offers"]) if hasattr(p, "facts") else json.loads(p._facts["vast_skipped_stale_offers"])
+    assert [s["offer_id"] for s in skipped] == ["42274235"], skipped
+    assert p._facts["vast_offer_id"] == "42274236"
+
+
+def test_walking_down_the_list_never_walks_past_the_approved_ceiling():
+    dear = dict(OFFER, id=42274236, dph_total=9.99)
+    tr = FakeTransport(routes({
+        ("GET", "/v0/bundles/"): [(200, {"offers": [OFFER, dear]})],
+        ("PUT", "/v0/asks/42274235/"): [_TAKEN],
+    }))
+    with pytest.raises(VastRefused, match="above the declared --usd-per-hour"):
+        provider(tr).launch(gpu="RTX 5090", wallclock_h=1.0, image="img", max_dph=0.66)
+
+
+def test_a_run_of_taken_asks_refuses_rather_than_shopping_forever():
+    offers = [dict(OFFER, id=42274235 + i, dph_total=0.60 + i / 100) for i in range(8)]
+    extra = {("PUT", f"/v0/asks/{o['id']}/"): [_TAKEN] for o in offers}
+    extra[("GET", "/v0/bundles/")] = [(200, {"offers": offers})]
+    with pytest.raises(VastRefused, match="already taken between search and create"):
+        provider(FakeTransport(routes(extra))).launch(gpu="RTX 5090", wallclock_h=1.0, image="img", max_dph=0.66)
