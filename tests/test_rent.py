@@ -3,6 +3,7 @@ schema-valid receipts on every path -- including the PR #440 review fixes."""
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import subprocess
@@ -14,7 +15,7 @@ import pytest
 
 from experts4bit_qlora.tools.rent import (
     FakeProvider, ReceiptInvalid, RentRefused, acquire_live_lock, check_approvals, evaluate_launch, estimate_usd,
-    git_facts, main, select_approver_spec, spawn_guard, validate_receipt,
+    _vast_anchor_exclusions, build_receipt, git_facts, main, select_approver_spec, spawn_guard, validate_receipt,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -63,6 +64,255 @@ def _receipt(tmp_path: Path) -> dict:
     rec = json.loads(receipts[0].read_text())
     validate_receipt(rec, SCHEMA)  # every receipt the launcher writes satisfies the repo's schema
     return rec
+
+
+def _canonical_anchor_refusal(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
+    root = tmp_path / "receipt-repo" / "receipts" / "experts4bit-qlora"
+    run_id, instance_id, machine_id = "p41-r1-granite-test", "50120000", "144661"
+    run_dir = root / "2026-09-07" / run_id
+    p41 = run_dir / "p41"
+    (p41 / "logs").mkdir(parents=True)
+    nonce = "a" * 64
+    runner = b"#!/bin/bash\n# exact fixture runner\n"
+    gate_runner = b"# exact fixture train-anchor gate\n"
+    expected = {
+        "repo": "pjordanandrsn/experts4bit-qlora",
+        "receipt_repo_origin": "https://github.com/pjordanandrsn/adertha-agents.git",
+        "executor": "CTO/claude-session-5c68525a",
+        "work_id": "experts4bit-qlora#P41",
+        "preregistration": "bench/p41/P41-PREREG.md",
+        "gpu_model": "RTX 5090",
+        "container_image": "pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+        "dataset": "clinical",
+        "dataset_hash": "d" * 64,
+        "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+        "model_revision": "a" * 40,
+        "max_dph": 0.66,
+        "p41_run_sha256": hashlib.sha256(runner).hexdigest(),
+        "train_anchor_gate_sha256": hashlib.sha256(gate_runner).hexdigest(),
+    }
+    expected["approvals"] = [{"role": "Jordan", "agent": "Jordan", "usd_estimate": 2.64,
+                              "slack_permalink": PERM}]
+    teardown_evidence = {
+        "destroy": {"method": "vast-destroy", "instance_id": instance_id, "http": 200},
+        "instance_absent": True,
+        "list_after": [],
+    }
+    receipt = build_receipt(
+        experiment_id=run_id, work_id=expected["work_id"], requested_by=expected["executor"],
+        executed_by=expected["executor"], hypothesis="registered hypothesis", expected_result="registered result",
+        success_criteria="registered success", failure_criteria="registered failure",
+        preregistration=expected["preregistration"], approvals=expected["approvals"],
+        commit_sha="b" * 40, branch="main",
+        dirty_tree=False, command="registered command", environment={"vast_machine_id": machine_id,
+        "vast_offer_id": "49868233", "vast_contract_id": instance_id, "vast_verification": "verified",
+        "vast_gpu_name": "RTX 5090", "vast_image": expected["container_image"],
+        "vast_disk_space_gb": "320", "vast_cpu_ram_mb": str(128 * 1024), "vast_dph_total": "0.62",
+        "vast_search_filter": json.dumps({"verified": {"eq": True}, "external": {"eq": False},
+        "rentable": {"eq": True}, "type": "on-demand", "num_gpus": {"eq": 1},
+        "gpu_name": {"eq": "RTX 5090"}, "disk_space": {"gte": 320},
+        "cpu_ram": {"gte": 98 * 1024}, "order": [["dph_total", "asc"]]}, sort_keys=True)},
+        provider="vast:verified-secure", instance_id=instance_id,
+        gpu_model=expected["gpu_model"], gpu_count=1, started_at="2026-09-07T00:00:00Z",
+        finished_at="2026-09-07T00:01:00Z", runtime_seconds=60, cost_estimated=2.64,
+        cost_actual=0.02, teardown_proof={"method": "vast-destroy", "evidence": json.dumps(teardown_evidence),
+        "complete": True, "reason": "completion"}, status="HARNESS_ERROR", result="fail",
+        notes="strict anchor refusal", configuration={}, dataset=expected["dataset"],
+        dataset_hash=expected["dataset_hash"], model=expected["model"],
+        model_revision=expected["model_revision"], container_image=expected["container_image"], complete=True,
+    )
+    (run_dir / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    files = {
+        "P41_RUN_NONCE": nonce + "\n", "BOX_REFUSED": "", f"TP_DONE.{nonce}": "",
+        f"P41_EXIT_CODE.{nonce}": "12\n", "INSTANCE_ID": instance_id + "\n",
+        "box.json": json.dumps({"run_id": run_id, "instance_id": instance_id,
+        "provider": "vast:verified-secure", "registered_gpu_class": "RTX 5090",
+        "gpu_name": "NVIDIA GeForce RTX 5090",
+        "gpu_uuid": "GPU-4504a39e-e33d-bf3f-4b7a-792d3b07e62d"}) + "\n",
+        "anchor.json": json.dumps({"status": "OK", "gpu": "NVIDIA GeForce RTX 5090"}) + "\n",
+        "summary.txt": "ANCHOR rc=3 class=pcie-full/launch-fast\nBOX REFUSED by train anchor (rc=3)\n",
+        "outer.log": "ANCHOR rc=3 class=pcie-full/launch-fast\nBOX REFUSED by train anchor (rc=3)\n",
+    }
+    for name, content in files.items():
+        (p41 / name).write_text(content)
+    (p41 / "logs" / "anchor_gate.log").write_text(
+        "  launch.self_pair     1.0779  FATAL: >1.03\n"
+        "  class                pcie-full/launch-fast  reported\n\nBOX REFUSED\n"
+    )
+    (p41 / "p41_run.sh").write_bytes(runner)
+    (p41 / "train_anchor_gate.py").write_bytes(gate_runner)
+    repo = tmp_path / "receipt-repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "fixture"], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", expected["receipt_repo_origin"]], check=True)
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True,
+                          capture_output=True, text=True).stdout.strip()
+    branch = subprocess.run(["git", "-C", str(repo), "branch", "--show-current"], check=True,
+                            capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "-C", str(repo), "update-ref", f"refs/remotes/origin/{branch}", head], check=True)
+    subprocess.run(["git", "-C", str(repo), "branch", f"--set-upstream-to=origin/{branch}"], check=True,
+                   capture_output=True)
+    return root, run_dir / "receipt.json", expected
+
+
+def _commit_anchor_fixture(root: Path, message: str) -> None:
+    repo = root.parents[1]
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", message], check=True)
+    head = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], check=True,
+                          capture_output=True, text=True).stdout.strip()
+    upstream = subprocess.run(["git", "-C", str(repo), "rev-parse", "--symbolic-full-name", "@{upstream}"],
+                              check=True, capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "-C", str(repo), "update-ref", upstream, head], check=True)
+
+
+def test_vast_anchor_exclusions_accept_only_canonical_committed_strict_anchor_refusal(tmp_path: Path):
+    root, receipt, expected = _canonical_anchor_refusal(tmp_path)
+    machines, evidence = _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected,
+                                                  schema_path=SCHEMA)
+    assert machines == {"144661"}
+    assert evidence[0]["run_id"] == "p41-r1-granite-test"
+    assert evidence[0]["machine_id"] == "144661"
+    assert evidence[0]["path"] == "2026-09-07/p41-r1-granite-test/receipt.json"
+    assert len(evidence[0]["git_blob"]) == 40 and len(evidence[0]["git_head"]) == 40
+
+
+def test_vast_anchor_exclusions_empty_list_needs_no_receipt_git_repo(tmp_path: Path):
+    assert _vast_anchor_exclusions([], runs_root=tmp_path / "absent", expected={}) == (set(), [])
+
+
+@pytest.mark.parametrize("tamper", ["origin", "unpushed-head"])
+def test_vast_anchor_exclusions_bind_canonical_origin_and_upstream(tmp_path: Path, tamper: str):
+    root, receipt, expected = _canonical_anchor_refusal(tmp_path)
+    repo = root.parents[1]
+    if tamper == "origin":
+        subprocess.run(["git", "-C", str(repo), "remote", "set-url", "origin", "https://example.com/fake.git"],
+                       check=True)
+    else:
+        (repo / "extra").write_text("new commit\n")
+        subprocess.run(["git", "-C", str(repo), "add", "extra"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-qm", "not in upstream"], check=True)
+    with pytest.raises(RentRefused, match="origin mismatch|not the configured upstream"):
+        _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected, schema_path=SCHEMA)
+
+
+def test_vast_anchor_exclusions_refuse_modified_or_non_anchor_evidence(tmp_path: Path):
+    root, receipt, expected = _canonical_anchor_refusal(tmp_path)
+    receipt.write_text(receipt.read_text() + " ")
+    with pytest.raises(RentRefused, match="differs from receipt Git HEAD"):
+        _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected, schema_path=SCHEMA)
+
+    subprocess.run(["git", "-C", str(root.parents[1]), "checkout", "--", "."], check=True)
+    gate = receipt.parent / "p41" / "logs" / "anchor_gate.log"
+    gate.write_text("  class                pcie-full/launch-fast  reported\n\nBOX REFUSED\n")
+    _commit_anchor_fixture(root, "remove refusal evidence")
+    with pytest.raises(RentRefused, match="strict train-anchor refusal"):
+        _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected, schema_path=SCHEMA)
+
+
+@pytest.mark.parametrize(("field", "value"), [("complete", 1), ("dirty_tree", 0)])
+def test_vast_anchor_exclusions_require_exact_receipt_booleans(tmp_path: Path, field: str, value: int):
+    root, receipt, expected = _canonical_anchor_refusal(tmp_path)
+    payload = json.loads(receipt.read_text())
+    payload[field] = value
+    receipt.write_text(json.dumps(payload, indent=2) + "\n")
+    _commit_anchor_fixture(root, "bad bool")
+    with pytest.raises(RentRefused):
+        _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected, schema_path=SCHEMA)
+
+
+def test_vast_anchor_exclusions_bind_the_original_approval_identity(tmp_path: Path):
+    root, receipt, expected = _canonical_anchor_refusal(tmp_path)
+    payload = json.loads(receipt.read_text())
+    payload["approvals"][0]["slack_permalink"] = (
+        "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788749828896999"
+    )
+    receipt.write_text(json.dumps(payload, indent=2) + "\n")
+    _commit_anchor_fixture(root, "different approval")
+    with pytest.raises(RentRefused, match="identity/status mismatch"):
+        _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected, schema_path=SCHEMA)
+
+
+@pytest.mark.parametrize("tamper", ["verification", "gpu-name", "anchor-gpu", "numeric-bools", "nan-rate"])
+def test_vast_anchor_exclusions_bind_verified_offer_and_exact_anchor_gpu(tmp_path: Path, tamper: str):
+    root, receipt, expected = _canonical_anchor_refusal(tmp_path)
+    if tamper == "anchor-gpu":
+        anchor_path = receipt.parent / "p41" / "anchor.json"
+        anchor = json.loads(anchor_path.read_text())
+        anchor["gpu"] += " arbitrary suffix"
+        anchor_path.write_text(json.dumps(anchor) + "\n")
+    elif tamper in ("verification", "gpu-name"):
+        payload = json.loads(receipt.read_text())
+        key = "vast_verification" if tamper == "verification" else "vast_gpu_name"
+        payload["environment"][key] = "unverified" if tamper == "verification" else "RTX 4090"
+        receipt.write_text(json.dumps(payload, indent=2) + "\n")
+    else:
+        payload = json.loads(receipt.read_text())
+        if tamper == "nan-rate":
+            payload["environment"]["vast_dph_total"] = "nan"
+        else:
+            recorded = json.loads(payload["environment"]["vast_search_filter"])
+            recorded["verified"]["eq"] = 1
+            recorded["external"]["eq"] = 0
+            recorded["rentable"]["eq"] = 1
+            payload["environment"]["vast_search_filter"] = json.dumps(recorded, sort_keys=True)
+        receipt.write_text(json.dumps(payload, indent=2) + "\n")
+    _commit_anchor_fixture(root, f"tamper {tamper}")
+    with pytest.raises(RentRefused, match="offer/search contract mismatch|box/anchor identity mismatch"):
+        _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected, schema_path=SCHEMA)
+
+
+@pytest.mark.parametrize("tamper", ["untracked-success", "success", "outcome", "done", "box-newline",
+                                           "metrics", "foreign-run"])
+def test_vast_anchor_exclusions_reject_adversarial_terminal_or_scope_evidence(tmp_path: Path, tamper: str):
+    root, receipt, expected = _canonical_anchor_refusal(tmp_path)
+    p41 = receipt.parent / "p41"
+    nonce = (p41 / "P41_RUN_NONCE").read_text().strip()
+    if tamper == "untracked-success":
+        (p41 / f"P41_SUCCESS.{nonce}").write_text("")
+    elif tamper == "success":
+        (p41 / "P41_SUCCESS.foreign").write_text("")
+    elif tamper == "outcome":
+        (p41 / "P41_OUTCOME_COUNTS.foreign.json").write_text("{}\n")
+    elif tamper == "done":
+        (p41 / f"TP_DONE.{nonce}").write_text("foreign\n")
+    elif tamper == "box-newline":
+        (p41 / "BOX_REFUSED").write_text("\n")
+    elif tamper == "metrics":
+        payload = json.loads(receipt.read_text())
+        payload["metrics"] = {"loss": 1.0}
+        receipt.write_text(json.dumps(payload, indent=2) + "\n")
+    else:
+        payload = json.loads(receipt.read_text())
+        payload["experiment_id"] = "p41-r1-granite-foreign"
+        receipt.write_text(json.dumps(payload, indent=2) + "\n")
+        box = json.loads((p41 / "box.json").read_text())
+        box["run_id"] = payload["experiment_id"]
+        (p41 / "box.json").write_text(json.dumps(box) + "\n")
+    if tamper != "untracked-success":
+        _commit_anchor_fixture(root, f"tamper {tamper}")
+    with pytest.raises(RentRefused):
+        _vast_anchor_exclusions([str(receipt)], runs_root=root, expected=expected, schema_path=SCHEMA)
+
+
+def test_invalid_anchor_exclusion_is_receipted_under_live_lock_before_provider(tmp_path: Path, monkeypatch):
+    from experts4bit_qlora.tools import rent as rent_mod
+
+    monkeypatch.setattr(rent_mod, "DEFAULT_LIVE_LOCK_PATH", tmp_path / "live.lock")
+    invoked = []
+    monkeypatch.setattr(rent_mod, "provider_for", lambda *args, **kwargs: invoked.append((args, kwargs)))
+    missing = tmp_path / "not-canonical" / "receipt.json"
+    rc = main(_cli(tmp_path, "bad-anchor-exclusion", "--provider", "fake",
+                   "--exclude-vast-anchor-receipt", str(missing), dry_run=False))
+    assert rc == 2 and invoked == []
+    rec = _receipt(tmp_path)
+    assert rec["status"] == "REFUSED" and rec["complete"] is True
+    assert rec["teardown_proof"]["method"] == "not-launched"
+    assert rec["environment"]["live_lock_path"] == str(tmp_path / "live.lock")
+    assert "not inside the canonical receipt Git repository" in rec["notes"]
 
 
 # ---------------------------------------------------------------- policy refusals (no network)

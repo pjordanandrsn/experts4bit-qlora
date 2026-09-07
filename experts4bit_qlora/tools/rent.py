@@ -31,6 +31,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 import pwd
 import re
@@ -360,7 +361,249 @@ def read_pubkey(path: Path | str) -> str:
     return lines[0]
 
 
-def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = "e4b-rent", ssh_pubkey: str | None = None):
+def _vast_anchor_exclusions(receipts: list[str], *, runs_root: Path, expected: dict[str, Any],
+                            schema_path: Path = SCHEMA_PATH) -> tuple[set[str], list[dict[str, str]]]:
+    """Derive machine exclusions only from canonical, committed strict-anchor BOX_REFUSED receipts."""
+    if not receipts:
+        return set(), []
+    root = runs_root.expanduser().resolve()
+    git_root_probe = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True, text=True,
+    )
+    if git_root_probe.returncode != 0:
+        raise RentRefused(f"--runs-root {root}: not inside the canonical receipt Git repository")
+    git_root = Path(git_root_probe.stdout.strip()).resolve()
+    try:
+        root_rel = root.relative_to(git_root).as_posix()
+    except ValueError as e:
+        raise RentRefused(f"--runs-root {root}: outside receipt Git repository {git_root}") from e
+    if root_rel != "receipts/experts4bit-qlora":
+        raise RentRefused(
+            f"--runs-root {root}: expected receipts/experts4bit-qlora in the canonical receipt repository"
+        )
+    origin_probe = subprocess.run(
+        ["git", "-C", str(git_root), "remote", "get-url", "origin"], capture_output=True, text=True,
+    )
+    if origin_probe.returncode != 0 or origin_probe.stdout.strip() != expected["receipt_repo_origin"]:
+        raise RentRefused(f"--runs-root {root}: canonical receipt repository origin mismatch")
+    git_head_probe = subprocess.run(
+        ["git", "-C", str(git_root), "rev-parse", "HEAD"], capture_output=True, text=True,
+    )
+    if git_head_probe.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40,64}", git_head_probe.stdout.strip()):
+        raise RentRefused(f"--runs-root {root}: receipt Git HEAD identity unavailable")
+    git_head = git_head_probe.stdout.strip()
+    upstream_probe = subprocess.run(
+        ["git", "-C", str(git_root), "rev-parse", "@{upstream}"], capture_output=True, text=True,
+    )
+    if upstream_probe.returncode != 0 or upstream_probe.stdout.strip() != git_head:
+        raise RentRefused(f"--runs-root {root}: receipt Git HEAD is not the configured upstream commit")
+
+    def tracked_bytes(candidate: Path) -> tuple[bytes, str]:
+        candidate = candidate.resolve()
+        try:
+            git_rel = candidate.relative_to(git_root).as_posix()
+        except ValueError as e:
+            raise RentRefused(f"anchor-exclusion evidence {candidate}: outside receipt Git repository {git_root}") from e
+        show = subprocess.run(["git", "-C", str(git_root), "show", f"{git_head}:{git_rel}"], capture_output=True)
+        if show.returncode != 0:
+            raise RentRefused(f"anchor-exclusion evidence {candidate}: not tracked at receipt Git HEAD")
+        try:
+            disk = candidate.read_bytes()
+        except OSError as e:
+            raise RentRefused(f"anchor-exclusion evidence {candidate}: absent from the worktree") from e
+        if disk != show.stdout:
+            raise RentRefused(f"anchor-exclusion evidence {candidate}: worktree bytes differ from receipt Git HEAD")
+        blob = subprocess.run(
+            ["git", "-C", str(git_root), "rev-parse", f"{git_head}:{git_rel}"], capture_output=True, text=True,
+        )
+        if blob.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40,64}", blob.stdout.strip()):
+            raise RentRefused(f"anchor-exclusion evidence {candidate}: Git blob identity unavailable")
+        return disk, blob.stdout.strip()
+
+    machine_ids: set[str] = set()
+    evidence: list[dict[str, str]] = []
+    for raw in receipts:
+        path = Path(raw).expanduser().resolve()
+        if path.is_dir():
+            path /= "receipt.json"
+        try:
+            rel = path.relative_to(root)
+        except ValueError as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: outside canonical --runs-root {root}") from e
+        if path.name != "receipt.json":
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: expected receipt.json")
+        run_status = subprocess.run(
+            ["git", "-C", str(git_root), "status", "--porcelain", "--untracked-files=all", "--",
+             path.parent.relative_to(git_root).as_posix()],
+            capture_output=True, text=True,
+        )
+        if run_status.returncode != 0 or run_status.stdout:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: receipt run differs from receipt Git HEAD")
+        raw_bytes, receipt_blob = tracked_bytes(path)
+        try:
+            receipt = json.loads(raw_bytes)
+        except json.JSONDecodeError as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: invalid JSON") from e
+        if not isinstance(receipt, dict):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: receipt JSON must be an object")
+        try:
+            validate_receipt(receipt, schema_path)
+        except (ReceiptInvalid, OSError, json.JSONDecodeError) as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: receipt schema invalid: {e}") from e
+        required = {
+            "repo": expected["repo"], "work_id": expected["work_id"],
+            "preregistration": expected["preregistration"], "provider": "vast:verified-secure",
+            "gpu_model": expected["gpu_model"], "container_image": expected["container_image"],
+            "dataset": expected["dataset"], "dataset_hash": expected["dataset_hash"],
+            "model": expected["model"], "model_revision": expected["model_revision"],
+            "requested_by": expected["executor"], "executed_by": expected["executor"],
+            "approvals": expected["approvals"], "status": "HARNESS_ERROR", "result": "fail",
+        }
+        mismatch = [f"{key}={receipt.get(key)!r} (want {want!r})" for key, want in required.items() if receipt.get(key) != want]
+        if mismatch:
+            detail = ", ".join(mismatch)
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: identity/status mismatch: {detail}")
+        if receipt.get("complete") is not True or receipt.get("dirty_tree") is not False:
+            raise RentRefused(
+                f"--exclude-vast-anchor-receipt {path}: complete must be true and dirty_tree must be false booleans"
+            )
+        if type(receipt.get("gpu_count")) is not int or receipt.get("gpu_count") != 1:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: exact one-GPU scope not proven")
+        if receipt.get("metrics") != {}:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: strict-anchor refusal must have empty metrics")
+        run_id = str(receipt.get("experiment_id", ""))
+        instance_id = str(receipt.get("instance_id", ""))
+        env = receipt.get("environment")
+        if not isinstance(env, dict):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: environment must be an object")
+        machine_id = str(env.get("vast_machine_id", ""))
+        offer_id = str(env.get("vast_offer_id", ""))
+        if (not run_id or path.parent.name != run_id or not instance_id.isdigit() or not machine_id.isdigit()
+                or not offer_id.isdigit()
+                or env.get("vast_contract_id") != instance_id):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: bound run/contract/machine identity absent")
+        expected_filter = {
+            "verified": {"eq": True}, "external": {"eq": False}, "rentable": {"eq": True},
+            "type": "on-demand", "num_gpus": {"eq": 1}, "gpu_name": {"eq": expected["gpu_model"]},
+            "disk_space": {"gte": 320}, "cpu_ram": {"gte": 98 * 1024}, "order": [["dph_total", "asc"]],
+        }
+        try:
+            disk_gb = float(env.get("vast_disk_space_gb", ""))
+            ram_mb = float(env.get("vast_cpu_ram_mb", ""))
+            dph = float(env.get("vast_dph_total", ""))
+        except (TypeError, ValueError) as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: recorded offer facts malformed") from e
+        if (env.get("vast_verification") != "verified" or env.get("vast_gpu_name") != expected["gpu_model"]
+                or env.get("vast_image") != expected["container_image"]
+                or env.get("vast_search_filter") != json.dumps(expected_filter, sort_keys=True)
+                or not all(math.isfinite(value) for value in (disk_gb, ram_mb, dph))
+                or disk_gb < 320 or ram_mb < 98 * 1024 or dph < 0 or dph > float(expected["max_dph"])):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: verified offer/search contract mismatch")
+        teardown = receipt.get("teardown_proof")
+        if not isinstance(teardown, dict):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: teardown_proof must be an object")
+        try:
+            teardown_evidence = json.loads(teardown.get("evidence", ""))
+        except (TypeError, json.JSONDecodeError) as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: teardown evidence is not JSON") from e
+        if not isinstance(teardown_evidence, dict):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: teardown evidence must be an object")
+        destroy = teardown_evidence.get("destroy") or {}
+        if not isinstance(destroy, dict):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: destroy evidence must be an object")
+        if (teardown.get("complete") is not True or teardown.get("method") != "vast-destroy"
+                or teardown.get("instance_id") != instance_id
+                or teardown_evidence.get("instance_absent") is not True or teardown_evidence.get("list_after") != []
+                or destroy.get("instance_id") != instance_id or destroy.get("http") != 200):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: complete instance-bound zero teardown not proven")
+        p41 = path.parent / "p41"
+        nonce_bytes, _ = tracked_bytes(p41 / "P41_RUN_NONCE")
+        try:
+            nonce = nonce_bytes.decode("ascii").strip()
+        except UnicodeDecodeError as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: malformed P41 nonce") from e
+        if not re.fullmatch(r"[0-9a-f]{64}", nonce) or nonce_bytes != nonce.encode("ascii") + b"\n":
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: malformed P41 nonce")
+        box_refused_bytes, _ = tracked_bytes(p41 / "BOX_REFUSED")
+        done_bytes, _ = tracked_bytes(p41 / f"TP_DONE.{nonce}")
+        exit_bytes, _ = tracked_bytes(p41 / f"P41_EXIT_CODE.{nonce}")
+        success_probe = subprocess.run(
+            ["git", "-C", str(git_root), "cat-file", "-e", f"{git_head}:{(p41 / f'P41_SUCCESS.{nonce}').relative_to(git_root).as_posix()}"],
+            capture_output=True,
+        )
+        if box_refused_bytes != b"" or done_bytes != b"" \
+                or exit_bytes != b"12\n" or success_probe.returncode == 0:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: strict-anchor exit must be exact 12\n without SUCCESS")
+        instance_bytes, _ = tracked_bytes(p41 / "INSTANCE_ID")
+        if instance_bytes != instance_id.encode("ascii") + b"\n":
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: staged instance identity mismatch")
+        box_bytes, _ = tracked_bytes(p41 / "box.json")
+        anchor_bytes, _ = tracked_bytes(p41 / "anchor.json")
+        gate_bytes, _ = tracked_bytes(p41 / "logs" / "anchor_gate.log")
+        summary_bytes, _ = tracked_bytes(p41 / "summary.txt")
+        outer_bytes, _ = tracked_bytes(p41 / "outer.log")
+        runner_bytes, _ = tracked_bytes(p41 / "p41_run.sh")
+        gate_runner_bytes, _ = tracked_bytes(p41 / "train_anchor_gate.py")
+        try:
+            box = json.loads(box_bytes)
+            anchor = json.loads(anchor_bytes)
+        except json.JSONDecodeError as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: box/anchor JSON invalid") from e
+        if not isinstance(box, dict) or not isinstance(anchor, dict):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: box/anchor JSON must be objects")
+        if (box.get("run_id") != run_id or box.get("instance_id") != instance_id
+                or box.get("provider") != "vast:verified-secure" or box.get("registered_gpu_class") != expected["gpu_model"]
+                or box.get("gpu_name") != "NVIDIA GeForce RTX 5090"
+                or not re.fullmatch(r"GPU-[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}",
+                                    str(box.get("gpu_uuid", "")))
+                or anchor.get("status") != "OK" or anchor.get("gpu") != box.get("gpu_name")):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: box/anchor identity mismatch")
+        try:
+            gate = gate_bytes.decode("utf-8")
+            summary = summary_bytes.decode("utf-8")
+            outer = outer_bytes.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: anchor gate logs are not UTF-8") from e
+        gate_refused = (gate.endswith("\nBOX REFUSED\n") and
+                        re.search(r"(?m)^\s+(?:flops|launch\.self_pair|h2d\.self_pair)\s+.*(?:FATAL:|REFUSE:)", gate))
+        class_match = re.search(r"(?m)^\s*class\s+([A-Za-z0-9._/-]+)\s+reported\s*$", gate)
+        anchor_class = class_match.group(1) if class_match else ""
+        strict_tail = f"ANCHOR rc=3 class={anchor_class}\nBOX REFUSED by train anchor (rc=3)\n"
+        if not gate_refused or not anchor_class or not summary.endswith(strict_tail) or not outer.endswith(strict_tail):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: strict train-anchor refusal logs not proven")
+        if hashlib.sha256(runner_bytes).hexdigest() != expected["p41_run_sha256"]:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: archived P41 runner identity mismatch")
+        if hashlib.sha256(gate_runner_bytes).hexdigest() != expected["train_anchor_gate_sha256"]:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: archived train-anchor gate identity mismatch")
+        tree = subprocess.run(
+            ["git", "-C", str(git_root), "ls-tree", "-r", "--name-only", git_head, "--", p41.relative_to(git_root).as_posix()],
+            capture_output=True, text=True,
+        )
+        if tree.returncode != 0:
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: P41 evidence inventory unavailable")
+        row_names = [Path(name).name for name in tree.stdout.splitlines()
+                     if re.fullmatch(r".+_e4b_.+\.json", Path(name).name)]
+        forbidden_markers = [Path(name).name for name in tree.stdout.splitlines()
+                             if Path(name).name.startswith(("P41_SUCCESS.", "P41_OUTCOME_COUNTS."))]
+        if row_names or forbidden_markers or re.search(r"(?m)^RESULT ", summary):
+            raise RentRefused(f"--exclude-vast-anchor-receipt {path}: scientific receipt rows exist: {row_names}")
+        machine_ids.add(machine_id)
+        evidence.append({
+            "path": rel.as_posix(), "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+            "git_blob": receipt_blob, "git_head": git_head, "run_id": run_id, "machine_id": machine_id,
+            "repo_origin": origin_probe.stdout.strip(),
+        })
+    evidence.sort(key=lambda item: (item["machine_id"], item["path"], item["sha256"]))
+    end_head = subprocess.run(
+        ["git", "-C", str(git_root), "rev-parse", "HEAD"], capture_output=True, text=True,
+    )
+    if end_head.returncode != 0 or end_head.stdout.strip() != git_head:
+        raise RentRefused("receipt Git HEAD changed while validating anchor-exclusion evidence")
+    return machine_ids, evidence
+
+
+def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = "e4b-rent",
+                 ssh_pubkey: str | None = None, excluded_vast_machine_ids: set[str] | None = None):
     """The provider for `kind`. Live Vast (#455) is armed only by E4B_RENT_LIVE=1 and a mode-600 key file
     (`~/.vast/secrets.env`, key read by shape, never echoed); every other live kind still refuses by name."""
     if kind == "fake":
@@ -370,7 +613,11 @@ def provider_for(kind: str, *, fake_state: Path | None = None, run_label: str = 
     if kind == "vast:verified-secure":
         from experts4bit_qlora.tools import vast_provider
         try:
-            return vast_provider.provider_from_env(run_label=run_label, **({"ssh_pubkey": ssh_pubkey} if ssh_pubkey else {}))
+            return vast_provider.provider_from_env(
+                run_label=run_label,
+                excluded_machine_ids=excluded_vast_machine_ids,
+                **({"ssh_pubkey": ssh_pubkey} if ssh_pubkey else {}),
+            )
         except (vast_provider.VastRefused, vast_provider.BackendUnavailable) as e:
             raise RentRefused(f"live provider {kind} refused: {e}") from e
     if kind == "runpod:secure":
@@ -841,6 +1088,8 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--schema", default=str(SCHEMA_PATH))
     ap.add_argument("--run-id")
     ap.add_argument("--provider", default="vast:verified-secure")
+    ap.add_argument("--exclude-vast-anchor-receipt", action="append", default=[], metavar="PATH",
+                    help="canonical prior strict-anchor BOX_REFUSED receipt whose Vast machine is excluded; repeatable")
     ap.add_argument("--fake-state")
     ap.add_argument("--gpu", default="RTX 5090")
     ap.add_argument("--usd-per-hour", type=float, required=True)
@@ -948,8 +1197,13 @@ def main(argv: list[str] | None = None) -> int:
                                    "approver_spec": "unresolved",
                                    "heartbeat_timeout_s": str(args.heartbeat_timeout_s),
                                    "python": sys.version.split()[0]}
+    excluded_vast_machine_ids: set[str] = set()
+    exclusion_evidence: list[dict[str, str]] = []
+    environment["vast_excluded_machine_ids"] = json.dumps(sorted(excluded_vast_machine_ids))
+    environment["vast_anchor_exclusion_receipts"] = json.dumps(exclusion_evidence, sort_keys=True)
     configuration = {"dry_run": bool(args.dry_run), "wallclock_h": args.wallclock_h,
-                     "usd_per_hour": args.usd_per_hour, "gpu": args.gpu, "image": args.image}
+                     "usd_per_hour": args.usd_per_hour, "gpu": args.gpu, "image": args.image,
+                     "vast_anchor_exclusion_receipts": exclusion_evidence}
 
     def refused(msg: str, spec: str | None, *, status: str = "REFUSED", method: str = "not-launched",
                 complete: bool = True, record_run_id: str | None = None,
@@ -1013,6 +1267,25 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as e:
         return refused(f"cannot reserve run id {run_id!r}: {e}", spec)
     try:
+        # Validate canonical exclusion evidence only after the live-controller lock and run-id reservation.
+        # A bad or racing evidence set therefore yields a schema-valid refusal receipt and cannot reach PUT.
+        excluded_vast_machine_ids, exclusion_evidence = _vast_anchor_exclusions(
+            args.exclude_vast_anchor_receipt, runs_root=Path(args.runs_root),
+            expected={"repo": "pjordanandrsn/experts4bit-qlora", "executor": who,
+                      "approvals": approvals, "work_id": args.work_id,
+                      "receipt_repo_origin": "https://github.com/pjordanandrsn/adertha-agents.git",
+                      "preregistration": args.preregistration, "gpu_model": args.gpu,
+                      "container_image": args.image, "dataset": args.dataset,
+                      "dataset_hash": args.dataset_hash, "model": args.model,
+                      "model_revision": args.model_revision,
+                      "max_dph": args.usd_per_hour,
+                      "p41_run_sha256": "292482969a3936955c42eea7b84886f417bd7151ee82ba68de410bdd8aa81b9d",
+                      "train_anchor_gate_sha256": "171fde58ad9451e27ba1268828deb47d089bf9168febf6baaa6fc0cb69de948e"},
+            schema_path=schema_path,
+        )
+        environment["vast_excluded_machine_ids"] = json.dumps(sorted(excluded_vast_machine_ids))
+        environment["vast_anchor_exclusion_receipts"] = json.dumps(exclusion_evidence, sort_keys=True)
+        configuration["vast_anchor_exclusion_receipts"] = exclusion_evidence
         spec = evaluate_launch(
             policy, ledger, role=args.role, estimate=estimate,
             provider=policy_provider, gpu=args.gpu, wallclock_h=args.wallclock_h,
@@ -1021,7 +1294,10 @@ def main(argv: list[str] | None = None) -> int:
         fake_state = Path(args.fake_state) if args.fake_state else rec_dir / "fake-state.json"
         ssh_pubkey = read_pubkey(args.ssh_pubkey) if args.ssh_pubkey else None  # #464: by shape, or a named refusal
         environment["ssh_pubkey_given"] = "yes" if ssh_pubkey else "no"   # #465 MEDIUM-1: the attach itself is the pre-flight's fact (vast_ssh_key_attached)
-        prov = provider_for(provider, fake_state=fake_state, run_label=run_id, ssh_pubkey=ssh_pubkey)  # MEDIUM-3: a live-provider refusal is a receipt too
+        prov = provider_for(
+            provider, fake_state=fake_state, run_label=run_id, ssh_pubkey=ssh_pubkey,
+            excluded_vast_machine_ids=excluded_vast_machine_ids,
+        )  # MEDIUM-3: a live-provider refusal is a receipt too
     except RentRefused as e:
         return refused(str(e), spec)
 
@@ -1029,6 +1305,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         iid = prov.launch(gpu=args.gpu, wallclock_h=args.wallclock_h, image=args.image, max_dph=args.usd_per_hour)  # #464: the offer must fit the declared rate
     except Exception as e:  # noqa: BLE001 - #455: a create that fails at the provider is a refusal receipt, not a crash
+        for k, v in (getattr(prov, "launch_facts", lambda: {})() or {}).items():
+            environment[k] = str(v)
         # CEO read (#460): a create the adapter could not parse is not a clean refusal. The adapter has already
         # swept by this run's label; what it proved decides the receipt: instances found and destroyed → ALARM,
         # complete (money was spent, the box is gone); nothing provable → ALARM, complete=False, a human checks
