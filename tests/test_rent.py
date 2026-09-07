@@ -23,6 +23,7 @@ POLICY = json.loads(POLICY_PATH.read_text())
 SCHEMA = REPO / "docs" / "run-receipt-schema.json"
 PERM = "https://cerin-amroth.slack.com/archives/C0BV5028SGM/p1788680181409539"
 GROK = {"CTO": "cursor-desktop-mini/grok"}
+_MISSING = object()
 
 def _ledger_module():
     spec = importlib.util.spec_from_file_location("check_run_ledger", REPO / "scripts" / "check_run_ledger.py")
@@ -468,6 +469,71 @@ def test_cli_dry_run_writes_complete_receipt(tmp_path: Path):
     assert rec["decision"] == "pending experts4bit-qlora#430" and rec["environment"]["approver_spec"] == "requesting-agent"
     assert rec["cpu"] == "unknown" and rec["teardown_proof"]["method"] == "fake-destroy"
     assert rec["artifacts"][0]["path"] == "receipt.json"
+
+
+@pytest.mark.parametrize(
+    "complete_value",
+    [False, None, 0, "false", pytest.param(_MISSING, id="missing")],
+    ids=["false", "null", "zero", "string", "missing"],
+)
+def test_ok_pass_receipt_requires_complete_in_both_validators(
+    tmp_path: Path, monkeypatch, complete_value: object,
+):
+    assert main(_cli(tmp_path, "rent-complete-invariant-1")) == 0
+    rec = _receipt(tmp_path)
+    incomplete = dict(rec)
+    if complete_value is _MISSING:
+        incomplete.pop("complete")
+    else:
+        incomplete["complete"] = complete_value
+
+    with pytest.raises(ReceiptInvalid, match="OK/pass receipts require complete=true"):
+        validate_receipt(incomplete, SCHEMA)
+    checker = _ledger_module()
+    with pytest.raises(SystemExit):
+        checker.validate_receipt(tmp_path / "incomplete.json", incomplete)
+
+    monkeypatch.setitem(sys.modules, "jsonschema", None)
+    with pytest.raises(ReceiptInvalid, match="OK/pass receipts require complete=true"):
+        validate_receipt(incomplete, SCHEMA)
+    with pytest.raises(SystemExit):
+        checker.validate_receipt(tmp_path / "incomplete-fallback.json", incomplete)
+
+
+@pytest.mark.parametrize("proof_complete", [False, None, 0, "false"], ids=["false", "null", "zero", "string"])
+def test_ok_pass_receipt_requires_true_nested_teardown_complete_when_present(
+    tmp_path: Path, monkeypatch, proof_complete: object,
+):
+    assert main(_cli(tmp_path, "rent-proof-complete-invariant-1")) == 0
+    rec = _receipt(tmp_path)
+    contradictory = dict(rec, teardown_proof=dict(rec["teardown_proof"], complete=proof_complete))
+
+    with pytest.raises(ReceiptInvalid):
+        validate_receipt(contradictory, SCHEMA)
+    checker = _ledger_module()
+    with pytest.raises(SystemExit):
+        checker.validate_receipt(tmp_path / "contradictory.json", contradictory)
+
+    monkeypatch.setitem(sys.modules, "jsonschema", None)
+    with pytest.raises(ReceiptInvalid):
+        validate_receipt(contradictory, SCHEMA)
+    with pytest.raises(SystemExit):
+        checker.validate_receipt(tmp_path / "contradictory-fallback.json", contradictory)
+
+
+def test_ok_pass_receipt_allows_historical_nested_teardown_complete_omission(tmp_path: Path, monkeypatch):
+    assert main(_cli(tmp_path, "rent-proof-complete-historical-1")) == 0
+    rec = _receipt(tmp_path)
+    historical = dict(rec, teardown_proof=dict(rec["teardown_proof"]))
+    historical["teardown_proof"].pop("complete")
+
+    validate_receipt(historical, SCHEMA)
+    checker = _ledger_module()
+    checker.validate_receipt(tmp_path / "historical.json", historical)
+
+    monkeypatch.setitem(sys.modules, "jsonschema", None)
+    validate_receipt(historical, SCHEMA)
+    checker.validate_receipt(tmp_path / "historical-fallback.json", historical)
 
 
 def test_failed_command_still_receipts_and_tears_down(tmp_path: Path):
@@ -1152,6 +1218,49 @@ def test_teardown_listing_outage_holds_lock_and_retries_until_absence(tmp_path: 
     tp = rec["teardown_proof"]
     assert tp["complete"] is True and tp["reason"] == "completion"
     assert json.loads(tp["evidence"])["list_after"] == [] and json.loads(tp["evidence"])["instance_absent"] is True
+
+
+def test_receipt_reuses_authenticated_teardown_absence_when_next_listing_would_429(
+    tmp_path: Path, monkeypatch,
+):
+    """The listing that closes the own-teardown loop is final evidence; a redundant next request cannot void it."""
+    import experts4bit_qlora.tools.rent as rent_mod
+
+    class NextListingWouldRateLimit(FakeProvider):
+        def __init__(self, state_path: Path):
+            super().__init__(state_path)
+            self.list_calls = 0
+
+        def list_ids(self):
+            self.list_calls += 1
+            if self.list_calls >= 3:
+                raise RuntimeError("HTTP 429 after authenticated teardown absence")
+            return super().list_ids()
+
+    provider = NextListingWouldRateLimit(tmp_path / "rent-final-list-429-fake.json")
+    guards: list[subprocess.Popen] = []
+
+    def _spawn(*, python, module_args, log_path, **kwargs):
+        proc = _arming_guard_spawn(module_args, "import time; time.sleep(60)\n")
+        guards.append(proc)
+        return proc
+
+    monkeypatch.setattr(rent_mod, "provider_for", lambda kind, **kwargs: provider)
+    monkeypatch.setattr(rent_mod, "spawn_guard", _spawn)
+    try:
+        rc = main(_cli(tmp_path, "rent-final-list-429", "--command", "true"))
+    finally:
+        for guard in guards:
+            if guard.poll() is None:
+                guard.kill()
+
+    rec = _receipt(tmp_path)
+    assert provider.list_calls == 2, "the controller made a redundant listing after proving absence"
+    assert rc == 0 and rec["status"] == "OK" and rec["result"] == "pass" and rec["complete"] is True
+    proof = rec["teardown_proof"]
+    assert proof["instance_id"] == rec["instance_id"] and proof["complete"] is True
+    evidence = json.loads(proof["evidence"])
+    assert evidence["instance_absent"] is True and evidence["list_after"] == []
 
 
 def test_unparsed_create_with_nothing_provable_is_an_alarm_receipt(tmp_path: Path, monkeypatch):
