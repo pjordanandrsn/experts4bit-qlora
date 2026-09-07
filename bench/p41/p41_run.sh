@@ -29,8 +29,13 @@ E4B_VER=${P41_E4B_VER:-0.35.3}; GNF4_VER=${P41_GNF4_VER:-0.30.2}            # th
 # version it pinned. R1 attempt 4 (2026-09-07T01:23Z) proved it on a rented box: TRIPWIRE FAIL, 0 of 19 arms.
 # Install the exact commit instead of a version string: a commit is a pin, a version is a promise someone kept.
 # Override with P41_E4B_PIN to go back to a released wheel once one exists that carries the API.
-E4B_COMMIT=${P41_E4B_COMMIT:-0a0b2136e3cc5ea3d7d80c1f6b83f0acf34a5e5f}
-E4B_PIN=${P41_E4B_PIN:-experts4bit-qlora@git+https://github.com/pjordanandrsn/experts4bit-qlora@$E4B_COMMIT}
+E4B_COMMIT=${P41_E4B_COMMIT:-66c540f0fc69c9cde0f5d4151d5a96869e619671}
+# Install from the GitHub source ARCHIVE, not `git+https`. Attempt 5 (2026-09-07T01:37Z) proved pip's git path
+# fails on this image: `git fetch -q https://github.com/… <sha>` exits 128 — fetching a bare commit needs the
+# server to allow it and git to be configured for it, and neither is true here. The archive URL is the same
+# mechanism the lane already uses for its helper tarball, over plain HTTPS, and it has fetched 87 MB and matched
+# four sha256 hashes on every box tonight. Use what is already proven on the box.
+E4B_PIN=${P41_E4B_PIN:-https://github.com/pjordanandrsn/experts4bit-qlora/archive/$E4B_COMMIT.tar.gz}
 TF_VER=${P41_TRANSFORMERS_VER:-5.16.1}; BNB_VER=${P41_BNB_VER:-0.50.1}       # tp1/P38's e4b-side pins, as tp2 ran them
 E4B_SRC_REF=${P41_E4B_SRC_REF:-0c2a256dcdc2cb0a83cf7692224a8aa716f61ecd}   # = tag v0.35.3 resolved to its commit (tags move; commits do not)
 # the four helper files at that commit, sha256 (git show v0.35.3:<path> | sha256sum on the controller, 2026-09-06); a mismatch refuses the run
