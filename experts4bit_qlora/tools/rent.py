@@ -695,6 +695,13 @@ def validate_receipt(receipt: dict[str, Any], schema_path: Path = SCHEMA_PATH) -
     tp = receipt.get("teardown_proof")
     if isinstance(tp, dict) and "instance_id" in tp and tp.get("instance_id") != receipt.get("instance_id"):
         problems.append("teardown_proof.instance_id must equal receipt instance_id")
+    # A successful workload is not a complete run until teardown has been authenticated. Keep this
+    # cross-field invariant outside the jsonschema/fallback split so both validation paths fail closed.
+    if receipt.get("status") == "OK" and receipt.get("result") == "pass":
+        if receipt.get("complete") is not True:
+            problems.append("OK/pass receipts require complete=true")
+        if isinstance(tp, dict) and "complete" in tp and tp.get("complete") is not True:
+            problems.append("OK/pass receipts require teardown_proof.complete=true when present")
     if problems:
         raise ReceiptInvalid("receipt does not satisfy the schema: " + "; ".join(problems[:8]))
 
@@ -1125,6 +1132,11 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, json.JSONDecodeError):
             return None
         return candidate if candidate.get("instance_id") == iid else None
+    # The listing that accepts a guard proof, or the one that completes our own teardown loop, is the
+    # authenticated absence fact for this receipt. Reuse it through receipt construction: asking the
+    # provider again adds no evidence and can turn an already-proven teardown into UNKNOWN on a transient
+    # rate-limit response (#486).
+    authenticated_absent = False
     proof = _read_proof()
     if proof is not None:
         _proof_live = _list_or_unknown(prov)
@@ -1133,6 +1145,8 @@ def main(argv: list[str] | None = None) -> int:
             status, result = "ALARM", "invalid"
             notes = "ignored teardown proof without authenticated absence for this instance (" + notes + ")"
             proof = None
+        else:
+            authenticated_absent = True
     # Warden MEDIUM-1 (#460): a listing that fails here is UNKNOWN — never "gone", never a proof, never
     # complete=True. `_list_or_unknown` (the guard's helper) answers None on any failure.
     _live0 = _list_or_unknown(prov) if proof is None else None
@@ -1149,6 +1163,7 @@ def main(argv: list[str] | None = None) -> int:
                                              "list_after": sorted(_after) if _after is not None else "UNKNOWN"},
                                             sort_keys=True), "complete": _absent, "instance_id": iid, "at": _utc()}
             _write_proof(proof_path, proof)
+            authenticated_absent = _absent
     # Item 3 (#446): TOCTOU residual -- the guard may have written guard-firing.json *before* destroy but
     # the instance is still live (or only just gone) when the launcher checks. Treat the marker like a
     # proof: wait briefly for the guard's real proof, then synthesise one if it hasn't arrived yet.
@@ -1174,14 +1189,23 @@ def main(argv: list[str] | None = None) -> int:
                 status, result = "ALARM", "invalid"
                 notes = "ignored guard-firing marker for a different instance (" + notes + ")"
     # A proof may have appeared while either wait above was in progress. Treat it as final only when it names
-    # this instance, says complete, and a fresh authenticated listing independently proves the instance absent.
+    # this instance, says complete, and an authenticated listing proves the instance absent. A prior proof
+    # check may already have established that fact; otherwise obtain exactly one here and carry it forward.
     if proof is not None:
-        _proof_live = _list_or_unknown(prov)
-        _proof_absent = _proof_live is not None and iid not in _proof_live
-        if proof.get("instance_id") != iid or proof.get("complete") is not True or not _proof_absent:
+        if proof.get("instance_id") != iid or proof.get("complete") is not True:
             status, result = "ALARM", "invalid"
             notes = "ignored teardown proof without authenticated absence for this instance (" + notes + ")"
             proof = None
+            authenticated_absent = False
+        elif not authenticated_absent:
+            _proof_live = _list_or_unknown(prov)
+            _proof_absent = _proof_live is not None and iid not in _proof_live
+            if not _proof_absent:
+                status, result = "ALARM", "invalid"
+                notes = "ignored teardown proof without authenticated absence for this instance (" + notes + ")"
+                proof = None
+            else:
+                authenticated_absent = True
     if proof is not None:
         reason = proof.get("reason") or "unknown"
         status, result = "ALARM", "invalid"
@@ -1201,6 +1225,7 @@ def main(argv: list[str] | None = None) -> int:
             remaining = _list_or_unknown(prov)
             _absent = remaining is not None and iid not in remaining
             if _absent:
+                authenticated_absent = True
                 break
             # There is no atomic way to hand the lock back to a guard between poll() and its exit. Keep the
             # parent and its descriptor alive until authenticated absence, regardless of guard liveness.
@@ -1229,9 +1254,11 @@ def main(argv: list[str] | None = None) -> int:
                 guard.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 pass
-    _final = _list_or_unknown(prov)
-    gone = _final is not None and iid not in _final
-    complete = gone and proof.get("method") not in (None, "pending")
+    gone = authenticated_absent
+    complete = authenticated_absent and proof.get("method") not in (None, "pending")
+    if status == "OK" and result == "pass" and not complete:
+        status, result = "ALARM", "invalid"
+        notes = "authenticated teardown absence was not established (" + notes + ")"
     actual_cost = 0.0  # fake provider bills nothing; a live adapter must read the provider's billing, never copy the estimate
     if hasattr(prov, "actual_cost"):
         actual_cost, cost_method = prov.actual_cost(iid, time.time() - t0)

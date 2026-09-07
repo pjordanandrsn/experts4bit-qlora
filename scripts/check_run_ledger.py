@@ -311,6 +311,14 @@ def validate_receipt(path: Path, data: dict[str, Any]) -> None:
     if isinstance(tp, dict) and "instance_id" in tp and tp["instance_id"] != data.get("instance_id"):
         fail(path, 0, "teardown_proof.instance_id must equal receipt instance_id")
 
+    # A successful workload is not a complete run until teardown has been authenticated. Enforce the
+    # producer's cross-field invariant here too, on both the jsonschema and manual fallback paths.
+    if data.get("status") == "OK" and data.get("result") == "pass":
+        if data.get("complete") is not True:
+            fail(path, 0, "OK/pass receipts require complete=true")
+        if isinstance(tp, dict) and "complete" in tp and tp.get("complete") is not True:
+            fail(path, 0, "OK/pass receipts require teardown_proof.complete=true when present")
+
     # ISO-8601 timestamp validation: run in both paths because Draft 2020-12 does not
     # enforce format: date-time without a format checker, so "yesterday" passes strict.
     for _ts_field in ["started_at", "finished_at"]:

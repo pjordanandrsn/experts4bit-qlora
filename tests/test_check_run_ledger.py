@@ -119,6 +119,7 @@ def test_passing_receipt(tmp_path: Path) -> None:
         },
         "status": "OK",
         "result": "pass",
+        "complete": True,
         "decision": "merge https://github.com/example/repo/issues/1",
         "notes": "Test run completed successfully",
     }
@@ -216,6 +217,7 @@ def test_over_ceiling_day(tmp_path: Path) -> None:
             "teardown_proof": {"method": "vast-cli-destroy", "evidence": f"Instance destroyed {i}"},
             "status": "OK",
             "result": "pass",
+            "complete": True,
             "decision": "continue https://github.com/example/repo/issues/2",
             "notes": f"Benchmark run {i}",
         }
@@ -319,6 +321,7 @@ def test_missing_approval(tmp_path: Path) -> None:
         "teardown_proof": {"method": "runpod-api-terminate", "evidence": "Terminated via API"},
         "status": "OK",
         "result": "pass",
+        "complete": True,
         "decision": "revise https://github.com/example/repo/issues/3",
         "notes": "Training completed but approval was insufficient",
     }
@@ -432,6 +435,7 @@ def test_global_daily_budget_violation(tmp_path):
         "teardown_proof": {"method": "vast-destroy", "evidence": "Instance terminated"},
         "status": "OK",
         "result": "pass",
+        "complete": True,
         "decision": "merge https://github.com/example/repo/pull/10",
         "notes": "First run of the day",
     }
@@ -492,6 +496,7 @@ def test_global_daily_budget_violation(tmp_path):
         "teardown_proof": {"method": "vast-destroy", "evidence": "Instance terminated"},
         "status": "OK",
         "result": "pass",
+        "complete": True,
         "decision": "merge https://github.com/example/repo/pull/11",
         "notes": "Second run of the day - pushes total to $101.5",
     }
@@ -613,6 +618,7 @@ _BASE_RECEIPT: dict = {
     },
     "status": "OK",
     "result": "pass",
+    "complete": True,
     "decision": "adopt https://github.com/pjordanandrsn/experts4bit-qlora/issues/999",
     "notes": "Schema-driven test baseline",
 }
