@@ -164,6 +164,18 @@ class FakeTransport:
 
 
 # ---------------------------------------------------------------------------------------------- provider
+STALE_ASK_MAX_SKIPS = 4      # how many already-taken asks to walk past before refusing (#488-class, R1 17/18)
+_STALE_ASK_RE = re.compile(r"no_such_ask|is not available", re.I)
+
+
+def _is_stale_ask(status: int, resp: Any) -> bool:
+    """The provider saying this ask is gone: HTTP 400 invalid_args with `no_such_ask … is not available`.
+    Understood and harmless — nothing was created — and distinct from a refusal we must not walk past."""
+    if status != 400 or not isinstance(resp, dict):
+        return False
+    return bool(_STALE_ASK_RE.search(str(resp.get("msg") or "") + " " + str(resp.get("error") or "")))
+
+
 def offer_filter(gpu: str, *, min_disk_gb: int, min_ram_gb: int) -> dict[str, Any]:
     """The server-side search filter for the policy's class; recorded verbatim in the receipt."""
     return {
@@ -269,27 +281,47 @@ class VastProvider:
         if not offers:
             suffix = f" after excluding machines {sorted(self.excluded_machine_ids)}" if self.excluded_machine_ids else ""
             raise VastRefused(f"no verified rentable {gpu} offer with ≥{self.min_disk_gb} GB disk and ≥{self.min_ram_gb} GB RAM right now{suffix}; refusing")
-        offer = offers[0]
         q = offer_filter(gpu, min_disk_gb=self.min_disk_gb, min_ram_gb=self.min_ram_gb)
-        self._facts.update({
-            "vast_offer_id": str(offer.get("id")),
-            "vast_machine_id": str(offer.get("machine_id", "UNKNOWN")),
-            "vast_dph_total": str(offer.get("dph_total", "UNKNOWN")),
-            "vast_gpu_name": str(offer.get("gpu_name", "UNKNOWN")),
-            "vast_disk_space_gb": str(offer.get("disk_space", "UNKNOWN")),
-            "vast_cpu_ram_mb": str(offer.get("cpu_ram", "UNKNOWN")),
-            "vast_verification": str(offer.get("verification", "UNKNOWN")),
-            "vast_search_filter": json.dumps(q, sort_keys=True),
-            "vast_image": image,
-        })
-        # e4b#464 (the money path): the approval line is `--usd-per-hour × cap`; an offer priced above the declared rate would make
-        # the receipt's estimate a lie. The cheapest verified offer must fit under the declared ceiling or nothing is created.
-        dph = offer.get("dph_total")
-        if max_dph is not None and (dph is None or float(dph) > float(max_dph)):
-            raise VastRefused(f"cheapest verified {gpu} offer is ${dph}/h, above the declared --usd-per-hour ${max_dph}/h the approval was given for; raise the ceiling (a new approval line) or wait — nothing created")
-        body = {"client_id": "me", "image": image, "disk": self.min_disk_gb, "label": self.run_label,
-                "runtype": "ssh", "onstart": None}
-        status, resp = self.t.request("PUT", f"/v0/asks/{offer['id']}/", body=body)
+        # A listing is a snapshot. Between the search and the create another buyer can take the ask, and Vast
+        # keeps serving it afterwards: R1 attempts 7, 11, 17 and 18 all died on `no_such_ask … is not available`,
+        # and 17 and 18 died on the SAME offer id minutes apart, so retrying the launch loops on it forever.
+        # The create IS the only test of whether an ask is still there, so walk down the sorted offers and let
+        # each create be that test. A taken ask is ordinary market behaviour, not a reason to refuse a launch.
+        # Bounded: a run of them means something else is wrong, and the receipt should say so rather than shop
+        # indefinitely. Every skip is recorded in the facts, and the ceiling is re-checked on each candidate —
+        # walking down the list must never walk past the price the approval was given for.
+        skipped: list[dict[str, str]] = []
+        resp = None
+        for offer in offers[:STALE_ASK_MAX_SKIPS + 1]:
+            self._facts.update({
+                "vast_offer_id": str(offer.get("id")),
+                "vast_machine_id": str(offer.get("machine_id", "UNKNOWN")),
+                "vast_dph_total": str(offer.get("dph_total", "UNKNOWN")),
+                "vast_gpu_name": str(offer.get("gpu_name", "UNKNOWN")),
+                "vast_disk_space_gb": str(offer.get("disk_space", "UNKNOWN")),
+                "vast_cpu_ram_mb": str(offer.get("cpu_ram", "UNKNOWN")),
+                "vast_verification": str(offer.get("verification", "UNKNOWN")),
+                "vast_search_filter": json.dumps(q, sort_keys=True),
+                "vast_image": image,
+                "vast_skipped_stale_offers": json.dumps(skipped, sort_keys=True),
+            })
+            # e4b#464 (the money path): the approval line is `--usd-per-hour × cap`; an offer priced above the declared rate would make
+            # the receipt's estimate a lie. The offer taken must fit under the declared ceiling or nothing is created.
+            dph = offer.get("dph_total")
+            if max_dph is not None and (dph is None or float(dph) > float(max_dph)):
+                raise VastRefused(f"cheapest remaining verified {gpu} offer is ${dph}/h, above the declared --usd-per-hour ${max_dph}/h the approval was given for; raise the ceiling (a new approval line) or wait — nothing created")
+            body = {"client_id": "me", "image": image, "disk": self.min_disk_gb, "label": self.run_label,
+                    "runtype": "ssh", "onstart": None}
+            status, resp = self.t.request("PUT", f"/v0/asks/{offer['id']}/", body=body)
+            if _is_stale_ask(status, resp):
+                skipped.append({"offer_id": str(offer.get("id")), "dph": str(offer.get("dph_total")),
+                                "detail": " ".join(str(_shape(resp)).split())[:120]})
+                continue
+            break
+        self._facts["vast_skipped_stale_offers"] = json.dumps(skipped, sort_keys=True)
+        if _is_stale_ask(status, resp):
+            raise VastRefused(f"{len(skipped)} consecutive offers were already taken between search and create "
+                              f"(no_such_ask); nothing created — the listing is stale, try again shortly")
         if status == 200 and isinstance(resp, dict) and resp.get("success") is False:
             # Understood: the provider refused and nothing was created (insufficient_credit, offer gone, …).
             raise BackendUnavailable(f"create did not succeed: HTTP {status}, body {_shape(resp)}")
