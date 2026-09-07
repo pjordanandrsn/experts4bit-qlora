@@ -48,5 +48,20 @@ say "fetched $(ls "$RUN_DIR/p41" | wc -l | tr -d ' ') entries into $RUN_DIR/p41"
 [ -f "$RUN_DIR/p41/TP_DONE" ] || { say "lane did not finish (no TP_DONE)"; exit 23; }
 [ -f "$RUN_DIR/p41/BOX_REFUSED" ] && { say "box refused by the train anchor (BOX_REFUSED)"; exit 12; }
 for m in STOP1 STOP2 STOP3 STOP4 STOP5; do [ -f "$RUN_DIR/p41/$m" ] && say "lane reports $m (a row, not a failure of the driver; stop_state.json has the reason)"; done
-say "admission: $(grep -c '^ADMIT OK' "$RUN_DIR/p41/summary.txt" 2>/dev/null) admitted, $(grep -c '^ADMIT VOID' "$RUN_DIR/p41/summary.txt" 2>/dev/null) VOID, $(grep -c 'STUB ' "$RUN_DIR/p41/summary.txt" 2>/dev/null) stubs"
+SUM="$RUN_DIR/p41/summary.txt"
+# `grep -c` PRINTS 0 and EXITS 1 when it matches nothing, so `|| echo 0` appends a second zero and the count
+# becomes the two-line string "0\n0" — which then fails `[ "$A" -eq 0 ]` with "too many arguments" and the guard
+# below never fires. Caught by testing this against attempt 4's real summary before shipping it. Use `|| :`.
+ADMITTED=$(grep -c '^ADMIT OK' "$SUM" 2>/dev/null || :)
+VOIDED=$(grep -c '^ADMIT VOID' "$SUM" 2>/dev/null || :)
+STUBS=$(grep -c 'STUB ' "$SUM" 2>/dev/null || :)
+ADMITTED=${ADMITTED:-0}; VOIDED=${VOIDED:-0}; STUBS=${STUBS:-0}
+say "admission: $ADMITTED admitted, $VOIDED VOID, $STUBS stubs"
+# e4b#489: attempt 4 planned 19 arms, admitted 0, exited 0, and the launcher recorded OK/pass/complete with
+# empty metrics. Every other gate was working and all of them certified a run that produced no data. A lane
+# that admits nothing has not run, and must say so in its exit code — the only question none of the gates asked.
+if [ "$ADMITTED" -eq 0 ] && [ "$VOIDED" -eq 0 ]; then
+  say "REFUSED: 0 arms admitted and 0 VOID — the lane produced no rows at all; see $SUM"
+  exit 8
+fi
 say "done"; exit 0
