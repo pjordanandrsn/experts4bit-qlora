@@ -4,9 +4,9 @@ turn a receipt that fails a validity rule into a VOID row and the p41c probe int
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -133,6 +133,7 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
     out = _bash(str(DRIVE), env=env)
     assert out.returncode == 0, out.stdout + out.stderr
     lines = out.stdout.splitlines()
+    assert any(ln.startswith("DRYRUN clean:") and "rm -rf -- /root/p41" in ln for ln in lines)
     assert any(
         ln.startswith("DRYRUN stage:")
         and "bench/tp3/tp3_arm.py" in ln
@@ -144,6 +145,7 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
     assert any(
         ln.startswith("DRYRUN start:")
         and "P41_RUN_ID=p41-r1-granite" in ln
+        and re.search(r"P41_RUN_NONCE=[0-9a-f]{64}", ln)
         and "P41_DEADLINE_EPOCH=1788800000" in ln
         and "P41_USD_PER_HOUR=0.66" in ln
         and "P41_PLAN_EST_USD=1.87" in ln
@@ -152,6 +154,9 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
         and "P41_INSTANCE_ID=50059999" in ln
         and "P41_PROVIDER=vast:verified-secure" in ln
         for ln in lines
+    )
+    assert any(
+        ln.startswith("DRYRUN poll :") and re.search(r"TP_DONE\.[0-9a-f]{64}", ln) for ln in lines
     )
     assert any(ln.startswith("DRYRUN fetch:") and "/tmp/run/p41/" in ln and "excluding adapters" in ln for ln in lines)
     assert not any("ssh-add" in ln or "PRIVATE" in ln for ln in lines)
@@ -177,10 +182,12 @@ def test_lane_script_never_calls_the_provider_and_names_no_credential():
     assert "TP_DONE" in run and all(f"STOP-{n}" in run for n in (1, 2, 3, 4, 5))
     # the helpers come from a COMMIT, never a tag, each file pinned by sha256 and verified before anything runs (Warden MEDIUM on #466)
     assert "refs/tags" not in run and 'bash -c "curl' not in run
-    import re
-
-    default_ref = re.search(r"E4B_SRC_REF=\$\{P41_E4B_SRC_REF:-([0-9a-f]+)\}", run).group(1)
-    assert len(default_ref) == 40
+    assert "E4B_SRC_REF=5dad2a7fe7020ced76df0ddd0cfc548627223496" in run
+    assert "E4B_ARCHIVE_SHA256=8c2562d23a213ae5773ed8f01170b7807e1cf6551f1f54fa5f694d7ae573e479" in run
+    assert "${P41_E4B_SRC_REF" not in run and "${P41_E4B_ARCHIVE_SHA256" not in run
+    assert "E4B_VER=0.35.3" in run and "GNF4_VER=0.30.2" in run
+    assert "ANCHOR_STRICT=1" in run and "STOP1_TOL=0.10" in run
+    assert "P41_E4B_VER" not in DRIVE.read_text() and "P41_GNF4_VER" not in DRIVE.read_text()
     pins = dict(kv.split("=") for kv in re.search(r'HELPER_SHAS="([^"]+)"', run).group(1).split())
     assert set(pins) == {
         "bench/flagship-matrix/drivers/n9_datasets.py",
@@ -219,16 +226,68 @@ def _write_executable(path: Path, text: str) -> None:
     path.chmod(0o755)
 
 
-def _fake_driver(tmp_path: Path, remote: Path) -> subprocess.CompletedProcess:
+def _fake_driver(
+    tmp_path: Path,
+    child_result: Path,
+    *,
+    child_starts: bool = True,
+    nonce_mode: str = "current",
+    stale_result: Path | None = None,
+    local_stale_result: Path | None = None,
+    deadline_s: int = 60,
+) -> subprocess.CompletedProcess:
     fake_bin = tmp_path / "driver-bin"
     fake_bin.mkdir(exist_ok=True)
+    live_remote = tmp_path / "driver-remote-live"
+    live_remote.mkdir(exist_ok=True)
+    if stale_result is not None:
+        subprocess.run(["cp", "-R", f"{stale_result}/.", str(live_remote)], check=True)
+    nonce_capture = tmp_path / "driver-expected-nonce"
     _write_executable(
         fake_bin / "ssh",
         """#!/bin/bash
 cmd=""
 for arg in "$@"; do cmd=$arg; done
 case "$cmd" in
-  *"test -f /root/p41/TP_DONE"*) test -f "$FAKE_REMOTE/TP_DONE" ;;
+  *"rm -rf -- /root/p41"*)
+    rm -rf "$FAKE_REMOTE"
+    mkdir -p "$FAKE_REMOTE/logs"
+    ;;
+  *"nohup env "*"p41_run.sh"*)
+    [ "$FAKE_CHILD_START" = "1" ] || exit 1
+    cp -R "$FAKE_CHILD_RESULT"/. "$FAKE_REMOTE"/
+    nonce=""
+    for word in $cmd; do case "$word" in P41_RUN_NONCE=*) nonce=${word#*=};; esac; done
+    printf '%s\n' "$nonce" > "$FAKE_NONCE_CAPTURE"
+    [ ! -f "$FAKE_REMOTE/TP_DONE" ] || mv "$FAKE_REMOTE/TP_DONE" "$FAKE_REMOTE/TP_DONE.$nonce"
+    [ ! -f "$FAKE_REMOTE/P41_EXIT_CODE" ] || mv "$FAKE_REMOTE/P41_EXIT_CODE" "$FAKE_REMOTE/P41_EXIT_CODE.$nonce"
+    [ ! -f "$FAKE_REMOTE/P41_SUCCESS" ] || mv "$FAKE_REMOTE/P41_SUCCESS" "$FAKE_REMOTE/P41_SUCCESS.$nonce"
+    for f in "$FAKE_REMOTE"/TP_DONE.*; do [ ! -e "$f" ] || [ "$f" = "$FAKE_REMOTE/TP_DONE.$nonce" ] || mv "$f" "$FAKE_REMOTE/TP_DONE.$nonce"; done
+    for f in "$FAKE_REMOTE"/P41_EXIT_CODE.*; do [ ! -e "$f" ] || [ "$f" = "$FAKE_REMOTE/P41_EXIT_CODE.$nonce" ] || mv "$f" "$FAKE_REMOTE/P41_EXIT_CODE.$nonce"; done
+    for f in "$FAKE_REMOTE"/P41_SUCCESS.*; do [ ! -e "$f" ] || [ "$f" = "$FAKE_REMOTE/P41_SUCCESS.$nonce" ] || mv "$f" "$FAKE_REMOTE/P41_SUCCESS.$nonce"; done
+    if [ -f "$FAKE_REMOTE/P41_OUTCOME_COUNTS.json" ]; then
+      python3 - "$FAKE_REMOTE/P41_OUTCOME_COUNTS.json" "$FAKE_REMOTE/P41_OUTCOME_COUNTS.$nonce.json" "$nonce" <<'PY'
+import json, sys
+src, dst, nonce = sys.argv[1:]
+obj = json.load(open(src))
+obj["run_nonce"] = nonce
+with open(dst, "w") as f:
+    json.dump(obj, f)
+    f.write("\\n")
+PY
+      rm -f "$FAKE_REMOTE/P41_OUTCOME_COUNTS.json"
+    fi
+    case "$FAKE_NONCE_MODE" in
+      current) printf '%s\n' "$nonce" > "$FAKE_REMOTE/P41_RUN_NONCE" ;;
+      wrong) printf '%064d\n' 0 > "$FAKE_REMOTE/P41_RUN_NONCE" ;;
+      missing) rm -f "$FAKE_REMOTE/P41_RUN_NONCE" ;;
+      *) exit 98 ;;
+    esac
+    ;;
+  *"test -f /root/p41/TP_DONE."*)
+    expected=$(cat "$FAKE_NONCE_CAPTURE" 2>/dev/null || true)
+    test -f "$FAKE_REMOTE/TP_DONE.$expected"
+    ;;
   *"tail -n 1 /root/p41/summary.txt"*) tail -n 1 "$FAKE_REMOTE/summary.txt" 2>/dev/null || true ;;
   *) exit 0 ;;
 esac
@@ -245,14 +304,22 @@ cp -R "$FAKE_REMOTE"/. "$dest"/
 """,
     )
     run_dir = tmp_path / "driver-run"
+    if local_stale_result is not None:
+        local = run_dir / "p41"
+        local.mkdir(parents=True)
+        subprocess.run(["cp", "-R", f"{local_stale_result}/.", str(local)], check=True)
     env = {
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
-        "FAKE_REMOTE": str(remote),
+        "FAKE_REMOTE": str(live_remote),
+        "FAKE_CHILD_RESULT": str(child_result),
+        "FAKE_CHILD_START": "1" if child_starts else "0",
+        "FAKE_NONCE_MODE": nonce_mode,
+        "FAKE_NONCE_CAPTURE": str(nonce_capture),
         "E4B_RENT_SSH_HOST": "fake.vast.invalid",
         "E4B_RENT_SSH_PORT": "12345",
         "E4B_RENT_RUN_DIR": str(run_dir),
         "E4B_RENT_RUN_ID": "p41-no-gpu-regression",
-        "E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + 60),
+        "E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + deadline_s),
         "E4B_RENT_WALLCLOCK_S": "60",
         "E4B_RENT_USD_PER_HOUR": "0.66",
         "E4B_RENT_EST_USD": "2.64",
@@ -260,6 +327,7 @@ cp -R "$FAKE_REMOTE"/. "$dest"/
         "E4B_RENT_PROVIDER": "vast:verified-secure",
         "P41_PLAN_EST_USD": "1.87",
         "P41_POLL_S": "1",
+        "P41_START_WAIT_S": "1",
     }
     return _bash(str(DRIVE), env=env)
 
@@ -285,6 +353,12 @@ cp "$P41_TEST_ARCHIVE" "$out"
 """,
     )
     _write_executable(
+        fake_bin / "sha256sum",
+        """#!/bin/bash
+printf '%s  %s\n' '8c2562d23a213ae5773ed8f01170b7807e1cf6551f1f54fa5f694d7ae573e479' "$1"
+""",
+    )
+    _write_executable(
         fake_bin / "python",
         """#!/bin/bash
 if [ "${1:-}" = "-m" ] && [ "${2:-}" = "pip" ]; then exit 0; fi
@@ -304,15 +378,17 @@ exec python3 "$@"
         "P41_PLAN_EST_USD": "1.87",
         "P41_APPROVAL_EST_USD": "2.64",
         "P41_DEADLINE_EPOCH": str(int(time.time()) + 600),
-        "P41_E4B_ARCHIVE_SHA256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+        "P41_RUN_NONCE": "1" * 64,
     }
     lane = _bash(str(RUN), env=env)
     assert lane.returncode == 9
     assert "TRIPWIRE FAIL (e4b)" in lane.stdout
     assert "ImportError: cannot import name 'detect_attention_projections'" in lane.stderr
-    assert (work / "P41_EXIT_CODE").read_text() == "9\n"
-    assert (work / "P41_EXIT_CODE").stat().st_mtime_ns <= (work / "TP_DONE").stat().st_mtime_ns
-    assert not (work / "P41_SUCCESS").exists()
+    rc_marker = work / f"P41_EXIT_CODE.{'1' * 64}"
+    done_marker = work / f"TP_DONE.{'1' * 64}"
+    assert rc_marker.read_text() == "9\n"
+    assert rc_marker.stat().st_mtime_ns <= done_marker.stat().st_mtime_ns
+    assert not (work / f"P41_SUCCESS.{'1' * 64}").exists()
 
     driven = _fake_driver(tmp_path, work)
     assert driven.returncode == 9, driven.stdout + driven.stderr
@@ -325,10 +401,10 @@ exec python3 "$@"
     [
         (None, False, 24, "no P41_EXIT_CODE"),
         ("not-a-number\n", False, 24, "malformed P41_EXIT_CODE"),
-        ("0\n1\n", False, 24, "expected one line"),
+        ("0\n1\n", False, 24, "malformed P41_EXIT_CODE"),
         ("999\n", False, 24, "malformed P41_EXIT_CODE"),
         ("7\n", False, 7, "remote rc=7"),
-        ("0\n", False, 24, "without P41_SUCCESS"),
+        ("0\n", False, 24, "without current-run P41_SUCCESS"),
         ("0\n", True, 0, "done"),
     ],
 )
@@ -343,6 +419,7 @@ def test_driver_requires_exact_remote_exit_and_success_marker(
         (remote / "P41_EXIT_CODE").write_text(rc_text)
     if success:
         (remote / "P41_SUCCESS").touch()
+        _write_valid_outcome(remote)
     out = _fake_driver(tmp_path, remote)
     assert out.returncode == expected_rc, out.stdout + out.stderr
     assert message in out.stdout
@@ -350,17 +427,159 @@ def test_driver_requires_exact_remote_exit_and_success_marker(
         assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
 
 
+def test_driver_rejects_nul_tainted_exit_code_bytes(tmp_path: Path):
+    remote = tmp_path / "remote-nul-result"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_bytes(b"0\0\n")
+    (remote / "summary.txt").write_text("")
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == 24, out.stdout + out.stderr
+    assert "malformed P41_EXIT_CODE" in out.stdout
+    assert "[p41_drive] done" not in out.stdout
+
+
+def test_driver_rejects_success_without_bound_outcome_manifest(tmp_path: Path):
+    remote = tmp_path / "remote-no-outcome"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_text("0\n")
+    (remote / "P41_SUCCESS").touch()
+    (remote / "summary.txt").write_text("ADMIT OK claimed\n")
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == 24, out.stdout + out.stderr
+    assert "invalid P41 outcome evidence" in out.stdout
+    assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
+
+
+def _write_valid_outcome(path: Path) -> None:
+    for index in range(19):
+        receipt = {"admitted": index == 0, "status": "ok" if index == 0 else "not_run"}
+        (path / f"granite_e4b_fixture_{index:02d}.json").write_text(json.dumps(receipt))
+    manifest = {
+        "run_nonce": "replaced-by-fake-ssh",
+        "expected": 19,
+        "actual": 19,
+        "admitted": 1,
+        "void": 0,
+        "other": 18,
+        "gate_pass": True,
+    }
+    (path / "P41_OUTCOME_COUNTS.json").write_text(json.dumps(manifest) + "\n")
+
+
+def _terminal_result(path: Path, rc: int, *, success: bool, summary: str) -> Path:
+    path.mkdir()
+    (path / "TP_DONE").touch()
+    (path / "P41_EXIT_CODE").write_text(f"{rc}\n")
+    (path / "summary.txt").write_text(summary)
+    if success:
+        (path / "P41_SUCCESS").touch()
+        _write_valid_outcome(path)
+    return path
+
+
+def test_stale_success_cannot_override_the_current_child_result(tmp_path: Path):
+    stale = _terminal_result(tmp_path / "stale", 0, success=True, summary="ADMIT OK stale\n")
+    (stale / "P41_RUN_NONCE").write_text("0" * 64 + "\n")
+    current = _terminal_result(tmp_path / "current", 7, success=False, summary="CURRENT FAILED\n")
+
+    out = _fake_driver(tmp_path, current, stale_result=stale)
+
+    assert out.returncode == 7, out.stdout + out.stderr
+    assert "lane failed with remote rc=7" in out.stdout
+    assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
+
+
+def test_failure_after_a_completed_arm_cannot_publish_lane_success(tmp_path: Path):
+    current = _terminal_result(tmp_path / "post-arm-failure", 7, success=False, summary="ADMIT OK first arm\nFAILED\n")
+    (current / "granite_e4b_fused_attn4_s512_r8.json").write_text(
+        json.dumps({"admitted": True, "status": "ok"})
+    )
+
+    out = _fake_driver(tmp_path, current)
+
+    assert out.returncode == 7, out.stdout + out.stderr
+    assert "lane failed with remote rc=7" in out.stdout
+    assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
+
+
+def test_child_that_never_starts_fails_closed_even_if_stale_success_exists(tmp_path: Path):
+    stale = _terminal_result(tmp_path / "stale", 0, success=True, summary="ADMIT OK stale\n")
+    (stale / "P41_RUN_NONCE").write_text("0" * 64 + "\n")
+    unused = _terminal_result(tmp_path / "unused", 0, success=True, summary="ADMIT OK unused\n")
+
+    out = _fake_driver(tmp_path, unused, child_starts=False, stale_result=stale)
+
+    assert out.returncode == 21, out.stdout + out.stderr
+    assert "child did not bind the current run nonce" in out.stdout
+    assert "TP_DONE seen" not in out.stdout and "[p41_drive] done" not in out.stdout
+
+
+def test_stale_local_fetch_destination_is_cleared_before_current_result(tmp_path: Path):
+    stale = _terminal_result(tmp_path / "local-stale", 0, success=True, summary="ADMIT OK stale\n")
+    (stale / "P41_RUN_NONCE").write_text("0" * 64 + "\n")
+    current = _terminal_result(tmp_path / "current-failed", 7, success=False, summary="CURRENT FAILED\n")
+
+    out = _fake_driver(tmp_path, current, local_stale_result=stale)
+
+    assert out.returncode == 7, out.stdout + out.stderr
+    assert "lane failed with remote rc=7" in out.stdout
+    fetched = tmp_path / "driver-run" / "p41"
+    assert not any(p.name.startswith("P41_SUCCESS") for p in fetched.iterdir())
+
+
+def test_fetched_result_nonce_must_match_the_current_invocation(tmp_path: Path):
+    current = _terminal_result(tmp_path / "current", 0, success=True, summary="ADMIT OK current\n")
+
+    out = _fake_driver(tmp_path, current, nonce_mode="wrong", deadline_s=1)
+
+    assert out.returncode == 24, out.stdout + out.stderr
+    assert "stale or foreign P41_RUN_NONCE" in out.stdout
+    assert "admission:" not in out.stdout and "[p41_drive] done" not in out.stdout
+
+
+def test_zero_row_lane_is_terminal_failure_and_cannot_publish_success(tmp_path: Path):
+    work = tmp_path / "zero-row-p41"
+    nonce = "2" * 64
+    env = {
+        "P41_WORKDIR": str(work),
+        "P41_FAMILIES": "gptoss",
+        "P41_RUN_NONCE": nonce,
+        "P41_USD_PER_HOUR": "0.66",
+        "P41_PLAN_EST_USD": "1.87",
+        "P41_APPROVAL_EST_USD": "2.64",
+        "P41_DEADLINE_EPOCH": str(int(time.time()) + 600),
+    }
+
+    lane = _bash(str(RUN), env=env)
+
+    assert lane.returncode == 9, lane.stdout + lane.stderr
+    assert "unknown family gptoss" in lane.stdout
+    assert (work / f"P41_EXIT_CODE.{nonce}").read_bytes() == b"9\n"
+    assert (work / f"TP_DONE.{nonce}").exists()
+    assert not (work / f"P41_SUCCESS.{nonce}").exists()
+    assert not (work / f"P41_OUTCOME_COUNTS.{nonce}.json").exists()
+
+
 def test_source_install_and_prereg_amendment_bind_the_detector_commit():
     run = RUN.read_text()
     prereg = (REPO / "bench" / "p41" / "P41-PREREG.md").read_text()
     commit = "5dad2a7fe7020ced76df0ddd0cfc548627223496"
     archive_sha = "8c2562d23a213ae5773ed8f01170b7807e1cf6551f1f54fa5f694d7ae573e479"
-    assert f"E4B_SRC_REF=${{P41_E4B_SRC_REF:-{commit}}}" in run
-    assert f"E4B_ARCHIVE_SHA256=${{P41_E4B_ARCHIVE_SHA256:-{archive_sha}}}" in run
+    assert f"E4B_SRC_REF={commit}" in run
+    assert f"E4B_ARCHIVE_SHA256={archive_sha}" in run
+    assert "${P41_E4B_SRC_REF" not in run and "${P41_E4B_ARCHIVE_SHA256" not in run
     assert '--force-reinstall "$W/e4b-src.tar.gz"' in run
     assert "e4b {e.__version__} (source {source})" in run and "e4b {e.__version__} (PyPI)" not in run
     assert "P41_EXIT_CODE" in run and "P41_SUCCESS" in run
+    assert "P41_RUN_NONCE" in run and '.P41_RUN_NONCE.$$' in run
     assert commit in prereg and archive_sha in prereg and "terminal-status amendment" in prereg
+    assert "nonce-named terminal-status and complete-outcome amendment" in prereg
 
 
 def test_stop4_projects_the_remaining_cells_at_the_planning_curve_not_the_alarm_sum(capsys):
