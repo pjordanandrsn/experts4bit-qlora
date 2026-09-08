@@ -1,5 +1,5 @@
 #!/bin/bash
-# bench/p41/p41_drive.sh -- lane P41, controller-side driver: the launcher's --command (experts4bit_qlora/tools/rent.py, e4b#464).
+# bench/p41/p41_drive.sh -- lane P41, controller-side driver: the launcher's --command (the private control plane's `adertha.compute.rent`, e4b#464; the launcher left this repository under the 2026-09-06 boundary directive).
 # Reads the box from the launcher's environment (E4B_RENT_SSH_HOST / _PORT, _RUN_DIR, _RUN_ID, _DEADLINE_EPOCH, _WALLCLOCK_S), stages the
 # harness (bench/tp3/tp3_arm.py) and p41_run.sh, synchronously clears the fixed remote workdir, then starts the lane detached. A fresh
 # unpredictable nonce binds this controller invocation to the child: p41_run writes P41_RUN_NONCE atomically before doing setup, then
