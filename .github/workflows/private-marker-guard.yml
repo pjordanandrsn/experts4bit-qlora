@@ -45,19 +45,59 @@ jobs:
           evidence at ~/e4b-evidence/run1
           radio silence resumes until the gate
           box is a QNAP TVS-h1688X on 10.0.0.68
+          must not reach the public remote
+          private fork only
+          not stamped, not committed
+          held for owner review
+          moves to the public repo at the gate
+          private-lineage
+          private-only
+          e4b-ssdtier
+          grouped-nf4-gemm-private
+          experts4bit-qlora-private
+          staged for release in ~/e4b-outbox
+          latency captures in ~/gnf4-lat
+          provider credentials under ~/.runpod/config.toml
+          aftermath rails
+          coordination operation
+          do not solicit
+          not to be solicited
+          intel notes — competitor cadence
+          candidate FLEET contribution
+          FLEET contributions
+          PhxTec
+          lab host sits at 192.168.1.24
+          feat/pipelined-lean-prefill
+          perf/routed-staging-overhead
+          integration/lean-onto-routed-staging
+          approval at https://cerin-amroth.slack.com/archives/CXXXXXXXXXX/p1700000000000000
+          C0BV5028SGM
+          moved to pjordanandrsn/adertha-agents
+          ingested by pjordanandrsn/org-corpus
+          the run lock lives at ~/.adertha/rent-live.lock
           CANARY
           grep -vE '^[[:space:]]*(#|$)' .github/private-markers.txt > /tmp/patterns.txt
-          n=$(grep -c -E -i -f /tmp/patterns.txt /tmp/canary.md || true)
           np=$(wc -l < /tmp/patterns.txt | tr -d ' ')
           if [ "${np}" -lt 20 ]; then
             echo "::error::pattern file collapsed to ${np} patterns — refusing to run a toothless scan"
             exit 1
           fi
-          echo "canary matched ${n} lines against ${np} patterns"
-          if [ "${n}" -lt 6 ]; then
-            echo "::error::guard self-test FAILED — matched only ${n}/7 canary lines; the pattern file is broken"
+          # EVERY pattern must match at least one canary line. A count of matching
+          # LINES cannot do this job: a pattern that matches nothing leaves the
+          # count unchanged, so the self-test stays green about a pattern that
+          # guards nothing. That is how five patterns shipped unexercised.
+          unexercised=0
+          while IFS= read -r p; do
+            if ! grep -q -E -i -e "$p" /tmp/canary.md; then
+              echo "::error::pattern is not exercised by the canary: $p"
+              unexercised=$((unexercised + 1))
+            fi
+          done < /tmp/patterns.txt
+          if [ "${unexercised}" -gt 0 ]; then
+            echo "::error::${unexercised} of ${np} patterns match no canary line — every pattern needs one"
             exit 1
           fi
+          echo "canary exercises all ${np} patterns"
 
       - name: refuse AGENT-* planning docs at any depth
         run: |
