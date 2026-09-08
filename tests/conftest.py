@@ -155,26 +155,16 @@ def pytest_report_collectionfinish(config, items):
                  "SKIPPED rather than disappearing.")
     return lines
 
-# e4b#455 — tests never rent. On 2026-09-06 a test reached the live Vast API and created an instance; this fixture
-# and vast_provider._under_test() make that impossible from now on: the live flag is off, the key path points at a
-# file that does not exist, and the real transport cannot be constructed under a test runner.
+# Tests never rent. A test once reached a live provider API and created an instance (#455). The launcher
+# and its provider adapters now live in the private control plane, so nothing in this repository can rent
+# at all — but the lane drivers still read these variables, and anything that re-enters this tree must
+# land already refused rather than rely on being absent.
 
 
 @pytest.fixture(autouse=True)
-def _never_rent_in_tests(monkeypatch, tmp_path):
+def _never_rent_in_tests(monkeypatch):
     monkeypatch.setenv("E4B_RENT_LIVE", "0")
-    # E4B_NO_LIVE crosses a process boundary where _under_test() cannot: a subprocess a test spawns inherits it
-    # and provider_from_env refuses on it whatever E4B_RENT_LIVE says in the child (CEO read, #460).
+    # E4B_NO_LIVE crosses a process boundary that an in-process flag cannot: a subprocess a test spawns
+    # inherits it, and a provider refuses on it whatever the child's own environment says (#460).
     monkeypatch.setenv("E4B_NO_LIVE", "1")
-    try:
-        from experts4bit_qlora.tools import vast_provider
-        monkeypatch.setattr(vast_provider, "DEFAULT_KEY_PATH", tmp_path / "no-such-secrets.env")
-        monkeypatch.setattr(vast_provider, "UrllibTransport", _RefuseTransport)
-    except ImportError:
-        pass
     yield
-
-
-class _RefuseTransport:
-    def __init__(self, *a, **k):
-        raise RuntimeError("a real HTTP transport was constructed inside a test — tests never rent")

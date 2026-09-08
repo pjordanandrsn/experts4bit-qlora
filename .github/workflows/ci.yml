@@ -124,12 +124,6 @@ jobs:
           python scripts/check_claims_register.py --sibling /tmp/sibling
       - name: dependency-floor drift (every current document states pyproject's [fast] floor; historical lines are listed, not failed)
         run: python scripts/check_dependency_floor.py
-      - name: compute governance (receipts validate against schema; ledger in sync; daily ceilings and approvals enforced)
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          pip install --quiet "jsonschema>=4.18"
-          python scripts/check_run_ledger.py
       - name: change-impact contract (pull requests only -- docs/change-impact.json, what must move together)
         # The base commit is not in a depth-1 checkout; fetch it by sha so the
         # diff is the pull request's own changes. Skipped on push events.

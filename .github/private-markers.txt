@@ -73,3 +73,14 @@ PhxTec
 feat/pipelined-lean-prefill
 perf/routed-staging-overhead
 integration/lean-onto-routed-staging
+# --- control-plane markers (added with the 2026-09-06 boundary directive) ---
+# The organisational record — Slack coordination, seats, the control-plane and
+# corpus repositories — is private. These patterns are what the guard could not
+# see before: a Slack permalink validator, a workspace channel id, the private
+# repository URLs and the runtime's own dot-directory all reached this tree
+# through files the old list had no expression for.
+cerin-amroth\.slack\.com
+C0BV5028SGM
+pjordanandrsn/adertha-
+pjordanandrsn/org-corpus
+\.adertha/

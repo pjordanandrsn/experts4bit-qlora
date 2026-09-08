@@ -2902,17 +2902,6 @@ catches a corpus that stopped routing its own queries.
   calibrated pack needs the same sign on two texts before it is licensed.
 - Do not publish a number before its receipt exists; if the receipt is
   private, the claim says `evidence_private`.
-- **GPU rental experiments follow the compute governance policy**:
-  approval thresholds (self-approval ≤ $2; one-of CTO/CSO ≤ $20;
-  two-of CEO/CTO/CSO ≤ $50; Jordan above), per-role daily ceilings,
-  a global daily budget, teardown proof required, immutable receipts
-  at `bench/runs/<date>/<run-id>/receipt.json` validated against
-  [`docs/run-receipt-schema.json`](docs/run-receipt-schema.json).
-  The policy is [`docs/COMPUTE-GOVERNANCE.md`](docs/COMPUTE-GOVERNANCE.md);
-  `scripts/check_run_ledger.py` enforces it in CI. Rent through
-  `python -m experts4bit_qlora.tools.rent` (or `scripts/rent_run.py`): it
-  checks the ledger and approvals before create, arms a controller-side
-  teardown guard, and writes the receipt.
 
 ## 8. When you change something
 
@@ -2943,117 +2932,30 @@ quality instrument at 512-token resolution (#359); gpt-oss's raw-text
 perplexity cannot rank an exact arm against a noisy one. B=1 decode is
 host-bound: absolutes do not travel between hosts, ratios do.
 
-## 10. Working with other agents
+## 10. Contributing
 
-Six agents touch this repository, coordinated through GitHub (the record) and
-Slack channel `#ml-packages` (live handoffs). The live board — role chart,
-blocking issues, handover protocol — is the Slack canvas "ML packages — live
-board" in #ml-packages; `@Name` mentions in threads are answered with
-`ACK <repo>#<issue>`, `DONE <repo>#<issue> -> <link>`, or `BLOCKED <repo>#<issue> - <reason>`. Seats without Slack (desktop agents) post `ACK <repo>#<issue>` / `DONE … -> <PR url>` / `BLOCKED … - <why>` as comments on the GitHub issue; review requests and fix lists for their PRs are posted on the issue as well as the PR; the CEO mirrors to #ml-packages.
-
-**Jordan — Chair / Owner**: the maintainer (final decisions, account access,
-rulings).
-
-**Claude Code — CEO**: orchestration, releases, the merge gate.
-
-**Cursor — CTO**: a bounded code task that starts from an issue and ends as a
-pull request (substantive implementation).
-
-**ChatGPT — Chief Science Officer**: review, research, repo-state reports;
-read-only.
-
-**Chief Data Officer**: Claude Code desktop on the mini; owns the organisational
-corpus `pjordanandrsn/org-corpus`, the ingestion jobs, receipts + ledger
-ingestion, scaffold ops; first successor to the CTO.
-
-**Chief Experiments Officer**: Kimi K3 desktop agent on the MBP;
-pre-registrations and experiment design, `PREDICT:` before any run, next-lane
-harnesses under new `bench/<lane>/` trees, compute-economics analysis; never
-touches a committed receipt tree.
-
-**Scout — Chief Evidence Officer**: read-only verification (claims vs receipts,
-prior art, upstream behaviour at a pinned revision); cites `file:line` / URLs;
-never edits.
-
-**Forge — COO**: mechanical repository work from issues on branches like
-`forge/<issue>-<slug>`; single PR per issue; no merges; restricted from
-touching gates, thresholds, floors, registered claims, or documents with an
-OpenTimestamps footer.
-
-**Warden — Chief Risk Officer**: read-only review: correctness, silent
-fallbacks, gate / threshold drift, claims outrunning receipts, security;
-findings as `file:line — claim — why — severity` + what was not checked; hands
-fixes to Forge.
-
-### Succession & dynamic reassignment
-
-Any role can go dark; any role that notices reassigns. A teammate is unavailable
-when it posts an explicit failure line (unpaid invoice, usage limit, context
-limit, "something broke"), gives no ACK within 15 minutes of a mention, shows no
-DONE/BLOCKED/progress within 60 minutes of an ACK, or says so.
-
-**Successors:**
-
-| Role | First successor | Second successor | Third successor | Fourth successor |
-|------|----------------|------------------|-----------------|------------------|
-| CEO | CTO | CDO | CSO coordinates; Jordan | — |
-| CTO | CDO | COO (docs/register/small code only, Warden review) | CEO | — |
-| Chief Science Officer | Scout | CDO | CEO | — |
-| CDO | CEO | COO | — | — |
-| COO | CDO | CTO | CEO | — |
-| Chief Evidence Officer | Warden | Chief Science Officer | — | — |
-| Chief Risk Officer | Scout | Chief Science Officer | CEO | — |
-| Chief Experiments Officer | Chief Science Officer | Warden | CEO | — |
-| Independent review | Warden (source read) | CXO / CTO / CSO / CDO (not the author) | CEO | — |
-| Chair / Owner | none (decisions wait, `blocked:user`) | — | — | — |
-
-**Procedure:**
-
-1. Post in the issue's thread: `REASSIGN <repo>#<issue>: <role> -> <successor role> -- reason: billing_limit|usage_limit|context_limit|availability|crash|manual`
-2. Include a fenced code block labelled `handoff` with: task, current_state, known_facts, open_questions, artifacts, next_action
-3. Add a real mention of the successor
-4. The successor answers `ACK <repo>#<issue> (acting <role>)`
-5. The successor works under ITS OWN charter limits (a read-only role stays read-only, the COO never touches gates)
-6. In-flight work stays with the acting owner until DONE; the returning primary posts HANDBACK only for items not yet started
-
-Every rule survives reassignment.
-
-Every handoff posted in Slack is also written on the issue.
-
-- A task is an issue opened from the **Agent task** template (goal, acceptance
-  criteria, evidence required, constraints) carrying exactly one of
-  `agent:cursor` / `agent:chatgpt` / `agent:claude`; `handoff` marks it ready
-  for the agent named in the last comment; `blocked:user` means the maintainer
-  must act (decision, credential, account link).
-- The taking agent acknowledges on the issue, works on a branch, opens a pull
-  request that cites the issue, and stops. Every PR gets one independent review
-  before merge — by a seat that did not author it: Warden's source read
-  (`file:line — claim — why — severity`), or a review by the CXO (Chief
-  Experiments Officer), CTO, CSO, CDO or CEO; Cursor Bugbot and automated Claude
-  Code review are retired (Jordan,
-  2026-09-06). Claude Code holds the merge gate: checks green on the head that
-  carries the `ready-to-merge` label + that review + zero unresolved threads,
-  with section 8's companions in the same diff. CI runs on `main` and on a pull
-  request only when the gate holder applies `ready-to-merge` (or the PR leaves
-  draft), never on every push (Jordan, 2026-09-06); a head with no CI run is
-  not green — remove and re-apply the label after a new push. Nobody merges
-  their own PR. The gate holder reads the PR's base branch before merging and confirms the squash commit is on `main` afterwards; a stacked PR is retargeted with `gh pr edit --base main` (or its base branch deleted) before merge. Receipts
-  and code ship in separate pull requests; a pull request too large to review
-  in one read is a finding, not a pass.
+- A change starts from an issue and ends as a pull request that cites it. Every
+  pull request gets one independent review — by someone who did not write it —
+  before it merges. Nobody merges their own. CI runs on `main` and on a pull
+  request once it carries the `ready-to-merge` label (or leaves draft), never on
+  every push; a head with no CI run is not green, so remove and re-apply the
+  label after a new push.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
-  registered claim; if the task needs one, the agent stops and says so on the
-  issue.
-- Sections 2–9 bind every agent equally: structure not names, counts or
-  raise, measured means a receipt in the repository, `llms-full.txt`
-  regenerated when a bundled document changed.
-- Documents that carry an OpenTimestamps footer are never edited in place: a
+  registered claim. If the task needs one, stop and say so on the issue.
+- Sections 2–9 bind every contributor equally: structure not names, counts or
+  raise, measured means a receipt in the repository, `llms-full.txt` regenerated
+  when a bundled document changed.
+- Receipts and code ship in separate pull requests. A pull request too large to
+  review in one read is a finding, not a pass.
+- Documents carrying an OpenTimestamps footer are never edited in place: a
   sibling file with errata, never the original.
 - Nothing is filed upstream without the maintainer's explicit say-so: no issues,
   pull requests, discussions or bug reports on any repository outside
-  `pjordanandrsn/*` (Unsloth, transformers, huggingface_hub, bitsandbytes, vLLM,
-  ...). Findings about other projects stay as notes in this repository's receipts
-  and issues until the maintainer decides.
-- Never invent an identifier, URL, hash, timestamp, title or number. If you do not have it, write UNKNOWN and say what would produce it. A placeholder is a fabrication.
+  `pjordanandrsn/*`. Findings about other projects stay as notes in this
+  repository's receipts and issues until the maintainer decides.
+- Never invent an identifier, URL, hash, timestamp, title or number. If you do
+  not have it, write UNKNOWN and say what would produce it. A placeholder is a
+  fabrication.
 
 ## Source: docs/claims.json (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json)
 
