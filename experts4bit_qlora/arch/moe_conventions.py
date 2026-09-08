@@ -386,6 +386,14 @@ NEMOTRON_H = MoEConvention(
 #: non-expert quirks — a layer-conditional post_mlp_layernorm and an unshipped
 #: e_score_correction_bias buffer — need per-layer knowledge and live in the
 #: dedicated keymap :mod:`experts4bit_qlora.arch.axk1`. Never per-expert.
+#: **STAGED, NOT WIRED (#509).** No loader admits this family today. `loader.py`'s check is
+#: `model_type not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(model_type)`;
+#: `axk1` has no `SUPPORTED_ARCHITECTURES` entry, and this convention's name is not in
+#: `READ_COMPATIBLE_CONVENTIONS` (`{qwen2_moe, mixtral, phimoe}`), so both routes refuse it and an
+#: axk1 checkpoint raises. `rewrite_axk1_keys` is also absent from `CKPT_KEY_REWRITERS`, so the
+#: keymap would not be applied even if the architecture were admitted -- wiring only the first
+#: would silently load with the wrong key mapping. Contrast `axk2`, which is mapped onto
+#: `QWEN2_MOE` below and IS admitted, because that convention is read-compatible.
 AXK1 = MoEConvention(
     name="axk1",
     expert_re=re.compile(r"(?!)"),
