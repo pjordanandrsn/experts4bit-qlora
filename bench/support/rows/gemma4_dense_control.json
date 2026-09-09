@@ -1,7 +1,7 @@
 {
- "model": "/Users/jordananderson/models/gemma-4-31B",
+ "model": "gemma-4-31B",
  "revision": null,
- "source": "local-path",
+ "source": "local-mirror",
  "provenance": "published",
  "device": "cpu",
  "dtype": "bfloat16",
@@ -35,7 +35,7 @@
   "load": {
    "status": "refused",
    "refusal_basis": "message",
-   "error": "RuntimeError: no fused expert stacks found in '/Users/jordananderson/models/gemma-4-31B' (model_type='gemma4'): expected 'model.layers.<i>.experts.gate_up_proj' (fused) or 'model.layers.<i>.experts.0.gate_proj.weight' (per-expert) tensors in the checkpoint. Refusing to return a model with zero quantized expert layers \u2014 silently skipping the experts is the exact failure this loader exists to prevent.",
+   "error": "RuntimeError: no fused expert stacks found in 'gemma-4-31B' (model_type='gemma4'): expected 'model.layers.<i>.experts.gate_up_proj' (fused) or 'model.layers.<i>.experts.0.gate_proj.weight' (per-expert) tensors in the checkpoint. Refusing to return a model with zero quantized expert layers \u2014 silently skipping the experts is the exact failure this loader exists to prevent.",
    "seconds": 0.5
   }
  },
@@ -53,5 +53,6 @@
   "expert_attr": "experts"
  },
  "exit_code": 3,
- "finished_utc": "2026-09-09T14:54:00Z"
+ "finished_utc": "2026-09-09T14:54:00Z",
+ "model_note": "probed from a local mirror; the row records the release directory name, never the operator's path"
 }

@@ -1,7 +1,7 @@
 {
- "model": "/Users/jordananderson/models/granite-3.0-1b-a400m-instruct",
+ "model": "granite-3.0-1b-a400m-instruct",
  "revision": null,
- "source": "local-path",
+ "source": "local-mirror",
  "provenance": "published",
  "device": "cpu",
  "dtype": "bfloat16",
@@ -69,5 +69,6 @@
  "tier": "toy",
  "tier_rule": "total_params < 1000000000 -> toy; else reference",
  "exit_code": 0,
- "finished_utc": "2026-09-09T11:40:19Z"
+ "finished_utc": "2026-09-09T11:40:19Z",
+ "model_note": "probed from a local mirror; the row records the release directory name, never the operator's path"
 }

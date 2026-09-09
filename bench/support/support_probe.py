@@ -175,6 +175,9 @@ def main() -> int:
     ap.add_argument("--r", type=int, default=8)
     ap.add_argument("--alpha", type=int, default=16)
     ap.add_argument("--trust-remote-code", action="store_true")
+    ap.add_argument("--model-id", default=None,
+                    help="public identity of the checkpoint (e.g. openai/gpt-oss-20b) when "
+                         "--model is a local mirror; the row records this instead of the path")
     ap.add_argument("--provenance", default="published", choices=("published", "generated"),
                     help="'generated' for a fixture we built; declared, because a generated "
                          "config is indistinguishable from a released one by path or content")
@@ -189,10 +192,16 @@ def main() -> int:
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    # Never record an absolute local path. A row is committed to a PUBLIC repo,
+    # and the operator's filesystem layout is not evidence about a model -- the
+    # release name is. When --model is a directory, the row carries its basename
+    # (which on any sane mirror IS the release name) and says it came from a
+    # local copy. --model-id overrides when the public identity differs.
+    _is_local = os.path.isdir(args.model)
     row: dict = {
-        "model": args.model,
+        "model": args.model_id or (Path(args.model).name if _is_local else args.model),
         "revision": args.revision,
-        "source": "local-path" if os.path.exists(args.model) else "hf-id",
+        "source": "local-mirror" if _is_local else "hf-id",
         "provenance": args.provenance,
         "device": device,
         "dtype": args.dtype,
@@ -214,11 +223,25 @@ def main() -> int:
         print(f"wrote {p} (exit {code})")
         return code
 
+    def scrub(text: str) -> str:
+        """Strip the operator's path out of any recorded message.
+
+        The loader quotes the model path back in its errors -- the zero-expert
+        refusal names it -- so a verbatim error string reintroduces the absolute
+        path the row deliberately does not carry. Rows are committed to a public
+        repository; the release name is the useful part and the home directory
+        is not.
+        """
+        if _is_local:
+            return text.replace(str(Path(args.model).resolve()), Path(args.model).name) \
+                       .replace(args.model, Path(args.model).name)
+        return text
+
     def fail(stage: str, exc: BaseException, code: int) -> int:
         row["stages"][stage] = {
             "status": "error",
-            "error": f"{type(exc).__name__}: {exc}",
-            "traceback_tail": traceback.format_exc().strip().splitlines()[-1],
+            "error": scrub(f"{type(exc).__name__}: {exc}"),
+            "traceback_tail": scrub(traceback.format_exc().strip().splitlines()[-1]),
         }
         return write(code)
 
@@ -338,7 +361,7 @@ def main() -> int:
             "status": "refused" if refusal else "error",
             "refusal_basis": ("type" if type(e).__name__ in REFUSAL_TYPES
                               else "message" if refusal else "n/a"),
-            "error": f"{type(e).__name__}: {e}",
+            "error": scrub(f"{type(e).__name__}: {e}"),
             "seconds": round(time.time() - t0, 1),
         }
         return write(3 if refusal else 6)

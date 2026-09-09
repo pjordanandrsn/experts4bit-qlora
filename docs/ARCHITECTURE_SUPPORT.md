@@ -195,14 +195,14 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 |---|---|---|---|---|---|---|---|---|
 | `deepseek_v2` | `hmellor/tiny-random-DeepseekV2ForCausalLM` | toy | convention | cpu | ok | 3q/0u | ok | **toy-ok** |
 | `gemma4` | `google/gemma-4-26B-A4B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 30q/0u | ok | **reference-ok** |
-| `gemma4` | `/Users/jordananderson/models/gemma-4-31B` | — | SUPPORTED_ARCHITECTURES | cpu | refused | — | — | **refused** |
-| `gpt_oss` | `/Users/jordananderson/models/gpt-oss-20b` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **reference-ok** |
+| `gemma4` | `gemma-4-31B` | — | SUPPORTED_ARCHITECTURES | cpu | refused | — | — | **refused** |
+| `gpt_oss` | `gpt-oss-20b` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **reference-ok** |
 | `granitemoe` | `ibm-granite/granite-3.1-3b-a800m-instruct` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 32q/0u | ok | **reference-ok** |
-| `granitemoe` | `/Users/jordananderson/models/granite-3.0-1b-a400m-instruct` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **toy-ok** |
-| `olmoe` | `/Users/jordananderson/models/OLMoE-1B-7B-0924` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 16q/0u | ok | **reference-ok** |
-| `qwen3_5_moe` | `/Users/jordananderson/models/Qwen3.6-35B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 40q/0u | ok | **reference-ok** |
+| `granitemoe` | `granite-3.0-1b-a400m-instruct` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **toy-ok** |
+| `olmoe` | `OLMoE-1B-7B-0924` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 16q/0u | ok | **reference-ok** |
+| `qwen3_5_moe` | `Qwen3.6-35B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 40q/0u | ok | **reference-ok** |
 | `qwen3_5_moe` | `yujiepan/qwen3.5-moe-tiny-random` | — | SUPPORTED_ARCHITECTURES | cpu | — | — | — | **blocked** |
-| `qwen3_moe` | `/Users/jordananderson/models/Qwen3-30B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 48q/0u | ok | **reference-ok** |
+| `qwen3_moe` | `Qwen3-30B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 48q/0u | ok | **reference-ok** |
 | `qwen3_next` | `theo77186/Qwen3-Next-70M-TinyStories` | toy | convention | cpu | ok | 8q/0u | ok | **toy-ok** |
 
 ## Claimed vs evidenced
@@ -211,10 +211,10 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 
 | claimed model_type | best evidence | checkpoint |
 |---|---|---|
-| `olmoe` | **reference-ok** | `/Users/jordananderson/models/OLMoE-1B-7B-0924` |
-| `qwen3_moe` | **reference-ok** | `/Users/jordananderson/models/Qwen3-30B-A3B` |
-| `qwen3_5_moe` | **reference-ok** | `/Users/jordananderson/models/Qwen3.6-35B-A3B` |
-| `gpt_oss` | **reference-ok** | `/Users/jordananderson/models/gpt-oss-20b` |
+| `olmoe` | **reference-ok** | `OLMoE-1B-7B-0924` |
+| `qwen3_moe` | **reference-ok** | `Qwen3-30B-A3B` |
+| `qwen3_5_moe` | **reference-ok** | `Qwen3.6-35B-A3B` |
+| `gpt_oss` | **reference-ok** | `gpt-oss-20b` |
 | `gemma4` | **reference-ok** | `google/gemma-4-26B-A4B` |
 | `gemma4_text` | **none** | — |
 | `granitemoe` | **reference-ok** | `ibm-granite/granite-3.1-3b-a800m-instruct` |
