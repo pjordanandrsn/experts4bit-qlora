@@ -1,0 +1,57 @@
+{
+ "model": "Ling-3.0-tiny",
+ "revision": null,
+ "source": "local-mirror",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-09T19:59:52Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.11.0",
+  "transformers": "5.13.1",
+  "bitsandbytes": "0.50.0",
+  "gnf4": "absent (ModuleNotFoundError)",
+  "e4b": "0.35.3"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "ok",
+   "shards": 32,
+   "note": "every shard matches the length its own header declares"
+  },
+  "load": {
+   "status": "refused",
+   "refusal_basis": "type",
+   "error": "NotImplementedError: Unsupported model_type='bailing_hybrid'. This streaming loader handles SwiGLU fused-MoE checkpoints: ['deepseek_v4', 'gemma4', 'gemma4_text', 'gpt_oss', 'granitemoe', 'kimi_k3', 'olmoe', 'qwen3_5_moe', 'qwen3_moe'], plus every model_type on the ['mixtral', 'phimoe', 'qwen2_moe'] conventions, whose per-expert layout the generic read takes from the convention itself. The Experts4bit primitive is model-agnostic \u2014 see the README 'Scope' note to adapt another architecture.",
+   "seconds": 0.0
+  }
+ },
+ "model_type": "bailing_hybrid",
+ "config": {
+  "hidden_size": 1536,
+  "num_hidden_layers": 24,
+  "num_experts": 128,
+  "top_k": 8,
+  "moe_intermediate_size": 512
+ },
+ "claim": {
+  "in_supported_architectures": false,
+  "reachable_by_convention": false,
+  "expert_attr": null
+ },
+ "exit_code": 3,
+ "finished_utc": "2026-09-09T19:59:56Z"
+}

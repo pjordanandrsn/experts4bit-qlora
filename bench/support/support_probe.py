@@ -75,6 +75,16 @@ def _versions() -> dict:
                       ("e4b", "experts4bit_qlora")):
         try:
             out[name] = __import__(mod).__version__
+        except AttributeError:
+            # Imported but exposes no __version__ -- grouped-nf4-gemm does this,
+            # and reporting it as "absent" was wrong in the direction that
+            # matters: the row claimed the kernel package was missing on a run
+            # where enable_fast had just patched 24 modules with it.
+            try:
+                from importlib.metadata import version as _v
+                out[name] = _v({"nf4_grouped": "grouped-nf4-gemm"}.get(mod, mod))
+            except Exception:                       # noqa: BLE001
+                out[name] = "present (version not exposed)"
         except Exception as e:                      # noqa: BLE001 -- absence is data
             out[name] = f"absent ({type(e).__name__})"
     return out
@@ -182,6 +192,10 @@ def main() -> int:
                     help="'generated' for a fixture we built; declared, because a generated "
                          "config is indistinguishable from a released one by path or content")
     ap.add_argument("--no-forward", action="store_true")
+    ap.add_argument("--no-capture", action="store_true",
+                    help="skip CUDA-graph capture even on a GPU")
+    ap.add_argument("--capture-tokens", type=int, default=16,
+                    help="new tokens for the capture-vs-eager comparison")
     ap.add_argument("--seq", type=int, default=16, help="tokens in the single forward")
     args = ap.parse_args()
 
@@ -414,14 +428,79 @@ def main() -> int:
         except Exception as e:                              # noqa: BLE001
             return fail("forward", e, 8)
 
-    # ── capture is a different claim, on different hardware ───────────────────
-    row["stages"]["capture"] = {
-        "status": "not_tested",
-        "reason": ("CPU probe: CUDA-graph capture cannot be established here"
-                   if device == "cpu" else "not attempted by this probe"),
-    }
+    # ── capture: a different claim, answerable only on CUDA and only with the
+    # ── pipelined engine actually serving ─────────────────────────────────────
+    #
+    # The instrument is e4b's own `probe_capture`, not a hand-rolled one, because
+    # its gate is token-stream equality against eager decode driven by the SAME
+    # rule. A captured graph that reads a stale pointer replays without error and
+    # returns plausible-looking tokens, so "it ran" is not evidence.
+    #
+    # And capture REQUIRES the pipelined engine: the reference forward's
+    # dequantize path synchronizes, and capture throws on a host sync inside the
+    # region. My first GPU run hit exactly that ("operation failed due to a
+    # previous error during capture") with the engine never enabled -- a row
+    # reporting it as a capture failure would have blamed the family for my
+    # setup. So the engine state is recorded, and capture is not attempted
+    # without it.
+    if device != "cuda":
+        row["stages"]["capture"] = {
+            "status": "not_tested",
+            "reason": "CPU probe: CUDA-graph capture cannot be established here",
+        }
+    elif args.no_capture:
+        row["stages"]["capture"] = {"status": "not_tested", "reason": "--no-capture"}
+    else:
+        patched, engine = None, None
+        try:
+            from experts4bit_qlora import enable_fast
+            # eval() FIRST, and this is not a formality. e4b warns:
+            # "[e4b.fast] model is in TRAINING mode: fused_experts_lora_forward
+            # falls back to the reference path while `training` is set, so all N
+            # patch(es) will be bypassed". A patched count of 24 with the model
+            # in training mode means the grouped kernel never ran -- the
+            # reference forward did, it synchronized, and capture threw. The row
+            # would have said "capture failed" about a path that was never used.
+            model.eval()
+            patched = enable_fast(model)
+            engine = f"enable_fast patched {patched} modules (model.eval())"
+        except Exception as e:                          # noqa: BLE001
+            engine = f"unavailable: {type(e).__name__}: {e}"
 
-    bad = [k for k, v in row["stages"].items() if v["status"] == "error"]
+        if not patched:
+            row["stages"]["capture"] = {
+                "status": "not_tested",
+                "engine": scrub(str(engine)),
+                "reason": "the pipelined engine is not serving (grouped-nf4-gemm + Triton on "
+                          "sm_80+), so capture cannot be established: a fact about this host, "
+                          "not about the checkpoint",
+            }
+        else:
+            try:
+                from experts4bit_qlora import probe_capture
+                cap_ids = torch.arange(1, args.seq + 1, device=device).unsqueeze(0)
+                t2 = time.time()
+                rep = probe_capture(model, cap_ids, max_new_tokens=args.capture_tokens)
+                ok = bool(rep.get("captured")) and rep.get("matches_eager") is True
+                row["stages"]["capture"] = {
+                    # Captured-but-not-matching-eager is a FAILURE, not a partial
+                    # success: a graph replaying different tokens is worse than one
+                    # that refuses, because it looks like it worked.
+                    "status": "ok" if ok else ("mismatch" if rep.get("captured") else "error"),
+                    "engine": engine,
+                    "captured": bool(rep.get("captured")),
+                    "matches_eager": rep.get("matches_eager"),
+                    "n_new": rep.get("n_new"),
+                    "error": scrub(rep["error"]) if rep.get("error") else None,
+                    "seconds": round(time.time() - t2, 2),
+                }
+            except Exception as e:                      # noqa: BLE001
+                row["stages"]["capture"] = {
+                    "status": "error", "captured": False, "engine": engine,
+                    "error": scrub(f"{type(e).__name__}: {e}"),
+                }
+
+    bad = [k for k, v in row["stages"].items() if v["status"] in ("error", "mismatch")]
     return write(0 if not bad else 6)
 
 
