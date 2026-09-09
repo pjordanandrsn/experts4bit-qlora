@@ -1,0 +1,25 @@
+{
+ "model": "DeepSeek-V4-Flash",
+ "revision": null,
+ "source": "local-mirror",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/lan_queue.sh (stub: the probe produced no row)",
+ "started_utc": "2026-09-09T18:56:54Z",
+ "finished_utc": "2026-09-09T18:56:54Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O"
+ },
+ "model_type": "deepseek_v4",
+ "stages": {
+  "load": {
+   "status": "error",
+   "error": "the probe exited 137 without writing a row -- most likely killed by the OS (OOM). Nothing here says the family is unsupported: it says this HOST could not complete the attempt."
+  }
+ },
+ "exit_code": 137,
+ "model_note": "probed from a local mirror; the row records the release directory name, never the operator's path",
+ "contamination": "A concurrent LAN copy (Ling-3.0-tiny) started ~7.5 min into this load and ran ~1 min before I stopped it; system memory free went 87% -> 39% -> 60%. The kill came ~7 min AFTER that copy ended, with memory recovered, so contention is unlikely to be the cause -- but the run was not clean and this row should not be read as a settled verdict on the host limit."
+}
