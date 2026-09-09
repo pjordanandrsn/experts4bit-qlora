@@ -1,5 +1,9 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""Opt-in uniform-int4 expert store for SINGLE-STREAM serving decode.
+"""Opt-in uniform-int4 expert store for serving decode.
+
+Single-stream by default; batched decode also reads this store when
+``hot_residency.DEVICE_GROUPING`` is on -- see Scope at the end, which
+is written from the dispatch rather than from the design intent.
 
 ``enable_serve_experts_int4(model, source_dir)`` repacks every hot
 expert stack to the int4-b32 grid **from the source checkpoint** (never
@@ -15,9 +19,32 @@ Fusion layout MUST match the loader's: gate_up is ``cat(gate, up)``
 along the intermediate axis, **gate first** (moe_conventions.fuse_experts).
 The parity test pins one repacked expert against the source weights.
 
-Scope: T == 1 decode only (the singleton branch). Batched decode keeps
-the NF4 M-tile path -- at mean group 1.6+ the grouped kernel's weight
-sharing wins, and that lane's engine is the certified graph loop.
+Scope, by dispatch rather than by intent (#496). Two branches in
+``hot_residency._fused_over_stack`` read this store, and which one runs
+is decided by ``hot_residency.DEVICE_GROUPING``:
+
+* ``T == 1`` -- the int4-b32 grouped GEMV described above.
+* ``T > 1`` **with DEVICE_GROUPING on** -- the grouped captured
+  int4-b32 GEMM against the same prebuilt device tiles the NF4 captured
+  path uses (``hot_residency.py`` ~line 330), or the split-K GEMV when
+  ``x_rows <= 256`` (~line 165). So batched decode does NOT keep the NF4
+  M-tile path in that configuration.
+* ``T > 1`` with DEVICE_GROUPING off -- the NF4 grouped path, which is
+  the library default: ``DEVICE_GROUPING = [False]`` and nothing in the
+  package ever assigns it.
+
+The flag is set by ``bench/hybrid-g9/step_decomp.py`` and by
+``tests/test_s2_verify_mechanics.py``, which is the configuration the
+register's ``e4b.serve.b16.qwen3-30b.int4.5090`` row was measured in --
+1,238 tok/s aggregate, x2.50 over the NF4 batched baseline.
+
+An earlier version of this note asserted the opposite: that batched
+decode stayed on the NF4 M-tile path, full stop. That contradicted the
+published claim above -- the module implementing the path said the path
+does not run. The mean-group-1.6+ argument it cited is a reason to
+DEFAULT to NF4, not a description of what dispatch does once the flag
+is on. ``tests/test_int4_docstring_matches_dispatch.py`` now fails if
+this note and the dispatch drift apart in either direction.
 """
 from __future__ import annotations
 
