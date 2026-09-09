@@ -1,0 +1,88 @@
+{
+ "model": "granite-3.0-1b-a400m-instruct",
+ "revision": null,
+ "source": "local-mirror",
+ "provenance": "published",
+ "device": "cuda",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-09T20:55:47Z",
+ "versions": {
+  "python": "3.11.13",
+  "platform": "Linux-6.6.32-qnap-x86_64-with-glibc2.35",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.17.0",
+  "bitsandbytes": "0.50.2",
+  "gnf4": "0.30.2",
+  "e4b": "0.35.3"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "ok",
+   "shards": 1,
+   "note": "every shard matches the length its own header declares"
+  },
+  "load": {
+   "status": "ok",
+   "seconds": 42.0
+  },
+  "verify": {
+   "status": "ok",
+   "n_quantized": 24,
+   "n_unquantized": 0,
+   "quant_types": [
+    "nf4"
+   ]
+  },
+  "forward": {
+   "status": "ok",
+   "note": "loss is on synthetic arange token ids: a finiteness smoke test, NOT a quality measure",
+   "seconds": 1.12,
+   "loss": 14.33632,
+   "loss_finite": true,
+   "logits_finite": true
+  },
+  "capture": {
+   "status": "ok",
+   "engine": "enable_pipelined_residency patched 24/24 modules (K=0, k_slots=8, model.eval())",
+   "captured": true,
+   "matches_eager": true,
+   "n_new": 16,
+   "error": null,
+   "seconds": 3.98
+  }
+ },
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "capability": [
+  8,
+  6
+ ],
+ "model_type": "granitemoe",
+ "config": {
+  "hidden_size": 1024,
+  "num_hidden_layers": 24,
+  "num_experts": 32,
+  "top_k": 8,
+  "moe_intermediate_size": 512
+ },
+ "claim": {
+  "in_supported_architectures": true,
+  "reachable_by_convention": false,
+  "expert_attr": "block_sparse_moe.experts"
+ },
+ "total_params": 752668672,
+ "tier": "toy",
+ "tier_rule": "total_params < 1000000000 -> toy; else reference",
+ "exit_code": 0,
+ "finished_utc": "2026-09-09T20:56:39Z"
+}

@@ -471,7 +471,26 @@ def main() -> int:
     else:
         patched, engine = None, None
         try:
-            from experts4bit_qlora import enable_fast
+            # The PIPELINED engine, not enable_fast. ARCHITECTURE_SUPPORT.md says
+            # capture "requires the pipelined engine to be serving", and that is
+            # `enable_pipelined_residency` -- "one address-dispatched gather,
+            # device-id GEMV", i.e. expert ids stay ON DEVICE.
+            #
+            # enable_fast is the wrong engine for this and cannot work: its
+            # grouped path does `sizes = counts[active].tolist()` (fast.py:215)
+            # because gemm_4bit_grouped sizes its launch grid from host-side
+            # per-group counts. That is a host sync AND a data-dependent launch,
+            # both of which capture forbids -- measured on an A2000 as
+            # "operation not permitted when stream is capturing", filed as #527.
+            #
+            # Empty hot sets are a production configuration, not a degenerate
+            # one: the engine's own docstring measures 3.51x on granite-3.0-1b
+            # with K=0, and raising K flat-to-negative. So K=0 keeps this probe
+            # measuring the engine rather than a residency policy.
+            from experts4bit_qlora import enable_pipelined_residency
+            from experts4bit_qlora.verify import verify_moe_4bit as _v
+            n_mod = _v(model)["n_quantized"] + _v(model)["n_unquantized"]
+            top_k = row["config"].get("top_k")
             # eval() FIRST, and this is not a formality. e4b warns:
             # "[e4b.fast] model is in TRAINING mode: fused_experts_lora_forward
             # falls back to the reference path while `training` is set, so all N
@@ -480,8 +499,15 @@ def main() -> int:
             # reference forward did, it synchronized, and capture threw. The row
             # would have said "capture failed" about a path that was never used.
             model.eval()
-            patched = enable_fast(model)
-            engine = f"enable_fast patched {patched} modules (model.eval())"
+            if not isinstance(top_k, int) or top_k <= 0:
+                raise RuntimeError(
+                    f"k_slots is required and comes from the config's top_k, which read "
+                    f"{top_k!r}; a forward with the wrong k silently falls back to the "
+                    f"reference path, so guessing it would measure the wrong thing")
+            patched = enable_pipelined_residency(
+                model, [[] for _ in range(n_mod)], device="cuda", k_slots=top_k)
+            engine = (f"enable_pipelined_residency patched {patched}/{n_mod} modules "
+                      f"(K=0, k_slots={top_k}, model.eval())")
         except Exception as e:                          # noqa: BLE001
             engine = f"unavailable: {type(e).__name__}: {e}"
 
@@ -489,7 +515,7 @@ def main() -> int:
             row["stages"]["capture"] = {
                 "status": "not_tested",
                 "engine": scrub(str(engine)),
-                "reason": "the pipelined engine is not serving (grouped-nf4-gemm + Triton on "
+                "reason": "the pipelined engine is not serving (enable_pipelined_residency needs [fast]: "
                           "sm_80+), so capture cannot be established: a fact about this host, "
                           "not about the checkpoint",
             }
