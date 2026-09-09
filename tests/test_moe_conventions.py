@@ -773,3 +773,117 @@ def test_the_refusal_is_still_necessary_because_consumers_assume_gate_first():
             f"{rel} now references fused_order — if it honours the order, remove the "
             f"loader refusal in expert_layout_for and update this test (e4b#515)"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# e4b#515 direction (3) — a NUMERICAL detector for a gate/up swap.
+#
+# Why this is not covered by the three tests above. All three are regexes over
+# UPSTREAM SOURCE TEXT: test_gate_precedes_up_in_upstream_spec parses the
+# converter spec, and the two forward tests run inspect.getsource() over
+# transformers and match on `gate, up = ... chunk(2` / `act_fn(gate)`. They
+# establish that upstream's code SAYS gate-first. None of them evaluates a
+# number, and none of them exercises OUR pipeline: if fuse_experts' packing and
+# the consumers' chunk ever disagreed with each other, all three would still
+# pass while every arm computed act(up) * gate.
+#
+# So this closes the composition: pack with the real fuse_experts, split with
+# the arithmetic the consumers actually use, and check the result against a
+# reference built from the separate gate/up tensors — which involves no fused
+# layout at all and so cannot inherit the same mistake.
+#
+# Pure torch, CPU, seeded. No bitsandbytes, no CUDA, no checkpoint.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SWAP_SEED = 20260909
+
+
+def _swap_fixture(dtype=torch.float64):
+    """Distinguishable gate/up/down, seeded so this can never be flaky (#341)."""
+    g = torch.Generator().manual_seed(_SWAP_SEED)
+    E, inter, hidden, T = 3, 4, 5, 6
+    gate = [torch.randn(inter, hidden, generator=g, dtype=dtype) for _ in range(E)]
+    up = [torch.randn(inter, hidden, generator=g, dtype=dtype) for _ in range(E)]
+    down = [torch.randn(hidden, inter, generator=g, dtype=dtype) for _ in range(E)]
+    x = torch.randn(T, hidden, generator=g, dtype=dtype)
+    return gate, up, down, x, E
+
+
+def _consumer_forward(gate_up_e, down_e, x):
+    """The arithmetic every consumer of a fused stack applies, verbatim.
+
+    Mirrors ``_vendor/experts.py`` lines 499-501 — ``proj.chunk(2, dim=-1)``
+    then ``act_fn(gate) * up`` — and ``arch/deepseek_v4.py``'s dense path,
+    which chunks the same way. The projection is ``x @ W.T`` for
+    ``W = [2*inter, hidden]``, so output features [0:inter] are the rows
+    [0:inter] of the packed weight.
+    """
+    proj = x @ gate_up_e.T
+    gate, up = proj.chunk(2, dim=-1)
+    return (torch.nn.functional.silu(gate) * up) @ down_e.T
+
+
+def test_fused_pack_and_consumer_split_compose_to_the_reference():
+    """fuse_experts' packing, run through the consumers' split, equals a
+    reference computed from the SEPARATE tensors.
+
+    This is the property a swap breaks and that no source-text regex can see.
+    """
+    gate, up, down, x, E = _swap_fixture()
+    gate_up, down_stack = fuse_experts(gate, up, down)
+    for e in range(E):
+        got = _consumer_forward(gate_up[e], down_stack[e], x)
+        # Reference: no fused tensor anywhere in this expression.
+        want = (torch.nn.functional.silu(x @ gate[e].T) * (x @ up[e].T)) @ down[e].T
+        assert torch.allclose(got, want, rtol=1e-12, atol=1e-12), (
+            f"expert {e}: the packed-then-split path disagrees with the "
+            f"separate-tensor reference — gate/up order is wrong somewhere "
+            f"between fuse_experts and chunk(2, dim=-1)"
+        )
+
+
+def test_the_detector_actually_catches_a_swap():
+    """False-accept probe. Without this the test above could be a tautology.
+
+    A pack with the halves exchanged must FAIL the same comparison. If it
+    passes, the fixture is degenerate (gate == up, or an activation that
+    commutes) and the test above is worthless.
+    """
+    gate, up, down, x, E = _swap_fixture()
+    # up first — the layout MoEConvention.fused_order can now express and
+    # expert_layout_for refuses.
+    swapped = torch.stack([torch.cat([up[e], gate[e]], dim=0) for e in range(E)])
+    down_stack = torch.stack(down)
+    caught = 0
+    for e in range(E):
+        got = _consumer_forward(swapped[e], down_stack[e], x)
+        want = (torch.nn.functional.silu(x @ gate[e].T) * (x @ up[e].T)) @ down[e].T
+        if not torch.allclose(got, want, rtol=1e-6, atol=1e-6):
+            caught += 1
+    assert caught == E, (
+        f"the swap was invisible on {E - caught} of {E} experts — the fixture is "
+        f"degenerate and test_fused_pack_and_consumer_split_compose_to_the_reference "
+        f"proves nothing"
+    )
+
+
+def test_a_swap_is_silent_without_a_numerical_check():
+    """Why the check has to be numerical: a swapped pack is structurally perfect.
+
+    Shape, dtype, expert count and the intermediate split all agree. Every
+    structural gate e4b applies — the attention census, n_patched == n_layers,
+    the kernel-call floor, C1 bit-exactness on frozen experts — is indifferent
+    to which half is the gate. Only the numbers differ.
+    """
+    gate, up, down, x, E = _swap_fixture()
+    correct, _ = fuse_experts(gate, up, down)
+    swapped = torch.stack([torch.cat([up[e], gate[e]], dim=0) for e in range(E)])
+    assert correct.shape == swapped.shape
+    assert correct.dtype == swapped.dtype
+    # Same rows, same multiset of values — only the ORDER of the two blocks moved.
+    for e in range(E):
+        assert torch.equal(torch.sort(correct[e].flatten()).values,
+                           torch.sort(swapped[e].flatten()).values)
+    # ...and yet the forwards differ, which is the whole point.
+    assert not torch.allclose(_consumer_forward(correct[0], down[0], x),
+                              _consumer_forward(swapped[0], down[0], x))
