@@ -196,3 +196,22 @@ def test_a_host_that_could_not_finish_is_not_a_family_verdict(reducer):
     r = reducer.RANK
     assert r.index("none") < r.index("host-limited") < r.index("error")
     assert r.index("host-limited") < r.index("reference-ok")
+
+
+def test_a_signal_death_grades_as_a_host_limit(reducer):
+    """A real OOM arrives as exit 137 (128 + SIGKILL), not as the stub's sentinel 9.
+
+    This was found by an actual kill, not by review: DeepSeek-V4-Flash was
+    OOM-killed mid-load, lan_queue.sh synthesised its row correctly, and the
+    grader then read 137 as `error` -- filing the host running out of memory as a
+    fault in e4b, which is the precise misattribution `host-limited` was added to
+    prevent. The vocabulary was invented before it met a real signal.
+    """
+    for code in (137, 143, 129, 255):
+        assert reducer._grade({"exit_code": code, "stages": {}}) == "host-limited", code
+    # Ordinary non-zero exits keep their meanings.
+    assert reducer._grade({"exit_code": 6, "stages": {}}) == "error"
+    assert reducer._grade({"exit_code": 3, "stages": {}}) == "refused"
+    assert reducer._grade({"exit_code": 4, "stages": {}}) == "blocked"
+    # 128 exactly is not a signal death.
+    assert reducer._grade({"exit_code": 128, "stages": {}}) == "error"

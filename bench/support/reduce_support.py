@@ -62,7 +62,12 @@ def _grade(row: dict) -> str:
     code = row.get("exit_code")
     if code == 5:
         return "copy-broken"
-    if code == 9:
+    # 9 is the stub's own sentinel; 128+N is a signal death. A real OOM arrives
+    # as 137 (128 + SIGKILL) and graded `error` until this was widened -- the
+    # exact misattribution `host-limited` exists to prevent, defeated because the
+    # vocabulary was invented before it met a real kill. SIGTERM (143) counts
+    # too: a process someone stopped says nothing about the family either.
+    if code == 9 or (isinstance(code, int) and 128 < code < 256):
         return "host-limited"
     if code == 4:
         return "blocked"

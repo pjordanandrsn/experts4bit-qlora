@@ -1,5 +1,5 @@
 {
- "deepseek_v4": "none",
+ "deepseek_v4": "host-limited",
  "gemma4": "reference-ok",
  "gemma4_text": "none",
  "gpt_oss": "reference-ok",
