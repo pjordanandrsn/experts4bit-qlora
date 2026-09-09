@@ -1,0 +1,8 @@
+{
+ "gemma4": true,
+ "gpt_oss": true,
+ "granitemoe": false,
+ "olmoe": true,
+ "qwen3_5_moe": false,
+ "qwen3_moe": true
+}
