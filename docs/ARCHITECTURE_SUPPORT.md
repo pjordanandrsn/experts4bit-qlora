@@ -179,3 +179,59 @@ The attention-4-bit configuration these receipts add per family is recorded in `
 `olmoe`, `qwen3_moe`, `mixtral`; not supported on `gemma4_text` pending #412; refused on `gpt_oss` (bias-carrying
 projections). No tp1 verdict moved, no gate or threshold moved, and P38's 200-step curve row (Unsloth lower at N=200)
 still stands beside any Qwen3 position.
+
+## Probe evidence (generated)
+
+<!-- BEGIN GENERATED: bench/support/reduce_support.py --write-doc -->
+
+*Generated from `bench/support/rows/*.json`. Do not edit by hand — run
+`python bench/support/reduce_support.py --write-doc`. The hand-written
+sections above and below remain authoritative for everything these rows do
+not cover, notably CUDA-graph capture and any throughput figure.*
+
+## Probe rows
+
+| model_type | checkpoint | tier | route | device | load | verify | forward | grade |
+|---|---|---|---|---|---|---|---|---|
+| `deepseek_v2` | `hmellor/tiny-random-DeepseekV2ForCausalLM` | toy | convention | cpu | ok | 3q/0u | ok | **toy-ok** |
+| `gemma4` | `google/gemma-4-26B-A4B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 30q/0u | ok | **reference-ok** |
+| `gemma4` | `/Users/jordananderson/models/gemma-4-31B` | — | SUPPORTED_ARCHITECTURES | cpu | refused | — | — | **refused** |
+| `gpt_oss` | `/Users/jordananderson/models/gpt-oss-20b` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **reference-ok** |
+| `granitemoe` | `ibm-granite/granite-3.1-3b-a800m-instruct` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 32q/0u | ok | **reference-ok** |
+| `granitemoe` | `/Users/jordananderson/models/granite-3.0-1b-a400m-instruct` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **toy-ok** |
+| `olmoe` | `/Users/jordananderson/models/OLMoE-1B-7B-0924` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 16q/0u | ok | **reference-ok** |
+| `qwen3_5_moe` | `/Users/jordananderson/models/Qwen3.6-35B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 40q/0u | ok | **reference-ok** |
+| `qwen3_5_moe` | `yujiepan/qwen3.5-moe-tiny-random` | — | SUPPORTED_ARCHITECTURES | cpu | — | — | — | **blocked** |
+| `qwen3_moe` | `/Users/jordananderson/models/Qwen3-30B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 48q/0u | ok | **reference-ok** |
+| `qwen3_next` | `theo77186/Qwen3-Next-70M-TinyStories` | toy | convention | cpu | ok | 8q/0u | ok | **toy-ok** |
+
+## Claimed vs evidenced
+
+`SUPPORTED_ARCHITECTURES` claims **9** families.
+
+| claimed model_type | best evidence | checkpoint |
+|---|---|---|
+| `olmoe` | **reference-ok** | `/Users/jordananderson/models/OLMoE-1B-7B-0924` |
+| `qwen3_moe` | **reference-ok** | `/Users/jordananderson/models/Qwen3-30B-A3B` |
+| `qwen3_5_moe` | **reference-ok** | `/Users/jordananderson/models/Qwen3.6-35B-A3B` |
+| `gpt_oss` | **reference-ok** | `/Users/jordananderson/models/gpt-oss-20b` |
+| `gemma4` | **reference-ok** | `google/gemma-4-26B-A4B` |
+| `gemma4_text` | **none** | — |
+| `granitemoe` | **reference-ok** | `ibm-granite/granite-3.1-3b-a800m-instruct` |
+| `kimi_k3` | **none** | — |
+| `deepseek_v4` | **none** | — |
+
+Probed but **not** in the claimed list (reachable by convention, or not supported at all — a passing row here is not a reason to claim it):
+
+- `deepseek_v2` — toy-ok on `hmellor/tiny-random-DeepseekV2ForCausalLM`
+- `qwen3_next` — toy-ok on `theo77186/Qwen3-Next-70M-TinyStories`
+
+**6 of 9** claimed families have a reference-tier passing row.
+
+Why some rows above read `none` and always will:
+
+- **`gemma4_text`** — the text tower of a `gemma4` config -- `moe_conventions.py:328` gives ONE convention record (`GEMMA4`) for `{gemma4_text, gemma4}`, and its own comment calls `gemma4_text` "what the loader constructs from `text_config`". Every released gemma-4 (26B-A4B, 26B-A4B-it, 31B, E4B) reports `model_type: gemma4`; `Gemma4TextConfig.model_type` exists in transformers but Google ships `Gemma4Config`. The `gemma4` row therefore already exercised this record's `model.language_model.` -> `model.` rename -- without it the load would have found no experts at all -- and `test_gemma4_text_only_tree_strips_the_prefix_and_drops_the_vision_tower` covers the text-only tree. What is NOT covered is a real-weight load entered through a top-level `gemma4_text` config, which no download can supply.
+
+These stay uncounted on purpose. The count tracks loads, not arguments.
+
+<!-- END GENERATED -->

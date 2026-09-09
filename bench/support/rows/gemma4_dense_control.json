@@ -1,0 +1,57 @@
+{
+ "model": "/Users/jordananderson/models/gemma-4-31B",
+ "revision": null,
+ "source": "local-path",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-09T14:53:57Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.11.0",
+  "transformers": "5.13.1",
+  "bitsandbytes": "0.50.0",
+  "gnf4": "absent (ModuleNotFoundError)",
+  "e4b": "0.35.3"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "ok",
+   "shards": 2,
+   "note": "every shard matches the length its own header declares"
+  },
+  "load": {
+   "status": "refused",
+   "refusal_basis": "message",
+   "error": "RuntimeError: no fused expert stacks found in '/Users/jordananderson/models/gemma-4-31B' (model_type='gemma4'): expected 'model.layers.<i>.experts.gate_up_proj' (fused) or 'model.layers.<i>.experts.0.gate_proj.weight' (per-expert) tensors in the checkpoint. Refusing to return a model with zero quantized expert layers \u2014 silently skipping the experts is the exact failure this loader exists to prevent.",
+   "seconds": 0.5
+  }
+ },
+ "model_type": "gemma4",
+ "config": {
+  "hidden_size": 5376,
+  "num_hidden_layers": 60,
+  "num_experts": null,
+  "top_k": null,
+  "moe_intermediate_size": 21504
+ },
+ "claim": {
+  "in_supported_architectures": true,
+  "reachable_by_convention": false,
+  "expert_attr": "experts"
+ },
+ "exit_code": 3,
+ "finished_utc": "2026-09-09T14:54:00Z"
+}

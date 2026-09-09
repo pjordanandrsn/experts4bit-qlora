@@ -1,0 +1,51 @@
+{
+ "model": "yujiepan/qwen3.5-moe-tiny-random",
+ "revision": null,
+ "source": "hf-id",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "float32",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-09T11:13:51Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.11.0",
+  "transformers": "5.13.1",
+  "bitsandbytes": "0.50.0",
+  "gnf4": "absent (ModuleNotFoundError)",
+  "e4b": "0.35.3"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "blocked",
+   "blocksize": 64,
+   "offending_dims": {
+    "hidden_size": 8,
+    "moe_intermediate_size": 32
+   },
+   "reason": "hidden_size=8, moe_intermediate_size=32 not divisible by blocksize 64; ExpertsNbit would refuse before this family is exercised. This is a property of the CHECKPOINT, not of 'qwen3_5_moe' support -- a bigger checkpoint is needed to answer the question."
+  }
+ },
+ "model_type": "qwen3_5_moe",
+ "config": {
+  "hidden_size": 8,
+  "num_hidden_layers": 4,
+  "num_experts": 128,
+  "top_k": 10,
+  "moe_intermediate_size": 32
+ },
+ "claim": {
+  "in_supported_architectures": true,
+  "reachable_by_convention": false,
+  "expert_attr": "mlp.experts"
+ },
+ "exit_code": 4,
+ "finished_utc": "2026-09-09T11:13:54Z"
+}

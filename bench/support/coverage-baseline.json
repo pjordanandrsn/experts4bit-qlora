@@ -1,0 +1,11 @@
+{
+ "deepseek_v4": "none",
+ "gemma4": "reference-ok",
+ "gemma4_text": "none",
+ "gpt_oss": "reference-ok",
+ "granitemoe": "reference-ok",
+ "kimi_k3": "none",
+ "olmoe": "reference-ok",
+ "qwen3_5_moe": "reference-ok",
+ "qwen3_moe": "reference-ok"
+}

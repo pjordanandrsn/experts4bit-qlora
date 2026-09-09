@@ -1,0 +1,73 @@
+{
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "source": "hf-id",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-09T11:05:30Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.11.0",
+  "transformers": "5.13.1",
+  "bitsandbytes": "0.50.0",
+  "gnf4": "absent (ModuleNotFoundError)",
+  "e4b": "0.35.3"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "load": {
+   "status": "ok",
+   "seconds": 10.4
+  },
+  "verify": {
+   "status": "ok",
+   "n_quantized": 32,
+   "n_unquantized": 0,
+   "quant_types": [
+    "nf4"
+   ]
+  },
+  "forward": {
+   "status": "ok",
+   "note": "loss is on synthetic arange token ids: a finiteness smoke test, NOT a quality measure",
+   "seconds": 1.83,
+   "loss": 14.06198,
+   "loss_finite": true,
+   "logits_finite": true
+  },
+  "capture": {
+   "status": "not_tested",
+   "reason": "CPU probe: CUDA-graph capture cannot be established here"
+  }
+ },
+ "model_type": "granitemoe",
+ "config": {
+  "hidden_size": 1536,
+  "num_hidden_layers": 32,
+  "num_experts": 40,
+  "top_k": 8,
+  "moe_intermediate_size": 512
+ },
+ "claim": {
+  "in_supported_architectures": true,
+  "reachable_by_convention": false,
+  "expert_attr": "block_sparse_moe.experts"
+ },
+ "total_params": 1836029952,
+ "tier": "reference",
+ "tier_rule": "total_params < 1000000000 -> toy; else reference",
+ "exit_code": 0,
+ "finished_utc": "2026-09-09T11:05:44Z"
+}

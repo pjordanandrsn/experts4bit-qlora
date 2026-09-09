@@ -1,0 +1,73 @@
+{
+ "model": "theo77186/Qwen3-Next-70M-TinyStories",
+ "revision": null,
+ "source": "hf-id",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "float32",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-09T11:13:56Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.11.0",
+  "transformers": "5.13.1",
+  "bitsandbytes": "0.50.0",
+  "gnf4": "absent (ModuleNotFoundError)",
+  "e4b": "0.35.3"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "load": {
+   "status": "ok",
+   "seconds": 1.1
+  },
+  "verify": {
+   "status": "ok",
+   "n_quantized": 8,
+   "n_unquantized": 0,
+   "quant_types": [
+    "nf4"
+   ]
+  },
+  "forward": {
+   "status": "ok",
+   "note": "loss is on synthetic arange token ids: a finiteness smoke test, NOT a quality measure",
+   "seconds": 0.31,
+   "loss": 12.13937,
+   "loss_finite": true,
+   "logits_finite": true
+  },
+  "capture": {
+   "status": "not_tested",
+   "reason": "CPU probe: CUDA-graph capture cannot be established here"
+  }
+ },
+ "model_type": "qwen3_next",
+ "config": {
+  "hidden_size": 256,
+  "num_hidden_layers": 8,
+  "num_experts": 16,
+  "top_k": 2,
+  "moe_intermediate_size": 256
+ },
+ "claim": {
+  "in_supported_architectures": false,
+  "reachable_by_convention": true,
+  "expert_attr": null
+ },
+ "total_params": 57042968,
+ "tier": "toy",
+ "tier_rule": "total_params < 1000000000 -> toy; else reference",
+ "exit_code": 0,
+ "finished_utc": "2026-09-09T11:14:00Z"
+}
