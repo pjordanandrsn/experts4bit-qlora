@@ -640,3 +640,136 @@ def test_gemma4_drop_never_hides_a_missing_language_key():
     text.remove("model.layers.1.experts.down_proj")
     with pytest.raises(MoEConventionError, match="do not map"):
         plan_moe_checkpoint(keys, _NamesTree(text), "gemma4_text")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# e4b#515 — the fused gate/up order as a declared, validated fact.
+#
+# What was already covered before this: the orientation IS pinned, by
+# test_gate_precedes_up_in_upstream_spec against the converter specs, by the
+# three forward tests (mixtral, qwen2_moe family, granitemoe) and by
+# test_fuse_puts_gate_first_and_refuses_partial numerically. #515's real gap is
+# narrower than "nothing verifies it": the convention RECORD had no field for
+# the order, so for a natively pre-fused family (roles={}, unmatchable
+# expert_re) the adjudication lived only in prose and in whichever test someone
+# remembered to write. A newly added row could omit the question entirely.
+#
+# So these tests cover what the field adds, not what the suite already had.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _all_convention_records():
+    from experts4bit_qlora.arch import moe_conventions as mc
+    return [v for v in vars(mc).values() if isinstance(v, mc.MoEConvention)]
+
+
+def test_every_convention_declares_a_legal_fused_order():
+    """The question cannot be left unanswered by a new record.
+
+    Every record is validated at construction, so this also proves the module
+    imports only if all of them are legal.
+    """
+    records = _all_convention_records()
+    assert len(records) >= 15, f"expected the full convention set, got {len(records)}"
+    for conv in records:
+        assert tuple(conv.fused_order) in (("gate", "up"), ("up", "gate")), conv.name
+        # gate_first is the predicate consumers read; keep it consistent with the tuple.
+        assert conv.gate_first == (tuple(conv.fused_order) == ("gate", "up")), conv.name
+
+
+def test_every_gated_family_is_adjudicated_gate_first_today():
+    """The nine natively-pre-fused conventions included.
+
+    If a family ever ships up-first this test is the one that should change, in
+    the same commit that parameterises the consumers — not before.
+    """
+    for conv in _all_convention_records():
+        if conv.gated:
+            assert conv.gate_first, (
+                f"{conv.name} declares up-first; the loader refuses that today "
+                f"(see test_expert_layout_for_refuses_an_up_first_convention)"
+            )
+
+
+@pytest.mark.parametrize("bad", [
+    ("up", "gate", "extra"),   # three entries
+    ("gate", "gate"),          # not a permutation
+    "gate-up",                 # a string, not a pair
+    ("Gate", "Up"),            # case matters; the halves are named, not parsed
+    (),
+])
+def test_a_bogus_fused_order_is_refused_at_construction(bad):
+    """A frozen record cannot repair itself, so it must refuse rather than coerce."""
+    from experts4bit_qlora.arch.moe_conventions import MoEConvention, MoEConventionError
+    with pytest.raises(MoEConventionError, match="fused_order must be"):
+        MoEConvention(name="probe", expert_re=re.compile(r"(?!)"), roles={},
+                      fused_prefix="p", fused_order=bad)
+
+
+def test_a_non_gated_convention_may_not_declare_a_gate_order():
+    """nemotron_h stacks {up, down}; there is no gate to put first or second."""
+    from experts4bit_qlora.arch.moe_conventions import MoEConvention, MoEConventionError
+    with pytest.raises(MoEConventionError, match="no gate to order"):
+        MoEConvention(name="ungated-probe", expert_re=re.compile(r"(?!)"), roles={},
+                      fused_prefix="p", gated=False, fused_order=("up", "gate"))
+
+
+def test_an_up_first_convention_is_expressible():
+    """The point of the field: the other order becomes representable.
+
+    Before this it could not be stated at all, so a family shipping it had no
+    way to say so and would have been loaded gate-first — silently wrong.
+    """
+    from experts4bit_qlora.arch.moe_conventions import MoEConvention
+    conv = MoEConvention(name="upfirst-probe", expert_re=re.compile(r"(?!)"), roles={},
+                         fused_prefix="p", fused_order=("up", "gate"))
+    assert conv.gate_first is False
+
+
+def test_expert_layout_for_refuses_an_up_first_convention(monkeypatch):
+    """Loud beats wrong.
+
+    Every consumer of a fused gate_up_proj splits it with ``chunk(2, dim=-1)``
+    and takes the first half as the gate — the vendored expert forward,
+    deepseek_v4's dense path, the hybrid and hot-residency engines, ExpertsLoRA.
+    None is parameterised on the order, so an up-first family would load and
+    compute ``up * act(gate)``: a wrong activation with every structural gate
+    still passing. The single funnel from the convention system into the loader
+    refuses it instead.
+    """
+    from experts4bit_qlora import loader
+    from experts4bit_qlora.arch.moe_conventions import MoEConvention, MoEConventionError
+
+    upfirst = MoEConvention(
+        name="upfirst-probe", expert_re=re.compile(r"(?!)"), roles={},
+        fused_prefix="mlp.experts", model_types=frozenset({"upfirst_probe"}),
+        fused_order=("up", "gate"),
+    )
+    monkeypatch.setattr(loader, "convention_for", lambda mt, **k: upfirst, raising=False)
+    monkeypatch.setattr("experts4bit_qlora.arch.moe_conventions.convention_for",
+                        lambda mt, **k: upfirst)
+    with pytest.raises(MoEConventionError, match="assume the gate occupies rows"):
+        loader.expert_layout_for("upfirst_probe")
+
+
+def test_the_refusal_is_still_necessary_because_consumers_assume_gate_first():
+    """A guard on the reason for the refusal, so it is lifted deliberately.
+
+    When someone parameterises these sites on ``fused_order``, this test fails
+    and points at the refusal that should then be removed. Without it the
+    refusal would outlive its cause and look like policy.
+    """
+    import pathlib as _pathlib
+    root = _pathlib.Path(__file__).resolve().parents[1] / "experts4bit_qlora"
+    sites = {
+        "_vendor/experts.py": "proj.chunk(2, dim=-1)",
+        "arch/deepseek_v4.py": "gate_up.chunk(2, dim=-1)",
+    }
+    for rel, needle in sites.items():
+        text = (root / rel).read_text()
+        assert needle in text, f"{rel} no longer splits with {needle!r} — re-check e4b#515"
+        # and it is still unparameterised: no consumer reads the field yet
+        assert "fused_order" not in text, (
+            f"{rel} now references fused_order — if it honours the order, remove the "
+            f"loader refusal in expert_layout_for and update this test (e4b#515)"
+        )

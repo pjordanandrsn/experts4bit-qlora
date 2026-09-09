@@ -215,6 +215,24 @@ def expert_layout_for(model_type):
     from .arch.moe_conventions import MoEConventionError, convention_for
     try:
         conv = convention_for(model_type)
+        # e4b#515. Every consumer of a fused gate_up_proj splits it with
+        # ``chunk(2, dim=-1)`` and takes the FIRST half as the gate -- the
+        # vendored expert forward, deepseek_v4's dense path, the hybrid and
+        # hot-residency engines, and ExpertsLoRA. None of them is parameterised
+        # on the order. So a convention declaring up-first would load and then
+        # compute ``up * act(gate)``: a wrong activation, silently, with every
+        # structural gate still passing. Refuse it here, at the one funnel from
+        # the convention system into this loader, until those consumers read
+        # ``fused_order`` instead of assuming. Loud beats wrong.
+        if not conv.gate_first:
+            raise MoEConventionError(
+                f"convention {conv.name!r} declares fused_order "
+                f"{tuple(conv.fused_order)!r}, but this loader's expert consumers "
+                f"all assume the gate occupies rows [0:inter] of gate_up_proj. "
+                f"Loading it would compute a wrong activation without raising. "
+                f"Parameterise the consumers on MoEConvention.fused_order before "
+                f"admitting an up-first family (e4b#515)."
+            )
         return conv.fused_prefix, conv.gated
     except MoEConventionError:
         if model_type in SUPPORTED_ARCHITECTURES:
