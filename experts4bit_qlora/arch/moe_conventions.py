@@ -58,6 +58,11 @@ import re
 from dataclasses import dataclass, field
 
 
+class MoEConventionError(ValueError):
+    """An expert stack could not be built. Never downgrade to a warning: a
+    partial or mis-ordered stack computes wrong numbers without raising."""
+
+
 @dataclass(frozen=True)
 class MoEConvention:
     """How one family stores per-expert weights on disk.
@@ -82,6 +87,20 @@ class MoEConvention:
     # plain up/down (nemotron_h: no gate, up_proj and down_proj stacked
     # separately). Non-gated conventions declare roles {up, down} only.
     gated: bool = True
+    # Which half of a fused ``gate_up_proj`` [E, 2*inter, hidden] is the gate.
+    # ``("gate", "up")`` means rows [0:inter] are the gate, matching
+    # ``fuse_experts``' contract and what every consumer assumes when it does
+    # ``proj.chunk(2, dim=-1)``. This is an ADJUDICATED fact, never inferred:
+    # gate and up are shape-identical, so a swap cannot be detected from
+    # shapes and produces ``up * act(gate)`` -- a wrong activation, silently,
+    # with every structural gate still passing (e4b#515).
+    #
+    # It is data rather than a comment because for a natively pre-fused family
+    # (``roles={}``, unmatchable ``expert_re``) there are no key names left to
+    # recover it from, so the only record was prose. ``DBRX`` had already
+    # written "SwiGLU gate-first ... recorded here so the orientation is never
+    # re-guessed" in its comment; this is that sentence for all of them.
+    fused_order: tuple = ("gate", "up")
     # Keys whose SUFFIX matches this get their last two axes transposed at load.
     # Some pre-fused families (qwen3_vl_moe) ship experts as [E, in, out] and
     # the module declares [E, out, in]; upstream's converter is a Transpose(1,2)
@@ -95,6 +114,27 @@ class MoEConvention:
     # the key has no home in the tree; a multimodal tree that does build
     # the tower keeps them. None means no key is ever dropped.
     drop_re: re.Pattern | None = None
+
+    def __post_init__(self):
+        # A frozen dataclass cannot repair itself, so refuse rather than coerce.
+        if tuple(self.fused_order) not in (("gate", "up"), ("up", "gate")):
+            raise MoEConventionError(
+                f"{self.name}: fused_order must be ('gate', 'up') or "
+                f"('up', 'gate'), got {self.fused_order!r}. It names which half "
+                f"of a fused gate_up_proj is the gate; there is no third option "
+                f"and it must not be guessed."
+            )
+        if not self.gated and tuple(self.fused_order) != ("gate", "up"):
+            raise MoEConventionError(
+                f"{self.name}: a non-gated convention (roles {{up, down}}) has no "
+                f"gate to order, so fused_order must stay at its default; got "
+                f"{self.fused_order!r}."
+            )
+
+    @property
+    def gate_first(self) -> bool:
+        """Rows ``[0:inter]`` of a fused ``gate_up_proj`` are the gate."""
+        return tuple(self.fused_order) == ("gate", "up")
 
     def rename(self, key: str) -> str:
         for src, dst in self.renames:
@@ -408,9 +448,6 @@ CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS, 
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 
-class MoEConventionError(ValueError):
-    """An expert stack could not be built. Never downgrade to a warning: a
-    partial or mis-ordered stack computes wrong numbers without raising."""
 
 
 def convention_for(model_type: str, *, dense_ok: bool = False) -> MoEConvention:
@@ -444,7 +481,8 @@ def fuse_experts(gate: list, up: list, down: list):
     ``[hidden, inter]``. Equivalent to transformers'
     ``MergeModulelist(dim=0)`` + ``Concatenate(dim=1)``: stack each projection
     across experts, then join gate and up along the intermediate axis with the
-    **gate first**. Missing experts raise rather than silently shrinking the
+    **gate first** -- the layout ``MoEConvention.fused_order`` names and every
+    ``chunk(2, dim=-1)`` consumer assumes (e4b#515). Missing experts raise rather than silently shrinking the
     stack — a short stack would route some tokens to the wrong expert.
     """
     import torch
