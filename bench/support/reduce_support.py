@@ -27,6 +27,9 @@ it is written down rather than implied:
                 about the family, only that the transfer failed
   host-limited  the probe was killed before it finished (OOM): says the HOST
                 could not complete the attempt, not that the family fails
+  checkpoint-broken  the checkpoint's own trust_remote_code payload failed to
+                import against the installed transformers -- a third party's
+                stale code, not e4b's
   none          no row at all -- the state that reads exactly like validated
 
 `reference-ok` on CPU is full evidence for the loader claim and none at all for
@@ -53,8 +56,12 @@ BASELINE = Path(__file__).resolve().parent / "coverage-baseline.json"
 # is a probe the OS killed (an OOM on the largest checkpoints). Both must
 # outrank `none` -- an attempt was made and the outcome is known -- and both must
 # rank BELOW `error` and `refused`, which are statements about the code.
-RANK = ["none", "copy-broken", "host-limited", "error", "refused", "blocked",
-        "toy-ok", "reference-ok"]
+# Four grades now say "not a verdict on e4b", each naming a different origin:
+# copy-broken (the transfer), host-limited (this machine), checkpoint-broken
+# (the checkpoint's own remote code), and none (never attempted). All rank below
+# `error` and `refused`, which ARE statements about e4b.
+RANK = ["none", "copy-broken", "host-limited", "checkpoint-broken", "error", "refused",
+        "blocked", "toy-ok", "reference-ok"]
 
 
 def _grade(row: dict) -> str:
@@ -69,6 +76,8 @@ def _grade(row: dict) -> str:
     # too: a process someone stopped says nothing about the family either.
     if code == 9 or (isinstance(code, int) and 128 < code < 256):
         return "host-limited"
+    if code == 10:
+        return "checkpoint-broken"
     if code == 4:
         return "blocked"
     if code == 3:

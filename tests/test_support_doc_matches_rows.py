@@ -215,3 +215,24 @@ def test_a_signal_death_grades_as_a_host_limit(reducer):
     assert reducer._grade({"exit_code": 4, "stages": {}}) == "blocked"
     # 128 exactly is not a signal death.
     assert reducer._grade({"exit_code": 128, "stages": {}}) == "error"
+
+
+def test_a_checkpoints_own_stale_remote_code_is_not_an_e4b_fault(reducer):
+    """Exit 10: the checkpoint's trust_remote_code payload failed to import.
+
+    Moonlight-16B-A3B-Instruct raises "cannot import name 'is_torch_fx_available'"
+    -- a symbol transformers removed -- before e4b sees a tensor.
+    docs/ARCHITECTURE_SUPPORT.md already records this for deepseek_v3's TINY
+    checkpoint and calls it "not a loader defect"; the released model does it
+    too, which is the finding.
+
+    Grading it `error` would file a third party's stale code as ours. It is the
+    fourth distinct origin the grades now separate -- transfer, host, checkpoint,
+    e4b -- and all three non-e4b origins must outrank `none` (an attempt was
+    made) and rank below `error`/`refused` (which are verdicts on e4b).
+    """
+    assert reducer._grade({"exit_code": 10, "stages": {}}) == "checkpoint-broken"
+    r = reducer.RANK
+    for g in ("copy-broken", "host-limited", "checkpoint-broken"):
+        assert r.index("none") < r.index(g) < r.index("error"), g
+    assert r.index("error") < r.index("refused") < r.index("reference-ok")

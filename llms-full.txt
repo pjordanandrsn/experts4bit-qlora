@@ -2793,6 +2793,7 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 |---|---|---|---|---|---|---|---|---|
 | `bailing_hybrid` | `Ling-3.0-tiny` | — | — | cpu | refused | — | — | **refused** |
 | `deepseek_v2` | `hmellor/tiny-random-DeepseekV2ForCausalLM` | toy | convention | cpu | ok | 3q/0u | ok | **toy-ok** |
+| `deepseek_v3` | `Moonlight-16B-A3B-Instruct` | — | convention | cpu | checkpoint-broken | — | — | **checkpoint-broken** |
 | `deepseek_v4` | `DeepSeek-V4-Flash` | — | — | cpu | error | — | — | **host-limited** |
 | `gemma4` | `google/gemma-4-26B-A4B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 30q/0u | ok | **reference-ok** |
 | `gemma4` | `gemma-4-31B` | — | SUPPORTED_ARCHITECTURES | cpu | refused | — | — | **refused** |
@@ -2825,6 +2826,7 @@ Probed but **not** in the claimed list (reachable by convention, or not supporte
 
 - `bailing_hybrid` — refused on `Ling-3.0-tiny`
 - `deepseek_v2` — toy-ok on `hmellor/tiny-random-DeepseekV2ForCausalLM`
+- `deepseek_v3` — checkpoint-broken on `Moonlight-16B-A3B-Instruct`
 - `qwen3_next` — toy-ok on `theo77186/Qwen3-Next-70M-TinyStories`
 
 **6 of 9** claimed families have a reference-tier passing row.

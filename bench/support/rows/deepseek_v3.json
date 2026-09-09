@@ -1,0 +1,59 @@
+{
+ "model": "Moonlight-16B-A3B-Instruct",
+ "revision": null,
+ "source": "local-mirror",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-09T20:29:51Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.11.0",
+  "transformers": "5.13.1",
+  "bitsandbytes": "0.50.0",
+  "gnf4": "absent (ModuleNotFoundError)",
+  "e4b": "0.35.3"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "ok",
+   "shards": 27,
+   "note": "every shard matches the length its own header declares"
+  },
+  "load": {
+   "status": "checkpoint-broken",
+   "refusal_basis": "n/a",
+   "error": "ImportError: cannot import name 'is_torch_fx_available' from 'transformers.utils.import_utils' (/Users/jordananderson/.venvs/e4b/lib/python3.14/site-packages/transformers/utils/import_utils.py)",
+   "seconds": 0.2,
+   "origin": "the checkpoint's own remote code, not e4b -- it imports a symbol the installed transformers no longer provides"
+  }
+ },
+ "model_type": "deepseek_v3",
+ "config": {
+  "hidden_size": 2048,
+  "num_hidden_layers": 27,
+  "num_experts": 64,
+  "top_k": 6,
+  "moe_intermediate_size": 1408
+ },
+ "claim": {
+  "in_supported_architectures": false,
+  "reachable_by_convention": true,
+  "expert_attr": null
+ },
+ "exit_code": 10,
+ "finished_utc": "2026-09-09T20:29:54Z",
+ "regraded_note": "re-graded from exit 6 after the probe learned this origin; the run itself is unchanged and the checkpoint was already reclaimed"
+}

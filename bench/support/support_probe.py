@@ -371,14 +371,32 @@ def main() -> int:
         REFUSAL_MARKERS = ("Refusing", "no fused expert stacks found")
         refusal = (type(e).__name__ in REFUSAL_TYPES
                    or any(m in str(e) for m in REFUSAL_MARKERS))
+
+        # A THIRD origin, distinct from the loader and from this host: the
+        # checkpoint's own trust_remote_code payload, stale against the
+        # installed transformers. Moonlight-16B-A3B raises
+        # "cannot import name 'is_torch_fx_available'" -- a symbol transformers
+        # removed -- before e4b sees a single tensor. docs/ARCHITECTURE_SUPPORT.md
+        # already records this for deepseek_v3's TINY checkpoint and calls it
+        # "not a loader defect"; the released model does it too.
+        #
+        # With remote code enabled, an import failure during load is
+        # overwhelmingly that payload rather than e4b. Grading it `error` files a
+        # third party's stale code as our fault, which is the same misattribution
+        # as copy-broken and host-limited.
+        ckpt_broken = (args.trust_remote_code
+                       and type(e).__name__ in ("ImportError", "ModuleNotFoundError"))
         row["stages"]["load"] = {
-            "status": "refused" if refusal else "error",
+            "status": ("refused" if refusal
+                       else "checkpoint-broken" if ckpt_broken else "error"),
             "refusal_basis": ("type" if type(e).__name__ in REFUSAL_TYPES
                               else "message" if refusal else "n/a"),
+            "origin": ("the checkpoint's own remote code, not e4b -- it imports a symbol the "
+                       "installed transformers no longer provides" if ckpt_broken else None),
             "error": scrub(f"{type(e).__name__}: {e}"),
             "seconds": round(time.time() - t0, 1),
         }
-        return write(3 if refusal else 6)
+        return write(3 if refusal else (10 if ckpt_broken else 6))
     row["stages"]["load"] = {"status": "ok", "seconds": round(time.time() - t0, 1)}
 
     total = sum(p.numel() for p in model.parameters())
