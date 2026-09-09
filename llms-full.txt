@@ -2792,6 +2792,7 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 | model_type | checkpoint | tier | route | device | load | verify | forward | grade |
 |---|---|---|---|---|---|---|---|---|
 | `deepseek_v2` | `hmellor/tiny-random-DeepseekV2ForCausalLM` | toy | convention | cpu | ok | 3q/0u | ok | **toy-ok** |
+| `deepseek_v4` | `DeepSeek-V4-Flash` | — | — | cpu | error | — | — | **host-limited** |
 | `gemma4` | `google/gemma-4-26B-A4B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 30q/0u | ok | **reference-ok** |
 | `gemma4` | `gemma-4-31B` | — | SUPPORTED_ARCHITECTURES | cpu | refused | — | — | **refused** |
 | `gpt_oss` | `gpt-oss-20b` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **reference-ok** |
@@ -2817,7 +2818,7 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 | `gemma4_text` | **none** | — |
 | `granitemoe` | **reference-ok** | `ibm-granite/granite-3.1-3b-a800m-instruct` |
 | `kimi_k3` | **none** | — |
-| `deepseek_v4` | **none** | — |
+| `deepseek_v4` | **host-limited** | `DeepSeek-V4-Flash` |
 
 Probed but **not** in the claimed list (reachable by convention, or not supported at all — a passing row here is not a reason to claim it):
 

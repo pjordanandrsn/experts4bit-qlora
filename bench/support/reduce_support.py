@@ -263,11 +263,28 @@ def write_doc(rows: list[dict]) -> int:
         # First insertion: append rather than guess where it belongs. The doc's
         # hand-written taxonomy and evidence-scope sections stay untouched.
         new_text = text.rstrip() + "\n\n## Probe evidence (generated)\n\n" + block + "\n"
-    if new_text == text:
+    doc_changed = new_text != text
+    if not doc_changed:
         print(f"{DOC.relative_to(ROOT)} already current")
-        return 0
-    DOC.write_text(new_text)
-    print(f"updated {DOC.relative_to(ROOT)}")
+    if doc_changed:
+        DOC.write_text(new_text)
+        print(f"updated {DOC.relative_to(ROOT)}")
+
+    # Editing a doc makes llms-full.txt stale, and the discoverability job fails
+    # on it. I forgot that on two consecutive PRs, which makes it a property of
+    # the workflow rather than of my attention: the tool that invalidates the
+    # bundle should rebuild it. Best-effort -- a missing builder is not this
+    # script's problem to report.
+    # Unconditional: an early return on "doc already current" skipped this and
+    # left the bundle stale, which is the exact failure it was added to prevent.
+    builder = ROOT / "scripts" / "build_llms_bundle.py"
+    if builder.exists():
+        import subprocess
+        r = subprocess.run([sys.executable, str(builder)], cwd=ROOT,
+                           capture_output=True, text=True)
+        print("  " + (r.stdout.strip().splitlines() or ["llms bundle: no output"])[-1]
+              if r.returncode == 0 else
+              f"  llms bundle rebuild FAILED ({r.returncode}) -- run it by hand: {r.stderr.strip()[:120]}")
     return 0
 
 
