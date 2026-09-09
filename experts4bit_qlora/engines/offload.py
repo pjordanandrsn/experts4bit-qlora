@@ -914,8 +914,11 @@ def enable_expert_cache(handles, slots=None, top_k=8):
     # projection widths, or a different set of offloaded tensors — would have
     # later layers writing into rows sized for the first. That corrupts silently,
     # which is the one failure mode this cache must not have. Check, do not
-    # assume: `SUPPORTED_ARCHITECTURES` spans six model types and nothing
-    # guarantees uniformity across them.
+    # assume: `SUPPORTED_ARCHITECTURES` spans a growing set of model types and
+    # nothing guarantees uniformity across them. This comment used to name a
+    # count -- "six" -- which was wrong by three families within a few releases;
+    # the count is not what the check below depends on, so it no longer states
+    # one. The geometry comparison is the invariant, not the size of the list.
     def _shape_key(h):
         return (h.base.num_experts,
                 tuple(sorted((n, h.home[n].numel() // h.base.num_experts,
