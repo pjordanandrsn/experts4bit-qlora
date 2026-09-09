@@ -202,6 +202,7 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 | `gpt_oss` | `gpt-oss-20b` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **reference-ok** |
 | `granitemoe` | `ibm-granite/granite-3.1-3b-a800m-instruct` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 32q/0u | ok | **reference-ok** |
 | `granitemoe` | `granite-3.0-1b-a400m-instruct` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **toy-ok** |
+| `granitemoe` | `granite-3.0-1b-a400m-instruct` | toy | SUPPORTED_ARCHITECTURES | cuda | ok | 24q/0u | ok | **toy-ok** |
 | `olmoe` | `OLMoE-1B-7B-0924` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 16q/0u | ok | **reference-ok** |
 | `qwen3_5_moe` | `Qwen3.6-35B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 40q/0u | ok | **reference-ok** |
 | `qwen3_5_moe` | `yujiepan/qwen3.5-moe-tiny-random` | — | SUPPORTED_ARCHITECTURES | cpu | — | — | — | **blocked** |
