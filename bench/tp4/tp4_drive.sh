@@ -31,7 +31,13 @@ POLL=${TP4_POLL_S:-60}; STALL_S=${TP4_STALL_S:-900}; W=/root/tp4
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOCH=$DEADLINE TP4_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA"
-for v in TP4_FAMILIES TP4_SKIP TP4_UNSLOTH_VERSION TP4_UNSLOTH_ZOO_VERSION TP4_PIN_FALLBACK TP4_STEPS; do [ -n "${!v:-}" ] && PASS="$PASS $v=${!v}"; done
+# Every knob the box-side script reads from the environment must be forwardable, or an amendment that changes one
+# of them silently does not reach the box: TP4-PREREG amendment 2 cut the eval instrument for the large families
+# and TP4_EVAL_N / TP4_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.
+for v in TP4_FAMILIES TP4_SKIP TP4_UNSLOTH_VERSION TP4_UNSLOTH_ZOO_VERSION TP4_PIN_FALLBACK TP4_STEPS \
+         TP4_EVAL_N TP4_EVAL_EVERY TP4_SEQ TP4_MB TP4_ACCUM TP4_R TP4_LR TP4_OPTIM TP4_SCHED TP4_WARMUP TP4_GPU_CLASS; do
+  [ -n "${!v:-}" ] && PASS="$PASS $v=${!v}"
+done
 if [ "${TP4_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash tp4_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/tp4"; exit 0; fi
 say "run $RUN_ID box $TP4_BOX nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); gnf4 $GNF4_SHA; receipts -> $RUN_DIR/tp4; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/data /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }
@@ -49,7 +55,7 @@ while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  hb=$($SSH "echo \"\$(tail -n 1 $W/summary.txt 2>/dev/null | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null)
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null)
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
   if [ "$line" != "$LAST" ]; then LAST=$line; LAST_CHANGE=$now; fi
   stall=""; if [ $((now - LAST_CHANGE)) -ge "$STALL_S" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then stall=" STALL? (no summary change for $((now - LAST_CHANGE))s and GPU idle -- LOOK, do not kill)"; fi

@@ -29,6 +29,11 @@ EVAL_EVERY=${TP4_EVAL_EVERY:-20}; EVAL_N=${TP4_EVAL_N:-48}; AUTOCAST=${TP4_AUTOC
 DS_ALPACA_SHA=${TP4_DS_ALPACA_SHA:-5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb}   # tp4_alpaca.py output, registered
 # the anchor pair's fixture = tp2/P38 as run (TP4-PREREG "Anchor"): clinical text, seq 512, batch 1, r 8 / alpha 16, lr 1e-4, torch AdamW wd 0.01, constant, seed 0
 A_STEPS=60; A_SEQ=512; A_MB=1; A_ACCUM=1; A_R=8; A_ALPHA=16; A_LR=1e-4; A_WD=0.01; A_WARMUP=0; A_SCHED=constant; A_OPTIM=adamw_torch; A_SEED=0; A_TEMPLATE=clinical
+# The anchor's override set must cover EVERY knob its arms read, including the eval instrument: with eval_n/
+# eval_every missing, TP4-PREREG amendment 2's field-recipe instrument leaked into the anchor and it ran 8
+# held-out rows where tp2 ran 48 (amendment 3's erratum). A fixture-scoped override that does not cover a knob
+# is not a fixture.
+A_EVAL_N=48; A_EVAL_EVERY=20
 TF_VER=${TP4_TRANSFORMERS_VER:-5.17.0}; BNB_VER=${TP4_BNB_VER:-0.50.2}; PEFT_VER=${TP4_PEFT_VER:-0.20.0}
 SKIP=${TP4_SKIP:-}; PIN_FALLBACK=${TP4_PIN_FALLBACK:-0}; GPU_CLASS=${TP4_GPU_CLASS:-5090}
 case "$TP4_BOX" in
@@ -215,9 +220,9 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   { skip $FAM || skip $FAM/$FW/$TAG; } && { say "skip $FAM/$FW/$TAG"; stubw $FAM $FW $TAG $ARM not_run "skipped by TP4_SKIP"; return 0; }
   local PY=$PY_E4B; [ "$FW" = unsloth ] && PY=$PY_UNS
   if [ "$FW" = unsloth ] && [ "$UNS_OK" != 1 ]; then stubw $FAM $FW $TAG $ARM install_failed "unsloth venv did not install/import (logs/pip_unsloth.log, logs/tripwire_unsloth.log)"; return 0; fi
-  local s=$STEPS q=$SEQ m=$MB ac=$ACCUM r=$R al=$ALPHA lr=$LR wd=$WD wu=$WARMUP sc=$SCHED op=$OPTIM sd=$SEED ex_tag=fused_attn4
+  local s=$STEPS q=$SEQ m=$MB ac=$ACCUM r=$R al=$ALPHA lr=$LR wd=$WD wu=$WARMUP sc=$SCHED op=$OPTIM sd=$SEED en=$EVAL_N ee=$EVAL_EVERY ex_tag=fused_attn4
   case "$RECIPE" in
-    anchor) s=$A_STEPS; q=$A_SEQ; m=$A_MB; ac=$A_ACCUM; r=$A_R; al=$A_ALPHA; lr=$A_LR; wd=$A_WD; wu=$A_WARMUP; sc=$A_SCHED; op=$A_OPTIM; sd=$A_SEED; ex_tag=fused_attn4_p38;;
+    anchor) s=$A_STEPS; q=$A_SEQ; m=$A_MB; ac=$A_ACCUM; r=$A_R; al=$A_ALPHA; lr=$A_LR; wd=$A_WD; wu=$A_WARMUP; sc=$A_SCHED; op=$A_OPTIM; sd=$A_SEED; en=$A_EVAL_N; ee=$A_EVAL_EVERY; ex_tag=fused_attn4_p38;;
     mb1)    m=1; ac=$(( MB * ACCUM )); ex_tag=fused_attn4_mb1;;
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
@@ -227,7 +232,7 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 TP4_BOX_CLASS="RTX $GPU_CLASS" perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
-      --tokens $TOK --tokens-sha $TOK_SHA --eval-every $EVAL_EVERY --eval-n $EVAL_N --unsloth-loader FastLanguageModel $EXPARG \
+      --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \
       --prereg $PREREG --out $W --adapter-dir $W/adapters "$@" > logs/run_${FAM}_${FW}_$TAG.log 2>&1
   local rc=$?; vram_stop $sp
   if [ $rc -eq 142 ] && [ ! -s $W/${FAM}_${FW}_$TAG.json ]; then stubw $FAM $FW $TAG $ARM alarm "arm alarm $A s (SIGALRM; the process could not write its own stub)"; fi
@@ -236,9 +241,9 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   $PY -c "import torch; torch.cuda.empty_cache()" 2>/dev/null; nvidia-smi --query-gpu=memory.used --format=csv,noheader
   rm -rf $W/adapters/* 2>/dev/null; }
 free_family(){ rm -rf /root/.cache/huggingface/hub/models--$2; say "freed $1 (disk: $(df -h /root | tail -1 | awk '{print $4}') free)"; }
-tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 TOK=$8
+tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 TOK=$8 EVAL_N_=${9:-$EVAL_N}
   say "tokenise $FAM ($TEMPLATE_, seq $SEQ_) -> $(basename $TOK)"
-  HF_HUB_OFFLINE=1 $PY_E4B $W/tp4_arm.py --prepare --fam $FAM --model "$MID" --revision $REV --data $DATA --data-sha $DATA_SHA --seq $SEQ_ --eval-n $EVAL_N --template $TEMPLATE_ --tokens $TOK > logs/prepare_${FAM}_$TEMPLATE_.log 2>&1 || return 1
+  HF_HUB_OFFLINE=1 $PY_E4B $W/tp4_arm.py --prepare --fam $FAM --model "$MID" --revision $REV --data $DATA --data-sha $DATA_SHA --seq $SEQ_ --eval-n $EVAL_N_ --template $TEMPLATE_ --tokens $TOK > logs/prepare_${FAM}_$TEMPLATE_.log 2>&1 || return 1
   tail -1 logs/prepare_${FAM}_$TEMPLATE_.log; return 0; }
 tok_sha(){ $PY_E4B -c "import json; print(json.load(open('$1'))['sha256'])"; }
 # family FAM MID REV FETCH_AL FUSED_AL UNS_AL HF_AL REF_AL OFFLOAD MODE UNS_TARGETS
@@ -294,7 +299,7 @@ anchor_pair(){ local FAM=qwen3 MID=Qwen/Qwen3-30B-A3B REV=ad44e777bcd18fa416d9da
   if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault
     stubw $FAM e4b fused_attn4_p38 fused $st "$FETCH_REASON"; stubw $FAM unsloth ckpt_unsloth_p38 unsloth $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; return 0; fi
   local TOK=$W/tokens_${FAM}_p38.json CLIN_SHA; CLIN_SHA=$($PY_E4B -c "import json; print(json.load(open('$W/ds_manifest.json'))['clinical']['sha256'])")
-  if ! tokenise $FAM $MID $REV clinical $A_SEQ $W/data/ds_clinical.json $CLIN_SHA $TOK; then
+  if ! tokenise $FAM $MID $REV clinical $A_SEQ $W/data/ds_clinical.json $CLIN_SHA $TOK $A_EVAL_N; then
     local why="tokenise failed (logs/prepare_${FAM}_clinical.log)"; stubw $FAM e4b fused_attn4_p38 fused harness_error "$why"; stubw $FAM unsloth ckpt_unsloth_p38 unsloth harness_error "$why"
     free_family $FAM ${MID//\//--}; return 0; fi
   local TS; TS=$(tok_sha $TOK); echo "TOKENS ${FAM}_p38 clinical sha=$TS (tp2's tokens_qwen3 sha for cross-check: the tp2 receipt records it)" | tee -a summary.txt
