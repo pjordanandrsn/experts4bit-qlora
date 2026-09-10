@@ -146,6 +146,63 @@ if [ "$P39_BOX" = 1 ]; then
   can_run 700 old_b16_r2 && speed_arm old_b16_r2 16 1 1 $LOAD
   gnf4_switch NEW || finish 9
   can_run 700 new_b16_r2 && speed_arm new_b16_r2 16 1 1 $LOAD
+elif [ "$P39_BOX" = 3 ]; then
+  # ---------------- BOX 3 (Amendment 4): force a disagreement, then honour it.
+  # p39-box2-4 passed the gate but corrected NOTHING -- its routing agreed with box 1 on all 12,288
+  # expert-roles, and a no-assignment control produced the same bytes. So the mechanism was never
+  # exercised. Box 1's record is a 128-sequence calibration (11512 gptq / 776 rtn); a 32-sequence one
+  # is known to split differently (bo6: 10820 / 1468 on this model). Running BOTH arms at NSEQ=32 on
+  # one box makes the disagreement deterministic instead of hunting for a host that happens to differ.
+  #   arm 1  recipe   NSEQ=32, no assignment  -> counts must DIFFER from box 1's, or there is nothing to test
+  #   arm 2  honoured NSEQ=32 + box 1's record -> counts must EQUAL box 1's, disagreements > 0
+  # No K8 gate here on purpose: a 32-sequence pack is a worse calibration, so a quality number would
+  # confound the thing being tested. This box tests the CLASSIFICATION mechanism, nothing else.
+  [ -s $W/box1/assignment.json ] || { say "box 3 needs box1/assignment.json"; finish 78; }
+  CAL32="E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=32"
+  can_run 3600 recipe32 || finish 30
+  speed_arm recipe32 16 1 1 $CAL32 E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact_recipe32 || { rc=$?
+    [ "$rc" = 30 ] && finish 30; say "recipe32 failed (rc=$rc)"; finish 20; }
+  FP_R=$(fp_of $W/artifact_recipe32); echo "ARTIFACT_RECIPE32 $FP_R" | tee -a summary.txt
+  can_run 3600 honoured32 || finish 30
+  speed_arm honoured32 16 1 1 $CAL32 E4B_INT4_ASSIGNMENT=$W/box1/assignment.json E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact_honoured32 || { rc=$?
+    [ "$rc" = 30 ] && finish 30; say "honoured32 failed (rc=$rc)"; finish 20; }
+  FP_H=$(fp_of $W/artifact_honoured32); echo "ARTIFACT_HONOURED32 $FP_H" | tee -a summary.txt
+  mkdir -p $W/box3_out && cp $W/artifact_recipe32/payloads/assignment.json $W/box3_out/recipe32_assignment.json 2>/dev/null
+  cp $W/artifact_honoured32/payloads/assignment.json $W/box3_out/honoured32_assignment.json 2>/dev/null
+  python - <<'PYV' | tee -a summary.txt
+import glob, json, os, re
+W = "/root/p39"
+def counts(arm):
+    t = "".join(open(f, errors="ignore").read() for f in glob.glob(f"{W}/logs/run_{arm}.log"))
+    m = re.findall(r"INT4EXP calibrated experts: (\d+) gptq / (\d+) rtn", t)
+    d = re.search(r"assignment honoured \S+: (\d+) expert-roles", t)
+    return ((sum(int(g) for g, _ in m), sum(int(r) for _, r in m)) if m else None,
+            int(d.group(1)) if d else None)
+box1 = json.load(open(f"{W}/box1/assignment.json"))["method_map"]
+b1 = (sum(r["method"] == "gptq" for r in box1), sum(r["method"] == "rtn" for r in box1))
+rc_, _ = counts("recipe32"); hc, dis = counts("honoured32")
+def same_map(p):
+    try:
+        return json.load(open(p))["method_map"] == box1
+    except (OSError, KeyError, json.JSONDecodeError):
+        return None
+out = {"box1_counts": list(b1), "recipe32_counts": list(rc_) if rc_ else None,
+       "honoured32_counts": list(hc) if hc else None, "disagreements": dis,
+       "honoured_map_equals_box1": same_map(f"{W}/box3_out/honoured32_assignment.json"),
+       "recipe_map_equals_box1": same_map(f"{W}/box3_out/recipe32_assignment.json")}
+if rc_ is None or hc is None:
+    out["verdict"] = "INCOMPLETE (an arm produced no counts)"
+elif tuple(rc_) == b1:
+    out["verdict"] = ("NO DISAGREEMENT FORCED: a 32-sequence calibration split the same as box 1's 128 -- "
+                      "the perturbation was too weak, nothing was tested")
+elif tuple(hc) == b1 and out["honoured_map_equals_box1"] and (dis or 0) > 0:
+    out["verdict"] = (f"CONFIRMED: local routing would have split {rc_[0]}/{rc_[1]}, the record's "
+                      f"{b1[0]}/{b1[1]} was honoured instead, {dis} expert-roles overridden")
+else:
+    out["verdict"] = "REFUTED: honouring did not reproduce the recorded split"
+json.dump(out, open(f"{W}/forced_disagreement.json", "w"), indent=1)
+print("FORCED", json.dumps(out))
+PYV
 else
   # ---------------- BOX 2: honour box 1's decision, gate it
   [ -s $W/box1/assignment.json ] && [ -n "${P39_BOX1_FINGERPRINT:-}" ] || { say "box 2 needs box1/assignment.json and P39_BOX1_FINGERPRINT"; finish 78; }

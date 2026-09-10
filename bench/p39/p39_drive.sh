@@ -10,7 +10,7 @@ say(){ echo "[$(date -u +%FT%TZ)] [p39_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID P39_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$P39_BOX" in 1|2) ;; *) say "refusing: P39_BOX must be 1 or 2"; exit 78;; esac
+case "$P39_BOX" in 1|2|3) ;; *) say "refusing: P39_BOX must be 1, 2 or 3"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 STAGE="$HERE/p39_run.sh $HERE/step_decomp.py $HERE/k8_bake.py $HERE/calib.json $HERE/staged.sha256"
 for f in $STAGE $HERE/hook/usercustomize.py; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -29,7 +29,7 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex s
 GNF4_NEW_SHA=${GNF4_NEW_SHA:-00bf78ec07cdfbfd4cef012a2e3b562c0dd71f9b}
 GNF4_OLD_SHA=${GNF4_OLD_SHA:-f8f6405d799bbb8efe328a991413cd3869d49bef}
 BOX1_FP=""
-if [ "$P39_BOX" = 2 ]; then
+if [ "$P39_BOX" = 2 ] || [ "$P39_BOX" = 3 ]; then
   [ -n "${P39_BOX1_DIR:-}" ] && [ -s "$P39_BOX1_DIR/box1_out/assignment.json" ] && [ -s "$P39_BOX1_DIR/box1_out/FINGERPRINT" ] \
     || { say "refusing: box 2 needs P39_BOX1_DIR with box1_out/assignment.json and FINGERPRINT (STOP-6)"; exit 78; }
   BOX1_FP=$(tr -d '\n' < "$P39_BOX1_DIR/box1_out/FINGERPRINT"); case "$BOX1_FP" in sha256:*) ;; *) say "refusing: box 1 fingerprint malformed"; exit 78;; esac
@@ -46,7 +46,7 @@ if [ "${P39_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W 
 say "run $RUN_ID box $P39_BOX nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); receipts -> $RUN_DIR/p39; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook $W/box1" || { say "stage failed: remote cleanup"; exit 20; }
 $SCP $STAGE "root@$HOST:$W/" && $SCP "$HERE/hook/usercustomize.py" "root@$HOST:$W/hook/" || { say "stage failed: scp"; exit 20; }
-if [ "$P39_BOX" = 2 ]; then $SCP "$P39_BOX1_DIR/box1_out/assignment.json" "$P39_BOX1_DIR/box1_out/manifest.json" "root@$HOST:$W/box1/" || { say "stage failed: box 1 record"; exit 20; }; fi
+if [ "$P39_BOX" != 1 ]; then $SCP "$P39_BOX1_DIR/box1_out/assignment.json" "$P39_BOX1_DIR/box1_out/manifest.json" "root@$HOST:$W/box1/" || { say "stage failed: box 1 record"; exit 20; }; fi
 $SSH "cd $W || exit 20; nohup env $PASS bash p39_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P39_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
 say "lane started; polling TP_DONE every ${POLL}s"; LAST=""
 while :; do
