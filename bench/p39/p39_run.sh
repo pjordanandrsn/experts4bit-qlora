@@ -34,7 +34,7 @@ arm_alarm(){ local left=$(( P39_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left"
 # the 8.6 min a good host takes): that bounds a bad host to ~$0.3 instead of a full 6-hour rental, and
 # reports host-limited with the evidence. Arms that never calibrate pass straight through.
 first_chunk_watchdog(){ local pid=$1 name=$2 budget=${P39_FIRST_CHUNK_S:-1500} t0; t0=$(date +%s)
-  case "$name" in *build*|honoured*|recipe*) ;; *) return 0;; esac
+  case "$name" in *build*|honoured*|recipe*) ;; *) return 0;; esac   # only arms that calibrate
   while kill -0 "$pid" 2>/dev/null; do
     grep -qa "INT4EXP calibrated experts" "logs/run_$name.log" 2>/dev/null && { say "$name: calibration chunk 1 in $(( $(date +%s) - t0 ))s"; return 0; }
     if [ $(( $(date +%s) - t0 )) -ge "$budget" ]; then
@@ -105,8 +105,14 @@ k8_arm(){ local NAME=$1 KIND=$2 SRC=$3; shift 3; local EXP=1 CA=1 G=1 R=1 E=1; [
   hdr ${NAME}_$SRC
   env "$@" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E \
     perl -e "alarm $(arm_alarm); exec @ARGV" python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
-      --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source $SRC --out $W/qwen3_ppl_${NAME}_$SRC.json >> logs/run_${NAME}_$SRC.log 2>&1
-  local rc=$?
+      --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source $SRC --out $W/qwen3_ppl_${NAME}_$SRC.json >> logs/run_${NAME}_$SRC.log 2>&1 &
+  local pid=$! rc=0
+  # box 2's calibrated arms run HERE, not through speed_arm: the watchdog was added to speed_arm only,
+  # so p39-box2-2's honoured build sat 1h51m on a latency-bound host (machine 36493, 100% util at 108 W,
+  # zero chunks) with the deadline-derived alarm giving it five hours. A guard that covers one of two
+  # call sites is not a guard.
+  first_chunk_watchdog "$pid" "${NAME}_$SRC" || rc=$?
+  wait "$pid" 2>/dev/null; [ "$rc" = 0 ] && rc=$?
   grep -aE "K8_PPL|INT4EXP calibrated experts|honoured|ATTNINT4|REFUSED|Error" logs/run_${NAME}_$SRC.log | tail -4 | sed "s/^/    /"
   { echo -n "k8 $NAME src=$SRC rc=$rc "; grep -aE "K8_PPL" logs/run_${NAME}_$SRC.log | tail -1 | cut -c1-240; echo; } >> summary.txt; return $rc; }
 fp_of(){ python -c "import json; print(json.load(open('$1/manifest.json'))['pack_fingerprint'])" 2>/dev/null; }
@@ -146,7 +152,9 @@ else
   can_run 600 nf4_wikitext && k8_arm nf4 nf4 wikitext
   can_run 600 nf4_c4val1   && k8_arm nf4 nf4 c4val1
   can_run 3600 honoured_build || finish 20
-  k8_arm honoured all wikitext $CAL E4B_INT4_ASSIGNMENT=$W/box1/assignment.json E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact2 || { say "honoured build failed"; finish 20; }
+  k8_arm honoured all wikitext $CAL E4B_INT4_ASSIGNMENT=$W/box1/assignment.json E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact2 || { hrc=$?
+    [ "$hrc" = 30 ] && { say "host-limited on the honoured build; H2 not measured"; finish 30; }
+    say "honoured build failed (rc=$hrc)"; finish 20; }
   FP2=$(fp_of $W/artifact2); echo "ARTIFACT2 $FP2 BOX1 $P39_BOX1_FINGERPRINT $([ "$FP2" = "$P39_BOX1_FINGERPRINT" ] && echo SAME_BYTES || echo DIFFERENT_BYTES)" | tee -a summary.txt
   mkdir -p $W/box2_out && cp $W/artifact2/manifest.json $W/artifact2/payloads/assignment.json $W/box2_out/ 2>/dev/null
   can_run 700 honoured_c4 && k8_arm honoured all c4val1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_INT4_ARTIFACT_DIR=$W/artifact2 E4B_INT4_EXPECTED_FINGERPRINT=$FP2
