@@ -161,3 +161,11 @@ the lane reports H1 as `host-limited`. The spend rules are unchanged: $0.0806 co
 toward the $6 estimate, $12 ceiling, $20 hard stop.
 
 **Box 2 is unchanged** and still waits on box 1's record (STOP-6).
+
+## Amendment 2 — 2026-09-10, before box 2 launches
+
+Box 2 launches with **attempt 3's instrument**: machine `59164` excluded by the same two
+committed receipts, `ssh_ready_s: 600`, adertha pin `406f5ca`. Amendment 1 said box 2
+was unchanged; leaving it on the original instrument would knowingly risk buying the
+host that refused the key twice, so this is said here rather than done silently.
+Nothing about box 2's hypotheses, arms, bands, e4b workload pin or STOP rules changes.
