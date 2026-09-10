@@ -760,7 +760,7 @@ def _attach_live_pack_provenance(model, installed, method_map, row_counts, *,
     """
     from .pack_manifest import (
         PAYLOAD_DIR, attach_provenance, compute_pack_fingerprint,
-        method_map_hash, payload_entry, provenance_record,
+        method_map_hash, payload_entry, provenance_from_model, provenance_record,
         row_count_vector_hash, tensor_payload_bytes,
     )
     payloads = []
@@ -779,14 +779,42 @@ def _attach_live_pack_provenance(model, installed, method_map, row_counts, *,
             for (la, e), r in sorted(row_counts.items())]
     cfg = getattr(model, "config", None)
     revision = getattr(cfg, "_commit_hash", None)
-    extra = {"calibrated_counts": {"gptq": tot_gptq, "rtn": tot_rtn},
+    method_map = list(method_map)
+    counts = {"gptq": tot_gptq, "rtn": tot_rtn}
+    disagreements = int(assignment_disagreements or 0)
+    # Streamed calibration (enable_serve_experts_int4_calibrated) calls this once PER LAYER CHUNK.
+    # Before P39 each call replaced the record, so the live provenance -- and the assignment
+    # payload dump_calibrated_artifact wrote from it -- described only the LAST chunk: box 1's
+    # record covered 8 of 48 layers and box 2 refused to honour it ("not named by the
+    # assignment"). A live record already on this model for the same checkpoint is MERGED:
+    # payloads by path (this chunk's bytes win), the decision by (layer, expert, role), row
+    # counts by (layer, expert), counts summed, every hash recomputed over the union -- so the
+    # record after the last chunk equals what one all-at-once enable would have written.
+    prev = provenance_from_model(model)
+    if (prev and not prev.get("loaded_from_artifact") and prev.get("method_map") is not None
+            and prev.get("model") == getattr(cfg, "_name_or_path", None)):
+        by_path = {p["path"]: p for p in prev.get("component_hashes", [])}
+        by_path.update({p["path"]: p for p in payloads})
+        payloads = sorted(by_path.values(), key=lambda p: p["path"])
+        seen = {(int(r["layer"]), int(r["expert"]), r["role"]): r for r in prev["method_map"]}
+        seen.update({(int(r["layer"]), int(r["expert"]), r["role"]): r for r in method_map})
+        method_map = [seen[k] for k in sorted(seen)]
+        rc = {(int(r["layer"]), int(r["expert"])): r for r in prev.get("row_counts", [])}
+        rc.update({(int(r["layer"]), int(r["expert"])): r for r in rows})
+        rows = [rc[k] for k in sorted(rc)]
+        pc = prev.get("calibrated_counts") or {}
+        counts = {"gptq": int(pc.get("gptq", 0)) + tot_gptq, "rtn": int(pc.get("rtn", 0)) + tot_rtn}
+        ph = prev.get("assignment_honoured") or {}
+        if assignment_hash is not None and ph.get("method_map_hash") == assignment_hash:
+            disagreements += int(ph.get("disagreements", 0))
+    extra = {"calibrated_counts": counts,
              # the decision itself, not just its hash: dump_calibrated_artifact writes it as
              # the hashed assignment payload so a re-pack elsewhere can honour it (#530)
-             "method_map": list(method_map),
+             "method_map": method_map,
              "row_counts": rows}
     if assignment_hash is not None:
         extra["assignment_honoured"] = {"method_map_hash": assignment_hash,
-                                        "disagreements": int(assignment_disagreements or 0)}
+                                        "disagreements": disagreements}
     if not revision:
         # Said explicitly, never silently: this live pack cannot become a licensed artifact.
         extra["model_revision_missing"] = True

@@ -318,3 +318,89 @@ def test_calibrated_entry_resolves_the_assignment_from_env(tmp_path, monkeypatch
     monkeypatch.setenv("E4B_INT4_ASSIGNMENT", str(tmp_path / "nope"))
     with pytest.raises(PackManifestError, match="no assignment payload"):
         enable_serve_experts_int4_calibrated(_M(), str(tmp_path), batches=[torch.zeros(1, 4, dtype=torch.long)])
+
+
+
+# ------------------------------------------------------- streamed enable: chunks must MERGE --
+
+
+def _two_layer_case():
+    """A qwen3_moe checkpoint with TWO expert layers and a live tree carrying a fake hot state
+    under each, so a chunked enable (layers=[0] then layers=[1]) can be exercised hermetically."""
+    from test_int4_experts import _FakeState
+    g = torch.Generator().manual_seed(11)
+
+    def w(n, k):
+        return (torch.randn(n, k, generator=g) / 8).to(torch.float32)
+    ck, names, wraps = {}, [], []
+    for L in (0, 1):
+        pre = f"model.layers.{L}.mlp.experts"
+        for e in range(E):
+            ck[f"{pre}.{e}.gate_proj.weight"] = w(N1, K1)
+            ck[f"{pre}.{e}.up_proj.weight"] = w(N1, K1)
+            ck[f"{pre}.{e}.down_proj.weight"] = w(K1, N1)
+        names += [f"{pre}.gate_up_proj", f"{pre}.down_proj"]
+        wraps.append(pre)
+    ck["model.embed_tokens.weight"] = w(N1, K1)
+    names.append("model.embed_tokens.weight")
+
+    def live():
+        root = torch.nn.Module()
+        states = []
+        for wrap in wraps:
+            node = root
+            for part in wrap.split("."):
+                child = node.get_submodule(part) if part in dict(node.named_children()) else None
+                if child is None:
+                    child = torch.nn.Module()
+                    node.add_module(part, child)
+                node = child
+            node._hot_residency = _FakeState()
+            states.append(node._hot_residency)
+
+        class _Cfg:
+            pass
+        cfg = _Cfg()
+        cfg.model_type = "qwen3_moe"
+        cfg.num_experts_per_tok = 8
+        cfg._commit_hash = "ad44e777" + "0" * 32
+        cfg._name_or_path = "Qwen/Qwen3-30B-A3B"
+        root.config = cfg
+        return root, states
+    return ck, names, live
+
+
+def test_chunked_enable_merges_provenance_into_the_whole_pack(tmp_path, stubs, monkeypatch):
+    """P39 box 1: streamed calibration enables layer chunks one at a time, and each chunk's
+    provenance REPLACED the last -- the dumped assignment covered 8 of 48 layers and box 2
+    refused it. After the fix a two-chunk enable carries both layers' decision, summed counts,
+    every payload, and the SAME fingerprint as one all-at-once enable."""
+    monkeypatch.delenv("E4B_INT4_KEEP_NF4", raising=False)
+    ck, names, live = _two_layer_case()
+    src = _write_ckpt(tmp_path, ck)
+    Hg, Hd = torch.eye(K1) * 4.0, torch.eye(N1) * 4.0
+    hess = {0: {0: (Hg, Hd, 500), 1: (Hg, Hd, 3)}, 1: {0: (Hg, Hd, 3), 1: (Hg, Hd, 500)}}
+    # chunked, as the streamed path does it
+    m1, _ = live()
+    assert enable_serve_experts_int4(m1, src, model_type="qwen3_moe", plan_model=_PlanTree(names),
+                                     expert_hessians={0: hess[0]}, layers=[0]) == 1
+    assert enable_serve_experts_int4(m1, src, model_type="qwen3_moe", plan_model=_PlanTree(names),
+                                     expert_hessians={1: hess[1]}, layers=[1]) == 1
+    chunked = provenance_from_model(m1)
+    # all at once, for the reference record
+    m2, _ = live()
+    assert enable_serve_experts_int4(m2, src, model_type="qwen3_moe", plan_model=_PlanTree(names),
+                                     expert_hessians=hess) == 2
+    whole = provenance_from_model(m2)
+    assert {r["layer"] for r in chunked["method_map"]} == {0, 1}
+    assert len(chunked["method_map"]) == 2 * E * 2 == len(whole["method_map"])
+    assert method_map_hash(chunked["method_map"]) == method_map_hash(whole["method_map"])
+    assert chunked["calibrated_counts"] == whole["calibrated_counts"] == {"gptq": 4, "rtn": 4}
+    assert len(chunked["component_hashes"]) == 8 == len(whole["component_hashes"])
+    assert chunked["pack_fingerprint"] == whole["pack_fingerprint"]
+    assert chunked["row_count_vector_hash"] == whole["row_count_vector_hash"]
+    # and the artifact a chunked model dumps names every layer's decision
+    monkeypatch.setattr(ie, "_meta_twin", lambda m: _PlanTree(names))
+    man = dump_calibrated_artifact(m1, src, str(tmp_path / "art"), model_type="qwen3_moe")
+    rec = read_assignment(tmp_path / "art")
+    assert {r["layer"] for r in rec["method_map"]} == {0, 1} and man["calibrated_counts"] == {"gptq": 4, "rtn": 4}

@@ -169,3 +169,22 @@ committed receipts, `ssh_ready_s: 600`, adertha pin `406f5ca`. Amendment 1 said 
 was unchanged; leaving it on the original instrument would knowingly risk buying the
 host that refused the key twice, so this is said here rather than done silently.
 Nothing about box 2's hypotheses, arms, bands, e4b workload pin or STOP rules changes.
+
+
+## Amendment 3 — 2026-09-10, after box 2 refused an incomplete record
+
+**What happened.** Box 2 (`p39-box2`, machine 45511) ran the two NF4 gate arms (wikitext 6.41984 /
+c4val1 16.49703 — P37's instrument to five digits) and then the honoured build **refused**:
+`layer 0 expert 0 gu: not named by the assignment`. The refusal was right. Box 1's dumped
+`assignment.json` covered **8 of 48 layers**: streamed calibration enables the pack one layer
+chunk at a time and `_attach_live_pack_provenance` *replaced* the live record on every chunk, so
+the record — and the payload dumped from it — described only the last chunk. A #531 defect the
+lane found; fixed (the chunks now merge, and a two-chunk enable is tested equal to an
+all-at-once one). $0.2157; teardown proven. H2 is **not measured**; nothing about it is refuted.
+
+**What follows, and only this.** (1) `p39-box1b`: a build-only run — recipe calibration and a
+*complete* artifact dump, nothing else (~1 h, ≤ $0.75); its `assignment.json` must name all 48
+layers or the run is VOID. (2) `p39-box2-2`: box 2 exactly as registered, honouring box 1b's
+record. Hypotheses, bands, arms and STOP rules are unchanged. H1 is done and is not re-run.
+Spend so far $0.9665; the estimate for the remainder is ~$1.3, inside the $6 estimate and the
+$12 ceiling. Cap: one build run and one box-2 run.
