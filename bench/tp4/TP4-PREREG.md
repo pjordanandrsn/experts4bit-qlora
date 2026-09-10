@@ -114,6 +114,48 @@ P39 needed). So the re-draw:
 The registered stop rule still binds: a **second** consecutive pre-flight refusal on box C ends that box's attempts
 for the day, and Gemma-4 and Mixtral are then reported as not measured rather than retried into a loop.
 
+### Amendment 2 (2026-09-10 21:30Z, before any large-family data exists): N = 20 and a cheaper eval instrument for the large families -- the alarms this lane inherited cannot hold 60 steps at this fixture
+
+**Measured, not predicted.** Box B's first Qwen3-30B-A3B arm ran 24 minutes past its load line without reaching
+step 10. The box says why: `nvidia-smi pmon` shows **sm 99-100 % with memory-bandwidth 0 %** at 107 W and 2985 MHz
+with one CPU core saturated -- real GPU work in a long stream of tiny kernels, which is what a 128-expert
+48-layer MoE at batch 2 looks like. Against tp2's measured **4.108 s/step** for the same model and arm at seq 512 /
+batch 1 / accum 1, this lane's fixture puts **32x the tokens through a step** (2 rows x 2048 x 4 accum = 16,384 vs
+512), so a step costs ~130 s and 60 of them cost **~2.2 h before any eval** -- against a registered per-arm alarm
+of 3600 s. The arm cannot finish, and an alarmed arm yields a stub, not a measurement.
+
+**What was wrong.** The fixture came from the Unsloth notebook (correctly -- it is the field's recipe) while the
+per-arm alarms and the eval instrument came from tp2, whose fixture was 32x smaller per step. Two registered
+quantities that only make sense together were taken from different places. The alarms were checked against the
+wall clock, never against the fixture they had to cover.
+
+**The amendment, for the large families only** (`qwen3`, `qwen3_5`, `gemma4`, `mixtral` -- those whose per-step cost
+at this fixture exceeds ~60 s; the small families granite/olmoe/gpt-oss are unaffected and box A's rows stand):
+
+- **N = 20 optimizer steps** (was 60). The measured quantity is `s_per_step_median_11plus`, so N = 20 leaves **10
+  measured steps** after the 10 warm-up steps the median already discards. Thinner than 50 and stated as such;
+  every other fixture term -- seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear
+  warmup 5, seed 3407, the Alpaca text -- is **unchanged**, because those are the field's recipe and N is not.
+- **The eval instrument shrinks: 8 held-out rows, at step 0 and step N only** (was 48 rows every 20 steps). The
+  eval is *our* quality reading, not part of the notebook's recipe -- the notebook holds nothing out at all. At
+  ~7 s per batch-1 forward at seq 2048 the old instrument cost ~22 min per arm, more than the training it was
+  measuring. The reading stays **paired**: every arm of a family evaluates the identical 8 rows, and the
+  registered threshold (held-out |delta| <= 0.05 nats reads COMPARABLE) applies to that pair. A reading on 8 rows
+  is noisier in absolute terms and is quoted only as the paired comparison it is.
+- **Warm-up is unchanged at 10 steps**, so `s_per_step_median_11plus` keeps its meaning across every family and
+  across tp2.
+
+**Box B is restarted in place**, keeping its already-fetched 61 GB Qwen3 snapshot: the box-side script already reads
+`TP4_STEPS`, `TP4_EVAL_N` and `TP4_EVAL_EVERY` from the environment, so no code changes and no new rental. The
+restart re-uses the run's nonce, and the first attempt produced **no receipts** -- so no data is discarded and this
+amendment still precedes every large-family measurement. Box C's launch (`tp4-c-2`, still queued for a controller
+slot) carries `TP4_STEPS=20`; the drive script forwards that variable already.
+
+**What this costs the comparison, said plainly:** the large families are measured over 10 steps rather than 50, so
+their s/step medians carry more variance than box A's, and their quality readings rest on 8 rows rather than 48.
+Both are recorded per row. The alternative -- 60 steps at this fixture -- is ~2.2 h per arm, i.e. ~6.5 h for one
+family's three primary arms, which no 5 h box can hold and which would have bought stubs instead of numbers.
+
 Related defect filed while this lane was in flight, not fixed under it: **experts4bit-qlora#542** (the HF arm's
 expert-parameter list is selected by the name substring `experts`, so GraniteMoe's `input_linear`/`output_linear`
 stacks are never adapted and box A's Granite HF row will VOID with that reason).
