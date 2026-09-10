@@ -220,3 +220,38 @@ box tests the mechanism and nothing else; the licensable-quality question was al
 
 **Cost.** One box, ~1 h (two 32-sequence calibrations at roughly a quarter of a 128's), ≤ $1.0
 estimated. Spend so far $5.3321; the $12 ceiling and $20 hard stop are unchanged. Cap: one box.
+
+## Amendment 5 — 2026-09-10, after box 3 hit a property of the mechanism
+
+**What box 3 established, and what it could not.** `recipe32` split **10820 gptq / 1468 rtn**
+against box 1's **11512 / 776** — the perturbation works, the disagreement is real and
+deterministic. But `honoured32` **refused**: at `NSEQ=32`, expert (13, 60) is never routed, so box
+1's record names `gptq` where this box has no Hessian, and #531 declines rather than silently
+packing it RTN. That refusal is correct — a silent RTN there would not be the licensed pack.
+
+**The property, stated as a finding:** *a record can only be honoured where the local calibration
+routed to at least the experts the record calls `gptq`.* Honouring fixes the classification; it
+cannot conjure a Hessian. So a weaker calibration can never honour a richer one's record, and my
+perturbation ran in the unhonourable direction.
+
+**Box 4 inverts it.** The **record** is box 3's weak one (10820 gptq, `p39-box3`'s
+`recipe32_assignment.json`); the **calibration** is the rich `NSEQ=128` that locally splits
+11512 / 776 (measured on `p39-box1b-5` and `p39-box2-4`). Every expert the record calls `gptq` is
+certainly routed under the richer calibration, so nothing can refuse, and honouring must drag
+roughly 692 experts from `gptq` down to `rtn`.
+
+*Confirmed by:* honoured counts equal the record's 10820 / 1468, the dumped `method_map` equals the
+record, and **disagreements > 0**.
+*Vacuous if:* counts match with 0 disagreements (this calibration happened to agree).
+*Refuted by:* honouring producing anything other than the recorded split.
+
+No K8 gate here either, for the same reason as box 3.
+
+**Also fixed, and it is why box 3 read "INCOMPLETE" rather than "REFUSED":** `speed_arm` and
+`k8_arm` captured the arm's exit status with `[ "$rc" = 0 ] && rc=$?`, which reads the *test's*
+status, not `wait`'s — so every arm reported `rc=0` and the lane walked past `honoured32`'s
+`RuntimeError` and wrote an empty artifact line. An exit code read from the wrong command is worse
+than none.
+
+**Cost.** One box, one `NSEQ=128` calibration, ~1.2 h, ≤ $1.0. Spend so far $6.19; ceiling $12,
+hard stop $20 unchanged. Cap: one box.
