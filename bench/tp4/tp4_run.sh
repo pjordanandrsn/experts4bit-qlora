@@ -249,7 +249,7 @@ tok_sha(){ $PY_E4B -c "import json; print(json.load(open('$1'))['sha256'])"; }
 # family FAM MID REV FETCH_AL FUSED_AL UNS_AL HF_AL REF_AL OFFLOAD MODE UNS_TARGETS
 #   MODE normal: e4b fused (primary) -> unsloth -> hf -> e4b reference (control) -> the mb1 secondary pair when a primary arm OOMed
 #   MODE gptoss: e4b fused REFUSED stub (bare experts; tp1/tp2 cited) + attn_only (secondary row, probes and refreshes the stubs) -> unsloth -> hf
-family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 FUAL=$5 UAL=$6 HAL=$7 RAL=$8 OFF=$9 MODE=${10} UT=${11}
+family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 FUAL=$5 UAL=$6 HAL=$7 RAL=$8 OFF=$9 MODE=${10} UT=${11} UT2=${12:-}
   if skip $FAM; then say "skip family $FAM (TP4_SKIP)"
     for t in "e4b fused_attn4 fused" "unsloth ckpt_unsloth unsloth" "hf hf_peft hf" "e4b reference_attn4 reference"; do set -- $t; stubw $FAM $1 $2 $3 not_run "family skipped by TP4_SKIP"; done
     [ "$MODE" = gptoss ] && stubw $FAM e4b attn_only attn_only not_run "family skipped by TP4_SKIP"; return 0; fi
@@ -278,6 +278,11 @@ family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 FUAL=$5 UAL=$6 HAL=$7 RAL=$8 OFF=$9 
     can_run 600 $FAM/e4b/fused && arm $FAM e4b fused_attn4 fused $FUAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
   fi
   can_run 600 $FAM/unsloth && arm $FAM unsloth ckpt_unsloth unsloth $UAL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT"
+  # TP4-PREREG amendment 4: the notebooks' seven are a DENSE recipe. When a family stores its experts under names
+  # none of the seven can reach (granite: block_sparse_moe.input_linear/output_linear, class GraniteMoeParallelExperts),
+  # the registered arm can only adapt attention and the row VOIDs on trainable count. This SECOND arm names that
+  # family's actual expert modules. The registered arm above is untouched and still runs, so its row stands.
+  [ -n "$UT2" ] && can_run 600 $FAM/unsloth/experts && arm $FAM unsloth ckpt_unsloth_experts unsloth $UAL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT2"
   can_run 600 $FAM/hf && arm $FAM hf hf_peft hf $HAL "$MID" $REV 0 field $TOK $TS
   if [ "$MODE" != gptoss ]; then
     can_run 900 $FAM/e4b/reference && arm $FAM e4b reference_attn4 reference $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
@@ -318,7 +323,7 @@ UT4="q_proj,k_proj,v_proj,o_proj"                                 # attention on
 # ---------------------------------------------------------------- the plan (TP4-PREREG "Families"; revisions = the HF API on 2026-09-10, tp1/tp2's where they exist)
 #      FAM      MID                                        REV                                         FETCH FUSED UNS  HF   REF  OFF MODE   UNS_TARGETS
 for FAM in $FAMILIES; do case "$FAM" in
-  granite)   family granite  ibm-granite/granite-3.1-3b-a800m-instruct a02780686e08a03fe0d2679a293b5c74a90efa89 1800 1800 1800 1800 2400 0 normal $UT7;;
+  granite)   family granite  ibm-granite/granite-3.1-3b-a800m-instruct a02780686e08a03fe0d2679a293b5c74a90efa89 1800 1800 1800 1800 2400 0 normal $UT7 "q_proj,k_proj,v_proj,o_proj,input_linear,output_linear";;
   olmoe)     family olmoe    allenai/OLMoE-1B-7B-0924-Instruct         7f1c97f440f06ce36705e4f2b843edb5925f4498 2400 2400 2400 2400 3000 0 normal $UT7;;
   gptoss)    family gptoss   openai/gpt-oss-20b                        6cee5e81ee83917806bbde320786a8fb61efebee 3000 3600 2400 2400 3600 0 gptoss $UT7;;
   qwen3)     family qwen3    Qwen/Qwen3-30B-A3B                        ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 5400 0 normal $UT7;;
