@@ -151,6 +151,16 @@ restart re-uses the run's nonce, and the first attempt produced **no receipts** 
 amendment still precedes every large-family measurement. Box C's launch (`tp4-c-2`, still queued for a controller
 slot) carries `TP4_STEPS=20`; the drive script forwards that variable already.
 
+**The Qwen3 anchor pair moves from box A to box B, and its own fixture is untouched.** Box A's remaining budget
+cannot reach it: at 21:35Z it had OLMoE and gpt-oss still to run plus ~2.6 h of guard, and the anchor needs a fresh
+61 GB Qwen3 download it would have to make from scratch. Box B **already holds that snapshot** (57 GB on disk,
+verified), so the pair costs it only two short arms -- the anchor runs at tp2/P38's fixture (clinical text, seq 512,
+batch 1 x accum 1, r 8, lr 1e-4, torch AdamW, seed 0, **N = 60**, 48 held-out rows), none of which amendment 2
+changes, and it is scheduled FIRST on box B so the deadline cannot eat the one arm-pair that ties this lane to the
+earlier two. Box B therefore runs `qwen3anchor qwen3 qwen3_5`, and its clinical dataset is built and sha-verified
+against `ds_manifest.json` exactly as box A's was. This is a scheduling change, not a fixture change; box A's own
+`qwen3anchor` slot becomes a `not_run` row naming this relocation.
+
 **What this costs the comparison, said plainly:** the large families are measured over 10 steps rather than 50, so
 their s/step medians carry more variance than box A's, and their quality readings rest on 8 rows rather than 48.
 Both are recorded per row. The alternative -- 60 steps at this fixture -- is ~2.2 h per arm, i.e. ~6.5 h for one
