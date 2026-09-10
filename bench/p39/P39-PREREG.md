@@ -188,3 +188,35 @@ layers or the run is VOID. (2) `p39-box2-2`: box 2 exactly as registered, honour
 record. Hypotheses, bands, arms and STOP rules are unchanged. H1 is done and is not re-run.
 Spend so far $0.9665; the estimate for the remainder is ~$1.3, inside the $6 estimate and the
 $12 ceiling. Cap: one build run and one box-2 run.
+
+## Amendment 4 — 2026-09-10, after H2 passed without exercising the mechanism
+
+**Why.** `p39-box2-4` passed the K8 gate on both texts (wikitext −0.0574, c4val1 +0.0399) and
+reproduced box 1's pack **byte for byte** — refuting registered prediction (c), which said the
+bytes must differ. But it reported **0 disagreements**, and the optional no-assignment control
+produced the *same* `pack_fingerprint`. That box's routing agreed with box 1 on all 12,288
+expert-roles, so honouring corrected nothing and H2's actual question — *does honouring a record
+override a box that would have split differently?* — is untested. The registered reading
+"PASS ⇒ the split caused P37's c4val1 FAIL" is therefore **withdrawn**: its premise is false.
+
+**Box 3, one box, both arms on it.** Rather than hunt for a host that happens to disagree
+(P37's is gone and the rate is unknown), the disagreement is made deterministic. Box 1's record is
+a **128-sequence** calibration (11512 gptq / 776 rtn); a **32-sequence** one is known to split
+differently on this model (bo6: 10820 / 1468). Both arms run at `E4B_CALIB_NSEQ=32`:
+
+| arm | assignment | prediction |
+|---|---|---|
+| `recipe32` | none | counts **differ** from box 1's — else the perturbation was too weak and nothing is tested |
+| `honoured32` | box 1's record | counts **equal** box 1's, `method_map` equal to box 1's, **disagreements > 0** |
+
+*Refuted by:* `honoured32` not reproducing the recorded split, or reporting 0 disagreements.
+*Vacuous (and reported as such) if:* `recipe32` splits the same as box 1 — the 32-sequence
+perturbation was not enough.
+
+**No K8 gate on this box, deliberately.** A 32-sequence pack is a worse calibration, so a
+perplexity number here would confound the classification mechanism with calibration quality. This
+box tests the mechanism and nothing else; the licensable-quality question was already answered by
+`p39-box2-4`.
+
+**Cost.** One box, ~1 h (two 32-sequence calibrations at roughly a quarter of a 128's), ≤ $1.0
+estimated. Spend so far $5.3321; the $12 ceiling and $20 hard stop are unchanged. Cap: one box.
