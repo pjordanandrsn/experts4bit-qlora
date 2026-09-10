@@ -82,13 +82,20 @@ fp_of(){ python -c "import json; print(json.load(open('$1/manifest.json'))['pack
 CAL="E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128"
 if [ "$P39_BOX" = 1 ]; then
   # ---------------- BOX 1: controls, one calibration + dump, then the kernel A/B on identical bytes
-  can_run 900 nf4_b1  && speed_arm nf4_b1 1 0 0
-  can_run 900 nf4_b16 && speed_arm nf4_b16 16 0 0
+  if [ "${P39_BUILD_ONLY:-0}" != 1 ]; then
+    can_run 900 nf4_b1  && speed_arm nf4_b1 1 0 0
+    can_run 900 nf4_b16 && speed_arm nf4_b16 16 0 0
+  fi
   can_run 3600 old_b16_build || finish 20
   speed_arm old_b16_build 16 1 1 $CAL E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact || { say "licensed build failed"; finish 20; }
   FP=$(fp_of $W/artifact); [ -n "$FP" ] || { say "no artifact fingerprint after the build"; finish 20; }
   mkdir -p $W/box1_out && cp $W/artifact/manifest.json $W/artifact/payloads/assignment.json $W/artifact/payloads/identity.json $W/box1_out/ && echo "$FP" > $W/box1_out/FINGERPRINT
   say "artifact $FP dumped; assignment staged for box 2 in box1_out/"; echo "ARTIFACT $FP" >> summary.txt
+  # Amendment 3: the assignment must name EVERY expert layer, or the record cannot drive a re-pack
+  NL=$(python -c "import json; print(len({r['layer'] for r in json.load(open('$W/box1_out/assignment.json'))['method_map']}))")
+  echo "ASSIGNMENT_LAYERS $NL" | tee -a summary.txt
+  [ "$NL" = 48 ] || { say "VOID: assignment names $NL of 48 layers"; finish 21; }
+  if [ "${P39_BUILD_ONLY:-0}" = 1 ]; then say "build-only run (Amendment 3): dump complete, no A/B arms"; grep -a "PLAN_HAS_R\|gptq /\|ARTIFACT\|ASSIGNMENT" summary.txt logs/run_*.log 2>/dev/null | sort -u | head -40 > highlights.txt; echo "----- summary -----"; cat summary.txt; finish 0; fi
   LOAD="E4B_SERVE_EXP_INT4_CALIB=1 E4B_INT4_ARTIFACT_DIR=$W/artifact E4B_INT4_EXPECTED_FINGERPRINT=$FP"
   # ABAB on identical bytes; each arm's log header carries PLAN_HAS_R, the per-arm proof of which kernel ran
   can_run 700 old_b16_r1 && speed_arm old_b16_r1 16 1 1 $LOAD

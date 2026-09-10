@@ -31,6 +31,7 @@ POLL=${P39_POLL_S:-60}; W=/root/p39
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P39_BOX=$P39_BOX P39_RUN_ID=$RUN_ID P39_RUN_NONCE=$NONCE P39_DEADLINE_EPOCH=$DEADLINE P39_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_NEW_SHA=$GNF4_NEW_SHA GNF4_OLD_SHA=$GNF4_OLD_SHA"
 [ -n "$BOX1_FP" ] && PASS="$PASS P39_BOX1_FINGERPRINT=$BOX1_FP"
+[ "${P39_BUILD_ONLY:-0}" = 1 ] && PASS="$PASS P39_BUILD_ONLY=1"   # Amendment 3: build + complete dump only
 if [ "${P39_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p39_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p39"; exit 0; fi
 say "run $RUN_ID box $P39_BOX nonce=$NONCE -> $HOST:$PORT; receipts -> $RUN_DIR/p39; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook $W/box1" || { say "stage failed: remote cleanup"; exit 20; }
