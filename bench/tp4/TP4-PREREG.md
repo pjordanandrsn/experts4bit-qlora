@@ -166,6 +166,33 @@ their s/step medians carry more variance than box A's, and their quality reading
 Both are recorded per row. The alternative -- 60 steps at this fixture -- is ~2.2 h per arm, i.e. ~6.5 h for one
 family's three primary arms, which no 5 h box can hold and which would have bought stubs instead of numbers.
 
+### Amendment 3 (2026-09-10 21:45Z, ERRATUM to amendment 2, before the anchor pair's data): the anchor ran with 8 held-out rows, not 48 -- its TRAINING bytes are byte-identical to tp2's and verified so
+
+Amendment 2 said the relocated anchor pair keeps tp2's fixture including "48 held-out rows". **It did not.** The
+anchor's overrides are the run script's `A_*` constants (steps, seq, micro-batch, accum, r, alpha, lr, wd, warmup,
+schedule, optimizer, seed, template) and **`eval_n` / `eval_every` are not among them**, so the anchor inherited
+amendment 2's field-recipe instrument: **8 held-out rows** at step 0 and step N.
+
+**What that does and does not touch, verified rather than argued.** The tokens file's sha covers train AND eval, so
+it differs from tp2's (`cb4f505d…` vs tp2's `81dc24c3…`) -- but the **training** portion is byte-identical:
+
+```
+train-only sha256   this anchor : 2bcd43e1bd8c90f402f782f15ffb2785e2f2a001a1be1f415941d448843b74a3
+train-only sha256   tp2         : 2bcd43e1bd8c90f402f782f15ffb2785e2f2a001a1be1f415941d448843b74a3
+n_train 1200 / train_tokens 103,298 / seq 512 / clinical template  -- identical on both
+```
+
+So the quantity the anchor exists for -- the **s/step ratio** over steps 11..60 on identical training bytes under
+identical training terms -- **is comparable to tp2's 1.457 and P38's 1.413** as registered. What rests on 8 rows
+rather than 48 is only the anchor's own held-out reading, and those 8 are the first 8 of tp2's 48 (the slice is a
+prefix), so it stays paired within this box. The anchor's held-out numbers are therefore **not** compared across
+lanes; its ratio is.
+
+**The underlying defect, filed not patched under the run:** a fixture-scoped override set that does not cover every
+knob the arm reads lets an unrelated amendment leak into it. `eval_n` and `eval_every` belong in the `A_*` set.
+Fixed for future anchors in experts4bit-qlora#545; not changed under the running box, because that would alter a
+fixture mid-lane.
+
 Related defect filed while this lane was in flight, not fixed under it: **experts4bit-qlora#542** (the HF arm's
 expert-parameter list is selected by the name substring `experts`, so GraniteMoe's `input_linear`/`output_linear`
 stacks are never adapted and box A's Granite HF row will VOID with that reason).
