@@ -86,4 +86,34 @@ Three **RTX 5090** boxes (Vast verified, on-demand; the launcher's pre-flight: �
 
 ## Amendments (dated entries, before the data they touch)
 
-- (none yet)
+### Amendment 1 (2026-09-10 20:55Z, before any box-C data exists): box C re-draws under a $0.69/h ceiling with this account's proven-unattachable machines excluded
+
+Box C's first attempt (`tp4-c`, committed receipt `receipts/experts4bit-qlora/2026-09-10/tp4-c/receipt.json`, $0.0294,
+teardown proven) was **refused by the pre-flight at 39.0 MB/s against the registered 40 MB/s floor** on machine
+145701 — the cheapest qualifying offer, and the lowest-advertised link (657 Mbit/s) of the 21–23 offers that clear
+the disk and RAM minimums. Box C carries the lane's two heaviest downloads (Gemma-4 51.6 GB, Mixtral 93.4 GB), so
+the floor refused the host whose link would have consumed a large share of the 5 h guard fetching. **The floor is
+not touched.**
+
+Two facts force the re-draw to be re-aimed rather than simply repeated: the offer search is `dph_total` ascending,
+so an unchanged relaunch buys machine 145701 again; and the launcher's machine-exclusion class cannot express this
+refusal (`rent.py`: *"bandwidth or `loading` failures are not this class"* — it is bound to the ssh-readiness shape
+P39 needed). So the re-draw:
+
+- **`usd_per_hour` 0.85 → 0.69** for box C only, which excludes the 39.0 MB/s host by price. The estimate falls
+  from $4.25 to **$3.45** (0.69 × 5 h), still in the (2, 20] band. If no qualifying offer sits under the ceiling the
+  launcher refuses **before creating anything** (`VastRefused`, $0), which is the outcome to prefer over another
+  rental at a known-slow host.
+- **The four committed ssh-readiness refusals this account already owns are passed as
+  `exclude_vast_machine_receipts`** — `p39-box1` and `p39-box1-2` (machine 59164, the current cheapest offer at
+  $0.538, which failed to attach twice after 33 attempts each), `p39-box1b-2` (136897) and `p39-box1b` (147546).
+  This is the mechanism used exactly as designed, on receipts that already satisfy its class.
+- Run id **`tp4-c-2`** (the ledger holds a row for `tp4-c` and refuses a repeat).
+- Everything else is unchanged: same families, same fixture, same guard, same pins.
+
+The registered stop rule still binds: a **second** consecutive pre-flight refusal on box C ends that box's attempts
+for the day, and Gemma-4 and Mixtral are then reported as not measured rather than retried into a loop.
+
+Related defect filed while this lane was in flight, not fixed under it: **experts4bit-qlora#542** (the HF arm's
+expert-parameter list is selected by the name substring `experts`, so GraniteMoe's `input_linear`/`output_linear`
+stacks are never adapted and box A's Granite HF row will VOID with that reason).
