@@ -121,3 +121,43 @@ refused by construction (`ledger_check.py` read `policy.json` relative to a cwd 
 the receipt repository) and that #95's checker still validated Slack-only approvals;
 both fixed and tested in adertha-agents#96 before any money was spent — which is the
 "refusal is the finding" the support prereg anticipated.
+
+---
+
+## Amendment 1 — 2026-09-10, after two pre-flight VOIDs on box 1 (registered before any further rental)
+
+**What happened.** `p39-box1` (11:33Z) and `p39-box1-2` (11:42Z) both bought Vast offer
+`46672417` on **machine `59164`** — the cheapest verified RTX 5090, $0.5378/h — and both
+died identically in pre-flight: ssh `Permission denied (publickey)` for the whole 180 s
+readiness budget (33 attempts each). Both boxes were destroyed with proof; $0.0487 +
+$0.0319 = **$0.0806 spent**. The workload never ran, so nothing bears on H1. Receipts:
+`receipts/experts4bit-qlora/2026-09-10/p39-box1/` and `…/p39-box1-2/` in the private record.
+
+**STOP-3 fired** ("two consecutive VOIDs on one box stop that box") and box 1 stopped.
+
+**Why an amendment rather than a third identical attempt.** The two receipts name the
+same machine. The launcher's only machine-exclusion mechanism was bound to P41's
+strict-anchor `BOX_REFUSED` receipt shape, so a pre-flight `NOT_RUN` could not exclude
+anything, and `rent.py` orders offers by price — a third launch would have bought the same
+host a third time. That is "a third attempt after two instrument failures", which is not
+evidence-gathering. The instrument was changed first, as its own reviewed change:
+**adertha-agents#99** (merged `406f5ca`) — a committed pre-flight ssh-readiness refusal on
+the same provider and GPU class now excludes its machine (`--exclude-vast-machine-receipt`,
+forwarded from the manifest as `exclude_vast_machine_receipts`), and the ssh-readiness
+budget has a surface (`--ssh-ready-s`, manifest `ssh_ready_s`; default unchanged).
+
+**What changes for box 1, and only box 1.**
+
+| | attempts 1–2 | attempt 3 (`p39-box1-3`) |
+|---|---|---|
+| machine exclusions | none expressible | `59164`, by the two committed receipts above |
+| ssh readiness budget | 180 s (default) | **600 s** (matches the `running` wait) |
+| adertha pin | `950d5dc` | `406f5ca` |
+| everything else (e4b pin, image, rate ceiling, wallclock, arms, bands, guards) | — | **unchanged** |
+
+**STOP-3 counter.** Reset to zero for box 1 *because the instrument changed*, and **capped
+at one further attempt**: if `p39-box1-3` VOIDs for any reason, box 1 stops for good and
+the lane reports H1 as `host-limited`. The spend rules are unchanged: $0.0806 counts
+toward the $6 estimate, $12 ceiling, $20 hard stop.
+
+**Box 2 is unchanged** and still waits on box 1's record (STOP-6).
