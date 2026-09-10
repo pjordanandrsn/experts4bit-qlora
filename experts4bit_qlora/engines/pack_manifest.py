@@ -10,6 +10,11 @@ every payload and **refuses** a mismatch; it never rebuilds from the
 recipe.
 
 Counts (GPTQ vs RTN) stay diagnostics. Identity is the fingerprint.
+
+Since #530 a calibrated artifact also carries the gptq/rtn ASSIGNMENT
+per (layer, expert, role) plus the routed-row counts, as a hashed
+payload (``payloads/assignment.json``). ``read_assignment`` returns it;
+``int4_experts.enable_serve_experts_int4(assignment=...)`` honours it.
 """
 from __future__ import annotations
 
@@ -28,6 +33,15 @@ PAYLOAD_DIR = "payloads"
 FINGERPRINT_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 PROVENANCE_ATTR = "_e4b_pack_provenance"
 IDENTITY_PATH = f"{PAYLOAD_DIR}/identity.json"
+# The per-(layer, expert, role) gptq/rtn decision and the routed-row counts it was made from,
+# written as a HASHED payload so the root fingerprint covers them (#530). The decision is a
+# threshold (rows >= min_rows) on a quantity at the router-flip noise floor, so it does not
+# reproduce across boxes; recording it lets a re-pack HONOUR the licensed split instead of
+# re-litigating it. It fixes the classification only -- GPTQ output still depends on the
+# Hessian, which routing also perturbs -- so bytes reproduce only via the artifact.
+ASSIGNMENT_PATH = f"{PAYLOAD_DIR}/assignment.json"
+ROLES = ("gu", "dn")
+METHODS = ("gptq", "rtn")
 # The manifest fields that name WHICH checkpoint and layout the bytes belong to. They are
 # written a second time as a hashed payload (IDENTITY_PATH) so the root fingerprint covers
 # them; verify_artifact refuses a manifest whose top-level copy disagrees with the hashed one.
@@ -221,6 +235,13 @@ def verify_artifact(artifact_dir: str | os.PathLike, *,
             raise PackManifestError(
                 f"manifest {key!r} = {man.get(key)!r} differs from the hashed identity payload "
                 f"({identity.get(key)!r}) -- the manifest was edited after the bytes were fingerprinted; refusing")
+    if any(p.get("path") == ASSIGNMENT_PATH for p in payloads):
+        rec = read_assignment(root)
+        if man.get("method_map_hash") not in (None, rec["method_map_hash"]):
+            raise PackManifestError(
+                f"manifest method_map_hash {man.get('method_map_hash')} != the hashed assignment "
+                f"payload's {rec['method_map_hash']} -- the manifest was edited after the decision "
+                "was fingerprinted; refusing")
     man = dict(man)
     man["pack_fingerprint"] = computed
     return man
@@ -230,6 +251,70 @@ def identity_payload_bytes(man: Mapping[str, Any]) -> bytes:
     """Canonical bytes of the identity fields, exactly as the manifest carries them (absent stays absent)."""
     ident = {k: man[k] for k in IDENTITY_KEYS if k in man and man[k] is not None}
     return json.dumps(ident, separators=(",", ":"), sort_keys=True, ensure_ascii=True).encode("utf-8")
+
+
+def canonical_method_map(entries: Sequence[Mapping]) -> list[dict]:
+    """Sorted, typed, validated rows -- the one shape method_map_hash and the payload share."""
+    rows = []
+    for e in entries:
+        role, method = e["role"], e["method"]
+        if role not in ROLES or method not in METHODS:
+            raise PackManifestError(f"assignment row has role={role!r} method={method!r}")
+        rows.append({"layer": int(e["layer"]), "expert": int(e["expert"]),
+                     "role": role, "method": method})
+    rows.sort(key=lambda r: (r["layer"], r["role"], r["expert"]))
+    return rows
+
+
+def canonical_row_counts(entries: Sequence[Mapping]) -> list[dict]:
+    rows = [{"layer": int(e["layer"]), "expert": int(e["expert"]), "rows": int(e["rows"])}
+            for e in entries]
+    rows.sort(key=lambda r: (r["layer"], r["expert"]))
+    return rows
+
+
+def assignment_payload_bytes(method_map: Sequence[Mapping],
+                             row_counts: Sequence[Mapping] | None,
+                             min_rows: int | None) -> bytes:
+    """Canonical bytes of the recorded decision. ``min_rows`` rides along as the rule that
+    CREATED the assignment; a reader never re-applies it."""
+    obj = {"method_map": canonical_method_map(method_map),
+           "row_counts": canonical_row_counts(row_counts or []),
+           "min_rows": None if min_rows is None else int(min_rows)}
+    return json.dumps(obj, separators=(",", ":"), sort_keys=True, ensure_ascii=True).encode("utf-8")
+
+
+def read_assignment(source: str | os.PathLike) -> dict:
+    """The recorded assignment from an artifact dir (its hashed payload) or a bare
+    ``assignment.json``. Returns ``{"method_map", "row_counts", "min_rows",
+    "method_map_hash"}``; refuses an empty or malformed one. Reading does NOT verify the
+    artifact's fingerprint -- callers that need the licensed bytes use verify_artifact."""
+    path = Path(source)
+    if path.is_dir():
+        path = path / ASSIGNMENT_PATH
+    if not path.is_file():
+        raise PackManifestError(f"no assignment payload at {path}")
+    try:
+        obj = json.loads(path.read_bytes().decode("utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise PackManifestError(f"assignment payload unreadable: {e}") from e
+    if not isinstance(obj, dict) or not isinstance(obj.get("method_map"), list) or not obj["method_map"]:
+        raise PackManifestError("assignment payload has no method_map rows")
+    mm = canonical_method_map(obj["method_map"])
+    rc = canonical_row_counts(obj.get("row_counts") or [])
+    return {"method_map": mm, "row_counts": rc, "min_rows": obj.get("min_rows"),
+            "method_map_hash": method_map_hash(mm)}
+
+
+def assignment_index(method_map: Sequence[Mapping]) -> dict[tuple[int, int, str], str]:
+    """``(layer, expert, role) -> method``; a duplicate key is a refusal, not a last-wins."""
+    idx: dict[tuple[int, int, str], str] = {}
+    for r in canonical_method_map(method_map):
+        key = (r["layer"], r["expert"], r["role"])
+        if key in idx and idx[key] != r["method"]:
+            raise PackManifestError(f"assignment names {key} twice with different methods")
+        idx[key] = r["method"]
+    return idx
 
 
 def read_identity_payload(root: Path, payloads: Sequence[Mapping]) -> dict:
@@ -295,8 +380,26 @@ def require_model_revision(revision, *, allow_unknown: bool = False) -> tuple[st
 
 def write_artifact(artifact_dir: str | os.PathLike, *,
                    tensors: Mapping[tuple, Any],
-                   meta: Mapping[str, Any]) -> dict:
-    """Write payload files + manifest. ``tensors`` keys are (layer, role, kind)."""
+                   meta: Mapping[str, Any],
+                   assignment: Mapping[str, Any] | None = None) -> dict:
+    """Write payload files + manifest. ``tensors`` keys are (layer, role, kind).
+
+    ``assignment`` = ``{"method_map": [...], "row_counts": [...]}`` is written as a hashed
+    payload (ASSIGNMENT_PATH) so the root fingerprint covers the recorded gptq/rtn decision;
+    the manifest's ``method_map_hash`` is then derived from it, never taken on trust."""
+    meta = dict(meta)
+    assignment_blob = None
+    if assignment is not None:
+        # validated and serialised BEFORE any filesystem write: a refusal here must not
+        # leave a half-written artifact directory behind
+        mm = assignment.get("method_map") or []
+        if not mm:
+            raise PackManifestError("assignment given but its method_map is empty")
+        assignment_blob = assignment_payload_bytes(mm, assignment.get("row_counts"), meta.get("min_rows"))
+        # the manifest copy is DERIVED from the hashed payload
+        meta["method_map_hash"] = method_map_hash(mm)
+        if assignment.get("row_counts"):
+            meta["row_count_vector_hash"] = row_count_vector_hash(assignment["row_counts"])
     root = Path(artifact_dir)
     pay = root / PAYLOAD_DIR
     pay.mkdir(parents=True, exist_ok=True)
@@ -306,6 +409,9 @@ def write_artifact(artifact_dir: str | os.PathLike, *,
         data = tensor_payload_bytes(tensors[(layer, role, kind)])
         (root / rel).write_bytes(data)
         payloads.append(payload_entry(rel, data))
+    if assignment_blob is not None:
+        (root / ASSIGNMENT_PATH).write_bytes(assignment_blob)
+        payloads.append(payload_entry(ASSIGNMENT_PATH, assignment_blob))
     head = {"schema_version": SCHEMA_VERSION, "layout": LAYOUT,
             **{k: v for k, v in meta.items() if v is not None}}
     ident = identity_payload_bytes(head)
@@ -329,8 +435,8 @@ def load_payload_tensors(artifact_dir: str | os.PathLike,
     out = {}
     for p in manifest["payloads"]:
         rel = p["path"]
-        if rel == IDENTITY_PATH:
-            continue  # hashed identity, not a tensor
+        if rel in (IDENTITY_PATH, ASSIGNMENT_PATH):
+            continue  # hashed identity / recorded decision, not tensors
         name = Path(rel).name
         # layer_0007_gu_packed.bin
         m = re.fullmatch(r"layer_(\d+)_(gu|dn)_(packed|scales)\.bin", name)
@@ -342,17 +448,11 @@ def load_payload_tensors(artifact_dir: str | os.PathLike,
 
 
 def method_map_hash(entries: Sequence[Mapping]) -> str:
-    rows = [{"layer": int(e["layer"]), "expert": int(e["expert"]),
-             "role": e["role"], "method": e["method"]} for e in entries]
-    rows.sort(key=lambda r: (r["layer"], r["role"], r["expert"]))
-    return hash_canonical(rows)
+    return hash_canonical(canonical_method_map(entries))
 
 
 def row_count_vector_hash(entries: Sequence[Mapping]) -> str:
-    rows = [{"layer": int(e["layer"]), "expert": int(e["expert"]),
-             "rows": int(e["rows"])} for e in entries]
-    rows.sort(key=lambda r: (r["layer"], r["expert"]))
-    return hash_canonical(rows)
+    return hash_canonical(canonical_row_counts(entries))
 
 
 def token_stream_sha(batches: Iterable) -> str | None:

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### The gptq/rtn decision travels with the pack; a re-pack honours it (#530)
+
+Mechanism only. No gate, threshold, floor, `min_rows`, damping, or existing claim value moved; no licence granted or withdrawn. The P37 VOID stands until a pack built from a recorded assignment passes the two-text gate on a second box.
+
+- **Why**: the per-expert gptq/rtn choice is `routed_rows >= min_rows`, a threshold on a quantity at the router-flip noise floor, so it does not reproduce across boxes (P37: 10 of 12,288 experts flipped, `11522/766` vs the licensed `11512/776`; every e4b arm VOID). `#405` made the licensed **bytes** reproducible by artifact; it recorded only a *hash* of the decision, so a re-pack elsewhere could verify a mismatch but never avoid one.
+- **`pack_manifest`**: the decision (`method_map` per `(layer, expert, role)` + `row_counts` + the `min_rows` that created it) is written as a **hashed payload** `payloads/assignment.json`, so the root `pack_fingerprint` covers it; the manifest's `method_map_hash` is derived from that payload and `verify_artifact` refuses a manifest copy that disagrees. `read_assignment(artifact_dir | assignment.json)`, `assignment_index` (duplicate keys with different methods refuse). `#405` artifacts without the payload still verify and load.
+- **`enable_serve_experts_int4(assignment=...)`**: honours the record and does **not** consult `min_rows`. Refusals, never silent fallbacks: an expert the record names `gptq` that this box's calibration never routed to (no Hessian) refuses; an expert the record does not name refuses; an assignment without Hessians refuses. Where the record disagrees with what `min_rows` would have picked locally, that is **counted and reported** (`INT4EXP assignment honoured <hash>: N expert-roles where local routing disagrees`; provenance `assignment_honoured`), never applied.
+- **`enable_serve_experts_int4_calibrated(assignment=...)`** and env **`E4B_INT4_ASSIGNMENT`** (file or artifact dir) so a lane hook can pin the licensed split without a code change; the argument wins over the env; a bad path refuses. Absent both, the recipe decides — unchanged.
+- **Provenance and dump**: the live record now carries `method_map` and `row_counts` as lists (not only their hashes); `dump_calibrated_artifact` writes them as the hashed payload; a licensed `enable_serve_experts_int4_from_artifact` load carries them back, so dump → load → dump reproduces the same `pack_fingerprint`.
+- **What it does not do, said plainly**: it fixes the *classification*. GPTQ output also depends on the Hessian, which routing flips also perturb, so bytes still reproduce only via the artifact. The experiment this enables is the one the issue asks for: re-pack on a second box from the recorded assignment and run the K8 two-text gate — if c4val1 still fails, the split was not the cause.
+
 ### Pack-manifest: licensed int4 experts are bytes, not a recipe (#405)
 
 Code and register contract; no gate, threshold, floor, `min_rows`, damping, or existing claim value moved. Qwen3 licensed 238.1 / 1327.5 stay. No `pack_fingerprint` hashes invented for existing licence rows (the bo6c bytes were not retained).
