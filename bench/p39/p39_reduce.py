@@ -129,13 +129,16 @@ def h2_verdict(b1: dict, b2: dict) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("box1"); ap.add_argument("box2", nargs="?"); ap.add_argument("--md")
+    ap.add_argument("box1")
+    ap.add_argument("box2", nargs="?")
+    ap.add_argument("--md")
     a = ap.parse_args()
     b1 = reduce_box1(Path(a.box1) / "p39" if (Path(a.box1) / "p39").exists() else Path(a.box1))
     res = {"h1": b1}
     if a.box2:
         b2 = reduce_box2(Path(a.box2) / "p39" if (Path(a.box2) / "p39").exists() else Path(a.box2), b1["artifact_fingerprint"])
-        res["h2"] = b2; res["h2_verdict"] = h2_verdict(b1, b2)
+        res["h2"] = b2
+        res["h2_verdict"] = h2_verdict(b1, b2)
     print(json.dumps(res, indent=1, default=str))
     if a.md:
         lines = ["# P39 results (reduced from receipts; bands from P39-PREREG.md)", "",
