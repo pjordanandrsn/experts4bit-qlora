@@ -35,8 +35,9 @@ def _plan_has_r(text: str):
 
 
 def _counts(text: str):
-    m = re.search(r"INT4EXP calibrated experts: (\d+) gptq / (\d+) rtn", text)
-    return (int(m.group(1)), int(m.group(2))) if m else None
+    """Streamed calibration prints one 'calibrated experts' line per layer chunk; the pack's counts are their SUM."""
+    ms = re.findall(r"INT4EXP calibrated experts: (\d+) gptq / (\d+) rtn", text)
+    return (sum(int(g) for g, _ in ms), sum(int(r) for _, r in ms)) if ms else None
 
 
 def _honoured(text: str):
@@ -51,7 +52,7 @@ def _ratio(new, old):
 def reduce_box1(d: Path) -> dict:
     rows, out = {}, {"box": 1, "arms": {}, "h1": {}}
     for arm in ("nf4_b1", "nf4_b16", "old_b16_build", "old_b16_r1", "new_b16_r1", "new_b1_r1", "old_b1_r1", "old_b16_r2", "new_b16_r2"):
-        b = 1 if "_b1" in arm else 16
+        b = 16 if "_b16" in arm else 1        # "_b1" is a substring of "_b16": test the longer token first
         rec = _load(d / f"e4b_b{b}_{arm}.json")
         log = _log(d, arm)
         has_r = _plan_has_r(log)
