@@ -103,7 +103,14 @@ canonical pack-manifest (`experts4bit_qlora.engines.pack_manifest`): ordered
 payload `payloads/identity.json`** (schema version, layout, model id, model
 revision, per-layer shapes), so the hash names which checkpoint the bytes
 belong to; a manifest whose top-level identity fields disagree with the hashed
-payload is refused. The register check
+payload is refused. Since #530 a calibrated artifact also hashes **the
+recorded gptq/rtn decision, `payloads/assignment.json`** (`method_map` per
+layer/expert/role, the routed-row counts, and the `min_rows` that created
+it); the manifest's `method_map_hash` is derived from that payload and a
+disagreeing copy is refused; #405 artifacts without it still verify. A
+re-pack that honours the record reproduces the *classification* -- the
+threshold on routed rows that P37 showed flips at the noise floor -- not the
+bytes, which still come only from the artifact. The register check
 regex-checks the format. An ACTIVE row with `licensed_by` is artifact-backed
 once either that row or its verdict carries the field: then both must carry
 it and they must be equal. Unlicensed / VOID observations may record the

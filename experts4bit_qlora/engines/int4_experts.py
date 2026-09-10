@@ -395,7 +395,8 @@ def enable_serve_experts_int4(model, source_dir: str, *,
                               plan_model=None,
                               expert_hessians: dict | None = None,
                               min_rows: int = 32,
-                              layers=None) -> int:
+                              layers=None,
+                              assignment=None) -> int:
     """Repack + install for EVERY family the load plan understands.
 
     Routes the source read through the same machinery the loader uses --
@@ -415,11 +416,40 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     is packed round-to-nearest and COUNTED; the store records
     ``calibrated=(n_gptq, n_rtn)`` so a lane can refuse a mostly-RTN pack
     under the calibrated banner.
+
+    ``assignment`` (#530) is a RECORDED gptq/rtn decision -- the
+    ``method_map`` rows of a licensed pack (``pack_manifest.read_assignment``
+    or the list itself). When given, ``min_rows`` is NOT consulted: each
+    (layer, expert, role) is packed the way the record says. ``rows >=
+    min_rows`` is a threshold on routed-row counts, which sit at the
+    router-flip noise floor, so re-deriving it on another box flips
+    experts near 32 (P37: 10 of 12,288). Honouring the record makes the
+    CLASSIFICATION reproducible; it does not make the bytes reproducible
+    -- GPTQ output also depends on the Hessian, which routing perturbs --
+    so the licensed bytes still come only from the artifact. Refusals,
+    never silent fallbacks: an expert the record names ``gptq`` that this
+    box's calibration never routed to (no Hessian) refuses; an expert the
+    record does not name refuses. Where the record disagrees with what
+    ``min_rows`` would have picked here, that is COUNTED and reported as
+    an observation, never acted on.
     """
     import torch as _torch
 
     from int4_b32 import _plan
     from int4_pack_ref import pack_int4_b32
+
+    from .pack_manifest import assignment_index, method_map_hash
+
+    assign_idx = None
+    assign_hash = None
+    if assignment is not None:
+        if expert_hessians is None:
+            raise RuntimeError("enable_serve_experts_int4: assignment given without "
+                               "expert_hessians -- an RTN-only enable has no decision to honour")
+        rows_mm = assignment["method_map"] if isinstance(assignment, dict) else assignment
+        assign_idx = assignment_index(rows_mm)
+        assign_hash = method_map_hash(rows_mm)
+    disagreements = 0
 
     from ..arch.moe_load import make_plan_reader, read_fused_expert_layer
     from ..arch.moe_plan import plan_moe_checkpoint
@@ -514,14 +544,31 @@ def enable_serve_experts_int4(model, source_dir: str, *,
         n_gptq = n_rtn = 0
 
         def _pack_stack(stack, role, E=E, dev=dev):
-            nonlocal n_gptq, n_rtn
+            nonlocal n_gptq, n_rtn, disagreements
             pk, sc = [], []
             for e in range(E):
                 H = None
-                if hl is not None and e in hl:
-                    H_gu, H_dn, rows = hl[e]
-                    if rows >= min_rows:
-                        H = H_gu if role == "gu" else H_dn
+                routed = hl is not None and e in hl
+                would_gptq = routed and hl[e][2] >= min_rows      # the min_rows rule's own pick
+                if assign_idx is not None:
+                    key = (int(layer), int(e), role)
+                    want = assign_idx.get(key)
+                    if want is None:
+                        raise RuntimeError(
+                            f"layer {layer} expert {e} {role}: not named by the assignment "
+                            "-- refusing to re-derive a decision the record was meant to fix")
+                    if want == "gptq":
+                        if not routed:
+                            raise RuntimeError(
+                                f"layer {layer} expert {e} {role}: the assignment says gptq but "
+                                "this box's calibration never routed to it (no Hessian) -- "
+                                "refusing; a silent RTN here would not be the licensed pack")
+                        H = hl[e][0] if role == "gu" else hl[e][1]
+                    if (want == "gptq") != bool(would_gptq):
+                        disagreements += 1
+                elif would_gptq:
+                    H_gu, H_dn, _rows = hl[e]
+                    H = H_gu if role == "gu" else H_dn
                 if H is not None:
                     from gptq_pack import gptq_pack_int4_b32
                     # E4B_INT4_GPTQ_DEVICE=cuda solves on the GPU: a 14336^2
@@ -593,9 +640,17 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     if expert_hessians is not None:
         print(f"INT4EXP calibrated experts: {tot_gptq} gptq / {tot_rtn} rtn "
               f"(min_rows={min_rows}) over {n_layers} layers", flush=True)
+        if assign_hash is not None:
+            # the engagement banner a lane asserts on: which decision was honoured, and how
+            # far this box's own routing would have strayed from it
+            print(f"INT4EXP assignment honoured {assign_hash}: {disagreements} expert-roles "
+                  f"where local routing disagrees with the record (observed, not applied)",
+                  flush=True)
         _attach_live_pack_provenance(model, installed, method_map, row_counts,
                                      min_rows=min_rows, tot_gptq=tot_gptq,
-                                     tot_rtn=tot_rtn)
+                                     tot_rtn=tot_rtn, assignment_hash=assign_hash,
+                                     assignment_disagreements=(
+                                         disagreements if assign_hash is not None else None))
     return n_layers
 
 
@@ -607,7 +662,8 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
                                          layers_per_pass: int | None = None,
                                          artifact_dir: str | None = None,
                                          expected_fingerprint: str | None = None,
-                                         dump_artifact_dir: str | None = None) -> int:
+                                         dump_artifact_dir: str | None = None,
+                                         assignment=None) -> int:
     """Calibrate AND pack layer by layer, so the host never holds more than
     one pass's Hessians: ``calibrate_expert_hessians`` returned every
     layer's fp32 Hessians before any packing began, which for Mixtral-8x7B
@@ -628,12 +684,26 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
     they are unlicensed observations until their bytes pass K8 and are
     published. ``dump_artifact_dir`` writes the just-built recipe pack
     as an artifact (observation, not a licence).
+
+    ``assignment`` (#530): a recorded gptq/rtn decision to honour instead
+    of re-deriving it from this box's routing -- a path to an artifact
+    dir or ``assignment.json``, or the record itself. Falls back to the
+    ``E4B_INT4_ASSIGNMENT`` env (same forms) so a lane hook can pin the
+    licensed split without a code change. Absent both, the recipe decides
+    (unchanged behaviour). Fixes the classification only; see
+    :func:`enable_serve_experts_int4`.
     """
     from .pack_manifest import (
-        attach_provenance, provenance_from_model, require_artifact_for_licensed_load,
-        token_stream_sha,
+        attach_provenance, provenance_from_model, read_assignment,
+        require_artifact_for_licensed_load, token_stream_sha,
     )
     require_artifact_for_licensed_load(artifact_dir, expected_fingerprint)
+    if assignment is None:
+        env_src = os.environ.get("E4B_INT4_ASSIGNMENT")
+        if env_src:
+            assignment = env_src
+    if isinstance(assignment, (str, os.PathLike)):
+        assignment = read_assignment(assignment)
     if expected_fingerprint is not None:
         return enable_serve_experts_int4_from_artifact(
             model, source_dir, artifact_dir,
@@ -664,7 +734,8 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
                                        hessian_device=hessian_device, layers_per_pass=len(chunk),
                                        only_layers=chunk)
         total += enable_serve_experts_int4(model, source_dir, model_type=model_type,
-                                           expert_hessians=hs, min_rows=min_rows, layers=chunk)
+                                           expert_hessians=hs, min_rows=min_rows, layers=chunk,
+                                           assignment=assignment)
         n_pass += 1
         del hs
         gc.collect()
@@ -679,7 +750,8 @@ def enable_serve_experts_int4_calibrated(model, source_dir: str, batches, *,
 
 
 def _attach_live_pack_provenance(model, installed, method_map, row_counts, *,
-                                 min_rows, tot_gptq, tot_rtn):
+                                 min_rows, tot_gptq, tot_rtn,
+                                 assignment_hash=None, assignment_disagreements=None):
     """Fingerprint the pack that was just installed and hang the record on the model.
 
     Cost: every packed/scales tensor is copied to the host and sha256'd once per enable
@@ -707,7 +779,14 @@ def _attach_live_pack_provenance(model, installed, method_map, row_counts, *,
             for (la, e), r in sorted(row_counts.items())]
     cfg = getattr(model, "config", None)
     revision = getattr(cfg, "_commit_hash", None)
-    extra = {"calibrated_counts": {"gptq": tot_gptq, "rtn": tot_rtn}}
+    extra = {"calibrated_counts": {"gptq": tot_gptq, "rtn": tot_rtn},
+             # the decision itself, not just its hash: dump_calibrated_artifact writes it as
+             # the hashed assignment payload so a re-pack elsewhere can honour it (#530)
+             "method_map": list(method_map),
+             "row_counts": rows}
+    if assignment_hash is not None:
+        extra["assignment_honoured"] = {"method_map_hash": assignment_hash,
+                                        "disagreements": int(assignment_disagreements or 0)}
     if not revision:
         # Said explicitly, never silently: this live pack cannot become a licensed artifact.
         extra["model_revision_missing"] = True
@@ -774,7 +853,10 @@ def dump_calibrated_artifact(model, source_dir: str, artifact_dir: str, *,
         "layers": layers_meta,
         "calibrated_counts": rec.get("calibrated_counts"),
     }
-    return write_artifact(artifact_dir, tensors=tensors, meta=meta)
+    assignment = None
+    if rec.get("method_map"):
+        assignment = {"method_map": rec["method_map"], "row_counts": rec.get("row_counts") or []}
+    return write_artifact(artifact_dir, tensors=tensors, meta=meta, assignment=assignment)
 
 
 def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir: str, *,
@@ -785,8 +867,8 @@ def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir
     from int4_b32 import _plan
 
     from .pack_manifest import (
-        LAYOUT, PackManifestError, attach_provenance, check_manifest_dims, int4_store_dims,
-        load_payload_tensors, provenance_record, verify_artifact,
+        ASSIGNMENT_PATH, LAYOUT, PackManifestError, attach_provenance, check_manifest_dims,
+        int4_store_dims, load_payload_tensors, provenance_record, read_assignment, verify_artifact,
     )
     cfg = getattr(model, "config", None)
     live_rev = getattr(cfg, "_commit_hash", None)
@@ -853,6 +935,13 @@ def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir
         n_layers += 1
     if n_layers == 0:
         raise PackManifestError("artifact load installed no layers")
+    extra = {"calibrated_counts": man.get("calibrated_counts"), "loaded_from_artifact": True}
+    if any(p.get("path") == ASSIGNMENT_PATH for p in man["payloads"]):
+        # carry the recorded decision forward, so a re-dump of this load reproduces the
+        # same assignment payload (and therefore the same pack_fingerprint)
+        rec_a = read_assignment(artifact_dir)
+        extra["method_map"] = rec_a["method_map"]
+        extra["row_counts"] = rec_a["row_counts"]
     attach_provenance(model, provenance_record(
         pack_fingerprint=man["pack_fingerprint"],
         component_hashes=man["payloads"],
@@ -864,8 +953,7 @@ def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir
         min_rows=man.get("min_rows"),
         damping=man.get("damping"),
         solve_device=man.get("solve_device"),
-        extra={"calibrated_counts": man.get("calibrated_counts"),
-               "loaded_from_artifact": True},
+        extra=extra,
     ))
     print(f"INT4EXP licensed artifact {man['pack_fingerprint']} "
           f"installed on {n_layers} layers", flush=True)
