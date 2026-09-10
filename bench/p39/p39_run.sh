@@ -170,7 +170,30 @@ for s in ("wikitext","c4val1"):
     n, a = ppl("nf4", s), ppl("honoured", s); d = (a-n) if (a is not None and n is not None) else None
     v = "PASS" if d is not None and d <= 0.05 else ("MISSING" if d is None else "FAIL"); ok = ok and v=="PASS"
     out["texts"][s]={"nf4":n,"honoured":a,"delta":d,"verdict":v}
-out["verdict"]="PASS (split was the cause)" if ok else "FAIL or MISSING (split not the cause, or host-limited)"
+# A gate PASS alone is correlational: if this box's routing agreed with the record anyway, the
+# honoured build corrected nothing and the pass says only that the pack is licensable here.
+# p39-box2-4 is exactly that case -- 0 disagreements, and a no-assignment control produced the same
+# bytes -- and the old string would have printed "split was the cause" over it. Attribution now
+# requires the record to have actually overridden something.
+dis = None
+try:
+    import re as _re, glob as _g
+    for _f in _g.glob(f"{W}/logs/run_honoured_*.log"):
+        _m = _re.search(r"assignment honoured \S+: (\d+) expert-roles", open(_f, errors="ignore").read())
+        if _m:
+            dis = int(_m.group(1)); break
+except OSError:
+    pass
+out["disagreements"] = dis
+if not ok:
+    out["verdict"] = "FAIL or MISSING (host-limited, or the pack is not licensable here)"
+elif dis is None:
+    out["verdict"] = "PASS, attribution unknown (no honoured banner found)"
+elif dis == 0:
+    out["verdict"] = ("PASS: pack reproduced and licensable here, but the assignment was NOT exercised "
+                      "(0 disagreements) -- this says nothing about whether honouring fixes a disagreeing box")
+else:
+    out["verdict"] = f"PASS with {dis} disagreements corrected -- honouring the record changed the outcome"
 json.dump(out, open(f"{W}/gate_verdict.json","w"), indent=1); print("GATE", json.dumps(out))
 PYV
   # optional: plain recipe on this box -- do its counts differ from box 1's? (P37's flip, third box)
