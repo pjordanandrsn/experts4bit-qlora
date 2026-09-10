@@ -11,11 +11,21 @@ for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
 case "$P39_BOX" in 1|2) ;; *) say "refusing: P39_BOX must be 1 or 2"; exit 78;; esac
-HERE=$(cd "$(dirname "$0")" && pwd)
+HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 STAGE="$HERE/p39_run.sh $HERE/step_decomp.py $HERE/k8_bake.py $HERE/calib.json $HERE/staged.sha256"
 for f in $STAGE $HERE/hook/usercustomize.py; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 (cd "$HERE" && sha256sum -c staged.sha256 >/dev/null) || (cd "$HERE" && shasum -a 256 -c staged.sha256 >/dev/null) || { say "refusing: staged pieces differ from staged.sha256"; exit 78; }
-E4B_SHA=${E4B_SHA:-ef6d532438e823f29763efb6e65067e02ddbde85}
+# The e4b the BOX installs must be the e4b this driver ships from -- the launcher has already
+# proven that checkout is the manifest's heads.e4b (pod-launch.sh check_tree). A literal default
+# here is exactly the unread constant the manifest design exists to remove, and it bit: p39-box1b-3
+# installed ef6d532 (pre-#537) while the checkout was 3d22719, so the box rebuilt the same 8-layer
+# assignment and VOIDed on its own 48-layer check. Derived, and refused if the tree is dirty.
+if [ -z "${E4B_SHA:-}" ]; then
+  E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot read HEAD of $REPO"; exit 78; }
+  [ -z "$(git -C "$REPO" status --porcelain 2>/dev/null)" ] || { say "refusing: $REPO is dirty -- the box would install a commit that does not describe this tree"; exit 78; }
+fi
+case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78;; esac
+[ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
 GNF4_NEW_SHA=${GNF4_NEW_SHA:-00bf78ec07cdfbfd4cef012a2e3b562c0dd71f9b}
 GNF4_OLD_SHA=${GNF4_OLD_SHA:-f8f6405d799bbb8efe328a991413cd3869d49bef}
 BOX1_FP=""
@@ -33,7 +43,7 @@ PASS="P39_BOX=$P39_BOX P39_RUN_ID=$RUN_ID P39_RUN_NONCE=$NONCE P39_DEADLINE_EPOC
 [ -n "$BOX1_FP" ] && PASS="$PASS P39_BOX1_FINGERPRINT=$BOX1_FP"
 [ "${P39_BUILD_ONLY:-0}" = 1 ] && PASS="$PASS P39_BUILD_ONLY=1"   # Amendment 3: build + complete dump only
 if [ "${P39_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p39_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p39"; exit 0; fi
-say "run $RUN_ID box $P39_BOX nonce=$NONCE -> $HOST:$PORT; receipts -> $RUN_DIR/p39; deadline $DEADLINE"
+say "run $RUN_ID box $P39_BOX nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); receipts -> $RUN_DIR/p39; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook $W/box1" || { say "stage failed: remote cleanup"; exit 20; }
 $SCP $STAGE "root@$HOST:$W/" && $SCP "$HERE/hook/usercustomize.py" "root@$HOST:$W/hook/" || { say "stage failed: scp"; exit 20; }
 if [ "$P39_BOX" = 2 ]; then $SCP "$P39_BOX1_DIR/box1_out/assignment.json" "$P39_BOX1_DIR/box1_out/manifest.json" "root@$HOST:$W/box1/" || { say "stage failed: box 1 record"; exit 20; }; fi
