@@ -476,7 +476,17 @@ def pos_lines(pos, N, prefix="POSITION"):
 def family_block(R):
     fam = R["fam"]
     lines = [f"\n### {NAMES.get(fam, fam)} (`{fam}`, registered n_layers {N_LAYERS.get(fam, '?')})"]
-    src = R["e"] or R["ref"] or R["u"] or R["h"] or next((x["r"] for x in R["rows"] if x["r"]), None)
+    # The header states which fixture the family ran, so it must come from a row that actually RAN: a refusal
+    # stub carries none of those fields, and on gpt-oss the primary arm IS a stub (refused by registration),
+    # which rendered the whole header as "model None ... lr None r None". Prefer any OK row, in the order
+    # primary -> reference -> comparators -> anything, and fall back to a stub only if nothing ran.
+    def _ran(*cands):
+        for c in cands:
+            if c and STATUS_MAP.get(c.get("status")) == "OK":
+                return c
+        return None
+    src = (_ran(R["e"], R["ref"], R["u"], R["h"], *[x["r"] for x in R["rows"]])
+           or R["e"] or R["ref"] or R["u"] or R["h"] or next((x["r"] for x in R["rows"] if x["r"]), None))
     if src:
         env = src.get("env", {}) or {}
         lines.append(f"- model `{src.get('model')}` @ `{str(src.get('revision', ''))[:12]}`; tokens sha `{str(R['tokens_sha'] or '')[:12]}`; N={R['N']}; "
