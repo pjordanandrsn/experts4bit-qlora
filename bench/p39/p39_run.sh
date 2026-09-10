@@ -94,7 +94,11 @@ speed_arm(){ local NAME=$1 B=$2 EXP=$3 CA=$4; shift 4; local G=1 R=1 E=1; [ "$EX
       --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/e4b_b${B}_$NAME.json >> logs/run_$NAME.log 2>&1 &
   local pid=$! rc=0
   first_chunk_watchdog "$pid" "$NAME" || rc=$?
-  wait "$pid" 2>/dev/null; [ "$rc" = 0 ] && rc=$?
+  local wrc=0; wait "$pid" 2>/dev/null || wrc=$?
+  # `[ "$rc" = 0 ] && rc=$?` captured the TEST's status, not wait's, so EVERY arm reported rc=0:
+  # p39-box3's honoured32 raised a RuntimeError and the lane walked past it and wrote an empty
+  # artifact line. An exit code read from the wrong command is worse than no exit code.
+  [ "$rc" = 0 ] && rc=$wrc
   vram_stop $sp
   grep -aE "B1D_TIMED|BV3_|INT4EXP|ATTNINT4|gptq /|honoured|REFUSED|Error" logs/run_$NAME.log | tail -4 | sed "s/^/    /"
   local nch; nch=$(grep -ac "INT4EXP calibrated experts" logs/run_$NAME.log 2>/dev/null || echo 0)
@@ -112,7 +116,8 @@ k8_arm(){ local NAME=$1 KIND=$2 SRC=$3; shift 3; local EXP=1 CA=1 G=1 R=1 E=1; [
   # zero chunks) with the deadline-derived alarm giving it five hours. A guard that covers one of two
   # call sites is not a guard.
   first_chunk_watchdog "$pid" "${NAME}_$SRC" || rc=$?
-  wait "$pid" 2>/dev/null; [ "$rc" = 0 ] && rc=$?
+  local wrc=0; wait "$pid" 2>/dev/null || wrc=$?
+  [ "$rc" = 0 ] && rc=$wrc
   grep -aE "K8_PPL|INT4EXP calibrated experts|honoured|ATTNINT4|REFUSED|Error" logs/run_${NAME}_$SRC.log | tail -4 | sed "s/^/    /"
   { echo -n "k8 $NAME src=$SRC rc=$rc "; grep -aE "K8_PPL" logs/run_${NAME}_$SRC.log | tail -1 | cut -c1-240; echo; } >> summary.txt; return $rc; }
 fp_of(){ python -c "import json; print(json.load(open('$1/manifest.json'))['pack_fingerprint'])" 2>/dev/null; }
@@ -202,6 +207,52 @@ else:
     out["verdict"] = "REFUTED: honouring did not reproduce the recorded split"
 json.dump(out, open(f"{W}/forced_disagreement.json", "w"), indent=1)
 print("FORCED", json.dumps(out))
+PYV
+elif [ "$P39_BOX" = 4 ]; then
+  # ---------------- BOX 4 (Amendment 5): the reverse direction, which is the only one honourable.
+  # Box 3 forced a real disagreement (NSEQ=32 splits 10820/1468 against box 1's 11512/776) but could
+  # not honour box 1's richer record: at NSEQ=32 expert (13,60) is never routed, so the record named
+  # gptq where this box has no Hessian and #531 refused -- correctly, since a silent RTN there would
+  # not be the licensed pack. The lesson is a property of the mechanism: a record can only be honoured
+  # where the local calibration routed to AT LEAST the experts the record calls gptq.
+  # So invert it. The RECORD is box 3's weak one (10820 gptq); the calibration is the rich NSEQ=128
+  # that would locally say 11512. Every expert the record calls gptq is certainly routed here, so
+  # nothing can refuse, and honouring must drag ~692 expert-roles from gptq down to rtn.
+  [ -s $W/record/assignment.json ] || { say "box 4 needs record/assignment.json (box 3's recipe32 record)"; finish 78; }
+  can_run 5400 honoured128 || finish 30
+  speed_arm honoured128 16 1 1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128 \
+    E4B_INT4_ASSIGNMENT=$W/record/assignment.json E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact_honoured128 || { rc=$?
+    [ "$rc" = 30 ] && finish 30; say "honoured128 failed (rc=$rc)"; finish 20; }
+  echo "ARTIFACT_HONOURED128 $(fp_of $W/artifact_honoured128)" | tee -a summary.txt
+  mkdir -p $W/box4_out && cp $W/artifact_honoured128/payloads/assignment.json $W/box4_out/ 2>/dev/null
+  python - <<'PYV' | tee -a summary.txt
+import glob, json, re
+W = "/root/p39"
+rec = json.load(open(f"{W}/record/assignment.json"))["method_map"]
+r = (sum(x["method"] == "gptq" for x in rec), sum(x["method"] == "rtn" for x in rec))
+t = "".join(open(f, errors="ignore").read() for f in glob.glob(f"{W}/logs/run_honoured128.log"))
+m = re.findall(r"INT4EXP calibrated experts: (\d+) gptq / (\d+) rtn", t)
+d = re.search(r"assignment honoured \S+: (\d+) expert-roles", t)
+got = (sum(int(g) for g, _ in m), sum(int(x) for _, x in m)) if m else None
+dis = int(d.group(1)) if d else None
+try:
+    out_map = json.load(open(f"{W}/box4_out/assignment.json"))["method_map"] == rec
+except (OSError, KeyError, json.JSONDecodeError):
+    out_map = None
+o = {"record_counts": list(r), "honoured_counts": list(got) if got else None, "disagreements": dis,
+     "dumped_map_equals_record": out_map,
+     "local_would_have_been": "11512/776 (the NSEQ=128 split, from p39-box1b-5 and p39-box2-4)"}
+if got is None:
+    o["verdict"] = "INCOMPLETE (no counts)"
+elif tuple(got) == r and out_map and (dis or 0) > 0:
+    o["verdict"] = (f"CONFIRMED: local routing would have split 11512/776, the record's {r[0]}/{r[1]} was "
+                    f"honoured instead, {dis} expert-roles overridden and the dumped record matches")
+elif tuple(got) == r and (dis or 0) == 0:
+    o["verdict"] = "VACUOUS: counts match but 0 disagreements -- this calibration agreed with the record"
+else:
+    o["verdict"] = f"REFUTED: honouring produced {got}, not the recorded {r}"
+json.dump(o, open(f"{W}/reverse_honour.json", "w"), indent=1)
+print("REVERSE", json.dumps(o))
 PYV
 else
   # ---------------- BOX 2: honour box 1's decision, gate it
