@@ -196,3 +196,40 @@ fixture mid-lane.
 Related defect filed while this lane was in flight, not fixed under it: **experts4bit-qlora#542** (the HF arm's
 expert-parameter list is selected by the name substring `experts`, so GraniteMoe's `input_linear`/`output_linear`
 stacks are never adapted and box A's Granite HF row will VOID with that reason).
+
+### Amendment 4 (2026-09-10 23:40Z, before the arm it adds has ever been run): a second Unsloth arm that names a family's ACTUAL expert modules, because the notebooks' seven are a dense recipe
+
+**What box A measured.** `granite/unsloth/ckpt_unsloth` came back `ok` with **5,242,880** trainable against e4b's
+**99,614,720**, `trainable_by_group = {attention: 5242880, experts: 0}`, `Params4bit_expert_stacks = 0`,
+`experts_forward_calls_per_step_min = 0`, and explicitly **no** `Enabling LoRA on MoE parameters` banner. Under the
+registered rule (same trainable count as the family's e4b arm) that row is **VOID** and no ratio was quoted. It was
+right not to quote it: the two arms did not train the same problem.
+
+**Why, read from the installed source rather than guessed.** The registered `--unsloth-targets` default is the
+Unsloth notebooks' seven — `q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj` — which is a **dense-model**
+recipe. Under Unsloth's own pin (`transformers==5.5.0`), `GraniteMoeMoE` holds its experts as
+`self.input_linear` / `self.output_linear`, both of class `GraniteMoeParallelExperts`; there is no module named
+`experts` and no `gate_proj`/`up_proj`/`down_proj` anywhere inside the MoE block. So of the seven, only the four
+attention names match anything, which is exactly the 5,242,880 observed. By contrast Qwen3-MoE and OLMoE at the same
+pin do expose `self.experts` with fused `gate_up_proj` / `down_proj` parameters, which is why the Qwen3 anchor arm
+engaged fully (96 stacks, banner present).
+
+**The amendment.** A **second** Unsloth arm, tag `ckpt_unsloth_experts`, run for any family that supplies a
+secondary target list, with granite's set to `q_proj,k_proj,v_proj,o_proj,input_linear,output_linear`. It is
+**additive**: the registered `ckpt_unsloth` arm keeps the notebooks' seven and is re-run unchanged, so the VOID row
+is reproduced on the same box rather than replaced. The whole granite family (e4b fused, both Unsloth arms, HF,
+e4b reference) is re-run on **one** box, because a ratio may never cross boxes — box A's granite rows are not
+divided into the new box's.
+
+**Registered prediction, before the run (P10).** The secondary arm will **also fail to adapt Granite's experts**.
+Unsloth's `get_moe_target_parameters` (`unsloth/models/_utils.py`) resolves exactly two names —
+`mlp.experts.gate_up_proj` / `experts.gate_up_proj` and the `down_proj` counterparts — and its companion
+`get_moe_target_modules` handles only a per-expert `nn.Linear` ModuleList layout. Granite's
+`input_linear`/`output_linear` `ParallelExperts` is neither, and the only occurrence of the string `ParallelExperts`
+anywhere in the installed `unsloth` / `unsloth_zoo` is a compiler list, not a LoRA path. So P10 predicts the arm
+returns either `experts: 0` again or a PEFT error on an unsupported module type, and that **no** value of
+`--unsloth-targets` can produce a quotable Granite ratio against this Unsloth release.
+
+P10 is falsified if the secondary arm engages the experts and matches e4b's trainable count, in which case Granite
+gains a real Unsloth position and the earlier VOID is recorded as this lane's invocation error rather than a
+coverage limit of the framework under test. Either outcome is a row.
