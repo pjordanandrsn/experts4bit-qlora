@@ -387,6 +387,19 @@ def write_artifact(artifact_dir: str | os.PathLike, *,
     ``assignment`` = ``{"method_map": [...], "row_counts": [...]}`` is written as a hashed
     payload (ASSIGNMENT_PATH) so the root fingerprint covers the recorded gptq/rtn decision;
     the manifest's ``method_map_hash`` is then derived from it, never taken on trust."""
+    meta = dict(meta)
+    assignment_blob = None
+    if assignment is not None:
+        # validated and serialised BEFORE any filesystem write: a refusal here must not
+        # leave a half-written artifact directory behind
+        mm = assignment.get("method_map") or []
+        if not mm:
+            raise PackManifestError("assignment given but its method_map is empty")
+        assignment_blob = assignment_payload_bytes(mm, assignment.get("row_counts"), meta.get("min_rows"))
+        # the manifest copy is DERIVED from the hashed payload
+        meta["method_map_hash"] = method_map_hash(mm)
+        if assignment.get("row_counts"):
+            meta["row_count_vector_hash"] = row_count_vector_hash(assignment["row_counts"])
     root = Path(artifact_dir)
     pay = root / PAYLOAD_DIR
     pay.mkdir(parents=True, exist_ok=True)
@@ -396,18 +409,9 @@ def write_artifact(artifact_dir: str | os.PathLike, *,
         data = tensor_payload_bytes(tensors[(layer, role, kind)])
         (root / rel).write_bytes(data)
         payloads.append(payload_entry(rel, data))
-    meta = dict(meta)
-    if assignment is not None:
-        mm = assignment.get("method_map") or []
-        if not mm:
-            raise PackManifestError("assignment given but its method_map is empty")
-        blob = assignment_payload_bytes(mm, assignment.get("row_counts"), meta.get("min_rows"))
-        (root / ASSIGNMENT_PATH).write_bytes(blob)
-        payloads.append(payload_entry(ASSIGNMENT_PATH, blob))
-        # the manifest copy is DERIVED from the hashed payload
-        meta["method_map_hash"] = method_map_hash(mm)
-        if assignment.get("row_counts"):
-            meta["row_count_vector_hash"] = row_count_vector_hash(assignment["row_counts"])
+    if assignment_blob is not None:
+        (root / ASSIGNMENT_PATH).write_bytes(assignment_blob)
+        payloads.append(payload_entry(ASSIGNMENT_PATH, assignment_blob))
     head = {"schema_version": SCHEMA_VERSION, "layout": LAYOUT,
             **{k: v for k, v in meta.items() if v is not None}}
     ident = identity_payload_bytes(head)

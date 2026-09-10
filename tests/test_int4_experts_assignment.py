@@ -242,14 +242,16 @@ def test_artifacts_without_an_assignment_still_verify(tmp_path):
         read_assignment(tmp_path)
 
 
-def test_malformed_records_refuse():
+def test_malformed_records_refuse(tmp_path):
     with pytest.raises(PackManifestError, match="twice with different methods"):
         assignment_index([{"layer": 0, "expert": 0, "role": "gu", "method": "gptq"},
                           {"layer": 0, "expert": 0, "role": "gu", "method": "rtn"}])
     with pytest.raises(PackManifestError, match="role="):
         method_map_hash([{"layer": 0, "expert": 0, "role": "up", "method": "gptq"}])
     with pytest.raises(PackManifestError, match="empty"):
-        write_artifact("/nonexistent", tensors=_tensors(), meta=_meta(), assignment={"method_map": []})
+        write_artifact(tmp_path / "never", tensors=_tensors(), meta=_meta(), assignment={"method_map": []})
+    # the refusal came before any write: no half-built artifact directory is left behind
+    assert not (tmp_path / "never").exists()
 
 
 # ------------------------------------------------------------------ round trip --
