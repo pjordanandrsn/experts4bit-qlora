@@ -21,6 +21,30 @@ for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py staged.sha25
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p39/staged.sha256"; finish 9; }
 # ---- deadline guard: never start an arm that cannot finish 10 min before the launcher tears the box down
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P39_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P39_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
+# ---- per-arm alarm: what is LEFT before the launcher's deadline, minus a 10-min fetch margin, not a
+# literal. p39-box1b-4 died on a hardcoded 5400 s: that host's streamed calibration had not finished its
+# FIRST chunk in 88 min where a good host does all five in 43 (100% GPU util at 107 W on a 5090 -- a
+# latency-bound host, not an OOM), so the run burned 90 min and VOIDed with 4 h of paid wallclock unused.
+# An arm now gets the time the run actually has; a slow host either finishes or is host-limited AT the
+# deadline, which is a fact about the host rather than about a constant nobody re-read.
+arm_alarm(){ local left=$(( P39_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -lt 1800 ] && left=1800; [ "$left" -gt 18000 ] && left=18000; echo "$left"; }
+# A deadline-derived alarm still lets a bad host spend the WHOLE rental before saying so. box1b-4's host
+# had not finished calibration chunk 1 in 88 min where the previous host did all five in 43. So a
+# calibrated arm is killed early if chunk 1 does not land within P39_FIRST_CHUNK_S (default 1500 s, ~3x
+# the 8.6 min a good host takes): that bounds a bad host to ~$0.3 instead of a full 6-hour rental, and
+# reports host-limited with the evidence. Arms that never calibrate pass straight through.
+first_chunk_watchdog(){ local pid=$1 name=$2 budget=${P39_FIRST_CHUNK_S:-1500} t0; t0=$(date +%s)
+  case "$name" in *build*|honoured*|recipe*) ;; *) return 0;; esac
+  while kill -0 "$pid" 2>/dev/null; do
+    grep -qa "INT4EXP calibrated experts" "logs/run_$name.log" 2>/dev/null && { say "$name: calibration chunk 1 in $(( $(date +%s) - t0 ))s"; return 0; }
+    if [ $(( $(date +%s) - t0 )) -ge "$budget" ]; then
+      say "HOST-LIMITED: $name produced no calibration chunk in ${budget}s (a good host: ~520s) -- killing the arm"
+      echo "HOSTLIMITED $name no calibration chunk in ${budget}s" >> summary.txt
+      kill -TERM "$pid" 2>/dev/null; sleep 10; kill -KILL "$pid" 2>/dev/null; return 30
+    fi
+    sleep 20
+  done
+  return 0; }
 # ---- install: e4b pinned + P37's toolchain pins; gnf4 switchable
 export DEBIAN_FRONTEND=noninteractive
 say "install e4b @$E4B_SHA (image python; P37 pins)"
@@ -48,7 +72,9 @@ import experts4bit_qlora as e, torch, triton, transformers
 open("/root/p39/versions.txt", "a").write(f"e4b {e.__version__} @{os.environ['E4B_SHA']}\ngnf4 {md.version('grouped-nf4-gemm')}\ntorch {torch.__version__}\ntriton {triton.__version__}\ntransformers {transformers.__version__}\nbitsandbytes {md.version('bitsandbytes')}\n")
 print("tripwire OK: e4b", e.__version__, "torch", torch.__version__, "triton", triton.__version__)
 PYT
-nvidia-smi --query-gpu=name,memory.total,driver_version,uuid --format=csv,noheader | tee forensics.txt; lscpu | grep -E "Model name" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt
+nvidia-smi --query-gpu=name,memory.total,driver_version,uuid --format=csv,noheader | tee forensics.txt
+# power at load separates a slow host from a slow kernel: box1b-4 sat at 100% util / 107 W on a 5090
+nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/^/power.limit,clocks.max.sm /" | tee -a forensics.txt; lscpu | grep -E "Model name" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt
 python -c "import torch; assert torch.cuda.is_available()" || { say "DUD BOX"; finish 10; }
 # ---- fetch (pinned), bake (bo7's k8_bake.py), prompts (step_decomp's own window) -- as P37
 say "fetch $MID @ $REV"
@@ -62,18 +88,23 @@ vram_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
 hdr(){ { echo "P39 arm=$1 gnf4=${GNF4_LIVE:-?} sha=${GNF4_LIVE_SHA:-?} PLAN_HAS_R=${PLAN_HAS_R:-?} at=$(date -u +%FT%TZ)"; } > logs/run_$1.log; }
 # speed_arm NAME B EXP CA [env...]   receipt e4b_b${B}_${NAME}.json ; fuse=all (1 1 1) like P37's licensed arms; nf4 control fuse=0
 speed_arm(){ local NAME=$1 B=$2 EXP=$3 CA=$4; shift 4; local G=1 R=1 E=1; [ "$EXP" = 0 ] && { G=0; R=0; E=0; }
-  local sp; sp=$(vram_start $NAME); hdr $NAME
+  local sp t_arm; t_arm=$(date +%s); sp=$(vram_start $NAME); hdr $NAME
   env "$@" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E \
-    perl -e 'alarm 5400; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
-      --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/e4b_b${B}_$NAME.json >> logs/run_$NAME.log 2>&1
-  local rc=$?; vram_stop $sp
+    perl -e "alarm $(arm_alarm); exec @ARGV" python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
+      --batch $B --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv --out $W/e4b_b${B}_$NAME.json >> logs/run_$NAME.log 2>&1 &
+  local pid=$! rc=0
+  first_chunk_watchdog "$pid" "$NAME" || rc=$?
+  wait "$pid" 2>/dev/null; [ "$rc" = 0 ] && rc=$?
+  vram_stop $sp
   grep -aE "B1D_TIMED|BV3_|INT4EXP|ATTNINT4|gptq /|honoured|REFUSED|Error" logs/run_$NAME.log | tail -4 | sed "s/^/    /"
+  local nch; nch=$(grep -ac "INT4EXP calibrated experts" logs/run_$NAME.log 2>/dev/null || echo 0)
+  [ "$nch" -gt 0 ] && echo "CHUNKS $NAME $nch calibration chunk(s) in $(( $(date +%s) - t_arm ))s" >> summary.txt
   { echo -n "arm $NAME B=$B gnf4=${GNF4_LIVE:-?} rc=$rc "; grep -aE "B1D_TIMED|BV3_" logs/run_$NAME.log | tail -1 | cut -c1-240; echo; } >> summary.txt; return $rc; }
 # k8_arm NAME ARMKIND(nf4|all) SRC [env...]  -- p37c's k8() verbatim in flags; receipt qwen3_ppl_${NAME}_${SRC}.json
 k8_arm(){ local NAME=$1 KIND=$2 SRC=$3; shift 3; local EXP=1 CA=1 G=1 R=1 E=1; [ "$KIND" = nf4 ] && { EXP=0; CA=0; G=0; R=0; E=0; }
   hdr ${NAME}_$SRC
   env "$@" E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4_CALIB=$CA E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E \
-    perl -e 'alarm 5400; exec @ARGV' python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
+    perl -e "alarm $(arm_alarm); exec @ARGV" python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
       --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv --ppl-source $SRC --out $W/qwen3_ppl_${NAME}_$SRC.json >> logs/run_${NAME}_$SRC.log 2>&1
   local rc=$?
   grep -aE "K8_PPL|INT4EXP calibrated experts|honoured|ATTNINT4|REFUSED|Error" logs/run_${NAME}_$SRC.log | tail -4 | sed "s/^/    /"
@@ -87,7 +118,9 @@ if [ "$P39_BOX" = 1 ]; then
     can_run 900 nf4_b16 && speed_arm nf4_b16 16 0 0
   fi
   can_run 3600 old_b16_build || finish 20
-  speed_arm old_b16_build 16 1 1 $CAL E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact || { say "licensed build failed"; finish 20; }
+  speed_arm old_b16_build 16 1 1 $CAL E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact || { brc=$?
+    [ "$brc" = 30 ] && { say "host-limited on the build; nothing measured about the hypothesis"; finish 30; }
+    say "licensed build failed (rc=$brc)"; finish 20; }
   FP=$(fp_of $W/artifact); [ -n "$FP" ] || { say "no artifact fingerprint after the build"; finish 20; }
   mkdir -p $W/box1_out && cp $W/artifact/manifest.json $W/artifact/payloads/assignment.json $W/artifact/payloads/identity.json $W/box1_out/ && echo "$FP" > $W/box1_out/FINGERPRINT
   say "artifact $FP dumped; assignment staged for box 2 in box1_out/"; echo "ARTIFACT $FP" >> summary.txt
