@@ -19,6 +19,22 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 : > summary.txt; echo "$K15_INSTANCE_ID" > INSTANCE_ID
 
 python -c "import torch; assert torch.cuda.is_available()" || { say "DUD BOX"; finish 10; }
+# The comparator is vLLM 0.28.0, whose wheel is built against torch 2.13.0+cu130 and
+# REFUSES to initialise on a driver older than CUDA 13.0 ("The NVIDIA driver on your
+# system is too old (found version 12090)"). P37 measured vLLM on driver 595.84; this
+# lane drew a 12.9 box and discovered it only AFTER installing gnf4, running our whole
+# side and pulling ~4 minutes of vLLM wheels (k15-marlin-3, rc=21, $0.16). Checked here
+# instead, before anything is installed, so a wrong draw costs seconds.
+CUDA_MAJOR=$(nvidia-smi 2>/dev/null | sed -n 's/.*CUDA Version: *\([0-9][0-9]*\)\..*/\1/p' | head -1)
+echo "driver $(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1), CUDA ${CUDA_MAJOR:-?}" | tee -a summary.txt
+case "$CUDA_MAJOR" in
+  ''|*[!0-9]*) say "cannot read the driver CUDA version -- refusing rather than guessing"; finish 30;; 
+esac
+if [ "$CUDA_MAJOR" -lt 13 ]; then
+  say "HOST-LIMITED: driver exposes CUDA $CUDA_MAJOR, vLLM 0.28.0 needs 13.0 -- this box cannot run the comparator; draw another"
+  echo "SKIPPED host-limited driver CUDA $CUDA_MAJOR < 13" >> summary.txt
+  finish 30
+fi
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid --format=csv,noheader | tee forensics.txt
 nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/^/power.limit,clocks.max.sm /" | tee -a forensics.txt
 
