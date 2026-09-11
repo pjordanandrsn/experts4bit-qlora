@@ -126,7 +126,7 @@ Measured: `p42-census-2`'s `int4_b1` reached `INT4EXP enabled` in **21 s** — t
 expert pack is cheap, as predicted — and then sat in attention calibration for **40
 minutes** without reaching a timed window, while the same host ran the two nf4 arms in
 about four minutes each. I stopped the run through the script's own `TERM` trap so the
-two finished censuses were fetched, and the box was torn down. rc=130, $0.86.
+two finished censuses were fetched, and the box was torn down. rc=130, $0.4853.
 
 **The fix.** The int4 arms take `E4B_SERVE_ATTN_INT4=1`, the uncalibrated path.
 `enable_serve_attn_int4` and `enable_serve_attn_int4_calib` install the **same**
@@ -144,5 +144,5 @@ we quote. The run writes that count to `summary.txt` per arm.
 rule, and the accounting standard all stand. The two nf4 arms are re-run rather than
 carried over from `p42-census-2`, so the 2×2 comes from one box.
 
-**Budget.** `p42-census-2` spent $0.86 of the lane's $3 ceiling. The re-run is estimated
-at $0.60, for about $1.50 against that ceiling and the $5 hard stop.
+**Budget.** `p42-census-2` spent $0.4853 of the lane's $3 ceiling. The re-run is estimated
+at $0.60, for about $1.09 against that ceiling and the $5 hard stop.
