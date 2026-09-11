@@ -996,7 +996,13 @@ def _bv3_stage(a, model, runner, sched, kv):
     # Same contract as Stage A's replay profiler (e4b#275): post-window
     # profiled replays advance pos/KV, so their slots are reserved HERE
     # and the timed window stays byte-identical to a no-flag run.
-    profile_replays = 8 if (a.replay_profile_out and a.b1d_timed) else 0
+    # `and a.b1d_timed` was carried over from Stage A, where the flag picks the
+    # timed loop. This stage has no untimed variant -- it always captures a graph
+    # and times the replay window -- so the extra condition never selected
+    # anything here; it only meant --replay-profile-out silently wrote nothing
+    # unless a B=1 flag happened to be set too. That is the same silent skip the
+    # --graph-break-census guards below exist to refuse, on the B>1 path.
+    profile_replays = 8 if a.replay_profile_out else 0
     cap_tokens = a.prompt_len + a.gen_tokens + 8 + profile_replays
     kv.graph_mode_init_batch(slots, upto_tokens=cap_tokens)
     dev = "cuda"
@@ -2745,6 +2751,22 @@ def main():
                          "playbook: 8; the default thrashes pinned workers)")
     ap.add_argument("--out", default="/workspace/g8out/step_decomp.json")
     a = ap.parse_args()
+    # Argument-shape refusals go HERE, before the model loads. Both census sites
+    # live under the b1d stages, so --replay-profile-out without --b1d-loop names
+    # an output file nothing ever writes; at B=1 the census additionally rides the
+    # TIMED loop. The existing --graph-break-census guards refuse the same shape
+    # but do it after the load, which on a rented box means the refusal arrives
+    # twenty minutes and a model fetch late.
+    if a.replay_profile_out:
+        if not a.b1d_loop:
+            raise SystemExit(
+                "--replay-profile-out needs --b1d-loop; neither census site runs "
+                "without it and the file would never be written")
+        if a.batch == 1 and not a.b1d_timed:
+            raise SystemExit(
+                "--replay-profile-out at --batch 1 needs --b1d-timed: the B=1 "
+                "census rides the timed loop. (At batch > 1 the BV3 stage is "
+                "always timed and the flag stands alone.)")
     # E4B_RECOMPILE_LIMIT / E4B_ACCUM_RECOMPILE_LIMIT: set dynamo's
     # budgets UNIFORMLY for this run, whatever the lane. The BV3b
     # parity receipts proved device-vs-eager grouping bitwise, leaving
