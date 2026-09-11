@@ -63,7 +63,15 @@ tail -25 logs/k14_bench.log | tee -a summary.txt
 # --- side B: vLLM 0.28.0 in its OWN venv. It brings torch 2.13.0+cu130 and would
 # otherwise replace the torch our kernels were measured on -- P37's two-venv shape.
 say "theirs: vllm venv"
-python -m venv --system-site-packages=false $W/venv_vllm > logs/venv.log 2>&1 || { say "VENV FAIL"; finish 9; }
+# `--system-site-packages=false` is not a thing: it is a store_true flag, so argparse
+# refused with "ignored explicit argument 'false'" and the venv was never created. A
+# plain `python -m venv` already excludes system site-packages, which is the whole
+# point here -- the vLLM side must not see the torch our side was measured on.
+python -m venv $W/venv_vllm > logs/venv.log 2>&1 || {
+  tail -5 logs/venv.log; say "VENV FAIL (see logs/venv.log)"; finish 9; }
+[ -x $W/venv_vllm/bin/pip ] || { say "VENV FAIL: no pip in $W/venv_vllm"; finish 9; }
+$W/venv_vllm/bin/python -c "import sys; assert sys.prefix != sys.base_prefix, 'not isolated'" \
+  || { say "VENV FAIL: not isolated from the image python"; finish 9; }
 perl -e 'alarm 2400; exec @ARGV' $W/venv_vllm/bin/pip install -q --no-input "vllm==0.28.0" > logs/pip_vllm.log 2>&1 \
   || { tail -5 logs/pip_vllm.log; say "PIP FAIL (vllm)"; finish 9; }
 $W/venv_vllm/bin/python -c "

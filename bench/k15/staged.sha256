@@ -1,3 +1,3 @@
 # Names as the BOX sees them after staging. The controller resolves each to
 # bench/k15/<name> and compares hashes itself; see k15_drive.sh.
-92addffd3a3873bd20b63ef72096bbd18c3f7f1ef8d6896de19dcd8e93c84e5f  k15_run.sh
+41847ddcc2875f0323c0cffb01688b0faf6b3a39b44b768c12ca27c2b022603d  k15_run.sh
