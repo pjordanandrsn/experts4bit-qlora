@@ -1,9 +1,9 @@
 # Names are as the BOX sees them after staging (flat in $W, hook/ one level down),
 # because p42_run.sh checks this file on the box. The controller side resolves each
-# name to its source path -- p42_run.sh here, everything else from bench/p39 -- and
+# name to its source path -- p42_run.sh here, the hook here too, everything else from bench/p39 -- and
 # compares hashes itself; see p42_drive.sh.
-6c31140020778f5d6b04005235bf6f234ede8bc63c42ce98d53fd6be985e90f5  p42_run.sh
+4b907be8d5aa0e0cf8c3717a8b1874f638277baf75f5c90eb41a6adc7858dbf7  p42_run.sh
 034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
 e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
-5665f1ff4446973bfc72b9d286f210bd3de085a5fccf2ecf1d761ec2c24cffe0  hook/usercustomize.py
+9320eaceb802c08d4ffc939e7f6bccf5e7de91b3c2ebc222487fd932d60db520  hook/usercustomize.py

@@ -109,8 +109,11 @@ speed_arm(){ local NAME=$1 B=$2 EXP=$3 CA=$4; shift 4; local G=1 R=1 E=1; [ "$EX
   [ "$rc" = 0 ] && rc=$wrc
   vram_stop $sp
   grep -aE "B1D_TIMED|BV3_|REPLAY_PROFILE_OUT|INT4EXP|ATTNINT4|REFUSED|Error" logs/run_$NAME.log | tail -4 | sed "s/^/    /"
-  local nch; nch=$(grep -ac "INT4EXP calibrated experts" logs/run_$NAME.log 2>/dev/null || echo 0)
+  local nch; nch=$(grep -ac "INT4EXP calibrated experts" logs/run_$NAME.log 2>/dev/null); nch=${nch:-0}
   [ "$nch" -gt 0 ] && echo "CHUNKS $NAME $nch calibration chunk(s) in $(( $(date +%s) - t_arm ))s" >> summary.txt
+  # ATTNINT4's projection count is the cross-check that the uncalibrated swap covers the
+  # same modules the calibrated one did: P39's logs read "192 projections" on this model.
+  grep -aoE "ATTNINT4 rtn: [0-9]+ projections" logs/run_$NAME.log | tail -1 | sed "s/^/ATTNINT4 $NAME /" >> summary.txt
   { echo -n "arm $NAME B=$B gnf4=${GNF4_LIVE:-?} rc=$rc "; grep -aE "B1D_TIMED|BV3_" logs/run_$NAME.log | tail -1 | cut -c1-240; echo; } >> summary.txt; return $rc; }
 # k8_arm NAME ARMKIND(nf4|all) SRC [env...]  -- p37c's k8() verbatim in flags; receipt qwen3_ppl_${NAME}_${SRC}.json
 k8_arm(){ local NAME=$1 KIND=$2 SRC=$3; shift 3; local EXP=1 CA=1 G=1 R=1 E=1; [ "$KIND" = nf4 ] && { EXP=0; CA=0; G=0; R=0; E=0; }
@@ -133,8 +136,19 @@ fp_of(){ python -c "import json; print(json.load(open('$1/manifest.json'))['pack
 # ---- the 2x2. Every arm censuses; --replay-profile-out runs 8 profiled replays AFTER the timed
 # window, in slots cap_tokens already reserves, so the timed number stays byte-identical to a
 # no-flag run (step_decomp's own contract, e4b#275).
-census_arm(){ local NAME=$1 B=$2 EXP=$3
-  P42_CENSUS_OUT=$W/logs/census_$NAME.txt speed_arm "$NAME" "$B" "$EXP" "$EXP"
+# Amendment 1. The int4 arms take UNCALIBRATED int4 attention (E4B_SERVE_ATTN_INT4=1),
+# never the calibrated flag. enable_serve_attn_int4 and enable_serve_attn_int4_calib
+# install the same Int4Linear from int4_attn.py and differ only in the packer, so the
+# serve-time kernels -- what a census measures -- are identical, while the calibrated
+# path additionally runs a Hessian pass over 192 projections. That pass is a BUILD cost
+# and P39 paid it once, in its build arm, then loaded the result from an artifact. This
+# lane has no artifact, so every int4 arm was paying it fresh: run 1 (p42-census-2) spent
+# 40 minutes inside it on int4_b1 and never reached a timed window. Same reasoning as the
+# experts, which the prereg already applied and this line failed to.
+census_arm(){ local NAME=$1 B=$2 EXP=$3; local extra=()
+  [ "$EXP" = 1 ] && extra=(E4B_SERVE_ATTN_INT4=1)
+  # ${extra[@]+...}: an empty array under `set -u` is an unbound expansion on bash < 4.4
+  P42_CENSUS_OUT=$W/logs/census_$NAME.txt speed_arm "$NAME" "$B" "$EXP" 0 ${extra[@]+"${extra[@]}"}
 }
 rc_any=0
 can_run 900 nf4_b1    && { census_arm nf4_b1    1  0 || rc_any=$?; }

@@ -14,14 +14,14 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # pins them by path, so a drift in either lane refuses here.
 P39="$REPO/bench/p39"
 STAGE="$HERE/p42_run.sh $P39/step_decomp.py $P39/k8_bake.py $P39/calib.json $HERE/staged.sha256"
-for f in $STAGE $P39/hook/usercustomize.py; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
+for f in $STAGE $HERE/hook/usercustomize.py; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged.sha256 names the files as the BOX will see them, so the check here resolves each
 # name to its source and compares hashes rather than running `sha256sum -c` against paths
 # that only exist after staging.
 sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
-  case "$name" in p42_run.sh) src="$HERE/$name";; *) src="$P39/$name";; esac
+  case "$name" in p42_run.sh|hook/*) src="$HERE/$name";; *) src="$P39/$name";; esac
   got=$(sha_of "$src")
   [ "$got" = "$want" ] || { say "refusing: $src is $got, staged.sha256 says $want"; exit 78; }
 done < "$HERE/staged.sha256"
@@ -46,7 +46,7 @@ PASS="P42_RUN_ID=$RUN_ID P42_RUN_NONCE=$NONCE P42_DEADLINE_EPOCH=$DEADLINE P42_I
 if [ "${P42_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p42_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p42"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); receipts -> $RUN_DIR/p42; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook" || { say "stage failed: remote cleanup"; exit 20; }
-$SCP $STAGE "root@$HOST:$W/" && $SCP "$P39/hook/usercustomize.py" "root@$HOST:$W/hook/" || { say "stage failed: scp"; exit 20; }
+$SCP $STAGE "root@$HOST:$W/" && $SCP "$HERE/hook/usercustomize.py" "root@$HOST:$W/hook/" || { say "stage failed: scp"; exit 20; }
 $SSH "cd $W || exit 20; nohup env $PASS bash p42_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P42_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
 say "lane started; polling TP_DONE every ${POLL}s"; LAST=""
 while :; do
