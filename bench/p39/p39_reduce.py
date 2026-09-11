@@ -41,8 +41,18 @@ def _counts(text: str):
 
 
 def _honoured(text: str):
-    m = re.search(r"INT4EXP assignment honoured (sha256:[0-9a-f]{64}): (\d+) expert-roles", text)
-    return (m.group(1), int(m.group(2))) if m else None
+    """Like the counts above, streamed calibration prints one honoured line PER LAYER CHUNK, and the
+    pack's disagreement total is their SUM. Reading only the first (re.search) under-reported P39
+    box 4 as 140 when the five chunks summed to 714 -- the same one-chunk read #536 fixed for the
+    counts, left behind on this field. The sha is the record's, identical on every chunk; a run where
+    it is not is not one artifact and gets no number."""
+    ms = re.findall(r"INT4EXP assignment honoured (sha256:[0-9a-f]{64}): (\d+) expert-roles", text)
+    if not ms:
+        return None
+    shas = {sha for sha, _ in ms}
+    if len(shas) != 1:
+        raise ValueError(f"one run honoured {len(shas)} different records: {sorted(shas)}")
+    return (ms[0][0], sum(int(n) for _, n in ms))
 
 
 def _ratio(new, old):

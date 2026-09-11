@@ -180,9 +180,9 @@ W = "/root/p39"
 def counts(arm):
     t = "".join(open(f, errors="ignore").read() for f in glob.glob(f"{W}/logs/run_{arm}.log"))
     m = re.findall(r"INT4EXP calibrated experts: (\d+) gptq / (\d+) rtn", t)
-    d = re.search(r"assignment honoured \S+: (\d+) expert-roles", t)
+    d = re.findall(r"assignment honoured \S+: (\d+) expert-roles", t)   # one line PER CHUNK -- sum, never first
     return ((sum(int(g) for g, _ in m), sum(int(r) for _, r in m)) if m else None,
-            int(d.group(1)) if d else None)
+            sum(int(x) for x in d) if d else None)
 box1 = json.load(open(f"{W}/box1/assignment.json"))["method_map"]
 b1 = (sum(r["method"] == "gptq" for r in box1), sum(r["method"] == "rtn" for r in box1))
 rc_, _ = counts("recipe32"); hc, dis = counts("honoured32")
@@ -232,9 +232,9 @@ rec = json.load(open(f"{W}/record/assignment.json"))["method_map"]
 r = (sum(x["method"] == "gptq" for x in rec), sum(x["method"] == "rtn" for x in rec))
 t = "".join(open(f, errors="ignore").read() for f in glob.glob(f"{W}/logs/run_honoured128.log"))
 m = re.findall(r"INT4EXP calibrated experts: (\d+) gptq / (\d+) rtn", t)
-d = re.search(r"assignment honoured \S+: (\d+) expert-roles", t)
+d = re.findall(r"assignment honoured \S+: (\d+) expert-roles", t)   # one line PER CHUNK -- sum, never first
 got = (sum(int(g) for g, _ in m), sum(int(x) for _, x in m)) if m else None
-dis = int(d.group(1)) if d else None
+dis = sum(int(x) for x in d) if d else None
 try:
     out_map = json.load(open(f"{W}/box4_out/assignment.json"))["method_map"] == rec
 except (OSError, KeyError, json.JSONDecodeError):
@@ -287,9 +287,11 @@ dis = None
 try:
     import re as _re, glob as _g
     for _f in _g.glob(f"{W}/logs/run_honoured_*.log"):
-        _m = _re.search(r"assignment honoured \S+: (\d+) expert-roles", open(_f, errors="ignore").read())
+        # one honoured line PER LAYER CHUNK: sum them. Reading the first alone under-reported box 4
+        # as 140 against a true 714.
+        _m = _re.findall(r"assignment honoured \S+: (\d+) expert-roles", open(_f, errors="ignore").read())
         if _m:
-            dis = int(_m.group(1)); break
+            dis = sum(int(x) for x in _m); break
 except OSError:
     pass
 out["disagreements"] = dis
