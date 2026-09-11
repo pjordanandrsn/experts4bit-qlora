@@ -97,15 +97,27 @@ print('vllm', vllm.__version__, 'torch', torch.__version__)" | tee -a summary.tx
   || { say "VLLM IMPORT FAIL"; finish 9; }
 left2=$(( K15_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left2" -lt 300 ] && { say "STOP: no time for side B"; finish 30; }
 [ "$left2" -gt 3600 ] && left2=3600
-perl -e "alarm $left2; exec @ARGV" $W/venv_vllm/bin/python src/kernel/k15_marlin_bench.py \
-  --out $W/k15_marlin_rows.json --ms "${K15_MS:-1,4,8,16,32}" --groups "${K15_GROUPS:-128,32}" \
-  > logs/k15_marlin_bench.log 2>&1
-rc_theirs=$?
-tail -30 logs/k15_marlin_bench.log | tee -a summary.txt
+# Two passes. vLLM's own kernel selector logs that use_atomic_add helps for small
+# size_n -- exactly k_proj/v_proj at N=512 -- so measuring only the default would
+# understate the comparator on half the shapes.
+rc_theirs=0
+for pass_ in default atomic; do
+  [ "$pass_" = atomic ] && export VLLM_MARLIN_USE_ATOMIC_ADD=1 || unset VLLM_MARLIN_USE_ATOMIC_ADD
+  left2=$(( K15_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left2" -lt 240 ] && { say "STOP: no time for the $pass_ pass"; break; }
+  [ "$left2" -gt 1800 ] && left2=1800
+  say "theirs: marlin ($pass_ pass, alarm ${left2}s)"
+  perl -e "alarm $left2; exec @ARGV" $W/venv_vllm/bin/python src/kernel/k15_marlin_bench.py \
+    --out $W/k15_marlin_rows_$pass_.json --ms "${K15_MS:-1,4,8,16,32}" --groups "${K15_GROUPS:-128,32}" \
+    > logs/k15_marlin_bench_$pass_.log 2>&1
+  prc=$?
+  tail -24 logs/k15_marlin_bench_$pass_.log | tee -a summary.txt
+  [ "$prc" = 0 ] && [ -s "$W/k15_marlin_rows_$pass_.json" ] || { say "marlin $pass_ pass rc=$prc"; rc_theirs=1; }
+done
+unset VLLM_MARLIN_USE_ATOMIC_ADD
 
 rc=0
 [ "$rc_ours" = 0 ] && [ -s "$W/k14_rows_same_box.json" ] || rc=20
-[ "$rc_theirs" = 0 ] && [ -s "$W/k15_marlin_rows.json" ] || rc=21
+[ "$rc_theirs" = 0 ] && [ -s "$W/k15_marlin_rows_default.json" ] || rc=21
 [ "$rc" = 0 ] || { say "BENCH ours=$rc_ours theirs=$rc_theirs"; finish "$rc"; }
 say "----- summary -----"; cat summary.txt
 finish 0
