@@ -440,9 +440,13 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     Hessian that was never computed. A calibration thinner than the one
     that produced the record generally violates this -- P39 box 3 ran a
     32-sequence calibration against a 128-sequence record and refused at
-    layer 13 expert 60, an expert 32 sequences never route to -- so a
-    record has to carry the calibration setting that produced it, and a
-    box honouring one has to meet or exceed it.
+    layer 13 expert 60, an expert 32 sequences never route to. The record
+    does not name the calibration that produced it, but its ``row_counts``
+    carry that box's per-expert coverage, so a reader can see what the
+    record's routing had and a caller can pick a calibration that meets
+    it. Nothing checks this before packing: the coverage a local run will
+    have is not known until it has calibrated, so the precondition is
+    enforced where it becomes knowable, as the refusal above.
     """
     import torch as _torch
 
