@@ -3,6 +3,14 @@
 
 Load the experts in 4-bit with `experts4bit-qlora`. Two serving surfaces exist and they are not the same path. The **measured decode path** is the paged runner (`PagedModelRunner`: paged fp8 KV cache and paged attention) with the experts on `grouped-nf4-gemm`'s kernels — NF4 experts on the grouped GEMM (`enable_fast(model)` is the library entry point for that kernel; the harness attaches it through its residency engines), int4-b32 experts through `enable_serve_experts_int4` — driven by the in-tree bench harness `bench/hybrid-g9/step_decomp.py`, which produced the throughput and parity claims on this page. The **HTTP shim** (`python -m experts4bit_qlora.serve`) is a reference-path deployment: it loads with `load_moe_4bit_streaming` (experts streamed from pinned host RAM by default), runs stock `model.generate`, hot-swaps per-expert LoRA adapters per request, and attaches a kernel-backed engine only under `E4B_RESIDENCY=pipelined`; it does not use the paged runner or `enable_fast`. The serving levers — NF4 experts, int4-b32 experts, calibrated int4 attention, fused glue rounds, the router epilogue and the paged fp8 KV cache — are opt-in, licensed per family by a registered quality gate, and measured per family under one protocol in [`../SERVING-THROUGHPUT.md`](../SERVING-THROUGHPUT.md). Every serving number in the register was measured on one rented RTX 5090 class; no smaller card carries a serving claim.
 
+## Choose the surface you need
+
+| Goal | Requirements | Engine and API | What the evidence establishes |
+|---|---|---|---|
+| Run an HTTP service | `[serve]`, checkpoint, GPU and host RAM; an adapter file for the example below | `python -m experts4bit_qlora.serve`; stock `model.generate`; `/health`, `/generate`, `/v1/completions` | A reference-path deployment. The decode census numbers are not measurements of this HTTP service. |
+| Attach grouped NF4 kernels in Python | `[train,fast]`, checkpoint and compatible CUDA GPU | `load_moe_4bit_streaming`, `model.eval()`, `enable_fast` | The example verifies loading and patch engagement. It does not configure the census's complete paged decode stack. |
+| Inspect or reproduce a measured decode arm | The receipt's exact commits, model, hardware, packs and flags | `bench/hybrid-g9/step_decomp.py`, `PagedModelRunner` and the arm's recorded engines | Per-arm throughput and parity in the [bo7 receipt](../../bench/hybrid-g9/throughput-20260904/bo7/README.md), with scope in [STATUS](../STATUS.md). No cross-family or HTTP throughput inference. |
+
 ## Symptoms
 
 - "serve a 30B MoE on an RTX 5090" / "fast MoE inference on a consumer NVIDIA GPU with 4-bit experts" / "Mixtral 8x7B with 4-bit experts on one GPU".
@@ -32,11 +40,13 @@ The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the i
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[fast]"    # library fast path: grouped-nf4-gemm's kernels, paged attention, glue
+pip install "experts4bit-qlora[train,fast]"  # complete loader + grouped-kernel library example
 pip install "experts4bit-qlora[serve]"   # HTTP shim (optional): the FastAPI reference-path deployment
 ```
 
 ## Smallest correct example
+
+### Library: load and attach grouped NF4 kernels
 
 Needs: GPU + network + model download. This is the library path — NF4 experts on the grouped GEMM — not the HTTP shim launch below.
 
@@ -53,7 +63,9 @@ n = enable_fast(model)
 assert n > 0, "no eligible expert module was patched (0 never means a missing kernel)"
 ```
 
-The HTTP shim is a separate surface. It loads the model itself (`load_moe_4bit_streaming`, experts streamed from pinned host RAM by default), runs stock `model.generate` on the reference expert path with adapters hot-swapped per request, and does not call `enable_fast` or the paged runner; only `E4B_RESIDENCY=pipelined` attaches a kernel-backed engine ([`../SERVING.md`](../SERVING.md)).
+### HTTP: launch the reference service
+
+Install `[serve]` above and use an existing adapter file produced by training. The HTTP shim is a separate surface. It loads the model itself (`load_moe_4bit_streaming`, experts streamed from pinned host RAM by default), runs stock `model.generate` on the reference expert path with adapters hot-swapped per request, and does not call `enable_fast` or the paged runner; only `E4B_RESIDENCY=pipelined` attaches a kernel-backed engine ([`../SERVING.md`](../SERVING.md)).
 
 ```bash
 # HTTP: localhost only by default; E4B_TOKEN + E4B_HOST=0.0.0.0 to expose it
@@ -62,6 +74,10 @@ curl -s localhost:8777/health
 curl -s localhost:8777/generate -H 'content-type: application/json' \
      -d '{"prompt": "### Instruction:\nSay hi.\n\n### Response:\n", "adapter": "alpaca"}'
 ```
+
+### Measured decode: follow the recorded arm
+
+Use the [bo7 receipt](../../bench/hybrid-g9/throughput-20260904/bo7/README.md) to identify the model, commits, pack and arm configuration, then inspect the [in-tree harness](../../bench/hybrid-g9/step_decomp.py). Its paged runner, calibration and residency configuration must match the arm being compared. Setting fusion flags on the HTTP launch does not reproduce that arm: the shim does not read those flags or use the paged runner. The lever table above names which surface consumes each control.
 
 ## Expected result
 

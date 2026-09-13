@@ -160,8 +160,8 @@
           "command": "pip install \"experts4bit-qlora[train]\""
         },
         {
-          "purpose": "accelerated grouped-kernel path",
-          "command": "pip install \"experts4bit-qlora[fast]\""
+          "purpose": "loader plus accelerated grouped-kernel path",
+          "command": "pip install \"experts4bit-qlora[train,fast]\""
         }
       ],
       "entrypoints": [
@@ -695,8 +695,8 @@
       },
       "install": [
         {
-          "purpose": "library fast path",
-          "command": "pip install \"experts4bit-qlora[fast]\""
+          "purpose": "loader plus accelerated grouped-kernel path",
+          "command": "pip install \"experts4bit-qlora[train,fast]\""
         },
         {
           "purpose": "HTTP shim (optional)",
@@ -806,8 +806,8 @@
           "command": "pip install \"experts4bit-qlora[train]\""
         },
         {
-          "purpose": "residency/NVMe/fast-kernel route",
-          "command": "pip install \"experts4bit-qlora[fast]\""
+          "purpose": "loader plus accelerated grouped-kernel path",
+          "command": "pip install \"experts4bit-qlora[train,fast]\""
         }
       ],
       "entrypoints": [
