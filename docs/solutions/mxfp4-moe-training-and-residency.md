@@ -1,14 +1,29 @@
 # How do I train and serve MoE models released in MXFP4 (gpt-oss, DeepSeek-V4)?
-<!-- summary: Choose between the convenient QLoRA path, which decodes MXFP4 and re-quantises to NF4, and the native-byte path, which keeps the released blocks and scales in an arena. -->
+<!-- summary: Choose an MXFP4 loading or native-byte execution route by model and task; gpt-oss arena training is refused, while its separate experimental expert-training path remains unlicensed. -->
 
-`load_moe_4bit_streaming` dequantises the released MXFP4 experts bit-identically and, by default, re-quantises them to NF4 for QLoRA. To keep computing on the released bytes, relocate them into an arena with `grouped-nf4-gemm` and bind it with `enable_mxfp4_nvme_residency` (serving) or `enable_nvme_train_residency` (training); the native MXFP4 expert store for the paged engine is a separate opt-in whose quality gate is still open.
+The loader can decode MXFP4 and re-quantise it to NF4, or load experts for an engine that computes on the released bytes. Loading a model does not establish that every training or residency route supports it. Choose the model and task first.
+
+## Model, task and supported entry point
+
+The [capability register](../capabilities.json) and its `training_support` records distinguish these routes:
+
+| Model | Task | Entry point | Status and evidence |
+|---|---|---|---|
+| gpt-oss | Load a frozen NF4 re-quantisation | `load_moe_4bit_streaming`, then `verify_moe_4bit` | Supported load; experts are bare, without `ExpertsLoRA`. This is not expert training. |
+| gpt-oss | Native MXFP4 serving in the paged engine | `engines.int4_experts.enable_serve_experts_int4` | Native-byte store; the quality gate remains open, so speed is not a licensed quality result. |
+| gpt-oss | Bind the native-byte NVMe serving engine | `enable_mxfp4_nvme_residency` | **REFUSED** for bias-carrying modules; the generic epilogue is not faithful to this model. |
+| gpt-oss | Train experts against an NVMe arena | `arena_train=True`, `enable_nvme_train_residency` | **REFUSED. No supported arena-training route.** See `training_support.gpt_oss.nvme_train`. |
+| gpt-oss | Train native MXFP4 experts outside the arena route | grouped-nf4-gemm's `mxfp4_qlora.ExpertsMxfp4LoRA` | **Experimental, unlicensed.** The tp1 run has a canary and provenance check, but no parity pair. |
+| DeepSeek-V4 | Load a re-quantised NF4 model | `load_moe_4bit_streaming`, then `verify_moe_4bit` | Implemented loading path; check the [model-specific scope](../DEEPSEEK-V4.md). |
+| DeepSeek-V4 | Serve from released MXFP4 bytes in an arena | `enable_mxfp4_nvme_residency` after a relocation bake | Experimental capability; preserves native bytes and the model's epilogue. The recipe below uses this model. |
+| DeepSeek-V4 | Train against a native-byte arena | `arena_train=True`, then `enable_nvme_train_residency` | Experimental; [CPU specification tests](../../tests/test_mxfp4_arena_train.py) cover layout/staging/numerics, not real-weight convergence or performance. |
 
 ## Two fidelity paths — choose before loading
 
 Only the second path keeps the checkpoint's original expert bytes.
 
-1. **Convenient QLoRA path — decode, then re-quantise to NF4.** The quantising branch of `load_moe_4bit_streaming` (`experts4bit_qlora/loader.py`) reads the released blocks and scales through `experts4bit_qlora.formats.mxfp4.dequantize_mxfp4` — verified bit-identical to transformers' reference decode in `tests/test_mxfp4_dequant.py` — and then builds the expert stack in the storage you asked for, NF4 by default: `GptOssExperts4bit.from_gptoss(..., quant_type=quant_type)` for gpt-oss and `DeepseekV4Experts4bit.from_deepseek_v4(..., quant_type=quant_type)` for DeepSeek-V4, each of which quantises the decoded stack through `Experts4bit.from_float`. What trains and serves afterwards is an NF4 re-quantisation of an exact decode of the release: the decode is bit-exact, the NF4 that follows it is the quantiser's output, and that — not the release — is the provenance of the served experts. Needs no arena and no kernel package. `verify_moe_4bit(model, strict=True)` proves the stack is 4-bit, not that it is the released bytes.
-2. **Native-byte path — retain the released MXFP4 blocks and scales.** Relocate the checkpoint's own blocks and scales verbatim into an arena with `nvme_arena.bake_expert_tensors` (hash-preserving; the manifest's `bake_mode` records it) and bind it with `enable_mxfp4_nvme_residency` (serving through `mxfp4_grouped`'s native kernels) or `enable_nvme_train_residency` on an `arena=..., arena_train=True` load (training against the arena, gradient checkpointing required). The paged engine's native MXFP4 store — `enable_serve_experts_int4` on gpt-oss, which never re-quantises onto the int4 grid — is the all-VRAM form of the same idea. Here the checkpoint's expert bytes are what computes, and provenance is preserved end to end.
+1. **Decode, then re-quantise to NF4.** The quantising branch of `load_moe_4bit_streaming` (`experts4bit_qlora/loader.py`) reads the released blocks and scales through `experts4bit_qlora.formats.mxfp4.dequantize_mxfp4` — verified bit-identical to transformers' reference decode in `tests/test_mxfp4_dequant.py` — and then builds the expert stack in the storage you asked for, NF4 by default: `GptOssExperts4bit.from_gptoss(..., quant_type=quant_type)` for gpt-oss and `DeepseekV4Experts4bit.from_deepseek_v4(..., quant_type=quant_type)` for DeepSeek-V4, each of which quantises the decoded stack through `Experts4bit.from_float`. The resulting base is an NF4 re-quantisation of an exact decode of the release; whether its expert adapters can train depends on the model and path above: the decode is bit-exact, the NF4 that follows it is the quantiser's output, and that — not the release — is the provenance of the served experts. Needs no arena and no kernel package. `verify_moe_4bit(model, strict=True)` proves the stack is 4-bit, not that it is the released bytes.
+2. **Native-byte path — retain the released MXFP4 blocks and scales.** For the DeepSeek-V4 arena route, relocate the checkpoint's own blocks and scales verbatim into an arena with `nvme_arena.bake_expert_tensors` (hash-preserving; the manifest's `bake_mode` records it) and bind it with `enable_mxfp4_nvme_residency` (serving through `mxfp4_grouped`'s native kernels) or `enable_nvme_train_residency` on an `arena=..., arena_train=True` load (training against the arena, gradient checkpointing required). The paged engine's native MXFP4 store — `enable_serve_experts_int4` on gpt-oss, which never re-quantises onto the int4 grid — is the all-VRAM form of the same idea. Here the checkpoint's expert bytes are what computes, and provenance is preserved end to end.
 
 ## Symptoms
 
@@ -28,7 +43,7 @@ MXFP4 (OCP microscaling FP4) stores two e2m1 nibbles per byte in blocks of 32 va
 
 ```bash
 pip install "experts4bit-qlora[train]"   # minimum/reference training: the loader (decode-then-NF4 path)
-pip install "experts4bit-qlora[fast]"    # residency/NVMe/fast-kernel route: grouped-nf4-gemm's MXFP4 kernels, arena bake, residency
+pip install "experts4bit-qlora[train,fast]"  # loader plus the native-byte engines used below
 ```
 
 ## Smallest correct example
@@ -57,7 +72,7 @@ n = enable_mxfp4_nvme_residency(model, "/nvme/v4.mxarena",
 assert n > 0
 ```
 
-Training against the same relocated bytes: load with `arena=..., arena_train=True`, then `enable_nvme_train_residency(model, arena, hot_rows=<expert count>)` with gradient checkpointing enabled ([`offload-moe-experts-to-cpu-or-nvme.md`](offload-moe-experts-to-cpu-or-nvme.md)). The default NF4 path needs no arena: `load_moe_4bit_streaming("openai/gpt-oss-20b", ...)` then `verify_moe_4bit(model, strict=True)`.
+**DeepSeek-V4 only — experimental arena training:** load with `arena=..., arena_train=True`, then `enable_nvme_train_residency(model, arena, hot_rows=<expert count>)` with gradient checkpointing enabled ([`offload-moe-experts-to-cpu-or-nvme.md`](offload-moe-experts-to-cpu-or-nvme.md)). The default NF4 loading path needs no arena and does not enable gpt-oss expert training: `load_moe_4bit_streaming("openai/gpt-oss-20b", ...)` then `verify_moe_4bit(model, strict=True)`.
 
 ## Expected result
 
