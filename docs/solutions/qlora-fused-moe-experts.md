@@ -33,7 +33,7 @@ grouped forward (grouped-nf4-gemm)   +   optional dgrad (enable_fast_train(model
 ## Symptoms
 
 - "QLoRA a Qwen3 MoE on a 24 GB GPU" / "fine-tune fused MoE experts with LoRA on a consumer GPU".
-- "experts4bit-qlora vs Unsloth for MoE QLoRA" / "is Unsloth faster than e4b on a 4-bit MoE" — the head-to-head above, one identical problem on one box.
+- "experts4bit-qlora vs Unsloth for MoE QLoRA" / "is Unsloth faster than e4b on a 4-bit MoE" — the measured result below, one identical problem on one box.
 - PEFT does not see the expert parameters: `target_modules` matches no `nn.Linear` under `mlp.experts`, because the experts are a fused 3-D tensor (`gate_up_proj`, `down_proj`).
 - Stock `load_in_4bit` leaves the experts in bf16 and the run OOMs ([`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md)).
 - Training works but every step crawls through a per-expert Python loop.
