@@ -1,0 +1,78 @@
+{
+ "model": "baidu/ERNIE-4.5-21B-A3B-PT",
+ "revision": null,
+ "source": "local-mirror",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-18T22:55:08Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.14.0",
+  "transformers": "5.17.0",
+  "bitsandbytes": "0.50.2",
+  "gnf4": "absent (ModuleNotFoundError)",
+  "e4b": "0.36.0"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "ok",
+   "shards": 9,
+   "note": "every shard matches the length its own header declares"
+  },
+  "load": {
+   "status": "ok",
+   "seconds": 81.6
+  },
+  "verify": {
+   "status": "ok",
+   "n_quantized": 27,
+   "n_unquantized": 0,
+   "quant_types": [
+    "nf4"
+   ]
+  },
+  "forward": {
+   "status": "ok",
+   "note": "loss is on synthetic arange token ids: a finiteness smoke test, NOT a quality measure",
+   "seconds": 8.58,
+   "loss": 5.17343,
+   "loss_finite": true,
+   "logits_finite": true
+  },
+  "capture": {
+   "status": "not_tested",
+   "reason": "CPU probe: CUDA-graph capture cannot be established here"
+  }
+ },
+ "model_type": "ernie4_5_moe",
+ "config": {
+  "hidden_size": 2560,
+  "num_hidden_layers": 28,
+  "num_experts": 64,
+  "top_k": 6,
+  "moe_intermediate_size": 1536
+ },
+ "claim": {
+  "in_supported_architectures": false,
+  "reachable_by_convention": true,
+  "expert_attr": null
+ },
+ "total_params": 11767759040,
+ "tier": "reference",
+ "tier_rule": "total_params < 1000000000 -> toy; else reference",
+ "exit_code": 0,
+ "finished_utc": "2026-09-18T22:56:40Z"
+}

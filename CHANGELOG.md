@@ -1,6 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.36.1 — 2026-09-18 — ernie4_5_moe loads its released checkpoint: tensors the text model does not build are skipped when the modeling class declares them, refused by name otherwise (#529)
+
+**A released checkpoint that ships a speculative-decoding block now loads.**
+ERNIE-4.5-21B-A3B-PT carries 12 multi-token-prediction tensors its text model
+does not build; the loader died on the first of them with a bare
+`AttributeError`. It now honours the modeling class's own
+`_keys_to_ignore_on_load_unexpected` — what transformers' `from_pretrained`
+does with those keys — and skips them before reading a byte, and any other
+tensor with no module is refused by name with the two declared-drop routes.
+Affects every family whose class declares such patterns (ERNIE-4.5 MoE and
+DeepSeek-V4 today) and, only as a clearer error, any checkpoint carrying a
+tensor the model does not build; nothing changes for a checkpoint whose every
+tensor has a home, and no gate, threshold, floor or registered number moves.
+**Verified on the released ERNIE-4.5-21B-A3B-PT** off the LAN (CPU, bf16):
+9 shards integrity-clean, load 81.6 s, 12 tensors skipped, 27 keys renamed,
+27 of 27 MoE layers quantised (nf4), forward finite — a `reference-ok` row in
+`docs/ARCHITECTURE_SUPPORT.md`. Upgrade if you load ERNIE-4.5 MoE or any
+checkpoint with an MTP / next-token block; no action otherwise. A patch
+release: the `[fast]` extra stays at `grouped-nf4-gemm>=0.30.0` and the CI
+kernel pin stays at v0.31.0.
 
 ### A checkpoint tensor the text model does not build: skipped when the modeling class declares it, refused by name otherwise (#529)
 
@@ -26,9 +45,17 @@
   unplaceable tensor is refused by name (the false-accept probe — the skip is gated on the
   declaration, not on "anything with no module"); the patterns are read from the class (ERNIE
   yes, Qwen3-MoE none); `_assign` refuses by name.
-- **Not claimed:** that the released 21B checkpoint loads. That is `bench/support/support_probe.py`'s
-  row, pending a re-run against the checkpoint; until it lands the ARCHITECTURE_SUPPORT row stays
-  fixture-tier and its note says so.
+- **Verified on the released checkpoint** (2026-09-18, `bench/support/rows/ernie4_5_moe.json`,
+  `bench/support/support_probe.py` on CPU, bf16, transformers 5.17.0 / torch 2.14.0 / bitsandbytes
+  0.50.2): ERNIE-4.5-21B-A3B-PT off the LAN — 9 shards each matching the length its own header
+  declares; load 81.6 s with `skipped 12 checkpoint tensor(s) the text model does not build
+  (Ernie4_5_MoeForCausalLM._keys_to_ignore_on_load_unexpected)` and 27 transformers checkpoint-key
+  renamings (`moe_statics`); `verify_moe_4bit(strict)` 27 quantised / 0 unquantised (nf4); one
+  forward finite (loss 5.17 on synthetic ids — a finiteness smoke, not a quality measure); grade
+  **`reference-ok`**. CUDA-graph capture not tested (CPU probe). The family loads by convention
+  (`QWEN2_MOE`), not through `SUPPORTED_ARCHITECTURES`, so the row sits under "probed but not in the
+  claimed list" by design; `docs/ARCHITECTURE_SUPPORT.md`'s hand-written row is now real-checkpoint
+  evidence and its Notes say so.
 
 ## 0.36.0 — 2026-09-18 — the licensed int4 expert pack is bytes with its gptq/rtn decision recorded (#405, #530, #537); the fused gate/up order and the attention projections are declared by structure (#518, #519, #426)
 
