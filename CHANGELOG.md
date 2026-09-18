@@ -1,6 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.36.0 — 2026-09-18 — the licensed int4 expert pack is bytes with its gptq/rtn decision recorded (#405, #530, #537); the fused gate/up order and the attention projections are declared by structure (#518, #519, #426)
+
+**Two things stop being recipes and become records.** The calibrated int4
+expert pack is an artifact with a root fingerprint, and the per-expert
+gptq/rtn decision travels inside it, so a licensed pack loads byte-for-byte
+on another box and a re-pack honours the recorded split instead of
+re-deriving it from routing counts at the noise floor (#405, #530); a
+streamed build's record now covers every chunk, not the last one (#537). The
+fused `gate_up_proj` orientation is a declared, validated field on every
+convention and an up-first family is refused at the loader instead of
+computing `up * act(gate)` silently (#518, #519); attention projections are
+found by module structure, so Gemma-4's `k_eq_v` layers are counted rather
+than skipped (#426). Affects the int4 serving lanes
+(`enable_serve_experts_int4*`, `dump_calibrated_artifact`,
+`E4B_INT4_ASSIGNMENT`), attention-4-bit and attention-LoRA on every family,
+and — only as a refusal that no shipped convention triggers — every fused MoE
+load. Upgrade if you build or consume calibrated int4 packs, target
+attention on Gemma-4, or pin this package by version: the 0.35.3 wheel on
+PyPI predates `detect_attention_projections`, `pack_manifest` and the
+assignment API, so that version string named two code states (#488) and this
+release closes it. No gate, threshold, floor or existing claim value moved.
+The `[fast]` extra stays at `grouped-nf4-gemm>=0.30.0`; CI pins the kernel
+package at its v0.31.0 release commit.
 
 ### The gptq/rtn decision travels with the pack; a re-pack honours it (#530)
 
@@ -44,6 +66,71 @@ The bias refusal still fires after admission, so gpt-oss's "96 of 96 attention
 projections carry a bias" REFUSED holds. `docs/capabilities.json` `gemma4_text`
 attention-4-bit stays "not supported pending #412"; the tp2 VOID rows stay VOID.
 No gate, threshold, floor or registered claim moved.
+
+### The fused gate/up order is a declared, validated field; up-first is refused at the loader (#515 → #518, #519; #509 → #514)
+
+- `MoEConvention.fused_order` (default `("gate", "up")`) records which half of a fused `gate_up_proj`
+  `[E, 2*inter, hidden]` is the gate. It is an adjudicated fact, never inferred: gate and up are
+  shape-identical, so a swap computes `up * act(gate)` with every structural gate still passing.
+  `__post_init__` refuses any value but the two orders and refuses a non-default order on a non-gated
+  convention; `gate_first` is the predicate consumers read. Nine conventions have an unmatchable
+  `expert_re` (natively pre-fused or nested — dense, granitemoe, gptoss, qwen3_vl_moe, gemma4, axk1,
+  jetmoe, dbrx, qwen3_5_moe) and all nine are gated, so for each an order exists to get wrong; the
+  field is data rather than a comment because those families have no key names left to recover it from.
+- `loader.expert_layout_for`, the single funnel from the convention system into the loader, raises
+  `MoEConventionError` for a convention that declares up-first, until the `chunk(2, dim=-1)` consumers
+  (the vendored expert forward, deepseek_v4's dense path, the hybrid and hot-residency engines,
+  ExpertsLoRA) are parameterised on the order. No shipped convention declares up-first, so nothing that
+  loaded before is refused now.
+- `tests/test_moe_conventions.py` adds a numerical detector: pack with the real `fuse_experts`, split
+  with the arithmetic the consumers apply, and compare against a reference built from the *separate*
+  gate/up tensors (no fused layout to inherit a mistake from) to 1e-12 in float64 on every expert; a
+  false-accept probe shows a pack with the halves exchanged fails the same comparison on 3 of 3
+  experts. The three pre-existing orientation tests are regexes over upstream source text and could
+  not see this pipeline disagreeing with itself.
+- Still open on #515: the field states the order and the detector checks this package's packing
+  against its own split; neither can tell a reader that a natively pre-fused checkpoint's own order
+  differs from the adjudication.
+- `axk1` is annotated **staged, not wired** (#509 → #514; comments and one doc line): `loader.py`
+  admits it by neither route (`SUPPORTED_ARCHITECTURES`, or a read-compatible convention —
+  `{qwen2_moe, mixtral, phimoe}`), and `rewrite_axk1_keys` is absent from `CKPT_KEY_REWRITERS`, so
+  admitting it alone would load with the wrong key mapping. `axk2` maps onto `QWEN2_MOE`, which is
+  read-compatible, and is admitted; `mixtral` loads by the same second route, which is why it carries
+  real-weight PASS receipts without a `SUPPORTED_ARCHITECTURES` entry.
+
+### Streamed calibration merges each chunk's provenance (#537)
+
+- `enable_serve_experts_int4_calibrated` enables the pack one layer chunk at a time, and each chunk's
+  enable called `_attach_live_pack_provenance`, which **replaced** the live record — so after a
+  48-layer streamed build the record, and the hashed assignment payload `dump_calibrated_artifact`
+  wrote from it, described the last chunk only. P39 box 1 dumped an assignment naming 8 of 48 layers;
+  box 2's honoured build refused `layer 0 expert 0 gu: not named by the assignment` — the refusal #530
+  promised, and correct. The single-chunk tests could not see it.
+- A live record already on the model for the same checkpoint is now merged: component hashes by path
+  (the chunk's bytes win), the decision by `(layer, expert, role)`, row counts by `(layer, expert)`,
+  counts summed, honoured-disagreements summed under the same hash, and every hash and the
+  `pack_fingerprint` recomputed over the union — so the record after the last chunk equals what one
+  all-at-once enable writes. Test: a two-layer checkpoint enabled as `layers=[0]` then `layers=[1]`
+  carries both layers' decision, summed counts, all eight payloads and the SAME `pack_fingerprint` as a
+  single enable, and the artifact it dumps names both layers.
+
+### Documentation, and what is repository-only
+
+- `engines/int4_experts.py`'s module note describes the dispatch, not the design (#496 → #520):
+  batched decode stays on the NF4 M-tile path in every default configuration (`DEVICE_GROUPING =
+  [False]`, assigned nowhere in the package), and the `gemm_int4_b32_grouped_captured` branch the
+  published `e4b.serve.b16.qwen3-30b.int4.5090` row was measured in is reached only when a bench flips
+  that flag. `tests/test_int4_docstring_matches_dispatch.py` holds the note to the code.
+- `docs/ARCHITECTURE_SUPPORT.md` is regenerated from `bench/support/` rows (#521, #522; PR title:
+  "1 of 9 evidenced becomes 6 of 9"): real-checkpoint load / verify / forward rows on current versions,
+  `tests/test_support_doc_matches_rows.py` fails when regenerating is not a no-op, and the
+  architecture claim is joined to grouped-nf4-gemm's shape census (#353's missing artifact). The
+  `SUPPORTED_ARCHITECTURES` comment in `engines/offload.py` no longer states a family count.
+- `train.py` logs the structurally expected attention-projection count beside the converted one.
+- Repository-only, not in the wheel: the pre-registered lanes and their box-side runners under `bench/`
+  (P39, P41, P42, tp3, tp4, and the K14/K15 runners whose pre-registrations live in grouped-nf4-gemm),
+  the compute-governance policy and run-receipt ledger, and the Vast rent launcher fixes. Lane results
+  are registered where they moved a number; see `docs/claims.json` and the receipts they name.
 
 ## 0.35.3 — 2026-09-06 — the loader honours a pinned checkpoint revision (#404); tp2 / P40 into the register (#415)
 
