@@ -69,6 +69,13 @@ at scale, and the fixture numbers should not be quoted as one.
 keys respectively — while the module tree carries it under `mlp.gate.`. The loader walked raw
 checkpoint keys and died with `Ernie4_5_MoeSparseMoeBlock has no attribute 'moe_statics'`. It
 now reads transformers' own per-`model_type` rename table rather than keeping a second copy.
+The same family's released checkpoint then failed on its multi-token-prediction block
+([#529](https://github.com/pjordanandrsn/experts4bit-qlora/issues/529): 12 tensors under
+`model.mtp_*` that `Ernie4_5_MoeModel` does not build) — a gap the fixture row above could not see,
+because the fixture has no MTP weights. The loader now honours the modeling class's own
+`_keys_to_ignore_on_load_unexpected` (ERNIE declares `mtp`) and refuses any other unplaceable
+tensor by name. The released-checkpoint row is pending a re-run of the probe; until it lands,
+`validated | fixture` above is exactly that — fixture evidence, not a load of the released bytes.
 
 **`longcat_flash`** — allocates `gate_up_proj` over `n_routed_experts + zero_expert_num`
 (512 + 256 by default) but `down_proj` over the routed count only, because its forward sends

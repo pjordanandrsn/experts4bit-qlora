@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### A checkpoint tensor the text model does not build: skipped when the modeling class declares it, refused by name otherwise (#529)
+
+- ERNIE-4.5-21B-A3B-PT's released index carries a multi-token-prediction block — 12 tensors
+  under `model.mtp_block.0.*`, `model.mtp_emb_norm.*`, `model.mtp_hidden_norm.*` and
+  `model.mtp_linear_proj.*` — that `Ernie4_5_MoeModel` does not build. The loader walked to the
+  first of them and died with `Ernie4_5_MoeModel has no attribute `mtp_block``, a bare
+  `AttributeError` naming neither the key nor a remedy. `docs/ARCHITECTURE_SUPPORT.md` read
+  `validated` for the family on fixture evidence; the fixture had no MTP weights, which is exactly
+  the gap that row's own caveat warns about.
+- The loader now honours the modeling class's own `_keys_to_ignore_on_load_unexpected` at the
+  non-expert assignment pass — what transformers' `from_pretrained` does with those keys (ERNIE-4.5
+  MoE declares `["mtp"]`, its modeling file saying "Not supporting multi-token prediction (MTP)
+  atm"; DeepSeek-V4 declares `["(^|\.)mtp\..*"]`). A key with no module that matches is skipped
+  before its shard is read and counted in the log (`skipped N checkpoint tensor(s) the text model
+  does not build (<Class>._keys_to_ignore_on_load_unexpected)`); a key with no module that matches
+  nothing raises `loader.UnplaceableTensorError` — an `AttributeError` subclass, so what caught the
+  old exception still catches it — naming the key and the two declared-drop routes
+  (`CKPT_KEY_REWRITERS`, the convention's `drop_re`). Family-agnostic: no per-family table, and
+  DeepSeek-V4's bespoke `mtp.` rewriter stays as the first line.
+- `tests/test_unbuilt_checkpoint_tensors.py`: the family's own tiny model plus tensors under the
+  released MTP prefixes loads, counts the skipped tensors, and forwards; an *undeclared*
+  unplaceable tensor is refused by name (the false-accept probe — the skip is gated on the
+  declaration, not on "anything with no module"); the patterns are read from the class (ERNIE
+  yes, Qwen3-MoE none); `_assign` refuses by name.
+- **Not claimed:** that the released 21B checkpoint loads. That is `bench/support/support_probe.py`'s
+  row, pending a re-run against the checkpoint; until it lands the ARCHITECTURE_SUPPORT row stays
+  fixture-tier and its note says so.
+
 ## 0.36.0 — 2026-09-18 — the licensed int4 expert pack is bytes with its gptq/rtn decision recorded (#405, #530, #537); the fused gate/up order and the attention projections are declared by structure (#518, #519, #426)
 
 **Two things stop being recipes and become records.** The calibrated int4
