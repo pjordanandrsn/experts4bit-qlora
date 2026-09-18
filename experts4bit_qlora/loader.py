@@ -336,13 +336,62 @@ def _rename_checkpoint_key(name, renamings):
     return name
 
 
+class UnplaceableTensorError(AttributeError):
+    """A checkpoint tensor names a module the built model does not have.
+
+    Raised by :func:`_parent_module` (so by :func:`_assign`) instead of torch's bare
+    ``AttributeError`` — ``Ernie4_5_MoeModel has no attribute `mtp_block``` named
+    neither the checkpoint key nor either way this loader knows to declare a tensor
+    the text model does not build (e4b#529). A subclass of AttributeError so
+    nothing that caught the old exception breaks.
+    """
+
+
+def _unbuilt_key_patterns(model):
+    """The modeling class's own declaration of checkpoint tensors it does not build.
+
+    transformers' ``from_pretrained`` files a checkpoint key with no destination as
+    "unexpected" and, when the class lists a matching pattern in
+    ``_keys_to_ignore_on_load_unexpected``, drops it without a word: ERNIE-4.5 MoE
+    declares ``["mtp"]`` (its modeling file: "Not supporting multi-token prediction
+    (MTP) atm"), DeepSeek-V4 ``["(^|\\.)mtp\\..*"]``. This loader walks raw keys itself,
+    so it honours the same declaration at the same point: a key with no module that
+    matches is skipped and counted; a key with no module that matches nothing is
+    refused by name. The instance attribute is the set transformers merges from
+    every submodule at post-init; the class attribute is the fallback.
+    """
+    pats = getattr(model, "_keys_to_ignore_on_load_unexpected", None)
+    if not pats:
+        pats = getattr(type(model), "_keys_to_ignore_on_load_unexpected", None)
+    return [re.compile(p) for p in (pats or ())]
+
+
+def _parent_module(model, name):
+    """The module that owns dotted ``name``, and the attribute name on it.
+
+    Refuses by name when no such module exists, and says what to do about it.
+    """
+    *path, attr = name.split(".")
+    try:
+        return (model.get_submodule(".".join(path)) if path else model), attr
+    except AttributeError as e:
+        raise UnplaceableTensorError(
+            f"checkpoint tensor {name!r} has no module to receive it in "
+            f"{type(model).__name__} ({e}). If the text model does not build it — a "
+            f"multi-token-prediction block, a vision or audio tower — the modeling class "
+            f"declares that in `_keys_to_ignore_on_load_unexpected` and this loader honours "
+            f"it; otherwise map or drop the key in CKPT_KEY_REWRITERS or the convention's "
+            f"`drop_re`. Assigning it anyway is not an option (e4b#529)."
+        ) from e
+
+
 def _assign(model, name, tensor):
     """Place a real (GPU) tensor into a meta-initialized module by dotted name.
 
-    Returns True if the tensor was narrowed to fit — see :func:`_fit`.
+    Returns True if the tensor was narrowed to fit — see :func:`_fit`. Raises
+    :class:`UnplaceableTensorError` when ``name`` has no module.
     """
-    *path, attr = name.split(".")
-    mod = model.get_submodule(".".join(path)) if path else model
+    mod, attr = _parent_module(model, name)
     if attr in mod._parameters:
         tensor, cut = _fit(name, tensor, mod._parameters[attr])
         mod._parameters[attr] = torch.nn.Parameter(tensor, requires_grad=False)
@@ -789,7 +838,8 @@ def load_moe_4bit_streaming(
         for k, f in raw_map.items():
             new = rewrite(k)
             if new is None:
-                dropped.append(k)     # no module to receive it (V4: the MTP block)
+                dropped.append(k)     # no module to receive it (V4: the MTP block; the
+                                      # class-declared route below covers ERNIE-4.5's)
                 continue
             weight_map[new] = f
             orig_key[new] = k
@@ -1201,13 +1251,30 @@ def load_moe_4bit_streaming(
     # every convention with an empty rename table, and for granitemoe, whose
     # identical renames LEGACY_KEY_RENAMES has already applied to `weight_map`.
     conv_rename = conv.rename if conv is not None else (lambda k: k)
-    renamed = 0
+    unbuilt_pats = _unbuilt_key_patterns(model)
+    renamed, unbuilt = 0, []
     for name in weight_map:
         if name not in expert_keys:
             target = _rename_checkpoint_key(conv_rename(name), renamings)
             renamed += target != name
+            try:
+                _parent_module(model, target)
+            except UnplaceableTensorError:
+                # Decided BEFORE the shard is read, on the declaration alone: a tensor with
+                # no module that the modeling class lists in
+                # `_keys_to_ignore_on_load_unexpected` is skipped and counted (ERNIE-4.5's
+                # multi-token-prediction block — 12 tensors under `model.mtp_*` in the
+                # released 21B index, e4b#529); one it does not list propagates as the
+                # named refusal, never as a silent skip and never as a bare getattr error.
+                if any(p.search(target) or p.search(name) for p in unbuilt_pats):
+                    unbuilt.append(name)
+                    continue
+                raise
             if _assign(model, target, get(name)):
                 narrowed.append(target)
+    if unbuilt:
+        log(f"  skipped {len(unbuilt)} checkpoint tensor(s) the text model does not build "
+            f"({type(model).__name__}._keys_to_ignore_on_load_unexpected), e.g. {unbuilt[0]}")
     if renamed:
         log(f"  applied {renamed} transformers checkpoint-key renaming(s) "
             f"(this checkpoint's layout differs from the module tree)")
