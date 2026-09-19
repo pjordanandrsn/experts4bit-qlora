@@ -37,7 +37,9 @@ PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOC
 for v in TP4_FAMILIES TP4_SKIP TP4_UNSLOTH_VERSION TP4_UNSLOTH_ZOO_VERSION TP4_PIN_FALLBACK TP4_STEPS \
          TP4_EVAL_N TP4_EVAL_EVERY TP4_SEQ TP4_MB TP4_ACCUM TP4_R TP4_LR TP4_OPTIM TP4_SCHED TP4_WARMUP TP4_GPU_CLASS \
          TP4_LOG_EVERY TP4_DIAG_ALARM; do
-  [ -n "${!v:-}" ] && PASS="$PASS $v=${!v}"
+  # Quoted: run tp4-b-p46cut-3 passed TP4_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tp4_run.sh` saw the second
+  # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
+  [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
 done
 if [ "${TP4_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash tp4_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/tp4"; exit 0; fi
 say "run $RUN_ID box $TP4_BOX nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); gnf4 $GNF4_SHA; receipts -> $RUN_DIR/tp4; deadline $DEADLINE"
