@@ -224,34 +224,42 @@ def test_smallm_route_is_opt_in_and_serves_two_to_sixteen_rows(monkeypatch):
     assert calls[-1][0] == "gemv"                                                    # one row: the GEMV
 
 
-def test_smallm_enable_reads_the_flag_and_refuses_without_the_kernel(monkeypatch):
+def test_smallm_enable_auto_default_flag_and_refusal(monkeypatch, capsys):
+    """K16 route default (P5 read): unset -> auto -> ON when the stub kernel is importable; =0 -> off; =1 without the
+    kernel -> refuse at enable time; auto without the kernel -> off with a one-line notice, never silent."""
     import sys
     calls = []
     _cpu_kernel_stubs(monkeypatch, calls)
-    from experts4bit_qlora.engines.int4_attn import Int4Linear, enable_serve_attn_int4
+    from experts4bit_qlora.engines.int4_attn import Int4Linear, enable_serve_attn_int4, resolve_smallm
 
-    class Attn(nn.Module):
+    class TinyAttention(nn.Module):
         def __init__(self):
             super().__init__()
             self.q_proj = nn.Linear(64, 64, bias=False, dtype=torch.bfloat16)
-
-    class TinyAttention(Attn):
-        pass
 
     class M(nn.Module):
         def __init__(self):
             super().__init__()
             self.attn = TinyAttention()
             self.lm_head = nn.Linear(64, 32, bias=False, dtype=torch.bfloat16)
-    m = M()
-    monkeypatch.setenv("E4B_ATTN_INT4_SMALLM", "1")
-    assert enable_serve_attn_int4(m) == 1 and isinstance(m.attn.q_proj, Int4Linear) and m.attn.q_proj._smallm is not None
-    m2 = M()
     monkeypatch.delenv("E4B_ATTN_INT4_SMALLM", raising=False)
-    assert enable_serve_attn_int4(m2) == 1 and m2.attn.q_proj._smallm is None
-    m3 = M()
+    m = M()
+    assert enable_serve_attn_int4(m) == 1 and isinstance(m.attn.q_proj, Int4Linear) and m.attn.q_proj._smallm is not None   # auto: on
+    monkeypatch.setenv("E4B_ATTN_INT4_SMALLM", "0")
+    m0 = M()
+    assert enable_serve_attn_int4(m0) == 1 and m0.attn.q_proj._smallm is None                                             # off
+    monkeypatch.setenv("E4B_ATTN_INT4_SMALLM", "1")
+    m1 = M()
+    assert enable_serve_attn_int4(m1) == 1 and m1.attn.q_proj._smallm is not None                                         # required, present
+    # the kernel goes away
     monkeypatch.delitem(sys.modules, "int4_smallm")
     monkeypatch.setattr("experts4bit_qlora.engines.int4_attn._smallm_kernels",
                         lambda: (_ for _ in ()).throw(ImportError("No module named int4_smallm")))
     with pytest.raises(RuntimeError, match="E4B_ATTN_INT4_SMALLM=1 needs grouped-nf4-gemm with int4_smallm"):
-        enable_serve_attn_int4(m3, smallm=True)
+        enable_serve_attn_int4(M(), smallm=True)
+    monkeypatch.delenv("E4B_ATTN_INT4_SMALLM", raising=False)
+    capsys.readouterr()
+    assert resolve_smallm(None) is False                                                                                  # auto without the kernel: off ...
+    out = capsys.readouterr().out
+    assert "K16 small-M route OFF" in out and "int4_smallm" in out                                                        # ... and it says so
+    assert resolve_smallm(False) is False

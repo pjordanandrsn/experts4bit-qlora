@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### K16 P5 read: the small-M route saves 1.06 ms/step at B=16 on the 5090; the route's default becomes `auto`
+
+- Lane `k16-p5` (`bench/k16/RESULTS-k16-p5.md`, receipt `2026-09-19/k16-p5/`), P42's census protocol on one RTX 5090 with the
+  same bytes: `int4_b16` 12.25 ms/step → `int4_b16_smallm` **11.19 ms/step** (−1.06 ms, −8.6 %; 1,306 → 1,429 tok/s). The
+  census attributes it exactly: the bf16 GEMM family that carried the attention projections falls by 2.35 ms/step and
+  `_gemm_int4_b32_smallm` costs 1.30 in its place (net −1.05; the microbench predicted −0.96); the route appears in the
+  smallm arm's census (192 calls/step) and in no other arm's. **P5 HOLDS** (≥ 0.4 ms/step registered). Every other kernel
+  row is within noise between the two int4 arms.
+- **`E4B_ATTN_INT4_SMALLM` now defaults to `auto`** (`resolve_smallm`): the route is ON when the installed grouped-nf4-gemm
+  carries `int4_smallm` (≥ 0.32.0), OFF with a one-line banner when it does not — never a silent fallback, never a refusal
+  on an older cut. `=1` still refuses without the kernel; `=0` keeps the cached-bf16 path. The same rule now applies to the
+  CALIBRATED enable (`enable_serve_attn_int4_calib`), so the licensed calibrated-attention stacks take the route too. The
+  B=1 path (the int4 GEMV) is untouched, so every K8 row on record is unaffected; at 2..16 rows the route computes the same
+  `x_bf16 @ dequant(W)` with fp32 accumulation the cached matmul computes, within bf16 rounding (K16's contract).
+- `bench/k16/k16p5_reduce.py` reads the B=16 receipt directly (the shared P42 helper keyed the batch off an `_b16` suffix the
+  smallm arm does not end with).
+
 ### K16 consumer route (opt-in): `Int4Linear` serves 2..16 rows with the small-M int4 GEMM (#561, lane K16)
 
 - `enable_serve_attn_int4(model, smallm=None)` reads **`E4B_ATTN_INT4_SMALLM=1`** (or the argument): each `Int4Linear`
