@@ -1,0 +1,11 @@
+# Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on
+# this file and the controller resolves each name to its source (this dir, bench/p42/hook, bench/p39, bench/) and compares.
+f15e24281b7455087bce51969c5919b51fc6a429169b15861f47441c231f338b  p44b_run.sh
+ce1645f21d793d0e61d7d0f8feb2921636c7541761d6683d25479b3a44f3b569  serve_stack.py
+bd135c5f2aa4a5e2f114a5410ad50857353874d6ff8632e0b1ae3497c7748c67  kl_serve.py
+52e6d8147c1bad4a1a247c32679299c388508de75f11cd8a5ee8eff8a6940e40  kl_fidelity.py
+f1380821949df0fa27321dfbf3049f0f0b8f0067bf7e19a19ed312b1c4de8a01  kl_paths.py
+ea3e29864f090c44faf56e288a5c327ff56474904cc965b6756b36348839009d  kl_prompts.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+9320eaceb802c08d4ffc939e7f6bccf5e7de91b3c2ebc222487fd932d60db520  hook/usercustomize.py
