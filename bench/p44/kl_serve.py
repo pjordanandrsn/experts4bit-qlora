@@ -49,12 +49,14 @@ from kl_fidelity import (METRIC_VERSION, KLAccumulator,  # noqa: E402
                          decode_teacher_forced_logits, teacher_forced_logits)
 from kl_paths import _gate_on_k0  # noqa: E402
 from kl_prompts import PROMPTS, digest as prompt_digest, strata_counts  # noqa: E402
-from serve_stack import ARMS, LANE_KEYS, MODELS, arm_env, build_served_model  # noqa: E402
+from serve_stack import ARMS, LANE_KEYS, MODELS, arm_env, build_arm_model, control_arm  # noqa: E402
 
 REFERENCE = {
     "gemma4": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision, resident on the same card",
     "gptoss": "dequant-to-bf16 of the SAME shipped MXFP4 bytes (Mxfp4Config(dequantize=True)) -- there is no bf16 "
               "original of gpt-oss (kl_paths.py's rule)",
+    "gemma4diag": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision, resident on the same "
+                  "card -- P44-b's Gemma-4 reference, reused unchanged for the P47 builders (#597)",
 }
 SCORERS = {"decode": decode_teacher_forced_logits, "prefill": teacher_forced_logits}
 SELF_CONSISTENCY_MAX = 1e-2      # amendment 5: the reference must agree with itself decode-vs-prefill or the decode scorer is refused
@@ -147,6 +149,17 @@ def reference_pass(family, model_id, revision, tok, prompts, cache_dir, max_len,
     return rep, chosen
 
 
+def _builder_check(info: dict) -> None:
+    """P47: a loader builder's layer set must have applied -- the quantised / unquantised stack counts `verify_moe_4bit`
+    reports must equal what the builder asked for, or the row is refused (a half that did not quantise is not a half)."""
+    if info.get("builder", "served") == "served":
+        return
+    for got, want in (("n_quantized", "expected_quantized"), ("n_unquantized", "expected_unquantized")):
+        if info.get(got) != info.get(want):
+            raise RuntimeError(f"builder {info['builder']!r}: {got}={info.get(got)} but the builder expects {info.get(want)} "
+                               f"(quantize_layers={info.get('quantize_layers')}) -- the layer set did not apply; row refused")
+
+
 def _lever_check(env: dict, info: dict) -> None:
     """A set lever must have engaged. Zero counts under a set flag refuse the row."""
     if env.get("E4B_SERVE_EXP_INT4") == "1" and info.get("int4_expert_layers", 0) == 0:
@@ -197,7 +210,7 @@ def run_controls(a, model_id, revision, tok, prompts, dev, ref_cache, scorer_use
     gc.collect()
     torch.cuda.empty_cache()
     import subprocess
-    ctrl_arm = "nf4" if "nf4" in ARMS[a.family] else sorted(ARMS[a.family])[0]
+    ctrl_arm = control_arm(a.family)
     other = "prefill" if scorer_used == "decode" else "decode"
     part = f"{a.out}.{ctrl_arm}.{other}.part.json"
     env = dict(os.environ)
@@ -340,11 +353,12 @@ def main() -> int:
         t1 = time.time()
         model = None
         try:
-            model, info = build_served_model(model_id, a.arena, a.calib, device=dev)
+            model, info = build_arm_model(a.family, arm, model_id, a.arena, a.calib, device=dev)
             info["hook_loaded"] = hook
             _lever_check(env, info)
+            _builder_check(info)
             r = score_arm(model, tok, prompts, ref_cache, a.max_len, score, dev)
-            r.update({"arm": arm, "row": f"{a.family}/{arm} vs the family's reference", "env": env,
+            r.update({"arm": arm, "builder": info.get("builder", "served"), "row": f"{a.family}/{arm} vs the family's reference", "env": env,
                       "engagement": info, "reference": REFERENCE[a.family], "scorer": scorer_used,
                       "wall_s": round(time.time() - t1, 1)})
             receipt["rows"].append(r)
