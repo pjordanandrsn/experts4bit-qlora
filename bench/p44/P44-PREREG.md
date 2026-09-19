@@ -63,4 +63,39 @@ Both under the $35 cap. STOP: a card not of the class (refused before install); 
 
 ## Amendments
 
-(none yet)
+### Amendment 1 (2026-09-19, before any box is rented) — harness facts the registration got wrong or left open
+
+1. **K8 window = 2048 steps, not 8192.** Every registered K8 row this lane re-gates or compares against (bo5, bo6, bo7,
+   p37, p42: `--ppl-steps 2048 --b1d-loop eager --no-fuse-qkv`, `--prompt-len 512 --gen-tokens 16`) scored a
+   2048-step window; the "8192-step window" above was a misstatement of the protocol, corrected here before data.
+   `k8_gate.verdict` refuses to pair arms of different step counts, so the two texts inside P44-a share 2048 and the
+   deltas are read against the same-window rows on record.
+2. **P44-b's scorer is DECODE-SHAPED on both sides** (`kl_fidelity.decode_teacher_forced_logits`: one token per
+   forward, KV cache). The arms are serving stacks whose levers engage only at T == 1 (the int4 attention GEMV,
+   the glue folds, the router epilogue, the MXFP4 store's single-row route); the prefill scorer would report 0.000
+   for every one of them and that would mean "never ran". The reference's per-prompt logits are computed once,
+   cached to disk in the model's own output dtype (lossless) and the reference is freed before any arm is built, so
+   the bf16 Gemma-4 and a served arm never share the card. Every row records the scorer; every arm records an
+   engagement census (Int4Linear count, int4 expert layers, fusion patch counts) and a set lever that engaged nothing
+   refuses the row.
+3. **P44-b guard 3 h → 4 h ($9.30 → $12.40 at $3.10/h; still under the $35 cap).** Decode-shaped scoring is ~30k
+   single-token forwards per side per family; the HF bf16 reference at that shape is the slow side (≈ 25–40 ms/step
+   on a 26B-A4B MoE in eager HF), and Gemma-4's 52 GB fetch alone can take 45 min at the 20 MB/s floor.
+4. **Calibration text, stated exactly.** `calibexp_all` (OLMoE) calibrates on **wikitext-2 train** with the streamed
+   64k sequential recipe (`E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=128 E4B_CALIB_SOURCE=wikitext`); the hook shares
+   one source, so that arm's int4 attention pack is wikitext-calibrated too (bo7's timed `calibexp` arms used C4) —
+   calibration text only, same kernels, same speed. `int4all`'s attention calibrates on C4 as bo7's timed arm did.
+   `k8_gate.verdict(..., calibrated=True, calibration_domain="wikitext")` for `calibexp_all`; two-sided for `int4all`.
+5. **Census activations.** Granite's census runs on the hook's default calibration set (32 × 512 C4 tokens — the set
+   its timed `calibexp_r12epi` calibrated on) and reads GPTQ residuals where the recipe would pack GPTQ; Mixtral's
+   timed arm `all` is RTN and has no calibration set of its own, so its census runs on the same 32 × 512 C4 tokens
+   and reads RTN residuals. P3's statistic is read per family on its own method.
+6. **Model revisions pinned** (resolved from the Hub on 2026-09-19): OLMoE `7f1c97f4…`, Granite `a0278068…`, Mixtral
+   `eba92302…`, Gemma-4 `4d7ae498…`, gpt-oss `6cee5e81…` (`bench/p44/serve_stack.py:MODELS`). Kernel pin: gnf4
+   v0.31.0 (`24f8c9fb…`), the consumer CI pin.
+7. **The lane hook is P42's, referenced not copied** (`bench/p42/hook/usercustomize.py`, hook v7), staged as `hook/` on the box and pinned by hash in both `staged-*.sha256`.
+8. **Arm table in one place.** `bench/p44/serve_stack.py` carries bo7's arm definitions; the K8 shell arms take their
+   environment from it and the KL/census drivers build the served model through it, so a K8 row and a KL row of the
+   same arm name are the same flags.
+
+Nothing above moves a prediction, a threshold or a reading rule.
