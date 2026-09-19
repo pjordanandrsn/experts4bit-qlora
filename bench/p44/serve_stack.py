@@ -79,6 +79,13 @@ MODELS["gemma4diag"] = MODELS["gemma4"]
 BUILDERS = {"gemma4diag": {"served_nf4": "served", "loader_nf4": "loader", "loader_bf16experts": "loader_unquant",
                            "loader_nf4_lo": "loader_lo", "loader_nf4_hi": "loader_hi"}}
 LOADER_BUILDERS = ("loader", "loader_unquant", "loader_lo", "loader_hi")
+# P50 (#597, after P49 refuted every store on layer 0): the remedy the decision rule names -- keep the first k expert layers
+# in bf16 and NF4 the rest -- measured as a quality/memory CURVE, not assumed. `loader_keep_<k>` = quantize_layers {k..L-1}.
+# k=15 is P47's `loader_nf4_hi` (0.1334) and k=0 is `loader_nf4` (1.0837): both are anchors this lane re-reads.
+GEMMA4_KEEP_KS = (5, 10, 15, 20, 24)
+ARMS["gemma4keep"] = {f"K{k:02d}": (0, 0, "0", {}) for k in GEMMA4_KEEP_KS}
+MODELS["gemma4keep"] = MODELS["gemma4"]
+BUILDERS["gemma4keep"] = {f"K{k:02d}": f"loader_keep_{k}" for k in GEMMA4_KEEP_KS}
 # P48 (#597, after P47 put the nat in layers 0-14): ONE NF4 layer at a time. Family `gemma4layer`, arm `L<i>` for every
 # text-decoder layer, builder `loader_only_<i>` = the training loader with quantize_layers={i} (bf16 experts everywhere
 # else). 30 arms; the smallest row bounds e4b's Gemma-4 modelling cost from above (P47 amendment 1), the per-layer
@@ -87,6 +94,7 @@ GEMMA4_TEXT_LAYERS = 30
 ARMS["gemma4layer"] = {f"L{i:02d}": (0, 0, "0", {}) for i in range(GEMMA4_TEXT_LAYERS)}
 MODELS["gemma4layer"] = MODELS["gemma4"]
 BUILDERS["gemma4layer"] = {f"L{i:02d}": f"loader_only_{i}" for i in range(GEMMA4_TEXT_LAYERS)}
+_KEEP = re.compile(r"^loader_keep_(\d+)$")          # P50: bf16 experts in layers 0..k-1, NF4 in the rest
 _ONLY = re.compile(r"^loader_only_(\d+)(?::([a-z0-9]+))?(?::b(\d+))?$")   # loader_only_<layer>[:<quant_type>][:b<blocksize>]
 # P49 (#597, after P48 put 83 % of the gap in layer 0 alone): the expert FORMAT on layer 0, and NF4 at four depths for the
 # activation probe. Same nf4 lever set everywhere (no int4 store, no fusion); the builder names the store.
@@ -254,6 +262,12 @@ def text_layers(model_id: str) -> int:
 def quantize_layer_set(builder: str, n_layers: int):
     """P47's per-builder ``quantize_layers``: None (all), the empty set (none), the first half, the second half."""
     half = n_layers // 2
+    mk = _KEEP.match(builder)
+    if mk:
+        k = int(mk.group(1))
+        if not 0 <= k <= n_layers:
+            raise ValueError(f"{builder}: k={k} is outside 0..{n_layers}")
+        return set(range(k, n_layers))          # bf16 in 0..k-1, NF4 in k..L-1
     po = parse_only(builder)
     if po:
         i = po[0]
@@ -273,8 +287,8 @@ def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
     import torch
     from experts4bit_qlora import load_moe_4bit_streaming, verify_moe_4bit
     po = parse_only(builder)
-    if builder not in LOADER_BUILDERS and not po:
-        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS} or loader_only_<i>[:<qt>][:b<bs>]")
+    if builder not in LOADER_BUILDERS and not po and not _KEEP.match(builder):
+        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS}, loader_only_<i>[:<qt>][:b<bs>] or loader_keep_<k>")
     n = text_layers(model_id)
     ql = quantize_layer_set(builder, n)
     qt, bs = (po[1], po[2]) if po else ("nf4", 64)
@@ -286,7 +300,14 @@ def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
         if cfg_ is not None:
             cfg_.use_cache = True
     v = verify_moe_4bit(model)
-    info = {"builder": builder, "moe_layers": n, "quantize_layers": "all" if ql is None else sorted(ql),
+    ebytes = {"quantized": 0, "bf16": 0}
+    for q in v["quantized"]:
+        m_ = model.get_submodule(q["module"])
+        ebytes["quantized"] += sum(b.numel() * b.element_size() for b in list(m_.buffers()) + list(m_.parameters()))
+    for u in v["unquantized"]:
+        m_ = model.get_submodule(u["module"].rsplit(".", 1)[0])
+        ebytes["bf16"] += sum(b.numel() * b.element_size() for b in m_.parameters(recurse=False))
+    info = {"builder": builder, "expert_bytes": ebytes, "expert_bytes_total_gb": round((ebytes["quantized"] + ebytes["bf16"]) / 2**30, 3), "moe_layers": n, "quantize_layers": "all" if ql is None else sorted(ql),
             "quant_type": qt, "blocksize": bs, "quantized_types": sorted({q["quant_type"] for q in v["quantized"]}),
             "quantized_blocksizes": sorted({int(getattr(model.get_submodule(q["module"]), "blocksize", 0)) for q in v["quantized"]}),
             "n_quantized": v["n_quantized"], "n_unquantized": v["n_unquantized"],
