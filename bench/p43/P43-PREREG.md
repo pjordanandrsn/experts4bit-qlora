@@ -87,3 +87,82 @@ before any distance was read. HARNESS_ERROR, receipt committed. Fix: the sweep n
 path list (`model.layers`, `model.language_model.layers`, …), pins the oracle's list to the e4b side's layer count,
 records `oracle_layer_path`, and refuses if the three arms' captured shapes differ at any layer. P7/P8 and the
 reading rules are unchanged; the redraw is `p43-t2b-g4sweep-2`.
+
+## Read (2026-09-19, after both lanes; the rows are the receipts, this section only reads them)
+
+### T1 — Qwen3 field-recipe diagnosis (`p43-t1-qwen3-2`, RTX 5090, vast 51519025; run 1 `p43-t1-qwen3` never authenticated ssh, NOT_RUN, $0.13)
+
+Three arms, N=20 at the registered field fixture (alpaca, seq 2048, mb2 × accum 4, r 16, adamw_8bit), all `CELL OK`,
+VALID; e4b `ec22050` + gnf4 v0.31.0; receipts `2026-09-19/p43-t1-qwen3-2/tp4/`:
+
+| arm | s/step (median, steps 11+) | step_ms, steps 0..19 (s) | Spearman ρ (steps 2..N) | last / step 2 | tok/s | GPU util median / power median | kernel calls per step |
+|---|---|---|---|---|---|---|---|
+| `fused_attn4` | **29.30** | 32.1 29.3 28.7 28.4 27.1 28.5 28.5 27.9 27.0 31.2 27.9 27.2 29.4 28.7 29.2 28.9 31.5 31.3 31.2 33.1 | 0.699 | 1.155 | 51.8 | **16 % / 113 W** (max 35 % / 163 W) | 768 |
+| `fused_bf16attn` | **29.47** | 32.3 29.0 27.6 28.0 28.3 28.6 27.8 28.1 26.8 31.9 28.4 27.4 29.6 29.4 29.0 28.2 31.2 31.2 31.2 32.4 | 0.674 | 1.173 | 51.9 | 16 % / 114 W | 768 |
+| `fused_attn4_mb1` (mb1 × accum 8) | **50.65** | 50.2 46.9 51.6 51.6 51.6 50.9 53.8 49.0 51.6 51.8 48.6 50.7 50.1 50.6 49.6 48.5 52.4 54.2 53.1 53.7 | 0.162 | 1.041 | 29.8 | 14 % / 103 W | 1536 |
+
+Held-out loss 1.918 → 0.903 (`fused_attn4`), 1.994 → 0.894 (`fused_bf16attn`), 1.918 → 0.904 (mb1): the three arms
+train to the same place. `TRITON_PRINT_AUTOTUNING` emitted **zero** autotuning lines in any arm.
+
+- **P1 (RAMP) — NOT MET, and the collapse did not reproduce.** ρ = 0.70 / 0.67 (< 0.8), last/step-2 = 1.16 / 1.17: a
+  mild monotone drift (+15 % over 20 steps, 27 → 33 s) in both mb2 arms, absent in the mb1 arm (ρ 0.16), and nothing
+  like tp4's reading (24.7 s at step 10 with later steps averaging > 200 s). Neither the RAMP nor the CLIFF shape the
+  decision rule was written for appeared in 20 steps on this host (EPYC 7302, 16 cores, 528 GB).
+- **P2 (tier) — the attention-4-bit path is NOT the tier.** `fused_bf16attn` and `fused_attn4` are indistinguishable
+  (29.47 vs 29.30 s/step, same drift, same ρ); the mb1 arm with int4 attention is flat. The registered alternative
+  applies: whatever drifts, drifts in the expert path or the trainer loop, and only at mb2. (P2's literal ρ < 0.5
+  clause fails on `fused_bf16attn` — ρ 0.67 — so it is read with its alternative, not as a pass.)
+- **P3 (not JIT) — HOLDS.** No autotuning after step 0; micro-batch spread within a step median 1.29× (max 1.62× at
+  step 0, the warm-up step).
+- **P4 (signature) — REFUTED in both halves.** The card never showed ≥ 300 W: **utilisation 16 % at 113 W from step 0
+  to step 19** (max 35 %, 163 W), i.e. the whole run is host-bound, not a run that degrades into host-boundness.
+  768 kernel calls per optimiser step at mb2 (1536 at mb1) against a 575 W card sitting at a fifth of its power.
+
+**What T1 says.** The field-recipe collapse tp4 recorded is not a property of the code at this fixture on this host;
+it did not reproduce in 20 steps. What did reproduce is the number that matters for the throughput campaign:
+**e4b trains the Qwen3 field recipe at 29.3 s/step with the GPU 16 % busy** — a host-bound step, the same class of
+finding as the B=16 serving step (`finding_b16_is_host_bound`). The int4 attention is free here (P2). The follow-up
+the decision rule named (allocator stats for RAMP, event alignment for CLIFF) is not the follow-up the curve asks
+for; the curve asks where the host time goes in a training step at mb2 (a P42-style census of the training step's
+host side), and that is a new lane to register, not a fix to write here. tp4's collapse stays on record as
+unreproduced, with its own host (a different machine) as the first suspect.
+
+### T2 / T2b — Gemma-4 per-layer three-way (`p43-t2-g4layer1`, `p43-t2b-g4sweep-2`, H100 NVL)
+
+T2b (`gemma4_layer_sweep.json`, 30 text-decoder layers on both sides — `model.layers` on the e4b model,
+`model.language_model.layers` on the oracle — 23,314 real positions over 128 rows / 16 chunks; run 1 died on the
+oracle's vision-tower list, amendment 2):
+
+| layer | rms(fused − ref) | rms(ref − oracle) | rms(fused − oracle) | ratio | | layer | rms(fused − ref) | rms(ref − oracle) | rms(fused − oracle) | ratio |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 0.0044 | 0.0640 | 0.0640 | 1.0004 | | 15 | 0.307 | 0.620 | 0.616 | 0.994 |
+| 1 | 0.0138 | 0.0805 | 0.0803 | 0.9985 | | 17 | 0.400 | 0.730 | 0.725 | 0.994 |
+| 3 | 0.0246 | 0.0964 | 0.0967 | 1.0031 | | 19 | 0.381 | 0.647 | 0.639 | 0.988 |
+| 5 | 0.0385 | 0.136 | 0.136 | 0.995 | | 21 | 0.389 | 0.635 | 0.629 | 0.991 |
+| 7 | 0.0538 | 0.188 | 0.187 | 0.995 | | 24 | 0.415 | 0.671 | 0.666 | 0.993 |
+| 9 | 0.117 | 0.350 | 0.352 | 1.0069 | | 27 | 0.349 | 0.574 | 0.569 | 0.992 |
+| 11 | 0.196 | 0.520 | 0.520 | 0.9998 | | 28 | 0.336 | 0.567 | 0.562 | 0.991 |
+| 13 | 0.229 | 0.578 | 0.577 | 0.999 | | 29 | 0.181 | 0.309 | 0.309 | 0.998 |
+
+First layer with rms(fused − reference) over 1e-3 / 1e-2 / 5e-2: **0 / 1 / 7**. Ratio within [0.9, 1.1] on **every**
+layer (range 0.988–1.007); the fused path is the marginally closer one on 25 of 30 layers, the reference on 5.
+
+- **P7 (amplification) — HOLDS.** rms(fused − reference) grows 0.0044 → 0.42 (layer 24) and is 0.18 at the last layer
+  (> 5e-2 from layer 7 on); it does not stay within 2× its layer-1 value. The loss delta is not born at the head.
+- **P8 (faithfulness) — HOLDS.** The fused/reference-to-oracle ratio never leaves [0.9, 1.1]: **neither path is closer
+  to bf16 anywhere.** The two 4-bit paths disagree with each other by an amount that grows with depth to about half
+  their common distance from the bf16 oracle, and the oracle sits equidistant from both at every layer. The registered
+  alternative (the ratio leaves the band at some k and the farther path is the unfaithful one) did not occur.
+
+**What T2b says about #558.** Under the registered rule, P8 holding means the disagreement is second-order to
+quantisation and **#558's remedy is a re-derived per-family parity band, not a kernel fix**: on Gemma-4 two 4-bit
+paths that are each equally faithful to bf16 differ from one another by 0.18–0.42 rms in hidden state at depth, and
+a 0.05-nat parity band between them is not a band this family can meet. The hidden-state instrument cannot say which
+path lands the *lower* loss or why (T2's oracle loss comparison already found the metrics disagree); it can say the
+fused path is not the unfaithful one. Deriving the per-family band is its own registered step, with the band's
+derivation fixed before the number is read; no Gemma-4 training position is quoted until that step closes.
+
+### Cost
+
+T1: `p43-t1-qwen3` NOT_RUN $0.13, `p43-t1-qwen3-2` ≈ $0.62 (≈ 57 min box). T2: $0.61. T2b: run 1 HARNESS_ERROR ≈ $0.35,
+run 2 ≈ $0.45. Proving runs ≤ $0.15 each. Lane total under $3; every rental torn down with proof.
