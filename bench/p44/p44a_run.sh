@@ -88,9 +88,10 @@ k8_arm(){ local FAM=$1 TAG=$2 ARM=$3 SRC=$4 AR=$5 MID; MID=$(python $W/serve_sta
   grep -aE "K8_PPL|INT4EXP|ATTNINT4|REFUSED|Error" logs/run_$name.log | tail -4 | sed "s/^/    /"
   { echo -n "k8 $TAG $ARM src=$SRC rc=$rc "; grep -aE "K8_PPL" logs/run_$name.log | tail -1 | cut -c1-240; echo; } >> summary.txt; return $rc; }
 rc_any=0
+FAMS=",${P44A_FAMILIES:-olmoe,granite,mixtral},"    # amendment 3: a redraw may run one family alone (e.g. granite after the prefused-stack census fix)
 # ================= (1) OLMoE two-text K8
 read OL OLREV <<<"$(python $W/serve_stack.py model olmoe)"
-if can_run 1200 olmoe_fetch_bake && fetch "$OL" "$OLREV" && bake "$OL" olmoe; then OA=$W/work_olmoe/nf4.arena
+if [[ "$FAMS" != *,olmoe,* ]]; then say "olmoe not in P44A_FAMILIES -- skipped"; elif can_run 1200 olmoe_fetch_bake && fetch "$OL" "$OLREV" && bake "$OL" olmoe; then OA=$W/work_olmoe/nf4.arena
   for ARM in nf4 int4all calibexp_all; do for SRC in wikitext c4val1; do
     need=900; case "$ARM" in calibexp_all) need=3000;; esac
     can_run $need "olmoe/$ARM/$SRC" && { k8_arm olmoe olmoe $ARM $SRC $OA || rc_any=$?; }
@@ -105,9 +106,11 @@ census(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
       --source c4 --nseq 32 --out $W/census_$FAM.json > logs/census_$FAM.log 2>&1; local rc=$?
   tail -3 logs/census_$FAM.log | sed "s/^/    /"; { echo -n "census $FAM rc=$rc "; tail -1 logs/census_$FAM.log | cut -c1-200; } >> summary.txt
   free_family $FAM "$MID"; return $rc; }
-census granite 1800 || rc_any=${rc_any:-$?}; [ "$rc_any" = 0 ] && rc_any=$?
-census mixtral 5400 || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }
-for f in olmoe_ppl_nf4_wikitext olmoe_ppl_nf4_c4val1 olmoe_ppl_int4all_wikitext olmoe_ppl_int4all_c4val1 olmoe_ppl_calibexp_all_wikitext olmoe_ppl_calibexp_all_c4val1 census_granite census_mixtral; do
+[[ "$FAMS" == *,granite,* ]] && { census granite 1800 || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
+[[ "$FAMS" == *,mixtral,* ]] && { census mixtral 5400 || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
+ROWS=""; [[ "$FAMS" == *,olmoe,* ]] && ROWS="olmoe_ppl_nf4_wikitext olmoe_ppl_nf4_c4val1 olmoe_ppl_int4all_wikitext olmoe_ppl_int4all_c4val1 olmoe_ppl_calibexp_all_wikitext olmoe_ppl_calibexp_all_c4val1"
+[[ "$FAMS" == *,granite,* ]] && ROWS="$ROWS census_granite"; [[ "$FAMS" == *,mixtral,* ]] && ROWS="$ROWS census_mixtral"
+for f in $ROWS; do
   [ -s "$W/$f.json" ] && echo "ROW $f present" >> summary.txt || { echo "ROW $f MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }
 done
 say "----- summary -----"; cat summary.txt
