@@ -137,6 +137,10 @@ def build_served_model(model_id: str, arena: str, calib_path: str, *, hot_rows: 
     torch.manual_seed(1689)
     model, _ = load_moe_4bit_streaming(model_id, device, torch.bfloat16, r=8, alpha=16, quant_type="nf4", arena=arena)
     model.eval()
+    # the decode-shaped scorer carries HF's KV cache step to step; the paged runner never needed it, so make it explicit
+    for cfg_ in (model.config, getattr(model.config, "text_config", None)):
+        if cfg_ is not None:
+            cfg_.use_cache = True
     mods = target_modules(model)
     L, E = len(mods), mods[0].num_experts
     k = routed_topk(model.config)
