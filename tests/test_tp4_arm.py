@@ -270,7 +270,9 @@ def test_the_prologue_residual_cannot_go_negative_from_rounding():
     again: ten phases of 0.6 ms each round UP to 1 ms apiece (10 ms of rounded
     parts) inside a 7 ms window.
     """
-    import importlib.util, pathlib, time
+    import importlib.util
+    import pathlib
+    import time
     spec = importlib.util.spec_from_file_location(
         "tp4_arm_mod", pathlib.Path(__file__).resolve().parents[1] / "bench" / "tp4" / "tp4_arm.py")
     mod = importlib.util.module_from_spec(spec)
