@@ -56,3 +56,8 @@ Two families, two fetches (49 GB + 13 GB), four arms, two reference passes over 
 ## Amendments
 
 (none yet)
+
+## Read (2026-09-19, run p52-gemma4gate)
+
+`RESULTS-p52.md`: **G2 HOLDS** (gpt-oss 0.0217 vs 0.0222, -2.1 % — the bar transfers, so the rest is readable); **G1 REFUTED** (the Gemma anchor moved -19.8 % while gpt-oss moved 2 % — the family is the unstable thing, not the sets — so everything is read on held-out alone); **G3 THE GATE FAILS** (0.1319 nats / top-1 0.874 against ≤ 0.10 and ≥ 0.93, missing on both axes and on the more favourable set); **G4 HOLDS** (1.39× at matched bytes, against 1.44× on the committed set). **Decision: documented option, no default, no quoted position — the gate is now RUN AND NOT PASSED.**
+
