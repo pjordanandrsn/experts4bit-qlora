@@ -274,3 +274,19 @@ coverage limit of the framework under test. Either outcome is a row.
 **Version pinning.** The axolotl version and its resolved dependency set are recorded in the arm's receipt exactly as the Unsloth arm records `TP4_UNSLOTH_VERSION` / `TP4_UNSLOTH_ZOO_VERSION`; a draw that cannot pin them aborts the arm rather than quoting an unpinnable comparison.
 
 **Cost note.** A fourth arm adds roughly a quarter to a full family's wall-clock. The alarms, arm ceilings and `can_run`'s 900 s margin are unchanged, so on a window that cannot hold four arms the **last** arms are skipped as `host-limited` — which is why the ordering above matters and why amendment 5's parity-only draw exists as the mechanism for answering a parity question directly rather than hoping a full draw reaches it.
+
+### Erratum to amendment 5 (2026-09-19 20:55Z, before the draw it governs has produced a reading): its predictions are renumbered P10-P12
+
+**The defect.** Amendment 5 registered its predictions as **P7, P8, P9**. Those labels were already taken: `tp4_reduce.py` scores **P7** for gptoss, and **P8** and **P9** across all families, and prints them in its own predictions table. Two different claims under one label is a register that cannot be read, and the reducer would have printed the older meaning beside the newer one with no way for a reader to tell which was which.
+
+**The correction.** Amendment 5's predictions are hereby renumbered, with no change to their content:
+
+| was | is | claim (unchanged) |
+|---|---|---|
+| P7 | **P10** | both e4b arms reach VALID |
+| P8 | **P11** | e4b internal parity is READABLE, i.e. not `NO-REF` -- the purpose of the draw |
+| P9 | **P12** | the parity VERDICT is deliberately NOT predicted |
+
+**Why an erratum and not an edit.** Amendment 5 is registered and the draw it authorises (`tp4-c-parity-1`) was launched at 20:23:16Z against it. Silently renumbering a registered document after its run has started is exactly the move that makes a register worthless -- the point of registration is that what it said is fixed and checkable. The original numbering stands in the text above; this erratum is what a reader follows, and both are timestamped.
+
+**Caught by the reducer, not by review.** Box C's own output printed a `P7 | gptoss` row beside the numbers I had just registered, which is how the collision surfaced. Worth recording: **a register is checked by running the thing that reads it**, not by reading it. Related: amendment 3, an erratum of the same shape.
