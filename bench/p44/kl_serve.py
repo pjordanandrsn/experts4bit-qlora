@@ -59,6 +59,8 @@ REFERENCE = {
                   "card -- P44-b's Gemma-4 reference, reused unchanged for the P47 builders (#597)",
     "gemma4layer": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
                    "reference, reused unchanged for the P48 one-layer-at-a-time builders (#597)",
+    "gemma4fmt": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
+                 "reference, reused unchanged for the P49 expert-format builders (#597)",
 }
 SCORERS = {"decode": decode_teacher_forced_logits, "prefill": teacher_forced_logits}
 SELF_CONSISTENCY_MAX = 1e-2      # amendment 5: the reference must agree with itself decode-vs-prefill or the decode scorer is refused
@@ -160,6 +162,14 @@ def _builder_check(info: dict) -> None:
         if info.get(got) != info.get(want):
             raise RuntimeError(f"builder {info['builder']!r}: {got}={info.get(got)} but the builder expects {info.get(want)} "
                                f"(quantize_layers={info.get('quantize_layers')}) -- the layer set did not apply; row refused")
+    # P49: the STORE the builder named must be the store the stacks carry (a wrong quant_type or blocksize is a wrong row)
+    if info.get("n_quantized", 0) and "quant_type" in info:
+        if info.get("quantized_types") != [info["quant_type"]]:
+            raise RuntimeError(f"builder {info['builder']!r}: stacks carry {info.get('quantized_types')} but the builder asked for "
+                               f"{info['quant_type']!r}; row refused")
+        if info.get("quantized_blocksizes") not in ([info["blocksize"]], [0]):
+            raise RuntimeError(f"builder {info['builder']!r}: stacks carry blocksize {info.get('quantized_blocksizes')} but the builder "
+                               f"asked for {info['blocksize']}; row refused")
 
 
 def _lever_check(env: dict, info: dict) -> None:

@@ -628,7 +628,7 @@ def _record_checkpoint_revision(model_id, revision, config, snap):
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
-    revision=None,
+    revision=None, blocksize=64,
 ):
     """Stream the checkpoint onto the GPU, quantizing fused experts to Experts4bit on the way.
 
@@ -1187,7 +1187,8 @@ def load_moe_4bit_streaming(
             # they did before the ExpertsNbit fold.
             base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
             base = base_cls.from_float(
-                gate_up, down, has_gate=has_gate, activation=activation, quant_type=quant_type, compute_dtype=dtype
+                gate_up, down, has_gate=has_gate, activation=activation, quant_type=quant_type, compute_dtype=dtype,
+                blocksize=blocksize,
             )
             experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:
