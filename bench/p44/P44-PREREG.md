@@ -137,3 +137,13 @@ Qwen3-VL) ships one stacked tensor per projection, `plan.experts` is empty and t
 The census now reads prefused stacks the same way (`expert_layout` recorded per receipt); nothing about the statistic changes.
 `P44A_FAMILIES` lets a redraw run one family (`p44-a-granite`, Granite alone, ≤ 1 h); the OLMoE K8 rows and the Mixtral census
 of run 2 stand and are not re-run. P3 is read per family as registered.
+
+### Amendment 4 (2026-09-19 ~04:45Z, after run `p44-a-olmoe-2` finished, before any census data) — the census math falls back to the CPU per row
+
+Run 2's Mixtral census died on its FIRST row with a CUDA OOM (784 MB requested, 98 MB free: the 24 GB resident NF4 model,
+a 14336² fp32 Hessian, its GPTQ solve, and the Hessian pass's still-cached allocator blocks on a 32 GB card). The census
+now releases the allocator cache after each Hessian pass and computes any row that still does not fit on the CPU, recording
+the device per row; the statistic is a property of the bytes, not of where the trace was taken. The six OLMoE K8 rows of run 2
+stand (receipt 496cd76): `int4all` c4val1 **+0.255** (FAIL two-sided, P1 holds), `calibexp_all` wikitext −0.055 / c4val1
+**+0.443** (FAIL one-sided, P2 REFUTED — the Qwen3 recipe does not transfer; calibrating on wikitext-train made c4val1 worse
+than RTN). Granite and Mixtral censuses are redrawn together as `p44-a-census` (`P44A_FAMILIES=granite,mixtral`, ≤ 2 h).
