@@ -52,16 +52,43 @@ else
   say "no hf token file at $HF_TOKEN_FILE -- pulls run unauthenticated (every registered checkpoint is ungated)"
 fi
 $SSH "cd $W || exit 20; nohup env $PASS bash tp4_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat TP4_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
-say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change and idle GPU; never acted on)"
-LAST=""; LAST_CHANGE=$(date +%s)
+# Pure decision function, extracted so it can be tested without renting a box.
+# Args: idle_s stall_s util dfk_now dfk_prev du_now du_prev
+# Echoes "" (healthy) | "fetching:<delta>" | "stall:<idle_s>".
+# A lane fetching a checkpoint has an idle GPU and an unchanged summary BY
+# DEFINITION, so those two conditions alone cannot tell a fetch from a hang.
+# The HF cache lives OUTSIDE $W, so `du` stays flat through a model fetch and
+# only free-disk movement sees it; `du` still catches in-tree writes.
+tp4_progress_verdict() {
+  idle_s=$1; stall_s=$2; util=$3; dfk_now=$4; dfk_prev=$5; du_now=$6; du_prev=$7
+  consumed=0; grew=0
+  if [ -n "$dfk_now" ] && [ -n "$dfk_prev" ] && [ "$dfk_now" -lt "$dfk_prev" ] 2>/dev/null; then consumed=$((dfk_prev - dfk_now)); fi
+  if [ -n "$du_now" ] && [ -n "$du_prev" ] && [ "$du_now" -gt "$du_prev" ] 2>/dev/null; then grew=$((du_now - du_prev)); fi
+  if [ "$consumed" -gt 0 ] || [ "$grew" -gt 0 ]; then
+    if [ "$consumed" -ge "$((grew * 1024))" ]; then echo "fetching:-$((consumed / 1024))M on disk"
+    else echo "fetching:+${grew}M in tree"; fi
+    return 0
+  fi
+  if [ "$idle_s" -ge "$stall_s" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then echo "stall:$idle_s"; fi
+}
+
+say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""
 while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null)
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null)
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
+  dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
   if [ "$line" != "$LAST" ]; then LAST=$line; LAST_CHANGE=$now; fi
-  stall=""; if [ $((now - LAST_CHANGE)) -ge "$STALL_S" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then stall=" STALL? (no summary change for $((now - LAST_CHANGE))s and GPU idle -- LOOK, do not kill)"; fi
+  verdict=$(tp4_progress_verdict "$((now - LAST_CHANGE))" "$STALL_S" "${util:-0}" "$dfk" "$LAST_DFK" "$duM" "$LAST_DU")
+  LAST_DFK=$dfk; LAST_DU=$duM
+  case "$verdict" in
+    fetching:*) stall=" fetching (${verdict#fetching:} since last hb)" ;;
+    stall:*)    stall=" STALL? (no summary change for ${verdict#stall:}s, GPU idle and no disk movement -- LOOK, do not kill)" ;;
+    *)          stall="" ;;
+  esac
   say "hb: ${hb:-<no answer>} | left $((DEADLINE - now))s$stall"
   sleep "$POLL"
 done
