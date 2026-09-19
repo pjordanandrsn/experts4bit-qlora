@@ -102,6 +102,35 @@ README. The same reading, per family and per path:
 
 Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`. Row statuses in the tp1 receipt are one of OK / REFUSED / HARNESS_ERROR / ALARM / OOM / NOT_RUN / EXPERIMENTAL with the parity verdict (PASS / FAIL / VOID) as a separate column.
 
+**The field-recipe position, on the 2026-09-19 kernel cut** (lane tp4
+re-run, `bench/tp4/RESULTS-tp4-p46cut.md`; ordered by P46's decision rule
+and extended to the second box by its amendment 2; register
+`e4b.train.h2h.unsloth.qwen3.5090.2026-09-19` with its `.quality-n20`,
+`.e4b-internal-parity`, `.secondary-mb1`, per-arm and `.coverage` rows).
+One rule changed in the kernel package: the grouped-LoRA delta's `auto`
+path now pads unless the padded block would not fit, where it used to send
+any call past a 4× padding-waste ratio to a per-expert Python loop
+(grouped-nf4-gemm 0.32.1). On **Qwen3-30B-A3B at the Unsloth notebooks'
+own recipe** — alpaca, seq 2048, micro-batch 2 × accum 4, r 16, AdamW-8bit,
+one RTX 5090, both frameworks training the same 642,514,944 parameters —
+**e4b takes 6.4707 s/step against Unsloth's 29.0547: a ratio of 4.490**,
+at 237 vs 48 tokens/s and 1,186 vs 3,341 J/step, the same peak VRAM, and a
+held-out gap of 0.0283 nats (COMPARABLE). On the previous cut this arm did
+not finish at all — tp4 alarmed it at 3600 s, and P43's T1 diagnosis
+measured 29.30 s/step. e4b's fused path passes its own parity control on
+the same box at **0.00140 nats** from its dense reference (×9.31 slower),
+and that control passed on every family measured; it was the registered
+condition that would otherwise have stopped the release. The gain is
+family-dependent and smaller elsewhere, as pre-registered: Granite 2.853 →
+2.366 (×1.21) and OLMoE 2.739 → 1.395 (×1.96), both with parity passing.
+**Nothing is quoted against Unsloth on Granite or Qwen3.6** — its arm
+trains 5.2 M parameters against e4b's 99.6 M there, attention only, VOID
+by tp4's regime rule — nor on OLMoE, whose Unsloth arm died before its
+first step. The two Unsloth positions on this page (1.413 at p38's
+clinical fixture, 4.490 here) are different workloads on different cuts
+and neither supersedes the other.
+
+
 **Against Unsloth, end-to-end, on one identical training problem** (lane
 p38, 2026-09-05, one rented RTX 5090, box 49975389; **measured** — receipt
 [`bench/h2h-20260905/p38/`](../bench/h2h-20260905/p38/README.md), table in
