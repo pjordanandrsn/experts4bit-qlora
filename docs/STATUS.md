@@ -300,6 +300,33 @@ experts carry half the GPTQ error — 9.9 %, at the 10 % threshold) and
 Mixtral (flat: 22.7 % on the 16 layers measured) is data for a
 per-expert fallback that is not built.
 
+**Gemma-4's experts take a graded store map, not one store** (lanes P47–P51,
+2026-09-19; `bench/p47`–`bench/p51`, all against the bf16 checkpoint on the
+same 200 prompts). This family's per-layer sensitivity to expert
+quantisation spans **159×** — NF4 in layer 0 alone puts the model 0.892 nats
+from the checkpoint, NF4 in layer 27 alone 0.0056 — and the cause is
+positional rather than a matter of how much precision is lost: the same ~8 %
+expert-branch damage costs 159× more at layer 0 than at layer 27, while an
+8.5× *smaller* damage at layer 0 buys only 22 %. So no store rescues the
+early layers (on layer 0 alone: int8 0.693, fp8 0.774, NF4 0.892, FP4 1.051),
+e4b's own Gemma-4 modelling is faithful (0.0056 nats with 29 of 30 expert
+stacks in bf16), and the tail cannot be crushed further — `moe_intermediate_size`
+is 704 = 64 × 11, so no quantisation block above 64 divides it and NF4 at
+block 64 is already the smallest store this package ships. What works is a
+**graded map**, which the loader accepts since `quantize_layers` learned to
+take a per-layer mapping: `{0..9: None, 10..19: "int8", 20..29: ("nf4", 64)}`.
+**At matched expert bytes it is 1.44× better than a uniform high-precision
+head** (0.1695 nats at 25.70 GB against 0.2448 at 25.21 GB), and it saves
+6.65 GB against the uniform configuration that reaches the 0.05 fidelity
+floor. The crossover is real and cuts both ways: with a 5-layer bf16 head
+grading *loses* to uniform, because an int8 tier starting at layer 5 still
+covers layers that cannot take it. **No Gemma-4 position is quoted and no
+default ships silently** — the map becomes a per-family default only after
+the K8 two-text gate on the served stack, a separate instrument and a
+separate lane. Curve and rows in
+[`bench/p51/RESULTS-p51.md`](../bench/p51/RESULTS-p51.md).
+
+
 **Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed
 position is the census's, below — **×2.067 at B=1 (238.1 tok/s on box
 49916675) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4 control on
