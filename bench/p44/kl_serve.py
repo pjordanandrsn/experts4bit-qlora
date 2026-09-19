@@ -59,6 +59,8 @@ REFERENCE = {
                   "card -- P44-b's Gemma-4 reference, reused unchanged for the P47 builders (#597)",
     "gemma4layer": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
                    "reference, reused unchanged for the P48 one-layer-at-a-time builders (#597)",
+    "gemma4keep": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
+                  "reference, reused unchanged for the P50 keep-k builders (#597)",
     "gemma4fmt": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
                  "reference, reused unchanged for the P49 expert-format builders (#597)",
 }
