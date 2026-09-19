@@ -46,3 +46,8 @@ Timing basis (P47): fetch 7.5 min, K0 < 2 min, reference pass 40 s, each loader 
 ### Amendment 1 (2026-09-19 ~09:00Z, after run 1, before the redraw) — a disk floor on the box
 
 Run `p48-gemma4layer` (H100 NVL, instance 51560608): K0 passed, then the Gemma-4 fetch died `ENOSPC` — the instance's container overlay was **32 GB** (P47's box had 494 GB, P44-b's 2.4 TB; the launcher orders ≥ 320 GB of MACHINE disk, which is not what the instance gets). No arm ran; $0.49; a host-limited draw, receipted as HARNESS_ERROR. The runner now refuses BEFORE any fetch when `/root` has under `P47_MIN_DISK_GB` (default 120) GB free — exit 13, a refusal row, the same class as the VRAM and egress floors — and P44-b's runner gets the same check. Predictions, rules and budget are unchanged; the redraw is `p48-gemma4layer-2` (same manifest, the new e4b head).
+
+## Read (2026-09-19, run p48-gemma4layer-3)
+
+`RESULTS-p48.md`: **P3 HOLDS (0.0056 at layer 27 — e4b's Gemma-4 modelling is faithful)**; **P2/P2b HOLD (layers 0–4 = 52 %, layers 0–14 = 96 %; layer 0 alone = 0.89 of the 1.08)**; P1 REFUTED (singles sum 7.6 — sub-additive); P4 REFUTED by its rank statistic, and the registered per-block re-probe is flat (p50 0.092 / p99 0.113 in layers 0, 1, 7, 14, 21, 29) — the weights do not explain it; the mechanism is activation-side. Next: P49 (expert-format arms on layer 0 + activation-scale probe).
+
