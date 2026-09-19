@@ -15,7 +15,7 @@ for f in $STAGE $HOOK; do [ -s "$f" ] || { say "refusing: staged piece missing: 
 sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
-  case "$name" in p44a_run.sh|serve_stack.py|expert_residuals.py|hook/*) src="$REPO/bench/p42/$name";; *) src="$P39/$name";; esac
+  case "$name" in hook/*) src="$REPO/bench/p42/$name";; p44a_run.sh|serve_stack.py|expert_residuals.py) src="$HERE/$name";; *) src="$P39/$name";; esac
   got=$(sha_of "$src"); [ "$got" = "$want" ] || { say "refusing: $src is $got, staged-a.sha256 says $want"; exit 78; }
 done < "$HERE/staged-a.sha256"
 if [ -z "${E4B_SHA:-}" ]; then
