@@ -39,14 +39,16 @@ def moe_layers(model) -> dict:
     mods = dict(model.named_modules())
     out = {}
     for name, m in mods.items():
-        mm = _LAYER_EXPERTS.match(name)
+        mm = _LAYER_EXPERTS.search(name)   # SEARCH: the name is dotted ("model.language_model.layers.0.experts"), so match() anchors at 0 and finds nothing
         if not mm:
             continue
         layer = mods[name[: -len(".experts")]]
         if hasattr(layer, "post_feedforward_layernorm_2"):
             out[int(mm.group(1))] = (layer, m)
     if not out:
-        raise RuntimeError("no `layers.<i>.experts` module with a post_feedforward_layernorm_2 parent found -- not Gemma-4's text tower?")
+        seen = [n for n in mods if n.endswith(".experts")][:6]
+        raise RuntimeError("no `layers.<i>.experts` module with a post_feedforward_layernorm_2 parent found -- not Gemma-4's "
+                           f"text tower? (modules ending in '.experts': {seen})")
     return out
 
 
