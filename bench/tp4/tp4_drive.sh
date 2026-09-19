@@ -30,7 +30,7 @@ SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
 POLL=${TP4_POLL_S:-60}; STALL_S=${TP4_STALL_S:-900}; W=/root/tp4
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOCH=$DEADLINE TP4_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${TP4_PROF_ALARM:+TP4_PROF_ALARM=$TP4_PROF_ALARM }${TP4_PROFILE_STEPS:+TP4_PROFILE_STEPS=$TP4_PROFILE_STEPS }${TP4_PROFILE_WARM:+TP4_PROFILE_WARM=$TP4_PROFILE_WARM }"
+PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOCH=$DEADLINE TP4_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${TP4_PROF_ALARM:+TP4_PROF_ALARM=$TP4_PROF_ALARM }${TP4_PROFILE_STEPS:+TP4_PROFILE_STEPS=$TP4_PROFILE_STEPS }${TP4_PROFILE_WARM:+TP4_PROFILE_WARM=$TP4_PROFILE_WARM }${TP4_PROF_ARMS:+TP4_PROF_ARMS=$TP4_PROF_ARMS }"
 # Every knob the box-side script reads from the environment must be forwardable, or an amendment that changes one
 # of them silently does not reach the box: TP4-PREREG amendment 2 cut the eval instrument for the large families
 # and TP4_EVAL_N / TP4_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.

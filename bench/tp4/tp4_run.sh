@@ -359,6 +359,7 @@ diag_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 AL=${TP4_DIAG_ALARM:-$5} LE=${T
 dmon_start(){ ( nvidia-smi dmon -s ut -d 1 -o T > $W/logs/dmon_$1.txt 2>/dev/null ) & echo $!; }
 dmon_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
 prof_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 AL=${TP4_PROF_ALARM:-$5} PS=${TP4_PROFILE_STEPS:-3} PW=${TP4_PROFILE_WARM:-3}
+  local ARMS=",${TP4_PROF_ARMS:-e4b,unsloth},"     # P45 amendment 1: a redraw may run one arm (the Unsloth comparator alarmed after the e4b profiling overhead)
   say "===== PROF family $FAM ($MID @ $REV; P45: e4b fused_attn4 + unsloth ckpt_unsloth, steps=$STEPS, profile warm=$PW steps=$PS, dmon 1 s, arm alarm $AL)"
   FETCH_REASON=""; fetch $FAM $MID $REV $FAL; local frc=$?
   if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault
@@ -372,9 +373,9 @@ prof_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 AL=${TP4_PROF_ALARM:-$5} PS=${T
   local TS; TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS" | tee -a summary.txt
   local extra="--log-every 1 --microbatch-timing 1 --profile-steps $PS --profile-warm $PW"
   local dp; dp=$(dmon_start ${FAM}_e4b_fused_attn4)
-  can_run 600 $FAM/e4b/fused && arm $FAM e4b fused_attn4 fused $AL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $extra
+  [[ "$ARMS" == *,e4b,* ]] && { can_run 600 $FAM/e4b/fused && arm $FAM e4b fused_attn4 fused $AL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $extra; }
   dmon_stop $dp
-  if [ "$UNS_OK" = 1 ]; then dp=$(dmon_start ${FAM}_unsloth_ckpt_unsloth)
+  if [[ "$ARMS" != *,unsloth,* ]]; then say "unsloth arm not in TP4_PROF_ARMS -- skipped"; elif [ "$UNS_OK" = 1 ]; then dp=$(dmon_start ${FAM}_unsloth_ckpt_unsloth)
     can_run 600 $FAM/unsloth && arm $FAM unsloth ckpt_unsloth unsloth $AL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT7" $extra
     dmon_stop $dp
   else stubw $FAM unsloth ckpt_unsloth unsloth install_failed "venv-unsloth did not install or import (see logs/pip_unsloth.log, logs/tripwire_unsloth.log)"; fi
