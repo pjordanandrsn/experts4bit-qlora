@@ -39,16 +39,34 @@ def _kernels():
     return gemv_int4_b32, quant_x_rows, dequant_int4_ref, pack_int4_b32
 
 
+def _smallm_kernels():
+    """The K16 small-M GEMM (grouped-nf4-gemm ``int4_smallm``, lane K16). Optional and OPT-IN:
+    absent, ``enable_serve_attn_int4(..., smallm=True)`` refuses with a sentence; it is never
+    substituted silently."""
+    from int4_smallm import gemm_int4_b32_smallm, plan_smallm, smallm_workspace  # noqa: F401
+    return gemm_int4_b32_smallm, plan_smallm, smallm_workspace
+
+
 class Int4Linear(nn.Module):
     """Frozen serving projection stored on the int4-b32 grid."""
 
-    def __init__(self, lin: nn.Linear, packer=None):
+    def __init__(self, lin: nn.Linear, packer=None, smallm: bool = False):
         """``packer(w_fp32_cpu) -> (packed, scales)`` defaults to the
         shipped round-to-nearest packer; the calibrated lane passes one
-        closed over that projection's Hessian. Same bytes either way."""
+        closed over that projection's Hessian. Same bytes either way.
+
+        ``smallm=True`` routes ``1 < rows <= SMALLM_ROWS_MAX`` to the K16
+        small-M int4 GEMM (``int4_smallm.gemm_int4_b32_smallm``) instead of
+        the cached bf16 matmul, on the SAME packed bytes; its split-K
+        workspace is preallocated here so a captured decode step allocates
+        nothing. Opt-in (lane K16, `PREREG-k16-smallm-int4-gemm.md`): the
+        default stays the bf16 path until the 5090 lane licenses the route."""
         super().__init__()
         gemv, qx, dref, pack = _kernels()
         self._gemv, self._qx, self._dref = gemv, qx, dref
+        self._smallm = None
+        if smallm:
+            self._smallm, plan_smallm, smallm_workspace = _smallm_kernels()
         self.N, self.K = lin.out_features, lin.in_features
         dev = lin.weight.device
         packed, scales = (packer or pack)(lin.weight.detach().float().cpu())
@@ -69,6 +87,12 @@ class Int4Linear(nn.Module):
                              persistent=False)
         self._decode_cache = {}        # R -> (eids, part) for 1 < R <= cap
         self._bf16_cache = None        # dequantised weight for rows > cap
+        if self._smallm is not None:
+            bn, kc, sk_sm = plan_smallm(self.N, self.K)
+            self._smallm_cfg = (bn, kc, sk_sm)
+            part_sm, cnt_sm = smallm_workspace(self.N, block_n=bn, sk=sk_sm, device=dev)
+            self.register_buffer("_smallm_part", part_sm, persistent=False)
+            self.register_buffer("_smallm_cnt", cnt_sm, persistent=False)
         # A projection bias (gpt-oss's q/k/v/o carry one) rides beside the
         # int4 weight in bf16 and is added after the GEMV / matmul -- the
         # weight is what the grid stores, the bias is not quantised. Kept
@@ -90,6 +114,11 @@ class Int4Linear(nn.Module):
     # exactly what bf16 attention costs. A batched int4 attention that WINS
     # needs a small-M int4 GEMM with weight-tile reuse; not this module.
     GEMV_ROWS_MAX = 1
+    # K16: the small-M GEMM serves 1 < rows <= 16 -- ONE M-tile, in-register dequant, bf16 MMA over
+    # fat K chunks, fused split-K -- reading the int4 bytes once instead of the cached bf16 copy
+    # (#561: the bf16 cache holds a second, 4x larger representation of every projection). Opt-in
+    # until the K16 lane's 5090 numbers meet its registered decision rule.
+    SMALLM_ROWS_MAX = 16
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         rows = x.reshape(-1, self.K)
@@ -101,6 +130,14 @@ class Int4Linear(nn.Module):
                              self.N, self.K, part=part)
             if self.bias is not None:
                 out = out + self.bias.to(out.dtype)
+            return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
+        if self._smallm is not None and R <= self.SMALLM_ROWS_MAX:
+            bn, kc, sk_sm = self._smallm_cfg
+            out = self._smallm(rows.to(torch.bfloat16), self.packed[0], self.scales[0],
+                               block_n=bn, kc=kc, sk=sk_sm,
+                               workspace=(self._smallm_part, self._smallm_cnt))
+            if self.bias is not None:
+                out = out + self.bias
             return out.reshape(*x.shape[:-1], self.N).to(x.dtype)
         w = self._bf16_weight()
         out = rows.to(torch.bfloat16) @ w.t()
@@ -143,9 +180,14 @@ class Int4Linear(nn.Module):
         return w.reshape(self.N, self.K).to(torch.bfloat16)
 
 
-def enable_serve_attn_int4(model) -> int:
+def enable_serve_attn_int4(model, smallm: bool | None = None) -> int:
     """Swap every structural attention projection for Int4Linear.
-    Returns the count; refuses a vacuous enable. lm_head untouched."""
+    Returns the count; refuses a vacuous enable. lm_head untouched.
+
+    ``smallm`` (default: ``E4B_ATTN_INT4_SMALLM=1``) routes ``1 < rows <= 16``
+    to the K16 small-M int4 GEMM; a set flag with the kernel absent refuses
+    here, never at forward time."""
+    import os
     try:
         _kernels()
     except ImportError as e:
@@ -153,12 +195,22 @@ def enable_serve_attn_int4(model) -> int:
             "E4B_SERVE_ATTN_INT4=1 needs grouped-nf4-gemm with int4_b32 "
             f"(missing: {e}); install the matching cut or unset the flag"
         ) from e
+    if smallm is None:
+        smallm = os.environ.get("E4B_ATTN_INT4_SMALLM", "0") == "1"
+    if smallm:
+        try:
+            _smallm_kernels()
+        except ImportError as e:
+            raise RuntimeError(
+                "E4B_ATTN_INT4_SMALLM=1 needs grouped-nf4-gemm with int4_smallm (lane K16) "
+                f"(missing: {e}); install that cut or unset the flag -- the route is never substituted silently"
+            ) from e
     n = 0
     for mod in model.modules():
         if type(mod).__name__.endswith("Attention"):
             for name, child in list(mod.named_children()):
                 if type(child) is nn.Linear:
-                    setattr(mod, name, Int4Linear(child))
+                    setattr(mod, name, Int4Linear(child, smallm=smallm))
                     n += 1
     if n == 0:
         raise RuntimeError("E4B_SERVE_ATTN_INT4=1 matched no attention "

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### K16 consumer route (opt-in): `Int4Linear` serves 2..16 rows with the small-M int4 GEMM (#561, lane K16)
+
+- `enable_serve_attn_int4(model, smallm=None)` reads **`E4B_ATTN_INT4_SMALLM=1`** (or the argument): each `Int4Linear`
+  then routes `1 < rows <= 16` to grouped-nf4-gemm's `int4_smallm.gemm_int4_b32_smallm` on the SAME packed bytes, with
+  its split-K workspace preallocated at construction (capture-legal), and **does not build the cached bf16 copy** for
+  those rows (#561: today every `rows > 1` call dequantises and caches a 4× larger second representation). One row
+  still takes the int4 GEMV; more than 16 rows still take the cached bf16 matmul. A set flag with the kernel absent
+  refuses at enable time with a sentence, never at forward time.
+- **Default unchanged.** The route stays opt-in until lane K16 (`grouped-nf4-gemm kernel/PREREG-k16-smallm-int4-gemm.md`)
+  reports on the RTX 5090 class and its registered decision rule (P1 ∧ P2 → route; P2 alone → route with the distance
+  to Marlin recorded; ¬P2 → refuse) is applied; no gate, threshold, floor or registered number moves here.
+- Tests: the route is opt-in, serves 2..16 rows on the small-M kernel with the construction-time workspace and leaves
+  the bf16 cache unbuilt, 17 rows fall back, one row keeps the GEMV, the enable flag is read and the missing-kernel
+  refusal fires.
+
 ## 0.36.1 — 2026-09-18 — ernie4_5_moe loads its released checkpoint: tensors the text model does not build are skipped when the modeling class declares them, refused by name otherwise (#529)
 
 **A released checkpoint that ships a speculative-decoding block now loads.**
