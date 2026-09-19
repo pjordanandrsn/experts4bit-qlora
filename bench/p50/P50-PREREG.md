@@ -39,3 +39,8 @@ Timing basis (P48/P49): fetch ~7 min, K0 < 2 min, reference pass 40 s, five load
 ## Amendments
 
 (none yet)
+
+## Read (2026-09-19, run p50-gemma4keep)
+
+`RESULTS-p50.md`: P1 HOLDS (k=15 = 0.1334, P47's row to four digits), P2 HOLDS, **P3 HOLDS (k=20 = 0.0469 ≤ 0.05)**, **P4 HOLDS (32.3 GB vs 12.0 GB all-NF4 = 2.70×, i.e. 76 % of the all-bf16 store)**, **P5 REFUTED and its threshold was miscalibrated by me** (gpt-oss's shipped NF4 reads top-1 0.9366, itself under the 0.95 I registered). Decision: **no NF4 expert default for Gemma-4**; `quantize_layers` plus this curve is the documentation; no position is quoted or proposed.
+
