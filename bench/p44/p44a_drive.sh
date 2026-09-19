@@ -29,7 +29,7 @@ SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=
 SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
 POLL=${P44_POLL_S:-60}; W=/root/p44a
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="P44A_RUN_ID=$RUN_ID P44A_RUN_NONCE=$NONCE P44A_DEADLINE_EPOCH=$DEADLINE P44A_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA P44_MIN_MBPS=${P44_MIN_MBPS:-20} "
+PASS="P44A_RUN_ID=$RUN_ID P44A_RUN_NONCE=$NONCE P44A_DEADLINE_EPOCH=$DEADLINE P44A_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA P44_MIN_MBPS=${P44_MIN_MBPS:-20} ${P44A_FAMILIES:+P44A_FAMILIES=$P44A_FAMILIES }"
 if [ "${P44_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p44a_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p44a"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA gnf4 $GNF4_SHA (from $REPO); receipts -> $RUN_DIR/p44a; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook" || { say "stage failed: remote cleanup"; exit 20; }

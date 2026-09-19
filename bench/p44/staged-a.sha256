@@ -1,8 +1,8 @@
 # Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on
 # this file and the controller resolves each name to its source (this dir, bench/p42/hook, bench/p39, bench/) and compares.
-68a712b9a26e4703742cb31073a65576e40b7ba04c059c736d08c017a3413a79  p44a_run.sh
+df158722526087214b164658d2545553db6be3ec1c9e4b185a3177d8ea217880  p44a_run.sh
 ce1645f21d793d0e61d7d0f8feb2921636c7541761d6683d25479b3a44f3b569  serve_stack.py
-8b5e654bf074196cd8d064113ffd96288dd5daf0f63287195d16b948e1380bbb  expert_residuals.py
+20d874797d2c70fb859e3adaa92449e76987aa4e741d5351da8348f1ba886053  expert_residuals.py
 034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
 e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json

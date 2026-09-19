@@ -111,10 +111,22 @@ def main() -> int:
     tok = AutoTokenizer.from_pretrained(model_id, revision=revision)
     src = snapshot_download(model_id, revision=revision, allow_patterns=["*.json", "*.safetensors"])
     plan, layer_ws = _expert_layers(model, src)
-    if not plan.experts:
-        raise RuntimeError(f"{a.family}: the plan has no per-expert projections (prefused stacks) -- census not defined here")
     keys, read_tensor = safetensors_reader(src)
     read = make_plan_reader(plan, read_tensor, torch.float32)
+    # PRE-FUSED families (Granite, Gemma-4, Qwen3-VL) ship one stacked tensor per projection: plan.experts is empty and
+    # the enabler reads the stacks through plan.passthrough (int4_experts._prefused_layers) -- the census does the same,
+    # so both see the same bytes. Run 2 refused Granite here; that was the census, not the family.
+    from experts4bit_qlora.engines.int4_experts import _prefused_layers
+    prefused = _prefused_layers(plan) if not plan.experts else {}
+    if not plan.experts and not prefused:
+        raise RuntimeError(f"{a.family}: neither per-expert projections nor prefused stacks in the plan -- census not defined here")
+    layout = "per-expert" if plan.experts else "prefused stacks"
+
+    def read_layer(layer):
+        if plan.experts:
+            return read_fused_expert_layer(plan, layer, read, device="cpu", dtype=torch.float32)
+        gu_key, dn_key = prefused[layer]
+        return read(gu_key).to(torch.float32), read(dn_key).to(torch.float32)
     batches = calib_batches(tok, a.nseq, a.source)
     order = [layer for layer, _w in layer_ws]
     if a.layers:
@@ -132,7 +144,7 @@ def main() -> int:
            "calibration": {"source": a.source, "nseq": a.nseq, "seq_len": 512, "n_batches": len(batches),
                            "tokens": a.nseq * 512},
            "min_rows": a.min_rows, "damp": a.damp, "gptq_device": os.environ["E4B_INT4_GPTQ_DEVICE"],
-           "layers_total": len(layer_ws), "layers_censused": order, "experts": E, "hidden": hid, "inter": inter,
+           "layers_total": len(layer_ws), "layers_censused": order, "expert_layout": layout, "experts": E, "hidden": hid, "inter": inter,
            "hessian_bytes_per_layer": per_layer, "layers_per_pass": lpp, "engagement": info,
            "gpu": torch.cuda.get_device_name(0), "torch": torch.__version__, "rows": []}
 
@@ -148,7 +160,7 @@ def main() -> int:
                                        hessian_device="cpu")
         print(f"  hessians for layers {chunk[0]}..{chunk[-1]} in {time.time() - t1:.0f}s", flush=True)
         for layer in chunk:
-            first, down = read_fused_expert_layer(plan, layer, read, device="cpu", dtype=torch.float32)
+            first, down = read_layer(layer)
             hl = hs.get(layer, {})
             for e in range(first.shape[0]):
                 H_gu, H_dn, rows = hl.get(e, (None, None, 0))

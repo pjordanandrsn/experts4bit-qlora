@@ -128,3 +128,12 @@ family produced nothing (its reference check refused a correct dequant). Three f
    defect of the served Gemma-4 stack and is filed as such (an issue with the numbers), not a licence verdict.
 4. Run 3 is `p44-b-kl80-3`, same class and guard; the `p44-a-olmoe-2` lane (K8 + census, unaffected by 1–3: its arms run
    `step_decomp.py` with the env at process start) continues.
+
+### Amendment 3 (2026-09-19 ~04:25Z, during run `p44-a-olmoe-2`, before any census data) — the census reads prefused stacks; a family may be redrawn alone
+
+`expert_residuals.py` refused Granite ("the plan has no per-expert projections (prefused stacks)"): Granite (like Gemma-4 and
+Qwen3-VL) ships one stacked tensor per projection, `plan.experts` is empty and the int4 enabler reads the stacks through
+`plan.passthrough` (`_prefused_layers`). That was the census, not the family — the enabler packs Granite this way every time.
+The census now reads prefused stacks the same way (`expert_layout` recorded per receipt); nothing about the statistic changes.
+`P44A_FAMILIES` lets a redraw run one family (`p44-a-granite`, Granite alone, ≤ 1 h); the OLMoE K8 rows and the Mixtral census
+of run 2 stand and are not re-run. P3 is read per family as registered.
