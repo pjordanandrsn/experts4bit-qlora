@@ -22,6 +22,14 @@ ss = _load("serve_stack_p51", ("p44", "serve_stack.py"))
 GB = 2 ** 30
 
 
+def _rowx(arm, kl, gb, census, top1=0.92, builder="loader_tiers_x"):
+    """Like _row but does not require the arm in BUILDERS -- `bf16_13` was added by P51 amendment 2 and
+    `graded_10_10_crush` was RETIRED by it (Gemma-4's 704 intermediate dim admits no block over 64), while the
+    reducer still reads an M5 row from any receipt that carries one."""
+    return {"arm": arm, "kl_mean": kl, "top1_agreement": top1, "builder": builder,
+            "per_stratum": {}, "engagement": {"expert_bytes_total_gb": gb, "stacks_by_store": census}}
+
+
 def _row(arm, kl, gb, census, top1=0.92):
     return {"arm": arm, "kl_mean": kl, "top1_agreement": top1, "builder": ss.BUILDERS["gemma4mix"][arm],
             "per_stratum": {}, "engagement": {"expert_bytes_total_gb": gb, "stacks_by_store": census}}
@@ -40,7 +48,7 @@ CRUSH_CENSUS = {"bf16(base)": 10, "int8/b64": 10, "nf4/b256": 10}
 def test_graded_map_ships(tmp_path):
     rows = [_row("bf16_20", 0.0469, 32.35, ANCHOR_CENSUS), _row("int8_20", 0.71, 19.1, {"int8/b64": 20, "nf4/b64": 10}),
             _row("graded_10_10", 0.082, 25.7, GRADED_CENSUS), _row("graded_5_15", 0.24, 22.2, {"bf16(base)": 5, "int8/b64": 15, "nf4/b64": 10}),
-            _row("graded_10_10_crush", 0.090, 25.3, CRUSH_CENSUS)]
+            _rowx("graded_10_10_crush", 0.090, 25.3, CRUSH_CENSUS)]
     json.dump(_rec(rows), open(tmp_path / "gemma4mix_kl.json", "w"))
     v = p51.reduce(str(tmp_path))
     assert v["M1_anchor"]["verdict"] == "HOLDS"
@@ -54,7 +62,7 @@ def test_graded_map_ships(tmp_path):
 
 def test_grading_does_not_pay(tmp_path):
     rows = [_row("bf16_20", 0.0469, 32.35, ANCHOR_CENSUS), _row("int8_20", 0.71, 19.1, {"int8/b64": 20, "nf4/b64": 10}),
-            _row("graded_10_10", 0.35, 25.7, GRADED_CENSUS), _row("graded_10_10_crush", 0.60, 21.0, CRUSH_CENSUS)]
+            _row("graded_10_10", 0.35, 25.7, GRADED_CENSUS), _rowx("graded_10_10_crush", 0.60, 21.0, CRUSH_CENSUS)]
     json.dump(_rec(rows), open(tmp_path / "gemma4mix_kl.json", "w"))
     v = p51.reduce(str(tmp_path))
     assert v["M3_graded"]["verdict"] == "REFUTED"
@@ -125,3 +133,25 @@ def test_expected_stack_counts_come_from_the_specs_not_the_map_length():
         # and the two checks agree: the census counts the same stacks the expectation does
         census = ss.tier_census(builder, 30)
         assert sum(v for k, v in census.items() if k != "bf16(base)") == want, (builder, census)
+
+
+def test_m6_matched_bytes_decides_the_default():
+    """M6 (P51 amendment 2): the only question that decides the default is whether grading beats a plain
+    uniform head AT THE SAME BYTES. A uniform arm at least as good dominates and the default stays uniform."""
+    import tempfile
+
+    def run(uniform_kl):
+        rows = [_row("bf16_20", 0.0469, 32.35, ANCHOR_CENSUS), _row("graded_10_10", 0.1695, 25.70, GRADED_CENSUS),
+                _rowx("bf16_13", uniform_kl, 25.2, {"bf16(base)": 13, "nf4/b64": 17})]
+        with tempfile.TemporaryDirectory() as d:
+            json.dump(_rec(rows), open(os.path.join(d, "gemma4mix_kl.json"), "w"))
+            return p51.reduce(d)
+
+    v = run(0.160)          # uniform better at the same bytes
+    assert v["M6_matched_bytes"]["verdict"] == "HOLDS" and "dominated" in v["M6_matched_bytes"]["reads"]
+    assert v["decision"].startswith("SHIP the uniform bf16 head (P50's curve)")
+    v = run(0.175)          # within 10 %
+    assert v["M6_matched_bytes"]["verdict"] == "INCONCLUSIVE" and v["decision"].startswith("SHIP the uniform bf16 head;")
+    v = run(0.230)          # uniform clearly worse -> grading pays
+    assert v["M6_matched_bytes"]["verdict"] == "REFUTED" and v["decision"].startswith("SHIP the graded map")
+    assert "M6_matched_bytes" in p51.render_md(v)

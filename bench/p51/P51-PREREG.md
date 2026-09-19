@@ -58,3 +58,22 @@ Run `p51-gemma4mix` produced **one** row: `int8_20` at **0.7369** (M2's predicti
 
 Predictions and thresholds are unchanged. The redraw `p51-gemma4mix-2` re-runs all five arms (the `int8_20` row is cheap to repeat and a self-consistent receipt is worth more than saving 90 s). M2 is therefore read on run 1 AND re-read on the redraw; if the two disagree the lane says so.
 
+### Amendment 2 (2026-09-19 ~13:05Z, after the redraw — two answers and one matched-bytes arm) — M5 is unmeasurable on this model; M3 needs a matched control
+
+The redraw `p51-gemma4mix-2` read four of five arms (`RESULTS-p51.md`):
+
+| arm | KL | expert store |
+|---|---|---|
+| `bf16_20` (anchor) | **0.0469** | 32.35 GB |
+| `graded_10_10` | **0.1695** | 25.70 GB |
+| `graded_5_15` | 0.4773 | 22.38 GB |
+| `int8_20` | 0.7369 | 19.05 GB |
+
+**M1 HOLDS** (the anchor reproduces P50's keep-20 to four digits and to the byte). **M2 HOLDS** (a uniform int8 head fails, 0.737). **M4 HOLDS** (the graded map saves 6.65 GB, 0.79× the anchor). **M3 is INCONCLUSIVE**: 0.1695 sits between the registered 0.10 (ships) and 0.30 (does not).
+
+**M5 is RETIRED as unmeasurable on this model, not refuted.** `graded_10_10_crush` asked for NF4 at block 256 and the stack refused: Gemma-4's `moe_intermediate_size` is **704 = 64 × 11**, so no block larger than 64 divides it. NF4 at block 64 is already the smallest store e4b ships here, so **the tail in every one of these configurations is already crushed as far as this architecture allows** — the "crush the rest" half of the design has no remaining freedom on Gemma-4, and the question is entirely where the high-precision boundary goes.
+
+**What M3's inconclusive reading leaves open is the only question that decides the default**: does grading beat a plain uniform head *at the same bytes*? The lane has one nearly-matched pair already, and it favours uniform: `graded_5_15` is **22.38 GB / 0.4773** against P50's `keep_10` at **22.16 GB / 0.4618** — fewer bytes AND better. At `graded_10_10`'s 25.70 GB the uniform curve has no measured point, and interpolating a convex curve is not a measurement.
+
+So one arm is added and the family re-run on one box: **`bf16_13`** (`bf16:13_nf4:17`, ≈ 25.2 GB), the matched-bytes uniform control for `graded_10_10`. Registered prediction, **M6**: `bf16_13` ≤ `graded_10_10`'s KL — i.e. grading is dominated and the default is the uniform head at an N the user picks. Refuted if `bf16_13` > 0.1695 by more than 10 %, which would say grading genuinely buys quality per byte and belongs in the default. `p51-gemma4mix-3`, H100 NVL, 1 h, ≤ $3.10.
+

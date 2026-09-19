@@ -83,6 +83,18 @@ def reduce(run_dir: str) -> dict:
                            if g.get("expert_gb") and a.get("expert_gb") else {"verdict": "NOT_READ"})
     else:
         out["M3_graded"] = out["M4_bytes"] = {"verdict": "NOT_READ"}
+    b13, g10 = rows.get("bf16_13"), rows.get("graded_10_10")
+    if b13 and g10:
+        ratio = b13["kl_mean"] / g10["kl_mean"]
+        out["M6_matched_bytes"] = {"uniform_kl": b13["kl_mean"], "uniform_gb": b13["expert_gb"],
+                                   "graded_kl": g10["kl_mean"], "graded_gb": g10["expert_gb"], "ratio": ratio,
+                                   "verdict": "HOLDS" if ratio <= 1.0 else ("REFUTED" if ratio > 1.10 else "INCONCLUSIVE"),
+                                   "reads": ("grading is dominated: a plain uniform head at the same bytes is at least as good"
+                                             if ratio <= 1.0 else
+                                             "grading buys quality per byte and belongs in the default" if ratio > 1.10 else
+                                             "within 10 %: the two are equivalent at matched bytes; prefer the simpler uniform head")}
+    else:
+        out["M6_matched_bytes"] = {"verdict": "NOT_READ"}
     c = rows.get("graded_10_10_crush")
     if c and g and g.get("expert_gb"):
         db = abs(c["expert_gb"] - g["expert_gb"]) / g["expert_gb"]
@@ -96,6 +108,15 @@ def reduce(run_dir: str) -> dict:
         out["M5_crush"] = {"verdict": "NOT_READ"}
     m3 = out["M3_graded"].get("verdict")
     m4 = out["M4_bytes"].get("verdict")
+    m6 = out["M6_matched_bytes"].get("verdict")
+    if m6 in ("HOLDS", "INCONCLUSIVE"):
+        out["decision"] = ("SHIP the uniform bf16 head (P50's curve); grading is not better at matched bytes"
+                           if m6 == "HOLDS" else
+                           "SHIP the uniform bf16 head; grading is equivalent at matched bytes and the uniform head is simpler")
+        return out
+    if m6 == "REFUTED":
+        out["decision"] = "SHIP the graded map: it buys quality per byte over a uniform head at the same cost"
+        return out
     out["decision"] = ("SHIP the graded map (M1, M3, M4 hold)" if m3 == "HOLDS" and m4 == "HOLDS" else
                        "SHIP P50's uniform bf16 head; grading does not pay" if m3 == "REFUTED" else
                        "REPORT only: grading is between the registered thresholds" if m3 == "INCONCLUSIVE" else
@@ -122,11 +143,13 @@ def render_md(v: dict) -> str:
     L += [""]
     if "M1_anchor" in v and v["M1_anchor"].get("verdict") != "HOLDS":
         return "\n".join(L + [f"- **M1_anchor: {v['M1_anchor'].get('verdict')}**", "", v.get("verdict", "")]) + "\n"
-    for key in ("M1_anchor", "M2_uniform_int8", "M3_graded", "M4_bytes", "M5_crush"):
+    for key in ("M1_anchor", "M2_uniform_int8", "M3_graded", "M4_bytes", "M5_crush", "M6_matched_bytes"):
         p = v.get(key, {})
         extra = f" — {p['reads']}" if "reads" in p else ""
         if key == "M4_bytes" and p.get("ratio"):
             extra = f" — {p['graded_gb']:.1f} GB vs {p['anchor_gb']:.1f} GB = {p['ratio']:.2f}× (saves {p['saved_gb']} GB)" + extra
+        if key == "M6_matched_bytes" and p.get("ratio"):
+            extra = f" — uniform {p['uniform_kl']:.4f} @ {p['uniform_gb']:.1f} GB vs graded {p['graded_kl']:.4f} @ {p['graded_gb']:.1f} GB = {p['ratio']:.2f}×" + extra
         if key == "M3_graded" and p.get("vs_anchor"):
             extra = f" — {p['vs_anchor']:.1f}× the anchor's KL" + extra
         L.append(f"- **{key}: {p.get('verdict', 'NOT_READ')}**{extra}")
