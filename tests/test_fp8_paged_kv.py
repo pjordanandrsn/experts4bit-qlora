@@ -121,30 +121,98 @@ def test_append_batch_matches_per_seq():
         assert torch.equal(a[0], c[0]) and torch.equal(a[1], c[1])
 
 
+#: Per-element bound on kernel-vs-f32-SDPA agreement, BY THE COMPUTE MODE
+#: THAT ACTUALLY RAN. The f32 modes read the same bytes the reference
+#: dequantizes, so only softmax accumulation order separates them: 2e-2,
+#: the serving tolerance this file has always documented. The fp8-compute
+#: path (the DEFAULT on sm_89+ since grouped-nf4-gemm 0.17.0, chosen by
+#: `_compute_default` when GNF4_ATTN_COMPUTE is unset) additionally rounds
+#: q to e4m3 once and the softmax weights p to e4m3 once per token tile —
+#: roundings the f32 oracle does not have, and which 2e-2 does not cover
+#: at these lengths (e4b#341).
+#:
+#: 6e-2 is calibrated, not picked: the kernel package probes its own fp8
+#: worst-element at 0.087 for T=2 and 0.034 for T=33 (comment on `_close`
+#: in gnf4 kernel/test_fp8_paged_attn.py; its adversarial tiny-T shape
+#: tests take 0.15, its serving-shape p99 bound is 5e-2), and the shortest
+#: sequence here is 37 tokens. A CPU model of the same two roundings over
+#: these exact shapes needs 0.014-0.039 across 300 draws. 6e-2 clears that
+#: with margin and still sits BELOW what this test exists to catch: a
+#: sequence reading another's rows lands 0.33-1.24 away, and a sequence
+#: short by one block 0.087-0.736. Widening past ~0.08 would start buying
+#: the flake off with detection power.
+#:
+#: The seed alone would NOT have been enough. The same model puts the
+#: pinned draw at 0.018-0.019 depending only on the K-tile width, i.e.
+#: at 90-97% of the old 2e-2 bar — inside the band by which one kernel
+#: schedule differs from another, let alone by which a model differs from
+#: the kernel. A seeded test under that bar is pinned to its own noise.
+_ATTN_TOL = {"f32": 2e-2, "fp8": 6e-2}
+
+
+def _mode_that_ran(fn, *a, **kw):
+    """Run one decode and report which compute mode the kernel resolved.
+
+    An env var is a request and the hardware gets a vote, so the tolerance
+    has to follow what RAN, not what was asked for; `compute_counts()` is
+    the kernel's own tally of exactly that (gnf4 0.17.0, PREREG-m3), and
+    this file's floor is 0.30.0."""
+    import fp8_paged_attn
+    fp8_paged_attn.reset_compute_counts()
+    out = fn(*a, **kw)
+    counts = fp8_paged_attn.compute_counts()
+    ran = [m for m, n in counts.items() if n]
+    assert len(ran) == 1 and counts[ran[0]] == 1, \
+        f"expected exactly one decode to be tallied, got {counts}"
+    return out, ran[0]
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
 def test_kernel_attention_end_to_end():
     """append -> pools -> fused kernel, against SDPA over the reference
-    dequant of the same pools. Same bytes both ways, so the tolerance is
-    softmax accumulation order only — documented serving tolerance."""
+    dequant of the same pools. Same K/V bytes both ways, so the gap is
+    softmax accumulation order plus whatever roundings the resolved
+    compute mode adds — see `_ATTN_TOL`. Inputs are seeded: an unseeded
+    draw against an fp8-mode-blind tolerance is what made this flaky
+    (e4b#341), and a seed only helps once the bar underneath it is right."""
     pytest.importorskip("fp8_paged_attn")
+    g = torch.Generator().manual_seed(341)
     hq, hkv, d = 8, 2, 64
     kv = Fp8PagedKV(1, hkv, d, batch=3, max_tokens_per_seq=128,
                     k_groups=2, device="cuda")
     lens = [100, 37, 128]
     for seq, t in enumerate(lens):
-        k, v = (torch.randn(t, hkv, d) * 1.5, torch.randn(t, hkv, d))
+        k = torch.randn(t, hkv, d, generator=g) * 1.5
+        v = torch.randn(t, hkv, d, generator=g)
         kv.append(0, seq, k.cuda(), v.cuda())
-    q = (torch.randn(3, hq, d) * 0.5).to(torch.bfloat16).cuda()
-    out = kv.attention(0, q)
-    for seq, t in enumerate(lens):
+    q = (torch.randn(3, hq, d, generator=g) * 0.5).to(torch.bfloat16).cuda()
+    out, mode = _mode_that_ran(kv.attention, 0, q)
+    tol = _ATTN_TOL[mode]
+
+    refs = []
+    for seq in range(len(lens)):
         kr, vr = kv.reference_kv(0, seq)
-        ref = torch.nn.functional.scaled_dot_product_attention(
+        refs.append(torch.nn.functional.scaled_dot_product_attention(
             q[seq][None, :, None].float(),
             kr.permute(1, 0, 2)[None].float(),
             vr.permute(1, 0, 2)[None].float(),
-            enable_gqa=True)[0, :, 0]
-        assert torch.allclose(out[seq].float(), ref, atol=2e-2, rtol=2e-2), \
-            f"seq {seq}: kernel vs reference-SDPA beyond serving tolerance"
+            enable_gqa=True)[0, :, 0])
+    for seq in range(len(lens)):
+        got = out[seq].float()
+        assert torch.allclose(got, refs[seq], atol=tol, rtol=tol), \
+            (f"seq {seq}: kernel ({mode} compute) vs reference-SDPA beyond "
+             f"the {mode} serving tolerance {tol}")
+        # ...and the row really is THIS sequence's. The fp8 bar is wide
+        # enough that a numeric check alone would be a weaker gate than
+        # the one it replaced; a mis-mapped row is an order of magnitude
+        # further from its own oracle than rounding ever is, so this
+        # holds whatever the tolerance.
+        own = (got - refs[seq]).abs().max()
+        for other in range(len(lens)):
+            if other != seq:
+                assert own * 3 < (got - refs[other]).abs().max(), \
+                    (f"seq {seq}'s output is not distinguishably closer to "
+                     f"its own KV than to seq {other}'s")
 
 
 def test_failed_append_leaves_pools_in_lockstep(monkeypatch):
@@ -249,22 +317,38 @@ def test_attention_maps_rows_to_slots_not_positions():
     a model that starts coherent and degenerates rather than as a
     crash."""
     pytest.importorskip("fp8_paged_attn")
+    g = torch.Generator().manual_seed(342)
     hq, hkv, d = 8, 2, 64
     kv = Fp8PagedKV(1, hkv, d, batch=3, max_tokens_per_seq=64,
                     k_groups=2, device="cuda")
     for slot, n in ((0, 8), (1, 24), (2, 40)):
-        k = (torch.randn(n, hkv, d) * 1.5).cuda()
-        v = torch.randn(n, hkv, d).cuda()
+        k = (torch.randn(n, hkv, d, generator=g) * 1.5).cuda()
+        v = torch.randn(n, hkv, d, generator=g).cuda()
         kv.append(0, slot, k, v)
-    q = (torch.randn(1, hq, d) * 0.5).to(torch.bfloat16).cuda()
+    q = (torch.randn(1, hq, d, generator=g) * 0.5).to(torch.bfloat16).cuda()
 
     # decoding ONLY slot 2 must attend over slot 2's 40 tokens
     got = kv.attention(0, q, slots=[2])
-    kr, vr = kv.reference_kv(0, 2)
-    ref = torch.nn.functional.scaled_dot_product_attention(
-        q[0][None, :, None].float(), kr.permute(1, 0, 2)[None].float(),
-        vr.permute(1, 0, 2)[None].float(), enable_gqa=True)[0, :, 0]
-    torch.testing.assert_close(got[0].float(), ref, rtol=5e-2, atol=5e-2)
+    refs = []
+    for slot in range(3):
+        kr, vr = kv.reference_kv(0, slot)
+        refs.append(torch.nn.functional.scaled_dot_product_attention(
+            q[0][None, :, None].float(), kr.permute(1, 0, 2)[None].float(),
+            vr.permute(1, 0, 2)[None].float(), enable_gqa=True)[0, :, 0])
+    # 5e-2 is LEFT ALONE deliberately (e4b#341). It was not calibrated for
+    # the fp8 compute default either, but unlike the 2e-2 next door it
+    # clears that path's roundings at these lengths, so no failure was
+    # observed or modelled here — and tightening it to the f32 bar would
+    # risk the f32-path misses tracked in grouped-nf4-gemm#319. The seed
+    # above is the part worth having: it removes the run-to-run variance
+    # that would decide a margin this size.
+    torch.testing.assert_close(got[0].float(), refs[2], rtol=5e-2, atol=5e-2)
+    # the point of the test, stated so it does not ride on the tolerance:
+    # the row read slot 2's KV, not slot 0's or slot 1's
+    own = (got[0].float() - refs[2]).abs().max()
+    for other in (0, 1):
+        assert own * 3 < (got[0].float() - refs[other]).abs().max(), \
+            f"slot-2 decode is not distinguishably slot 2's rather than {other}'s"
 
     # and the mismatch is refused rather than silently mis-mapped
     with pytest.raises(ValueError, match="pass slots="):
