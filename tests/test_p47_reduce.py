@@ -87,6 +87,15 @@ def test_serve_stack_builders_and_layer_sets():
         assert env["E4B_FUSE_T1_GLUE"] == "0" and env["E4B_FUSE_ROUTER_EPI"] == "0"
     with pytest.raises(ValueError):
         ss.build_loader_model("x/y", "served")
+    # P48: one NF4 layer at a time
+    assert len(ss.ARMS["gemma4layer"]) == 30 and list(ss.ARMS["gemma4layer"])[:2] == ["L00", "L01"]
+    assert ss.builder_for("gemma4layer", "L07") == "loader_only_7"
+    assert ss.quantize_layer_set("loader_only_7", 30) == {7}
+    with pytest.raises(ValueError, match="outside"):
+        ss.quantize_layer_set("loader_only_30", 30)
+    assert ss.needs_arena("gemma4diag") is True and ss.needs_arena("gemma4layer") is False and ss.needs_arena("gemma4") is True
+    assert ss.control_arm("gemma4layer") == "L00"
+    assert ss.main(["needs_arena", "gemma4layer"]) == 0
 
 
 def test_builder_check_refuses_a_layer_set_that_did_not_apply():

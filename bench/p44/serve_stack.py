@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -78,6 +79,20 @@ MODELS["gemma4diag"] = MODELS["gemma4"]
 BUILDERS = {"gemma4diag": {"served_nf4": "served", "loader_nf4": "loader", "loader_bf16experts": "loader_unquant",
                            "loader_nf4_lo": "loader_lo", "loader_nf4_hi": "loader_hi"}}
 LOADER_BUILDERS = ("loader", "loader_unquant", "loader_lo", "loader_hi")
+# P48 (#597, after P47 put the nat in layers 0-14): ONE NF4 layer at a time. Family `gemma4layer`, arm `L<i>` for every
+# text-decoder layer, builder `loader_only_<i>` = the training loader with quantize_layers={i} (bf16 experts everywhere
+# else). 30 arms; the smallest row bounds e4b's Gemma-4 modelling cost from above (P47 amendment 1), the per-layer
+# profile says WHERE block-64 NF4 hurts. No served arm -> no arena bake (`needs_arena`).
+GEMMA4_TEXT_LAYERS = 30
+ARMS["gemma4layer"] = {f"L{i:02d}": (0, 0, "0", {}) for i in range(GEMMA4_TEXT_LAYERS)}
+MODELS["gemma4layer"] = MODELS["gemma4"]
+BUILDERS["gemma4layer"] = {f"L{i:02d}": f"loader_only_{i}" for i in range(GEMMA4_TEXT_LAYERS)}
+_ONLY = re.compile(r"^loader_only_(\d+)$")
+
+
+def needs_arena(family: str) -> bool:
+    """True when any arm of the family is built through the served stack (which needs the NF4 arena bake)."""
+    return any(builder_for(family, arm) == "served" for arm in ARMS[family])
 
 
 def builder_for(family: str, arm: str) -> str:
@@ -219,6 +234,12 @@ def text_layers(model_id: str) -> int:
 def quantize_layer_set(builder: str, n_layers: int):
     """P47's per-builder ``quantize_layers``: None (all), the empty set (none), the first half, the second half."""
     half = n_layers // 2
+    m = _ONLY.match(builder)
+    if m:
+        i = int(m.group(1))
+        if i >= n_layers:
+            raise ValueError(f"{builder}: layer {i} is outside the {n_layers} text-decoder layers")
+        return {i}
     return {"loader": None, "loader_unquant": set(), "loader_lo": set(range(0, half)),
             "loader_hi": set(range(half, n_layers))}[builder]
 
@@ -231,8 +252,8 @@ def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
     builder whose layer set did not apply refuses its row (`kl_serve._builder_check`)."""
     import torch
     from experts4bit_qlora import load_moe_4bit_streaming, verify_moe_4bit
-    if builder not in LOADER_BUILDERS:
-        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS}")
+    if builder not in LOADER_BUILDERS and not _ONLY.match(builder):
+        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS} or loader_only_<i>")
     n = text_layers(model_id)
     ql = quantize_layer_set(builder, n)
     torch.manual_seed(1689)
@@ -277,7 +298,10 @@ def main(argv=None) -> int:
     if len(a) == 3 and a[0] == "builder":
         print(builder_for(a[1], a[2]))
         return 0
-    print("usage: serve_stack.py env <family> <arm> | model <family> | arms <family> | builder <family> <arm>", file=sys.stderr)
+    if len(a) == 2 and a[0] == "needs_arena":
+        print("1" if needs_arena(a[1]) else "0")
+        return 0
+    print("usage: serve_stack.py env <family> <arm> | model <family> | arms <family> | builder <family> <arm> | needs_arena <family>", file=sys.stderr)
     return 2
 
 
