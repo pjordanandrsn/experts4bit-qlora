@@ -28,6 +28,11 @@ nvidia-smi --query-gpu=name,memory.total,driver_version,uuid --format=csv,nohead
 nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/^/power.limit,clocks.max.sm /" | tee -a forensics.txt
 lscpu | grep -E "Model name" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h /root | tail -1 | tee -a forensics.txt
 VRAM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1 | tr -d ' ')
+# Run p48-gemma4layer (2026-09-19) drew a host whose container overlay was 32 GB: the 49 GB Gemma-4 fetch died ENOSPC after
+# K0 passed, $0.49 and a receipt row for nothing. The launcher orders >= 320 GB of MACHINE disk, but the instance overlay is
+# what the box gets; refuse here, before any fetch, when it is under the floor (a refusal row, exit 13 -- host-limited).
+MIN_DISK_GB=${P47_MIN_DISK_GB:-120}; FREE_GB=$(df -BG --output=avail /root 2>/dev/null | tail -1 | tr -dc 0-9)
+if [ "${FREE_GB:-0}" -lt "$MIN_DISK_GB" ]; then say "REFUSED: ${FREE_GB:-?} GB free on /root < ${MIN_DISK_GB} GB -- the instance overlay is too small for the checkpoints (host-limited, not a result)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; fi
 if [ "${VRAM_MB:-0}" -lt $(( MIN_VRAM_GB * 1000 )) ]; then say "REFUSED: card holds ${VRAM_MB} MiB < ${MIN_VRAM_GB} GB -- not the registered class"; echo "refused: vram class" > REFUSAL; finish 15; fi
 say "egress pre-flight: HF CDN, 50 MB range, 20 s cap (floor ${MIN_MBPS} MB/s)"
 BPS=$(curl -sSL --max-time 20 -r 0-52428800 -o /dev/null -w '%{speed_download}' https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors 2>/dev/null || echo 0)
