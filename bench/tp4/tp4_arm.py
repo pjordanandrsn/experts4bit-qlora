@@ -835,6 +835,72 @@ def iter_base_layers(m):
 
 
 # ----------------------------------------------------------------------------- the arm (both frameworks, one code path)
+# ------------------------------------------------------------------ P45: where a training step's time goes (host vs device)
+PROFILE_FAMILIES = [                     # first match wins; the order is the registration (P45-PREREG.md)
+    ("memcpy", r"Memcpy|Memset|copy_|_to_copy|\.to\b|contiguous|clone"),
+    ("fused_kernel", r"nf4_qlora|grouped|dgrad|fused_|int4_b32|gemm_4bit|nf4_grouped|mxfp4|triton|_gemm_int4|smallm|dequant"),
+    ("routing", r"index_select|index_add|index_put|index_copy|gather|scatter|where|nonzero|topk|argsort|\bsort\b|bincount|cumsum|unique|masked_|one_hot|repeat_interleave|argmax|softmax|sigmoid|embedding"),
+    ("optimizer", r"adam|Adam|optimizer|_foreach|lerp|addcdiv|addcmul|zero_grad|bnb|bitsandbytes|dequantize_blockwise|quantize_blockwise"),
+    ("autograd", r"autograd|AccumulateGrad|Backward|backward|CheckpointFunction|checkpoint|torch::autograd"),
+    ("matmul", r"\bmm\b|matmul|bmm|addmm|baddbmm|linear|cublas|cutlass|gemm|gemv"),
+    ("norm_act", r"norm|silu|gelu|rsqrt|mul\b|add\b|sub\b|div\b|pow\b|mean|sum\b|exp\b|log\b|cat\b|split|chunk|view|reshape|transpose|permute|expand|slice|select|unsqueeze|squeeze|fill_|zeros|ones|empty|arange"),
+]
+
+
+def _family(name: str) -> str:
+    import re
+    for fam, rx in PROFILE_FAMILIES:
+        if re.search(rx, name):
+            return fam
+    return "other"
+
+
+def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
+    """The census P45 registers: device-busy fraction (sum of device-side self time over the profiled steps' wall --
+    overlapping streams can push it past 1.0 and that is reported, not clipped), device events (launches + memcpys)
+    per step, and CPU self time by op family from key_averages(). Full top tables go to `out_path`; the returned dict
+    is the summary the CELL line carries. Nothing here is a timed number: the timed s/step excludes nothing, the
+    profiled steps simply carry the profiler's overhead and are flagged in the receipt."""
+    from torch.autograd import DeviceType
+    ka = prof.key_averages()
+    dev_ms = 0.0; memcpy_ms = 0.0; n_dev = 0; n_cpu = 0; cpu_ms = 0.0
+    by_fam_cpu, by_fam_dev = {}, {}
+    rows = []
+    for e in ka:
+        name = e.key
+        cpu_self = float(getattr(e, "self_cpu_time_total", 0.0)) / 1e3
+        dev_self = float(getattr(e, "self_device_time_total", getattr(e, "self_cuda_time_total", 0.0))) / 1e3
+        cnt = int(e.count)
+        fam = _family(name)
+        is_dev = getattr(e, "device_type", None) == DeviceType.CUDA
+        if is_dev:
+            n_dev += cnt; dev_ms += dev_self
+            if "Memcpy" in name or "Memset" in name:
+                memcpy_ms += dev_self
+            by_fam_dev[fam] = by_fam_dev.get(fam, 0.0) + dev_self
+        else:
+            n_cpu += cnt; cpu_ms += cpu_self
+            by_fam_cpu[fam] = by_fam_cpu.get(fam, 0.0) + cpu_self
+        rows.append({"name": name[:120], "family": fam, "device": bool(is_dev), "count": cnt,
+                     "self_cpu_ms": round(cpu_self, 3), "self_device_ms": round(dev_self, 3)})
+    wall_ms = wall_s * 1e3
+    summ = {
+        "profiled_steps": n_steps, "wall_ms": round(wall_ms, 1), "wall_ms_per_step": round(wall_ms / max(n_steps, 1), 1),
+        "device_ms": round(dev_ms, 1), "device_busy_fraction": round(dev_ms / wall_ms, 4) if wall_ms else None,
+        "memcpy_ms": round(memcpy_ms, 1), "memcpy_fraction_of_device": round(memcpy_ms / dev_ms, 4) if dev_ms else None,
+        "device_events_per_step": round(n_dev / max(n_steps, 1)), "cpu_ops_per_step": round(n_cpu / max(n_steps, 1)),
+        "cpu_self_ms": round(cpu_ms, 1), "cpu_self_fraction_of_wall": round(cpu_ms / wall_ms, 4) if wall_ms else None,
+        "cpu_self_by_family_fraction": {k: round(v / cpu_ms, 4) for k, v in sorted(by_fam_cpu.items(), key=lambda kv: -kv[1])} if cpu_ms else {},
+        "device_by_family_fraction": {k: round(v / dev_ms, 4) for k, v in sorted(by_fam_dev.items(), key=lambda kv: -kv[1])} if dev_ms else {},
+        "note": "device_busy_fraction sums device self time across streams and can exceed 1.0; cpu_self is the profiler's op-level self time and excludes interpreter time between ops",
+    }
+    top_cpu = sorted([r for r in rows if not r["device"]], key=lambda r: -r["self_cpu_ms"])[:80]
+    top_dev = sorted([r for r in rows if r["device"]], key=lambda r: -r["self_device_ms"])[:80]
+    write_json(out_path, {"summary": summ, "top_cpu": top_cpu, "top_device": top_dev, "families": [f for f, _ in PROFILE_FAMILIES]})
+    summ["path"] = os.path.basename(out_path)
+    return summ
+
+
 def run_arm(a, load_fn, sampler=True):
     import importlib.metadata as md
     os.makedirs(a.out, exist_ok=True)
@@ -959,6 +1025,7 @@ def run_arm(a, load_fn, sampler=True):
     reset_peak()
 
     losses, step_ms, tokens_per_step, tokens_padded_per_step, lr_per_step, kcalls = [], [], [], [], [], []
+    profile_summary = None                                              # P45
     microbatch_ms = []                                                # T17: per step, one entry per micro-batch (only with --microbatch-timing)
     train_wall, steps_done = 0.0, 0
     common_stub = lambda: {"n_patched": n_patched, "n_attn4": n_attn4, "init_sha": init_sha, "load_s": round(load_s, 1),
@@ -968,7 +1035,13 @@ def run_arm(a, load_fn, sampler=True):
         with PowerSampler(enabled=sampler) as ps:
             cuda_sync()
             t0 = time.perf_counter()
+            prof, prof_wall = None, 0.0                                       # P45: profiled steps are inside the window and marked in the receipt
             for i in range(a.steps):
+                if a.profile_steps and i == a.profile_warm:
+                    from torch.profiler import ProfilerActivity, profile as _tprofile
+                    acts = [ProfilerActivity.CPU] + ([ProfilerActivity.CUDA] if torch.cuda.is_available() else [])
+                    prof = _tprofile(activities=acts, record_shapes=False, profile_memory=False, with_stack=False)
+                    prof.start()
                 before = counter.snapshot()
                 ts = time.perf_counter()
                 loss_sum, ntok, npad = 0.0, 0, 0
@@ -999,6 +1072,13 @@ def run_arm(a, load_fn, sampler=True):
                 opt.zero_grad(set_to_none=True)
                 cuda_sync()
                 dt = time.perf_counter() - ts
+                if prof is not None and a.profile_warm <= i < a.profile_warm + a.profile_steps:
+                    prof_wall += dt
+                    if i == a.profile_warm + a.profile_steps - 1:
+                        prof.stop()
+                        profile_summary = summarize_profile(prof, prof_wall, a.profile_steps, os.path.splitext(receipt_path(a))[0] + "_profile.json")
+                        prof = None
+                        print("PROFILE " + json.dumps(profile_summary), flush=True)
                 train_wall += dt
                 step_ms.append(round(dt * 1e3, 1))
                 losses.append(round(loss_sum / a.accum, 5))
@@ -1110,6 +1190,7 @@ def run_arm(a, load_fn, sampler=True):
         "peak_vram_gb": peak, "idle_w": round(idle_w, 1), "mean_w": round(mean_w, 1) if mean_w else None, "power_samples": len(ps.samples),
         "sampler": bool(sampler), "joules_per_step": round(net_w * (train_wall / a.steps), 2) if net_w else None,
         "adapter": adapter, "losses": losses,
+        "profile": profile_summary, "profile_steps": int(a.profile_steps), "profile_warm": int(a.profile_warm),
     }
     write_json(receipt_path(a), cell)
     print(("CELL OK " if c1_ok else "CELL C1_FAILED ") + json.dumps(
@@ -1546,6 +1627,10 @@ def main():
     ap.add_argument("--steps", type=int, default=60)
     ap.add_argument("--log-every", type=int, default=10,
                     help="T17 (P43): print a step line every N optimizer steps (default 10 = tp4 as run; 1 = every step)")
+    ap.add_argument("--profile-steps", type=int, default=0,
+                    help="P45: wrap this many optimizer steps (after --profile-warm) in torch.profiler (CPU+CUDA) and write <receipt>_profile.json: "
+                         "device-busy fraction, launches/step, CPU self time by op family; 0 = off (the timed number is never taken from profiled steps)")
+    ap.add_argument("--profile-warm", type=int, default=3, help="P45: steps to run before the profiler starts")
     ap.add_argument("--microbatch-timing", type=int, default=0,
                     help="T17 (P43): time every micro-batch (a cuda sync per micro-batch) and record microbatch_ms per step; 0 = tp4 as run")
     ap.add_argument("--seq", type=int, default=512)
