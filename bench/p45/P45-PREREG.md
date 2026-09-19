@@ -38,4 +38,12 @@ Under the $35 cap. STOP: a box not of the class (refused, exit 15); egress below
 
 ## Amendments
 
-(none yet)
+### Amendment 1 (2026-09-19 ~05:40Z, after run 2, before the comparator redraw) — the Unsloth arm alarmed; it is redrawn alone
+
+Run `p45-qwen3prof-2`: the e4b arm profiled cleanly (P1, P3, P5 hold; P2 names the adapter-dispatch family — `RESULTS-p45.md`);
+the Unsloth arm was killed by its alarm (1,388 s) before its first step. The arm alarm is derived from the run's remaining time,
+and the e4b arm's profiling overhead — three 38.6 s profiled steps plus ~30 min of `torch.profiler` trace processing at 0 % GPU
+(94 GB RSS for ~6 M op records per step) — had consumed it. `TP4_PROF_ARMS` (default `e4b,unsloth`) lets a redraw run one arm;
+`p45-unsloth` (`TP4_PROF_ARMS=unsloth`, one 5090, 1.5 h, ≤ $0.98) reads P4 against run 2's e4b window. P4's thresholds are
+unchanged; P2's read stands as written (the registered families did not include the adapter matmuls; that omission is
+recorded, not repaired after the fact).
