@@ -254,3 +254,39 @@ def test_load_e4b_records_its_own_phases(monkeypatch):
     for k in ("load_weights", "verify", "lora", "enable", "tokenizer"):
         assert ph[k] >= 0.04, (k, ph)               # each slept 0.05 s: the phase it was billed to is the one it ran in
     assert x["n_patched"] == 2 and calls.count("enable") == 1
+
+
+def test_the_prologue_residual_cannot_go_negative_from_rounding():
+    """e4b#629 CI: `prologue_unattributed_s` read -0.001 and the invariant assert fired.
+
+    Every phase lies inside the prologue window, so in exact arithmetic
+    total - sum(parts) >= 0 always. But each part is rounded to 1 ms for the
+    table, and ~10 of those roundings can accumulate PAST the total. Computing
+    the residual from the rounded parts therefore produced a negative number
+    for a quantity that cannot be negative -- an arithmetic artefact presented
+    as a measurement.
+
+    This reproduces it from the mechanism rather than waiting for CI to roll it
+    again: ten phases of 0.6 ms each round UP to 1 ms apiece (10 ms of rounded
+    parts) inside a 7 ms window.
+    """
+    import importlib.util, pathlib, time
+    spec = importlib.util.spec_from_file_location(
+        "tp4_arm_mod", pathlib.Path(__file__).resolve().parents[1] / "bench" / "tp4" / "tp4_arm.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    ph = mod.Phases()
+    t0 = time.perf_counter()
+    ph.begin(t0)
+    for i in range(10):
+        ph.mark(f"p{i}", 0.0006)          # rounds to 0.001 each -> 0.010 rounded, 0.006 exact
+    ph._t0 = time.perf_counter() - 0.007  # a 7 ms window: exact parts (6 ms) fit, rounded parts (10 ms) do not
+    ph.end_prologue()
+    r = ph.report()
+
+    assert r["prologue_unattributed_s"] >= 0, (
+        "the residual is a duration and cannot be negative; "
+        f"got {r['prologue_unattributed_s']} from parts {r['phase_seconds']}")
+    # and it is still the honest remainder, not a clamp: exact total minus exact parts
+    assert r["prologue_unattributed_s"] <= r["prologue_s"]

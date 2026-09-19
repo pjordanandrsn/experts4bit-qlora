@@ -211,6 +211,8 @@ class Phases:
         self.current, self._cur_t0 = None, None
         self._lock = threading.Lock()
         self._t0, self.prologue_s, self._prologue_named_s = None, None, None
+        self._exact = {}
+        self._prologue_s_exact = None
         self.budget_s, self._on_over, self._stop = 0.0, None, None
 
     # -- recording ------------------------------------------------------------
@@ -222,6 +224,11 @@ class Phases:
             if name not in self.seconds:
                 self.order.append(name)
             self.seconds[name] = round(self.seconds.get(name, 0.0) + float(seconds), 3)
+            # Unrounded, for the residual ONLY. Every phase lies inside the prologue window, so
+            # exact(total) - exact(sum of parts) >= 0 always; but each part is rounded to 1 ms for
+            # the table, and ~10 of those roundings can accumulate past the total, which made the
+            # residual read -0.001 (e4b#629 CI). Round the residual ONCE, from unrounded inputs.
+            self._exact[name] = self._exact.get(name, 0.0) + float(seconds)
 
     @contextlib.contextmanager
     def __call__(self, name, sync=True):
@@ -249,9 +256,11 @@ class Phases:
         self.stop_watchdog()
         if self._t0 is None:
             return
-        self.prologue_s = round(time.perf_counter() - self._t0, 3)
+        self._prologue_s_exact = time.perf_counter() - self._t0
+        self.prologue_s = round(self._prologue_s_exact, 3)
         with self._lock:
             self._prologue_named_s = round(sum(self.seconds.values()), 3)
+            self._prologue_named_exact = sum(self._exact.values())
 
     def report(self):
         """The receipt block. `prologue_unattributed_s` is the residual and is the field that keeps this honest."""
@@ -260,7 +269,7 @@ class Phases:
         out = {"phase_seconds": ph, "phase_budget_s": (round(self.budget_s, 1) if self.budget_s else None)}
         if self.prologue_s is not None:
             out["prologue_s"] = self.prologue_s
-            out["prologue_unattributed_s"] = round(self.prologue_s - (self._prologue_named_s or 0.0), 3)
+            out["prologue_unattributed_s"] = round((self._prologue_s_exact or 0.0) - getattr(self, "_prologue_named_exact", 0.0), 3)
         return out
 
     def snapshot(self):
