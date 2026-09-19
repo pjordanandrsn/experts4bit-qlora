@@ -1,6 +1,34 @@
 # Changelog
 
-## Unreleased
+## 0.36.3 — 2026-09-19 — a per-layer expert STORE MAP; the field-recipe training position on the new kernel cut (Qwen3-30B-A3B 4.49x Unsloth, parity-gated); Gemma-4 explained end to end
+
+### The loader takes a per-layer store map
+
+- `load_moe_4bit_streaming(quantize_layers=...)` accepts a **mapping** `{layer: spec}` beside the existing `None` and set forms.
+  A spec is a scheme name (`"int8"`), a `(scheme, blocksize)` pair, a `{"quant_type": ..., "blocksize": ...}` dict, or `None` for
+  the base dtype; layers the mapping does not name stay in the base dtype. `layer_store_spec()` is the documented selector, and a
+  map is **refused** on the arena and dedicated-quant paths, which carry one store for the whole model. `blocksize` is also a
+  first-class argument of the direct path now. Why: expert layers are not equally sensitive to quantisation — on Gemma-4 the span
+  is **159x** — so one store for the whole model is the wrong shape for some families (#597).
+
+### Measured this release (no default changes, nothing silently applied)
+
+- **Training, the field recipe, on grouped-nf4-gemm 0.32.1** (`bench/tp4/RESULTS-tp4-p46cut.md`, 21 register rows
+  `e4b.train.h2h.unsloth.*.2026-09-19`): Qwen3-30B-A3B on one RTX 5090, both frameworks training the same 642,514,944
+  parameters — e4b `fused_attn4` **6.4707 s/step against Unsloth's 29.0547 (x4.490)**, 237 vs 48 tok/s, 1186 vs 3341 J/step,
+  the same peak VRAM, held-out delta 0.0283 nats (COMPARABLE). On the previous cut this arm did not finish. e4b's fused path
+  passes its own parity control against its dense reference on **every** family measured (0.00063 / 0.00203 / 0.00140 /
+  0.00159 against a 0.05 band), which was the registered condition for this release to proceed. Granite 2.853 -> 2.366 and
+  OLMoE 2.739 -> 1.395 on the same cut. Four comparisons are deliberately NOT quoted, each with its reason in the coverage row.
+- **Gemma-4 (#597), explained end to end across four lanes** (`bench/p47`-`bench/p51`): the serving stack is innocent; e4b's
+  modelling is faithful (0.0056 nats with 29 of 30 expert stacks bf16); the cost is NF4 on the EARLY expert layers and the
+  sensitivity is **positional** — the same ~8 % expert-branch damage costs 159x more at layer 0 than at layer 27, while an 8.5x
+  smaller damage at layer 0 buys 22 %; no store rescues layer 0; the tail cannot be crushed further (704 = 64 x 11). What works
+  is a **graded map** — `{0..9: None, 10..19: "int8", 20..29: ("nf4", 64)}` — which at matched bytes is **1.44x better than a
+  uniform high-precision head** (0.1695 nats at 25.70 GB vs 0.2448 at 25.21 GB). **No Gemma-4 position is quoted and no default
+  ships**: the K8 two-text gate on the served stack is still owed.
+
+### Also
 
 - **CI pins grouped-nf4-gemm at the v0.32.1 release commit** (`9206352f`; the `[fast]` floor `>=0.30.0` is unchanged) and the
   system manifest is the v0.32.1 copy (`consumer_ci_pin` prose now names v0.32.1). What 0.32.1 changes for e4b training: the
