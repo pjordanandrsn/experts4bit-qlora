@@ -180,6 +180,15 @@ def decode_teacher_forced_logits(model, input_ids: torch.Tensor):
             out = model(input_ids=input_ids[:, i:i + 1],
                         past_key_values=past, use_cache=True)
             past = out.past_key_values if hasattr(out, "past_key_values") else out[1]
+            if past is None:
+                # GUARD (P44-b run 3): a model that returns no cache is scored one token at a time -- every position
+                # conditioned on nothing -- and reads as a large, deterministic, lever-independent KL that looks like
+                # a served-model defect. That is the scorer failing, not the model, and it must refuse, not report.
+                raise RuntimeError(
+                    "decode_teacher_forced_logits: the model returned no past_key_values after step "
+                    f"{i} (config.use_cache={getattr(getattr(model, 'config', None), 'use_cache', None)!r}); "
+                    "the decode-shaped scorer needs a carried KV cache -- set config.use_cache=True on the "
+                    "model (and its text_config) or score prefill-shaped")
             logits = out.logits if hasattr(out, "logits") else out[0]
             steps.append(logits[0, -1])
     return torch.stack(steps)
