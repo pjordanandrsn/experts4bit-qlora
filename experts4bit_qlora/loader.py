@@ -36,6 +36,8 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.activations import ACT2FN
 
+from collections.abc import Mapping
+
 from . import Experts4bit, ExpertsNbit, normalize_quant_type
 from .arch.deepseek_v4 import DEFAULT_SWIGLU_LIMIT, DeepseekV4Experts4bit
 from .arch.deepseek_v4 import rename_checkpoint_key as rename_deepseek_v4_key
@@ -497,6 +499,48 @@ def _assign_expert_stacks(model, epfx, stacks, has_gate):
             if _assign(model, f"{epfx}{n}", stack)]
 
 
+def layer_store_spec(quantize_layers, layer, default_quant_type, default_blocksize):
+    """The store layer ``layer``'s experts are built with, or ``None`` to leave them in the base dtype.
+
+    ``quantize_layers`` accepts three shapes, in increasing specificity:
+
+    * ``None`` — every MoE layer takes the call's ``quant_type`` / ``blocksize``.
+    * a set / sequence of layer indices — those layers take the call's store, the rest stay in the
+      base dtype (:func:`_place_unquantized_experts` fills them).
+    * a **mapping** ``{layer: spec}`` — each named layer takes its OWN store and layers absent from
+      the mapping stay in the base dtype. ``spec`` is a scheme name (``"int8"``) or a
+      ``(scheme, blocksize)`` pair (``("nf4", 256)``); a ``None`` spec means the base dtype, so a
+      mapping can say "these bf16, those nf4" without a second argument.
+
+    The mapping is what a per-family store MAP needs: Gemma-4's early expert layers are far more
+    sensitive to quantisation than its late ones (experts4bit-qlora#597, bench/p48-p50), so a useful
+    Gemma-4 configuration is "the first N layers at a high-precision store, the rest crushed" — one
+    model, two stores, chosen per layer. Returns ``(quant_type, blocksize)`` or ``None``.
+    """
+    if quantize_layers is None:
+        return normalize_quant_type(default_quant_type), int(default_blocksize)
+    if isinstance(quantize_layers, Mapping):
+        if layer not in quantize_layers:
+            return None
+        spec = quantize_layers[layer]
+        if spec is None:
+            return None
+        if isinstance(spec, str):
+            qt, bs = spec, default_blocksize
+        elif isinstance(spec, Mapping):
+            qt, bs = spec.get("quant_type", default_quant_type), spec.get("blocksize", default_blocksize)
+        else:
+            try:
+                qt, bs = spec
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"quantize_layers[{layer}] = {spec!r}: expected a scheme name, a (scheme, blocksize) "
+                    "pair, a mapping, or None"
+                ) from None
+        return normalize_quant_type(qt), int(bs)
+    return (normalize_quant_type(default_quant_type), int(default_blocksize)) if layer in quantize_layers else None
+
+
 def _place_unquantized_experts(model, epfx, layer, weight_map, get, n_exp, model_type,
                                layer_experts, has_gate):
     """Place a ``quantize_layers``-excluded layer's experts, unquantized.
@@ -910,7 +954,8 @@ def load_moe_4bit_streaming(
 
     n_layers = lm_config.num_hidden_layers
     n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
-    log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to {quant_type} (streaming)...")
+    log(f"  fusing + quantizing experts (up to {n_layers}x{n_exp}) to "
+        f"{'a per-layer store map' if isinstance(quantize_layers, Mapping) else quant_type} (streaming)...")
     expert_keys = set()
     narrowed = []                  # tensors `_fit` had to narrow, reported after the walk
     meta_expert_prefixes = []      # arena mode: modules whose buffers stay on meta
@@ -926,7 +971,9 @@ def load_moe_4bit_streaming(
         # Empty for the pre-fused and dedicated-quant families, whose branches below
         # address the checkpoint by `epfx` because there the two sides do coincide.
         layer_experts = ckpt_experts.get(i, {})
-        if quantize_layers is not None and i not in quantize_layers:
+        spec = layer_store_spec(quantize_layers, i, quant_type, blocksize)
+        layer_quant_type, layer_blocksize = spec if spec is not None else (None, None)
+        if spec is None:
             # Deliberately left in the base dtype: the original module stays in place,
             # unquantized. It still has to be FILLED, and a per-expert checkpoint cannot
             # fill a fused module key-by-key — see `_place_unquantized_experts`.
@@ -936,6 +983,14 @@ def load_moe_4bit_streaming(
             expert_keys |= consumed
             narrowed += cut
             continue
+        if isinstance(quantize_layers, Mapping) and (arena_index is not None or model_type in K3_PER_EXPERT_MXFP4
+                                                     or f"{epfx}gate_up_proj_blocks" in weight_map):
+            raise NotImplementedError(
+                f"layer {i}: a per-layer store map is not supported on this load path "
+                f"({'arena' if arena_index is not None else model_type!r} packs its experts by a family "
+                "convention with one store for the whole model). Use a single quant_type here, or a set "
+                "of layers to quantize, and raise an issue if a map is what this family needs."
+            )
         if arena_index is not None:
             # Every checkpoint key under the experts submodule is an expert tensor,
             # so they can be marked read-and-skipped WITHOUT reading them — which is
@@ -1185,10 +1240,10 @@ def load_moe_4bit_streaming(
             # Instantiate the most-specific class for the scheme: 4-bit loads stay `Experts4bit`
             # instances, so downstream `isinstance(x, Experts4bit)` checks keep working exactly as
             # they did before the ExpertsNbit fold.
-            base_cls = Experts4bit if quant_type in ("nf4", "fp4") else ExpertsNbit
+            base_cls = Experts4bit if layer_quant_type in ("nf4", "fp4") else ExpertsNbit
             base = base_cls.from_float(
-                gate_up, down, has_gate=has_gate, activation=activation, quant_type=quant_type, compute_dtype=dtype,
-                blocksize=blocksize,
+                gate_up, down, has_gate=has_gate, activation=activation, quant_type=layer_quant_type,
+                compute_dtype=dtype, blocksize=layer_blocksize,
             )
             experts = ExpertsLoRA(base, r=r, alpha=alpha, dtype=dtype).to(device)
         if offload:

@@ -83,7 +83,17 @@ LOADER_BUILDERS = ("loader", "loader_unquant", "loader_lo", "loader_hi")
 # in bf16 and NF4 the rest -- measured as a quality/memory CURVE, not assumed. `loader_keep_<k>` = quantize_layers {k..L-1}.
 # k=15 is P47's `loader_nf4_hi` (0.1334) and k=0 is `loader_nf4` (1.0837): both are anchors this lane re-reads.
 GEMMA4_KEEP_KS = (5, 10, 15, 20, 24)
+GEMMA4_MIX_ARMS = {                      # arm -> the tier spec (stores, in layer order, with counts)
+    "bf16_20":        "bf16:20_nf4:10",             # = P50's K20 exactly, the anchor
+    "int8_20":        "int8:20_nf4:10",             # a UNIFORM int8 head -- P49 read int8 on layer 0 alone at 0.693
+    "graded_10_10":   "bf16:10_int8:10_nf4:10",     # the candidate: bf16 where it matters, int8 where it does not
+    "graded_5_15":    "bf16:5_int8:15_nf4:10",      # a shorter bf16 head
+    "graded_10_10_crush": "bf16:10_int8:10_nf4b256:10",   # ... and the tail crushed harder
+}
 ARMS["gemma4keep"] = {f"K{k:02d}": (0, 0, "0", {}) for k in GEMMA4_KEEP_KS}
+ARMS["gemma4mix"] = {a: (0, 0, "0", {}) for a in GEMMA4_MIX_ARMS}
+MODELS["gemma4mix"] = MODELS["gemma4"]
+BUILDERS["gemma4mix"] = {a: f"loader_tiers_{spec}" for a, spec in GEMMA4_MIX_ARMS.items()}
 MODELS["gemma4keep"] = MODELS["gemma4"]
 BUILDERS["gemma4keep"] = {f"K{k:02d}": f"loader_keep_{k}" for k in GEMMA4_KEEP_KS}
 # P48 (#597, after P47 put the nat in layers 0-14): ONE NF4 layer at a time. Family `gemma4layer`, arm `L<i>` for every
@@ -95,6 +105,12 @@ ARMS["gemma4layer"] = {f"L{i:02d}": (0, 0, "0", {}) for i in range(GEMMA4_TEXT_L
 MODELS["gemma4layer"] = MODELS["gemma4"]
 BUILDERS["gemma4layer"] = {f"L{i:02d}": f"loader_only_{i}" for i in range(GEMMA4_TEXT_LAYERS)}
 _KEEP = re.compile(r"^loader_keep_(\d+)$")          # P50: bf16 experts in layers 0..k-1, NF4 in the rest
+# P51: the per-layer STORE MAP as TIERS -- `loader_tiers_<store>:<count>_<store>:<count>_...`, counts summing to
+# the layer count, e.g. `loader_tiers_bf16:20_nf4:10` (= P50's keep-20, the anchor) or the GRADED map
+# `loader_tiers_bf16:10_int8:10_nf4:10`. A store is a scheme name with an optional block (`nf4b256`);
+# `bf16` means the base dtype (spec None). Grading is the point: P48 measured Gemma-4's per-layer
+# sensitivity spanning 159x, so a uniform head wastes bytes on layers that do not need them.
+_TIERS = re.compile(r"^loader_tiers_((?:[a-z0-9]+:\d+_)*[a-z0-9]+:\d+)$")
 _ONLY = re.compile(r"^loader_only_(\d+)(?::([a-z0-9]+))?(?::b(\d+))?$")   # loader_only_<layer>[:<quant_type>][:b<blocksize>]
 # P49 (#597, after P48 put 83 % of the gap in layer 0 alone): the expert FORMAT on layer 0, and NF4 at four depths for the
 # activation probe. Same nf4 lever set everywhere (no int4 store, no fusion); the builder names the store.
@@ -108,6 +124,48 @@ BUILDERS["gemma4fmt"] = {"L00_nf4": "loader_only_0:nf4", "L00_fp4": "loader_only
                          "L00_fp8": "loader_only_0:fp8", "L00_nf4b32": "loader_only_0:nf4:b32",
                          "L07_nf4": "loader_only_7:nf4", "L14_nf4": "loader_only_14:nf4", "L21_nf4": "loader_only_21:nf4",
                          "L27_nf4": "loader_only_27:nf4"}
+
+
+def parse_tiers(builder: str):
+    """``loader_tiers_<store>:<count>_...`` -> [(store, blocksize_or_None, count), ...] or None."""
+    m = _TIERS.match(builder)
+    if not m:
+        return None
+    out = []
+    for part in m.group(1).split("_"):
+        store, count = part.split(":")
+        bs = None
+        if "b" in store[3:]:
+            store, _, b = store.partition("b")
+            bs = int(b)
+        out.append((store, bs, int(count)))
+    return out
+
+
+def store_map(builder: str, n_layers: int) -> dict:
+    """The `quantize_layers` MAPPING a `loader_tiers_*` builder names, layer by layer. ``bf16`` means the
+    base dtype (spec ``None``), so `loader_tiers_bf16:20_nf4:10` is byte-for-byte P50's `loader_keep_20`."""
+    tiers = parse_tiers(builder)
+    if tiers is None:
+        raise ValueError(f"{builder!r} is not a loader_tiers_* builder")
+    total = sum(c for _, _, c in tiers)
+    if total != n_layers:
+        raise ValueError(f"{builder}: tier counts sum to {total}, but the model has {n_layers} MoE layers")
+    out, i = {}, 0
+    for store, bs, count in tiers:
+        for _ in range(count):
+            out[i] = None if store == "bf16" else (store, bs or 64)
+            i += 1
+    return out
+
+
+def tier_census(builder: str, n_layers: int) -> dict:
+    """What `stacks_by_store` must look like for this builder -- the row's proof that the map applied."""
+    want = {}
+    for store, bs, count in parse_tiers(builder) or []:
+        key = "bf16(base)" if store == "bf16" else f"{store}/b{bs or 64}"
+        want[key] = want.get(key, 0) + count
+    return want
 
 
 def parse_only(builder: str):
@@ -262,6 +320,8 @@ def text_layers(model_id: str) -> int:
 def quantize_layer_set(builder: str, n_layers: int):
     """P47's per-builder ``quantize_layers``: None (all), the empty set (none), the first half, the second half."""
     half = n_layers // 2
+    if _TIERS.match(builder):
+        return store_map(builder, n_layers)
     mk = _KEEP.match(builder)
     if mk:
         k = int(mk.group(1))
@@ -287,11 +347,13 @@ def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
     import torch
     from experts4bit_qlora import load_moe_4bit_streaming, verify_moe_4bit
     po = parse_only(builder)
-    if builder not in LOADER_BUILDERS and not po and not _KEEP.match(builder):
-        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS}, loader_only_<i>[:<qt>][:b<bs>] or loader_keep_<k>")
+    pt = parse_tiers(builder)
+    if builder not in LOADER_BUILDERS and not po and not _KEEP.match(builder) and not pt:
+        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS}, "
+                         "loader_only_<i>[:<qt>][:b<bs>], loader_keep_<k> or loader_tiers_<store>:<n>_...")
     n = text_layers(model_id)
     ql = quantize_layer_set(builder, n)
-    qt, bs = (po[1], po[2]) if po else ("nf4", 64)
+    qt, bs = (po[1], po[2]) if po else ("nf4", 64)      # a tiers builder carries its stores in the map itself
     torch.manual_seed(1689)
     model, _ = load_moe_4bit_streaming(model_id, device, torch.bfloat16, r=8, alpha=16, offload=False, pin=True,
                                        prefetch=False, quant_type=qt, quantize_layers=ql, blocksize=bs)
@@ -307,7 +369,14 @@ def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
     for u in v["unquantized"]:
         m_ = model.get_submodule(u["module"].rsplit(".", 1)[0])
         ebytes["bf16"] += sum(b.numel() * b.element_size() for b in m_.parameters(recurse=False))
-    info = {"builder": builder, "expert_bytes": ebytes, "expert_bytes_total_gb": round((ebytes["quantized"] + ebytes["bf16"]) / 2**30, 3), "moe_layers": n, "quantize_layers": "all" if ql is None else sorted(ql),
+    by_store = {}
+    for q in v["quantized"]:
+        m_ = model.get_submodule(q["module"])
+        by_store[f"{q['quant_type']}/b{int(getattr(m_, 'blocksize', 0))}"] = by_store.get(f"{q['quant_type']}/b{int(getattr(m_, 'blocksize', 0))}", 0) + 1
+    if v["unquantized"]:
+        by_store["bf16(base)"] = len(v["unquantized"])
+    info = {"builder": builder, "expert_bytes": ebytes, "expert_bytes_total_gb": round((ebytes["quantized"] + ebytes["bf16"]) / 2**30, 3),
+            "stacks_by_store": by_store, "tier_census_expected": (tier_census(builder, n) if pt else None), "moe_layers": n, "quantize_layers": "all" if ql is None else sorted(ql),
             "quant_type": qt, "blocksize": bs, "quantized_types": sorted({q["quant_type"] for q in v["quantized"]}),
             "quantized_blocksizes": sorted({int(getattr(model.get_submodule(q["module"]), "blocksize", 0)) for q in v["quantized"]}),
             "n_quantized": v["n_quantized"], "n_unquantized": v["n_unquantized"],
