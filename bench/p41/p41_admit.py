@@ -8,11 +8,18 @@
                harness_error / ... -- left as written), 3 no readable receipt (the caller writes the harness_error stub).
 `footprint` -- after the p41c probe: the family's footprint row (PREREG "p41c"): fit_status in P40's vocabulary, allocator
                peak, nvidia-smi max from the lane's sampler, seq/batch/offload/checkpointing. Feeds the footprint row only.
+`verdict`   -- after the fetch, controller-side: the run's verdict computed from the PRE-REGISTERED criteria that the lane
+               itself recorded, never from whether a process exited cleanly (e4b#495). A VOID row and a fired STOP are the
+               pre-registration's own failure conditions ("STOP rules": a stop is reported, not worked around; "Validity
+               rules": a VOID never enters a reading) -- a run in which either fired cannot be `pass`. Exit 0 pass, 1 fail,
+               2 inconclusive, 3 invalid; the driver maps those onto its own exit status so no caller that derives a
+               receipt's `result` from the exit code can read a fired criterion as a success.
 Stdlib only; runs on the box's image python and in the repo's tests."""
 
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import sys
@@ -28,6 +35,9 @@ VOID_CLASSES = (
     "c1",
 )  # STOP-3 counts VOIDs per class per family
 HARNESS_VOIDS = {"void_trainable": "trainable", "void_attn4": "attn4", "tokens_mismatch": "tokens", "c1_failed": "c1"}
+STOP_RULES = ("STOP-1", "STOP-2", "STOP-3", "STOP-4", "STOP-5")  # PREREG "STOP rules"
+RESULT_ENUM = ("pass", "fail", "inconclusive", "invalid")
+VERDICT_EXIT = {"pass": 0, "fail": 1, "inconclusive": 2, "invalid": 3}
 
 
 def _utc() -> str:
@@ -217,6 +227,170 @@ def budget(a) -> int:
     return 0 if due else 1
 
 
+def is_void(rec: dict) -> bool:
+    """A VOID row in the pre-registration's vocabulary: rewritten by `admit`, or the harness's own void status."""
+    status, void_class = rec.get("status"), rec.get("void_class")
+    return (status == "void" and void_class in VOID_CLASSES) or (
+        status in HARNESS_VOIDS and HARNESS_VOIDS[status] == void_class
+    )
+
+
+def _stops_fired(root: str) -> tuple[list[str], list[str]]:
+    """The STOP rules this run reports, from BOTH artifacts the lane writes -- the `STOPn` marker files and
+    `stop_state.json` -- unioned, plus any problem that stops the criteria being read at all. A stop that can be
+    seen in one artifact and not the other still counts as fired: the union fails closed."""
+    problems: list[str] = []
+    fired = {rule for rule in STOP_RULES if os.path.exists(os.path.join(root, rule.replace("-", "")))}
+    path = os.path.join(root, "stop_state.json")
+    if os.path.exists(path):
+        try:
+            with open(path) as fh:
+                stops = json.load(fh).get("stops")
+            if not isinstance(stops, list):
+                raise ValueError("no `stops` list")
+            for entry in stops:
+                rule = entry.get("rule") if isinstance(entry, dict) else None
+                if rule in STOP_RULES:
+                    fired.add(rule)
+                else:
+                    problems.append(f"stop_state.json names an unregistered stop rule {rule!r}")
+        except Exception as exc:  # noqa: BLE001 -- unreadable STOP evidence is `invalid`, never a silent pass
+            problems.append(f"stop_state.json unreadable: {type(exc).__name__}: {exc}")
+    return sorted(fired), problems
+
+
+def _summary_criteria(root: str) -> tuple[dict, list[str]]:
+    """What `summary.txt` -- the artifact a reader actually opens -- says the criteria did. `admit` writes
+    `ADMIT OK` / `ADMIT VOID`; a FIRED stop is written by `stop_now` as `STOP-n: <reason>` (the advisory
+    `STOP-4 ok:` / `STOP-4 DUE:` / `STOP-1 UNDECIDED:` lines are deliberately NOT that shape)."""
+    path = os.path.join(root, "summary.txt")
+    try:
+        with open(path, errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except Exception as exc:  # noqa: BLE001
+        return {}, [f"summary.txt unreadable: {type(exc).__name__}: {exc}"]
+    return {
+        "admit_ok_lines": sum(line.startswith("ADMIT OK") for line in lines),
+        "admit_void_lines": sum(line.startswith("ADMIT VOID") for line in lines),
+        "stop_lines": sorted({rule for rule in STOP_RULES for line in lines if line.startswith(rule + ": ")}),
+    }, []
+
+
+def _verdict(a) -> int:
+    """The run's verdict from the pre-registration's own criteria, not from a clean exit (e4b#495).
+
+    `invalid` -- the criteria cannot be located, parsed or reconciled. Failing closed is the point: an
+                 unreadable criterion is not a satisfied one.
+    `fail`    -- a VOID row appeared. PREREG "Validity rules" / "STOP rules": a VOID is reported as a row and
+                 never enters a reading, and R1 was closed `FAIL / STOP-1` on exactly this shape.
+    `inconclusive` -- no VOID, but a STOP fired or no arm was admitted: the lane behaved, and there is still
+                 nothing to read. A legitimate, valuable outcome -- and not a `pass`.
+    `pass`    -- at least one admitted arm, no VOID row, no STOP fired, every criterion readable.
+    """
+    root, nonce, expected = a.run_dir, a.nonce, a.expected
+    problems: list[str] = []
+    reasons: list[str] = []
+    admitted = void = other = actual = None
+
+    records: list[dict] = []
+    for path in sorted(glob.glob(os.path.join(root, "*_e4b_*.json"))):
+        try:
+            with open(path) as fh:
+                records.append(json.load(fh))
+        except Exception as exc:  # noqa: BLE001
+            problems.append(f"receipt unreadable {os.path.basename(path)}: {type(exc).__name__}: {exc}")
+    if any(type(rec.get("admitted")) is not bool for rec in records):
+        problems.append("a receipt carries no Boolean `admitted` classification")
+    admitted = sum(rec.get("admitted") is True for rec in records)
+    void = sum(is_void(rec) for rec in records)
+    actual = len(records)
+    other = actual - admitted - void
+
+    manifest_path = os.path.join(root, f"P41_OUTCOME_COUNTS.{nonce}.json")
+    try:
+        with open(manifest_path) as fh:
+            manifest = json.load(fh)
+    except Exception as exc:  # noqa: BLE001
+        manifest = None
+        problems.append(f"outcome manifest unreadable ({os.path.basename(manifest_path)}): {type(exc).__name__}: {exc}")
+    if manifest is not None:
+        observed = {"expected": expected, "actual": actual, "admitted": admitted, "void": void, "other": other}
+        if any(type(manifest.get(key)) is not int for key in observed):
+            problems.append("outcome counts are not exact integers")
+        elif any(manifest[key] != observed[key] for key in observed):
+            problems.append(f"outcome counts do not match fetched receipts: manifest {manifest} vs {observed}")
+        if manifest.get("run_nonce") != nonce or manifest.get("gate_pass") is not True:
+            problems.append("outcome manifest is not bound to this successful run")
+    if expected <= 0:
+        problems.append(f"the plan expected {expected} rows")
+    elif actual != expected:
+        problems.append(f"{actual} receipts fetched, the plan expected {expected}")
+
+    stops, stop_problems = _stops_fired(root)
+    problems.extend(stop_problems)
+    summary, summary_problems = _summary_criteria(root)
+    problems.extend(summary_problems)
+    # the harm in e4b#495 is a criterion firing in `summary.txt` that the verdict never sees; a criterion
+    # visible there and nowhere else is an unreconcilable record, not a pass.
+    if summary and summary.get("admit_void_lines", 0) > 0 and void == 0:
+        problems.append(f"summary.txt reports {summary['admit_void_lines']} ADMIT VOID line(s) but no receipt is VOID")
+    if summary and set(summary.get("stop_lines", [])) - set(stops):
+        problems.append(
+            f"summary.txt reports {sorted(set(summary['stop_lines']) - set(stops))} that no STOP marker or stop_state.json entry carries"
+        )
+
+    if problems:
+        result = "invalid"
+        reasons = problems
+    else:
+        if void > 0:
+            reasons.append(
+                f"{void} VOID row(s) -- the pre-registration reports a VOID as a row and never reads it (PREREG 'Validity rules')"
+            )
+        if stops:
+            reasons.append(f"{', '.join(stops)} fired -- a stop is reported, not worked around (PREREG 'STOP rules')")
+        if admitted == 0:
+            reasons.append("no arm was admitted -- there is no reading to pass")
+        result = "fail" if void > 0 else ("inconclusive" if reasons else "pass")
+        if not reasons:
+            reasons.append(f"{admitted} admitted arm(s), no VOID row, no STOP fired")
+
+    row = {
+        "row": "p41 verdict",
+        "verdict": result,
+        "result_enum": list(RESULT_ENUM),
+        "computed_from": "the pre-registered criteria the lane recorded (admitted arms, VOID rows, STOP rules) -- never a process exit code (e4b#495)",
+        "run_nonce": nonce,
+        "expected": expected,
+        "actual": actual,
+        "admitted": admitted,
+        "void": void,
+        "other": other,
+        "stops_fired": stops,
+        "summary_observed": summary or None,
+        "reasons": reasons,
+        "prereg": "bench/p41/P41-PREREG.md",
+        "written_by": "p41_admit.py verdict",
+        "at": _utc(),
+    }
+    if a.out:
+        _write(a.out, row)
+    print(f"outcome: {actual} rows: {admitted} admitted, {void} VOID, {other} other")
+    print(f"VERDICT {result}: " + "; ".join(reasons))
+    return VERDICT_EXIT[result]
+
+
+def verdict(a) -> int:
+    """A verdict that cannot be computed at all is `invalid` -- never `fail`, and never `pass`. Without this the
+    tool's own uncaught exception would leave Python's generic exit 1, which the driver maps to `fail`: still not a
+    success, but the wrong name for it, and this issue is about a run being given the wrong name (e4b#495)."""
+    try:
+        return _verdict(a)
+    except Exception as exc:  # noqa: BLE001
+        print(f"VERDICT invalid: the verdict could not be computed: {type(exc).__name__}: {exc}")
+        return VERDICT_EXIT["invalid"]
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -243,6 +417,12 @@ def main(argv=None) -> int:
     b.add_argument("--rate", type=float, required=True)
     b.add_argument("--est", type=float, required=True)
     b.set_defaults(fn=budget)
+    v = sub.add_parser("verdict")
+    v.add_argument("run_dir")
+    v.add_argument("--nonce", required=True)
+    v.add_argument("--expected", type=int, required=True)
+    v.add_argument("--out", default=None)
+    v.set_defaults(fn=verdict)
     a = p.parse_args(argv)
     return a.fn(a)
 

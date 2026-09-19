@@ -258,7 +258,7 @@
     },
     "result": {
       "type": "string",
-      "description": "Outcome classification",
+      "description": "Outcome classification, DERIVED FROM `failure_criteria` and never from whether the process exited cleanly (e4b#495). A run in which any registered failure criterion fired cannot be `pass`: name it `fail`, `inconclusive` or `invalid` with the criterion that fired. `status` already carries the mechanical question (did the harness complete); this field answers the scientific one, and a receipt that reports `pass` while the run's own criteria fired in the same directory has published a verdict it never computed. Criteria that cannot be located or parsed are `invalid`, never `pass` -- fail closed.",
       "enum": [
         "pass",
         "fail",
