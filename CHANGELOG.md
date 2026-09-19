@@ -1,38 +1,57 @@
 # Changelog
 
-## Unreleased
+## 0.36.2 — 2026-09-19 — the K16 small-M int4 attention route ships and defaults to `auto` (−1.06 ms/step at B=16 on the 5090, P5 read); the P43 read (T1: no collapse, host-bound; T2b: #558 is a per-family band); the P44 and P45 instruments
 
-### K16 P5 read: the small-M route saves 1.06 ms/step at B=16 on the 5090; the route's default becomes `auto`
+### K16 route: `Int4Linear` serves 2..16 rows with grouped-nf4-gemm's small-M int4 GEMM (#578, #587; lane K16, #561)
 
-- Lane `k16-p5` (`bench/k16/RESULTS-k16-p5.md`, receipt `2026-09-19/k16-p5/`), P42's census protocol on one RTX 5090 with the
-  same bytes: `int4_b16` 12.25 ms/step → `int4_b16_smallm` **11.19 ms/step** (−1.06 ms, −8.6 %; 1,306 → 1,429 tok/s). The
-  census attributes it exactly: the bf16 GEMM family that carried the attention projections falls by 2.35 ms/step and
-  `_gemm_int4_b32_smallm` costs 1.30 in its place (net −1.05; the microbench predicted −0.96); the route appears in the
-  smallm arm's census (192 calls/step) and in no other arm's. **P5 HOLDS** (≥ 0.4 ms/step registered). Every other kernel
-  row is within noise between the two int4 arms.
-- **`E4B_ATTN_INT4_SMALLM` now defaults to `auto`** (`resolve_smallm`): the route is ON when the installed grouped-nf4-gemm
-  carries `int4_smallm` (≥ 0.32.0), OFF with a one-line banner when it does not — never a silent fallback, never a refusal
-  on an older cut. `=1` still refuses without the kernel; `=0` keeps the cached-bf16 path. The same rule now applies to the
-  CALIBRATED enable (`enable_serve_attn_int4_calib`), so the licensed calibrated-attention stacks take the route too. The
-  B=1 path (the int4 GEMV) is untouched, so every K8 row on record is unaffected; at 2..16 rows the route computes the same
-  `x_bf16 @ dequant(W)` with fp32 accumulation the cached matmul computes, within bf16 rounding (K16's contract).
-- `bench/k16/k16p5_reduce.py` reads the B=16 receipt directly (the shared P42 helper keyed the batch off an `_b16` suffix the
-  smallm arm does not end with).
+- `Int4Linear(smallm=True)` routes `1 < rows <= 16` to `int4_smallm.gemm_int4_b32_smallm` (grouped-nf4-gemm ≥ 0.32.0) on the
+  SAME packed bytes, split-K workspace preallocated at construction (capture-legal), **no cached bf16 copy** for those rows
+  (#561). One row keeps the int4 GEMV; more than 16 rows keep the cached bf16 matmul.
+- **Default `auto`** (`resolve_smallm`, applied to BOTH `enable_serve_attn_int4` and `enable_serve_attn_int4_calib`): the route
+  is ON when the installed kernel package carries `int4_smallm`, OFF with a one-line banner when it does not — never a silent
+  fallback, never a refusal on an older cut. `E4B_ATTN_INT4_SMALLM=1` requires the kernel (refuses without it at enable time),
+  `=0` keeps the cached-bf16 path. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`; CI pins the kernel at the v0.32.0
+  commit (`8b1acc9e…`).
+- **Why the default moved — the K16 P5 read** (`bench/k16/RESULTS-k16-p5.md`, lane `k16-p5`, receipt `2026-09-19/k16-p5/`,
+  P42's census protocol on one RTX 5090): `int4_b16` 12.25 ms/step → `int4_b16_smallm` **11.19 ms/step** (−1.06 ms, −8.6 %;
+  1,306 → 1,429 tok/s); the bf16 GEMM family that carried the attention projections falls by 2.35 ms/step and the K16 kernel
+  costs 1.30 in its place (net −1.05; the microbench predicted −0.96); the route appears in the smallm arm's census (192
+  calls/step) and in no other arm's. **P5 HOLDS** (≥ 0.4 registered). B=1 is untouched, so every K8 row on record is
+  unaffected; at 2..16 rows the route computes the same `x_bf16 @ dequant(W)` with fp32 accumulation, within bf16 rounding.
+  Kernel side: grouped-nf4-gemm 0.32.0 (`gnf4.kernel.k16-smallm-int4-gemm.5090.2026-09-19`, measured; P4 untested there).
+- `bench/k16/`: the K16 5090 runner (installs pytest on the box, #579), the P5 census lane (`k16p5_run.sh`, `k16p5_drive.sh`,
+  `k16p5_reduce.py`, #584).
 
-### K16 consumer route (opt-in): `Int4Linear` serves 2..16 rows with the small-M int4 GEMM (#561, lane K16)
+### P43 read (#582): T1 — no collapse, a host-bound step; T2b — #558 is a per-family parity band, not a kernel defect
 
-- `enable_serve_attn_int4(model, smallm=None)` reads **`E4B_ATTN_INT4_SMALLM=1`** (or the argument): each `Int4Linear`
-  then routes `1 < rows <= 16` to grouped-nf4-gemm's `int4_smallm.gemm_int4_b32_smallm` on the SAME packed bytes, with
-  its split-K workspace preallocated at construction (capture-legal), and **does not build the cached bf16 copy** for
-  those rows (#561: today every `rows > 1` call dequantises and caches a 4× larger second representation). One row
-  still takes the int4 GEMV; more than 16 rows still take the cached bf16 matmul. A set flag with the kernel absent
-  refuses at enable time with a sentence, never at forward time.
-- **Default unchanged.** The route stays opt-in until lane K16 (`grouped-nf4-gemm kernel/PREREG-k16-smallm-int4-gemm.md`)
-  reports on the RTX 5090 class and its registered decision rule (P1 ∧ P2 → route; P2 alone → route with the distance
-  to Marlin recorded; ¬P2 → refuse) is applied; no gate, threshold, floor or registered number moves here.
-- Tests: the route is opt-in, serves 2..16 rows on the small-M kernel with the construction-time workspace and leaves
-  the bf16 cache unbuilt, 17 rows fall back, one row keeps the GEMV, the enable flag is read and the missing-kernel
-  refusal fires.
+- T1 (`p43-t1-qwen3-2`, 5090, three arms at the field fixture): `fused_attn4` **29.30 s/step**, `fused_bf16attn` 29.47,
+  `fused_attn4_mb1` 50.65; ρ 0.70 / 0.67 / 0.16 — a +15 % drift over 20 steps at mb2, no RAMP, no CLIFF; tp4's collapse
+  (24.7 s → > 200 s) did not reproduce. Int4 attention is not the tier (P2). **P4 refuted: the card sat at 16 % utilisation /
+  113 W from step 0** — host-bound the whole run. The follow-up is P45 (below), not the RAMP/CLIFF lanes the rule named.
+- T2b (`p43-t2b-g4sweep-2`, H100 NVL; run 1 walked the oracle's vision tower, #580): 30 text-decoder layers, 23,314 positions,
+  rms(fused − reference) 0.0044 → 0.42 (**P7 holds**); the fused/reference-to-oracle ratio stays in [0.988, 1.007] on every
+  layer (**P8 holds**: neither path is closer to bf16 anywhere). Under the registered rule **#558's remedy is a re-derived
+  per-family parity band, not a kernel fix**; no Gemma-4 training position is quoted until that step closes.
+
+### P44 instruments (#581, #583, #585): OLMoE two-text K8 + per-expert census, KL-from-bf16 for the families K8 cannot read
+
+- `bench/p44/serve_stack.py` (ONE table of the arms bo7 timed + `build_served_model()` mirroring `step_decomp`'s all-VRAM
+  assembly with an engagement census), `kl_serve.py` (K0-gated; reference scored once decode-shaped, cached, freed; **one child
+  process per arm** because the lane hook arms only when a lever flag is set at interpreter start; a set lever that engaged
+  nothing refuses the row; gpt-oss's dequant reference proven by its weights), `expert_residuals.py` (per-expert
+  `sqrt(tr(DHDᵀ)/tr(WHWᵀ))` for RTN and GPTQ from the recipe's own Hessians), `p44_reduce.py` (k8_gate two-text rule, the KL
+  reading rule, P3 tail statistic; a missing row is NOT_READ), runners/drivers, amendments 1–2 in `P44-PREREG.md` (2048-step K8
+  window; decode-shaped scorer; the 1.1-nat Gemma-4 rows of run 2 disclosed as unexplained with two controls added).
+- First OLMoE rows (`p44-a-olmoe-2`, quoted here as observations; the register rows follow the reducer): `int4all` c4val1
+  **+0.255 ppl** (FAIL two-sided), `calibexp_all` (streamed 64k on wikitext-train) wikitext −0.055 / c4val1 **+0.443** (FAIL
+  one-sided) — the Qwen3 recipe does not transfer to OLMoE; its licensed position stays NF4.
+
+### P45 instrument (#586, #588): where a training step's host time goes
+
+- `bench/tp4/tp4_arm.py --profile-steps K --profile-warm W` wraps K optimizer steps of the shared loop in `torch.profiler`
+  (device-busy fraction, device events/step, CPU op self time by op family, top rows → `<receipt>_profile.json`; profiled steps
+  are flagged, the timed number never comes from them); `tp4_run.sh` box E (`qwen3prof`: e4b + Unsloth at the field recipe with a
+  1 s `nvidia-smi dmon` sampler); `bench/p45/P45-PREREG.md` + `p45_reduce.py`.
 
 ## 0.36.1 — 2026-09-18 — ernie4_5_moe loads its released checkpoint: tensors the text model does not build are skipped when the modeling class declares them, refused by name otherwise (#529)
 
