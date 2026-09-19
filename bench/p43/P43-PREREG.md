@@ -67,3 +67,13 @@ Ratios and curve shapes only within a box. No training THROUGHPUT position is qu
 ## Amendments
 
 (dated entries, before the data they touch)
+
+### Amendment 1 (2026-09-19 ~02:10Z, after T2's layer-1 result and before any per-layer data): T2b, the per-layer sweep the decision rule named
+
+T2 ran on an H100 NVL (receipt `2026-09-19/p43-t2-g4layer1`; 13 min wall, $0.61): layer-0 sanity **exactly 0** on both pairs (P6 held). At decoder layer 1, over 23,314 real positions: rms(reference, oracle) = 0.063963, rms(fused, oracle) = 0.063992, **ratio 1.0004** → the registered rule's **inconclusive band** (0.83 < ratio < 1.2): the oracle does not prefer either path. But **fused and reference DO differ from each other at layer 1: rms 0.00439, max |Δ| 1.0, mean |Δ| 0.00068** — about 7 % of either path's distance to the oracle, deterministic (the within-path noise floor is exactly zero). So the divergence e4b#558 measured is present from the first expert block, and the oracle cannot say which side of it is faithful there. P5 (ratio ≥ 1.2 at layer 1) is **refuted**; the offloaded whole-stack run's "first diverging layer = 1" is **confirmed** with a resident oracle, its per-layer 18/12/1 count is not.
+
+T2b (`bench/p43/g4/gemma4_layer_sweep.py`, `P43_G4_PROBE=layer_sweep`): the same three arms on the same 128 rows / 16 chunks, forward hooks on **every** decoder layer (no early exit; the oracle is resident), reporting per layer rms(fused − reference), rms(reference − oracle), rms(fused − oracle), the ratio, and the **first layer at which rms(fused − reference) exceeds each of 1e-3, 1e-2 and 5e-2** (layer 1 sits at 4.4e-3, so the 1e-2 and 5e-2 crossings are the amplification onsets).
+
+Registered predictions for T2b: **P7 (amplification)** — rms(fused − reference) grows with depth and exceeds 5e-2 by the last decoder layer (the 0.09-nat loss delta needs an output-scale difference); registered alternative: it stays within 2× its layer-1 value throughout — then the loss delta arises at the head, not in the expert stack. **P8 (faithfulness)** — the fused/reference-to-oracle ratio stays within [0.9, 1.1] on every layer (neither path is closer to bf16 anywhere: the disagreement is second-order to quantisation, and #558's remedy is a re-derived per-family parity band, not a kernel fix); registered alternative: the ratio leaves that band at some layer k and stays out — then the path that is farther from the oracle from k on is the unfaithful one and #558 becomes a defect in it.
+
+Budget: `p43-t2b-g4sweep`, H100 NVL, $3.10/h ceiling, guard 1 h, estimate $3.10 (T2's checkpoint fetch took 7.5 min on this class; the three sweeps under a minute).

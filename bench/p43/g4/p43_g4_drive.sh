@@ -25,12 +25,12 @@ TOK_SHA=${P43_G4_TOKENS_SHA:-4a1e8bf309b2654ca5ae0b56315bc6c37ee104cd524fc0bbf75
 [ -s "$TOK" ] || { say "refusing: tokens file missing: $TOK"; exit 78; }
 GOT=$(shasum -a 256 "$TOK" 2>/dev/null | cut -c1-64 || sha256sum "$TOK" | cut -c1-64)
 [ "$GOT" = "$TOK_SHA" ] || { say "refusing: tokens file sha256 $GOT != registered $TOK_SHA"; exit 78; }
-for f in "$HERE/gemma4_layer1_probe.py" "$HERE/p43_g4_run.sh"; do [ -s "$f" ] || { say "refusing: missing $f"; exit 78; }; done
+for f in "$HERE/gemma4_layer1_probe.py" "$HERE/gemma4_layer_sweep.py" "$HERE/p43_g4_run.sh"; do [ -s "$f" ] || { say "refusing: missing $f"; exit 78; }; done
 say "run ${E4B_RENT_RUN_ID:-?} -> $HOST:$PORT; e4b $E4B_SHA gnf4 $GNF4_SHA; $MID @ $REV; tokens sha ok"
 $SSH "rm -rf -- $W && mkdir -p $W/logs" || { say "stage failed"; exit 20; }
-$SCP "$HERE/gemma4_layer1_probe.py" "$HERE/p43_g4_run.sh" "$TOK" "root@$HOST:$W/" || { say "scp failed"; exit 20; }
+$SCP "$HERE/gemma4_layer1_probe.py" "$HERE/gemma4_layer_sweep.py" "$HERE/p43_g4_run.sh" "$TOK" "root@$HOST:$W/" || { say "scp failed"; exit 20; }
 say "running (synchronous: pre-flights, venv, fetch, one load + three sweeps + the oracle)"
-$SSH "cd $W && E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA MID='$MID' REV=$REV P43_MIN_MBPS=${P43_MIN_MBPS:-20} P43_MIN_VRAM_GB=${P43_MIN_VRAM_GB:-80} P43_ROWS=${P43_ROWS:-128} P43_CHUNK=${P43_CHUNK:-8} bash p43_g4_run.sh" 2>&1 | sed 's/^/    /'
+$SSH "cd $W && E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA MID='$MID' REV=$REV P43_MIN_MBPS=${P43_MIN_MBPS:-20} P43_MIN_VRAM_GB=${P43_MIN_VRAM_GB:-80} P43_ROWS=${P43_ROWS:-128} P43_CHUNK=${P43_CHUNK:-8} P43_G4_PROBE=${P43_G4_PROBE:-layer1} P43_NOISE_FLOOR=${P43_NOISE_FLOOR:-1e-4} bash p43_g4_run.sh" 2>&1 | sed 's/^/    /'
 rc=${PIPESTATUS[0]}
 say "box returned rc=$rc; fetching"
 mkdir -p "$E4B_RENT_RUN_DIR/probe"
