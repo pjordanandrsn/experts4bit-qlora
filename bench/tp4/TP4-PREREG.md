@@ -253,3 +253,24 @@ coverage limit of the framework under test. Either outcome is a row.
 **Cost.** One RTX 5090 at the standing $0.69/h ceiling, estimated ~2.5 h (fetch, environment build, two arms with their prologues) ~= **$1.75**, inside the <$2 band and well inside the $35/run cap. Today's spend before this is $26.26 against the $50 daily ceiling.
 
 **Ordering note, recorded because I got this wrong earlier today.** This amendment is committed to `main` **before** the launch, and the launch will cite the commit. On 2026-09-19 I published a bar as pre-registered when the commit registering it merged 34 minutes after the run (see `bench/p52/RESULTS-p52.md`). The point of registering is that it predates the measurement, and that is only true if the timestamps say so.
+
+### Amendment 6 (2026-09-19 20:30Z, BEFORE any axolotl arm has been run): axolotl joins the comparison as a fourth framework
+
+**Owner's directive, 2026-09-19:** *"add axolotl to the comparisons from now on."* Registered here before any axolotl data exists.
+
+**The arm.** `axolotl/ckpt_axolotl`, one per family, at the same field fixture as every other arm: alpaca template, seq 2048, micro-batch 2 x accum 4, r16 / alpha16, AdamW-8bit, seed 3407, N = 20, the same `tp4_alpaca.py` tokens and the registered `DS_ALPACA_SHA`. It joins `EXPECTED` after `hf/hf_peft` and before `e4b/reference_attn4`, so **the reference arm stays last and internal parity keeps its place** (amendment 5's point: the parity pair must not be charged behind arms that do not bear on it).
+
+**Why it needs its own proof-of-work predicate, and what it is.** Axolotl drives PEFT from a YAML config, so *which* parameters it adapts is configuration, not architecture — the same surface where e4b#542 found the HF arm selecting expert parameters by a **name substring** whose empty result was handled rather than refused, and where tp2/tp4 already VOIDed Unsloth on Granite for training **attention only at 5.2 M parameters against e4b's 99.6 M** while looking faster. An axolotl arm that quietly adapts attention only would produce a flattering number and a green status. So, with L = registered n_layers and A = accum:
+
+- `axolotl_expert_params_adapted >= 1` **expert** parameter, established **structurally** (a 3-D floating parameter of shape `(E, *, *)`, the rule e4b#630 landed), never by a name match;
+- `experts_forward_calls_per_step_min >= L * A`, the same evidence the HF arm must produce that experts actually ran;
+- `n_bnb4bit_unwrapped >= L` when the arm is configured 4-bit, so a silently-dequantised run is not read as a quantised one;
+- C1 frozen bytes bit-exact, step count == N, the same tokens sha, and **the same trainable count as the family's e4b arm of the same recipe** — the single check that would have caught the Granite mismatch on its own.
+
+**Any of these unmet is VOID, not a slower number.** `tp4_reduce.py` already quotes a position only when both arms of a pair are VALID; an axolotl arm that fails its predicate is recorded as a row and **no axolotl ratio is quotable for that family**.
+
+**What is NOT registered here.** No prediction about axolotl's speed, in either direction. This project already holds a measured finding that axolotl's fused-NF4 path was *slower* on an earlier comparison, and repeating that as an expectation would bias the reading of a different fixture on a different kernel cut. The first draw that carries this arm reports what it measures.
+
+**Version pinning.** The axolotl version and its resolved dependency set are recorded in the arm's receipt exactly as the Unsloth arm records `TP4_UNSLOTH_VERSION` / `TP4_UNSLOTH_ZOO_VERSION`; a draw that cannot pin them aborts the arm rather than quoting an unpinnable comparison.
+
+**Cost note.** A fourth arm adds roughly a quarter to a full family's wall-clock. The alarms, arm ceilings and `can_run`'s 900 s margin are unchanged, so on a window that cannot hold four arms the **last** arms are skipped as `host-limited` — which is why the ordering above matters and why amendment 5's parity-only draw exists as the mechanism for answering a parity question directly rather than hoping a full draw reaches it.
