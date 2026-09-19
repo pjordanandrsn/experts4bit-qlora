@@ -80,7 +80,8 @@ def test_kl_verdicts_read_files_and_note_holes(tmp_path):
     d = str(tmp_path)
     ctrl = _kl_row("nf4", 0.01, {"general": 0.01, "code": 0.01})
     _write(d, "gemma4_kl.json", {"scorer": {"name": "decode"}, "rows": [ctrl, _kl_row("int4_r1epi", 0.0102, {"general": 0.0102, "code": 0.0101})],
-                                 "not_measured": {"calattn_r1epi": {"error": "RuntimeError: boom"}}})
+                                 "not_measured": {"calattn_r1epi": {"error": "RuntimeError: boom"}},
+                                 "controls": {"reference_decode_vs_prefill": {"kl_mean": 0.0003, "passes_1e-2": True}}})   # decode admitted
     v = p44.kl_verdicts(d)
     assert v["gemma4"]["int4_r1epi"]["licenses"]
     assert v["gemma4"]["calattn_r1epi"] == {"verdict": "NOT_READ"}
@@ -123,3 +124,25 @@ def test_render_and_reduce_run_on_an_empty_dir(tmp_path):
     v = p44.reduce(str(tmp_path))
     md = p44.render_md(v)
     assert "NOT_READ" in md and "P44-b" in md
+
+
+def test_decode_rows_are_not_read_when_the_reference_disagrees_with_itself(tmp_path):
+    """Amendment 5: the Gemma-4 rows of runs 2-3 sat at ~1.1 nats under a decode scorer whose reference read 0.279 nats
+    against itself; those rows must come out NOT_READ, and a prefill-scored receipt needs no such control."""
+    d = str(tmp_path)
+    ctrl = _kl_row("nf4", 1.1087, {"general": 0.94, "code": 1.39})
+    cand = _kl_row("int4_r1epi", 1.1085, {"general": 0.955, "code": 1.449})
+    _write(d, "gemma4_kl.json", {"scorer": {"name": "decode"}, "rows": [ctrl, cand, _kl_row("r1epi", 1.084, {"general": 1.03, "code": 1.30})],
+                                 "controls": {"reference_decode_vs_prefill": {"kl_mean": 0.2787, "passes_1e-2": False}}})
+    v = p44.kl_verdicts(d)["gemma4"]
+    assert v["verdict"].startswith("NOT_READ") and v["scorer_control"]["admitted"] is False and "int4_r1epi" not in v
+    # run 4 shape: the control chose prefill before the arms -> rows are read, P4 is not
+    _write(d, "gemma4_kl.json", {"scorer": {"name": "auto", "used": "prefill"}, "rows": [ctrl, cand, _kl_row("r1epi", 1.1087, {"general": 0.94, "code": 1.39})],
+                                 "reference_pass": {"self_consistency": {"kl_mean": 0.2787, "passes": False}, "scorer_selected_by_control": "prefill"}})
+    v = p44.kl_verdicts(d)["gemma4"]
+    assert v["scorer_control"]["admitted"] is True and v["int4_r1epi"]["licenses"] and v["P4_r1epi_equals_nf4"]["verdict"].startswith("NOT_READ")
+    # gpt-oss: decode admitted by the control -> read
+    _write(d, "gptoss_kl.json", {"scorer": {"name": "decode"}, "rows": [_kl_row("nf4_r12", 0.0222, {"general": 0.024}), _kl_row("store_r12", 0.0019, {"general": 0.0016})],
+                                 "controls": {"reference_decode_vs_prefill": {"kl_mean": 0.00051, "passes_1e-2": True}}})
+    v = p44.kl_verdicts(d)["gptoss"]
+    assert v["scorer_control"]["admitted"] is True and v["store_r12"]["licenses"] and v["P6_store_at_floor"]["holds"] is False
