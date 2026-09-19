@@ -76,9 +76,9 @@ free_family(){ rm -rf $W/work_$1 $W/refcache_$1; rm -rf /root/.cache/huggingface
 kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
   can_run "$2" "${FAM}_kl" || return 40
   fetch "$MID" "$REV" && bake "$MID" $FAM || { echo "KL $FAM fetch/bake FAILED" >> summary.txt; return 11; }
-  say "kl_serve $FAM (decode-shaped both sides; reference cached to refcache_$FAM then freed)"
+  say "kl_serve $FAM (scorer by control (i): decode if the reference agrees with itself, else prefill; reference cached to refcache_$FAM.<scorer> then freed)"
   E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python -u $W/kl_serve.py --family $FAM --arena $W/work_$FAM/nf4.arena --calib $W/calib.json \
-      --k0-receipt $W/k0.json --ref-cache $W/refcache_$FAM --scorer decode --out $W/${FAM}_kl.json > logs/kl_$FAM.log 2>&1; local rc=$?
+      --k0-receipt $W/k0.json --ref-cache $W/refcache_$FAM --scorer auto --out $W/${FAM}_kl.json > logs/kl_$FAM.log 2>&1; local rc=$?
   grep -aE "^== |NOT MEASURED|receipt ->|Error" logs/kl_$FAM.log | tail -8 | sed "s/^/    /"
   { echo -n "kl $FAM rc=$rc "; grep -aE "receipt ->" logs/kl_$FAM.log | tail -1 | cut -c1-200; echo; } >> summary.txt
   free_family $FAM "$MID"; return $rc; }

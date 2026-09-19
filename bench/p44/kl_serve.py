@@ -57,6 +57,7 @@ REFERENCE = {
               "original of gpt-oss (kl_paths.py's rule)",
 }
 SCORERS = {"decode": decode_teacher_forced_logits, "prefill": teacher_forced_logits}
+SELF_CONSISTENCY_MAX = 1e-2      # amendment 5: the reference must agree with itself decode-vs-prefill or the decode scorer is refused
 
 
 def load_reference(family: str, model_id: str, revision: str, dev: str):
@@ -84,15 +85,48 @@ def _tokenize(tok, text: str, max_len: int):
     return tok(text, return_tensors="pt", truncation=True, max_length=max_len)["input_ids"]
 
 
-def reference_pass(family, model_id, revision, tok, prompts, cache_dir, max_len, score, dev) -> dict:
-    """Fill `cache_dir/<prompt id>.pt` for every prompt that lacks one; load the reference only if needed; free it."""
-    os.makedirs(cache_dir, exist_ok=True)
-    missing = [p for p in prompts if not os.path.exists(os.path.join(cache_dir, p["id"] + ".pt"))]
-    rep = {"cache_dir": cache_dir, "n_cached_before": len(prompts) - len(missing), "n_computed": len(missing)}
-    if missing:
+def self_consistency(ref, tok, prompts, max_len, dev, n: int) -> dict:
+    """Control (i), amendment 2/5: the REFERENCE scored decode-shaped vs prefill-shaped on the same prompts. An HF-side
+    cache/positions fault shows here; over SELF_CONSISTENCY_MAX the decode scorer is refused for the family."""
+    acc = KLAccumulator()
+    t0 = time.time()
+    with torch.no_grad():
+        for p in prompts[:n]:
+            ids = _tokenize(tok, p["text"], max_len).to(dev)
+            acc.add(decode_teacher_forced_logits(ref, ids), teacher_forced_logits(ref, ids))
+    s_ = acc.summary()
+    return {"n_prompts": min(n, len(prompts)), "kl_mean": s_["kl_mean"], "kl_max": s_["kl_max_per_token"], "top1": s_["top1_agreement"],
+            "tokens": s_["n_tokens_scored"], "threshold": SELF_CONSISTENCY_MAX, "passes": s_["kl_mean"] < SELF_CONSISTENCY_MAX,
+            "wall_s": round(time.time() - t0, 1)}
+
+
+def reference_pass(family, model_id, revision, tok, prompts, cache_dir, max_len, scorer_name, dev, controls_n) -> tuple:
+    """Fill `cache_dir/<prompt id>.pt` for every prompt that lacks one; load the reference only if needed; free it.
+    With ``scorer_name == "auto"`` the self-consistency control runs FIRST on the loaded reference and picks the scorer:
+    decode when the reference agrees with itself, prefill when it does not (P44-b run 3: Gemma-4's reference read
+    0.279 nats against itself under decode, so every decode row of that run was the scorer, not the model).
+    Returns ``(report, scorer_name_used)``; the cache dir is suffixed by the scorer so the two never mix."""
+    chosen = scorer_name
+    rep = {"requested_scorer": scorer_name}
+    ref = None
+    if scorer_name == "auto":
         t0 = time.time()
         ref = load_reference(family, model_id, revision, dev)
         rep["load_s"] = round(time.time() - t0, 1)
+        rep["self_consistency"] = self_consistency(ref, tok, prompts, max_len, dev, controls_n)
+        chosen = "decode" if rep["self_consistency"]["passes"] else "prefill"
+        rep["scorer_selected_by_control"] = chosen
+        print(f"  control (i) reference decode-vs-prefill: KL {rep['self_consistency']['kl_mean']:.4e} -> scorer {chosen}", flush=True)
+    cache_dir = f"{cache_dir}.{chosen}"
+    score = SCORERS[chosen]
+    os.makedirs(cache_dir, exist_ok=True)
+    missing = [p for p in prompts if not os.path.exists(os.path.join(cache_dir, p["id"] + ".pt"))]
+    rep.update({"cache_dir": cache_dir, "scorer": chosen, "n_cached_before": len(prompts) - len(missing), "n_computed": len(missing)})
+    if missing:
+        t0 = time.time()
+        if ref is None:
+            ref = load_reference(family, model_id, revision, dev)
+            rep["load_s"] = round(time.time() - t0, 1)
         rep["reference_class"] = type(ref).__name__
         rep["reference_dtype"] = str(next(ref.parameters()).dtype)
         t1 = time.time()
@@ -106,10 +140,11 @@ def reference_pass(family, model_id, revision, tok, prompts, cache_dir, max_len,
                     print(f"  reference {i + 1}/{len(missing)} ({time.time() - t1:.0f}s)", flush=True)
         rep["score_s"] = round(time.time() - t1, 1)
         rep["logits_dtype"] = str(logits.dtype)
+    if ref is not None:
         del ref
         gc.collect()
         torch.cuda.empty_cache()
-    return rep
+    return rep, chosen
 
 
 def _lever_check(env: dict, info: dict) -> None:
@@ -147,54 +182,41 @@ def score_arm(model, tok, prompts, cache_dir, max_len, score, dev) -> dict:
     return out
 
 
-def run_controls(a, model_id, revision, tok, prompts, dev) -> dict:
-    """Amendment 2 (after run 2 read KL ~1.1 nats for Gemma-4 nf4 AND r1epi against bf16): two controls that say whether
-    such a number is the served model or the scorer. (i) the REFERENCE scored decode-shaped vs prefill-shaped on the
-    same prompts -- an HF-side cache/positions fault shows here, and > 1e-2 nats refuses the decode scorer for the
-    family; (ii) the nf4 control arm scored PREFILL-shaped against the cached decode-shaped reference, beside its decode
-    row: a served model whose weights are wrong is far from bf16 under both shapes; a decode-path fault is far under
-    decode only. Both run on the first --controls-n prompts (cost), with the counts recorded."""
+def run_controls(a, model_id, revision, tok, prompts, dev, ref_cache, scorer_used) -> dict:
+    """Amendment 2/5 controls, after the arms. (i) the reference decode-vs-prefill self-KL (already run and decisive
+    when --scorer auto; re-run here so the receipt carries it in every mode). (ii) the nf4 control arm scored with the
+    OTHER shape against the same cached reference -- with the reference's own shape gap (i) disclosed beside it."""
     n = min(a.controls_n, len(prompts))
-    sub = prompts[:n]
     out = {"n_prompts": n}
-    t0 = time.time()
     try:
         ref = load_reference(a.family, model_id, revision, dev)
-        acc = KLAccumulator()
-        with torch.no_grad():
-            for p in sub:
-                ids = _tokenize(tok, p["text"], a.max_len).to(dev)
-                dec = torch.load(os.path.join(a.ref_cache, p["id"] + ".pt"))["logits"].to(dev)
-                pre = teacher_forced_logits(ref, ids)
-                acc.add(dec, pre)
-        s_ = acc.summary()
-        out["reference_decode_vs_prefill"] = {"kl_mean": s_["kl_mean"], "kl_max": s_["kl_max_per_token"], "top1": s_["top1_agreement"],
-                                              "tokens": s_["n_tokens_scored"], "passes_1e-2": s_["kl_mean"] < 1e-2, "wall_s": round(time.time() - t0, 1)}
+        out["reference_decode_vs_prefill"] = self_consistency(ref, tok, prompts, a.max_len, dev, n)
         del ref
     except Exception as e:
         out["reference_decode_vs_prefill"] = {"error": f"{type(e).__name__}: {str(e)[:400]}"}
     gc.collect()
     torch.cuda.empty_cache()
-    # (ii) nf4 control arm, prefill-shaped, in a child with the nf4 env (no levers) so the hook state matches the arms
     import subprocess
     ctrl_arm = "nf4" if "nf4" in ARMS[a.family] else sorted(ARMS[a.family])[0]
-    part = f"{a.out}.{ctrl_arm}.prefill.part.json"
+    other = "prefill" if scorer_used == "decode" else "decode"
+    part = f"{a.out}.{ctrl_arm}.{other}.part.json"
     env = dict(os.environ)
     for k in LANE_KEYS:
         env.pop(k, None)
     env.update(arm_env(a.family, ctrl_arm, model_id))
     cmd = [sys.executable, "-u", os.path.abspath(__file__), "--family", a.family, "--model", model_id, "--revision", revision,
            "--arena", a.arena, "--calib", a.calib, "--k0-receipt", a.k0_receipt, "--arms", ctrl_arm, "--max-len", str(a.max_len),
-           "--limit", str(n), "--ref-cache", a.ref_cache, "--scorer", "prefill", "--out", part, "--child", "--controls", "0"]
+           "--limit", str(n), "--ref-cache", ref_cache, "--scorer", other, "--out", part, "--child", "--controls", "0"]
     t1 = time.time()
     rc = subprocess.call(cmd, env=env)
     got = json.load(open(part)) if os.path.exists(part) else {}
     rows = got.get("rows", [])
-    out["control_arm_prefill"] = ({"arm": ctrl_arm, "kl_mean": rows[0]["kl_mean"], "kl_p95": rows[0]["kl_p95"], "top1": rows[0]["top1_agreement"],
-                                   "tokens": rows[0]["n_tokens_scored"], "per_stratum": {k: v["kl_mean"] for k, v in rows[0]["per_stratum"].items()},
-                                   "note": "PREFILL-shaped arm vs the DECODE-shaped cached reference: includes the reference's own decode-vs-prefill gap (i)"}
-                                  if rows else {"arm": ctrl_arm, "error": f"child rc={rc}: {got.get('not_measured')}"})
-    out["control_arm_prefill"]["wall_s"] = round(time.time() - t1, 1)
+    out["control_arm_other_shape"] = ({"arm": ctrl_arm, "arm_scorer": other, "reference_scorer": scorer_used, "kl_mean": rows[0]["kl_mean"],
+                                       "kl_p95": rows[0]["kl_p95"], "top1": rows[0]["top1_agreement"], "tokens": rows[0]["n_tokens_scored"],
+                                       "per_stratum": {k: v["kl_mean"] for k, v in rows[0]["per_stratum"].items()},
+                                       "note": "the control arm under the OTHER forward shape vs the cached reference: includes the reference's own shape gap (i)"}
+                                      if rows else {"arm": ctrl_arm, "error": f"child rc={rc}: {got.get('not_measured')}"})
+    out["control_arm_other_shape"]["wall_s"] = round(time.time() - t1, 1)
     return out
 
 
@@ -210,7 +232,8 @@ def main() -> int:
     ap.add_argument("--max-len", type=int, default=320)
     ap.add_argument("--limit", type=int, default=0, help="debug: first N prompts only (RECORDED)")
     ap.add_argument("--ref-cache", required=True)
-    ap.add_argument("--scorer", default="decode", choices=sorted(SCORERS))
+    ap.add_argument("--scorer", default="auto", choices=["auto"] + sorted(SCORERS),
+                    help="auto (amendment 5): control (i) picks decode when the reference agrees with itself, prefill otherwise")
     ap.add_argument("--out", required=True)
     ap.add_argument("--child", action="store_true", help="internal: one arm, env already set by the parent")
     ap.add_argument("--controls", type=int, default=1,
@@ -229,7 +252,9 @@ def main() -> int:
             raise SystemExit(f"unregistered arm {arm!r} for {a.family}; registered: {list(ARMS[a.family])}")
     prompts = PROMPTS[:a.limit] if a.limit else PROMPTS
     dev = "cuda"
-    score = SCORERS[a.scorer]
+    if a.child and a.scorer == "auto":
+        raise SystemExit("child needs a resolved --scorer (decode|prefill)")
+    score = SCORERS[a.scorer] if a.scorer != "auto" else None
     try:
         import usercustomize  # noqa: F401  (the staged lane hook; the lever census below is the real check)
         hook = getattr(usercustomize, "__file__", "?")
@@ -247,10 +272,9 @@ def main() -> int:
         "family": a.family, "model": model_id, "revision": revision,
         "reference": REFERENCE[a.family],
         "scorer": {"name": a.scorer, "both_sides": True,
-                   "note": "decode-shaped teacher forcing on BOTH sides (one token per forward, KV cache): the "
-                           "serving levers engage only at T == 1" if a.scorer == "decode" else
-                           "PREFILL scorer -- a debugging control; serving levers that engage only at T == 1 "
-                           "report 0.000 here and that means 'never ran', not 'faithful'"},
+                   "note": {"decode": "decode-shaped teacher forcing on BOTH sides (one token per forward, KV cache): the serving levers engage only at T == 1",
+                            "prefill": "PREFILL scorer on BOTH sides: the weight-format levers (int4 experts, calibrated int4 attention) engage; the decode-only fusions (folds, router epilogue) do not and their rows equal the control's by construction",
+                            "auto": "control (i) picks the scorer per family: decode when the reference agrees with itself to < 1e-2 nats, prefill otherwise (amendment 5)"}[a.scorer]},
         "prompt_set": {"sha256": prompt_digest(), "n_registered": len(PROMPTS), "n_scored": len(prompts),
                        "limit": a.limit, "strata": strata_counts(), "max_len": a.max_len},
         "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
@@ -264,12 +288,16 @@ def main() -> int:
     flush()
     t0 = time.time()
     if not a.child:
-        receipt["reference_pass"] = reference_pass(a.family, model_id, revision, tok, prompts, a.ref_cache,
-                                                   a.max_len, score, dev)
+        receipt["reference_pass"], scorer_used = reference_pass(a.family, model_id, revision, tok, prompts, a.ref_cache,
+                                                                a.max_len, a.scorer, dev, a.controls_n)
         receipt["reference_pass"]["wall_s"] = round(time.time() - t0, 1)
+        receipt["scorer"]["used"] = scorer_used
+        ref_cache = receipt["reference_pass"]["cache_dir"]
+        score = SCORERS[scorer_used]
         flush()
     else:
-        missing = [p["id"] for p in prompts if not os.path.exists(os.path.join(a.ref_cache, p["id"] + ".pt"))]
+        scorer_used, ref_cache = a.scorer, a.ref_cache
+        missing = [p["id"] for p in prompts if not os.path.exists(os.path.join(ref_cache, p["id"] + ".pt"))]
         if missing:
             raise SystemExit(f"child: reference cache incomplete ({len(missing)} prompts missing) -- the parent scores the reference first")
 
@@ -284,7 +312,7 @@ def main() -> int:
             part = f"{a.out}.{arm}.part.json"
             cmd = [sys.executable, "-u", os.path.abspath(__file__), "--family", a.family, "--model", model_id, "--revision", revision,
                    "--arena", a.arena, "--calib", a.calib, "--k0-receipt", a.k0_receipt, "--arms", arm, "--max-len", str(a.max_len),
-                   "--limit", str(a.limit), "--ref-cache", a.ref_cache, "--scorer", a.scorer, "--out", part, "--child"]
+                   "--limit", str(a.limit), "--ref-cache", ref_cache, "--scorer", scorer_used, "--out", part, "--child"]
             t1 = time.time()
             rc = subprocess.call(cmd, env=env)
             got = json.load(open(part)) if os.path.exists(part) else {"rows": [], "not_measured": {arm: {"error": f"child exited rc={rc} with no partial receipt", "wall_s": round(time.time() - t1, 1)}}}
@@ -296,7 +324,7 @@ def main() -> int:
                 print(f"== {a.family}/{k}: NOT MEASURED -- {v.get('error', '')[:300]}", flush=True)
             flush()
         if a.controls:
-            receipt["controls"] = run_controls(a, model_id, revision, tok, prompts, dev)
+            receipt["controls"] = run_controls(a, model_id, revision, tok, prompts, dev, ref_cache, scorer_used)
             flush()
         receipt["wall_s_total"] = round(time.time() - t0, 1)
         flush()
@@ -315,9 +343,9 @@ def main() -> int:
             model, info = build_served_model(model_id, a.arena, a.calib, device=dev)
             info["hook_loaded"] = hook
             _lever_check(env, info)
-            r = score_arm(model, tok, prompts, a.ref_cache, a.max_len, score, dev)
+            r = score_arm(model, tok, prompts, ref_cache, a.max_len, score, dev)
             r.update({"arm": arm, "row": f"{a.family}/{arm} vs the family's reference", "env": env,
-                      "engagement": info, "reference": REFERENCE[a.family], "scorer": a.scorer,
+                      "engagement": info, "reference": REFERENCE[a.family], "scorer": scorer_used,
                       "wall_s": round(time.time() - t1, 1)})
             receipt["rows"].append(r)
             print(f"== {a.family}/{arm}: KL mean={r['kl_mean']:.6e} p95={r['kl_p95']:.6e} top1={r['top1_agreement']:.5f} "

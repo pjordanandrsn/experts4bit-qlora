@@ -147,3 +147,25 @@ the device per row; the statistic is a property of the bytes, not of where the t
 stand (receipt 496cd76): `int4all` c4val1 **+0.255** (FAIL two-sided, P1 holds), `calibexp_all` wikitext −0.055 / c4val1
 **+0.443** (FAIL one-sided, P2 REFUTED — the Qwen3 recipe does not transfer; calibrating on wikitext-train made c4val1 worse
 than RTN). Granite and Mixtral censuses are redrawn together as `p44-a-census` (`P44A_FAMILIES=granite,mixtral`, ≤ 2 h).
+
+### Amendment 5 (2026-09-19 ~04:55Z, after run 3's controls, before run 4) — the Gemma-4 decode scorer is REFUSED by control (i); the scorer is chosen by the control
+
+Run `p44-b-kl80-3` (H100 NVL, instance 51528...; all four Gemma-4 arms measured, every lever engaged — `INT4EXP enabled: 30
+layers`, hook banner in every child): `nf4` 1.1087, `r1epi` 1.0841, `int4_r1epi` 1.1085, `calattn_r1epi` 1.2915 nats/token,
+the first three identical to run 2 to four digits. **Control (i): the bf16 REFERENCE scored decode-shaped vs prefill-shaped on
+the same 40 prompts (366 tokens) reads KL 0.279 nats/token, top-1 0.83 — against a 1e-2 threshold.** The HF Gemma-4 forward
+does not agree with itself between one-token-per-step decoding under `DynamicCache` and a single prefill; whatever the
+mechanism (cache/positions handling for this family's layer mix), a scorer that disagrees with itself by 0.28 nats cannot
+read a 0.005-nat reading rule. Under amendment 2's rule the **decode scorer is refused for Gemma-4 and every decode row of
+runs 2 and 3 is VOID as an instrument reading** — the lever-independent ~1.1 nats was the scorer, not the served model. The
+served model is not exonerated by this either; it is simply unmeasured until run 4. Control (ii) (nf4 prefill vs the decode
+reference, 0.945) is uninterpretable for the same reason and is not quoted.
+
+Run 4: `kl_serve.py --scorer auto` — control (i) runs FIRST on the loaded reference and picks the scorer per family: decode
+when the reference agrees with itself to < 1e-2, prefill otherwise; the choice is recorded (`scorer.used`,
+`reference_pass.scorer_selected_by_control`) and the reference cache is suffixed by the scorer so the shapes never mix.
+Under the PREFILL scorer the weight-format levers engage (int4 expert stores serve batched rows; the calibrated int4
+attention's bytes are what the cached matmul dequantises) and the decode-only fusions (folds, router epilogue) do not:
+`r1epi`'s row then equals `nf4`'s by construction and P4 is read as "the fold's arithmetic is exact" only where the decode
+scorer is admitted; for Gemma-4 P4 is NOT READ. P5/P6 and the reading rule apply to whichever scorer the control admits,
+stated on every row. gpt-oss goes through the same control. Nothing else moves.
