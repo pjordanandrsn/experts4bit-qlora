@@ -157,6 +157,31 @@ probes — it was placement, visible before there was a design capable of seeing
 - No performance claim of any kind. This work built an instrument and measured existing
   paths.
 
+## Addendum 2026-09-19 — the reference against itself (P44-b)
+
+Two things the September serving-quality lane (`bench/p44/P44-PREREG.md`, `RESULTS-p44.md`)
+added to this instrument, kept here because they are about the instrument, not about any arm:
+
+1. **The first control is the reference against itself under the two forward shapes the
+   scorer compares.** Scoring decode-shaped (one token per forward, KV cache carried) on both
+   sides, every e4b Gemma-4-26B-A4B arm sat ~1.1 nats from the bf16 checkpoint, deterministic
+   across runs and independent of which lever was set — which looked like a served-model
+   defect. The control that resolved the reading was the bf16 reference scored decode-shaped
+   against ITSELF prefill-shaped: **0.279 nats/token, top-1 0.83** (HF `Gemma4ForConditionalGeneration`,
+   transformers 5.16.1). A scorer that disagrees with itself by 0.28 nats cannot read a
+   0.005-nat rule, so the decode rows were VOID and `kl_serve.py --scorer auto` now runs this
+   control first per family and falls back to prefill on both sides when it fails (gpt-oss
+   passes it at 0.0005 and keeps the decode scorer). The Gemma-4 gap then reproduced under
+   prefill (1.077 nats), so it IS the model — but the number is believable only because the
+   control that cleared the instrument was run first. General form: a lever-independent large
+   number is the scorer until the reference agrees with itself.
+2. **A KL-from-reference licence is its own label.** gpt-oss's native MXFP4 store route reads
+   0.0019 nats against a dequant of the same bytes (the NF4 requant control 0.0222; every
+   stratum ≤ 0.13×) and is registered as licensed with `licensed_by` naming a KL verdict row,
+   distinct from a K8 (held-out perplexity) licence — the "change detector, not damage estimate"
+   caveat above travels with it. It is the first quality verdict on that family that is not
+   out-of-domain flattery (its wikitext K8 *improves* under quantisation).
+
 ## Retracted along the way
 
 Kept visible rather than quietly dropped, since each was stated confidently first:
