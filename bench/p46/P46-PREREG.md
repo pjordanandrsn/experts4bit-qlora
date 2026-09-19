@@ -67,3 +67,19 @@ Registered predictions for that draw, before it runs:
 
 Positions are quoted only from `tp4_reduce.py` over both boxes' receipts, under its own validity rules, as before.
 
+### Amendment 3 (2026-09-19 ~14:20Z, before the box-C draw) — the last two families, and what they test that the others could not
+
+Box A and box B covered granite, olmoe, gpt-oss, qwen3 and qwen3_5 on the 0.32.1 cut (`bench/tp4/RESULTS-tp4-p46cut.md`). **Gemma-4 and Mixtral are the two families left**, and each carries a question the others could not answer:
+
+- **Gemma-4 is the one family whose e4b internal parity FAILS.** tp4's own rows (`tp4-c-4`, N=20, the same fixture) read fused held-out 0.94445 against the dense reference's 1.04273 — **Δ 0.0983**, twice the 0.05 band, which is [#558](https://github.com/pjordanandrsn/experts4bit-qlora/issues/558). Every family measured today passes that control at 0.002 or better. This draw asks whether the kernel change touches it.
+- **Mixtral is the one family where Unsloth is faster** (tp4: 4.3369 vs e4b's 12.8975 s/step, ratio 0.336), because e4b's arm runs under expert offload at 5.30 GB against Unsloth's resident 30.28 GB. This draw asks whether the adapter-path change narrows a gap that is bounded by streaming, not by dispatch.
+
+Registered predictions, before the draw:
+
+- **C1 (Gemma-4 speed):** e4b `fused_attn4` < **17.5977** s/step (its tp4 row, same fixture and N). Refuted above 1.14× that, the box-to-box variance tp4 measured.
+- **C2 (#558 survives the kernel change) — the one that matters:** Gemma-4's internal parity |Δ held-out| **stays above 0.05**. P47–P51 established that this family's problem is the quantised model itself — sensitivity spanning 159× across expert layers, positional rather than magnitudinal — and the adapter path is not implicated, so a change to the adapter path should not move it. **Registered alternative: it drops below 0.05**, which would mean the per-expert adapter loop *was* implicated after all and #558 closes on this cut. Either way the issue gets its first measurement since the change.
+- **C3 (Mixtral stays Unsloth's):** e4b `fused_attn4` < 12.8975 s/step, and the `unsloth/e4b` ratio rises from 0.336 but **stays below 1** — the gap there is expert streaming, not adapter dispatch. Refuted if the ratio crosses 1 (e4b faster), which would say offload was never the binding constraint.
+- **C4 (Mixtral parity holds):** its internal parity stays under 0.05 (tp4 read 0.00087).
+
+`tp4-b-p46cut-C`, RTX 5090, 5 h, ≤ $3.45. `TP4_BOX=C` runs gemma4 and mixtral at the field recipe; the ~142 GB of checkpoints is why the guard is 5 h and why the runner's 200 GB disk floor matters. Positions, as always, are quoted only by `tp4_reduce.py` under its own rules, and **a Gemma-4 position is quoted only if C2's alternative fires** — a family failing its own parity control does not get a position whatever its speed.
+
