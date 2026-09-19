@@ -4,13 +4,13 @@
 # _DEADLINE_EPOCH, _INSTANCE_ID), stages the tp4 pieces + the two dataset helpers + the HF token, starts tp4_run.sh
 # detached under a fresh nonce, polls TP_DONE.<nonce> with a per-poll HEARTBEAT line (box summary tail + GPU util/mem +
 # workdir size; a stall is REPORTED, never acted on), fetches receipts (never the venvs, caches or adapters).
-# Pattern: bench/p39/p39_drive.sh.   TP4_BOX=A|B|C (required).   Nothing here creates, destroys or approves compute.
+# Pattern: bench/p39/p39_drive.sh.   TP4_BOX=A|B|C|D (required; D = P43 diagnosis).   Nothing here creates, destroys or approves compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [tp4_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TP4_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$TP4_BOX" in A|B|C) ;; *) say "refusing: TP4_BOX must be A, B or C"; exit 78;; esac
+case "$TP4_BOX" in A|B|C|D) ;; *) say "refusing: TP4_BOX must be A, B, C or D (D = the P43 diagnosis box, bench/p43/P43-PREREG.md)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 STAGE="$HERE/tp4_run.sh $HERE/tp4_arm.py $HERE/tp4_reduce.py $HERE/tp4_alpaca.py $REPO/bench/flagship-matrix/drivers/n9_datasets.py $REPO/bench/flagship-matrix/ds_manifest.json"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -35,7 +35,8 @@ PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOC
 # of them silently does not reach the box: TP4-PREREG amendment 2 cut the eval instrument for the large families
 # and TP4_EVAL_N / TP4_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.
 for v in TP4_FAMILIES TP4_SKIP TP4_UNSLOTH_VERSION TP4_UNSLOTH_ZOO_VERSION TP4_PIN_FALLBACK TP4_STEPS \
-         TP4_EVAL_N TP4_EVAL_EVERY TP4_SEQ TP4_MB TP4_ACCUM TP4_R TP4_LR TP4_OPTIM TP4_SCHED TP4_WARMUP TP4_GPU_CLASS; do
+         TP4_EVAL_N TP4_EVAL_EVERY TP4_SEQ TP4_MB TP4_ACCUM TP4_R TP4_LR TP4_OPTIM TP4_SCHED TP4_WARMUP TP4_GPU_CLASS \
+         TP4_LOG_EVERY TP4_DIAG_ALARM; do
   [ -n "${!v:-}" ] && PASS="$PASS $v=${!v}"
 done
 if [ "${TP4_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash tp4_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/tp4"; exit 0; fi

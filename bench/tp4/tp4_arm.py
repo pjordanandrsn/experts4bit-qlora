@@ -128,7 +128,7 @@ import torch
 import torch.nn as nn
 
 PREREG = "tp4/TP4-PREREG.md"   # selftest-only: real runs must pass --prereg (main() refuses otherwise; no default)
-HARNESS = "tp4_arm.py (copy of tp3_arm.py @ e0cfb488 + T11-T16: hf arm, alpaca template, micro-batches, optim/schedule, unsloth loader fallback)"
+HARNESS = "tp4_arm.py (copy of tp3_arm.py @ e0cfb488 + T11-T16: hf arm, alpaca template, micro-batches, optim/schedule, unsloth loader fallback; + T17: --log-every / --microbatch-timing, P43)"
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
 FMT = "### Instruction:\n{instruction}\n\n### Response:\n{output}"
@@ -414,7 +414,7 @@ def stub(a, status, reason, extra=None, code=None, fw=None, tag=None, arm=None):
     if extra:
         rec.update(extra)
     write_json(receipt_path(a, fw, tag), rec)
-    print(f"CELL {status.upper()} " + json.dumps({k: v for k, v in rec.items() if k not in ("losses", "step_ms")}), flush=True)
+    print(f"CELL {status.upper()} " + json.dumps({k: v for k, v in rec.items() if k not in ("losses", "step_ms", "microbatch_ms")}), flush=True)
     if code is not None:
         sys.exit(code)
 
@@ -436,7 +436,7 @@ def refresh_stub(a, tag, arm, status, reason, extra):
         rec.update(extra)
         rec["probe_reason"] = str(reason)[:600]
         write_json(p, rec)
-        print(f"CELL {rec['status'].upper()} (stub refreshed) " + json.dumps({k: v for k, v in rec.items() if k not in ("losses", "step_ms")}), flush=True)
+        print(f"CELL {rec['status'].upper()} (stub refreshed) " + json.dumps({k: v for k, v in rec.items() if k not in ("losses", "step_ms", "microbatch_ms")}), flush=True)
     else:
         stub(a, status, reason, extra, fw="e4b", tag=tag, arm=arm)
 
@@ -959,6 +959,7 @@ def run_arm(a, load_fn, sampler=True):
     reset_peak()
 
     losses, step_ms, tokens_per_step, tokens_padded_per_step, lr_per_step, kcalls = [], [], [], [], [], []
+    microbatch_ms = []                                                # T17: per step, one entry per micro-batch (only with --microbatch-timing)
     train_wall, steps_done = 0.0, 0
     common_stub = lambda: {"n_patched": n_patched, "n_attn4": n_attn4, "init_sha": init_sha, "load_s": round(load_s, 1),
                            "trainable_params": n_trainable, "census": census, "n_layers": x.get("n_layers"), "model_type": x.get("model_type"),
@@ -971,8 +972,10 @@ def run_arm(a, load_fn, sampler=True):
                 before = counter.snapshot()
                 ts = time.perf_counter()
                 loss_sum, ntok, npad = 0.0, 0, 0
+                mb_ms = []
                 lr_per_step.append(float(opt.param_groups[0]["lr"]))
                 for j in range(a.accum):                                    # T5/T13: accum micro-batches of M rows, rows in fixed order
+                    tm = time.perf_counter() if a.microbatch_timing else None
                     if M == 1:
                         ids = torch.tensor(train[(i * a.accum + j) % len(train)], dtype=torch.long).unsqueeze(0).to(DEV)
                         kw, labels, nreal = fwd_kwargs(ids), ids, int(ids.numel())
@@ -984,6 +987,9 @@ def run_arm(a, load_fn, sampler=True):
                         out = model(input_ids=ids, labels=labels, **kw)
                         loss = out.loss / a.accum
                     loss.backward()
+                    if tm is not None:                                      # T17: a sync per micro-batch, so the number is the micro-batch's
+                        cuda_sync()
+                        mb_ms.append(round((time.perf_counter() - tm) * 1e3, 1))
                     loss_sum += float(out.loss.detach())
                     ntok += nreal
                     npad += int(ids.numel()) - nreal
@@ -998,11 +1004,14 @@ def run_arm(a, load_fn, sampler=True):
                 losses.append(round(loss_sum / a.accum, 5))
                 tokens_per_step.append(ntok)
                 tokens_padded_per_step.append(npad)
+                if a.microbatch_timing:
+                    microbatch_ms.append(mb_ms)
                 after = counter.snapshot()
                 kcalls.append({k: after[k] - before[k] for k in after})
                 steps_done = i + 1
-                if steps_done % 10 == 0:
-                    print(f"    step {steps_done}/{a.steps} loss {losses[-1]} {step_ms[-1]} ms kcalls {kcalls[-1]}", flush=True)
+                if steps_done % max(1, int(a.log_every)) == 0:
+                    mb = f" mb_ms {mb_ms}" if a.microbatch_timing else ""
+                    print(f"    step {steps_done}/{a.steps} loss {losses[-1]} {step_ms[-1]} ms{mb} kcalls {kcalls[-1]}", flush=True)
                 if steps_done % a.eval_every == 0:
                     e = eval_loss(model, ev, fwd_kwargs, a.autocast)
                     curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2)})
@@ -1013,7 +1022,7 @@ def run_arm(a, load_fn, sampler=True):
         counter.uninstall()
         if is_oom(e):
             stub(a, "oom", f"OOM at step {steps_done + 1}: {str(e)[:200]}",
-                 dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, peak_vram_gb=peak_gb()), code=5)
+                 dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, microbatch_ms=microbatch_ms, peak_vram_gb=peak_gb()), code=5)
         raise
     counter.uninstall()
     peak = peak_gb()
@@ -1094,7 +1103,7 @@ def run_arm(a, load_fn, sampler=True):
         "C1_control_detects_flipped_byte": True, "C1_experts_changed": len(changed), "C1_bit_exact": c1_ok, "C1_changed_sample": changed[:3],
         "loss_first": losses[0], "loss_last": losses[-1], "loss_mean_last20": round(statistics.mean(losses[-20:]), 5),
         "eval_loss_step0": round(ev0, 5), "eval_loss_final": ev1, "eval_curve": curve,
-        "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms,
+        "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,
         "tokens_padded_per_step": tokens_padded_per_step, "tokens_padded_total": sum(tokens_padded_per_step),
@@ -1104,7 +1113,7 @@ def run_arm(a, load_fn, sampler=True):
     }
     write_json(receipt_path(a), cell)
     print(("CELL OK " if c1_ok else "CELL C1_FAILED ") + json.dumps(
-        {k: v for k, v in cell.items() if k not in ("losses", "step_ms", "tokens_per_step", "tokens_padded_per_step", "lr_per_step", "kernel_calls_all",
+        {k: v for k, v in cell.items() if k not in ("losses", "step_ms", "microbatch_ms", "tokens_per_step", "tokens_padded_per_step", "lr_per_step", "kernel_calls_all",
                                                    "env", "census", "eval_curve", "kernel_calls_per_step")}), flush=True)
     if not c1_ok:
         sys.exit(4)
@@ -1382,6 +1391,7 @@ def selftest(a):
     a.fam, a.model, a.revision, a.data, a.data_sha = "tiny", "selftest/tiny", "0" * 40, dp, sha_bytes(open(dp, "rb").read())
     a.seq, a.steps, a.eval_every, a.eval_n, a.accum, a.autocast, a.lr, a.r, a.alpha = 64, 12, 4, 6, a.accum, a.autocast, 1e-3, 2, 4
     a.micro_batch, a.optim, a.weight_decay, a.lr_schedule, a.warmup_steps, a.template = 1, "adamw_torch", 0.01, "constant", 0, "clinical"
+    a.log_every, a.microbatch_timing = 1, 1                          # T17: every step printed, every micro-batch timed
     a.out, a.adapter_dir, a.tokens = d, os.path.join(d, "adapters"), os.path.join(d, "tokens_tiny.json")
     rec = prepare(a, tok=_FakeTok())
     a.tokens_sha = rec["sha256"]
@@ -1534,6 +1544,10 @@ def main():
     ap.add_argument("--model", default="Qwen/Qwen3-30B-A3B")
     ap.add_argument("--revision", default="ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
     ap.add_argument("--steps", type=int, default=60)
+    ap.add_argument("--log-every", type=int, default=10,
+                    help="T17 (P43): print a step line every N optimizer steps (default 10 = tp4 as run; 1 = every step)")
+    ap.add_argument("--microbatch-timing", type=int, default=0,
+                    help="T17 (P43): time every micro-batch (a cuda sync per micro-batch) and record microbatch_ms per step; 0 = tp4 as run")
     ap.add_argument("--seq", type=int, default=512)
     ap.add_argument("--accum", type=int, default=4, help="T5: micro-batches (batch 1 each) per optimizer step (P40: 4)")
     ap.add_argument("--autocast", type=int, default=1, help="T5: torch.autocast bf16 around forward+loss (P40: bf16 autocast)")

@@ -46,6 +46,15 @@ def test_tp4_arm_selftest():
         r = json.loads((d / f"tinya_{fw}_{tag}.json").read_text())
         assert r["status"] == "ok" and r["micro_batch"] == 2 and r["template"] == "alpaca" and r["tokens_padded_total"] > 0, (fw, r["status"])
         assert r["lr_per_step"][0] == 0.0 and r["optimizer"].endswith("schedule=linear warmup_steps=3"), (fw, r["optimizer"])
+    # T17 (P43): the selftest runs with --log-every 1 --microbatch-timing 1, so every step is printed and every step's
+    # receipt carries one timing per micro-batch; the CELL line never carries the per-step lists
+    ref = json.loads((d / "tiny_e4b_reference_attn4.json").read_text())
+    assert ref["log_every"] == 1 and ref["microbatch_timing"] is True
+    assert len(ref["microbatch_ms"]) == ref["steps"] and all(len(mb) == ref["accum"] for mb in ref["microbatch_ms"]), ref["microbatch_ms"][:2]
+    assert all(isinstance(v, float) and v >= 0 for mb in ref["microbatch_ms"] for v in mb)
+    assert sum(1 for line in p.stdout.splitlines() if line.strip().startswith(f"step {ref['steps']}/{ref['steps']} ")) >= 1
+    assert "mb_ms [" in p.stdout
+    assert '"microbatch_ms"' not in "".join(line for line in p.stdout.splitlines() if line.startswith("CELL "))
 
 
 def test_real_run_without_prereg_refuses():
