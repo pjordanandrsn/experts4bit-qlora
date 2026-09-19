@@ -6,6 +6,9 @@
 # writes nonce-named P41_EXIT_CODE and TP_DONE files on every normal shell exit and nonce-named P41_SUCCESS only at successful completion.
 # The driver polls and fetches only those nonce-named files and returns 0 only for canonical numeric remote rc 0 plus P41_SUCCESS; stale,
 # missing, malformed or nonzero remote status is HARNESS_ERROR in the receipt.
+# After the fetch it computes the run's VERDICT from the PRE-REGISTERED criteria (admitted arms, VOID rows, fired STOP rules) via
+# `p41_admit.py verdict`, writes P41_VERDICT.<nonce>.json beside the receipts, and exits 0 ONLY for `pass` -- 40 fail, 41 inconclusive,
+# 24 invalid (e4b#495: a receipt must not read `pass` while the run's own registered failure criteria fired in the same directory).
 # Nothing here creates, destroys or approves compute.
 # The approval line's rate ceiling and estimate come from the launcher (E4B_RENT_USD_PER_HOUR / E4B_RENT_EST_USD, e4b#465); the run's
 # amended PLANNING estimate comes from the controller's environment (P41_PLAN_EST_USD, set per run thread from the pre-registration's
@@ -90,48 +93,23 @@ PYR
 [ "$LANE_RC" -eq 0 ] || { say "lane failed with remote rc=$LANE_RC"; exit "$LANE_RC"; }
 [ -f "$RUN_DIR/p41/BOX_REFUSED" ] && { say "box refused despite remote rc=0 (BOX_REFUSED)"; exit 12; }
 [ -f "$RUN_DIR/p41/P41_SUCCESS.$RUN_NONCE" ] || { say "remote rc=0 without current-run P41_SUCCESS"; exit 24; }
-OUTCOME_FILE="$RUN_DIR/p41/P41_OUTCOME_COUNTS.$RUN_NONCE.json"
-OUTCOME=$(python3 - "$OUTCOME_FILE" "$RUN_DIR/p41" "$RUN_NONCE" "$EXPECTED_ROWS" <<'PYO'
-import glob, json, os, sys
-
-manifest_path, root, nonce = sys.argv[1:4]
-try:
-    manifest = json.load(open(manifest_path))
-except Exception as exc:
-    raise SystemExit(f"outcome manifest unreadable: {type(exc).__name__}: {exc}")
-keys = ("expected", "actual", "admitted", "void", "other")
-if any(type(manifest.get(key)) is not int for key in keys):
-    raise SystemExit("outcome counts are not exact integers")
-if manifest.get("run_nonce") != nonce or manifest.get("gate_pass") is not True:
-    raise SystemExit("outcome manifest is not bound to this successful run")
-paths = sorted(glob.glob(os.path.join(root, "*_e4b_*.json")))
-records = []
-for path in paths:
-    try:
-        records.append(json.load(open(path)))
-    except Exception as exc:
-        raise SystemExit(f"outcome receipt unreadable {os.path.basename(path)}: {type(exc).__name__}: {exc}")
-void_classes = {"steps", "tokens", "trainable", "attn4", "engagement", "c1"}
-harness_voids = {"void_trainable": "trainable", "void_attn4": "attn4", "tokens_mismatch": "tokens", "c1_failed": "c1"}
-def is_void(rec):
-    status, void_class = rec.get("status"), rec.get("void_class")
-    return (status == "void" and void_class in void_classes) or (
-        status in harness_voids and harness_voids[status] == void_class
-    )
-admitted = sum(rec.get("admitted") is True for rec in records)
-void = sum(is_void(rec) for rec in records)
-other = len(records) - admitted - void
-expected = int(sys.argv[4])
-observed = {"expected": expected, "actual": len(records), "admitted": admitted, "void": void, "other": other}
-if manifest["expected"] <= 0 or manifest["actual"] != manifest["expected"] or any(manifest[key] != observed[key] for key in keys):
-    raise SystemExit("outcome counts do not match fetched receipts")
-if admitted + void <= 0 or any(type(rec.get("admitted")) is not bool for rec in records):
-    raise SystemExit("successful lane has no admitted/VOID outcome or an unclassified receipt")
-print(f"{len(records)} rows: {admitted} admitted, {void} VOID, {other} other")
-PYO
-) || { say "invalid P41 outcome evidence"; exit 24; }
-say "outcome: $OUTCOME"
-for m in STOP1 STOP2 STOP3 STOP4 STOP5; do [ -f "$RUN_DIR/p41/$m" ] && say "lane reports $m (a row, not a failure of the driver; stop_state.json has the reason)"; done
+# The run's VERDICT comes from the PRE-REGISTERED criteria the lane recorded -- admitted arms, VOID rows, fired STOP rules --
+# and never from "the process exited cleanly" (e4b#495: p41-r1-granite-10 was filed OK/pass while a VOID row and STOP-1 sat in
+# the same directory). p41_admit.py verdict re-reads the receipts, the outcome manifest, the STOPn markers, stop_state.json and
+# summary.txt, cross-checks them, and fails closed: a criterion it cannot locate, parse or reconcile is `invalid`, not a pass.
+# Only `pass` leaves here with the exit status of a clean run; the fetch is already complete, so no evidence is lost either way.
+# (#490's guard -- a lane that admits nothing is not a success -- is preserved: zero admitted arms is `inconclusive`, nonzero.)
+VERDICT_JSON="$RUN_DIR/p41/P41_VERDICT.$RUN_NONCE.json"
+VERDICT_RC=0
+VERDICT_OUT=$(python3 "$ADMIT" verdict "$RUN_DIR/p41" --nonce "$RUN_NONCE" --expected "$EXPECTED_ROWS" --out "$VERDICT_JSON" 2>&1) || VERDICT_RC=$?
+printf '%s\n' "$VERDICT_OUT" | while IFS= read -r ln; do [ -n "$ln" ] && say "$ln"; done
+case "$VERDICT_RC" in
+  0) : ;;
+  1) say "P41 FAIL: the pre-registration's own failure criteria fired in this run -- the rows stand, the run is not a pass (P41_VERDICT.$RUN_NONCE.json)"; exit 40 ;;
+  2) say "P41 INCONCLUSIVE: the lane ran and the registered criteria leave nothing to read -- a real outcome, not a pass (P41_VERDICT.$RUN_NONCE.json)"; exit 41 ;;
+  3) say "invalid P41 outcome evidence"; exit 24 ;;
+  *) say "invalid P41 outcome evidence (the verdict step itself failed rc=$VERDICT_RC)"; exit 24 ;;
+esac
 ADMITTED=$(grep -c '^ADMIT OK' "$RUN_DIR/p41/summary.txt" 2>/dev/null || :); ADMITTED=${ADMITTED:-0}
 VOIDED=$(grep -c '^ADMIT VOID' "$RUN_DIR/p41/summary.txt" 2>/dev/null || :); VOIDED=${VOIDED:-0}
 STUBS=$(grep -c 'STUB ' "$RUN_DIR/p41/summary.txt" 2>/dev/null || :); STUBS=${STUBS:-0}

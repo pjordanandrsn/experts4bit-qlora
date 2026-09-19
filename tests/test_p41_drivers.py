@@ -221,6 +221,14 @@ def test_helper_archive_fetch_survives_the_registered_images_without_curl():
     )
 
 
+# the driver's verdict exit codes (bench/p41/p41_drive.sh; e4b#495) -- `pass` is the only one that is 0
+VERDICT_RC = {"pass": 0, "fail": 40, "inconclusive": 41, "invalid": 24}
+
+
+def _expected_nonce(tmp_path: Path) -> str:
+    return (tmp_path / "driver-expected-nonce").read_text().strip()
+
+
 def _write_executable(path: Path, text: str) -> None:
     path.write_text(text)
     path.chmod(0o755)
@@ -496,8 +504,70 @@ def test_every_registered_void_status_counts_as_a_real_void_outcome(tmp_path: Pa
 
     out = _fake_driver(tmp_path, remote)
 
-    assert out.returncode == 0, out.stdout + out.stderr
+    # the row is a real VOID outcome -- and the pre-registration names a VOID row a failure
+    # condition, so the lane is counted AND verdicted `fail`, never published as a clean run (e4b#495)
+    assert out.returncode == VERDICT_RC["fail"], out.stdout + out.stderr
     assert "19 rows: 0 admitted, 1 VOID, 18 other" in out.stdout
+    assert "VERDICT fail" in out.stdout
+
+
+def _granite_10_shape(path: Path) -> Path:
+    """The `p41-r1-granite-10` run directory exactly as e4b#495 records it: the (512, 8) anchor
+    receipt rewritten `VOID class=engagement`, STOP-1 fired against a void anchor, the other 18
+    rows NOT_RUN, nothing admitted -- and the lane's own machinery behaving impeccably throughout."""
+    path.mkdir()
+    (path / "TP_DONE").touch()
+    (path / "P41_EXIT_CODE").write_text("0\n")
+    (path / "P41_SUCCESS").touch()
+    (path / "summary.txt").write_text(
+        "ADMIT VOID class=engagement granite_e4b_fused_attn4_s512_r8.json: "
+        "engagement: engagement banner missing (a green skipped path is not evidence)\n"
+        "STOP-1 UNDECIDED: anchor status void admitted=False -- not comparable\n"
+        "STOP-1: the (512, 8) fused anchor did not produce an admitted receipt -- nothing to "
+        "compare against tp2; remaining granite cells NOT_RUN\n"
+    )
+    (path / "STOP1").touch()
+    (path / "stop_state.json").write_text(
+        json.dumps(
+            {
+                "stops": [
+                    {
+                        "rule": "STOP-1",
+                        "family": "granite",
+                        "reason": "the (512, 8) fused anchor did not produce an admitted receipt",
+                        "effect": "the family's remaining cells NOT_RUN; the cause is the finding",
+                    }
+                ]
+            }
+        )
+        + "\n"
+    )
+    _write_valid_outcome(path, void_status="void")
+    return path
+
+
+def test_a_fired_failure_criterion_cannot_be_published_as_a_pass(tmp_path: Path):
+    """e4b#495: `p41-r1-granite-10` was recorded `OK / pass / complete` while the pre-registration's
+    own failure criteria -- a VOID row and a fired STOP -- were both in the same run directory. The
+    driver's exit status is what the rental receipt derives `result` from, so a lane whose registered
+    criteria fired must not leave with the exit status of a clean run."""
+    remote = _granite_10_shape(tmp_path / "p41-r1-granite-10")
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode != 0, (
+        "a VOID row and a fired STOP are the pre-registration's own failure criteria; "
+        "exiting 0 publishes this run as `pass`\n" + out.stdout + out.stderr
+    )
+    assert out.returncode == VERDICT_RC["fail"], out.stdout + out.stderr
+    assert "VERDICT fail" in out.stdout
+    assert "VOID" in out.stdout and "STOP-1" in out.stdout
+    verdict = json.loads(
+        (tmp_path / "driver-run" / "p41" / f"P41_VERDICT.{_expected_nonce(tmp_path)}.json").read_text()
+    )
+    assert verdict["verdict"] == "fail" and verdict["admitted"] == 0 and verdict["void"] == 1
+    assert verdict["stops_fired"] == ["STOP-1"]
+    assert any("VOID" in reason for reason in verdict["reasons"])
 
 
 def test_unregistered_void_prefix_cannot_satisfy_the_outcome_gate(tmp_path: Path):
@@ -513,6 +583,172 @@ def test_unregistered_void_prefix_cannot_satisfy_the_outcome_gate(tmp_path: Path
 
     assert out.returncode == 24, out.stdout + out.stderr
     assert "invalid P41 outcome evidence" in out.stdout
+
+
+def test_a_fired_stop_without_a_void_row_is_inconclusive_not_a_pass(tmp_path: Path):
+    """STOP-2's OOM is a registered, valuable row -- and a run that stopped is still not a `pass`."""
+    remote = tmp_path / "remote-stop2"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_text("0\n")
+    (remote / "P41_SUCCESS").touch()
+    (remote / "summary.txt").write_text(
+        "ADMIT OK granite_e4b_fixture_00.json: s/step 0.64\n"
+        "STOP-4 ok: projected $3.10 vs 1.5 x estimate $2.81\n"  # the advisory line is NOT a fired stop
+        "STOP-2: OOM at (2048, r8, fused) -- this family's ascent ends at seq 2048\n"
+    )
+    (remote / "STOP2").touch()
+    (remote / "stop_state.json").write_text(json.dumps({"stops": [{"rule": "STOP-2", "family": "granite"}]}) + "\n")
+    _write_valid_outcome(remote)
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == VERDICT_RC["inconclusive"], out.stdout + out.stderr
+    assert "VERDICT inconclusive" in out.stdout and "STOP-2" in out.stdout
+    verdict = json.loads(
+        (tmp_path / "driver-run" / "p41" / f"P41_VERDICT.{_expected_nonce(tmp_path)}.json").read_text()
+    )
+    assert verdict["verdict"] == "inconclusive" and verdict["stops_fired"] == ["STOP-2"]
+
+
+def test_unreadable_stop_evidence_fails_closed_as_invalid(tmp_path: Path):
+    """A criterion that cannot be parsed is not a satisfied criterion."""
+    remote = tmp_path / "remote-bad-stopstate"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_text("0\n")
+    (remote / "P41_SUCCESS").touch()
+    (remote / "summary.txt").write_text("ADMIT OK granite_e4b_fixture_00.json: s/step 0.64\n")
+    (remote / "stop_state.json").write_text("{not json at all\n")
+    _write_valid_outcome(remote)
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == VERDICT_RC["invalid"], out.stdout + out.stderr
+    assert "invalid P41 outcome evidence" in out.stdout
+    assert "VERDICT invalid" in out.stdout and "stop_state.json unreadable" in out.stdout
+
+
+def test_a_criterion_visible_only_in_the_summary_cannot_be_passed_over(tmp_path: Path):
+    """The harm in e4b#495 is a reader seeing `pass` and never opening summary.txt. A criterion that
+    fired there and nowhere else is an unreconcilable record, not a clean run."""
+    remote = tmp_path / "remote-summary-only"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_text("0\n")
+    (remote / "P41_SUCCESS").touch()
+    (remote / "summary.txt").write_text(
+        "ADMIT OK granite_e4b_fixture_00.json: s/step 0.64\n"
+        "STOP-1: the (512, 8) fused anchor disagrees with tp2 beyond +-10 %\n"  # no STOP1 marker, no stop_state.json
+    )
+    _write_valid_outcome(remote)
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == VERDICT_RC["invalid"], out.stdout + out.stderr
+    assert "VERDICT invalid" in out.stdout and "STOP-1" in out.stdout
+
+
+def test_a_clean_run_still_passes_and_says_what_it_passed_on(tmp_path: Path):
+    remote = tmp_path / "remote-clean"
+    remote.mkdir()
+    (remote / "TP_DONE").touch()
+    (remote / "P41_EXIT_CODE").write_text("0\n")
+    (remote / "P41_SUCCESS").touch()
+    (remote / "summary.txt").write_text("ADMIT OK granite_e4b_fixture_00.json: s/step 0.64\n")
+    _write_valid_outcome(remote)
+
+    out = _fake_driver(tmp_path, remote)
+
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "VERDICT pass: 1 admitted arm(s), no VOID row, no STOP fired" in out.stdout
+    assert "[p41_drive] done" in out.stdout
+    verdict = json.loads(
+        (tmp_path / "driver-run" / "p41" / f"P41_VERDICT.{_expected_nonce(tmp_path)}.json").read_text()
+    )
+    assert verdict["verdict"] == "pass" and verdict["stops_fired"] == [] and verdict["void"] == 0
+    assert "never a process exit code" in verdict["computed_from"]
+
+
+# ---------------------------------------------------------------- p41_admit.py verdict, directly
+
+
+def _verdict_dir(tmp_path: Path, name: str, *, admitted: int, void: int, stops: tuple[str, ...] = ()) -> Path:
+    root = tmp_path / name
+    root.mkdir()
+    lines = []
+    for index in range(19):
+        if index < admitted:
+            receipt = {"admitted": True, "status": "ok"}
+            lines.append(f"ADMIT OK granite_e4b_fixture_{index:02d}.json: s/step 0.64")
+        elif index < admitted + void:
+            receipt = {"admitted": False, "status": "void", "void_class": "engagement"}
+            lines.append(f"ADMIT VOID class=engagement granite_e4b_fixture_{index:02d}.json: engagement banner missing")
+        else:
+            receipt = {"admitted": False, "status": "not_run"}
+        (root / f"granite_e4b_fixture_{index:02d}.json").write_text(json.dumps(receipt))
+    for rule in stops:
+        (root / rule.replace("-", "")).touch()
+        lines.append(f"{rule}: the lane reports this stop")
+    (root / "summary.txt").write_text("\n".join(lines) + "\n")
+    (root / "stop_state.json").write_text(json.dumps({"stops": [{"rule": r} for r in stops]}) + "\n")
+    (root / "P41_OUTCOME_COUNTS.nonce0.json").write_text(
+        json.dumps(
+            {
+                "run_nonce": "nonce0",
+                "expected": 19,
+                "actual": 19,
+                "admitted": admitted,
+                "void": void,
+                "other": 19 - admitted - void,
+                "gate_pass": True,
+            }
+        )
+        + "\n"
+    )
+    return root
+
+
+@pytest.mark.parametrize(
+    ("admitted", "void", "stops", "expect"),
+    [
+        (19, 0, (), "pass"),
+        (1, 0, (), "pass"),
+        (18, 1, (), "fail"),  # a VOID row is a registered failure condition, however much else read cleanly
+        (0, 1, ("STOP-1",), "fail"),  # p41-r1-granite-10
+        (18, 0, ("STOP-5",), "inconclusive"),  # the lane stopped: real, valuable, not a pass
+        (0, 0, (), "inconclusive"),  # nothing admitted: no reading to pass (#490's guard, graded)
+    ],
+)
+def test_verdict_is_computed_from_the_registered_criteria(
+    tmp_path: Path, admitted: int, void: int, stops: tuple[str, ...], expect: str
+):
+    root = _verdict_dir(tmp_path, f"v-{admitted}-{void}-{len(stops)}", admitted=admitted, void=void, stops=stops)
+
+    rc = p41_admit.main(["verdict", str(root), "--nonce", "nonce0", "--expected", "19"])
+
+    assert rc == p41_admit.VERDICT_EXIT[expect]
+    assert expect in p41_admit.RESULT_ENUM
+
+
+def test_verdict_refuses_a_run_whose_counts_it_cannot_reconcile(tmp_path: Path):
+    root = _verdict_dir(tmp_path, "v-lying-manifest", admitted=0, void=1, stops=())
+    manifest = json.loads((root / "P41_OUTCOME_COUNTS.nonce0.json").read_text())
+    manifest["admitted"], manifest["void"] = 1, 0  # the manifest claims the arm was admitted
+    (root / "P41_OUTCOME_COUNTS.nonce0.json").write_text(json.dumps(manifest) + "\n")
+
+    assert p41_admit.main(["verdict", str(root), "--nonce", "nonce0", "--expected", "19"]) == (
+        p41_admit.VERDICT_EXIT["invalid"]
+    )
+
+
+def test_verdict_of_a_directory_with_no_criteria_at_all_is_invalid(tmp_path: Path):
+    empty = tmp_path / "v-empty"
+    empty.mkdir()
+
+    assert p41_admit.main(["verdict", str(empty), "--nonce", "nonce0", "--expected", "19"]) == (
+        p41_admit.VERDICT_EXIT["invalid"]
+    )
 
 
 def _terminal_result(path: Path, rc: int, *, success: bool, summary: str) -> Path:
