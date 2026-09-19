@@ -70,3 +70,7 @@ probe ALONE (`P47_KL_SKIP=1`, new): the KL rows of run 1 stand and need no secon
 
 `RESULTS-p49.md`: P0 HOLDS; **P1 REFUTED — int8 reads 0.693 against NF4's 0.892, so no store e4b ships rescues layer 0 and the early layers stay bf16**; P2 REFUTED (fp8 0.774); P3 HOLDS (fp4 1.051, worse); P4 HOLDS (block 32 = 0.97× block 64); P5 NOT READ (amendment 1, redrawn probe-only). The depth arms reproduce P48 to four digits on a different box.
 
+### Amendment 2 (2026-09-19 ~11:45Z, after the probe redraw — the read, not a change to it) — both P5 readings are refuted
+
+`p49-gemma4fmt-2` produced the probe cleanly. P5 predicted a flat raw error (true: 1.21× spread across depth, inside the registered 2×) with the POST-NORM error tracking the KL; the rank correlation is −0.90, i.e. backwards, and the registered alternative (the raw error spreads and tracks the KL) reads −0.10. **Neither registered reading survives**; the rows say the sensitivity is positional — the same 8–10 % branch damage costs 0.892 nats at layer 0 and 0.0056 at layer 27, while an 8.5× SMALLER damage at layer 0 (int8) buys 22 %. That third reading is recorded in `RESULTS-p49.md` as an observation, explicitly not as a tested prediction, and no lane is registered from it without its own pre-registration.
+
