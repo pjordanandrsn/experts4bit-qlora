@@ -111,6 +111,7 @@ Exit codes: 0 ok; 3 refused; 4 C1 failed (receipt written, arm void); 5 OOM; 6 l
 """
 import argparse
 import contextlib
+import faulthandler
 import gc
 import glob
 import hashlib
@@ -133,7 +134,8 @@ import torch.nn as nn
 PREREG = "tp4/TP4-PREREG.md"   # selftest-only: real runs must pass --prereg (main() refuses otherwise; no default)
 HARNESS = ("tp4_arm.py (copy of tp3_arm.py @ e0cfb488 + T11-T16: hf arm, alpaca template, micro-batches, optim/schedule, "
            "unsloth loader fallback; + T17: --log-every / --microbatch-timing, P43; + #542: HF expert selection by "
-           "STRUCTURE, an empty/implausible selection refuses)")   # a receipt must say WHICH harness produced it
+           "STRUCTURE, an empty/implausible selection refuses; + T18 (#548): phase_seconds / prologue_s / "
+           "prologue_unattributed_s on every row and a prologue watchdog that refuses inside the phase)")   # a receipt must say WHICH harness produced it
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
 FMT = "### Instruction:\n{instruction}\n\n### Response:\n{output}"
@@ -145,6 +147,8 @@ ALPACA_PROMPT = ("Below is an instruction that describes a task, paired with an 
 UNSLOTH_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 BANNER = "Enabling LoRA on MoE parameters"
 DEV = "cuda"
+# #548: the share of an arm's own alarm the prologue may consume before the arm refuses itself (see phase_budget_for)
+PROLOGUE_BUDGET_SHARE = 0.35
 
 
 # ----------------------------------------------------------------------------- T9: device abstraction
@@ -171,6 +175,164 @@ def autocast_ctx(enabled):
 
 def is_oom(e):
     return isinstance(e, torch.cuda.OutOfMemoryError) or "out of memory" in str(e).lower()
+
+
+# ----------------------------------------------------------------------------- #548: where the time before step 1 goes
+PROC_T0 = time.perf_counter()          # after the imports: the interpreter's own import cost precedes this mark
+_FIRST_ARM = [True]                    # a real lane runs one arm per process; the selftest runs many in one
+
+
+class Phases:
+    """The named-phase clock for everything before step 1 (and the epilogue), plus a watchdog that refuses LOUDLY.
+
+    #548: a 30B-class arm spent ~33 min between `LOAD OK` and step 1 while the receipt carried exactly one number
+    about that window (`load_s`), so an arm that ALARMED and an arm that was merely slow read identically. Three
+    properties are what turn this into a receipt that answers the question rather than one that carries more numbers:
+
+      EXHAUSTIVE   `prologue_s` is measured independently of its parts and `prologue_unattributed_s` is the
+                   residual, so time spent in a phase nobody thought to name still appears as a NUMBER, never as
+                   a hole. A future prologue surprise is therefore visible before anyone knows what to call it.
+      SYNCHRONISED every boundary cuda-syncs, so device work is billed to the phase that launched it instead of to
+                   whichever later phase happens to touch the result. The prologue publishes no measurement, so a
+                   sync here changes no quantity this lane quotes (the timed window still opens on its own sync).
+      LOUD         the watchdog fires WHILE THE ARM IS STILL INSIDE the over-budget phase and writes a receipt
+                   naming it, instead of leaving `perl alarm` to SIGKILL a process that cannot write its own stub.
+
+    Phases do not nest: each `with PH(name)` block is a flat interval, and the loaders cover their own bodies.
+    """
+
+    POLL_S = 0.25
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.seconds, self.order = {}, []
+        self.current, self._cur_t0 = None, None
+        self._lock = threading.Lock()
+        self._t0, self.prologue_s, self._prologue_named_s = None, None, None
+        self.budget_s, self._on_over, self._stop = 0.0, None, None
+
+    # -- recording ------------------------------------------------------------
+    def begin(self, t0):
+        self._t0 = t0
+
+    def mark(self, name, seconds):
+        with self._lock:
+            if name not in self.seconds:
+                self.order.append(name)
+            self.seconds[name] = round(self.seconds.get(name, 0.0) + float(seconds), 3)
+
+    @contextlib.contextmanager
+    def __call__(self, name, sync=True):
+        if sync:
+            _sync_quiet()
+        t = time.perf_counter()
+        with self._lock:
+            self.current, self._cur_t0 = name, t
+        try:
+            yield
+        finally:
+            if sync:
+                _sync_quiet()
+            dt = time.perf_counter() - t
+            with self._lock:
+                self.current, self._cur_t0 = None, None
+            self.mark(name, dt)
+
+    def started(self):
+        """True once an arm has opened its window: an empty table then MEANS empty, rather than absent."""
+        return self._t0 is not None
+
+    def end_prologue(self):
+        """Close the window at the instant the timed training loop opens; the residual is computed here, once."""
+        self.stop_watchdog()
+        if self._t0 is None:
+            return
+        self.prologue_s = round(time.perf_counter() - self._t0, 3)
+        with self._lock:
+            self._prologue_named_s = round(sum(self.seconds.values()), 3)
+
+    def report(self):
+        """The receipt block. `prologue_unattributed_s` is the residual and is the field that keeps this honest."""
+        with self._lock:
+            ph = {k: self.seconds[k] for k in self.order}
+        out = {"phase_seconds": ph, "phase_budget_s": (round(self.budget_s, 1) if self.budget_s else None)}
+        if self.prologue_s is not None:
+            out["prologue_s"] = self.prologue_s
+            out["prologue_unattributed_s"] = round(self.prologue_s - (self._prologue_named_s or 0.0), 3)
+        return out
+
+    def snapshot(self):
+        """Safe to call from the watchdog thread: what has been recorded so far, plus the phase in flight."""
+        with self._lock:
+            ph = {k: self.seconds[k] for k in self.order}
+            cur, cur_t0 = self.current, self._cur_t0
+        if cur is not None and cur_t0 is not None:
+            ph[cur + " (in flight)"] = round(time.perf_counter() - cur_t0, 3)
+        return ph, cur, cur_t0
+
+    # -- the loud half --------------------------------------------------------
+    def start_watchdog(self, budget_s, on_over_budget):
+        """Refuse while still inside the over-budget phase. Budget <= 0 (or no action) records only, never fires."""
+        self.budget_s = float(budget_s or 0.0)
+        self._on_over = on_over_budget
+        if self.budget_s <= 0 or on_over_budget is None or self._t0 is None:
+            return None
+        self._stop = threading.Event()
+        stop, t0, budget = self._stop, self._t0, self.budget_s
+        poll = max(0.01, min(self.POLL_S, budget / 4.0))     # a budget the poll cannot resolve is a budget that does not fire
+
+        def _loop():
+            while not stop.wait(poll):
+                since = time.perf_counter() - t0
+                if since <= budget:
+                    continue
+                stop.set()
+                ph, cur, cur_t0 = self.snapshot()
+                on_over_budget(cur or "(between phases)",
+                               round(time.perf_counter() - cur_t0, 1) if cur_t0 else None,
+                               round(since, 1), ph)
+                return
+        th = threading.Thread(target=_loop, name="tp4-phase-watchdog", daemon=True)
+        th.start()
+        return th
+
+    def stop_watchdog(self):
+        if self._stop is not None:
+            self._stop.set()
+
+
+def _sync_quiet():
+    """A phase boundary must never be the thing that raises; a failed sync is the next phase's problem."""
+    try:
+        cuda_sync()
+    except Exception:
+        pass
+
+
+PH = Phases()
+
+
+def phase_budget_for(a):
+    """The prologue's share of the arm's own alarm. `--phase-budget-s` wins, then TP4_PHASE_BUDGET_S, then a share
+    of TP4_ARM_ALARM_S (what `tp4_run.sh` passed to `perl -e alarm`), then nothing.
+
+    Why a SHARE and not a literal: the budget has to mean "this arm can no longer finish", which is a fact about the
+    rental window the run script chose, not about seconds. At tp4's 3600 s arm alarm the default is 1260 s -- #548's
+    observed ~1970 s prologue would have been refused with a receipt naming its phase, ~11 min before SIGALRM killed
+    the process silently. It is recorded in every receipt (`phase_budget_s`) so a row says what it was judged against.
+    """
+    if getattr(a, "phase_budget_s", None) is not None:
+        return float(a.phase_budget_s)          # explicit wins, INCLUDING an explicit 0 = off
+    for var, scale in (("TP4_PHASE_BUDGET_S", 1.0), ("TP4_ARM_ALARM_S", PROLOGUE_BUDGET_SHARE)):
+        v = os.environ.get(var)
+        if v:
+            try:
+                return max(60.0, float(v) * scale) if scale != 1.0 else float(v)
+            except ValueError:
+                pass
+    return 0.0
 
 
 # ----------------------------------------------------------------------------- n17 / tp1 / p38 code (unchanged)
@@ -412,10 +574,46 @@ def trainable_sha(tr):
     return h.hexdigest()
 
 
+def _phase_alarm_action(a, ctx):
+    """#548 (3): refuse LOUDLY, from inside the phase, rather than recording the overrun afterwards.
+
+    The failure this replaces is a real row from lane tp4: `status: alarm`, reason *"the process could not write its
+    own stub"* -- SIGALRM from `perl -e alarm` killed an arm 3570 s into a prologue and the receipt could not name a
+    single phase. Here the arm refuses itself while still inside the offending phase, so the row carries the phase,
+    its elapsed seconds, every phase already closed, and a traceback of every thread. It exits 16 (a status of its
+    own) rather than 142, so a run script can tell "the prologue blew its budget" from "the whole arm ran out".
+    """
+    def _fire(phase, in_phase_s, since_start_s, ph):
+        budget = round(PH.budget_s, 1)
+        msg = (f"prologue phase '{phase}' has run {in_phase_s}s and the prologue is {since_start_s}s in, past its "
+               f"{budget}s budget; refusing now so this row can name the phase (#548)")
+        print("PHASE ALARM " + msg, flush=True)
+        sys.stdout.flush()
+        try:
+            faulthandler.dump_traceback()           # every thread's stack: a stuck phase leaves evidence, not just a number
+        except Exception:
+            pass
+        sys.stderr.flush()
+        try:
+            stub(a, "phase_alarm", msg, dict(ctx, phase=phase, phase_seconds=ph, phase_in_flight=phase,
+                                             phase_elapsed_s=in_phase_s, prologue_s=since_start_s, phase_budget_s=budget))
+        except Exception as e:                      # a receipt we could not write must still be visible on stdout
+            print(f"PHASE ALARM could not write its stub: {type(e).__name__}: {e}", flush=True)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(16)
+    return _fire
+
+
 def stub(a, status, reason, extra=None, code=None, fw=None, tag=None, arm=None):
     rec = {"framework": fw or a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "arm": arm or a.arm,
            "tag": tag or a.tag, "status": status, "reason": str(reason)[:800], "steps": a.steps, "seq": a.seq,
            "accum": a.accum, "micro_batch": int(getattr(a, "micro_batch", 1) or 1), "offload": bool(a.offload), "prereg": a.prereg, "harness": HARNESS}
+    ph, cur, _ = PH.snapshot()                      # #548: a REFUSED / OOM / alarmed row says where its time went too --
+    if PH.started():                                # that is the row the issue was raised about, and it had no numbers at all.
+        # Emitted even when EMPTY, so "this arm died before anything was timed" is distinguishable from
+        # "this receipt predates the field" -- the same reason prologue_unattributed_s is always present.
+        rec["phase_seconds"], rec["phase_in_flight"], rec["phase_budget_s"] = ph, cur, (round(PH.budget_s, 1) if PH.budget_s else None)
     if extra:
         rec.update(extra)
     write_json(receipt_path(a, fw, tag), rec)
@@ -655,6 +853,8 @@ def attn4_census_check(a, model, x, detect_fn, quantize_fn):
 
 
 def load_e4b(a):
+    """#548: the loader's own phases. `load_s` (the whole call) is unchanged and stays in the receipt; these split
+    it, because on a 30B MoE the four steps after the weights land are not a rounding error on the weights."""
     from experts4bit_qlora import (disable_batched_train, disable_fast_train, enable_batched_train, enable_fast_train,
                                    load_moe_4bit_streaming, verify_moe_4bit)
     import experts4bit_qlora
@@ -663,46 +863,52 @@ def load_e4b(a):
     from transformers import AutoTokenizer
     x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [], "probes": {}, "attn4_probe": None,
          "structural_expected_n_attn4": None, "detector_version": detector_version(_lora_mod, experts4bit_qlora.__version__)}
-    model, cfg = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, a.r, a.alpha,
-                                         offload=bool(a.offload), pin=True, prefetch=False, quant_type="nf4")
-    if not a.offload:
-        model.to("cuda")
+    with PH("load_weights"):
+        model, cfg = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, a.r, a.alpha,
+                                             offload=bool(a.offload), pin=True, prefetch=False, quant_type="nf4")
+        if not a.offload:
+            model.to("cuda")
     x["n_layers"], x["model_type"] = n_layers_of(cfg)
-    try:
-        rep = verify_moe_4bit(model, strict=True)
-    except RuntimeError as e:
-        stub(a, "verify_failed", str(e), {"phase": "verify"}, code=7)
+    with PH("verify"):
+        try:
+            rep = verify_moe_4bit(model, strict=True)
+        except RuntimeError as e:
+            stub(a, "verify_failed", str(e), {"phase": "verify"}, code=7)
     x["verify"] = {"n_quantized": rep.get("n_quantized"), "n_unquantized": rep.get("n_unquantized")}
-    x["attn4_probe"] = attn4_bias_probe(model)
-    if a.attn_4bit:
-        attn4_census_check(a, model, x, detect_attention_projections, quantize_attention_projections_4bit)   # T10
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-    model.config.use_cache = False
-    add_attention_lora(model, a.r, a.alpha, torch.float32)
-    if a.arm == "attn_only":
-        for n, p in model.named_parameters():
-            if "lora" in n and "experts" in n:
-                p.requires_grad_(False)
-        nf, why_f = capture_verbose(enable_fast_train, model, verbose=True, dgrad=True)
-        disable_fast_train(model)
-        nb, why_b = capture_verbose(enable_batched_train, model, verbose=True)
-        disable_batched_train(model)
-        x["probes"] = {"fused": {"n_patched": nf, "reason": why_f}, "batched": {"n_patched": nb, "reason": why_b}}
-        common = {"model_type": x["model_type"], "n_layers": x["n_layers"], "probed_by": "attn_only", "n_patched": 0}
-        if nf == 0:
-            refresh_stub(a, "fused_attn4", "fused", "refused", f"enable_fast_train(dgrad=True) patched 0 modules on this box: {why_f}", dict(common, probe_n_patched=nf))
-        if x["attn4_probe"]["would_refuse"]:
-            refresh_stub(a, "reference_attn4", "reference", "refused",
-                         f"TRAIN_ATTN_4BIT would refuse: {x['attn4_probe']['n_biased']} of {x['attn4_probe']['n_projections']} attention projections carry a bias "
-                         f"(quantize_attention_projections_4bit raises SystemExit on a bias; e.g. {x['attn4_probe']['sample']})", dict(common, attn4_probe=x["attn4_probe"]))
-    elif a.arm == "fused":
-        x["n_patched"], x["reason"] = capture_verbose(enable_fast_train, model, verbose=True, dgrad=True)
-        if x["n_patched"] == 0:
-            stub(a, "refused", f"enable_fast_train(dgrad=True) patched 0 modules: {x['reason']}", {"phase": "enable", "n_layers": x["n_layers"], "model_type": x["model_type"]}, code=3)
-    else:
-        disable_fast_train(model)
-        disable_batched_train(model)
-    x["tokenizer_obj"] = AutoTokenizer.from_pretrained(a.model, revision=a.revision)
+    with PH("attn4"):
+        x["attn4_probe"] = attn4_bias_probe(model)
+        if a.attn_4bit:
+            attn4_census_check(a, model, x, detect_attention_projections, quantize_attention_projections_4bit)   # T10
+    with PH("lora"):
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        model.config.use_cache = False
+        add_attention_lora(model, a.r, a.alpha, torch.float32)
+    with PH("enable"):
+        if a.arm == "attn_only":
+            for n, p in model.named_parameters():
+                if "lora" in n and "experts" in n:
+                    p.requires_grad_(False)
+            nf, why_f = capture_verbose(enable_fast_train, model, verbose=True, dgrad=True)
+            disable_fast_train(model)
+            nb, why_b = capture_verbose(enable_batched_train, model, verbose=True)
+            disable_batched_train(model)
+            x["probes"] = {"fused": {"n_patched": nf, "reason": why_f}, "batched": {"n_patched": nb, "reason": why_b}}
+            common = {"model_type": x["model_type"], "n_layers": x["n_layers"], "probed_by": "attn_only", "n_patched": 0}
+            if nf == 0:
+                refresh_stub(a, "fused_attn4", "fused", "refused", f"enable_fast_train(dgrad=True) patched 0 modules on this box: {why_f}", dict(common, probe_n_patched=nf))
+            if x["attn4_probe"]["would_refuse"]:
+                refresh_stub(a, "reference_attn4", "reference", "refused",
+                             f"TRAIN_ATTN_4BIT would refuse: {x['attn4_probe']['n_biased']} of {x['attn4_probe']['n_projections']} attention projections carry a bias "
+                             f"(quantize_attention_projections_4bit raises SystemExit on a bias; e.g. {x['attn4_probe']['sample']})", dict(common, attn4_probe=x["attn4_probe"]))
+        elif a.arm == "fused":
+            x["n_patched"], x["reason"] = capture_verbose(enable_fast_train, model, verbose=True, dgrad=True)
+            if x["n_patched"] == 0:
+                stub(a, "refused", f"enable_fast_train(dgrad=True) patched 0 modules: {x['reason']}", {"phase": "enable", "n_layers": x["n_layers"], "model_type": x["model_type"]}, code=3)
+        else:
+            disable_fast_train(model)
+            disable_batched_train(model)
+    with PH("tokenizer"):
+        x["tokenizer_obj"] = AutoTokenizer.from_pretrained(a.model, revision=a.revision)
     x["ckpt_mode"] = "hf:use_reentrant=False"
     x["hashes"] = hashes_e4b
     x["fwd_kwargs"] = lambda t: {}
@@ -730,8 +936,9 @@ def load_unsloth(a):
     x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [], "probes": {}, "attn4_probe": None,
          "structural_expected_n_attn4": None, "detector_version": None,   # T10: e4b-only fields, null here
          "loader_used": a.unsloth_loader, "loader_fallback_reason": None, "unsloth_targets": unsloth_targets_of(a)}
-    _cand = snapshot_dir_for(a.model, a.revision)                                        # amendment 3: the pinned snapshot dir, same bytes
-    local = _cand if os.path.isdir(_cand) else snapshot_download(a.model, revision=a.revision)
+    with PH("snapshot"):                                                                 # #548
+        _cand = snapshot_dir_for(a.model, a.revision)                                    # amendment 3: the pinned snapshot dir, same bytes
+        local = _cand if os.path.isdir(_cand) else snapshot_download(a.model, revision=a.revision)
     x["snapshot_dir"] = local
 
     def _load(ldr):
@@ -742,15 +949,16 @@ def load_unsloth(a):
                 model, r=a.r, lora_alpha=a.alpha, lora_dropout=0.0, bias="none", target_modules=list(x["unsloth_targets"]),
                 use_gradient_checkpointing=("unsloth" if a.grad_ckpt == "unsloth" else True), random_state=a.seed)
         return model, tokenizer_obj, buf.getvalue()
-    try:
-        model, tokenizer_obj, out = _load(loader)
-    except Exception as e:                                          # T15: one recorded retry with FastModel when the message asks for it
-        if a.unsloth_loader == "FastLanguageModel" and FASTMODEL_HINT_RE.search(str(e)) and hasattr(unsloth, "FastModel"):
-            x["loader_used"], x["loader_fallback_reason"] = "FastModel (fallback)", f"{type(e).__name__}: {str(e)[:300]}"
-            print(f"LOADER FALLBACK FastLanguageModel -> FastModel: {x['loader_fallback_reason']}", flush=True)
-            model, tokenizer_obj, out = _load(unsloth.FastModel)
-        else:
-            raise
+    with PH("load_weights"):                                                             # #548: from_pretrained + get_peft_model
+        try:
+            model, tokenizer_obj, out = _load(loader)
+        except Exception as e:                                      # T15: one recorded retry with FastModel when the message asks for it
+            if a.unsloth_loader == "FastLanguageModel" and FASTMODEL_HINT_RE.search(str(e)) and hasattr(unsloth, "FastModel"):
+                x["loader_used"], x["loader_fallback_reason"] = "FastModel (fallback)", f"{type(e).__name__}: {str(e)[:300]}"
+                print(f"LOADER FALLBACK FastLanguageModel -> FastModel: {x['loader_fallback_reason']}", flush=True)
+                model, tokenizer_obj, out = _load(unsloth.FastModel)
+            else:
+                raise
     x["banner_lines"] = [l for l in out.splitlines() if re.search(r"MoE|Params4bit|4.?bit|LoRA on", l)][:12]
     print("\n".join(out.splitlines()[-40:]), flush=True)
     if not any(BANNER in l for l in x["banner_lines"]):
@@ -891,30 +1099,35 @@ def load_hf(a):
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [], "probes": {}, "attn4_probe": None,
          "structural_expected_n_attn4": None, "detector_version": None, "loader_used": "AutoModelForCausalLM"}
-    _cand = snapshot_dir_for(a.model, a.revision)
-    local = _cand if os.path.isdir(_cand) else snapshot_download(a.model, revision=a.revision)
+    with PH("snapshot"):                                                                 # #548
+        _cand = snapshot_dir_for(a.model, a.revision)
+        local = _cand if os.path.isdir(_cand) else snapshot_download(a.model, revision=a.revision)
     x["snapshot_dir"] = local
     bnb_cfg = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16,
                                  bnb_4bit_use_double_quant=False)
-    model = AutoModelForCausalLM.from_pretrained(local, quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0})
+    with PH("load_weights"):                                                             # #548
+        model = AutoModelForCausalLM.from_pretrained(local, quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0})
     x["n_layers"], x["model_type"] = n_layers_of(model.config)
-    x["attn4_probe"] = attn4_bias_probe(model)
-    mods, params, expert_diag = hf_targets(model, x["n_layers"], x["model_type"])   # #542: params is never empty -- it refuses
-    if not mods:
-        raise NotImplementedError("HF arm: no attention projection found by structure (q_proj/k_proj/o_proj); refusing rather than guessing")
-    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-    model.enable_input_require_grads()
-    cfg = LoraConfig(r=a.r, lora_alpha=a.alpha, lora_dropout=0.0, bias="none", target_modules=mods,
-                     target_parameters=params, task_type="CAUSAL_LM")
-    model = get_peft_model(model, cfg)
-    model.config.use_cache = False
+    with PH("attn4"):                                                                    # #548: the probe only (the HF arm converts nothing)
+        x["attn4_probe"] = attn4_bias_probe(model)
+    with PH("lora"):                                                                     # #548
+        mods, params, expert_diag = hf_targets(model, x["n_layers"], x["model_type"])   # #542: params is never empty -- it refuses
+        if not mods:
+            raise NotImplementedError("HF arm: no attention projection found by structure (q_proj/k_proj/o_proj); refusing rather than guessing")
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        model.enable_input_require_grads()
+        cfg = LoraConfig(r=a.r, lora_alpha=a.alpha, lora_dropout=0.0, bias="none", target_modules=mods,
+                         target_parameters=params, task_type="CAUSAL_LM")
+        model = get_peft_model(model, cfg)
+        model.config.use_cache = False
     x["hf_targets"] = {"peft": peft.__version__, "n_target_modules": len(mods), "target_modules_sample": mods[:4],
                        "n_target_parameters": len(params), "target_parameters": params[:8] + (["..."] if len(params) > 8 else []),
                        "expert_selection": expert_diag,      # #542: the structural rule + what the old substring would have taken
                        "bnb": {"load_in_4bit": True, "quant_type": "nf4", "compute_dtype": "bfloat16", "double_quant": False}}
     x["banner_lines"] = [f"PEFT {peft.__version__}: target_modules={len(mods)} target_parameters={len(params)}"]
     x["verify"] = {"n_quantized": None, "n_unquantized": None}
-    x["tokenizer_obj"] = AutoTokenizer.from_pretrained(local)
+    with PH("tokenizer"):                                                                # #548
+        x["tokenizer_obj"] = AutoTokenizer.from_pretrained(local)
     x["ckpt_mode"] = "hf:use_reentrant=False"
     x["hashes"] = hashes_unsloth                                           # the same frozen-bytes hasher: Params4bit + uint8 stacks
     x["fwd_kwargs"] = lambda t: {"attention_mask": torch.ones_like(t)}
@@ -1013,6 +1226,10 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
 
 def run_arm(a, load_fn, sampler=True):
     import importlib.metadata as md
+    # #548: the window opens HERE, not at LOAD OK -- so the receipt accounts for the whole process, not a chosen slice.
+    PH.reset()
+    PH.begin(PROC_T0 if _FIRST_ARM[0] else time.perf_counter())
+    _FIRST_ARM[0] = False
     os.makedirs(a.out, exist_ok=True)
     os.makedirs(a.adapter_dir, exist_ok=True)
     tk = json.load(open(a.tokens))
@@ -1039,6 +1256,9 @@ def run_arm(a, load_fn, sampler=True):
     idle_w = idle_power() if sampler else 0.0
     torch.manual_seed(a.seed)
     t_load = time.perf_counter()
+    PH.mark("preamble", t_load - PH._t0)            # #548: argv, the tokens file, the version census, the idle-power probe
+    alarm_ctx = {}                                  # what the watchdog can name about the model, filled in as it is learned
+    PH.start_watchdog(phase_budget_for(a), _phase_alarm_action(a, alarm_ctx))
     try:
         model, x = load_fn(a)
     except SystemExit as e:                      # a stub already written (int code) propagates; a framework's SystemExit(message) is a refusal row
@@ -1052,7 +1272,10 @@ def run_arm(a, load_fn, sampler=True):
     n_attn4, n_patched, reason, banner_lines = x["n_attn4"], x["n_patched"], x["reason"], x["banner_lines"]
     hashes, fwd_kwargs, tokenizer_obj = x["hashes"], x["fwd_kwargs"], x.get("tokenizer_obj")
 
+    alarm_ctx.update({"n_layers": x.get("n_layers"), "model_type": x.get("model_type"), "load_s": round(load_s, 1)})
     # U5: adapters fp32 (Unsloth: cast if needed, recorded), the censuses, U3/T6: the trainable count
+    _census_phase = PH("census")                    # #548: the two censuses + the tokenizer agreement re-derivation
+    _census_phase.__enter__()
     tr, n_trainable, dtypes_before, non_adapter, groups = trainable_census(model)
     cast = 0
     if a.framework != "e4b":                      # U5 (tp2: Unsloth), T11 (hf): adapters fp32 in every arm, the cast recorded
@@ -1078,6 +1301,7 @@ def run_arm(a, load_fn, sampler=True):
                 tokenizer_agree = encode_rows(tokenizer_obj, rows[:8], a.seq, template, eos) == train[:8]
         except Exception as e:
             tokenizer_agree = f"unchecked: {e}"
+    _census_phase.__exit__(None, None, None)
     trainable_mismatch = None
     if a.expect_trainable and n_trainable != a.expect_trainable:
         trainable_mismatch = {"expected": a.expect_trainable, "got": n_trainable, "by_group": groups}
@@ -1093,23 +1317,29 @@ def run_arm(a, load_fn, sampler=True):
     if non_adapter:
         stub(a, "void_trainable", f"non-adapter trainables {non_adapter[:4]}",
              {"trainable_params": n_trainable, "non_adapter_trainable": non_adapter[:8], "census": census, "n_layers": x.get("n_layers"), "model_type": x.get("model_type")}, code=15)
-    init_sha = trainable_sha(tr)
+    with PH("trainable_sha"):                       # #548: every trainable parameter cast to CPU fp32 purely to be hashed
+        init_sha = trainable_sha(tr)
 
-    counter = Counters()
-    if a.framework == "e4b":
-        counter.install_e4b()
-    elif a.framework == "hf":
-        counter.install_hf(model)
-    else:
-        counter.install_unsloth(model)
+    with PH("counters"):
+        counter = Counters()
+        if a.framework == "e4b":
+            counter.install_e4b()
+        elif a.framework == "hf":
+            counter.install_hf(model)
+        else:
+            counter.install_unsloth(model)
 
-    h_before, bytes_before, empties_before = hashes(model)
-    assert bytes_before > 0, "C1 hashed ZERO bytes -- gate is vacuous"
-    assert empties_before == 0, f"C1 saw {empties_before} empty frozen tensors"
-    assert control_flip_fires(h_before), "C1 positive control did not fire -- the check cannot fail"
+    with PH("c1_before"):                           # #548: the frozen expert bytes, copied to CPU and sha256'd (C1_bytes_hashed says how many)
+        h_before, bytes_before, empties_before = hashes(model)
+        assert bytes_before > 0, "C1 hashed ZERO bytes -- gate is vacuous"
+        assert empties_before == 0, f"C1 saw {empties_before} empty frozen tensors"
+        assert control_flip_fires(h_before), "C1 positive control did not fire -- the check cannot fail"
 
-    ev0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
+    with PH("eval0"):                               # #548: also the first forward -- any JIT / autotune on the forward path lands here
+        ev0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
     curve = [{"step": 0, "heldout_loss": round(ev0, 5), "train_wall_s": 0.0}]
+    _opt_phase = PH("optimizer")                    # #548
+    _opt_phase.__enter__()
     params = [p for _, p in tr]
     optim_name, wd = getattr(a, "optim", "adamw_torch"), float(getattr(a, "weight_decay", 0.01))
     if optim_name == "adamw_8bit":                     # T14: the notebooks' optimizer, the same call in every arm
@@ -1133,6 +1363,7 @@ def run_arm(a, load_fn, sampler=True):
     model.train()
     gc.collect()
     reset_peak()
+    _opt_phase.__exit__(None, None, None)
 
     losses, step_ms, tokens_per_step, tokens_padded_per_step, lr_per_step, kcalls = [], [], [], [], [], []
     profile_summary = None                                              # P45
@@ -1144,6 +1375,8 @@ def run_arm(a, load_fn, sampler=True):
     try:
         with PowerSampler(enabled=sampler) as ps:
             cuda_sync()
+            PH.end_prologue()                       # #548: the window closes exactly where the timed window opens
+            print("PROLOGUE " + json.dumps(PH.report()), flush=True)
             t0 = time.perf_counter()
             prof, prof_wall = None, 0.0                                       # P45: profiled steps are inside the window and marked in the receipt
             for i in range(a.steps):
@@ -1218,10 +1451,12 @@ def run_arm(a, load_fn, sampler=True):
     peak = peak_gb()
 
     if curve[-1]["step"] != steps_done:
-        e = eval_loss(model, ev, fwd_kwargs, a.autocast)
+        with PH("eval_final"):                      # #548
+            e = eval_loss(model, ev, fwd_kwargs, a.autocast)
         curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2)})
     ev1 = curve[-1]["heldout_loss"]
-    h_after, bytes_after, empties_after = hashes(model)
+    with PH("c1_after"):                            # #548: the SECOND full pass over the frozen expert bytes
+        h_after, bytes_after, empties_after = hashes(model)
     changed = [k for k in h_before if h_before[k] != h_after.get(k)]
     c1_ok = (not changed) and bytes_after == bytes_before and empties_after == 0
 
@@ -1230,6 +1465,8 @@ def run_arm(a, load_fn, sampler=True):
     # U7: the adapter
     adapter = {}
     atag = f"{a.fam}_{a.tag}"
+    _adapter_phase = PH("adapter_save")              # #548
+    _adapter_phase.__enter__()
     try:
         if a.framework == "e4b":
             if a.selftest:
@@ -1262,6 +1499,7 @@ def run_arm(a, load_fn, sampler=True):
                 adapter["read_error"] = str(e)[:200]
     except Exception as e:
         adapter = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
+    _adapter_phase.__exit__(None, None, None)
 
     mean_w = statistics.mean(ps.samples) if ps.samples else None
     net_w = (mean_w - idle_w) if mean_w else None
@@ -1282,6 +1520,7 @@ def run_arm(a, load_fn, sampler=True):
         "tokens": {"path": os.path.basename(a.tokens), "sha256": tk["sha256"], "n_train": len(train), "eval_rows_used": len(ev), "tokenizer_agree": tokenizer_agree,
                    "pad_id": pad_id},
         "prereg": a.prereg, "harness": HARNESS, "env": env, "load_s": round(load_s, 1),
+        **PH.report(),                              # #548: phase_seconds, prologue_s, prologue_unattributed_s, phase_budget_s
         "verify": x.get("verify"), "census": census, "engagement_banners": banner_lines, "unsloth_bnb4bit_modules": bnb4,
         "trainable_params": n_trainable, "trainable_tensors": len(tr), "trainable_by_group": groups,
         "expect_trainable": a.expect_trainable, "trainable_mismatch": trainable_mismatch,
@@ -1448,15 +1687,17 @@ def _install_fake_modules():
 
 
 def _selftest_load_e4b(a):
-    m = _TinyLM("e4b")
+    with PH("load_weights"):                        # #548: the loaders' own phase names, exercised on CPU
+        m = _TinyLM("e4b")
     x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [], "probes": {}, "n_layers": 2, "model_type": "tiny_e4b",
          "verify": {"n_quantized": 2, "n_unquantized": 0}, "ckpt_mode": "hf:use_reentrant=False", "hashes": hashes_e4b,
          "fwd_kwargs": lambda t: {}, "tokenizer_obj": _FakeTok(), "snapshot_dir": None, "attn4_probe": attn4_bias_probe(m),
          "structural_expected_n_attn4": None, "detector_version": None}
-    if a.attn_4bit:
-        x["n_attn4"] = 4 * 2
-        x["structural_expected_n_attn4"] = 4 * 2     # T10: simulated census here; the REAL detector is dry-run tested below
-        x["detector_version"] = "selftest"
+    with PH("attn4"):
+        if a.attn_4bit:
+            x["n_attn4"] = 4 * 2
+            x["structural_expected_n_attn4"] = 4 * 2     # T10: simulated census here; the REAL detector is dry-run tested below
+            x["detector_version"] = "selftest"
     if a.arm == "fused":
         for l in m.model.layers:
             l.mlp.experts.patched = True
@@ -1472,7 +1713,8 @@ def _selftest_load_e4b(a):
 
 def _selftest_load_hf(a):
     """T11: the HF arm's bookkeeping on the same tiny bnb-shaped model (Params4bit stacks, wrapped experts module)."""
-    m = _TinyLM("unsloth", wrap=True)
+    with PH("load_weights"):
+        m = _TinyLM("unsloth", wrap=True)
     x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": ["PEFT selftest: target_modules=8 target_parameters=4"],
          "probes": {}, "n_layers": 2, "model_type": "tiny_hf", "verify": {"n_quantized": None, "n_unquantized": None},
          "ckpt_mode": "hf:use_reentrant=False", "hashes": hashes_unsloth, "fwd_kwargs": lambda t: {"attention_mask": torch.ones_like(t)},
@@ -1484,7 +1726,8 @@ def _selftest_load_hf(a):
 def _selftest_load_unsloth(a):
     if a.model == "selftest/refuse":
         raise NotImplementedError("selftest: loader refuses this family")
-    m = _TinyLM("unsloth", wrap=True)
+    with PH("load_weights"):
+        m = _TinyLM("unsloth", wrap=True)
     x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [f"Unsloth: Detected MoE model. {BANNER}: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']"],
          "probes": {}, "n_layers": 2, "model_type": "tiny_unsloth", "verify": {"n_quantized": None, "n_unquantized": None},
          "ckpt_mode": "unsloth" if a.grad_ckpt == "unsloth" else "hf:True (via get_peft_model)", "hashes": hashes_unsloth,
@@ -1868,6 +2111,10 @@ def main():
     ap.add_argument("--expect-trainable", type=int, default=None, help="T6: the family's e4b trainable count; a mismatch is recorded")
     ap.add_argument("--prereg", default=None, help="REQUIRED for a real run: the governing pre-registration path written into every receipt and stub (P41: p41/P41-PREREG.md). No default — a receipt must never cite a pre-registration the run did not pass")
     ap.add_argument("--no-sampler", type=int, default=0)
+    ap.add_argument("--phase-budget-s", type=float, default=None,
+                    help="#548: refuse the arm (status phase_alarm, exit 16) while still inside a prologue phase once the whole "
+                         f"prologue passes this many seconds. Default: TP4_PHASE_BUDGET_S, else {PROLOGUE_BUDGET_SHARE:g} x TP4_ARM_ALARM_S "
+                         "(what tp4_run.sh gave perl's alarm), else off. phase_seconds is recorded either way")
     ap.add_argument("--out", default="/root/tp4")
     ap.add_argument("--adapter-dir", default="/root/tp4/adapters")
     a = ap.parse_args()

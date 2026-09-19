@@ -245,14 +245,18 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   local A; A=$(alarm_for $AL)
   say "arm $FAM/$FW/$TAG (arm=$ARM recipe=$RECIPE steps=$s seq=$q mb=$m accum=$ac r=$r lr=$lr optim=$op sched=$sc offload=$OFF alarm=$A expect_trainable=${EXP:-none} $*)"
   local sp; sp=$(vram_start ${FAM}_${FW}_$TAG)
-  HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 TP4_BOX_CLASS="RTX $GPU_CLASS" perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
+  # e4b#548: the arm is told the alarm it is running under, so it can refuse ITSELF while still inside an over-budget
+  # prologue phase (status phase_alarm, exit 16) instead of leaving SIGALRM to kill a process that cannot write a stub.
+  HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 TP4_BOX_CLASS="RTX $GPU_CLASS" TP4_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \
       --prereg $PREREG --out $W --adapter-dir $W/adapters "$@" > logs/run_${FAM}_${FW}_$TAG.log 2>&1
   local rc=$?; vram_stop $sp
   if [ $rc -eq 142 ] && [ ! -s $W/${FAM}_${FW}_$TAG.json ]; then stubw $FAM $FW $TAG $ARM alarm "arm alarm $A s (SIGALRM; the process could not write its own stub)"; fi
-  grep -aE "^CELL |^LOAD OK|^ENGAGE|^STUB|^LOADER FALLBACK|Enabling LoRA on MoE|MoE bnb4bit|Error|error:" logs/run_${FAM}_${FW}_$TAG.log | tail -3 | cut -c1-300 | sed "s/^/    /"
+  grep -aE "^CELL |^LOAD OK|^PROLOGUE |^PHASE ALARM|^ENGAGE|^STUB|^LOADER FALLBACK|Enabling LoRA on MoE|MoE bnb4bit|Error|error:" logs/run_${FAM}_${FW}_$TAG.log | tail -3 | cut -c1-300 | sed "s/^/    /"
+  # e4b#548: the phase table goes into summary.txt beside the CELL line, so the box's own summary answers "where did the prologue go"
+  grep -aE "^PROLOGUE |^PHASE ALARM" logs/run_${FAM}_${FW}_$TAG.log | tail -1 | cut -c1-600 | sed "s|^|$FAM/$FW/$TAG |" >> summary.txt
   { echo -n "$FAM/$FW/$TAG rc=$rc "; grep -aE "^CELL " logs/run_${FAM}_${FW}_$TAG.log | tail -1 | cut -c1-400; echo; } >> summary.txt
   $PY -c "import torch; torch.cuda.empty_cache()" 2>/dev/null; nvidia-smi --query-gpu=memory.used --format=csv,noheader
   rm -rf $W/adapters/* 2>/dev/null; }

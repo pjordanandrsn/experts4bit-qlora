@@ -52,6 +52,9 @@ EXPECTED["qwen3"] = EXPECTED["qwen3"] + [("e4b", ANCHOR["e4b"]), ("unsloth", ANC
 VOCAB = ("OK", "REFUSED", "OOM", "INSTALL_FAILED", "LOAD_FAULT", "HARNESS_ERROR", "ALARM", "NOT_RUN")
 STATUS_MAP = {"ok": "OK", "c1_failed": "OK", "refused": "REFUSED", "oom": "OOM", "install_failed": "INSTALL_FAILED",
               "load_fault": "LOAD_FAULT", "verify_failed": "LOAD_FAULT", "alarm": "ALARM", "not_run": "NOT_RUN",
+              # e4b#548: an arm that refused itself inside an over-budget prologue phase is the SAME registered word as
+              # the SIGALRM it replaces -- ALARM. What changed is that the row can now name the phase; no verdict moves.
+              "phase_alarm": "ALARM",
               "tokens_mismatch": "HARNESS_ERROR", "void_trainable": "HARNESS_ERROR", "void_attn4": "HARNESS_ERROR",
               "harness_error": "HARNESS_ERROR", "unreadable": "HARNESS_ERROR"}
 
@@ -118,6 +121,28 @@ def status_of(r, rcs):
     if r.get("loader_fallback_reason"):
         reason = (reason + " | " if reason else "") + f"loader fallback: {r.get('loader_used')}"
     return st, reason[:260]
+
+
+def prologue_lines(rows, top=4):
+    """e4b#548: what the arm spent before step 1, from the receipt's own `phase_seconds`.
+
+    One bullet per arm that recorded it. The residual is printed ALWAYS, even when it is zero -- a prologue whose
+    parts do not add up to its whole is exactly the condition #548 was raised about, and it has to be readable
+    without opening the JSON. Rows from before this field existed print nothing rather than a guessed zero.
+    """
+    out = []
+    for x in rows:
+        r = x["r"] or {}
+        ph, tot = r.get("phase_seconds"), r.get("prologue_s")
+        if not ph or tot is None:
+            continue
+        big = sorted(ph.items(), key=lambda kv: -kv[1])[:top]
+        share = f"{100 * tot / (tot + (r.get('window_wall_s') or 0)):.0f}% of the arm" if r.get("window_wall_s") else "—"
+        out.append(f"- prologue `{x['fw']}/{x['tag']}` **{tot:.1f} s** before step 1 ({share}): "
+                   + ", ".join(f"{k} {v:.1f}" for k, v in big)
+                   + f"; unattributed {r.get('prologue_unattributed_s', '—')}"
+                   + (f"; budget {r['phase_budget_s']}" if r.get("phase_budget_s") else ""))
+    return out
 
 
 def c1_ok(r):
@@ -510,6 +535,8 @@ def family_block(R):
                      f"{f(r.get('peak_vram_gb'))} | {f(r.get('joules_per_step'), 1)} | {f(r.get('loss_first'), 4)}→{f(r.get('loss_last'), 4)} | "
                      f"{f(r.get('eval_loss_step0'), 4)}→{f(r.get('eval_loss_final'), 4)} | {eng} | {r.get('n_attn4', '—')} | {r.get('trainable_params', '—')} | "
                      f"{(ad.get('bytes') or 0) / 1e6:.1f} ({','.join(ad.get('dtypes', []) or ['?'])}) | {x['regime'] or '—'} | {note} |")
+    for line in prologue_lines(R["rows"]):                  # e4b#548
+        lines.append(line)
     p = R["parity"]
     if p["verdict"] in ("PASS", "FAIL"):
         lines.append(f"- e4b internal parity (tp1's rule, informational): fused_attn4 vs reference_attn4 Δfinal {p['d_final']:.5f}, median step |Δ| {p['median']:.5f} → **{p['verdict']}** "
