@@ -70,7 +70,9 @@ def main():
     ap.add_argument("--alpha", type=int, default=16)
     ap.add_argument("--attn-4bit", type=int, default=1)
     ap.add_argument("--noise-floor", type=float, default=1e-4,
-                    help="rms(fused - reference) above which a layer counts as diverging (registered: P43 amendment 1)")
+                    help="rms(fused - reference) above which a layer counts as diverging; the JSON also reports the first "
+                         "layer over 1e-3, 1e-2 and 5e-2 (P43 amendment 1: layer 1 measured 4.4e-3, so the larger two "
+                         "are the amplification onsets)")
     ap.add_argument("--out", default="gemma4_layer_sweep.json")
     a = ap.parse_args()
     rep = {"model": a.model, "revision": a.revision, "rows": a.rows, "chunk": a.chunk, "noise_floor": a.noise_floor}
@@ -156,6 +158,11 @@ def main():
             first_div = i
     rep["per_layer"] = per
     rep["first_diverging_layer"] = first_div
+    rep["first_layer_over"] = {str(t): next((p["layer"] for p in per if p["fused_vs_reference"]["rms"] > t), None)
+                               for t in (1e-3, 1e-2, 5e-2)}
+    rep["ratio_band_0.9_1.1_all_layers"] = all(p["ratio_fused_over_reference_to_oracle"] is not None and
+                                               0.9 <= p["ratio_fused_over_reference_to_oracle"] <= 1.1 for p in per)
+    rep["last_layer_fused_vs_reference_rms"] = per[-1]["fused_vs_reference"]["rms"]
     rep["layers_reference_closer"] = sum(1 for p in per if p["closer"] == "reference")
     rep["layers_fused_closer"] = sum(1 for p in per if p["closer"] == "fused")
     print("\n=== per layer over %d real positions ===" % rep["compared_positions"])
@@ -164,6 +171,8 @@ def main():
         print(f" {p['layer']:5d}  {p['fused_vs_reference']['rms']:.6f}     {p['reference_vs_oracle']['rms']:.6f}     "
               f"{p['fused_vs_oracle']['rms']:.6f}     {p['ratio_fused_over_reference_to_oracle']}")
     print("\nFIRST DIVERGING LAYER (rms(fused-reference) > %g): %s" % (a.noise_floor, first_div))
+    print("first layer over 1e-3 / 1e-2 / 5e-2:", rep["first_layer_over"], "| ratio within [0.9, 1.1] on every layer:",
+          rep["ratio_band_0.9_1.1_all_layers"], "| last-layer rms(fused-reference):", rep["last_layer_fused_vs_reference_rms"])
     print("reference closer on %d layers, fused closer on %d" % (rep["layers_reference_closer"], rep["layers_fused_closer"]))
     json.dump(rep, open(a.out, "w"), indent=1)
     print("wrote", a.out)
