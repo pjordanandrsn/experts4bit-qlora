@@ -47,3 +47,7 @@ and the e4b arm's profiling overhead — three 38.6 s profiled steps plus ~30 mi
 `p45-unsloth` (`TP4_PROF_ARMS=unsloth`, one 5090, 1.5 h, ≤ $0.98) reads P4 against run 2's e4b window. P4's thresholds are
 unchanged; P2's read stands as written (the registered families did not include the adapter matmuls; that omission is
 recorded, not repaired after the fact).
+
+### Amendment 2 (2026-09-19 ~07:20Z) — P4 stopped under the STOP rule
+
+The Unsloth comparator's redraw `p45-unsloth` was NOT_RUN (the box never reached the lane) and its second draw `p45-unsloth-2` again NOT_RUN: two host draws on the same lane → stop and report, as registered. **P4 is NOT READ**; P1, P3, P5 hold and P2's read stands (`RESULTS-p45.md`). The comparator question rides on the tp4 H2H re-run that P46's decision rule already requires; it is not redrawn here.
