@@ -77,3 +77,7 @@ The redraw `p51-gemma4mix-2` read four of five arms (`RESULTS-p51.md`):
 
 So one arm is added and the family re-run on one box: **`bf16_13`** (`bf16:13_nf4:17`, ≈ 25.2 GB), the matched-bytes uniform control for `graded_10_10`. Registered prediction, **M6**: `bf16_13` ≤ `graded_10_10`'s KL — i.e. grading is dominated and the default is the uniform head at an N the user picks. Refuted if `bf16_13` > 0.1695 by more than 10 %, which would say grading genuinely buys quality per byte and belongs in the default. `p51-gemma4mix-3`, H100 NVL, 1 h, ≤ $3.10.
 
+## Read (2026-09-19, runs p51-gemma4mix-2 and -3)
+
+`RESULTS-p51.md`: M1 HOLDS (the anchor rebuilds P50's keep-20 to four digits and to the byte), M2 HOLDS (a uniform int8 head fails at 0.7369 — the head must be bf16), M3 INCONCLUSIVE, M4 HOLDS (6.65 GB saved), M5 RETIRED as architecturally unmeasurable (704 = 64 × 11), **M6 REFUTED — and that is the answer: at matched bytes the graded map is 1.44× better than a uniform head** (0.2448 @ 25.21 GB vs 0.1695 @ 25.70 GB). **Decision: ship the graded map** (bf16 first ~10, int8 next ~10, NF4 rest) as the recommended Gemma-4 shape, behind the registered K8 gate before any position is quoted.
+
