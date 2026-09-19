@@ -578,7 +578,14 @@ class Counters:
             pass
 
     def snapshot(self):
-        return dict(self.counts)
+        d = dict(self.counts)
+        try:   # P46: which path the grouped-LoRA delta took (grouped-nf4-gemm >= 0.32.1 keeps per-path counters)
+            import nf4_qlora
+            for k, v in getattr(nf4_qlora, "LORA_PATH_STATS", {}).items():
+                d["lora_path_" + k] = int(v)
+        except ImportError:
+            pass
+        return d
 
     def uninstall(self):
         for h in self._hooks:
