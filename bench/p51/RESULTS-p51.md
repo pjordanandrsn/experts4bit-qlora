@@ -33,7 +33,7 @@ So, for Gemma-4:
 - It reaches **0.1695 nats at 25.70 GB** of expert store, against 42.5 GB for all-bf16 experts and 12.0 GB for all-NF4.
 - A user who wants the 0.05 fidelity floor still pays for it: on the uniform curve the floor arrives at 32.35 GB, and the graded configuration that would reach it is not measured here.
 
-**No Gemma-4 position is quoted, and none ships as a silent default.** The registered rule stands: this becomes a per-family default only after the **K8 two-text gate** on the served stack, a different instrument from this one, with its own lane. What ships today is the mechanism, this curve, and the recommendation.
+**No Gemma-4 position is quoted, and none ships as a silent default.** The gate the registered rule named — K8 on the served stack — **cannot be built on this family**, for two independent reasons recorded in amendment 3: K8 is unreadable on Gemma-4 (its own NLL moves 0.4 nats with batch shape against a 0.05 budget), and the K8 runner requires the arena path, which refuses per-layer store maps by design. The replacement bar, derived from configurations e4b already ships (≤ 0.10 nats and top-1 ≥ 0.93, the band gpt-oss's licensed NF4 and the other families occupy), is **not cleared**: this map reads 0.1695 / 0.855. So the graded map stays a **documented option**. Two boundaries travel with the recommendation: it applies to the **loader path only**, and its quality is materially below every other family's shipped quantisation.
 
 ## Cost
 

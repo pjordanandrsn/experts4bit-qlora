@@ -44,3 +44,7 @@ Timing basis (P48/P49): fetch ~7 min, K0 < 2 min, reference pass 40 s, five load
 
 `RESULTS-p50.md`: P1 HOLDS (k=15 = 0.1334, P47's row to four digits), P2 HOLDS, **P3 HOLDS (k=20 = 0.0469 ≤ 0.05)**, **P4 HOLDS (32.3 GB vs 12.0 GB all-NF4 = 2.70×, i.e. 76 % of the all-bf16 store)**, **P5 REFUTED and its threshold was miscalibrated by me** (gpt-oss's shipped NF4 reads top-1 0.9366, itself under the 0.95 I registered). Decision: **no NF4 expert default for Gemma-4**; `quantize_layers` plus this curve is the documentation; no position is quoted or proposed.
 
+### Amendment 1 (2026-09-19 ~14:30Z) — the K8 gate this lane's decision rule named is unbuildable on this family
+
+P50's decision rules say a per-family default ships "only after the **K8 two-text gate** passes on the served stack". P51 amendment 3 records why that gate cannot be built on Gemma-4: K8 is unreadable here (the family's own NLL moves 0.4 nats with batch shape against a 0.05 budget — `e4b.parity.gemma4.no-reference`), and the K8 runner requires the arena path, which refuses per-layer store maps by design. The replacement is the KL-from-checkpoint instrument these lanes already use, with a bar derived from shipped configurations (≤ 0.10 nats, top-1 ≥ 0.93). Neither the uniform curve here nor P51's graded map clears it, so the conclusion of both lanes is unchanged: **documented option, no default, no quoted position.**
+
