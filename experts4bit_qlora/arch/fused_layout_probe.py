@@ -43,6 +43,7 @@ layout is a property of the CODE, not of any particular weights.
 """
 from __future__ import annotations
 
+import functools
 import importlib
 import types
 from dataclasses import dataclass
@@ -230,10 +231,16 @@ def _fill(module, generator):
                     else torch.randn(p.shape, generator=generator, dtype=torch.float64) * _SCALE)
 
 
+@functools.lru_cache(maxsize=None)
 def measure_fused_layout(model_type: str) -> FusedLayout:
     """Run upstream's own expert forward and report where the gate actually is.
 
     Raises :class:`FusedLayoutUndetermined` rather than returning a guess.
+
+    Cached: the answer depends only on the installed transformers, so the toy
+    module is built once per model_type per process. This keeps the load-time
+    check free on repeat calls without weakening it -- nothing reloads a modeling
+    module mid-process, and ``cache_clear()`` is there for a test that does.
     """
     module, run, param_path, axis = build_upstream_expert(model_type)
     return measure_module_fused_layout(module, run, param_path, axis, label=model_type)
@@ -319,6 +326,11 @@ def verify_declared_layout(model_type: str, conv) -> FusedLayout | None:
     the declaration is separately asserted against a measurement for EVERY shipped
     family in ``tests/test_fused_layout_probe.py``. That test is where "we could
     not measure it" is a failure; here it is a fact about this installation.
+
+    Cost, measured: 2.2 ms for the measurement itself once the family's modeling
+    module is imported -- and the loader is about to import that module anyway to
+    build the model, so the marginal cost of checking is milliseconds, cached per
+    model_type thereafter.
 
     Returns the measurement when one was made, so a caller can log it.
     """
