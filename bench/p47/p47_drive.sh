@@ -30,7 +30,7 @@ SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=
 SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
 POLL=${P47_POLL_S:-60}; W=/root/p47
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="P47_RUN_ID=$RUN_ID P47_RUN_NONCE=$NONCE P47_DEADLINE_EPOCH=$DEADLINE P47_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA P47_MIN_MBPS=${P47_MIN_MBPS:-20} P47_FAMILY=${P47_FAMILY:-gemma4diag} P47_NEED_S=${P47_NEED_S:-6000} "
+PASS="P47_RUN_ID=$RUN_ID P47_RUN_NONCE=$NONCE P47_DEADLINE_EPOCH=$DEADLINE P47_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA P47_MIN_MBPS=${P47_MIN_MBPS:-20} P47_MIN_DISK_GB=${P47_MIN_DISK_GB:-120} P47_FAMILY=${P47_FAMILY:-gemma4diag} P47_NEED_S=${P47_NEED_S:-6000} "
 if [ "${P47_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p47_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p47"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA gnf4 $GNF4_SHA (from $REPO); receipts -> $RUN_DIR/p47; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook" || { say "stage failed: remote cleanup"; exit 20; }
