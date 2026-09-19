@@ -75,7 +75,8 @@ free_family(){ rm -rf $W/work_$1 $W/refcache_$1; rm -rf /root/.cache/huggingface
 # kl FAMILY NEED_S  -- fetch, bake, kl_serve over the family's registered arms; receipt <family>_kl.json (rewritten per arm)
 kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
   can_run "$2" "${FAM}_kl" || return 40
-  fetch "$MID" "$REV" && bake "$MID" $FAM || { echo "KL $FAM fetch/bake FAILED" >> summary.txt; return 11; }
+  fetch "$MID" "$REV" || { echo "KL $FAM fetch FAILED" >> summary.txt; return 11; }
+  if [ "$(python $W/serve_stack.py needs_arena $FAM)" = 1 ]; then bake "$MID" $FAM || { echo "KL $FAM bake FAILED" >> summary.txt; return 12; }; else say "no served arm in $FAM -- no arena bake (P48)"; mkdir -p $W/work_$FAM; fi
   say "kl_serve $FAM (scorer by control (i): decode if the reference agrees with itself, else prefill; reference cached to refcache_$FAM.<scorer> then freed)"
   E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python -u $W/kl_serve.py --family $FAM --arena $W/work_$FAM/nf4.arena --calib $W/calib.json \
       --k0-receipt $W/k0.json --ref-cache $W/refcache_$FAM --scorer auto --out $W/${FAM}_kl.json > logs/kl_$FAM.log 2>&1; local rc=$?
@@ -83,7 +84,8 @@ kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
   { echo -n "kl $FAM rc=$rc "; grep -aE "receipt ->" logs/kl_$FAM.log | tail -1 | cut -c1-200; echo; } >> summary.txt
   free_family $FAM "$MID"; return $rc; }
 rc_any=0
-kl gemma4diag 6000 || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }
-for f in gemma4diag_kl; do [ -s "$W/$f.json" ] && echo "ROW $f present" >> summary.txt || { echo "ROW $f MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }; done
+FAM=${P47_FAMILY:-gemma4diag}; NEED_S=${P47_NEED_S:-6000}     # P48 runs the same lane with P47_FAMILY=gemma4layer
+kl $FAM $NEED_S || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }
+for f in ${FAM}_kl; do [ -s "$W/$f.json" ] && echo "ROW $f present" >> summary.txt || { echo "ROW $f MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }; done
 say "----- summary -----"; cat summary.txt
 finish "$rc_any"

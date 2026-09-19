@@ -57,6 +57,8 @@ REFERENCE = {
               "original of gpt-oss (kl_paths.py's rule)",
     "gemma4diag": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision, resident on the same "
                   "card -- P44-b's Gemma-4 reference, reused unchanged for the P47 builders (#597)",
+    "gemma4layer": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
+                   "reference, reused unchanged for the P48 one-layer-at-a-time builders (#597)",
 }
 SCORERS = {"decode": decode_teacher_forced_logits, "prefill": teacher_forced_logits}
 SELF_CONSISTENCY_MAX = 1e-2      # amendment 5: the reference must agree with itself decode-vs-prefill or the decode scorer is refused
