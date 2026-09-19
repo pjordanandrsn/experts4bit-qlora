@@ -42,14 +42,14 @@ def arm_census(d: Path, arm: str):
 
 
 def step_ms(d: Path, arm: str):
+    """Every arm here is B=16; p42.step_ms keys the batch off an ``_b16`` suffix the smallm arm does not end with."""
+    f = d / f"e4b_b16_{arm}.json"
+    if not f.exists():
+        return None
     try:
-        return p42.step_ms(d, arm)
-    except Exception:
-        f = d / f"e4b_b16_{arm}.json"
-        if not f.exists():
-            return None
-        j = json.load(open(f))
-        return j.get("step_ms_clean") or j.get("step_ms")
+        return float(json.load(open(f))["step_ms_clean"])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
 
 
 def reduce(run_dir: str, gemm_regex: str = DEFAULT_GEMM_REGEX) -> dict:

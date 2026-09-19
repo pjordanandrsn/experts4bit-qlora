@@ -180,14 +180,43 @@ class Int4Linear(nn.Module):
         return w.reshape(self.N, self.K).to(torch.bfloat16)
 
 
+def resolve_smallm(smallm=None, *, banner=print) -> bool:
+    """The K16 route's default, decided ONCE per enable (K16 P5 read, bench/k16/RESULTS-k16-p5.md: -1.06 ms/step
+    at B=16 on the 5090). ``E4B_ATTN_INT4_SMALLM``: ``1`` requires the kernel (refuses without it), ``0`` keeps the
+    cached-bf16 path, unset/``auto`` routes when the installed grouped-nf4-gemm carries ``int4_smallm`` (>= 0.32.0)
+    and says so in one line when it does not -- never a silent fallback, never a refusal on an older cut."""
+    import os
+    if smallm is None:
+        v = os.environ.get("E4B_ATTN_INT4_SMALLM", "auto").strip().lower()
+        smallm = {"1": True, "true": True, "0": False, "false": False}.get(v, "auto")
+    if smallm is True:
+        try:
+            _smallm_kernels()
+        except ImportError as e:
+            raise RuntimeError(
+                "E4B_ATTN_INT4_SMALLM=1 needs grouped-nf4-gemm with int4_smallm (lane K16, >= 0.32.0) "
+                f"(missing: {e}); install that cut or unset the flag -- the route is never substituted silently"
+            ) from e
+        return True
+    if smallm is False:
+        return False
+    try:
+        _smallm_kernels()
+        return True
+    except ImportError as e:
+        banner(f"[e4b.int4_attn] K16 small-M route OFF: the installed grouped-nf4-gemm has no int4_smallm ({e}); "
+               "rows 2..16 take the cached-bf16 matmul (E4B_ATTN_INT4_SMALLM=1 to require the route, =0 to silence this)")
+        return False
+
+
 def enable_serve_attn_int4(model, smallm: bool | None = None) -> int:
     """Swap every structural attention projection for Int4Linear.
     Returns the count; refuses a vacuous enable. lm_head untouched.
 
-    ``smallm`` (default: ``E4B_ATTN_INT4_SMALLM=1``) routes ``1 < rows <= 16``
-    to the K16 small-M int4 GEMM; a set flag with the kernel absent refuses
-    here, never at forward time."""
-    import os
+    ``smallm`` (default: ``E4B_ATTN_INT4_SMALLM``, ``auto``) routes ``1 < rows <= 16``
+    to the K16 small-M int4 GEMM when the kernel is installed (see
+    :func:`resolve_smallm`); ``=1`` with the kernel absent refuses here, never
+    at forward time."""
     try:
         _kernels()
     except ImportError as e:
@@ -195,16 +224,7 @@ def enable_serve_attn_int4(model, smallm: bool | None = None) -> int:
             "E4B_SERVE_ATTN_INT4=1 needs grouped-nf4-gemm with int4_b32 "
             f"(missing: {e}); install the matching cut or unset the flag"
         ) from e
-    if smallm is None:
-        smallm = os.environ.get("E4B_ATTN_INT4_SMALLM", "0") == "1"
-    if smallm:
-        try:
-            _smallm_kernels()
-        except ImportError as e:
-            raise RuntimeError(
-                "E4B_ATTN_INT4_SMALLM=1 needs grouped-nf4-gemm with int4_smallm (lane K16) "
-                f"(missing: {e}); install that cut or unset the flag -- the route is never substituted silently"
-            ) from e
+    smallm = resolve_smallm(smallm)
     n = 0
     for mod in model.modules():
         if type(mod).__name__.endswith("Attention"):

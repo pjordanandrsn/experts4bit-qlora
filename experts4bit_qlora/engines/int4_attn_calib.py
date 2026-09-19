@@ -195,6 +195,8 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
     Hessian is NOT silently packed uncalibrated -- that would mix two
     quantisers under one banner and make the quality gate ambiguous; it
     raises instead."""
+    from .int4_attn import resolve_smallm
+    smallm = resolve_smallm(None)          # K16 route (P5 read): auto by default, same rule as the RTN enable
     from .int4_attn import Int4Linear, _kernels
     try:
         _kernels()
@@ -225,7 +227,7 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
 
         def packer(w, _H=H):
             return gptq_pack_int4_b32(w, _H)
-        setattr(parent, child, Int4Linear(lin, packer=packer))
+        setattr(parent, child, Int4Linear(lin, packer=packer, smallm=smallm))
         hessians[name] = None          # free the 16-64 MB as we go
         n += 1
     if n == 0:
