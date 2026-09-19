@@ -233,3 +233,23 @@ returns either `experts: 0` again or a PEFT error on an unsupported module type,
 P10 is falsified if the secondary arm engages the experts and matches e4b's trainable count, in which case Granite
 gains a real Unsloth position and the earlier VOID is recorded as this lane's invocation error rather than a
 coverage limit of the framework under test. Either outcome is a row.
+
+### Amendment 5 (2026-09-19 20:20Z, BEFORE the redraw it authorises has been launched): a parity-only box C, because the full box C cannot reach its own reference arm
+
+**What the draw in flight shows.** `tp4-b-p46cut-C2` (launched 16:26Z) spent its window like this: the Gemma-4 fused arm completed clean; the Unsloth arm **alarmed out** (`rc=142`, SIGALRM) at 18:25:40Z; the HF arm **OOMed** at 18:26:44Z; and the `e4b/reference_attn4` arm has been running since 18:26 with no row after **106 minutes**, against ~44 minutes of expected work (40.4 s/step x 20 from the #558 receipt, plus the ~30-minute prologue e4b#548 is open about). At 20:14Z it had 2370 s of window left and Mixtral had not been reached at all.
+
+**Why that is a measurement failure and not just a slow run.** `tp4_reduce.py` returns `NO-REF` for e4b internal parity when the reference arm is missing or not OK. The reference arm is **last** in `EXPECTED`, so every other arm's cost is charged ahead of the one question this draw was redrawn to answer: does #558's Gemma-4 parity failure (fused vs e4b's own dense reference, 0.09037 nats final and 0.11801 median step-wise against a 0.05/0.05 band) survive the new kernel cut. Ordering the scarce resource behind three arms that do not bear on that question is the defect.
+
+**The amendment.** A box-C draw may be restricted to the parity pair alone, via the knobs the run script already registers -- `TP4_FAMILIES=gemma4` and `TP4_SKIP="mixtral gemma4/unsloth/ckpt_unsloth gemma4/hf/hf_peft"`. Nothing else moves: the field fixture, N = 20, the alarms, the arm ceilings, `can_run`'s 900 s margin, the GPU class and the disk floor are all unchanged, and the skipped arms write `not_run` stubs in the existing vocabulary rather than vanishing.
+
+**What this draw may and may not answer.** It may report **e4b internal parity on gemma4** and the fused arm's step time. It may **not** report any head-to-head position for Gemma-4 -- Unsloth and HF are deliberately absent, so `tp4_reduce.py` will read VOID or NOT_RUN for those pairs and **no ratio is quotable from this draw**. It says nothing about Mixtral, so **P6 remains unanswered** by it.
+
+**Registered predictions, before any of its data exists.**
+
+- **P7** -- both e4b arms reach VALID (`n_patched == 30`, the structural attention census, matching trainable counts and the same tokens sha), because the fused arm already did so in the draw in flight.
+- **P8** -- e4b internal parity is **READABLE**, i.e. not `NO-REF`. This is the whole purpose; if it is not met the redraw has failed regardless of what else it produces.
+- **P9** -- the parity verdict itself is **NOT predicted**. #558 measured 0.09037 / 0.11801 on the previous cut against a 0.05 band. Either outcome is a real result: PASS means the kernel change closed a defect that was open, FAIL means it did not and #558 stays open with a second independent measurement. **Registering a hoped-for direction here would be the thing that makes the reading worthless**, so nothing is registered beyond readability.
+
+**Cost.** One RTX 5090 at the standing $0.69/h ceiling, estimated ~2.5 h (fetch, environment build, two arms with their prologues) ~= **$1.75**, inside the <$2 band and well inside the $35/run cap. Today's spend before this is $26.26 against the $50 daily ceiling.
+
+**Ordering note, recorded because I got this wrong earlier today.** This amendment is committed to `main` **before** the launch, and the launch will cite the commit. On 2026-09-19 I published a bar as pre-registered when the commit registering it merged 34 minutes after the run (see `bench/p52/RESULTS-p52.md`). The point of registering is that it predates the measurement, and that is only true if the timestamps say so.
