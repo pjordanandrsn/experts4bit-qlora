@@ -10,7 +10,7 @@ say(){ echo "[$(date -u +%FT%TZ)] [tp4_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TP4_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$TP4_BOX" in A|B|C|D|E) ;; *) say "refusing: TP4_BOX must be A, B, C, D or E (D = the P43 diagnosis box, E = the P45 profiling box)"; exit 78;; esac
+case "$TP4_BOX" in A|B|C|D|E|F) ;; *) say "refusing: TP4_BOX must be A, B, C, D, E or F (D = P43 diagnosis, E = P45 profiling, F = P46 adapter path)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 STAGE="$HERE/tp4_run.sh $HERE/tp4_arm.py $HERE/tp4_reduce.py $HERE/tp4_alpaca.py $REPO/bench/flagship-matrix/drivers/n9_datasets.py $REPO/bench/flagship-matrix/ds_manifest.json"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -30,7 +30,7 @@ SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
 POLL=${TP4_POLL_S:-60}; STALL_S=${TP4_STALL_S:-900}; W=/root/tp4
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOCH=$DEADLINE TP4_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${TP4_PROF_ALARM:+TP4_PROF_ALARM=$TP4_PROF_ALARM }${TP4_PROFILE_STEPS:+TP4_PROFILE_STEPS=$TP4_PROFILE_STEPS }${TP4_PROFILE_WARM:+TP4_PROFILE_WARM=$TP4_PROFILE_WARM }${TP4_PROF_ARMS:+TP4_PROF_ARMS=$TP4_PROF_ARMS }"
+PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOCH=$DEADLINE TP4_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${TP4_PROF_ALARM:+TP4_PROF_ALARM=$TP4_PROF_ALARM }${TP4_PROFILE_STEPS:+TP4_PROFILE_STEPS=$TP4_PROFILE_STEPS }${TP4_PROFILE_WARM:+TP4_PROFILE_WARM=$TP4_PROFILE_WARM }${TP4_PROF_ARMS:+TP4_PROF_ARMS=$TP4_PROF_ARMS }${TP4_LORA_ARMS:+TP4_LORA_ARMS=$TP4_LORA_ARMS }${TP4_LORA_ALARM:+TP4_LORA_ALARM=$TP4_LORA_ALARM }"
 # Every knob the box-side script reads from the environment must be forwardable, or an amendment that changes one
 # of them silently does not reach the box: TP4-PREREG amendment 2 cut the eval instrument for the large families
 # and TP4_EVAL_N / TP4_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.
