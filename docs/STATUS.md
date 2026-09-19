@@ -320,11 +320,19 @@ head** (0.1695 nats at 25.70 GB against 0.2448 at 25.21 GB), and it saves
 6.65 GB against the uniform configuration that reaches the 0.05 fidelity
 floor. The crossover is real and cuts both ways: with a 5-layer bf16 head
 grading *loses* to uniform, because an int8 tier starting at layer 5 still
-covers layers that cannot take it. **No Gemma-4 position is quoted and no
-default ships silently** — the map becomes a per-family default only after
-the K8 two-text gate on the served stack, a separate instrument and a
-separate lane. Curve and rows in
-[`bench/p51/RESULTS-p51.md`](../bench/p51/RESULTS-p51.md).
+covers layers that cannot take it. **No Gemma-4 position is quoted, and the
+map is an option rather than a default.** The gate originally registered for
+it — K8 on the served stack — cannot be built on this family: Gemma-4's own
+NLL moves 0.4 nats with batch shape against K8's 0.05 budget
+(`e4b.parity.gemma4.no-reference`), and the K8 runner requires the arena
+path, which refuses per-layer store maps by design. The replacement bar,
+taken from configurations this package already ships (≤ 0.10 nats and top-1
+≥ 0.93 — the band gpt-oss's licensed NF4 requant and the other families
+occupy), is **not cleared**: the graded map reads 0.1695 nats and top-1
+0.855, about one token in seven disagreeing with bf16. Two boundaries travel
+with the recommendation: it applies to the **loader path only**, and its
+quality is materially below every other family's shipped quantisation. Curve
+and rows in [`bench/p51/RESULTS-p51.md`](../bench/p51/RESULTS-p51.md).
 
 
 **Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed
