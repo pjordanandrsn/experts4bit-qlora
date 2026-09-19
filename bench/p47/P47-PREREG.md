@@ -53,4 +53,10 @@ Under the $35 cap. Timing basis (run 5): fetch 7.5 min, K0 < 2 min, bake ~6 min,
 
 ## Amendments
 
-(none yet)
+### Amendment 1 (2026-09-19 ~08:30Z, after the run) — the bf16-experts arm is refused by the loader, by design
+
+`loader_bf16experts` asked `load_moe_4bit_streaming` for `quantize_layers=set()`; the loader's zero-quantized-layers guard refuses ("Refusing to return a model with zero quantized expert layers — silently skipping the experts is the exact failure this loader exists to prevent"). A harness fault of this lane's, not a finding; the row is an honest hole and **P3 is NOT READ**. The `hi` row (bf16 experts in 15 of 30 layers) is the partial reading. No loader knob is added for it: the per-layer sweep registered as P48 contains a one-layer-NF4 arm for every layer, and the SMALLEST of those rows bounds the modelling cost from above without asking the loader to build a model it refuses.
+
+## Read (2026-09-19)
+
+`RESULTS-p47.md`: P1 HOLDS (1.077), **P2 HOLDS (loader 1.084 — the model, not the stack)**, P3 NOT READ, **P4 HOLDS (layers 0–14 carry 89 % of lo + hi; NF4 in 0–14 alone = 1.058, in 15–29 alone = 0.133)**, P5 HOLDS (0.279). Next: P48.
