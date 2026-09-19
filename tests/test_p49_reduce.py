@@ -4,11 +4,18 @@ import json
 import os
 import sys
 
+import pytest
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-_spec = importlib.util.spec_from_file_location("p49_reduce", os.path.join(HERE, "..", "bench", "p49", "p49_reduce.py"))
-p49 = importlib.util.module_from_spec(_spec)
-sys.modules["p49_reduce"] = p49
-_spec.loader.exec_module(p49)
+def _load(name, rel):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, "..", "bench", *rel))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+p49 = _load("p49_reduce", ("p49", "p49_reduce.py"))
 
 
 def _row(arm, kl, qt="nf4", bs=64):
@@ -59,3 +66,52 @@ def test_inconclusive_int8_missing_files_and_refused_scorer(tmp_path):
     v = p49.reduce(str(tmp_path))
     assert v["kl_verdict"].startswith("NOT_READ") and v["P0_anchor"]["verdict"] == "NOT_READ"
     assert p49.reduce(str(tmp_path / "nowhere"))["P0_anchor"]["verdict"] == "NOT_READ"
+
+
+def test_act_probe_discovers_dotted_module_names():
+    """The probe's module discovery must SEARCH dotted names (`model.language_model.layers.0.experts`), not match them:
+    run 1 of p49-gemma4fmt found zero layers and P5 went unread (P49 amendment 1)."""
+    import torch.nn as nn
+
+    # On the box every staged file is flat in $W; here the imports live in bench/ and bench/p44
+    for rel in ("", "p44"):
+        d = os.path.join(HERE, "..", "bench", rel)
+        if d not in sys.path:
+            sys.path.insert(0, d)
+    ap = _load("act_probe", ("p49", "act_probe.py"))
+
+    class Experts(nn.Module):
+        pass
+
+    class Layer(nn.Module):
+        def __init__(self, moe):
+            super().__init__()
+            if moe:
+                self.experts = Experts()
+                self.post_feedforward_layernorm_1 = nn.Identity()
+                self.post_feedforward_layernorm_2 = nn.Identity()
+
+    class Tower(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = nn.ModuleList([Layer(True), Layer(False), Layer(True)])
+
+    class Model(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = nn.Module()
+            self.model.language_model = Tower()
+
+    found = ap.moe_layers(Model())
+    assert sorted(found) == [0, 2], sorted(found)
+    assert isinstance(found[0][1], Experts)
+
+    class Bare(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = nn.Module()
+            self.model.language_model = nn.Module()
+            self.model.language_model.layers = nn.ModuleList([Layer(False)])
+
+    with pytest.raises(RuntimeError, match=r"\.experts"):
+        ap.moe_layers(Bare())

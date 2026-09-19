@@ -55,4 +55,18 @@ Timing basis (P48-3): fetch ~7 min, K0 < 2 min, reference pass 40 s, nine one-la
 
 ## Amendments
 
-(none yet)
+### Amendment 1 (2026-09-19 ~11:15Z, after run 1 — the KL rows are read, the probe is not) — the probe found no modules
+
+Run `p49-gemma4fmt` produced all nine KL rows (`RESULTS-p49.md`); the activation probe died before its first forward:
+`no \`layers.<i>.experts\` module with a post_feedforward_layernorm_2 parent found`. The cause is this lane's own code, not the
+model: `act_probe.moe_layers` matched module names with `re.match`, which anchors at position 0, against dotted names like
+`model.language_model.layers.0.experts` — it can never match. (I first suspected a transformers version difference and checked:
+the pinned 5.16.1 `Gemma4TextDecoderLayer` does carry `post_feedforward_layernorm_2` under `enable_moe_block`, so the layout was
+always right.) Fixed to `re.search`, with the failure message now listing the `.experts` modules it did see, and a unit test over a
+dummy module tree. **P5 is NOT READ on run 1**; predictions and thresholds are unchanged. The redraw `p49-gemma4fmt-2` runs the
+probe ALONE (`P47_KL_SKIP=1`, new): the KL rows of run 1 stand and need no second pass, so the redraw is ~15 min (fetch + probe).
+
+## Read (2026-09-19, run p49-gemma4fmt)
+
+`RESULTS-p49.md`: P0 HOLDS; **P1 REFUTED — int8 reads 0.693 against NF4's 0.892, so no store e4b ships rescues layer 0 and the early layers stay bf16**; P2 REFUTED (fp8 0.774); P3 HOLDS (fp4 1.051, worse); P4 HOLDS (block 32 = 0.97× block 64); P5 NOT READ (amendment 1, redrawn probe-only). The depth arms reproduce P48 to four digits on a different box.
+

@@ -82,11 +82,13 @@ kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
   can_run "$2" "${FAM}_kl" || return 40
   fetch "$MID" "$REV" || { echo "KL $FAM fetch FAILED" >> summary.txt; return 11; }
   if [ "$(python $W/serve_stack.py needs_arena $FAM)" = 1 ]; then bake "$MID" $FAM || { echo "KL $FAM bake FAILED" >> summary.txt; return 12; }; else say "no served arm in $FAM -- no arena bake (P48)"; mkdir -p $W/work_$FAM; fi
+  if [ "${P47_KL_SKIP:-0}" = 1 ]; then say "kl_serve SKIPPED for $FAM (P47_KL_SKIP=1: this draw runs the activation probe only)"; local rc=0; else
   say "kl_serve $FAM (scorer by control (i): decode if the reference agrees with itself, else prefill; reference cached to refcache_$FAM.<scorer> then freed)"
   E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python -u $W/kl_serve.py --family $FAM --arena $W/work_$FAM/nf4.arena --calib $W/calib.json \
       --k0-receipt $W/k0.json --ref-cache $W/refcache_$FAM --scorer auto --out $W/${FAM}_kl.json > logs/kl_$FAM.log 2>&1; local rc=$?
   grep -aE "^== |NOT MEASURED|receipt ->|Error" logs/kl_$FAM.log | tail -8 | sed "s/^/    /"
   { echo -n "kl $FAM rc=$rc "; grep -aE "receipt ->" logs/kl_$FAM.log | tail -1 | cut -c1-200; echo; } >> summary.txt
+  fi
   if [ "${P47_ACT_PROBE:-0}" = 1 ]; then   # P49: the activation probe on the same checkpoint, before the family is freed
     say "act_probe $FAM (reference hooks on every MoE layer, then each one-layer arm on the same ${P47_ACT_PROBE_N:-8} prompts)"
     E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python -u $W/act_probe.py --family $FAM --n ${P47_ACT_PROBE_N:-8} --cache-dir $W/actref_$FAM \
@@ -98,6 +100,7 @@ kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
 rc_any=0
 FAM=${P47_FAMILY:-gemma4diag}; NEED_S=${P47_NEED_S:-6000}     # P48 runs the same lane with P47_FAMILY=gemma4layer
 kl $FAM $NEED_S || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }
-for f in ${FAM}_kl; do [ -s "$W/$f.json" ] && echo "ROW $f present" >> summary.txt || { echo "ROW $f MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }; done
+CHECK="${FAM}_kl"; [ "${P47_KL_SKIP:-0}" = 1 ] && CHECK="${FAM}_act"
+for f in $CHECK; do [ -s "$W/$f.json" ] && echo "ROW $f present" >> summary.txt || { echo "ROW $f MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }; done
 say "----- summary -----"; cat summary.txt
 finish "$rc_any"
