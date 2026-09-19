@@ -169,3 +169,7 @@ attention's bytes are what the cached matmul dequantises) and the decode-only fu
 `r1epi`'s row then equals `nf4`'s by construction and P4 is read as "the fold's arithmetic is exact" only where the decode
 scorer is admitted; for Gemma-4 P4 is NOT READ. P5/P6 and the reading rule apply to whichever scorer the control admits,
 stated on every row. gpt-oss goes through the same control. Nothing else moves.
+
+## Read (2026-09-19, after runs p44-a-olmoe-2, p44-a-census, p44-b-kl80-5)
+
+`RESULTS-p44.md`. P1 holds (int4all FAILS c4val1 +0.255); **P2 REFUTED** (calibexp_all c4val1 +0.443 — the Qwen3 recipe does not transfer; OLMoE stays NF4); P3 HOLDS on Granite by 0.08 points and is REFUTED on Mixtral's measured half (16/32 layers); P4 NOT READ (Gemma-4's decode scorer refused by control (i) at 0.279 nats); **P5 REFUTED and the Gemma-4 NF4 control itself is 1.077 nats from bf16 — defect #597**; **P6 not met literally (0.0019 vs < 1e-3) but gpt-oss `store_r12` LICENSES under the reading rule** (`licensed_by: kl-vs-bf16`). Register rows `e4b.serve.p44.*` (four).

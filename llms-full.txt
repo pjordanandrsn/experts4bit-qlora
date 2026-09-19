@@ -2130,6 +2130,31 @@ measured cost is the fp8 cache and dot: 0.046 nats, concentrated on the
 five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
 §13.2; numbers: SERVING-PARITY.
 
+**Quality measured from the checkpoint, not from e4b's own reference
+(P44, 2026-09-19).** A second instrument scores each served stack
+against the family's bf16 checkpoint (full-vocabulary KL, 200 committed
+prompts), after a control that first asks the reference whether it
+agrees with *itself* under the two forward shapes the scorer compares.
+Three readings moved the register
+([`bench/p44/RESULTS-p44.md`](../bench/p44/RESULTS-p44.md)):
+**gpt-oss-20b's native MXFP4 store route licenses** (0.0019 nats from a
+dequant of the same bytes, against 0.0222 for the NF4 requant control;
+every stratum ≤ 0.13× the control) — the first quality verdict on that
+family that is not out-of-domain flattery, carried as a KL-from-reference
+licence rather than a K8 one; **OLMoE's int4 recipes FAIL the second
+text** (RTN int4 experts +0.255 ppl on C4; the Qwen3 calibrated recipe
++0.443 — worse than RTN, so OLMoE stays NF4); and **Gemma-4's served NF4
+stack is 1.08 nats/token from the bf16 checkpoint with 36 % top-1
+disagreement**, lever-independent, reproduced across three runs, where
+the same instrument reads the other four families at 0.02–0.1. That is
+a served-model defect, not a quantisation cost, filed as
+[#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597)
+with a three-arm diagnostic to pre-register; no Gemma-4 serving position
+is quoted. The per-expert error census on Granite (126 of 1,270 routed
+experts carry half the GPTQ error — 9.9 %, at the 10 % threshold) and
+Mixtral (flat: 22.7 % on the 16 layers measured) is data for a
+per-expert fallback that is not built.
+
 **Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed
 position is the census's, below — **×2.067 at B=1 (238.1 tok/s on box
 49916675) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4 control on
@@ -3263,6 +3288,10 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b16.eager [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm eager at B=16 -- enforce_eager=True at B=16 (secondary); median-of-3 322.4; 0.159 of the graph arm -- 322.5 tok/s (49.616 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
 - e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.vllm.b16.fp8kv [measured]: [VALID] Head-to-head lane p37 (2026-09-05, one rented RTX 5090, same box and session as every other p37 row): vLLM 0.28.0 arm fp8kv at B=16 -- default graphs, kv fp8 at B=16 (secondary); median-of-3 2217.4; 1.087 of the graph arm -- 2206.5 tok/s (7.251 ms/step), nvidia-smi peak 31.0 GB (a policy number: vLLM reserves 0.90 of the card; its own accounting is in the receipt); prompts_sha f67e7e4d592b002b; VALID under the pre-registered checks.
 - e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate [measured]: Head-to-head lane p37, amendment 3 (pre-registered 20:30Z after TP_DONE, run on the same box, Vast 49975016): the registered K8 gate on THIS box's re-derived 64k streamed-calibrated pack (11522 gptq / 766 rtn) -- bo6c's k8() verbatim, 2048 teacher-forced steps through the paged path, eager loop, fp8 compute, the full stack (calibrated int4 experts + calibrated int4 attention + round-1/2 folds + router epilogue + glue) against this box's own NF4 -- FAILS the registered calibrated-pack gate on its second text: wikitext nf4 6.41984 -> all 6.39679 ppl (delta -0.0230, PASS; sha 9ef10d760ad9), c4val1 nf4 16.49703 -> all 16.60631 ppl (delta +0.1093 against the +0.05 budget, FAIL; sha 4bcb55179b96); verdict NOT LICENSED, VOID stands. The pack licensed by `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05` (11512 / 776) read -0.0662 on the same c4val1 window: ten of 12,288 expert matrices classified differently at the min_rows threshold go with a real quality difference -- the streamed calibration recipe does NOT reproduce its licence across boxes. No ratio of vLLM against the stack licensed by `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05` is quoted on this lane; the recipe's speed on this box (236.4 / 1305.3 tok/s) stays measured and unlicensed.
+- e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19 [measured]: gpt-oss-20b served on its native MXFP4 store for single rows (store_r12: MXFP4 GEMV + round-1/2 folds) is 0.0019 nats/token (KL, full vocabulary, fp64, decode-shaped teacher forcing) from dequant-to-bf16 of the SAME shipped bytes over the committed 200-prompt set, top-1 agreement 0.981; the NF4 requant control (nf4_r12) is 0.0222. Every stratum is <= 0.13x the control and the pooled delta is -0.020, so under P44's registered reading rule (every stratum <= 1.10x NF4 and pooled delta <= 0.005) the store route LICENSES -- the first quality verdict on this family that is not OOD flattery (its wikitext K8 improves under quantisation). The scorer was admitted by the reference self-consistency control (decode vs prefill self-KL 0.0005).
+- e4b.serve.p44.olmoe.two-text-k8.2026-09-19 [measured]: OLMoE-1B-7B-0924-Instruct two-text K8 (2048 steps, budget 0.05 ppl, k8_gate.verdict): int4all (RTN int4 experts + C4-calibrated int4 attention + folds + epilogue) wikitext -0.0414 / c4val1 +0.2546 -> FAIL two-sided; calibexp_all (streamed 64k sequential GPTQ experts calibrated on wikitext-train + int4 attention + folds + epilogue) wikitext -0.0550 (same-domain, not trusted) / c4val1 +0.4427 -> FAIL one-sided. P1 (RTN fails the second text) holds; P2 (the Qwen3 recipe transfers) is REFUTED -- calibrating on wikitext-train made c4val1 worse than RTN. OLMoE's quoted position stays NF4; its measured x2.07 / x2.29 speed levers (bo7) stay unlicensed.
+- e4b.serve.p44.census.granite-mixtral.2026-09-19 [measured]: Per-expert activation-weighted reconstruction-error census (sqrt(tr(DHD^T)/tr(WHW^T)) from the recipe's own Hessians on the hook's 32x512 C4 set): Granite-3.1-3B-A800M (prefused stacks, GPTQ where >= 32 rows): 126 of 1270 routed experts (9.92%) carry 50.3% of the summed error -> P3 (<= 10%) HOLDS by 0.08 points; GPTQ halves the median per-expert residual vs RTN (0.088 -> 0.049). Mixtral-8x7B (RTN, its timed arm) on 16 of 32 layers before the arm alarm: 29 of 128 experts (22.7%) for 50%, top 10% carry 24.8% -> P3 REFUTED on the half measured (flat distribution). Data for a per-expert NF4 fallback (#530's third method); no fallback is built or gated.
+- e4b.serve.p44.gemma4.nf4-vs-bf16.2026-09-19 [measured]: e4b's served Gemma-4-26B-A4B-it NF4 stack (all-VRAM hybrid tier via the NF4 arena) is 1.077 nats/token (KL, full vocabulary, fp64, PREFILL-shaped teacher forcing on both sides) from the bf16 checkpoint over the committed 200-prompt set, top-1 agreement 0.638; r1epi 1.127, int4_r1epi 1.156, calattn_r1epi 1.278. Lever-independent and reproduced to four digits across three runs, where the same instrument reads gpt-oss NF4 at 0.022 and OLMoE/Granite/Mixtral NF4 at 0.02-0.1: a served-model DEFECT on this family (#597), not quantisation. No arm licenses (P5 refuted; int4_r1epi pooled delta +0.079); no Gemma-4 serving position is quoted. The decode scorer is REFUSED for this family: the bf16 reference disagrees with ITSELF by 0.279 nats between one-token decoding and prefill (control (i)), so P4 is NOT READ.
 
 Open items (no evidence either way):
 
@@ -3270,4 +3299,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(167 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(171 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
