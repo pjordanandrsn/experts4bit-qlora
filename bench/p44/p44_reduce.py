@@ -162,24 +162,52 @@ def p4_control(control: dict, r1epi: dict) -> dict:
     return {"holds": ok, "eps": P4_EPS, "abs_delta_per_stratum": per}
 
 
+def scorer_admitted(rec: dict) -> tuple:
+    """Amendments 2/5: decode rows are readable only when control (i) -- the reference against itself, decode vs
+    prefill -- passed (< 1e-2 nats). The control lives in `reference_pass.self_consistency` (run 4+, chosen before the
+    arms) or `controls.reference_decode_vs_prefill` (runs 2-3, run after them). Prefill rows need no such control.
+    Returns (admitted, scorer_used, control_kl)."""
+    used = (rec.get("scorer") or {}).get("used") or (rec.get("scorer") or {}).get("name")
+    ctl = ((rec.get("reference_pass") or {}).get("self_consistency")
+           or (rec.get("controls") or {}).get("reference_decode_vs_prefill") or {})
+    kl = ctl.get("kl_mean")
+    if used == "prefill":
+        return True, used, kl
+    if used == "decode":
+        ok = ctl.get("passes", ctl.get("passes_1e-2"))
+        return bool(ok), used, kl
+    return False, used, kl
+
+
 def kl_verdicts(run_dir: str) -> dict:
     out = {}
     g = _load(os.path.join(run_dir, "gemma4_kl.json"))
     if g is not None:
         rows = kl_rows(g)
-        fam = {"not_measured": g.get("not_measured", {}), "scorer": g.get("scorer", {}).get("name")}
-        if "nf4" in rows:
+        fam = {"not_measured": g.get("not_measured", {}), "scorer": (g.get("scorer") or {}).get("used") or (g.get("scorer") or {}).get("name")}
+        ok, used, ckl = scorer_admitted(g)
+        fam["scorer_control"] = {"admitted": ok, "scorer": used, "reference_self_kl": ckl}
+        if not ok:
+            fam["verdict"] = f"NOT_READ: the {used} scorer is refused for this family (reference self-KL {ckl}; control (i) must pass)"
+            out["gemma4"] = fam
+        elif "nf4" in rows:
             for cand in ("int4_r1epi", "calattn_r1epi"):
                 fam[cand] = reading_rule(rows["nf4"], rows[cand]) if cand in rows else {"verdict": "NOT_READ"}
-            fam["P4_r1epi_equals_nf4"] = p4_control(rows["nf4"], rows["r1epi"]) if "r1epi" in rows else {"verdict": "NOT_READ"}
+            fam["P4_r1epi_equals_nf4"] = (p4_control(rows["nf4"], rows["r1epi"]) if ("r1epi" in rows and used == "decode")
+                                          else {"verdict": "NOT_READ (P4 needs the decode scorer: the fold engages only at T == 1)"})
         else:
             fam["verdict"] = "NOT_READ: no nf4 control row"
-        out["gemma4"] = fam
+        if "gemma4" not in out:
+            out["gemma4"] = fam
     gp = _load(os.path.join(run_dir, "gptoss_kl.json"))
     if gp is not None:
         rows = kl_rows(gp)
-        fam = {"not_measured": gp.get("not_measured", {}), "scorer": gp.get("scorer", {}).get("name")}
-        if "nf4_r12" in rows and "store_r12" in rows:
+        fam = {"not_measured": gp.get("not_measured", {}), "scorer": (gp.get("scorer") or {}).get("used") or (gp.get("scorer") or {}).get("name")}
+        ok, used, ckl = scorer_admitted(gp)
+        fam["scorer_control"] = {"admitted": ok, "scorer": used, "reference_self_kl": ckl}
+        if not ok:
+            fam["verdict"] = f"NOT_READ: the {used} scorer is refused for this family (reference self-KL {ckl}; control (i) must pass)"
+        elif "nf4_r12" in rows and "store_r12" in rows:
             fam["store_r12"] = reading_rule(rows["nf4_r12"], rows["store_r12"])
             fam["P6_store_at_floor"] = {"kl_mean": rows["store_r12"]["kl_mean"], "floor": 1e-3,
                                         "holds": rows["store_r12"]["kl_mean"] < 1e-3}
@@ -210,7 +238,9 @@ def render_md(v: dict) -> str:
                  + (f" — {r['reason']}" if r.get("reason") else "") + " |")
     L += ["", "## P44-b — KL from the family's reference (reading rule: every stratum ≤ 1.10× NF4 and pooled Δ ≤ 0.005 nats/token)", ""]
     for fam, r in v.get("kl", {}).items():
-        L += [f"### {fam} (scorer: {r.get('scorer')})", ""]
+        L += [f"### {fam} (scorer: {r.get('scorer')}; control (i) {r.get('scorer_control')})", ""]
+        if isinstance(r.get("verdict"), str) and r["verdict"].startswith("NOT_READ"):
+            L += [f"- **{r['verdict']}**", ""]
         for arm, rr in r.items():
             if not isinstance(rr, dict) or "licenses" not in rr:
                 continue
