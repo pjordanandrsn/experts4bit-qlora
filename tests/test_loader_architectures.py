@@ -1679,3 +1679,41 @@ def test_loader_pinned_sha_loads_from_an_offline_hub_cache_with_no_refs(tmp_path
     assert cfg._commit_hash == _PIN                       # the receipt, parsed from the cache path
     assert not [n for n, t in list(model.named_parameters()) + list(model.named_buffers()) if t.is_meta]
     assert not (repo_dir / "refs").exists()               # the load did not paper over the layout
+
+
+def test_loader_per_layer_store_map_builds_mixed_stores(tmp_path):
+    """P51 (#597): `quantize_layers` as a MAPPING gives each layer its own store, so one model can
+    hold a high-precision head and a crushed tail. The census must show exactly what the map asked
+    for -- a map that silently collapsed to one store, or to the global quant_type, would be the
+    bug this feature exists to make impossible."""
+    from experts4bit_qlora import ExpertsLoRA, verify_moe_4bit
+
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    # layer 0 int8, layer 1 nf4 at a different block; every other layer stays in the base dtype
+    # (the synthetic model's hidden_dim is 64, and the stack requires blocksize to divide it)
+    qmap = {0: "int8", 1: ("nf4", 32)}
+    model, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8, quant_type="nf4",
+                               quantize_layers=qmap, what="a per-layer store map")
+    bases = {n: m.base for n, m in model.named_modules() if isinstance(m, ExpertsLoRA)}
+    got = {n: (b.quant_type, b.blocksize) for n, b in bases.items()}
+    assert len(got) == 2, got
+    assert [v for k, v in sorted(got.items())] == [("int8", 64), ("nf4", 32)], got
+    rep = verify_moe_4bit(model)
+    assert rep["n_quantized"] == 2 and rep["n_unquantized"] == cfg.num_hidden_layers - 2, rep
+    model.config.use_cache = False
+    out = model(input_ids=torch.randint(0, cfg.vocab_size, (1, 8), device=DEVICE))
+    assert tuple(out.logits.shape) == (1, 8, cfg.vocab_size)
+
+
+def test_loader_per_layer_store_map_none_spec_is_the_base_dtype(tmp_path):
+    """A `None` spec inside the map means "this layer stays in the base dtype", so one mapping can
+    express "these bf16, those nf4" without a second argument."""
+    from experts4bit_qlora import ExpertsLoRA
+
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    model, _ = _load_or_skip(str(tmp_path), r=4, alpha=8, quant_type="nf4",
+                             quantize_layers={0: None, 1: "nf4"}, what="a per-layer store map")
+    bases = [m.base for m in model.modules() if isinstance(m, ExpertsLoRA)]
+    assert len(bases) == 1 and bases[0].quant_type == "nf4"

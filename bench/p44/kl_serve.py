@@ -59,6 +59,8 @@ REFERENCE = {
                   "card -- P44-b's Gemma-4 reference, reused unchanged for the P47 builders (#597)",
     "gemma4layer": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
                    "reference, reused unchanged for the P48 one-layer-at-a-time builders (#597)",
+    "gemma4mix": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
+                 "reference, reused unchanged for the P51 store-map builders (#597)",
     "gemma4keep": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
                   "reference, reused unchanged for the P50 keep-k builders (#597)",
     "gemma4fmt": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
@@ -164,6 +166,13 @@ def _builder_check(info: dict) -> None:
         if info.get(got) != info.get(want):
             raise RuntimeError(f"builder {info['builder']!r}: {got}={info.get(got)} but the builder expects {info.get(want)} "
                                f"(quantize_layers={info.get('quantize_layers')}) -- the layer set did not apply; row refused")
+    # P51: a TIERS row is checked against the census its builder names -- every layer at the store the map asked for
+    want = info.get("tier_census_expected")
+    if want:
+        got = {k: v for k, v in (info.get("stacks_by_store") or {}).items() if v}
+        if got != want:
+            raise RuntimeError(f"builder {info['builder']!r}: stacks by store {got} but the tiers ask for {want}; row refused")
+        return
     # P49: the STORE the builder named must be the store the stacks carry (a wrong quant_type or blocksize is a wrong row)
     if info.get("n_quantized", 0) and "quant_type" in info:
         if info.get("quantized_types") != [info["quant_type"]]:

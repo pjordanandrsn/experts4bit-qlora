@@ -1,0 +1,53 @@
+# P51 — A GRADED STORE MAP FOR GEMMA-4: keep the sensitive layers high-precision, crush the rest (pre-registered 2026-09-19 ~12:10Z, before any box is rented)
+
+Work item: adertha-agents#110; [#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597) (closed as explained). **Owner directive, 2026-09-19:** *"gemma: Keep the first N expert layers high precision, crush the rest."* P50 recommended shipping no Gemma-4 default; the owner's call is to ship the hybrid, so this lane picks its shape with numbers rather than assuming one.
+
+Lineage, all measured this morning on the same instrument: e4b's Gemma-4 modelling is faithful (P48: 0.0056 nats with 29 of 30 expert stacks bf16); per-layer sensitivity spans **159×** (P48: NF4 on layer 0 alone 0.892, on layer 27 alone 0.0056); **no store rescues layer 0** (P49: int8 0.693, fp8 0.774, NF4 0.892, FP4 1.051) because the sensitivity is positional, not magnitudinal; and a uniform bf16 head reaches the 0.05 fidelity floor only at N = 20, costing 32.35 GB of expert store against 12.0 GB all-NF4 and 42.5 GB all-bf16 (P50).
+
+**What those rows leave open is the shape of the head.** P50's head is uniform bf16 across 20 layers, but the layers inside it are not uniform: layer 0 is 0.892 and layer 19 is 0.017 on the same store. A **graded** map — bf16 only where it pays, int8 in the middle, NF4 at the end — is what the directive asks for and what nothing has measured. The mechanism for it landed with this lane: `load_moe_4bit_streaming(quantize_layers={layer: spec})` (a per-layer store map, `layer_store_spec`), refused on the arena and dedicated-quant paths, with tests.
+
+## Instrument and arms
+
+`bench/p44/kl_serve.py` (prefill scorer by control (i), the same cached bf16 reference and 200 committed prompts as P44-b / P47 / P48 / P49 / P50) on family **`gemma4mix`**, builder `loader_tiers_<store>:<count>_...` (counts sum to 30; `bf16` means the base dtype, so a tier spec is exactly a `quantize_layers` mapping):
+
+| arm | tiers (layers 0→29) | role |
+|---|---|---|
+| `bf16_20` | `bf16:20_nf4:10` | **the anchor — byte-for-byte P50's `loader_keep_20` (0.0469, 32.35 GB)** |
+| `int8_20` | `int8:20_nf4:10` | the uniform int8 head: half the head's bytes, and the cheap falsification of "just use int8" |
+| `graded_10_10` | `bf16:10_int8:10_nf4:10` | **the candidate** |
+| `graded_5_15` | `bf16:5_int8:15_nf4:10` | a shorter bf16 head |
+| `graded_10_10_crush` | `bf16:10_int8:10_nf4b256:10` | the candidate with the tail crushed harder |
+
+Proof of execution per row: `verify_moe_4bit`'s per-stack store and block must equal the tier census the builder names (`kl_serve._builder_check`), so a map that silently collapsed to one store refuses instead of producing a wrong row. Every row also carries the expert-bytes census P50 added.
+
+## Registered predictions (falsifiable; reducer `bench/p51/p51_reduce.py`)
+
+- **M1 (the anchor):** `bf16_20` ∈ [0.040, 0.055] — P50's 0.0469 rebuilt through the map machinery. Refuted → the map does not build what keep-k built and **nothing else in this lane is read**.
+- **M2 (a uniform int8 head fails):** `int8_20` **≥ 0.50**. P49 measured int8 on layer 0 *alone* at 0.693 and P50's curve is monotone in how much is quantised, so a head containing layer 0 at int8 cannot do better. Refuted below 0.30 → single-layer rows do not compose and the head question reopens with its own lane.
+- **M3 (grading works):** `graded_10_10` **≤ 0.10** — int8 on layers 10..19 costs little because those layers are 5–50× less sensitive than layer 0. Refuted at **≥ 0.30**; in between, reported and not shipped.
+- **M4 (grading saves bytes):** `graded_10_10`'s expert store ≤ **0.85×** the anchor's.
+- **M5 (the tail is not where the bytes are):** `graded_10_10_crush`'s store is within **5 %** of `graded_10_10`'s and its KL within **1.3×** — i.e. "crush the rest" is the cheap half of the directive and the head is where the memory lives. Refuted → crushing does pay and the tail store belongs in the default.
+
+## Decision rules
+
+- **M1 ∧ M3 ∧ M4 → the shipped Gemma-4 default is the graded map** with these boundaries, behind its own K8 + KL gate (a separate lane, because K8 is a serving-stack instrument), with the curve and the byte cost quoted beside it.
+- M3 refuted → the default is P50's uniform bf16 head at an N the user picks; grading does not pay and the write-up says so.
+- M5 refuted → the tail store joins the default and is named in it.
+- M2 refuted → reopen the head question before any default ships.
+- Until a default passes its gate, **no Gemma-4 position is quoted**. This lane ships a mechanism (the per-layer store map) and a recommendation, not a number.
+
+## Budget and STOP rules
+
+| run | class | $/h ceiling | guard | estimate |
+|---|---|---|---|---|
+| `p51-gemma4mix` | H100 NVL (≥ 80 GB) | 3.10 | 1.0 h | $3.10 |
+
+Timing basis (P50): fetch ~7 min, K0 < 2 min, reference pass 40 s, five loader arms ~90–150 s ≈ 12 min; ≈ 25 min. STOP: not the class (15); egress < 20 MB/s (14); free disk < 120 GB (13); K0 failing (16); a fetch alarm → not_run; a refused tier row (the census disagreeing with the map) is an honest hole and the other arms still run; a second host-limited draw → stop and report.
+
+## Receipts
+
+`receipts/experts4bit-qlora/<date>/p51-gemma4mix/p47/` — `gemma4mix_kl.json` (5 rows with their tier census and expert bytes), `k0.json`, `versions.txt`, `forensics.txt`, `logs/`; read by `bench/p51/p51_reduce.py`. Results → `RESULTS-p51.md`.
+
+## Amendments
+
+(none yet)
