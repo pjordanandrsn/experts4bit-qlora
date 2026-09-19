@@ -18,7 +18,9 @@ NONCE=${TP4_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/TP4_RUN_NONCE.tmp && mv $W
 finish(){ local rc=$1; printf '%s\n' "$rc" > TP4_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > TP4_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
 for v in TP4_BOX TP4_RUN_ID TP4_DEADLINE_EPOCH TP4_INSTANCE_ID E4B_SHA GNF4_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
-case "$TP4_BOX" in A|B|C) ;; *) say "refusing: TP4_BOX must be A, B or C"; finish 78;; esac
+case "$TP4_BOX" in A|B|C|D) ;; *) say "refusing: TP4_BOX must be A, B, C or D"; finish 78;; esac
+# D = the P43 T1 DIAGNOSIS box (bench/p43/P43-PREREG.md): e4b arms only, N defaults to 20, every step and micro-batch timed.
+[ "$TP4_BOX" = D ] && [ -z "${TP4_STEPS:-}" ] && export TP4_STEPS=20
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 PREREG=tp4/TP4-PREREG.md
 export TP4_INSTANCE_ID
@@ -40,6 +42,7 @@ case "$TP4_BOX" in
   A) FAMILIES=${TP4_FAMILIES:-"granite olmoe gptoss qwen3anchor notrun"};;
   B) FAMILIES=${TP4_FAMILIES:-"qwen3 qwen3_5"};;
   C) FAMILIES=${TP4_FAMILIES:-"gemma4 mixtral"};;
+  D) FAMILIES=${TP4_FAMILIES:-"qwen3diag"};;
 esac
 : > summary.txt; echo "$TP4_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST" | tee -a summary.txt
@@ -99,14 +102,19 @@ open("/root/tp4/versions.txt", "a").write(f"e4b {e.__version__} @{ce} (GitHub ma
 PYT
 tail -1 logs/tripwire_e4b.log
 # Unsloth: latest PyPI at launch (recorded), its own venv, NO transformers/bnb/peft pins from us (P38 amendment 1); torchao removed on the ScalingType tripwire (P38 amendment 2)
-UNS_VER=${TP4_UNSLOTH_VERSION:-$(python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/unsloth/json',timeout=60))['info']['version'])" 2>/dev/null)}
-ZOO_VER=${TP4_UNSLOTH_ZOO_VERSION:-$(python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/unsloth-zoo/json',timeout=60))['info']['version'])" 2>/dev/null)}
-UNS_OK=1; [ -z "$UNS_VER" ] && { echo "UNSLOTH VERSION UNRESOLVED (set TP4_UNSLOTH_VERSION)"; UNS_OK=0; }
-if [ "$UNS_OK" = 1 ]; then
-  say "venv-unsloth: unsloth[cu128-torch280]==$UNS_VER unsloth_zoo==$ZOO_VER"
-  python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir \
-    "unsloth[cu128-torch280]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
-  rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth) -- other arms still run; Unsloth rows = install_failed"; UNS_OK=0; }
+if [ "$TP4_BOX" = D ]; then
+  UNS_OK=0; UNS_VER=none; ZOO_VER=none
+  say "diagnosis box (P43 T1): the Unsloth comparator is NOT installed by registration -- its field-recipe row exists (receipt 2026-09-11/tp4-qwen-mb1-2); e4b arms only"
+else
+  UNS_VER=${TP4_UNSLOTH_VERSION:-$(python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/unsloth/json',timeout=60))['info']['version'])" 2>/dev/null)}
+  ZOO_VER=${TP4_UNSLOTH_ZOO_VERSION:-$(python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/unsloth-zoo/json',timeout=60))['info']['version'])" 2>/dev/null)}
+  UNS_OK=1; [ -z "$UNS_VER" ] && { echo "UNSLOTH VERSION UNRESOLVED (set TP4_UNSLOTH_VERSION)"; UNS_OK=0; }
+  if [ "$UNS_OK" = 1 ]; then
+    say "venv-unsloth: unsloth[cu128-torch280]==$UNS_VER unsloth_zoo==$ZOO_VER"
+    python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir \
+      "unsloth[cu128-torch280]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
+    rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth) -- other arms still run; Unsloth rows = install_failed"; UNS_OK=0; }
+  fi
 fi
 cat > $W/tripwire_unsloth.py <<'PYU'
 import importlib.metadata as md, torch, transformers, bitsandbytes, peft
@@ -318,6 +326,31 @@ notrun_rows(){  # the two registered families no single box of this class can ho
     local why="$why_ds"; [ "$fam" = kimi_k3 ] && why="$why_k3"
     for t in "e4b fused_attn4 fused" "unsloth ckpt_unsloth unsloth" "hf hf_peft hf" "e4b reference_attn4 reference"; do set -- $t; stubw $fam $1 $2 $3 not_run "$why" '{"registered": "TP4-PREREG.md Families"}'; done
   done; }
+# ---------------------------------------------------------------- P43 T1: the Qwen3 field-recipe DIAGNOSIS (bench/p43/P43-PREREG.md)
+# Same fetch/tokenise as `family` (same pin, same registered Alpaca subset); e4b arms ONLY, each with every optimizer step
+# printed and every micro-batch timed (tp4_arm.py T17), Triton autotuning printed into the arm log, the per-second GPU
+# sample tp4 already takes. Between arms the Triton cache is cleared, so an ALARMED arm cannot leave a stale JIT lock for
+# the next one (the confound tp4's sharpened read hit). An alarm is a ROW with its partial curve; nothing is coerced.
+diag_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 AL=${TP4_DIAG_ALARM:-$5} LE=${TP4_LOG_EVERY:-1}
+  say "===== DIAG family $FAM ($MID @ $REV; P43 T1: e4b arms only, steps=$STEPS, log_every=$LE, microbatch_timing=1, TRITON_PRINT_AUTOTUNING=1, arm alarm $AL)"
+  export TRITON_PRINT_AUTOTUNING=1
+  FETCH_REASON=""; fetch $FAM $MID $REV $FAL; local frc=$?
+  if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault
+    for t in "e4b fused_attn4 fused" "e4b fused_bf16attn fused" "e4b fused_attn4_mb1 fused"; do set -- $t; stubw $FAM $1 $2 $3 $st "$FETCH_REASON"; done
+    free_family $FAM ${MID//\//--}; return 0; fi
+  local TOK=$W/tokens_$FAM.json
+  if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK; then
+    local why; why="tokenise failed (logs/prepare_${FAM}_alpaca.log): $(tail -1 logs/prepare_${FAM}_alpaca.log | cut -c1-200)"
+    for t in "e4b fused_attn4 fused" "e4b fused_bf16attn fused" "e4b fused_attn4_mb1 fused"; do set -- $t; stubw $FAM $1 $2 $3 harness_error "$why"; done
+    free_family $FAM ${MID//\//--}; return 0; fi
+  local TS; TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS" | tee -a summary.txt
+  local extra="--log-every $LE --microbatch-timing 1"
+  can_run 600 $FAM/e4b/fused && arm $FAM e4b fused_attn4 fused $AL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $extra
+  rm -rf /root/.triton/cache; say "triton cache cleared between arms"
+  can_run 600 $FAM/e4b/fused_bf16attn && arm $FAM e4b fused_bf16attn fused $AL "$MID" $REV 0 field $TOK $TS --attn-4bit 0 $extra
+  rm -rf /root/.triton/cache; say "triton cache cleared between arms"
+  can_run 600 $FAM/e4b/fused_mb1 && arm $FAM e4b fused_attn4_mb1 fused $AL "$MID" $REV 0 mb1 $TOK $TS --attn-4bit 1 $extra
+  echo "$(echo $FAM | tr a-z A-Z) DIAG DONE" | tee -a summary.txt; free_family $FAM ${MID//\//--}; }
 UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"     # the notebooks' seven targets
 UT4="q_proj,k_proj,v_proj,o_proj"                                 # attention only: families with a SHARED dense expert (qwen3_5) so both frameworks adapt the same set
 # ---------------------------------------------------------------- the plan (TP4-PREREG "Families"; revisions = the HF API on 2026-09-10, tp1/tp2's where they exist)
@@ -331,6 +364,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   gemma4)    family gemma4   google/gemma-4-26B-A4B-it                 4d7ae4984b7db7de8f8457170b3f1a419ee76d52 5400 3600 3600 1800 5400 0 normal $UT7;;
   mixtral)   family mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 2400 1800 6000 1 normal $UT7;;
   qwen3anchor) anchor_pair;;
+  qwen3diag) diag_family qwen3 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400;;
   notrun)    notrun_rows;;
   *) say "unknown family token $FAM"; echo "UNKNOWN $FAM" >> summary.txt;;
 esac; done
@@ -338,5 +372,5 @@ esac; done
 say "reduce"
 $PY_E4B $W/tp4_reduce.py $W --md $W/RESULTS-tp4-box$TP4_BOX.md --steps $STEPS > RESULTS.txt 2>&1; tail -30 RESULTS.txt
 echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"; cat versions.txt
-[ "$UNS_OK" = 1 ] || echo "NO UNSLOTH COMPARATOR on this box: the Unsloth side did not install/import (rows = install_failed)" | tee -a summary.txt
+[ "$UNS_OK" = 1 ] || [ "$TP4_BOX" = D ] || echo "NO UNSLOTH COMPARATOR on this box: the Unsloth side did not install/import (rows = install_failed)" | tee -a summary.txt
 finish 0
