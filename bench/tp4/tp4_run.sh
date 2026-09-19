@@ -18,9 +18,10 @@ NONCE=${TP4_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/TP4_RUN_NONCE.tmp && mv $W
 finish(){ local rc=$1; printf '%s\n' "$rc" > TP4_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > TP4_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
 for v in TP4_BOX TP4_RUN_ID TP4_DEADLINE_EPOCH TP4_INSTANCE_ID E4B_SHA GNF4_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
-case "$TP4_BOX" in A|B|C|D) ;; *) say "refusing: TP4_BOX must be A, B, C or D"; finish 78;; esac
+case "$TP4_BOX" in A|B|C|D|E) ;; *) say "refusing: TP4_BOX must be A, B, C, D or E"; finish 78;; esac
 # D = the P43 T1 DIAGNOSIS box (bench/p43/P43-PREREG.md): e4b arms only, N defaults to 20, every step and micro-batch timed.
 [ "$TP4_BOX" = D ] && [ -z "${TP4_STEPS:-}" ] && export TP4_STEPS=20
+[ "$TP4_BOX" = E ] && [ -z "${TP4_STEPS:-}" ] && export TP4_STEPS=8      # P45: 3 warm + 3 profiled + 2, the profiled steps are flagged in the receipt
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 PREREG=tp4/TP4-PREREG.md
 export TP4_INSTANCE_ID
@@ -43,6 +44,7 @@ case "$TP4_BOX" in
   B) FAMILIES=${TP4_FAMILIES:-"qwen3 qwen3_5"};;
   C) FAMILIES=${TP4_FAMILIES:-"gemma4 mixtral"};;
   D) FAMILIES=${TP4_FAMILIES:-"qwen3diag"};;
+  E) FAMILIES=${TP4_FAMILIES:-"qwen3prof"};;
 esac
 : > summary.txt; echo "$TP4_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST" | tee -a summary.txt
@@ -351,6 +353,33 @@ diag_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 AL=${TP4_DIAG_ALARM:-$5} LE=${T
   rm -rf /root/.triton/cache; say "triton cache cleared between arms"
   can_run 600 $FAM/e4b/fused_mb1 && arm $FAM e4b fused_attn4_mb1 fused $AL "$MID" $REV 0 mb1 $TOK $TS --attn-4bit 1 $extra
   echo "$(echo $FAM | tr a-z A-Z) DIAG DONE" | tee -a summary.txt; free_family $FAM ${MID//\//--}; }
+# P45 (bench/p45/P45-PREREG.md): where a training step's time goes. Two arms at the field recipe, each with 3 warm + 3 profiled
+# steps (torch.profiler CPU+CUDA in tp4_arm.py --profile-steps) and a 1 s nvidia-smi dmon sampler (sm%, mem%, PCIe rx/tx MB/s)
+# running beside the arm. e4b fused_attn4 (T1's arm, 29.3 s/step at 16 % util) and the Unsloth comparator on the same box.
+dmon_start(){ ( nvidia-smi dmon -s ut -d 1 -o T > $W/logs/dmon_$1.txt 2>/dev/null ) & echo $!; }
+dmon_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
+prof_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 AL=${TP4_PROF_ALARM:-$5} PS=${TP4_PROFILE_STEPS:-3} PW=${TP4_PROFILE_WARM:-3}
+  say "===== PROF family $FAM ($MID @ $REV; P45: e4b fused_attn4 + unsloth ckpt_unsloth, steps=$STEPS, profile warm=$PW steps=$PS, dmon 1 s, arm alarm $AL)"
+  FETCH_REASON=""; fetch $FAM $MID $REV $FAL; local frc=$?
+  if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault
+    for t in "e4b fused_attn4 fused" "unsloth ckpt_unsloth unsloth"; do set -- $t; stubw $FAM $1 $2 $3 $st "$FETCH_REASON"; done
+    free_family $FAM ${MID//\//--}; return 0; fi
+  local TOK=$W/tokens_$FAM.json
+  if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK; then
+    local why; why="tokenise failed (logs/prepare_${FAM}_alpaca.log): $(tail -1 logs/prepare_${FAM}_alpaca.log | cut -c1-200)"
+    for t in "e4b fused_attn4 fused" "unsloth ckpt_unsloth unsloth"; do set -- $t; stubw $FAM $1 $2 $3 harness_error "$why"; done
+    free_family $FAM ${MID//\//--}; return 0; fi
+  local TS; TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS" | tee -a summary.txt
+  local extra="--log-every 1 --microbatch-timing 1 --profile-steps $PS --profile-warm $PW"
+  local dp; dp=$(dmon_start ${FAM}_e4b_fused_attn4)
+  can_run 600 $FAM/e4b/fused && arm $FAM e4b fused_attn4 fused $AL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $extra
+  dmon_stop $dp
+  if [ "$UNS_OK" = 1 ]; then dp=$(dmon_start ${FAM}_unsloth_ckpt_unsloth)
+    can_run 600 $FAM/unsloth && arm $FAM unsloth ckpt_unsloth unsloth $AL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT7" $extra
+    dmon_stop $dp
+  else stubw $FAM unsloth ckpt_unsloth unsloth install_failed "venv-unsloth did not install or import (see logs/pip_unsloth.log, logs/tripwire_unsloth.log)"; fi
+  for f in $W/logs/dmon_*.txt; do [ -s "$f" ] && echo "DMON $(basename $f) $(wc -l < $f) samples" >> summary.txt; done
+  echo "$(echo $FAM | tr a-z A-Z) PROF DONE" | tee -a summary.txt; free_family $FAM ${MID//\//--}; }
 UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"     # the notebooks' seven targets
 UT4="q_proj,k_proj,v_proj,o_proj"                                 # attention only: families with a SHARED dense expert (qwen3_5) so both frameworks adapt the same set
 # ---------------------------------------------------------------- the plan (TP4-PREREG "Families"; revisions = the HF API on 2026-09-10, tp1/tp2's where they exist)
@@ -365,6 +394,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   mixtral)   family mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 2400 1800 6000 1 normal $UT7;;
   qwen3anchor) anchor_pair;;
   qwen3diag) diag_family qwen3 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400;;
+  qwen3prof) prof_family qwen3 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;
   notrun)    notrun_rows;;
   *) say "unknown family token $FAM"; echo "UNKNOWN $FAM" >> summary.txt;;
 esac; done
