@@ -65,6 +65,31 @@ MODELS = {
     "gptoss": ("openai/gpt-oss-20b", "6cee5e81ee83917806bbde320786a8fb61efebee"),
 }
 
+# P47 (#597, the Gemma-4 diagnostic): the SAME nf4 lever set (no int4 stores, no fusions) on five BUILDERS of the
+# model. Every arm's env is the nf4 control's; what differs is how the model is constructed -- `BUILDERS` below.
+ARMS["gemma4diag"] = {
+    "served_nf4": (0, 0, "0", {}),          # P44-b's `nf4`: arena bake + placement + hybrid tier, all-VRAM (the 1.077 anchor)
+    "loader_nf4": (0, 0, "0", {}),          # the training loader alone: load_moe_4bit_streaming, NF4 experts, no arena / tier
+    "loader_bf16experts": (0, 0, "0", {}),  # the training loader with quantize_layers=set(): e4b's Gemma-4 modelling, bf16 experts
+    "loader_nf4_lo": (0, 0, "0", {}),       # NF4 experts in the first half of the layers only (the rest bf16)
+    "loader_nf4_hi": (0, 0, "0", {}),       # NF4 experts in the second half only
+}
+MODELS["gemma4diag"] = MODELS["gemma4"]
+BUILDERS = {"gemma4diag": {"served_nf4": "served", "loader_nf4": "loader", "loader_bf16experts": "loader_unquant",
+                           "loader_nf4_lo": "loader_lo", "loader_nf4_hi": "loader_hi"}}
+LOADER_BUILDERS = ("loader", "loader_unquant", "loader_lo", "loader_hi")
+
+
+def builder_for(family: str, arm: str) -> str:
+    """How this arm's model is built: ``served`` (P44-b, default) or one of the P47 loader builders."""
+    return BUILDERS.get(family, {}).get(arm, "served")
+
+
+def control_arm(family: str) -> str:
+    """The family's control row: ``nf4`` where registered, else the FIRST registered arm (P47: ``served_nf4``)."""
+    return "nf4" if "nf4" in ARMS[family] else next(iter(ARMS[family]))
+
+
 LANE_KEYS = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_INT4_CALIB", "E4B_SERVE_ATTN_INT4",
              "E4B_SERVE_LMHEAD_INT4_CALIB", "E4B_SERVE_DENSE_INT4_CALIB", "E4B_CALIB_SOURCE", "E4B_CALIB_NSEQ",
              "E4B_INT4_KEEP_NF4", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
@@ -180,6 +205,64 @@ def build_served_model(model_id: str, arena: str, calib_path: str, *, hot_rows: 
     return model, info
 
 
+def text_layers(model_id: str) -> int:
+    """The text tower's decoder-layer count from the pinned config (multimodal configs keep it under text_config)."""
+    from transformers import AutoConfig
+    cfg = AutoConfig.from_pretrained(model_id)
+    for c in (getattr(cfg, "text_config", None), cfg):
+        n = getattr(c, "num_hidden_layers", None) if c is not None else None
+        if isinstance(n, int) and n > 0:
+            return n
+    raise ValueError("cannot find num_hidden_layers in this config")
+
+
+def quantize_layer_set(builder: str, n_layers: int):
+    """P47's per-builder ``quantize_layers``: None (all), the empty set (none), the first half, the second half."""
+    half = n_layers // 2
+    return {"loader": None, "loader_unquant": set(), "loader_lo": set(range(0, half)),
+            "loader_hi": set(range(half, n_layers))}[builder]
+
+
+def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
+    """P47's loader arms: the model exactly as a TRAINING step would hold it -- `load_moe_4bit_streaming` with no
+    arena and no hybrid tier (P43 T2b's fixture), NF4 experts in the layers ``quantize_layer_set`` names and the
+    checkpoint's bf16 everywhere else. Returns ``(model, info)``; ``info`` carries the proof of execution --
+    ``verify_moe_4bit``'s quantised / unquantised stack counts beside the counts the builder expects -- so a
+    builder whose layer set did not apply refuses its row (`kl_serve._builder_check`)."""
+    import torch
+    from experts4bit_qlora import load_moe_4bit_streaming, verify_moe_4bit
+    if builder not in LOADER_BUILDERS:
+        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS}")
+    n = text_layers(model_id)
+    ql = quantize_layer_set(builder, n)
+    torch.manual_seed(1689)
+    model, _ = load_moe_4bit_streaming(model_id, device, torch.bfloat16, r=8, alpha=16, offload=False, pin=True,
+                                       prefetch=False, quant_type="nf4", quantize_layers=ql)
+    model.eval()
+    for cfg_ in (model.config, getattr(model.config, "text_config", None)):
+        if cfg_ is not None:
+            cfg_.use_cache = True
+    v = verify_moe_4bit(model)
+    info = {"builder": builder, "moe_layers": n, "quantize_layers": "all" if ql is None else sorted(ql),
+            "n_quantized": v["n_quantized"], "n_unquantized": v["n_unquantized"],
+            "expected_quantized": n if ql is None else len(ql), "expected_unquantized": 0 if ql is None else n - len(ql),
+            "quantized_modules": [q["module"] for q in v["quantized"]][:64],
+            "unquantized_modules": [u["module"] for u in v["unquantized"]][:64],
+            "int4_expert_layers": 0, "int4_attn_projections": 0,
+            "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": 0, "fuse_router_epilogue_n": 0}
+    return model, info
+
+
+def build_arm_model(family: str, arm: str, model_id: str, arena: str, calib_path: str, *, device: str = "cuda"):
+    """ONE entry for every KL arm: the served stack (P44-b) or a P47 loader builder, by `builder_for`."""
+    b = builder_for(family, arm)
+    if b == "served":
+        model, info = build_served_model(model_id, arena, calib_path, device=device)
+        info["builder"] = "served"
+        return model, info
+    return build_loader_model(model_id, b, device=device)
+
+
 def main(argv=None) -> int:
     a = argv if argv is not None else sys.argv[1:]
     if len(a) == 3 and a[0] == "env":
@@ -191,7 +274,10 @@ def main(argv=None) -> int:
     if len(a) == 2 and a[0] == "arms":
         print(" ".join(ARMS[a[1]]))
         return 0
-    print("usage: serve_stack.py env <family> <arm> | model <family> | arms <family>", file=sys.stderr)
+    if len(a) == 3 and a[0] == "builder":
+        print(builder_for(a[1], a[2]))
+        return 0
+    print("usage: serve_stack.py env <family> <arm> | model <family> | arms <family> | builder <family> <arm>", file=sys.stderr)
     return 2
 
 
