@@ -59,29 +59,54 @@ $SSH "cd $W || exit 20; nohup env $PASS bash tp4_run.sh > outer.log 2>&1 < /dev/
 # DEFINITION, so those two conditions alone cannot tell a fetch from a hang.
 # The HF cache lives OUTSIDE $W, so `du` stays flat through a model fetch and
 # only free-disk movement sees it; `du` still catches in-tree writes.
+# Progress must be BIG ENOUGH to be work, not just nonzero (e4b#634).
+# tp4-c-parity-1 died on the box at ~20:36 and the controller polled it for 53
+# more minutes, because the heartbeat kept logging `fetching (-0M on disk)`: a
+# sub-megabyte write -- a log line -- read as a fetch and silenced a stall alarm
+# that had correctly fired six times. A threshold of "any byte" is not a
+# threshold. A checkpoint shard moves hundreds of MB per minute; nothing real
+# moves 200 KB and stops.
+TP4_MIN_PROGRESS_MB=${TP4_MIN_PROGRESS_MB:-16}
 tp4_progress_verdict() {
   idle_s=$1; stall_s=$2; util=$3; dfk_now=$4; dfk_prev=$5; du_now=$6; du_prev=$7
+  min_mb=${8:-$TP4_MIN_PROGRESS_MB}
   consumed=0; grew=0
-  if [ -n "$dfk_now" ] && [ -n "$dfk_prev" ] && [ "$dfk_now" -lt "$dfk_prev" ] 2>/dev/null; then consumed=$((dfk_prev - dfk_now)); fi
+  if [ -n "$dfk_now" ] && [ -n "$dfk_prev" ] && [ "$dfk_now" -lt "$dfk_prev" ] 2>/dev/null; then consumed=$(( (dfk_prev - dfk_now) / 1024 )); fi
   if [ -n "$du_now" ] && [ -n "$du_prev" ] && [ "$du_now" -gt "$du_prev" ] 2>/dev/null; then grew=$((du_now - du_prev)); fi
-  if [ "$consumed" -gt 0 ] || [ "$grew" -gt 0 ]; then
-    if [ "$consumed" -ge "$((grew * 1024))" ]; then echo "fetching:-$((consumed / 1024))M on disk"
+  if [ "$consumed" -ge "$min_mb" ] || [ "$grew" -ge "$min_mb" ]; then
+    if [ "$consumed" -ge "$grew" ]; then echo "fetching:-${consumed}M on disk"
     else echo "fetching:+${grew}M in tree"; fi
     return 0
   fi
   if [ "$idle_s" -ge "$stall_s" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then echo "stall:$idle_s"; fi
 }
 
+# A lane that DIED is not a lane that is slow (e4b#634). tp4-c-parity-1's remote
+# process was killed without writing TP4_EXIT_CODE or TP_DONE -- no OOM, 123 GB
+# free -- so every marker the controller polls for was simply absent forever,
+# which is indistinguishable from "still working" to a poller. The box itself
+# answers the question: is the lane's own process still there?
+# Two consecutive absences, so one flaky ssh or pgrep does not end a good run.
+tp4_lane_dead() {  # live_now live_prev  -> "dead" when both are a definite 0
+  [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead
+}
+
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"
-LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
 while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}')\"" 2>/dev/null)
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f 'bash tp4_run.sh' | wc -l | tr -d ' ')\"" 2>/dev/null)
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
   dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
+  live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
   if [ "$line" != "$LAST" ]; then LAST=$line; LAST_CHANGE=$now; fi
+  if [ -n "$(tp4_lane_dead "$live" "$LAST_LIVE")" ]; then
+    say "LANE DEAD: no 'bash tp4_run.sh' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
+    LANE_DEAD=1; break
+  fi
+  LAST_LIVE=$live
   verdict=$(tp4_progress_verdict "$((now - LAST_CHANGE))" "$STALL_S" "${util:-0}" "$dfk" "$LAST_DFK" "$duM" "$LAST_DU")
   LAST_DFK=$dfk; LAST_DU=$duM
   case "$verdict" in
@@ -96,7 +121,11 @@ rm -rf "$RUN_DIR/tp4" && mkdir -p "$RUN_DIR/tp4" || { say "fetch failed: local d
 rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' "root@$HOST:$W/" "$RUN_DIR/tp4/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/tp4" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/tp4/TP4_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
-[ -f "$RUN_DIR/tp4/TP_DONE.$NONCE" ] || { say "lane did not finish (no TP_DONE for this run)"; exit 23; }
+[ -f "$RUN_DIR/tp4/TP_DONE.$NONCE" ] || {
+  # A lane the box killed is a different fact from a lane that ran out of clock,
+  # and the receipt should not flatten them (e4b#634).
+  [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no TP4_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }
+  say "lane did not finish (no TP_DONE for this run)"; exit 23; }
 RC=$(cat "$RUN_DIR/tp4/TP4_EXIT_CODE.$NONCE" 2>/dev/null); case "$RC" in ''|*[!0-9]*) say "malformed exit code"; exit 24;; esac
 [ -f "$RUN_DIR/tp4/TP4_SUCCESS.$NONCE" ] && [ "$RC" = 0 ] || { say "lane exit rc=$RC without success marker"; exit "$RC"; }
 say "box $TP4_BOX complete rc=0"; exit 0
