@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **CI pins grouped-nf4-gemm at the v0.32.1 release commit** (`9206352f`; the `[fast]` floor `>=0.30.0` is unchanged) and the
+  system manifest is the v0.32.1 copy (`consumer_ci_pin` prose now names v0.32.1). What 0.32.1 changes for e4b training: the
+  grouped-LoRA delta's `auto` path now pads unless the padded block would not fit (P46, `bench/p46/RESULTS-p46.md`: 4.22 vs
+  24.46 s/step at Qwen3-30B-A3B's field recipe, same loss, same peak VRAM). **No training position moves from this entry** --
+  the tp4 box-B head-to-head re-runs on the 0.32.1 commit and the position, if any, is quoted from that receipt.
+- `bench/tp4/tp4_run.sh`: refuses before any fetch when the instance overlay has under `TP4_MIN_DISK_GB` (200) GB free (P48
+  run 1 died ENOSPC on a 32 GB overlay; the launcher orders machine disk, the instance overlay is what the box gets).
+
 ## 0.36.2 — 2026-09-19 — the K16 small-M int4 attention route ships and defaults to `auto` (−1.06 ms/step at B=16 on the 5090, P5 read); the P43 read (T1: no collapse, host-bound; T2b: #558 is a per-family band); the P44 and P45 instruments
 
 ### K16 route: `Int4Linear` serves 2..16 rows with grouped-nf4-gemm's small-M int4 GEMM (#578, #587; lane K16, #561)
