@@ -9,8 +9,11 @@ scaffolding, the T10 structural attention census. What is new, named so the file
   T11 --framework hf / --arm hf: the field's plain stack -- transformers AutoModelForCausalLM with
       BitsAndBytesConfig(load_in_4bit, nf4, bf16 compute, no double quant) + PEFT LoraConfig with target_modules =
       every attention projection found BY STRUCTURE (q/k/o present, v optional -- the same predicate as e4b's
-      detector) and target_parameters = every frozen 3-D expert parameter (PEFT >= 0.17 creates one A/B pair per
-      expert, the shape e4b's ExpertsLoRA and Unsloth's MoE LoRA also have). What is and is not 4-bit is what the
+      detector) and target_parameters = every 3-D floating expert stack, ALSO found by structure since #542 -- the
+      rule was a `"experts" in name` substring, which selects NOTHING on a family that names the module something
+      else and then degrades silently to attention-only, so an empty or implausible selection now REFUSES (PEFT
+      >= 0.17 creates one A/B pair per expert, the shape e4b's ExpertsLoRA and Unsloth's MoE LoRA also have). What
+      is and is not 4-bit is what the
       census records: transformers' bnb quantizer converts nn.Linear only, so the expert stacks stay bf16 and the
       row says so (census Params4bit_expert_stacks == 0). Its engagement counter is experts_forward (module
       forward calls); a loader exception is classified exactly as Unsloth's (oom / refused / load_fault).
@@ -128,7 +131,9 @@ import torch
 import torch.nn as nn
 
 PREREG = "tp4/TP4-PREREG.md"   # selftest-only: real runs must pass --prereg (main() refuses otherwise; no default)
-HARNESS = "tp4_arm.py (copy of tp3_arm.py @ e0cfb488 + T11-T16: hf arm, alpaca template, micro-batches, optim/schedule, unsloth loader fallback; + T17: --log-every / --microbatch-timing, P43)"
+HARNESS = ("tp4_arm.py (copy of tp3_arm.py @ e0cfb488 + T11-T16: hf arm, alpaca template, micro-batches, optim/schedule, "
+           "unsloth loader fallback; + T17: --log-every / --microbatch-timing, P43; + #542: HF expert selection by "
+           "STRUCTURE, an empty/implausible selection refuses)")   # a receipt must say WHICH harness produced it
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
 FMT = "### Instruction:\n{instruction}\n\n### Response:\n{output}"
@@ -765,24 +770,121 @@ def is_linear_like(m):
     return m is not None and isinstance(m, nn.Module) and hasattr(m, "in_features") and hasattr(m, "out_features") and hasattr(m, "weight")
 
 
-def hf_targets(model):
-    """T11: what PEFT adapts, found BY STRUCTURE (the same predicate as e4b's detector -- q/k/o present, v optional) plus
-    every frozen 3-D expert parameter; full names, so PEFT's suffix match is exact."""
-    mods, params = [], []
+def per_expert_2d_groups(model):
+    """#542, diagnostic only: how many modules hold their experts PER EXPERT -- numerically named sibling submodules,
+    each carrying linear-like children. That layout has no fused stack for PEFT's target_parameters to adapt, so it is
+    the commonest thing an empty structural selection means; counting it turns a bare refusal into a legible one."""
+    n = 0
+    for _, m in model.named_modules():
+        kids = list(m.named_children())
+        if len(kids) >= 2 and all(k.isdigit() for k, _ in kids) \
+                and all(any(is_linear_like(c) for _, c in kid.named_children()) for _, kid in kids):
+            n += 1
+    return n
+
+
+def declared_num_experts(cfg):
+    """The expert count the CONFIG declares, if it declares one. Used only to disambiguate a structural selection that
+    found more than one leading dimension -- never to make the selection."""
+    for owner in (getattr(cfg, "text_config", None), cfg):
+        if owner is None:
+            continue
+        for k in ("num_experts", "num_local_experts", "n_routed_experts", "moe_num_experts", "num_experts_per_layer"):
+            v = getattr(owner, k, None)
+            if isinstance(v, int) and not isinstance(v, bool) and v > 1:
+                return v
+    return None
+
+
+def hf_expert_parameters(model, n_layers=None, model_type=None):
+    """#542: the fused expert stacks PEFT must adapt, selected BY STRUCTURE and never by a family's word for the module.
+
+    The predicate is the SHAPE: a 3-D floating-point parameter (E, *, *). A decoder carries no other one -- attention
+    and MLP weights are 2-D, norms and biases 1-D, embeddings 2-D, and bitsandbytes' Params4bit is uint8 -- so nothing
+    here reads a name. The pre-#542 rule was ``p.ndim == 3 and "experts" in name``, a NAME substring, which is the
+    shape #426/#435 already removed from the attention path: it selects nothing on a family that calls the module
+    something else (GraniteMoe's own ``block_sparse_moe.input_linear`` / ``output_linear``) and then degrades SILENTLY
+    to an attention-only run. ``EXPERT_PARAM_RE``, the other candidate the issue names, does not fix that either --
+    it requires a literal ``experts.`` component in the path, so it misses the very layout whose leaf names it lists.
+
+    ``requires_grad`` is deliberately NOT part of the predicate, against the issue's sketch: this runs BEFORE
+    ``get_peft_model``, where transformers has not frozen the base weights, so a frozen-only filter would select
+    nothing on a real load.
+
+    An empty or implausible selection RAISES ``NotImplementedError`` -- ``run_arm`` classifies that as ``refused``
+    (code 3), the same way ``load_hf`` already refuses when no attention projection is found. An arm that adapts
+    attention only is not the comparator this lane registered, and a comparator that quietly becomes something else
+    is worse than a missing row.
+
+    Returns (names, diag); the diag goes into the receipt so a future run can be audited against this rule.
+    """
+    by_lead, quantized_3d = {}, []
+    for name, p in model.named_parameters():
+        if p.ndim != 3:
+            continue
+        if not p.is_floating_point():                  # a quantized stack is not a PEFT target_parameters candidate
+            quantized_3d.append(name)
+            continue
+        by_lead.setdefault(int(p.shape[0]), []).append(name)
+    declared = declared_num_experts(getattr(model, "config", None))
+    flat = [n for names in by_lead.values() for n in names]
+    diag = {"rule": "structural: 3-D floating parameter (E, *, *), no name substring (#542)",
+            "n_3d_floating": len(flat), "leading_dims": {str(k): len(v) for k, v in sorted(by_lead.items())},
+            "declared_num_experts": declared, "n_3d_non_floating": len(quantized_3d),
+            "n_by_name_substring": sum("experts" in n for n in flat),        # what the pre-#542 rule would have taken
+            "n_by_expert_param_re": sum(bool(EXPERT_PARAM_RE.search(n)) for n in flat),
+            "per_expert_2d_groups": per_expert_2d_groups(model),
+            "n_layers": n_layers, "model_type": model_type}
+
+    def refusal(why):     # the reason is truncated to 700 chars in the receipt, so everything load-bearing comes first
+        return NotImplementedError(
+            f"HF arm REFUSES its expert selection: {why} (model_type={model_type!r}, n_layers={n_layers}). Adapting "
+            f"attention only is not this lane's HF comparator (#542). Looked for a 3-D floating expert stack (E, *, *) "
+            f"BY STRUCTURE; selection census {json.dumps(diag, sort_keys=True)}")
+
+    if not flat:
+        raise refusal("no expert stack found")
+    if declared is not None and declared in by_lead:
+        lead = declared
+    elif len(by_lead) == 1:
+        # One leading dimension is unambiguous STRUCTURE, so it wins even when the config declares a different number:
+        # the declared field means different things across families (routed vs shared experts), and structure is the
+        # rule here. The disagreement is recorded in the diag, so a receipt shows it rather than hiding it.
+        lead = next(iter(by_lead))
+    elif declared is not None:
+        raise refusal(f"the config declares {declared} experts but no 3-D floating parameter has that leading dimension")
+    else:
+        raise refusal(f"3-D floating parameters disagree on their leading dimension {sorted(by_lead)} "
+                      f"and the config declares no expert count")
+    if lead < 2:
+        raise refusal(f"the only 3-D floating parameters have leading dimension {lead}, which is not an expert stack")
+    names = by_lead[lead]
+    if n_layers and len(names) % n_layers:
+        raise refusal(f"{len(names)} expert stacks over {n_layers} layers is not a whole number per layer")
+    diag["n_selected"], diag["experts_per_stack"] = len(names), lead
+    diag["stacks_per_layer"] = (len(names) // n_layers) if n_layers else None
+    return names, diag
+
+
+def hf_targets(model, n_layers=None, model_type=None):
+    """T11 / #542: what PEFT adapts, found BY STRUCTURE -- the attention projections by the same predicate as e4b's
+    detector (q/k/o present, v optional), the expert stacks by shape via hf_expert_parameters, which REFUSES rather
+    than handing back an empty list. Full names, so PEFT's suffix match is exact."""
+    mods = []
     for name, m in model.named_modules():
         if all(is_linear_like(getattr(m, p, None)) for p in ("q_proj", "k_proj", "o_proj")):
             for p in ("q_proj", "k_proj", "v_proj", "o_proj"):
                 if is_linear_like(getattr(m, p, None)):
                     mods.append(f"{name}.{p}")
-    for name, p in model.named_parameters():
-        if p.ndim == 3 and "experts" in name:          # the fused expert stacks (E, out, in); biases and 2-D params are not adapted
-            params.append(name)
-    return mods, params
+    params, expert_diag = hf_expert_parameters(model, n_layers, model_type)
+    return mods, params, expert_diag
 
 
 def load_hf(a):
     """T11: the field's plain stack -- transformers + bitsandbytes 4-bit + PEFT LoRA (target_modules by structure,
-    target_parameters on the 3-D expert stacks). The census, not this function, says what ended up 4-bit."""
+    target_parameters on the 3-D expert stacks, BOTH by structure since #542 -- a family whose expert stacks cannot be
+    found refuses here rather than training an attention-only arm). The census, not this function, says what ended up
+    4-bit."""
     import peft
     from huggingface_hub import snapshot_download
     from peft import LoraConfig, get_peft_model
@@ -797,17 +899,18 @@ def load_hf(a):
     model = AutoModelForCausalLM.from_pretrained(local, quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0})
     x["n_layers"], x["model_type"] = n_layers_of(model.config)
     x["attn4_probe"] = attn4_bias_probe(model)
-    mods, params = hf_targets(model)
+    mods, params, expert_diag = hf_targets(model, x["n_layers"], x["model_type"])   # #542: params is never empty -- it refuses
     if not mods:
         raise NotImplementedError("HF arm: no attention projection found by structure (q_proj/k_proj/o_proj); refusing rather than guessing")
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
     cfg = LoraConfig(r=a.r, lora_alpha=a.alpha, lora_dropout=0.0, bias="none", target_modules=mods,
-                     target_parameters=(params or None), task_type="CAUSAL_LM")
+                     target_parameters=params, task_type="CAUSAL_LM")
     model = get_peft_model(model, cfg)
     model.config.use_cache = False
     x["hf_targets"] = {"peft": peft.__version__, "n_target_modules": len(mods), "target_modules_sample": mods[:4],
                        "n_target_parameters": len(params), "target_parameters": params[:8] + (["..."] if len(params) > 8 else []),
+                       "expert_selection": expert_diag,      # #542: the structural rule + what the old substring would have taken
                        "bnb": {"load_in_4bit": True, "quant_type": "nf4", "compute_dtype": "bfloat16", "double_quant": False}}
     x["banner_lines"] = [f"PEFT {peft.__version__}: target_modules={len(mods)} target_parameters={len(params)}"]
     x["verify"] = {"n_quantized": None, "n_unquantized": None}
@@ -1464,6 +1567,109 @@ def _selftest_detector(d, a):
     return {"tiny_keqv30": 115, "tiny_plain4": 16, "tiny_missing_k": r["attn4_refusing_modules"]}
 
 
+def _moe_stub(L=3, E=4, layout="fused_experts", H=8, declare_experts=True, drop_last_stack=False):
+    """#542 selftest fixture: a decoder of L layers whose MoE block stores its experts in ONE of the layouts the
+    families in this lane actually use. Only the NAMES and the storage shape differ between layouts."""
+    blocks = []
+    for i in range(L):
+        b = nn.Module()
+        b.self_attn = nn.Module()
+        for p in ("q_proj", "k_proj", "v_proj", "o_proj"):
+            setattr(b.self_attn, p, nn.Linear(H, H, bias=False))
+        blk = nn.Module()
+        blk.gate = nn.Linear(H, E, bias=False)
+        last = drop_last_stack and i == L - 1
+        if layout == "fused_experts":            # transformers v5 fuses these under a module literally named `experts`
+            blk.experts = nn.Module()
+            blk.experts.gate_up_proj = nn.Parameter(torch.zeros(E, H, 2 * H))
+            if not last:
+                blk.experts.down_proj = nn.Parameter(torch.zeros(E, 2 * H, H))
+        elif layout == "granite_on_disk":        # GraniteMoe's OWN names: not one `experts` component in the path
+            blk.input_linear = nn.Module()
+            blk.input_linear.weight = nn.Parameter(torch.zeros(E, 2 * H, H))
+            blk.output_linear = nn.Module()
+            blk.output_linear.weight = nn.Parameter(torch.zeros(E, H, H))
+        elif layout == "per_expert_2d":          # OLMoE / Mixtral as stored: one 2-D Linear triple per expert
+            blk.experts = nn.ModuleList()
+            for _ in range(E):
+                e = nn.Module()
+                e.gate_proj = nn.Linear(H, H, bias=False)
+                e.up_proj = nn.Linear(H, H, bias=False)
+                e.down_proj = nn.Linear(H, H, bias=False)
+                blk.experts.append(e)
+        elif layout == "dense":                  # no MoE at all
+            blk.up_proj = nn.Linear(H, 2 * H, bias=False)
+            blk.down_proj = nn.Linear(2 * H, H, bias=False)
+        elif layout == "ragged":                 # two 3-D floating stacks that disagree on their leading dimension
+            blk.experts = nn.Module()
+            blk.experts.gate_up_proj = nn.Parameter(torch.zeros(E, H, 2 * H))
+            blk.experts.down_proj = nn.Parameter(torch.zeros(E + 1, 2 * H, H))
+        b.mlp = blk
+        blocks.append(b)
+    inner = nn.Module()
+    inner.layers = nn.ModuleList(blocks)
+    m = nn.Module()
+    m.model = inner
+    m.config = types.SimpleNamespace(num_hidden_layers=L, model_type=f"tiny_{layout}")
+    if declare_experts == "mismatch":             # a config whose declared count matches no stack on the loaded model
+        m.config.num_experts = 99
+    elif declare_experts:
+        m.config.num_experts = E
+    return m
+
+
+def _selftest_hf_expert_selection():
+    """#542 dry-runs, the shape _selftest_detector has for attention: the HF arm's expert selection is STRUCTURAL, and
+    an empty or implausible selection REFUSES instead of degrading to an attention-only run.
+
+    The load-bearing case is `granite_on_disk`: GraniteMoe's own names carry no `experts` component, so the pre-#542
+    substring (and `EXPERT_PARAM_RE`, which requires a literal `experts.`) would both have taken ZERO -- recorded here
+    as n_by_name_substring / n_by_expert_param_re beside a full structural selection."""
+    L, E = 3, 4
+    out = {}
+    fused = _moe_stub(L, E, "fused_experts")
+    mods, params, diag = hf_targets(fused, L, "tiny_fused_experts")
+    assert len(mods) == 4 * L and len(params) == 2 * L and diag["stacks_per_layer"] == 2, (len(mods), diag)
+    assert diag["n_by_name_substring"] == 2 * L, diag       # the old rule and the new one agree on this layout
+    out["fused"] = {"n": len(params), "substring": diag["n_by_name_substring"]}
+
+    gran = _moe_stub(L, E, "granite_on_disk")
+    _, params, diag = hf_targets(gran, L, "tiny_granite_on_disk")
+    assert len(params) == 2 * L and diag["experts_per_stack"] == E, (params, diag)
+    assert diag["n_by_name_substring"] == 0 and diag["n_by_expert_param_re"] == 0, diag   # both name rules take nothing
+    assert all(n.endswith(("input_linear.weight", "output_linear.weight")) for n in params), params
+    out["granite_on_disk"] = {"n": len(params), "substring": diag["n_by_name_substring"], "param_re": diag["n_by_expert_param_re"]}
+
+    refusals = {}
+    for tag, model, needle in (
+            ("per_expert_2d", _moe_stub(L, E, "per_expert_2d"), "no expert stack found"),
+            ("dense", _moe_stub(L, E, "dense"), "no expert stack found"),
+            ("ragged_no_config", _moe_stub(L, E, "ragged", declare_experts=False), "disagree on their leading dimension"),
+            ("ragged_declared_matches_nothing", _moe_stub(L, E, "ragged", declare_experts="mismatch"), "declares 99 experts"),
+            ("not_per_layer", _moe_stub(L, E, "fused_experts", drop_last_stack=True), "is not a whole number per layer")):
+        try:
+            hf_targets(model, L, f"tiny_{tag}")
+            raise AssertionError(f"#542: {tag} did not refuse -- an empty/implausible selection ran attention-only")
+        except NotImplementedError as e:
+            msg = str(e)
+            assert "(#542)" in msg and f"n_layers={L}" in msg, msg
+            if needle:
+                assert needle in msg, msg
+            refusals[tag] = type(e).__name__
+    # a config that DECLARES its expert count disambiguates a model carrying more than one 3-D leading dimension
+    _, params, diag = hf_targets(_moe_stub(L, E, "ragged"), L, "tiny_ragged")
+    assert len(params) == L and diag["experts_per_stack"] == E and diag["leading_dims"] == {"4": L, "5": L}, diag
+    # the per-expert refusal NAMES the layout it found instead of a bare "empty"
+    try:
+        hf_targets(_moe_stub(L, E, "per_expert_2d"), L, "tiny_per_expert_2d")
+    except NotImplementedError as e:
+        assert f'"per_expert_2d_groups": {L}' in str(e), str(e)
+    # the classifier run_arm uses turns every one of these into a `refused` row (code 3), never a silent arm
+    assert classify_load_exception(NotImplementedError("x")) == ("refused", 3)
+    out["refusals"] = sorted(refusals)
+    return out
+
+
 def selftest(a):
     global DEV
     DEV = "cpu"
@@ -1567,6 +1773,7 @@ def selftest(a):
     assert r["prereg"] == "p41/P41-PREREG.md", r["prereg"]
     a.prereg = PREREG
     det = _selftest_detector(d, a)   # T10: the three dry-run tests against the REAL structural detector (#434)
+    sel = _selftest_hf_expert_selection()   # #542: the HF arm's expert selection is structural and refuses when empty
 
     # ---- T11: the hf arm through the same run_arm (module-level counter, fp32 cast, C1 on Params4bit bytes)
     a.fam, a.model, a.tokens, a.tokens_sha = "tiny", "selftest/tiny", os.path.join(d, "tokens_tiny.json"), rec["sha256"]   # _selftest_detector left a.fam at tcdet
@@ -1609,7 +1816,8 @@ def selftest(a):
 
     print(f"SELFTEST OK dir={d} receipts={sorted(R)} e4b ref/fused loss_last {e_ref['loss_last']}/{e_fu['loss_last']} unsloth {u1['loss_last']} "
           f"hf {hfr['loss_last']} accum={a.accum} autocast={a.autocast} kcalls fused={e_fu['kernel_calls_per_step_min']} unsloth={u1['kernel_calls_per_step_min']} "
-          f"hf={hfr['kernel_calls_per_step_min']} mb2_pads={ {k: v['tokens_padded_total'] for k, v in mb.items()} } detector_dryruns={det}")
+          f"hf={hfr['kernel_calls_per_step_min']} mb2_pads={ {k: v['tokens_padded_total'] for k, v in mb.items()} } detector_dryruns={det} "
+          f"expert_selection_dryruns={sel}")
     return d
 
 

@@ -35,6 +35,10 @@ def test_tp4_arm_selftest():
     assert "SELFTEST OK" in p.stdout
     # the tp3 T10 dry-runs against the REAL structural detector still pass through this copy
     assert "'tiny_keqv30': 115" in p.stdout and "'tiny_plain4': 16" in p.stdout and "'tiny_missing_k': ['layers.1']" in p.stdout
+    # #542: the HF arm's expert selection dry-runs -- the Granite-named stacks the old NAME substring took zero of are
+    # selected by structure, and every empty/implausible layout refuses instead of running attention-only
+    assert "'granite_on_disk': {'n': 6, 'substring': 0, 'param_re': 0}" in p.stdout, p.stdout[-1500:]
+    assert "'refusals': ['dense', 'not_per_layer', 'per_expert_2d', 'ragged_declared_matches_nothing', 'ragged_no_config']" in p.stdout
     d = Path(re.search(r"SELFTEST OK dir=(\S+)", p.stdout).group(1))
     # receipts name THIS lane's pre-registration
     assert json.loads((d / "tiny_e4b_reference_attn4.json").read_text())["prereg"] == "tp4/TP4-PREREG.md"
