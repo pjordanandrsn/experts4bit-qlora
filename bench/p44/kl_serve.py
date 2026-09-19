@@ -49,6 +49,21 @@ from kl_fidelity import (METRIC_VERSION, KLAccumulator,  # noqa: E402
                          decode_teacher_forced_logits, teacher_forced_logits)
 from kl_paths import _gate_on_k0  # noqa: E402
 from kl_prompts import PROMPTS, digest as prompt_digest, strata_counts  # noqa: E402
+
+#: P52: a run scores ONE prompt set, named in the receipt with its own digest. `heldout` is
+#: `kl_prompts_heldout.py`, written for the Gemma-4 gate because every lane from P44 to P51 used
+#: the committed set -- including P48's per-layer profile, which chose the graded map's boundaries.
+PROMPT_SETS = {"committed": ("kl_prompts", PROMPTS, prompt_digest, strata_counts)}
+
+
+def _prompt_set(name: str):
+    if name == "committed":
+        return PROMPT_SETS["committed"]
+    if name == "heldout":
+        import kl_prompts_heldout as hp
+        hp.assert_disjoint_from_committed()          # refuses rather than scoring a contaminated set
+        return ("kl_prompts_heldout", hp.PROMPTS, hp.digest, hp.strata_counts)
+    raise SystemExit(f"unknown --prompt-set {name!r}; expected committed | heldout")
 from serve_stack import ARMS, LANE_KEYS, MODELS, arm_env, build_arm_model, control_arm  # noqa: E402
 
 REFERENCE = {
@@ -127,7 +142,7 @@ def reference_pass(family, model_id, revision, tok, prompts, cache_dir, max_len,
         chosen = "decode" if rep["self_consistency"]["passes"] else "prefill"
         rep["scorer_selected_by_control"] = chosen
         print(f"  control (i) reference decode-vs-prefill: KL {rep['self_consistency']['kl_mean']:.4e} -> scorer {chosen}", flush=True)
-    cache_dir = f"{cache_dir}.{chosen}"
+    cache_dir = f"{cache_dir}.{chosen}"        # the scorer; the caller suffixes the prompt set
     score = SCORERS[chosen]
     os.makedirs(cache_dir, exist_ok=True)
     missing = [p for p in prompts if not os.path.exists(os.path.join(cache_dir, p["id"] + ".pt"))]
@@ -242,6 +257,7 @@ def run_controls(a, model_id, revision, tok, prompts, dev, ref_cache, scorer_use
     env.update(arm_env(a.family, ctrl_arm, model_id))
     cmd = [sys.executable, "-u", os.path.abspath(__file__), "--family", a.family, "--model", model_id, "--revision", revision,
            "--arena", a.arena, "--calib", a.calib, "--k0-receipt", a.k0_receipt, "--arms", ctrl_arm, "--max-len", str(a.max_len),
+                   "--prompt-set", a.prompt_set,
            "--limit", str(n), "--ref-cache", ref_cache, "--scorer", other, "--out", part, "--child", "--controls", "0"]
     t1 = time.time()
     rc = subprocess.call(cmd, env=env)
@@ -267,6 +283,8 @@ def main() -> int:
     ap.add_argument("--arms", default=None, help="comma list; default: every registered arm of the family, in order")
     ap.add_argument("--max-len", type=int, default=320)
     ap.add_argument("--limit", type=int, default=0, help="debug: first N prompts only (RECORDED)")
+    ap.add_argument("--prompt-set", default="committed", choices=["committed", "heldout"],
+                    help="P52: which committed prompt file to score; the name and its digest go in the receipt")
     ap.add_argument("--ref-cache", required=True)
     ap.add_argument("--scorer", default="auto", choices=["auto"] + sorted(SCORERS),
                     help="auto (amendment 5): control (i) picks decode when the reference agrees with itself, prefill otherwise")
@@ -286,7 +304,8 @@ def main() -> int:
     for arm in arms:
         if arm not in ARMS[a.family]:
             raise SystemExit(f"unregistered arm {arm!r} for {a.family}; registered: {list(ARMS[a.family])}")
-    prompts = PROMPTS[:a.limit] if a.limit else PROMPTS
+    set_name, set_prompts, set_digest, set_strata = _prompt_set(a.prompt_set)
+    prompts = set_prompts[:a.limit] if a.limit else set_prompts
     dev = "cuda"
     if a.child and a.scorer == "auto":
         raise SystemExit("child needs a resolved --scorer (decode|prefill)")
@@ -311,8 +330,8 @@ def main() -> int:
                    "note": {"decode": "decode-shaped teacher forcing on BOTH sides (one token per forward, KV cache): the serving levers engage only at T == 1",
                             "prefill": "PREFILL scorer on BOTH sides: the weight-format levers (int4 experts, calibrated int4 attention) engage; the decode-only fusions (folds, router epilogue) do not and their rows equal the control's by construction",
                             "auto": "control (i) picks the scorer per family: decode when the reference agrees with itself to < 1e-2 nats, prefill otherwise (amendment 5)"}[a.scorer]},
-        "prompt_set": {"sha256": prompt_digest(), "n_registered": len(PROMPTS), "n_scored": len(prompts),
-                       "limit": a.limit, "strata": strata_counts(), "max_len": a.max_len},
+        "prompt_set": {"name": set_name, "sha256": set_digest(), "n_registered": len(set_prompts),
+                       "n_scored": len(prompts), "limit": a.limit, "strata": set_strata(), "max_len": a.max_len},
         "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
         "hook": hook, "arms_requested": arms, "rows": [], "not_measured": {},
     }
@@ -324,7 +343,8 @@ def main() -> int:
     flush()
     t0 = time.time()
     if not a.child:
-        receipt["reference_pass"], scorer_used = reference_pass(a.family, model_id, revision, tok, prompts, a.ref_cache,
+        receipt["reference_pass"], scorer_used = reference_pass(a.family, model_id, revision, tok, prompts,
+                                                                f"{a.ref_cache}.{a.prompt_set}",
                                                                 a.max_len, a.scorer, dev, a.controls_n)
         receipt["reference_pass"]["wall_s"] = round(time.time() - t0, 1)
         receipt["scorer"]["used"] = scorer_used
@@ -348,6 +368,7 @@ def main() -> int:
             part = f"{a.out}.{arm}.part.json"
             cmd = [sys.executable, "-u", os.path.abspath(__file__), "--family", a.family, "--model", model_id, "--revision", revision,
                    "--arena", a.arena, "--calib", a.calib, "--k0-receipt", a.k0_receipt, "--arms", arm, "--max-len", str(a.max_len),
+                   "--prompt-set", a.prompt_set,
                    "--limit", str(a.limit), "--ref-cache", ref_cache, "--scorer", scorer_used, "--out", part, "--child"]
             t1 = time.time()
             rc = subprocess.call(cmd, env=env)

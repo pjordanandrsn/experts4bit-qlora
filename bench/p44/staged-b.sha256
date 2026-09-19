@@ -2,7 +2,7 @@
 # this file and the controller resolves each name to its source (this dir, bench/p42/hook, bench/p39, bench/) and compares.
 bd279c6b43b3d41cab2f6638b054738e546519c7972e17f047eeffca67104b1d  p44b_run.sh
 295aa3ccb96821d67db098ba3912a892ddb2ee5f33b43fff1369b6f8af741355  serve_stack.py
-8cbf5dfcccf58190c62b1130f1c9b51c7f883425f72a18db54d2c988886b2a69  kl_serve.py
+050e25c2a747b4ba247cff9f1210597ea785deba0056885c77b191aa793b1062  kl_serve.py
 b2a9668a62659455d70e6010813f0c6ac54caeeb9d36a269009c574e9ab51cce  kl_fidelity.py
 f1380821949df0fa27321dfbf3049f0f0b8f0067bf7e19a19ed312b1c4de8a01  kl_paths.py
 ea3e29864f090c44faf56e288a5c327ff56474904cc965b6756b36348839009d  kl_prompts.py

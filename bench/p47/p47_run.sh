@@ -21,7 +21,7 @@ export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOK
 export PYTHONPATH=$W/hook E4B_INT4_GPTQ_DEVICE=cuda E4B_INT4_HESSIAN_BUDGET_GB=24
 MIN_MBPS=${P47_MIN_MBPS:-20}; MIN_VRAM_GB=${P47_MIN_VRAM_GB:-80}
 : > summary.txt; echo "$P47_INSTANCE_ID" > INSTANCE_ID
-for f in p47_run.sh serve_stack.py kl_serve.py kl_fidelity.py kl_paths.py kl_prompts.py k8_bake.py calib.json hook/usercustomize.py act_probe.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in p47_run.sh serve_stack.py kl_serve.py kl_fidelity.py kl_paths.py kl_prompts.py kl_prompts_heldout.py k8_bake.py calib.json hook/usercustomize.py act_probe.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p47/staged.sha256"; finish 9; }
 python -c "import torch; assert torch.cuda.is_available()" || { say "DUD BOX"; finish 10; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid --format=csv,noheader | tee forensics.txt
@@ -85,7 +85,8 @@ kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
   if [ "${P47_KL_SKIP:-0}" = 1 ]; then say "kl_serve SKIPPED for $FAM (P47_KL_SKIP=1: this draw runs the activation probe only)"; local rc=0; else
   say "kl_serve $FAM (scorer by control (i): decode if the reference agrees with itself, else prefill; reference cached to refcache_$FAM.<scorer> then freed)"
   E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python -u $W/kl_serve.py --family $FAM --arena $W/work_$FAM/nf4.arena --calib $W/calib.json \
-      --k0-receipt $W/k0.json --ref-cache $W/refcache_$FAM --scorer auto --out $W/${FAM}_kl.json > logs/kl_$FAM.log 2>&1; local rc=$?
+      --k0-receipt $W/k0.json --ref-cache $W/refcache_$FAM --scorer auto --prompt-set ${P47_PROMPT_SET:-committed} \
+      ${P47_ARMS:+--arms "$P47_ARMS"} --out $W/${FAM}_kl.json > logs/kl_$FAM.log 2>&1; local rc=$?
   grep -aE "^== |NOT MEASURED|receipt ->|Error" logs/kl_$FAM.log | tail -8 | sed "s/^/    /"
   { echo -n "kl $FAM rc=$rc "; grep -aE "receipt ->" logs/kl_$FAM.log | tail -1 | cut -c1-200; echo; } >> summary.txt
   fi
@@ -100,7 +101,13 @@ kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
 rc_any=0
 FAM=${P47_FAMILY:-gemma4diag}; NEED_S=${P47_NEED_S:-6000}     # P48 runs the same lane with P47_FAMILY=gemma4layer
 kl $FAM $NEED_S || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }
-CHECK="${FAM}_kl"; [ "${P47_KL_SKIP:-0}" = 1 ] && CHECK="${FAM}_act"
+CHECK="${FAM}_kl"
+# P52: an optional SECOND family in the same draw, on the same prompts -- the gate needs the
+# reference point its bar was derived from measured on the same data as its subject.
+if [ -n "${P47_FAMILY2:-}" ]; then
+  P47_ARMS=${P47_ARMS2:-} kl "$P47_FAMILY2" "${P47_NEED_S2:-2400}" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }
+  CHECK="$CHECK ${P47_FAMILY2}_kl"
+fi; [ "${P47_KL_SKIP:-0}" = 1 ] && CHECK="${FAM}_act"
 for f in $CHECK; do [ -s "$W/$f.json" ] && echo "ROW $f present" >> summary.txt || { echo "ROW $f MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }; done
 say "----- summary -----"; cat summary.txt
 finish "$rc_any"
