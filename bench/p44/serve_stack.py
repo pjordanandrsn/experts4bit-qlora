@@ -159,6 +159,21 @@ def store_map(builder: str, n_layers: int) -> dict:
     return out
 
 
+def n_expected_quantized(quantize_layers, n_layers: int) -> int:
+    """How many expert stacks a `quantize_layers` argument should leave QUANTIZED.
+
+    A set names the layers to quantize, so its length is the count. A MAPPING names every layer it
+    controls and a ``None`` spec means "leave this one in the base dtype", so its length is NOT the
+    count -- that mistake refused all four bf16-tier arms of run `p51-gemma4mix` (the model was built
+    correctly; the expectation was wrong), and it is why this is a named function with its own test.
+    """
+    if quantize_layers is None:
+        return n_layers
+    if isinstance(quantize_layers, dict):
+        return sum(1 for v in quantize_layers.values() if v is not None)
+    return len(quantize_layers)
+
+
 def tier_census(builder: str, n_layers: int) -> dict:
     """What `stacks_by_store` must look like for this builder -- the row's proof that the map applied."""
     want = {}
@@ -380,7 +395,7 @@ def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
             "quant_type": qt, "blocksize": bs, "quantized_types": sorted({q["quant_type"] for q in v["quantized"]}),
             "quantized_blocksizes": sorted({int(getattr(model.get_submodule(q["module"]), "blocksize", 0)) for q in v["quantized"]}),
             "n_quantized": v["n_quantized"], "n_unquantized": v["n_unquantized"],
-            "expected_quantized": n if ql is None else len(ql), "expected_unquantized": 0 if ql is None else n - len(ql),
+            "expected_quantized": n_expected_quantized(ql, n), "expected_unquantized": n - n_expected_quantized(ql, n),
             "quantized_modules": [q["module"] for q in v["quantized"]][:64],
             "unquantized_modules": [u["module"] for u in v["unquantized"]][:64],
             "int4_expert_layers": 0, "int4_attn_projections": 0,

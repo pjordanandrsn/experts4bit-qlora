@@ -51,3 +51,10 @@ Timing basis (P50): fetch ~7 min, K0 < 2 min, reference pass 40 s, five loader a
 ## Amendments
 
 (none yet)
+
+### Amendment 1 (2026-09-19 ~12:40Z, after run 1 — one arm read, four refused by a bug of this lane's) — the expected-stack count
+
+Run `p51-gemma4mix` produced **one** row: `int8_20` at **0.7369** (M2's prediction was ≥ 0.50, and this is it). The four arms with a `bf16` tier were refused by `_builder_check` — correctly, given what it was told: `build_loader_model` computed `expected_quantized` as `len(quantize_layers)`, which is right for a SET but wrong for a MAPPING, because a map names every layer it controls and a `None` spec means "base dtype". The models were built correctly (`bf16:20_nf4:10` reported 10 quantised stacks, exactly right); the expectation was wrong, so the guard refused a correct row. Fixed by `n_expected_quantized()`, with a test that asserts the PRODUCER over every registered tier spec, not just the checker — the original test hand-built the expectation and so could not catch this.
+
+Predictions and thresholds are unchanged. The redraw `p51-gemma4mix-2` re-runs all five arms (the `int8_20` row is cheap to repeat and a self-consistent receipt is worth more than saving 90 s). M2 is therefore read on run 1 AND re-read on the redraw; if the two disagree the lane says so.
+
