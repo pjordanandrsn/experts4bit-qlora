@@ -67,3 +67,13 @@ Ratios and curve shapes only within a box. No training THROUGHPUT position is qu
 ## Amendments
 
 (dated entries, before the data they touch)
+
+### Amendment 1 (2026-09-19 ~02:05Z, after T2's layer-1 result and before any per-layer data): T2b, the per-layer sweep the decision rule named
+
+T2 ran on an H100 NVL (receipt `2026-09-19/p43-t2-g4layer1`; 8 min, ≈ $0.40): layer-0 sanity **exactly 0** on both pairs (P6 held), and at decoder layer 1 rms(reference, oracle) = 0.063963, rms(fused, oracle) = 0.063992, **ratio 1.0004** → the registered rule's **inconclusive band** (0.83 < ratio < 1.2). The two 4-bit paths are equally far from the oracle at layer 1 and differ from each other by ~3e-5 rms there, so the 0.09-nat step-0 divergence does NOT originate in layer 1's expert block; the earlier "first diverging layer = 1" came from a CPU-offloaded whole-stack run and is superseded by this resident-oracle measurement. P5 (ratio ≥ 1.2) is **refuted at layer 1**.
+
+T2b (`bench/p43/g4/gemma4_layer_sweep.py`, `P43_G4_PROBE=layer_sweep`): the same three arms on the same 128 rows / 16 chunks, forward hooks on **every** decoder layer (no early exit; the oracle is resident), reporting per layer rms(fused − reference), rms(reference − oracle), rms(fused − oracle) and the ratio, plus the **first diverging layer** = the first layer with rms(fused − reference) > 1e-4 (registered noise floor; layer 1 measured ~3e-5 — inside it).
+
+Registered predictions for T2b: **P7** — the first diverging layer is a single layer k with 2 ≤ k ≤ 29, and from k on the fused path is the one farther from the oracle on ≥ 70 % of layers (the reference-faithful reading, the same direction the offloaded run's 18/12/1 count gave). Registered alternative: divergence grows smoothly from layer 1 with no single onset (an accumulation of within-noise differences, i.e. a numerics/order effect, not a defect at one layer) — then the training-loss gap is not a kernel bug to fix but a batch-shape/accumulation-order effect to characterise, and #558 is re-scoped. **P8** — the per-layer ratio stays < 1.2 on every layer (both paths ≈ equally far from the oracle throughout): then neither path is "unfaithful" against bf16 and the fused/reference disagreement is second-order relative to quantisation; #558's parity band for this family would be re-derived from these numbers rather than inherited from tp1's 0.05.
+
+Budget: `p43-t2b-g4sweep`, H100 NVL, $3.10/h ceiling, guard 1 h, estimate $3.10 (T2 fetched the checkpoint in 7.5 min on this class).

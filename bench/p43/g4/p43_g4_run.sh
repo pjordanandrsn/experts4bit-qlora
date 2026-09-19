@@ -62,11 +62,18 @@ RDIR=/root/.cache/huggingface/hub/models--${MID//\//--}
 mkdir -p "$RDIR/refs" && printf '%s' "$REV" > "$RDIR/refs/main"
 say "PIN OK staged=$GOT == pin"
 
-say "running the LAYER-1 adjudication ($ROWS rows, chunk $CHUNK, real positions only; oracle resident)"
+PROBE=${P43_G4_PROBE:-layer1}            # layer1 (T2) | layer_sweep (T2b, amendment 1)
+case "$PROBE" in
+  layer1)      SCRIPT=gemma4_layer1_probe.py; OUT=gemma4_layer1_probe.json; EXTRA="";;
+  layer_sweep) SCRIPT=gemma4_layer_sweep.py; OUT=gemma4_layer_sweep.json; EXTRA="--noise-floor ${P43_NOISE_FLOOR:-1e-4}";;
+  *) say "REFUSED: unknown probe '$PROBE'"; echo "refused: probe $PROBE" > REFUSAL; mark 16;;
+esac
+[ -s "$W/$SCRIPT" ] || { say "REFUSED: $SCRIPT was not staged"; echo "refused: probe script missing" > REFUSAL; mark 16; }
+say "running probe $PROBE ($ROWS rows, chunk $CHUNK, real positions only; oracle resident)"
 ( while :; do echo "$(date -u +%s) $(nvidia-smi --query-gpu=memory.used,utilization.gpu,power.draw --format=csv,noheader,nounits)"; sleep 2; done ) > "$W/vram.txt" 2>/dev/null & SP=$!
-HF_HUB_OFFLINE=1 perl -e 'alarm 3600; exec @ARGV' "$PY" -u "$W/gemma4_layer1_probe.py" \
-  --model "$MID" --revision "$REV" --tokens "$W/tokens_gemma4.json" --rows "$ROWS" --chunk "$CHUNK" \
-  --out "$W/gemma4_layer1_probe.json" 2>&1 | tee "$W/logs/probe.log"
+HF_HUB_OFFLINE=1 perl -e 'alarm 3600; exec @ARGV' "$PY" -u "$W/$SCRIPT" \
+  --model "$MID" --revision "$REV" --tokens "$W/tokens_gemma4.json" --rows "$ROWS" --chunk "$CHUNK" $EXTRA \
+  --out "$W/$OUT" 2>&1 | tee "$W/logs/probe.log"
 prc=${PIPESTATUS[0]}; kill "$SP" 2>/dev/null
 say "probe exit rc=$prc"
 mark "$prc"
