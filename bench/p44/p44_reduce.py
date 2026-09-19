@@ -193,8 +193,12 @@ def kl_verdicts(run_dir: str) -> dict:
         elif "nf4" in rows:
             for cand in ("int4_r1epi", "calattn_r1epi"):
                 fam[cand] = reading_rule(rows["nf4"], rows[cand]) if cand in rows else {"verdict": "NOT_READ"}
-            fam["P4_r1epi_equals_nf4"] = (p4_control(rows["nf4"], rows["r1epi"]) if ("r1epi" in rows and used == "decode")
-                                          else {"verdict": "NOT_READ (P4 needs the decode scorer: the fold engages only at T == 1)"})
+            if "r1epi" not in rows:
+                fam["P4_r1epi_equals_nf4"] = {"verdict": "NOT_READ"}
+            elif used != "decode":
+                fam["P4_r1epi_equals_nf4"] = {"verdict": "NOT_READ (P4 needs the decode scorer: the fold engages only at T == 1)"}
+            else:
+                fam["P4_r1epi_equals_nf4"] = p4_control(rows["nf4"], rows["r1epi"])
         else:
             fam["verdict"] = "NOT_READ: no nf4 control row"
         if "gemma4" not in out:
