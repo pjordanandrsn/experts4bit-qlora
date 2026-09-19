@@ -4,13 +4,13 @@
 # _DEADLINE_EPOCH, _INSTANCE_ID), stages the tp4 pieces + the two dataset helpers + the HF token, starts tp4_run.sh
 # detached under a fresh nonce, polls TP_DONE.<nonce> with a per-poll HEARTBEAT line (box summary tail + GPU util/mem +
 # workdir size; a stall is REPORTED, never acted on), fetches receipts (never the venvs, caches or adapters).
-# Pattern: bench/p39/p39_drive.sh.   TP4_BOX=A|B|C|D (required; D = P43 diagnosis).   Nothing here creates, destroys or approves compute.
+# Pattern: bench/p39/p39_drive.sh.   TP4_BOX=A|B|C|D|E (required; D = P43 diagnosis, E = P45 profiling).   Nothing here creates, destroys or approves compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [tp4_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TP4_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$TP4_BOX" in A|B|C|D) ;; *) say "refusing: TP4_BOX must be A, B, C or D (D = the P43 diagnosis box, bench/p43/P43-PREREG.md)"; exit 78;; esac
+case "$TP4_BOX" in A|B|C|D|E) ;; *) say "refusing: TP4_BOX must be A, B, C, D or E (D = the P43 diagnosis box, E = the P45 profiling box)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 STAGE="$HERE/tp4_run.sh $HERE/tp4_arm.py $HERE/tp4_reduce.py $HERE/tp4_alpaca.py $REPO/bench/flagship-matrix/drivers/n9_datasets.py $REPO/bench/flagship-matrix/ds_manifest.json"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
