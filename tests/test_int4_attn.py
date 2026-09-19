@@ -110,7 +110,24 @@ def _cpu_kernel_stubs(monkeypatch, calls):
     k.gemv_int4_b32 = gemv_int4_b32
     k.quant_x_rows = quant_x_rows
     k._plan = _plan
-    for name, mod in (("int4_pack_ref", pack_ref), ("int4_b32", k)):
+    sm = types.ModuleType("int4_smallm")
+
+    def gemm_int4_b32_smallm(x, packed, scales, *, block_n=64, kc=128, sk=4, warps=4, stages=2, workspace=None, dot_bf16=None):
+        calls.append(("smallm", int(x.shape[0]), (block_n, kc, sk), None if workspace is None else tuple(workspace[0].shape)))
+        N, kh = packed.shape
+        w = dequant_int4_ref(packed.reshape(N, kh), scales.reshape(N, kh * 2 // 32), N, kh * 2)
+        return (x.float() @ w.t()).to(torch.bfloat16)
+
+    def plan_smallm(N, K, block_n=64, kc=128, sk=4):
+        return block_n, min(kc, K), (sk if (K // min(kc, K)) % sk == 0 else 1)
+
+    def smallm_workspace(N, block_m=16, block_n=64, sk=4, device="cpu"):
+        return (torch.empty(sk, block_m, N, dtype=torch.float32, device=device),
+                torch.zeros((N + block_n - 1) // block_n, dtype=torch.int32, device=device))
+    sm.gemm_int4_b32_smallm = gemm_int4_b32_smallm
+    sm.plan_smallm = plan_smallm
+    sm.smallm_workspace = smallm_workspace
+    for name, mod in (("int4_pack_ref", pack_ref), ("int4_b32", k), ("int4_smallm", sm)):
         monkeypatch.setitem(sys.modules, name, mod)
 
 
@@ -174,3 +191,67 @@ def test_bias_is_added_after_the_gemv_and_the_matmul(monkeypatch):
     gotb = q(xb)
     assert torch.allclose(gotb.float(), lin(xb.float()), rtol=2 ** -4, atol=2 ** -3)
     assert torch.allclose((q(xb) - q0(xb)).float(), lin.bias.to(torch.bfloat16).float().expand(4, 96), rtol=2 ** -6, atol=2 ** -6)
+
+
+def test_smallm_route_is_opt_in_and_serves_two_to_sixteen_rows(monkeypatch):
+    """K16 (opt-in): with ``smallm=True`` rows in (1, 16] take the small-M int4 GEMM on the SAME
+    packed bytes with a construction-time workspace, and the bf16 cache is never built for them;
+    rows > 16 still take the cached bf16 matmul; one row still takes the GEMV. With the flag off
+    nothing changes."""
+    calls = []
+    _cpu_kernel_stubs(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    torch.manual_seed(5)
+    lin = nn.Linear(64, 96, bias=False, dtype=torch.bfloat16)
+    off = Int4Linear(lin)
+    x4 = torch.randn(4, 64, dtype=torch.bfloat16)
+    off(x4)
+    assert not any(c[0] == "smallm" for c in calls) and off._bf16_cache is not None    # default: unchanged
+    calls.clear()
+    m = Int4Linear(lin, smallm=True)
+    assert m._smallm_part.shape[2] == 96 and int(m._smallm_cnt.sum()) == 0            # workspace at construction
+    y4 = m(x4)
+    assert calls == [("smallm", 4, m._smallm_cfg, tuple(m._smallm_part.shape))]
+    assert m._bf16_cache is None                                                     # #561: no second copy
+    import int4_pack_ref
+    ref = int4_pack_ref.dequant_int4_ref(m.packed[0], m.scales[0], 96, 64)
+    assert torch.allclose(y4.float(), x4.float() @ ref.t(), rtol=2e-2, atol=2e-2)
+    m(torch.randn(16, 64, dtype=torch.bfloat16))
+    assert calls[-1][0] == "smallm" and calls[-1][1] == 16
+    m(torch.randn(17, 64, dtype=torch.bfloat16))
+    assert calls[-1][0] == "smallm" and m._bf16_cache is not None                   # 17 rows: the bf16 path
+    m(x4[:1])
+    assert calls[-1][0] == "gemv"                                                    # one row: the GEMV
+
+
+def test_smallm_enable_reads_the_flag_and_refuses_without_the_kernel(monkeypatch):
+    import sys
+    calls = []
+    _cpu_kernel_stubs(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear, enable_serve_attn_int4
+
+    class Attn(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.q_proj = nn.Linear(64, 64, bias=False, dtype=torch.bfloat16)
+
+    class TinyAttention(Attn):
+        pass
+
+    class M(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.attn = TinyAttention()
+            self.lm_head = nn.Linear(64, 32, bias=False, dtype=torch.bfloat16)
+    m = M()
+    monkeypatch.setenv("E4B_ATTN_INT4_SMALLM", "1")
+    assert enable_serve_attn_int4(m) == 1 and isinstance(m.attn.q_proj, Int4Linear) and m.attn.q_proj._smallm is not None
+    m2 = M()
+    monkeypatch.delenv("E4B_ATTN_INT4_SMALLM", raising=False)
+    assert enable_serve_attn_int4(m2) == 1 and m2.attn.q_proj._smallm is None
+    m3 = M()
+    monkeypatch.delitem(sys.modules, "int4_smallm")
+    monkeypatch.setattr("experts4bit_qlora.engines.int4_attn._smallm_kernels",
+                        lambda: (_ for _ in ()).throw(ImportError("No module named int4_smallm")))
+    with pytest.raises(RuntimeError, match="E4B_ATTN_INT4_SMALLM=1 needs grouped-nf4-gemm with int4_smallm"):
+        enable_serve_attn_int4(m3, smallm=True)
