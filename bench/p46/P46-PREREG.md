@@ -54,3 +54,16 @@ P1 as registered demanded `lora_path_loop ≥ 1 AND lora_path_padded = 0` on eve
 
 `RESULTS-p46.md`: P2 HOLDS (padded 0.173× auto's s/step: 4.22 vs 24.46 s), P4 HOLDS on both fused arms, P5 HOLDS (identical peak), P3 NOT READ (`torch._grouped_mm` is sm_90-only; the 5090 refuses), P1 refuted at the letter / loop-dominant in substance (amendment 1). Decision: the waste guard is the defect → grouped-nf4-gemm `auto` moves to a structural (padded-bytes) guard; tp4 box B re-run on that cut; the position moves from that receipt only.
 
+### Amendment 2 (2026-09-19 ~11:55Z, before the box-A draw) — the re-run extends to the other field-recipe families
+
+The decision rule named **box B** (qwen3, qwen3_5) for the re-run on the new grouped-nf4-gemm cut, and box B's Qwen3 rows are in (`tp4-b-p46cut-4`: e4b fused **6.47 s/step** against 29.3 on the old cut, Unsloth 29.05, internal parity 0.0005). But `lora_delta_grouped` is on the adapter path of **every** family that trains through `enable_fast_train`, so the cut's effect is a per-family question and box B answers it for one family. **Box A (granite, olmoe, gpt-oss) is re-run on the same cut** (`tp4-b-p46cut-A`, RTX 5090, 3 h, ≤ $2.55, `TP4_BOX=A TP4_FAMILIES='granite olmoe gptoss'`; the `qwen3anchor` and `notrun` entries are dropped — the anchor is tp2's fixture and is not what this cut touches, and box B already carries a Qwen3 tie).
+
+Registered predictions for that draw, before it runs:
+
+- **A1**: every family whose e4b arm was VALID in tp4 (2026-09-10/11) is VALID again and **faster** on this cut: granite < 2.853 s/step, olmoe < 4.6867. Refuted if any is slower than its tp4 row by more than its box-to-box variance (tp4 measured ±14 % across hosts, so > 1.14× is a refutation).
+- **A2**: the improvement is **smaller** than Qwen3's 4.5×, because the padding-waste guard bites hardest under router skew at 128 experts and these families have 64 (granite) and 64 (olmoe). Registered alternative: any family ≥ 3× → the guard was mis-tuned across the board, not just at Qwen3's shape.
+- **A3**: e4b internal parity (fused vs e4b's own dense reference, tp1's rule) holds on every family that produced both arms — |Δ held-out| ≤ 0.05 and median per-step |Δ| ≤ 0.05. **A refuted A3 on any family stops the release**: a faster arm that fails its own parity control is not a position.
+- gpt-oss's e4b fused arm stays a refused stub by citation (bare experts, no `ExpertsLoRA`) — recorded, not a finding.
+
+Positions are quoted only from `tp4_reduce.py` over both boxes' receipts, under its own validity rules, as before.
+
