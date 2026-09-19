@@ -56,6 +56,10 @@ echo "BOX $TP4_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TP4_RU
 for f in tp4_arm.py tp4_reduce.py tp4_alpaca.py n9_datasets.py ds_manifest.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is not the registered class ($GPU_CLASS)"; echo "BOX_REFUSED gpu=$GPU_NAME" >> summary.txt; finish 12;; esac
+# P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
+# checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
+MIN_DISK_GB=${TP4_MIN_DISK_GB:-200}; FREE_GB=$(df -BG --output=avail /root 2>/dev/null | tail -1 | tr -dc 0-9)
+if [ "${FREE_GB:-0}" -lt "$MIN_DISK_GB" ]; then say "BOX REFUSED: ${FREE_GB:-?} GB free on /root < ${MIN_DISK_GB} GB (instance overlay too small for the checkpoints -- host-limited)"; echo "BOX_REFUSED disk=${FREE_GB:-?}GB" >> summary.txt; finish 13; fi
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,power.limit,clocks.max.sm --format=csv,noheader | tee forensics.txt
 lscpu | grep -E "Model name|^CPU\(s\)" | tee -a forensics.txt; grep MemTotal /proc/meminfo | tee -a forensics.txt; cat /sys/fs/cgroup/memory.max 2>/dev/null | sed "s/^/cgroup memory.max /" | tee -a forensics.txt; df -h /root | tail -1 | tee -a forensics.txt
 python3 - "$TP4_BOX" "$TP4_RUN_ID" "$TP4_INSTANCE_ID" "$GPU_NAME" <<'PYB' > box.json

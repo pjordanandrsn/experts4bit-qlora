@@ -42,7 +42,7 @@ jobs:
           # The int4 tripwire below is why a plain `pip install .[test]` is
           # not enough: tests/test_int4_*.py importorskip on the int4 modules
           # and would report green coverage that never executed (#310).
-          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@8b1acc9e103ed1798a82307503c1c63d667b59ee"
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@9206352f7c49d76432824f7ce8872f0b285f2a4e"
           pip install -e ".[test]"
       - name: int4 modules present (tripwire)
         # The int4 suites guard with importorskip, so a gnf4 build without
