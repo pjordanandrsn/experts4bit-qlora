@@ -204,6 +204,21 @@ def test_loader_quant_type_threads_through(quant_type, expected, tmp_path):
     assert tuple(out.logits.shape) == (1, 8, cfg.vocab_size)
 
 
+def test_loader_blocksize_threads_through(tmp_path):
+    """P49 (#597): the loader's ``blocksize`` knob reaches the direct-path stacks -- a layer-0 NF4 arm at block 32 is
+    a registered row, so a knob that silently stayed at 64 would be a wrong row. The forward still runs."""
+    from experts4bit_qlora import ExpertsLoRA
+
+    torch.manual_seed(0)
+    _write_ckpt(_olmoe(), str(tmp_path), per_expert=True)
+    model, cfg = _load_or_skip(str(tmp_path), r=4, alpha=8, quant_type="nf4", blocksize=32, what="nf4 block 32")
+    bases = [m.base for m in model.modules() if isinstance(m, ExpertsLoRA)]
+    assert bases and all(b.blocksize == 32 for b in bases), [getattr(b, "blocksize", None) for b in bases]
+    model.config.use_cache = False
+    out = model(input_ids=torch.randint(0, cfg.vocab_size, (1, 8), device=DEVICE))
+    assert tuple(out.logits.shape) == (1, 8, cfg.vocab_size)
+
+
 def test_loader_rejects_bad_quant_type_before_any_io(tmp_path):
     """A bad quant_type fails BEFORE any config read, download, or shard streaming: the target
     directory is empty, so getting the quant_type ValueError (and not a file-not-found error)

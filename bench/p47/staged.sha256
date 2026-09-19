@@ -1,8 +1,9 @@
 # Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on this
 # file and the controller resolves each name to its source (this dir, bench/p44, bench/p42/hook, bench/p39, bench/) and compares.
-0e9b114723e64a329e483e429a85a31339a2d2fa382cd47b6e40985e20ac5ddd  p47_run.sh
-6f4f2d4d55574104c76806d0b9987f9c4129f0616addf3e1a59080c1b3eb8675  serve_stack.py
-263b5de5d94f42c9b595d2ee805655424803ff352cde8c245848fb723d2dfc5f  kl_serve.py
+582e5fbac576853416554f8f7b626e159b73c66e6ee0e43c0afb76326a8449fc  p47_run.sh
+380c8cc15801669a5a3e254db735d8935dc3e90fe84520c1b2bf34acbde28a37  serve_stack.py
+d122ba5c3c9737e73350a0155f06766653fbda0b43d3a1dc4c2d967b78548620  kl_serve.py
+59df14410936b0cecaf17325cbe0d734ae903ff9f29dfe0fb3a1d05ef8bf77e7  act_probe.py
 b2a9668a62659455d70e6010813f0c6ac54caeeb9d36a269009c574e9ab51cce  kl_fidelity.py
 f1380821949df0fa27321dfbf3049f0f0b8f0067bf7e19a19ed312b1c4de8a01  kl_paths.py
 ea3e29864f090c44faf56e288a5c327ff56474904cc965b6756b36348839009d  kl_prompts.py

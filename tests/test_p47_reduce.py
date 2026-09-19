@@ -96,6 +96,13 @@ def test_serve_stack_builders_and_layer_sets():
     assert ss.needs_arena("gemma4diag") is True and ss.needs_arena("gemma4layer") is False and ss.needs_arena("gemma4") is True
     assert ss.control_arm("gemma4layer") == "L00"
     assert ss.main(["needs_arena", "gemma4layer"]) == 0
+    # P49: the store on layer 0, and NF4 at four depths
+    assert ss.parse_only("loader_only_0:fp4") == (0, "fp4", 64) and ss.parse_only("loader_only_0:nf4:b32") == (0, "nf4", 32)
+    assert ss.parse_only("loader_only_27") == (27, "nf4", 64) and ss.parse_only("loader_lo") is None
+    assert ss.builder_for("gemma4fmt", "L00_int8") == "loader_only_0:int8" and ss.quantize_layer_set("loader_only_0:int8", 30) == {0}
+    assert ss.needs_arena("gemma4fmt") is False and ss.control_arm("gemma4fmt") == "L00_nf4"
+    for arm in ss.ARMS["gemma4fmt"]:
+        assert ss.arm_env("gemma4fmt", arm)["E4B_SERVE_EXP_INT4"] == "0"
 
 
 def test_builder_check_refuses_a_layer_set_that_did_not_apply():
@@ -104,3 +111,10 @@ def test_builder_check_refuses_a_layer_set_that_did_not_apply():
     kl._builder_check({"builder": "loader_lo", "n_quantized": 15, "n_unquantized": 15, "expected_quantized": 15, "expected_unquantized": 15})
     with pytest.raises(RuntimeError, match="did not apply"):
         kl._builder_check({"builder": "loader_unquant", "n_quantized": 30, "n_unquantized": 0, "expected_quantized": 0, "expected_unquantized": 30})
+    ok = {"builder": "loader_only_0:int8", "n_quantized": 1, "n_unquantized": 29, "expected_quantized": 1, "expected_unquantized": 29,
+          "quant_type": "int8", "blocksize": 64, "quantized_types": ["int8"], "quantized_blocksizes": [64]}
+    kl._builder_check(ok)
+    with pytest.raises(RuntimeError, match="asked for 'int8'"):
+        kl._builder_check(dict(ok, quantized_types=["nf4"]))
+    with pytest.raises(RuntimeError, match="blocksize"):
+        kl._builder_check(dict(ok, blocksize=32))

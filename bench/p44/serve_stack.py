@@ -87,7 +87,27 @@ GEMMA4_TEXT_LAYERS = 30
 ARMS["gemma4layer"] = {f"L{i:02d}": (0, 0, "0", {}) for i in range(GEMMA4_TEXT_LAYERS)}
 MODELS["gemma4layer"] = MODELS["gemma4"]
 BUILDERS["gemma4layer"] = {f"L{i:02d}": f"loader_only_{i}" for i in range(GEMMA4_TEXT_LAYERS)}
-_ONLY = re.compile(r"^loader_only_(\d+)$")
+_ONLY = re.compile(r"^loader_only_(\d+)(?::([a-z0-9]+))?(?::b(\d+))?$")   # loader_only_<layer>[:<quant_type>][:b<blocksize>]
+# P49 (#597, after P48 put 83 % of the gap in layer 0 alone): the expert FORMAT on layer 0, and NF4 at four depths for the
+# activation probe. Same nf4 lever set everywhere (no int4 store, no fusion); the builder names the store.
+ARMS["gemma4fmt"] = {
+    "L00_nf4": (0, 0, "0", {}), "L00_fp4": (0, 0, "0", {}), "L00_int8": (0, 0, "0", {}), "L00_fp8": (0, 0, "0", {}),
+    "L00_nf4b32": (0, 0, "0", {}),
+    "L07_nf4": (0, 0, "0", {}), "L14_nf4": (0, 0, "0", {}), "L21_nf4": (0, 0, "0", {}), "L27_nf4": (0, 0, "0", {}),
+}
+MODELS["gemma4fmt"] = MODELS["gemma4"]
+BUILDERS["gemma4fmt"] = {"L00_nf4": "loader_only_0:nf4", "L00_fp4": "loader_only_0:fp4", "L00_int8": "loader_only_0:int8",
+                         "L00_fp8": "loader_only_0:fp8", "L00_nf4b32": "loader_only_0:nf4:b32",
+                         "L07_nf4": "loader_only_7:nf4", "L14_nf4": "loader_only_14:nf4", "L21_nf4": "loader_only_21:nf4",
+                         "L27_nf4": "loader_only_27:nf4"}
+
+
+def parse_only(builder: str):
+    """``loader_only_<i>[:<quant_type>][:b<blocksize>]`` -> (layer, quant_type, blocksize) or None."""
+    m = _ONLY.match(builder)
+    if not m:
+        return None
+    return int(m.group(1)), (m.group(2) or "nf4"), int(m.group(3) or 64)
 
 
 def needs_arena(family: str) -> bool:
@@ -234,9 +254,9 @@ def text_layers(model_id: str) -> int:
 def quantize_layer_set(builder: str, n_layers: int):
     """P47's per-builder ``quantize_layers``: None (all), the empty set (none), the first half, the second half."""
     half = n_layers // 2
-    m = _ONLY.match(builder)
-    if m:
-        i = int(m.group(1))
+    po = parse_only(builder)
+    if po:
+        i = po[0]
         if i >= n_layers:
             raise ValueError(f"{builder}: layer {i} is outside the {n_layers} text-decoder layers")
         return {i}
@@ -252,19 +272,23 @@ def build_loader_model(model_id: str, builder: str, *, device: str = "cuda"):
     builder whose layer set did not apply refuses its row (`kl_serve._builder_check`)."""
     import torch
     from experts4bit_qlora import load_moe_4bit_streaming, verify_moe_4bit
-    if builder not in LOADER_BUILDERS and not _ONLY.match(builder):
-        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS} or loader_only_<i>")
+    po = parse_only(builder)
+    if builder not in LOADER_BUILDERS and not po:
+        raise ValueError(f"unknown loader builder {builder!r}; registered: {LOADER_BUILDERS} or loader_only_<i>[:<qt>][:b<bs>]")
     n = text_layers(model_id)
     ql = quantize_layer_set(builder, n)
+    qt, bs = (po[1], po[2]) if po else ("nf4", 64)
     torch.manual_seed(1689)
     model, _ = load_moe_4bit_streaming(model_id, device, torch.bfloat16, r=8, alpha=16, offload=False, pin=True,
-                                       prefetch=False, quant_type="nf4", quantize_layers=ql)
+                                       prefetch=False, quant_type=qt, quantize_layers=ql, blocksize=bs)
     model.eval()
     for cfg_ in (model.config, getattr(model.config, "text_config", None)):
         if cfg_ is not None:
             cfg_.use_cache = True
     v = verify_moe_4bit(model)
     info = {"builder": builder, "moe_layers": n, "quantize_layers": "all" if ql is None else sorted(ql),
+            "quant_type": qt, "blocksize": bs, "quantized_types": sorted({q["quant_type"] for q in v["quantized"]}),
+            "quantized_blocksizes": sorted({int(getattr(model.get_submodule(q["module"]), "blocksize", 0)) for q in v["quantized"]}),
             "n_quantized": v["n_quantized"], "n_unquantized": v["n_unquantized"],
             "expected_quantized": n if ql is None else len(ql), "expected_unquantized": 0 if ql is None else n - len(ql),
             "quantized_modules": [q["module"] for q in v["quantized"]][:64],

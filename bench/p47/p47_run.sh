@@ -21,7 +21,7 @@ export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOK
 export PYTHONPATH=$W/hook E4B_INT4_GPTQ_DEVICE=cuda E4B_INT4_HESSIAN_BUDGET_GB=24
 MIN_MBPS=${P47_MIN_MBPS:-20}; MIN_VRAM_GB=${P47_MIN_VRAM_GB:-80}
 : > summary.txt; echo "$P47_INSTANCE_ID" > INSTANCE_ID
-for f in p47_run.sh serve_stack.py kl_serve.py kl_fidelity.py kl_paths.py kl_prompts.py k8_bake.py calib.json hook/usercustomize.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in p47_run.sh serve_stack.py kl_serve.py kl_fidelity.py kl_paths.py kl_prompts.py k8_bake.py calib.json hook/usercustomize.py act_probe.py staged.sha256; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p47/staged.sha256"; finish 9; }
 python -c "import torch; assert torch.cuda.is_available()" || { say "DUD BOX"; finish 10; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid --format=csv,noheader | tee forensics.txt
@@ -76,7 +76,7 @@ PYF
 bake(){ local MID=$1 TAG=$2; [ -e "$W/work_$TAG/nf4.arena" ] && return 0; say "bake $TAG"; mkdir -p $W/work_$TAG
   K8_MODEL="$MID" K8_WORK="$W/work_$TAG" perl -e "alarm $(arm_alarm); exec @ARGV" python $W/k8_bake.py > logs/bake_$TAG.log 2>&1 || { tail -3 logs/bake_$TAG.log; say "BAKE FAIL $TAG"; return 12; }
   [ -e "$W/work_$TAG/nf4.arena" ] || { say "BAKE FAIL $TAG (no arena)"; return 12; }; }
-free_family(){ rm -rf $W/work_$1 $W/refcache_$1; rm -rf /root/.cache/huggingface/hub/models--${2//\//--}; say "freed $1 ($(df -h /root | tail -1 | awk '{print $4}') free)"; }
+free_family(){ rm -rf $W/work_$1 $W/refcache_$1 $W/actref_$1; rm -rf /root/.cache/huggingface/hub/models--${2//\//--}; say "freed $1 ($(df -h /root | tail -1 | awk '{print $4}') free)"; }
 # kl FAMILY NEED_S  -- fetch, bake, kl_serve over the family's registered arms; receipt <family>_kl.json (rewritten per arm)
 kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
   can_run "$2" "${FAM}_kl" || return 40
@@ -87,6 +87,13 @@ kl(){ local FAM=$1; read MID REV <<<"$(python $W/serve_stack.py model $FAM)"
       --k0-receipt $W/k0.json --ref-cache $W/refcache_$FAM --scorer auto --out $W/${FAM}_kl.json > logs/kl_$FAM.log 2>&1; local rc=$?
   grep -aE "^== |NOT MEASURED|receipt ->|Error" logs/kl_$FAM.log | tail -8 | sed "s/^/    /"
   { echo -n "kl $FAM rc=$rc "; grep -aE "receipt ->" logs/kl_$FAM.log | tail -1 | cut -c1-200; echo; } >> summary.txt
+  if [ "${P47_ACT_PROBE:-0}" = 1 ]; then   # P49: the activation probe on the same checkpoint, before the family is freed
+    say "act_probe $FAM (reference hooks on every MoE layer, then each one-layer arm on the same ${P47_ACT_PROBE_N:-8} prompts)"
+    E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python -u $W/act_probe.py --family $FAM --n ${P47_ACT_PROBE_N:-8} --cache-dir $W/actref_$FAM \
+        --arena $W/work_$FAM/nf4.arena --calib $W/calib.json --out $W/${FAM}_act.json > logs/act_$FAM.log 2>&1; local arc=$?
+    grep -aE "^== |NOT MEASURED|reference captured|Error" logs/act_$FAM.log | tail -12 | sed "s/^/    /"
+    echo "act_probe $FAM rc=$arc" >> summary.txt; [ "$rc" = 0 ] && rc=$arc
+  fi
   free_family $FAM "$MID"; return $rc; }
 rc_any=0
 FAM=${P47_FAMILY:-gemma4diag}; NEED_S=${P47_NEED_S:-6000}     # P48 runs the same lane with P47_FAMILY=gemma4layer
