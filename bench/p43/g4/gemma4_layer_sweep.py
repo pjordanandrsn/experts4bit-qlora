@@ -13,20 +13,50 @@ forward, so the last hidden state stands in for it here) so the per-layer curve 
 Memory: no early exit; forward hooks on every decoder layer store the masked real-position rows in fp32 on CPU per
 chunk (8 rows x <= 2048 tokens x 2816 hidden x 31 layers ~ 560 MB per chunk at fp32); the oracle is bf16 resident.
 """
-import argparse, gc, hashlib, json, time
+import argparse
+import gc
+import hashlib
+import json
+import time
 import torch
 
 
-def decoder_layers(m):
-    for name, mod in m.named_modules():
-        if isinstance(mod, torch.nn.ModuleList) and len(mod) >= 4 and name.endswith("layers"):
-            return name, mod
-    raise RuntimeError("no decoder ModuleList named *.layers")
+def decoder_layers(m, expect=None):
+    """The TEXT decoder ModuleList, by explicit path first (the layer-1 probe's list), never "the first
+    ModuleList named *.layers": on the bf16 oracle that walk returned the vision tower's 27 encoder layers
+    (run p43-t2b-g4sweep, IndexError 27 -- the e4b side had walked the 30-layer text decoder), so the three
+    arms were not about to be compared on the same module. ``expect`` pins the length to the e4b side's."""
+    found = []
+    for path in ("model.layers", "model.language_model.layers", "language_model.model.layers",
+                 "model.model.layers", "model.text_model.layers"):
+        cur, ok = m, True
+        for part in path.split("."):
+            if hasattr(cur, part):
+                cur = getattr(cur, part)
+            else:
+                ok = False
+                break
+        if ok and isinstance(cur, torch.nn.ModuleList) and len(cur) > 0:
+            found.append((path, cur))
+    if not found:
+        for name, mod in m.named_modules():
+            if isinstance(mod, torch.nn.ModuleList) and len(mod) >= 8 and name.endswith("layers"):
+                found.append((name, mod))
+    if expect is not None:
+        hit = [f for f in found if len(f[1]) == expect]
+        if not hit:
+            raise RuntimeError(f"no decoder ModuleList of {expect} layers on this side; candidates: "
+                               + ", ".join(f"{n}[{len(l)}]" for n, l in found))
+        found = hit
+    if not found:
+        raise RuntimeError("could not locate the decoder layer list")
+    return found[0]
 
 
 def sweep(model, dev, tag, chunks, n_layers):
     """Per layer: the concatenated real-position outputs (fp32, CPU). Returns list[n_layers] of tensors [P, H]."""
-    name, layers = decoder_layers(model)
+    name, layers = decoder_layers(model, expect=n_layers)
+    print(f"  {tag}: decoder layers at {name} [{len(layers)}]", flush=True)
     store = {}
     hooks = []
     def mk(i):
@@ -143,8 +173,14 @@ def main():
     except Exception:
         in_dev = next(oracle.parameters()).device
     rep["oracle_input_device"] = str(in_dev)
+    rep["oracle_layer_path"] = decoder_layers(oracle, expect=n_layers)[0]
     orc = sweep(oracle, in_dev, "oracle", chunks, n_layers)
 
+    # the three arms must have captured the SAME module on the same positions before any distance is read
+    for i in range(n_layers):
+        if not (ref[i].shape == fus[i].shape == orc[i].shape):
+            raise RuntimeError(f"layer {i}: captured shapes differ -- reference {tuple(ref[i].shape)} fused "
+                               f"{tuple(fus[i].shape)} oracle {tuple(orc[i].shape)}; the arms walked different modules")
     rep["compared_positions"] = int(ref[0].shape[0])
     per = []
     first_div = None

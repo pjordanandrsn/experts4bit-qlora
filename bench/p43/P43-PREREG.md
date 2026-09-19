@@ -77,3 +77,13 @@ T2b (`bench/p43/g4/gemma4_layer_sweep.py`, `P43_G4_PROBE=layer_sweep`): the same
 Registered predictions for T2b: **P7 (amplification)** — rms(fused − reference) grows with depth and exceeds 5e-2 by the last decoder layer (the 0.09-nat loss delta needs an output-scale difference); registered alternative: it stays within 2× its layer-1 value throughout — then the loss delta arises at the head, not in the expert stack. **P8 (faithfulness)** — the fused/reference-to-oracle ratio stays within [0.9, 1.1] on every layer (neither path is closer to bf16 anywhere: the disagreement is second-order to quantisation, and #558's remedy is a re-derived per-family parity band, not a kernel fix); registered alternative: the ratio leaves that band at some layer k and stays out — then the path that is farther from the oracle from k on is the unfaithful one and #558 becomes a defect in it.
 
 Budget: `p43-t2b-g4sweep`, H100 NVL, $3.10/h ceiling, guard 1 h, estimate $3.10 (T2's checkpoint fetch took 7.5 min on this class; the three sweeps under a minute).
+
+### Amendment 2 (2026-09-19, before any T2b data) — the sweep's layer discovery
+
+Run `p43-t2b-g4sweep` (H100 NVL, instance 51521714) produced NO per-layer data: `gemma4_layer_sweep.py` found the
+decoder as "the first `ModuleList` named `*.layers`", and on the bf16 oracle (the full multimodal class) that is the
+vision tower's 27 encoder layers, while the e4b side had walked the 30-layer text decoder → `IndexError: index 27`
+before any distance was read. HARNESS_ERROR, receipt committed. Fix: the sweep now uses the layer-1 probe's explicit
+path list (`model.layers`, `model.language_model.layers`, …), pins the oracle's list to the e4b side's layer count,
+records `oracle_layer_path`, and refuses if the three arms' captured shapes differ at any layer. P7/P8 and the
+reading rules are unchanged; the redraw is `p43-t2b-g4sweep-2`.
