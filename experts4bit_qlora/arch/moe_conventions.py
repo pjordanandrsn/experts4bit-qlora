@@ -101,6 +101,25 @@ class MoEConvention:
     # written "SwiGLU gate-first ... recorded here so the orientation is never
     # re-guessed" in its comment; this is that sentence for all of them.
     fused_order: tuple = ("gate", "up")
+    # How the two projections SHARE the fused axis on disk: ``"contiguous"`` (a
+    # gate block then an up block, split by ``chunk(2)``) or ``"interleaved"``
+    # (alternating stripes, split by ``[..., ::2]`` / ``[..., 1::2]``).
+    # ``fused_order`` names which of the two comes first; this names the SHAPE of
+    # "first", and the two together are the layout.
+    #
+    # It exists because ``fused_order`` on its own is WEAKER than the property it
+    # guards. That field has exactly two values, but gpt-oss's released layout is
+    # a third thing neither of them describes -- ``GptOssExperts._apply_gate`` is
+    # ``gate, up = gate_up[..., ::2], gate_up[..., 1::2]`` -- so ``gptoss`` took
+    # the contiguous default and silently declared something untrue about itself.
+    # A field that cannot state a shipped family's layout is precisely the false
+    # confidence #515 is about.
+    #
+    # Adjudicated by MEASUREMENT, not by reading: ``arch/fused_layout_probe.py``
+    # runs each family's real upstream expert forward and reports where the gate
+    # actually is, and ``tests/test_fused_layout_probe.py`` fails if a declaration
+    # here disagrees with it.
+    ckpt_gate_up_packing: str = "contiguous"
     # Keys whose SUFFIX matches this get their last two axes transposed at load.
     # Some pre-fused families (qwen3_vl_moe) ship experts as [E, in, out] and
     # the module declares [E, out, in]; upstream's converter is a Transpose(1,2)
@@ -124,6 +143,19 @@ class MoEConvention:
                 f"of a fused gate_up_proj is the gate; there is no third option "
                 f"and it must not be guessed."
             )
+        if self.ckpt_gate_up_packing not in ("contiguous", "interleaved"):
+            raise MoEConventionError(
+                f"{self.name}: ckpt_gate_up_packing must be 'contiguous' or "
+                f"'interleaved', got {self.ckpt_gate_up_packing!r}. It names how the "
+                f"gate and up projections share the fused axis; an unrecognised value "
+                f"would be read as the default and silently mis-split."
+            )
+        if not self.gated and self.ckpt_gate_up_packing != "contiguous":
+            raise MoEConventionError(
+                f"{self.name}: a non-gated convention has no gate/up pair to share an "
+                f"axis, so ckpt_gate_up_packing must stay at its default; got "
+                f"{self.ckpt_gate_up_packing!r}."
+            )
         if not self.gated and tuple(self.fused_order) != ("gate", "up"):
             raise MoEConventionError(
                 f"{self.name}: a non-gated convention (roles {{up, down}}) has no "
@@ -135,6 +167,18 @@ class MoEConvention:
     def gate_first(self) -> bool:
         """Rows ``[0:inter]`` of a fused ``gate_up_proj`` are the gate."""
         return tuple(self.fused_order) == ("gate", "up")
+
+    @property
+    def splits_by_chunk2(self) -> bool:
+        """The on-disk stack can be split by ``chunk(2, dim=-1)``, gate half first.
+
+        This is what every e4b consumer of a fused ``gate_up_proj`` actually does,
+        so it is the precondition for placing a stack unchanged. A family that
+        fails it needs a loader path that rewrites the stack first (gpt-oss's
+        ``from_gptoss`` de-interleaves) or it must be refused -- never placed and
+        hoped for, because a mis-split raises nothing.
+        """
+        return self.gate_first and self.ckpt_gate_up_packing == "contiguous"
 
     def rename(self, key: str) -> str:
         for src, dst in self.renames:
@@ -284,6 +328,16 @@ GPTOSS = MoEConvention(
     fused_prefix="mlp.experts",
     model_types=frozenset({"gpt_oss"}),
     renames=(),
+    # INTERLEAVED, not contiguous halves -- the one shipped family that is.
+    # ``GptOssExperts._apply_gate`` is literally
+    # ``gate, up = gate_up[..., ::2], gate_up[..., 1::2]``, so the stack alternates
+    # gate and up stripes along its last axis ([E, hidden, 2*inter], input-major).
+    # Measured, not read: ``fused_layout_probe`` reports interleaved/gate-first at
+    # a 5e14 margin. Until this field existed the record declared contiguous
+    # gate-first, which is false about this checkpoint -- it was harmless only
+    # because ``arch/gptoss.py::from_gptoss`` de-interleaves on the one path that
+    # loads gpt-oss, never because anything checked.
+    ckpt_gate_up_packing="interleaved",
 )
 
 #: qwen3_vl_moe (and its qwen3_vl_moe_text tower) ship experts PRE-FUSED as a
@@ -445,6 +499,32 @@ AXK1 = MoEConvention(
 
 CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS, GEMMA4,
                QWEN3_VL_MOE, JETMOE, DBRX, QWEN3_5_MOE, NEMOTRON_H, AXK1)
+
+#: The conventions EXPOSED to a silent gate/up swap (e4b#515): a family is exposed
+#: when its checkpoint ships ONE fused gate_up tensor whose two halves carry no
+#: names, so nothing in the checkpoint can recover the order.
+#:
+#: Pinned precisely because two earlier counts disagreed and both were wrong. The
+#: issue enumerated six by grepping ``expert_re=re.compile(r"(?!)")`` with
+#: ``roles={}``; a later correction put it at nine by enumerating the same way more
+#: carefully. That predicate is the wrong one in both directions:
+#:
+#:   * it MISSES nothing here, but it ADMITS ``DENSE``, which has no ``model_types``
+#:     and is selected explicitly rather than by lookup -- not a family at all; and
+#:   * it ADMITS ``DBRX``, which stores ``w1`` / ``v1`` / ``w2`` as three separately
+#:     NAMED flat tensors and never fuses them. Its order is recoverable from names
+#:     exactly as a per-expert family's is, so it is not exposed.
+#:
+#: The correct predicate is "one fused tensor, two unlabelled halves", which leaves
+#: SEVEN. ``tests/test_fused_layout_probe.py`` measures every one of them against
+#: upstream's own expert forward, and fails if this set drifts from the records.
+#:
+#: Reachability is a separate question from exposure: ``axk1`` is staged-not-wired
+#: (#509/#514) and no loader admits it today, but the layout question is answered
+#: here now so that adding the loader row cannot open the seam.
+NATIVELY_PREFUSED = frozenset({
+    "granitemoe", "gptoss", "qwen3_vl_moe", "gemma4", "jetmoe", "qwen3_5_moe", "axk1",
+})
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 

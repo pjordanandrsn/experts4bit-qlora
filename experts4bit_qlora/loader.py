@@ -199,6 +199,19 @@ def _index_per_expert_keys(conv, checkpoint_keys):
     return index
 
 
+#: model_types whose loader path REWRITES the checkpoint's fused gate/up stack into
+#: e4b's [gate-block; up-block] layout before any consumer sees it, so a non-chunk(2)
+#: on-disk packing is handled rather than mis-split. Every entry must name real code:
+#:
+#:   gpt_oss -> arch/gptoss.py::from_gptoss, which transposes to [E, 2I, H] and then
+#:              de-interleaves the rows with torch.cat([gu[:, 0::2], gu[:, 1::2]]).
+#:
+#: This is an exemption from the refusal in ``expert_layout_for``, so it is data and
+#: it is tested: ``test_every_deinterleaving_loader_names_real_code`` fails if an entry
+#: has no de-interleaving code behind it, and the refusal fires for anyone not listed.
+DEINTERLEAVING_LOADERS = frozenset({"gpt_oss"})
+
+
 def expert_layout_for(model_type):
     """``(expert_submodule_path, has_gate)`` for the quantized loader.
 
@@ -215,31 +228,57 @@ def expert_layout_for(model_type):
     (see tests) — this makes that agreement the mechanism, not a coincidence.
     """
     from .arch.moe_conventions import MoEConventionError, convention_for
+    # The fallback below exists for ONE case: this family has no convention at all.
+    # It must not also catch the refusals that follow, so the lookup is the only
+    # thing inside the try. It used to wrap them too, which made every refusal INERT
+    # for exactly the families that matter: a model_type with a SUPPORTED_ARCHITECTURES
+    # entry -- gemma4, gemma4_text, granitemoe, gpt_oss, qwen3_5_moe, olmoe, qwen3_moe,
+    # deepseek_v4, kimi_k3, i.e. every reachable pre-fused family -- had its refusal
+    # raised, caught one line later, and downgraded to a successful return. The guard
+    # read as a guard and protected nobody (e4b#515).
     try:
         conv = convention_for(model_type)
-        # e4b#515. Every consumer of a fused gate_up_proj splits it with
-        # ``chunk(2, dim=-1)`` and takes the FIRST half as the gate -- the
-        # vendored expert forward, deepseek_v4's dense path, the hybrid and
-        # hot-residency engines, and ExpertsLoRA. None of them is parameterised
-        # on the order. So a convention declaring up-first would load and then
-        # compute ``up * act(gate)``: a wrong activation, silently, with every
-        # structural gate still passing. Refuse it here, at the one funnel from
-        # the convention system into this loader, until those consumers read
-        # ``fused_order`` instead of assuming. Loud beats wrong.
-        if not conv.gate_first:
-            raise MoEConventionError(
-                f"convention {conv.name!r} declares fused_order "
-                f"{tuple(conv.fused_order)!r}, but this loader's expert consumers "
-                f"all assume the gate occupies rows [0:inter] of gate_up_proj. "
-                f"Loading it would compute a wrong activation without raising. "
-                f"Parameterise the consumers on MoEConvention.fused_order before "
-                f"admitting an up-first family (e4b#515)."
-            )
-        return conv.fused_prefix, conv.gated
     except MoEConventionError:
         if model_type in SUPPORTED_ARCHITECTURES:
             return SUPPORTED_ARCHITECTURES[model_type], True
         raise
+    # From here on a refusal PROPAGATES. Loud beats wrong.
+    #
+    # e4b#515. Every consumer of a fused gate_up_proj splits it with
+    # ``chunk(2, dim=-1)`` and takes the FIRST half as the gate -- the
+    # vendored expert forward, deepseek_v4's dense path, the hybrid and
+    # hot-residency engines, and ExpertsLoRA. None of them is parameterised
+    # on the order. So a convention declaring up-first would load and then
+    # compute ``up * act(gate)``: a wrong activation, silently, with every
+    # structural gate still passing. Refuse it here, at the one funnel from
+    # the convention system into this loader, until those consumers read
+    # ``fused_order`` instead of assuming. Loud beats wrong.
+    if not conv.gate_first:
+        raise MoEConventionError(
+            f"convention {conv.name!r} declares fused_order "
+            f"{tuple(conv.fused_order)!r}, but this loader's expert consumers "
+            f"all assume the gate occupies rows [0:inter] of gate_up_proj. "
+            f"Loading it would compute a wrong activation without raising. "
+            f"Parameterise the consumers on MoEConvention.fused_order before "
+            f"admitting an up-first family (e4b#515)."
+        )
+    # Same refusal, second axis. ``chunk(2, dim=-1)`` splits CONTIGUOUS blocks,
+    # so an interleaved stack placed unchanged would pair gate stripe k with up
+    # stripe k+1 -- again a wrong activation with every shape agreeing. A family
+    # is admitted only if its stack is chunk(2)-splittable as stored, or if a
+    # named loader path rewrites it first.
+    if not conv.splits_by_chunk2 and model_type not in DEINTERLEAVING_LOADERS:
+        raise MoEConventionError(
+            f"convention {conv.name!r} declares ckpt_gate_up_packing "
+            f"{conv.ckpt_gate_up_packing!r}, but this loader's expert consumers "
+            f"split a fused gate_up_proj with chunk(2, dim=-1), which recovers "
+            f"gate and up only from CONTIGUOUS blocks. Placing this stack "
+            f"unchanged would compute a wrong activation without raising. Give "
+            f"{model_type!r} a loader path that rewrites the stack into "
+            f"[gate-block; up-block] (see arch/gptoss.py::from_gptoss) and add it "
+            f"to DEINTERLEAVING_LOADERS (e4b#515)."
+        )
+    return conv.fused_prefix, conv.gated
 
 # model_type -> ((legacy on-disk spelling, name in the transformers>=5 module tree), ...).
 # GraniteMoe checkpoints on the Hub predate the standardized fused-experts interface: the fused
