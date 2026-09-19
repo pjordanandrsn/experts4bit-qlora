@@ -246,6 +246,31 @@ measured cost is the fp8 cache and dot: 0.046 nats, concentrated on the
 five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
 §13.2; numbers: SERVING-PARITY.
 
+**Quality measured from the checkpoint, not from e4b's own reference
+(P44, 2026-09-19).** A second instrument scores each served stack
+against the family's bf16 checkpoint (full-vocabulary KL, 200 committed
+prompts), after a control that first asks the reference whether it
+agrees with *itself* under the two forward shapes the scorer compares.
+Three readings moved the register
+([`bench/p44/RESULTS-p44.md`](../bench/p44/RESULTS-p44.md)):
+**gpt-oss-20b's native MXFP4 store route licenses** (0.0019 nats from a
+dequant of the same bytes, against 0.0222 for the NF4 requant control;
+every stratum ≤ 0.13× the control) — the first quality verdict on that
+family that is not out-of-domain flattery, carried as a KL-from-reference
+licence rather than a K8 one; **OLMoE's int4 recipes FAIL the second
+text** (RTN int4 experts +0.255 ppl on C4; the Qwen3 calibrated recipe
++0.443 — worse than RTN, so OLMoE stays NF4); and **Gemma-4's served NF4
+stack is 1.08 nats/token from the bf16 checkpoint with 36 % top-1
+disagreement**, lever-independent, reproduced across three runs, where
+the same instrument reads the other four families at 0.02–0.1. That is
+a served-model defect, not a quantisation cost, filed as
+[#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597)
+with a three-arm diagnostic to pre-register; no Gemma-4 serving position
+is quoted. The per-expert error census on Granite (126 of 1,270 routed
+experts carry half the GPTQ error — 9.9 %, at the 10 % threshold) and
+Mixtral (flat: 22.7 % on the 16 layers measured) is data for a
+per-expert fallback that is not built.
+
 **Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed
 position is the census's, below — **×2.067 at B=1 (238.1 tok/s on box
 49916675) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4 control on
