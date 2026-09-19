@@ -44,6 +44,24 @@ def _trace_quad(D: torch.Tensor, H: torch.Tensor) -> float:
 
 
 def census_row(W: torch.Tensor, H, rows: int, *, min_rows: int, damp: float, dev: str) -> dict:
+    """One (layer, expert, role). On the GPU when it fits, on the CPU when it does not: run 2's Mixtral census OOMed
+    on its first row (a 14336^2 fp32 Hessian, its GPTQ solve and the 24 GB resident model on a 32 GB card, with the
+    Hessian pass's cached allocator blocks still held) -- the row is a fact about the bytes, not about where the trace
+    was computed, so a per-row CPU fallback keeps the census whole and records the device it ran on."""
+    try:
+        with torch.no_grad():
+            out = _census_row_on(W, H, rows, min_rows=min_rows, damp=damp, dev=dev)
+        out["device"] = dev
+        return out
+    except torch.OutOfMemoryError:
+        torch.cuda.empty_cache()
+        with torch.no_grad():
+            out = _census_row_on(W, H, rows, min_rows=min_rows, damp=damp, dev="cpu")
+        out["device"] = "cpu (GPU OOM fallback)"
+        return out
+
+
+def _census_row_on(W: torch.Tensor, H, rows: int, *, min_rows: int, damp: float, dev: str) -> dict:
     from gptq_pack import gptq_pack_int4_b32
     from int4_pack_ref import dequant_int4_ref, pack_int4_b32
     W = W.to(dev, torch.float32)
@@ -159,6 +177,8 @@ def main() -> int:
         hs = calibrate_expert_hessians(model, src, batches, only_layers=chunk, layers_per_pass=len(chunk),
                                        hessian_device="cpu")
         print(f"  hessians for layers {chunk[0]}..{chunk[-1]} in {time.time() - t1:.0f}s", flush=True)
+        gc.collect()
+        torch.cuda.empty_cache()                                     # release the Hessian pass's cached blocks before the row math
         for layer in chunk:
             first, down = read_layer(layer)
             hl = hs.get(layer, {})
