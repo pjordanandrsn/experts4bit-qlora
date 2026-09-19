@@ -109,3 +109,19 @@ def test_builder_check_refuses_a_map_that_did_not_apply():
     kl._builder_check(ok)
     with pytest.raises(RuntimeError, match="tiers ask for"):
         kl._builder_check(dict(ok, stacks_by_store={"bf16(base)": 10, "nf4/b64": 20}))
+
+
+def test_expected_stack_counts_come_from_the_specs_not_the_map_length():
+    """The bug that refused four of five arms in run `p51-gemma4mix`: a MAPPING names every layer it
+    controls, so `len(map)` is the layer count, not the quantized-stack count. The model was built
+    correctly and the expectation was wrong -- so this asserts the producer, not the checker."""
+    assert ss.n_expected_quantized(None, 30) == 30
+    assert ss.n_expected_quantized(set(range(20, 30)), 30) == 10
+    for builder, want in (("loader_tiers_bf16:20_nf4:10", 10), ("loader_tiers_int8:20_nf4:10", 30),
+                          ("loader_tiers_bf16:10_int8:10_nf4:10", 20), ("loader_tiers_bf16:5_int8:15_nf4:10", 25)):
+        m = ss.store_map(builder, 30)
+        assert len(m) == 30, builder
+        assert ss.n_expected_quantized(m, 30) == want, (builder, want)
+        # and the two checks agree: the census counts the same stacks the expectation does
+        census = ss.tier_census(builder, 30)
+        assert sum(v for k, v in census.items() if k != "bf16(base)") == want, (builder, census)
