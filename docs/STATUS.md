@@ -331,8 +331,21 @@ taken from configurations this package already ships (≤ 0.10 nats and top-1
 occupy), is **not cleared**: the graded map reads 0.1695 nats and top-1
 0.855, about one token in seven disagreeing with bf16. Two boundaries travel
 with the recommendation: it applies to the **loader path only**, and its
-quality is materially below every other family's shipped quantisation. Curve
-and rows in [`bench/p51/RESULTS-p51.md`](../bench/p51/RESULTS-p51.md).
+quality is materially below every other family's shipped quantisation.
+
+That bar has since been applied on **held-out prompts** — a fresh 100-prompt
+set written after the design was fixed, disjoint from the committed set by
+assertion — and the map does not clear it there either: **0.1319 nats and
+top-1 0.874**, missing on both axes, on every stratum, and on the *more*
+favourable of the two sets. The same run carries its own control: gpt-oss's
+licensed NF4 requant, the configuration the bar was taken from, reads 0.0217
+against its committed 0.0222, so the bar transfers between prompt sets to
+within 2 %. What survives the gate is the shape, not a position — the graded
+map still beat a matched-bytes uniform head by 1.39× on the fresh prompts.
+The gate is therefore **run and not passed**, which is a stronger and less
+comfortable statement than not run. Curve and rows in
+[`bench/p51/RESULTS-p51.md`](../bench/p51/RESULTS-p51.md); the gate in
+[`bench/p52/RESULTS-p52.md`](../bench/p52/RESULTS-p52.md).
 
 
 **Serving speed**, Qwen3-30B-A3B on a rented RTX 5090: the licensed

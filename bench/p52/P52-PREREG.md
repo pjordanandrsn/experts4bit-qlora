@@ -11,7 +11,9 @@ Two contaminations this lane removes:
 1. **The prompts.** Every lane from P44 to P51 scored `bench/kl_prompts.py`'s 200 prompts, and **P48's per-layer sensitivity profile — the measurement that chose the graded map's 10/10/10 tier boundaries — was taken on them.** Scoring the gate on the same prompts would make it partly a fitted metric. This lane scores **`bench/kl_prompts_heldout.py`**, 100 new prompts in the same four strata and proportions, written for this purpose, committed before the run, mechanically checked disjoint (`assert_disjoint_from_committed`), and never used to choose anything.
 2. **The bar's provenance.** The bar comes from gpt-oss's shipped NF4 requant reading 0.0222 nats / top-1 0.9366 **on the committed set**. Applying it to a Gemma-4 number measured on a different set assumes the two sets are equivalent. This lane measures that reference point on the **same held-out prompts as its subject**, so the comparison is within-set.
 
-## The bar (registered on `main` before this lane, in P51 amendment 3)
+## The bar (registered before this lane; provenance stated exactly)
+
+**Where the bar was written, and when, because a gate's whole value is that its threshold predates its measurement.** The bar was first written in P51 amendment 3 and pushed to a public branch (PR #621) at ~14:30Z. That PR was **not merged until 16:25Z, after this lane ran** — an ordering error of mine, recorded rather than smoothed over. What *was* on `main` before the run is **this file**: the paragraph below was committed to `main` at **15:47:42Z** (commit `286250c`) and the lane launched at **15:51Z**, four minutes later. So the bar is pre-registered in two immutable, timestamped places that both predate the measurement, but the four-minute margin on the `main` copy is thin, and anyone auditing this should check both commits rather than take the claim on trust.
 
 A per-family **default** must sit in the band every configuration e4b already ships occupies on this instrument: **KL ≤ 0.10 nats/token AND top-1 agreement ≥ 0.93.** Reference points, all on the committed set: gpt-oss NF4 requant 0.0222 / 0.9366; gpt-oss licensed store route 0.0019 / 0.9814; OLMoE, Granite and Mixtral NF4 0.02–0.10 (`bench/KL-FINDINGS.md`); Gemma-4's own layer-27-only configuration 0.0056 / 0.9697.
 
@@ -56,3 +58,8 @@ Two families, two fetches (49 GB + 13 GB), four arms, two reference passes over 
 ## Amendments
 
 (none yet)
+
+## Read (2026-09-19, run p52-gemma4gate)
+
+`RESULTS-p52.md`: **G2 HOLDS** (gpt-oss 0.0217 vs 0.0222, -2.1 % — the bar transfers, so the rest is readable); **G1 REFUTED** (the Gemma anchor moved -19.8 % while gpt-oss moved 2 % — the family is the unstable thing, not the sets — so everything is read on held-out alone); **G3 THE GATE FAILS** (0.1319 nats / top-1 0.874 against ≤ 0.10 and ≥ 0.93, missing on both axes and on the more favourable set); **G4 HOLDS** (1.39× at matched bytes, against 1.44× on the committed set). **Decision: documented option, no default, no quoted position — the gate is now RUN AND NOT PASSED.**
+
