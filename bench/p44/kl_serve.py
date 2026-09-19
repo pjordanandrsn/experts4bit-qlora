@@ -49,7 +49,7 @@ from kl_fidelity import (METRIC_VERSION, KLAccumulator,  # noqa: E402
                          decode_teacher_forced_logits, teacher_forced_logits)
 from kl_paths import _gate_on_k0  # noqa: E402
 from kl_prompts import PROMPTS, digest as prompt_digest, strata_counts  # noqa: E402
-from serve_stack import ARMS, MODELS, apply_env, arm_env, build_served_model  # noqa: E402
+from serve_stack import ARMS, LANE_KEYS, MODELS, arm_env, build_served_model  # noqa: E402
 
 REFERENCE = {
     "gemma4": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision, resident on the same card",
@@ -65,10 +65,15 @@ def load_reference(family: str, model_id: str, revision: str, dev: str):
         from transformers import Mxfp4Config
         m = AutoModelForCausalLM.from_pretrained(model_id, revision=revision, dtype=torch.bfloat16, device_map=dev,
                                                  quantization_config=Mxfp4Config(dequantize=True))
-        qc = getattr(m.config, "quantization_config", None)
-        deq = getattr(qc, "dequantize", None) if qc is not None else None
-        if deq is not True and not (isinstance(qc, dict) and qc.get("dequantize") is True):
-            raise RuntimeError(f"gpt-oss reference is not the dequant path: quantization_config={qc!r}")
+        # transformers 5.x DROPS quantization_config from the config once it has dequantised, so the proof is the
+        # weights: no packed byte tensor may remain (run 2 refused a correct dequant on the missing config).
+        low = [n for n, t in list(m.named_parameters()) + list(m.named_buffers())
+               if t.dtype in (torch.uint8, torch.int8) or "blocks" in n.split(".")[-1] and t.dtype not in (torch.bfloat16, torch.float32, torch.float16)]
+        if low:
+            raise RuntimeError(f"gpt-oss reference still carries packed/quantised tensors ({len(low)}: {low[:3]}) -- not the dequant path")
+        for n, t in m.named_parameters():
+            if "experts" in n and t.dtype != torch.bfloat16:
+                raise RuntimeError(f"gpt-oss reference expert tensor {n} is {t.dtype}, expected bf16 after dequantize=True")
     else:
         m = AutoModelForCausalLM.from_pretrained(model_id, revision=revision, dtype=torch.bfloat16, device_map=dev)
     m.config.use_cache = True
@@ -142,6 +147,57 @@ def score_arm(model, tok, prompts, cache_dir, max_len, score, dev) -> dict:
     return out
 
 
+def run_controls(a, model_id, revision, tok, prompts, dev) -> dict:
+    """Amendment 2 (after run 2 read KL ~1.1 nats for Gemma-4 nf4 AND r1epi against bf16): two controls that say whether
+    such a number is the served model or the scorer. (i) the REFERENCE scored decode-shaped vs prefill-shaped on the
+    same prompts -- an HF-side cache/positions fault shows here, and > 1e-2 nats refuses the decode scorer for the
+    family; (ii) the nf4 control arm scored PREFILL-shaped against the cached decode-shaped reference, beside its decode
+    row: a served model whose weights are wrong is far from bf16 under both shapes; a decode-path fault is far under
+    decode only. Both run on the first --controls-n prompts (cost), with the counts recorded."""
+    n = min(a.controls_n, len(prompts))
+    sub = prompts[:n]
+    out = {"n_prompts": n}
+    t0 = time.time()
+    try:
+        ref = load_reference(a.family, model_id, revision, dev)
+        acc = KLAccumulator()
+        with torch.no_grad():
+            for p in sub:
+                ids = _tokenize(tok, p["text"], a.max_len).to(dev)
+                dec = torch.load(os.path.join(a.ref_cache, p["id"] + ".pt"))["logits"].to(dev)
+                pre = teacher_forced_logits(ref, ids)
+                acc.add(dec, pre)
+        s_ = acc.summary()
+        out["reference_decode_vs_prefill"] = {"kl_mean": s_["kl_mean"], "kl_max": s_["kl_max_per_token"], "top1": s_["top1_agreement"],
+                                              "tokens": s_["n_tokens_scored"], "passes_1e-2": s_["kl_mean"] < 1e-2, "wall_s": round(time.time() - t0, 1)}
+        del ref
+    except Exception as e:
+        out["reference_decode_vs_prefill"] = {"error": f"{type(e).__name__}: {str(e)[:400]}"}
+    gc.collect()
+    torch.cuda.empty_cache()
+    # (ii) nf4 control arm, prefill-shaped, in a child with the nf4 env (no levers) so the hook state matches the arms
+    import subprocess
+    ctrl_arm = "nf4" if "nf4" in ARMS[a.family] else sorted(ARMS[a.family])[0]
+    part = f"{a.out}.{ctrl_arm}.prefill.part.json"
+    env = dict(os.environ)
+    for k in LANE_KEYS:
+        env.pop(k, None)
+    env.update(arm_env(a.family, ctrl_arm, model_id))
+    cmd = [sys.executable, "-u", os.path.abspath(__file__), "--family", a.family, "--model", model_id, "--revision", revision,
+           "--arena", a.arena, "--calib", a.calib, "--k0-receipt", a.k0_receipt, "--arms", ctrl_arm, "--max-len", str(a.max_len),
+           "--limit", str(n), "--ref-cache", a.ref_cache, "--scorer", "prefill", "--out", part, "--child", "--controls", "0"]
+    t1 = time.time()
+    rc = subprocess.call(cmd, env=env)
+    got = json.load(open(part)) if os.path.exists(part) else {}
+    rows = got.get("rows", [])
+    out["control_arm_prefill"] = ({"arm": ctrl_arm, "kl_mean": rows[0]["kl_mean"], "kl_p95": rows[0]["kl_p95"], "top1": rows[0]["top1_agreement"],
+                                   "tokens": rows[0]["n_tokens_scored"], "per_stratum": {k: v["kl_mean"] for k, v in rows[0]["per_stratum"].items()},
+                                   "note": "PREFILL-shaped arm vs the DECODE-shaped cached reference: includes the reference's own decode-vs-prefill gap (i)"}
+                                  if rows else {"arm": ctrl_arm, "error": f"child rc={rc}: {got.get('not_measured')}"})
+    out["control_arm_prefill"]["wall_s"] = round(time.time() - t1, 1)
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="P44-b: KL-from-bf16 for the served arms, per stratum")
     ap.add_argument("--family", required=True, choices=sorted(REFERENCE))
@@ -156,6 +212,11 @@ def main() -> int:
     ap.add_argument("--ref-cache", required=True)
     ap.add_argument("--scorer", default="decode", choices=sorted(SCORERS))
     ap.add_argument("--out", required=True)
+    ap.add_argument("--child", action="store_true", help="internal: one arm, env already set by the parent")
+    ap.add_argument("--controls", type=int, default=1,
+                    help="amendment 2: after the arms, the instrument controls -- reference decode-vs-prefill self-KL and the nf4 "
+                         "control arm scored with the PREFILL scorer against the same cached reference (first --controls-n prompts)")
+    ap.add_argument("--controls-n", type=int, default=40)
     a = ap.parse_args()
 
     k0 = _gate_on_k0(a.k0_receipt)
@@ -202,18 +263,57 @@ def main() -> int:
 
     flush()
     t0 = time.time()
-    receipt["reference_pass"] = reference_pass(a.family, model_id, revision, tok, prompts, a.ref_cache,
-                                               a.max_len, score, dev)
-    receipt["reference_pass"]["wall_s"] = round(time.time() - t0, 1)
-    flush()
+    if not a.child:
+        receipt["reference_pass"] = reference_pass(a.family, model_id, revision, tok, prompts, a.ref_cache,
+                                                   a.max_len, score, dev)
+        receipt["reference_pass"]["wall_s"] = round(time.time() - t0, 1)
+        flush()
+    else:
+        missing = [p["id"] for p in prompts if not os.path.exists(os.path.join(a.ref_cache, p["id"] + ".pt"))]
+        if missing:
+            raise SystemExit(f"child: reference cache incomplete ({len(missing)} prompts missing) -- the parent scores the reference first")
 
+    if not a.child:
+        # ONE CHILD PER ARM, env set before its interpreter starts (the hook arms itself at import time -- run 2's fault).
+        import subprocess
+        for arm in arms:
+            env = dict(os.environ)
+            for k in LANE_KEYS:
+                env.pop(k, None)
+            env.update(arm_env(a.family, arm, model_id))
+            part = f"{a.out}.{arm}.part.json"
+            cmd = [sys.executable, "-u", os.path.abspath(__file__), "--family", a.family, "--model", model_id, "--revision", revision,
+                   "--arena", a.arena, "--calib", a.calib, "--k0-receipt", a.k0_receipt, "--arms", arm, "--max-len", str(a.max_len),
+                   "--limit", str(a.limit), "--ref-cache", a.ref_cache, "--scorer", a.scorer, "--out", part, "--child"]
+            t1 = time.time()
+            rc = subprocess.call(cmd, env=env)
+            got = json.load(open(part)) if os.path.exists(part) else {"rows": [], "not_measured": {arm: {"error": f"child exited rc={rc} with no partial receipt", "wall_s": round(time.time() - t1, 1)}}}
+            receipt["rows"] += got.get("rows", [])
+            receipt["not_measured"].update(got.get("not_measured", {}))
+            for r in got.get("rows", []):
+                print(f"== {a.family}/{arm}: KL mean={r['kl_mean']:.6e} p95={r['kl_p95']:.6e} top1={r['top1_agreement']:.5f} tokens={r['n_tokens_scored']} ({r['wall_s']} s)", flush=True)
+            for k, v in got.get("not_measured", {}).items():
+                print(f"== {a.family}/{k}: NOT MEASURED -- {v.get('error', '')[:300]}", flush=True)
+            flush()
+        if a.controls:
+            receipt["controls"] = run_controls(a, model_id, revision, tok, prompts, dev)
+            flush()
+        receipt["wall_s_total"] = round(time.time() - t0, 1)
+        flush()
+        print(f"receipt -> {a.out} ({len(receipt['rows'])} rows, {len(receipt['not_measured'])} not measured)")
+        return 0 if receipt["rows"] and not receipt["not_measured"] else 3
+
+    # ---- child: exactly one arm, the env already set by the parent; the hook banner proves it armed
     for arm in arms:
         env = arm_env(a.family, arm, model_id)
-        apply_env(env)
+        for k, v in env.items():
+            if os.environ.get(k) != v:
+                raise SystemExit(f"child env mismatch for {k}: {os.environ.get(k)!r} != {v!r} -- the parent must set the arm's env before the interpreter starts")
         t1 = time.time()
         model = None
         try:
             model, info = build_served_model(model_id, a.arena, a.calib, device=dev)
+            info["hook_loaded"] = hook
             _lever_check(env, info)
             r = score_arm(model, tok, prompts, a.ref_cache, a.max_len, score, dev)
             r.update({"arm": arm, "row": f"{a.family}/{arm} vs the family's reference", "env": env,
@@ -236,7 +336,6 @@ def main() -> int:
             flush()
     receipt["wall_s_total"] = round(time.time() - t0, 1)
     flush()
-    print(f"receipt -> {a.out} ({len(receipt['rows'])} rows, {len(receipt['not_measured'])} not measured)")
     return 0 if receipt["rows"] and not receipt["not_measured"] else 3
 
 

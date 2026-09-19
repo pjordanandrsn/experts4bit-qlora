@@ -99,3 +99,32 @@ Both under the $35 cap. STOP: a card not of the class (refused before install); 
    same arm name are the same flags.
 
 Nothing above moves a prediction, a threshold or a reading rule.
+
+### Amendment 2 (2026-09-19 ~04:00Z, after run 2 of P44-b and before run 3) — the hook arms at process start; two instrument controls
+
+Run `p44-b-kl80-2` (H100 NVL, instance 51527275, ≈ 24 min, receipt 6c668b9): K0 passed on the box; the Gemma-4 reference (bf16,
+`Gemma4ForConditionalGeneration`) was scored decode-shaped over the 200 prompts (5,879 tokens, 303 s); the `nf4` and `r1epi`
+arms produced rows; `int4_r1epi` and `calattn_r1epi` were REFUSED by the lever check ("the hook did not apply"); the gpt-oss
+family produced nothing (its reference check refused a correct dequant). Three facts, three fixes, no rule moved:
+
+1. **The lane hook arms itself only when a lever flag is set when the interpreter starts** (`bench/p42/hook/usercustomize.py`
+   wraps `enable_hybrid_tier` inside `if E4B_SERVE_EXP_INT4 or …` at import). `kl_serve.py` switched the env per arm inside one
+   process, so no lever ever applied — the engagement census caught it and refused the rows, as designed. Fix: the parent scores
+   the reference once (no lanes) and spawns **one child process per arm** with the arm's env set before Python starts; the child
+   asserts its env, builds, checks engagement, scores, writes a partial receipt the parent merges. Every K8/speed arm this campaign
+   ran had its env at process start; the KL driver now does too.
+2. **transformers 5.x drops `quantization_config` from the config once it has dequantised**, so a check on the config refused the
+   correct gpt-oss dequant reference. The proof is now the weights: no packed byte tensor remains and every expert tensor is bf16.
+3. **The two rows that WERE measured read KL(bf16 ‖ nf4) = 1.109 and KL(bf16 ‖ r1epi) = 1.084 nats/token, top-1 agreement 0.64.**
+   That is not quantisation noise (NF4 rows on OLMoE/Granite/Mixtral in `bench/KL-FINDINGS.md` sit at 1e-2..1e-1), it is not read
+   as a verdict, and it is disclosed here before run 3 rather than after. It is one of: the served Gemma-4 model's DECODE path (the
+   family whose K8 already sat in a ±0.1–0.27-nat "chaos band", `e4b.parity.gemma4.no-reference`), the served weights themselves,
+   or the scorer. Two controls now run after the arms (`--controls 1`, first 40 prompts, counts recorded): **(i)** the reference
+   scored decode-shaped vs prefill-shaped on the same prompts — an HF-side cache/positions fault shows here, and a mean over
+   1e-2 nats REFUSES the decode scorer for the family; **(ii)** the `nf4` control arm scored PREFILL-shaped against the cached
+   decode-shaped reference, beside its decode row — wrong weights are far from bf16 under both shapes, a decode-path fault is far
+   under decode only. **Reading:** the reading rule applies to decode rows only when (i) passes; the nf4 decode-vs-prefill gap is
+   disclosed on every Gemma-4 row; if (ii) sits at quantisation level while the decode rows do not, the finding is a decode-path
+   defect of the served Gemma-4 stack and is filed as such (an issue with the numbers), not a licence verdict.
+4. Run 3 is `p44-b-kl80-3`, same class and guard; the `p44-a-olmoe-2` lane (K8 + census, unaffected by 1–3: its arms run
+   `step_decomp.py` with the env at process start) continues.
