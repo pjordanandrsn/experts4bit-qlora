@@ -88,8 +88,12 @@ GEMMA4_MIX_ARMS = {                      # arm -> the tier spec (stores, in laye
     "int8_20":        "int8:20_nf4:10",             # a UNIFORM int8 head -- P49 read int8 on layer 0 alone at 0.693
     "graded_10_10":   "bf16:10_int8:10_nf4:10",     # the candidate: bf16 where it matters, int8 where it does not
     "graded_5_15":    "bf16:5_int8:15_nf4:10",      # a shorter bf16 head
-    "graded_10_10_crush": "bf16:10_int8:10_nf4b256:10",   # ... and the tail crushed harder
+    "bf16_13":        "bf16:13_nf4:17",             # the MATCHED-BYTES uniform head (~25.2 GB vs graded_10_10's 25.70)
 }
+# `graded_10_10_crush` ("bf16:10_int8:10_nf4b256:10") was registered and is RETIRED, not dropped quietly: Gemma-4's
+# moe_intermediate_size is 704 = 64 x 11, so no block larger than 64 divides it and the stack refuses. NF4 at block 64
+# is already the smallest store e4b ships for this model -- on THIS architecture the tail cannot be crushed further,
+# and the anchor's tail is already maximal. (P51 amendment 2.)
 ARMS["gemma4keep"] = {f"K{k:02d}": (0, 0, "0", {}) for k in GEMMA4_KEEP_KS}
 ARMS["gemma4mix"] = {a: (0, 0, "0", {}) for a in GEMMA4_MIX_ARMS}
 MODELS["gemma4mix"] = MODELS["gemma4"]
