@@ -52,6 +52,10 @@ cat versions.txt | tee -a summary.txt
 
 left=$(( K16_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -lt 600 ] && { say "STOP: no time left"; finish 30; }
 [ "$left" -gt 2400 ] && left=2400
+# The correctness suite is pytest; the vast image has none (k16-5090 run 1: `No module named pytest`,
+# rc=21 with a healthy card -- a harness fault, not a kernel one). Install it explicitly, own log, own code.
+python -c "import pytest" 2>/dev/null || perl -e 'alarm 300; exec @ARGV' python -m pip install -q --no-input pytest > logs/pip_pytest.log 2>&1 \
+  || { tail -3 logs/pip_pytest.log; say "PYTEST INSTALL FAIL"; finish 9; }
 say "correctness first (compiled bf16 suite on this card, alarm 600)"
 perl -e 'alarm 600; exec @ARGV' python -m pytest src/kernel/test_int4_smallm_interp.py -q -x -p no:cacheprovider > logs/tests.log 2>&1; trc=$?
 tail -3 logs/tests.log | tee -a summary.txt
