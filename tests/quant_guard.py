@@ -89,6 +89,7 @@ LOADER_REFUSALS = (
     "nothing this loader can stream",         # neither a shard index nor a single-file checkpoint
     "per-expert biases",                      # arena layout carries biases this path would drop
     "no fused expert stacks",                 # zero expert layers mapped
+    "per-layer store map is not supported", # a store MAP on the arena / dedicated-quant paths (P51)
     "tie_word_embeddings=False",              # untied head never found
     "unmaterialized meta tensors remain",     # something never got materialized
     "quantize_layers excludes",               # excluded layer's experts are packed on disk
