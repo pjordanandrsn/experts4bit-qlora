@@ -278,6 +278,14 @@ def expert_layout_for(model_type):
             f"[gate-block; up-block] (see arch/gptoss.py::from_gptoss) and add it "
             f"to DEINTERLEAVING_LOADERS (e4b#515)."
         )
+    # ...and finally, where it can be measured, check the DECLARATION itself against
+    # what upstream's expert forward actually computes. The refusals above act on
+    # what the record SAYS; this acts on whether the record is TRUE. A definite
+    # disagreement raises. An unmeasurable family does not -- see
+    # `verify_declared_layout` for why, and `tests/test_fused_layout_probe.py`,
+    # which makes "unmeasurable" a failure for every family e4b ships.
+    from .arch.fused_layout_probe import verify_declared_layout
+    verify_declared_layout(model_type, conv)
     return conv.fused_prefix, conv.gated
 
 # model_type -> ((legacy on-disk spelling, name in the transformers>=5 module tree), ...).

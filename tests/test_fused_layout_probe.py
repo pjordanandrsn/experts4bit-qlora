@@ -386,6 +386,48 @@ def test_gptoss_still_loads_because_its_path_de_interleaves():
     assert loader.expert_layout_for("gpt_oss") == ("mlp.experts", True)
 
 
+def test_the_load_path_rejects_a_declaration_upstream_contradicts(monkeypatch):
+    """The load-time hard failure, on the case that actually happened.
+
+    Declare gpt-oss contiguous gate-first -- which is what the record said before
+    this change -- and load it. The two refusals above both PASS: contiguous and
+    gate-first is exactly what ``chunk(2)`` wants, so nothing about the
+    declaration looks wrong. Only measuring it against upstream's forward catches
+    that the declaration is false, and it must raise rather than warn: the run
+    would otherwise finish and emit an admitted receipt computed on the wrong
+    halves.
+    """
+    from experts4bit_qlora import loader
+
+    lying = MoEConvention(
+        name="gptoss-lying", expert_re=re.compile(r"(?!)"), roles={},
+        fused_prefix="mlp.experts", model_types=frozenset({"gpt_oss"}),
+        ckpt_gate_up_packing="contiguous",       # the lie; upstream interleaves
+    )
+    assert lying.splits_by_chunk2 is True, "the declaration must pass the earlier refusals"
+    monkeypatch.setattr("experts4bit_qlora.arch.moe_conventions.convention_for",
+                        lambda mt, **k: lying)
+    with pytest.raises(MoEConventionError, match="transformers' own gpt_oss expert forward"):
+        loader.expert_layout_for("gpt_oss")
+
+
+def test_an_unmeasurable_family_does_not_break_the_load(monkeypatch):
+    """The other half of the load-time policy, stated as a test.
+
+    ``verify_declared_layout`` raises only on a DEFINITE disagreement. A family it
+    cannot measure returns None, because refusing a load over an upstream
+    packaging quirk would trade silent-wrong-numbers for cannot-load. That is only
+    safe because the CI test above makes "unmeasurable" a hard failure for every
+    family e4b ships -- this is the runtime half of that split, not a loophole.
+    """
+    from experts4bit_qlora.arch import fused_layout_probe as probe
+
+    conv = convention_for("granitemoe")
+    monkeypatch.setattr(probe, "measure_fused_layout", lambda mt: (_ for _ in ()).throw(
+        probe.FusedLayoutUndetermined("no driver")))
+    assert probe.verify_declared_layout("granitemoe", conv) is None
+
+
 def test_every_deinterleaving_loader_names_real_code():
     """An exemption whose code has gone is a hole, so pin it to the source.
 

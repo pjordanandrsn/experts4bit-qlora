@@ -303,3 +303,47 @@ def measure_module_fused_layout(module, run, param_path="gate_up_proj", axis=0, 
     packing, order = best
     return FusedLayout(packing=packing, order=order, residuals=residuals,
                        margin=(r_next / r_best if r_best else float("inf")))
+
+
+def verify_declared_layout(model_type: str, conv) -> FusedLayout | None:
+    """Raise if ``conv``'s declared layout disagrees with what upstream computes.
+
+    The load-time half of #515. A DEFINITE disagreement is a hard failure, never a
+    warning: it is exactly the case where every weight lands, every shape agrees,
+    nothing raises, and the run emits an admitted receipt built on ``up * act(gate)``.
+
+    A disagreement is the only thing that raises. If the family has no registered
+    driver, or transformers does not ship it, or the measurement is not decisive,
+    this returns ``None`` -- because refusing a load over an upstream packaging
+    quirk would trade a silent-wrong-numbers bug for a noisy cannot-load one, and
+    the declaration is separately asserted against a measurement for EVERY shipped
+    family in ``tests/test_fused_layout_probe.py``. That test is where "we could
+    not measure it" is a failure; here it is a fact about this installation.
+
+    Returns the measurement when one was made, so a caller can log it.
+    """
+    try:
+        measured = measure_fused_layout(model_type)
+    except FusedLayoutUndetermined:
+        return None
+    except Exception:  # noqa: BLE001 - a probe must never be the reason a load dies
+        return None
+
+    declared_packing = getattr(conv, "ckpt_gate_up_packing", "contiguous")
+    declared_order = tuple(getattr(conv, "fused_order", ("gate", "up")))
+    if measured.packing == declared_packing and tuple(measured.order) == declared_order:
+        return measured
+
+    from .moe_conventions import MoEConventionError
+
+    raise MoEConventionError(
+        f"convention {conv.name!r} declares the fused gate/up layout as "
+        f"{declared_packing}/{'gate' if declared_order == ('gate', 'up') else 'up'}-first, "
+        f"but transformers' own {model_type} expert forward computes "
+        f"{measured} (decisive by {measured.margin:.1e}x). One of the two is wrong, and "
+        f"loading under the declaration would compute act(up) * gate -- a wrong "
+        f"activation, silently, with every shape agreeing and every structural gate "
+        f"still passing. Re-adjudicate the convention against "
+        f"arch/fused_layout_probe.py before loading this family (e4b#515). "
+        f"Residuals: {measured.residuals}."
+    )
