@@ -43,3 +43,14 @@ Under the $35 cap. STOP: not a 5090 (refused); egress below the floor; a fetch a
 ## Amendments
 
 (none yet)
+
+## Amendments
+
+### Amendment 1 (2026-09-19 ~08:30Z, AFTER the data — disclosed as such) — P1's `padded = 0` clause
+
+P1 as registered demanded `lora_path_loop ≥ 1 AND lora_path_padded = 0` on every step. The run shows the loop on every step (652–768 of 768 calls) AND 8–116 padded calls per step: the `auto` guard is evaluated per (layer, projection, micro-batch) call and a minority of calls had skew under 4×. The reducer reads P1 REFUTED and that stays in `RESULTS-p46.md`. What the clause was written to establish — that P45's ~273k per-step `aten::mm` are the adapter loop, i.e. the loop serves the large majority of calls — the census shows directly (≥ 85 % of calls every step). The registered consequence of a refuted P1 ("P45's attribution was wrong; stop and re-read") described the loop NOT being taken, which is not what happened, so the decision rule is applied with P1 read as loop-dominant; this amendment is the record that the reading was chosen after the data. P2, P4 and P5 hold as registered and would carry the decision on their own.
+
+## Read (2026-09-19)
+
+`RESULTS-p46.md`: P2 HOLDS (padded 0.173× auto's s/step: 4.22 vs 24.46 s), P4 HOLDS on both fused arms, P5 HOLDS (identical peak), P3 NOT READ (`torch._grouped_mm` is sm_90-only; the 5090 refuses), P1 refuted at the letter / loop-dominant in substance (amendment 1). Decision: the waste guard is the defect → grouped-nf4-gemm `auto` moves to a structural (padded-bytes) guard; tp4 box B re-run on that cut; the position moves from that receipt only.
+
