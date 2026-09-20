@@ -61,7 +61,7 @@ def test_staged_file_matches_its_pin(want, name):
 def test_every_staged_piece_the_driver_names_is_pinned():
     """A file the driver stages but the pin omits is unguarded."""
     driver = (REPO / "bench" / "p47" / "p47_drive.sh").read_text()
-    stage_line = next(l for l in driver.splitlines() if l.startswith("STAGE="))
+    stage_line = next(ln for ln in driver.splitlines() if ln.startswith("STAGE="))
     named = {p.rsplit("/", 1)[-1] for p in stage_line.split() if p.endswith((".py", ".json"))}
     named.add("hook/usercustomize.py")           # $HOOK, referenced not copied
     pinned = {name for _w, name in _entries()}
