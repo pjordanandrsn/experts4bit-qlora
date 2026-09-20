@@ -85,3 +85,32 @@ Both H100 NVL machines are now known-bad from today's draws: **34985** failed ss
 **What would make this amendment wrong**, and is therefore worth saying out loud: if the calibration path's numerics differed by card in a way that changed the *ordering* of the three arms, a class change would matter. Nothing measured says it does, and P47–P52 read this family on H100 NVL while the training-parity lanes read it on RTX 5090 without either instrument's ordering moving. That is an argument from adjacent evidence, not a proof, and if the arms land within noise of each other the class is one of the things to suspect.
 
 **Nothing else moves.** Same fixture, same three arms, same single variable (calibration order), same instrument, same prompts, same bar (≤ 0.10 nats, top-1 ≥ 0.93), same predictions P1–P3, and P3 remains deliberately unpredicted.
+
+## Amendment 2 (2026-09-20 14:00Z, before any P53 arm has produced a reading): the egress floor is re-derived for THIS lane's fetch, and the window widens to keep it honest
+
+**The observation.** Sixteen draws, no measurement. The last eight all died on the same box-side check, and the numbers are the point:
+
+| draw | 9 | 10 | 11 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|
+| HF CDN MB/s | 15.9 | 15.8 | 19.0 | 18.3 | 18.0 | 17.7 | 18.3 |
+
+Floor: **20 MB/s**. Every host in the pool sits in a tight band just under it. Eight hosts failing the same check by 5–20 % is a mis-calibrated floor, not eight bad hosts.
+
+**Why the floor is wrong HERE.** `P47_MIN_MBPS` defaults to 20 for a family of lanes; tp4's box C fetches ~142 GB of checkpoints, where 20 MB/s is already two hours. **P53 fetches one model**, Gemma-4-26B-A4B at ~52 GB. The floor was inherited, not derived for this lane.
+
+**The derivation, stated so it can be checked rather than trusted.** The floor exists to answer one question: *will the fetch leave enough window to do the work?* Budget the fetch at no more than **40 %** of the window, leaving 60 % for calibration and three arms' scoring:
+
+```
+window 3.5 h = 210 min      fetch budget = 84 min
+52 000 MB / (84 x 60 s)  =  10.3 MB/s   <- the requirement
+```
+
+So the principled floor at a 3.5 h window is ~10 MB/s. **This amendment sets it to 15**, about 1.5x the requirement, so it still refuses anything materially slow. At the worst rate observed (15.8) the fetch is 55 min, **26 % of the window**.
+
+**The window widens 2.5 h → 3.5 h, and that is not incidental.** Lowering a floor without widening the window would trade a refusal for an overrun — the same lane failing later and more expensively, having paid for the download first. The floor protects "can this finish"; if the floor drops, the window must absorb it or the protection is fake. Estimate becomes 3.5 h x \$3.30 = **\$11.55**, still inside the \$2–20 band and the \$35/run cap.
+
+**The obvious objection, and why I think it does not hold.** Lowering a threshold after it repeatedly refuses is the exact shape of fitting a gate to the outcome one wants, and I have no standing to be casual about it — I published a bar earlier this week whose registering commit merged *after* its run. Three things distinguish this: the quantity is **computable rather than judgmental** (bytes over time against a window, not a quality call); the new number is **derived from the lane's own fetch size and window**, and lands at 1.5x the requirement rather than just below the observations (15 vs a worst observation of 15.8 — if the floor were being fitted to admit what I drew, it would sit at 15.7); and **no bar that bears on the result moves** — KL, top-1, the 0.10/0.93 band and P1–P3 are untouched. A slow host makes this lane *take longer*, not read differently.
+
+**What would make this wrong:** if egress rate correlated with anything the instrument measures. It does not — the arms are scored after the fetch, from local weights, and all three share the box.
+
+**Unchanged:** fixture, three arms, the single variable (calibration order), instrument, prompts, bar, and predictions P1–P3, with P3 still deliberately unpredicted.
