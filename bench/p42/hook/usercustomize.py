@@ -75,8 +75,18 @@ if (os.environ.get("E4B_SERVE_EXP_INT4", "0") == "1" or os.environ.get("E4B_SERV
                             print("INT4EXP calibrating (streamed):", len(batches), "batches of", os.environ.get("E4B_CALIB_SOURCE", "c4"),
                                   "budget GB", os.environ.get("E4B_INT4_HESSIAN_BUDGET_GB", "24"),
                                   "assignment", os.environ.get("E4B_INT4_ASSIGNMENT") or "recipe", "dump", dump_dir, flush=True)
+                        # P53: the calibration ORDER, set directly. The engine derives layers_per_pass
+                        # from the Hessian budget when this is unset, so order could only be changed by
+                        # changing the memory budget -- which would make two arms differ in pressure as
+                        # well as order, and the Qwen3 result this lane transfers held everything but
+                        # order constant. 30 = one pass = all-at-once; 10 = the streamed recipe's shape.
+                        lpp = os.environ.get("E4B_CALIB_LAYERS_PER_PASS")
+                        lpp = int(lpp) if lpp else None
+                        if lpp is not None:
+                            print("INT4EXP calibration order: layers_per_pass =", lpp, flush=True)
                         n = enable_serve_experts_int4_calibrated(model, src, batches, artifact_dir=art_dir,
-                                                                 expected_fingerprint=art_fp, dump_artifact_dir=dump_dir)
+                                                                 expected_fingerprint=art_fp, dump_artifact_dir=dump_dir,
+                                                                 layers_per_pass=lpp)
                     else:
                         hs = calibrate_expert_hessians(model, src, batches)
                         n_exp = sum(len(v) for v in hs.values())
