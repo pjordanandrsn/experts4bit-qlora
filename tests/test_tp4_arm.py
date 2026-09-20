@@ -292,3 +292,51 @@ def test_the_prologue_residual_cannot_go_negative_from_rounding():
         f"got {r['prologue_unattributed_s']} from parts {r['phase_seconds']}")
     # and it is still the honest remainder, not a clamp: exact total minus exact parts
     assert r["prologue_unattributed_s"] <= r["prologue_s"]
+
+
+def test_p53_arms_differ_only_in_calibration_order():
+    """#636/P53: the lane's whole claim is that ORDER is the only variable.
+
+    The engine derives `layers_per_pass` from the Hessian budget when it is
+    unset, so before this lane the only way to change the calibration order was
+    to change the memory budget -- which would have made the two arms differ in
+    pressure as well as order, and the Qwen3 result being transferred held
+    everything but order constant. This pins that the two calibrated arms are
+    identical except for the ordering lever, so a future edit cannot quietly
+    introduce a second difference and leave the lane reading a confound.
+    """
+    import importlib.util
+    import pathlib
+    spec = importlib.util.spec_from_file_location(
+        "serve_stack_mod", pathlib.Path(__file__).resolve().parents[1] / "bench" / "p44" / "serve_stack.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    arms = mod.ARMS["gemma4calib"]
+    assert set(arms) == {"nf4_uniform", "int4_allatonce", "int4_sequential"}, sorted(arms)
+
+    a, b = arms["int4_allatonce"], arms["int4_sequential"]
+    assert a[:3] == b[:3], (a[:3], b[:3])          # same store levers, same epilogue
+    ea, eb = dict(a[3]), dict(b[3])
+    key = "E4B_CALIB_LAYERS_PER_PASS"
+    assert ea.pop(key) == "30" and eb.pop(key) == "10", (a[3], b[3])
+    assert ea == eb, ("the calibrated arms differ in more than the order", ea, eb)
+
+    # and the baseline really is unquantised experts, not a third calibrated arm
+    assert arms["nf4_uniform"][0] == 0 and arms["nf4_uniform"][3] == {}, arms["nf4_uniform"]
+
+
+def test_p53_ordering_lever_is_actually_passed_to_the_engine():
+    """A lever the hook reads but never forwards is a lever that does nothing.
+
+    The pre-#636 hook called `enable_serve_experts_int4_calibrated` without
+    `layers_per_pass`, so setting the env would have changed nothing while the
+    receipt recorded the arm as 'sequential'. That is the exact shape of a
+    silently-wrong measurement, so it gets a test rather than a code review.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parents[1] / "bench" / "p42" / "hook" / "usercustomize.py").read_text()
+    assert "E4B_CALIB_LAYERS_PER_PASS" in src, "the hook does not read the ordering lever"
+    call = src[src.index("enable_serve_experts_int4_calibrated(model"):]
+    call = call[:call.index(")") + 1]
+    assert "layers_per_pass=" in call, ("the hook reads the lever but does not forward it", call)

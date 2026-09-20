@@ -97,6 +97,18 @@ GEMMA4_MIX_ARMS = {                      # arm -> the tier spec (stores, in laye
 ARMS["gemma4keep"] = {f"K{k:02d}": (0, 0, "0", {}) for k in GEMMA4_KEEP_KS}
 ARMS["gemma4mix"] = {a: (0, 0, "0", {}) for a in GEMMA4_MIX_ARMS}
 MODELS["gemma4mix"] = MODELS["gemma4"]
+
+# P53 (#636): can calibration make the DOWNSTREAM absorb early expert error? All 30 expert layers
+# quantised -- sequential calibration needs a quantised downstream to adapt to, so P49's
+# one-layer-against-29-bf16 diagnostic is structurally unable to test this. Calibration batches,
+# source and Hessian budget are identical across the two calibrated arms; ORDER is the only variable.
+ARMS["gemma4calib"] = {
+    "nf4_uniform":    (0, 0, "0", {}),                                    # P50's k=0 baseline, 1.0837 nats
+    "int4_allatonce": (1, 0, "0", {"E4B_SERVE_EXP_INT4_CALIB": "1", "E4B_CALIB_LAYERS_PER_PASS": "30"}),
+    "int4_sequential":(1, 0, "0", {"E4B_SERVE_EXP_INT4_CALIB": "1", "E4B_CALIB_LAYERS_PER_PASS": "10"}),
+}
+MODELS["gemma4calib"] = MODELS["gemma4"]
+
 BUILDERS["gemma4mix"] = {a: f"loader_tiers_{spec}" for a, spec in GEMMA4_MIX_ARMS.items()}
 MODELS["gemma4keep"] = MODELS["gemma4"]
 BUILDERS["gemma4keep"] = {f"K{k:02d}": f"loader_keep_{k}" for k in GEMMA4_KEEP_KS}
