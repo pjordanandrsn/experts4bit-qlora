@@ -112,13 +112,19 @@ def _materialize_computed_buffers(model: torch.nn.Module, device) -> list:
     return rebuilt
 
 
-def make_plan_reader(plan, read_tensor, dtype: torch.dtype):
+def make_plan_reader(plan, read_tensor, dtype: torch.dtype, *, param_shape=None):
     """The plan's read path as a reusable closure: dequantizes
     block-FP8 / GPTQ / AWQ / NVFP4 / MXFP4 / compressed-int sources
     and applies the family's stored transposes, so every consumer --
     the loader, or the int4 serve-lane repack -- gets dense tensors
     without knowing what the checkpoint shipped. Extracted verbatim
-    from execute_moe_plan."""
+    from execute_moe_plan.
+
+    ``param_shape(module_param_name) -> torch.Size | None`` lets the reader
+    replicate upstream's CONDITIONAL transpose (see the transform site below).
+    Omitting it keeps the unconditional behaviour, except that an ambiguous
+    (square) stack is then refused rather than guessed.
+    """
     def read(key):
         """Read a checkpoint tensor, dequantizing block-FP8 or MXFP4 in place.
 
@@ -176,8 +182,35 @@ def make_plan_reader(plan, read_tensor, dtype: torch.dtype):
         # Applied AFTER any dequant: a pre-fused family may store this stack
         # transposed vs the module. .transpose is a view; make it contiguous so
         # the parameter owns its storage rather than aliasing the read buffer.
+        #
+        # e4b#637. This MUST be conditional, because upstream's is. qwen3_vl_moe's
+        # converter is ``Transpose(dim0=1, dim1=2, check_dims=True)``, and
+        # check_dims means: compare the checkpoint tensor to the module parameter
+        # and transpose ONLY if they differ. An unconditional transpose here
+        # agreed with upstream on every non-square stack and disagreed on every
+        # square one -- where [E, 2I, H] and [E, H, 2I] are the same shape, so
+        # nothing raises and the two just compute different functions. Replicate
+        # the condition rather than the common case.
         if plan.transforms.get(key) == "transpose_last2":
-            t = t.transpose(-1, -2).contiguous()
+            want = param_shape(plan.passthrough[key]) if param_shape else None
+            if want is not None:
+                if tuple(t.shape) != tuple(want):
+                    t = t.transpose(-1, -2).contiguous()
+            elif t.ndim >= 2 and t.shape[-1] == t.shape[-2]:
+                # No expected shape to compare against AND the last two axes are
+                # equal: upstream's condition is unevaluable and both answers fit.
+                # Transposing would be a coin-flip that raises nothing, so refuse.
+                raise MoEConventionError(
+                    f"{key}: this family's stack is transposed at load, but the "
+                    f"tensor is square on its last two axes {tuple(t.shape)} and no "
+                    f"expected module shape was supplied. Upstream's converter is "
+                    f"Transpose(check_dims=True), which transposes only when the "
+                    f"shapes DIFFER -- a condition that cannot be evaluated here. "
+                    f"Either answer loads and computes a different function, so "
+                    f"refusing rather than guessing (e4b#637). Pass param_shape= "
+                    f"to make_plan_reader to resolve it.")
+            else:
+                t = t.transpose(-1, -2).contiguous()
         return t
     return read
 
@@ -223,7 +256,15 @@ def execute_moe_plan(
     Returns a report: assigned / fused / rebuilt-buffer counts, plus any
     parameters still on ``meta`` (which raises under ``strict``).
     """
-    read = make_plan_reader(plan, read_tensor, dtype)
+    # The model is the authority on what shape each parameter wants, which is
+    # exactly what upstream's Transpose(check_dims=True) consults (e4b#637).
+    def _param_shape(name):
+        try:
+            return model.get_parameter(name).shape
+        except (AttributeError, KeyError, ValueError):
+            return None
+
+    read = make_plan_reader(plan, read_tensor, dtype, param_shape=_param_shape)
 
     assigned = 0
     for ckpt_key, param in plan.passthrough.items():

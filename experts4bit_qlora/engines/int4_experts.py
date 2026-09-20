@@ -478,7 +478,18 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     if plan_model is None:
         plan_model = _meta_twin(model)
     plan = plan_moe_checkpoint(keys, plan_model, mt, skip_extra_layers=True)
-    read = make_plan_reader(plan, read_tensor, _torch.float32)
+    # Same conditional transpose the loader applies: the meta twin knows every
+    # parameter's declared shape, which is what upstream's Transpose(check_dims=True)
+    # compares against. Without it a square pre-fused stack would be refused here
+    # while loading fine through execute_moe_plan (e4b#637).
+    def _plan_param_shape(name):
+        try:
+            return plan_model.get_parameter(name).shape
+        except (AttributeError, KeyError, ValueError):
+            return None
+
+    read = make_plan_reader(plan, read_tensor, _torch.float32,
+                            param_shape=_plan_param_shape)
     keep_nf4 = os.environ.get("E4B_INT4_KEEP_NF4", "0") == "1"
 
     prefused = _prefused_layers(plan) if not plan.experts else {}

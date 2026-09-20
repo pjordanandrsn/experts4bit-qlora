@@ -372,9 +372,17 @@ def plan_moe_checkpoint(
                 # Pre-fused-but-transposed families (qwen3_vl_moe): the tensor
                 # passes through by NAME, but its last two axes are swapped
                 # relative to the module. Record it (keyed on the checkpoint key
-                # the executor reads) so it transposes at load — placing it as-is
-                # would mis-shape, and _assign would then reject it, which is the
-                # safety net, not the plan.
+                # the executor reads) so it transposes at load.
+                #
+                # The transform is CONDITIONAL at read time, matching upstream's
+                # Transpose(check_dims=True): transpose only when the checkpoint
+                # shape differs from the module's. This comment used to say a
+                # mis-shape would be caught by _assign, "which is the safety net,
+                # not the plan" — true, and the reason the unconditional version
+                # survived, but that net has a hole exactly where it matters:
+                # when the last two axes are equal the two layouts are the same
+                # shape, _assign accepts either, and the wrong one is silent
+                # (e4b#637).
                 plan.transforms[key] = "transpose_last2"
             continue
         unmapped.append((key, f"no parameter {renamed!r} in the model"))
