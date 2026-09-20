@@ -2184,6 +2184,22 @@ experts carry half the GPTQ error — 9.9 %, at the 10 % threshold) and
 Mixtral (flat: 22.7 % on the 16 layers measured) is data for a
 per-expert fallback that is not built.
 
+**Gemma-4's fused training path does not agree with e4b's own dense
+reference, and a kernel change did not fix it.** On the same box, the same
+tokens and identical trainable counts, the fused expert path and e4b's
+per-expert dense reference end 0.08257 nats apart on held-out loss, with a
+median step-wise gap of 0.12421, against a 0.05/0.05 band — a FAIL that
+reproduces the 0.09037 / 0.11801 first measured on the previous kernel cut.
+This is e4b against itself, not against another framework, which is exactly
+what the control exists to catch. The direction was the one the P47–P51 lanes
+predicted: Gemma-4's sensitivity is **positional and lives in the quantised
+model**, not in the adapter path, so changing the adapter path was not
+expected to move it and did not. The defect is **characterised, reproduced on
+two kernel cuts, and unfixed**
+([`e4b.parity.gemma4.train-internal`](claims.json)). On the same pair the
+fused path is 10.81× faster per step at identical peak VRAM; that is an
+internal comparison and no competitive position is quoted from it.
+
 **Gemma-4's experts take a graded store map, not one store** (lanes P47–P51,
 2026-09-19; `bench/p47`–`bench/p51`, all against the bf16 checkpoint on the
 same 200 prompts). This family's per-layer sensitivity to expert
@@ -3390,6 +3406,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.h2h.unsloth.qwen3_5.5090.2026-09-19.arm.unsloth.ckpt_unsloth [measured]: tp4 field-recipe arm on grouped-nf4-gemm 0.32.1: unsloth/ckpt_unsloth on qwen3_5 takes 26.9787 s/step (49.5 tok/s, 21.638 GB peak, held-out final 0.93144). An arm row, not a position: tp4 quotes a ratio only when both arms of a pair are VALID.
 - e4b.train.h2h.unsloth.qwen3_5.5090.2026-09-19.e4b-internal-parity [measured]: e4b's fused training path against its own dense reference on qwen3_5, same box and tokens: 0.00159 nats final against tp1's 0.05 band -- PASS, with the fused path x13.89 faster per step. Registered as A3 in P46 amendment 2: a refused parity on any family would have stopped the release.
 - e4b.train.h2h.unsloth.coverage.5090.2026-09-19 [measured]: Coverage of the 0.32.1 re-run, stated so the gaps are not read as results: positions are quoted for Qwen3-30B-A3B against Unsloth (4.490) and Granite against HF+PEFT (1.292). NOT quoted: Granite and Qwen3.6 against Unsloth (its arm trains 5.2 M parameters against e4b's 99.6 M -- attention only, VOID by tp4's regime rule); OLMoE against Unsloth (its arm died before its first step); OLMoE against HF (ratio 1.945 but the held-out gap is 0.0550 nats, outside the reading band -- FLAGGED); gpt-oss (e4b's fused path refuses the family by citation, so no primary pair); Qwen3 and Qwen3.6 against HF (OOM). Gemma-4 and Mixtral were not in this re-run's scope.
+- e4b.parity.gemma4.train-internal [measured-private] (receipt private): Gemma-4-26B-A4B-it's FUSED expert training path disagrees with e4b's OWN dense per-expert reference, and the disagreement survives a kernel change: final held-out delta 0.08257 nats and median step-wise |delta| 0.12421 against tp1's 0.05/0.05 band -> FAIL, measured on grouped-nf4-gemm 0.32.1 after the adapter-path change, having read 0.09037 / 0.11801 -> FAIL on the previous cut. Both arms OK/VALID at 487,280,640 trainable, same box, same tokens. This is e4b against itself, not against another framework. NOT FIXED (e4b#558 closed as explained, not resolved).
 
 Open items (no evidence either way):
 
@@ -3397,4 +3414,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(192 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(193 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
