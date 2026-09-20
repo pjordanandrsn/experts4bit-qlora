@@ -804,3 +804,163 @@ def test_gptq_rejects_a_g_idx_that_would_load_the_wrong_scales(g_idx, why):
     good = torch.arange(64, dtype=torch.int32) // 32
     assert tuple(dequantize_gptq(qw, qz, sc, good,
                                  dtype=torch.float32).shape) == (8, 64)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# e4b#643 -- a convention's renames must reach the EXPERT fused target, not just
+# the passthrough branch.
+#
+# Renames used to mean two different things depending on which branch a key took.
+# A passthrough key went through ``conv.rename``; a per-expert key had its fused
+# target built from the RAW checkpoint prefix, so a family shipping
+# ``backbone.layers.N.`` where the tree declares ``model.layers.N.`` mapped its
+# non-expert keys fine and failed every expert key with "fused target ... absent".
+#
+# No shipped convention exercised the combination, which is why it survived:
+# mixtral/phimoe/granitemoe rename AFTER ``layers.N.`` (the prefix is untouched,
+# and the post-layer part is already baked into ``fused_prefix``), and gemma4
+# renames in the prefix but is pre-fused (``roles={}``) so it never takes the
+# expert branch. nemotron_h is the first with BOTH.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _PlanNamesTree(torch.nn.Module):
+    """A state_dict-only tree: the planner needs names, not tensors."""
+
+    def __init__(self, names):
+        super().__init__()
+        self._names = list(names)
+
+    def state_dict(self, *a, **k):
+        return {n: torch.zeros(1) for n in self._names}
+
+
+#: The released MoE Nemotron-H's spelling, from
+#: inference-optimization/NemotronH-0.3B-A0.3B (model_type nemotron_h,
+#: n_routed_experts 32, 168 tensors of which 167 are under ``backbone.``).
+#: Reduced to 2 MoE layers x 3 experts here; the shape of the keys is verbatim.
+_NH_MOE_LAYERS = (1, 4)
+_NH_EXPERTS = 3
+
+
+def _nemotron_h_released_keys():
+    keys = ["backbone.embeddings.weight", "lm_head.weight"]
+    for layer in _NH_MOE_LAYERS:
+        keys.append(f"backbone.layers.{layer}.mixer.gate.weight")
+        keys.append(f"backbone.layers.{layer}.norm.weight")
+        for e in range(_NH_EXPERTS):
+            keys.append(f"backbone.layers.{layer}.mixer.experts.{e}.up_proj.weight")
+            keys.append(f"backbone.layers.{layer}.mixer.experts.{e}.down_proj.weight")
+    return keys
+
+
+def _nemotron_h_tree_names():
+    """What transformers builds: the decoder under ``model.``, experts stacked."""
+    names = ["model.embeddings.weight", "lm_head.weight"]
+    for layer in _NH_MOE_LAYERS:
+        names.append(f"model.layers.{layer}.mixer.gate.weight")
+        names.append(f"model.layers.{layer}.norm.weight")
+        names.append(f"model.layers.{layer}.mixer.experts.up_proj")
+        names.append(f"model.layers.{layer}.mixer.experts.down_proj")
+    return names
+
+
+def test_nemotron_h_maps_the_released_backbone_spelling():
+    """Every key of a released nemotron_h checkpoint must map -- experts included.
+
+    Before #643 this raised on all 128 expert keys of the real release while the
+    non-expert keys renamed fine, because only the passthrough branch applied the
+    convention's renames.
+    """
+    from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint
+
+    keys = _nemotron_h_released_keys()
+    plan = plan_moe_checkpoint(keys, _PlanNamesTree(_nemotron_h_tree_names()), "nemotron_h")
+    n_expert_keys = sum(len(v) for st in plan.experts.values() for v in st.values())
+    assert len(plan.passthrough) + n_expert_keys == len(keys), (
+        f"only {len(plan.passthrough) + n_expert_keys} of {len(keys)} keys accounted for"
+    )
+    assert len(plan.experts) == len(_NH_MOE_LAYERS)
+    # The fused targets must carry the TREE's prefix, not the checkpoint's.
+    for layer in _NH_MOE_LAYERS:
+        first, down = plan.expert_targets[layer]
+        assert first == f"model.layers.{layer}.mixer.experts.up_proj", first
+        assert down == f"model.layers.{layer}.mixer.experts.down_proj", down
+        assert "backbone." not in first and "backbone." not in down
+
+
+def test_a_prefix_rename_reaches_the_expert_fused_target():
+    """The general property, stated without reference to nemotron_h.
+
+    Any per-expert convention whose renames touch the part of the key BEFORE
+    ``layers.N.`` must still build its fused target in the tree's spelling.
+    """
+    import re as _re
+
+    from experts4bit_qlora.arch.moe_conventions import MoEConvention
+    from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint
+
+    conv = MoEConvention(
+        name="prefix-rename-probe",
+        expert_re=_re.compile(r"^mlp\.experts\.(\d+)\.(gate_proj|up_proj|down_proj)\.weight$"),
+        roles={"gate_proj": "gate", "up_proj": "up", "down_proj": "down"},
+        fused_prefix="mlp.experts",
+        model_types=frozenset({"prefix_rename_probe"}),
+        renames=(("trunk.", "model."),),
+    )
+    keys = [f"trunk.layers.0.mlp.experts.{e}.{p}.weight"
+            for e in range(2) for p in ("gate_proj", "up_proj", "down_proj")]
+    tree = ["model.layers.0.mlp.experts.gate_up_proj", "model.layers.0.mlp.experts.down_proj"]
+
+    import experts4bit_qlora.arch.moe_plan as _mp
+    original = _mp.convention_for
+    _mp.convention_for = lambda mt, **kw: conv if mt == "prefix_rename_probe" else original(mt, **kw)
+    try:
+        plan = plan_moe_checkpoint(keys, _PlanNamesTree(tree), "prefix_rename_probe")
+    finally:
+        _mp.convention_for = original
+
+    assert sum(len(v) for st in plan.experts.values() for v in st.values()) == len(keys)
+    assert plan.expert_targets[0] == ("model.layers.0.mlp.experts.gate_up_proj",
+                                      "model.layers.0.mlp.experts.down_proj")
+
+
+@pytest.mark.parametrize("model_type,ckpt_prefix,container,spelling", [
+    ("qwen3_moe", "model.", "mlp.experts", ("gate_proj", "up_proj", "down_proj")),
+    ("mixtral", "model.", "block_sparse_moe.experts", ("w1", "w3", "w2")),
+])
+def test_families_that_need_no_prefix_rename_are_unchanged(
+        model_type, ckpt_prefix, container, spelling):
+    """Regression guard on the fallback's scope.
+
+    The renamed-prefix lookup only runs when the RAW prefix missed, so a family
+    that already maps must be bit-identical. qwen2_moe has no renames at all;
+    mixtral's (``.block_sparse_moe.`` -> ``.mlp.``) cannot occur in a prefix, and
+    its post-layer half is already baked into ``fused_prefix``.
+    """
+    from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint
+
+    gate, up, down = spelling
+    keys = [f"{ckpt_prefix}layers.0.{container}.{e}.{p}.weight"
+            for e in range(2) for p in (gate, up, down)]
+    tree = [f"{ckpt_prefix}layers.0.mlp.experts.gate_up_proj",
+            f"{ckpt_prefix}layers.0.mlp.experts.down_proj"]
+    plan = plan_moe_checkpoint(keys, _PlanNamesTree(tree), model_type)
+    assert plan.expert_targets[0] == (f"{ckpt_prefix}layers.0.mlp.experts.gate_up_proj",
+                                      f"{ckpt_prefix}layers.0.mlp.experts.down_proj")
+    assert sum(len(v) for st in plan.experts.values() for v in st.values()) == len(keys)
+
+
+def test_an_expert_key_that_maps_under_neither_prefix_still_raises():
+    """The fallback must not turn a genuine mismatch into a silent pass.
+
+    A tree that declares neither spelling has to fail, naming the target — the
+    fallback widens what maps, and a widened lookup that never refuses would be
+    worse than the bug it fixes.
+    """
+    from experts4bit_qlora.arch.moe_conventions import MoEConventionError
+    from experts4bit_qlora.arch.moe_plan import plan_moe_checkpoint
+
+    keys = _nemotron_h_released_keys()
+    tree = [n for n in _nemotron_h_tree_names() if "experts" not in n]
+    with pytest.raises(MoEConventionError, match="do not map"):
+        plan_moe_checkpoint(keys, _PlanNamesTree(tree), "nemotron_h")
