@@ -64,3 +64,24 @@ Nothing about training throughput, nothing about the fused-vs-dense training con
 One H100 NVL, est. 2.5 h at the class's observed rate ≈ **$6.50**, inside the $2–20 band and the $35/run cap. Calibration adds Hessian accumulation over the registered batches to the fetch-and-load cost the P47–P52 lanes already measured at 12–32 min.
 
 This document merges to `main` **before** the launch, and the launch cites the commit. Timestamps, not assertions.
+
+## Amendment 1 (2026-09-20 13:05Z, before any P53 arm has produced a reading): the box class widens to any single ≥80 GB HBM card
+
+**Why.** Seven draws have produced no measurement, and the last two failures are the market rather than the lane. A read-only probe using the launcher's **own** `offer_filter` (imported, not hand-written — my first hand-written probe omitted a constraint the launcher applies and was therefore not evidence about its behaviour) shows the qualifying pool at the registered floors:
+
+| class, disk ≥ 320 GB | machines | cheapest |
+|---|---|---|
+| **H100 NVL** (registered) | **2** | \$2.87/h |
+| H100 SXM | 4 | \$3.14/h |
+| H200 | 2 | \$4.74/h |
+| A100 80 GB PCIe / RTX 6000 Ada / RTX PRO 6000 | 0 | — |
+
+Both H100 NVL machines are now known-bad from today's draws: **34985** failed ssh authentication for 600 s (draw 2) and **57775** sat in `loading` past 600 s (draw 7). Redrawing the registered class means redrawing those two, so continuing is not patience, it is paying for the same two faults.
+
+**The change.** The class becomes **any single card with ≥ 80 GB HBM** — H100 NVL, H100 SXM or H200 — and the rate ceiling rises **\$3.10 → \$3.30/h** so H100 SXM's \$3.14 is reachable. Estimate becomes ~\$8.25 for 2.5 h, still inside the \$2–20 band and far inside the \$35/run cap.
+
+**Why this does not weaken the reading, stated so it can be checked rather than trusted.** The instrument is KL against the model's own bf16 checkpoint, and **all three arms run on the same box in the same lane**, so every comparison this lane makes is internal. Cross-box absolute comparability is *not* claimed and is known not to hold here (`finding_licensed_pack_does_not_reproduce_across_boxes`) — which is exactly why `nf4_uniform` is **re-measured as an arm** rather than cited from P50's 1.0837. P50's number is context; the comparator is in the run.
+
+**What would make this amendment wrong**, and is therefore worth saying out loud: if the calibration path's numerics differed by card in a way that changed the *ordering* of the three arms, a class change would matter. Nothing measured says it does, and P47–P52 read this family on H100 NVL while the training-parity lanes read it on RTX 5090 without either instrument's ordering moving. That is an argument from adjacent evidence, not a proof, and if the arms land within noise of each other the class is one of the things to suspect.
+
+**Nothing else moves.** Same fixture, same three arms, same single variable (calibration order), same instrument, same prompts, same bar (≤ 0.10 nats, top-1 ≥ 0.93), same predictions P1–P3, and P3 remains deliberately unpredicted.
