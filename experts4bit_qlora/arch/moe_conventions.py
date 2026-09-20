@@ -476,7 +476,19 @@ NEMOTRON_H = MoEConvention(
 
 #: A.X-K1 (SKT): a DeepSeek-V3 MoE whose released checkpoint ships experts
 #: PRE-FUSED (mlp.experts.gate_up_proj [E, 2*inter, hidden] matching the tree,
-#: no transpose), so the expert surface is plain native passthrough. Its two
+#: no transpose), so the expert surface is plain native passthrough.
+#: Adjudicated 2026-09-20 against the released skt/A.X-K1
+#: model.safetensors.index.json (1.04 TB, 260 shards): 976 keys, of which 120 are
+#: expert keys and ZERO are per-expert -- 60 mlp.experts.gate_up_proj + 60
+#: mlp.experts.down_proj over layers 1..60, layer 0 dense
+#: (first_k_dense_replace=1), 61 post_mlp_layernorm keys, and NO
+#: e_score_correction_bias, which is what arch/axk1.py's two quirks exist for.
+#: The citation matters because upstream's converter for axk1 MERGES per-expert
+#: keys (mlp.experts.*.{gate,up}_proj -> MergeModulelist + Concatenate). That is
+#: not a contradiction: its source patterns never match this spelling, so it is a
+#: no-op here, the same way granitemoe's renames no-op on an already-renamed
+#: checkpoint. Pinned by
+#: tests/test_converter_arrow.py::test_axk1s_upstream_converter_cannot_match_its_released_spelling. Its two
 #: non-expert quirks — a layer-conditional post_mlp_layernorm and an unshipped
 #: e_score_correction_bias buffer — need per-layer knowledge and live in the
 #: dedicated keymap :mod:`experts4bit_qlora.arch.axk1`. Never per-expert.

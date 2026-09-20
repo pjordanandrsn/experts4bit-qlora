@@ -214,21 +214,58 @@ _WITH_UPSTREAM_CONVERTER = {
 #: than silently skipped -- an unverifiable family must not look verified.
 _NO_UPSTREAM_CONVERTER = {"gemma4", "qwen3_5_moe", "gptoss", "jetmoe", "dbrx", "dense"}
 
-#: Conventions whose declaration CONTRADICTS upstream's converter. NOT a
-#: suppression: the contradiction is asserted below to still be exactly what is
-#: described here, so it cannot quietly widen or quietly resolve itself.
-_KNOWN_DISAGREEMENTS = {
+#: Conventions whose shape DIFFERS from upstream's converter without either being
+#: wrong. A converter whose source patterns do not match a checkpoint is a no-op --
+#: granitemoe's own record says as much ("a checkpoint already saved with the
+#: current names matches nothing and passes through unchanged") -- so "upstream
+#: merges per-expert keys" does NOT imply "this release ships per-expert keys".
+#:
+#: Recorded with the evidence that settled each one, and asserted below to still be
+#: exactly this, so a real contradiction cannot hide behind an explained one.
+_CONVERTER_COVERS_ANOTHER_SPELLING = {
     "axk1": (
-        "upstream's converter merges PER-EXPERT keys "
+        "Upstream's converter merges per-expert keys "
         "(mlp.experts.*.{gate,up}_proj.weight -> MergeModulelist + Concatenate), "
-        "but e4b's AXK1 record declares the released checkpoint already fused "
-        "(roles={}, unmatchable expert_re). One of the two adjudications is wrong. "
-        "axk1 is STAGED-NOT-WIRED (#509/#514) so nothing loads it today, and if it "
-        "were wired the per-expert keys would fail to map LOUDLY rather than "
-        "silently -- but it must be settled against a real checkpoint before the "
-        "loader row is added, which is the seam #515 warned about."
+        "but the RELEASED skt/A.X-K1 checkpoint is pre-fused and e4b's record is "
+        "right: its model.safetensors.index.json has 976 keys, of which 120 are "
+        "expert keys and ZERO are per-expert -- 60 mlp.experts.gate_up_proj + 60 "
+        "mlp.experts.down_proj over layers 1..60. The converter's source patterns "
+        "simply never match, so it does nothing. Checked against the index rather "
+        "than the module tree, which is what the earlier adjudication had cited."
     ),
 }
+
+
+#: One key from the released skt/A.X-K1 index, in its real spelling.
+_AXK1_RELEASED_EXPERT_KEY = "model.layers.1.mlp.experts.gate_up_proj"
+
+
+def test_axk1s_upstream_converter_cannot_match_its_released_spelling():
+    """Turn the recorded explanation into a check.
+
+    The claim is that upstream's per-expert converter is a NO-OP on the released
+    A.X-K1 checkpoint because its source patterns never match. Assert that rather
+    than trusting the prose: if upstream ever rewrites those patterns so they DO
+    match a pre-fused key, the explanation stops holding and e4b's pre-fused
+    convention becomes a real contradiction.
+    """
+    import fnmatch
+
+    sources = [sp for c in _mapping("axk1") for sp in c.source_patterns]
+    assert any("experts.*" in sp for sp in sources), \
+        "axk1's converter no longer has per-expert source patterns — re-read the record"
+    for sp in sources:
+        assert not fnmatch.fnmatch(_AXK1_RELEASED_EXPERT_KEY, f"*{sp}*"), (
+            f"upstream's axk1 pattern {sp!r} now matches the RELEASED pre-fused key "
+            f"{_AXK1_RELEASED_EXPERT_KEY!r}; the converter is no longer a no-op and "
+            f"e4b's pre-fused convention must be re-adjudicated (e4b#637)"
+        )
+    # ...and e4b does claim that key, which is the other half of "no contradiction".
+    from experts4bit_qlora.arch.moe_conventions import convention_for
+    conv = convention_for("axk1")
+    assert not conv.roles, "axk1 is declared pre-fused"
+    assert conv.match("mlp.experts.gate_up_proj") is None, \
+        "a pre-fused convention must not treat the fused stack as a per-expert key"
 
 
 def _first_target_suffix(conv):
@@ -254,7 +291,7 @@ def test_the_no_converter_set_is_true_of_upstream():
         if mt is None:
             continue
         has = bool(_mapping(mt))
-        if name in _KNOWN_DISAGREEMENTS:
+        if name in _CONVERTER_COVERS_ANOTHER_SPELLING:
             continue
         if name in _WITH_UPSTREAM_CONVERTER:
             assert has, f"{name}: expected an upstream converter for {mt}, found none"
@@ -268,7 +305,7 @@ def test_the_no_converter_set_is_true_of_upstream():
 def test_every_convention_is_either_checked_or_named_unverifiable():
     """No convention may fall through the gap between the two sets."""
     covered = (set(_WITH_UPSTREAM_CONVERTER) | _NO_UPSTREAM_CONVERTER
-               | set(_KNOWN_DISAGREEMENTS))
+               | set(_CONVERTER_COVERS_ANOTHER_SPELLING))
     missing = [c.name for c in CONVENTIONS if c.name not in covered]
     assert not missing, f"conventions in neither set: {missing}"
 
