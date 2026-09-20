@@ -472,6 +472,20 @@ NEMOTRON_H = MoEConvention(
     fused_prefix="mixer.experts",
     model_types=frozenset({"nemotron_h"}),
     gated=False,
+    # The released checkpoints nest the whole decoder under ``backbone.`` while
+    # the built tree declares ``model.``; upstream's converter opens with exactly
+    # this WeightRenaming. Adjudicated 2026-09-20 against two real releases:
+    # nvidia/Nemotron-H-8B-Base-8K (311 keys, 310 under ``backbone.``, 0 under
+    # ``model.``) and the MoE inference-optimization/NemotronH-0.3B-A0.3B
+    # (model_type nemotron_h, n_routed_experts 32, 168 tensors, 167 under
+    # ``backbone.``), whose expert keys are
+    # ``backbone.layers.N.mixer.experts.E.{up,down}_proj.weight`` -- per-expert
+    # and non-gated, which is what this convention already declared correctly.
+    # Without the rename every key failed to map; the expert keys additionally
+    # needed the planner to rename the PREFIX before building the fused target
+    # (e4b#643). Note this release DOES ship mixer.gate.e_score_correction_bias,
+    # unlike axk1's, so axk1's ignore-pattern reasoning does not transfer.
+    renames=(("backbone.", "model."),),
 )
 
 #: A.X-K1 (SKT): a DeepSeek-V3 MoE whose released checkpoint ships experts

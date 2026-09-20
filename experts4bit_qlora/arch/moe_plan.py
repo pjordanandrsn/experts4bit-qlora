@@ -358,6 +358,29 @@ def plan_moe_checkpoint(
                 gu, dn = conv.fused_names(layer, prefix)
                 target = dn if role == "down" else gu
                 if target not in claimable:
+                    # The PREFIX (everything before ``layers.N.``) may need the
+                    # convention's renames too. Post-``layers.N.`` renames are
+                    # already baked into ``fused_prefix`` -- mixtral stores
+                    # ``block_sparse_moe.experts`` on disk and declares
+                    # ``mlp.experts`` -- but nothing rewrote the part in front,
+                    # so a family that ships ``backbone.layers.N.`` where the
+                    # tree declares ``model.layers.N.`` built its fused target
+                    # from the checkpoint's prefix and matched nothing. Every
+                    # expert key then failed with "fused target ... absent",
+                    # while the non-expert keys renamed fine through the
+                    # passthrough branch below -- renames meant two different
+                    # things depending on which branch a key took (e4b#643).
+                    #
+                    # Same rule as passthrough: a name the tree already claims is
+                    # never renamed, so this only runs when the raw prefix missed.
+                    # That keeps every currently-mapping family bit-identical --
+                    # qwen2_moe has no renames, and mixtral's and phimoe's do not
+                    # occur in a prefix, so for them this branch cannot fire.
+                    r_gu, r_dn = conv.fused_names(layer, conv.rename(prefix))
+                    renamed_target = r_dn if role == "down" else r_gu
+                    if renamed_target in claimable:
+                        gu, dn, target = r_gu, r_dn, renamed_target
+                if target not in claimable:
                     unmapped.append((key, f"fused target {target} absent from the model"))
                     continue
                 experts[layer][role][idx] = key

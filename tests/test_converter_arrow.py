@@ -387,11 +387,10 @@ def test_per_expert_declaration_matches_upstreams_merge_and_concatenate(name, mo
 #: raises "do not map"), so it is a support gap, not a silent-wrong-numbers bug
 #: -- which is why it is listed here instead of holding up this change.
 _MISSING_RENAMES = {
-    # NVIDIA's Nemotron-H modeling nests the decoder under ``backbone.``; upstream
-    # rewrites that to ``model.`` on load and e4b does not, so a checkpoint using
-    # the backbone spelling raises "no parameter ... in the model" rather than
-    # mis-loading. A support gap with a loud failure, tracked here.
-    "nemotron_h": {("backbone.", "model.")},
+    # Empty, and that is the point: nemotron_h's ``backbone.`` -> ``model.`` was
+    # the only entry, and e4b#643 implemented it. A new entry here means upstream
+    # started rewriting a key e4b does not, so some spelling of that family's
+    # checkpoint stops loading entirely.
 }
 
 
