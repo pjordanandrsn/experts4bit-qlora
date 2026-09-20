@@ -1,7 +1,7 @@
 # Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on this
 # file and the controller resolves each name to its source (this dir, bench/p44, bench/p42/hook, bench/p39, bench/) and compares.
 cc69a982215331c023dddb9b7ab0425b9071d7a54eb2d0bc3131b2c685ccf06a  p47_run.sh
-295aa3ccb96821d67db098ba3912a892ddb2ee5f33b43fff1369b6f8af741355  serve_stack.py
+713d8c7f6e1538790e7e2bf27698ad67ebf95c3c7efac2af51553e3b50bf5f73  serve_stack.py
 050e25c2a747b4ba247cff9f1210597ea785deba0056885c77b191aa793b1062  kl_serve.py
 97fd5d047a859451843bc9c9de283da4a7afa87410f618712cdf9ec745f992dc  act_probe.py
 b2a9668a62659455d70e6010813f0c6ac54caeeb9d36a269009c574e9ab51cce  kl_fidelity.py
@@ -10,4 +10,4 @@ ea3e29864f090c44faf56e288a5c327ff56474904cc965b6756b36348839009d  kl_prompts.py
 ebe09363380516f244d9095a157971acce2bfd4a84f1d166a6ae86cb49ac2ae9  kl_prompts_heldout.py
 e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
-9320eaceb802c08d4ffc939e7f6bccf5e7de91b3c2ebc222487fd932d60db520  hook/usercustomize.py
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  hook/usercustomize.py
