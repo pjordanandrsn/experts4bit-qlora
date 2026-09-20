@@ -78,6 +78,8 @@ REFERENCE = {
                  "reference, reused unchanged for the P51 store-map builders (#597)",
     "gemma4keep": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
                   "reference, reused unchanged for the P50 keep-k builders (#597)",
+    "gemma4calib": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
+                   "reference, reused unchanged for P53's calibration-order builders (#636)",
     "gemma4fmt": "the bf16 checkpoint (AutoModelForCausalLM, dtype=bfloat16) at the pinned revision -- P44-b's Gemma-4 "
                  "reference, reused unchanged for the P49 expert-format builders (#597)",
 }
