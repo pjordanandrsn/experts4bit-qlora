@@ -300,6 +300,22 @@ experts carry half the GPTQ error — 9.9 %, at the 10 % threshold) and
 Mixtral (flat: 22.7 % on the 16 layers measured) is data for a
 per-expert fallback that is not built.
 
+**Gemma-4's fused training path does not agree with e4b's own dense
+reference, and a kernel change did not fix it.** On the same box, the same
+tokens and identical trainable counts, the fused expert path and e4b's
+per-expert dense reference end 0.08257 nats apart on held-out loss, with a
+median step-wise gap of 0.12421, against a 0.05/0.05 band — a FAIL that
+reproduces the 0.09037 / 0.11801 first measured on the previous kernel cut.
+This is e4b against itself, not against another framework, which is exactly
+what the control exists to catch. The direction was the one the P47–P51 lanes
+predicted: Gemma-4's sensitivity is **positional and lives in the quantised
+model**, not in the adapter path, so changing the adapter path was not
+expected to move it and did not. The defect is **characterised, reproduced on
+two kernel cuts, and unfixed**
+([`e4b.parity.gemma4.train-internal`](claims.json)). On the same pair the
+fused path is 10.81× faster per step at identical peak VRAM; that is an
+internal comparison and no competitive position is quoted from it.
+
 **Gemma-4's experts take a graded store map, not one store** (lanes P47–P51,
 2026-09-19; `bench/p47`–`bench/p51`, all against the bf16 checkpoint on the
 same 200 prompts). This family's per-layer sensitivity to expert
