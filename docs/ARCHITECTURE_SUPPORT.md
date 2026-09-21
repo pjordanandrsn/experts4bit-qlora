@@ -214,6 +214,8 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 | `granitemoe` | `ibm-granite/granite-3.1-3b-a800m-instruct` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 32q/0u | ok | **reference-ok** |
 | `granitemoe` | `granite-3.0-1b-a400m-instruct` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 24q/0u | ok | **toy-ok** |
 | `granitemoe` | `granite-3.0-1b-a400m-instruct` | toy | SUPPORTED_ARCHITECTURES | cuda | ok | 24q/0u | ok | **toy-ok** |
+| `nemotron_h` | `inference-optimization/NemotronH-0.3B-A0.3B` | toy | SUPPORTED_ARCHITECTURES | cpu | ok | 2q/0u | ok | **toy-ok** |
+| `nemotron_h` | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 23q/0u | ok | **reference-ok** |
 | `olmoe` | `OLMoE-1B-7B-0924` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 16q/0u | ok | **reference-ok** |
 | `qwen3_5_moe` | `Qwen3.6-35B-A3B` | reference | SUPPORTED_ARCHITECTURES | cpu | ok | 40q/0u | ok | **reference-ok** |
 | `qwen3_5_moe` | `yujiepan/qwen3.5-moe-tiny-random` | — | SUPPORTED_ARCHITECTURES | cpu | — | — | — | **blocked** |
@@ -222,7 +224,7 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 
 ## Claimed vs evidenced
 
-`SUPPORTED_ARCHITECTURES` claims **9** families.
+`SUPPORTED_ARCHITECTURES` claims **10** families.
 
 | claimed model_type | best evidence | checkpoint |
 |---|---|---|
@@ -235,6 +237,7 @@ not cover, notably CUDA-graph capture and any throughput figure.*
 | `granitemoe` | **reference-ok** | `ibm-granite/granite-3.1-3b-a800m-instruct` |
 | `kimi_k3` | **none** | — |
 | `deepseek_v4` | **host-limited** | `DeepSeek-V4-Flash` |
+| `nemotron_h` | **reference-ok** | `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16` |
 
 Probed but **not** in the claimed list (reachable by convention, or not supported at all — a passing row here is not a reason to claim it):
 
@@ -244,7 +247,7 @@ Probed but **not** in the claimed list (reachable by convention, or not supporte
 - `ernie4_5_moe` — reference-ok on `baidu/ERNIE-4.5-21B-A3B-PT`
 - `qwen3_next` — toy-ok on `theo77186/Qwen3-Next-70M-TinyStories`
 
-**6 of 9** claimed families have a reference-tier passing row.
+**7 of 10** claimed families have a reference-tier passing row.
 
 Why some rows above read `none` and always will:
 

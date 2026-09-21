@@ -1717,3 +1717,100 @@ def test_loader_per_layer_store_map_none_spec_is_the_base_dtype(tmp_path):
                              quantize_layers={0: None, 1: "nf4"}, what="a per-layer store map")
     bases = [m.base for m in model.modules() if isinstance(m, ExpertsLoRA)]
     assert len(bases) == 1 and bases[0].quant_type == "nf4"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A convention's renames must reach the EXPERT path, not only the passthrough one
+# (e4b#648; the loader-side twin of the planner fix in #643/#644).
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: A representative slice of the REAL released key spelling of
+#: inference-optimization/NemotronH-0.3B-A0.3B (168 tensors, 167 of them under
+#: ``backbone.``). Verbatim from the checkpoint's own safetensors metadata, so the
+#: test fails if the loader stops handling what that family actually ships.
+_NEMOTRON_H_RELEASED_KEYS = (
+    "backbone.embeddings.weight",
+    "backbone.layers.0.mixer.in_proj.weight",
+    "backbone.layers.1.mixer.experts.0.up_proj.weight",
+    "backbone.layers.1.mixer.experts.0.down_proj.weight",
+    "backbone.layers.1.mixer.experts.31.up_proj.weight",
+    "backbone.layers.1.mixer.experts.31.down_proj.weight",
+    "backbone.layers.1.mixer.shared_experts.up_proj.weight",
+    "backbone.layers.4.mixer.experts.7.up_proj.weight",
+    "backbone.layers.4.mixer.experts.7.down_proj.weight",
+)
+
+
+def test_nemotron_h_expert_keys_are_indexed_through_the_prefix_rename():
+    """The regression this exists for: admission alone loaded ZERO experts.
+
+    nemotron_h ships every tensor under ``backbone.`` while the tree declares
+    ``model.``. The loader anchors expert indexing on ``^model\\.layers\\.``, so
+    before the prefix rename ``_index_per_expert_keys`` returned ``{}`` for the
+    real checkpoint: every MoE layer looked dense and the load ended in the
+    zero-expert-stacks guard — while the NON-expert keys mapped fine, because the
+    ``_assign`` pass applies ``conv.rename`` and the expert path never did.
+    """
+    from experts4bit_qlora.loader import (
+        _convention_or_none, _index_per_expert_keys, _rename_ckpt_prefixes)
+
+    conv = _convention_or_none("nemotron_h")
+    raw = {k: "model.safetensors" for k in _NEMOTRON_H_RELEASED_KEYS}
+
+    # Before: the raw spelling matches no expert key at all.
+    assert _index_per_expert_keys(conv, raw) == {}
+
+    renamed, orig = _rename_ckpt_prefixes(conv, raw, {k: k for k in raw})
+    index = _index_per_expert_keys(conv, renamed)
+    assert sorted(index) == [1, 4], index
+    assert index[1]["up"][0] == "model.layers.1.mixer.experts.0.up_proj.weight"
+    assert index[1]["down"][31] == "model.layers.1.mixer.experts.31.down_proj.weight"
+    assert index[4]["up"][7] == "model.layers.4.mixer.experts.7.up_proj.weight"
+    # The on-disk spelling is preserved for the shard read — the rename is a
+    # MAPPING, not a claim that the checkpoint is spelled differently.
+    assert orig["model.layers.1.mixer.experts.0.up_proj.weight"] == \
+        "backbone.layers.1.mixer.experts.0.up_proj.weight"
+    # A non-layer key keeps its own prefix here; the `_assign` pass renames it.
+    assert "backbone.embeddings.weight" in renamed
+
+
+def test_nemotron_h_is_admitted_non_gated_at_the_mixer():
+    """Non-gated is taken from the convention, not assumed. Getting this wrong
+    would fuse an absent gate and refuse, or halve the stack."""
+    from experts4bit_qlora.loader import SUPPORTED_ARCHITECTURES, expert_layout_for
+
+    assert SUPPORTED_ARCHITECTURES["nemotron_h"] == "mixer.experts"
+    assert expert_layout_for("nemotron_h") == ("mixer.experts", False)
+
+
+@pytest.mark.parametrize("model_type", sorted(
+    {"olmoe", "qwen3_moe", "qwen3_5_moe", "gpt_oss", "gemma4", "gemma4_text",
+     "granitemoe", "mixtral", "phimoe", "minimax_m2", "qwen2_moe", "deepseek_v3"}))
+def test_the_prefix_rename_is_a_no_op_for_every_family_admitted_before_it(model_type):
+    """The blast radius, asserted rather than argued.
+
+    A blanket ``conv.rename`` over the WHOLE key would rewrite the container too,
+    and mixtral stores experts under ``block_sparse_moe.experts`` while declaring
+    ``mlp.experts`` — so its own rename would destroy the substring
+    ``MIXTRAL.expert_re`` matches on, and every mixtral expert key would stop
+    being recognised. Renaming only the part BEFORE ``layers.N.`` cannot do that,
+    and for an already-normalized ``model.`` prefix it changes nothing at all.
+    """
+    from experts4bit_qlora.loader import _convention_or_none, _rename_ckpt_prefixes
+
+    conv = _convention_or_none(model_type)
+    if conv is None:
+        pytest.skip(f"{model_type} has no convention (dedicated-quant special)")
+    keys = [
+        "model.embed_tokens.weight",
+        "model.layers.0.self_attn.q_proj.weight",
+        "model.layers.0.block_sparse_moe.experts.0.w1.weight",
+        "model.layers.0.block_sparse_moe.gate.weight",
+        "model.layers.0.mlp.experts.0.gate_proj.weight",
+        "model.layers.0.mlp.experts.gate_up_proj",
+        "model.layers.3.experts.down_proj",
+    ]
+    raw = {k: "model.safetensors" for k in keys}
+    renamed, orig = _rename_ckpt_prefixes(conv, raw, {k: k for k in raw})
+    assert renamed == raw, f"{model_type}: prefix rename changed keys it must not touch"
+    assert orig == {k: k for k in raw}

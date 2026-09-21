@@ -485,6 +485,15 @@ NEMOTRON_H = MoEConvention(
     # needed the planner to rename the PREFIX before building the fused target
     # (e4b#643). Note this release DOES ship mixer.gate.e_score_correction_bias,
     # unlike axk1's, so axk1's ignore-pattern reasoning does not transfer.
+    #
+    # **WIRED 2026-09-21 (e4b#648).** ``loader.SUPPORTED_ARCHITECTURES`` carries
+    # ``nemotron_h -> mixer.experts``; the evidence is
+    # ``bench/support/rows/nemotron_h.json`` (NemotronH-0.3B-A0.3B, CPU, bf16 --
+    # load, verify strict, finite forward). Admission alone was NOT enough: these
+    # ``backbone.`` renames had to reach the LOADER's expert path too, exactly as
+    # e4b#643 made them reach the planner's. Until they did, every MoE layer read
+    # as dense and the load died in the zero-expert-stacks guard. See
+    # ``loader._rename_ckpt_prefixes``.
     renames=(("backbone.", "model."),),
 )
 
@@ -564,21 +573,20 @@ NATIVELY_PREFUSED = frozenset({
 #: ``axk2``, which has no ``SUPPORTED_ARCHITECTURES`` entry either but aliases
 #: onto ``QWEN2_MOE`` and IS admitted because that convention is read-compatible.
 #:
-#: **This turned out to be ten model_types across seven conventions, not the two
-#: that #648 named.** Recorded in full rather than trimmed to the two, because a
-#: registry that lists some of the unadmitted families is worse than none: it
-#: reads as a complete answer. Two are analysed; the rest are stated as the fact
-#: that they are, without inventing a reason:
+#: **This turned out to be 9 model_types across 7 conventions, not the two that
+#: #648 named.** Recorded in full rather than trimmed, because a registry that
+#: lists some of the unadmitted families is worse than none: it reads as a
+#: complete answer. (It was first written "ten ... across seven". Ten was right
+#: then; seven was not -- the conventions were AXK1, NEMOTRON_H, GRANITEMOE,
+#: QWEN3_VL_MOE, JAMBA, LFM2_MOE, JETMOE, DBRX, which is eight. ``nemotron_h`` has
+#: since been WIRED and removed from this set, which is what makes it 9 across 7
+#: now. ``tests/test_staged_not_wired.py`` asserts BOTH numbers against the set
+#: itself, so a hand-written count cannot drift from the data again.)
 #:
 #: * ``axk1`` -- unreachable TWICE over: no admission, not read-compatible, AND
 #:   ``rewrite_axk1_keys`` absent from ``CKPT_KEY_REWRITERS``. Wiring only the
 #:   admission would apply no keymap, a silent wrong-key-mapping path, so the two
 #:   must land in one change (#509).
-#: * ``nemotron_h`` -- no admission, not read-compatible. Its config also names
-#:   the activation ``mlp_hidden_act`` (``relu2``) and declares neither field the
-#:   loader used to read, so it resolved a ``"silu"`` DEFAULT; for a NON-GATED
-#:   family that is a different expert function. Fixed in #648 independently of
-#:   whether the family is ever wired.
 #: * ``granitemoehybrid`` / ``granitemoeshared`` -- this convention claims them and
 #:   plain ``granitemoe`` IS in ``SUPPORTED_ARCHITECTURES``; the two aliases are
 #:   not. Worth a look: it reads like an omission rather than a decision.
@@ -594,7 +602,7 @@ NATIVELY_PREFUSED = frozenset({
 #: delisting it fails, and adding a convention nothing admits without listing it
 #: fails too.
 STAGED_NOT_WIRED = frozenset({
-    "axk1", "nemotron_h",
+    "axk1",
     "granitemoehybrid", "granitemoeshared",
     "qwen3_vl_moe", "qwen3_vl_moe_text",
     "jamba", "lfm2_moe", "jetmoe", "dbrx",

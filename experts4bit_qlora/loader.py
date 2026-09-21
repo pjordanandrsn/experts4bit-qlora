@@ -66,6 +66,13 @@ SUPPORTED_ARCHITECTURES = {
     # lineage as K3 but with honest dtype labels and a `weight`/`scale` suffix pair.
     # Its DENSE half is block-scaled FP8, not bf16 — see DEEPSEEK_V4_FP8_DENSE.
     "deepseek_v4": "mlp.experts",
+    # Nemotron-H: hybrid Mamba/attention, experts in a `mixer` block and NON-GATED
+    # (`down(act(up(x)))`, no SwiGLU gate). `expert_layout_for` takes has_gate from the
+    # convention, so the read stacks up_proj alone rather than fusing an absent gate,
+    # and `_expert_activation_name` reads the family's own `mlp_hidden_act` (relu2)
+    # instead of defaulting to SiLU (#650). Its checkpoint nests everything under
+    # `backbone.`, which `_rename_ckpt_prefixes` normalizes to `model.` (e4b#648).
+    "nemotron_h": "mixer.experts",
 }
 # model_type -> checkpoint prefix for the text tower of a MULTIMODAL config. Gemma-4
 # nests the language model as `model.language_model.`; Kimi K3 reverses the order
@@ -102,9 +109,16 @@ SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 #: convention's own ``expert_re``, so the difference is data, not a branch.
 #:
 #: Still deliberately NARROW. Absent on purpose: ``jamba`` and ``lfm2_moe``
-#: (hybrid Mamba towers whose NON-expert surface this loader has never placed),
-#: ``nemotron_h`` (hybrid AND non-gated), and ``dbrx`` (flat ``[E*inter, hidden]``
-#: stacks, which are not per-expert at all). Each needs evidence, not an entry.
+#: (hybrid Mamba towers whose NON-expert surface this loader has never placed) and
+#: ``dbrx`` (flat ``[E*inter, hidden]`` stacks, which are not per-expert at all).
+#: Each needs evidence, not an entry.
+#:
+#: ``nemotron_h`` used to be listed here too, as "hybrid AND non-gated". It is now
+#: admitted -- but through ``SUPPORTED_ARCHITECTURES``, not this set, and the
+#: distinction is the point: this set says a convention's per-expert layout is
+#: READ-COMPATIBLE, which would have carried nemotron_h in on membership alone. It
+#: came in on its own evidence instead (e4b#648): a real-checkpoint row, a non-gated
+#: read taken from the convention, and its own activation field.
 #:
 #: **This answers STORAGE ONLY.** A convention says where the weights are and how
 #: they fuse; it says nothing about the epilogue the model runs over them, which is
@@ -373,6 +387,61 @@ def _convention_or_none(model_type):
 #: to the plain ``model.`` prefix (see the multimodal/rewriter branches below), so
 #: the anchor is exact rather than the planner's non-greedy prefix capture.
 _LAYER_KEY = re.compile(r"^model\.layers\.(\d+)\.(.+)$")
+
+#: Capture the part of a checkpoint key BEFORE ``layers.N.`` so the convention's
+#: renames can be applied to it alone. Non-greedy, exactly as the planner's.
+_CKPT_PREFIX = re.compile(r"^(.*?)layers\.(\d+)\.(.+)$")
+
+
+def _rename_ckpt_prefixes(conv, weight_map, orig_key):
+    r"""Apply the convention's renames to each key's PREFIX -- the part before
+    ``layers.N.`` -- returning new ``(weight_map, orig_key)``.
+
+    The loader anchors its expert indexing on :data:`_LAYER_KEY`
+    (``^model\.layers\.``) and builds every fused-target lookup from
+    ``model.layers.{i}.{expert_rel}.``. A family that ships ``backbone.layers.N.``
+    where the tree declares ``model.layers.N.`` (nemotron_h) therefore matched NO
+    expert key: ``_index_per_expert_keys`` returned ``{}``, every MoE layer looked
+    dense, and the load ended in the zero-expert-stacks guard -- while its
+    NON-expert keys renamed fine, because the ``_assign`` pass applies
+    ``conv.rename`` and the expert path never did. Renames meant two different
+    things depending on which branch a key took. That is the same defect #643/#644
+    fixed in the PLANNER, on the other side of the same convention.
+
+    Deliberately the planner's narrow rule rather than a blanket rename of the
+    whole key: renaming a full key would rewrite the CONTAINER too, and the
+    mixtral family stores experts under ``block_sparse_moe.experts`` while
+    declaring ``mlp.experts`` -- its rename turned on the whole key would rewrite
+    the very substring ``MIXTRAL.expert_re`` matches on, so every mixtral expert
+    key would stop being recognised. Post-``layers.N.`` renames are already baked
+    into ``fused_prefix``; only the prefix was left unrewritten.
+
+    A no-op for every family admitted before nemotron_h, by construction: the
+    prefix of an already-normalized key is ``model.``, and no convention's rename
+    source occurs in it (mixtral/phimoe/granitemoe rename a ``block_sparse_moe``
+    container, gemma4 renames ``model.language_model.``, which the multimodal
+    branch above has already stripped by the time this runs).
+    ``tests/test_loader_architectures.py`` asserts that no-op directly.
+    """
+    if conv is None or not conv.renames:
+        return weight_map, orig_key
+    new_map, new_orig = {}, {}
+    for key, shard in weight_map.items():
+        m = _CKPT_PREFIX.match(key)
+        renamed = key
+        if m is not None:
+            prefix = conv.rename(m.group(1))
+            if prefix != m.group(1):
+                renamed = f"{prefix}layers.{m.group(2)}.{m.group(3)}"
+        if renamed in new_map:
+            raise RuntimeError(
+                f"convention {conv.name!r}: renaming the prefix of {key!r} to "
+                f"{renamed!r} collides with another checkpoint key. Refusing rather "
+                f"than dropping one of them -- a silently shorter key set loads a "
+                f"model with weights missing.")
+        new_map[renamed] = shard
+        new_orig[renamed] = orig_key[key]
+    return new_map, new_orig
 
 
 def _index_per_expert_keys(conv, checkpoint_keys):
@@ -1253,6 +1322,11 @@ def load_moe_4bit_streaming(
     # once here rather than probed per layer, so a family whose container this loader
     # would not have guessed is read by matching, not by string assembly.
     conv = _convention_or_none(model_type)
+    # The convention's renames reach the key PREFIX too, so a family shipping
+    # `backbone.layers.N.` where the tree declares `model.layers.N.` is indexed and
+    # placed like any other rather than reading as entirely dense (nemotron_h; the
+    # loader-side twin of the planner fix in e4b#643/#644).
+    weight_map, orig_key = _rename_ckpt_prefixes(conv, weight_map, orig_key)
     ckpt_experts = _index_per_expert_keys(conv, weight_map)
     trace.enter("map shard handles")
     _shards = sorted(set(weight_map.values()))

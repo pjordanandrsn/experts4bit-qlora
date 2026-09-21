@@ -102,6 +102,31 @@ def test_the_layout_doc_points_at_the_registry():
         assert model_type in doc, f"{model_type} is staged but README-LAYOUT.md omits it"
 
 
+def test_the_stated_counts_match_the_set():
+    """A hand-written count is prose about data, so it is checked against the data.
+
+    Both the registry docstring and README-LAYOUT.md say how many model_types are
+    staged and across how many conventions. The first version of that sentence said
+    "ten model_types across seven conventions" when the conventions were eight --
+    wrong the day it was written, and invisible because nothing read it. Now the
+    numbers come from the same frozenset the loader is asserted against.
+    """
+    import pathlib
+    import experts4bit_qlora.arch.moe_conventions as mc
+
+    n_types = len(STAGED_NOT_WIRED)
+    n_conventions = len({conv.name for conv in CONVENTIONS
+                         if conv.model_types & STAGED_NOT_WIRED})
+    phrase = f"{n_types} model_types across {n_conventions} conventions"
+    doc = (pathlib.Path(__file__).resolve().parents[1]
+           / "experts4bit_qlora" / "README-LAYOUT.md").read_text()
+    assert phrase in doc, (
+        f"README-LAYOUT.md must state {phrase!r} — it is derived from "
+        f"STAGED_NOT_WIRED, not written by hand")
+    assert phrase in mc.__doc__ or phrase in pathlib.Path(mc.__file__).read_text(), (
+        f"the STAGED_NOT_WIRED record must state {phrase!r}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # The activation the loader used to default.
 # ─────────────────────────────────────────────────────────────────────────────

@@ -93,6 +93,7 @@ LOADER_REFUSALS = (
     "tie_word_embeddings=False",              # untied head never found
     "unmaterialized meta tensors remain",     # something never got materialized
     "quantize_layers excludes",               # excluded layer's experts are packed on disk
+    "collides with another checkpoint key",   # a convention prefix rename would shadow a key
 )
 
 
