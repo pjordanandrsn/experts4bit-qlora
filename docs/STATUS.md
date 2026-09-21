@@ -300,6 +300,20 @@ experts carry half the GPTQ error — 9.9 %, at the 10 % threshold) and
 Mixtral (flat: 22.7 % on the 16 layers measured) is data for a
 per-expert fallback that is not built.
 
+**Calibration does not rescue Gemma-4's experts, and the more principled
+calibration is worse.** With all 30 expert layers quantised, KL against the
+bf16 checkpoint reads **1.0772** for NF4 round-to-nearest, **1.1050** for
+calibrated int4 packed all at once, and **1.1564** for calibrated int4 packed
+sequentially — batches, source and Hessian budget identical, calibration
+**order** the only difference. The ordering effect that licensed sequential
+calibration on Qwen3-30B does not transfer to this family; it **inverts**.
+Both registered predictions were refuted, and the third — which deliberately
+declined to predict the direction — is why the reading stands
+([`bench/p53/RESULTS-p53.md`](../bench/p53/RESULTS-p53.md)). Together with P49,
+which refuted shrinking the perturbation, **both addressable axes are now
+closed**: the only lever on Gemma-4's positional sensitivity remains keeping
+early expert layers in high precision, and that lever is memory.
+
 **Gemma-4's fused training path does not agree with e4b's own dense
 reference, and a kernel change did not fix it.** On the same box, the same
 tokens and identical trainable counts, the fused expert path and e4b's

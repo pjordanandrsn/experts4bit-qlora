@@ -5362,6 +5362,24 @@
     "receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2/ (run tp4-c-parity-2)"
    ],
    "notes": "Registered before the run as amendment 5 of bench/tp4/TP4-PREREG.md (commit ccefeec, merged 20:21:05Z; launch 21:43:31Z), which deliberately predicted only that parity become READABLE and explicitly did NOT predict the verdict. The direction is consistent with lanes P47-P51: Gemma-4's sensitivity is POSITIONAL and lives in the quantised model, not the adapter path, so an adapter-path change was not expected to move it -- and it did not (final delta -8.6%, median step delta +5.3%, both far outside the band). Also measured on the same pair: the fused path is 10.81x faster per step at identical peak VRAM; that is an internal comparison and no competitive position is quoted from it."
+  },
+  {
+   "id": "e4b.quality.gemma4.calibration-refuted",
+   "package": "experts4bit-qlora",
+   "area": "quality",
+   "claim": "GPTQ calibration does NOT rescue Gemma-4-26B-A4B-it's quantised experts, and SEQUENTIAL calibration is WORSE than all-at-once on this family: with all 30 expert layers quantised, KL vs the bf16 checkpoint reads NF4 round-to-nearest 1.0772 (top-1 0.6438), calibrated int4 all-at-once 1.1050 (0.6423), calibrated int4 sequential 1.1564 (0.6299). Calibration batches, source and Hessian budget identical across the calibrated arms; ORDER was the only difference. The Qwen3-30B ordering effect (streamed -0.050 ppl vs all-at-once +0.150) does not transfer to Gemma-4's experts -- it inverts. No position is licensed; this row records a refutation.",
+   "value": 1.1564,
+   "unit": "nats (KL(P_bf16||P_test), prefill, full-vocab fp64, 200 committed prompts) -- the SEQUENTIAL arm",
+   "model": "google/gemma-4-26B-A4B-it",
+   "hardware": "H100 SXM, rented (Vast, run p53-gemma4calib-23)",
+   "measured_on": "2026-09-20",
+   "status": "measured-private",
+   "tier": "measured",
+   "evidence": [],
+   "evidence_private": [
+    "receipts/experts4bit-qlora/2026-09-20/p53-gemma4calib-23/"
+   ],
+   "notes": "Registered before the run (bench/p53/P53-PREREG.md, merged 2026-09-20T07:23:42Z; launch 21:24:12Z) with P1 'sequential < all-at-once' and P2 'sequential < NF4' -- BOTH refuted -- and P3 deliberately declining to predict the magnitude or direction. Closes the second of the two axes open on e4b#636: P49 refuted reducing the perturbation (branch output reproduced to cosine 0.997, model still 0.9 nats off), and this refutes making the downstream absorb it. The only remaining lever is keeping early expert layers high-precision, which is memory (P50). Control (i) refused the decode scorer again (reference self-KL 0.3765 vs a 0.01 threshold), so this is a prefill reading, as every Gemma-4 lane has been."
   }
  ]
 }
