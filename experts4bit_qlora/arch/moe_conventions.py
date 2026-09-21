@@ -548,6 +548,10 @@ CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS, 
 #: Reachability is a separate question from exposure: ``axk1`` is staged-not-wired
 #: (#509/#514) and no loader admits it today, but the layout question is answered
 #: here now so that adding the loader row cannot open the seam.
+NATIVELY_PREFUSED = frozenset({
+    "granitemoe", "gptoss", "qwen3_vl_moe", "gemma4", "jetmoe", "qwen3_5_moe", "axk1",
+})
+
 #: model_types that HAVE a convention here and that NO loader path admits
 #: (e4b#648, #509). Membership is mechanical, not editorial: a model_type is
 #: listed iff ``loader``'s own gate refuses it --
@@ -594,10 +598,6 @@ STAGED_NOT_WIRED = frozenset({
     "granitemoehybrid", "granitemoeshared",
     "qwen3_vl_moe", "qwen3_vl_moe_text",
     "jamba", "lfm2_moe", "jetmoe", "dbrx",
-})
-
-NATIVELY_PREFUSED = frozenset({
-    "granitemoe", "gptoss", "qwen3_vl_moe", "gemma4", "jetmoe", "qwen3_5_moe", "axk1",
 })
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 

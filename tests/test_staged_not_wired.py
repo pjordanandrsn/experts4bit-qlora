@@ -176,3 +176,31 @@ def test_every_undeclared_exemption_is_still_true(model_type):
         f"{model_type} now declares {declared} — drop it from "
         f"_ACTIVATION_UNDECLARED_OK and let the declaration be read (e4b#648)"
     )
+
+
+def _admitted_model_types():
+    """Every model_type the loader admits today, by its own rule."""
+    return sorted({mt for conv in CONVENTIONS for mt in conv.model_types if _admitted(mt)}
+                  | set(loader.SUPPORTED_ARCHITECTURES))
+
+
+@pytest.mark.parametrize("model_type", _admitted_model_types())
+def test_no_admitted_family_is_refused_by_its_default_config(model_type):
+    """The refusal must stop at the families the loader admits.
+
+    ``_expert_activation_name`` raises where the old lookup defaulted, so the
+    regression to guard against is an ADMITTED family whose config declares none
+    of ``_ACTIVATION_FIELDS`` and is not exempt: it loaded yesterday and would
+    refuse today. transformers' own default config for the family is the
+    cheapest stand-in for a released one. A family absent from this transformers
+    is skipped, not passed (kimi_k2 / kimi_k3 ship their config as remote code).
+    """
+    CONFIG_MAPPING = pytest.importorskip("transformers").CONFIG_MAPPING
+    try:
+        cfg = CONFIG_MAPPING[model_type]()
+    except Exception:  # noqa: BLE001 - family absent from this transformers
+        pytest.skip(f"{model_type} has no config class in this transformers")
+    lm = getattr(cfg, "text_config", None) or cfg
+    name, field = loader._expert_activation_name(lm, model_type)
+    assert isinstance(name, str) and name, (model_type, name, field)
+    assert field, (model_type, name, field)
