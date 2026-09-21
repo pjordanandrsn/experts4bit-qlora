@@ -45,6 +45,7 @@ def main() -> int:
     gate = load(d / "gate_verdict.json")
     det = load(d / "determinism.json")
     up = load(d / "upload_probe.json")
+    fetch = load(d.parent / "artifact_fetch.json") or load(d / "artifact_fetch.json")
     k0 = load(d / "k0.json")
     man = load(d / "artifact1" / "manifest.json")
     summary = (d / "summary.txt").read_text() if (d / "summary.txt").exists() else ""
@@ -178,6 +179,11 @@ def main() -> int:
         w(f"- upload probe: **{up.get('mb_s')} MB/s** over {up.get('probe_mb')} MB "
           f"(floor {up.get('floor_mb_s')}, rsync rc {up.get('rsync_rc')}) — the direction the rental")
         w("  pre-flight does not measure, and the one this lane's product has to travel")
+    if fetch:
+        w(f"- artifact fetch, **sustained**: {fetch.get('mb_s')} MB/s over {fetch.get('bytes_mb')} MB in "
+          f"{fetch.get('seconds')} s (rsync rc {fetch.get('rsync_rc')}) — the real number, against the "
+          f"probe's {up.get('mb_s') if up else '—'}; a 256 MB probe understates sustained rate, so size a "
+          f"transfer budget from this row and gate on the probe")
     if a.artifact:
         ad = pathlib.Path(a.artifact)
         if ad.is_dir():

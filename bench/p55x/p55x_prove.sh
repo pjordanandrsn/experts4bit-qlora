@@ -21,7 +21,18 @@ done
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; OUT="$E4B_RENT_RUN_DIR/p55x-prove"
 SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -p $PORT root@$HOST"
 RSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT"
-PROBE_MB=${P55X_PROBE_MB:-256}; MIN_UP_MBS=${P55X_MIN_UP_MBS:-8}; MIN_DISK_GB=${P55X_MIN_DISK_GB:-200}
+# The floor's job is to catch the DISASTER regime, not to predict throughput. Measured 2026-09-21 on
+# p55x-prove-2: a 5090 pushed 256 MB at 6.40 MB/s, which puts the 15.2 GiB pack at ~41 min -- comfortable
+# inside a 5 h guard, and BELOW the 8 MB/s this lane first registered. That 8 came from "32 minutes sounds
+# fine", which is not a constraint anything has to satisfy; it sat inside the acceptable region instead of at
+# the boundary. The documented disaster is 0.2-0.5 MB/s (consumer Vast hosts, 11 hours for this artifact).
+# Re-derived from the constraint that actually binds -- the background transfer must not threaten the guard:
+#   3 MB/s -> 1.4 h,  2 MB/s -> 2.2 h,  1 MB/s -> 4.4 h (threatens a 5 h guard),  0.5 MB/s -> 8.9 h (disaster)
+# 3 MB/s it is: 6-15x above the disaster regime, 1.4 h of transfer against ~3.3 h of arms to overlap. Note
+# also that a 256 MB probe UNDERSTATES sustained rate (a prior lane read 14.76 MB/s probe vs 38.70 MB/s over
+# 23.6 GB, 2.6x), so this floor is applied to a pessimistic instrument. The measured 6.40 clears 3, 4, 5 and
+# 6 alike, so the number is not fitted to the one sample that prompted re-reading it.
+PROBE_MB=${P55X_PROBE_MB:-256}; MIN_UP_MBS=${P55X_MIN_UP_MBS:-3}; MIN_DISK_GB=${P55X_MIN_DISK_GB:-200}
 mkdir -p "$OUT" || { say "cannot create $OUT"; exit 20; }
 
 say "box facts ($HOST:$PORT, instance $E4B_RENT_INSTANCE_ID)"
