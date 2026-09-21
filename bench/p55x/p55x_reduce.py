@@ -106,6 +106,24 @@ def main() -> int:
             w("")
             w(f"**{cfg} verdict: {c.get('verdict', 'NOT RUN')}**"
               + (f" (incomplete: {c.get('incomplete')})" if c.get("incomplete") else ""))
+            # The pre-registration promises the lane will say WHICH failure it read, because
+            # k8_gate fails a calibrated pack on mixed signs even when every text is inside the
+            # budget (if any text improves, all must). "Outside the budget" and "inside the budget,
+            # mixed in sign" are not the same result and the second is not a quality failure.
+            ds = [t_["delta"] for t_ in (c.get("texts") or {}).values() if t_.get("delta") is not None]
+            if c.get("verdict") == "FAIL" and ds:
+                if all(d <= BUDGET for d in ds):
+                    w("")
+                    w("  Read this failure carefully: **every text is inside the +0.05 budget** and the")
+                    w("  pack fails the *corroboration* clause instead — the deltas are mixed in sign, and")
+                    w("  `k8_gate` requires that if any text improves, all do (an improvement that moves")
+                    w("  with the calibration text is fitting it). This is not a quality failure of the")
+                    w("  kind P37 read on c4val1 at +0.109, and it must not be quoted as one.")
+                else:
+                    over = [s for s, t_ in (c.get("texts") or {}).items()
+                            if (t_.get("delta") or 0) > BUDGET]
+                    w("")
+                    w(f"  Failure is on the **budget**: {', '.join(over)} exceeds +{BUDGET}.")
             if c.get("error"):
                 w(f"  \n  gate error: `{c['error']}`")
             w("")
