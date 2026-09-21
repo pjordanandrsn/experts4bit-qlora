@@ -1,5 +1,82 @@
 # Changelog
 
+## Unreleased
+
+### The loader: three arrows measured against upstream's own code, and each one found a defect
+
+None of these came from a wrong number in the field. Each came from executing upstream's code beside e4b's on the same
+tensors and reading the disagreement. Nothing here changes which families load.
+
+- **The expert activation is read from the family's own field, or refused** (#650, #648). The lookup was
+  `hidden_activation`, then `hidden_act`, then a `"silu"` DEFAULT. `nemotron_h` declares neither and names
+  `mlp_hidden_act: relu2`; it is non-gated, so `down(act(up(x)))` with SiLU instead of ReLU² is a different function with
+  every shape agreeing, and the existing guard (unknown activation NAME) could not see a field it never read.
+  `_ACTIVATION_FIELDS` is the ordered list (adds `mlp_hidden_act`, `activation_function`); a config that declares none of
+  them raises `MoEConventionError` unless the model_type is in `_ACTIVATION_UNDECLARED_OK` with its evidence
+  (`qwen3_omni_moe`, `lfm2_moe`, `dbrx`). Every admitted family's transformers default config resolves under the new rule
+  (39 of 39, asserted by test); the load log names the field the activation came from.
+- **`STAGED_NOT_WIRED`** (`arch/moe_conventions.py`): the ten model_types that have a convention here and that no loader
+  path admits — `axk1`, `nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `qwen3_vl_moe`, `qwen3_vl_moe_text`,
+  `jamba`, `lfm2_moe`, `jetmoe`, `dbrx` — asserted equal to the loader's own refusal in both directions, so wiring one
+  without delisting it fails and adding a convention nothing admits without listing it fails too. (`axk2` has no
+  `SUPPORTED_ARCHITECTURES` row either but aliases onto `qwen2_moe` and IS admitted.) The wire-or-remove decision on #648
+  and #509 stays open.
+- **The fused gate/up layout is verified against upstream's own expert forward** (#630, closes #515).
+  `arch/fused_layout_probe.py`: a gated expert's output is affine in `up` and nonlinear in `gate`, so scaling one index
+  set of the fused axis and taking the second difference finds the layout on CPU, with no checkpoint and no GPU, for any
+  activation; no affine set or more than one raises `FusedLayoutUndetermined` rather than guessing. All 13 gated
+  conventions measured: contiguous gate-first everywhere except `gpt_oss`, which is interleaved. Three pre-existing
+  defects: (a) `gptoss` DECLARED contiguous gate-first and is interleaved — `fused_order` had two values for a layout space
+  of at least three; new field `ckpt_gate_up_packing`, and gptoss declares it; (b) the #518 refusal in `expert_layout_for`
+  was raised inside a `try` whose `except MoEConventionError` fell back to `SUPPORTED_ARCHITECTURES`, so it was INERT for
+  every natively pre-fused family — the `try` now wraps only the lookup; (c) the exposed set is SEVEN (`NATIVELY_PREFUSED`:
+  granitemoe, gptoss, qwen3_vl_moe, gemma4, jetmoe, qwen3_5_moe, axk1), not the six or nine counted before.
+- **The pre-fused transpose is conditional, because upstream's is** (#639, closes #637). Upstream's converter is
+  `Transpose(check_dims=True)`: transpose only if the checkpoint tensor and the module parameter differ. e4b's
+  `transpose_last2` was unconditional, so on a SQUARE expert stack (`2 * moe_intermediate_size == hidden_size`) e4b loaded a
+  transposed tensor upstream would not — same shape, different values, nothing raised. `make_plan_reader(param_shape=)`
+  replicates the condition; `execute_moe_plan` supplies the shape from the model and the int4 serve lane from its meta
+  twin; a square stack with no expected shape is REFUSED. `tests/test_converter_arrow.py` (43 arms) runs upstream's real
+  `ConversionOps` beside e4b's read path over the same tensors for eight conventions.
+- **A convention's renames reach the expert fused target too** (#644, closes #643). A passthrough key went through
+  `conv.rename`; a per-expert key had its fused target built from the RAW checkpoint prefix, so a family shipping
+  `backbone.layers.N.` where the tree declares `model.layers.N.` (nemotron_h) mapped the two branches inconsistently.
+
+### Measured this release (no default changes; nothing licensed)
+
+- **P52 — the Gemma-4 graded store map's gate ran properly, on held-out prompts, and DID NOT PASS** (#621, #622, #623;
+  `bench/p51/RESULTS-p51.md`). The K8 two-text gate 0.36.3 promised cannot be built on this family: Gemma-4's own NLL
+  moves 0.4 nats with batch shape against K8's 0.05 budget (`e4b.parity.gemma4.no-reference`), and the K8 runner needs
+  the arena path, which refuses a per-layer map. Replacement bar, registered on `main` four minutes before the run: KL from
+  the bf16 checkpoint ≤ 0.10 nats AND top-1 ≥ 0.93. `bench/kl_prompts_heldout.py` holds 100 NEW prompts (same strata,
+  disjointness from the committed 200 asserted — the first build had 6 overlaps). Result: graded map **0.1319 nats /
+  top-1 0.874**, failing both axes on every stratum, while the bar's own provenance point (gpt-oss NF4) moved 2 % between
+  prompt sets and Gemma moved 20 % — the instability is the family. The map stays a documented option; **no Gemma-4
+  default ships and no position is quoted**.
+- **P53 — calibration does not rescue Gemma-4's experts, and sequential is WORSE** (#638, #640, #645, #646, #649; closes
+  #636; `bench/p53/RESULTS-p53.md`, one H100, $3.14). All 30 expert layers quantised: NF4 RTN **1.0772** nats KL vs the
+  bf16 checkpoint, GPTQ int4 all-at-once 1.1050, GPTQ int4 sequential **1.1564** (top-1 0.644 / 0.642 / 0.630). Order was
+  the only difference between the calibrated arms. Both axes on #636 — reduce the perturbation (P49) and make the
+  downstream absorb it — are now closed; the one lever that works is keeping the early expert layers in high precision,
+  and that lever is memory. Register row `e4b.quality.gemma4.calibration-refuted`.
+- **The Gemma-4 TRAINING-path parity failure is in the register before #558 closed** (#635, `e4b.parity.gemma4.train-internal`):
+  e4b's fused expert path against e4b's own dense per-expert reference, same box and tokens, ends **0.08257 nats** apart on
+  held-out loss against the 0.05 band on the 0.32.1 kernel cut (0.09037 on the previous cut) — the failure survives the
+  kernel change, so it is the family, not the kernel. The `fused` arm is not quoted for Gemma-4.
+
+### Tests and bench harness
+
+- The paged-attention end-to-end test's tolerance follows the compute mode that ran (fp8 default on sm_89+ gets the
+  kernel package's own 1.5e-1; f32 keeps 2e-2) and its draw is seeded (#626, closes #341).
+- p41 driver: a run whose registered failure criteria fired can no longer be published as a pass (#627, closes #495).
+- tp4 HF arm selects expert parameters by STRUCTURE and refuses an empty selection (#628, closes #542).
+- tp4 harness: the stall alarm tells a model fetch from a hang (#625, closes #624); the prologue names where its time went
+  and its residual cannot round negative (#629, #633, closes #548); "any byte" is not a stall threshold and a dead lane is
+  not a slow one (#634); amendments 5 and 6 register a parity-only box C and an axolotl arm with a proof-of-work predicate
+  (#631, #632).
+- `bench/p47/staged.sha256` is checked in CI rather than on the controller after a box is rented (#642); `kl_serve
+  --family` has the P53 family's REFERENCE entry, found only after a rented box had fetched 52 GB (#647).
+
 ## 0.36.3 — 2026-09-19 — a per-layer expert STORE MAP; the field-recipe training position on the new kernel cut (Qwen3-30B-A3B 4.49x Unsloth, parity-gated); Gemma-4 explained end to end
 
 ### The loader takes a per-layer store map
