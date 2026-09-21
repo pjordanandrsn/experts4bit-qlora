@@ -5367,7 +5367,7 @@
    "id": "e4b.quality.gemma4.calibration-refuted",
    "package": "experts4bit-qlora",
    "area": "quality",
-   "claim": "GPTQ calibration does NOT rescue Gemma-4-26B-A4B-it's quantised experts, and SEQUENTIAL calibration is WORSE than all-at-once on this family: with all 30 expert layers quantised, KL vs the bf16 checkpoint reads NF4 round-to-nearest 1.0772 (top-1 0.6438), calibrated int4 all-at-once 1.1050 (0.6423), calibrated int4 sequential 1.1564 (0.6299). Calibration batches, source and Hessian budget identical across the calibrated arms; ORDER was the only difference. The Qwen3-30B ordering effect (streamed -0.050 ppl vs all-at-once +0.150) does not transfer to Gemma-4's experts -- it inverts. No position is licensed; this row records a refutation.",
+   "claim": "GPTQ calibration does NOT rescue Gemma-4-26B-A4B-it's quantised experts, and SEQUENTIAL calibration is WORSE than all-at-once on this family: with all 30 expert layers quantised, KL vs the bf16 checkpoint reads NF4 round-to-nearest 1.0772 (top-1 0.6438), calibrated int4 all-at-once 1.1050 (0.6423), calibrated int4 sequential 1.1564 (0.6299). Calibration batches, source and Hessian budget identical across the calibrated arms; ORDER was the only difference. The Qwen3-30B ordering effect (streamed -0.050 ppl vs all-at-once +0.150) does not transfer to Gemma-4's experts -- it inverts. No serving position is quoted from this lane; the row records a refutation.",
    "value": 1.1564,
    "unit": "nats (KL(P_bf16||P_test), prefill, full-vocab fp64, 200 committed prompts) -- the SEQUENTIAL arm",
    "model": "google/gemma-4-26B-A4B-it",
