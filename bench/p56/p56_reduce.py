@@ -80,10 +80,24 @@ def valid(arm: dict, ref: dict | None) -> tuple[bool, list[str]]:
     return (not why), why
 
 
-def parity(arm: dict, ref: dict) -> tuple[float, float]:
+def parity(arm: dict, ref: dict) -> tuple[float, float, float | None]:
+    """tp1's B2/C2 pair, computed exactly as ``tp4_reduce.parity`` computes it --
+    on ``loss_last``, the final TRAIN loss -- plus the held-out delta beside it.
+
+    Both, because the register disagrees with itself about which one it quotes.
+    ``e4b.parity.gemma4.train-internal`` gives its unit as "|fused - dense
+    reference| final HELD-OUT loss", but the 0.08257 it carries came from
+    ``tp4_reduce.parity()``, which reads ``loss_last``. tp1's rule is the train
+    loss, and `bench/flagship-matrix/RESULTS-flagship-matrix.md` already had to
+    correct a published table for exactly this substitution, noting that eval loss
+    is "a smaller, easier number here, so the original table flattered the result".
+    Reporting one number under the other's name is how that happens twice, so this
+    reports both and names each."""
     d_final = abs(arm["loss_last"] - ref["loss_last"])
     med = statistics.median(abs(a - b) for a, b in zip(arm["losses"], ref["losses"]))
-    return d_final, med
+    a_ev, r_ev = arm.get("eval_loss_final"), ref.get("eval_loss_final")
+    d_eval = abs(a_ev - r_ev) if (a_ev is not None and r_ev is not None) else None
+    return d_final, med, d_eval
 
 
 def reduce_run(run_dir: str) -> dict:
@@ -103,9 +117,10 @@ def reduce_run(run_dir: str) -> dict:
         if not ok:
             rows.append({"arm": tag, "status": "VOID", "why": "; ".join(why)})
             continue
-        d_final, med = parity(arm, ref)
+        d_final, med, d_eval = parity(arm, ref)
         rows.append({"arm": tag, "status": "PASS" if (d_final <= BAND and med <= BAND) else "FAIL",
                      "d_final": round(d_final, 5), "median_step": round(med, 5),
+                     "d_heldout": (round(d_eval, 5) if d_eval is not None else None),
                      "s_per_step": arm.get("s_per_step_median_11plus"),
                      "dgrad": arm.get("dgrad"),
                      "batched_stats": arm.get("batched_stats")})
@@ -142,11 +157,11 @@ def reduce_run(run_dir: str) -> dict:
 
 
 def render(res: dict) -> str:
-    out = ["| arm | Δ final | median step \\|Δ\\| | band 0.05 | s/step | note |",
-           "|---|---|---|---|---|---|"]
+    out = ["| arm | Δ final train | median step \\|Δ\\| | band 0.05 | Δ held-out | s/step | note |",
+           "|---|---|---|---|---|---|---|"]
     for r in res["rows"]:
         if r.get("d_final") is None:
-            out.append(f"| `{r['arm']}` | — | — | **{r['status']}** | — | {r.get('why', '')} |")
+            out.append(f"| `{r['arm']}` | — | — | **{r['status']}** | — | — | {r.get('why', '')} |")
             continue
         note = ""
         if r.get("batched_stats"):
@@ -154,8 +169,9 @@ def render(res: dict) -> str:
             note = f"engaged {st.get('batched')}/{st.get('calls')} calls, {st.get('fallback_calls')} fallbacks"
         elif r.get("dgrad") is not None:
             note = f"dgrad={r['dgrad']}"
+        he = f"{r['d_heldout']:.5f}" if r.get("d_heldout") is not None else "—"
         out.append(f"| `{r['arm']}` | {r['d_final']:.5f} | {r['median_step']:.5f} | "
-                   f"**{r['status']}** | {r.get('s_per_step')} | {note} |")
+                   f"**{r['status']}** | {he} | {r.get('s_per_step')} | {note} |")
     out += ["", f"**Verdict: {res['verdict']}** — {res['why']}"]
     return "\n".join(out)
 

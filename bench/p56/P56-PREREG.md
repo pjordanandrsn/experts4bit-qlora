@@ -80,6 +80,22 @@ so from step 2 onward they route differently and the divergence compounds.
 **So: is 0.08257 nats the fused path being wrong, or is it how far apart two
 equally-correct training runs of THIS model land over 20 steps?**
 
+### One quantity, under two names — recorded before the draw so the read is unambiguous
+
+The claim row gives its unit as *"nats (|fused - dense reference| final **held-out**
+loss, N=20 at tp4's field fixture)"*. The 0.08257 it carries came from
+`tp4_reduce.parity()`, which reads **`loss_last`** — the final **train** loss.
+tp1's B2/C2 rule is the train loss, and `bench/flagship-matrix/RESULTS-flagship-matrix.md`
+already had to correct a published table for exactly this substitution, noting that
+eval loss is *"a smaller, easier number here, so the original table flattered the
+result."*
+
+So the row's wording is wrong, not its number. This lane computes the band on the
+**train** loss, exactly as `tp4_reduce` does, so it is comparable to the standing
+row; `p56_reduce.py` reports the **held-out** delta beside it, named, so nobody has
+to guess again. Correcting the row's unit string is a separate change against
+`docs/claims.json` and is not smuggled into this lane.
+
 ## The instrument: a four-point ladder of increasing arithmetic error
 
 All four arms train the same fixture on the same box in one session, from the same
