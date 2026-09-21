@@ -219,7 +219,23 @@ rung takes the fused arm's 3600 s and `batched` takes the reference's 5400 s,
 because it runs at about reference speed. `can_run`'s 900 s margin drops arms from
 the END of the list as the window closes, which is why the cheap rung is ordered
 before the expensive one.
-A proving run precedes it, per the standing rule for any guard over one hour.
+A proving run precedes it, per the standing rule for any guard over one hour, and it
+is `bench/p56/p56_prove.sh` — which does the second job a proving run should do and
+**measures the one quantity that decides whether this draw can run at all on the box
+it draws: host RAM against Gemma-4's single 49.9 GiB shard.**
+
+That quantity is not in any pre-flight, and it is the sibling lane's finding: e4b#344
+records this checkpoint failing on 2 of 6 rented 5090s with driver and GPU both
+refuted, and `bench/p55/P55-PREREG.md`'s host fingerprint orders every one of those
+outcomes by host RAM — 30 GiB refuses the map outright, 64 GiB maps it and dies
+opaquely, 96 / 125 / 188 GiB pass. A P56 draw on a low-RAM box loses all four arms to
+a load fault that is not P56's question, and the $2.42 with it.
+
+The proving run **reports and does not refuse** on it: a run that can only say "pass"
+and one that can only say "fail" look identical on a green result (P41, 2026-09-07).
+The go/no-go on the registered draw is a reading of the printed number. Both branches
+of that reading were driven on CPU against synthetic 188 / 64 / 30 GiB boxes before
+this merged.
 Authorization: the owner's standing directive for the training/throughput campaign
 (adertha-agents#110), under "use pods as needed" within the caps.
 
