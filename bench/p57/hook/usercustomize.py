@@ -22,6 +22,7 @@ library already exposes, so one calibration can serve many arms:
   E4B_INT4_ASSIGNMENT=<dir|file>        (read by the library itself) honour a recorded
                                         gptq/rtn split during a recipe build
 """
+import importlib
 import os
 if (os.environ.get("E4B_SERVE_EXP_INT4", "0") == "1" or os.environ.get("E4B_SERVE_ATTN_INT4_CALIB", "0") == "1"
         or os.environ.get("E4B_SERVE_ATTN_INT4", "0") == "1"
@@ -190,7 +191,7 @@ if _P57_OUT:
                      "experts4bit_qlora.engines.nvme_experts", "experts4bit_qlora.engines.placement"):
         try:
             _m = importlib.import_module(_modname)
-        except Exception:
+        except ImportError:                       # a module this e4b cut does not have; anything else is a bug and must show
             continue
         _orig = getattr(_m, "enable_hybrid_tier", None)
         if _orig is None or getattr(_orig, "_p57_hooked", False):
