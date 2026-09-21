@@ -117,3 +117,24 @@ def test_no_reference_arm_is_NO_REF_not_a_verdict(tmp_path):
     d = _write(tmp_path, [_arm("fused_attn4", _curve(1.0, 0.09), dgrad=True)])
     res = p56.reduce_run(d)
     assert res["verdict"] == "NO-REF" and not res["readable"]
+
+
+def test_a_ladder_that_all_passes_is_a_non_reproduction_not_a_fix(tmp_path):
+    """The outcome neither registered pattern covers. If every rung lands inside
+    the band, the standing 0.08257 did not reproduce on this box — which is a
+    result about the standing row, not evidence that anything was fixed. It must
+    not fall through to MIXED, and it must not be read as TRACKS-ARITHMETIC just
+    because the smallest rung happens to be smallest."""
+    ref = _arm("reference_attn4", _curve(1.0, 0.0), n_patched=0)
+    d = _write(tmp_path, [
+        ref,
+        _arm("batched_attn4", _curve(1.0, 0.001),
+             batched_stats={"modules": 30, "calls": 2400, "batched": 2400,
+                            "fallback_calls": 0, "by_reason": {}}),
+        _arm("fused_attn4_nodgrad", _curve(1.0, 0.002), dgrad=False),
+        _arm("fused_attn4", _curve(1.0, 0.003), dgrad=True),
+    ])
+    res = p56.reduce_run(d)
+    assert res["verdict"] == "DID-NOT-REPRODUCE", res
+    assert all(r["status"] == "PASS" for r in res["rows"])
+    assert "not evidence that anything was fixed" in res["why"]

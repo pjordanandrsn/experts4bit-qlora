@@ -136,7 +136,18 @@ def reduce_run(run_dir: str) -> dict:
         # outside the band and they sit within 2x of each other: the delta does
         # not track the arithmetic at all.
         smallest = next((r for r in rows if r.get("d_final") is not None), None)
-        if smallest and smallest["d_final"] <= BAND < hi:
+        if hi <= BAND:
+            # The outcome neither registered pattern covers, and it is not "mixed":
+            # the standing FAIL did not reproduce at all. It was measured on a
+            # different box (Vast 51645512) and this is a different draw, so a
+            # non-reproduction is a real and reportable result about the standing
+            # row -- NOT evidence that anything was fixed.
+            verdict = "DID-NOT-REPRODUCE"
+            why = (f"every rung is inside the band (worst {hi:.5f}), so the standing "
+                   f"0.08257 did not reproduce on this box at all. That is a result "
+                   f"about the standing row's reproducibility, not evidence that "
+                   f"anything was fixed; #558 needs a third draw before either reading.")
+        elif smallest and smallest["d_final"] <= BAND < hi:
             verdict = "TRACKS-ARITHMETIC"
             why = (f"the smallest-perturbation rung that ran ({smallest['arm']}) is inside the band "
                    f"at {smallest['d_final']:.5f} while {hi:.5f} is outside it — the divergence is a "

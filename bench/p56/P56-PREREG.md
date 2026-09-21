@@ -138,6 +138,14 @@ comparable and LARGE regardless of the ladder.
   Registering a hoped-for direction here is exactly what would make the reading
   worthless — the same reason TP4-PREREG amendment 5 registered only readability.
 
+- **P3b — a third outcome, registered because the reducer must not fold it into
+  either of the two above.** Every rung may land INSIDE the band, i.e. the standing
+  0.08257 does not reproduce on this box at all. The standing row was measured on
+  one rented box (Vast 51645512) and this is a different draw. **That reading is a
+  result about the standing row's reproducibility and is NOT evidence that anything
+  was fixed**; it would leave #558 open and needing a third draw. The reducer
+  reports it as `DID-NOT-REPRODUCE`, separately from `MIXED`.
+
 - **P4 — NOT registered, and stated so it is not smuggled in later:** no claim
   about which of `fused_attn4` and `fused_attn4_nodgrad` is faster. This lane is a
   correctness reading; the dgrad kernel's speed is already measured in
