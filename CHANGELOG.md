@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### `jamba` and `lfm2_moe` are wired — the "no reason recorded" was that nobody had tried (#648)
+
+`STAGED_NOT_WIRED` said of these two only that there was *"no reason recorded here because none was
+found; that absence is itself the thing to resolve."* Resolved by trying them: both load unchanged.
+
+- **Both are hybrid towers** — Jamba is Mamba/attention, LFM2-MoE uses short convolutions — and that
+  was the stated caution for keeping them out (`READ_COMPATIBLE_CONVENTIONS`: *"hybrid Mamba towers
+  whose NON-expert surface this loader has never placed"*). The caution was reasonable and the answer
+  is that the non-expert surface is ordinary passthrough: it goes through `_assign` like any other
+  dense tensor, no meta tensors remain, and the forward is finite.
+- **Admitted through `SUPPORTED_ARCHITECTURES`, not by adding their conventions to
+  `READ_COMPATIBLE_CONVENTIONS`.** Membership there would have carried them in on their STORAGE
+  convention, and storage was never the open question — so each came in on its own row instead.
+- **A dense layer must never be read as an expert, and that is now pinned.** Both families alternate
+  MoE and dense layers, and the dense MLP sits in the SAME container under the SAME projection names
+  (`feed_forward.{gate,up,down}_proj` / `feed_forward.w{1,2,3}`), differing only by the absent
+  `experts.{e}.`. Matching one would build a one-expert stack for a layer the router never routes
+  through. `expert_re` requires the index; `test_a_hybrids_dense_layer_is_never_read_as_an_expert`
+  asserts it against the released key spellings.
+- **Admitting `lfm2_moe` does not reopen the #648 activation hazard**: its config declares none of
+  `_ACTIVATION_FIELDS`, so #650's rule would REFUSE it — it is carried by
+  `_ACTIVATION_UNDECLARED_OK` with its evidence (upstream `Lfm2Moe` applies SiLU unconditionally),
+  and a test pins that.
+- **Evidence**, CPU/bf16, transformers 5.17.0 / torch 2.14.0 / bitsandbytes 0.50.2:
+  `bench/support/rows/lfm2_moe.json` — `LiquidAI/LFM2-8B-A1B` (4.5 B params, 32 experts on 22 of 24
+  layers): load 13.7 s, **22 quantized / 0 unquantized** (nf4), forward finite → **`reference-ok`**.
+  `bench/support/rows/jamba.json` — `ai21labs/Jamba-tiny-dev` (222 M params, 8 experts on 8 of 16
+  layers): load 0.9 s, **8 quantized / 0 unquantized** (nf4), forward finite → **`toy-ok`**, and the
+  row says so: every larger published jamba MoE is 52 B+, gated, or (the 3 B "Jamba2"/"Reasoning"
+  releases) ships `num_experts: 1` and is not MoE at all.
+- `STAGED_NOT_WIRED` drops both; the derived counts go to 5 across 4.
+
 ### GraniteMoe's two aliases are wired — it was an omission, and the tree now says so (#648)
 
 `granitemoehybrid` and `granitemoeshared` had a convention that claimed them, while plain `granitemoe`

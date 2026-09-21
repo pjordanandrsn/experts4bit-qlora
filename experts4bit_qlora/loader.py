@@ -81,6 +81,15 @@ SUPPORTED_ARCHITECTURES = {
     # instead of defaulting to SiLU (#650). Its checkpoint nests everything under
     # `backbone.`, which `_rename_ckpt_prefixes` normalizes to `model.` (e4b#648).
     "nemotron_h": "mixer.experts",
+    # Jamba and LFM2-MoE: hybrid towers (Mamba; LFM2's short convolutions) whose MoE
+    # layers store experts PER-EXPERT under `feed_forward.experts.{e}.*` -- jamba as
+    # {gate,up,down}_proj, lfm2_moe as w1/w3/w2 -- and whose built trees declare one
+    # fused stack at `feed_forward.experts`. The generic per-expert read handles both
+    # from the convention; the non-expert Mamba/conv surface is ordinary passthrough.
+    # Admitted 2026-09-21 (e4b#648) on real-checkpoint rows, not on convention
+    # membership -- see the note on READ_COMPATIBLE_CONVENTIONS below.
+    "jamba": "feed_forward.experts",
+    "lfm2_moe": "feed_forward.experts",
 }
 # model_type -> checkpoint prefix for the text tower of a MULTIMODAL config. Gemma-4
 # nests the language model as `model.language_model.`; Kimi K3 reverses the order
@@ -116,10 +125,16 @@ SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 #: under a container the module tree does not use. Both are read through the
 #: convention's own ``expert_re``, so the difference is data, not a branch.
 #:
-#: Still deliberately NARROW. Absent on purpose: ``jamba`` and ``lfm2_moe``
-#: (hybrid Mamba towers whose NON-expert surface this loader has never placed) and
-#: ``dbrx`` (flat ``[E*inter, hidden]`` stacks, which are not per-expert at all).
-#: Each needs evidence, not an entry.
+#: Still deliberately NARROW. Absent on purpose: ``dbrx``, whose flat
+#: ``[E*inter, hidden]`` stacks are not per-expert at all. It needs evidence, not
+#: an entry.
+#:
+#: ``jamba`` and ``lfm2_moe`` were listed here too, as "hybrid Mamba towers whose
+#: NON-expert surface this loader has never placed". That was the right caution and
+#: it turned out to be answerable: both now load, and both were admitted through
+#: ``SUPPORTED_ARCHITECTURES`` on their own real-checkpoint rows rather than added
+#: to this set. The distinction is deliberate -- membership here would have carried
+#: them in on their STORAGE convention, and the open question was never storage.
 #:
 #: ``nemotron_h`` used to be listed here too, as "hybrid AND non-gated". It is now
 #: admitted -- but through ``SUPPORTED_ARCHITECTURES``, not this set, and the

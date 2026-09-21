@@ -1908,3 +1908,91 @@ def test_the_granite_legacy_renames_map_released_keys_onto_the_tree(model_type):
         "model.layers.0.block_sparse_moe.experts.down_proj",
         "model.layers.0.block_sparse_moe.router.weight",
     ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# jamba / lfm2_moe: hybrid towers whose MoE layers are per-expert (e4b#648).
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Verbatim from the released checkpoints — ai21labs/Jamba-tiny-dev (435 tensors)
+#: and LiquidAI/LFM2-8B-A1B (2302). Both interleave DENSE layers, which spell the
+#: same block WITHOUT `experts.{e}.`; that contrast is the point of the test.
+_HYBRID_RELEASED_KEYS = {
+    "jamba": (
+        ["model.layers.1.feed_forward.experts.0.gate_proj.weight",
+         "model.layers.1.feed_forward.experts.0.up_proj.weight",
+         "model.layers.1.feed_forward.experts.0.down_proj.weight",
+         "model.layers.1.feed_forward.experts.7.gate_proj.weight",
+         "model.layers.1.feed_forward.experts.7.up_proj.weight",
+         "model.layers.1.feed_forward.experts.7.down_proj.weight"],
+        # dense layer 0 — same container, no `experts.{e}.`
+        ["model.layers.0.feed_forward.gate_proj.weight",
+         "model.layers.0.feed_forward.up_proj.weight",
+         "model.layers.0.feed_forward.down_proj.weight",
+         "model.layers.0.mamba.A_log"],
+    ),
+    "lfm2_moe": (
+        ["model.layers.2.feed_forward.experts.0.w1.weight",
+         "model.layers.2.feed_forward.experts.0.w3.weight",
+         "model.layers.2.feed_forward.experts.0.w2.weight",
+         "model.layers.2.feed_forward.experts.31.w1.weight",
+         "model.layers.2.feed_forward.experts.31.w3.weight",
+         "model.layers.2.feed_forward.experts.31.w2.weight"],
+        ["model.layers.0.feed_forward.w1.weight",
+         "model.layers.0.feed_forward.w2.weight",
+         "model.layers.0.feed_forward.w3.weight",
+         "model.layers.0.conv.conv.weight"],
+    ),
+}
+
+
+@pytest.mark.parametrize("model_type", sorted(_HYBRID_RELEASED_KEYS))
+def test_a_hybrids_dense_layer_is_never_read_as_an_expert(model_type):
+    """The hazard specific to these two families, pinned.
+
+    jamba and lfm2_moe alternate MoE and DENSE layers, and the dense layer's MLP
+    lives in the SAME container under the SAME projection names — jamba's
+    `feed_forward.{gate,up,down}_proj.weight`, lfm2's `feed_forward.w{1,2,3}.weight`
+    — differing only by the absent `experts.{e}.`. A convention that matched those
+    would read a dense MLP as expert 0 of a stack that has no other experts, and
+    `fuse_experts` would then build a one-expert stack for a layer the router never
+    routes through. `expert_re` requires the index, so it cannot; this asserts it.
+    """
+    from experts4bit_qlora.loader import _convention_or_none, _index_per_expert_keys
+
+    conv = _convention_or_none(model_type)
+    moe_keys, dense_keys = _HYBRID_RELEASED_KEYS[model_type]
+
+    index = _index_per_expert_keys(conv, {k: "s" for k in moe_keys})
+    assert len(index) == 1, index
+    layer = next(iter(index))
+    assert sorted(index[layer]) == ["down", "gate", "up"], index[layer]
+    assert set(index[layer]["gate"]) == {0, int(moe_keys[3].split("experts.")[1].split(".")[0])}
+
+    assert _index_per_expert_keys(conv, {k: "s" for k in dense_keys}) == {}, (
+        f"{model_type}: a DENSE layer's MLP was indexed as an expert")
+
+
+@pytest.mark.parametrize("model_type", ("jamba", "lfm2_moe"))
+def test_the_hybrid_moe_families_are_admitted_and_gated(model_type):
+    from experts4bit_qlora.loader import SUPPORTED_ARCHITECTURES, expert_layout_for
+
+    assert SUPPORTED_ARCHITECTURES[model_type] == "feed_forward.experts"
+    assert expert_layout_for(model_type) == ("feed_forward.experts", True)
+
+
+def test_lfm2_moes_undeclared_activation_is_still_exempt_not_defaulted():
+    """Admitting lfm2_moe must not reopen the #648 activation hazard.
+
+    Its config declares NONE of `_ACTIVATION_FIELDS`, so under #650's rule it would
+    be REFUSED rather than silently defaulted — unless it is in
+    `_ACTIVATION_UNDECLARED_OK` with its evidence, which it is.
+    """
+    import types
+
+    from experts4bit_qlora.loader import _ACTIVATION_UNDECLARED_OK, _expert_activation_name
+
+    assert "lfm2_moe" in _ACTIVATION_UNDECLARED_OK
+    name, field = _expert_activation_name(types.SimpleNamespace(num_experts=32), "lfm2_moe")
+    assert name == "silu"
+    assert _ACTIVATION_UNDECLARED_OK["lfm2_moe"] in field

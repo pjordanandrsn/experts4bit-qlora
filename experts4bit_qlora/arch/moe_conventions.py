@@ -261,6 +261,14 @@ PHIMOE = MoEConvention(
     renames=((".block_sparse_moe.", ".mlp."), (".gate.weight", ".router.weight")),
 )
 
+#: **WIRED 2026-09-21 (e4b#648).** Row ``bench/support/rows/jamba.json``
+#: (ai21labs/Jamba-tiny-dev, ``toy-ok``: 222 M parameters, the largest ungated
+#: published jamba MoE small enough to load on the probe host -- the Mini/v0.1
+#: releases are 52 B+ or gated, and the 3 B "Jamba2/Reasoning" releases ship
+#: ``num_experts: 1``, i.e. not MoE at all). Its MoE layers are per-expert under
+#: ``feed_forward.experts.{e}.*``; its DENSE layers spell the same block
+#: ``feed_forward.{gate,up,down}_proj.weight`` with no ``experts.{e}.``, so
+#: ``expert_re`` cannot match them and a dense layer is never read as an expert.
 JAMBA = MoEConvention(
     name="jamba",
     expert_re=re.compile(
@@ -270,6 +278,13 @@ JAMBA = MoEConvention(
     model_types=frozenset({"jamba"}),
 )
 
+#: **WIRED 2026-09-21 (e4b#648).** Row ``bench/support/rows/lfm2_moe.json``
+#: (LiquidAI/LFM2-8B-A1B, ``reference-ok``: 4.5 B parameters, 32 experts on 22 of
+#: 24 layers). Same per-expert shape as jamba under a ``w1``/``w3``/``w2``
+#: spelling. Note this family declares NO activation attribute at all and is
+#: carried by ``loader._ACTIVATION_UNDECLARED_OK`` with its evidence (upstream
+#: ``Lfm2Moe`` applies SiLU unconditionally) -- so admitting it does not reopen
+#: the #648 activation hazard.
 LFM2_MOE = MoEConvention(
     name="lfm2_moe",
     expert_re=re.compile(r"^feed_forward\.experts\.(\d+)\.(w1|w2|w3)\.weight$"),
@@ -587,14 +602,15 @@ NATIVELY_PREFUSED = frozenset({
 #: ``axk2``, which has no ``SUPPORTED_ARCHITECTURES`` entry either but aliases
 #: onto ``QWEN2_MOE`` and IS admitted because that convention is read-compatible.
 #:
-#: **This turned out to be 7 model_types across 6 conventions, not the two that
+#: **This turned out to be 5 model_types across 4 conventions, not the two that
 #: #648 named.** Recorded in full rather than trimmed, because a registry that
 #: lists some of the unadmitted families is worse than none: it reads as a
 #: complete answer. (It was first written "ten ... across seven". Ten was right
 #: then; seven was not -- the conventions were AXK1, NEMOTRON_H, GRANITEMOE,
 #: QWEN3_VL_MOE, JAMBA, LFM2_MOE, JETMOE, DBRX, which is eight. ``nemotron_h`` has
-#: since been WIRED and removed from this set, and so have ``granitemoehybrid``
-#: and ``granitemoeshared``, which is what makes it 7 across 6 now.
+#: since been WIRED and removed from this set, and so have ``granitemoehybrid``,
+#: ``granitemoeshared``, ``jamba`` and ``lfm2_moe``, which is what makes it
+#: 5 across 4 now.
 #: ``tests/test_staged_not_wired.py`` asserts BOTH numbers against the set itself,
 #: so a hand-written count cannot drift from the data again.)
 #:
@@ -605,9 +621,11 @@ NATIVELY_PREFUSED = frozenset({
 #: * ``qwen3_vl_moe`` / ``qwen3_vl_moe_text`` -- adjudicated against a released
 #:   index and given a conditional transpose in #637/#639, and still not admitted.
 #:   Correctness work on a family the loader currently refuses.
-#: * ``jamba``, ``lfm2_moe``, ``jetmoe``, ``dbrx`` -- convention present, neither
-#:   admission route open. No reason recorded here because none was found; that
-#:   absence is itself the thing to resolve.
+#: * ``jetmoe``, ``dbrx`` -- convention present, neither admission route open. No
+#:   reason recorded here because none was found; that absence is itself the thing
+#:   to resolve. (``jamba`` and ``lfm2_moe`` sat in this same bullet until #648
+#:   simply tried them: both load, and the "no reason recorded" was that nobody had
+#:   looked, not that a blocker existed.)
 #:
 #: ``tests/test_staged_not_wired.py`` asserts this set equals what the loader
 #: refuses, so it cannot go stale in either direction: wiring a family without
@@ -616,7 +634,7 @@ NATIVELY_PREFUSED = frozenset({
 STAGED_NOT_WIRED = frozenset({
     "axk1",
     "qwen3_vl_moe", "qwen3_vl_moe_text",
-    "jamba", "lfm2_moe", "jetmoe", "dbrx",
+    "jetmoe", "dbrx",
 })
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
