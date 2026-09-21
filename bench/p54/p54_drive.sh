@@ -49,19 +49,59 @@ say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); receipt
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook" || { say "stage failed: remote cleanup"; exit 20; }
 $SCP $STAGE "root@$HOST:$W/" && $SCP "$HOOK" "root@$HOST:$W/hook/" || { say "stage failed: scp"; exit 20; }
 $SSH "cd $W || exit 20; nohup env $PASS bash p54_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat P54_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
-say "lane started; polling TP_DONE every ${POLL}s"; LAST=""
+# ---- heartbeat + liveness (e4b#641 -- ported from tp4_drive.sh, #625/#634). A poller that waits for a
+# marker cannot tell a dead lane from a slow one: tp4-c-parity-1's remote process was killed without writing
+# its markers and the controller polled the corpse for 53 minutes. Each poll now asks the box (a) the last
+# summary line, (b) GPU util, (c) workdir size and free disk, (d) whether `bash p54_run.sh` is still there.
+# A stall is REPORTED, never acted on; two consecutive definite zeros on (d) with no TP_DONE end the wait
+# with their own exit code (25), so a killed lane is not flattened into "ran out of clock".
+STALL_S=${P54_STALL_S:-900}; P54_MIN_PROGRESS_MB=${P54_MIN_PROGRESS_MB:-16}
+progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev -> "" | "fetching:<delta>" | "stall:<idle_s>"
+  idle_s=$1; stall_s=$2; util=$3; dfk_now=$4; dfk_prev=$5; du_now=$6; du_prev=$7; min_mb=$P54_MIN_PROGRESS_MB
+  consumed=0; grew=0
+  if [ -n "$dfk_now" ] && [ -n "$dfk_prev" ] && [ "$dfk_now" -lt "$dfk_prev" ] 2>/dev/null; then consumed=$(( (dfk_prev - dfk_now) / 1024 )); fi
+  if [ -n "$du_now" ] && [ -n "$du_prev" ] && [ "$du_now" -gt "$du_prev" ] 2>/dev/null; then grew=$((du_now - du_prev)); fi
+  if [ "$consumed" -ge "$min_mb" ] || [ "$grew" -ge "$min_mb" ]; then
+    if [ "$consumed" -ge "$grew" ]; then echo "fetching:-${consumed}M on disk"; else echo "fetching:+${grew}M in tree"; fi
+    return 0
+  fi
+  if [ "$idle_s" -ge "$stall_s" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then echo "stall:$idle_s"; fi
+}
+lane_dead() { [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead; }   # live_now live_prev: two DEFINITE zeros
+say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on; a lane whose process is gone for two polls ends the wait)"
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
 while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  line=$($SSH "tail -n 1 $W/summary.txt 2>/dev/null" 2>/dev/null | cut -c1-200); [ -n "$line" ] && [ "$line" != "$LAST" ] && { say "box: $line"; LAST=$line; }
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f 'bash p54_run.sh' | wc -l | tr -d ' ')\"" 2>/dev/null)
+  line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
+  dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
+  live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
+  if [ "$line" != "$LAST" ]; then [ -n "$line" ] && say "box: $line"; LAST=$line; LAST_CHANGE=$now; fi
+  if [ -n "$(lane_dead "$live" "$LAST_LIVE")" ]; then
+    say "LANE DEAD: no 'bash p54_run.sh' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
+    LANE_DEAD=1; break
+  fi
+  LAST_LIVE=$live
+  verdict=$(progress_verdict "$((now - LAST_CHANGE))" "$STALL_S" "${util:-0}" "$dfk" "$LAST_DFK" "$duM" "$LAST_DU")
+  LAST_DFK=$dfk; LAST_DU=$duM
+  case "$verdict" in
+    fetching:*) stall=" fetching (${verdict#fetching:} since last hb)" ;;
+    stall:*)    stall=" STALL? (no summary change for ${verdict#stall:}s, GPU idle and no disk movement -- LOOK, do not kill)" ;;
+    *)          stall="" ;;
+  esac
+  say "hb: ${hb:-<no answer>} | left $((DEADLINE - now))s$stall"
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/p54" && mkdir -p "$RUN_DIR/p54" || { say "fetch failed: local dir"; exit 22; }
 rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude 'artifact*/payloads/layer_*' --exclude work_qwen3 --exclude 'venv*' --exclude '.cache' "root@$HOST:$W/" "$RUN_DIR/p54/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p54" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/p54/P54_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
-[ -f "$RUN_DIR/p54/TP_DONE.$NONCE" ] || { say "lane did not finish (no TP_DONE for this run)"; exit 23; }
+[ -f "$RUN_DIR/p54/TP_DONE.$NONCE" ] || {
+  # A lane the box killed is a different fact from a lane that ran out of clock (e4b#634/#641).
+  [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no P54_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }
+  say "lane did not finish (no TP_DONE for this run)"; exit 23; }
 RC=$(cat "$RUN_DIR/p54/P54_EXIT_CODE.$NONCE" 2>/dev/null); case "$RC" in ''|*[!0-9]*) say "malformed exit code"; exit 24;; esac
 [ -f "$RUN_DIR/p54/P54_SUCCESS.$NONCE" ] && [ "$RC" = 0 ] || { say "lane exit rc=$RC without success marker"; exit "$RC"; }
 say "lane complete rc=0"; exit 0
