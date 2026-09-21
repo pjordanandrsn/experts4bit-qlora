@@ -430,3 +430,57 @@ def test_batched_composition_is_family_blind(name, act, n_exp, top_k, hidden, in
     assert abs(got_floor - ref_floor) < ref_floor, (
         f"{name}: the batched arm's distance from fp32 ({got_floor:.3e}) departs from "
         f"the reference's ({ref_floor:.3e}) by more than the floor itself")
+
+
+def test_pad_waste_guard_is_a_speed_guard_and_can_be_raised(monkeypatch):
+    """The pad-waste fallback is what VOIDed the batched arm on three families.
+
+    `enable_batched_train` falls back to the reference forward when the padded
+    block would be more than `_PAD_WASTE_LIMIT` times the real rows. Under a
+    SKEWED router — which is what a trained one is — that fires, and the tp1
+    bundle records it producing VOID rows on OLMoE, Qwen3 and Gemma-4, because a
+    fallback is invisible in the output and an arm that fell back is comparing the
+    reference against itself.
+
+    The guard is a SPEED guard: falling back and batching compute the same
+    function. So a parity arm may raise it to buy engagement, paying peak memory,
+    never numerics. This pins both halves — that the skew really does trip the
+    default, and that raising the limit really does restore engagement — because a
+    knob that turns out not to change the thing it names would leave the arm
+    silently VOID again."""
+    import importlib
+
+    from experts4bit_qlora import batched_fallback_stats, enable_batched_train
+
+    def engagement(limit):
+        monkeypatch.setenv("E4B_BATCHED_PAD_WASTE_LIMIT", str(limit))
+        import experts4bit_qlora.engines.batched as B
+        importlib.reload(B)
+        assert B._PAD_WASTE_LIMIT == limit
+        mod = _build_family("gelu_tanh", 128, 512, 128, torch.bfloat16)
+        assert enable_batched_train(mod) == 1
+        g = torch.Generator().manual_seed(1)
+        # A trained router concentrates mass; a flat one does not trip the guard at
+        # all, and neither does a short window -- the ratio is n_active * widest /
+        # total, so it needs enough tokens for the skew to show. 2048 is tp4's seq.
+        n_tok = 2048
+        logits = torch.randn(n_tok, 128, generator=g) + torch.linspace(4.0, 0.0, 128)
+        probs = torch.nn.functional.softmax(logits, dim=-1, dtype=torch.float32)
+        w, idx = torch.topk(probs, k=8, dim=-1)
+        w = w / w.sum(-1, keepdim=True)
+        hs = torch.randn(n_tok, 512, generator=g).to(torch.bfloat16).to(DEVICE)
+        mod(hs, idx.to(DEVICE), w.to(torch.bfloat16).to(DEVICE)).float().sum().backward()
+        return batched_fallback_stats(mod)
+
+    tripped = engagement(4.0)
+    raised = engagement(64.0)
+    try:
+        assert tripped["fallback_calls"] > 0 and tripped["by_reason"]["pad_waste"] > 0, (
+            f"control invalid: the skewed router did not trip the default guard {tripped}")
+        assert raised["fallback_calls"] == 0 and raised["batched"] > 0, (
+            f"raising the limit did not restore engagement: {raised}")
+        assert raised["pad_waste_limit"] == 64.0, "the receipt must say which limit ran"
+    finally:
+        monkeypatch.delenv("E4B_BATCHED_PAD_WASTE_LIMIT", raising=False)
+        import experts4bit_qlora.engines.batched as B
+        importlib.reload(B)

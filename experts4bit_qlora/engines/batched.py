@@ -96,6 +96,7 @@ Usage::
 """
 from __future__ import annotations
 
+import os
 import types
 
 import torch
@@ -105,7 +106,17 @@ import torch
 # multiple of the real rows, fall back to the reference loop — pathological routing
 # must not cost more than it did without this path. A guard, not a tuned optimum;
 # under even remotely balanced routing the ratio sits near 1.
-_PAD_WASTE_LIMIT = 4.0
+#
+# Overridable because the guard is a SPEED guard, not a correctness one, and one use
+# of this path is not about speed at all. Falling back is correct and batching is
+# correct -- they compute the same function, and the fallback exists only so that
+# pathological routing cannot cost more than not having this path. But a *parity*
+# arm wants the batched arithmetic on every call: a run that falls back is measuring
+# the reference against itself, which is how three families (OLMoE, Qwen3, Gemma-4)
+# produced VOID rows in the tp1 bundle before `batched_fallback_stats` existed to
+# say so. Raising this trades peak memory and speed for engagement, never numerics.
+# `batched_fallback_stats` reports the limit in force so a receipt says which it ran.
+_PAD_WASTE_LIMIT = float(os.environ.get("E4B_BATCHED_PAD_WASTE_LIMIT", "4.0"))
 
 
 def _dequant_whole(packed, absmax, n_exp, out_f, in_f, quant_type, blocksize, dtype):
@@ -358,6 +369,7 @@ def batched_fallback_stats(model) -> dict:
     per_module = [dict(m._e4b_batched_stats, by_reason=dict(m._e4b_batched_stats["by_reason"]))
                   for m in model.modules() if hasattr(m, "_e4b_batched_stats")]
     out = {"modules": len(per_module), "calls": 0, "batched": 0, "fallback_calls": 0,
+           "pad_waste_limit": _PAD_WASTE_LIMIT,   # which guard was in force, on the receipt
            "by_reason": {r: 0 for r in FALLBACK_REASONS}, "per_module": per_module}
     for st in per_module:
         for k in ("calls", "batched", "fallback_calls"):

@@ -253,7 +253,14 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   local sp; sp=$(vram_start ${FAM}_${FW}_$TAG)
   # e4b#548: the arm is told the alarm it is running under, so it can refuse ITSELF while still inside an over-budget
   # prologue phase (status phase_alarm, exit 16) instead of leaving SIGALRM to kill a process that cannot write a stub.
-  HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 TP4_BOX_CLASS="RTX $GPU_CLASS" TP4_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
+  # P56: the batched arm is a PARITY arm, so it must run the batched arithmetic on every
+  # call. `enable_batched_train` falls back to the reference forward above a pad-waste
+  # ratio, and the tp1 bundle records exactly that producing VOID rows on OLMoE, Qwen3 and
+  # Gemma-4 -- an arm that fell back is measuring the reference against itself. The guard
+  # is a SPEED guard; raising it trades peak memory for engagement and never numerics, and
+  # `batched_fallback_stats` puts the limit in force on the receipt.
+  local ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=${TP4_BATCHED_PAD_WASTE_LIMIT:-64}"
+  HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 $ARM_ENV TP4_BOX_CLASS="RTX $GPU_CLASS" TP4_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \

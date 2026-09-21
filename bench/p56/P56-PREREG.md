@@ -120,13 +120,43 @@ comparable and LARGE regardless of the ladder.
 
 - **P1 — all four arms reach VALID.** Same `init_sha`, same trainable count, same
   tokens sha, `n_patched == 30` on each accelerated arm, C1 frozen bytes bit-exact.
-- **P2 — the batched arm's engagement is REPORTED and gates its own reading.**
+- **P2 — the batched arm's engagement is REPORTED and gates its own reading, and it
+  is the rung this lane depends on, so its known failure mode is pre-empted.**
   `batched_fallback_stats` is written to the receipt; `fallback_calls > 0` VOIDs
   that arm rather than being read as a number. A fallback lands on the reference
   forward invisibly, so an arm that fell back on every call would read ~0.000
   parity while measuring nothing. On CPU at each family's real routing the path
-  engages with zero fallbacks, but that is a balanced synthetic router; a trained
-  router is skewed and MAY trip the pad-waste guard, and that outcome is a row.
+  engages with zero fallbacks — but that is a BALANCED synthetic router, and a
+  trained one is skewed.
+
+  **This is not a hypothetical: it has already happened to this exact arm on this
+  exact family.** `docs/ARCHITECTURE_SUPPORT.md` records the tp1 bundle producing
+  **VOID rows on OLMoE, Qwen3 AND Gemma-4** because `enable_batched_train` "falls
+  back to the reference forward per call above `_PAD_WASTE_LIMIT` with no counter of
+  its own", against two engaged families (Granite, Mixtral). `batched_fallback_stats`
+  was added in 0.35.1 (#402) for exactly this and had never been wired into a tp4 arm.
+
+  **Why that would have gutted this lane, and what is done about it.** The ladder's
+  discriminating power is almost entirely in this rung: `bench/dgrad-gate` measured
+  `fast_train` and `fast_train_dgrad` at **4.97e-02 and 4.99e-02** composed gradient
+  error — the two fused rungs are barely separated — against the batched lane's
+  **3.79e-03**. A VOID here leaves a ladder with no short rung.
+
+  So the pad-waste limit is now an env knob (`E4B_BATCHED_PAD_WASTE_LIMIT`), and the
+  batched arm runs at **64** instead of the default 4. **This is legitimate because
+  the guard is a SPEED guard, not a correctness one** — falling back and batching
+  compute the same function, and the guard exists only so pathological routing cannot
+  cost more than not having the path. Raising it buys engagement with peak memory and
+  changes no numerics. Reproduced on CPU at Gemma-4's shape (E=128, top-k 8, seq
+  2048): a skewed router gives a pad ratio of 4.81 and the default guard falls back on
+  every call; at 64 it engages on every call. Both halves are pinned by
+  `test_pad_waste_guard_is_a_speed_guard_and_can_be_raised`, including the control
+  that the skew really does trip the default — a knob that turned out not to change
+  the thing it names would leave the arm silently VOID again.
+
+  The limit in force is on the receipt (`batched_stats.pad_waste_limit`), and
+  `fallback_calls > 0` still VOIDs the arm. If raising it makes the padded block OOM,
+  that is an OOM row, not a number.
 - **P3 — the VERDICT IS NOT PREDICTED.** Both outcomes are real results:
   - deltas ordered by the ladder, reference↔batched small ⇒ the divergence tracks
     the arithmetic, the kernel is implicated, and #558 becomes a localisable defect
