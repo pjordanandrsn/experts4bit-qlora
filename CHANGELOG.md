@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.36.4 — 2026-09-21 — the loader's three arrows measured against upstream (fused layout, conditional transpose, rename reach) and an activation that no longer defaults; the int4 attention stack can fuse q/k/v (P54 measures it); P52 and P53 read on Gemma-4
 
 ### The loader: three arrows measured against upstream's own code, and each one found a defect
 
