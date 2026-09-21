@@ -263,3 +263,61 @@ def test_smallm_enable_auto_default_flag_and_refusal(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "K16 small-M route OFF" in out and "int4_smallm" in out                                                        # ... and it says so
     assert resolve_smallm(False) is False
+
+
+def test_fuse_concatenates_the_packed_store_and_serves_it_as_one_launch(monkeypatch):
+    """Lane P54: ``Int4Linear.fuse`` stacks q/k/v stores along N without touching a byte, so the
+    fused module computes the parts' function on ONE launch per row-regime (GEMV at one row, K16
+    small-M GEMM at 2..16) where the parts took three. Mismatched K, mixed smallm routing and a
+    half-biased set are refused, never half-fused."""
+    calls = []
+    _cpu_kernel_stubs(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    torch.manual_seed(7)
+    lins = [nn.Linear(64, n, bias=False, dtype=torch.bfloat16) for n in (32, 16, 16)]
+    parts = [Int4Linear(lin, smallm=True) for lin in lins]
+    fused = Int4Linear.fuse(parts)
+    assert (fused.N, fused.K) == (64, 64) and fused._smallm is not None and fused.bias is None
+    assert torch.equal(fused.packed, torch.cat([p.packed for p in parts], dim=1))     # bytes, unchanged
+    assert torch.equal(fused.scales, torch.cat([p.scales for p in parts], dim=1))
+    assert fused._smallm_part.shape[2] == 64 and fused._part.shape[1] == 64          # workspaces sized for N
+    x = torch.randn(4, 64, dtype=torch.bfloat16)
+    calls.clear()
+    want = torch.cat([p(x) for p in parts], dim=-1)
+    assert [c[0] for c in calls] == ["smallm"] * 3
+    calls.clear()
+    got = fused(x)
+    assert [c[0] for c in calls] == ["smallm"]                                        # one launch, not three
+    ref = want.float().abs().max().item()
+    assert (got.float() - want.float()).abs().max().item() <= ref * 2.0 ** -7         # same bytes: reorder noise only
+    calls.clear()
+    fused(x[:1])
+    assert calls == [("gemv", 1, tuple(fused._part.shape))]                          # one row: the GEMV, once
+    # refusals
+    with pytest.raises(ValueError, match="disagree on K"):
+        Int4Linear.fuse([parts[0], Int4Linear(nn.Linear(32, 8, bias=False, dtype=torch.bfloat16), smallm=True)])
+    with pytest.raises(ValueError, match="smallm"):
+        Int4Linear.fuse([parts[0], Int4Linear(lins[1])])
+    with pytest.raises(ValueError, match="every part must be an Int4Linear"):
+        Int4Linear.fuse([parts[0], lins[1]])
+    with pytest.raises(ValueError, match="bias"):
+        Int4Linear.fuse([parts[0], Int4Linear(nn.Linear(64, 8, bias=True, dtype=torch.bfloat16), smallm=True)])
+    # all-biased parts fuse with the biases concatenated in order
+    b = [Int4Linear(nn.Linear(64, n, bias=True, dtype=torch.bfloat16), smallm=True) for n in (8, 24)]
+    fb = Int4Linear.fuse(b)
+    assert torch.equal(fb.bias, torch.cat([m.bias for m in b]))
+    calls.clear()
+    got_b = fb(x)
+    want_b = torch.cat([m(x) for m in b], dim=-1)
+    assert (got_b.float() - want_b.float()).abs().max().item() <= want_b.float().abs().max().item() * 2.0 ** -7
+
+
+def test_from_packed_refuses_bytes_that_do_not_describe_the_shape(monkeypatch):
+    calls = []
+    _cpu_kernel_stubs(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    m = Int4Linear(nn.Linear(64, 16, bias=False, dtype=torch.bfloat16))
+    same = Int4Linear.from_packed(m.packed, m.scales, 16, 64)
+    assert torch.equal(same.packed, m.packed) and torch.equal(same.scales, m.scales)
+    with pytest.raises(ValueError, match="do not describe"):
+        Int4Linear.from_packed(m.packed, m.scales, 32, 64)

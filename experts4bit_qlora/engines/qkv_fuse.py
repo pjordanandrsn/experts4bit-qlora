@@ -21,6 +21,18 @@ rotary misplacement) is an O(1) error and fails the same tolerance in
 Opt-in and arm-gated: nothing calls this unless the harness passes
 ``--fuse-qkv`` (or a later RESULTS flips a default). Applied BEFORE
 ``--compile-layers`` so dynamo traces the fused forward.
+
+**The projections may already be on the int4-b32 grid.** Every int4 lane
+applies ``enable_serve_attn_int4`` at load (the hook rides the hybrid-tier
+enable) and ``fuse_qkv`` runs after it, so until lane P54 the two were
+exclusive: ``mod.q_proj.weight`` does not exist on an ``Int4Linear`` and the
+arm refused, which is why every int4 census ran ``--no-fuse-qkv`` and paid
+three attention launches per layer where the bf16 stack paid one. When
+q/k/v are ``Int4Linear`` the fused projection is ``Int4Linear.fuse`` --
+their packed rows and scales concatenated along N, byte-identical, so the
+fused module computes the same function on one GEMV (rows == 1) or one
+K16 small-M GEMM (rows 2..16) per layer. A mix of int4 and dense
+projections is refused rather than half-fused.
 """
 
 from __future__ import annotations
@@ -88,25 +100,36 @@ def fuse_qkv(model) -> int:
                 raise RuntimeError(
                     f"Qwen3MoeAttention missing {attr!r}: transformers "
                     "layout drifted; refusing to half-fuse")
-        wq, wk, wv = (mod.q_proj.weight, mod.k_proj.weight,
-                      mod.v_proj.weight)
-        if any(p.bias is not None for p in (mod.q_proj, mod.k_proj,
-                                            mod.v_proj)):
+        parts = (mod.q_proj, mod.k_proj, mod.v_proj)
+        if any(p.bias is not None for p in parts):
             raise RuntimeError("biased q/k/v projections: the fused "
                                "split-view layout assumes bias=None "
                                "(Qwen3MoE ships attention_bias=False)")
-        qkv = torch.nn.Linear(wq.shape[1],
-                              wq.shape[0] + wk.shape[0] + wv.shape[0],
-                              bias=False, device=wq.device,
-                              dtype=wq.dtype)
-        with torch.no_grad():
-            qkv.weight[: wq.shape[0]].copy_(wq)
-            qkv.weight[wq.shape[0]: wq.shape[0] + wk.shape[0]].copy_(wk)
-            qkv.weight[wq.shape[0] + wk.shape[0]:].copy_(wv)
+        int4 = [type(p).__name__ == "Int4Linear" for p in parts]
+        if all(int4):
+            # the serving int4 store: fuse the BYTES, not a dequantised copy
+            from .int4_attn import Int4Linear
+            qkv = Int4Linear.fuse(parts)
+            nq, nk, nv = (p.N for p in parts)
+        elif any(int4):
+            raise RuntimeError(
+                "q/k/v projections are a mix of Int4Linear and dense modules "
+                f"(int4: q={int4[0]} k={int4[1]} v={int4[2]}): refusing to half-fuse")
+        else:
+            wq, wk, wv = (p.weight for p in parts)
+            qkv = torch.nn.Linear(wq.shape[1],
+                                  wq.shape[0] + wk.shape[0] + wv.shape[0],
+                                  bias=False, device=wq.device,
+                                  dtype=wq.dtype)
+            with torch.no_grad():
+                qkv.weight[: wq.shape[0]].copy_(wq)
+                qkv.weight[wq.shape[0]: wq.shape[0] + wk.shape[0]].copy_(wk)
+                qkv.weight[wq.shape[0] + wk.shape[0]:].copy_(wv)
+            nq, nk, nv = wq.shape[0], wk.shape[0], wv.shape[0]
         mod.qkv_proj = qkv
-        mod._fused_nq = wq.shape[0]
-        mod._fused_nk = wk.shape[0]
-        mod._fused_nv = wv.shape[0]
+        mod._fused_nq = nq
+        mod._fused_nk = nk
+        mod._fused_nv = nv
         # drop the unfused Linears so their weights free and nothing can
         # accidentally run the old path
         del mod.q_proj, mod.k_proj, mod.v_proj

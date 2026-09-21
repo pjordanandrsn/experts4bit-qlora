@@ -59,23 +59,83 @@ class Int4Linear(nn.Module):
         small-M int4 GEMM (``int4_smallm.gemm_int4_b32_smallm``) instead of
         the cached bf16 matmul, on the SAME packed bytes; its split-K
         workspace is preallocated here so a captured decode step allocates
-        nothing. Opt-in (lane K16, `PREREG-k16-smallm-int4-gemm.md`): the
-        default stays the bf16 path until the 5090 lane licenses the route."""
+        nothing. Default ``auto`` since the K16 P5 read (see
+        :func:`resolve_smallm`); callers pass the resolved flag."""
         super().__init__()
-        gemv, qx, dref, pack = _kernels()
+        _gemv, _qx, _dref, pack = _kernels()
+        N, K = lin.out_features, lin.in_features
+        dev = lin.weight.device
+        packed, scales = (packer or pack)(lin.weight.detach().float().cpu())
+        # A projection bias (gpt-oss's q/k/v/o carry one) rides beside the
+        # int4 weight in bf16 and is added after the GEMV / matmul -- the
+        # weight is what the grid stores, the bias is not quantised. Kept
+        # as a buffer of the module's own so the swap stays weight-exact.
+        bias = None if lin.bias is None else lin.bias.detach().to(torch.bfloat16).clone()
+        self._install(packed.reshape(1, N, K // 2).to(dev),
+                      scales.reshape(1, N, K // 32).to(dev),
+                      N, K, bias, dev, smallm)
+
+    @classmethod
+    def from_packed(cls, packed: torch.Tensor, scales: torch.Tensor, N: int, K: int, *,
+                    bias: torch.Tensor | None = None, smallm: bool = False) -> "Int4Linear":
+        """An ``Int4Linear`` over bytes that are ALREADY on the int4-b32 grid
+        (``packed [N, K//2] uint8`` or ``[1, N, K//2]``; ``scales [N, K//32]`` or
+        ``[1, N, K//32]``). Nothing is re-quantised: the grid is the one the
+        caller hands over, so two modules built from the same bytes serve the
+        same function. This is the constructor :meth:`fuse` uses."""
+        self = cls.__new__(cls)
+        nn.Module.__init__(self)
+        _kernels()
+        if packed.numel() != N * (K // 2) or scales.numel() != N * (K // 32):
+            raise ValueError(
+                f"from_packed: bytes do not describe an [N={N}, K={K}] int4-b32 store "
+                f"(packed {tuple(packed.shape)}, scales {tuple(scales.shape)})")
+        dev = packed.device
+        self._install(packed.reshape(1, N, K // 2), scales.reshape(1, N, K // 32),
+                      N, K, None if bias is None else bias.to(torch.bfloat16), dev, smallm)
+        return self
+
+    @classmethod
+    def fuse(cls, mods) -> "Int4Linear":
+        """ONE ``Int4Linear`` whose output is the concatenation, in order, of
+        ``mods``' outputs on the same input -- the int4 counterpart of
+        stacking q/k/v weights into one ``nn.Linear`` (``engines.qkv_fuse``).
+
+        The int4-b32 grid quantises each output row over its own K-blocks, so
+        concatenating the packed rows and their scales along N is exact: every
+        fused row is byte-identical to the row it came from, and the fused
+        module computes the same function as the parts. What changes is the
+        launch count -- one GEMV / small-M GEMM per layer where there were
+        three -- which is the whole point at decode (k/v_proj sit within 1 us
+        of the launch floor on a 5090, K16 rows). Refuses (``ValueError``)
+        rather than half-fuses: every part must be an ``Int4Linear`` with the
+        same ``K``, the same small-M routing, and either all or none biased."""
+        mods = list(mods)
+        if not mods or not all(isinstance(m, cls) for m in mods):
+            raise ValueError("fuse: every part must be an Int4Linear")
+        K = mods[0].K
+        if any(m.K != K for m in mods):
+            raise ValueError(f"fuse: parts disagree on K: {[m.K for m in mods]}")
+        smallm = mods[0]._smallm is not None
+        if any((m._smallm is not None) != smallm for m in mods):
+            raise ValueError("fuse: parts disagree on the smallm route (some route rows 2..16 to K16, some do not)")
+        biased = [m.bias is not None for m in mods]
+        if any(biased) and not all(biased):
+            raise ValueError("fuse: some parts carry a bias and some do not -- refusing to half-fuse")
+        packed = torch.cat([m.packed for m in mods], dim=1)
+        scales = torch.cat([m.scales for m in mods], dim=1)
+        bias = torch.cat([m.bias for m in mods]) if all(biased) else None
+        return cls.from_packed(packed, scales, sum(m.N for m in mods), K, bias=bias, smallm=smallm)
+
+    def _install(self, packed, scales, N, K, bias, dev, smallm):
+        gemv, qx, dref, _pack = _kernels()
         self._gemv, self._qx, self._dref = gemv, qx, dref
         self._smallm = None
         if smallm:
             self._smallm, plan_smallm, smallm_workspace = _smallm_kernels()
-        self.N, self.K = lin.out_features, lin.in_features
-        dev = lin.weight.device
-        packed, scales = (packer or pack)(lin.weight.detach().float().cpu())
-        self.register_buffer("packed",
-                             packed.reshape(1, self.N, self.K // 2).to(dev),
-                             persistent=False)
-        self.register_buffer("scales",
-                             scales.reshape(1, self.N, self.K // 32).to(dev),
-                             persistent=False)
+        self.N, self.K = N, K
+        self.register_buffer("packed", packed.contiguous(), persistent=False)
+        self.register_buffer("scales", scales.contiguous(), persistent=False)
         self.register_buffer("_eid0",
                              torch.zeros(1, dtype=torch.int32, device=dev),
                              persistent=False)
@@ -93,13 +153,8 @@ class Int4Linear(nn.Module):
             part_sm, cnt_sm = smallm_workspace(self.N, block_n=bn, sk=sk_sm, device=dev)
             self.register_buffer("_smallm_part", part_sm, persistent=False)
             self.register_buffer("_smallm_cnt", cnt_sm, persistent=False)
-        # A projection bias (gpt-oss's q/k/v/o carry one) rides beside the
-        # int4 weight in bf16 and is added after the GEMV / matmul -- the
-        # weight is what the grid stores, the bias is not quantised. Kept
-        # as a buffer of the module's own so the swap stays weight-exact.
-        if lin.bias is not None:
-            self.register_buffer("bias", lin.bias.detach().to(torch.bfloat16).clone(),
-                                 persistent=False)
+        if bias is not None:
+            self.register_buffer("bias", bias, persistent=False)
         else:
             self.bias = None
 
