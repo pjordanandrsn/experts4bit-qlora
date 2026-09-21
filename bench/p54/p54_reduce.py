@@ -108,6 +108,36 @@ def series_stats(d: Path):
             "per_layer": per_layer}
 
 
+def token_parity(d: Path, arm_a: str, arm_b: str, batch: int, suffix_a: str = "", suffix_b: str = ""):
+    """P5, read from the receipts rather than by eye: the generated token ids of two arms, per sequence.
+
+    `step_decomp` records `tokens` in every decode receipt (a dict of per-sequence lists at B>1, one list at
+    B=1). Two arms of the same configuration on the same box are bit-deterministic -- the control-vs-control
+    pair is the A/A that proves it -- so a divergence between control and fused is a real arithmetic
+    difference, and its FIRST index per sequence is the honest way to report it.
+    """
+    def toks(arm, suffix):
+        f = d / f"e4b_b{batch}_{arm}{suffix}.json"
+        if not f.exists():
+            return None
+        t = json.loads(f.read_text()).get("tokens")
+        if t is None:
+            return None
+        return {str(k): list(v) for k, v in t.items()} if isinstance(t, dict) else {"0": list(t)}
+    A, B = toks(arm_a, suffix_a), toks(arm_b, suffix_b)
+    if A is None or B is None or set(A) != set(B):
+        return None
+    rows = []
+    for k in sorted(A, key=int):
+        x, y = A[k], B[k]
+        first = next((i for i in range(min(len(x), len(y))) if x[i] != y[i]), None)
+        rows.append({"seq": k, "len": (len(x), len(y)), "first_divergence": first})
+    identical = [r for r in rows if r["first_divergence"] is None and r["len"][0] == r["len"][1]]
+    return {"sequences": len(rows), "identical": len(identical),
+            "first_divergences": [(r["seq"], r["first_divergence"]) for r in rows if r["first_divergence"] is not None],
+            "all_identical": len(identical) == len(rows)}
+
+
 def reduce(run_dir: str) -> dict:
     d = Path(run_dir)
     out = {"pairs": {}, "series": series_stats(d), "stop1": None}
@@ -148,11 +178,23 @@ def reduce(run_dir: str) -> dict:
                 g = moved["int4 expert GEMV"]
                 pair["p3_calls"] = (g["control_calls"], g["fused_calls"])
                 pair["p3_calls_ok"] = abs((g["control_calls"] - g["fused_calls"]) - 96) < 1
-            others = [n for n, v in moved.items() if n not in ("k16 small-M GEMM", "bf16 GEMM (cutlass/cublas)")
+            # The TARGET family is the one the fusion removes launches from, and it differs by batch:
+            # at B=16 the attention projections take the K16 small-M GEMM, at B=1 the int4 GEMV. Naming
+            # it per batch is what P3's "every OTHER family" clause means.
+            target = "k16 small-M GEMM" if batch == 16 else "int4 expert GEMV"
+            pair["p3_target_family"] = target
+            others = [n for n, v in moved.items() if n not in (target, "bf16 GEMM (cutlass/cublas)")
                       and v["rel"] is not None and abs(v["rel"]) > 0.05 and v["control_ms"] > 0.05]
             pair["p3_others_moved_over_5pct"] = others
         else:
             pair["census"] = {"MISSING": [n for n, c in ((ctl, cc), (fq, fc)) if c is None]}
+        # P5, mechanically: the fused arm's generated tokens against the control's on BOTH draws, with the
+        # control's own two draws as the A/A that says whether a divergence is arithmetic or run-to-run noise.
+        pair["tokens"] = {
+            "draw1_control_vs_fused": token_parity(d, ctl, fq, batch),
+            "draw2_control_vs_fused": token_parity(d, ctl, fq, batch, "_r2", "_r2"),
+            "aa_control_draw1_vs_draw2": token_parity(d, ctl, ctl, batch, "", "_r2"),
+        }
         out["pairs"][batch] = pair
     c16 = out["pairs"][16]["control"]["draws"][0] if 16 in out["pairs"] else None
     if c16 is not None:
@@ -195,6 +237,19 @@ def to_md(rep: dict) -> str:
                 L += ["", "</details>", ""]
         else:
             L += [f"Census: {cen}", ""]
+        tk = pair.get("tokens") or {}
+        L += ["**P5 (token parity)** -- generated tokens, fused vs control:", ""]
+        for label, key in (("draw 1", "draw1_control_vs_fused"), ("draw 2", "draw2_control_vs_fused"),
+                           ("A/A (control draw 1 vs draw 2)", "aa_control_draw1_vs_draw2")):
+            v = tk.get(key)
+            if v is None:
+                L.append(f"- {label}: unread (a receipt is missing)")
+            elif v["all_identical"]:
+                L.append(f"- {label}: **identical** on all {v['sequences']} sequence(s)")
+            else:
+                L.append(f"- {label}: **{v['sequences'] - v['identical']} of {v['sequences']} sequences diverge**; "
+                         f"first divergence (seq, index): {v['first_divergences'][:8]}")
+        L.append("")
     ser = rep["series"]
     L += ["## P4: distinct experts per layer per decode step (B=16, `int4_b16_series`, untimed)", ""]
     if ser and ser["mean_distinct_over_layers"] is not None:

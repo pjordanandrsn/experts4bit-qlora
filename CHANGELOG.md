@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Measured (no default changes)
+
+- **Lane P54 — fusing q/k/v on the int4 attention store** (`bench/p54/RESULTS-p54.md`, receipts in
+  `bench/p54/receipts/`, one RTX 5090, $0.47). `Int4Linear.fuse` (0.36.4, #651) measured on Qwen3-30B-A3B,
+  two interleaved draws per arm: **B=1 4.210 → 3.693 ms/step (0.516 ms, 12.4 %; 237.5 → 270.8 tok/s) with
+  token-IDENTICAL output**, and B=16 11.420 → 11.197 ms (0.223 ms, 2.0 %) where the fused arm's tokens
+  **diverge** from the control's on 14 of 16 sequences, reproducibly, against a bit-identical A/A. The K16
+  small-M GEMM's accumulation order is a function of N, so the fused N=5120 launch rounds differently from the
+  three it replaces. **`--fuse-qkv` stays opt-in at B=16 and no B=16 position is quoted** until a
+  KL-from-checkpoint or K8 read bounds the divergence (bar: ≤ 0.10 nats, top-1 ≥ 0.93); B=1 is a licensed
+  lever. Four register rows `e4b.serve.p54.qwen3.*.5090.2026-09-21`. The lane's distinct-expert arm (#564's
+  unmeasured number) was **unbuildable as registered** — `--series-out` requires `--amort on`, which the
+  captured B>1 stage refuses — and is re-registered in the lane's amendment 1.
+
 ## 0.36.4 — 2026-09-21 — the loader's three arrows measured against upstream (fused layout, conditional transpose, rename reach) and an activation that no longer defaults; the int4 attention stack can fuse q/k/v (P54 measures it); P52 and P53 read on Gemma-4
 
 ### The loader: three arrows measured against upstream's own code, and each one found a defect
