@@ -1,0 +1,33 @@
+GNF4 K16 9206352f7c49d76432824f7ce8872f0b285f2a4e PLAN_HAS_R=True
+ATTNINT4 int4_b16 ATTNINT4 rtn: 192 projections
+arm int4_b16 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.44ms agg=1398.2tok/s recompiles=0 out=/root/p54/e4b_b16_int4_b16.json
+
+ATTNINT4 int4_b16_fqkv ATTNINT4 rtn: 192 projections
+arm int4_b16_fqkv B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.19ms agg=1429.3tok/s recompiles=0 out=/root/p54/e4b_b16_int4_b16_fqkv.json
+
+ATTNINT4 int4_b16_r2 ATTNINT4 rtn: 192 projections
+arm int4_b16_r2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.40ms agg=1404.0tok/s recompiles=0 out=/root/p54/e4b_b16_int4_b16_r2.json
+
+ATTNINT4 int4_b16_fqkv_r2 ATTNINT4 rtn: 192 projections
+arm int4_b16_fqkv_r2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.20ms agg=1428.6tok/s recompiles=0 out=/root/p54/e4b_b16_int4_b16_fqkv_r2.json
+
+ATTNINT4 int4_b1 ATTNINT4 rtn: 192 projections
+arm int4_b1 B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=4.21ms compile=None recompiles=0 out=/root/p54/e4b_b1_int4_b1.json
+
+ATTNINT4 int4_b1_fqkv ATTNINT4 rtn: 192 projections
+arm int4_b1_fqkv B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=3.69ms compile=None recompiles=0 out=/root/p54/e4b_b1_int4_b1_fqkv.json
+
+ATTNINT4 int4_b1_r2 ATTNINT4 rtn: 192 projections
+arm int4_b1_r2 B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=4.21ms compile=None recompiles=0 out=/root/p54/e4b_b1_int4_b1_r2.json
+
+ATTNINT4 int4_b1_fqkv_r2 ATTNINT4 rtn: 192 projections
+arm int4_b1_fqkv_r2 B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=3.69ms compile=None recompiles=0 out=/root/p54/e4b_b1_int4_b1_fqkv_r2.json
+
+FQKV fused_census_k16_rows=1 control_census_k16_rows=1
+FQKV b16 fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+CENSUS int4_b16 46 rows
+CENSUS int4_b16_fqkv 47 rows
+CENSUS int4_b1 45 rows
+CENSUS int4_b1_fqkv 45 rows
+arm int4_b16_series B=16 UNTIMED rc=1 
+SERIES MISSING

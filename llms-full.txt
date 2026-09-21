@@ -2662,6 +2662,23 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   (2) still open: a parity instrument that survives batch-shape
   variance — a long window, or matched routing — before any verdict is
   quoted for this family.
+- **Fusing q/k/v on the int4 attention store changes the arithmetic at
+  B=16** (lane P54, `bench/p54/RESULTS-p54.md`). The fusion is byte-identical
+  by construction and **token-identical at B=1**, where it is worth 0.516
+  ms/step (12.4 %) on one 5090. At B=16 the fused arm's tokens diverge from
+  the control's on 14 of 16 sequences, reproducibly, while the control's own
+  two draws are bit-identical — the K16 small-M GEMM's accumulation order is a
+  function of N. Leading hypothesis only; a second candidate (the round-2 glue
+  path taken when `qkv_proj` exists) is not excluded. `--fuse-qkv` therefore
+  stays **opt-in** on the int4 lanes at B=16, with no position quoted, until a
+  KL-from-checkpoint or K8 read bounds the divergence against the shipped bar
+  (≤ 0.10 nats, top-1 ≥ 0.93).
+- **The distinct-expert count at B=16 is still unmeasured**
+  ([#564](https://github.com/pjordanandrsn/experts4bit-qlora/issues/564)): it
+  decides whether the expert GEMV — 56 % of the B=16 step — has ~1.3 ms of
+  headroom or none. P54's arm for it was unbuildable as registered
+  (`--series-out` needs `--amort on`, which the captured B>1 stage refuses);
+  the replacement is registered in that lane's amendment 1.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3420,6 +3437,10 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.h2h.unsloth.coverage.5090.2026-09-19 [measured]: Coverage of the 0.32.1 re-run, stated so the gaps are not read as results: positions are quoted for Qwen3-30B-A3B against Unsloth (4.490) and Granite against HF+PEFT (1.292). NOT quoted: Granite and Qwen3.6 against Unsloth (its arm trains 5.2 M parameters against e4b's 99.6 M -- attention only, VOID by tp4's regime rule); OLMoE against Unsloth (its arm died before its first step); OLMoE against HF (ratio 1.945 but the held-out gap is 0.0550 nats, outside the reading band -- FLAGGED); gpt-oss (e4b's fused path refuses the family by citation, so no primary pair); Qwen3 and Qwen3.6 against HF (OOM). Gemma-4 and Mixtral were not in this re-run's scope.
 - e4b.parity.gemma4.train-internal [measured-private] (receipt private): Gemma-4-26B-A4B-it's FUSED expert training path disagrees with e4b's OWN dense per-expert reference, and the disagreement survives a kernel change: final held-out delta 0.08257 nats and median step-wise |delta| 0.12421 against tp1's 0.05/0.05 band -> FAIL, measured on grouped-nf4-gemm 0.32.1 after the adapter-path change, having read 0.09037 / 0.11801 -> FAIL on the previous cut. Both arms OK/VALID at 487,280,640 trainable, same box, same tokens. This is e4b against itself, not against another framework. NOT FIXED (e4b#558 closed as explained, not resolved).
 - e4b.quality.gemma4.calibration-refuted [measured-private] (receipt private): GPTQ calibration does NOT rescue Gemma-4-26B-A4B-it's quantised experts, and SEQUENTIAL calibration is WORSE than all-at-once on this family: with all 30 expert layers quantised, KL vs the bf16 checkpoint reads NF4 round-to-nearest 1.0772 (top-1 0.6438), calibrated int4 all-at-once 1.1050 (0.6423), calibrated int4 sequential 1.1564 (0.6299). Calibration batches, source and Hessian budget identical across the calibrated arms; ORDER was the only difference. The Qwen3-30B ordering effect (streamed -0.050 ppl vs all-at-once +0.150) does not transfer to Gemma-4's experts -- it inverts. No serving position is quoted from this lane; the row records a refutation.
+- e4b.serve.p54.qwen3.b16.control.5090.2026-09-21 [measured]: Lane P54: batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v as three projections: 11.420 ms/step (median of two interleaved draws: 11.443 / 11.396), 1401.1 tok/s on this box.
+- e4b.serve.p54.qwen3.b16.fqkv.5090.2026-09-21 [measured]: Lane P54: batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v FUSED into one Int4Linear: 11.197 ms/step (median of two interleaved draws: 11.194 / 11.200), 1429.0 tok/s on this box.
+- e4b.serve.p54.qwen3.b1.control.5090.2026-09-21 [measured]: Lane P54: single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v as three projections: 4.210 ms/step (median of two interleaved draws: 4.209 / 4.210), 237.6 tok/s on this box.
+- e4b.serve.p54.qwen3.b1.fqkv.5090.2026-09-21 [measured]: Lane P54: single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v FUSED into one Int4Linear: 3.693 ms/step (median of two interleaved draws: 3.693 / 3.694), 270.8 tok/s on this box.
 
 Open items (no evidence either way):
 
@@ -3427,4 +3448,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(194 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(198 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

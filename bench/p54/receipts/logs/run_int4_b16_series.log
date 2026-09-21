@@ -1,0 +1,23 @@
+P54 arm=int4_b16_series gnf4=K16 sha=9206352f7c49d76432824f7ce8872f0b285f2a4e PLAN_HAS_R=True at=2026-09-21T19:36:15Z
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 776.27it/s]
+[19:36:24]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested main, unpinned)
+[19:36:24]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[19:36:24]   quantized experts on 48/48 MoE layers (128 experts each)
+[19:36:24]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[19:36:25]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[19:38:02]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 571.65it/s]
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+Traceback (most recent call last):
+  File "/root/p54/step_decomp.py", line 3529, in <module>
+    main()
+  File "/root/p54/step_decomp.py", line 3225, in main
+    _bv3_stage(a, model, runner, sched, kv)
+  File "/root/p54/step_decomp.py", line 979, in _bv3_stage
+    assert a.amort == "off", \
+           ^^^^^^^^^^^^^^^^
+AssertionError: amort-armed runs keep the baseline dispatch path (not capturable)

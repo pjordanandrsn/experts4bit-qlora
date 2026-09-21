@@ -8,6 +8,32 @@ One rented RTX 5090 per lane. Per family: NF4 bake of the released checkpoint; K
 
 Two lanes on two host classes, and **B=1 is host-bound**: OLMoE, Granite and gpt-oss ran on a Ryzen 9 9900X host (tpA); Qwen3, Gemma-4 and Mixtral on an EPYC 9755 host (tpB). Ratios to the Qwen3 reference across that line are indicative, not certified; the same-host re-measurement of Granite and gpt-oss on the EPYC host reproduced their NF4 B=1 and every B=16 number to within 1% (private receipt P30, validation lane), so the rows are comparable at that level.
 
+## 2026-09-21 — fusing q/k/v on the int4 attention store (lane P54, one RTX 5090)
+
+Every int4 census on this page ran `--no-fuse-qkv`, because the int4 swap happens at load and `fuse_qkv` could
+not take an `Int4Linear`. [#651](https://github.com/pjordanandrsn/experts4bit-qlora/pull/651) fuses the packed
+bytes instead (`Int4Linear.fuse`: q/k/v rows and scales concatenated along N, byte-identical), and lane P54
+measured it on Qwen3-30B-A3B, two interleaved draws per arm, census on the first
+([`bench/p54/RESULTS-p54.md`](../bench/p54/RESULTS-p54.md), receipts in
+[`bench/p54/receipts/`](../bench/p54/receipts)):
+
+| batch | control | fused | saving | tok/s | tokens |
+|---|---|---|---|---|---|
+| B=1 | 4.210 ms/step | **3.693** | **0.516 ms (12.4 %)** | 237.5 → **270.8** | **identical** |
+| B=16 | 11.420 ms/step | 11.197 | 0.223 ms (2.0 %) | 1401 → 1429 | **diverge** — see below |
+
+`e4b.serve.p54.qwen3.{b1,b16}.{control,fqkv}.5090.2026-09-21`, **measured**, ratios within this box only.
+
+**B=1 is a licensed lever and B=16 is not.** At B=1 the int4 GEMV computes an independent dot product per
+output row, so concatenating rows along N cannot change any row's arithmetic — the fused arm's generated
+tokens are identical to the control's on both draws, and the census accounts for the whole saving as launch
+count (the GEMV, its activation-quantise and its split-K reduce each fall from 288 to 192 calls). At B=16 the
+attention projections take the K16 small-M GEMM, whose tiling and split-K accumulation are a function of N, and
+the fused arm's tokens **diverge from the control's on 14 of 16 sequences, reproducibly**, while the control's
+own two draws are bit-identical. That is an arithmetic change, not noise, and this lane carries no quality
+instrument — so **no B=16 default ships and no B=16 position is quoted** until a KL-from-checkpoint or K8 read
+bounds it against the shipped bar (≤ 0.10 nats, top-1 ≥ 0.93).
+
 ## Per-family table (tok/s; K8 in nats)
 
 | family | host | K8 nll nf4 / int4exp / calib | B=1 nf4 | B=1 int4exp | B=1 calib | B=1 fused | B=16 nf4 | B=16 int4exp |
