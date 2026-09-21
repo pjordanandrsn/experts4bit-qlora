@@ -24,7 +24,13 @@ case "$TP4_BOX" in A|B|C|D|E|F) ;; *) say "refusing: TP4_BOX must be A, B, C, D,
 [ "$TP4_BOX" = E ] && [ -z "${TP4_STEPS:-}" ] && export TP4_STEPS=8      # P45: 3 warm + 3 profiled + 2, the profiled steps are flagged in the receipt
 [ "$TP4_BOX" = F ] && [ -z "${TP4_STEPS:-}" ] && export TP4_STEPS=20     # P46: the field fixture's 20 steps, timed (no profiler)
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
-PREREG=tp4/TP4-PREREG.md
+# The pre-registration written into EVERY receipt and stub. Overridable because a
+# draw that adds arms is governed by the document that REGISTERED those arms and
+# authorised its spend, not by the one that happens to be hard-coded here -- and
+# tp4_arm.py refuses a run without --prereg precisely so a receipt can never cite
+# a pre-registration the run did not pass. A P56 draw sets TP4_PREREG=bench/p56/
+# P56-PREREG.md, which itself cites TP4-PREREG.md for the fixture it did not change.
+PREREG=${TP4_PREREG:-tp4/TP4-PREREG.md}
 export TP4_INSTANCE_ID
 # ---------------------------------------------------------------- the registered fixture (TP4-PREREG "Fixture"): the Unsloth notebooks' recipe, verbatim
 STEPS=${TP4_STEPS:-60}; SEQ=${TP4_SEQ:-2048}; MB=${TP4_MB:-2}; ACCUM=${TP4_ACCUM:-4}; R=${TP4_R:-16}; ALPHA=${TP4_ALPHA:-16}
