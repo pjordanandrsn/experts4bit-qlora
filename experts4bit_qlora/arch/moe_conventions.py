@@ -551,6 +551,54 @@ CONVENTIONS = (QWEN2_MOE, MIXTRAL, PHIMOE, JAMBA, LFM2_MOE, GRANITEMOE, GPTOSS, 
 NATIVELY_PREFUSED = frozenset({
     "granitemoe", "gptoss", "qwen3_vl_moe", "gemma4", "jetmoe", "qwen3_5_moe", "axk1",
 })
+
+#: model_types that HAVE a convention here and that NO loader path admits
+#: (e4b#648, #509). Membership is mechanical, not editorial: a model_type is
+#: listed iff ``loader``'s own gate refuses it --
+#: ``mt not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(mt)``.
+#:
+#: The point is that "has a convention" and "is loadable" are different
+#: questions, and nothing in the tree used to say which was which. Everything a
+#: reader checks -- the record, the keymap, the unit tests, README-LAYOUT.md --
+#: says "supported"; the one table that decides says nothing at all. Contrast
+#: ``axk2``, which has no ``SUPPORTED_ARCHITECTURES`` entry either but aliases
+#: onto ``QWEN2_MOE`` and IS admitted because that convention is read-compatible.
+#:
+#: **This turned out to be ten model_types across seven conventions, not the two
+#: that #648 named.** Recorded in full rather than trimmed to the two, because a
+#: registry that lists some of the unadmitted families is worse than none: it
+#: reads as a complete answer. Two are analysed; the rest are stated as the fact
+#: that they are, without inventing a reason:
+#:
+#: * ``axk1`` -- unreachable TWICE over: no admission, not read-compatible, AND
+#:   ``rewrite_axk1_keys`` absent from ``CKPT_KEY_REWRITERS``. Wiring only the
+#:   admission would apply no keymap, a silent wrong-key-mapping path, so the two
+#:   must land in one change (#509).
+#: * ``nemotron_h`` -- no admission, not read-compatible. Its config also names
+#:   the activation ``mlp_hidden_act`` (``relu2``) and declares neither field the
+#:   loader used to read, so it resolved a ``"silu"`` DEFAULT; for a NON-GATED
+#:   family that is a different expert function. Fixed in #648 independently of
+#:   whether the family is ever wired.
+#: * ``granitemoehybrid`` / ``granitemoeshared`` -- this convention claims them and
+#:   plain ``granitemoe`` IS in ``SUPPORTED_ARCHITECTURES``; the two aliases are
+#:   not. Worth a look: it reads like an omission rather than a decision.
+#: * ``qwen3_vl_moe`` / ``qwen3_vl_moe_text`` -- adjudicated against a released
+#:   index and given a conditional transpose in #637/#639, and still not admitted.
+#:   Correctness work on a family the loader currently refuses.
+#: * ``jamba``, ``lfm2_moe``, ``jetmoe``, ``dbrx`` -- convention present, neither
+#:   admission route open. No reason recorded here because none was found; that
+#:   absence is itself the thing to resolve.
+#:
+#: ``tests/test_staged_not_wired.py`` asserts this set equals what the loader
+#: refuses, so it cannot go stale in either direction: wiring a family without
+#: delisting it fails, and adding a convention nothing admits without listing it
+#: fails too.
+STAGED_NOT_WIRED = frozenset({
+    "axk1", "nemotron_h",
+    "granitemoehybrid", "granitemoeshared",
+    "qwen3_vl_moe", "qwen3_vl_moe_text",
+    "jamba", "lfm2_moe", "jetmoe", "dbrx",
+})
 _BY_MODEL_TYPE = {mt: c for c in CONVENTIONS for mt in c.model_types}
 
 
