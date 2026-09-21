@@ -59,6 +59,14 @@ SUPPORTED_ARCHITECTURES = {
     "gemma4": "experts",  # multimodal top-level config
     "gemma4_text": "experts",  # the text tower (what a text-only QLoRA loads)
     "granitemoe": "block_sparse_moe.experts",  # IBM Granite MoE (granite-3.0-*-a*m, PowerMoE-3b)
+    # The same convention's two aliases, admitted 2026-09-21 (e4b#648). They are the
+    # SAME expert surface as `granitemoe` -- identical pre-fused `input_linear` /
+    # `output_linear` spelling and a byte-identical upstream converter -- differing
+    # only OUTSIDE the experts: `granitemoeshared` adds a per-layer dense
+    # `shared_mlp`, and `granitemoehybrid` additionally replaces most attention
+    # layers with Mamba. Both are passthrough for this loader.
+    "granitemoehybrid": "block_sparse_moe.experts",   # granite-4.0-h-* (Mamba/attention hybrid)
+    "granitemoeshared": "block_sparse_moe.experts",   # granite MoE + a dense shared_mlp
     # Kimi K3 (`KimiK3ForConditionalGeneration`, DeepSeek-V3 lineage): per-expert
     # MXFP4 under `block_sparse_moe.experts.{e}.w{1,3,2}` — see K3_PER_EXPERT_MXFP4.
     "kimi_k3": "block_sparse_moe.experts",
@@ -633,12 +641,32 @@ def expert_layout_for(model_type):
 # "granitemoe"); this loader reads shards directly, so it must apply them itself. Substring
 # renames over the whole key set: a checkpoint already saved with the current names matches
 # nothing and passes through unchanged.
+#: GraniteMoe's released spelling, shared verbatim by its two aliases. Upstream's
+#: `conversion_mapping` entry for `granitemoe`, `granitemoehybrid` and
+#: `granitemoeshared` is the SAME three `WeightRenaming`s, compared entry by entry
+#: rather than assumed -- `tests/test_loader_architectures.py`
+#: ::`test_the_granite_aliases_share_granitemoes_converter_exactly` fails if upstream
+#: ever splits them.
+#:
+#: Referenced three times rather than folded into a convention-wide fallback on
+#: purpose. `LEGACY_KEY_RENAMES` rewrites `weight_map` UP FRONT, and a convention's
+#: renames are not all safe there: mixtral's `.block_sparse_moe.` -> `.mlp.` would
+#: rewrite the very substring `MIXTRAL.expert_re` matches on, so every mixtral expert
+#: key would stop being recognised. Only this family's renames are up-front-safe,
+#: because they rename a key to the name the module tree already uses.
+_GRANITEMOE_LEGACY = (
+    ("block_sparse_moe.input_linear.weight", "block_sparse_moe.experts.gate_up_proj"),
+    ("block_sparse_moe.output_linear.weight", "block_sparse_moe.experts.down_proj"),
+    ("block_sparse_moe.router.layer.weight", "block_sparse_moe.router.weight"),
+)
 LEGACY_KEY_RENAMES = {
-    "granitemoe": (
-        ("block_sparse_moe.input_linear.weight", "block_sparse_moe.experts.gate_up_proj"),
-        ("block_sparse_moe.output_linear.weight", "block_sparse_moe.experts.down_proj"),
-        ("block_sparse_moe.router.layer.weight", "block_sparse_moe.router.weight"),
-    ),
+    "granitemoe": _GRANITEMOE_LEGACY,
+    # Without these two entries the aliases would be ADMITTED and load nothing: the
+    # table is keyed on model_type, so `input_linear` would never become
+    # `experts.gate_up_proj`, every layer would look dense, and the load would end in
+    # the zero-expert-stacks guard. Admission and the rename have to land together.
+    "granitemoehybrid": _GRANITEMOE_LEGACY,
+    "granitemoeshared": _GRANITEMOE_LEGACY,
 }
 
 

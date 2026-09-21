@@ -1,0 +1,77 @@
+{
+ "model": "ibm-research/moe-7b-1b-active-shared-experts",
+ "revision": null,
+ "source": "hf-id",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-21T23:07:24Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.14.0",
+  "transformers": "5.17.0",
+  "bitsandbytes": "0.50.2",
+  "gnf4": "0.31.0",
+  "e4b": "0.36.4"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "not_tested",
+   "reason": "hf-id: huggingface_hub verifies its own downloads"
+  },
+  "load": {
+   "status": "ok",
+   "seconds": 23.7
+  },
+  "verify": {
+   "status": "ok",
+   "n_quantized": 40,
+   "n_unquantized": 0,
+   "quant_types": [
+    "nf4"
+   ]
+  },
+  "forward": {
+   "status": "ok",
+   "note": "loss is on synthetic arange token ids: a finiteness smoke test, NOT a quality measure",
+   "seconds": 5.35,
+   "loss": 10.51295,
+   "loss_finite": true,
+   "logits_finite": true
+  },
+  "capture": {
+   "status": "not_tested",
+   "reason": "CPU probe: CUDA-graph capture cannot be established here"
+  }
+ },
+ "model_type": "granitemoeshared",
+ "config": {
+  "hidden_size": 1536,
+  "num_hidden_layers": 40,
+  "num_experts": 62,
+  "top_k": 6,
+  "moe_intermediate_size": 512
+ },
+ "claim": {
+  "in_supported_architectures": true,
+  "reachable_by_convention": false,
+  "expert_attr": "block_sparse_moe.experts"
+ },
+ "total_params": 3538480128,
+ "tier": "reference",
+ "tier_rule": "total_params < 1000000000 -> toy; else reference",
+ "exit_code": 0,
+ "finished_utc": "2026-09-21T23:07:56Z"
+}

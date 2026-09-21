@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### GraniteMoe's two aliases are wired — it was an omission, and the tree now says so (#648)
+
+`granitemoehybrid` and `granitemoeshared` had a convention that claimed them, while plain `granitemoe`
+was admitted and they were not. This confirms that was an omission rather than a decision, and closes it
+with real-checkpoint rows for both.
+
+- **The expert surface is the same, checked rather than assumed.** Upstream's `conversion_mapping` entry
+  is the SAME three `WeightRenaming`s for all three model_types, compared entry by entry against
+  transformers (`test_the_granite_aliases_share_granitemoes_converter_exactly`), so one rename tuple
+  legitimately serves all three and the test fails if upstream ever splits them. They differ only
+  OUTSIDE the experts: `granitemoeshared` adds a per-layer dense `shared_mlp`, `granitemoehybrid`
+  additionally replaces most attention layers with Mamba — both pure passthrough here.
+- **Admission alone would have loaded nothing.** `LEGACY_KEY_RENAMES` is keyed on **model_type**, so
+  without an entry each, `block_sparse_moe.input_linear` never becomes `experts.gate_up_proj`, every
+  layer looks dense, and the load ends in the zero-expert-stacks guard. Admission and the rename land
+  together, and `test_an_admitted_prefused_family_cannot_be_missing_its_legacy_renames` now asserts
+  that mechanically for any family admitted on this convention. Same shape as #509's axk1 point.
+- **Evidence — both `reference-ok`**, CPU, bf16, transformers 5.17.0 / torch 2.14.0 / bitsandbytes 0.50.2:
+  `bench/support/rows/granitemoehybrid.json` — `ibm-granite/granite-4.0-h-tiny` (4.0 B params, 64 experts,
+  40 MoE layers, Mamba/attention hybrid): load ok 23.0 s, **40 quantized / 0 unquantized** (nf4), forward
+  finite. `bench/support/rows/granitemoeshared.json` — `ibm-research/moe-7b-1b-active-shared-experts`
+  (3.5 B params, 62 experts, 40 MoE layers): load ok 23.7 s, **40 quantized / 0 unquantized** (nf4),
+  forward finite.
+- `STAGED_NOT_WIRED` drops both; the registry's derived counts go to 7 across 6.
+
 ### `nemotron_h` is wired: the loader admits it, and its renames now reach the expert path (#648, #509)
 
 The wire-or-remove decision #648 exists for, taken for the first family, with a real published

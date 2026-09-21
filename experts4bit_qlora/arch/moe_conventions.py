@@ -299,6 +299,20 @@ DENSE = MoEConvention(
 #: (so no key is ever treated as per-expert) plus the rename table upstream
 #: uses. Verified against the released checkpoint AND the built tree.
 #: Covers granitemoe + its granitemoehybrid / granitemoeshared aliases.
+#:
+#: **All three are WIRED as of 2026-09-21 (e4b#648).** The aliases were staged, and
+#: it was an omission rather than a decision: upstream's ``conversion_mapping``
+#: entry is the SAME three ``WeightRenaming``s for all three model_types (compared
+#: entry by entry, not assumed -- ``tests/test_loader_architectures.py``
+#: ::``test_the_granite_aliases_share_granitemoes_converter_exactly``), and the
+#: expert surface is byte-identical. They differ only OUTSIDE the experts:
+#: ``granitemoeshared`` adds a per-layer dense ``shared_mlp``, and
+#: ``granitemoehybrid`` additionally replaces most attention layers with Mamba --
+#: both pure passthrough for the loader. Rows:
+#: ``bench/support/rows/granitemoe{hybrid,shared}.json``. Admission alone was NOT
+#: enough: ``LEGACY_KEY_RENAMES`` is keyed on model_type, so without an entry each
+#: the ``input_linear``/``output_linear`` keys never become
+#: ``experts.gate_up_proj`` and the load finds no experts at all.
 GRANITEMOE = MoEConvention(
     name="granitemoe",
     expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
@@ -573,23 +587,21 @@ NATIVELY_PREFUSED = frozenset({
 #: ``axk2``, which has no ``SUPPORTED_ARCHITECTURES`` entry either but aliases
 #: onto ``QWEN2_MOE`` and IS admitted because that convention is read-compatible.
 #:
-#: **This turned out to be 9 model_types across 7 conventions, not the two that
+#: **This turned out to be 7 model_types across 6 conventions, not the two that
 #: #648 named.** Recorded in full rather than trimmed, because a registry that
 #: lists some of the unadmitted families is worse than none: it reads as a
 #: complete answer. (It was first written "ten ... across seven". Ten was right
 #: then; seven was not -- the conventions were AXK1, NEMOTRON_H, GRANITEMOE,
 #: QWEN3_VL_MOE, JAMBA, LFM2_MOE, JETMOE, DBRX, which is eight. ``nemotron_h`` has
-#: since been WIRED and removed from this set, which is what makes it 9 across 7
-#: now. ``tests/test_staged_not_wired.py`` asserts BOTH numbers against the set
-#: itself, so a hand-written count cannot drift from the data again.)
+#: since been WIRED and removed from this set, and so have ``granitemoehybrid``
+#: and ``granitemoeshared``, which is what makes it 7 across 6 now.
+#: ``tests/test_staged_not_wired.py`` asserts BOTH numbers against the set itself,
+#: so a hand-written count cannot drift from the data again.)
 #:
 #: * ``axk1`` -- unreachable TWICE over: no admission, not read-compatible, AND
 #:   ``rewrite_axk1_keys`` absent from ``CKPT_KEY_REWRITERS``. Wiring only the
 #:   admission would apply no keymap, a silent wrong-key-mapping path, so the two
 #:   must land in one change (#509).
-#: * ``granitemoehybrid`` / ``granitemoeshared`` -- this convention claims them and
-#:   plain ``granitemoe`` IS in ``SUPPORTED_ARCHITECTURES``; the two aliases are
-#:   not. Worth a look: it reads like an omission rather than a decision.
 #: * ``qwen3_vl_moe`` / ``qwen3_vl_moe_text`` -- adjudicated against a released
 #:   index and given a conditional transpose in #637/#639, and still not admitted.
 #:   Correctness work on a family the loader currently refuses.
@@ -603,7 +615,6 @@ NATIVELY_PREFUSED = frozenset({
 #: fails too.
 STAGED_NOT_WIRED = frozenset({
     "axk1",
-    "granitemoehybrid", "granitemoeshared",
     "qwen3_vl_moe", "qwen3_vl_moe_text",
     "jamba", "lfm2_moe", "jetmoe", "dbrx",
 })
