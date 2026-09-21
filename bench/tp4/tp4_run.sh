@@ -24,7 +24,13 @@ case "$TP4_BOX" in A|B|C|D|E|F) ;; *) say "refusing: TP4_BOX must be A, B, C, D,
 [ "$TP4_BOX" = E ] && [ -z "${TP4_STEPS:-}" ] && export TP4_STEPS=8      # P45: 3 warm + 3 profiled + 2, the profiled steps are flagged in the receipt
 [ "$TP4_BOX" = F ] && [ -z "${TP4_STEPS:-}" ] && export TP4_STEPS=20     # P46: the field fixture's 20 steps, timed (no profiler)
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
-PREREG=tp4/TP4-PREREG.md
+# The pre-registration written into EVERY receipt and stub. Overridable because a
+# draw that adds arms is governed by the document that REGISTERED those arms and
+# authorised its spend, not by the one that happens to be hard-coded here -- and
+# tp4_arm.py refuses a run without --prereg precisely so a receipt can never cite
+# a pre-registration the run did not pass. A P56 draw sets TP4_PREREG=bench/p56/
+# P56-PREREG.md, which itself cites TP4-PREREG.md for the fixture it did not change.
+PREREG=${TP4_PREREG:-tp4/TP4-PREREG.md}
 export TP4_INSTANCE_ID
 # ---------------------------------------------------------------- the registered fixture (TP4-PREREG "Fixture"): the Unsloth notebooks' recipe, verbatim
 STEPS=${TP4_STEPS:-60}; SEQ=${TP4_SEQ:-2048}; MB=${TP4_MB:-2}; ACCUM=${TP4_ACCUM:-4}; R=${TP4_R:-16}; ALPHA=${TP4_ALPHA:-16}
@@ -247,7 +253,14 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   local sp; sp=$(vram_start ${FAM}_${FW}_$TAG)
   # e4b#548: the arm is told the alarm it is running under, so it can refuse ITSELF while still inside an over-budget
   # prologue phase (status phase_alarm, exit 16) instead of leaving SIGALRM to kill a process that cannot write a stub.
-  HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 TP4_BOX_CLASS="RTX $GPU_CLASS" TP4_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
+  # P56: the batched arm is a PARITY arm, so it must run the batched arithmetic on every
+  # call. `enable_batched_train` falls back to the reference forward above a pad-waste
+  # ratio, and the tp1 bundle records exactly that producing VOID rows on OLMoE, Qwen3 and
+  # Gemma-4 -- an arm that fell back is measuring the reference against itself. The guard
+  # is a SPEED guard; raising it trades peak memory for engagement and never numerics, and
+  # `batched_fallback_stats` puts the limit in force on the receipt.
+  local ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=${TP4_BATCHED_PAD_WASTE_LIMIT:-64}"
+  HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 $ARM_ENV TP4_BOX_CLASS="RTX $GPU_CLASS" TP4_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \
@@ -306,6 +319,17 @@ family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 FUAL=$5 UAL=$6 HAL=$7 RAL=$8 OFF=$9 
   can_run 600 $FAM/hf && arm $FAM hf hf_peft hf $HAL "$MID" $REV 0 field $TOK $TS
   if [ "$MODE" != gptoss ]; then
     can_run 900 $FAM/e4b/reference && arm $FAM e4b reference_attn4 reference $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
+    # P56 (bench/p56/P56-PREREG.md): two more rungs of the arithmetic ladder, OPT-IN via
+    # TP4_P56=1 so no other draw's arm set, cost or ordering changes. `fused --dgrad 0` is
+    # the fused forward with the EXACT per-expert decode backward (isolates the backward
+    # kernel); `batched` is enable_batched_train, kernel-free and group-sorted (the smallest
+    # perturbation available). The cheap rung runs FIRST: batched costs about what the
+    # reference costs, and it is the one that can VOID on a pad-waste fallback, so losing it
+    # to the window is the least-bad outcome.
+    if [ "${TP4_P56:-0}" = 1 ]; then
+      can_run 600 $FAM/e4b/fused_nodgrad && arm $FAM e4b fused_attn4_nodgrad fused $FUAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 --dgrad 0
+      can_run 900 $FAM/e4b/batched && arm $FAM e4b batched_attn4 batched $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
+    fi
     # the secondary pair (TP4-PREREG "Arms"): micro-batch 1 x accum 8 -- same tokens per step -- for EVERY framework, only when a primary arm OOMed
     local se su sh; se=$(status_of $FAM e4b fused_attn4); su=$(status_of $FAM unsloth ckpt_unsloth); sh=$(status_of $FAM hf hf_peft)
     if [ "$se" = oom ] || [ "$su" = oom ] || [ "$sh" = oom ]; then

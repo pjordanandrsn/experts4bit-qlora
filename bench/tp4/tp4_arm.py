@@ -910,9 +910,19 @@ def load_e4b(a):
                              f"TRAIN_ATTN_4BIT would refuse: {x['attn4_probe']['n_biased']} of {x['attn4_probe']['n_projections']} attention projections carry a bias "
                              f"(quantize_attention_projections_4bit raises SystemExit on a bias; e.g. {x['attn4_probe']['sample']})", dict(common, attn4_probe=x["attn4_probe"]))
         elif a.arm == "fused":
-            x["n_patched"], x["reason"] = capture_verbose(enable_fast_train, model, verbose=True, dgrad=True)
+            dg = bool(getattr(a, "dgrad", 1))
+            x["n_patched"], x["reason"] = capture_verbose(enable_fast_train, model, verbose=True, dgrad=dg)
             if x["n_patched"] == 0:
-                stub(a, "refused", f"enable_fast_train(dgrad=True) patched 0 modules: {x['reason']}", {"phase": "enable", "n_layers": x["n_layers"], "model_type": x["model_type"]}, code=3)
+                stub(a, "refused", f"enable_fast_train(dgrad={dg}) patched 0 modules: {x['reason']}", {"phase": "enable", "n_layers": x["n_layers"], "model_type": x["model_type"]}, code=3)
+        elif a.arm == "batched":
+            # P56. Counted like the fused arm, but its proof-of-work is DIFFERENT and is
+            # recorded below: this path silently falls back to the reference forward per
+            # call (pad waste, evicted storage, empty batch), and a fallback is invisible
+            # in the output. An arm that fell back on every call IS a second reference arm,
+            # and its parity number would read ~0 while measuring nothing.
+            x["n_patched"], x["reason"] = capture_verbose(enable_batched_train, model, verbose=True)
+            if x["n_patched"] == 0:
+                stub(a, "refused", f"enable_batched_train patched 0 modules: {x['reason']}", {"phase": "enable", "n_layers": x["n_layers"], "model_type": x["model_type"]}, code=3)
         else:
             disable_fast_train(model)
             disable_batched_train(model)
@@ -1512,6 +1522,15 @@ def run_arm(a, load_fn, sampler=True):
 
     mean_w = statistics.mean(ps.samples) if ps.samples else None
     net_w = (mean_w - idle_w) if mean_w else None
+    # P56: what RAN on the batched arm, not what was patched. `enable_batched_train`
+    # returns a count of modules PATCHED; every one of them can still fall back to the
+    # reference forward on any given call, indistinguishably in the output. The reducer
+    # VOIDs a batched arm with fallback_calls > 0, so the number has to reach the receipt.
+    batched_stats = None
+    if a.arm == "batched":
+        from experts4bit_qlora import batched_fallback_stats
+        batched_stats = batched_fallback_stats(model)
+        batched_stats.pop("per_module", None)     # totals + by_reason; per-module is 30 dicts
     key = {"e4b": "fused_grouped_lora", "unsloth": "moe_bnb4bit_backend", "hf": "experts_forward"}[a.framework]
     kps = [k[key] for k in kcalls]
     efw = [k["experts_forward"] for k in kcalls]
@@ -1535,6 +1554,8 @@ def run_arm(a, load_fn, sampler=True):
         "expect_trainable": a.expect_trainable, "trainable_mismatch": trainable_mismatch,
         "adapter_dtypes_before": dtypes_before, "adapter_dtypes_after": dtypes_after,
         "lora_cast_to_fp32": cast, "init_sha": init_sha, "n_patched": n_patched, "enable_reason": reason, "probes": x.get("probes"),
+        "batched_stats": batched_stats,          # P56: None unless --arm batched; see below
+        "dgrad": (bool(getattr(a, "dgrad", 1)) if a.arm == "fused" else None),   # P56: which backward the fused arm ran
         "kernel_counter_key": key, "kernel_calls_per_step": kps, "kernel_calls_per_step_min": (min(kps) if kps else 0),
         "experts_forward_calls_per_step_min": (min(efw) if efw else 0), "kernel_calls_all": kcalls,
         "C1_tensors_hashed": len(h_before), "C1_bytes_hashed": bytes_before, "C1_empties_skipped": empties_before,
@@ -2079,7 +2100,11 @@ def main():
     ap.add_argument("--prepare", action="store_true")
     ap.add_argument("--selftest", action="store_true", help="T8: CPU, tiny synthetic model, both branches, mocked kernels; + T10 detector dry-runs (#434)")
     ap.add_argument("--framework", choices=["e4b", "unsloth", "hf"], default="e4b")
-    ap.add_argument("--arm", choices=["reference", "fused", "attn_only", "unsloth", "hf"], default="fused")
+    ap.add_argument("--arm", choices=["reference", "fused", "batched", "attn_only", "unsloth", "hf"], default="fused",
+                    help="P56: `batched` is enable_batched_train -- e4b's KERNEL-FREE group-sorted path. It computes the "
+                         "same function as `reference` with the same arithmetic REORDERING as `fused`, but through torch "
+                         "+ bitsandbytes rather than grouped-nf4-gemm, so a parity pair against `reference` separates a "
+                         "kernel defect from a trajectory floor.")
     ap.add_argument("--template", choices=["clinical", "alpaca"], default="clinical", help="T12: the prompt template the tokens file is built with (--prepare)")
     ap.add_argument("--micro-batch", type=int, default=1, help="T13: rows per micro-batch (right-padded, masked, -100 labels on pads); 1 = tp2 byte-for-byte")
     ap.add_argument("--optim", choices=["adamw_torch", "adamw_8bit"], default="adamw_torch", help="T14: the same optimizer call in every arm")
@@ -2114,6 +2139,11 @@ def main():
     ap.add_argument("--alpha", type=int, default=16)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--dgrad", type=int, default=1,
+                    help="P56: enable_fast_train(dgrad=...) on the `fused` arm. 1 (default, every tp1-tp4 row to date) "
+                         "routes the BACKWARD through grouped-nf4-gemm's single-launch dgrad kernel; 0 keeps its "
+                         "per-expert decode loop, which decodes with the same oracle the reference uses and is EXACT. "
+                         "The pair separates the forward fusion's error from the backward kernel's.")
     ap.add_argument("--attn-4bit", type=int, default=0, help="e4b: quantize_attention_projections_4bit before the attention LoRA (U4)")
     ap.add_argument("--grad-ckpt", choices=["unsloth", "hf"], default="unsloth", help="Unsloth: use_gradient_checkpointing mode (U1)")
     ap.add_argument("--unsloth-loader", choices=["FastLanguageModel", "FastModel"], default="FastLanguageModel", help="T4: P38's loader; FastModel is an amendment")
