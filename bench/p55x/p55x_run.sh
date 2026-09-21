@@ -237,10 +237,29 @@ PY
   echo "ARTIFACT2_PAYLOADS_REMOVED (fingerprint recorded; bytes not retained -- artifact1 is the one kept)" >> summary.txt
 fi
 
-# ---- the terminal marker has to encode the OUTCOME, not that the script reached its last line
-NARMS=$(ls $W/qwen3_ppl_*.json 2>/dev/null | wc -l | tr -d ' ')
-echo "ARMS_WITH_RECEIPTS $NARMS" >> summary.txt
-[ "$NARMS" -ge 6 ] || { say "only $NARMS K8 receipts (need >= 6: nf4 x2, lic x2, licrtn x2)"; note 42; }
+# ---- the terminal marker has to encode the OUTCOME, not that the script reached its last line. The property
+# it guards is "the primary gate can be read", and a COUNT of receipts does not express that -- six files can
+# be the wrong six. Name the four the primary verdict is computed from. (2026-09-19: a driver that ended with
+# an unconditional DONE and a gate that asked only whether the reduction had ROWS together mailed RESULT OK
+# for a run in which every arm failed.)
+echo "ARMS_WITH_RECEIPTS $(ls $W/qwen3_ppl_*.json 2>/dev/null | wc -l | tr -d ' ')" >> summary.txt
+MISSING=""
+for f in qwen3_ppl_nf4_wikitext.json qwen3_ppl_nf4_c4val1.json qwen3_ppl_lic_wikitext.json qwen3_ppl_lic_c4val1.json; do
+  [ -s "$W/$f" ] || MISSING="$MISSING $f"
+done
+[ -z "$MISSING" ] || { say "the PRIMARY gate cannot be read -- missing:$MISSING"; echo "GATE_UNREADABLE missing:$MISSING" >> summary.txt; note 42; }
+# the secondary configuration may be host-limited without failing the run -- but it says so rather than
+# vanishing, because an arm that silently did not run reads exactly like one that had nothing to report
+for f in qwen3_ppl_licrtn_wikitext.json qwen3_ppl_licrtn_c4val1.json; do
+  [ -s "$W/$f" ] || echo "SECONDARY_INCOMPLETE $f absent (skipped or host-limited)" >> summary.txt
+done
+# and the verdict itself has to be a verdict: NOT RUN or ERROR is not a result the reducer may print as one
+python - "$W/gate_verdict.json" <<'PYV' || note 41
+import json, sys
+v = (json.load(open(sys.argv[1])).get("configurations") or {}).get("lic") or {}
+if v.get("verdict") not in ("PASS", "FAIL"):
+    sys.exit(f"primary gate verdict is {v.get('verdict')!r}, not PASS/FAIL: {v.get('error') or v.get('missing')}")
+PYV
 [ -s "$W/artifact1/manifest.json" ] || { say "artifact1 has no manifest"; note 43; }
 say "----- summary -----"; cat summary.txt
 finish "$rc_any"

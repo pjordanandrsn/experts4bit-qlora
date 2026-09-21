@@ -153,8 +153,11 @@ say "fetched $(ls "$RUN_DIR/p55x" | wc -l | tr -d ' ') entries"
   [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no P55X_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }
   say "lane did not finish (no TP_DONE for this run)"; exit 23; }
 RC=$(cat "$RUN_DIR/p55x/P55X_EXIT_CODE.$NONCE" 2>/dev/null); case "$RC" in ''|*[!0-9]*) say "malformed exit code"; exit 24;; esac
-# The lane's product is the BYTES plus the verdict. A run whose gate read cleanly but whose artifact did not
-# come off the box is not a success: it is bo6c again (#405), and the marker has to say so.
-[ "$ART_RC" = 0 ] || { say "lane rc=$RC but the artifact fetch did not complete (rc=$ART_RC) -- the pack bytes were NOT retained; the gate verdict is an observation, not a licence basis (STOP-4)"; exit 26; }
+# The lane's own exit code is read FIRST. A box refused at K0 (rc 13) never reaches the build, so it has no
+# artifact and no marker -- reporting that as "the bytes were not retained" would name the wrong fact and hide
+# the real one, which is that this host was refused before it cost anything.
 [ -f "$RUN_DIR/p55x/P55X_SUCCESS.$NONCE" ] && [ "$RC" = 0 ] || { say "lane exit rc=$RC without success marker"; exit "$RC"; }
+# Past that, the lane's product is the BYTES as well as the verdict. A run whose gate read cleanly but whose
+# artifact did not come off the box is not a success: it is bo6c again (#405), and the marker has to say so.
+[ "$ART_RC" = 0 ] || { say "lane rc=0 but the artifact fetch did not complete (rc=$ART_RC) -- the pack bytes were NOT retained; the gate verdict is an observation, not a licence basis (STOP-4)"; exit 26; }
 say "lane complete rc=0; artifact at $ART_LOCAL -- verify and place it with bench/p55x/p55x_publish.sh"; exit 0
