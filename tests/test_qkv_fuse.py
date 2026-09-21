@@ -13,6 +13,9 @@ tolerance immediately -- that is what the full-forward case is for.
 Runs the REAL transformers class on CPU so drift fails before a box is
 rented."""
 
+import importlib.util
+from pathlib import Path
+
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -117,3 +120,49 @@ def test_missing_attr_refuses_not_half_fuses():
     with pytest.raises(RuntimeError, match="k_norm"):
         fuse_qkv(attn)
     assert hasattr(attn, "q_proj"), "refusal must leave the module intact"
+
+
+def _int4_cpu_stubs():
+    """test_int4_attn's CPU stand-ins for the int4 kernel package, loaded by path (tests/ is not a package)."""
+    spec = importlib.util.spec_from_file_location("_t_int4_attn", Path(__file__).with_name("test_int4_attn.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)          # its own importorskip guards apply
+    return mod._cpu_kernel_stubs
+
+
+def test_fuse_qkv_after_the_int4_swap_fuses_the_packed_store(monkeypatch):
+    """Lane order in every int4 census: ``enable_serve_attn_int4`` at load, ``fuse_qkv`` after. Until P54 the
+    second refused the first's output (no ``.weight`` on an Int4Linear), so every int4 arm ran unfused and paid
+    q, k, v and o as four attention launches per layer. Fused: two (qkv, o), same function."""
+    calls = []
+    _int4_cpu_stubs()(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear, enable_serve_attn_int4
+    cfg, attn = _tiny()
+    x, pe = _inputs(cfg)
+    assert enable_serve_attn_int4(attn, smallm=True) == 4                       # q, k, v, o
+    with torch.no_grad():
+        want_out, _ = attn(x, pe, None)                                          # int4, unfused
+    launches_unfused = [c[0] for c in calls]
+    calls.clear()
+    assert fuse_qkv(attn) == 1
+    assert isinstance(attn.qkv_proj, Int4Linear) and not hasattr(attn, "q_proj")
+    n_q = cfg.num_attention_heads * cfg.head_dim
+    n_kv = cfg.num_key_value_heads * cfg.head_dim
+    assert (attn._fused_nq, attn._fused_nk, attn._fused_nv) == (n_q, n_kv, n_kv)
+    assert attn.qkv_proj.N == n_q + 2 * n_kv and attn.qkv_proj._smallm is not None
+    with torch.no_grad():
+        got_out, _ = attn(x, pe, None)
+    launches_fused = [c[0] for c in calls]
+    assert launches_unfused == ["smallm"] * 4 and launches_fused == ["smallm"] * 2
+    _close(want_out, got_out, "full forward, int4: fused vs unfused")
+
+
+def test_fuse_qkv_refuses_a_mixed_int4_and_dense_triple(monkeypatch):
+    calls = []
+    _int4_cpu_stubs()(monkeypatch, calls)
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    cfg, attn = _tiny()
+    attn.q_proj = Int4Linear(attn.q_proj)                                        # only q on the grid
+    with pytest.raises(RuntimeError, match="mix of Int4Linear and dense"):
+        fuse_qkv(attn)
+    assert hasattr(attn, "k_proj") and hasattr(attn, "v_proj"), "refusal must leave the module intact"
