@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-18, version 0.36.1** (the version of record is
+**As of 2026-09-21, version 0.36.4** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -763,8 +763,6 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   tensor is 1.375 GiB, so it never triggered. The live lead is that CUDA
   reports asynchronously, so the traceback site need not be the faulting
   kernel.
-- **#341 — a flaky end-to-end KV test** (unseeded inputs, an f32-mode
-  tolerance applied to the fp8 default on sm_120).
 - **[#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392) —
   the energy receipt does not record its bitsandbytes build.**
   `docs/METHODOLOGY.md` names the build only as `0.50.0.dev0` (§1) and
