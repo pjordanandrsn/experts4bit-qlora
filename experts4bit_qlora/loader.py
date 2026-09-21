@@ -199,6 +199,66 @@ def _index_per_expert_keys(conv, checkpoint_keys):
     return index
 
 
+#: Config fields a family may declare its EXPERT/MLP activation with, in priority
+#: order. Widened in e4b#648: the lookup used to be ``hidden_activation`` then
+#: ``hidden_act`` with a ``"silu"`` DEFAULT, and nemotron_h declares NEITHER --
+#: it names the field ``mlp_hidden_act`` and its value is ``relu2``. So the
+#: default fired, and because nemotron_h is NON-GATED the expert function is
+#: ``down(act(up(x)))``: SiLU instead of ReLU squared is a different function,
+#: with every shape agreeing. The pre-existing guard could not see it -- it warns
+#: on an activation NAME that is not in ACT2FN, and here the name resolved to
+#: ``"silu"``, which is both in ACT2FN and explicitly excluded from the warning.
+#: It was built for a value it cannot resolve (Kimi-K3's ``situ``); this was a
+#: FIELD it never looked at.
+_ACTIVATION_FIELDS = ("hidden_activation", "hidden_act", "mlp_hidden_act",
+                      "activation_function")
+
+#: model_types whose config declares none of the above and for which SiLU is
+#: nonetheless correct, with where the real value lives. An absent field is
+#: otherwise a REFUSAL, because "no declaration" and "declared silu" must not
+#: look the same -- that equivalence is what hid the nemotron_h case. Each entry
+#: is adjudicated and asserted by
+#: ``tests/test_expert_activation.py::test_every_undeclared_exemption_is_still_true``.
+_ACTIVATION_UNDECLARED_OK = {
+    # Composite config: the loader reads `text_config`, which Qwen3-Omni does not
+    # have at the top level (it nests `thinker_config`). The real value is
+    # `thinker_config.text_config.hidden_act` == "silu", so the default is right.
+    "qwen3_omni_moe": "thinker_config.text_config.hidden_act == 'silu'",
+    # Flat config with no activation attribute at all; upstream's modeling applies
+    # SiLU unconditionally.
+    "lfm2_moe": "no activation attribute; upstream Lfm2Moe applies SiLU",
+    # Declares it nested as `ffn_config.ffn_act_fn == {"name": "silu"}`.
+    "dbrx": "ffn_config.ffn_act_fn['name'] == 'silu'",
+}
+
+
+def _expert_activation_name(lm_config, model_type):
+    """``(activation_name, field_it_came_from)``, or raise rather than default.
+
+    Returns the family's own declaration. When a config declares NONE of
+    :data:`_ACTIVATION_FIELDS`, silently falling back to SiLU is the
+    silent-wrong-numbers failure this loader exists to prevent, so an unlisted
+    family is refused (e4b#648).
+    """
+    for field in _ACTIVATION_FIELDS:
+        value = getattr(lm_config, field, None)
+        if value is not None:
+            return value, field
+    if model_type in _ACTIVATION_UNDECLARED_OK:
+        return "silu", f"<undeclared; {_ACTIVATION_UNDECLARED_OK[model_type]}>"
+    from .arch.moe_conventions import MoEConventionError
+    present = sorted(k for k in vars(lm_config) if "act" in k.lower())
+    raise MoEConventionError(
+        f"{model_type!r}: its config declares none of {list(_ACTIVATION_FIELDS)}, so "
+        f"the expert activation is unknown. Defaulting to SiLU here would compute a "
+        f"wrong expert function without raising -- nemotron_h names the field "
+        f"`mlp_hidden_act` and means `relu2`, and got SiLU silently for exactly this "
+        f"reason. Activation-like attributes present: {present or 'none'}. Add the "
+        f"field this family uses to _ACTIVATION_FIELDS, or record it in "
+        f"_ACTIVATION_UNDECLARED_OK with the evidence that SiLU is correct (e4b#648)."
+    )
+
+
 #: model_types whose loader path REWRITES the checkpoint's fused gate/up stack into
 #: e4b's [gate-block; up-block] layout before any consumer sees it, so a non-chunk(2)
 #: on-disk packing is handled rather than mis-split. Every entry must name real code:
@@ -862,7 +922,7 @@ def load_moe_4bit_streaming(
     ckpt_prefix = ""
     if lm_config is not config:
         ckpt_prefix = MULTIMODAL_CKPT_PREFIX.get(model_type, "model.language_model.")
-    act_name = getattr(lm_config, "hidden_activation", None) or getattr(lm_config, "hidden_act", "silu")
+    act_name, act_field = _expert_activation_name(lm_config, model_type)
     try:
         activation = ACT2FN[act_name]
     except KeyError:
@@ -873,9 +933,9 @@ def load_moe_4bit_streaming(
         # would load a model that runs but is quietly WRONG.
         activation = None
         if act_name not in ("silu", None) and model_type not in ("gpt_oss",):
-            log(f"  NOTE: activation {act_name!r} is not in transformers' ACT2FN; "
-                f"the fused-expert GLU will use the module default. Verify numerics "
-                f"before trusting outputs from this checkpoint.")
+            log(f"  NOTE: activation {act_name!r} (from {act_field}) is not in "
+                f"transformers' ACT2FN; the fused-expert GLU will use the module "
+                f"default. Verify numerics before trusting outputs from this checkpoint.")
 
     # A trust_remote_code checkpoint fetches its modeling module separately from its weights; pin
     # that fetch to the same commit (transformers' ``code_revision``), otherwise a pinned load runs

@@ -6,9 +6,11 @@ solves — not code quality.
 
 | directory | holds | add here when… |
 |---|---|---|
-| `arch/` | architecture seams — keymaps, conventions, per-family expert layouts (`deepseek_v4`, `glm5`, `axk1` — **staged, not loader-admitted: #509**, `glimmer*`, `mixtral`, `gptoss`, `moe_*`) | you are teaching e4b a new **model family**: where its experts live on disk and how its keys map |
+| `arch/` | architecture seams — keymaps, conventions, per-family expert layouts (`deepseek_v4`, `glm5`, `axk1` — **staged, not loader-admitted**, `glimmer*`, `mixtral`, `gptoss`, `moe_*`) | you are teaching e4b a new **model family**: where its experts live on disk and how its keys map |
 | `formats/` | on-disk quantization formats and readers (`awq`, `gptq`, `nvfp4`, `mxfp4`, `compressed_int`, `fp8_blocks`, `dense_disk`) | you are teaching e4b to **read new bytes** — a released checkpoint's quantization scheme |
 | `engines/` | execution paths and residency policy (`pipelined`, `cold_engine`, `hot_residency`, `offload`, `dense_offload`, `nvme_experts`, `nvme_train`, `fast`, `batched`, `capture`, `kv_cache`, `speculative`, `expert_profile`) | you are changing **how compute or memory is scheduled**, not what is read |
+
+> **Staged, not wired.** Having a convention and being loadable are different questions. **Ten model_types across seven conventions have a record here that no loader path admits** — `axk1`, `nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `qwen3_vl_moe`, `qwen3_vl_moe_text`, `jamba`, `lfm2_moe`, `jetmoe`, `dbrx`. `moe_conventions.STAGED_NOT_WIRED` is the authority and is asserted against what the loader actually refuses, in both directions. (`axk2`, by contrast, has no `SUPPORTED_ARCHITECTURES` entry either but aliases onto `qwen2_moe` and **is** admitted.) Refs #648, #509.
 
 Staying at the top level: `loader`, `lora`, `train`, `infer`, `serve`, `verify`, `util` —
 the entry points and the primitives everything else composes.
