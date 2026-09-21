@@ -135,7 +135,7 @@ def main() -> int:
     # On the box: load through the SAME path the census arms use (the P42 hook applies the int4 lanes when the
     # hybrid tier is enabled), so the model, revision and store are the census's. The load is the harness's
     # business; this script only places the hook and counts. It refuses rather than guessing a loader.
-    raise SystemExit("box mode is wired by the lane's runner (p55_run.sh) around the harness's own load path; "
+    raise SystemExit("box mode is wired by the lane's runner (p57_run.sh) around the harness's own load path; "
                      "run --self-test here")
 
 
