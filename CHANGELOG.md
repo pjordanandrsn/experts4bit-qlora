@@ -42,6 +42,18 @@ tensors and reading the disagreement. Nothing here changes which families load.
   `conv.rename`; a per-expert key had its fused target built from the RAW checkpoint prefix, so a family shipping
   `backbone.layers.N.` where the tree declares `model.layers.N.` (nemotron_h) mapped the two branches inconsistently.
 
+### Serving: the int4 attention stack can fuse q/k/v (lane P54 measures it)
+
+- **`fuse_qkv` takes the int4 store** (#651; #652). Every int4 serving lane applies `enable_serve_attn_int4` at load and
+  `fuse_qkv` after it, and `fuse_qkv` read `.weight`, which an `Int4Linear` lacks -- so the two were exclusive and every
+  quoted int4 census (P42, K16 P5, bo7) ran `--no-fuse-qkv`, paying q, k and v as THREE attention launches per layer
+  where the bf16 stack pays one (at M=16 `k_proj`/`v_proj` sit within 1 us of the 4.6 us launch floor). New
+  `Int4Linear.fuse(mods)` / `Int4Linear.from_packed(...)`: the parts' packed rows and scales concatenated along N,
+  byte-identical, so the fused projection computes the parts' function on one GEMV (rows == 1) or one K16 small-M GEMM
+  (rows 2..16, N = 5120 on Qwen3-30B). A mix of int4 and dense q/k/v is refused, never half-fused. **No default
+  moves**; `bench/p54/P54-PREREG.md` registers the measurement (B=16 saving 0.25-0.50 ms/step predicted, B=1
+  0.20-0.45, K16 calls 192 -> 96, plus the distinct-expert count #564 names as the unmeasured number) before the lane runs.
+
 ### Measured this release (no default changes; nothing licensed)
 
 - **P52 — the Gemma-4 graded store map's gate ran properly, on held-out prompts, and DID NOT PASS** (#621, #622, #623;
