@@ -5,6 +5,7 @@
  "gpt_oss": "reference-ok",
  "granitemoe": "reference-ok",
  "kimi_k3": "none",
+ "nemotron_h": "toy-ok",
  "olmoe": "reference-ok",
  "qwen3_5_moe": "reference-ok",
  "qwen3_moe": "reference-ok"

@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+### `nemotron_h` is wired: the loader admits it, and its renames now reach the expert path (#648, #509)
+
+The wire-or-remove decision #648 exists for, taken for the first family, with a real published
+checkpoint behind it rather than a fixture.
+
+- **Admitted.** `SUPPORTED_ARCHITECTURES` carries `nemotron_h -> mixer.experts`. `has_gate` comes
+  from the convention, so the read stacks `up_proj` alone (`down(act(up(x)))`, no SwiGLU gate) instead
+  of fusing a gate that does not exist, and #650's `_expert_activation_name` resolves the activation
+  from the family's own `mlp_hidden_act` (`relu2`) rather than the old `"silu"` default.
+- **Admission alone loaded ZERO experts, and that is the substance of this change.** Nemotron-H ships
+  every tensor under `backbone.` while the tree declares `model.`. The loader anchors expert indexing
+  on `^model\.layers\.` and builds every fused-target lookup from `model.layers.{i}.{expert_rel}.`, so
+  with the family merely admitted `_index_per_expert_keys` returned `{}` against the real checkpoint:
+  every MoE layer read as dense and the load died in the zero-expert-stacks guard — while its
+  NON-expert keys mapped fine, because the `_assign` pass applies `conv.rename` and the expert path
+  never did. Renames meant two different things depending on which branch a key took. That is exactly
+  the defect #643/#644 fixed in the PLANNER; this is the same fix on the loader side.
+  `loader._rename_ckpt_prefixes` applies a convention's renames to the part of a key BEFORE
+  `layers.N.`, which is the planner's own narrow rule — a blanket rename of the whole key would rewrite
+  the CONTAINER too, and mixtral's `.block_sparse_moe.` -> `.mlp.` would then destroy the substring
+  `MIXTRAL.expert_re` matches on, un-recognising every mixtral expert key. Asserted to be a no-op for
+  all twelve families admitted before it.
+- **Evidence** — `bench/support/rows/nemotron_h.json`: `inference-optimization/NemotronH-0.3B-A0.3B`
+  (`model_type: nemotron_h`, 32 routed experts, 5 layers of which 2 are MoE), CPU, bf16, transformers
+  5.17.0 / torch 2.14.0 / bitsandbytes 0.50.2. Load ok, `verify_moe_4bit(strict=True)` 2 quantized /
+  0 unquantized (nf4), forward finite. Grade **`toy-ok`**, not `reference-ok`: at 323 M parameters this
+  published checkpoint is below the probe's 1 B reference bar, and the row says so rather than
+  overstating it. `coverage-baseline.json` records `toy-ok` deliberately, so the new claim did not
+  arrive silently and a later reference-tier row reads as an improvement.
+- `STAGED_NOT_WIRED` drops `nemotron_h` in the same change — `tests/test_staged_not_wired.py` fails in
+  both directions, so wiring without delisting could not have merged. The registry's own count is now
+  derived from the set and asserted (`test_the_stated_counts_match_the_set`): it read "ten model_types
+  across seven conventions" when the conventions were **eight** — wrong the day it was written, and
+  invisible because nothing read it. It is 9 across 7 now, checked.
+
 ### Measured (no default changes)
 
 - **Lane P54 — fusing q/k/v on the int4 attention store** (`bench/p54/RESULTS-p54.md`, receipts in
