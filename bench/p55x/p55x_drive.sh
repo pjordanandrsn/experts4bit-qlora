@@ -38,7 +38,18 @@ SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=
 RSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT"
 SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
 POLL=${P55X_POLL_S:-60}; W=/root/p55x
-MIN_UP_MBS=${P55X_MIN_UP_MBS:-8}; PROBE_MB=${P55X_PROBE_MB:-256}
+# The floor's job is to catch the DISASTER regime, not to predict throughput. Measured 2026-09-21 on
+# p55x-prove-2: a 5090 pushed 256 MB at 6.40 MB/s, which puts the 15.2 GiB pack at ~41 min -- comfortable
+# inside a 5 h guard, and BELOW the 8 MB/s this lane first registered. That 8 came from "32 minutes sounds
+# fine", which is not a constraint anything has to satisfy; it sat inside the acceptable region instead of at
+# the boundary. The documented disaster is 0.2-0.5 MB/s (consumer Vast hosts, 11 hours for this artifact).
+# Re-derived from the constraint that actually binds -- the background transfer must not threaten the guard:
+#   3 MB/s -> 1.4 h,  2 MB/s -> 2.2 h,  1 MB/s -> 4.4 h (threatens a 5 h guard),  0.5 MB/s -> 8.9 h (disaster)
+# 3 MB/s it is: 6-15x above the disaster regime, 1.4 h of transfer against ~3.3 h of arms to overlap. Note
+# also that a 256 MB probe UNDERSTATES sustained rate (a prior lane read 14.76 MB/s probe vs 38.70 MB/s over
+# 23.6 GB, 2.6x), so this floor is applied to a pessimistic instrument. The measured 6.40 clears 3, 4, 5 and
+# 6 alike, so the number is not fitted to the one sample that prompted re-reading it.
+MIN_UP_MBS=${P55X_MIN_UP_MBS:-3}; PROBE_MB=${P55X_PROBE_MB:-256}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P55X_RUN_ID=$RUN_ID P55X_RUN_NONCE=$NONCE P55X_DEADLINE_EPOCH=$DEADLINE P55X_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA "
 if [ "${P55X_DRIVE_DRYRUN:-0}" = "1" ]; then
@@ -86,7 +97,7 @@ $SSH "cd $W || exit 20; nohup env $PASS bash p55x_run.sh > outer.log 2>&1 < /dev
 # zeros on liveness with no TP_DONE end the wait with their own code, so a killed lane is not flattened into
 # "ran out of clock".
 STALL_S=${P55X_STALL_S:-1200}; MIN_PROGRESS_MB=${P55X_MIN_PROGRESS_MB:-16}
-ART_LOCAL="$RUN_DIR/p55x-artifact"; ART_PID=""; ART_LOG="$RUN_DIR/p55x-artifact-fetch.log"
+ART_LOCAL="$RUN_DIR/p55x-artifact"; ART_PID=""; ART_LOG="$RUN_DIR/p55x-artifact-fetch.log"; ART_T0=""
 progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev
   idle_s=$1; stall_s=$2; util=$3; dfk_now=$4; dfk_prev=$5; du_now=$6; du_prev=$7; min_mb=$MIN_PROGRESS_MB
   consumed=0; grew=0
@@ -103,6 +114,7 @@ start_artifact_fetch() {   # the 15.2 GiB moves WHILE the gate arms and the seco
   [ -n "$ART_PID" ] && return 0
   mkdir -p "$ART_LOCAL" || return 1
   say "ARTIFACT_READY seen -- pulling $W/artifact1 -> $ART_LOCAL in the background (log: $ART_LOG)"
+  ART_T0=$(date +%s)
   nohup rsync -a --partial --inplace --timeout=600 -e "$RSH" \
     "root@$HOST:$W/artifact1/" "$ART_LOCAL/" > "$ART_LOG" 2>&1 &
   ART_PID=$!
@@ -140,7 +152,13 @@ $SSH "test -f $W/ARTIFACT_READY.$NONCE" 2>/dev/null && start_artifact_fetch
 if [ -n "$ART_PID" ]; then
   say "waiting on the artifact fetch (pid $ART_PID) -- these bytes are the lane's product"
   wait "$ART_PID"; ART_RC=$?
-  say "artifact fetch rc=$ART_RC, $(du -sm "$ART_LOCAL" 2>/dev/null | cut -f1)M local"
+  ART_SECS=$(( $(date +%s) - ${ART_T0:-$(date +%s)} )); ART_MB=$(du -sm "$ART_LOCAL" 2>/dev/null | cut -f1)
+  # The SUSTAINED rate of the real pull, which no lane has ever recorded -- the 256 MB probe is a disaster
+  # detector and is known to understate (14.76 probe vs 38.70 sustained on a prior lane). This is the number
+  # a future lane should size a transfer budget from.
+  printf '{"bytes_mb": %s, "seconds": %s, "mb_s": %s, "rsync_rc": %s}\n' "${ART_MB:-0}" "$ART_SECS" \
+    "$(python3 -c "print(f'{${ART_MB:-0} / max(1, $ART_SECS):.2f}')")" "$ART_RC" > "$RUN_DIR/artifact_fetch.json"
+  say "artifact fetch rc=$ART_RC, ${ART_MB}M in ${ART_SECS}s = $(python3 -c "print(f'{${ART_MB:-0} / max(1, $ART_SECS):.2f}')") MB/s sustained (probe read $UP)"
 else
   ART_RC=99; say "no ARTIFACT_READY marker was ever seen -- no pack bytes were retained (STOP-4)"
 fi

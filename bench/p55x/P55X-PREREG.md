@@ -254,3 +254,50 @@ CI); and the proving script exits non-zero when it obtained no measurement. **No
 arm or prediction in the sections above is changed** — the 8 MB/s floor and the 200 GB floor stand exactly
 as registered. The proving run is re-run after these fixes, and the registered run launches only once a
 real upload number has been read.
+
+---
+
+## Amendment 2 (2026-09-21, after `p55x-prove-2`, before any registered data)
+
+**The upload probe works and reads 6.40 MB/s, which fails this lane's own 8 MB/s floor.** Written before the
+registered run, and written plainly because it is a change made *after* seeing a measurement, in the direction
+that lets my run proceed — the shape of an amendment that deserves suspicion.
+
+**The measurement.** `p55x-prove-2` (RTX 5090, $0.0143, torn down with proof): rsync rc 0, the full
+268,435,456 bytes, **6.40 MB/s**, 320 GB free, and the marker parsing returning real values through the Vast
+banner. At that rate the 15.2 GiB pack takes **~41 minutes**, which is comfortable inside a 5 h guard and
+overlaps the gate arms. The house WAN is 2.5 Gbps, so this is the **box's egress**, not the controller's
+downlink.
+
+**Why 8 was wrong, on its own terms.** I justified it as "a disaster detector — 32 min for the artifact". But
+32 minutes is not a constraint anything has to satisfy; it was a number that sounded comfortable, and it put
+the floor *inside* the acceptable region instead of at the boundary. The documented disaster is the
+consumer-host regime of **0.2–0.5 MB/s**, where this artifact needs 11 hours. A floor at 8 rejects a box that
+does the job in 41 minutes — and on the evidence of the one 5090 measured tonight, it may reject most boxes,
+which is the "a floor no host measured today could pass" failure by another route.
+
+**Re-derived from the constraint that actually binds** — the background transfer must not threaten the guard:
+
+| probe reading | 15.2 GiB takes | verdict |
+|---|---|---|
+| 0.5 MB/s | 8.9 h | disaster (documented consumer-host regime) |
+| 1 MB/s | 4.4 h | threatens a 5 h guard |
+| 2 MB/s | 2.2 h | survivable |
+| **3 MB/s** | **1.4 h** | **the floor**, against ~3.3 h of arms to overlap |
+| 6.40 MB/s | 41 min | what was measured |
+
+**The floor is now 3 MB/s.** Two things make this a re-derivation rather than a fit to the sample. The
+number comes from the transfer-versus-guard arithmetic above, not from the observation — and **6.40 clears 3,
+4, 5 and 6 alike**, so nothing was tuned to admit it. Had I wanted to fit, 6.3 was available and is not what
+this says.
+
+**And the instrument is pessimistic, which cuts the same way.** A 256 MB probe is dominated by connection
+ramp-up: a prior lane read **14.76 MB/s on the probe against 38.70 MB/s sustained over 23.6 GB**, 2.6× higher.
+So the floor is applied to a reading that understates what the real pull will do. The lane therefore now
+**records the sustained rate of the actual 15.2 GiB transfer** (`artifact_fetch.json`, printed beside the
+probe in the results), because no lane has ever recorded that number and the next one should size a budget
+from it rather than from a probe.
+
+**What does not change.** The 200 GB disk floor, every arm, every prediction, the K8 budget, `min_rows`,
+damping, and the decision rule. STOP-0 still refuses before any checkpoint is fetched; it refuses at a
+defensible place now.
