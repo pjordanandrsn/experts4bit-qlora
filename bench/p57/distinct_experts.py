@@ -63,7 +63,7 @@ class DistinctExpertCounter:
             else:
                 logits = out[0] if isinstance(out, tuple) else out
                 ids = torch.topk(logits.reshape(-1, logits.shape[-1]), self.top_k, dim=-1).indices
-            self.series[li].append(int(torch.unique(ids).numel()))
+            self.series[li].append((int(ids.shape[0]), int(torch.unique(ids).numel())))
         return hook
 
     def remove(self):
@@ -71,11 +71,14 @@ class DistinctExpertCounter:
             h.remove()
 
     def report(self, batch: int, num_experts: int, skip_first: int = 0) -> dict:
+        """Decode calls are the ones with exactly ``batch`` rows; prefill chunks (more rows) are dropped, and
+        ``skip_first`` decode calls are dropped after that (warm-up). Every call is kept in ``raw`` for audit."""
         per_layer = []
-        for s in self.series:
-            s = s[skip_first:]
-            per_layer.append({"steps": len(s), "mean_distinct": statistics.mean(s) if s else None,
-                              "min": min(s) if s else None, "max": max(s) if s else None, "series": s})
+        for calls in self.series:
+            dec = [d for rows, d in calls if rows == batch][skip_first:]
+            per_layer.append({"steps": len(dec), "mean_distinct": statistics.mean(dec) if dec else None,
+                              "min": min(dec) if dec else None, "max": max(dec) if dec else None, "series": dec,
+                              "raw_calls": len(calls), "prefill_calls": sum(1 for rows, _ in calls if rows != batch)})
         means = [x["mean_distinct"] for x in per_layer if x["mean_distinct"] is not None]
         e, k, b = num_experts, self.top_k, batch
         return {"batch": batch, "top_k": k, "num_experts": e, "layers": self.layers,
@@ -106,8 +109,9 @@ def _self_test() -> int:
             out = model(nxt, past_key_values=past, use_cache=True)
             past = out.past_key_values
     counter.remove()
-    rep = counter.report(batch=B, num_experts=cfg.num_experts, skip_first=1)      # drop the prefill call
+    rep = counter.report(batch=B, num_experts=cfg.num_experts)                    # prefill (B*T rows) is dropped by row count
     assert rep["layers"] == 3 and rep["steps"] == steps, rep
+    assert all(pl["prefill_calls"] == 1 and pl["raw_calls"] == steps + 1 for pl in rep["per_layer"]), rep["per_layer"][0]
     for pl in rep["per_layer"]:
         assert all(1 <= d <= min(cfg.num_experts, B * cfg.num_experts_per_tok) for d in pl["series"]), pl
     print(json.dumps({k: v for k, v in rep.items() if k != "per_layer"}, indent=1))
