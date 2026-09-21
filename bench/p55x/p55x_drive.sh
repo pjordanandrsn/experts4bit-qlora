@@ -54,10 +54,13 @@ $SCP $STAGE "root@$HOST:$W/" && $SCP "$HOOK" "root@$HOST:$W/hook/" || { say "sta
 # the box, and the rental pre-flight measures the box's DOWNLOAD. Consumer-hosted Vast boxes have been measured
 # at 0.2-0.5 MB/s in the other direction, where the artifact would need 11 hours. Probe the real path -- a pull
 # of a real file over the real transport -- and refuse before a single byte of checkpoint is fetched.
+# NB: no --no-compress here. The controller is macOS, whose rsync is openrsync, and openrsync
+# rejects that flag with a usage error (rc 1) -- p55x-prove-1 measured 0.00 MB/s that way on a
+# box with 99.3 MB/s of HF CDN egress. Plain -a is already uncompressed.
 say "upload probe: ${PROBE_MB} MB off the box (floor ${MIN_UP_MBS} MB/s)"
 $SSH "dd if=/dev/urandom of=$W/.uprobe.bin bs=1M count=$PROBE_MB status=none" || { say "upload probe: could not create the probe file"; exit 20; }
 PROBE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/p55x-uprobe.XXXXXX"); T0=$(date +%s)
-rsync -a --no-compress -e "$RSH" "root@$HOST:$W/.uprobe.bin" "$PROBE_DIR/" >/dev/null 2>&1; PRC=$?
+rsync -a -e "$RSH" "root@$HOST:$W/.uprobe.bin" "$PROBE_DIR/" >/dev/null 2>&1; PRC=$?
 T1=$(date +%s); $SSH "rm -f $W/.uprobe.bin" >/dev/null 2>&1
 GOT=$(wc -c < "$PROBE_DIR/.uprobe.bin" 2>/dev/null || echo 0); rm -rf "$PROBE_DIR"
 UP=$(python3 -c "
@@ -100,7 +103,7 @@ start_artifact_fetch() {   # the 15.2 GiB moves WHILE the gate arms and the seco
   [ -n "$ART_PID" ] && return 0
   mkdir -p "$ART_LOCAL" || return 1
   say "ARTIFACT_READY seen -- pulling $W/artifact1 -> $ART_LOCAL in the background (log: $ART_LOG)"
-  nohup rsync -a --partial --inplace --no-compress --timeout=600 -e "$RSH" \
+  nohup rsync -a --partial --inplace --timeout=600 -e "$RSH" \
     "root@$HOST:$W/artifact1/" "$ART_LOCAL/" > "$ART_LOG" 2>&1 &
   ART_PID=$!
 }

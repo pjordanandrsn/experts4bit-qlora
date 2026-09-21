@@ -202,3 +202,55 @@ thing than publishing them. The CSO note on #405 proposed a dedicated Hugging Fa
 by commit, which would let a reader fetch as well as check; that remains the better answer and is not this
 lane's to take, because pushing 15.2 GiB of model-derived weights to a public host is the owner's decision and
 not a step inside a measurement lane.
+
+---
+
+## Amendment 1 (2026-09-21, after `p55x-prove-1`, before any registered data)
+
+The proving run happened, and it did not go the way the section above assumed. Recorded here because a
+pre-registration that quietly acquires a better story after the fact is not a pre-registration.
+
+**What the section above said.** That `p54-fqkv-1` had proven the path that morning, so a separate proving
+run "adds nothing". **That was wrong when written and I did not check it.** Two launcher commits landed
+*after* p54 ran — adertha#125 (the pre-flight now measures free disk with a real `df -Pk` on the box, and
+probes the **Hugging Face CDN** specifically at a 20 MB/s floor) and #124 (host-limited refusals name the
+machine). Both touch the rental path. "P54 proved it" had stopped being true of the code that would run,
+and the standing rule wanted a proving run on its own terms anyway.
+
+**What the proving run proved.** The launcher path works on hardware under the new code: pre-flight
+recorded `vast_free_disk_gb 320`, `vast_hf_cdn_mb_s 99.3`, `vast_bandwidth_mb_s 180.8`, 110 GB RAM; the
+box was destroyed on completion with `instance_absent: true` and an empty list after; **$0.0272**. The
+320 GB of *actual* overlay disk also clears this lane's 200 GB floor with room, on a box of the class the
+registered run will draw.
+
+**What it found, which is the point of doing it.** Two defects, both mine, both on the controller side,
+both invisible to `bash -n` and to every test that existed:
+
+1. **The controller is macOS, whose `rsync` is openrsync** ("rsync version 2.6.9 compatible"), and it
+   rejects `--no-compress` with a usage error. The probe's transfer never ran, and the lane reported
+   **`upload 0.00 MB/s`** on a box with 99.3 MB/s of measured CDN egress. Under STOP-0 as written, that
+   reading would have **refused a perfectly good box** — a floor that can only say no.
+2. The Vast image prints a two-line login banner ahead of the command's output, so values read by line
+   number came back as `"Welcome to vast.ai..."` and `0`. Same family as the ssh banner fused to a curl
+   HTTP status.
+
+And a third, in the proving script itself: it ended in `exit 0` regardless, so the receipt recorded
+**OK / pass** over a transfer that never happened. "Does not refuse on a low measurement" and "reports
+success having measured nothing" are different things and only the first was intended.
+
+**One condition this lane had left unstated, caught by the gnf4 #319 session on 2026-09-21.** These arms
+pass no `grouped-nf4-gemm` compute-mode kwarg, so the mode comes from the capability-conditional default,
+and on sm_120 that default resolves to **fp8**, not f32 (`gnf4#319`: the suite's own f32 arms were
+resolving to fp8 while carrying an f32 tolerance; `compute_counts()` on a 5090 read `{'f32': 0, 'fp8': 4}`).
+**The gate is unaffected** — the NF4 reference arm and every candidate arm go through the identical harness
+invocation, so all of them take the same default and the delta is a within-box comparison either way. What
+inherits the mode is the **absolute** perplexities, and the conditions line will say "gnf4 compute mode at
+its capability-conditional default (fp8 on sm_120)" rather than implying f32. Reading the tally per arm
+would mean instrumenting `step_decomp.py`, which is P39's pinned shared harness and outside this lane.
+
+**Changes.** Values are read by `KEY=` marker, never by line number; no rsync invocation in this lane uses
+a flag the controller's openrsync rejects (`tests/test_p55x_controller_portability.py` now asserts both in
+CI); and the proving script exits non-zero when it obtained no measurement. **No STOP rule, floor, band,
+arm or prediction in the sections above is changed** — the 8 MB/s floor and the 200 GB floor stand exactly
+as registered. The proving run is re-run after these fixes, and the registered run launches only once a
+real upload number has been read.
