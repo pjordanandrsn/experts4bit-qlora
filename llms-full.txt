@@ -2641,12 +2641,27 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   receipt status `void_attn4`). Attention-4-bit training on `gemma4_text`
   has no receipt and is not supported pending it; the bf16-attention
   `fast_train` path stays as tp1 left it.
-- **#344 — Gemma-4 fails to load on 2 of 6 rented hosts** with
-  `CUDA error: invalid argument`, after the experts quantise. A 2 GiB
-  host-hop fix was merged and reverted the same day: the model's largest
-  tensor is 1.375 GiB, so it never triggered. The live lead is that CUDA
-  reports asynchronously, so the traceback site need not be the faulting
-  kernel.
+- **[#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344) —
+  Gemma-4 fails to load on 2 of 6 rented hosts** with `CUDA error: invalid
+  argument`, after the experts quantise. A 2 GiB host-hop fix was merged and
+  reverted the same day: the model's largest tensor is 1.375 GiB, so it never
+  triggered. **The six hosts' forensics have now been put side by side**
+  (`bench/p55/P55-PREREG.md`), and two leads are dead by construction: driver
+  580.159.03 appears on both sides, and every host is the same RTX 5090. What
+  orders every outcome is **host RAM against this checkpoint's 49.9 GiB single
+  shard** — 30 GiB refused the map outright (`Cannot allocate memory`), 64 GiB
+  mapped it and died opaquely, 96 / 125 / 188 GiB passed — and one failing host
+  had already run two hours of clean CUDA on smaller models before Gemma-4
+  reached it. All three outcomes sit inside the `safe_open(device="cuda")`
+  mapping, which maps the whole shard and copies each tensor out of it. That is
+  a reading of six points, not a mechanism; **lane P55 is registered to test it
+  and has not been launched** (its authorisation is the open item, not its
+  code). Meanwhile the loader no longer fails silently about it: a shard-read
+  failure now prints the shard, its size and the host's `MemTotal` /
+  `MemAvailable` / cgroup limit, and `E4B_LOAD_SYNC_DEBUG=1` inserts staged
+  `torch.cuda.synchronize()` checkpoints (arming `CUDA_LAUNCH_BLOCKING=1` while
+  CUDA is still uninitialised) so a fault is bound to a load stage rather than
+  to whichever CUDA call observed it.
 - **[#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392) —
   the energy receipt does not record its bitsandbytes build.**
   `docs/METHODOLOGY.md` names the build only as `0.50.0.dev0` (§1) and
