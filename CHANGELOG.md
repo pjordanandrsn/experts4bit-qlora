@@ -24,13 +24,17 @@ checkpoint behind it rather than a fixture.
   the CONTAINER too, and mixtral's `.block_sparse_moe.` -> `.mlp.` would then destroy the substring
   `MIXTRAL.expert_re` matches on, un-recognising every mixtral expert key. Asserted to be a no-op for
   all twelve families admitted before it.
-- **Evidence** — `bench/support/rows/nemotron_h.json`: `inference-optimization/NemotronH-0.3B-A0.3B`
-  (`model_type: nemotron_h`, 32 routed experts, 5 layers of which 2 are MoE), CPU, bf16, transformers
-  5.17.0 / torch 2.14.0 / bitsandbytes 0.50.2. Load ok, `verify_moe_4bit(strict=True)` 2 quantized /
-  0 unquantized (nf4), forward finite. Grade **`toy-ok`**, not `reference-ok`: at 323 M parameters this
-  published checkpoint is below the probe's 1 B reference bar, and the row says so rather than
-  overstating it. `coverage-baseline.json` records `toy-ok` deliberately, so the new claim did not
-  arrive silently and a later reference-tier row reads as an improvement.
+- **Evidence — two rows, both on real published checkpoints.**
+  `bench/support/rows/nemotron_h.json` is `inference-optimization/NemotronH-0.3B-A0.3B` (32 routed
+  experts, 2 of 5 layers MoE): load ok, `verify_moe_4bit(strict=True)` 2 quantized / 0 unquantized
+  (nf4), forward finite — graded **`toy-ok`**, because at 323 M parameters it is below the probe's 1 B
+  reference bar and the row says so rather than overstating it.
+  `bench/support/rows/nemotron_h_30b.json` is `nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16`
+  (128 routed experts, 23 of 52 layers MoE, 14 shards): integrity clean (every shard the length its own
+  header declares), load ok 155.2 s, **23 quantized / 0 unquantized** (nf4), forward finite —
+  **`reference-ok`**, which is the grade `coverage-baseline.json` records. Both CPU, bf16, transformers
+  5.17.0 / torch 2.14.0 / bitsandbytes 0.50.2. The small row is kept rather than replaced: it is the
+  one whose two-MoE-layer shape the prefix-rename regression test is written against.
 - `STAGED_NOT_WIRED` drops `nemotron_h` in the same change — `tests/test_staged_not_wired.py` fails in
   both directions, so wiring without delisting could not have merged. The registry's own count is now
   derived from the set and asserted (`test_the_stated_counts_match_the_set`): it read "ten model_types

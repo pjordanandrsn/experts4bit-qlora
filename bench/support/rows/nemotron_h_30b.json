@@ -1,0 +1,78 @@
+{
+ "model": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+ "revision": null,
+ "source": "local-mirror",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-21T22:59:20Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.14.0",
+  "transformers": "5.17.0",
+  "bitsandbytes": "0.50.2",
+  "gnf4": "0.31.0",
+  "e4b": "0.36.4"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "ok",
+   "shards": 14,
+   "note": "every shard matches the length its own header declares"
+  },
+  "load": {
+   "status": "ok",
+   "seconds": 155.2
+  },
+  "verify": {
+   "status": "ok",
+   "n_quantized": 23,
+   "n_unquantized": 0,
+   "quant_types": [
+    "nf4"
+   ]
+  },
+  "forward": {
+   "status": "ok",
+   "note": "loss is on synthetic arange token ids: a finiteness smoke test, NOT a quality measure",
+   "seconds": 35.0,
+   "loss": 12.27774,
+   "loss_finite": true,
+   "logits_finite": true
+  },
+  "capture": {
+   "status": "not_tested",
+   "reason": "CPU probe: CUDA-graph capture cannot be established here"
+  }
+ },
+ "model_type": "nemotron_h",
+ "config": {
+  "hidden_size": 2688,
+  "num_hidden_layers": 52,
+  "num_experts": 128,
+  "top_k": 6,
+  "moe_intermediate_size": 1856
+ },
+ "claim": {
+  "in_supported_architectures": true,
+  "reachable_by_convention": false,
+  "expert_attr": "mixer.experts"
+ },
+ "total_params": 17104573888,
+ "tier": "reference",
+ "tier_rule": "total_params < 1000000000 -> toy; else reference",
+ "exit_code": 0,
+ "finished_utc": "2026-09-21T23:02:33Z"
+}
