@@ -276,3 +276,157 @@ def test_whole_stack_dequant_equals_per_expert_loop(shape, blocksize, quant_type
         assert torch.equal(per_expert, whole), (
             f"{pshape}: whole-stack dequant diverged from the per-expert loop "
             f"(max {(per_expert.float() - whole.float()).abs().max():.3e})")
+
+
+# --------------------------------------------------------------------------- #
+# The contract above runs on ONE synthetic expert configuration — SiLU, E=8,
+# top_k=2, uniform-random combine weights — and every test that uses it is gated
+# on CUDA, including the kernel-free candidate that needs no kernel at all. So
+# two things were never checked anywhere: whether the composition's agreement
+# with the reference is FAMILY-DEPENDENT, and whether the kernel-free lane holds
+# on a host without a GPU.
+#
+# Both matter because of a live question (e4b#558). Gemma-4-26B-A4B-it's fused
+# arm reads 0.08257 nats from e4b's own dense reference on tp4's fixture, where
+# every other family reads 0.0006-0.002. If the divergence were in the
+# composition — the epilogue placement, the group-sorted scatter, the top-k
+# weighting — it would be reachable HERE, at a family's real expert
+# configuration, with no rented GPU: those are exact-arithmetic questions, not
+# scale-dependent ones.
+#
+# Measured 2026-09-21 on CPU (torch 2.14.0, bnb 0.50.2), bf16 compute against an
+# fp32-compute arm over the SAME quantized weights, so only arithmetic order
+# differs:
+#
+#     family              ref-vs-fp32  batched-vs-fp32  batched-vs-ref  worst grad
+#     gemma4                5.919e-03        5.919e-03       0.000e+00   1.246e-07
+#     qwen3_moe             6.077e-03        6.077e-03       0.000e+00   1.020e-07
+#     olmoe                 6.142e-03        6.142e-03       0.000e+00   1.387e-07
+#     granitemoe            6.115e-03        6.115e-03       0.000e+00   1.765e-07
+#     mixtral               6.206e-03        6.206e-03       0.000e+00   1.737e-07
+#     gemma4-shape-silu     6.118e-03        6.118e-03       0.000e+00   1.248e-07
+#     qwen3-shape-gelu      5.876e-03        5.876e-03       0.000e+00   1.011e-07
+#
+# Those are THIS test's own numbers, printed by it (`pytest -s -k family_blind`),
+# not a transcription from a scratch probe with a different fixture.
+#
+# Every family sits at the same bf16 floor against fp32, and the two paths agree
+# with EACH OTHER to 1e-7 on gradients. The last two rows cross activation with
+# shape, so neither is confounded with the other. The composition is family-blind,
+# and Gemma-4's tp4 gap is therefore NOT in it.
+#
+# What this cannot see, stated so the negative result is not over-read: it
+# exercises the KERNEL-FREE lane. `enable_fast_train`'s kernel
+# (`grouped-nf4-gemm`'s `fused_grouped_lora`) is CUDA-only and is not touched
+# here, and the two lanes do not carry the same error — bench/dgrad-gate measured
+# the fused lane's composed gradient error at ~5e-2 against the reference at 48
+# layers where this lane's is ~4e-3. This file rules out the composition. It does
+# not rule out the kernel.
+# --------------------------------------------------------------------------- #
+
+# (name, activation, E, top_k, hidden, inter). E and top_k are each family's real
+# values; hidden and inter preserve its real ratio, scaled to multiples of the 64
+# blocksize (the primitive refuses others) so this runs on a laptop CPU.
+FAMILY_SHAPES = [
+    ("gemma4", "gelu_tanh", 128, 8, 512, 128),        # real 2816/704   4:1, E128 k8
+    ("qwen3_moe", "silu", 128, 8, 512, 192),          # real 2048/768   8:3, E128 k8
+    ("olmoe", "silu", 64, 8, 512, 256),               # real 2048/1024  2:1, E64  k8
+    ("granitemoe", "silu", 40, 8, 384, 128),          # real 1536/512   3:1, E40  k8
+    ("mixtral", "silu", 8, 2, 256, 896),              # real 4096/14336 2:7, E8   k2
+    # Activation crossed with shape, so a family-dependent result could be
+    # attributed to one or the other rather than to "gemma4".
+    ("gemma4-shape-silu", "silu", 128, 8, 512, 128),
+    ("qwen3-shape-gelu", "gelu_tanh", 128, 8, 512, 192),
+]
+
+_ACTS = {
+    "silu": torch.nn.functional.silu,
+    # Gemma-4 declares hidden_activation="gelu_pytorch_tanh"; ACT2FN maps that to
+    # the tanh approximation, which is what Gemma4TextExperts.forward applies.
+    "gelu_tanh": lambda x: torch.nn.functional.gelu(x, approximate="tanh"),
+}
+
+
+def _build_family(act, n_exp, hidden, inter, compute_dtype, seed=0):
+    torch.manual_seed(seed)
+    gate_up = (torch.randn(n_exp, 2 * inter, hidden) * 0.1).to(DEVICE)
+    down = (torch.randn(n_exp, hidden, inter) * 0.1).to(DEVICE)
+    require_quantize(DEVICE)
+    base = Experts4bit.from_float(gate_up, down, activation=_ACTS[act],
+                                  quant_type="nf4", compute_dtype=compute_dtype)
+    mod = ExpertsLoRA(base, r=16, alpha=16, dtype=torch.float32).to(DEVICE)
+    with torch.no_grad():
+        for p in (mod.gate_up_lora_B, mod.down_lora_B):
+            p.normal_(0, 0.02)
+    return mod.train()
+
+
+def _router_inputs(n_exp, top_k, hidden, n_tok=256, seed=1, dtype=torch.bfloat16):
+    """Combine weights shaped like a real MoE router's, not ``torch.rand``.
+
+    ``Gemma4TextRouter.forward``: softmax in fp32 -> top-k -> renormalise so the
+    kept weights sum to 1 -> multiply by ``per_expert_scale`` (all ones in the
+    released checkpoint). The renormalisation is what the shipped fixture's
+    uniform weights do not have, and it is what sets how much the k terms cancel
+    in the combine — the one place a group-sorted sum could plausibly diverge
+    from an ascending-expert-id sum by more than an ulp."""
+    g = torch.Generator().manual_seed(seed)
+    logits = torch.randn(n_tok, n_exp, generator=g)
+    probs = torch.nn.functional.softmax(logits, dim=-1, dtype=torch.float32)
+    w, idx = torch.topk(probs, k=top_k, dim=-1)
+    w = w / w.sum(-1, keepdim=True)
+    hs = torch.randn(n_tok, hidden, generator=g, dtype=torch.float32).to(dtype).to(DEVICE)
+    loss_w = torch.randn(n_tok, hidden, generator=g).to(DEVICE)
+    return hs, idx.to(DEVICE), w.to(dtype).to(DEVICE), loss_w
+
+
+@pytest.mark.parametrize("name,act,n_exp,top_k,hidden,inter", FAMILY_SHAPES,
+                         ids=[f[0] for f in FAMILY_SHAPES])
+def test_batched_composition_is_family_blind(name, act, n_exp, top_k, hidden, inter):
+    """The kernel-free lane must agree with the reference on EVERY family's real
+    expert configuration, and agree to the same degree on each.
+
+    Runs on CPU on purpose: it needs no kernel, and the question it answers —
+    is the composition exact — is host-independent. Scoring both arms against an
+    fp32-compute arm over the same quantized weights is what separates "both at
+    the bf16 floor" from "one of them departs"."""
+    from experts4bit_qlora import batched_fallback_stats, enable_batched_train
+
+    reference = _build_family(act, n_exp, hidden, inter, torch.bfloat16)
+    candidate = _build_family(act, n_exp, hidden, inter, torch.bfloat16)
+    fp32_arm = _build_family(act, n_exp, hidden, inter, torch.float32)
+    assert enable_batched_train(candidate) == 1, "batched path declined an eligible module"
+
+    hs, idx, wts, loss_w = _router_inputs(n_exp, top_k, hidden)
+    ref_out, ref_dx, ref_grads = _forward_backward(reference, hs, idx, wts, loss_w)
+    got_out, got_dx, got_grads = _forward_backward(candidate, hs, idx, wts, loss_w)
+    f32_out, _, _ = _forward_backward(fp32_arm, hs.float(), idx, wts.float(), loss_w)
+
+    ref_floor = _rel(ref_out, f32_out)
+    got_floor = _rel(got_out, f32_out)
+    worst_grad = max(_rel(got_grads[n], ref_grads[n]) for n in ref_grads)
+
+    print(f"\n{name}: ref-vs-fp32={ref_floor:.3e} batched-vs-fp32={got_floor:.3e} "
+          f"batched-vs-ref={_rel(got_out, ref_out):.3e} worst-grad={worst_grad:.3e}")
+
+    # ENGAGEMENT, before any tolerance. This path falls back to the reference
+    # forward per call (pad waste, evicted storage, empty batch) and a fallback is
+    # invisible in the output — so an arm that fell back on every call would agree
+    # with the reference perfectly while testing nothing at all. Every assertion
+    # below is vacuous without this one.
+    st = batched_fallback_stats(candidate)
+    assert st["modules"] == 1 and st["calls"] > 0, st
+    assert st["fallback_calls"] == 0, (
+        f"{name}: the batched path fell back to the reference on "
+        f"{st['fallback_calls']}/{st['calls']} calls ({st['by_reason']}) — this "
+        f"comparison is measuring the reference against itself")
+
+    assert _rel(got_out, ref_out) < FWD_TOL
+    assert _rel(got_dx, ref_dx) < GRAD_TOL
+    assert worst_grad < GRAD_TOL
+    # Neither arm may be further from fp32 truth than the other by more than the
+    # bf16 floor itself: that is what "the composition adds nothing family-specific"
+    # means, and it is the assertion a family-dependent bug would break.
+    assert abs(got_floor - ref_floor) < ref_floor, (
+        f"{name}: the batched arm's distance from fp32 ({got_floor:.3e}) departs from "
+        f"the reference's ({ref_floor:.3e}) by more than the floor itself")

@@ -306,6 +306,17 @@ family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 FUAL=$5 UAL=$6 HAL=$7 RAL=$8 OFF=$9 
   can_run 600 $FAM/hf && arm $FAM hf hf_peft hf $HAL "$MID" $REV 0 field $TOK $TS
   if [ "$MODE" != gptoss ]; then
     can_run 900 $FAM/e4b/reference && arm $FAM e4b reference_attn4 reference $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
+    # P56 (bench/p56/P56-PREREG.md): two more rungs of the arithmetic ladder, OPT-IN via
+    # TP4_P56=1 so no other draw's arm set, cost or ordering changes. `fused --dgrad 0` is
+    # the fused forward with the EXACT per-expert decode backward (isolates the backward
+    # kernel); `batched` is enable_batched_train, kernel-free and group-sorted (the smallest
+    # perturbation available). The cheap rung runs FIRST: batched costs about what the
+    # reference costs, and it is the one that can VOID on a pad-waste fallback, so losing it
+    # to the window is the least-bad outcome.
+    if [ "${TP4_P56:-0}" = 1 ]; then
+      can_run 600 $FAM/e4b/fused_nodgrad && arm $FAM e4b fused_attn4_nodgrad fused $FUAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 --dgrad 0
+      can_run 900 $FAM/e4b/batched && arm $FAM e4b batched_attn4 batched $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
+    fi
     # the secondary pair (TP4-PREREG "Arms"): micro-batch 1 x accum 8 -- same tokens per step -- for EVERY framework, only when a primary arm OOMed
     local se su sh; se=$(status_of $FAM e4b fused_attn4); su=$(status_of $FAM unsloth ckpt_unsloth); sh=$(status_of $FAM hf hf_peft)
     if [ "$se" = oom ] || [ "$su" = oom ] || [ "$sh" = oom ]; then
