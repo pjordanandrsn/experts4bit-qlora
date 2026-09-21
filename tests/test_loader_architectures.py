@@ -1814,3 +1814,97 @@ def test_the_prefix_rename_is_a_no_op_for_every_family_admitted_before_it(model_
     renamed, orig = _rename_ckpt_prefixes(conv, raw, {k: k for k in raw})
     assert renamed == raw, f"{model_type}: prefix rename changed keys it must not touch"
     assert orig == {k: k for k in raw}
+# GraniteMoe's two aliases: admitted on the SAME evidence as granitemoe, and
+# admission had to land together with the rename table (e4b#648).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_GRANITE_FAMILY = ("granitemoe", "granitemoehybrid", "granitemoeshared")
+
+
+def test_the_granite_aliases_share_granitemoes_converter_exactly():
+    """The reason one rename table serves three model_types, checked rather than assumed.
+
+    ``LEGACY_KEY_RENAMES`` hands all three the same tuple. That is only correct
+    while upstream's own ``conversion_mapping`` entry for all three is the same,
+    so this compares them entry by entry against transformers rather than
+    trusting that aliases stay aliases. If upstream ever splits them — a hybrid
+    that renames one key differently — this fails and the shared tuple must be
+    split with it.
+    """
+    cm = pytest.importorskip("transformers.conversion_mapping")
+    specs = {}
+    for model_type in _GRANITE_FAMILY:
+        mapping = cm.get_checkpoint_conversion_mapping(model_type)
+        assert mapping, f"{model_type} has no upstream conversion mapping"
+        specs[model_type] = [
+            (type(op).__name__,
+             tuple(getattr(op, "source_patterns", ()) or ()),
+             tuple(getattr(op, "target_patterns", ()) or ()),
+             tuple(type(o).__name__ for o in (getattr(op, "operations", None) or ())))
+            for op in mapping
+        ]
+    base = specs["granitemoe"]
+    for model_type in _GRANITE_FAMILY[1:]:
+        assert specs[model_type] == base, (
+            f"{model_type}'s upstream converter no longer matches granitemoe's — "
+            f"LEGACY_KEY_RENAMES must stop sharing one tuple across them")
+
+
+@pytest.mark.parametrize("model_type", _GRANITE_FAMILY)
+def test_every_granite_family_member_is_admitted_at_the_same_expert_path(model_type):
+    from experts4bit_qlora.loader import SUPPORTED_ARCHITECTURES, expert_layout_for
+
+    assert SUPPORTED_ARCHITECTURES[model_type] == "block_sparse_moe.experts"
+    assert expert_layout_for(model_type) == ("block_sparse_moe.experts", True)
+
+
+def test_an_admitted_prefused_family_cannot_be_missing_its_legacy_renames():
+    """Admission and the rename table have to land TOGETHER, asserted mechanically.
+
+    The granitemoe convention's checkpoint spells its experts ``input_linear`` /
+    ``output_linear``; nothing turns those into ``experts.gate_up_proj`` except
+    ``LEGACY_KEY_RENAMES``, which is keyed on **model_type**. So admitting an
+    alias without adding its entry would ADMIT the family and then find no expert
+    stacks at all — every layer dense, the load ending in the zero-expert guard.
+    That is the same shape as #509's axk1 point (admission without the rewriter),
+    and this is the check that keeps it from recurring for this family.
+    """
+    from experts4bit_qlora.loader import (
+        LEGACY_KEY_RENAMES, SUPPORTED_ARCHITECTURES, _convention_or_none)
+
+    for model_type in SUPPORTED_ARCHITECTURES:
+        conv = _convention_or_none(model_type)
+        if conv is None or conv.name != "granitemoe":
+            continue
+        assert model_type in LEGACY_KEY_RENAMES, (
+            f"{model_type} is admitted on the granitemoe convention but has no "
+            f"LEGACY_KEY_RENAMES entry — its input_linear/output_linear keys would "
+            f"never become experts.gate_up_proj and the load would find no experts")
+        assert LEGACY_KEY_RENAMES[model_type] == LEGACY_KEY_RENAMES["granitemoe"]
+
+
+@pytest.mark.parametrize("model_type", _GRANITE_FAMILY)
+def test_the_granite_legacy_renames_map_released_keys_onto_the_tree(model_type):
+    """The rename applied to the real released spelling lands on the module names.
+
+    Taken from the released indexes (granite-4.0-h-tiny, 586 keys;
+    ibm-research/moe-7b-1b-active-shared-experts, 442): the experts are pre-fused
+    under ``input_linear`` / ``output_linear`` and never per-expert.
+    """
+    from experts4bit_qlora.loader import LEGACY_KEY_RENAMES
+
+    released = [
+        "model.layers.0.block_sparse_moe.input_linear.weight",
+        "model.layers.0.block_sparse_moe.output_linear.weight",
+        "model.layers.0.block_sparse_moe.router.layer.weight",
+    ]
+    out = []
+    for key in released:
+        for old, new in LEGACY_KEY_RENAMES[model_type]:
+            key = key.replace(old, new)
+        out.append(key)
+    assert out == [
+        "model.layers.0.block_sparse_moe.experts.gate_up_proj",
+        "model.layers.0.block_sparse_moe.experts.down_proj",
+        "model.layers.0.block_sparse_moe.router.weight",
+    ]

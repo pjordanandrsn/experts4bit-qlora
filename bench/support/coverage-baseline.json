@@ -4,6 +4,8 @@
  "gemma4_text": "none",
  "gpt_oss": "reference-ok",
  "granitemoe": "reference-ok",
+ "granitemoehybrid": "reference-ok",
+ "granitemoeshared": "reference-ok",
  "kimi_k3": "none",
  "nemotron_h": "reference-ok",
  "olmoe": "reference-ok",
