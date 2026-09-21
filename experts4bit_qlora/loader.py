@@ -114,6 +114,212 @@ SUPPORTED_MODEL_TYPES = set(SUPPORTED_ARCHITECTURES)
 READ_COMPATIBLE_CONVENTIONS = frozenset({"qwen2_moe", "mixtral", "phimoe"})
 
 
+#: Env flag for the staged-synchronisation debug mode (#344). Off by default: the
+#: synchronisations it inserts serialise the load and cost real time on a healthy host.
+SYNC_DEBUG_ENV = "E4B_LOAD_SYNC_DEBUG"
+LAUNCH_BLOCKING_ENV = "CUDA_LAUNCH_BLOCKING"
+
+
+def _host_mem_facts():
+    """``(MemTotal, MemAvailable, cgroup_limit)`` in bytes; ``None`` where unreadable.
+
+    Linux-only by construction (``/proc``, ``/sys/fs/cgroup``); every caller treats
+    ``None`` as "not knowable here" rather than as zero. Used only to DESCRIBE a host
+    in a diagnosis or a debug banner — nothing branches on these numbers, because a
+    loader that refused on a RAM estimate would refuse hosts that load this checkpoint
+    perfectly well today.
+    """
+    total = avail = limit = None
+    try:
+        with open("/proc/meminfo") as fh:
+            for line in fh:
+                key, _, rest = line.partition(":")
+                if key == "MemTotal":
+                    total = int(rest.split()[0]) * 1024
+                elif key == "MemAvailable":
+                    avail = int(rest.split()[0]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    for path in ("/sys/fs/cgroup/memory.max",                      # cgroup v2
+                 "/sys/fs/cgroup/memory/memory.limit_in_bytes"):   # cgroup v1
+        try:
+            with open(path) as fh:
+                raw = fh.read().strip()
+        except OSError:
+            continue
+        if raw and raw != "max":
+            try:
+                value = int(raw)
+            except ValueError:
+                break
+            # v1 spells "no limit" as a sentinel near 2**63, not as a word.
+            if value < (1 << 62):
+                limit = value
+        break
+    return total, avail, limit
+
+
+def _gib(n):
+    return "unknown" if n is None else f"{n / 2**30:.1f} GiB"
+
+
+def _largest_shard(snap, weight_map):
+    """``(filename, bytes)`` of the biggest shard this load will map, or ``(None, None)``."""
+    best_name, best_size = None, None
+    for fn in set(weight_map.values()):
+        try:
+            size = os.path.getsize(os.path.join(snap, fn))
+        except OSError:
+            continue
+        if best_size is None or size > best_size:
+            best_name, best_size = fn, size
+    return best_name, best_size
+
+
+def _shard_read_diagnosis(name, fn, snap, weight_map, device):
+    """The sentences an opaque shard-read failure should have carried all along (#344).
+
+    ``safe_open(..., device="cuda")`` maps the whole shard and copies each tensor to the
+    GPU out of that mapping. When the mapping is marginal for the host, the failure is NOT
+    self-describing: a 30 GiB host refuses the map outright ("Cannot allocate memory"),
+    while a larger-but-still-tight host maps it and a later copy comes back as
+    ``CUDA error: invalid argument`` at whichever tensor read happens to be next — naming a
+    CUDA call and a tensor that need have nothing to do with the cause. Both readings were
+    taken for loader or driver bugs for three weeks (#344, and the dead #350/#351 pair).
+
+    So: name the shard, its size, and the host's memory headroom, at the point of failure.
+    This DESCRIBES; it does not diagnose by threshold. Nothing here decides the host is at
+    fault, and nothing refuses a load on a RAM estimate — it puts the numbers that would
+    settle the question next to the error, which is all that was ever missing.
+    """
+    total, avail, limit = _host_mem_facts()
+    big_name, big_size = _largest_shard(snap, weight_map)
+    n_shards = len(set(weight_map.values()))
+    try:
+        this_size = os.path.getsize(os.path.join(snap, fn)) if fn else None
+    except OSError:
+        this_size = None
+    what = (f"while reading {name!r} from shard {fn!r} ({_gib(this_size)})"
+            if name is not None else
+            f"while MAPPING this checkpoint's {n_shards} shard(s)")
+    return [
+        f"e4b: {what} onto device={device!r}.",
+        f"e4b: largest shard {big_name!r} at {_gib(big_size)}, of {n_shards} mapped.",
+        f"e4b: host memory — MemTotal {_gib(total)}, MemAvailable {_gib(avail)}, "
+        f"cgroup limit {_gib(limit)}.",
+        "e4b: safe_open(device=...) maps a whole shard and copies out of that mapping, so a "
+        "host whose headroom is marginal against the LARGEST shard can surface this as an "
+        "opaque CUDA error rather than as a memory error — see "
+        "https://github.com/pjordanandrsn/experts4bit-qlora/issues/344.",
+    ]
+
+
+def _explain_shard_failure(exc, name, fn, snap, weight_map, device, trace):
+    """Log the diagnosis and attach it to ``exc``, WITHOUT changing the exception.
+
+    The caller re-raises with a bare ``raise``: the type and traceback a caller may be
+    catching on stay exactly as they were, and the explanation rides along as notes
+    (3.11+) and, always, in the log — which is what receipts actually capture.
+    """
+    lines = _shard_read_diagnosis(name, fn, snap, weight_map, device) + [trace.where()]
+    add_note = getattr(exc, "add_note", None)
+    for line in lines:
+        log(line)
+        if add_note is not None:
+            add_note(line)
+
+
+class _LoadStageTrace:
+    """Staged ``torch.cuda.synchronize()`` checkpoints across the streaming load (#344).
+
+    Inert unless ``E4B_LOAD_SYNC_DEBUG=1``. CUDA reports asynchronously, so a fault raised
+    by one kernel is observed at whatever API call runs next — which is why #344's two
+    recorded failures name ``safe_open(...).get_tensor`` at two unrelated points in the
+    load. Synchronising at each stage boundary bounds the fault to the stage that caused
+    it; ``CUDA_LAUNCH_BLOCKING=1`` narrows it further, to the launch.
+
+    ``CUDA_LAUNCH_BLOCKING`` is read by the driver when the CUDA context is created, so
+    setting it here only does something while CUDA is still uninitialised. That case is
+    worth serving (a caller that imported torch but has not touched the GPU is the normal
+    one), and the banner says plainly which of the two happened — a debug mode that
+    silently did nothing would be the worst outcome of all.
+    """
+
+    def __init__(self, device, enabled=None):
+        self.enabled = (os.environ.get(SYNC_DEBUG_ENV, "0") == "1") if enabled is None else enabled
+        self.device = device
+        self.last = None          # last stage that synchronised clean
+        self.current = None       # fine-grained: the tensor read in flight
+        self.coarse = None        # the phase the load is in, between reads
+        # `torch.cuda.synchronize` RAISES on a non-CUDA device, so an armed trace on a CPU
+        # device would turn a diagnostic flag into a load failure. This flag exists to help
+        # someone whose load is already failing; it must not be able to be the reason.
+        if self.enabled and "cuda" not in str(device):
+            log(f"  {SYNC_DEBUG_ENV}=1 ignored: device={device!r} is not a CUDA device, and "
+                "there is nothing to synchronise. The shard-read diagnosis is unaffected.")
+            self.enabled = False
+
+    def arm(self):
+        if not self.enabled:
+            return
+        blocking = os.environ.get(LAUNCH_BLOCKING_ENV)
+        if blocking == "1":
+            state = "already set in the environment (the driver will honour it)"
+        elif torch.cuda.is_initialized():
+            state = (f"NOT set and CUDA is already initialised — {LAUNCH_BLOCKING_ENV} is read at "
+                     "context creation, so it cannot be turned on now. Stage bounds below are "
+                     "still exact; the kernel within a stage is not. Re-run with "
+                     f"{LAUNCH_BLOCKING_ENV}=1 in the environment for that.")
+        else:
+            os.environ[LAUNCH_BLOCKING_ENV] = "1"
+            state = ("set here, before this process created its CUDA context — the driver will "
+                     "honour it, so a fault surfaces at its own launch")
+        total, avail, limit = _host_mem_facts()
+        log(f"  {SYNC_DEBUG_ENV}=1: staged synchronisation ON; {LAUNCH_BLOCKING_ENV} {state}")
+        log(f"  host: MemTotal {_gib(total)}, MemAvailable {_gib(avail)}, cgroup limit {_gib(limit)}; "
+            f"torch {torch.__version__}, device {self.device!r}")
+
+    def phase(self, name):
+        """Open a COARSE phase ("quantise experts: layer 7"). What a fault falls back to
+        once the tensor read that preceded it has already synchronised clean — which is the
+        case #344 actually hypothesised: a kernel between the reads, observed at the next
+        read. Without this, such a fault reads as "between stages" and names nothing."""
+        if self.enabled:
+            self.coarse = name
+            self.current = name
+
+    def sync(self, stage):
+        """Close ``stage``: synchronise, log it, record it as the last clean stage."""
+        if not self.enabled:
+            return
+        torch.cuda.synchronize(self.device)
+        log(f"  [sync] {stage}: clean")
+        self.last = stage
+        self.current = self.coarse
+
+    def enter(self, stage):
+        if self.enabled:
+            self.current = stage
+
+    def tick(self):
+        """Close the current read silently — one log line per tensor would be a thousand
+        lines of noise, and the stage NAME is the payload, not the line."""
+        if not self.enabled:
+            return
+        torch.cuda.synchronize(self.device)
+        self.last = self.current
+        self.current = self.coarse
+
+    def where(self):
+        """A sentence placing a failure between the last clean stage and the current one."""
+        if not self.enabled:
+            return (f"e4b: re-run with {SYNC_DEBUG_ENV}=1 to bound this failure to a load stage "
+                    f"(and {LAUNCH_BLOCKING_ENV}=1 in the environment to bound it to a launch).")
+        return (f"e4b: [sync] last stage that synchronised clean: {self.last or '<none>'}; "
+                f"failure observed in: {self.current or '<between stages>'} "
+                f"(phase: {self.coarse or '<none>'}).")
+
+
 def _declares_clamped_swiglu(lm_config):
     """True if this config declares the CLAMPED SwiGLU epilogue (gpt-oss lineage):
     ``gate.clamp(max=limit)``, ``up.clamp(±limit)``, ``gate * sigmoid(gate * alpha)``.
@@ -832,6 +1038,13 @@ def load_moe_4bit_streaming(
     # below must only ever see canonical names (an unnormalized alias would silently pick the
     # wrong class).
     quant_type = normalize_quant_type(quant_type)
+    # #344: staged synchronisation, armed HERE because this is the last point in the load
+    # at which CUDA_LAUNCH_BLOCKING can still reach the driver — nothing above has touched
+    # the GPU (the model is built on `meta`, the snapshot comes off disk), so a caller that
+    # has imported torch without initialising CUDA still gets the launch-exact behaviour.
+    # Inert without E4B_LOAD_SYNC_DEBUG=1.
+    trace = _LoadStageTrace(device)
+    trace.arm()
     # `arena`: serve experts from a baked NVMe arena instead of reading them out of
     # the checkpoint. The expert modules are then built on `meta` (shapes only), so
     # expert storage stops scaling with model size — the difference between needing
@@ -1041,11 +1254,25 @@ def load_moe_4bit_streaming(
     # would not have guessed is read by matching, not by string assembly.
     conv = _convention_or_none(model_type)
     ckpt_experts = _index_per_expert_keys(conv, weight_map)
-    handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in set(weight_map.values())}
+    trace.enter("map shard handles")
+    _shards = sorted(set(weight_map.values()))
+    _big_name, _big_size = _largest_shard(snap, weight_map)
+    if trace.enabled:
+        log(f"  [sync] mapping {len(_shards)} shard(s), largest {_big_name!r} at {_gib(_big_size)}")
+    try:
+        handles = {f: safe_open(os.path.join(snap, f), framework="pt", device=device) for f in _shards}
+    except Exception as exc:
+        # A host that cannot map the largest shard fails RIGHT HERE with the mapping's own
+        # error ("Cannot allocate memory"), which is the readable end of #344's failure
+        # family. Say what was being mapped and against what headroom, so the readable case
+        # and the opaque one below carry the same facts.
+        _explain_shard_failure(exc, None, _big_name, snap, weight_map, device, trace)
+        raise
+    trace.sync("map shard handles")
 
     raw_readers = {}
 
-    def get(name):
+    def _read(name):
         fn = weight_map[name]
         try:
             return handles[fn].get_tensor(orig_key[name])
@@ -1058,6 +1285,22 @@ def load_moe_4bit_streaming(
                 log(f"  {fn}: holds a dtype this torch ({torch.__version__}) cannot "
                     f"name; reading those tensors as raw uint8")
             return raw_readers[fn].u8(orig_key[name]).to(device)
+
+    def get(name):
+        # EVERY shard read funnels through here, which is why the diagnosis hangs off it:
+        # #344's two recorded host failures both surfaced at this call, at two unrelated
+        # points in the load (the first expert read on one host, the non-expert pass on
+        # another), and both said only "CUDA error: invalid argument". The shard size and
+        # the host's headroom — the facts that make that sentence readable — were known
+        # right here and were never printed. Costs nothing until something raises.
+        trace.enter(f"read {name!r} from {weight_map[name]}")
+        try:
+            tensor = _read(name)
+        except Exception as exc:
+            _explain_shard_failure(exc, name, weight_map[name], snap, weight_map, device, trace)
+            raise
+        trace.tick()
+        return tensor
 
     n_layers = lm_config.num_hidden_layers
     n_exp = getattr(lm_config, "num_local_experts", None) or getattr(lm_config, "num_experts", None)
@@ -1074,6 +1317,7 @@ def load_moe_4bit_streaming(
         # Not a checkpoint prefix — for the mixtral family the checkpoint keys live
         # under `block_sparse_moe.experts` instead, and `ckpt_experts` holds those.
         epfx = f"model.layers.{i}.{expert_rel}."  # "...mlp.experts." / "...experts." / "...block_sparse_moe.experts."
+        trace.phase(f"quantise experts: layer {i}")
         # CHECKPOINT side: this layer's per-expert keys as the convention parses them.
         # Empty for the pre-fused and dedicated-quant families, whose branches below
         # address the checkpoint by `epfx` because there the two sides do coincide.
@@ -1362,6 +1606,7 @@ def load_moe_4bit_streaming(
         )  # ("model.layers.i.mlp","experts") or ("model.layers.i","experts")
         setattr(model.get_submodule(parent), leaf, experts)
         del gate_up, down
+    trace.sync("quantise experts (all layers)")
     if n_moe == 0:
         # Name the CHECKPOINT spelling the convention actually looks for, not the
         # module path. Reporting `expert_rel` here is what made the mixtral failure
@@ -1404,6 +1649,7 @@ def load_moe_4bit_streaming(
             f"(dense side stays FP8-resident, decoded on use)")
 
     log("  loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...")
+    trace.phase("load non-expert weights")
     renamings = _checkpoint_key_renamings(model_type)
     # The convention's own SUBSTRING renames, for the non-expert half of a family
     # whose MoE block is spelled differently on disk: the mixtral family's router
@@ -1452,6 +1698,8 @@ def load_moe_4bit_streaming(
     # the model has (some architectures, e.g. Gemma, use more than one). Generic; no per-model import.
     # Use `lm_config` (the text tower's config): a multimodal top-level config (Gemma-4's `Gemma4Config`)
     # lacks the rotary fields (`max_position_embeddings`, rope_theta) that live on `text_config`.
+    trace.sync("load non-expert weights")
+    trace.phase("rebuild rotary embeddings")
     for name, module in list(model.named_modules()):
         if type(module).__name__.endswith("RotaryEmbedding"):
             parent = model.get_submodule(name.rsplit(".", 1)[0]) if "." in name else model
@@ -1463,6 +1711,8 @@ def load_moe_4bit_streaming(
     # plausibly shaped, initial train loss sits at ln(vocab), and LoRA "converges" by learning
     # to steer hidden states into embed_tokens — then collapses when the adapter is served on a
     # stack that maps lm_head correctly. Gate on the config and fail loud instead.
+    trace.sync("rebuild rotary embeddings")
+    trace.phase("tie output head + final checks")
     if model.lm_head.weight.is_meta:
         if getattr(lm_config, "tie_word_embeddings", True):
             model.lm_head.weight = model.model.embed_tokens.weight
@@ -1497,6 +1747,7 @@ def load_moe_4bit_streaming(
         log(f"  experts deferred to the arena: {len(meta_expert_prefixes)} module(s), "
             f"{deferred} unmaterialized buffer(s) — call "
             f"nvme_experts.{_enabler}() before running this model")
+    trace.sync("tie output head + final checks")
     return model, config
 
 
