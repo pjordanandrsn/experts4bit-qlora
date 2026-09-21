@@ -1,0 +1,77 @@
+{
+ "model": "ai21labs/Jamba-tiny-dev",
+ "revision": null,
+ "source": "hf-id",
+ "provenance": "published",
+ "device": "cpu",
+ "dtype": "bfloat16",
+ "probe": "bench/support/support_probe.py",
+ "started_utc": "2026-09-21T23:35:05Z",
+ "versions": {
+  "python": "3.14.6",
+  "platform": "macOS-26.4.1-arm64-arm-64bit-Mach-O",
+  "torch": "2.14.0",
+  "transformers": "5.17.0",
+  "bitsandbytes": "0.50.2",
+  "gnf4": "0.31.0",
+  "e4b": "0.36.4"
+ },
+ "stages": {
+  "config": {
+   "status": "ok"
+  },
+  "claim": {
+   "status": "ok"
+  },
+  "precondition": {
+   "status": "ok",
+   "blocksize": 64
+  },
+  "integrity": {
+   "status": "not_tested",
+   "reason": "hf-id: huggingface_hub verifies its own downloads"
+  },
+  "load": {
+   "status": "ok",
+   "seconds": 0.9
+  },
+  "verify": {
+   "status": "ok",
+   "n_quantized": 8,
+   "n_unquantized": 0,
+   "quant_types": [
+    "nf4"
+   ]
+  },
+  "forward": {
+   "status": "ok",
+   "note": "loss is on synthetic arange token ids: a finiteness smoke test, NOT a quality measure",
+   "seconds": 0.77,
+   "loss": 19.38551,
+   "loss_finite": true,
+   "logits_finite": true
+  },
+  "capture": {
+   "status": "not_tested",
+   "reason": "CPU probe: CUDA-graph capture cannot be established here"
+  }
+ },
+ "model_type": "jamba",
+ "config": {
+  "hidden_size": 512,
+  "num_hidden_layers": 16,
+  "num_experts": 8,
+  "top_k": 2,
+  "moe_intermediate_size": 2048
+ },
+ "claim": {
+  "in_supported_architectures": true,
+  "reachable_by_convention": false,
+  "expert_attr": "feed_forward.experts"
+ },
+ "total_params": 221695360,
+ "tier": "toy",
+ "tier_rule": "total_params < 1000000000 -> toy; else reference",
+ "exit_code": 0,
+ "finished_utc": "2026-09-21T23:35:08Z"
+}
