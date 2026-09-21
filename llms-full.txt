@@ -2184,6 +2184,20 @@ experts carry half the GPTQ error — 9.9 %, at the 10 % threshold) and
 Mixtral (flat: 22.7 % on the 16 layers measured) is data for a
 per-expert fallback that is not built.
 
+**Calibration does not rescue Gemma-4's experts, and the more principled
+calibration is worse.** With all 30 expert layers quantised, KL against the
+bf16 checkpoint reads **1.0772** for NF4 round-to-nearest, **1.1050** for
+calibrated int4 packed all at once, and **1.1564** for calibrated int4 packed
+sequentially — batches, source and Hessian budget identical, calibration
+**order** the only difference. The ordering effect that licensed sequential
+calibration on Qwen3-30B does not transfer to this family; it **inverts**.
+Both registered predictions were refuted, and the third — which deliberately
+declined to predict the direction — is why the reading stands
+([`bench/p53/RESULTS-p53.md`](../bench/p53/RESULTS-p53.md)). Together with P49,
+which refuted shrinking the perturbation, **both addressable axes are now
+closed**: the only lever on Gemma-4's positional sensitivity remains keeping
+early expert layers in high precision, and that lever is memory.
+
 **Gemma-4's fused training path does not agree with e4b's own dense
 reference, and a kernel change did not fix it.** On the same box, the same
 tokens and identical trainable counts, the fused expert path and e4b's
@@ -3407,6 +3421,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.h2h.unsloth.qwen3_5.5090.2026-09-19.e4b-internal-parity [measured]: e4b's fused training path against its own dense reference on qwen3_5, same box and tokens: 0.00159 nats final against tp1's 0.05 band -- PASS, with the fused path x13.89 faster per step. Registered as A3 in P46 amendment 2: a refused parity on any family would have stopped the release.
 - e4b.train.h2h.unsloth.coverage.5090.2026-09-19 [measured]: Coverage of the 0.32.1 re-run, stated so the gaps are not read as results: positions are quoted for Qwen3-30B-A3B against Unsloth (4.490) and Granite against HF+PEFT (1.292). NOT quoted: Granite and Qwen3.6 against Unsloth (its arm trains 5.2 M parameters against e4b's 99.6 M -- attention only, VOID by tp4's regime rule); OLMoE against Unsloth (its arm died before its first step); OLMoE against HF (ratio 1.945 but the held-out gap is 0.0550 nats, outside the reading band -- FLAGGED); gpt-oss (e4b's fused path refuses the family by citation, so no primary pair); Qwen3 and Qwen3.6 against HF (OOM). Gemma-4 and Mixtral were not in this re-run's scope.
 - e4b.parity.gemma4.train-internal [measured-private] (receipt private): Gemma-4-26B-A4B-it's FUSED expert training path disagrees with e4b's OWN dense per-expert reference, and the disagreement survives a kernel change: final held-out delta 0.08257 nats and median step-wise |delta| 0.12421 against tp1's 0.05/0.05 band -> FAIL, measured on grouped-nf4-gemm 0.32.1 after the adapter-path change, having read 0.09037 / 0.11801 -> FAIL on the previous cut. Both arms OK/VALID at 487,280,640 trainable, same box, same tokens. This is e4b against itself, not against another framework. NOT FIXED (e4b#558 closed as explained, not resolved).
+- e4b.quality.gemma4.calibration-refuted [measured-private] (receipt private): GPTQ calibration does NOT rescue Gemma-4-26B-A4B-it's quantised experts, and SEQUENTIAL calibration is WORSE than all-at-once on this family: with all 30 expert layers quantised, KL vs the bf16 checkpoint reads NF4 round-to-nearest 1.0772 (top-1 0.6438), calibrated int4 all-at-once 1.1050 (0.6423), calibrated int4 sequential 1.1564 (0.6299). Calibration batches, source and Hessian budget identical across the calibrated arms; ORDER was the only difference. The Qwen3-30B ordering effect (streamed -0.050 ppl vs all-at-once +0.150) does not transfer to Gemma-4's experts -- it inverts. No serving position is quoted from this lane; the row records a refutation.
 
 Open items (no evidence either way):
 
@@ -3414,4 +3429,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(193 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(194 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
