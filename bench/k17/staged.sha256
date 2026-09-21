@@ -1,0 +1,3 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source in this directory and compares.
+e0d81b64726c0ad3ca46d76281a676455c432031930943b2ffe3df660086f3f1  k17_run.sh
