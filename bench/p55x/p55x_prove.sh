@@ -25,15 +25,21 @@ PROBE_MB=${P55X_PROBE_MB:-256}; MIN_UP_MBS=${P55X_MIN_UP_MBS:-8}; MIN_DISK_GB=${
 mkdir -p "$OUT" || { say "cannot create $OUT"; exit 20; }
 
 say "box facts ($HOST:$PORT, instance $E4B_RENT_INSTANCE_ID)"
-$SSH 'nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader; echo "---"; df -BG --output=avail /root | tail -1; echo "---"; df -h /root | tail -1; echo "---"; free -g | head -2; echo "---"; lscpu | grep -E "^Model name"' \
+# Every value is read by its own KEY= marker, never by line number. The Vast image prints a two-line login
+# banner ("Welcome to vast.ai...") ahead of the command's own output, so `head -1` returns the banner and
+# `sed -n 2p` returns "Have fun!" -- which is exactly what the first proving run recorded as its GPU name and
+# its free-disk figure. Same defect family as the ssh banner fused to a curl HTTP status.
+$SSH 'echo "P55X_GPU=$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | head -1)"; echo "P55X_AVAIL_GB=$(df -BG --output=avail /root | tail -1 | tr -dc 0-9)"; echo "P55X_DF=$(df -h /root | tail -1)"; echo "P55X_RAM_GB=$(free -g | awk "/^Mem:/{print \$2}")"; echo "P55X_CPU=$(lscpu | sed -n "s/^Model name: *//p" | head -1)"' \
   > "$OUT/box.txt" 2>&1 || { say "ssh to the box failed -- the path is NOT proven"; cat "$OUT/box.txt"; exit 21; }
 cat "$OUT/box.txt"
-GPU=$(head -1 "$OUT/box.txt"); AVAIL=$(sed -n '2p' "$OUT/box.txt" | tr -dc '0-9')
+val(){ grep -m1 "^$1=" "$OUT/box.txt" | cut -d= -f2-; }
+GPU=$(val P55X_GPU); AVAIL=$(val P55X_AVAIL_GB | tr -dc '0-9')
+[ -n "$GPU" ] && [ -n "$AVAIL" ] || { say "the box answered but not with the markers -- cannot report a measurement"; exit 23; }
 
 say "upload probe: ${PROBE_MB} MB off the box, the direction the pre-flight does not measure"
 $SSH "dd if=/dev/urandom of=/root/.uprobe.bin bs=1M count=$PROBE_MB status=none" || { say "could not create the probe file"; exit 22; }
 D=$(mktemp -d "${TMPDIR:-/tmp}/p55x-prove.XXXXXX"); T0=$(date +%s)
-rsync -a --no-compress -e "$RSH" "root@$HOST:/root/.uprobe.bin" "$D/" >/dev/null 2>&1; PRC=$?
+rsync -a -e "$RSH" "root@$HOST:/root/.uprobe.bin" "$D/" >/dev/null 2>&1; PRC=$?
 T1=$(date +%s); $SSH "rm -f /root/.uprobe.bin" >/dev/null 2>&1
 GOT=$(wc -c < "$D/.uprobe.bin" 2>/dev/null || echo 0); rm -rf "$D"
 UP=$(python3 -c "print(f'{$GOT / 1048576.0 / max(1.0, $T1 - $T0):.2f}')")
@@ -52,5 +58,13 @@ print(json.dumps({
 PY
 say "MEASURED: upload ${UP} MB/s (lane floor ${MIN_UP_MBS}); the 15.2 GiB artifact would take ~${ART_MIN} min at this rate"
 say "MEASURED: ${AVAIL:-0} GB free on /root (lane floor ${MIN_DISK_GB}) on ${GPU}"
+# A LOW reading is a result and this script reports it without refusing. NO reading is not a result, and the
+# first proving run wrote status OK / result pass over a transfer that never happened (rsync rc 1, 0 bytes)
+# because the script ended in `exit 0` regardless. "Does not refuse on the measurement" and "reports success
+# having measured nothing" are different things, and only the first one was intended.
+if [ "$PRC" != 0 ] || [ "$GOT" -lt $((PROBE_MB * 1048576)) ]; then
+  say "NO MEASUREMENT: the probe transfer failed (rsync rc $PRC, $GOT of $((PROBE_MB * 1048576)) bytes) -- this run measured nothing and is not a proof of the upload path"
+  exit 24
+fi
 say "path proven end to end; the launcher owns the receipt, the ledger row and the teardown proof"
 exit 0

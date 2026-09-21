@@ -47,7 +47,7 @@ BYTES=$(du -sm "$ART" | cut -f1)
 say "2/3 placing ${BYTES}M on the archive host at $DEST"
 ssh -o BatchMode=yes "$NAS_HOST" "mkdir -p '$DEST'${NAS_LINK:+ && { [ -e '$NAS_LINK' ] || ln -s '$NAS_POOL' '$NAS_LINK'; \}}" \
   || { say "REFUSING: cannot prepare $DEST"; exit 2; }
-rsync -a --partial --inplace --no-compress --info=progress2 "$ART/" "$NAS_HOST:$DEST/" \
+rsync -a --partial --inplace "$ART/" "$NAS_HOST:$DEST/" \
   || { say "REFUSING: rsync to the archive host failed -- the bytes are not retained"; exit 2; }
 
 say "3/3 re-hashing on the archive host and recomputing the root fingerprint there"
