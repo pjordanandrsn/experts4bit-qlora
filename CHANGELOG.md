@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### There is a licensed pack again, and its bytes exist (#658, #405)
+
+Lane P55x built Qwen3-30B-A3B's streamed 64k calibrated int4 expert pack, dumped it as a hash-pinned
+artifact, and ran the registered two-text K8 gate **on those bytes loaded back by fingerprint** — the
+path a loader takes, not the live stores they were built from. It **passes both texts**: wikitext
+−0.05275 ppl, c4val1 −0.06622, against an NF4 reference on that box bit-identical to bo6c's on both.
+
+`pack_fingerprint sha256:0c9955a9f06d8326…` is in the register. The bytes are retained and were verified
+after transfer by two independent implementations on two machines. A loader given that fingerprint
+refuses anything else and never rebuilds from the recipe, so **the licence travels as bytes** — which is
+what [#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405) had been open on since
+2026-09-06, when the machinery existed but no pack had been built, gated and kept.
+
+**Three findings beyond the licence.**
+
+- **The recipe reproduces across boxes, and #405's framing was drawn from an outlier.** This pack is
+  byte-identical to the one lane P39 built on 2026-09-10 on a different rented 5090 under **e4b 0.35.3**,
+  where this ran under **0.36.4** — the same 64 hex characters across a box and a release boundary. With
+  P39's own box-1/box-2 agreement and this lane's two same-box builds, four builds across at least three
+  boxes agree on every byte. P37's 11522/766 divergence is the outlier, not the rule, and the open
+  question becomes what was different about that host. The remedy is unchanged: a licence still travels
+  as bytes, because nothing here predicts which box is the next P37.
+- **The half that cannot be pinned is the half carrying the quality.** `engines/int4_attn_calib.py` has
+  no serialisation of any kind, so the 192 calibrated attention projections are re-derived on every load.
+  The same pinned expert bytes with RTN attention instead **fail** c4val1 at +0.13237 — a +0.19858 swing
+  and a budget failure. So `pack_fingerprint` names the experts, the unpinnable component is load-bearing,
+  and that residual is now measured rather than asserted.
+- **The recipe is byte-deterministic on one box.** Two builds in one session produced the identical
+  fingerprint, method-map hash and row-count-vector hash. bo6c's determinism row compared mean_nll and
+  counts for the 16k arm a day before fingerprints existed; this is the 64k recipe at byte level.
+
+bo6c's verdict row stays **active and unsuperseded**, deliberately: three bo7 census rows take their
+licence from it, and repointing them at this verdict would assert their pack is this pack — unverifiable,
+since neither bo6c's nor bo7's bytes were kept. What the new row replaces is bo6c's *role*, not its
+measurement. No gate, threshold, `min_rows`, damping or K8 budget moved.
+
 ### The five families still staged now say WHY, and each reason is a test (#648, #509)
 
 `STAGED_NOT_WIRED` recorded which families no loader admits. For four of them it recorded no reason

@@ -97,7 +97,11 @@ $SSH "cd $W || exit 20; nohup env $PASS bash p55x_run.sh > outer.log 2>&1 < /dev
 # zeros on liveness with no TP_DONE end the wait with their own code, so a killed lane is not flattened into
 # "ran out of clock".
 STALL_S=${P55X_STALL_S:-1200}; MIN_PROGRESS_MB=${P55X_MIN_PROGRESS_MB:-16}
-ART_LOCAL="$RUN_DIR/p55x-artifact"; ART_PID=""; ART_LOG="$RUN_DIR/p55x-artifact-fetch.log"; ART_T0=""
+# NOT under $RUN_DIR: that is inside the receipts GIT repository, and p55x-packlic-1 fetched 15.2 GiB
+# into it -- one `git add <run dir>` away from committing a 15 GiB pack to a repository of text receipts.
+# The bytes go beside the repo and the receipts carry the fingerprint that names them.
+ART_LOCAL=${P55X_ARTIFACT_DIR:-$HOME/p55x-artifacts/$E4B_RENT_RUN_ID}; ART_PID=""
+ART_LOG="$RUN_DIR/p55x-artifact-fetch.log"; ART_T0=""
 progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev
   idle_s=$1; stall_s=$2; util=$3; dfk_now=$4; dfk_prev=$5; du_now=$6; du_prev=$7; min_mb=$MIN_PROGRESS_MB
   consumed=0; grew=0

@@ -709,28 +709,34 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
 
 ## What is open
 
-- **The licensed serving pack does not reproduce bit-for-bit across boxes.**
-  Lane p37 (`bench/h2h-20260905/p37/`) re-derived Qwen3's streamed 64k
-  calibrated pack with the same recipe on another host and read 11522 gptq /
-  766 rtn expert matrices against the licensed 11512 / 776 (bo6b, bo6c,
-  bo7): ten of 12,288 matrices crossed the `min_rows` threshold the other
-  way — and the registered K8 gate run on that pack (amendment 3,
-  `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`) **fails on C4
-  validation: +0.1093 ppl against the +0.05 budget** (wikitext −0.0230,
-  pass), where the licensed pack read −0.0662 on the same window and the
-  two boxes' NF4 references agree to 0.0002 ppl. The reference travels; the
-  calibrated pack does not: the streamed calibration recipe does not
-  reproduce its licence across hosts. bo6c's licence stands on its box as
-  measured; what is open is the recipe's host-dependence — same checkpoint,
-  same text, same knobs, a different pack and a different verdict on
-  another host ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
-  The loader now pins licensed bytes: `enable_serve_experts_int4_calibrated`
-  given an `expected_fingerprint` loads a pack-manifest artifact and
-  **refuses** a mismatch — it never rebuilds from the recipe on that path.
-  No licensed artifact hash is in the register yet (the bo6c bytes were not
-  retained); existing licence rows carry no `pack_fingerprint` until a
-  replacement pack is pre-registered, K8'd, and published. Counts stay
-  diagnostics. `min_rows`, damping, and the K8 budget are unchanged.
+- **The licensed serving pack is now artifact-backed, and the recipe's
+  cross-host reproduction is narrower than it looked.** Lane P55x
+  (`bench/p55x/`, 2026-09-22) built Qwen3's streamed 64k calibrated pack,
+  dumped it as a hash-pinned artifact, and ran the registered K8 gate **on
+  those bytes loaded back by fingerprint** — the path a user gets. It
+  **passes both texts**: wikitext −0.05275 ppl, c4val1 −0.06622, against an
+  NF4 reference on that box that is bit-identical to bo6c's. `pack_fingerprint
+  sha256:0c9955a9f06d8326…` is in the register, the bytes are retained, and
+  they were verified after transfer by two independent implementations on two
+  machines. A loader given that fingerprint refuses anything else and never
+  rebuilds from the recipe, so the licence now travels as bytes
+  ([`e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22`](claims.json)).
+  That pack is also **byte-identical to the one lane P39 built on a different
+  5090 on 2026-09-10 under e4b 0.35.3**, where P55x ran under 0.36.4 — so four
+  builds across at least three boxes and a release boundary agree on every
+  byte, and **P37's divergence (11522/766, c4val1 +0.109) is an outlier rather
+  than the rule**. The open question is no longer whether the recipe
+  reproduces but what was different about that host
+  ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
+  Two things stay open and are not small. **The fingerprint covers the experts
+  only**: `engines/int4_attn_calib.py` has no serialisation, so the 192
+  calibrated attention projections are re-derived on every load — and the same
+  pinned expert bytes with RTN attention **fail** c4val1 at +0.13237, so that
+  unpinnable half is the half carrying the quality. And bo6c's own row keeps no
+  fingerprint, because its bytes were not retained; it stays active rather than
+  superseded, since the bo7 census rows take their licence from it and nothing
+  establishes that their pack is this pack. `min_rows`, damping and the K8
+  budget are unchanged.
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the
