@@ -174,11 +174,12 @@ if _P57_OUT:
         from distinct_experts import DistinctExpertCounter
         cfg = getattr(model, "config", None)
         top_k = int(getattr(cfg, "num_experts_per_tok"))
-        counter = DistinctExpertCounter(model, top_k=top_k)
         batch = int(os.environ.get("P57_BATCH", "16"))
+        # amendment 3: on-device accumulation (capture-safe) -- the constructor needs E and B up front
+        counter = DistinctExpertCounter(model, top_k=top_k, num_experts=int(getattr(cfg, "num_experts")), batch=batch)
 
         def _dump():
-            rep = counter.report(batch=batch, num_experts=int(getattr(cfg, "num_experts")))
+            rep = counter.report()
             with open(_P57_OUT, "w") as f:
                 _json.dump(rep, f, indent=1)
             print(f"P57_DISTINCT_OUT {_P57_OUT} layers={rep['layers']} steps={rep['steps']} "

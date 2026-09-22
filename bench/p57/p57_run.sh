@@ -181,7 +181,7 @@ if can_run 900 int4_b16_distinct; then
   env E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=0 \
     P57_DISTINCT_OUT=$W/distinct_experts_b16.json P57_BATCH=16 GNF4_GEMV_FUSED_REDUCE=0 \
     perl -e "alarm $(arm_alarm); exec @ARGV" python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
-      --batch 16 --prompt-len 512 --gen-tokens 128 --b1d-loop eager --b1d-timed --no-fuse-qkv \
+      --batch 16 --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv \
       --out $W/e4b_b16_int4_b16_distinct.json >> logs/run_int4_b16_distinct.log 2>&1
   rc_d=$?; vram_stop $sp
   grep -aE "P57 HOOK|P57_DISTINCT_OUT|B1D_TIMED|BV3_|REFUSED|Error" logs/run_int4_b16_distinct.log | tail -4 | sed "s/^/    /"
