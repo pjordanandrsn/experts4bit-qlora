@@ -215,7 +215,8 @@ other family.
 ## Fixture and knobs
 
 tp4's field recipe, unchanged and unchanged deliberately so the numbers compare to
-the standing row: alpaca, seq 2048, micro-batch 1 × accum 4, r16 / α16, lr 2e-4,
+the standing row: alpaca, seq 2048, **micro-batch 2 × accum 4** (see the erratum
+below), r16 / α16, lr 2e-4,
 AdamW-8bit, linear warm-up 5, seed 3407, **N = 20**, `--attn-4bit 1`, the same
 `tp4_alpaca.py` tokens and registered `DS_ALPACA_SHA`. Model
 `google/gemma-4-26B-A4B-it` at tp4's pinned revision.
@@ -280,3 +281,35 @@ Authorization: the owner's standing directive for the training/throughput campai
 Teardown proven by the launcher; receipts under
 `receipts/experts4bit-qlora/2026-09-21/<run-id>/`, read by `bench/p56/p56_reduce.py`
 under its own rules. Nothing in the results page is hand-transcribed from a log.
+
+
+---
+
+## Erratum (2026-09-22 00:07Z, while the draw it governs is RUNNING): the fixture is micro-batch 2, not 1
+
+**The defect.** "Fixture and knobs" above said the field recipe is *micro-batch 1 ×
+accum 4*. It is **micro-batch 2 × accum 4**: `tp4_run.sh:36` reads
+`MB=${TP4_MB:-2}`, `RESULTS-tp4-p46cut.md` states "micro-batch 2 × accum 4", and
+TP4-PREREG's own fixture line says the same. Micro-batch 1 is the `_mb1` SECONDARY
+pair (micro-batch 1 × accum 8), which this lane does not run.
+
+**What it does and does not affect.** Nothing in the experiment: the draw passes no
+`TP4_MB`, so it took the default **2**, which is the field recipe and is what the
+standing row `e4b.parity.gemma4.train-internal` was measured on. The box's own
+`summary.txt` for run `p56-gemma4-ladder-1` reads
+`FIXTURE field: … micro_batch=2 accum=4 …`, which is how the error was found — by
+reading what the harness printed, not by re-reading this document. So the comparison
+to the standing row is unaffected and no arm changes.
+
+The paragraph below headed "Micro-batch is NOT a knob this lane varies" also stands
+in full. Its reasoning is about `collate` right-padding variable-length rows so two
+micro-batch shapes optimise differently weighted objectives; that is true whichever
+shape is the primary, and it is still why no micro-batch pair is used as a null here.
+
+**Why an erratum and not an edit.** This document is registered and the draw it
+authorises launched at 2026-09-21T23:57:52Z, before this was written. Silently
+correcting a registered document after its run has started is what makes a register
+worthless. The corrected figure is marked inline above and the record of the error
+is here, both timestamped. Same shape as TP4-PREREG amendment 5's erratum, and the
+same lesson twice in one lane: **a register is checked by running the thing that
+reads it.**
