@@ -4,6 +4,14 @@ Pre-registration: [`P60-PREREG.md`](P60-PREREG.md) (#685, merged 87c5096 before 
 
 Lane `p60-5090-1`: Vast instance 52104714, one RTX 5090 (170 SMs) on an AMD EPYC host; e4b **87c5096**, grouped-nf4-gemm **65cb104**, torch 2.8.0+cu128; rented 18:57Z, `TP_DONE` 19:21Z, destroyed 19:21:53Z (proven); **$0.23** against the $0.66 estimate. The served int4 stack's routing was recorded on the 16 wikitext rows every B=16 lane decoded (digest `f67e7e4d…`), 128-row prefill, 128 teacher-forced decode steps; the replay ran those 128 steps × 96 expert-GEMV calls, one CUDA graph per step, 20 replays each, on synthetic 128-expert weights at the real shapes, with gnf4's own plan (split-K 16 for `gate_up`, 6 for `down`). Copy bandwidth on the box: **1512 GB/s** (#564 used 1,528).
 
+> **Correction (2026-09-22, after grouped-nf4-gemm lane K18).** This read attributed the 0.92 ms/step dedup gap to *re-streaming each expert's weight slice once per routed row*, called it "the ceiling a grouped expert GEMV can recover", and said P0/P2 suggest the kernel is load-bound. The number stands. The attribution does not.
+>
+> - The dedup arm drops three things at once: the repeated rows' loads, **their arithmetic**, and their programs.
+> - P3 below already found that locality is not the constraint.
+> - K18 built the grouped GEMV this read licensed. It loads each expert's slice once for up to four of its rows and keeps every row's arithmetic. It is bitwise exact and **1.49× slower** on these recorded ids: 9.689 against 6.520 ms/step on a second 5090 host, where this replay's served arm reads 6.520 and dedup 5.564 (grouped-nf4-gemm `kernel/RESULTS-k18-grouped-expert-gemv.md`, row `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`).
+>
+> So what 0.92 ms measures is the cost of ~73 more rows per call (128 routed against 54.7 distinct), and nothing measured separates their loads from their arithmetic. That work is not optional: each routed row is a different token's activation. The original text below is kept as written.
+
 ## The read
 
 | arm | step ms (median of 128) | mean | `_gemv_int4_b32` ms (profiler, 8 steps) | reduce ms |

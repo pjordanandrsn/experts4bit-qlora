@@ -2755,11 +2755,16 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   is present after all, sized by the routing it actually sees.
 - **Where that headroom is (P60, 2026-09-22, `bench/p60/RESULTS-p60.md`):
   repeated rows.** Replaying the recorded B=16 routing through the shipped GEMV
-  reproduces the served kernel row (6.155 vs 6.340 ms) and shows streaming each
-  expert once per routed row instead of once per distinct expert costs **0.92
-  ms/step**; ordering rows by expert changes nothing (L2 already serves repeats).
-  A grouped expert GEMV (grouped-nf4-gemm lane K18) is licensed to build against
-  those recorded ids; row `e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`.
+  reproduces the served kernel row (6.155 vs 6.340 ms) and shows one row per
+  distinct expert instead of one per routed row runs **0.92 ms/step** faster;
+  ordering rows by expert changes nothing (L2 already serves repeats); row
+  `e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`.
+  **Not reachable by sharing loads (K18):** a grouped GEMV loading each
+  expert's slice once per four rows is exact and 1.49× slower on those ids
+  (9.689 vs 6.520 ms/step, gnf4 row
+  `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`); the 0.92 ms is the
+  extra rows' loads and arithmetic together, and P60's re-streaming reading is
+  withdrawn.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3572,7 +3577,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p59b.qwen3.b16.fqkv-kl.5090.2026-09-22 [measured]: Lane P59B: at B=16 the fused-q/k/v int4 attention store changes Qwen/Qwen3-30B-A3B's served output distribution by KL(unfused || fused) = 0.00440 nats/token mean (median 0.00151, p95 0.01416, max 0.9790) with top-1 agreement 0.9775 over 2048 teacher-forced decode positions; the same stack rebuilt in a fresh process reads KL exactly 0 (determinism control) and the shared prefill path reads 2.93e-02 (prefill control). Verdicts: P1 HOLDS, P2 HOLDS, P3 HOLDS, P4 REFUTED, census OK.
 - e4b.serve.p59b.qwen3.b16.nf4-int4-kl.5090.2026-09-22 [measured]: Lane P59 anchor: KL(NF4 control || unfused int4 stack) at B=16 = 0.06715 nats/token mean (p95 0.25707), top-1 0.9028, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.
 - e4b.serve.p59b.qwen3.b16.nf4-fqkv-kl.5090.2026-09-22 [measured]: Lane P59 anchor: KL(NF4 control || fused-q/k/v int4 stack) at B=16 = 0.07057 nats/token mean (p95 0.25948), top-1 0.9014, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.
-- e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22 [measured]: Lane P60: replaying Qwen3-30B-A3B's recorded B=16 routing (128 decode steps x 48 layers, 54.7 distinct experts per layer per step) through the shipped int4-b32 expert GEMV on one RTX 5090 reproduces the served kernel row (6.155 ms/step vs the census's 6.340), and shows the cost of streaming each expert once per ROUTED ROW rather than once per distinct expert: 6.479 vs 5.560 ms/step = 0.919 ms/step, the ceiling a grouped expert GEMV can recover; ordering rows by expert changes nothing (-0.55%); one row per expert sits 1.21x above the 1512 GB/s byte floor (4.598 ms).
+- e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22 [measured]: Lane P60: replaying Qwen3-30B-A3B's recorded B=16 routing (128 decode steps x 48 layers, 54.7 distinct experts per layer per step) through the shipped int4-b32 expert GEMV on one RTX 5090 reproduces the served kernel row (6.155 ms/step vs the census's 6.340), and one row per distinct expert instead of one per routed row runs 6.479 vs 5.560 ms/step = 0.919 ms/step faster (the repeated rows' loads and arithmetic together; not reachable by sharing loads, per grouped-nf4-gemm K18); ordering rows by expert changes nothing (-0.55%); one row per expert sits 1.21x above the 1512 GB/s byte floor (4.598 ms).
 
 Open items (no evidence either way):
 
