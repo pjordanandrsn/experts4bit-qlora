@@ -214,7 +214,12 @@ for every family but Qwen3 and for every B=16 — no anchor-class measurement ex
   (`calibexp_all_n128`, `E4B_CALIB_NSEQ=128`, after `TP_DONE`): **×2.067 at B=1 (4.20 ms = 238.1 tok/s; NF4 8.68 ms =
   115.2) — anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a PROJECTION from a class never certified — and ×2.602 at
   B=16 (1327.5 tok/s; NF4 510.3; no anchor projection) vs e4b's own NF4 control on the same box** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. The
-  same-box field comparator is P37's vLLM 0.28.0 serving `Qwen3-30B-A3B-GPTQ-Int4` via MarlinExperts (286.0 / 2030.0 graph, 300.9 / 2206.5 fp8-KV; resident footprint not recorded), bounded to B=1/B=16 on one box and one prompt set; #405 is that reproduction item (c4val1 FAIL), not a licence withdrawal. The lane's own
+  same-box field comparator is now **P58 (2026-09-22, `bench/p58/RESULTS-p58.md`): vLLM 0.30.0 serving `Qwen3-30B-A3B-GPTQ-Int4` via
+  MarlinExperts at 260.3 / 1925.6 tok/s vs the CURRENT int4 stack (RTN int4 experts + uncalibrated int4 attention + K16 route, fused q/k/v at
+  B=1) at 239.4 / 1379.2 on the same EPYC 9655-hosted 5090 with identical prompt ids — ratios 1.087 (B=1) / 1.396 (B=16), vLLM ahead;
+  vLLM 0.29.0 1.387 at B=16 (its B=1 pair drifted, not quoted); `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22` /
+  `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22` / `e4b.serve.h2h.vllm-0.29.0.p58.qwen3.b16.5090.2026-09-22`**; P37's vLLM 0.28.0
+  rows (286.0 / 2030.0 graph, 300.9 / 2206.5 fp8-KV, 2026-09-05) stay as history, bounded to B=1/B=16 on one box and one prompt set; #405 is that reproduction item (c4val1 FAIL), not a licence withdrawal. The lane's own
   calibrated arm had run the hook's 16k default (`calibexp_all`, ×2.067 / ×2.624, measured, not the licensed pack); the
   64k arm's speed is identical to it (4.20 vs 4.20 ms; 1327.5 vs 1338.8, within 1%) and to the RTN stack: a calibrated
   pack's kernels do not depend on the calibration size, as the amendment predicted.

@@ -2298,8 +2298,26 @@ validation box the same class went from 156.1 to 177.9 tok/s at B=1
 attention it had silently skipped (#375) — measured, receipt in the bo3
 bundle below, the same caveat.
 
-**Against vLLM, same box, same session, identical prompt token ids** (lane
-p37, 2026-09-05, Vast 49975016, an RTX 5090 on an EPYC 7Q83 host;
+**Against vLLM, same box, same session, identical prompt token ids — CURRENT vs
+CURRENT (lane P58, 2026-09-22, Vast 52069847, an RTX 5090 on an EPYC 9655 host;
+**measured** — [`bench/p58/RESULTS-p58.md`](../bench/p58/RESULTS-p58.md), register
+`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22` /
+`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22` /
+`e4b.serve.h2h.vllm-0.29.0.p58.qwen3.b16.5090.2026-09-22` and one row per arm):**
+vLLM **0.30.0** (released that morning) serving Qwen's GPTQ-Int4 checkpoint via
+Marlin decodes at **260.3 tok/s at B=1 and 1925.6 aggregate at B=16**; this
+package's **current int4 stack** (RTN int4 experts + uncalibrated int4 attention +
+K16 route, fused q/k/v at B=1 — P54's) reads **239.4 / 1379.2** on the same box —
+**vLLM / e4b-int4 1.087 at B=1 and 1.396 at B=16**, vLLM ahead, both inside the
+pre-registered bands; vLLM 0.29.0 reads 1912.7 at B=16 (1.387; build-to-build
+1.007) and its two B=1 engine starts disagreed by 7 % (DRIFT, no B=1 ratio for
+that build). Same-box e4b int4 / NF4: ×2.356 / ×2.851. **Bounded:** one box,
+one prompt set, B=1/B=16 only; vLLM's number includes its serving loop and
+e4b's does not, so the engine advantage is understated; quality quoted, never
+equated; footprint and TTFT not compared. The 2026-09-05 comparison below
+stays as measured history.
+
+**Against vLLM 0.28.0 (history, lane p37, 2026-09-05,** same box, same session, identical prompt token ids; Vast 49975016, an RTX 5090 on an EPYC 7Q83 host;
 **measured** — receipt [`bench/h2h-20260905/p37/`](../bench/h2h-20260905/p37/README.md),
 table in its [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
 the pre-registration verbatim as its `PREREG.md`; register
@@ -2473,8 +2491,9 @@ amendment 2 (pre-registered 06:05Z, run after `TP_DONE`): **×2.067 at B=1
 (238.1 tok/s; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a
 projection from an uncertified class) and ×2.602 at B=16 (1327.5 tok/s;
 no anchor projection) vs e4b's own NF4 control** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. The
-same-box field comparator is P37's vLLM 0.28.0 GPTQ-Int4 / MarlinExperts
-(286.0 / 2030.0 graph; footprint not recorded); #405 is the P37
+same-box field comparator is now P58's vLLM 0.30.0 GPTQ-Int4 / MarlinExperts
+(260.3 / 1925.6 graph vs the current int4 stack's 239.4 / 1379.2 — 1.087 / 1.396,
+2026-09-22; P37's 0.28.0 rows 286.0 / 2030.0 are history); #405 is the P37
 reproduction item (c4val1 FAIL), not a licence withdrawal. Its
 speed is identical to the lane's 16k arm (4.20 vs 4.20 ms; 1327.5 vs
 1338.8, within 1%) and to the RTN stack: a calibrated pack's kernels do
@@ -3505,6 +3524,28 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p57.qwen3.b16.fr.5090.2026-09-22 [measured]: Lane P57 (K17's fused split-K reduce OFF vs ON at B=16 on the unfused int4 stack): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_fr` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=1 (K17's fused split-K reduce)): 11.796 ms/step (median of two interleaved draws: 11.791 / 11.800), 1356.4 tok/s on this box.
 - e4b.serve.p57.qwen3.b16.nor2_control.5090.2026-09-22 [measured]: Lane P57 (P54's B=16 divergence split: unfused vs fused q/k/v with the round-2 glue OFF on both legs): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_nor2` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF)): 13.266 ms/step (median of two interleaved draws: 13.264 / 13.269), 1206.1 tok/s on this box.
 - e4b.serve.p57.qwen3.b16.nor2_fqkv.5090.2026-09-22 [measured]: Lane P57 (P54's B=16 divergence split: unfused vs fused q/k/v with the round-2 glue OFF on both legs): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_fqkv_nor2` (--fuse-qkv (Int4Linear.fuse, #651) E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF)): 12.929 ms/step (median of two interleaved draws: 12.932 / 12.927), 1237.5 tok/s on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.int4_eager [measured]: Lane P58 arm e4b/int4_eager at B=1: 35.5 tok/s, 28.188 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.int4_r1 [measured]: Lane P58 arm e4b/int4_r1 at B=1: 239.4 tok/s, 4.177 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.int4_r2 [measured]: Lane P58 arm e4b/int4_r2 at B=1: 239.2 tok/s, 4.18 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.nf4_r1 [measured]: Lane P58 arm e4b/nf4_r1 at B=1: 101.6 tok/s, 9.842 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.nf4_r2 [measured]: Lane P58 arm e4b/nf4_r2 at B=1: 101.5 tok/s, 9.849 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b1.eager [measured]: Lane P58 arm vLLM 0.30.0 (primary build)/eager at B=1: 50.4 tok/s, 19.836 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b1.graph_r1 [measured]: Lane P58 arm vLLM 0.30.0 (primary build)/graph_r1 at B=1: 260.3 tok/s, 3.841 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b1.graph_r2 [measured]: Lane P58 arm vLLM 0.30.0 (primary build)/graph_r2 at B=1: 260.4 tok/s, 3.841 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b1.graph_r1 [measured]: Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r1 at B=1: 280.4 tok/s, 3.566 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b1.graph_r2 [measured]: Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r2 at B=1: 259.9 tok/s, 3.847 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22 [measured]: Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.30.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 260.3 tok/s vs e4b's current int4 stack at 239.4 tok/s at B=1: ratio 1.087 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.356; vLLM / e4b NF4: 2.562.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.int4_r1 [measured]: Lane P58 arm e4b/int4_r1 at B=16: 1379.2 tok/s, 11.601 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.int4_r2 [measured]: Lane P58 arm e4b/int4_r2 at B=16: 1379.0 tok/s, 11.602 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.nf4_r1 [measured]: Lane P58 arm e4b/nf4_r1 at B=16: 483.8 tok/s, 33.07 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.nf4_r2 [measured]: Lane P58 arm e4b/nf4_r2 at B=16: 484.0 tok/s, 33.058 ms/step (graph window) on this box.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b16.graph_r1 [measured]: Lane P58 arm vLLM 0.30.0 (primary build)/graph_r1 at B=16: 1925.6 tok/s, 8.309 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b16.graph_r2 [measured]: Lane P58 arm vLLM 0.30.0 (primary build)/graph_r2 at B=16: 1917.4 tok/s, 8.345 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b16.graph_r1 [measured]: Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r1 at B=16: 1912.7 tok/s, 8.365 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b16.graph_r2 [measured]: Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r2 at B=16: 1915.2 tok/s, 8.354 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.
+- e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22 [measured]: Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.30.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 1925.6 tok/s vs e4b's current int4 stack at 1379.2 tok/s at B=16: ratio 1.396 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.851; vLLM / e4b NF4: 3.980.
+- e4b.serve.h2h.vllm-0.29.0.p58.qwen3.b16.5090.2026-09-22 [measured]: Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.29.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 1912.7 tok/s vs e4b's current int4 stack at 1379.2 tok/s at B=16: ratio 1.387 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.851; vLLM / e4b NF4: 3.953.
+- e4b.serve.h2h.p58.vllm-build-to-build.qwen3.b16.5090.2026-09-22 [measured]: Lane P58: vLLM 0.30.0 / vLLM 0.29.0 decode tok/s at B=16, same box, same prompts, GPTQ-Int4 Marlin: 1.007 (1925.6 vs 1912.7).
 
 Open items (no evidence either way):
 
@@ -3512,4 +3553,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(208 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(230 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

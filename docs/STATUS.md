@@ -410,8 +410,26 @@ validation box the same class went from 156.1 to 177.9 tok/s at B=1
 attention it had silently skipped (#375) — measured, receipt in the bo3
 bundle below, the same caveat.
 
-**Against vLLM, same box, same session, identical prompt token ids** (lane
-p37, 2026-09-05, Vast 49975016, an RTX 5090 on an EPYC 7Q83 host;
+**Against vLLM, same box, same session, identical prompt token ids — CURRENT vs
+CURRENT (lane P58, 2026-09-22, Vast 52069847, an RTX 5090 on an EPYC 9655 host;
+**measured** — [`bench/p58/RESULTS-p58.md`](../bench/p58/RESULTS-p58.md), register
+`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22` /
+`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22` /
+`e4b.serve.h2h.vllm-0.29.0.p58.qwen3.b16.5090.2026-09-22` and one row per arm):**
+vLLM **0.30.0** (released that morning) serving Qwen's GPTQ-Int4 checkpoint via
+Marlin decodes at **260.3 tok/s at B=1 and 1925.6 aggregate at B=16**; this
+package's **current int4 stack** (RTN int4 experts + uncalibrated int4 attention +
+K16 route, fused q/k/v at B=1 — P54's) reads **239.4 / 1379.2** on the same box —
+**vLLM / e4b-int4 1.087 at B=1 and 1.396 at B=16**, vLLM ahead, both inside the
+pre-registered bands; vLLM 0.29.0 reads 1912.7 at B=16 (1.387; build-to-build
+1.007) and its two B=1 engine starts disagreed by 7 % (DRIFT, no B=1 ratio for
+that build). Same-box e4b int4 / NF4: ×2.356 / ×2.851. **Bounded:** one box,
+one prompt set, B=1/B=16 only; vLLM's number includes its serving loop and
+e4b's does not, so the engine advantage is understated; quality quoted, never
+equated; footprint and TTFT not compared. The 2026-09-05 comparison below
+stays as measured history.
+
+**Against vLLM 0.28.0 (history, lane p37, 2026-09-05,** same box, same session, identical prompt token ids; Vast 49975016, an RTX 5090 on an EPYC 7Q83 host;
 **measured** — receipt [`bench/h2h-20260905/p37/`](../bench/h2h-20260905/p37/README.md),
 table in its [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
 the pre-registration verbatim as its `PREREG.md`; register
@@ -585,8 +603,9 @@ amendment 2 (pre-registered 06:05Z, run after `TP_DONE`): **×2.067 at B=1
 (238.1 tok/s; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a
 projection from an uncertified class) and ×2.602 at B=16 (1327.5 tok/s;
 no anchor projection) vs e4b's own NF4 control** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. The
-same-box field comparator is P37's vLLM 0.28.0 GPTQ-Int4 / MarlinExperts
-(286.0 / 2030.0 graph; footprint not recorded); #405 is the P37
+same-box field comparator is now P58's vLLM 0.30.0 GPTQ-Int4 / MarlinExperts
+(260.3 / 1925.6 graph vs the current int4 stack's 239.4 / 1379.2 — 1.087 / 1.396,
+2026-09-22; P37's 0.28.0 rows 286.0 / 2030.0 are history); #405 is the P37
 reproduction item (c4val1 FAIL), not a licence withdrawal. Its
 speed is identical to the lane's 16k arm (4.20 vs 4.20 ms; 1327.5 vs
 1338.8, within 1%) and to the RTN stack: a calibrated pack's kernels do

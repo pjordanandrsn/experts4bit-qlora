@@ -167,7 +167,10 @@ def batch_section(D, B, out, ratios):
                 why = "missing/VOID primary arm: " + ", ".join(missing)
             out.append(f"- **NO RATIO QUOTED for vllm-{vt} at B={B} -- {why}** (readings above; a re-run is a new lane)")
     p_, s_ = vl["primary"].get("graph_r1"), vl["secondary"].get("graph_r1")
-    if valid(p_) and valid(s_):
+    pairs_ok = all(sp_v[vt] is not None and sp_v[vt] <= SELF_PAIR for vt in BUILDS)
+    if valid(p_) and valid(s_) and not pairs_ok:
+        out.append(f"- build-to-build at B={B}: NOT QUOTED -- a vLLM self-pair is outside {SELF_PAIR}x (first draws {p_[0]} vs {s_[0]} tok/s, printed, not a position)")
+    if valid(p_) and valid(s_) and pairs_ok:
         out.append(f"- build-to-build (same box, same prompts): vLLM {p_[3]} / vLLM {s_[3]} = {p_[0] / s_[0]:.3f} at B={B} ({p_[0]} vs {s_[0]} tok/s)")
     if B == 1:
         ve, ee = vl["primary"].get("eager"), e4b.get("int4_eager")
