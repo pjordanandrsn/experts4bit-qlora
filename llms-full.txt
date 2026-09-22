@@ -2726,8 +2726,12 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   function of N. Leading hypothesis only; a second candidate (the round-2 glue
   path taken when `qkv_proj` exists) **was excluded by P57 on 2026-09-22**
   (`bench/p57/RESULTS-p57.md`): with the round-2 glue forced OFF on both legs the
-  fused arm still diverges on 15 of 16 sequences at the same first-divergence
-  indices, so the divergence is the K16 GEMM's. `--fuse-qkv` therefore
+  fused arm still diverges on 15 of 16 sequences. **And the K16 GEMM is excluded
+  too (P59, same day, `bench/p59/RESULTS-p59.md`)**: the kernel is bitwise
+  invariant to fusing at 2–16 rows (A2000 probe) and the fused and unfused stacks
+  read KL exactly 0 at 16-row decode on the 5090. The divergence lives in the
+  >16-row path — the harness's 128-token prefill steps run cuBLAS on the cached
+  bf16 weight, whose kernel choice depends on N. `--fuse-qkv` therefore
   stays **opt-in** on the int4 lanes at B=16, with no position quoted, until a
   KL-from-checkpoint or K8 read bounds the divergence against the shipped bar
   (≤ 0.10 nats, top-1 ≥ 0.93).
@@ -3551,6 +3555,9 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.h2h.vllm-0.29.0.p58.qwen3.b16.5090.2026-09-22 [measured]: Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.29.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 1912.7 tok/s vs e4b's current int4 stack at 1379.2 tok/s at B=16: ratio 1.387 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.851; vLLM / e4b NF4: 3.953.
 - e4b.serve.h2h.p58.vllm-build-to-build.qwen3.b16.5090.2026-09-22 [measured]: Lane P58: vLLM 0.30.0 / vLLM 0.29.0 decode tok/s at B=16, same box, same prompts, GPTQ-Int4 Marlin: 1.007 (1925.6 vs 1912.7).
 - e4b.serve.p57.qwen3.b16.distinct-experts.5090.2026-09-22 [measured]: Lane P57 (amendment 3, run p57d-5090-1): at B=16 on the harness's wikitext-2 prompts, Qwen/Qwen3-30B-A3B's router touches on average 58.7 distinct experts per layer per decode step (layer means 50.9..71.7 over 48 layers, 73 decode steps counted on device; uniform-random expectation 82.4 of 128); 7-41 experts per layer were never touched. Against #564's expert-tier byte roofline (83.4 us per distinct expert per layer-step: 5.336 ms at 64, 6.670 at 80) the floor at 58.7 is 4.89 ms/step, vs the same lane's measured _gemv_int4_b32 row of 6.34 ms.
+- e4b.serve.p59.qwen3.b16.fqkv-kl.5090.2026-09-22 [measured]: Lane P59: at B=16 the fused-q/k/v int4 attention store changes Qwen/Qwen3-30B-A3B's served output distribution by KL(unfused || fused) = 0.00000 nats/token mean (median 0.00000, p95 0.00000, max 0.0000) with top-1 agreement 1.0000 over 2048 teacher-forced decode positions; the same stack rebuilt in a fresh process reads KL None (determinism control) and the shared prefill path reads 0.00e+00 (prefill control). Verdicts: P1 HOLDS, P2 HOLDS, P3 None, P4 HOLDS, census OK.
+- e4b.serve.p59.qwen3.b16.nf4-int4-kl.5090.2026-09-22 [measured]: Lane P59 anchor: KL(NF4 control || unfused int4 stack) at B=16 = 0.07173 nats/token mean (p95 0.25488), top-1 0.9048, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.
+- e4b.serve.p59.qwen3.b16.nf4-fqkv-kl.5090.2026-09-22 [measured]: Lane P59 anchor: KL(NF4 control || fused-q/k/v int4 stack) at B=16 = 0.07173 nats/token mean (p95 0.25488), top-1 0.9048, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.
 
 Open items (no evidence either way):
 
@@ -3558,4 +3565,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(231 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(234 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

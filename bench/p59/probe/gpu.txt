@@ -1,0 +1,2 @@
+NVIDIA RTX A2000 12GB, 575.64.05
+torch 2.8.0+cu128 triton 3.4.0 e4b 0.36.4 gnf4 0.32.1

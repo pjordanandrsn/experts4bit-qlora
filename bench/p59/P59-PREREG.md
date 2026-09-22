@@ -44,3 +44,15 @@ No bf16 reference: Qwen3-30B-A3B in bf16 is 61 GB and does not fit the card; the
 One RTX 5090 (verified/secure), **≤ 1.0 h guard**, estimate **≤ $0.66** (install ~8 min + fetch ~6–15 + bake ~1 + K0 ~1 + four arms × ~3 min: load from the arena ~30 s, RTN int4 packs ~30 s, 384-token prefill + 128 batched decode steps ~1 min); lane ceiling $1, hard stop $2. **STOP-1** K0 controls fail → rc 14, no KL row. **STOP-2** `fuse_qkv` count ≠ 48 → the fused arm refuses (rc 41). **STOP-3** an arm's logits missing → rc 42, the pairs that need it read MISSING. **STOP-4** no second box on a disappointing result. Receipt + ledger row committed together (ledger `cp` backup, post-commit diff); the drive fetches summaries, censuses and logs, **not the logits** (~1.2 GB per arm stay on the box; the reducer ran there and its JSON travels).
 
 Amendments, dated, go below this line before any data is read.
+
+
+## Amendment 1 (2026-09-22 ~18:40Z — after run 1 was read, before any amendment data)
+
+Run 1 (`p59-5090-1`, $0.34) read `KL(int4 ‖ int4_fqkv)` **exactly 0** on all 2,048 decode positions and on the prefill-last logits; the determinism arm was skipped by the deadline guard (the arms took ~5.5 min each; three fit before the guard's 10-minute margin). A free A2000 probe then showed why the decode read is zero: **the K16 small-M GEMM is bitwise invariant to fusing q/k/v at 2–16 rows**, while the >16-row path (cuBLAS on the cached bf16 weight) is not. Run 1 prefilled 6,144 rows in one forward, where the 5090's cuBLAS happened to agree; the harness prefills in 128-token steps. So run 1 measured the one configuration in which the fusion cannot change a bit, and the registered question — does the fused stack's quality differ in the path it actually serves — is still open.
+
+**Changes (instrument and runner only; predictions, bands and the decision rule unchanged):**
+1. `kl_b16.py --prefill-chunk N` prefills N tokens per row per forward; the runner passes **8** (16 rows × 8 = **128 rows per forward**, the harness's step). The CPU self-test now also checks chunked prefill against one-forward prefill (uneven last chunk; equal to 3e-7).
+2. The census records `int4_attn_smallm_routed` (the `Int4Linear` modules carrying the K16 route) and `prefill_chunk`; the reducer requires 192 (unfused) / 96 (fused) routed modules on amendment-1 receipts.
+3. Guard **1.5 h** (estimate ≤ $1.00 at $0.66/h), so the four arms plus the determinism arm fit with margin.
+
+Expected under the new hypothesis: `KL(int4 ‖ int4_fqkv)` **non-zero but small** — ulp-level cuBLAS differences in the prefill, amplified only where a router top-k flips — inside P1's hold band (≤ 0.01 nats, top-1 ≥ 0.97); P3 exactly 0; P4 (prefill-last) now non-zero, so it is read against its ≤ 1e-4 band as registered. Lane **`p59b-5090`**.

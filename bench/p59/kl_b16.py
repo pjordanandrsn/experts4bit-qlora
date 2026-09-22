@@ -44,7 +44,7 @@ for cand in (HERE, os.path.join(HERE, ".."), os.path.join(HERE, "..", "p44")):  
         sys.path.insert(0, cand)
 
 
-def batched_teacher_forced(model, ids: torch.Tensor, prefix: int, device) -> tuple[torch.Tensor, torch.Tensor]:
+def batched_teacher_forced(model, ids: torch.Tensor, prefix: int, device, prefill_chunk: int = 0) -> tuple[torch.Tensor, torch.Tensor]:
     """ids [B, T] int64. Prefill ids[:, :prefix] in one forward; then one token per forward for positions
     prefix..T-1 with the carried KV cache, feeding the ground-truth token. Returns (prefill_last_logits [B, V],
     decode_logits [B, T-prefix, V]) as fp32 on CPU. decode_logits[:, j] is the model's prediction AFTER seeing
@@ -54,10 +54,16 @@ def batched_teacher_forced(model, ids: torch.Tensor, prefix: int, device) -> tup
     ids = ids.to(device)
     steps = []
     with torch.no_grad():
-        out = model(input_ids=ids[:, :prefix], use_cache=True)
-        past = out.past_key_values if hasattr(out, "past_key_values") else out[1]
-        if past is None:
-            raise RuntimeError("the model returned no past_key_values after prefill: the batched scorer needs a carried KV cache")
+        # P59 amendment 1: ``prefill_chunk`` > 0 prefills in chunks of that many tokens PER ROW (B x chunk rows per
+        # forward) -- the harness steps 128 prefill tokens at a time, and above 16 rows Int4Linear runs cuBLAS on its
+        # cached bf16 weight, whose kernel choice depends on (M, N): the one path where fusing q/k/v can change bits.
+        step = prefill_chunk if prefill_chunk > 0 else prefix
+        past = None
+        for s0 in range(0, prefix, step):
+            out = model(input_ids=ids[:, s0:min(prefix, s0 + step)], past_key_values=past, use_cache=True)
+            past = out.past_key_values if hasattr(out, "past_key_values") else out[1]
+            if past is None:
+                raise RuntimeError("the model returned no past_key_values after prefill: the batched scorer needs a carried KV cache")
         pre_last = (out.logits if hasattr(out, "logits") else out[0])[:, -1].float().cpu()
         for t in range(prefix, T):
             out = model(input_ids=ids[:, t:t + 1], past_key_values=past, use_cache=True)
@@ -96,13 +102,17 @@ def run_arm(a) -> int:
         info["fuse_qkv_n"] = 0
     info["int4_attn_projections_before_fuse"] = n_int4_before
     info["int4_attn_projections"] = sum(1 for m in model.modules() if isinstance(m, Int4Linear))
+    # amendment 1: the route each Int4Linear takes at 2..16 rows (K16 small-M GEMM vs cached-bf16 cuBLAS) -- the
+    # module count alone cannot say whether the lever's arithmetic ran
+    info["int4_attn_smallm_routed"] = sum(1 for m in model.modules() if isinstance(m, Int4Linear) and getattr(m, "_smallm", None) is not None)
+    info["prefill_chunk"] = a.prefill_chunk
     info["env"] = {k: v for k, v in os.environ.items() if k.startswith("E4B_") or k.startswith("GNF4_")}
     info["arm"] = a.arm
     info["prompts_sha256"] = psha
     info["prefix"] = a.prefix
     ids = torch.tensor(prompts, dtype=torch.long)
     t1 = time.time()
-    pre_last, dec = batched_teacher_forced(model, ids, a.prefix, a.device)
+    pre_last, dec = batched_teacher_forced(model, ids, a.prefix, a.device, prefill_chunk=a.prefill_chunk)
     info["score_s"] = round(time.time() - t1, 1)
     info["decode_logits_shape"] = list(dec.shape)
     info["vocab"] = int(dec.shape[-1])
@@ -140,6 +150,9 @@ def _self_test() -> int:
         d_pre = (pre[b] - ref[prefix - 1].float()).abs().max().item()
         worst = max(worst, d, d_pre)
     assert worst < 2e-3, f"batched decode differs from per-row B=1 decode by {worst:.3e}"
+    pre_c, dec_c = batched_teacher_forced(model, ids, prefix, "cpu", prefill_chunk=5)     # 16 = 5+5+5+1: an uneven last chunk
+    worst_c = max((dec_c - dec).abs().max().item(), (pre_c - pre).abs().max().item())
+    assert worst_c < 2e-3, f"chunked prefill differs from one-forward prefill by {worst_c:.3e}"
     acc = kl_fidelity.KLAccumulator()
     pre2, dec2 = batched_teacher_forced(model, ids, prefix, "cpu")
     for b in range(B):
@@ -159,9 +172,9 @@ def _self_test() -> int:
         acc2.add(dec[b], dec3[b])
     s2 = acc2.summary()
     assert s2["kl_mean"] > 0 and s2["top1_agreement"] < 1.0, s2
-    print(json.dumps({"batched_vs_per_row_max_abs_diff": worst, "self_kl": s["kl_mean"], "perturbed_kl": s2["kl_mean"],
+    print(json.dumps({"batched_vs_per_row_max_abs_diff": worst, "chunked_vs_one_forward_max_abs_diff": worst_c, "self_kl": s["kl_mean"], "perturbed_kl": s2["kl_mean"],
                       "perturbed_top1": s2["top1_agreement"], "tokens_scored": s["n_tokens_scored"]}, indent=1))
-    print("self-test OK: batched B=5 teacher forcing == per-row decode scorer; self-KL exactly 0; perturbation detected")
+    print("self-test OK: batched B=5 teacher forcing == per-row decode scorer; chunked prefill == one forward; self-KL exactly 0; perturbation detected")
     return 0
 
 
@@ -176,6 +189,7 @@ def main() -> int:
     ap.add_argument("--out")
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--prefix", type=int, default=384)
+    ap.add_argument("--prefill-chunk", type=int, default=0, help="tokens per row per prefill forward; 0 = one forward (P59 run 1)")
     ap.add_argument("--fuse-qkv", action="store_true")
     ap.add_argument("--expect-fused-modules", type=int, default=48)
     ap.add_argument("--device", default="cuda")

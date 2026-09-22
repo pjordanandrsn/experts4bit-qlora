@@ -6329,6 +6329,88 @@
         "receipts/experts4bit-qlora/2026-09-22/p57d-5090-1/"
       ],
       "notes": "Read against #564: a measurement with a soft prior (<= 80 registered; HOLDS). Two earlier attempts (p57b, p57c) counted 3 warm-up steps because the first counter's torch.unique synchronised under CUDA-graph capture -- recorded in RESULTS-p57.md, not registered. The per-expert touch fractions (touched_frac) carry the skew the mean hides."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52092816); same box, same session, same prompt rows for every arm",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "conditions": "B=16, sixteen distinct 512-token wikitext-2 rows (step_decomp._k8_window, the P54/P57/P58 prompts), 384 prefilled as one forward, 128 positions decoded one token per forward with a carried KV cache, ground-truth tokens fed back (teacher forcing); KL(P_ref||P_test) fp64 over the full vocabulary, token-weighted over 16 x 128 positions (bench/kl_fidelity.py primitives); arms built by bench/p44/serve_stack.build_served_model under the P42 hook: int4 = RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 route auto, glue r1/r2 + router epilogue, GNF4_GEMV_FUSED_REDUCE unset; int4_fqkv = the same with qkv_fuse.fuse_qkv (48 modules, Int4Linear 192 -> 96); nf4 = NF4 experts + bf16 attention, no folds; int4_aa = int4 rebuilt in a fresh process; e4b b2d652568706, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p59-5090-1/ (receipt.json, teardown-proof.json, full fetched run; the fp32 logits stayed on the box)"
+      ],
+      "id": "e4b.serve.p59.qwen3.b16.fqkv-kl.5090.2026-09-22",
+      "claim": "Lane P59: at B=16 the fused-q/k/v int4 attention store changes Qwen/Qwen3-30B-A3B's served output distribution by KL(unfused || fused) = 0.00000 nats/token mean (median 0.00000, p95 0.00000, max 0.0000) with top-1 agreement 1.0000 over 2048 teacher-forced decode positions; the same stack rebuilt in a fresh process reads KL None (determinism control) and the shared prefill path reads 0.00e+00 (prefill control). Verdicts: P1 HOLDS, P2 HOLDS, P3 None, P4 HOLDS, census OK.",
+      "value": 0.0,
+      "unit": "nats/token, KL(int4 unfused || int4 fused q/k/v), B=16, teacher-forced full-vocab fp64, token-weighted",
+      "evidence": [
+        "bench/p59/RESULTS-p59.md",
+        "bench/p59/P59-PREREG.md",
+        "bench/p59/kl_b16.py",
+        "bench/p59/receipts/p59_rep.json",
+        "bench/p59/receipts/out/int4/census.json",
+        "bench/p59/receipts/out/int4_fqkv/census.json",
+        "bench/p59/probe/p59_probe.py",
+        "bench/p59/probe/probe.json"
+      ],
+      "notes": "kl_mean 0.00000 (hold <= 0.01, refute > 0.03), top-1 1.0000 (hold >= 0.97, refute < 0.95). KL(nf4||int4_fqkv) - KL(nf4||int4) = +0.00000 (band +-0.005); anchors 0.07173 / 0.07173. Pre-registered bands: hold <= 0.01 nats & top-1 >= 0.97; refuted > 0.03 or < 0.95; the shipped KL-from-checkpoint bar (<= 0.10 nats, top-1 >= 0.93) is the outer limit. The anchor is the NF4 control, not a bf16 reference (Qwen3-30B-A3B bf16 is 61 GB). Decision rule outcome recorded in RESULTS-p59.md. WHY ZERO: the K16 small-M GEMM is bitwise invariant to fusing q/k/v at 2-16 rows (A2000 probe, bench/p59/probe/); this run prefilled 6,144 rows in one forward where the 5090's cuBLAS agreed. The harness prefills in 128-token steps (the N-dependent cuBLAS path); amendment 1 measures that. The determinism arm was skipped by the deadline guard, so the decision rule was not met and --fuse-qkv stays opt-in at B=16."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52092816); same box, same session, same prompt rows for every arm",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "conditions": "B=16, sixteen distinct 512-token wikitext-2 rows (step_decomp._k8_window, the P54/P57/P58 prompts), 384 prefilled as one forward, 128 positions decoded one token per forward with a carried KV cache, ground-truth tokens fed back (teacher forcing); KL(P_ref||P_test) fp64 over the full vocabulary, token-weighted over 16 x 128 positions (bench/kl_fidelity.py primitives); arms built by bench/p44/serve_stack.build_served_model under the P42 hook: int4 = RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 route auto, glue r1/r2 + router epilogue, GNF4_GEMV_FUSED_REDUCE unset; int4_fqkv = the same with qkv_fuse.fuse_qkv (48 modules, Int4Linear 192 -> 96); nf4 = NF4 experts + bf16 attention, no folds; int4_aa = int4 rebuilt in a fresh process; e4b b2d652568706, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p59-5090-1/ (receipt.json, teardown-proof.json, full fetched run; the fp32 logits stayed on the box)"
+      ],
+      "id": "e4b.serve.p59.qwen3.b16.nf4-int4-kl.5090.2026-09-22",
+      "claim": "Lane P59 anchor: KL(NF4 control || unfused int4 stack) at B=16 = 0.07173 nats/token mean (p95 0.25488), top-1 0.9048, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.",
+      "value": 0.071728,
+      "unit": "nats/token, KL(NF4 || unfused int4 stack), B=16, teacher-forced full-vocab fp64",
+      "evidence": [
+        "bench/p59/RESULTS-p59.md",
+        "bench/p59/P59-PREREG.md",
+        "bench/p59/kl_b16.py",
+        "bench/p59/receipts/p59_rep.json",
+        "bench/p59/receipts/out/int4/census.json",
+        "bench/p59/receipts/out/int4_fqkv/census.json",
+        "bench/p59/receipts/out/nf4/census.json"
+      ],
+      "notes": "An anchor for P2 (the fusion must not move this distance by more than 0.005). Not a quality licence: the NF4 control is itself a quantised stack."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52092816); same box, same session, same prompt rows for every arm",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "conditions": "B=16, sixteen distinct 512-token wikitext-2 rows (step_decomp._k8_window, the P54/P57/P58 prompts), 384 prefilled as one forward, 128 positions decoded one token per forward with a carried KV cache, ground-truth tokens fed back (teacher forcing); KL(P_ref||P_test) fp64 over the full vocabulary, token-weighted over 16 x 128 positions (bench/kl_fidelity.py primitives); arms built by bench/p44/serve_stack.build_served_model under the P42 hook: int4 = RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 route auto, glue r1/r2 + router epilogue, GNF4_GEMV_FUSED_REDUCE unset; int4_fqkv = the same with qkv_fuse.fuse_qkv (48 modules, Int4Linear 192 -> 96); nf4 = NF4 experts + bf16 attention, no folds; int4_aa = int4 rebuilt in a fresh process; e4b b2d652568706, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p59-5090-1/ (receipt.json, teardown-proof.json, full fetched run; the fp32 logits stayed on the box)"
+      ],
+      "id": "e4b.serve.p59.qwen3.b16.nf4-fqkv-kl.5090.2026-09-22",
+      "claim": "Lane P59 anchor: KL(NF4 control || fused-q/k/v int4 stack) at B=16 = 0.07173 nats/token mean (p95 0.25488), top-1 0.9048, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.",
+      "value": 0.071728,
+      "unit": "nats/token, KL(NF4 || fused-q/k/v int4 stack), B=16, teacher-forced full-vocab fp64",
+      "evidence": [
+        "bench/p59/RESULTS-p59.md",
+        "bench/p59/P59-PREREG.md",
+        "bench/p59/kl_b16.py",
+        "bench/p59/receipts/p59_rep.json",
+        "bench/p59/receipts/out/int4/census.json",
+        "bench/p59/receipts/out/int4_fqkv/census.json",
+        "bench/p59/receipts/out/nf4/census.json"
+      ],
+      "notes": "An anchor for P2 (the fusion must not move this distance by more than 0.005). Not a quality licence: the NF4 control is itself a quantised stack."
     }
   ]
 }

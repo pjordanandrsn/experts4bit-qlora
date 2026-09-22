@@ -88,7 +88,7 @@ kl_arm(){ local TAG=$1 EXP=$2 FUSE=$3; local G=1 R=1 E=1 AI=1; [ "$EXP" = 0 ] &&
   local AL; AL=$(arm_alarm 1800); say "arm $TAG (exp=$EXP attn_int4=$AI fuse=$FUSE alarm=$AL)"
   { echo "P59 arm=$TAG gnf4=$GNF4_SHA at=$(date -u +%FT%TZ)"; } > logs/run_$TAG.log
   env E4B_SERVE_EXP_INT4=$EXP E4B_SERVE_ATTN_INT4=$AI E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=$G E4B_FUSE_T1_GLUE_R2=$R E4B_FUSE_ROUTER_EPI=$E \
-    perl -e "alarm $AL; exec @ARGV" python -u $W/kl_b16.py --arm $TAG --model "$MID" --arena "$QA" --calib $W/calib.json --prompts $W/prompts_b16.json --prefix 384 --out $W/out/$TAG $FUSE >> logs/run_$TAG.log 2>&1
+    perl -e "alarm $AL; exec @ARGV" python -u $W/kl_b16.py --arm $TAG --model "$MID" --arena "$QA" --calib $W/calib.json --prompts $W/prompts_b16.json --prefix 384 --prefill-chunk ${P59_PREFILL_CHUNK:-8} --out $W/out/$TAG $FUSE >> logs/run_$TAG.log 2>&1
   local rc=$?
   grep -aE "P59ARM|P59 fused|INT4EXP|ATTNINT4|fused q/k/v|REFUSED|Error|Traceback" logs/run_$TAG.log | tail -5 | sed "s/^/    /"
   { echo -n "arm $TAG rc=$rc "; grep -a "P59ARM" logs/run_$TAG.log | tail -1 | cut -c1-300; echo; } >> summary.txt

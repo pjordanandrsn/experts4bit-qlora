@@ -838,8 +838,12 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   function of N. Leading hypothesis only; a second candidate (the round-2 glue
   path taken when `qkv_proj` exists) **was excluded by P57 on 2026-09-22**
   (`bench/p57/RESULTS-p57.md`): with the round-2 glue forced OFF on both legs the
-  fused arm still diverges on 15 of 16 sequences at the same first-divergence
-  indices, so the divergence is the K16 GEMM's. `--fuse-qkv` therefore
+  fused arm still diverges on 15 of 16 sequences. **And the K16 GEMM is excluded
+  too (P59, same day, `bench/p59/RESULTS-p59.md`)**: the kernel is bitwise
+  invariant to fusing at 2–16 rows (A2000 probe) and the fused and unfused stacks
+  read KL exactly 0 at 16-row decode on the 5090. The divergence lives in the
+  >16-row path — the harness's 128-token prefill steps run cuBLAS on the cached
+  bf16 weight, whose kernel choice depends on N. `--fuse-qkv` therefore
   stays **opt-in** on the int4 lanes at B=16, with no position quoted, until a
   KL-from-checkpoint or K8 read bounds the divergence against the shipped bar
   (≤ 0.10 nats, top-1 ≥ 0.93).

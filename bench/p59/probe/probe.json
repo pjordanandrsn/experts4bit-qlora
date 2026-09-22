@@ -1,0 +1,91 @@
+{
+ "smallm_resolved_auto": true,
+ "smallm=True R=1": {
+  "bitwise_equal": true,
+  "max_abs": 0.0,
+  "n_diff": 0
+ },
+ "smallm=True R=2": {
+  "bitwise_equal": true,
+  "max_abs": 0.0,
+  "n_diff": 0
+ },
+ "smallm=True R=8": {
+  "bitwise_equal": true,
+  "max_abs": 0.0,
+  "n_diff": 0
+ },
+ "smallm=True R=16": {
+  "bitwise_equal": true,
+  "max_abs": 0.0,
+  "n_diff": 0
+ },
+ "smallm=True R=17": {
+  "bitwise_equal": false,
+  "max_abs": 0.0078125,
+  "n_diff": 42961
+ },
+ "smallm=True R=64": {
+  "bitwise_equal": false,
+  "max_abs": 0.00390625,
+  "n_diff": 26342
+ },
+ "smallm=True plans (bn,kc,sk)": {
+  "q": [
+   64,
+   128,
+   4
+  ],
+  "k": [
+   64,
+   128,
+   4
+  ],
+  "v": [
+   64,
+   128,
+   4
+  ],
+  "fused": [
+   64,
+   128,
+   4
+  ]
+ },
+ "smallm=False R=1": {
+  "bitwise_equal": true,
+  "max_abs": 0.0,
+  "n_diff": 0
+ },
+ "smallm=False R=2": {
+  "bitwise_equal": false,
+  "max_abs": 0.00390625,
+  "n_diff": 801
+ },
+ "smallm=False R=8": {
+  "bitwise_equal": false,
+  "max_abs": 0.00390625,
+  "n_diff": 3361
+ },
+ "smallm=False R=16": {
+  "bitwise_equal": false,
+  "max_abs": 0.00390625,
+  "n_diff": 6563
+ },
+ "smallm=False R=17": {
+  "bitwise_equal": false,
+  "max_abs": 0.0078125,
+  "n_diff": 43067
+ },
+ "smallm=False R=64": {
+  "bitwise_equal": false,
+  "max_abs": 0.00390625,
+  "n_diff": 26403
+ },
+ "smallm=False plans (bn,kc,sk)": {
+  "q": null,
+  "k": null,
+  "v": null,
+  "fused": null
+ }
+}
