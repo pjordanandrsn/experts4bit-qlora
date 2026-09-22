@@ -1,0 +1,47 @@
+GNF4 K16 65cb10410239120d25307812827a23139e84abe1 PLAN_HAS_R=True
+ATTNINT4 int4_b1 ATTNINT4 rtn: 192 projections
+arm int4_b1 B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=4.24ms compile=None recompiles=0 out=/root/p57/e4b_b1_int4_b1.json
+
+ATTNINT4 int4_b1_fr ATTNINT4 rtn: 192 projections
+arm int4_b1_fr B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=4.27ms compile=None recompiles=0 out=/root/p57/e4b_b1_int4_b1_fr.json
+
+ATTNINT4 int4_b1_r2 ATTNINT4 rtn: 192 projections
+arm int4_b1_r2 B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=4.24ms compile=None recompiles=0 out=/root/p57/e4b_b1_int4_b1_r2.json
+
+ATTNINT4 int4_b1_fr_r2 ATTNINT4 rtn: 192 projections
+arm int4_b1_fr_r2 B=1 gnf4=K16 rc=0 B1D_TIMED_GRAPH steps=127 step=4.27ms compile=None recompiles=0 out=/root/p57/e4b_b1_int4_b1_fr_r2.json
+
+ATTNINT4 int4_b16 ATTNINT4 rtn: 192 projections
+arm int4_b16 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.58ms agg=1382.1tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16.json
+
+ATTNINT4 int4_b16_fr ATTNINT4 rtn: 192 projections
+arm int4_b16_fr B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.79ms agg=1356.9tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16_fr.json
+
+ATTNINT4 int4_b16_r2 ATTNINT4 rtn: 192 projections
+arm int4_b16_r2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.58ms agg=1381.6tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16_r2.json
+
+ATTNINT4 int4_b16_fr_r2 ATTNINT4 rtn: 192 projections
+arm int4_b16_fr_r2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.80ms agg=1356.0tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16_fr_r2.json
+
+ATTNINT4 int4_b16_nor2 ATTNINT4 rtn: 192 projections
+arm int4_b16_nor2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=13.26ms agg=1206.3tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16_nor2.json
+
+ATTNINT4 int4_b16_fqkv_nor2 ATTNINT4 rtn: 192 projections
+arm int4_b16_fqkv_nor2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=12.93ms agg=1237.3tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16_fqkv_nor2.json
+
+ATTNINT4 int4_b16_nor2_r2 ATTNINT4 rtn: 192 projections
+arm int4_b16_nor2_r2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=13.27ms agg=1205.8tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16_nor2_r2.json
+
+ATTNINT4 int4_b16_fqkv_nor2_r2 ATTNINT4 rtn: 192 projections
+arm int4_b16_fqkv_nor2_r2 B=16 gnf4=K16 rc=0 BV3_GRAPH batch=16 steps=70 step=12.93ms agg=1237.8tok/s recompiles=0 out=/root/p57/e4b_b16_int4_b16_fqkv_nor2_r2.json
+
+K17ROUTE int4_b16_fr reduce_rows=0 control_reduce_rows=1
+K17ROUTE int4_b1_fr reduce_rows=0 control_reduce_rows=1
+CENSUS int4_b1 45 rows
+CENSUS int4_b1_fr 44 rows
+CENSUS int4_b16 46 rows
+CENSUS int4_b16_fr 45 rows
+CENSUS int4_b16_nor2 53 rows
+CENSUS int4_b16_fqkv_nor2 55 rows
+arm int4_b16_distinct B=16 UNTIMED rc=1 P57_DISTINCT_OUT /root/p57/distinct_experts_b16.json layers=48 steps=0 mean_distinct=None uniform=82.42
+

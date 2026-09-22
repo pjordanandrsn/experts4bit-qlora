@@ -817,10 +817,17 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   the control's on 14 of 16 sequences, reproducibly, while the control's own
   two draws are bit-identical — the K16 small-M GEMM's accumulation order is a
   function of N. Leading hypothesis only; a second candidate (the round-2 glue
-  path taken when `qkv_proj` exists) is not excluded. `--fuse-qkv` therefore
+  path taken when `qkv_proj` exists) **was excluded by P57 on 2026-09-22**
+  (`bench/p57/RESULTS-p57.md`): with the round-2 glue forced OFF on both legs the
+  fused arm still diverges on 15 of 16 sequences at the same first-divergence
+  indices, so the divergence is the K16 GEMM's. `--fuse-qkv` therefore
   stays **opt-in** on the int4 lanes at B=16, with no position quoted, until a
   KL-from-checkpoint or K8 read bounds the divergence against the shipped bar
   (≤ 0.10 nats, top-1 ≥ 0.93).
+- **K17's fused split-K reduce is exact and slower in the consumer** (P57,
+  same page): −0.038 ms/step at B=1, −0.217 at B=16, the epilogue landing inside
+  the critical-path GEMV while the launches it removed were overlapped. Stays
+  opt-in in grouped-nf4-gemm; the census row it targeted was GPU time, not a launch.
 - **The distinct-expert count at B=16 is still unmeasured**
   ([#564](https://github.com/pjordanandrsn/experts4bit-qlora/issues/564)): it
   decides whether the expert GEMV — 56 % of the B=16 step — has ~1.3 ms of

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### P57 read: K17's fused split-K reduce is exact and SLOWER in the consumer at both batches; P54's B=16 divergence is the K16 GEMM's, not the glue's (#666, lane p57-5090-2)
+
+- **`GNF4_GEMV_FUSED_REDUCE=1` costs 0.038 ms/step at B=1 and 0.217 ms/step at B=16** on the int4 serving stack
+  (Qwen3-30B-A3B, one RTX 5090, A/A spreads ≤ 0.009 ms; `bench/p57/RESULTS-p57.md`). The route engaged exactly as
+  asked (`_reduce_partials` gone from both fused censuses) and the tokens are identical, but `_gemv_int4_b32`'s own
+  duration grows by more than the reduce it absorbs (1.415 → 1.642 ms at B=1; +7.0 % at R=128 rows, B=16): the
+  separate reduce launches were overlapped in the graph, the fused epilogue sits on the critical path. K17's kernel
+  stays opt-in in grouped-nf4-gemm; nothing in e4b changes. P1 and P2 refuted as registered.
+- **With the round-2 glue forced OFF on both legs, fused q/k/v at B=16 still diverges from unfused on 15 of 16
+  sequences, at the same first-divergence indices P54 recorded**, while the control's two draws are bit-identical:
+  the divergence follows the K16 small-M GEMM's N-dependent accumulation, and the glue path is exonerated (P3).
+  `--fuse-qkv` stays the default at B=1 and opt-in at B=16 until a KL/K8 read bounds the difference.
+- **The distinct-expert count is still unread**: the untimed arm ran on a 6-step window (`--gen-tokens 64`; the
+  harness asserts ≥ 16) and the runner exited green on a `steps: 0` dump. Amendment 1 registers the re-run
+  (`--gen-tokens 128`, `steps: 0` → rc 45, `P57_ONLY_DISTINCT=1`, lane `p57b-5090`).
+- Register rows `e4b.serve.p57.qwen3.{b1,b16}.{control,fr}.5090.2026-09-22` and
+  `e4b.serve.p57.qwen3.b16.{nor2_control,nor2_fqkv}.5090.2026-09-22` (measured, same-box). Receipts in
+  `bench/p57/receipts/`; `bench/p57/p57_register_rows.py`. Cost $0.09 (a dud-box bake failure, `p57-5090-1`) + $0.22.
+
 ### There is a licensed pack again, and its bytes exist (#658, #405)
 
 Lane P55x built Qwen3-30B-A3B's streamed 64k calibrated int4 expert pack, dumped it as a hash-pinned
