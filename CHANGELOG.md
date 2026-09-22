@@ -2,12 +2,26 @@
 
 ## Unreleased
 
+### K18 read (grouped-nf4-gemm): a grouped expert GEMV is exact and slower — P60's 0.92 ms is not reachable by sharing loads; its re-streaming reading is withdrawn (lane `k18-5090-1`, $0.13)
+
+- **grouped-nf4-gemm lane K18** built the kernel P60 licensed: an int4-b32 split-K GEMV that loads each expert's slice
+  once for up to four of its rows. It was run from `bench/k18/` (#687) against P60's recorded ids on an RTX 5090.
+  - It is **bitwise the served GEMV** (0 of 256 replay checks differ) and **1.49× slower**: 9.689 against 6.520 ms/step.
+    The dedup arm reads 5.564, reproducing P60 on a second host.
+  - At R = 8/16 it is 1.00–1.65× the served call, worst where nothing can be shared.
+  - Decision: not a lever. It stays dormant in grouped-nf4-gemm, and nothing here routes to it (row
+    `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`).
+- **Correction to the P60 entry below.** The 0.92 ms/step dedup gap was read as "the cost of re-streaming each expert per
+  row". The dedup arm also drops the repeated rows' arithmetic and programs, locality was already ruled out (P60's P3),
+  and sharing the loads did not recover it. That reading is withdrawn in `bench/p60/RESULTS-p60.md` (dated correction),
+  `docs/STATUS.md` and the P60 claims row. The number stands.
+
 ### P60 read: the expert GEMV's B=16 headroom is repeated rows — 0.92 ms/step, the ceiling a grouped kernel can recover (lane `p60-5090-1`, $0.23)
 
 - **Recorded B=16 routing replayed through the shipped int4-b32 expert GEMV on one RTX 5090** (`bench/p60/RESULTS-p60.md`):
   the replay reproduces the served kernel row (**6.155 ms/step vs the census's 6.340**, −2.9 %), and one row per distinct expert
   instead of one per routed row runs **5.560 vs 6.479 ms/step** — **0.92 ms/step** (~8 % of the B=16
-  step) is the cost of re-streaming each expert per row. Ordering rows by expert changes nothing (-0.55%): L2
+  step) is the cost of the repeated rows [first read as re-streaming each expert per row — withdrawn by the K18 read above]. Ordering rows by expert changes nothing (-0.55%): L2
   already serves the repeats. One row per expert sits 1.21× above the 1,512 GB/s byte floor (between bands).
 - Decision: a **grouped expert GEMV** (grouped-nf4-gemm lane K18) is licensed to build, read against the recorded ids committed in
   `bench/p60/receipts/eids_b16.int16.bin`. Row `e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`. No default changes.

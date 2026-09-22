@@ -6499,7 +6499,7 @@
       "id": "e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "Lane P60: replaying Qwen3-30B-A3B's recorded B=16 routing (128 decode steps x 48 layers, 54.7 distinct experts per layer per step) through the shipped int4-b32 expert GEMV on one RTX 5090 reproduces the served kernel row (6.155 ms/step vs the census's 6.340), and shows the cost of streaming each expert once per ROUTED ROW rather than once per distinct expert: 6.479 vs 5.560 ms/step = 0.919 ms/step, the ceiling a grouped expert GEMV can recover; ordering rows by expert changes nothing (-0.55%); one row per expert sits 1.21x above the 1512 GB/s byte floor (4.598 ms).",
+      "claim": "Lane P60: replaying Qwen3-30B-A3B's recorded B=16 routing (128 decode steps x 48 layers, 54.7 distinct experts per layer per step) through the shipped int4-b32 expert GEMV on one RTX 5090 reproduces the served kernel row (6.155 ms/step vs the census's 6.340), and one row per distinct expert instead of one per routed row runs 6.479 vs 5.560 ms/step = 0.919 ms/step faster (the repeated rows' loads and arithmetic together; not reachable by sharing loads, per grouped-nf4-gemm K18); ordering rows by expert changes nothing (-0.55%); one row per expert sits 1.21x above the 1512 GB/s byte floor (4.598 ms).",
       "value": 0.919,
       "unit": "ms/step, served minus one-row-per-distinct-expert, expert GEMV graph time at B=16",
       "model": "Qwen/Qwen3-30B-A3B",
@@ -6521,7 +6521,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-22/p60-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
       ],
-      "notes": "Pre-registered verdicts: P0 (instrument, served within +-15 % of 6.340) HOLDS -2.9 %; P1 (served - dedup >= 0.8) HOLDS; P2 (dedup/floor <= 1.15) BETWEEN BANDS 1.21; P3 (order within 3 %) HOLDS; P4 (routing 58.7 +- 3) REFUTED 54.7 -- teacher-forced routing is narrower than greedy. Decision: a grouped expert GEMV (grouped-nf4-gemm lane K18) is licensed to build, read against these recorded ids. A replay measurement, not a served step time."
+      "notes": "Pre-registered verdicts: P0 (instrument, served within +-15 % of 6.340) HOLDS -2.9 %; P1 (served - dedup >= 0.8) HOLDS; P2 (dedup/floor <= 1.15) BETWEEN BANDS 1.21; P3 (order within 3 %) HOLDS; P4 (routing 58.7 +- 3) REFUTED 54.7 -- teacher-forced routing is narrower than greedy. Decision: a grouped expert GEMV (grouped-nf4-gemm lane K18) is licensed to build, read against these recorded ids. A replay measurement, not a served step time. Corrected 2026-09-22 after grouped-nf4-gemm lane K18 (gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22): the 0.919 ms was first read as weight re-streaming and as the ceiling a grouped expert GEMV can recover; a grouped GEMV loading each expert's slice once for up to four of its rows is bitwise exact and 1.49x SLOWER on these recorded ids (9.689 vs 6.520 ms/step), so that attribution is withdrawn -- the number stands."
     }
   ]
 }
