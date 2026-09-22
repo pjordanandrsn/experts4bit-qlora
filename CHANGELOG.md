@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### P58 read: same box, current vs current — vLLM 0.30.0 decodes 1.09× (B=1) / 1.40× (B=16) faster than e4b's int4 stack; 0.29.0 vs 0.30.0 within 1 % at B=16 (#676 lane, run `p58-5090-1`)
+
+- **The register's current-vs-current comparator against a production engine is re-pointed** (`bench/p58/RESULTS-p58.md`,
+  one RTX 5090 on an EPYC 9655 host, identical prompt token ids for both engines, $0.31): e4b's current int4 stack (RTN
+  int4 experts + uncalibrated int4 attention + K16 route, fused q/k/v at B=1) at **239.4 tok/s (B=1) / 1379.2 tok/s
+  (B=16)** vs vLLM 0.30.0 serving Qwen's GPTQ-Int4 via Marlin at **260.3 / 1925.6** → ratios **1.087 / 1.396**, vLLM
+  ahead, inside the pre-registered bands (P1 1.02–1.20, P2 1.35–1.75). vLLM 0.29.0: 1912.7 at B=16 (ratio 1.387;
+  build-to-build 1.007, P3 holds); at B=1 its two engine starts read 280.4 and 259.9 (self-pair 1.079 > 1.03 →
+  **DRIFT, no ratio quoted**) while 0.30.0's two starts agreed to 0.04 % — a vLLM B=1 engine-start variance on this
+  host, recorded not explained. Same-box e4b int4/NF4: ×2.356 (B=1), ×2.851 (B=16). P37's 2026-09-05 rows stay as
+  history; the engine advantage is understated (vLLM's number includes its serving loop). Quality quoted, never equated.
+- **B=1 is host-bound across three 5090 hosts today**: the same fused-q/k/v int4 stack read 4.24 (P57, EPYC), 4.18
+  (P58, EPYC 9655) and 3.69 ms/step (P54's box, 2026-09-21); STOP-1 informational, same-box ratios only.
+- Register rows `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.{b1,b16}.5090.2026-09-22`, `…vllm-0.29.0.p58.qwen3.b16…`, the
+  build-to-build row and 20 per-arm rows (`bench/p58/p58_register_rows.py`); `docs/SERVING-THROUGHPUT.md` and
+  `docs/STATUS.md` re-pointed. Receipts in `bench/p58/receipts/` (trimmed engine logs; full run private).
+
 ### P57 read: K17's fused split-K reduce is exact and SLOWER in the consumer at both batches; P54's B=16 divergence is the K16 GEMM's, not the glue's (#666, lane p57-5090-2)
 
 - **`GNF4_GEMV_FUSED_REDUCE=1` costs 0.038 ms/step at B=1 and 0.217 ms/step at B=16** on the int4 serving stack

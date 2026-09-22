@@ -5773,6 +5773,537 @@
         "receipts/experts4bit-qlora/2026-09-22/p57-5090-2/ (receipt.json, teardown-proof.json, full fetched run)"
       ],
       "notes": "Same-box pair: control 13.266 vs nor2_fqkv 12.929 ms/step = saving 0.337 ms (2.5 %); verdict per the registered rule: parity read (saving 0.337 ms is incidental: the split asks about TOKENS, see P3). Census (first draws): target family calls/step [192.0, 96.0]; other families moved > 5 %: none. Tokens fused-vs-control: draw 1 1/16 sequences identical, first divergences [['1', 41], ['2', 3], ['3', 35], ['4', 38], ['5', 8], ['6', 2], ['7', 17], ['8', 10], ['9', 8], ['10', 20], ['11', 6], ['12', 25], ['13', 14], ['14', 14], ['15', 6]]. COMPARATOR: vs e4b's own control on the same box; no field engine on this row. No default changes from this row."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.int4_eager",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/int4_eager at B=1: 35.5 tok/s, 28.188 ms/step (graph window) on this box.",
+      "value": 35.5,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b1_int4_eager.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.int4_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/int4_r1 at B=1: 239.4 tok/s, 4.177 ms/step (graph window) on this box.",
+      "value": 239.4,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b1_int4_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.int4_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/int4_r2 at B=1: 239.2 tok/s, 4.18 ms/step (graph window) on this box.",
+      "value": 239.2,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b1_int4_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.nf4_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/nf4_r1 at B=1: 101.6 tok/s, 9.842 ms/step (graph window) on this box.",
+      "value": 101.6,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; NF4 control (no folds, no int4); e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b1_nf4_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b1.nf4_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/nf4_r2 at B=1: 101.5 tok/s, 9.849 ms/step (graph window) on this box.",
+      "value": 101.5,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; NF4 control (no folds, no int4); e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b1_nf4_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b1.eager",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.30.0 (primary build)/eager at B=1: 50.4 tok/s, 19.836 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 50.4,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; vLLM 0.30.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); enforce_eager=True",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b1_eager.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b1.graph_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.30.0 (primary build)/graph_r1 at B=1: 260.3 tok/s, 3.841 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 260.3,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; vLLM 0.30.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b1_graph_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b1.graph_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.30.0 (primary build)/graph_r2 at B=1: 260.4 tok/s, 3.841 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 260.4,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; vLLM 0.30.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b1_graph_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b1.graph_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r1 at B=1: 280.4 tok/s, 3.566 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 280.4,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; vLLM 0.29.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_secondary_b1_graph_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b1.graph_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r2 at B=1: 259.9 tok/s, 3.847 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 259.9,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; vLLM 0.29.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_secondary_b1_graph_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.30.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 260.3 tok/s vs e4b's current int4 stack at 239.4 tok/s at B=1: ratio 1.087 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.356; vLLM / e4b NF4: 2.562.",
+      "value": 1.087,
+      "unit": "ratio vLLM 0.30.0 / e4b int4 stack, decode tok/s at B=1 (>1 = vLLM ahead)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=1; e4b: P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; vLLM 0.30.0: offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); self-pairs e4b int4 1.0007, e4b nf4 1.0007, vLLM 1.0004 (rule: inside 1.03x); prompts_sha a8e6ea1d7d140dbe; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b1_graph_r1.json",
+        "bench/p58/receipts/vllm_primary_b1_graph_r2.json",
+        "bench/p58/receipts/e4b_b1_int4_r1.json",
+        "bench/p58/receipts/e4b_b1_int4_r2.json",
+        "bench/p58/receipts/prompts_b1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box position; the vLLM number includes its serving loop and e4b's replay window has no scheduler, so the engine advantage is understated, not inflated. Quality quoted, never equated. e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 stays as history (a different e4b stack).",
+      "quoted_in": [
+        "docs/SERVING-THROUGHPUT.md",
+        "docs/STATUS.md"
+      ]
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.int4_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/int4_r1 at B=16: 1379.2 tok/s, 11.601 ms/step (graph window) on this box.",
+      "value": 1379.2,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b16_int4_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.int4_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/int4_r2 at B=16: 1379.0 tok/s, 11.602 ms/step (graph window) on this box.",
+      "value": 1379.0,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b16_int4_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.nf4_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/nf4_r1 at B=16: 483.8 tok/s, 33.07 ms/step (graph window) on this box.",
+      "value": 483.8,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; NF4 control (no folds, no int4); e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b16_nf4_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.e4b.b16.nf4_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm e4b/nf4_r2 at B=16: 484.0 tok/s, 33.058 ms/step (graph window) on this box.",
+      "value": 484.0,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; NF4 control (no folds, no int4); e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/e4b_b16_nf4_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row; the position is the headline ratio row. Same box, same session, identical prompt ids."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b16.graph_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.30.0 (primary build)/graph_r1 at B=16: 1925.6 tok/s, 8.309 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 1925.6,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; vLLM 0.30.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b16_graph_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.30.0.b16.graph_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.30.0 (primary build)/graph_r2 at B=16: 1917.4 tok/s, 8.345 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 1917.4,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; vLLM 0.30.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b16_graph_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b16.graph_r1",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r1 at B=16: 1912.7 tok/s, 8.365 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 1912.7,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; vLLM 0.29.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_secondary_b16_graph_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.p58.qwen3.5090.2026-09-22.arm.vllm-0.29.0.b16.graph_r2",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 arm vLLM 0.29.0 (secondary build)/graph_r2 at B=16: 1915.2 tok/s, 8.354 ms/step (slope) on this box, serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441.",
+      "value": 1915.2,
+      "unit": "tok/s (decode; B=1 per stream, B=16 aggregate)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; vLLM 0.29.0; offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); default CUDA graphs",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_secondary_b16_graph_r2.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Per-arm row (VALID). Quality quoted, never equated: GPTQ g128 vs e4b's RTN int4 -- different quantisers."
+    },
+    {
+      "id": "e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.30.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 1925.6 tok/s vs e4b's current int4 stack at 1379.2 tok/s at B=16: ratio 1.396 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.851; vLLM / e4b NF4: 3.980.",
+      "value": 1.396,
+      "unit": "ratio vLLM 0.30.0 / e4b int4 stack, decode tok/s at B=16 (>1 = vLLM ahead)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; e4b: P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; vLLM 0.30.0: offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); self-pairs e4b int4 1.0001, e4b nf4 1.0004, vLLM 1.0043 (rule: inside 1.03x); prompts_sha f67e7e4d592b002b; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b16_graph_r1.json",
+        "bench/p58/receipts/vllm_primary_b16_graph_r2.json",
+        "bench/p58/receipts/e4b_b16_int4_r1.json",
+        "bench/p58/receipts/e4b_b16_int4_r2.json",
+        "bench/p58/receipts/prompts_b16.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box position; the vLLM number includes its serving loop and e4b's replay window has no scheduler, so the engine advantage is understated, not inflated. Quality quoted, never equated. e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 stays as history (a different e4b stack).",
+      "quoted_in": [
+        "docs/SERVING-THROUGHPUT.md",
+        "docs/STATUS.md"
+      ]
+    },
+    {
+      "id": "e4b.serve.h2h.vllm-0.29.0.p58.qwen3.b16.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.29.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 1912.7 tok/s vs e4b's current int4 stack at 1379.2 tok/s at B=16: ratio 1.387 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.851; vLLM / e4b NF4: 3.953.",
+      "value": 1.387,
+      "unit": "ratio vLLM 0.29.0 / e4b int4 stack, decode tok/s at B=16 (>1 = vLLM ahead)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; e4b: P54's int4 stack: RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route auto, E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1, GNF4_GEMV_FUSED_REDUCE unset (two-launch default); --fuse-qkv at B=1 only; 512-token wikitext-2 prompts (step_decomp._k8_window), 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, all-vram, --amort off; vLLM 0.29.0: offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt); self-pairs e4b int4 1.0001, e4b nf4 1.0004, vLLM 1.0013 (rule: inside 1.03x); prompts_sha f67e7e4d592b002b; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_secondary_b16_graph_r1.json",
+        "bench/p58/receipts/vllm_secondary_b16_graph_r2.json",
+        "bench/p58/receipts/e4b_b16_int4_r1.json",
+        "bench/p58/receipts/e4b_b16_int4_r2.json",
+        "bench/p58/receipts/prompts_b16.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box position; the vLLM number includes its serving loop and e4b's replay window has no scheduler, so the engine advantage is understated, not inflated. Quality quoted, never equated. e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 stays as history (a different e4b stack).",
+      "quoted_in": [
+        "docs/SERVING-THROUGHPUT.md",
+        "docs/STATUS.md"
+      ]
+    },
+    {
+      "id": "e4b.serve.h2h.p58.vllm-build-to-build.qwen3.b16.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P58: vLLM 0.30.0 / vLLM 0.29.0 decode tok/s at B=16, same box, same prompts, GPTQ-Int4 Marlin: 1.007 (1925.6 vs 1912.7).",
+      "value": 1.007,
+      "unit": "ratio vLLM 0.30.0 / vLLM 0.29.0, decode tok/s at B=16",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52069847); same-box, same-session ratios only",
+      "conditions": "B=16; both builds: offline LLM.generate, dtype auto (float16), max_model_len 2048, gpu_memory_utilization 0.90, prefix caching off, seed 0, default CUDA graphs (enforce_eager on the eager arm), kv auto; decode isolated by the slope method (32 -> 128 tokens, min-of-3), identical prompt token ids to the e4b arms (prompts_sha in every receipt)",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p58/RESULTS-p58.md",
+        "bench/p58/P58-PREREG.md",
+        "bench/p58/receipts/vllm_primary_b16_graph_r1.json",
+        "bench/p58/receipts/vllm_secondary_b16_graph_r1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Tells the next comparator lane whether pinning the vLLM version matters (P3 band +-5 %)."
     }
   ]
 }
