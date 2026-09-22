@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### P60 read: the expert GEMV's B=16 headroom is repeated rows — 0.92 ms/step, the ceiling a grouped kernel can recover (lane `p60-5090-1`, $0.23)
+
+- **Recorded B=16 routing replayed through the shipped int4-b32 expert GEMV on one RTX 5090** (`bench/p60/RESULTS-p60.md`):
+  the replay reproduces the served kernel row (**6.155 ms/step vs the census's 6.340**, −2.9 %), and one row per distinct expert
+  instead of one per routed row runs **5.560 vs 6.479 ms/step** — **0.92 ms/step** (~8 % of the B=16
+  step) is the cost of re-streaming each expert per row. Ordering rows by expert changes nothing (-0.55%): L2
+  already serves the repeats. One row per expert sits 1.21× above the 1,512 GB/s byte floor (between bands).
+- Decision: a **grouped expert GEMV** (grouped-nf4-gemm lane K18) is licensed to build, read against the recorded ids committed in
+  `bench/p60/receipts/eids_b16.int16.bin`. Row `e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`. No default changes.
+
 ### P59 amendment 1: the fused q/k/v path is the default at B=16 too — 0.0044 nats/token through a 128-row prefill, determinism control bit-identical (lane `p59b-5090-1`)
 
 - **Through the harness's 128-row prefill, `KL(int4 unfused ‖ int4 fused q/k/v)` at B=16 = 0.0044 nats/token, top-1 0.9775**

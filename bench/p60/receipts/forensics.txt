@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-5e911316-b19e-7a23-f96a-6c16430f161a
+power.limit,clocks.max.sm 600.00 W, 3210 MHz
+Model name:                              AMD EPYC 7663 56-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             755         219          85         183         450         347
+cgroup memory.max 294412877824
+Build cuda_12.8.r12.8/compiler.35583870_0

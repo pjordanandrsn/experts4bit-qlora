@@ -6494,6 +6494,34 @@
         "bench/p59/receipts/p59b/out/nf4/census.json"
       ],
       "notes": "An anchor for P2 (the fusion must not move this distance by more than 0.005). Not a quality licence: the NF4 control is itself a quantised stack."
+    },
+    {
+      "id": "e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P60: replaying Qwen3-30B-A3B's recorded B=16 routing (128 decode steps x 48 layers, 54.7 distinct experts per layer per step) through the shipped int4-b32 expert GEMV on one RTX 5090 reproduces the served kernel row (6.155 ms/step vs the census's 6.340), and shows the cost of streaming each expert once per ROUTED ROW rather than once per distinct expert: 6.479 vs 5.560 ms/step = 0.919 ms/step, the ceiling a grouped expert GEMV can recover; ordering rows by expert changes nothing (-0.55%); one row per expert sits 1.21x above the 1512 GB/s byte floor (4.598 ms).",
+      "value": 0.919,
+      "unit": "ms/step, served minus one-row-per-distinct-expert, expert GEMV graph time at B=16",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, 170 SMs), one rented Vast.ai verified/secure host (instance 52104714)",
+      "conditions": "recorded routing: the served int4 stack (RTN int4 experts, uncalibrated int4 attention, K16 route, glue r1/r2, E4B_FUSE_ROUTER_EPI=0) on the 16 wikitext-2 rows of prompts_b16.json, 384-token prefill in 128-row chunks, 128 teacher-forced decode steps; replay: synthetic int4-b32 weights for 128 experts at gate_up N1536 K2048 / down N2048 K768, the step's 96 calls per CUDA graph, 20 replays median, gnf4 65cb104's own plan (sk 16 / 6), profiler-read kernel row on 8 steps; e4b 87c5096",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p60/RESULTS-p60.md",
+        "bench/p60/P60-PREREG.md",
+        "bench/p60/record_eids.py",
+        "bench/p60/replay_gemv.py",
+        "bench/p60/receipts/replay.json",
+        "bench/p60/receipts/eids_b16.pt.json",
+        "bench/p60/receipts/eids_b16.int16.bin",
+        "bench/p60/receipts/eids_b16.int16.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p60-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Pre-registered verdicts: P0 (instrument, served within +-15 % of 6.340) HOLDS -2.9 %; P1 (served - dedup >= 0.8) HOLDS; P2 (dedup/floor <= 1.15) BETWEEN BANDS 1.21; P3 (order within 3 %) HOLDS; P4 (routing 58.7 +- 3) REFUTED 54.7 -- teacher-forced routing is narrower than greedy. Decision: a grouped expert GEMV (grouped-nf4-gemm lane K18) is licensed to build, read against these recorded ids. A replay measurement, not a served step time."
     }
   ]
 }
