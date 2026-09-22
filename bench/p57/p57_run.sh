@@ -181,7 +181,7 @@ if can_run 900 int4_b16_distinct; then
   env E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=0 \
     P57_DISTINCT_OUT=$W/distinct_experts_b16.json P57_BATCH=16 GNF4_GEMV_FUSED_REDUCE=0 \
     perl -e "alarm $(arm_alarm); exec @ARGV" python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
-      --batch 16 --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv \
+      --batch 16 --prompt-len 512 --gen-tokens 128 --b1d-loop eager --b1d-timed --no-fuse-qkv \
       --out $W/e4b_b16_int4_b16_distinct.json >> logs/run_int4_b16_distinct.log 2>&1
   rc_d=$?; vram_stop $sp
   grep -aE "P57 HOOK|P57_DISTINCT_OUT|B1D_TIMED|BV3_|REFUSED|Error" logs/run_int4_b16_distinct.log | tail -4 | sed "s/^/    /"
@@ -190,6 +190,9 @@ if can_run 900 int4_b16_distinct; then
   # amendment 1: a dump with steps=0 is a file, not a measurement -- p57-5090-2 exited green on one (gen-tokens 64 -> a 6-step window)
   python -c "import json,sys; d=json.load(open('$W/distinct_experts_b16.json')); sys.exit(0 if d.get('steps',0) > 0 else 1)" 2>/dev/null \
     || { echo "DISTINCT EMPTY (steps=0): not a measurement" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=45; }
+  # amendment 2: p57b-5090-2 counted 3 warm-up steps before graph capture killed the harness (torch.unique syncs) -- a partial count is not the registered window
+  python -c "import json,sys; d=json.load(open('$W/distinct_experts_b16.json')); sys.exit(0 if d.get('steps',0) >= 16 else 1)" 2>/dev/null \
+    || { echo "DISTINCT SHORT (steps<16): warm-phase glimpse, not the 70-step window" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=45; }
 fi
 say "----- summary -----"; cat summary.txt
 finish "$rc_any"
