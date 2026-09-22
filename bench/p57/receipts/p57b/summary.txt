@@ -1,0 +1,4 @@
+GNF4 K16 65cb10410239120d25307812827a23139e84abe1 PLAN_HAS_R=True
+TIMED ARMS SKIPPED (P57_ONLY_DISTINCT=1, amendment 1)
+arm int4_b16_distinct B=16 UNTIMED rc=1 P57_DISTINCT_OUT /root/p57/distinct_experts_b16.json layers=48 steps=3 mean_distinct=54.84027777777778 uniform=82.42
+
