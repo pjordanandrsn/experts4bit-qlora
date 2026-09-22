@@ -18,9 +18,12 @@ source) line for line past the projections; structural drift (norm or
 rotary misplacement) is an O(1) error and fails the same tolerance in
 ``tests/test_qkv_fuse.py`` long before the serving gates.
 
-Opt-in and arm-gated: nothing calls this unless the harness passes
-``--fuse-qkv`` (or a later RESULTS flips a default). Applied BEFORE
-``--compile-layers`` so dynamo traces the fused forward.
+Arm-gated: nothing calls this unless the harness passes ``--fuse-qkv``
+(the harness's default). On the int4 serving lanes it is licensed at
+B=1 (P54: token-identical) and at B=16 (P59 amendment 1: 0.0044
+nats/token through a 128-row prefill, reorder class; the K16 decode
+path is bitwise invariant to fusing, the >16-row cuBLAS path is not).
+Applied BEFORE ``--compile-layers`` so dynamo traces the fused forward.
 
 **The projections may already be on the int4-b32 grid.** Every int4 lane
 applies ``enable_serve_attn_int4`` at load (the hook rides the hybrid-tier

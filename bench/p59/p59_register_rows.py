@@ -31,21 +31,23 @@ def main():
     ap.add_argument("--instance", required=True)
     ap.add_argument("--receipt-dir", default="bench/p59/receipts")
     ap.add_argument("--merge")
+    ap.add_argument("--lane", default="p59", help="id prefix: p59 (run 1) or p59b (amendment 1)")
+    ap.add_argument("--run-id", default="p59-5090-1")
     a = ap.parse_args()
     rep = json.load(open(a.rep_json))
     P, V = rep["pairs"], rep["verdicts"]
     hw = f"RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance {a.instance}); same box, same session, same prompt rows for every arm"
     ev = ["bench/p59/RESULTS-p59.md", "bench/p59/P59-PREREG.md", "bench/p59/kl_b16.py", f"{a.receipt_dir}/p59_rep.json",
           f"{a.receipt_dir}/out/int4/census.json", f"{a.receipt_dir}/out/int4_fqkv/census.json"]
-    priv = [f"receipts/experts4bit-qlora/{a.date}/p59-5090-1/ (receipt.json, teardown-proof.json, full fetched run; the fp32 logits stayed on the box)"]
+    priv = [f"receipts/experts4bit-qlora/{a.date}/{a.run_id}/ (receipt.json, teardown-proof.json, full fetched run; the fp32 logits stayed on the box)"]
     common = {"package": "experts4bit-qlora", "area": "serve", "model": MODEL, "hardware": hw, "measured_on": a.date, "status": "measured", "tier": "measured",
               "conditions": f"{COND}; e4b {a.e4b_sha[:12]}, grouped-nf4-gemm {a.gnf4_sha[:12]} (K17 merge)", "evidence_private": priv}
     p1 = P["int4 || int4_fqkv (P1)"]
     p3 = P.get("int4 || int4_aa (P3, determinism)") or {}
     p4 = P.get("int4 || int4_fqkv, PREFILL-last (P4)") or {}
     rows = [dict(common, **{
-        "id": f"e4b.serve.p59.qwen3.b16.fqkv-kl.5090.{a.date}",
-        "claim": (f"Lane P59: at B=16 the fused-q/k/v int4 attention store changes {MODEL}'s served output distribution by KL(unfused || fused) = "
+        "id": f"e4b.serve.{a.lane}.qwen3.b16.fqkv-kl.5090.{a.date}",
+        "claim": (f"Lane {a.lane.upper()}: at B=16 the fused-q/k/v int4 attention store changes {MODEL}'s served output distribution by KL(unfused || fused) = "
                   f"{p1['kl_mean']:.5f} nats/token mean (median {p1['kl_median']:.5f}, p95 {p1['kl_p95']:.5f}, max {p1['kl_max_per_token']:.4f}) with top-1 "
                   f"agreement {p1['top1_agreement']:.4f} over {p1['n_tokens_scored']} teacher-forced decode positions; the same stack rebuilt in a fresh process "
                   f"reads KL {'exactly 0' if p3.get('exactly_zero') else p3.get('kl_mean')} (determinism control) and the shared prefill path reads "
@@ -61,7 +63,7 @@ def main():
         if not s:
             continue
         rows.append(dict(common, **{
-            "id": f"e4b.serve.p59.qwen3.b16.{tag}.5090.{a.date}",
+            "id": f"e4b.serve.{a.lane}.qwen3.b16.{tag}.5090.{a.date}",
             "claim": (f"Lane P59 anchor: KL(NF4 control || {what}) at B=16 = {s['kl_mean']:.5f} nats/token mean (p95 {s['kl_p95']:.5f}), top-1 "
                       f"{s['top1_agreement']:.4f}, over {s['n_tokens_scored']} teacher-forced decode positions -- the distance of the int4 serving stack from "
                       "the register's NF4 control on the same rows; reported, not gated."),

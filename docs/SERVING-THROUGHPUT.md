@@ -24,6 +24,8 @@ measured it on Qwen3-30B-A3B, two interleaved draws per arm, census on the first
 
 `e4b.serve.p54.qwen3.{b1,b16}.{control,fqkv}.5090.2026-09-21`, **measured**, ratios within this box only.
 
+**Update 2026-09-22 — B=16 is licensed too** (P59 amendment 1, [`bench/p59/RESULTS-p59.md`](../bench/p59/RESULTS-p59.md), `e4b.serve.p59b.qwen3.b16.fqkv-kl.5090.2026-09-22`): the K16 small-M kernel is bitwise invariant to fusing at 2–16 rows, and through the harness's 128-row prefill the fused stack reads 0.0044 nats/token (top-1 0.9775) from the unfused one with the determinism control exactly 0 — the fused path is the B=16 default. The paragraph below is the 2026-09-21 reading, kept as written; its kernel attribution was withdrawn by P59.
+
 **B=1 is a licensed lever and B=16 is not.** At B=1 the int4 GEMV computes an independent dot product per
 output row, so concatenating rows along N cannot change any row's arithmetic — the fused arm's generated
 tokens are identical to the control's on both draws, and the census accounts for the whole saving as launch

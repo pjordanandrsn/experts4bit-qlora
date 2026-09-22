@@ -843,10 +843,14 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   invariant to fusing at 2–16 rows (A2000 probe) and the fused and unfused stacks
   read KL exactly 0 at 16-row decode on the 5090. The divergence lives in the
   >16-row path — the harness's 128-token prefill steps run cuBLAS on the cached
-  bf16 weight, whose kernel choice depends on N. `--fuse-qkv` therefore
-  stays **opt-in** on the int4 lanes at B=16, with no position quoted, until a
-  KL-from-checkpoint or K8 read bounds the divergence against the shipped bar
-  (≤ 0.10 nats, top-1 ≥ 0.93).
+  bf16 weight, whose kernel choice depends on N. **Bounded and licensed (P59
+  amendment 1, `e4b.serve.p59b.qwen3.b16.fqkv-kl.5090.2026-09-22`):** through a
+  128-row prefill the fused stack sits **0.0044 nats/token** (top-1 0.9775) from
+  the unfused one at B=16, with a fresh-process rebuild of the unfused stack
+  bit-identical (so the number is the fusion's, not noise) — reorder-class, well
+  inside the shipped bar (≤ 0.10 nats, top-1 ≥ 0.93). **The fused q/k/v path is
+  now the default on the int4 lanes at B=16 as well as B=1**; its same-box B=16
+  saving is P54's 0.223 ms/step (1401 → 1429 tok/s on that box).
 - **K17's fused split-K reduce is exact and slower in the consumer** (P57,
   same page): −0.038 ms/step at B=1, −0.217 at B=16, the epilogue landing inside
   the critical-path GEMV while the launches it removed were overlapped. Stays
