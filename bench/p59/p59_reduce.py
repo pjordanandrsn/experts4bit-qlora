@@ -70,7 +70,7 @@ def main():
             L.append(f"| {arm} | MISSING | | | | | | | |")
             rep["arms"][arm] = None
             continue
-        rep["arms"][arm] = {k: c.get(k) for k in ("fuse_qkv_n", "int4_attn_projections_before_fuse", "int4_attn_projections", "int4_expert_layers",
+        rep["arms"][arm] = {k: c.get(k) for k in ("fuse_qkv_n", "int4_attn_projections_before_fuse", "int4_attn_projections", "int4_attn_smallm_routed", "prefill_chunk", "int4_expert_layers",
                                                     "fuse_t1_glue_n", "fuse_t1_glue_r2_n", "fuse_router_epilogue_n", "decode_logits_shape", "build_s", "score_s", "prompts_sha256")}
         L.append(f"| {arm} | yes | {c.get('fuse_qkv_n')} | {c.get('int4_attn_projections_before_fuse')} -> {c.get('int4_attn_projections')} | {c.get('int4_expert_layers')} | "
                  f"{c.get('fuse_t1_glue_n')}/{c.get('fuse_t1_glue_r2_n')}/{c.get('fuse_router_epilogue_n')} | {c.get('decode_logits_shape')} | {c.get('build_s')} | {c.get('score_s')} |")
@@ -121,8 +121,12 @@ def main():
     if ci and cf and cn:
         ok = (cf["fuse_qkv_n"] == 48 and cf["int4_attn_projections"] == 96 and ci["int4_attn_projections"] == 192 and cn["int4_attn_projections"] == 0
               and ci["fuse_qkv_n"] == 0 and same_prompts)
+        routed = [x.get("int4_attn_smallm_routed") for x in (ci, cf)]
+        if all(r is not None for r in routed):          # amendment 1 receipts carry the route; run 1's did not
+            ok = ok and routed[0] == 192 and routed[1] == 96
         v["census"] = "OK" if ok else "FAILED"
-        v["census_detail"] = f"fused n={cf['fuse_qkv_n']} Int4Linear {cf['int4_attn_projections']}; int4 {ci['int4_attn_projections']}; nf4 {cn['int4_attn_projections']}; same prompts {same_prompts}"
+        v["census_detail"] = (f"fused n={cf['fuse_qkv_n']} Int4Linear {cf['int4_attn_projections']}; int4 {ci['int4_attn_projections']}; nf4 {cn['int4_attn_projections']}; "
+                              f"K16-routed int4/fused {ci.get('int4_attn_smallm_routed')}/{cf.get('int4_attn_smallm_routed')}; prefill chunk {cf.get('prefill_chunk')}; same prompts {same_prompts}")
     L += ["", "## Verdicts (pre-registered rules)", ""]
     for k in ("P1", "P2", "P3", "P4", "census"):
         if k in v:

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### P59 read: fusing q/k/v changes nothing at 16-row decode (KL exactly 0) — the K16 kernel is bitwise invariant to it; P57's kernel attribution withdrawn (#682, lane `p59-5090-1`)
+
+- **KL(int4 unfused ‖ int4 fused q/k/v) at B=16 = 0.000000 nats/token, top-1 1.0000, bit-identical on every one of 2,048
+  teacher-forced decode positions** (one RTX 5090, $0.34; `bench/p59/RESULTS-p59.md`). The fusion was installed (48 modules,
+  `Int4Linear` 192 → 96). A free A2000 probe (`bench/p59/probe/`) explains it: the K16 small-M GEMM is **bitwise invariant**
+  to fusing at 2–16 rows (the same plan for every N, independent columns); only the >16-row cuBLAS path on the cached bf16
+  weight differs (≤ 1 bf16 ulp). The anchors: the int4 stack sits 0.0717 nats/token (top-1 0.905) from the NF4 control.
+- **P57's reading that P54's B=16 token divergence "is the K16 GEMM's" is withdrawn** (P57's RESULTS, STATUS and the P57 entry
+  below corrected; also corrected: P57's first-divergence indices are not P54's). The leading hypothesis is now the harness's
+  128-token prefill steps, which take the cuBLAS path.
+- The determinism arm was skipped by the deadline guard, so the registered decision rule is not met and `--fuse-qkv` stays
+  opt-in at B=16 for now. **Amendment 1** re-runs the gate with a 128-row chunked prefill (`kl_b16.py --prefill-chunk 8`),
+  a K16-route census, and room for the determinism arm. Register rows `e4b.serve.p59.qwen3.b16.{fqkv-kl,nf4-int4-kl,nf4-fqkv-kl}.5090.2026-09-22`.
+
 ### P58 read: same box, current vs current — vLLM 0.30.0 decodes 1.09× (B=1) / 1.40× (B=16) faster than e4b's int4 stack; 0.29.0 vs 0.30.0 within 1 % at B=16 (#676 lane, run `p58-5090-1`)
 
 - **The register's current-vs-current comparator against a production engine is re-pointed** (`bench/p58/RESULTS-p58.md`,
@@ -19,7 +33,7 @@
   build-to-build row and 20 per-arm rows (`bench/p58/p58_register_rows.py`); `docs/SERVING-THROUGHPUT.md` and
   `docs/STATUS.md` re-pointed. Receipts in `bench/p58/receipts/` (trimmed engine logs; full run private).
 
-### P57 read: K17's fused split-K reduce is exact and SLOWER in the consumer at both batches; P54's B=16 divergence is the K16 GEMM's, not the glue's (#666, lane p57-5090-2)
+### P57 read: K17's fused split-K reduce is exact and SLOWER in the consumer at both batches; P54's B=16 divergence is not the glue's (#666, lane p57-5090-2)
 
 - **`GNF4_GEMV_FUSED_REDUCE=1` costs 0.038 ms/step at B=1 and 0.217 ms/step at B=16** on the int4 serving stack
   (Qwen3-30B-A3B, one RTX 5090, A/A spreads ≤ 0.009 ms; `bench/p57/RESULTS-p57.md`). The route engaged exactly as
@@ -28,8 +42,8 @@
   separate reduce launches were overlapped in the graph, the fused epilogue sits on the critical path. K17's kernel
   stays opt-in in grouped-nf4-gemm; nothing in e4b changes. P1 and P2 refuted as registered.
 - **With the round-2 glue forced OFF on both legs, fused q/k/v at B=16 still diverges from unfused on 15 of 16
-  sequences, at the same first-divergence indices P54 recorded**, while the control's two draws are bit-identical:
-  the divergence follows the K16 small-M GEMM's N-dependent accumulation, and the glue path is exonerated (P3).
+  sequences** while the control's two draws are bit-identical: the glue path is exonerated (P3). *(Corrected by P59:
+  the indices are not P54's, and the divergence is not the K16 GEMM's — see the P59 entry above.)*
   `--fuse-qkv` stays the default at B=1 and opt-in at B=16 until a KL/K8 read bounds the difference.
 - **The distinct-expert count is READ (amendment 3, run `p57d-5090-1`, $0.07): 58.7 distinct experts per layer per
   decode step at B=16** (layer means 50.9–71.7, 73 steps counted on device; uniform expectation 82.4;
