@@ -847,12 +847,16 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   same page): −0.038 ms/step at B=1, −0.217 at B=16, the epilogue landing inside
   the critical-path GEMV while the launches it removed were overlapped. Stays
   opt-in in grouped-nf4-gemm; the census row it targeted was GPU time, not a launch.
-- **The distinct-expert count at B=16 is still unmeasured**
-  ([#564](https://github.com/pjordanandrsn/experts4bit-qlora/issues/564)): it
-  decides whether the expert GEMV — 56 % of the B=16 step — has ~1.3 ms of
-  headroom or none. P54's arm for it was unbuildable as registered
-  (`--series-out` needs `--amort on`, which the captured B>1 stage refuses);
-  the replacement is registered in that lane's amendment 1.
+- **The distinct-expert count at B=16 is MEASURED (P57 amendment 3, 2026-09-22,
+  `e4b.serve.p57.qwen3.b16.distinct-experts.5090.2026-09-22`): 58.7 distinct
+  experts per layer per decode step** (layer means 50.9–71.7; uniform expectation
+  82.4; 7–41 of 128 experts per layer never touched in 73 steps × 16 rows), from an
+  on-device router hook that counts every graph-replayed step. Against
+  [#564](https://github.com/pjordanandrsn/experts4bit-qlora/issues/564)'s byte
+  roofline the floor at 58.7 is 4.89 ms/step vs the measured 6.34 ms expert-GEMV
+  row: **~77 % of roofline at real routing, ~1.4 ms/step of headroom** in the
+  largest row of the B=16 step — the lever the P58 gap analysis said was absent
+  is present after all, sized by the routing it actually sees.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
