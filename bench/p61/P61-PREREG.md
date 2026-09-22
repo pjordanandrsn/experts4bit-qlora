@@ -76,3 +76,17 @@ Nothing here changes a default.
 - **Receipts:** the receipt and its ledger row are committed together (backup, then post-commit diff).
 
 Amendments, dated, go below this line before any data is read.
+
+## Amendment 1 (2026-09-22, after run 1's P0 gate, before any P1–P4 read)
+
+**Run 1: gate failed.** Run `p61-5090-1` (receipt in adertha-receipts `56c5170`, $0.0436) completed with rc 0 but **failed P0**:
+- shared-store served read **7.253 ms/step** against P60's 6.479 (**+11.9 %**, band ± 5 %);
+- the lighter dedup arm read 5.513, within 1.5 % of P60's 5.560;
+- its card's `power.limit` was **450 W**. P60's was 600 W, and K18's was 575 W, where served read 6.520.
+
+**What was seen:** the forensics and the runner's four summary lines (both stores' served and dedup step medians) only. The grid, the fit, and P1–P4 were **not computed**, and run 1 is never read beyond P0.
+
+**Change:** `p61_run.sh` refuses a card whose `power.limit` is below **575 W** (rc 15), before any install, so the read box matches the P0 anchor's class. Nothing else changes.
+
+**Re-run:** exactly one, `p61-5090-2`. This amends STOP-4 for this instrument failure only. If run 2 also fails P0, the lane stops and records that the served GEMV's replay depends on the host's power class.
+
