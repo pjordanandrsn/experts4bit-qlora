@@ -378,6 +378,12 @@ GPTOSS = MoEConvention(
 #: down_proj [128, 768, 2048]; the built tree wants [128, 1536, 2048] and
 #: [128, 2048, 768] respectively — the last two axes swapped, both projections.
 #: Never per-expert, so the expert pattern matches nothing.
+#: **STAGED, NOT WIRED (#648): no ``ForCausalLM`` class exists upstream.** The
+#: layout below is adjudicated and USED -- by the int4 serve lane's planner, which
+#: builds its own tree -- but ``loader.load_moe_4bit_streaming`` builds through
+#: ``AutoModelForCausalLM.from_config`` and neither ``qwen3_vl_moe`` nor
+#: ``qwen3_vl_moe_text`` is registered for it. Pinned by
+#: ``tests/test_staged_blockers.py``, which fails if upstream adds one.
 QWEN3_VL_MOE = MoEConvention(
     name="qwen3_vl_moe",
     expert_re=re.compile(r"(?!)"),      # matches nothing: never per-expert
@@ -432,6 +438,14 @@ GEMMA4 = MoEConvention(
 #: released jetmoe-8b index: all 266 checkpoint keys map 1:1 (96 of them
 #: attention-expert tensors), and the only tree param the checkpoint omits is
 #: the tied ``lm_head`` — 267/267 covered. Never per-expert; no renames.
+#: **STAGED, NOT WIRED (#648).** ``fused_prefix`` below says ``mlp.experts``; the
+#: built tree has NO such module -- the stacks are ``mlp.input_linear`` /
+#: ``mlp.output_linear`` directly on the block. Left as-is rather than changed to
+#: another value that would also be wrong (``mlp.gate_up_proj`` is not the name
+#: either): the honest record is that this family's module naming is outside what
+#: ``fused_prefix`` + ``gate_up_proj``/``down_proj`` can address, and wiring needs a
+#: per-family module adapter plus a decision about the SECOND (attention) MoE.
+#: Pinned by ``tests/test_staged_blockers.py``.
 JETMOE = MoEConvention(
     name="jetmoe",
     expert_re=re.compile(r"(?!)"),      # matches nothing: native, never per-expert
@@ -458,6 +472,11 @@ JETMOE = MoEConvention(
 #: SwiGLU gate-first. They are NOT used by the passthrough loader (which places
 #: the flat tensors as-is) but are recorded here so the orientation is never
 #: re-guessed. The expert pattern matches nothing: dbrx is never per-expert.
+#: **STAGED, NOT WIRED (#648): flat 2-D stacks.** ``Experts4bit.from_float``
+#: requires ``[E, out, in]`` and refuses anything not 3-D, so the passthrough
+#: layout recorded below cannot reach the expert primitive without a reshape --
+#: which is exactly why the w1=gate / v1=up / w2=down roles are pinned here in
+#: advance. Pinned by ``tests/test_staged_blockers.py``.
 DBRX = MoEConvention(
     name="dbrx",
     expert_re=re.compile(r"(?!)"),      # matches nothing: flat native stacks
@@ -550,7 +569,19 @@ NEMOTRON_H = MoEConvention(
 #: `READ_COMPATIBLE_CONVENTIONS` (`{qwen2_moe, mixtral, phimoe}`), so both routes refuse it and an
 #: axk1 checkpoint raises. `rewrite_axk1_keys` is also absent from `CKPT_KEY_REWRITERS`, so the
 #: keymap would not be applied even if the architecture were admitted -- wiring only the first
-#: would silently load with the wrong key mapping. Contrast `axk2`, which is mapped onto
+#: would silently load with the wrong key mapping.
+#: **Measured 2026-09-21 (#648): the keymap does not FIT that registry.**
+#: `CKPT_KEY_REWRITERS` holds callables the loader applies one key at a time
+#: (`rewrite(k) -> str | None`); `rewrite_axk1_keys` takes `(checkpoint_keys,
+#: first_k_dense_replace)` and returns `(kept, dropped)`, because the
+#: `post_mlp_layernorm` rename is layer-CONDITIONAL -- the released checkpoint ships
+#: that key on the dense layer 0 AND on the MoE layers, and it must be dropped on
+#: one and renamed on the other. So wiring is: read `first_k_dense_replace` off the
+#: config, close over it, and adapt the list-shaped keymap to the per-key contract
+#: (or widen the contract). Separately, no support row is obtainable on any host
+#: here -- the only released checkpoint is 1.04 TB -- so an admission would be a
+#: claim the coverage gate has no evidence for. Both pinned by
+#: `tests/test_staged_blockers.py`. Contrast `axk2`, which is mapped onto
 #: `QWEN2_MOE` below and IS admitted, because that convention is read-compatible.
 AXK1 = MoEConvention(
     name="axk1",
@@ -618,14 +649,35 @@ NATIVELY_PREFUSED = frozenset({
 #:   ``rewrite_axk1_keys`` absent from ``CKPT_KEY_REWRITERS``. Wiring only the
 #:   admission would apply no keymap, a silent wrong-key-mapping path, so the two
 #:   must land in one change (#509).
-#: * ``qwen3_vl_moe`` / ``qwen3_vl_moe_text`` -- adjudicated against a released
-#:   index and given a conditional transpose in #637/#639, and still not admitted.
-#:   Correctness work on a family the loader currently refuses.
-#: * ``jetmoe``, ``dbrx`` -- convention present, neither admission route open. No
-#:   reason recorded here because none was found; that absence is itself the thing
-#:   to resolve. (``jamba`` and ``lfm2_moe`` sat in this same bullet until #648
-#:   simply tried them: both load, and the "no reason recorded" was that nobody had
-#:   looked, not that a blocker existed.)
+#: * ``qwen3_vl_moe`` / ``qwen3_vl_moe_text`` -- **transformers publishes no
+#:   ``ForCausalLM`` class for either**, only ``Qwen3VLMoeForConditionalGeneration``,
+#:   and neither config is in ``MODEL_FOR_CAUSAL_LM_MAPPING``. The loader's only
+#:   build path is ``AutoModelForCausalLM.from_config``, so admission would pass the
+#:   architecture gate and then raise while BUILDING the tree, before a weight is
+#:   read. That is why #637/#639 could adjudicate the expert LAYOUT (which the int4
+#:   planner uses) while the loader still refuses the family: the two consumers need
+#:   different things, and only one of them needs a CausalLM class.
+#: * ``jetmoe`` -- **its tree has no ``experts`` submodule to replace.** The fused
+#:   stacks sit directly on the MoE block as ``mlp.input_linear`` [E, 2I, H] /
+#:   ``mlp.output_linear`` -- the granitemoe SHAPE, but granitemoe's tree declares
+#:   ``block_sparse_moe.experts.gate_up_proj``, so a checkpoint-side rename suffices
+#:   there and cannot here, where both sides say ``input_linear``. ``fused_prefix``
+#:   below therefore names a module path that does not exist. It is also a DUAL MoE
+#:   (``self_attention.experts``, a second stack e4b cannot represent), so a naive
+#:   admission would quantize the MLP experts, leave the attention experts in bf16,
+#:   and report success.
+#: * ``dbrx`` -- **flat 2-D stacks.** Each projection is one
+#:   ``[E * ffn_hidden, hidden]`` tensor and the module declares it the same way, so
+#:   loading is passthrough; ``Experts4bit.from_float`` requires ``[E, out, in]`` and
+#:   refuses anything not 3-D. Reshaping is a real change with a real orientation
+#:   decision, not an admission row -- which is why the roles are pinned above.
+#:
+#: ``jamba`` and ``lfm2_moe`` sat in this list too, under "no reason recorded
+#: because none was found". #648 simply tried them: both load, and the absence was
+#: that nobody had looked. The four reasons above were then MEASURED rather than
+#: argued, and each is asserted by ``tests/test_staged_blockers.py`` so that it
+#: fails the day it stops being true -- a blocker kept as a comment rots into a
+#: stale excuse; one kept as a test tells you when the family became wirable.
 #:
 #: ``tests/test_staged_not_wired.py`` asserts this set equals what the loader
 #: refuses, so it cannot go stale in either direction: wiring a family without

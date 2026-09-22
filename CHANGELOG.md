@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### The five families still staged now say WHY, and each reason is a test (#648, #509)
+
+`STAGED_NOT_WIRED` recorded which families no loader admits. For four of them it recorded no reason
+at all — *"none was found; that absence is itself the thing to resolve."* Resolved: two of those four
+(`jamba`, `lfm2_moe`) simply had not been tried and are now wired; the rest have a measured blocker.
+
+`tests/test_staged_blockers.py` asserts each blocker as the CURRENT upstream or checkpoint fact, so it
+**fails the day the blocker lifts**. A blocker kept as a comment rots into a stale excuse; one kept as
+a test says when the family became wirable. Nothing here claims a family should stay unwired — only
+what would have to change first.
+
+- **`qwen3_vl_moe` / `qwen3_vl_moe_text` — transformers publishes no `ForCausalLM` class.** Only
+  `Qwen3VLMoeForConditionalGeneration` exists and neither config is in `MODEL_FOR_CAUSAL_LM_MAPPING`,
+  so admission would clear the architecture gate and then raise while BUILDING the tree, before a
+  weight is read. This is also why #637/#639 could adjudicate the expert layout while the loader still
+  refuses the family: the int4 planner builds its own tree and does not need a CausalLM class.
+- **`jetmoe` — its tree has no `experts` submodule to replace.** The stacks sit directly on the MoE
+  block as `mlp.input_linear` [E, 2I, H] / `mlp.output_linear`. That is granitemoe's *shape*, but
+  granitemoe's tree declares `block_sparse_moe.experts.gate_up_proj`, so a checkpoint-side rename is
+  enough there and cannot be here, where both sides say `input_linear`. The convention's `fused_prefix`
+  names a path that does not exist — left as-is rather than changed to another wrong value. It is also
+  a DUAL MoE (`self_attention.experts`), so a naive admission would quantize the MLP experts, leave the
+  attention experts in bf16, and report success.
+- **`dbrx` — flat 2-D stacks.** Each projection is one `[E * ffn_hidden, hidden]` tensor and the module
+  declares it the same way; `Experts4bit.from_float` requires `[E, out, in]` and refuses anything not
+  3-D. Reshaping is a real change with a real orientation decision — which is why the convention pins
+  w1=gate / v1=up / w2=down in advance.
+- **`axk1` — the keymap does not FIT the registry that would hold it.** #509 said admission and the
+  rewriter must land together; measured now, they cannot yet. `CKPT_KEY_REWRITERS` holds callables the
+  loader applies one key at a time (`rewrite(k) -> str | None`), while `rewrite_axk1_keys` takes
+  `(checkpoint_keys, first_k_dense_replace)` and returns `(kept, dropped)` — because the
+  `post_mlp_layernorm` rename is layer-CONDITIONAL: the released checkpoint ships that key on the dense
+  layer 0 *and* on the MoE layers, and it must be dropped on one and renamed on the other. So wiring is
+  "close over `first_k_dense_replace` and adapt the list-shaped keymap to the per-key contract", not an
+  admission row plus a dict entry. Separately, the only released checkpoint is 1.04 TB, so no support
+  row is obtainable here and an admission would be a claim the coverage gate has no evidence for.
+- A final test requires every member of `STAGED_NOT_WIRED` to be named by a blocker in that file, so
+  "no reason recorded" cannot reopen for a family added later.
+
 ### `jamba` and `lfm2_moe` are wired — the "no reason recorded" was that nobody had tried (#648)
 
 `STAGED_NOT_WIRED` said of these two only that there was *"no reason recorded here because none was
