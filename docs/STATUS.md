@@ -324,11 +324,22 @@ This is e4b against itself, not against another framework, which is exactly
 what the control exists to catch. The direction was the one the P47–P51 lanes
 predicted: Gemma-4's sensitivity is **positional and lives in the quantised
 model**, not in the adapter path, so changing the adapter path was not
-expected to move it and did not. The defect is **characterised, reproduced on
-two kernel cuts, and unfixed**
-([`e4b.parity.gemma4.train-internal`](claims.json)). On the same pair the
-fused path is 10.81× faster per step at identical peak VRAM; that is an
-internal comparison and no competitive position is quoted from it.
+expected to move it and did not. [`e4b.parity.gemma4.train-internal`](claims.json) is **SUPERSEDED** 2026-09-22 by lane P56
+([`e4b.parity.gemma4.train-floor`](claims.json),
+[`bench/p56/RESULTS-p56.md`](../bench/p56/RESULTS-p56.md)): the disagreement is
+**not attributable to the fused path**. e4b's kernel-free batched path — 13×
+less composed gradient error, never touching `grouped-nf4-gemm` — fails the
+same band on the same box, at 0.05425 final / 0.08487 median. Cutting the
+per-op error 13× closes only 1.9× of the gap, so no achievable arithmetic
+change reaches 0.05. The FAIL itself reproduced a third time (0.10223 /
+0.10639), so it is real and stable; what changed is what it is evidence
+*about*. P56 measures this family's training-parity floor for the first time —
+**≥ 0.054 final / 0.085 median step-wise** — and `tp4_reduce.parity()` compares
+against 0.05 **and against zero**, with no floor term. So #558 stands open as a
+**gate** defect, not a fused-path defect, and the serving side already fixed
+the same class of error by moving to a measured floor. On the same pair the
+fused path is 11.65× faster per step; that is an internal comparison and no
+competitive position is quoted from it.
 
 **Gemma-4's experts take a graded store map, not one store** (lanes P47–P51,
 2026-09-19; `bench/p47`–`bench/p51`, all against the bf16 checkpoint on the
