@@ -2212,11 +2212,22 @@ This is e4b against itself, not against another framework, which is exactly
 what the control exists to catch. The direction was the one the P47–P51 lanes
 predicted: Gemma-4's sensitivity is **positional and lives in the quantised
 model**, not in the adapter path, so changing the adapter path was not
-expected to move it and did not. The defect is **characterised, reproduced on
-two kernel cuts, and unfixed**
-([`e4b.parity.gemma4.train-internal`](claims.json)). On the same pair the
-fused path is 10.81× faster per step at identical peak VRAM; that is an
-internal comparison and no competitive position is quoted from it.
+expected to move it and did not. [`e4b.parity.gemma4.train-internal`](claims.json) is **SUPERSEDED** 2026-09-22 by lane P56
+([`e4b.parity.gemma4.train-floor`](claims.json),
+[`bench/p56/RESULTS-p56.md`](../bench/p56/RESULTS-p56.md)): the disagreement is
+**not attributable to the fused path**. e4b's kernel-free batched path — 13×
+less composed gradient error, never touching `grouped-nf4-gemm` — fails the
+same band on the same box, at 0.05425 final / 0.08487 median. Cutting the
+per-op error 13× closes only 1.9× of the gap, so no achievable arithmetic
+change reaches 0.05. The FAIL itself reproduced a third time (0.10223 /
+0.10639), so it is real and stable; what changed is what it is evidence
+*about*. P56 measures this family's training-parity floor for the first time —
+**≥ 0.054 final / 0.085 median step-wise** — and `tp4_reduce.parity()` compares
+against 0.05 **and against zero**, with no floor term. So #558 stands open as a
+**gate** defect, not a fused-path defect, and the serving side already fixed
+the same class of error by moving to a measured floor. On the same pair the
+fused path is 11.65× faster per step; that is an internal comparison and no
+competitive position is quoted from it.
 
 **Gemma-4's experts take a graded store map, not one store** (lanes P47–P51,
 2026-09-19; `bench/p47`–`bench/p51`, all against the bf16 checkpoint on the
@@ -3471,7 +3482,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.h2h.unsloth.qwen3_5.5090.2026-09-19.arm.unsloth.ckpt_unsloth [measured]: tp4 field-recipe arm on grouped-nf4-gemm 0.32.1: unsloth/ckpt_unsloth on qwen3_5 takes 26.9787 s/step (49.5 tok/s, 21.638 GB peak, held-out final 0.93144). An arm row, not a position: tp4 quotes a ratio only when both arms of a pair are VALID.
 - e4b.train.h2h.unsloth.qwen3_5.5090.2026-09-19.e4b-internal-parity [measured]: e4b's fused training path against its own dense reference on qwen3_5, same box and tokens: 0.00159 nats final against tp1's 0.05 band -- PASS, with the fused path x13.89 faster per step. Registered as A3 in P46 amendment 2: a refused parity on any family would have stopped the release.
 - e4b.train.h2h.unsloth.coverage.5090.2026-09-19 [measured]: Coverage of the 0.32.1 re-run, stated so the gaps are not read as results: positions are quoted for Qwen3-30B-A3B against Unsloth (4.490) and Granite against HF+PEFT (1.292). NOT quoted: Granite and Qwen3.6 against Unsloth (its arm trains 5.2 M parameters against e4b's 99.6 M -- attention only, VOID by tp4's regime rule); OLMoE against Unsloth (its arm died before its first step); OLMoE against HF (ratio 1.945 but the held-out gap is 0.0550 nats, outside the reading band -- FLAGGED); gpt-oss (e4b's fused path refuses the family by citation, so no primary pair); Qwen3 and Qwen3.6 against HF (OOM). Gemma-4 and Mixtral were not in this re-run's scope.
-- e4b.parity.gemma4.train-internal [measured-private] (receipt private): Gemma-4-26B-A4B-it's FUSED expert training path disagrees with e4b's OWN dense per-expert reference, and the disagreement survives a kernel change: final held-out delta 0.08257 nats and median step-wise |delta| 0.12421 against tp1's 0.05/0.05 band -> FAIL, measured on grouped-nf4-gemm 0.32.1 after the adapter-path change, having read 0.09037 / 0.11801 -> FAIL on the previous cut. Both arms OK/VALID at 487,280,640 trainable, same box, same tokens. This is e4b against itself, not against another framework. NOT FIXED (e4b#558 closed as explained, not resolved).
+- e4b.parity.gemma4.train-floor [measured-private] (receipt private): Gemma-4-26B-A4B-it's training-parity FAIL is not attributable to the fused expert path: on one box, one init_sha and the same tokens, e4b's KERNEL-FREE batched path -- 13x less composed gradient error, never touching grouped-nf4-gemm -- also fails tp1's 0.05/0.05 band, at 0.05425 final train / 0.08487 median step-wise against the fused path's 0.10223 / 0.10639. Cutting the per-op error 13x closes only 1.9x of the gap, so no achievable arithmetic change reaches the band. The smallest perturbation available therefore MEASURES this family's training-parity floor for the first time: >= 0.054 final / 0.085 median step-wise. tp4's parity() compares against 0.05 AND AGAINST ZERO, with no floor term.
 - e4b.quality.gemma4.calibration-refuted [measured-private] (receipt private): GPTQ calibration does NOT rescue Gemma-4-26B-A4B-it's quantised experts, and SEQUENTIAL calibration is WORSE than all-at-once on this family: with all 30 expert layers quantised, KL vs the bf16 checkpoint reads NF4 round-to-nearest 1.0772 (top-1 0.6438), calibrated int4 all-at-once 1.1050 (0.6423), calibrated int4 sequential 1.1564 (0.6299). Calibration batches, source and Hessian budget identical across the calibrated arms; ORDER was the only difference. The Qwen3-30B ordering effect (streamed -0.050 ppl vs all-at-once +0.150) does not transfer to Gemma-4's experts -- it inverts. No serving position is quoted from this lane; the row records a refutation.
 - e4b.serve.p54.qwen3.b16.control.5090.2026-09-21 [measured]: Lane P54: batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v as three projections: 11.420 ms/step (median of two interleaved draws: 11.443 / 11.396), 1401.1 tok/s on this box.
 - e4b.serve.p54.qwen3.b16.fqkv.5090.2026-09-21 [measured]: Lane P54: batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v FUSED into one Int4Linear: 11.197 ms/step (median of two interleaved draws: 11.194 / 11.200), 1429.0 tok/s on this box.
