@@ -1,0 +1,9 @@
+# Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on
+# this file and the controller resolves each name to its source (this dir; bench/h2h-20260905/p37 for p37_vllm.py; bench/p42/hook; bench/p39) and compares.
+a7853108a07e81177130941cbe568eefab44f4da2d6e978ca52d2f63fdfa499c  p58_run.sh
+81f2b131986762b652f4d9dfa035f2b14300c2a7da743551e29cae0167e8ef45  p58_reduce.py
+8252c8e750d3b35e8a9807f38339177e3eecee46a8fdd935fdb641e040194a91  p37_vllm.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  hook/usercustomize.py
