@@ -865,6 +865,13 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   row: **~77 % of roofline at real routing, ~1.4 ms/step of headroom** in the
   largest row of the B=16 step — the lever the P58 gap analysis said was absent
   is present after all, sized by the routing it actually sees.
+- **Where that headroom is (P60, 2026-09-22, `bench/p60/RESULTS-p60.md`):
+  repeated rows.** Replaying the recorded B=16 routing through the shipped GEMV
+  reproduces the served kernel row (6.155 vs 6.340 ms) and shows streaming each
+  expert once per routed row instead of once per distinct expert costs **0.92
+  ms/step**; ordering rows by expert changes nothing (L2 already serves repeats).
+  A grouped expert GEMV (grouped-nf4-gemm lane K18) is licensed to build against
+  those recorded ids; row `e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
