@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### P59 amendment 1: the fused q/k/v path is the default at B=16 too — 0.0044 nats/token through a 128-row prefill, determinism control bit-identical (lane `p59b-5090-1`)
+
+- **Through the harness's 128-row prefill, `KL(int4 unfused ‖ int4 fused q/k/v)` at B=16 = 0.0044 nats/token, top-1 0.9775**
+  over 2,048 teacher-forced decode positions (one RTX 5090, $0.18; `bench/p59/RESULTS-p59.md`); the unfused stack rebuilt in a
+  fresh process is **bit-identical** (KL exactly 0), so the number is the fusion's alone. The distance from the NF4 anchor moves
+  by +0.0034 (band ± 0.005). All four registered conditions hold → **`--fuse-qkv` is the default on the int4 serving lanes at
+  B=16 as well as B=1**; P54's fused B=16 row (0.223 ms/step, 1401 → 1429 tok/s on its box) is `licensed_by` this read.
+- The prefill-last control (P4) is refuted as the amendment anticipated: the >16-row cuBLAS path on the cached bf16 weight is
+  where fusing changes bits; the K16 decode path is bitwise invariant (run 1). Register rows
+  `e4b.serve.p59b.qwen3.b16.{fqkv-kl,nf4-int4-kl,nf4-fqkv-kl}.5090.2026-09-22`.
+
 ### P59 read: fusing q/k/v changes nothing at 16-row decode (KL exactly 0) — the K16 kernel is bitwise invariant to it; P57's kernel attribution withdrawn (#682, lane `p59-5090-1`)
 
 - **KL(int4 unfused ‖ int4 fused q/k/v) at B=16 = 0.000000 nats/token, top-1 1.0000, bit-identical on every one of 2,048
@@ -13,7 +24,7 @@
   below corrected; also corrected: P57's first-divergence indices are not P54's). The leading hypothesis is now the harness's
   128-token prefill steps, which take the cuBLAS path.
 - The determinism arm was skipped by the deadline guard, so the registered decision rule is not met and `--fuse-qkv` stays
-  opt-in at B=16 for now. **Amendment 1** re-runs the gate with a 128-row chunked prefill (`kl_b16.py --prefill-chunk 8`),
+  opt-in at B=16 on run 1 (amendment 1 flipped it — entry above). **Amendment 1** re-runs the gate with a 128-row chunked prefill (`kl_b16.py --prefill-chunk 8`),
   a K16-route census, and room for the determinism arm. Register rows `e4b.serve.p59.qwen3.b16.{fqkv-kl,nf4-int4-kl,nf4-fqkv-kl}.5090.2026-09-22`.
 
 ### P58 read: same box, current vs current — vLLM 0.30.0 decodes 1.09× (B=1) / 1.40× (B=16) faster than e4b's int4 stack; 0.29.0 vs 0.30.0 within 1 % at B=16 (#676 lane, run `p58-5090-1`)
