@@ -6304,6 +6304,31 @@
         "receipts/experts4bit-qlora/2026-09-22/p58-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
       ],
       "notes": "Tells the next comparator lane whether pinning the vLLM version matters (P3 band +-5 %)."
+    },
+    {
+      "id": "e4b.serve.p57.qwen3.b16.distinct-experts.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P57 (amendment 3, run p57d-5090-1): at B=16 on the harness's wikitext-2 prompts, Qwen/Qwen3-30B-A3B's router touches on average 58.7 distinct experts per layer per decode step (layer means 50.9..71.7 over 48 layers, 73 decode steps counted on device; uniform-random expectation 82.4 of 128); 7-41 experts per layer were never touched. Against #564's expert-tier byte roofline (83.4 us per distinct expert per layer-step: 5.336 ms at 64, 6.670 at 80) the floor at 58.7 is 4.89 ms/step, vs the same lane's measured _gemv_int4_b32 row of 6.34 ms.",
+      "value": 58.67,
+      "unit": "distinct experts per layer per decode step (mean over layers and steps)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries ~8.5% inter-box dispersion, so only same-box ratios are quoted",
+      "conditions": "B=16, --amort off, E4B_FUSE_ROUTER_EPI=0 (the router module is called), --no-fuse-qkv, --gen-tokens 128; the count is an on-device forward-hook accumulation on every MoE router (bench/p57/distinct_experts.py v2, capture-safe: every eager and graph-replayed decode call counted; prefill chunks excluded by row count); this arm's step time is not quoted; P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route at its auto default; E4B_FUSE_T1_GLUE=1 E4B_FUSE_ROUTER_EPI=1; each timed arm drawn twice, interleaved (A B A B), median quoted; census (8 profiled replays after the timed window) on the first draw; e4b 5bf6c99839ee, grouped-nf4-gemm 65cb10410239",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p57/RESULTS-p57.md",
+        "bench/p57/P57-PREREG.md",
+        "bench/p57/distinct_experts.py",
+        "bench/p57/receipts/p57d/distinct_experts_b16.json",
+        "bench/p57/receipts/p57d/summary.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p57d-5090-1/"
+      ],
+      "notes": "Read against #564: a measurement with a soft prior (<= 80 registered; HOLDS). Two earlier attempts (p57b, p57c) counted 3 warm-up steps because the first counter's torch.unique synchronised under CUDA-graph capture -- recorded in RESULTS-p57.md, not registered. The per-expert touch fractions (touched_frac) carry the skew the mean hides."
     }
   ]
 }

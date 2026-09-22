@@ -2735,12 +2735,16 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   same page): −0.038 ms/step at B=1, −0.217 at B=16, the epilogue landing inside
   the critical-path GEMV while the launches it removed were overlapped. Stays
   opt-in in grouped-nf4-gemm; the census row it targeted was GPU time, not a launch.
-- **The distinct-expert count at B=16 is still unmeasured**
-  ([#564](https://github.com/pjordanandrsn/experts4bit-qlora/issues/564)): it
-  decides whether the expert GEMV — 56 % of the B=16 step — has ~1.3 ms of
-  headroom or none. P54's arm for it was unbuildable as registered
-  (`--series-out` needs `--amort on`, which the captured B>1 stage refuses);
-  the replacement is registered in that lane's amendment 1.
+- **The distinct-expert count at B=16 is MEASURED (P57 amendment 3, 2026-09-22,
+  `e4b.serve.p57.qwen3.b16.distinct-experts.5090.2026-09-22`): 58.7 distinct
+  experts per layer per decode step** (layer means 50.9–71.7; uniform expectation
+  82.4; 7–41 of 128 experts per layer never touched in 73 steps × 16 rows), from an
+  on-device router hook that counts every graph-replayed step. Against
+  [#564](https://github.com/pjordanandrsn/experts4bit-qlora/issues/564)'s byte
+  roofline the floor at 58.7 is 4.89 ms/step vs the measured 6.34 ms expert-GEMV
+  row: **~77 % of roofline at real routing, ~1.4 ms/step of headroom** in the
+  largest row of the B=16 step — the lever the P58 gap analysis said was absent
+  is present after all, sized by the routing it actually sees.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3546,6 +3550,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22 [measured]: Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.30.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 1925.6 tok/s vs e4b's current int4 stack at 1379.2 tok/s at B=16: ratio 1.396 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.851; vLLM / e4b NF4: 3.980.
 - e4b.serve.h2h.vllm-0.29.0.p58.qwen3.b16.5090.2026-09-22 [measured]: Lane P58 (pre-registered 2026-09-22): same box, same session, identical prompt token ids -- vLLM 0.29.0 serving Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441 decodes at 1912.7 tok/s vs e4b's current int4 stack at 1379.2 tok/s at B=16: ratio 1.387 (vLLM ahead). e4b int4 / e4b NF4 control on this box: x2.851; vLLM / e4b NF4: 3.953.
 - e4b.serve.h2h.p58.vllm-build-to-build.qwen3.b16.5090.2026-09-22 [measured]: Lane P58: vLLM 0.30.0 / vLLM 0.29.0 decode tok/s at B=16, same box, same prompts, GPTQ-Int4 Marlin: 1.007 (1925.6 vs 1912.7).
+- e4b.serve.p57.qwen3.b16.distinct-experts.5090.2026-09-22 [measured]: Lane P57 (amendment 3, run p57d-5090-1): at B=16 on the harness's wikitext-2 prompts, Qwen/Qwen3-30B-A3B's router touches on average 58.7 distinct experts per layer per decode step (layer means 50.9..71.7 over 48 layers, 73 decode steps counted on device; uniform-random expectation 82.4 of 128); 7-41 experts per layer were never touched. Against #564's expert-tier byte roofline (83.4 us per distinct expert per layer-step: 5.336 ms at 64, 6.670 at 80) the floor at 58.7 is 4.89 ms/step, vs the same lane's measured _gemv_int4_b32 row of 6.34 ms.
 
 Open items (no evidence either way):
 
@@ -3553,4 +3558,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(230 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(231 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

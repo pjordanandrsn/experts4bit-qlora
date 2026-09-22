@@ -76,6 +76,38 @@ def rows(rep: dict, *, date: str, receipt_dir: str, e4b_sha: str, gnf4_sha: str)
     return out
 
 
+def distinct_row(d: dict, *, date: str, receipt_dir: str, e4b_sha: str, gnf4_sha: str) -> dict:
+    """The P4 row from p57d's on-device count (P57 amendment 3)."""
+    pl = d["per_layer"]
+    means = [x["mean_distinct"] for x in pl]
+    never = [sum(1 for f in x["touched_frac"] if f == 0) for x in pl]
+    m, u = d["mean_distinct_over_layers"], d["uniform_random_expectation"]
+    per_us = 5.336 / 64 * 1000
+    return {
+        "id": f"e4b.serve.p57.qwen3.b16.distinct-experts.5090.{date}",
+        "package": "experts4bit-qlora", "area": "serve",
+        "claim": (f"Lane P57 (amendment 3, run p57d-5090-1): at B=16 on the harness's wikitext-2 prompts, {MODEL}'s router touches on "
+                  f"average {m:.1f} distinct experts per layer per decode step (layer means {min(means):.1f}..{max(means):.1f} over "
+                  f"{d['layers']} layers, {d['steps']} decode steps counted on device; uniform-random expectation {u:.1f} of 128); "
+                  f"{min(never)}-{max(never)} experts per layer were never touched. Against #564's expert-tier byte roofline "
+                  f"({per_us:.1f} us per distinct expert per layer-step: 5.336 ms at 64, 6.670 at 80) the floor at {m:.1f} is "
+                  f"{5.336 / 64 * m:.2f} ms/step, vs the same lane's measured _gemv_int4_b32 row of 6.34 ms."),
+        "value": round(m, 2), "unit": "distinct experts per layer per decode step (mean over layers and steps)",
+        "model": MODEL, "hardware": HW,
+        "conditions": (f"B=16, --amort off, E4B_FUSE_ROUTER_EPI=0 (the router module is called), --no-fuse-qkv, --gen-tokens 128; the count is an "
+                       f"on-device forward-hook accumulation on every MoE router (bench/p57/distinct_experts.py v2, capture-safe: every eager and "
+                       f"graph-replayed decode call counted; prefill chunks excluded by row count); this arm's step time is not quoted; {COND_COMMON}; "
+                       f"e4b {e4b_sha[:12]}, grouped-nf4-gemm {gnf4_sha[:12]}"),
+        "measured_on": date, "status": "measured", "tier": "measured",
+        "evidence": ["bench/p57/RESULTS-p57.md", "bench/p57/P57-PREREG.md", "bench/p57/distinct_experts.py",
+                     f"{receipt_dir}/p57d/distinct_experts_b16.json", f"{receipt_dir}/p57d/summary.txt"],
+        "evidence_private": [f"receipts/experts4bit-qlora/{date}/p57d-5090-1/"],
+        "notes": ("Read against #564: a measurement with a soft prior (<= 80 registered; HOLDS). Two earlier attempts (p57b, p57c) counted 3 "
+                  "warm-up steps because the first counter's torch.unique synchronised under CUDA-graph capture -- recorded in RESULTS-p57.md, "
+                  "not registered. The per-expert touch fractions (touched_frac) carry the skew the mean hides."),
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("rep_json")
@@ -84,9 +116,12 @@ def main():
     ap.add_argument("--e4b-sha", required=True)
     ap.add_argument("--gnf4-sha", required=True)
     ap.add_argument("--merge", help="docs/claims.json to append the rows to (refuses to overwrite an existing id)")
+    ap.add_argument("--distinct", help="p57d's distinct_experts_b16.json (amendment 3); adds the P4 row")
     a = ap.parse_args()
     rep = json.load(open(a.rep_json))
     new = rows(rep, date=a.date, receipt_dir=a.receipt_dir, e4b_sha=a.e4b_sha, gnf4_sha=a.gnf4_sha)
+    if a.distinct:
+        new.append(distinct_row(json.load(open(a.distinct)), date=a.date, receipt_dir=a.receipt_dir, e4b_sha=a.e4b_sha, gnf4_sha=a.gnf4_sha))
     if a.merge:
         path = Path(a.merge)
         reg = json.loads(path.read_text())

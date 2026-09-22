@@ -31,9 +31,14 @@
   sequences, at the same first-divergence indices P54 recorded**, while the control's two draws are bit-identical:
   the divergence follows the K16 small-M GEMM's N-dependent accumulation, and the glue path is exonerated (P3).
   `--fuse-qkv` stays the default at B=1 and opt-in at B=16 until a KL/K8 read bounds the difference.
-- **The distinct-expert count is still unread**: the untimed arm ran on a 6-step window (`--gen-tokens 64`; the
-  harness asserts ≥ 16) and the runner exited green on a `steps: 0` dump. Amendment 1 registers the re-run
-  (`--gen-tokens 128`, `steps: 0` → rc 45, `P57_ONLY_DISTINCT=1`, lane `p57b-5090`).
+- **The distinct-expert count is READ (amendment 3, run `p57d-5090-1`, $0.07): 58.7 distinct experts per layer per
+  decode step at B=16** (layer means 50.9–71.7, 73 steps counted on device; uniform expectation 82.4;
+  7–41 of 128 experts per layer never touched). The first two attempts counted 3 warm-up steps because the
+  counter's `torch.unique` synchronised under CUDA-graph capture (amendments 1–2 in `P57-PREREG.md`); v2 of
+  `bench/p57/distinct_experts.py` accumulates on device and was verified under capture+replay on an A2000. Against
+  #564's expert-tier byte roofline the floor at 58.7 is 4.89 ms/step vs the measured 6.34 ms `_gemv_int4_b32`
+  row: the expert GEMV runs at ~77 % of roofline at its real routing. Row
+  `e4b.serve.p57.qwen3.b16.distinct-experts.5090.2026-09-22`.
 - Register rows `e4b.serve.p57.qwen3.{b1,b16}.{control,fr}.5090.2026-09-22` and
   `e4b.serve.p57.qwen3.b16.{nor2_control,nor2_fqkv}.5090.2026-09-22` (measured, same-box). Receipts in
   `bench/p57/receipts/`; `bench/p57/p57_register_rows.py`. Cost $0.09 (a dud-box bake failure, `p57-5090-1`) + $0.22.
