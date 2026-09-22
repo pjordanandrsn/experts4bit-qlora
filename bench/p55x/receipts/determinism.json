@@ -1,0 +1,20 @@
+{
+ "fp1": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+ "fp2": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+ "counts1": [
+  "gptq",
+  "rtn"
+ ],
+ "counts2": [
+  "gptq",
+  "rtn"
+ ],
+ "method_map_hash1": "sha256:1f2ba78a20c83c6bfcc18e6f77261a0964f1c9d526c4a6eaa81cc22ba3db9f50",
+ "method_map_hash2": "sha256:1f2ba78a20c83c6bfcc18e6f77261a0964f1c9d526c4a6eaa81cc22ba3db9f50",
+ "row_count_vector_hash1": "sha256:4ebf85d6389ed523c7bc25839919fe93fc27487a7afc2fb2e0db62e1b5fd8300",
+ "row_count_vector_hash2": "sha256:4ebf85d6389ed523c7bc25839919fe93fc27487a7afc2fb2e0db62e1b5fd8300",
+ "calibration_token_stream_sha": "sha256:e5d5eba524e6ad2bd6fb0da5c7272c7cf5a8cc73325daf6a5a2e4335a2067f0d",
+ "bytes_identical": true,
+ "classification_identical": true,
+ "verdict": "DETERMINISTIC"
+}

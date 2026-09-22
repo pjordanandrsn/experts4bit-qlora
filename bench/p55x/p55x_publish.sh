@@ -32,9 +32,17 @@ SHORT=${FP#sha256:}; SHORT=${SHORT:0:16}
 DEST="$NAS_POOL/qwen3-30b-a3b-calibexp-streamed-64k-$SHORT"
 
 say "1/3 verifying the local copy with this checkout's pack_manifest"
-PYTHONPATH="$REPO" "$PY" - "$ART" "$FP" <<'PY' || { say "REFUSING: the local artifact does not verify"; exit 1; }
-import sys
-from experts4bit_qlora.engines.pack_manifest import verify_artifact
+# pack_manifest is imported BY PATH, not as experts4bit_qlora.engines.pack_manifest: the package's
+# __init__ imports bitsandbytes, which a verifier that only hashes files has no business requiring, and
+# which refused this step on the controller's default python. verify_artifact itself needs nothing but
+# hashlib/json/pathlib, so any python3 can now check an artifact.
+PYTHONPATH="$REPO" "$PY" - "$ART" "$FP" "$REPO/experts4bit_qlora/engines/pack_manifest.py" <<'PY' || { say "REFUSING: the local artifact does not verify"; exit 1; }
+import importlib.util, sys
+_spec = importlib.util.spec_from_file_location("p55x_pack_manifest", sys.argv[3])
+_pm = importlib.util.module_from_spec(_spec)
+sys.modules["p55x_pack_manifest"] = _spec.name and _pm
+_spec.loader.exec_module(_pm)
+verify_artifact = _pm.verify_artifact
 art, fp = sys.argv[1], sys.argv[2]
 man = verify_artifact(art, expected_fingerprint=fp)
 print(f"   verify_artifact OK: {man['pack_fingerprint']}")
@@ -45,8 +53,15 @@ PY
 
 BYTES=$(du -sm "$ART" | cut -f1)
 say "2/3 placing ${BYTES}M on the archive host at $DEST"
-ssh -o BatchMode=yes "$NAS_HOST" "mkdir -p '$DEST'${NAS_LINK:+ && { [ -e '$NAS_LINK' ] || ln -s '$NAS_POOL' '$NAS_LINK'; \}}" \
+# One command per ssh. The previous form nested a brace group inside ${NAS_LINK:+...} and the escaped
+# closing brace survived into the remote shell verbatim: `sh: -c: line 1: syntax error: unexpected end of
+# file`, on a run whose bytes were already verified and waiting. Clever quoting is not worth a refusal.
+ssh -o BatchMode=yes "$NAS_HOST" "mkdir -p '$DEST'" \
   || { say "REFUSING: cannot prepare $DEST"; exit 2; }
+if [ -n "$NAS_LINK" ]; then
+  ssh -o BatchMode=yes "$NAS_HOST" "[ -e '$NAS_LINK' ] || ln -s '$NAS_POOL' '$NAS_LINK'" \
+    || say "note: could not create the reader-facing symlink $NAS_LINK (the bytes still go to $DEST)"
+fi
 rsync -a --partial --inplace "$ART/" "$NAS_HOST:$DEST/" \
   || { say "REFUSING: rsync to the archive host failed -- the bytes are not retained"; exit 2; }
 

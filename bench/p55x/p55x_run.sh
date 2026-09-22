@@ -211,7 +211,12 @@ def man(d):
     p = f"{W}/{d}/manifest.json"
     return json.load(open(p)) if os.path.exists(p) else None
 def counts(m):
+    # calibrated_counts is a MAPPING {"gptq": n, "rtn": m}; list() on it yields its KEYS, which is what
+    # p55x-packlic-1's determinism.json recorded where the numbers belonged. Harmless there (identity is
+    # the fingerprint and the counts are diagnostics) but it is still the wrong number written down.
     c = (m or {}).get("calibrated_counts")
+    if isinstance(c, dict):
+        return [c.get("gptq"), c.get("rtn")]
     return list(c) if c else None
 m1, m2 = man("artifact1"), man("artifact2")
 def mmh(d):

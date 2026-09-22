@@ -1,0 +1,20 @@
+{
+  "pack_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "payloads": 194,
+  "bytes": 16308340066,
+  "local_verify": {
+    "tool": "experts4bit_qlora.engines.pack_manifest.verify_artifact (e4b 0.36.4 @1c73a8d6)",
+    "host": "controller",
+    "result": "OK",
+    "note": "re-hashed every payload, cross-checked the hashed identity and assignment payloads against the manifest's copies, recomputed the root fingerprint, and matched the expected value"
+  },
+  "archive_verify": {
+    "tool": "independent inline implementation of the documented canonical rule (sha256 over the ordered (path,size,sha256) tuples), python 3.13 on the archive host",
+    "host": "operator archive host, offline",
+    "payloads_rehashed": 194,
+    "bytes": 16308340066,
+    "recomputed": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+    "result": "MATCH"
+  },
+  "note": "Two implementations, two machines, one artifact, the same 64 hex characters. Either alone would not be the check: the library could agree with itself, and the inline rule is trusted only because the library computed the same number on the same bytes. The payloads are NOT in this repository (15.2 GiB); what is here is the manifest, the identity and assignment payloads, and this record. A loader pinned to the fingerprint refuses anything else, so a reader can check any copy they are given."
+}

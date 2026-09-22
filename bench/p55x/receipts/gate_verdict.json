@@ -1,0 +1,55 @@
+{
+ "budget": 0.05,
+ "calibrated": true,
+ "calibration_domain": "c4val1",
+ "pack_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+ "configurations": {
+  "lic": {
+   "verdict": "PASS",
+   "incomplete": null,
+   "lines": [
+    "K8 wikitext: base=6.41984 cand=6.36709 delta=-0.05275 sha=9ef10d760ad9 steps=2048",
+    "K8 c4val1: base=16.49703 cand=16.43081 delta=-0.06622 sha=4bcb55179b96 steps=2048",
+    "K8 VERDICT PASS (calibrated: delta <= +0.05; improvement corroborated on 2 texts)"
+   ],
+   "texts": {
+    "wikitext": {
+     "nf4": 6.419839734124139,
+     "cand": 6.367086902514706,
+     "delta": -0.05275283160943278
+    },
+    "c4val1": {
+     "nf4": 16.497028406390328,
+     "cand": 16.430809816252147,
+     "delta": -0.0662185901381811
+    }
+   }
+  },
+  "licrtn": {
+   "verdict": "FAIL",
+   "incomplete": null,
+   "lines": [
+    "K8 wikitext: base=6.41984 cand=6.35725 delta=-0.06259 sha=9ef10d760ad9 steps=2048",
+    "K8 c4val1: base=16.49703 cand=16.62939 delta=+0.13237 sha=4bcb55179b96 steps=2048",
+    "K8 VERDICT FAIL (calibrated: an improvement needs the same sign on >= 2 scoring texts, one outside the calibration domain -- an improvement that moves with the calibration text is fitting it)"
+   ],
+   "texts": {
+    "wikitext": {
+     "nf4": 6.419839734124139,
+     "cand": 6.357251320911561,
+     "delta": -0.0625884132125778
+    },
+    "c4val1": {
+     "nf4": 16.497028406390328,
+     "cand": 16.629393609533697,
+     "delta": 0.13236520314336886
+    }
+   }
+  }
+ },
+ "roundtrip_wikitext": {
+  "live_store_ppl": 6.367086902514706,
+  "artifact_ppl": 6.367086902514706,
+  "delta": 0.0
+ }
+}

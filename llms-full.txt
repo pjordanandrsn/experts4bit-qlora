@@ -965,919 +965,923 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
 ## Source: docs/capabilities.json (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json)
 
 {
-  "$schema": "./capabilities.schema.json",
-  "schema_version": "1.0",
-  "project": {
-    "name": "experts4bit-qlora",
-    "canonical_package": "experts4bit-qlora",
-    "repository": "https://github.com/pjordanandrsn/experts4bit-qlora",
-    "summary": "Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs.",
-    "role": "Owns model loading, quantization orchestration, adapters, training, residency integration and serving; the packed-expert kernels come from grouped-nf4-gemm through the [fast] extra.",
-    "aliases": [
-      "e4b",
-      "e4b-qlora",
-      "experts4bit",
-      "expertsnbit",
-      "experts-mxfp4"
-    ],
-    "import_names": [
-      "experts4bit_qlora"
-    ],
-    "related_projects": [
-      {
-        "name": "grouped-nf4-gemm",
-        "canonical_package": "grouped-nf4-gemm",
-        "repository": "https://github.com/pjordanandrsn/grouped-nf4-gemm",
-        "capabilities": "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json",
-        "relationship": "kernel side: experts4bit-qlora[fast] installs grouped-nf4-gemm, which owns the grouped NF4/MXFP4 GEMMs, the int4 decode GEMV, the FP8 paged attention and decode glue, and the host/NVMe arena primitives"
-      }
-    ],
-    "claims_file": "docs/claims.json",
-    "status_file": "docs/STATUS.md",
-    "non_goals": [
-      "dense (non-MoE) models: use bitsandbytes directly",
-      "a general-purpose serving engine or a vLLM replacement",
-      "models that already fit in bf16 and need no offload: 4-bit here is a memory trade, not a speed-up, and on the measured comparator it cost energy (claim e4b.train.energy-honest.scoped-a2000)",
-      "silent fallbacks: every enable_* returns a count or a non-empty handle list, or raises; callers must assert it",
-      "operating systems other than Linux, or GPUs without CUDA"
-    ]
-  },
-  "capabilities": [
-    {
-      "id": "quantize-fused-moe-experts",
-      "problem": "A Mixture-of-Experts model loaded with load_in_4bit still occupies bf16-sized VRAM and OOMs, because transformers stores its experts as one fused 3-D parameter per layer that bitsandbytes' nn.Linear walker never touches.",
-      "symptoms": [
-        "load_in_4bit=True but the model still OOMs",
-        "BitsAndBytesConfig leaves gate_up_proj / down_proj in bf16",
-        "4-bit loading skips MoE experts",
-        "fused 3-D expert tensor is not an nn.Linear",
-        "how do I verify the experts are actually 4-bit"
-      ],
-      "solution": "load_moe_4bit_streaming quantises exactly the fused expert stack on the way to the GPU (Experts4bit, the 4-bit face of ExpertsNbit), never materialising it in bf16; verify_moe_4bit(model, strict=True) raises if any stack is still high precision.",
-      "modes": [
-        "quantization",
-        "inference",
-        "training"
-      ],
-      "formats": [
-        "nf4",
-        "fp4",
-        "int8",
-        "fp8",
-        "bf16",
-        "fp16"
-      ],
-      "model_families": [
-        "olmoe",
-        "qwen3_moe",
-        "qwen3_5_moe",
-        "gemma4_text",
-        "granitemoe",
-        "gpt_oss",
-        "deepseek_v4 (Flash, Pro)",
-        "qwen3_next",
-        "deepseek_v2",
-        "mixtral"
-      ],
-      "environment": {
-        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
-        "os": [
-          "Linux"
-        ],
-        "accelerator": [
-          "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
-        ],
-        "special_requirements": [
-          "torch>=2.2",
-          "bitsandbytes>=0.43",
-          "transformers>=5.0 for the streaming loader ([train] extra)"
-        ]
-      },
-      "install": [
-        {
-          "purpose": "streaming loader + trainer",
-          "command": "pip install \"experts4bit-qlora[train]\""
-        }
-      ],
-      "entrypoints": [
-        "experts4bit_qlora.loader:load_moe_4bit_streaming",
-        "experts4bit_qlora.verify:verify_moe_4bit",
-        "experts4bit_qlora:Experts4bit",
-        "experts4bit_qlora:ExpertsNbit"
-      ],
-      "documentation": [
-        "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
-        "docs/BITSANDBYTES.md",
-        "docs/ARCHITECTURE_SUPPORT.md",
-        "docs/STORAGE-MODES.md"
-      ],
-      "claim_ids": [
-        "e4b.train.olmoe-fits",
-        "e4b.serve.gptoss.loader-faithful",
-        "e4b.train.energy-honest.scoped-a2000"
-      ],
-      "limitations": [
-        "Unsupported model_type raises NotImplementedError; identity-expert families (LongCat-Flash) are refused by name",
-        "4-bit is a memory trade when the model already fits, and cost energy on the measured comparator (one card, one bitsandbytes development build): claim e4b.train.energy-honest.scoped-a2000",
-        "Dense (non-MoE) models are not the target; use bitsandbytes directly"
-      ],
-      "status": "supported"
-    },
-    {
-      "id": "qlora-fused-moe-experts",
-      "problem": "Fine-tune (QLoRA / LoRA) a fused-expert MoE whose expert weights PEFT and the bitsandbytes walker never see.",
-      "symptoms": [
-        "QLoRA on a MoE trains only the attention",
-        "peft cannot find the expert parameters",
-        "LoRA on gate_up_proj of a fused MoE",
-        "train a 30B MoE on a 24 GB GPU"
-      ],
-      "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer. model_families lists exactly the families whose fast_train path is `supported` in training_support (the headline path, enable_fast_train, with a PASS receipt on real weights); every other path is stated per family there, never as a flat flag.",
-      "modes": [
-        "training"
-      ],
-      "formats": [
-        "nf4"
-      ],
-      "model_families": [
-        "olmoe",
-        "qwen3_moe",
-        "gemma4_text",
-        "mixtral",
-        "granitemoe"
-      ],
-      "environment": {
-        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
-        "os": [
-          "Linux"
-        ],
-        "accelerator": [
-          "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
-        ],
-        "special_requirements": [
-          "torch>=2.2",
-          "bitsandbytes>=0.43",
-          "transformers>=5.0 for the streaming loader ([train] extra)"
-        ]
-      },
-      "install": [
-        {
-          "purpose": "minimum/reference training",
-          "command": "pip install \"experts4bit-qlora[train]\""
-        },
-        {
-          "purpose": "loader plus accelerated grouped-kernel path",
-          "command": "pip install \"experts4bit-qlora[train,fast]\""
-        }
-      ],
-      "entrypoints": [
-        "experts4bit_qlora.lora:ExpertsLoRA",
-        "experts4bit_qlora.engines.fast:enable_fast_train",
-        "experts4bit_qlora.engines.batched:enable_batched_train",
-        "cli:python -m experts4bit_qlora.train"
-      ],
-      "documentation": [
-        "docs/solutions/qlora-fused-moe-experts.md",
-        "docs/CHOOSING.md",
-        "docs/METHODOLOGY.md",
-        "docs/support_matrix.md",
-        "docs/ARCHITECTURE_SUPPORT.md"
-      ],
-      "claim_ids": [
-        "e4b.train.olmoe-converges",
-        "e4b.train.fast-train-dgrad",
-        "e4b.train.flagship-matrix",
-        "e4b.train.ablation",
-        "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
-        "e4b.train.parity.tp1.granite.batched.2026-09-05",
-        "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
-        "e4b.train.parity.tp1.granite.matrix.2026-09-05",
-        "e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05",
-        "e4b.train.parity.tp1.qwen3.fused.2026-09-05",
-        "e4b.train.parity.tp1.gemma4.fused.2026-09-05",
-        "e4b.train.parity.tp1.mixtral.fused.2026-09-05",
-        "e4b.train.parity.tp1.mixtral.batched.2026-09-05",
-        "e4b.train.parity.tp1.qwen3.matrix.2026-09-05",
-        "e4b.train.parity.tp1.gemma4.matrix.2026-09-05",
-        "e4b.train.parity.tp1.mixtral.matrix.2026-09-05",
-        "e4b.train.parity.tp1.granite.fused.2026-09-05",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.quality-n60",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.e4b-internal-parity",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.quality-n60",
-        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.e4b-internal-parity",
-        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06",
-        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.quality-n60",
-        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.e4b-internal-parity",
-        "e4b.train.h2h.unsloth.granite.5090.2026-09-06.e4b-internal-parity",
-        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity",
-        "e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage",
-        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage",
-        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint"
-      ],
-      "limitations": [
-        "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
-        "dgrad=True needs grouped-nf4-gemm>=0.7.0 (below the current [fast] floor in pyproject.toml, so any [fast] install has it); on older cuts it is downgraded with a RuntimeWarning",
-        "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset",
-        "model_families is evidence-gated: a family is listed when its fast_train path -- the headline path, enable_fast_train -- PASSES the registered loss-parity criteria on real weights with a receipt in this repository (training_support is the per-path record; bench/train-parity-20260905/tp1/ is lane tp1, all six serving families). olmoe is confirmed on real weights and a registered text; qwen3_moe and gemma4_text carry tp1 PASSes beside their flagship matrices; mixtral entered on its tp1 fused PASS under offload; granitemoe entered on its corrected-counter re-run's PASS (its first attempt was a harness error, kept as its own row); gpt_oss is refused by every training enabler and stays out",
-        "gpt_oss is not a training family here: the loader builds its experts bare (no ExpertsLoRA), and both enable_fast_train and enable_batched_train return zero on it -- REFUSED rows on tp1 (e4b.train.parity.tp1.gptoss.fused.2026-09-05, e4b.train.parity.tp1.gptoss.batched.2026-09-05). Attention-only QLoRA over its frozen experts trains (e4b.train.parity.tp1.gptoss.attn_only.2026-09-05); the only route that trains its experts is grouped-nf4-gemm's experimental mxfp4_qlora.ExpertsMxfp4LoRA under the mxfp4-moe-training-and-residency capability -- experimental, never licensed",
-        "enable_batched_train falls back to the reference forward per call above _PAD_WASTE_LIMIT (engines/batched.py): the patch count stays positive while some or all layers run the per-expert loop on some steps. In the shipped code tp1 measured this fallback was uncounted, and three arms read VOID on exactly that -- OLMoE, Qwen3 and Gemma-4 (e4b.train.parity.tp1.olmoe.batched.2026-09-05, e4b.train.parity.tp1.qwen3.batched.2026-09-05, e4b.train.parity.tp1.gemma4.batched.2026-09-05); it engaged everywhere only on Mixtral's eight-expert and Granite's forty-expert shapes. As of the release carrying that bundle the fallback is countable: batched_fallback_stats(model) reports it (#402; those VOID rows are the reason it exists). Assert kernel engagement, not the return value alone",
-        "enable_fast, enable_fast_train and enable_batched_train refuse a wrapper whose base violates the stock-epilogue contract (EpilogueContractError, #402) instead of silently computing act(gate)*up over a base that applies biases, clamps or another gating rule -- a refusal is loud, a wrong epilogue is not; gpt-oss is the family this protects, and DeepSeek-V4 supplies its epilogue through _apply_gate and is admitted",
-        "Head-to-head against Unsloth's 4-bit MoE QLoRA path on one identical training problem (lane p38, 2026-09-05, one rented RTX 5090, Qwen3-30B-A3B, the clinical fixture tokenised once, seq 512, r 8 / alpha 16, identical targets, optimizer, batch, steps, precision and eval; bench/h2h-20260905/p38/): the shipped fused dgrad path with NF4 attention is faster per step, lower in peak VRAM and lower in energy per step than Unsloth on that box, and the two are comparable on held-out loss at sixty steps (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05, ...quality-n60) -- BUT the two-hundred-step curve favours Unsloth: its held-out loss is lower at the end of the curve while e4b's flattens from step sixty (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200). Quote the position only beside that row. Candidate causes (the eval schedule, the checkpointing mode, the transformers/peft versions of the two stacks, the expert adapter's precision -- bf16 on this side, the loader passes the model dtype to ExpertsLoRA -- against fp32 on Unsloth's) are not established. One workload, one box, one family; nothing here licenses a path (tp1 does) and no general speed claim is made",
-        "tp2/P40 (2026-09-06, one rented RTX 5090, receipts in bench/h2h-20260906/tp2/) extends the Unsloth head-to-head to all six families on one box and one fixture, and its rows are statuses, not one number: positions exist only for Qwen3-30B-A3B (s/step ratio Unsloth/e4b 1.457, e4b faster per step, quality COMPARABLE; it agrees with P38's 1.413 inside the pre-registered anchor band, e4b.train.h2h.unsloth.qwen3.5090.2026-09-06) and Mixtral-8x7B, whose row leads with the footprint trade: e4b trained its experts under CPU offload at roughly one-ninth of Unsloth's resident allocator peak (the registered design; the footprint row e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint -- a trainable-on-smaller-cards capability, quality COMPARABLE) while Unsloth ran resident, its only mode, and what that VRAM buys it is speed per step (s/step ratio 0.361, e4b.train.h2h.unsloth.mixtral.5090.2026-09-06 -- a footprint-vs-speed trade, not a kernel deficit). No position on the other four, and the coverage rows are results, not empty cells: on Granite the comparator attached LoRA to the attention only, a fraction of e4b's trainable count with ExpertsLoRA on every MoE layer (e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage), and on OLMoE it died at MoE-LoRA engage while both e4b arms trained (e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage); gpt-oss refuses on both sides (P5 held), and Gemma-4's e4b attention-4-bit arms died on the projection-count check (#412; the bf16-attention fast_train path stays as tp1 left it) while Unsloth's arm trained. P38's two-hundred-step curve row (Unsloth lower at the end of the curve) still stands beside any Qwen3 position; per-arm rows are e4b.train.h2h.unsloth.<family>.5090.2026-09-06.arm.*",
-        "Attention projection targeting (add_attention_lora and TRAIN_ATTN_4BIT / quantize_attention_projections_4bit) is by module STRUCTURE, never family name: q_proj, k_proj and o_proj must be supported linears; v_proj may be a supported linear or absent/None (Gemma-4 attention_k_eq_v layers). The expected count is len(candidates) from detect_attention_projections, never 4 * n_layers. A layer with q_proj/o_proj but no k_proj is refused. A projection that carries a bias is refused (gpt-oss). Gemma-4 attention-4-bit remains not supported pending a measured lane (#412); this detector does not move that cell"
-      ],
-      "status": "supported",
-      "training_support": {
-        "headline_path": "fast_train",
-        "by_model_type": {
-          "olmoe": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
-                "e4b.train.parity.tp1.olmoe.reference.2026-09-05"
-              ]
-            },
-            "reference_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.olmoe.reference.2026-09-05",
-                "e4b.train.olmoe-converges",
-                "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.arm.e4b.reference_attn4"
-              ],
-              "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "fast_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
-                "e4b.train.fast-train-dgrad",
-                "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.arm.e4b.fused_attn4",
-                "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity"
-              ],
-              "reason": "tp1: PASS on the registered clinical text with real -Instruct weights; the dgrad-gate receipt was synthetic tokens. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "batched_train": {
-              "status": "void",
-              "claim_ids": [
-                "e4b.train.parity.tp1.olmoe.batched.2026-09-05"
-              ],
-              "reason": "enable_batched_train patched every layer but the whole-stack dequant kernel was not reached on every layer on every step: the per-call fallback above _PAD_WASTE_LIMIT engaged without a counter (tp1); the dgrad-gate synthetic-token reading stands as measured there"
-            },
-            "nvme_train": {
-              "status": "not_tested",
-              "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
-            },
-            "native_mxfp4_train": {
-              "status": "n/a",
-              "reason": "the checkpoint's experts are not native MXFP4"
-            }
-          },
-          "qwen3_moe": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.qwen3.matrix.2026-09-05",
-                "e4b.train.parity.tp1.qwen3.reference.2026-09-05",
-                "e4b.train.flagship-matrix"
-              ],
-              "reason": "tp1: the direct path loads the real checkpoint resident on a thirty-two-gigabyte-class card; the flagship ran it with offload"
-            },
-            "reference_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.qwen3.reference.2026-09-05",
-                "e4b.train.flagship-matrix",
-                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.arm.e4b.reference_attn4"
-              ],
-              "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 192 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "fast_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.qwen3.fused.2026-09-05",
-                "e4b.train.flagship-matrix",
-                "e4b.train.fast-train-dgrad",
-                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.arm.e4b.fused_attn4",
-                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.e4b-internal-parity",
-                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06",
-                "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.quality-n60"
-              ],
-              "reason": "tp1: PASS resident on this card, beside the flagship matrix's five-dataset PASS and the dgrad-gate's A6000 reading -- never divided into them. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 192 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "batched_train": {
-              "status": "void",
-              "claim_ids": [
-                "e4b.train.parity.tp1.qwen3.batched.2026-09-05"
-              ],
-              "reason": "tp1: the whole-stack dequant kernel was reached on a fraction of the layers on every step (the _PAD_WASTE_LIMIT per-call fallback on short rows over this many experts, prediction P2); the dgrad-gate's Alpaca trajectory, where the kernel engaged, stands as measured on its own fixture (e4b.train.fast-train-dgrad)"
-            },
-            "nvme_train": {
-              "status": "not_tested",
-              "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
-            },
-            "native_mxfp4_train": {
-              "status": "n/a",
-              "reason": "the checkpoint's experts are not native MXFP4"
-            }
-          },
-          "gemma4_text": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gemma4.matrix.2026-09-05",
-                "e4b.train.parity.tp1.gemma4.reference.2026-09-05",
-                "e4b.train.flagship-matrix"
-              ],
-              "reason": "tp1: the -it checkpoint loaded on this host without the fault of e4b.open.gemma4-load-fault (which stays open on the hosts that faulted); the flagship ran the base checkpoint"
-            },
-            "reference_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gemma4.reference.2026-09-05",
-                "e4b.train.flagship-matrix",
-                "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4"
-              ],
-              "reason": "tp1 and the flagship, with bf16 attention. The attention-4-bit configuration is NOT supported pending #412 (tp2/P40: 'quantize_attention_projections_4bit converted 100 projections, expected 120'; e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4)."
-            },
-            "fast_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gemma4.fused.2026-09-05",
-                "e4b.train.flagship-matrix",
-                "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4",
-                "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.fused_attn4"
-              ],
-              "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4 / fused_attn4) is NOT supported on this family pending #412: on tp2/P40 (2026-09-06) both e4b attention-4-bit arms died on the converter's own projection-count check -- 'quantize_attention_projections_4bit converted 100 projections, expected 120' -- before a step ran (void_attn4 receipts, reduced as HARNESS_ERROR; the two .arm.e4b.* claim ids here). The fast_train path with bf16 attention stays exactly as tp1 left it: supported."
-            },
-            "batched_train": {
-              "status": "void",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gemma4.batched.2026-09-05"
-              ],
-              "reason": "tp1: on some steps the batched kernel was not reached on any layer (the _PAD_WASTE_LIMIT fallback took every layer), as prediction P2 stated for this family; the batched label bought nothing here"
-            },
-            "nvme_train": {
-              "status": "not_tested",
-              "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
-            },
-            "native_mxfp4_train": {
-              "status": "n/a",
-              "reason": "the checkpoint's experts are not native MXFP4"
-            }
-          },
-          "granitemoe": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.granite.matrix.2026-09-05",
-                "e4b.train.parity.tp1.granite.reference.2026-09-05"
-              ],
-              "reason": "tp1: the first real-weight pass through the direct path (before it: fixtures and the serving lanes' arena path only)"
-            },
-            "reference_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.granite.reference.2026-09-05",
-                "e4b.train.h2h.unsloth.granite.5090.2026-09-06.arm.e4b.reference_attn4"
-              ],
-              "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "fast_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.granite.fused.2026-09-05",
-                "e4b.train.h2h.unsloth.granite.5090.2026-09-06.arm.e4b.fused_attn4",
-                "e4b.train.h2h.unsloth.granite.5090.2026-09-06.e4b-internal-parity"
-              ],
-              "reason": "tp1: PASS on the corrected-counter re-run (tp1b, same box, install and fixture); attempt one is the kept HARNESS_ERROR row of the harness's own counter (e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05), not a shipped-code failure; the family enters model_families on the re-run. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "batched_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.granite.batched.2026-09-05"
-              ],
-              "reason": "tp1: PASS, the kernel reached on every layer on every step"
-            },
-            "nvme_train": {
-              "status": "not_tested",
-              "reason": "no receipt; the bake would need --moe block_sparse_moe on a pre-fused layout, unverified"
-            },
-            "native_mxfp4_train": {
-              "status": "n/a",
-              "reason": "the checkpoint's experts are not native MXFP4"
-            }
-          },
-          "gpt_oss": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.matrix.2026-09-05",
-                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
-              ],
-              "reason": "the released MXFP4 blocks are dequantised bit-identically and re-quantised to NF4 as bare GptOssExperts4bit; verify_moe_4bit(strict) passes"
-            },
-            "reference_train": {
-              "status": "refused",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05",
-                "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.reference_attn4",
-                "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.attn_only"
-              ],
-              "reason": "the loader builds the experts bare (no ExpertsLoRA), so the reference path trains no expert adapter; attention-only QLoRA over the frozen experts trains (attn_only, no pair); tp2/P40 (2026-09-06) re-receipts both halves on a second 5090: the attention-4-bit configuration REFUSES on structure -- 96 of 96 attention projections carry a bias and quantize_attention_projections_4bit refuses bias-carrying projections (the reference_attn4 REFUSED row) -- and attention-only bf16-adapter QLoRA over the frozen bare experts trains (the attn_only OK row, a secondary row; the experts train nothing)."
-            },
-            "fast_train": {
-              "status": "refused",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.fused.2026-09-05",
-                "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.fused_attn4"
-              ],
-              "reason": "enable_fast_train returns zero: no ExpertsLoRA to patch, and the fused path does not apply gpt-oss's per-expert biases and clamped GLU; re-proven on tp2/P40 (2026-09-06): the zero-patch probe read 0 on that box too and the attention-4-bit half refuses on the family's bias-carrying projections (the fused_attn4 REFUSED row)."
-            },
-            "batched_train": {
-              "status": "refused",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.batched.2026-09-05"
-              ],
-              "reason": "enable_batched_train returns zero for the same structural reason"
-            },
-            "nvme_train": {
-              "status": "refused",
-              "reason": "enable_mxfp4_nvme_residency refuses bias-carrying (gpt-oss-shaped) modules: before #402 it passed no biases and defaulted to the DeepSeek-V4 epilogue, an unfaithful forward (#397); enable_nvme_train_residency refuses modules that are not ExpertsLoRA-wrapped, which gpt-oss's bare experts are not; the arena_train=True wrap of gpt-oss computes a generic epilogue without the biases and clamp and is refused on structure -- no NVMe training route exists for this family",
-              "code_ref": "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency"
-            },
-            "native_mxfp4_train": {
-              "status": "experimental",
-              "reason": "grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA via run_mxfp4_20b_qlora, under the mxfp4-moe-training-and-residency capability: tp1's canary and provenance passed on its own text; never licensed",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
-              ]
-            }
-          },
-          "mixtral": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.mixtral.matrix.2026-09-05",
-                "e4b.train.parity.tp1.mixtral.reference.2026-09-05"
-              ],
-              "reason": "tp1: the first real-weight pass through the direct path -- per-expert w1/w3/w2 fused gate-first into Experts4bit -- under offload=True (the experts pinned in host RAM), verify_moe_4bit(strict) passing"
-            },
-            "reference_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.mixtral.reference.2026-09-05",
-                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.arm.e4b.reference_attn4"
-              ],
-              "reason": "tp1: under offload=True, the frozen stack bit-exact from its CPU home. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "fast_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.mixtral.fused.2026-09-05",
-                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.arm.e4b.fused_attn4",
-                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.e4b-internal-parity",
-                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06",
-                "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.quality-n60"
-              ],
-              "reason": "tp1: PASS under offload=True, at half the reference loop's peak VRAM; the family enters model_families on this row. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
-            },
-            "batched_train": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.mixtral.batched.2026-09-05"
-              ],
-              "reason": "tp1: PASS with the kernel reached on every layer of every step -- the eight-expert shape never crosses _PAD_WASTE_LIMIT"
-            },
-            "nvme_train": {
-              "status": "not_tested",
-              "reason": "no receipt"
-            },
-            "native_mxfp4_train": {
-              "status": "n/a",
-              "reason": "the checkpoint's experts are not native MXFP4"
-            }
-          }
-        }
-      }
-    },
-    {
-      "id": "run-moe-larger-than-vram",
-      "problem": "The quantised experts still do not fit the GPU: run a Mixture-of-Experts model larger than VRAM by keeping experts resident somewhere else and streaming them per layer.",
-      "symptoms": [
-        "MoE larger than VRAM",
-        "experts fit in CPU RAM but not on the GPU",
-        "which residency engine should I use",
-        "hot experts in VRAM, cold experts on the host"
-      ],
-      "solution": "load_moe_4bit_streaming(..., offload=True) homes each layer's frozen 4-bit experts in pinned host RAM and streams one layer at a time (prefetch=True overlaps); enable_dense_offload streams the dense side; hot_sets_from_profile picks the resident experts by routing frequency; enable_pipelined_residency trades spare VRAM for speed at serve time.",
-      "modes": [
-        "offload",
-        "inference",
-        "training",
-        "serving"
-      ],
-      "formats": [
-        "nf4"
-      ],
-      "model_families": [
-        "olmoe",
-        "qwen3_moe",
-        "qwen3_5_moe",
-        "gemma4_text",
-        "granitemoe",
-        "gpt_oss",
-        "deepseek_v4 (Flash, Pro)",
-        "qwen3_next",
-        "deepseek_v2",
-        "mixtral"
-      ],
-      "environment": {
-        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
-        "os": [
-          "Linux"
-        ],
-        "accelerator": [
-          "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
-        ],
-        "special_requirements": [
-          "torch>=2.2",
-          "bitsandbytes>=0.43",
-          "transformers>=5.0 for the streaming loader ([train] extra)"
-        ]
-      },
-      "install": [
-        {
-          "purpose": "host-RAM training route",
-          "command": "pip install \"experts4bit-qlora[train]\""
-        },
-        {
-          "purpose": "residency/NVMe/fast-kernel route",
-          "command": "pip install \"experts4bit-qlora[fast]\""
-        }
-      ],
-      "entrypoints": [
-        "experts4bit_qlora.loader:load_moe_4bit_streaming",
-        "experts4bit_qlora.engines.offload:enable_expert_offload",
-        "experts4bit_qlora.engines.dense_offload:enable_dense_offload",
-        "experts4bit_qlora.engines.expert_profile:hot_sets_from_profile",
-        "experts4bit_qlora.engines.pipelined:enable_pipelined_residency",
-        "flag:E4B_EXPERT_PROFILE"
-      ],
-      "documentation": [
-        "docs/solutions/run-moe-larger-than-vram.md",
-        "docs/CHOOSING.md",
-        "docs/RESIDENCY-ENGINES.md",
-        "docs/OFFLOAD-TRANSFER-NOTES.md"
-      ],
-      "claim_ids": [
-        "e4b.offload.fits-30b-class",
-        "e4b.serve.informed-hot-sets",
-        "e4b.host.ratios-travel-absolutes-do-not"
-      ],
-      "limitations": [
-        "enable_pipelined_residency patches an ExpertsLoRA wrapper's base and only runs when the wrapper delegates (eval mode, no_grad, an adapter that contributes nothing): assert the count and check the served path",
-        "enable_hot_residency is deprecated since 0.6.2",
-        "Speed absolutes depend on the host link; only ratios travel between hosts (claim e4b.host.ratios-travel-absolutes-do-not)"
-      ],
-      "status": "supported"
-    },
-    {
-      "id": "offload-moe-experts-to-cpu-or-nvme",
-      "problem": "Experts do not even fit host RAM: serve or train from an on-disk expert arena (NVMe) with a pinned-DRAM hot tier.",
-      "symptoms": [
-        "offload MoE experts to NVMe",
-        "experts fit on NVMe but not in CPU RAM",
-        "expert arena",
-        "stream experts from disk during training"
-      ],
-      "solution": "Bake the experts into an arena with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the relocation bake for native MXFP4), then enable_nvme_residency (serving), enable_mxfp4_nvme_residency (native MXFP4 serving) or enable_nvme_train_residency (training, gradient checkpointing required) serve each layer's cold experts from the arena while hot_rows stay pinned in DRAM.",
-      "modes": [
-        "offload",
-        "serving",
-        "training",
-        "streaming"
-      ],
-      "formats": [
-        "nf4",
-        "mxfp4"
-      ],
-      "model_families": [
-        "qwen3_moe",
-        "olmoe",
-        "deepseek_v4 (Flash, Pro)",
-        "gpt_oss"
-      ],
-      "environment": {
-        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
-        "os": [
-          "Linux"
-        ],
-        "accelerator": [
-          "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
-        ],
-        "special_requirements": [
-          "transformers>=5.0 for the streaming loader ([train] extra)",
-          "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
-          "triton>=3.4 (Linux-only distribution)",
-          "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
-          "local NVMe or a fast block device; pinned host RAM for the hot tier"
-        ]
-      },
-      "install": [
-        {
-          "purpose": "residency/NVMe/fast-kernel route",
-          "command": "pip install \"experts4bit-qlora[fast]\""
-        },
-        {
-          "purpose": "host-RAM training route",
-          "command": "pip install \"experts4bit-qlora[train]\""
-        }
-      ],
-      "entrypoints": [
-        "experts4bit_qlora.engines.nvme_experts:enable_nvme_residency",
-        "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency",
-        "experts4bit_qlora.engines.nvme_train:enable_nvme_train_residency"
-      ],
-      "documentation": [
-        "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
-        "docs/RESIDENCY-ENGINES.md",
-        "docs/DEEPSEEK-V4.md",
-        "docs/CHOOSING.md"
-      ],
-      "claim_ids": [
-        "e4b.offload.arena-vs-host-ram",
-        "e4b.serve.deepseek-v4"
-      ],
-      "limitations": [
-        "No shipped tool bakes the training arena from a bf16 checkpoint yet (docs/STATUS.md, open)",
-        "enable_nvme_train_residency refuses hot_rows below the expert count and requires gradient checkpointing",
-        "NVMe residency is a batch-throughput path; cold-expert latency is bounded by the device link"
-      ],
-      "status": "supported"
-    },
-    {
-      "id": "serve-moe-on-consumer-gpu",
-      "problem": "Serve a large fused-expert MoE on one consumer NVIDIA GPU with the decode path measured against the model's own attention.",
-      "symptoms": [
-        "serve a 30B MoE on an RTX 5090 or 3090",
-        "paged KV cache for a 4-bit MoE",
-        "faster MoE decode than the per-expert loop",
-        "is the quantised serving path at parity with the model"
-      ],
-      "solution": "Two surfaces. The measured decode path is the paged runner (PagedModelRunner: paged fp8 KV cache and paged attention) with the experts on grouped-nf4-gemm's kernels -- NF4 experts on the grouped GEMM (enable_fast is the library entry point for that kernel; the harness attaches it through its residency engines), int4-b32 experts through enable_serve_experts_int4, and the opt-in calibrated int4 attention/head, fused glue rounds and router epilogue -- exercised by the in-tree bench harness bench/hybrid-g9/step_decomp.py, which produced the throughput and parity claims. The HTTP shim (python -m experts4bit_qlora.serve) is a reference-path deployment: load_moe_4bit_streaming with the experts streamed from pinned host RAM by default, stock model.generate, per-expert LoRA adapters hot-swapped per request; it attaches a kernel-backed engine only under E4B_RESIDENCY=pipelined and does not use the paged runner or enable_fast.",
-      "modes": [
-        "serving",
-        "inference"
-      ],
-      "formats": [
-        "nf4",
-        "int4",
-        "fp8"
-      ],
-      "model_families": [
-        "qwen3_moe",
-        "olmoe",
-        "granitemoe",
-        "gpt_oss",
-        "gemma4_text",
-        "mixtral"
-      ],
-      "environment": {
-        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
-        "os": [
-          "Linux"
-        ],
-        "accelerator": [
-          "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
-        ],
-        "special_requirements": [
-          "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
-          "triton>=3.4 (Linux-only distribution)"
-        ]
-      },
-      "install": [
-        {
-          "purpose": "loader plus accelerated grouped-kernel path",
-          "command": "pip install \"experts4bit-qlora[train,fast]\""
-        },
-        {
-          "purpose": "HTTP shim (optional)",
-          "command": "pip install \"experts4bit-qlora[serve]\""
-        }
-      ],
-      "entrypoints": [
-        "experts4bit_qlora.engines.fast:enable_fast",
-        "cli:python -m experts4bit_qlora.serve",
-        "experts4bit_qlora.engines.paged_runner:PagedModelRunner",
-        "experts4bit_qlora.engines.int4_experts:enable_serve_experts_int4",
-        "experts4bit_qlora.engines.int4_attn_calib:enable_serve_attn_int4_calib",
-        "experts4bit_qlora.engines.capture:capture_decode"
-      ],
-      "documentation": [
-        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
-        "docs/SERVING.md",
-        "docs/SERVING-THROUGHPUT.md",
-        "docs/SERVING-PARITY.md",
-        "docs/ARCHITECTURE_SUPPORT.md"
-      ],
-      "claim_ids": [
-        "e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05",
-        "e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05",
-        "e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05",
-        "e4b.serve.census.bo7.qwen3.census.5090.2026-09-05",
-        "e4b.serve.census.bo7.granite.b1.5090.2026-09-05",
-        "e4b.serve.census.bo7.granite.b16.5090.2026-09-05",
-        "e4b.serve.census.bo7.granite.census.5090.2026-09-05",
-        "e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05",
-        "e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05",
-        "e4b.serve.census.bo7.olmoe.census.5090.2026-09-05",
-        "e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05",
-        "e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05",
-        "e4b.serve.census.bo7.gptoss.census.5090.2026-09-05",
-        "e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05",
-        "e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05",
-        "e4b.serve.census.bo7.gemma4.census.5090.2026-09-05",
-        "e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05",
-        "e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05",
-        "e4b.serve.census.bo7.mixtral.census.5090.2026-09-05",
-        "e4b.serve.tp.olmoe.b1.5090.2026-09-04",
-        "e4b.serve.buildout.granite.b1.5090.2026-09-04",
-        "e4b.serve.buildout.granite.b16.5090.2026-09-04",
-        "e4b.serve.tp.gptoss.b1.5090.2026-09-04",
-        "e4b.serve.tp.gemma4.b1.5090.2026-09-04",
-        "e4b.serve.tp.mixtral.b1.5090.2026-09-04",
-        "e4b.parity.qwen3.paged-vs-own-attention",
-        "e4b.parity.granite.paged-vs-own-attention",
-        "e4b.parity.gptoss.paged-vs-own-attention",
-        "e4b.parity.moe-routing-flip-floor",
-        "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05",
-        "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate",
-        "e4b.serve.cuda-graph-capture"
-      ],
-      "limitations": [
-        "Not a general-purpose vLLM replacement: on the same box with identical prompt ids vLLM 0.28.0 is ahead of this package's NF4 control at both batch sizes (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05); the ratio against the licensed stack is not quoted on that lane because its licensed arms were void on that box under the pre-registered pack-fingerprint rule (the streamed calibration did not reproduce the licensed pack's expert-matrix counts), the registered K8 gate run on that box's pack failed its second text (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate), so the recipe's speed there stays unlicensed and the streamed calibration's host-dependence is an open item; the 2026-09-03 comparison is superseded",
-        "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
-        "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts with the folds and epilogue (e4b.serve.census.bo7.granite.b1.5090.2026-09-05, licensed by e4b.serve.buildout.granite.b1.5090.2026-09-04); the per-family positions the census quotes are in docs/STATUS.md -- Qwen3's licensed stack is the streamed calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), OLMoE's and Mixtral's position is NF4, Gemma-4's is the exact round-1 fold on NF4 with no quality instrument, gpt-oss's is its NF4 reference arm",
-        "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not",
-        "The streamed 64k calibration recipe does not reproduce its licence across hosts: re-derived on another RTX 5090 host with the same checkpoint, text and knobs it produced a different pack (a handful of expert matrices classified differently at the min_rows threshold) that fails the registered gate on C4 validation (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate); the licence of e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05 stands on its box as measured, and a pack derived elsewhere carries no licence until gated on that box -- tracked as issue #405"
-      ],
-      "status": "supported"
-    },
-    {
-      "id": "mxfp4-moe-training-and-residency",
-      "problem": "Work with models whose experts are released as native MXFP4 (gpt-oss, DeepSeek-V4): load them faithfully, keep the released bytes in an NVMe arena, train on them, and serve them without re-quantisation.",
-      "symptoms": [
-        "gpt-oss MXFP4 experts",
-        "DeepSeek-V4 expert arena",
-        "QLoRA on an MXFP4 checkpoint",
-        "serve MXFP4 experts from the released bytes"
-      ],
-      "solution": "The loader dequantises MXFP4 (e2m1 blocks + e8m0 scales) bit-identically to the reference; enable_mxfp4_nvme_residency relocates the released bytes into an arena and serves them through grouped-nf4-gemm's native MXFP4 kernels; enable_nvme_train_residency trains against an MXFP4 arena; the native MXFP4 expert store for the paged engine is an opt-in lane.",
-      "modes": [
-        "inference",
-        "training",
-        "offload",
-        "serving"
-      ],
-      "formats": [
-        "mxfp4",
-        "nf4"
-      ],
-      "model_families": [
-        "gpt_oss",
-        "deepseek_v4 (Flash, Pro)"
-      ],
-      "environment": {
-        "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
-        "os": [
-          "Linux"
-        ],
-        "accelerator": [
-          "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
-        ],
-        "special_requirements": [
-          "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
-          "triton>=3.4 (Linux-only distribution)",
-          "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
-          "local NVMe or a fast block device; pinned host RAM for the hot tier"
-        ]
-      },
-      "install": [
-        {
-          "purpose": "minimum/reference training",
-          "command": "pip install \"experts4bit-qlora[train]\""
-        },
-        {
-          "purpose": "loader plus accelerated grouped-kernel path",
-          "command": "pip install \"experts4bit-qlora[train,fast]\""
-        }
-      ],
-      "entrypoints": [
-        "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency",
-        "experts4bit_qlora.engines.nvme_train:enable_nvme_train_residency",
-        "experts4bit_qlora.loader:load_moe_4bit_streaming",
-        "experts4bit_qlora.engines.int4_experts:enable_serve_experts_int4"
-      ],
-      "documentation": [
-        "docs/solutions/mxfp4-moe-training-and-residency.md",
-        "docs/DEEPSEEK-V4.md",
-        "docs/STATUS.md"
-      ],
-      "claim_ids": [
-        "e4b.serve.gptoss.loader-faithful",
-        "e4b.serve.deepseek-v4",
-        "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
-      ],
-      "limitations": [
-        "A uniform int4 grid cannot hold e2m1 levels: re-quantising MXFP4 experts to int4-b32 fails the quality gate (docs/STATUS.md)",
-        "gpt-oss raw-text perplexity is not an instrument for ranking an exact arm against a noisy one; the native store's speed is quoted with its quality gate open (docs/SERVING-THROUGHPUT.md)",
-        "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml",
-        "gpt-oss expert training is EXPERIMENTAL and unlicensed. Lane tp1 (bench/train-parity-20260905/tp1/) ran grouped-nf4-gemm's run_mxfp4_20b_qlora (mxfp4_qlora.ExpertsMxfp4LoRA over the released e2m1/e8m0 bytes, faithful clamped GLU and biases) on its own text: the step-0 canary against transformers' dequant path passed, provenance pre == post held over every native expert tensor, and the loss fell -- the row is e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05. No parity pair exists, the run is never compared to the e4b arms, and nothing licenses it; the e4b enablers refuse gpt-oss (zero patched), and the arena_train=True wrap of gpt-oss computes a generic epilogue without the per-expert biases and clamp -- do not train gpt-oss experts through it",
-        "enable_mxfp4_nvme_residency REFUSES bias-carrying (gpt-oss-shaped) modules (#402): it passed no biases and defaulted to the DeepSeek-V4 epilogue, so binding a gpt-oss stack to a native-byte arena computed an unfaithful forward (#397); the native MXFP4 store for gpt-oss serving is the paged engine's route (enable_serve_experts_int4 on gpt-oss), and gpt-oss training against an arena has no route -- training_support.gpt_oss.nvme_train is refused, with that code reference"
-      ],
-      "status": "experimental",
-      "training_support": {
-        "headline_path": null,
-        "by_model_type": {
-          "gpt_oss": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.matrix.2026-09-05"
-              ],
-              "reason": "faithful dequant of the released MXFP4 bytes (e4b.serve.gptoss.loader-faithful), re-quantised to NF4 for the convenient path"
-            },
-            "reference_train": {
-              "status": "refused",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
-              ],
-              "reason": "no ExpertsLoRA over the bare experts under the e4b path; attention-only QLoRA trains"
-            },
-            "fast_train": {
-              "status": "refused",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.fused.2026-09-05"
-              ],
-              "reason": "enable_fast_train returns zero on gpt-oss"
-            },
-            "batched_train": {
-              "status": "refused",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.batched.2026-09-05"
-              ],
-              "reason": "enable_batched_train returns zero on gpt-oss"
-            },
-            "nvme_train": {
-              "status": "refused",
-              "reason": "enable_mxfp4_nvme_residency refuses bias-carrying (gpt-oss-shaped) modules: before #402 it passed no biases and defaulted to the DeepSeek-V4 epilogue, an unfaithful forward (#397); enable_nvme_train_residency refuses modules that are not ExpertsLoRA-wrapped, which gpt-oss's bare experts are not; the arena_train=True wrap of gpt-oss computes a generic epilogue without the biases and clamp and is refused on structure -- no NVMe training route exists for this family",
-              "code_ref": "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency"
-            },
-            "native_mxfp4_train": {
-              "status": "experimental",
-              "reason": "tp1: grouped-nf4-gemm's run_mxfp4_20b_qlora over the released e2m1/e8m0 bytes on its own text -- step-zero canary against transformers' dequant path passed, provenance pre == post held, the loss fell; EXPERIMENTAL, never licensed, no parity pair",
-              "claim_ids": [
-                "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
-              ]
-            }
-          },
-          "deepseek_v4": {
-            "quantize": {
-              "status": "supported",
-              "claim_ids": [
-                "e4b.serve.deepseek-v4"
-              ],
-              "reason": "the MXFP4 experts and the FP8 dense side load faithfully (serving receipt); the direct quantising path is the same loader"
-            },
-            "reference_train": {
-              "status": "not_tested",
-              "reason": "no training receipt in the register"
-            },
-            "fast_train": {
-              "status": "not_tested",
-              "reason": "no training receipt; the base supplies its clamped epilogue via _apply_gate, so the fused path is admitted by structure"
-            },
-            "batched_train": {
-              "status": "not_tested",
-              "reason": "no training receipt"
-            },
-            "nvme_train": {
-              "status": "experimental",
-              "reason": "training against a relocated MXFP4 arena has a CPU spec and a bench directory (bench/mxfp4-arena-train/) but no entry in the claims register"
-            },
-            "native_mxfp4_train": {
-              "status": "not_tested",
-              "reason": "the kernel package's experimental runner is gpt-oss-specific"
-            }
-          }
-        }
-      }
-    }
+ "$schema": "./capabilities.schema.json",
+ "schema_version": "1.0",
+ "project": {
+  "name": "experts4bit-qlora",
+  "canonical_package": "experts4bit-qlora",
+  "repository": "https://github.com/pjordanandrsn/experts4bit-qlora",
+  "summary": "Train and serve Mixture-of-Experts models that do not fit in VRAM: fused 4-bit experts, QLoRA, CPU/NVMe offload, and fast inference on consumer NVIDIA GPUs.",
+  "role": "Owns model loading, quantization orchestration, adapters, training, residency integration and serving; the packed-expert kernels come from grouped-nf4-gemm through the [fast] extra.",
+  "aliases": [
+   "e4b",
+   "e4b-qlora",
+   "experts4bit",
+   "expertsnbit",
+   "experts-mxfp4"
+  ],
+  "import_names": [
+   "experts4bit_qlora"
+  ],
+  "related_projects": [
+   {
+    "name": "grouped-nf4-gemm",
+    "canonical_package": "grouped-nf4-gemm",
+    "repository": "https://github.com/pjordanandrsn/grouped-nf4-gemm",
+    "capabilities": "https://github.com/pjordanandrsn/grouped-nf4-gemm/blob/main/docs/capabilities.json",
+    "relationship": "kernel side: experts4bit-qlora[fast] installs grouped-nf4-gemm, which owns the grouped NF4/MXFP4 GEMMs, the int4 decode GEMV, the FP8 paged attention and decode glue, and the host/NVMe arena primitives"
+   }
+  ],
+  "claims_file": "docs/claims.json",
+  "status_file": "docs/STATUS.md",
+  "non_goals": [
+   "dense (non-MoE) models: use bitsandbytes directly",
+   "a general-purpose serving engine or a vLLM replacement",
+   "models that already fit in bf16 and need no offload: 4-bit here is a memory trade, not a speed-up, and on the measured comparator it cost energy (claim e4b.train.energy-honest.scoped-a2000)",
+   "silent fallbacks: every enable_* returns a count or a non-empty handle list, or raises; callers must assert it",
+   "operating systems other than Linux, or GPUs without CUDA"
   ]
+ },
+ "capabilities": [
+  {
+   "id": "quantize-fused-moe-experts",
+   "problem": "A Mixture-of-Experts model loaded with load_in_4bit still occupies bf16-sized VRAM and OOMs, because transformers stores its experts as one fused 3-D parameter per layer that bitsandbytes' nn.Linear walker never touches.",
+   "symptoms": [
+    "load_in_4bit=True but the model still OOMs",
+    "BitsAndBytesConfig leaves gate_up_proj / down_proj in bf16",
+    "4-bit loading skips MoE experts",
+    "fused 3-D expert tensor is not an nn.Linear",
+    "how do I verify the experts are actually 4-bit"
+   ],
+   "solution": "load_moe_4bit_streaming quantises exactly the fused expert stack on the way to the GPU (Experts4bit, the 4-bit face of ExpertsNbit), never materialising it in bf16; verify_moe_4bit(model, strict=True) raises if any stack is still high precision.",
+   "modes": [
+    "quantization",
+    "inference",
+    "training"
+   ],
+   "formats": [
+    "nf4",
+    "fp4",
+    "int8",
+    "fp8",
+    "bf16",
+    "fp16"
+   ],
+   "model_families": [
+    "olmoe",
+    "qwen3_moe",
+    "qwen3_5_moe",
+    "gemma4_text",
+    "granitemoe",
+    "gpt_oss",
+    "deepseek_v4 (Flash, Pro)",
+    "qwen3_next",
+    "deepseek_v2",
+    "mixtral"
+   ],
+   "environment": {
+    "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+    "os": [
+     "Linux"
+    ],
+    "accelerator": [
+     "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
+    ],
+    "special_requirements": [
+     "torch>=2.2",
+     "bitsandbytes>=0.43",
+     "transformers>=5.0 for the streaming loader ([train] extra)"
+    ]
+   },
+   "install": [
+    {
+     "purpose": "streaming loader + trainer",
+     "command": "pip install \"experts4bit-qlora[train]\""
+    }
+   ],
+   "entrypoints": [
+    "experts4bit_qlora.loader:load_moe_4bit_streaming",
+    "experts4bit_qlora.verify:verify_moe_4bit",
+    "experts4bit_qlora:Experts4bit",
+    "experts4bit_qlora:ExpertsNbit"
+   ],
+   "documentation": [
+    "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md",
+    "docs/BITSANDBYTES.md",
+    "docs/ARCHITECTURE_SUPPORT.md",
+    "docs/STORAGE-MODES.md"
+   ],
+   "claim_ids": [
+    "e4b.train.olmoe-fits",
+    "e4b.serve.gptoss.loader-faithful",
+    "e4b.train.energy-honest.scoped-a2000"
+   ],
+   "limitations": [
+    "Unsupported model_type raises NotImplementedError; identity-expert families (LongCat-Flash) are refused by name",
+    "4-bit is a memory trade when the model already fits, and cost energy on the measured comparator (one card, one bitsandbytes development build): claim e4b.train.energy-honest.scoped-a2000",
+    "Dense (non-MoE) models are not the target; use bitsandbytes directly"
+   ],
+   "status": "supported"
+  },
+  {
+   "id": "qlora-fused-moe-experts",
+   "problem": "Fine-tune (QLoRA / LoRA) a fused-expert MoE whose expert weights PEFT and the bitsandbytes walker never see.",
+   "symptoms": [
+    "QLoRA on a MoE trains only the attention",
+    "peft cannot find the expert parameters",
+    "LoRA on gate_up_proj of a fused MoE",
+    "train a 30B MoE on a 24 GB GPU"
+   ],
+   "solution": "ExpertsLoRA wraps each frozen 4-bit expert stack with per-expert LoRA; load_moe_4bit_streaming installs it; enable_fast_train(model, dgrad=True) routes the step through grouped-nf4-gemm's grouped kernels, enable_batched_train(model) is the no-extras fallback; python -m experts4bit_qlora.train is the env-configured trainer. model_families lists exactly the families whose fast_train path is `supported` in training_support (the headline path, enable_fast_train, with a PASS receipt on real weights); every other path is stated per family there, never as a flat flag.",
+   "modes": [
+    "training"
+   ],
+   "formats": [
+    "nf4"
+   ],
+   "model_families": [
+    "olmoe",
+    "qwen3_moe",
+    "gemma4_text",
+    "mixtral",
+    "granitemoe"
+   ],
+   "environment": {
+    "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+    "os": [
+     "Linux"
+    ],
+    "accelerator": [
+     "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
+    ],
+    "special_requirements": [
+     "torch>=2.2",
+     "bitsandbytes>=0.43",
+     "transformers>=5.0 for the streaming loader ([train] extra)"
+    ]
+   },
+   "install": [
+    {
+     "purpose": "minimum/reference training",
+     "command": "pip install \"experts4bit-qlora[train]\""
+    },
+    {
+     "purpose": "loader plus accelerated grouped-kernel path",
+     "command": "pip install \"experts4bit-qlora[train,fast]\""
+    }
+   ],
+   "entrypoints": [
+    "experts4bit_qlora.lora:ExpertsLoRA",
+    "experts4bit_qlora.engines.fast:enable_fast_train",
+    "experts4bit_qlora.engines.batched:enable_batched_train",
+    "cli:python -m experts4bit_qlora.train"
+   ],
+   "documentation": [
+    "docs/solutions/qlora-fused-moe-experts.md",
+    "docs/CHOOSING.md",
+    "docs/METHODOLOGY.md",
+    "docs/support_matrix.md",
+    "docs/ARCHITECTURE_SUPPORT.md"
+   ],
+   "claim_ids": [
+    "e4b.train.olmoe-converges",
+    "e4b.train.fast-train-dgrad",
+    "e4b.train.flagship-matrix",
+    "e4b.train.ablation",
+    "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
+    "e4b.train.parity.tp1.granite.batched.2026-09-05",
+    "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
+    "e4b.train.parity.tp1.granite.matrix.2026-09-05",
+    "e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05",
+    "e4b.train.parity.tp1.qwen3.fused.2026-09-05",
+    "e4b.train.parity.tp1.gemma4.fused.2026-09-05",
+    "e4b.train.parity.tp1.mixtral.fused.2026-09-05",
+    "e4b.train.parity.tp1.mixtral.batched.2026-09-05",
+    "e4b.train.parity.tp1.qwen3.matrix.2026-09-05",
+    "e4b.train.parity.tp1.gemma4.matrix.2026-09-05",
+    "e4b.train.parity.tp1.mixtral.matrix.2026-09-05",
+    "e4b.train.parity.tp1.granite.fused.2026-09-05",
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05",
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.quality-n60",
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200",
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.e4b-internal-parity",
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06",
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.quality-n60",
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.e4b-internal-parity",
+    "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06",
+    "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.quality-n60",
+    "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.e4b-internal-parity",
+    "e4b.train.h2h.unsloth.granite.5090.2026-09-06.e4b-internal-parity",
+    "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity",
+    "e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage",
+    "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage",
+    "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint"
+   ],
+   "limitations": [
+    "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
+    "dgrad=True needs grouped-nf4-gemm>=0.7.0 (below the current [fast] floor in pyproject.toml, so any [fast] install has it); on older cuts it is downgraded with a RuntimeWarning",
+    "Loss parity is measured on the registered criteria in docs/METHODOLOGY.md, not asserted for every dataset",
+    "model_families is evidence-gated: a family is listed when its fast_train path -- the headline path, enable_fast_train -- PASSES the registered loss-parity criteria on real weights with a receipt in this repository (training_support is the per-path record; bench/train-parity-20260905/tp1/ is lane tp1, all six serving families). olmoe is confirmed on real weights and a registered text; qwen3_moe and gemma4_text carry tp1 PASSes beside their flagship matrices; mixtral entered on its tp1 fused PASS under offload; granitemoe entered on its corrected-counter re-run's PASS (its first attempt was a harness error, kept as its own row); gpt_oss is refused by every training enabler and stays out",
+    "gpt_oss is not a training family here: the loader builds its experts bare (no ExpertsLoRA), and both enable_fast_train and enable_batched_train return zero on it -- REFUSED rows on tp1 (e4b.train.parity.tp1.gptoss.fused.2026-09-05, e4b.train.parity.tp1.gptoss.batched.2026-09-05). Attention-only QLoRA over its frozen experts trains (e4b.train.parity.tp1.gptoss.attn_only.2026-09-05); the only route that trains its experts is grouped-nf4-gemm's experimental mxfp4_qlora.ExpertsMxfp4LoRA under the mxfp4-moe-training-and-residency capability -- experimental, never licensed",
+    "enable_batched_train falls back to the reference forward per call above _PAD_WASTE_LIMIT (engines/batched.py): the patch count stays positive while some or all layers run the per-expert loop on some steps. In the shipped code tp1 measured this fallback was uncounted, and three arms read VOID on exactly that -- OLMoE, Qwen3 and Gemma-4 (e4b.train.parity.tp1.olmoe.batched.2026-09-05, e4b.train.parity.tp1.qwen3.batched.2026-09-05, e4b.train.parity.tp1.gemma4.batched.2026-09-05); it engaged everywhere only on Mixtral's eight-expert and Granite's forty-expert shapes. As of the release carrying that bundle the fallback is countable: batched_fallback_stats(model) reports it (#402; those VOID rows are the reason it exists). Assert kernel engagement, not the return value alone",
+    "enable_fast, enable_fast_train and enable_batched_train refuse a wrapper whose base violates the stock-epilogue contract (EpilogueContractError, #402) instead of silently computing act(gate)*up over a base that applies biases, clamps or another gating rule -- a refusal is loud, a wrong epilogue is not; gpt-oss is the family this protects, and DeepSeek-V4 supplies its epilogue through _apply_gate and is admitted",
+    "Head-to-head against Unsloth's 4-bit MoE QLoRA path on one identical training problem (lane p38, 2026-09-05, one rented RTX 5090, Qwen3-30B-A3B, the clinical fixture tokenised once, seq 512, r 8 / alpha 16, identical targets, optimizer, batch, steps, precision and eval; bench/h2h-20260905/p38/): the shipped fused dgrad path with NF4 attention is faster per step, lower in peak VRAM and lower in energy per step than Unsloth on that box, and the two are comparable on held-out loss at sixty steps (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05, ...quality-n60) -- BUT the two-hundred-step curve favours Unsloth: its held-out loss is lower at the end of the curve while e4b's flattens from step sixty (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200). Quote the position only beside that row. Candidate causes (the eval schedule, the checkpointing mode, the transformers/peft versions of the two stacks, the expert adapter's precision -- bf16 on this side, the loader passes the model dtype to ExpertsLoRA -- against fp32 on Unsloth's) are not established. One workload, one box, one family; nothing here licenses a path (tp1 does) and no general speed claim is made",
+    "tp2/P40 (2026-09-06, one rented RTX 5090, receipts in bench/h2h-20260906/tp2/) extends the Unsloth head-to-head to all six families on one box and one fixture, and its rows are statuses, not one number: positions exist only for Qwen3-30B-A3B (s/step ratio Unsloth/e4b 1.457, e4b faster per step, quality COMPARABLE; it agrees with P38's 1.413 inside the pre-registered anchor band, e4b.train.h2h.unsloth.qwen3.5090.2026-09-06) and Mixtral-8x7B, whose row leads with the footprint trade: e4b trained its experts under CPU offload at roughly one-ninth of Unsloth's resident allocator peak (the registered design; the footprint row e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint -- a trainable-on-smaller-cards capability, quality COMPARABLE) while Unsloth ran resident, its only mode, and what that VRAM buys it is speed per step (s/step ratio 0.361, e4b.train.h2h.unsloth.mixtral.5090.2026-09-06 -- a footprint-vs-speed trade, not a kernel deficit). No position on the other four, and the coverage rows are results, not empty cells: on Granite the comparator attached LoRA to the attention only, a fraction of e4b's trainable count with ExpertsLoRA on every MoE layer (e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage), and on OLMoE it died at MoE-LoRA engage while both e4b arms trained (e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage); gpt-oss refuses on both sides (P5 held), and Gemma-4's e4b attention-4-bit arms died on the projection-count check (#412; the bf16-attention fast_train path stays as tp1 left it) while Unsloth's arm trained. P38's two-hundred-step curve row (Unsloth lower at the end of the curve) still stands beside any Qwen3 position; per-arm rows are e4b.train.h2h.unsloth.<family>.5090.2026-09-06.arm.*",
+    "Attention projection targeting (add_attention_lora and TRAIN_ATTN_4BIT / quantize_attention_projections_4bit) is by module STRUCTURE, never family name: q_proj, k_proj and o_proj must be supported linears; v_proj may be a supported linear or absent/None (Gemma-4 attention_k_eq_v layers). The expected count is len(candidates) from detect_attention_projections, never 4 * n_layers. A layer with q_proj/o_proj but no k_proj is refused. A projection that carries a bias is refused (gpt-oss). Gemma-4 attention-4-bit remains not supported pending a measured lane (#412); this detector does not move that cell"
+   ],
+   "status": "supported",
+   "training_support": {
+    "headline_path": "fast_train",
+    "by_model_type": {
+     "olmoe": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.olmoe.matrix.2026-09-05",
+        "e4b.train.parity.tp1.olmoe.reference.2026-09-05"
+       ]
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.olmoe.reference.2026-09-05",
+        "e4b.train.olmoe-converges",
+        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.arm.e4b.reference_attn4"
+       ],
+       "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
+        "e4b.train.fast-train-dgrad",
+        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.arm.e4b.fused_attn4",
+        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity"
+       ],
+       "reason": "tp1: PASS on the registered clinical text with real -Instruct weights; the dgrad-gate receipt was synthetic tokens. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "batched_train": {
+       "status": "void",
+       "claim_ids": [
+        "e4b.train.parity.tp1.olmoe.batched.2026-09-05"
+       ],
+       "reason": "enable_batched_train patched every layer but the whole-stack dequant kernel was not reached on every layer on every step: the per-call fallback above _PAD_WASTE_LIMIT engaged without a counter (tp1); the dgrad-gate synthetic-token reading stands as measured there"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "the checkpoint's experts are not native MXFP4"
+      }
+     },
+     "qwen3_moe": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.qwen3.matrix.2026-09-05",
+        "e4b.train.parity.tp1.qwen3.reference.2026-09-05",
+        "e4b.train.flagship-matrix"
+       ],
+       "reason": "tp1: the direct path loads the real checkpoint resident on a thirty-two-gigabyte-class card; the flagship ran it with offload"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.qwen3.reference.2026-09-05",
+        "e4b.train.flagship-matrix",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.arm.e4b.reference_attn4"
+       ],
+       "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 192 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.qwen3.fused.2026-09-05",
+        "e4b.train.flagship-matrix",
+        "e4b.train.fast-train-dgrad",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.arm.e4b.fused_attn4",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.e4b-internal-parity",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06",
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-06.quality-n60"
+       ],
+       "reason": "tp1: PASS resident on this card, beside the flagship matrix's five-dataset PASS and the dgrad-gate's A6000 reading -- never divided into them. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 192 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "batched_train": {
+       "status": "void",
+       "claim_ids": [
+        "e4b.train.parity.tp1.qwen3.batched.2026-09-05"
+       ],
+       "reason": "tp1: the whole-stack dequant kernel was reached on a fraction of the layers on every step (the _PAD_WASTE_LIMIT per-call fallback on short rows over this many experts, prediction P2); the dgrad-gate's Alpaca trajectory, where the kernel engaged, stands as measured on its own fixture (e4b.train.fast-train-dgrad)"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "the checkpoint's experts are not native MXFP4"
+      }
+     },
+     "gemma4_text": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gemma4.matrix.2026-09-05",
+        "e4b.train.parity.tp1.gemma4.reference.2026-09-05",
+        "e4b.train.flagship-matrix"
+       ],
+       "reason": "tp1: the -it checkpoint loaded on this host without the fault of e4b.open.gemma4-load-fault (which stays open on the hosts that faulted); the flagship ran the base checkpoint"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gemma4.reference.2026-09-05",
+        "e4b.train.flagship-matrix",
+        "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4"
+       ],
+       "reason": "tp1 and the flagship, with bf16 attention. The attention-4-bit configuration is NOT supported pending #412 (tp2/P40: 'quantize_attention_projections_4bit converted 100 projections, expected 120'; e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4)."
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gemma4.fused.2026-09-05",
+        "e4b.train.flagship-matrix",
+        "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4",
+        "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.fused_attn4"
+       ],
+       "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4 / fused_attn4) is NOT supported on this family pending #412: on tp2/P40 (2026-09-06) both e4b attention-4-bit arms died on the converter's own projection-count check -- 'quantize_attention_projections_4bit converted 100 projections, expected 120' -- before a step ran (void_attn4 receipts, reduced as HARNESS_ERROR; the two .arm.e4b.* claim ids here). The fast_train path with bf16 attention stays exactly as tp1 left it: supported."
+      },
+      "batched_train": {
+       "status": "void",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gemma4.batched.2026-09-05"
+       ],
+       "reason": "tp1: on some steps the batched kernel was not reached on any layer (the _PAD_WASTE_LIMIT fallback took every layer), as prediction P2 stated for this family; the batched label bought nothing here"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "the checkpoint's experts are not native MXFP4"
+      }
+     },
+     "granitemoe": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.granite.matrix.2026-09-05",
+        "e4b.train.parity.tp1.granite.reference.2026-09-05"
+       ],
+       "reason": "tp1: the first real-weight pass through the direct path (before it: fixtures and the serving lanes' arena path only)"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.granite.reference.2026-09-05",
+        "e4b.train.h2h.unsloth.granite.5090.2026-09-06.arm.e4b.reference_attn4"
+       ],
+       "reason": "tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.granite.fused.2026-09-05",
+        "e4b.train.h2h.unsloth.granite.5090.2026-09-06.arm.e4b.fused_attn4",
+        "e4b.train.h2h.unsloth.granite.5090.2026-09-06.e4b-internal-parity"
+       ],
+       "reason": "tp1: PASS on the corrected-counter re-run (tp1b, same box, install and fixture); attempt one is the kept HARNESS_ERROR row of the harness's own counter (e4b.train.parity.tp1.granite.fused.attempt1.2026-09-05), not a shipped-code failure; the family enters model_families on the re-run. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "batched_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.granite.batched.2026-09-05"
+       ],
+       "reason": "tp1: PASS, the kernel reached on every layer on every step"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no receipt; the bake would need --moe block_sparse_moe on a pre-fused layout, unverified"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "the checkpoint's experts are not native MXFP4"
+      }
+     },
+     "gpt_oss": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.matrix.2026-09-05",
+        "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
+       ],
+       "reason": "the released MXFP4 blocks are dequantised bit-identically and re-quantised to NF4 as bare GptOssExperts4bit; verify_moe_4bit(strict) passes"
+      },
+      "reference_train": {
+       "status": "refused",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05",
+        "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.reference_attn4",
+        "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.attn_only"
+       ],
+       "reason": "the loader builds the experts bare (no ExpertsLoRA), so the reference path trains no expert adapter; attention-only QLoRA over the frozen experts trains (attn_only, no pair); tp2/P40 (2026-09-06) re-receipts both halves on a second 5090: the attention-4-bit configuration REFUSES on structure -- 96 of 96 attention projections carry a bias and quantize_attention_projections_4bit refuses bias-carrying projections (the reference_attn4 REFUSED row) -- and attention-only bf16-adapter QLoRA over the frozen bare experts trains (the attn_only OK row, a secondary row; the experts train nothing)."
+      },
+      "fast_train": {
+       "status": "refused",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.fused.2026-09-05",
+        "e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.e4b.fused_attn4"
+       ],
+       "reason": "enable_fast_train returns zero: no ExpertsLoRA to patch, and the fused path does not apply gpt-oss's per-expert biases and clamped GLU; re-proven on tp2/P40 (2026-09-06): the zero-patch probe read 0 on that box too and the attention-4-bit half refuses on the family's bias-carrying projections (the fused_attn4 REFUSED row)."
+      },
+      "batched_train": {
+       "status": "refused",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.batched.2026-09-05"
+       ],
+       "reason": "enable_batched_train returns zero for the same structural reason"
+      },
+      "nvme_train": {
+       "status": "refused",
+       "reason": "enable_mxfp4_nvme_residency refuses bias-carrying (gpt-oss-shaped) modules: before #402 it passed no biases and defaulted to the DeepSeek-V4 epilogue, an unfaithful forward (#397); enable_nvme_train_residency refuses modules that are not ExpertsLoRA-wrapped, which gpt-oss's bare experts are not; the arena_train=True wrap of gpt-oss computes a generic epilogue without the biases and clamp and is refused on structure -- no NVMe training route exists for this family",
+       "code_ref": "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency"
+      },
+      "native_mxfp4_train": {
+       "status": "experimental",
+       "reason": "grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA via run_mxfp4_20b_qlora, under the mxfp4-moe-training-and-residency capability: tp1's canary and provenance passed on its own text; never licensed",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
+       ]
+      }
+     },
+     "mixtral": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.mixtral.matrix.2026-09-05",
+        "e4b.train.parity.tp1.mixtral.reference.2026-09-05"
+       ],
+       "reason": "tp1: the first real-weight pass through the direct path -- per-expert w1/w3/w2 fused gate-first into Experts4bit -- under offload=True (the experts pinned in host RAM), verify_moe_4bit(strict) passing"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.mixtral.reference.2026-09-05",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.arm.e4b.reference_attn4"
+       ],
+       "reason": "tp1: under offload=True, the frozen stack bit-exact from its CPU home. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.mixtral.fused.2026-09-05",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.arm.e4b.fused_attn4",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.e4b-internal-parity",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.quality-n60"
+       ],
+       "reason": "tp1: PASS under offload=True, at half the reference loop's peak VRAM; the family enters model_families on this row. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 128 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+      },
+      "batched_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.mixtral.batched.2026-09-05"
+       ],
+       "reason": "tp1: PASS with the kernel reached on every layer of every step -- the eight-expert shape never crosses _PAD_WASTE_LIMIT"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no receipt"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "the checkpoint's experts are not native MXFP4"
+      }
+     }
+    }
+   }
+  },
+  {
+   "id": "run-moe-larger-than-vram",
+   "problem": "The quantised experts still do not fit the GPU: run a Mixture-of-Experts model larger than VRAM by keeping experts resident somewhere else and streaming them per layer.",
+   "symptoms": [
+    "MoE larger than VRAM",
+    "experts fit in CPU RAM but not on the GPU",
+    "which residency engine should I use",
+    "hot experts in VRAM, cold experts on the host"
+   ],
+   "solution": "load_moe_4bit_streaming(..., offload=True) homes each layer's frozen 4-bit experts in pinned host RAM and streams one layer at a time (prefetch=True overlaps); enable_dense_offload streams the dense side; hot_sets_from_profile picks the resident experts by routing frequency; enable_pipelined_residency trades spare VRAM for speed at serve time.",
+   "modes": [
+    "offload",
+    "inference",
+    "training",
+    "serving"
+   ],
+   "formats": [
+    "nf4"
+   ],
+   "model_families": [
+    "olmoe",
+    "qwen3_moe",
+    "qwen3_5_moe",
+    "gemma4_text",
+    "granitemoe",
+    "gpt_oss",
+    "deepseek_v4 (Flash, Pro)",
+    "qwen3_next",
+    "deepseek_v2",
+    "mixtral"
+   ],
+   "environment": {
+    "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+    "os": [
+     "Linux"
+    ],
+    "accelerator": [
+     "NVIDIA CUDA GPU (bitsandbytes 4-bit)"
+    ],
+    "special_requirements": [
+     "torch>=2.2",
+     "bitsandbytes>=0.43",
+     "transformers>=5.0 for the streaming loader ([train] extra)"
+    ]
+   },
+   "install": [
+    {
+     "purpose": "host-RAM training route",
+     "command": "pip install \"experts4bit-qlora[train]\""
+    },
+    {
+     "purpose": "residency/NVMe/fast-kernel route",
+     "command": "pip install \"experts4bit-qlora[fast]\""
+    }
+   ],
+   "entrypoints": [
+    "experts4bit_qlora.loader:load_moe_4bit_streaming",
+    "experts4bit_qlora.engines.offload:enable_expert_offload",
+    "experts4bit_qlora.engines.dense_offload:enable_dense_offload",
+    "experts4bit_qlora.engines.expert_profile:hot_sets_from_profile",
+    "experts4bit_qlora.engines.pipelined:enable_pipelined_residency",
+    "flag:E4B_EXPERT_PROFILE"
+   ],
+   "documentation": [
+    "docs/solutions/run-moe-larger-than-vram.md",
+    "docs/CHOOSING.md",
+    "docs/RESIDENCY-ENGINES.md",
+    "docs/OFFLOAD-TRANSFER-NOTES.md"
+   ],
+   "claim_ids": [
+    "e4b.offload.fits-30b-class",
+    "e4b.serve.informed-hot-sets",
+    "e4b.host.ratios-travel-absolutes-do-not"
+   ],
+   "limitations": [
+    "enable_pipelined_residency patches an ExpertsLoRA wrapper's base and only runs when the wrapper delegates (eval mode, no_grad, an adapter that contributes nothing): assert the count and check the served path",
+    "enable_hot_residency is deprecated since 0.6.2",
+    "Speed absolutes depend on the host link; only ratios travel between hosts (claim e4b.host.ratios-travel-absolutes-do-not)"
+   ],
+   "status": "supported"
+  },
+  {
+   "id": "offload-moe-experts-to-cpu-or-nvme",
+   "problem": "Experts do not even fit host RAM: serve or train from an on-disk expert arena (NVMe) with a pinned-DRAM hot tier.",
+   "symptoms": [
+    "offload MoE experts to NVMe",
+    "experts fit on NVMe but not in CPU RAM",
+    "expert arena",
+    "stream experts from disk during training"
+   ],
+   "solution": "Bake the experts into an arena with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the relocation bake for native MXFP4), then enable_nvme_residency (serving), enable_mxfp4_nvme_residency (native MXFP4 serving) or enable_nvme_train_residency (training, gradient checkpointing required) serve each layer's cold experts from the arena while hot_rows stay pinned in DRAM.",
+   "modes": [
+    "offload",
+    "serving",
+    "training",
+    "streaming"
+   ],
+   "formats": [
+    "nf4",
+    "mxfp4"
+   ],
+   "model_families": [
+    "qwen3_moe",
+    "olmoe",
+    "deepseek_v4 (Flash, Pro)",
+    "gpt_oss"
+   ],
+   "environment": {
+    "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+    "os": [
+     "Linux"
+    ],
+    "accelerator": [
+     "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
+    ],
+    "special_requirements": [
+     "transformers>=5.0 for the streaming loader ([train] extra)",
+     "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
+     "triton>=3.4 (Linux-only distribution)",
+     "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
+     "local NVMe or a fast block device; pinned host RAM for the hot tier"
+    ]
+   },
+   "install": [
+    {
+     "purpose": "residency/NVMe/fast-kernel route",
+     "command": "pip install \"experts4bit-qlora[fast]\""
+    },
+    {
+     "purpose": "host-RAM training route",
+     "command": "pip install \"experts4bit-qlora[train]\""
+    }
+   ],
+   "entrypoints": [
+    "experts4bit_qlora.engines.nvme_experts:enable_nvme_residency",
+    "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency",
+    "experts4bit_qlora.engines.nvme_train:enable_nvme_train_residency"
+   ],
+   "documentation": [
+    "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
+    "docs/RESIDENCY-ENGINES.md",
+    "docs/DEEPSEEK-V4.md",
+    "docs/CHOOSING.md"
+   ],
+   "claim_ids": [
+    "e4b.offload.arena-vs-host-ram",
+    "e4b.serve.deepseek-v4"
+   ],
+   "limitations": [
+    "No shipped tool bakes the training arena from a bf16 checkpoint yet (docs/STATUS.md, open)",
+    "enable_nvme_train_residency refuses hot_rows below the expert count and requires gradient checkpointing",
+    "NVMe residency is a batch-throughput path; cold-expert latency is bounded by the device link"
+   ],
+   "status": "supported"
+  },
+  {
+   "id": "serve-moe-on-consumer-gpu",
+   "problem": "Serve a large fused-expert MoE on one consumer NVIDIA GPU with the decode path measured against the model's own attention.",
+   "symptoms": [
+    "serve a 30B MoE on an RTX 5090 or 3090",
+    "paged KV cache for a 4-bit MoE",
+    "faster MoE decode than the per-expert loop",
+    "is the quantised serving path at parity with the model"
+   ],
+   "solution": "Two surfaces. The measured decode path is the paged runner (PagedModelRunner: paged fp8 KV cache and paged attention) with the experts on grouped-nf4-gemm's kernels -- NF4 experts on the grouped GEMM (enable_fast is the library entry point for that kernel; the harness attaches it through its residency engines), int4-b32 experts through enable_serve_experts_int4, and the opt-in calibrated int4 attention/head, fused glue rounds and router epilogue -- exercised by the in-tree bench harness bench/hybrid-g9/step_decomp.py, which produced the throughput and parity claims. The HTTP shim (python -m experts4bit_qlora.serve) is a reference-path deployment: load_moe_4bit_streaming with the experts streamed from pinned host RAM by default, stock model.generate, per-expert LoRA adapters hot-swapped per request; it attaches a kernel-backed engine only under E4B_RESIDENCY=pipelined and does not use the paged runner or enable_fast.",
+   "modes": [
+    "serving",
+    "inference"
+   ],
+   "formats": [
+    "nf4",
+    "int4",
+    "fp8"
+   ],
+   "model_families": [
+    "qwen3_moe",
+    "olmoe",
+    "granitemoe",
+    "gpt_oss",
+    "gemma4_text",
+    "mixtral"
+   ],
+   "environment": {
+    "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+    "os": [
+     "Linux"
+    ],
+    "accelerator": [
+     "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
+    ],
+    "special_requirements": [
+     "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
+     "triton>=3.4 (Linux-only distribution)"
+    ]
+   },
+   "install": [
+    {
+     "purpose": "loader plus accelerated grouped-kernel path",
+     "command": "pip install \"experts4bit-qlora[train,fast]\""
+    },
+    {
+     "purpose": "HTTP shim (optional)",
+     "command": "pip install \"experts4bit-qlora[serve]\""
+    }
+   ],
+   "entrypoints": [
+    "experts4bit_qlora.engines.fast:enable_fast",
+    "cli:python -m experts4bit_qlora.serve",
+    "experts4bit_qlora.engines.paged_runner:PagedModelRunner",
+    "experts4bit_qlora.engines.int4_experts:enable_serve_experts_int4",
+    "experts4bit_qlora.engines.int4_attn_calib:enable_serve_attn_int4_calib",
+    "experts4bit_qlora.engines.capture:capture_decode"
+   ],
+   "documentation": [
+    "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
+    "docs/SERVING.md",
+    "docs/SERVING-THROUGHPUT.md",
+    "docs/SERVING-PARITY.md",
+    "docs/ARCHITECTURE_SUPPORT.md"
+   ],
+   "claim_ids": [
+    "e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22",
+    "e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05",
+    "e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05",
+    "e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05",
+    "e4b.serve.census.bo7.qwen3.census.5090.2026-09-05",
+    "e4b.serve.census.bo7.granite.b1.5090.2026-09-05",
+    "e4b.serve.census.bo7.granite.b16.5090.2026-09-05",
+    "e4b.serve.census.bo7.granite.census.5090.2026-09-05",
+    "e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05",
+    "e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05",
+    "e4b.serve.census.bo7.olmoe.census.5090.2026-09-05",
+    "e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05",
+    "e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05",
+    "e4b.serve.census.bo7.gptoss.census.5090.2026-09-05",
+    "e4b.serve.census.bo7.gemma4.b1.5090.2026-09-05",
+    "e4b.serve.census.bo7.gemma4.b16.5090.2026-09-05",
+    "e4b.serve.census.bo7.gemma4.census.5090.2026-09-05",
+    "e4b.serve.census.bo7.mixtral.b1.5090.2026-09-05",
+    "e4b.serve.census.bo7.mixtral.b16.5090.2026-09-05",
+    "e4b.serve.census.bo7.mixtral.census.5090.2026-09-05",
+    "e4b.serve.tp.olmoe.b1.5090.2026-09-04",
+    "e4b.serve.buildout.granite.b1.5090.2026-09-04",
+    "e4b.serve.buildout.granite.b16.5090.2026-09-04",
+    "e4b.serve.tp.gptoss.b1.5090.2026-09-04",
+    "e4b.serve.tp.gemma4.b1.5090.2026-09-04",
+    "e4b.serve.tp.mixtral.b1.5090.2026-09-04",
+    "e4b.parity.qwen3.paged-vs-own-attention",
+    "e4b.parity.granite.paged-vs-own-attention",
+    "e4b.parity.gptoss.paged-vs-own-attention",
+    "e4b.parity.moe-routing-flip-floor",
+    "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05",
+    "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate",
+    "e4b.serve.cuda-graph-capture",
+    "e4b.serve.p55x.qwen3.rtn-attn.k8.2026-09-22",
+    "e4b.serve.p55x.qwen3.pack-deterministic-samebox.2026-09-22",
+    "e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22"
+   ],
+   "limitations": [
+    "Not a general-purpose vLLM replacement: on the same box with identical prompt ids vLLM 0.28.0 is ahead of this package's NF4 control at both batch sizes (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05); the ratio against the licensed stack is not quoted on that lane because its licensed arms were void on that box under the pre-registered pack-fingerprint rule (the streamed calibration did not reproduce the licensed pack's expert-matrix counts), the registered K8 gate run on that box's pack failed its second text (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate), so the recipe's speed there stays unlicensed and the streamed calibration's host-dependence is an open item; the 2026-09-03 comparison is superseded",
+    "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
+    "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts with the folds and epilogue (e4b.serve.census.bo7.granite.b1.5090.2026-09-05, licensed by e4b.serve.buildout.granite.b1.5090.2026-09-04); the per-family positions the census quotes are in docs/STATUS.md -- Qwen3's licensed stack is the streamed calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), OLMoE's and Mixtral's position is NF4, Gemma-4's is the exact round-1 fold on NF4 with no quality instrument, gpt-oss's is its NF4 reference arm",
+    "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not",
+    "The streamed 64k calibration recipe does not reproduce its licence across hosts: re-derived on another RTX 5090 host with the same checkpoint, text and knobs it produced a different pack (a handful of expert matrices classified differently at the min_rows threshold) that fails the registered gate on C4 validation (claim e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate); the licence of e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05 stands on its box as measured, and a pack derived elsewhere carries no licence until gated on that box -- tracked as issue #405"
+   ],
+   "status": "supported"
+  },
+  {
+   "id": "mxfp4-moe-training-and-residency",
+   "problem": "Work with models whose experts are released as native MXFP4 (gpt-oss, DeepSeek-V4): load them faithfully, keep the released bytes in an NVMe arena, train on them, and serve them without re-quantisation.",
+   "symptoms": [
+    "gpt-oss MXFP4 experts",
+    "DeepSeek-V4 expert arena",
+    "QLoRA on an MXFP4 checkpoint",
+    "serve MXFP4 experts from the released bytes"
+   ],
+   "solution": "The loader dequantises MXFP4 (e2m1 blocks + e8m0 scales) bit-identically to the reference; enable_mxfp4_nvme_residency relocates the released bytes into an arena and serves them through grouped-nf4-gemm's native MXFP4 kernels; enable_nvme_train_residency trains against an MXFP4 arena; the native MXFP4 expert store for the paged engine is an opt-in lane.",
+   "modes": [
+    "inference",
+    "training",
+    "offload",
+    "serving"
+   ],
+   "formats": [
+    "mxfp4",
+    "nf4"
+   ],
+   "model_families": [
+    "gpt_oss",
+    "deepseek_v4 (Flash, Pro)"
+   ],
+   "environment": {
+    "python": ">=3.11 tested in CI (pyproject says >=3.9; 3.9/3.10 are not tested)",
+    "os": [
+     "Linux"
+    ],
+    "accelerator": [
+     "NVIDIA CUDA GPU, sm_80 or newer (Triton kernels via grouped-nf4-gemm)"
+    ],
+    "special_requirements": [
+     "grouped-nf4-gemm>=0.30.0 ([fast] extra; the floor is pyproject.toml's, validated by CI)",
+     "triton>=3.4 (Linux-only distribution)",
+     "an expert arena baked with grouped-nf4-gemm (nvme_bake_nf4 for NF4, the MXFP4 relocation bake for native MXFP4)",
+     "local NVMe or a fast block device; pinned host RAM for the hot tier"
+    ]
+   },
+   "install": [
+    {
+     "purpose": "minimum/reference training",
+     "command": "pip install \"experts4bit-qlora[train]\""
+    },
+    {
+     "purpose": "loader plus accelerated grouped-kernel path",
+     "command": "pip install \"experts4bit-qlora[train,fast]\""
+    }
+   ],
+   "entrypoints": [
+    "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency",
+    "experts4bit_qlora.engines.nvme_train:enable_nvme_train_residency",
+    "experts4bit_qlora.loader:load_moe_4bit_streaming",
+    "experts4bit_qlora.engines.int4_experts:enable_serve_experts_int4"
+   ],
+   "documentation": [
+    "docs/solutions/mxfp4-moe-training-and-residency.md",
+    "docs/DEEPSEEK-V4.md",
+    "docs/STATUS.md"
+   ],
+   "claim_ids": [
+    "e4b.serve.gptoss.loader-faithful",
+    "e4b.serve.deepseek-v4",
+    "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
+   ],
+   "limitations": [
+    "A uniform int4 grid cannot hold e2m1 levels: re-quantising MXFP4 experts to int4-b32 fails the quality gate (docs/STATUS.md)",
+    "gpt-oss raw-text perplexity is not an instrument for ranking an exact arm against a noisy one; the native store's speed is quoted with its quality gate open (docs/SERVING-THROUGHPUT.md)",
+    "MXFP4 arena training needs grouped-nf4-gemm>=0.12.0 (F8_E8M0 scales), below the current [fast] floor in pyproject.toml",
+    "gpt-oss expert training is EXPERIMENTAL and unlicensed. Lane tp1 (bench/train-parity-20260905/tp1/) ran grouped-nf4-gemm's run_mxfp4_20b_qlora (mxfp4_qlora.ExpertsMxfp4LoRA over the released e2m1/e8m0 bytes, faithful clamped GLU and biases) on its own text: the step-0 canary against transformers' dequant path passed, provenance pre == post held over every native expert tensor, and the loss fell -- the row is e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05. No parity pair exists, the run is never compared to the e4b arms, and nothing licenses it; the e4b enablers refuse gpt-oss (zero patched), and the arena_train=True wrap of gpt-oss computes a generic epilogue without the per-expert biases and clamp -- do not train gpt-oss experts through it",
+    "enable_mxfp4_nvme_residency REFUSES bias-carrying (gpt-oss-shaped) modules (#402): it passed no biases and defaulted to the DeepSeek-V4 epilogue, so binding a gpt-oss stack to a native-byte arena computed an unfaithful forward (#397); the native MXFP4 store for gpt-oss serving is the paged engine's route (enable_serve_experts_int4 on gpt-oss), and gpt-oss training against an arena has no route -- training_support.gpt_oss.nvme_train is refused, with that code reference"
+   ],
+   "status": "experimental",
+   "training_support": {
+    "headline_path": null,
+    "by_model_type": {
+     "gpt_oss": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.matrix.2026-09-05"
+       ],
+       "reason": "faithful dequant of the released MXFP4 bytes (e4b.serve.gptoss.loader-faithful), re-quantised to NF4 for the convenient path"
+      },
+      "reference_train": {
+       "status": "refused",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.attn_only.2026-09-05"
+       ],
+       "reason": "no ExpertsLoRA over the bare experts under the e4b path; attention-only QLoRA trains"
+      },
+      "fast_train": {
+       "status": "refused",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.fused.2026-09-05"
+       ],
+       "reason": "enable_fast_train returns zero on gpt-oss"
+      },
+      "batched_train": {
+       "status": "refused",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.batched.2026-09-05"
+       ],
+       "reason": "enable_batched_train returns zero on gpt-oss"
+      },
+      "nvme_train": {
+       "status": "refused",
+       "reason": "enable_mxfp4_nvme_residency refuses bias-carrying (gpt-oss-shaped) modules: before #402 it passed no biases and defaulted to the DeepSeek-V4 epilogue, an unfaithful forward (#397); enable_nvme_train_residency refuses modules that are not ExpertsLoRA-wrapped, which gpt-oss's bare experts are not; the arena_train=True wrap of gpt-oss computes a generic epilogue without the biases and clamp and is refused on structure -- no NVMe training route exists for this family",
+       "code_ref": "experts4bit_qlora.engines.nvme_experts:enable_mxfp4_nvme_residency"
+      },
+      "native_mxfp4_train": {
+       "status": "experimental",
+       "reason": "tp1: grouped-nf4-gemm's run_mxfp4_20b_qlora over the released e2m1/e8m0 bytes on its own text -- step-zero canary against transformers' dequant path passed, provenance pre == post held, the loss fell; EXPERIMENTAL, never licensed, no parity pair",
+       "claim_ids": [
+        "e4b.train.parity.tp1.gptoss.mxfp4.2026-09-05"
+       ]
+      }
+     },
+     "deepseek_v4": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.serve.deepseek-v4"
+       ],
+       "reason": "the MXFP4 experts and the FP8 dense side load faithfully (serving receipt); the direct quantising path is the same loader"
+      },
+      "reference_train": {
+       "status": "not_tested",
+       "reason": "no training receipt in the register"
+      },
+      "fast_train": {
+       "status": "not_tested",
+       "reason": "no training receipt; the base supplies its clamped epilogue via _apply_gate, so the fused path is admitted by structure"
+      },
+      "batched_train": {
+       "status": "not_tested",
+       "reason": "no training receipt"
+      },
+      "nvme_train": {
+       "status": "experimental",
+       "reason": "training against a relocated MXFP4 arena has a CPU spec and a bench directory (bench/mxfp4-arena-train/) but no entry in the claims register"
+      },
+      "native_mxfp4_train": {
+       "status": "not_tested",
+       "reason": "the kernel package's experimental runner is gpt-oss-specific"
+      }
+     }
+    }
+   }
+  }
+ ]
 }
 
 ## Source: docs/STATUS.md (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md)
@@ -2593,28 +2597,34 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
 
 ## What is open
 
-- **The licensed serving pack does not reproduce bit-for-bit across boxes.**
-  Lane p37 (`bench/h2h-20260905/p37/`) re-derived Qwen3's streamed 64k
-  calibrated pack with the same recipe on another host and read 11522 gptq /
-  766 rtn expert matrices against the licensed 11512 / 776 (bo6b, bo6c,
-  bo7): ten of 12,288 matrices crossed the `min_rows` threshold the other
-  way — and the registered K8 gate run on that pack (amendment 3,
-  `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`) **fails on C4
-  validation: +0.1093 ppl against the +0.05 budget** (wikitext −0.0230,
-  pass), where the licensed pack read −0.0662 on the same window and the
-  two boxes' NF4 references agree to 0.0002 ppl. The reference travels; the
-  calibrated pack does not: the streamed calibration recipe does not
-  reproduce its licence across hosts. bo6c's licence stands on its box as
-  measured; what is open is the recipe's host-dependence — same checkpoint,
-  same text, same knobs, a different pack and a different verdict on
-  another host ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
-  The loader now pins licensed bytes: `enable_serve_experts_int4_calibrated`
-  given an `expected_fingerprint` loads a pack-manifest artifact and
-  **refuses** a mismatch — it never rebuilds from the recipe on that path.
-  No licensed artifact hash is in the register yet (the bo6c bytes were not
-  retained); existing licence rows carry no `pack_fingerprint` until a
-  replacement pack is pre-registered, K8'd, and published. Counts stay
-  diagnostics. `min_rows`, damping, and the K8 budget are unchanged.
+- **The licensed serving pack is now artifact-backed, and the recipe's
+  cross-host reproduction is narrower than it looked.** Lane P55x
+  (`bench/p55x/`, 2026-09-22) built Qwen3's streamed 64k calibrated pack,
+  dumped it as a hash-pinned artifact, and ran the registered K8 gate **on
+  those bytes loaded back by fingerprint** — the path a user gets. It
+  **passes both texts**: wikitext −0.05275 ppl, c4val1 −0.06622, against an
+  NF4 reference on that box that is bit-identical to bo6c's. `pack_fingerprint
+  sha256:0c9955a9f06d8326…` is in the register, the bytes are retained, and
+  they were verified after transfer by two independent implementations on two
+  machines. A loader given that fingerprint refuses anything else and never
+  rebuilds from the recipe, so the licence now travels as bytes
+  ([`e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22`](claims.json)).
+  That pack is also **byte-identical to the one lane P39 built on a different
+  5090 on 2026-09-10 under e4b 0.35.3**, where P55x ran under 0.36.4 — so four
+  builds across at least three boxes and a release boundary agree on every
+  byte, and **P37's divergence (11522/766, c4val1 +0.109) is an outlier rather
+  than the rule**. The open question is no longer whether the recipe
+  reproduces but what was different about that host
+  ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
+  Two things stay open and are not small. **The fingerprint covers the experts
+  only**: `engines/int4_attn_calib.py` has no serialisation, so the 192
+  calibrated attention projections are re-derived on every load — and the same
+  pinned expert bytes with RTN attention **fail** c4val1 at +0.13237, so that
+  unpinnable half is the half carrying the quality. And bo6c's own row keeps no
+  fingerprint, because its bytes were not retained; it stays active rather than
+  superseded, since the bo7 census rows take their licence from it and nothing
+  establishes that their pack is this pack. `min_rows`, damping and the K8
+  budget are unchanged.
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the
@@ -3467,6 +3477,10 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p54.qwen3.b16.fqkv.5090.2026-09-21 [measured]: Lane P54: batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v FUSED into one Int4Linear: 11.197 ms/step (median of two interleaved draws: 11.194 / 11.200), 1429.0 tok/s on this box.
 - e4b.serve.p54.qwen3.b1.control.5090.2026-09-21 [measured]: Lane P54: single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v as three projections: 4.210 ms/step (median of two interleaved draws: 4.209 / 4.210), 237.6 tok/s on this box.
 - e4b.serve.p54.qwen3.b1.fqkv.5090.2026-09-21 [measured]: Lane P54: single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v FUSED into one Int4Linear: 3.693 ms/step (median of two interleaved draws: 3.693 / 3.694), 270.8 tok/s on this box.
+- e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22 [measured]: Qwen/Qwen3-30B-A3B's calibrated serving stack PASSES the registered K8 gate on both texts when the int4 expert pack is loaded BY FINGERPRINT from a hash-pinned artifact rather than re-derived: wikitext -0.05275 ppl, c4val1 -0.06622 ppl against the same box's NF4, both improving and so corroborated on two texts. The licence is a property of these bytes -- pack_fingerprint sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 -- and they are retained, which is what #405 was open on.
+- e4b.serve.p55x.qwen3.rtn-attn.k8.2026-09-22 [measured]: The same artifact-pinned int4 expert pack with UNCALIBRATED (RTN) int4 attention instead of calibrated FAILS the registered K8 gate: wikitext -0.06259 ppl but c4val1 +0.13237, outside the +0.05 budget. The calibrated attention component is load-bearing for C4.
+- e4b.serve.p55x.qwen3.pack-deterministic-samebox.2026-09-22 [measured]: The streamed 64k calibration recipe is BYTE-deterministic on one box: two independent builds in one session produced the identical pack_fingerprint sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42, the identical method_map_hash and the identical row-count-vector hash, 11512 gptq / 776 rtn both times.
+- e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22 [measured]: The streamed 64k pack reproduces BYTE-for-byte across boxes and across a release boundary: this build's pack_fingerprint sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 equals the one lane P39 recorded on 2026-09-10 on a different rented 5090 (instance 50509727) under e4b 0.35.3, where this ran under 0.36.4. P37's divergence (11522/766) is therefore an outlier, not the rule.
 
 Open items (no evidence either way):
 
@@ -3474,4 +3488,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(198 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(202 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

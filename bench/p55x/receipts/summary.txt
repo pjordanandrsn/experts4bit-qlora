@@ -1,0 +1,33 @@
+k8 nf4 src=wikitext kind=nf4 rc=0 in 109s K8_PPL steps=2048 nll=1.85939 ppl=6.41984 compute=fp8 sha=9ef10d760ad9 out=/root/p55x/qwen3_ppl_nf4_wikitext.json
+
+k8 nf4 src=c4val1 kind=nf4 rc=0 in 102s K8_PPL steps=2048 nll=2.80318 ppl=16.49703 compute=fp8 sha=4bcb55179b96 out=/root/p55x/qwen3_ppl_nf4_c4val1.json
+
+INT4EXP licbuild_wikitext INT4EXP calibrated experts: 1954 gptq / 94 rtn (min_rows=32) over 8 layers
+INT4EXP licbuild_wikitext INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+ATTNINT4 licbuild_wikitext ATTNINT4 calibrated: 192 projections
+k8 licbuild src=wikitext kind=calibattn rc=0 in 1832s K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/p55x/qwen3_ppl_licbuild_wikitext.json
+
+ARTIFACT1 sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42
+ARTIFACT1_SIZE 16G	/root/p55x/artifact1
+ATTNINT4 lic_wikitext ATTNINT4 calibrated: 192 projections
+k8 lic src=wikitext kind=calibattn rc=0 in 313s K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/p55x/qwen3_ppl_lic_wikitext.json
+
+ATTNINT4 lic_c4val1 ATTNINT4 calibrated: 192 projections
+k8 lic src=c4val1 kind=calibattn rc=0 in 306s K8_PPL steps=2048 nll=2.79916 ppl=16.43081 compute=fp8 sha=4bcb55179b96 out=/root/p55x/qwen3_ppl_lic_c4val1.json
+
+ATTNINT4 licrtn_wikitext ATTNINT4 rtn: 192 projections
+k8 licrtn src=wikitext kind=rtnattn rc=0 in 130s K8_PPL steps=2048 nll=1.84960 ppl=6.35725 compute=fp8 sha=9ef10d760ad9 out=/root/p55x/qwen3_ppl_licrtn_wikitext.json
+
+ATTNINT4 licrtn_c4val1 ATTNINT4 rtn: 192 projections
+k8 licrtn src=c4val1 kind=rtnattn rc=0 in 131s K8_PPL steps=2048 nll=2.81117 ppl=16.62939 compute=fp8 sha=4bcb55179b96 out=/root/p55x/qwen3_ppl_licrtn_c4val1.json
+
+GATE lic=PASS licrtn=FAIL
+INT4EXP licbuild2_wikitext INT4EXP calibrated experts: 1954 gptq / 94 rtn (min_rows=32) over 8 layers
+INT4EXP licbuild2_wikitext INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+ATTNINT4 licbuild2_wikitext ATTNINT4 calibrated: 192 projections
+k8 licbuild2 src=wikitext kind=calibattn rc=0 in 1832s K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/p55x/qwen3_ppl_licbuild2_wikitext.json
+
+ARTIFACT2 sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 SAME_BYTES
+DETERMINISM DETERMINISTIC counts ['gptq', 'rtn'] ['gptq', 'rtn']
+ARTIFACT2_PAYLOADS_REMOVED (fingerprint recorded; bytes not retained -- artifact1 is the one kept)
+ARMS_WITH_RECEIPTS 8
