@@ -1,0 +1,445 @@
+{
+ "batch": 16,
+ "top_k": 8,
+ "num_experts": 128,
+ "layers": 48,
+ "steps": 0,
+ "mean_distinct_over_layers": null,
+ "min_layer_mean": null,
+ "max_layer_mean": null,
+ "uniform_random_expectation": 82.42251130217052,
+ "per_layer": [
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  },
+  {
+   "steps": 0,
+   "mean_distinct": null,
+   "min": null,
+   "max": null,
+   "series": [],
+   "raw_calls": 124,
+   "prefill_calls": 124
+  }
+ ]
+}

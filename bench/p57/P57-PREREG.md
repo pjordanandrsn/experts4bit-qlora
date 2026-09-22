@@ -45,3 +45,18 @@ One RTX 5090 (verified/secure), ≤ 2.5 h, estimate ≤ $1.65 at $0.66/h (12 tim
 ## Amendments
 
 (none yet)
+
+
+---
+
+## Amendment 1 (2026-09-22 ~14:20Z — after the P1/P2/P3/P5 data were read, BEFORE any P4 data exists)
+
+Lane `p57-5090-2` ran every timed arm clean (12 receipts, A/A within 0.01 ms) and the untimed distinct-expert arm **failed without measuring**: `step_decomp.py … --gen-tokens 64` at B=16 leaves the bv3 stage a **6-step window** (the harness reserves ~58 generated tokens for warm-up and capture; P54's series arm used 128 → 70 steps) and its own guard fired — `AssertionError: window too small for bv3 (6)`. The hook still dumped `distinct_experts_b16.json` with `steps: 0`, so the runner's `[ -s … ]` check passed (a check weaker than the property it guards — the file existed, the measurement did not) and the lane exited rc=0; the reducer refused the file, so **P4 is UNREAD**, not misread. The dry-run rule was applied to the hook and the counter on a tiny model, not to the harness's window arithmetic at the registered token count — the same class of gap as P54's series arm.
+
+**Changes, before the re-run:**
+1. The distinct arm passes **`--gen-tokens 128`** (P54's series arm's value; 70 decode steps counted).
+2. The runner refuses a dump with `steps: 0` as **rc 45** (`DISTINCT EMPTY`), so an empty measurement can no longer exit green.
+3. **`P57_ONLY_DISTINCT=1`** skips the twelve timed arms (already read from `p57-5090-2`, receipts in `bench/p57/receipts/`), so the re-run — lane **`p57b-5090`**, est ≤ $0.35, guard 45 min (install + fetch + bake ≈ 20 min, the arm ≈ 5 min) — measures P4 and nothing else. Its P4 prediction is unchanged (mean distinct experts per layer per decode step ≤ 80; uniform expectation 82.4 for E=128, k=8, B=16 as the hook computes it — the prereg's 80.9 was an arithmetic slip; the soft prior is unchanged in spirit: real routing is skewed below uniform).
+4. **STOP-1 reference corrected:** this pre-registration compared `int4_b1` (fused q/k/v, per the arm table) against P54's **unfused** control 4.21 ms; P54's fused B=1 median was **3.693 ms**. On `p57-5090-2` the fused B=1 stack read **4.236 ms**, +14.7 % over P54's fused arm on P54's box — outside ±8 %, so **no B=1 number from this box is compared to P54's** (this lane has no unfused B=1 arm to say whether the fusion's saving or the whole step moved); the B=16 control reproduced within +1.4 %. Within-box ratios are the position either way (P37 rule 1).
+
+Nothing above changes a registered prediction's band or the decision rule; the lane's P1/P2/P3/P5 read stands as taken.

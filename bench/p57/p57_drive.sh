@@ -43,7 +43,7 @@ SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=
 SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
 POLL=${P57_POLL_S:-60}; W=/root/p57
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="P57_RUN_ID=$RUN_ID P57_RUN_NONCE=$NONCE P57_DEADLINE_EPOCH=$DEADLINE P57_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA "
+PASS="P57_RUN_ID=$RUN_ID P57_RUN_NONCE=$NONCE P57_DEADLINE_EPOCH=$DEADLINE P57_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${P57_ONLY_DISTINCT:+P57_ONLY_DISTINCT=$P57_ONLY_DISTINCT }"
 if [ "${P57_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p57_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p57"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); receipts -> $RUN_DIR/p57; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook" || { say "stage failed: remote cleanup"; exit 20; }

@@ -140,6 +140,10 @@ arm(){ local NAME=$1 B=$2 SUFFIX=$3 CENSUS=$4 FLAGS=$5; shift 5; local out=$W/lo
   P57_CENSUS_OUT=$out P57_ARM_SUFFIX=$SUFFIX P57_EXTRA_FLAGS=$FLAGS speed_arm "$NAME" "$B" 1 0 E4B_SERVE_ATTN_INT4=1 "$@"
 }
 rc_any=0
+if [ "${P57_ONLY_DISTINCT:-0}" = 1 ]; then
+  say "P57_ONLY_DISTINCT=1 (amendment 1): the twelve timed arms were read from p57-5090-2 (bench/p57/receipts/); running the distinct arm only"
+  echo "TIMED ARMS SKIPPED (P57_ONLY_DISTINCT=1, amendment 1)" >> summary.txt
+else
 # (a) K17 P4 -- A B A B at B=1 on the fused-qkv stack, then A B A B at B=16 on the unfused stack
 arm int4_b1        1  ""  1 --fuse-qkv GNF4_GEMV_FUSED_REDUCE=0 || rc_any=$?
 arm int4_b1_fr     1  ""  1 --fuse-qkv GNF4_GEMV_FUSED_REDUCE=1 || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }
@@ -168,6 +172,7 @@ for n in int4_b1 int4_b1_fr int4_b16 int4_b16_fr int4_b16_nor2 int4_b16_fqkv_nor
   if [ -s "$W/logs/census_$n.txt" ]; then echo "CENSUS $n $(wc -l < $W/logs/census_$n.txt) rows" >> summary.txt
   else echo "CENSUS $n MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=40; fi
 done
+fi
 # (c) the distinct-expert count, UNTIMED and LAST: --amort off (the captured B>1 stage refuses --amort on, P54's
 # lesson), the P57 hook attaches the router counter after enable_hybrid_tier and dumps P57_DISTINCT_OUT at exit;
 # E4B_FUSE_ROUTER_EPI=0 so the router module is actually called. Its step time is recorded but never quoted.
@@ -176,12 +181,15 @@ if can_run 900 int4_b16_distinct; then
   env E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=0 \
     P57_DISTINCT_OUT=$W/distinct_experts_b16.json P57_BATCH=16 GNF4_GEMV_FUSED_REDUCE=0 \
     perl -e "alarm $(arm_alarm); exec @ARGV" python $W/step_decomp.py --model "$MID" --arena "$QA" --calib $W/calib.json --placement-override all-vram --amort off \
-      --batch 16 --prompt-len 512 --gen-tokens 64 --b1d-loop graph --b1d-timed --no-fuse-qkv \
+      --batch 16 --prompt-len 512 --gen-tokens 128 --b1d-loop graph --b1d-timed --no-fuse-qkv \
       --out $W/e4b_b16_int4_b16_distinct.json >> logs/run_int4_b16_distinct.log 2>&1
   rc_d=$?; vram_stop $sp
   grep -aE "P57 HOOK|P57_DISTINCT_OUT|B1D_TIMED|BV3_|REFUSED|Error" logs/run_int4_b16_distinct.log | tail -4 | sed "s/^/    /"
   { echo -n "arm int4_b16_distinct B=16 UNTIMED rc=$rc_d "; grep -aE "P57_DISTINCT_OUT" logs/run_int4_b16_distinct.log | tail -1 | cut -c1-200; echo; } >> summary.txt
   [ -s "$W/distinct_experts_b16.json" ] || { echo "DISTINCT MISSING" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=45; }
+  # amendment 1: a dump with steps=0 is a file, not a measurement -- p57-5090-2 exited green on one (gen-tokens 64 -> a 6-step window)
+  python -c "import json,sys; d=json.load(open('$W/distinct_experts_b16.json')); sys.exit(0 if d.get('steps',0) > 0 else 1)" 2>/dev/null \
+    || { echo "DISTINCT EMPTY (steps=0): not a measurement" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=45; }
 fi
 say "----- summary -----"; cat summary.txt
 finish "$rc_any"

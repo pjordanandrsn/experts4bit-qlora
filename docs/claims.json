@@ -5623,6 +5623,156 @@
       ],
       "pack_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
       "notes": "NARROWS #405 rather than closing it. The issue's framing -- that the streamed recipe does not carry its licence across hosts -- was drawn from P37 alone. Four builds across at least three boxes now agree on every byte (P39 box 1, P39 box 2, and this lane's two), so the open question becomes what was different about P37's host, not whether the recipe reproduces. The REMEDY is unchanged: a licence still travels as bytes, because nothing here predicts which box is the next P37. Says nothing about bo6c's pack, whose bytes were not retained and whose identity is therefore unverifiable."
+    },
+    {
+      "id": "e4b.serve.p57.qwen3.b1.control.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P57 (K17's fused split-K reduce OFF vs ON at B=1 on the fused-q/k/v int4 stack): single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b1` (--fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=0): 4.236 ms/step (median of two interleaved draws: 4.236 / 4.235), 236.1 tok/s on this box.",
+      "value": 4.236,
+      "unit": "ms/step (median of two draws, same box)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries ~8.5% inter-box dispersion, so only same-box ratios are quoted",
+      "conditions": "B=1, --fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=0; P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route at its auto default; E4B_FUSE_T1_GLUE=1 E4B_FUSE_ROUTER_EPI=1; each timed arm drawn twice, interleaved (A B A B), median quoted; census (8 profiled replays after the timed window) on the first draw; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p57/RESULTS-p57.md",
+        "bench/p57/P57-PREREG.md",
+        "bench/p57/receipts/e4b_b1_int4_b1.json",
+        "bench/p57/receipts/e4b_b1_int4_b1_r2.json",
+        "bench/p57/receipts/logs/census_int4_b1.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p57-5090-2/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box pair: control 4.236 vs fr 4.274 ms/step = saving -0.038 ms (-0.9 %); verdict per the registered rule: REFUTED (saving -0.038 < 0.08). Census (first draws): target family calls/step [192.0, 0]; other families moved > 5 %: ['int4 expert GEMV']. Tokens fused-vs-control: draw 1 1/1 sequences identical. COMPARATOR: vs e4b's own control on the same box; no field engine on this row. No default changes from this row."
+    },
+    {
+      "id": "e4b.serve.p57.qwen3.b1.fr.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P57 (K17's fused split-K reduce OFF vs ON at B=1 on the fused-q/k/v int4 stack): single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b1_fr` (--fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=1 (K17's fused split-K reduce)): 4.274 ms/step (median of two interleaved draws: 4.274 / 4.274), 234.0 tok/s on this box.",
+      "value": 4.274,
+      "unit": "ms/step (median of two draws, same box)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries ~8.5% inter-box dispersion, so only same-box ratios are quoted",
+      "conditions": "B=1, --fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=1 (K17's fused split-K reduce); P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route at its auto default; E4B_FUSE_T1_GLUE=1 E4B_FUSE_ROUTER_EPI=1; each timed arm drawn twice, interleaved (A B A B), median quoted; census (8 profiled replays after the timed window) on the first draw; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p57/RESULTS-p57.md",
+        "bench/p57/P57-PREREG.md",
+        "bench/p57/receipts/e4b_b1_int4_b1_fr.json",
+        "bench/p57/receipts/e4b_b1_int4_b1_fr_r2.json",
+        "bench/p57/receipts/logs/census_int4_b1_fr.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p57-5090-2/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box pair: control 4.236 vs fr 4.274 ms/step = saving -0.038 ms (-0.9 %); verdict per the registered rule: REFUTED (saving -0.038 < 0.08). Census (first draws): target family calls/step [192.0, 0]; other families moved > 5 %: ['int4 expert GEMV']. Tokens fused-vs-control: draw 1 1/1 sequences identical. COMPARATOR: vs e4b's own control on the same box; no field engine on this row. No default changes from this row."
+    },
+    {
+      "id": "e4b.serve.p57.qwen3.b16.control.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P57 (K17's fused split-K reduce OFF vs ON at B=16 on the unfused int4 stack): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=0): 11.578 ms/step (median of two interleaved draws: 11.576 / 11.580), 1381.9 tok/s on this box.",
+      "value": 11.578,
+      "unit": "ms/step (median of two draws, same box)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries ~8.5% inter-box dispersion, so only same-box ratios are quoted",
+      "conditions": "B=16, --no-fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=0; P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route at its auto default; E4B_FUSE_T1_GLUE=1 E4B_FUSE_ROUTER_EPI=1; each timed arm drawn twice, interleaved (A B A B), median quoted; census (8 profiled replays after the timed window) on the first draw; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p57/RESULTS-p57.md",
+        "bench/p57/P57-PREREG.md",
+        "bench/p57/receipts/e4b_b16_int4_b16.json",
+        "bench/p57/receipts/e4b_b16_int4_b16_r2.json",
+        "bench/p57/receipts/logs/census_int4_b16.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p57-5090-2/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box pair: control 11.578 vs fr 11.796 ms/step = saving -0.217 ms (-1.9 %); verdict per the registered rule: REFUTED (saving -0.217 < 0.05). Census (first draws): target family calls/step [96.0, 0]; other families moved > 5 %: ['int4 expert GEMV']. Tokens fused-vs-control: draw 1 16/16 sequences identical. COMPARATOR: vs e4b's own control on the same box; no field engine on this row. No default changes from this row."
+    },
+    {
+      "id": "e4b.serve.p57.qwen3.b16.fr.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P57 (K17's fused split-K reduce OFF vs ON at B=16 on the unfused int4 stack): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_fr` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=1 (K17's fused split-K reduce)): 11.796 ms/step (median of two interleaved draws: 11.791 / 11.800), 1356.4 tok/s on this box.",
+      "value": 11.796,
+      "unit": "ms/step (median of two draws, same box)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries ~8.5% inter-box dispersion, so only same-box ratios are quoted",
+      "conditions": "B=16, --no-fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=1 (K17's fused split-K reduce); P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route at its auto default; E4B_FUSE_T1_GLUE=1 E4B_FUSE_ROUTER_EPI=1; each timed arm drawn twice, interleaved (A B A B), median quoted; census (8 profiled replays after the timed window) on the first draw; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p57/RESULTS-p57.md",
+        "bench/p57/P57-PREREG.md",
+        "bench/p57/receipts/e4b_b16_int4_b16_fr.json",
+        "bench/p57/receipts/e4b_b16_int4_b16_fr_r2.json",
+        "bench/p57/receipts/logs/census_int4_b16_fr.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p57-5090-2/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box pair: control 11.578 vs fr 11.796 ms/step = saving -0.217 ms (-1.9 %); verdict per the registered rule: REFUTED (saving -0.217 < 0.05). Census (first draws): target family calls/step [96.0, 0]; other families moved > 5 %: ['int4 expert GEMV']. Tokens fused-vs-control: draw 1 16/16 sequences identical. COMPARATOR: vs e4b's own control on the same box; no field engine on this row. No default changes from this row."
+    },
+    {
+      "id": "e4b.serve.p57.qwen3.b16.nor2_control.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P57 (P54's B=16 divergence split: unfused vs fused q/k/v with the round-2 glue OFF on both legs): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_nor2` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF)): 13.266 ms/step (median of two interleaved draws: 13.264 / 13.269), 1206.1 tok/s on this box.",
+      "value": 13.266,
+      "unit": "ms/step (median of two draws, same box)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries ~8.5% inter-box dispersion, so only same-box ratios are quoted",
+      "conditions": "B=16, --no-fuse-qkv E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF); P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route at its auto default; E4B_FUSE_T1_GLUE=1 E4B_FUSE_ROUTER_EPI=1; each timed arm drawn twice, interleaved (A B A B), median quoted; census (8 profiled replays after the timed window) on the first draw; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p57/RESULTS-p57.md",
+        "bench/p57/P57-PREREG.md",
+        "bench/p57/receipts/e4b_b16_int4_b16_nor2.json",
+        "bench/p57/receipts/e4b_b16_int4_b16_nor2_r2.json",
+        "bench/p57/receipts/logs/census_int4_b16_nor2.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p57-5090-2/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box pair: control 13.266 vs nor2_fqkv 12.929 ms/step = saving 0.337 ms (2.5 %); verdict per the registered rule: parity read (saving 0.337 ms is incidental: the split asks about TOKENS, see P3). Census (first draws): target family calls/step [192.0, 96.0]; other families moved > 5 %: none. Tokens fused-vs-control: draw 1 1/16 sequences identical, first divergences [['1', 41], ['2', 3], ['3', 35], ['4', 38], ['5', 8], ['6', 2], ['7', 17], ['8', 10], ['9', 8], ['10', 20], ['11', 6], ['12', 25], ['13', 14], ['14', 14], ['15', 6]]. COMPARATOR: vs e4b's own control on the same box; no field engine on this row. No default changes from this row."
+    },
+    {
+      "id": "e4b.serve.p57.qwen3.b16.nor2_fqkv.5090.2026-09-22",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P57 (P54's B=16 divergence split: unfused vs fused q/k/v with the round-2 glue OFF on both legs): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_fqkv_nor2` (--fuse-qkv (Int4Linear.fuse, #651) E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF)): 12.929 ms/step (median of two interleaved draws: 12.932 / 12.927), 1237.5 tok/s on this box.",
+      "value": 12.929,
+      "unit": "ms/step (median of two draws, same box)",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 52066091, AMD EPYC); the 5090 class carries ~8.5% inter-box dispersion, so only same-box ratios are quoted",
+      "conditions": "B=16, --fuse-qkv (Int4Linear.fuse, #651) E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF); P42's census protocol (bench/p39/step_decomp.py): 512-token prompt, 128 generated, graph loop, 127 (B=1) / 70 (B=16) timed steps, fp8 paged KV, placement all-vram, --amort off; RTN int4 experts (E4B_SERVE_EXP_INT4=1) + uncalibrated int4 attention (E4B_SERVE_ATTN_INT4=1, 192 projections), K16 small-M route at its auto default; E4B_FUSE_T1_GLUE=1 E4B_FUSE_ROUTER_EPI=1; each timed arm drawn twice, interleaved (A B A B), median quoted; census (8 profiled replays after the timed window) on the first draw; e4b 4cab05a81dcf, grouped-nf4-gemm 65cb10410239 (K17 merge)",
+      "measured_on": "2026-09-22",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p57/RESULTS-p57.md",
+        "bench/p57/P57-PREREG.md",
+        "bench/p57/receipts/e4b_b16_int4_b16_fqkv_nor2.json",
+        "bench/p57/receipts/e4b_b16_int4_b16_fqkv_nor2_r2.json",
+        "bench/p57/receipts/logs/census_int4_b16_fqkv_nor2.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-22/p57-5090-2/ (receipt.json, teardown-proof.json, full fetched run)"
+      ],
+      "notes": "Same-box pair: control 13.266 vs nor2_fqkv 12.929 ms/step = saving 0.337 ms (2.5 %); verdict per the registered rule: parity read (saving 0.337 ms is incidental: the split asks about TOKENS, see P3). Census (first draws): target family calls/step [192.0, 96.0]; other families moved > 5 %: none. Tokens fused-vs-control: draw 1 1/16 sequences identical, first divergences [['1', 41], ['2', 3], ['3', 35], ['4', 38], ['5', 8], ['6', 2], ['7', 17], ['8', 10], ['9', 8], ['10', 20], ['11', 6], ['12', 25], ['13', 14], ['14', 14], ['15', 6]]. COMPARATOR: vs e4b's own control on the same box; no field engine on this row. No default changes from this row."
     }
   ]
 }

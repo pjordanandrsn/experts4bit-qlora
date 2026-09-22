@@ -1,0 +1,1369 @@
+{
+ "pairs": {
+  "b1_fr": {
+   "control": {
+    "draws": [
+     4.236145582677166,
+     4.235417511811024
+    ],
+    "median": 4.235781547244095,
+    "n": 2
+   },
+   "fused": {
+    "draws": [
+     4.273702929133858,
+     4.274316937007874
+    ],
+    "median": 4.274009933070866,
+    "n": 2
+   },
+   "batch": 1,
+   "arms": [
+    "int4_b1",
+    "int4_b1_fr"
+   ],
+   "saving_ms": -0.03822838582677157,
+   "verdict": "REFUTED (saving -0.038 < 0.08)",
+   "census": {
+    "families": {
+     "k16 small-M GEMM": {
+      "control_ms": 0,
+      "fused_ms": 0,
+      "rel": null,
+      "control_calls": 0,
+      "fused_calls": 0
+     },
+     "int4 expert GEMV": {
+      "control_ms": 1.415,
+      "fused_ms": 1.642375,
+      "rel": 0.16068904593639569,
+      "control_calls": 192.0,
+      "fused_calls": 192.0
+     },
+     "bf16 GEMM (cutlass/cublas)": {
+      "control_ms": 0.49349449999999995,
+      "fused_ms": 0.492855625,
+      "rel": -0.0012945939620399574,
+      "control_calls": 49.0,
+      "fused_calls": 49.0
+     },
+     "fp8 paged decode": {
+      "control_ms": 0.34675,
+      "fused_ms": 0.346625,
+      "rel": -0.0003604902667627577,
+      "control_calls": 48.0,
+      "fused_calls": 48.0
+     },
+     "index / gather / scatter": {
+      "control_ms": 0.300495375,
+      "fused_ms": 0.300909625,
+      "rel": 0.0013785569911017928,
+      "control_calls": 193.0,
+      "fused_calls": 193.0
+     },
+     "activation quant": {
+      "control_ms": 0.157875,
+      "fused_ms": 0.15925,
+      "rel": 0.008709422011084815,
+      "control_calls": 192.0,
+      "fused_calls": 192.0
+     },
+     "split-K reduce": {
+      "control_ms": 0.317769875,
+      "fused_ms": 0.005036,
+      "rel": -0.9841520534317484,
+      "control_calls": 193.0,
+      "fused_calls": 1.0
+     },
+     "rope/norm folds": {
+      "control_ms": 0.24140875,
+      "fused_ms": 0.24141524999999997,
+      "rel": 2.6925287504967683e-05,
+      "control_calls": 193.0,
+      "fused_calls": 193.0
+     }
+    },
+    "replays": [
+     8,
+     8
+    ],
+    "top_control": [
+     {
+      "name": "_gemv_int4_b32",
+      "self_ms": 11.32,
+      "calls": 1536,
+      "ms_per_step": 1.415,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+      "self_ms": 3.03,
+      "calls": 8,
+      "ms_per_step": 0.37875,
+      "calls_per_step": 1.0
+     },
+     {
+      "name": "_fp8_paged_decode_split_f8dot",
+      "self_ms": 2.774,
+      "calls": 384,
+      "ms_per_step": 0.34675,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_reduce_partials",
+      "self_ms": 2.502,
+      "calls": 1536,
+      "ms_per_step": 0.31275,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "_quant_x_rows",
+      "self_ms": 1.263,
+      "calls": 1536,
+      "ms_per_step": 0.157875,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 1.112,
+      "calls": 392,
+      "ms_per_step": 0.139,
+      "calls_per_step": 49.0
+     },
+     {
+      "name": "_router_epilogue",
+      "self_ms": 1.078,
+      "calls": 384,
+      "ms_per_step": 0.13475,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_fp8_append_t1_side",
+      "self_ms": 1.066,
+      "calls": 768,
+      "ms_per_step": 0.13325,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+      "self_ms": 0.917956,
+      "calls": 384,
+      "ms_per_step": 0.1147445,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_rope_norm_heads",
+      "self_ms": 0.8830610000000001,
+      "calls": 768,
+      "ms_per_step": 0.11038262500000001,
+      "calls_per_step": 96.0
+     }
+    ],
+    "top_fused": [
+     {
+      "name": "_gemv_int4_b32",
+      "self_ms": 13.139,
+      "calls": 1536,
+      "ms_per_step": 1.642375,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+      "self_ms": 3.025,
+      "calls": 8,
+      "ms_per_step": 0.378125,
+      "calls_per_step": 1.0
+     },
+     {
+      "name": "_fp8_paged_decode_split_f8dot",
+      "self_ms": 2.773,
+      "calls": 384,
+      "ms_per_step": 0.346625,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_quant_x_rows",
+      "self_ms": 1.274,
+      "calls": 1536,
+      "ms_per_step": 0.15925,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 1.116,
+      "calls": 392,
+      "ms_per_step": 0.1395,
+      "calls_per_step": 49.0
+     },
+     {
+      "name": "_router_epilogue",
+      "self_ms": 1.079,
+      "calls": 384,
+      "ms_per_step": 0.134875,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_fp8_append_t1_side",
+      "self_ms": 1.066,
+      "calls": 768,
+      "ms_per_step": 0.13325,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "void at::native::vectorized_elementwise_kernel<4, at...",
+      "self_ms": 0.992715,
+      "calls": 1544,
+      "ms_per_step": 0.124089375,
+      "calls_per_step": 193.0
+     },
+     {
+      "name": "std::enable_if<!(false), void>::type internal::gemvx...",
+      "self_ms": 0.917845,
+      "calls": 384,
+      "ms_per_step": 0.114730625,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_rope_norm_heads",
+      "self_ms": 0.882968,
+      "calls": 768,
+      "ms_per_step": 0.110371,
+      "calls_per_step": 96.0
+     }
+    ]
+   },
+   "p3_calls": [
+    192.0,
+    0
+   ],
+   "p3_calls_ok": true,
+   "p3_target_family": "split-K reduce",
+   "p3_others_moved_over_5pct": [
+    "int4 expert GEMV"
+   ],
+   "tokens": {
+    "draw1_control_vs_fused": {
+     "sequences": 1,
+     "identical": 1,
+     "first_divergences": [],
+     "all_identical": true
+    },
+    "draw2_control_vs_fused": {
+     "sequences": 1,
+     "identical": 1,
+     "first_divergences": [],
+     "all_identical": true
+    },
+    "aa_control_draw1_vs_draw2": {
+     "sequences": 1,
+     "identical": 1,
+     "first_divergences": [],
+     "all_identical": true
+    }
+   }
+  },
+  "b16_fr": {
+   "control": {
+    "draws": [
+     11.576411499999999,
+     11.58038272857143
+    ],
+    "median": 11.578397114285714,
+    "n": 2
+   },
+   "fused": {
+    "draws": [
+     11.791443628571429,
+     11.799570557142857
+    ],
+    "median": 11.795507092857143,
+    "n": 2
+   },
+   "batch": 16,
+   "arms": [
+    "int4_b16",
+    "int4_b16_fr"
+   ],
+   "saving_ms": -0.217109978571429,
+   "verdict": "REFUTED (saving -0.217 < 0.05)",
+   "census": {
+    "families": {
+     "k16 small-M GEMM": {
+      "control_ms": 1.295875,
+      "fused_ms": 1.308625,
+      "rel": 0.009838911932092074,
+      "control_calls": 192.0,
+      "fused_calls": 192.0
+     },
+     "int4 expert GEMV": {
+      "control_ms": 6.340125,
+      "fused_ms": 6.781125,
+      "rel": 0.06955698822972745,
+      "control_calls": 96.0,
+      "fused_calls": 96.0
+     },
+     "bf16 GEMM (cutlass/cublas)": {
+      "control_ms": 0.5658291249999999,
+      "fused_ms": 0.565354,
+      "rel": -0.000839696966818224,
+      "control_calls": 97.0,
+      "fused_calls": 97.0
+     },
+     "fp8 paged decode": {
+      "control_ms": 0.681625,
+      "fused_ms": 0.685,
+      "rel": 0.004951402897487646,
+      "control_calls": 48.0,
+      "fused_calls": 48.0
+     },
+     "index / gather / scatter": {
+      "control_ms": 0.9527215,
+      "fused_ms": 0.954663625,
+      "rel": 0.0020385023325284637,
+      "control_calls": 241.0,
+      "fused_calls": 241.0
+     },
+     "activation quant": {
+      "control_ms": 0.3105,
+      "fused_ms": 0.3105,
+      "rel": 0.0,
+      "control_calls": 96.0,
+      "fused_calls": 96.0
+     },
+     "split-K reduce": {
+      "control_ms": 0.36543425,
+      "fused_ms": 0.059988124999999996,
+      "rel": -0.8358442729437648,
+      "control_calls": 145.0,
+      "fused_calls": 49.0
+     },
+     "rope/norm folds": {
+      "control_ms": 0.267649375,
+      "fused_ms": 0.268164125,
+      "rel": 0.0019232251149473175,
+      "control_calls": 193.0,
+      "fused_calls": 193.0
+     }
+    },
+    "replays": [
+     8,
+     8
+    ],
+    "top_control": [
+     {
+      "name": "_gemv_int4_b32",
+      "self_ms": 50.721,
+      "calls": 768,
+      "ms_per_step": 6.340125,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_gemm_int4_b32_smallm",
+      "self_ms": 10.367,
+      "calls": 1536,
+      "ms_per_step": 1.295875,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "_fp8_paged_decode_split_f8dot",
+      "self_ms": 5.453,
+      "calls": 384,
+      "ms_per_step": 0.681625,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 3.715,
+      "calls": 384,
+      "ms_per_step": 0.464375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_...",
+      "self_ms": 3.07,
+      "calls": 8,
+      "ms_per_step": 0.38375,
+      "calls_per_step": 1.0
+     },
+     {
+      "name": "_quant_x_rows",
+      "self_ms": 2.484,
+      "calls": 768,
+      "ms_per_step": 0.3105,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_reduce_partials",
+      "self_ms": 2.443,
+      "calls": 768,
+      "ms_per_step": 0.305375,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "void at::native::indexFuncSmallIndex<int, long, unsi...",
+      "self_ms": 1.675,
+      "calls": 384,
+      "ms_per_step": 0.209375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_fp8_append_bt1_side",
+      "self_ms": 1.377,
+      "calls": 768,
+      "ms_per_step": 0.172125,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 1.178,
+      "calls": 384,
+      "ms_per_step": 0.14725,
+      "calls_per_step": 48.0
+     }
+    ],
+    "top_fused": [
+     {
+      "name": "_gemv_int4_b32",
+      "self_ms": 54.249,
+      "calls": 768,
+      "ms_per_step": 6.781125,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_gemm_int4_b32_smallm",
+      "self_ms": 10.469,
+      "calls": 1536,
+      "ms_per_step": 1.308625,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "_fp8_paged_decode_split_f8dot",
+      "self_ms": 5.48,
+      "calls": 384,
+      "ms_per_step": 0.685,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 3.715,
+      "calls": 384,
+      "ms_per_step": 0.464375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_...",
+      "self_ms": 3.063,
+      "calls": 8,
+      "ms_per_step": 0.382875,
+      "calls_per_step": 1.0
+     },
+     {
+      "name": "_quant_x_rows",
+      "self_ms": 2.484,
+      "calls": 768,
+      "ms_per_step": 0.3105,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "void at::native::indexFuncSmallIndex<int, long, unsi...",
+      "self_ms": 1.685,
+      "calls": 384,
+      "ms_per_step": 0.210625,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_fp8_append_bt1_side",
+      "self_ms": 1.373,
+      "calls": 768,
+      "ms_per_step": 0.171625,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 1.179,
+      "calls": 384,
+      "ms_per_step": 0.147375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_router_epilogue",
+      "self_ms": 1.09,
+      "calls": 384,
+      "ms_per_step": 0.13625,
+      "calls_per_step": 48.0
+     }
+    ]
+   },
+   "p3_calls": [
+    96.0,
+    0
+   ],
+   "p3_calls_ok": true,
+   "p3_target_family": "split-K reduce",
+   "p3_others_moved_over_5pct": [
+    "int4 expert GEMV"
+   ],
+   "tokens": {
+    "draw1_control_vs_fused": {
+     "sequences": 16,
+     "identical": 16,
+     "first_divergences": [],
+     "all_identical": true
+    },
+    "draw2_control_vs_fused": {
+     "sequences": 16,
+     "identical": 16,
+     "first_divergences": [],
+     "all_identical": true
+    },
+    "aa_control_draw1_vs_draw2": {
+     "sequences": 16,
+     "identical": 16,
+     "first_divergences": [],
+     "all_identical": true
+    }
+   }
+  },
+  "b16_nor2": {
+   "control": {
+    "draws": [
+     13.263593985714285,
+     13.269094
+    ],
+    "median": 13.266343992857143,
+    "n": 2
+   },
+   "fused": {
+    "draws": [
+     12.931531928571427,
+     12.926552957142857
+    ],
+    "median": 12.929042442857142,
+    "n": 2
+   },
+   "batch": 16,
+   "arms": [
+    "int4_b16_nor2",
+    "int4_b16_fqkv_nor2"
+   ],
+   "saving_ms": 0.33730155000000117,
+   "verdict": "parity read (saving 0.337 ms is incidental: the split asks about TOKENS, see P3)",
+   "census": {
+    "families": {
+     "k16 small-M GEMM": {
+      "control_ms": 1.296125,
+      "fused_ms": 0.807375,
+      "rel": -0.3770855434468126,
+      "control_calls": 192.0,
+      "fused_calls": 96.0
+     },
+     "int4 expert GEMV": {
+      "control_ms": 6.65175,
+      "fused_ms": 6.464625,
+      "rel": -0.028131694666817003,
+      "control_calls": 96.0,
+      "fused_calls": 96.0
+     },
+     "bf16 GEMM (cutlass/cublas)": {
+      "control_ms": 0.567104375,
+      "fused_ms": 0.565961625,
+      "rel": -0.002015061160478563,
+      "control_calls": 97.0,
+      "fused_calls": 97.0
+     },
+     "fp8 paged decode": {
+      "control_ms": 0.681375,
+      "fused_ms": 0.685375,
+      "rel": 0.005870482480278854,
+      "control_calls": 48.0,
+      "fused_calls": 48.0
+     },
+     "index / gather / scatter": {
+      "control_ms": 0.939396375,
+      "fused_ms": 0.9468601249999999,
+      "rel": 0.007945261658051418,
+      "control_calls": 241.0,
+      "fused_calls": 241.0
+     },
+     "activation quant": {
+      "control_ms": 0.311875,
+      "fused_ms": 0.312125,
+      "rel": 0.0008016032064127373,
+      "control_calls": 96.0,
+      "fused_calls": 96.0
+     },
+     "split-K reduce": {
+      "control_ms": 0.458610625,
+      "fused_ms": 0.454276875,
+      "rel": -0.009449737454294631,
+      "control_calls": 193.0,
+      "fused_calls": 193.0
+     },
+     "rope/norm folds": {
+      "control_ms": 0.194,
+      "fused_ms": 0.193375,
+      "rel": -0.003221649484536157,
+      "control_calls": 145.0,
+      "fused_calls": 145.0
+     }
+    },
+    "replays": [
+     8,
+     8
+    ],
+    "top_control": [
+     {
+      "name": "_gemv_int4_b32",
+      "self_ms": 53.214,
+      "calls": 768,
+      "ms_per_step": 6.65175,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_gemm_int4_b32_smallm",
+      "self_ms": 10.369,
+      "calls": 1536,
+      "ms_per_step": 1.296125,
+      "calls_per_step": 192.0
+     },
+     {
+      "name": "_fp8_paged_decode_split_f8dot",
+      "self_ms": 5.451,
+      "calls": 384,
+      "ms_per_step": 0.681375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 3.682,
+      "calls": 384,
+      "ms_per_step": 0.46025,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void at::native::elementwise_kernel<128, 4, at::nati...",
+      "self_ms": 3.28,
+      "calls": 1920,
+      "ms_per_step": 0.41,
+      "calls_per_step": 240.0
+     },
+     {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_...",
+      "self_ms": 3.073,
+      "calls": 8,
+      "ms_per_step": 0.384125,
+      "calls_per_step": 1.0
+     },
+     {
+      "name": "_reduce_partials",
+      "self_ms": 2.525,
+      "calls": 768,
+      "ms_per_step": 0.315625,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_quant_x_rows",
+      "self_ms": 2.495,
+      "calls": 768,
+      "ms_per_step": 0.311875,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "void at::native::indexFuncSmallIndex<int, long, unsi...",
+      "self_ms": 1.603,
+      "calls": 384,
+      "ms_per_step": 0.200375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void at::native::unrolled_elementwise_kernel<at::nat...",
+      "self_ms": 1.6,
+      "calls": 776,
+      "ms_per_step": 0.2,
+      "calls_per_step": 97.0
+     }
+    ],
+    "top_fused": [
+     {
+      "name": "_gemv_int4_b32",
+      "self_ms": 51.717,
+      "calls": 768,
+      "ms_per_step": 6.464625,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_gemm_int4_b32_smallm",
+      "self_ms": 6.459,
+      "calls": 768,
+      "ms_per_step": 0.807375,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_fp8_paged_decode_split_f8dot",
+      "self_ms": 5.483,
+      "calls": 384,
+      "ms_per_step": 0.685375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::indexSelectS...",
+      "self_ms": 3.707,
+      "calls": 384,
+      "ms_per_step": 0.463375,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "void at::native::elementwise_kernel<128, 4, at::nati...",
+      "self_ms": 3.307,
+      "calls": 1920,
+      "ms_per_step": 0.413375,
+      "calls_per_step": 240.0
+     },
+     {
+      "name": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_...",
+      "self_ms": 3.064,
+      "calls": 8,
+      "ms_per_step": 0.383,
+      "calls_per_step": 1.0
+     },
+     {
+      "name": "_quant_x_rows",
+      "self_ms": 2.497,
+      "calls": 768,
+      "ms_per_step": 0.312125,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "_reduce_partials",
+      "self_ms": 2.488,
+      "calls": 768,
+      "ms_per_step": 0.311,
+      "calls_per_step": 96.0
+     },
+     {
+      "name": "void at::native::indexFuncSmallIndex<int, long, unsi...",
+      "self_ms": 1.621,
+      "calls": 384,
+      "ms_per_step": 0.202625,
+      "calls_per_step": 48.0
+     },
+     {
+      "name": "_rmsnorm_rows",
+      "self_ms": 1.547,
+      "calls": 1160,
+      "ms_per_step": 0.193375,
+      "calls_per_step": 145.0
+     }
+    ]
+   },
+   "p3_calls": [
+    192.0,
+    96.0
+   ],
+   "p3_calls_ok": true,
+   "p3_target_family": "k16 small-M GEMM",
+   "p3_others_moved_over_5pct": [],
+   "tokens": {
+    "draw1_control_vs_fused": {
+     "sequences": 16,
+     "identical": 1,
+     "first_divergences": [
+      [
+       "1",
+       41
+      ],
+      [
+       "2",
+       3
+      ],
+      [
+       "3",
+       35
+      ],
+      [
+       "4",
+       38
+      ],
+      [
+       "5",
+       8
+      ],
+      [
+       "6",
+       2
+      ],
+      [
+       "7",
+       17
+      ],
+      [
+       "8",
+       10
+      ],
+      [
+       "9",
+       8
+      ],
+      [
+       "10",
+       20
+      ],
+      [
+       "11",
+       6
+      ],
+      [
+       "12",
+       25
+      ],
+      [
+       "13",
+       14
+      ],
+      [
+       "14",
+       14
+      ],
+      [
+       "15",
+       6
+      ]
+     ],
+     "all_identical": false
+    },
+    "draw2_control_vs_fused": {
+     "sequences": 16,
+     "identical": 1,
+     "first_divergences": [
+      [
+       "1",
+       41
+      ],
+      [
+       "2",
+       3
+      ],
+      [
+       "3",
+       35
+      ],
+      [
+       "4",
+       38
+      ],
+      [
+       "5",
+       8
+      ],
+      [
+       "6",
+       2
+      ],
+      [
+       "7",
+       17
+      ],
+      [
+       "8",
+       10
+      ],
+      [
+       "9",
+       8
+      ],
+      [
+       "10",
+       20
+      ],
+      [
+       "11",
+       6
+      ],
+      [
+       "12",
+       25
+      ],
+      [
+       "13",
+       14
+      ],
+      [
+       "14",
+       14
+      ],
+      [
+       "15",
+       6
+      ]
+     ],
+     "all_identical": false
+    },
+    "aa_control_draw1_vs_draw2": {
+     "sequences": 16,
+     "identical": 16,
+     "first_divergences": [],
+     "all_identical": true
+    }
+   }
+  }
+ },
+ "stop1": {
+  "b1_fr": {
+   "control_first_draw_ms": 4.236145582677166,
+   "p54_ms": 4.21,
+   "rel": 0.006210352179849332,
+   "within": true
+  },
+  "b16_fr": {
+   "control_first_draw_ms": 11.576411499999999,
+   "p54_ms": 11.42,
+   "rel": 0.013696278458844136,
+   "within": true
+  }
+ },
+ "distinct": {
+  "batch": 16,
+  "top_k": 8,
+  "num_experts": 128,
+  "layers": 48,
+  "steps": 0,
+  "mean_distinct_over_layers": null,
+  "min_layer_mean": null,
+  "max_layer_mean": null,
+  "uniform_random_expectation": 82.42251130217052,
+  "per_layer": [
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   },
+   {
+    "steps": 0,
+    "mean_distinct": null,
+    "min": null,
+    "max": null,
+    "series": [],
+    "raw_calls": 124,
+    "prefill_calls": 124
+   }
+  ]
+ }
+}

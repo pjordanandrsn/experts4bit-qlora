@@ -2705,10 +2705,17 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   the control's on 14 of 16 sequences, reproducibly, while the control's own
   two draws are bit-identical — the K16 small-M GEMM's accumulation order is a
   function of N. Leading hypothesis only; a second candidate (the round-2 glue
-  path taken when `qkv_proj` exists) is not excluded. `--fuse-qkv` therefore
+  path taken when `qkv_proj` exists) **was excluded by P57 on 2026-09-22**
+  (`bench/p57/RESULTS-p57.md`): with the round-2 glue forced OFF on both legs the
+  fused arm still diverges on 15 of 16 sequences at the same first-divergence
+  indices, so the divergence is the K16 GEMM's. `--fuse-qkv` therefore
   stays **opt-in** on the int4 lanes at B=16, with no position quoted, until a
   KL-from-checkpoint or K8 read bounds the divergence against the shipped bar
   (≤ 0.10 nats, top-1 ≥ 0.93).
+- **K17's fused split-K reduce is exact and slower in the consumer** (P57,
+  same page): −0.038 ms/step at B=1, −0.217 at B=16, the epilogue landing inside
+  the critical-path GEMV while the launches it removed were overlapped. Stays
+  opt-in in grouped-nf4-gemm; the census row it targeted was GPU time, not a launch.
 - **The distinct-expert count at B=16 is still unmeasured**
   ([#564](https://github.com/pjordanandrsn/experts4bit-qlora/issues/564)): it
   decides whether the expert GEMV — 56 % of the B=16 step — has ~1.3 ms of
@@ -3492,6 +3499,12 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p55x.qwen3.rtn-attn.k8.2026-09-22 [measured]: The same artifact-pinned int4 expert pack with UNCALIBRATED (RTN) int4 attention instead of calibrated FAILS the registered K8 gate: wikitext -0.06259 ppl but c4val1 +0.13237, outside the +0.05 budget. The calibrated attention component is load-bearing for C4.
 - e4b.serve.p55x.qwen3.pack-deterministic-samebox.2026-09-22 [measured]: The streamed 64k calibration recipe is BYTE-deterministic on one box: two independent builds in one session produced the identical pack_fingerprint sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42, the identical method_map_hash and the identical row-count-vector hash, 11512 gptq / 776 rtn both times.
 - e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22 [measured]: The streamed 64k pack reproduces BYTE-for-byte across boxes and across a release boundary: this build's pack_fingerprint sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 equals the one lane P39 recorded on 2026-09-10 on a different rented 5090 (instance 50509727) under e4b 0.35.3, where this ran under 0.36.4. P37's divergence (11522/766) is therefore an outlier, not the rule.
+- e4b.serve.p57.qwen3.b1.control.5090.2026-09-22 [measured]: Lane P57 (K17's fused split-K reduce OFF vs ON at B=1 on the fused-q/k/v int4 stack): single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b1` (--fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=0): 4.236 ms/step (median of two interleaved draws: 4.236 / 4.235), 236.1 tok/s on this box.
+- e4b.serve.p57.qwen3.b1.fr.5090.2026-09-22 [measured]: Lane P57 (K17's fused split-K reduce OFF vs ON at B=1 on the fused-q/k/v int4 stack): single-stream (B=1) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b1_fr` (--fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=1 (K17's fused split-K reduce)): 4.274 ms/step (median of two interleaved draws: 4.274 / 4.274), 234.0 tok/s on this box.
+- e4b.serve.p57.qwen3.b16.control.5090.2026-09-22 [measured]: Lane P57 (K17's fused split-K reduce OFF vs ON at B=16 on the unfused int4 stack): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=0): 11.578 ms/step (median of two interleaved draws: 11.576 / 11.580), 1381.9 tok/s on this box.
+- e4b.serve.p57.qwen3.b16.fr.5090.2026-09-22 [measured]: Lane P57 (K17's fused split-K reduce OFF vs ON at B=16 on the unfused int4 stack): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_fr` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=1 GNF4_GEMV_FUSED_REDUCE=1 (K17's fused split-K reduce)): 11.796 ms/step (median of two interleaved draws: 11.791 / 11.800), 1356.4 tok/s on this box.
+- e4b.serve.p57.qwen3.b16.nor2_control.5090.2026-09-22 [measured]: Lane P57 (P54's B=16 divergence split: unfused vs fused q/k/v with the round-2 glue OFF on both legs): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_nor2` (--no-fuse-qkv E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF)): 13.266 ms/step (median of two interleaved draws: 13.264 / 13.269), 1206.1 tok/s on this box.
+- e4b.serve.p57.qwen3.b16.nor2_fqkv.5090.2026-09-22 [measured]: Lane P57 (P54's B=16 divergence split: unfused vs fused q/k/v with the round-2 glue OFF on both legs): batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090, arm `int4_b16_fqkv_nor2` (--fuse-qkv (Int4Linear.fuse, #651) E4B_FUSE_T1_GLUE_R2=0 (round-2 glue OFF)): 12.929 ms/step (median of two interleaved draws: 12.932 / 12.927), 1237.5 tok/s on this box.
 
 Open items (no evidence either way):
 
@@ -3499,4 +3512,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(202 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(208 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
