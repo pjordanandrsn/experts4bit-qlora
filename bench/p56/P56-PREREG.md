@@ -313,3 +313,42 @@ worthless. The corrected figure is marked inline above and the record of the err
 is here, both timestamped. Same shape as TP4-PREREG amendment 5's erratum, and the
 same lesson twice in one lane: **a register is checked by running the thing that
 reads it.**
+
+
+---
+
+## Draw 1 is a ROW, not a result: `p56-gemma4-ladder-1` lost all four e4b arms to a shell bug of mine (2026-09-22)
+
+**What happened.** Launched 23:57:52Z, complete rc=0 at 00:26:56Z, $0.2863 actual,
+box destroyed with proof, nothing left live. Every one of the four e4b arms exited
+**rc=127**: `tp4_run.sh: line 263: TP4_BOX_CLASS=RTX 5090: command not found`. The two
+non-e4b arms are `not_run` stubs, as registered. So the draw produced **no measurement
+at all** and nothing in it bears on the ladder.
+
+**The cause, which is entirely mine.** The commit that made the batched arm engage
+spliced an unquoted expansion into the command's assignment prefix:
+
+    HF_HUB_OFFLINE=1 ... $ARM_ENV TP4_BOX_CLASS="RTX $GPU_CLASS" ... perl ...
+
+The shell decides which leading words are assignments **before** it expands, so a
+non-assignment word in that position makes the next `VAR=value` the **command**. It
+fails whether `$ARM_ENV` is empty or set, which is why all four arms died and not just
+the batched one. Fixed by passing it through `env`, where the expansion is an ordinary
+argument and an empty one vanishes.
+
+**Why none of this lane's dry runs caught it, which is the part worth keeping.** I ran
+three and each one misses this line by construction: `bash -n` parses but does not
+execute it; `tp4_arm.py --selftest` never goes through `tp4_run.sh` at all; and
+`TP4_DRIVE_DRYRUN=1` stops before the box executes the script. I also read the line
+three times. **A dry run only covers the path it actually walks, and I had treated
+"I dry-ran the driver" as covering the driver.** The regression test added with the fix
+therefore EXECUTES the real prefix extracted from the real file, for both arms, and
+carries a control asserting the broken shape still fails.
+
+**What it does not touch.** No registered prediction is scored by this draw and no
+verdict is read from it: `p56_reduce.py` returns `NO-REF` without a valid reference
+arm, so the instrument refused the reading rather than producing a wrong one. P1-P3b
+stand unscored. Draw 2 runs the same registered arms on the fixed harness.
+
+**Spend:** $0.0086 (proving) + $0.2863 (this draw) = $0.2949 against the ≤$3 authorised
+for the lane, leaving the redraw inside it.

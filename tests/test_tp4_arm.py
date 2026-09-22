@@ -340,3 +340,57 @@ def test_p53_ordering_lever_is_actually_passed_to_the_engine():
     call = src[src.index("enable_serve_experts_int4_calibrated(model"):]
     call = call[:call.index(")") + 1]
     assert "layers_per_pass=" in call, ("the hook reads the lever but does not forward it", call)
+
+
+def test_arm_env_prefix_actually_executes(tmp_path):
+    """The arm's env prefix must RUN, not merely read correctly.
+
+    Run `p56-gemma4-ladder-1` lost all four e4b arms to `rc=127
+    TP4_BOX_CLASS=RTX 5090: command not found`, at $0.29 and a wasted draw. Cause:
+    an unquoted expansion spliced into the assignment prefix --
+    `A=1 $ARM_ENV B=2 cmd`. The shell decides which leading words are assignments
+    BEFORE it expands, so a non-assignment word in that position makes the next
+    `VAR=value` the COMMAND. It fails whether the variable is empty or set.
+
+    Nothing that existed could catch it. `bash -n` passes (it is a runtime effect),
+    `tp4_arm.py --selftest` never goes through `tp4_run.sh`, and
+    `TP4_DRIVE_DRYRUN=1` stops before the box runs the script. The line was also
+    read three times, by me, without seeing it. So this test EXECUTES the real
+    prefix out of the real file, for both arms, and asserts the command runs and
+    the variable arrives."""
+    import re
+    import subprocess
+
+    sh = (Path(__file__).parent.parent / "bench" / "tp4" / "tp4_run.sh").read_text()
+    m = re.search(r"^(\s*env \$ARM_ENV .*?TP4_ARM_ALARM_S=\$A) perl", sh, re.M)
+    assert m, "the arm's env prefix is not in the shape this test knows how to drive"
+    prefix = m.group(1).strip()
+
+    for arm, want in (("fused", ""), ("batched", "64")):
+        script = f"""
+        ARM={arm}; GPU_CLASS=5090; A=3600
+        ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=64"
+        {prefix} /bin/sh -c 'echo RAN box="$TP4_BOX_CLASS" alarm="$TP4_ARM_ALARM_S" pad="$E4B_BATCHED_PAD_WASTE_LIMIT"'
+        """
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        assert r.returncode == 0, (
+            f"{arm}: the arm prefix does not execute (rc={r.returncode}): {r.stderr.strip()}")
+        assert "RAN" in r.stdout, f"{arm}: command never ran: {r.stdout!r} {r.stderr!r}"
+        assert 'box=RTX 5090' in r.stdout, (
+            f"{arm}: TP4_BOX_CLASS did not survive as an assignment: {r.stdout!r}")
+        assert "alarm=3600" in r.stdout, f"{arm}: the alarm did not arrive: {r.stdout!r}"
+        assert f"pad={want}" in r.stdout, (
+            f"{arm}: expected pad={want!r}, got {r.stdout!r}")
+
+
+def test_the_broken_prefix_shape_is_rejected():
+    """The control. The exact construct that failed must still fail, or the test
+    above is asserting nothing -- a regression test whose negative case passes is
+    decoration."""
+    import subprocess
+
+    broken = 'A=1 $ARM_ENV B="RTX 5090" /bin/echo ok'
+    r = subprocess.run(["bash", "-c", f'ARM_ENV=""; {broken}'], capture_output=True, text=True)
+    assert r.returncode == 127 and "command not found" in r.stderr, (
+        f"control invalid: the broken shape no longer fails (rc={r.returncode}) — "
+        f"if this shell does not reproduce it, the test above cannot be trusted either")

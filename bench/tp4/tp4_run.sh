@@ -259,8 +259,16 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   # Gemma-4 -- an arm that fell back is measuring the reference against itself. The guard
   # is a SPEED guard; raising it trades peak memory for engagement and never numerics, and
   # `batched_fallback_stats` puts the limit in force on the receipt.
+  #
+  # It goes through `env`, and that is NOT cosmetic. An unquoted expansion spliced into
+  # the assignment prefix -- `A=1 $ARM_ENV B=2 cmd` -- makes the shell stop treating the
+  # words after it as assignments, because it decides which words are assignments BEFORE
+  # expanding: the next `VAR=value` becomes the COMMAND. Run p56-gemma4-ladder-1 lost all
+  # four e4b arms to rc=127 `TP4_BOX_CLASS=RTX 5090: command not found` this way, and it
+  # fails whether the variable is empty or set. As an argument to `env` the expansion is
+  # an ordinary word and an empty one simply vanishes.
   local ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=${TP4_BATCHED_PAD_WASTE_LIMIT:-64}"
-  HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 $ARM_ENV TP4_BOX_CLASS="RTX $GPU_CLASS" TP4_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
+  env $ARM_ENV HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 TP4_BOX_CLASS="RTX $GPU_CLASS" TP4_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tp4_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \
