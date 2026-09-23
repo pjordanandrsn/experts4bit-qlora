@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### The CI scripts both repositories carry start to become one file (repository tooling; nothing in the wheel changes)
+
+- **`scripts/check_shared_tooling.py`** (new, byte-identical in grouped-nf4-gemm): `SHARED` lists the scripts that are one
+  file in both repositories. Nine of the thirteen same-named scripts had forked, so one check name enforced two rules.
+  With `--sibling` it fails on any differing byte, a shared file missing there, a self-comparison or a sibling outside the
+  system, and lists the scripts still forked as NOTEs. grouped-nf4-gemm is upstream for shared tooling (kernel-first, as
+  for the manifest); a new `ci.yml` step clones its `main` and runs `--sibling`. `tests/test_check_shared_tooling.py`
+  produces every failure the check claims and asserts it is detected.
+- **`scripts/check_discovery_contract.py`** adopts grouped-nf4-gemm's copy, which adds `page_kind: orientation` records
+  ranked over their own corpus. This repository has none, so every query keeps its kind and corpus: the 45 rankings are
+  identical before and after (37/45 top-1 against the floor of 30), compared line by line.
+
 ## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); two expert-GEMV levers built and refused (K17, K18), and the B=16 expert GEMV's remaining headroom bounded with no lever to follow (P60, P61)
 
 **0.37.0.** The loader admits five more MoE families. `nemotron_h`, `granitemoehybrid`, `granitemoeshared` and

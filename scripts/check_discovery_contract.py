@@ -23,12 +23,21 @@ For every record it verifies that:
   * an optional ``forbidden_phrases`` list does not appear (wrong-project
     interpretation).
 
+A record may carry ``"page_kind": "orientation"`` (AGENTS.md, docs/STATUS.md,
+docs/INDEX.md): such a page is checked for its concepts, the package name and
+cross-project routing, not for an install route or a limitations section,
+because it orients rather than solves.
+
 ``--bm25`` prints a small BM25 ranking of the curated docs for each query as
-a regression aid. It is a local proxy only -- never evidence of ranking in
-any external search or assistant, and a BM25 regression is never evidence
-of LLM discoverability. ``--bm25-min-top1 N`` turns it into a floor: fail
-when fewer than N queries rank their own page first, naming every query
-whose expected page is not first.
+a regression aid. Solution queries are ranked over ``bm25_corpus`` (the
+solution pages, the index and the README) and orientation queries over
+``bm25_orientation_corpus`` (AGENTS.md, STATUS.md, INDEX.md), so adding the
+orientation documents does not change what the solution corpus measured
+before they existed. It is a local proxy only -- never evidence of ranking in
+any external search or assistant, and never evidence of LLM discoverability.
+``--bm25-min-top1 N`` turns it into a floor: fail when fewer than N queries
+rank their own page first, naming every query whose expected page is not
+ranked first together with its rank and the page that won.
 """
 from __future__ import annotations
 
@@ -56,44 +65,52 @@ def _tokens(text: str) -> list[str]:
     return TOKEN.findall(text.lower())
 
 
-def _bm25_report(root: Path, corpus_globs: list[str], queries: list[dict], k1=1.5, b=0.75) -> tuple[int, list[str]]:
-    """Print the ranking; return how many queries rank their page first and
-    one line per query that does not (query, expected page, its rank, the
-    page that ranked first)."""
-    docs = {}
-    for g in corpus_globs:
-        for p in sorted(root.glob(g)):
-            docs[p.relative_to(root).as_posix()] = _tokens(read_text(p))
-    if not docs:
-        print("bm25: no corpus")
-        return 0, []
+def _bm25_rank(docs: dict[str, list[str]], query: str, k1=1.5, b=0.75) -> list[str]:
     N = len(docs)
     avgdl = sum(len(t) for t in docs.values()) / N
     df = Counter()
     for toks in docs.values():
         df.update(set(toks))
+    qt = _tokens(query)
+    scores = {}
+    for name, toks in docs.items():
+        tf = Counter(toks)
+        dl = len(toks)
+        s = 0.0
+        for t in qt:
+            if t not in tf:
+                continue
+            idf = math.log(1 + (N - df[t] + 0.5) / (df[t] + 0.5))
+            s += idf * tf[t] * (k1 + 1) / (tf[t] + k1 * (1 - b + b * dl / avgdl))
+        scores[name] = s
+    return sorted(scores, key=lambda n: -scores[n])
+
+
+def _bm25_report(root: Path, corpora: dict[str, list[str]], queries: list[dict]) -> tuple[int, list[str]]:
+    """Print the ranking, each query over the corpus of its page_kind; return
+    how many queries rank their page first and one line per query that does
+    not (query, expected page, its rank, the page that ranked first)."""
+    docs: dict[str, dict[str, list[str]]] = {}
+    for kind, globs in corpora.items():
+        docs[kind] = {}
+        for g in globs:
+            for p in sorted(root.glob(g)):
+                docs[kind][p.relative_to(root).as_posix()] = _tokens(read_text(p))
+        if not docs[kind]:
+            print(f"bm25: no corpus for page_kind {kind!r}")
+            return 0, [f"no corpus for {kind}"]
     hits = 0
     misses: list[str] = []
     for q in queries:
-        qt = _tokens(q["query"])
-        scores = {}
-        for name, toks in docs.items():
-            tf = Counter(toks)
-            dl = len(toks)
-            s = 0.0
-            for t in qt:
-                if t not in tf:
-                    continue
-                idf = math.log(1 + (N - df[t] + 0.5) / (df[t] + 0.5))
-                s += idf * tf[t] * (k1 + 1) / (tf[t] + k1 * (1 - b + b * dl / avgdl))
-            scores[name] = s
-        ranked = sorted(scores, key=lambda n: -scores[n])
+        kind = q.get("page_kind", "solution")
+        ranked = _bm25_rank(docs[kind], q["query"])
         want = q["expected_document"]
         pos = ranked.index(want) + 1 if want in ranked else None
-        hits += 1 if pos == 1 else 0
-        if pos != 1:
-            misses.append(f"{q['query']!r}: expected {want} ranked {pos}; first was {ranked[0]}")
-        print(f"  bm25 top1={'yes' if pos == 1 else 'no ':3} rank={pos!s:>4}  {q['query'][:60]!r} -> {ranked[0]}")
+        if pos == 1:
+            hits += 1
+        else:
+            misses.append(f"{q['query']!r}: expected {want} ranked {pos if pos else 'outside the corpus'}; first was {ranked[0]}")
+        print(f"  bm25 top1={'yes' if pos == 1 else 'no ':3} rank={pos!s:>4} {kind[:6]:6} {q['query'][:60]!r} -> {ranked[0]}")
     print(f"bm25: {hits}/{len(queries)} queries rank their expected page first (local proxy, not a ranking claim)")
     return hits, misses
 
@@ -167,6 +184,10 @@ def main() -> int:
             errors.append(f"duplicate query: {r['query']!r}")
         seen.add(key)
         rel = r["expected_document"]
+        kind = r.get("page_kind", "solution")
+        if kind not in ("solution", "orientation"):
+            errors.append(f"{r['query']!r}: page_kind {kind!r} is neither 'solution' nor 'orientation'")
+            continue
         facts = _page_facts(root, rel, facts_cache, canonical_norm, extra_provides)
         if facts is None:
             errors.append(f"{r['query']!r}: expected document missing: {rel}")
@@ -185,15 +206,15 @@ def main() -> int:
             errors.append(f"{r['query']!r}: expected_package {exp_pkg!r} is an alias, not a canonical package")
         if not word_in(exp_pkg, low):
             errors.append(f"{r['query']!r}: {rel} never names the expected package {exp_pkg!r}")
-        if facts["n_targets"] == 0:
+        if kind == "solution" and facts["n_targets"] == 0:
             errors.append(f"{r['query']!r}: {rel} has no pip install route (in a fenced block or inline code)")
         for pkg in facts["packages"]:
             if pkg in aliases:
                 errors.append(f"{r['query']!r}: {rel} installs alias {pkg!r}")
-        if exp_norm not in facts["routes"]:
+        if kind == "solution" and exp_norm not in facts["routes"]:
             errors.append(f"{r['query']!r}: {rel} has no install route for {exp_pkg!r} (neither a pip install target "
                           f"nor pinned by an extra of {canonical} that the page installs)")
-        if not facts["has_limitations"]:
+        if kind == "solution" and not facts["has_limitations"]:
             errors.append(f"{r['query']!r}: {rel} has no Limitations section")
         if exp_pkg != canonical:
             rp = related.get(exp_pkg)
@@ -207,12 +228,14 @@ def main() -> int:
         return 1
     print(f"OK: {len(records)} queries route to existing pages with their concepts, canonical install routes and limitations")
     if a.bm25 or a.bm25_min_top1 > 0:
-        hits, misses = _bm25_report(root, q.get("bm25_corpus", ["docs/solutions/*.md", "docs/SOLUTIONS.md", "README.md"]), records)
+        corpora = {"solution": q.get("bm25_corpus", ["docs/solutions/*.md", "docs/SOLUTIONS.md", "README.md"]),
+                   "orientation": q.get("bm25_orientation_corpus", ["AGENTS.md", "docs/STATUS.md", "docs/INDEX.md"])}
+        hits, misses = _bm25_report(root, corpora, records)
         if hits < a.bm25_min_top1:
+            print(f"FAIL: bm25 top-1 hits {hits} < --bm25-min-top1 {a.bm25_min_top1}; the queries whose expected page is "
+                  "not ranked first (a local proxy over this corpus, never evidence of LLM discoverability):")
             for m in misses:
-                print(f"FAIL: bm25: {m}")
-            print(f"FAIL: bm25 top-1 hits {hits} < --bm25-min-top1 {a.bm25_min_top1} "
-                  f"({len(misses)} query/queries not first; local proxy, not a ranking claim)")
+                print("  MISS:", m)
             return 1
     return 0
 

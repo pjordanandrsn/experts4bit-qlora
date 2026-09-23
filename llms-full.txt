@@ -3089,6 +3089,7 @@ python scripts/check_change_impact.py --base origin/main    # docs/change-impact
 python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 30   # queries -> pages; the BM25 floor is a local proxy
 python scripts/check_docs_examples.py --root .   # doc code blocks parse; local links resolve
 python scripts/build_llms_bundle.py --check      # llms-full.txt is current
+python scripts/check_shared_tooling.py --sibling ../grouped-nf4-gemm   # the shared scripts are byte-identical to the kernel repository's
 ```
 
 Anything that needs a GPU, the network, a model download or a large disk runs
@@ -3130,6 +3131,8 @@ floor moved): `docs/system-manifest.json`, `docs/capabilities.json`, the CI
 diff; the pyproject comment ladder says why. Regenerate `llms-full.txt`
 (`python scripts/build_llms_bundle.py`) when a bundled document changed.
 Releases are cut from `main` by the maintainer ([`docs/RELEASE_NOTES_GUIDE.md`](docs/RELEASE_NOTES_GUIDE.md)).
+
+**Shared tooling is one file in both repositories.** The scripts listed in `SHARED` in `scripts/check_shared_tooling.py` are byte-identical here and in the sibling repository; grouped-nf4-gemm is their upstream (kernel-first, as for the manifest). Change one there first, then copy it byte-for-byte into experts4bit-qlora, whose CI compares its copies with grouped-nf4-gemm's `main`. A shared script that must behave differently per repository reads the difference from data (`pyproject.toml`, the manifest), never from two copies. The same-named scripts not yet in `SHARED` are forks still to reconcile; `--sibling` lists them.
 
 ## 9. Platform caveats
 
