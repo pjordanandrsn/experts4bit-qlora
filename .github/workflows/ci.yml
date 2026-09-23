@@ -122,6 +122,12 @@ jobs:
           git clone --quiet --depth 1 --branch "$TAG" "$REPO" /tmp/sibling
           python scripts/check_system_manifest.py --sibling /tmp/sibling --require-tags
           python scripts/check_claims_register.py --sibling /tmp/sibling
+      - name: shared tooling is byte-identical to the kernel repository's main (it is upstream for the scripts both repositories carry as one file; clone it, run --sibling)
+        run: |
+          set -euo pipefail
+          REPO=$(python -c "import json; print(json.load(open('docs/system-manifest.json'))['packages']['kernels']['repository'])")
+          git clone --quiet --depth 1 "$REPO" /tmp/sibling-main
+          python scripts/check_shared_tooling.py --sibling /tmp/sibling-main
       - name: dependency-floor drift (every current document states pyproject's [fast] floor; historical lines are listed, not failed)
         run: python scripts/check_dependency_floor.py
       - name: change-impact contract (pull requests only -- docs/change-impact.json, what must move together)
