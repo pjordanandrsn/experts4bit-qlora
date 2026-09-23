@@ -115,13 +115,15 @@ def _append(root: Path, rel: str, text: str = "\nchanged\n") -> None:
 
 
 def _manifest(floor: str) -> dict:
-    return {"packages": {"kernels": {"import_names": ["nf4_grouped", "gptq_pack"]}},
+    return {"packages": {"runtime": {"package": "experts4bit-qlora", "import_names": ["experts4bit_qlora"]},
+                         "kernels": {"package": "grouped-nf4-gemm", "import_names": ["nf4_grouped", "gptq_pack"]}},
             "compatibility": [{"consumer": "experts4bit-qlora", "consumer_versions": ">=0.35.0",
                                "kernel": "grouped-nf4-gemm", "floor": f">={floor}", "extra": "fast"}]}
 
 
 PYPROJECT = '[project]\nname = "experts4bit-qlora"\nversion = "0.35.0"\n' \
-            '[project.optional-dependencies]\nfast = ["grouped-nf4-gemm>={floor}"]\n'
+            '[project.optional-dependencies]\nfast = ["grouped-nf4-gemm>={floor}"]\n' \
+            '[project.urls]\nSource = "https://github.com/pjordanandrsn/experts4bit-qlora"\n'
 CLAIMS = {"status_vocabulary": {"measured": "run, receipt public", "retired": "withdrawn"},
           "claims": [{"id": "x.one", "status": "measured", "value": 1.0}]}
 
@@ -145,6 +147,10 @@ def repo(tmp_path: Path) -> Path:
     _write(root, "CHANGELOG.md", "# changelog\n")
     _write(root, "experts4bit_qlora/__init__.py", '__all__ = ["a", "b"]\n')
     _write(root, "experts4bit_qlora/fast.py", "import nf4_grouped\n")
+    for rel in ("README.md", "AGENTS.md", "llms.txt", "docs/INDEX.md"):
+        _write(root, rel, "# placeholder\n")
+    _write(root, "docs/change-impact.json", json.dumps({"classes": {c: {} for c in (
+        "dependency-floor", "measured-result", "public-api-change", "new-kernel-capability")}}))
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "base")
     return root
@@ -174,7 +180,8 @@ def test_floor_change_needs_its_companions(repo: Path):
         assert f"MISSING: {companion}" in r.stdout, r.stdout
     assert "docs/solutions/b.md" not in r.stdout          # historical line: not a companion
     _write(repo, "docs/system-manifest.json", json.dumps(_manifest("0.30.0")))
-    for companion in ("docs/capabilities.json", ".github/workflows/ci.yml", "docs/SOLUTIONS.md", "docs/solutions/a.md"):
+    _append(repo, "docs/capabilities.json", "\n")
+    for companion in (".github/workflows/ci.yml", "docs/SOLUTIONS.md", "docs/solutions/a.md"):
         _append(repo, companion)
     r = _impact(repo)
     assert r.returncode == 0 and "OK: dependency-floor" in r.stdout, r.stdout
@@ -220,7 +227,7 @@ def test_public_api_change_warns_then_strict_fails(repo: Path):
     assert r.returncode == 0 and "WARN: public-api-change" in r.stdout and "+['c']" in r.stdout, r.stdout
     r = _impact(repo, "--strict")
     assert r.returncode == 1 and "FAIL: public-api-change" in r.stdout
-    _append(repo, "docs/capabilities.json")
+    _append(repo, "docs/capabilities.json", "\n")
     _append(repo, "CHANGELOG.md")
     r = _impact(repo, "--strict")
     assert r.returncode == 0 and "OK: public-api-change" in r.stdout
