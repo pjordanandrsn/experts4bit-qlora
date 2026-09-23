@@ -54,6 +54,19 @@ jobs:
         run: ruff check experts4bit_qlora tests scripts tools
       - name: Test
         run: pytest tests/ -q
+      - name: census cross-check (grouped-nf4-gemm#353 -- every claimed family the kernel's shape census covered is still covered, against the census of the exact kernel commit installed above)
+        # The census comes from the commit pip installed (direct_url.json), so it
+        # is the kernel this suite ran against, never a second pin to keep in
+        # step. --check writes a missing baseline and passes, so the baseline's
+        # presence is asserted first: a deleted baseline must fail, not reset.
+        run: |
+          set -euo pipefail
+          test -f bench/support/census-coverage-baseline.json
+          SHA=$(python -c "import json, importlib.metadata as m; print(json.loads(m.distribution('grouped-nf4-gemm').read_text('direct_url.json'))['vcs_info']['commit_id'])")
+          REPO=$(python -c "import json; print(json.load(open('docs/system-manifest.json'))['packages']['kernels']['repository'])")
+          git clone --quiet --filter=blob:none --no-checkout "$REPO" /tmp/kernel-census
+          git -C /tmp/kernel-census show "$SHA:census/shape_census.json" > /tmp/shape_census.json
+          python bench/support/census_cross_check.py --census /tmp/shape_census.json --check
 
   wheel-smoke:
     if: ${{ github.event_name != 'pull_request' || github.event.action == 'ready_for_review' || github.event.label.name == 'ready-to-merge' }}
