@@ -22,6 +22,9 @@
   2026-09-22 and re-pointed `docs/STATUS.md` and `docs/SERVING-THROUGHPUT.md`, but not these four. They now quote P58
   (vLLM 0.30.0 / e4b's current int4 stack 1.087 at B=1, 1.396 at B=16) and keep p37 as history. No register check could
   catch the omission: p37's rows are still `measured`, correctly, because they are history rather than retracted.
+- `docs/STATUS.md` cited `e4b.serve.buildout.bo6.qwen3.calibexp-streamed-*`, a glob that breaks mid-segment; the
+  consumer site's claim-reference check reads it as the id `…calibexp-streamed-`, which is not in the register, and
+  refused the 0.37.0 re-pin on it. The three rows it stood for are now named.
 - The same capability said the streamed 64k calibration "does not reproduce its licence across hosts". P55x found the
   pack byte-reproducible on one box and across boxes and a release boundary, and P37's divergent pack an outlier; the
   limitation now says that, and what stays open (the calibrated attention half is not in the fingerprint, #674).

@@ -2317,7 +2317,10 @@ Qwen3-30B-A3B the order of calibration and packing alone moves c4val1 by
 0.200 ppl and flips the verdict
 (`e4b.serve.buildout.bo6.qwen3.calibration-order.c4val1.2026-09-04`, on a
 deterministic instrument, `e4b.serve.buildout.bo6.qwen3.k8-deterministic.5090.2026-09-04`);
-more calibration text helps (`e4b.serve.buildout.bo6.qwen3.calibexp-streamed-*`),
+more calibration text helps (16k → 64k → 256k tokens:
+`e4b.serve.buildout.bo6.qwen3.calibexp-streamed-16k.c4val1.2026-09-04`,
+`e4b.serve.buildout.bo6.qwen3.calibexp-streamed-64k.c4val1.2026-09-04`,
+`e4b.serve.buildout.bo6.qwen3.calibexp-streamed-256k.c4val1.2026-09-04`),
 none of it claimed as an improvement until wikitext agrees. **Qwen3-30B-A3B's
 licensed serving stack is the streamed one** (bo6c, 2026-09-05): sequentially
 calibrated int4 experts at 64k C4-validation tokens + C4-calibrated int4
