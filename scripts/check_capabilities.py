@@ -39,12 +39,13 @@ every failure in that run; exit 2 when the check itself cannot run. Checks:
     one back (reciprocity), when given;
   * WARN (never fail): a capability whose PRIMARY mode (``modes[0]``) is
     ``serving`` cites no claim from the newest serving lane docs/STATUS.md
-    quotes -- the
-    ``area: serve`` claims STATUS names by id, grouped by ``measured_on``; the
-    latest date is the position, and a serving capability that cites none of
-    its ids is headlining an older lane (the 2026-09-05 audit found the
+    quotes AS THE POSITION -- the ``area: serve`` claims STATUS names by id
+    before its first ``## What changed`` heading, grouped by ``measured_on``;
+    the latest date is the position, and a serving capability that cites none
+    of its ids is headlining an older lane (the 2026-09-05 audit found the
     capability citing 2026-09-04 rows while STATUS called the bo7 census the
-    position).
+    position). A lane quoted under "What changed" or "What is open" is a
+    retired row, a pending gate or a diagnostic read, never the position.
 
 Run with --import to also import each ``module:Symbol`` (needs the runtime).
 """
@@ -289,6 +290,17 @@ def _system_role(root: Path, package: str | None) -> str | None:
     return next((role for role, p in packages.items() if isinstance(p, dict) and p.get("package") == package), None)
 
 
+def status_position_text(status_text: str) -> str:
+    """The part of docs/STATUS.md that states the position: everything before its
+    first ``## What changed`` heading. What follows records what was retired or
+    superseded and what is still open, and a lane quoted there is not the
+    position: read whole, the file made a DIAGNOSTIC read (P61's expert-GEMV cost
+    split, quoted under "What is open") the newest serving lane, and the rule
+    warned on every run (2026-09-23). A STATUS without that heading is read whole."""
+    m = re.search(r"^## What changed\b", status_text, re.M)
+    return status_text[:m.start()] if m else status_text
+
+
 def newest_serving_lane(status_text: str, by_id: dict) -> tuple[str | None, set[str]]:
     """``(measured_on, ids)`` of the newest ``area: serve`` claims docs/STATUS.md
     quotes by backticked id (globs expanded); ``(None, set())`` when it quotes none."""
@@ -311,7 +323,7 @@ def newest_serving_lane(status_text: str, by_id: dict) -> tuple[str | None, set[
 
 
 def serving_position_warnings(doc: dict, by_id: dict, status_text: str) -> list[str]:
-    newest, ids = newest_serving_lane(status_text, by_id)
+    newest, ids = newest_serving_lane(status_position_text(status_text), by_id)
     if not ids:
         return []
     out = []
