@@ -27,6 +27,8 @@ Statistics (all WITHIN a layer, then averaged over layers -- Colla-Q allocates p
 Bootstrap CIs resample LAYERS (B = 2000, seed 65), deterministic.
 
 Registered rules:
+  * P0: a family is NOT_READ unless its census's selfcheck passed and it is complete (every requested layer, both
+    texts, both halves, the full rows) -- a census the arm alarm cut is never read on the layers it reached.
   * s SURVIVES iff r_cross_half(s) >= 0.5 AND penalty(s) <= 0.15.
   * entropy is REDUNDANT with rel_act iff |Spearman(entropy, rel_act)| > 0.8 within layers on either full text.
   * selector (the issue's step 3), per family where the per-expert premise holds:
@@ -58,6 +60,10 @@ sys.path.insert(0, str(HERE.parent / "p44"))
 from p44_reduce import P3_TAIL_FRACTION, expert_errors, tail_fraction  # noqa: E402
 
 SIGNALS = ("entropy", "rel_act", "freq", "rho_x_err")
+# reported beside the registered four and read by NO rule: the two projections' errors separately (the A2000 rehearsal
+# found them anti-correlated within a layer, so the combination is visible, not hidden), and the two descriptive
+# entropies expert_entropy.py records (input rho, output energy entropy)
+DESCRIPTIVE = ("rel_gu", "rel_dn", "rho_in", "h_energy")
 TEXTS = ("wikitext", "c4val1")
 MIN_ROWS = 32
 TOP_FRACTION = 0.10
@@ -265,14 +271,17 @@ def freq_hot_sets(census: dict, text: str, half, hot_per_layer: int):
 
 # ------------------------------------------------------------------------------------------- the read
 def premise(family: str, census: dict) -> dict:
-    if family in P44_PREMISE:
-        v, why = P44_PREMISE[family]
-        return {"premise": v == "HOLDS", "source": why}
+    """The per-expert premise: P44-a's P3 read where it exists, else P3 on this census (RTN, c4val1 full). This
+    census's RTN tail is reported for EVERY family as ``rtn_tail_c4val1`` (descriptive where P44-a's read decides:
+    Granite's P44-a read was GPTQ, this census is RTN)."""
     sub = {"rows": [r for r in census["rows"] if r.get("text") == "c4val1" and r.get("half") == "full"]}
     tf = tail_fraction(expert_errors(sub, "rtn")["errors"])
     f = tf.get("fraction_for_share")
+    if family in P44_PREMISE:
+        v, why = P44_PREMISE[family]
+        return {"premise": v == "HOLDS", "source": why, "rtn_tail_c4val1": tf}
     return {"premise": f is not None and f <= P3_TAIL_FRACTION,
-            "source": f"P3 on this census (RTN, c4val1 full): fraction {f}", **tf}
+            "source": f"P3 on this census (RTN, c4val1 full): fraction {f}", **tf, "rtn_tail_c4val1": tf}
 
 
 def selector(st: dict, redundant: bool) -> str:
@@ -321,6 +330,8 @@ def reduce_family(family: str, census: dict) -> dict:
     out = {"family": family, "layers": census.get("layers_censused"), "experts_per_layer": E,
            "selfcheck_ok": (census.get("selfcheck") or {}).get("ok"),
            "stability": {s: {k2: v for k2, v in st[s].items() if not k2.startswith("_")} for s in SIGNALS},
+           "stability_descriptive": {s: {k2: v for k2, v in stability(cs, s).items() if not k2.startswith("_")}
+                                     for s in DESCRIPTIVE},
            "overlap": over, "pooled": pooled,
            "hot_sets_from_profile": {"hot_per_layer": k, "mean_jaccard_wikitext_vs_c4val1":
                                      (sum(per_layer_j) / len(per_layer_j)) if per_layer_j else None},
@@ -332,19 +343,47 @@ def reduce_family(family: str, census: dict) -> dict:
     return out
 
 
+def load_census(run_dir: str, fam: str):
+    """``census_<fam>.json``, or its gzip (how committed receipts carry it); None when neither exists."""
+    p = os.path.join(run_dir, f"census_{fam}.json")
+    if os.path.exists(p):
+        with open(p) as f:
+            return json.load(f)
+    if os.path.exists(p + ".gz"):
+        import gzip
+        with gzip.open(p + ".gz", "rt") as f:
+            return json.load(f)
+    return None
+
+
 def reduce(run_dir: str) -> dict:
     out = {}
     for fam in FAMILIES:
-        p = os.path.join(run_dir, f"census_{fam}.json")
-        if not os.path.exists(p):
+        c = load_census(run_dir, fam)
+        if c is None:
             out[fam] = {"verdict": "NOT_READ", "reason": "no census file"}
             continue
-        c = json.load(open(p))
-        if not (c.get("selfcheck") or {}).get("ok"):
-            out[fam] = {"verdict": "NOT_READ", "reason": "the census's selfcheck did not pass"}
+        gate = p0_gate(c)
+        if gate:
+            out[fam] = {"verdict": "NOT_READ", "reason": gate}
             continue
         out[fam] = reduce_family(fam, c)
     return out
+
+
+def p0_gate(census: dict) -> str | None:
+    """P0 (the instrument gate): the selfcheck passed and the census is complete -- every requested layer, both texts,
+    both halves and the full rows. Returns the reason a family is NOT_READ, or None."""
+    if not (census.get("selfcheck") or {}).get("ok"):
+        return "the census's selfcheck did not pass"
+    req = census.get("layers_requested")
+    if req is None or census.get("layers_censused") != req:
+        return f"incomplete: {len(census.get('layers_censused') or [])} of {len(req or [])} requested layers censused"
+    cells = {(r.get("text"), r.get("half")) for r in census.get("rows", [])}
+    want = {(t, h) for t in TEXTS for h in (0, 1, "full")}
+    if cells != want:
+        return f"incomplete: census cells {sorted(map(str, cells))} are not {sorted(map(str, want))}"
+    return None
 
 
 def _f(x, nd=3):
@@ -366,8 +405,19 @@ def render_md(v: dict) -> str:
                          f"{_f(st['r_cross_full'])} | {_f(st['collaq_cosine'], 4)} | "
                          f"{_f(po['top10_jaccard_wikitext_vs_c4val1'])} ({_f(po['chance'])}) | "
                          f"{'yes' if st['survives'] else 'no'} |")
+    lines += ["", "Descriptive, read by no rule:", "",
+              "| family | signal | r_split | r_cross_half | penalty | rel_gu~rel_dn (wiki / c4) |", "|---|---|---|---|---|---|"]
+    for fam, r in v.items():
+        if "stability_descriptive" not in r:
+            continue
+        o = r["overlap"]
+        gd = (f"{_f(o['wikitext:rel_gu~rel_dn']['spearman_within_layer'])} / "
+              f"{_f(o['c4val1:rel_gu~rel_dn']['spearman_within_layer'])}")
+        for s in DESCRIPTIVE:
+            st = r["stability_descriptive"][s]
+            lines.append(f"| {fam} | {s} | {_f(st['r_split'])} | {_f(st['r_cross_half'])} | {_f(st['penalty'])} | {gd} |")
     lines += ["", "| family | entropy~rel_act (wiki / c4) | entropy redundant | Colla-Q claim (entropy − freq) | "
-              "premise | selector |", "|---|---|---|---|---|---|"]
+              "RTN tail, c4val1 (P3 statistic) | premise | selector |", "|---|---|---|---|---|---|---|"]
     for fam, r in v.items():
         if "stability" not in r:
             continue
@@ -378,6 +428,7 @@ def render_md(v: dict) -> str:
                      f"{_f(o['c4val1:entropy~rel_act']['spearman_within_layer'])} | "
                      f"{'yes' if r['entropy_redundant_with_rel_act'] else 'no'} | {c['verdict']} "
                      f"({_f(c['mean_diff'])}{f' [{ci[0]:.3f}, {ci[1]:.3f}]' if ci else ''}) | "
+                     f"{_f(r['premise']['rtn_tail_c4val1'].get('fraction_for_share'), 4)} | "
                      f"{'holds' if r['premise']['premise'] else 'no'} ({r['premise']['source']}) | {r['selector']} |")
     return "\n".join(lines) + "\n"
 

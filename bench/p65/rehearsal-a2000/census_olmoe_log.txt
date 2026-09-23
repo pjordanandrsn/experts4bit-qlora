@@ -1,0 +1,14 @@
+[20:26:40]   checkpoint: local directory /models/olmoe
+[20:26:40]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[20:26:40]   quantized experts on 16/16 MoE layers (64 experts each)
+[20:26:40]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:26:42]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:26:51]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+selfcheck ok: {"layer": 0, "ok": true, "max_rel_diff": 1.4525590898021376e-08}
+  layers 0..11 wikitext/0: hessians 47s rows 67s
+  layers 0..11 wikitext/1: hessians 67s rows 29s
+  layers 0..11 c4val1/0: hessians 90s rows 40s
+  layers 0..11 c4val1/1: hessians 54s rows 29s
+  layers 0..11 done; 3072 rows
+census -> /w/out/census_olmoe.json: 3072 rows over 4 layers in 478.6 s

@@ -303,6 +303,17 @@ def test_c4val1_is_k8s_text(monkeypatch):
     assert '"en/c4-validation.00001-of-00008.json.gz"' in k8 and 'ds["text"][:2000]' in k8
 
 
+def test_first_layers_follows_the_plan_order_not_the_layer_numbers():
+    """The plan enumerates layers in checkpoint-index key order (lexicographic). A census cut after 16 layers of
+    Mixtral's 32 therefore measured {0, 1, 2, 10..22}, not 0..15 -- and --first-layers 16 reproduces THAT set."""
+    lex = sorted(range(32), key=str)
+    assert cen.select_layers(lex, first=16) == [0, 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 21, 22]
+    assert cen.select_layers(lex, layers="3,1,2") == [1, 2, 3]
+    assert cen.select_layers(lex) == lex
+    with pytest.raises(SystemExit):
+        cen.select_layers(lex, layers="1", first=2)
+
+
 def test_halves_are_disjoint_and_cover_the_text():
     batches = [torch.full((4, 3), i) for i in range(8)]
     a, b = cen.split_halves(batches)

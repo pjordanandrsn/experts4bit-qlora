@@ -50,8 +50,8 @@ def census(*, entropy="stable", rel="stable", freq="text", ent_tracks_rel=False,
                                  "entropy": {"rho": 0.5}})
                     rows.append({**base, "role": "dn", "rtn": {"rel_act": r, "sq_err_act": r * r, "rel_frob": 0.1},
                                  "entropy": {"rho": rho, "h_energy": 0.9}})
-    return {"family": family, "experts": E, "layers_censused": list(range(L)), "rows": rows,
-            "selfcheck": {"ok": selfcheck}}
+    return {"family": family, "experts": E, "layers_requested": list(range(L)), "layers_censused": list(range(L)),
+            "rows": rows, "selfcheck": {"ok": selfcheck}}
 
 
 def test_the_colla_q_world_gives_two_arms():
@@ -119,6 +119,31 @@ def test_run_dir_missing_or_failed_selfcheck_is_not_read(tmp_path):
     assert v["mixtral"]["verdict"] == "NOT_READ" and v["olmoe"]["selector"] in {"TWO_ARMS", "NOT_WRITTEN (no per-expert premise)"}
     md = red.render_md(v)
     assert "| granite | — | NOT_READ" in md and "| olmoe | entropy |" in md
+
+
+def test_a_gzipped_census_reads_the_same(tmp_path):
+    import gzip
+    c = census()
+    (tmp_path / "plain").mkdir()
+    (tmp_path / "gz").mkdir()
+    (tmp_path / "plain" / "census_granite.json").write_text(json.dumps(c))
+    with gzip.open(tmp_path / "gz" / "census_granite.json.gz", "wt") as f:
+        json.dump(c, f)
+    a, b = red.reduce(str(tmp_path / "plain")), red.reduce(str(tmp_path / "gz"))
+    assert a["granite"]["selector"] == "TWO_ARMS" and red.render_md(a) == red.render_md(b)
+
+
+def test_an_incomplete_census_is_not_read(tmp_path):
+    """P0: a census the arm alarm cut, or one missing a text/half, is NOT_READ -- never read on the layers it reached."""
+    cut = census()
+    cut["layers_censused"] = cut["layers_censused"][:5]
+    assert "incomplete: 5 of 8" in red.p0_gate(cut)
+    half = census()
+    half["rows"] = [r for r in half["rows"] if not (r["text"] == "c4val1" and r["half"] == 1)]
+    assert red.p0_gate(half).startswith("incomplete: census cells")
+    assert red.p0_gate(census()) is None
+    (tmp_path / "census_granite.json").write_text(json.dumps(cut))
+    assert red.reduce(str(tmp_path))["granite"]["verdict"] == "NOT_READ"
 
 
 def test_underrouted_experts_are_excluded():

@@ -10,7 +10,7 @@ continuous-valued output activations (i.e., expert FFN outputs)":
     sigma2_within = 1/(|T||C|) sum_t sum_c (y_tc - mu_c)^2      mu_c = mean_t y_tc   (per-channel mean removed)
     sigma2_total  = 1/(|T||C|) sum_t sum_c (y_tc - mu_bar)^2    mu_bar = mean_c mu_c  (one global mean removed)
 
-over the token-slots T an expert was routed and the channels C of its output. ``rho`` is in (0, 1]; lower means the
+over the token-slots T an expert was routed and the channels C of its output. ``rho`` is in [0, 1]; lower means the
 expert's channels carry distinct, predictable responses (the paper's "better expert"), higher means a weaker expert,
 and Colla-Q gives weaker experts more bits. ``dH_nats = 1/2 ln rho = H_within - H_total`` is the same number as an
 entropy difference. An identity makes the quantity concrete: ``sigma2_total - sigma2_within = Var_c(mu_c)``, so

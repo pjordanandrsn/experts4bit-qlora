@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### P65 registered: per-expert activation entropy beside `rel_act`, and which ranking survives wikitext → c4val1 (#710; not yet run)
+
+- **The calibration tap keeps a first moment, on request.**
+  - `calibrate_expert_hessians(..., activation_means=)` fills a dict with each expert's fp64 mean gate/up input and
+    down input, from the same tap, over the same rows. It uses `_ExpertHessianSink(means=)`.
+  - Off by default. The Hessians are bitwise the same tensors either way, and the return value does not change
+    (`tests/test_p65_entropy.py`).
+  - The Hessians are uncentred (`2 X X^T`), so no statistic that needs per-channel means could be read from them
+    alone. Nothing else in the wheel changes.
+- **`bench/p65/`** (P65-PREREG.md):
+  - `expert_entropy.py`: Colla-Q's activation-entropy ratio `rho = sigma2_within / sigma2_total` of each expert's
+    output, read exactly from the tap's moments.
+  - `p65_census.py`: P44-a's `census_row`, unchanged and RTN only, plus the entropy field, on wikitext-2 train and
+    K8's c4val1 text. Each text runs in two disjoint halves; the full rows are combined exactly.
+  - `p65_reduce.py`: within-layer rank stability (a split-half ceiling, and the domain shift at the same sample size),
+    overlap with `rel_act` and with routing frequency (through `hot_sets_from_profile`), Colla-Q's cosine for
+    replication, and the registered rule for S-C's selector.
+  - `p65_run.sh` / `p65_drive.sh` / `staged.sha256`: the box/controller pair, with the pin, nonce, heartbeat and HF
+    token staging. The host floors are refusals, not stalls:
+    - RAM and disk;
+    - HF egress ≥ 100 MB/s, because Mixtral is 93 GB;
+    - a host-side Hessian update ≤ 0.15 s at Mixtral's 14336² shape. That update runs about 4,100 times, and the
+      rehearsal measured 0.33 s for it on the NAS Xeon.
+- **Rehearsed on the NAS RTX A2000**, not a reading (`bench/p65/rehearsal-a2000/`). It found that the census walks
+  layers in checkpoint-key order (0, 1, 10, 11, …). P44-a's "16 of 32" Mixtral layers were therefore most probably
+  not 0–15; unverified here. P65 takes the first 16 of the same order (`--first-layers`).
+- **Tests:**
+  - `tests/test_p65_entropy.py`: known distributions, moments against raw rows, the sink, the census row keeping P44's
+    `rel_act`, halves, texts, and layer order;
+  - `tests/test_p65_reduce.py`: every decision branch on synthetic rows;
+  - `tests/test_p65_staged_pin.py`.
+
 ### The int4 singleton GEMV no longer writes past its preallocated buffer at T > 1 (a fix; T = 1 unchanged)
 
 - **The defect.** `enable_serve_experts_int4` sizes each store's split-K partials buffer `st["part"]` for one token's

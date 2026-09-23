@@ -26,6 +26,8 @@ def _resolve(name: str) -> pathlib.Path:
 
 
 def _entries():
+    if not PIN.exists():                     # parametrize runs at collection, before skipif can apply
+        return
     for line in PIN.read_text().splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
             continue

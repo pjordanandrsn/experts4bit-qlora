@@ -1,0 +1,16 @@
+{
+ "threads": 8,
+ "gate_up_in (hidden 4096)": {
+  "K": 4096,
+  "bytes": 67108864,
+  "copy_s_median": 0.0011743329814635217,
+  "scale_add_s_median": 0.002504542004317045
+ },
+ "down_in (inter 14336)": {
+  "K": 14336,
+  "bytes": 822083584,
+  "copy_s_median": 0.01358795800479129,
+  "scale_add_s_median": 0.027323834015987813
+ },
+ "host": "Apple M1 Max (the controller Mac)"
+}

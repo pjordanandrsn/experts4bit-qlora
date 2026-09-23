@@ -42,7 +42,7 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="P65_RUN_ID=$RUN_ID P65_RUN_NONCE=$NONCE P65_DEADLINE_EPOCH=$DEADLINE P65_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA"
 # Every knob p65_run.sh reads must be forwardable, or an amendment that changes one silently does not reach the box
 # (TP4 amendment 2's lesson). %q-quoted: a space in a value would otherwise become the remote COMMAND (tp4-b-p46cut-3).
-for v in P65_FAMILIES P65_NSEQ P65_MIXTRAL_LAYERS P65_MIN_MBPS P65_MIN_DISK_GB P65_MIN_RAM_GB \
+for v in P65_FAMILIES P65_NSEQ P65_MIXTRAL_FIRST_LAYERS P65_MIN_MBPS P65_MIN_DISK_GB P65_MIN_RAM_GB P65_MAX_ACC_S \
          P65_NEED_GRANITE_S P65_NEED_OLMOE_S P65_NEED_MIXTRAL_S; do
   [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
 done

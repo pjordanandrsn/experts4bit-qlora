@@ -18,11 +18,13 @@ for v in E4B_SHA GNF4_SHA; do case "${!v}" in *[!0-9a-f]*|"") say "refusing: $v 
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false HF_HUB_ENABLE_HF_TRANSFER=0
 FAMILIES=${P65_FAMILIES:-granite,olmoe,mixtral}
 NSEQ=${P65_NSEQ:-64}                                  # windows of 512 per text; each half = 32 = P44-a's census size
-MIXTRAL_LAYERS=${P65_MIXTRAL_LAYERS:-0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}   # P44-a's measured half, registered
-MIN_MBPS=${P65_MIN_MBPS:-50}; MIN_DISK_GB=${P65_MIN_DISK_GB:-200}; MIN_RAM_GB=${P65_MIN_RAM_GB:-64}
+# Mixtral: the first 16 layers of the plan's own enumeration order -- the order P44-a's census walked (checkpoint-index
+# key order, lexicographic), so the SAME half P44-a measured; the census records the list (layers_requested)
+MIXTRAL_FIRST=${P65_MIXTRAL_FIRST_LAYERS:-16}
+MIN_MBPS=${P65_MIN_MBPS:-100}; MIN_DISK_GB=${P65_MIN_DISK_GB:-200}; MIN_RAM_GB=${P65_MIN_RAM_GB:-64}
 # seconds a family needs, fetch + bake + census, from the rehearsal (P65-PREREG "Box and cost"); a family that cannot
 # fit before the deadline is SKIPPED (host-limited), never started and cut
-NEED_granite=${P65_NEED_GRANITE_S:-1500}; NEED_olmoe=${P65_NEED_OLMOE_S:-1800}; NEED_mixtral=${P65_NEED_MIXTRAL_S:-4200}
+NEED_granite=${P65_NEED_GRANITE_S:-1500}; NEED_olmoe=${P65_NEED_OLMOE_S:-2100}; NEED_mixtral=${P65_NEED_MIXTRAL_S:-4500}
 : > summary.txt; echo "$P65_INSTANCE_ID" > INSTANCE_ID
 # ---- staged pieces, byte-for-byte (names as the box sees them)
 for f in p65_run.sh p65_census.py expert_entropy.py p65_reduce.py expert_residuals.py serve_stack.py p44_reduce.py k8_bake.py calib.json staged.sha256; do
@@ -39,10 +41,25 @@ DISK_GB=$(df -BG --output=avail /root | tail -1 | tr -dc 0-9); RAM_GB=$(awk '/Me
 echo "disk_avail_gb=$DISK_GB ram_avail_gb=$RAM_GB" >> forensics.txt
 [ "${DISK_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${DISK_GB} GB free < ${MIN_DISK_GB} (Mixtral bf16 + its NF4 snapshot + arena)"; echo "refused: disk $DISK_GB GB" > REFUSAL; finish 13; }
 [ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB} GB RAM available < ${MIN_RAM_GB} (Mixtral's Hessians + one layer's weights)"; echo "refused: host RAM $RAM_GB GB" > REFUSAL; finish 13; }
+# host-side Hessian pre-flight: every calibration batch lands a K x K fp32 gram on the host and scales + adds it into
+# the running mean (gptq_pack.HessianAccumulator, hessian_device="cpu"). At Mixtral's down shape (14336^2, 822 MB) that
+# is ~4,100 updates for the registered census, and it is HOST-bound: 0.33 s per scale+add on the NAS Xeon W-1250, 0.027 s
+# on an Apple M1 Max (bench/p65/rehearsal-a2000/accbench_*.json). A host above the floor would push Mixtral past the guard.
+MAX_ACC_S=${P65_MAX_ACC_S:-0.15}
+ACC_S=$(python - <<'PYA' 2>/dev/null || echo 99
+import time, torch
+H = torch.zeros(14336, 14336); g = torch.randn(14336, 14336); ts = []
+for i in range(3):
+    t0 = time.perf_counter(); H *= 0.9; H.add_(g, alpha=0.001); ts.append(time.perf_counter() - t0)
+print(f"{sorted(ts)[1]:.3f}")
+PYA
+)
+echo "host_scale_add_14336_s=$ACC_S (floor $MAX_ACC_S)" >> forensics.txt; say "host Hessian scale+add at 14336^2: ${ACC_S} s (floor ${MAX_ACC_S})"
+if python3 -c "import sys; sys.exit(0 if float('${ACC_S:-99}') > float('$MAX_ACC_S') else 1)"; then say "REFUSED: host scale+add ${ACC_S} s > ${MAX_ACC_S} -- host-limited, not a result"; echo "refused: host memory bandwidth (scale+add ${ACC_S} s)" > REFUSAL; finish 13; fi
 # the Hessian budget scales with the host (bigger chunks = fewer forward passes); recorded
 BUDGET=$(( RAM_GB * 2 / 5 )); [ "$BUDGET" -lt 16 ] && BUDGET=16; [ "$BUDGET" -gt 64 ] && BUDGET=64
 export E4B_INT4_HESSIAN_BUDGET_GB=$BUDGET; echo "E4B_INT4_HESSIAN_BUDGET_GB=$BUDGET" >> forensics.txt
-say "egress pre-flight: HF CDN, 50 MB range, 20 s cap (floor ${MIN_MBPS} MB/s)"
+say "egress pre-flight: HF CDN, 50 MB range, 20 s cap (floor ${MIN_MBPS} MB/s; Mixtral is 93 GB)"
 BPS=$(curl -sSL --max-time 20 -r 0-52428800 -o /dev/null -w '%{speed_download}' https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors 2>/dev/null || echo 0)
 MBPS=$(python3 -c "print(round(float('${BPS:-0}')/1e6,1))"); say "HF CDN ${MBPS} MB/s"; echo "hf_cdn_mbps=$MBPS" >> forensics.txt
 if python3 -c "import sys; sys.exit(0 if float('${MBPS:-0}') < float('$MIN_MBPS') else 1)"; then say "REFUSED: egress ${MBPS} MB/s < ${MIN_MBPS} -- host-limited, not a result"; echo "refused: egress $MBPS MB/s" > REFUSAL; finish 14; fi
@@ -84,20 +101,20 @@ bake(){ local MID=$1 TAG=$2; [ -e "$W/work_$TAG/nf4.arena" ] && return 0; say "b
   K8_MODEL="$MID" K8_WORK="$W/work_$TAG" perl -e "alarm $(arm_alarm); exec @ARGV" python $W/k8_bake.py > logs/bake_$TAG.log 2>&1 || { tail -3 logs/bake_$TAG.log; say "BAKE FAIL $TAG"; return 12; }
   [ -e "$W/work_$TAG/nf4.arena" ] || { say "BAKE FAIL $TAG (no arena)"; return 12; }; }
 free_family(){ rm -rf $W/work_$1; rm -rf /root/.cache/huggingface/hub/models--${2//\//--}; say "freed $1 ($(df -h /root | tail -1 | awk '{print $4}') free)"; }
-census(){ local FAM=$1 NEED=$2 LAYERS=${3:-}; read MID REV <<<"$(python -c "import sys; sys.path.insert(0, '$W'); from serve_stack import MODELS; print(*MODELS['$FAM'])")"
+census(){ local FAM=$1 NEED=$2 FIRST=${3:-}; read MID REV <<<"$(python -c "import sys; sys.path.insert(0, '$W'); from serve_stack import MODELS; print(*MODELS['$FAM'])")"
   can_run "$NEED" "${FAM}_census" || return 40
   local t0; t0=$(date +%s)
   fetch "$MID" "$REV" && bake "$MID" $FAM || { echo "CENSUS $FAM fetch/bake FAILED" >> summary.txt; return 11; }
-  say "census $FAM (nseq $NSEQ per text${LAYERS:+, layers $LAYERS})"
+  say "census $FAM (nseq $NSEQ per text${FIRST:+, first $FIRST layers of the plan order})"
   E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python $W/p65_census.py --family $FAM --arena $W/work_$FAM/nf4.arena --calib $W/calib.json \
-      --nseq "$NSEQ" ${LAYERS:+--layers "$LAYERS"} --out $W/census_$FAM.json > logs/census_$FAM.log 2>&1; local rc=$?
+      --nseq "$NSEQ" ${FIRST:+--first-layers "$FIRST"} --out $W/census_$FAM.json > logs/census_$FAM.log 2>&1; local rc=$?
   tail -3 logs/census_$FAM.log | sed "s/^/    /"; { echo -n "census $FAM rc=$rc wall=$(( $(date +%s) - t0 ))s "; tail -1 logs/census_$FAM.log | cut -c1-200; } >> summary.txt
   free_family $FAM "$MID"; return $rc; }
 rc_any=0
 FAMS=",$FAMILIES,"
 [[ "$FAMS" == *,granite,* ]] && { census granite "$NEED_granite" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
 [[ "$FAMS" == *,olmoe,* ]] && { census olmoe "$NEED_olmoe" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
-[[ "$FAMS" == *,mixtral,* ]] && { census mixtral "$NEED_mixtral" "$MIXTRAL_LAYERS" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
+[[ "$FAMS" == *,mixtral,* ]] && { census mixtral "$NEED_mixtral" "$MIXTRAL_FIRST" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
 # ---- every registered census present, complete (every requested layer, both texts, both halves) and self-checked
 for FAM in ${FAMILIES//,/ }; do
   python - "$W/census_$FAM.json" <<'PYC' >> summary.txt 2>&1 || { echo "ROW census_$FAM INCOMPLETE" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }

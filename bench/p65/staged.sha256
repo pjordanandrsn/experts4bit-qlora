@@ -1,0 +1,12 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (this directory; bench/p44 for P44-a's census row, served-model
+# builder and tail statistic; bench/p39 for the bake and the placement calibration) and compares.
+f8835544402d81f701062c9f5cd6dd9b705380fecb3ab2c3119ef38eeaea71b1  p65_run.sh
+52203b13932b3eb5b66eae2e412ee266994096bb2683749948ef7fef8473f617  p65_census.py
+02a6c44b66cbb660dfc838fe3d4192f22ded4a37879f1c6314d2ac24fb3a6493  expert_entropy.py
+bd0260e82bc83b53d6455abc30095925adc492edaead0bce3db292499024bc72  p65_reduce.py
+b3013b2e1564074354e31fc5086c67f05cac23d2af3bb58351334f7eb955123e  expert_residuals.py
+713d8c7f6e1538790e7e2bf27698ad67ebf95c3c7efac2af51553e3b50bf5f73  serve_stack.py
+690239f4b14ecd9bdaeda387affd9335d8eb86b6e527fdfc0a37d626fe2b28b1  p44_reduce.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json

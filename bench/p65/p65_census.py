@@ -98,6 +98,21 @@ def batches_digest(batches) -> dict:
             "ids_sha256": h.hexdigest()}
 
 
+def select_layers(enumeration, layers: str = "", first: int = 0):
+    """The layers a census walks, in the plan's OWN order (``_expert_layers``: checkpoint-index key order, which HF
+    writes sorted, so 0, 1, 10, 11, ..., 19, 2, 20, ...). ``first=N`` keeps the first N of that order -- what a census
+    cut after N layers measured, P44-a's Mixtral half included; ``layers`` keeps a named subset, order unchanged."""
+    if layers and first:
+        raise SystemExit("--layers and --first-layers are exclusive")
+    order = list(enumeration)
+    if layers:
+        keep = {int(x) for x in layers.split(",")}
+        order = [x for x in order if x in keep]
+    if first:
+        order = order[:first]
+    return order
+
+
 # ------------------------------------------------------------------------------------------- rows
 def combine_rows(r0: dict | None, r1: dict | None) -> dict:
     """The ``full`` row of a text from its two halves. ``rel_frob`` is text-independent (copied); the RTN trace terms
@@ -153,6 +168,10 @@ def main() -> int:
     ap.add_argument("--nseq", type=int, default=64, help="windows of 512 tokens PER TEXT; each half gets nseq/2")
     ap.add_argument("--texts", default=",".join(TEXTS))
     ap.add_argument("--layers", default="", help="comma list of layer indices (default: every expert layer, in order)")
+    ap.add_argument("--first-layers", type=int, default=0,
+                    help="only the first N layers of the plan's OWN enumeration order -- the order P44-a's census "
+                         "walked (checkpoint-index key order, lexicographic: 0, 1, 10, 11, ...), so N = 16 on "
+                         "Mixtral is the half P44-a measured, not layers 0-15")
     ap.add_argument("--selfcheck", type=int, default=1, help="1: determinism + moment-vs-direct entropy on real rows")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
@@ -196,10 +215,8 @@ def main() -> int:
         gu_key, dn_key = prefused[layer]
         return read(gu_key).to(torch.float32), read(dn_key).to(torch.float32)
 
-    order = [layer for layer, _w in layer_ws]
-    if a.layers:
-        keep = {int(x) for x in a.layers.split(",")}
-        order = [x for x in order if x in keep]
+    enumeration = [layer for layer, _w in layer_ws]
+    order = select_layers(enumeration, a.layers, a.first_layers)
     cfg = model.config
     tcfg = getattr(cfg, "text_config", None) or cfg
     hid = int(getattr(tcfg, "hidden_size"))
@@ -224,7 +241,8 @@ def main() -> int:
            "entropy_definition": "Colla-Q rho = sigma2_within / sigma2_total of the expert output y = W_dn h "
                                  "(bench/p65/expert_entropy.py)",
            "texts": tdig, "nseq_per_text": a.nseq, "seq_len": 512, "layers_total": len(layer_ws),
-           "layers_requested": order, "layers_censused": [], "expert_layout": layout, "experts": E, "hidden": hid,
+           "layer_enumeration": enumeration, "layers_requested": order, "layers_censused": [],
+           "expert_layout": layout, "experts": E, "hidden": hid,
            "inter": inter, "hessian_bytes_per_layer": per_layer_h, "weight_bytes_per_layer": per_layer_w,
            "layers_per_pass": lpp, "engagement": info, "gpu": torch.cuda.get_device_name(0), "torch": torch.__version__,
            "timing": [], "selfcheck": None, "rows": []}

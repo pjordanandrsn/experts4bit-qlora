@@ -1,0 +1,34 @@
+[19:50:51]   checkpoint: local directory /models/granite
+[19:50:51]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[19:50:51]   quantized experts on 24/24 MoE layers (32 experts each)
+[19:50:51]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[19:50:52]   experts deferred to the arena: 24 module(s), 120 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[19:50:57]   hybrid tier active on 24 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+selfcheck ok: {"layer": 0, "ok": true, "max_rel_diff": 4.506458326491822e-08}
+  layers 0..12 wikitext/0: hessians 6s rows 3s
+  layers 0..12 wikitext/1: hessians 7s rows 3s
+  layers 0..12 c4val1/0: hessians 9s rows 3s
+  layers 0..12 c4val1/1: hessians 6s rows 3s
+  layers 0..12 done; 1920 rows
+  layers 13..17 wikitext/0: hessians 7s rows 6s
+  layers 13..17 wikitext/1: hessians 6s rows 3s
+  layers 13..17 c4val1/0: hessians 6s rows 3s
+  layers 13..17 c4val1/1: hessians 6s rows 4s
+  layers 13..17 done; 3840 rows
+  layers 18..21 wikitext/0: hessians 6s rows 3s
+  layers 18..21 wikitext/1: hessians 6s rows 2s
+  layers 18..21 c4val1/0: hessians 6s rows 4s
+  layers 18..21 c4val1/1: hessians 7s rows 3s
+  layers 18..21 done; 5760 rows
+  layers 22..5 wikitext/0: hessians 7s rows 4s
+  layers 22..5 wikitext/1: hessians 12s rows 3s
+  layers 22..5 c4val1/0: hessians 6s rows 3s
+  layers 22..5 c4val1/1: hessians 7s rows 9s
+  layers 22..5 done; 7680 rows
+  layers 6..9 wikitext/0: hessians 5s rows 2s
+  layers 6..9 wikitext/1: hessians 5s rows 2s
+  layers 6..9 c4val1/0: hessians 7s rows 3s
+  layers 6..9 c4val1/1: hessians 5s rows 2s
+  layers 6..9 done; 9216 rows
+census -> /w/out/census_granite.json: 9216 rows over 24 layers in 263.8 s

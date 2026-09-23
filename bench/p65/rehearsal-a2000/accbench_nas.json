@@ -1,0 +1,16 @@
+{
+ "threads": 6,
+ "gate_up_in (hidden 4096)": {
+  "K": 4096,
+  "bytes": 67108864,
+  "copy_s_median": 0.014228118117898703,
+  "scale_add_s_median": 0.04049939499236643
+ },
+ "down_in (inter 14336)": {
+  "K": 14336,
+  "bytes": 822083584,
+  "copy_s_median": 0.1797114829532802,
+  "scale_add_s_median": 0.33351828902959824
+ },
+ "host": "QNAP NAS, Intel Xeon W-1250 (container --cpus 4; shared with production services)"
+}
