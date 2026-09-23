@@ -188,7 +188,8 @@ secondary row trains. **Gemma-4** — both e4b attention-4-bit arms died on the
 harness's projection-count check (the converter returned 100; the harness expected
 4 · n_layers = 120 —
 [#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412), fixed
-since by #435; the arms have not re-run, [#703](https://github.com/pjordanandrsn/experts4bit-qlora/issues/703); the
+since by #435; the attention-4-bit arms have run cleanly since, in P56
+and tp4, and are not licensed, [#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713); the
 bf16-attention `fast_train` path stays as tp1 left it), while Unsloth's arm
 is OK · VALID (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.unsloth.ckpt_unsloth`).
 e4b's internal fused-vs-reference parity PASSES on all four families that
@@ -639,15 +640,16 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   defaulted to the V4 epilogue, #397). What stays open is a gpt-oss-aware
   adapter; the kernel package's `ExpertsMxfp4LoRA` route is the experimental
   alternative (tp1: canary and provenance pass, never licensed).
-- **[#703](https://github.com/pjordanandrsn/experts4bit-qlora/issues/703) —
-  Gemma-4 attention 4-bit has no receipt.** Both e4b attention-4-bit arms of
-  tp2/P40 died before a step ran
-  (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.*`). The cause was the
-  converter's count check, which found 100 of 120 projections. That is
-  [#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412), fixed
-  by #435: projections are detected by structure, with `v_proj` optional on
-  `k_eq_v` layers. The arms have not re-run, so attention-4-bit training on
-  `gemma4_text` is not supported pending that re-run.
+- **[#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713) — Gemma-4 attention 4-bit runs, and the training-parity band cannot
+  license it.** Since #435 the arms convert all 115 structural projections: 25 sliding
+  layers × 4, and 5 full-attention layers × 3, which have no `v_proj`. They run VALID in
+  `p56-gemma4-ladder-3` and `tp4-c-4`. But tp1's constant 0.05 band fails for every
+  accelerated path, the kernel-free batched one included (0.054 final, against the fused
+  path's 0.102; `e4b.parity.gemma4.train-floor`), so the band cannot tell a defect from the
+  model's own sensitivity. P56 recommends a per-family floor measured by the
+  smallest-perturbation arm. Until that band is registered, attention-4-bit training on
+  `gemma4_text` is not supported. tp2/P40's own two arms were voided by its harness's count
+  check ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)); that harness still hard-codes 4 · n_layers.
 - **[#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344) —
   Gemma-4 fails to load on 2 of 6 rented hosts** with `CUDA error: invalid
   argument`, after the experts quantise. A 2 GiB host-hop fix was merged and
