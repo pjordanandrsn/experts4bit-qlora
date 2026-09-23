@@ -1,175 +1,261 @@
-# Claims register — schema (draft for docs/claims.json in both repos)
+# Claims register — schema
 
-One JSON object per claim. A claim is one sentence a reader could act on,
-with a number where there is one. Every README/docs number must map to an
-entry; CI can enforce that later.
+**One schema for both registers.** This file is byte-identical in
+experts4bit-qlora and grouped-nf4-gemm, and so is its checker,
+`scripts/check_claims_register.py` (both listed in `SHARED` in
+`scripts/check_shared_tooling.py`). Until 2026-09-23 each repository kept its own
+copy of both, and they had drifted into two schemas that refused each other's
+data. They were converged that day: every rule below is enforced in both
+repositories, and both registers were migrated to it (the last section says what
+moved). The prose that quotes claim ids is checked separately, by
+`scripts/check_readme_claims.py`.
+
+A claim is one sentence a reader could act on, with a number where there is one.
+Every README / docs number maps to a claim. `docs/claims.json` holds them:
 
 ```json
 {
-  "id": "e4b.serve.b1.qwen3-30b.nf4.5090",         // stable slug, never reused
-  "package": "experts4bit-qlora" | "grouped-nf4-gemm",
-  "area": "train" | "offload" | "serve" | "kernel" | "parity" | "provenance" | "portability",
-  "claim": "one sentence, present tense, the thing a user gets",
-  "value": 98.3, "unit": "tok/s",                    // omit for qualitative claims
-  "model": "Qwen/Qwen3-30B-A3B", "hardware": "RTX 5090 (sm_120), rented Vast host",
-  "conditions": "B=1, NF4 experts, fp8 paged KV, 512-token prompt, --no-fuse-qkv",
-  "measured_on": "2026-09-03",
-  "status": "verified" | "measured" | "projected" | "retired" | "superseded" | "open",
-  "tier": "confirmed" | "measured" | "projected",   // repo's existing evidence tiers
-  "evidence": ["bench/hybrid-g9/b1/RESULTS-b1-decomposition.md"],  // PUBLIC files in the git tree; see "Evidence entries"
-  "evidence_private": ["INT4B16/P25-PARITY.md"],    // exists but not in this repo -- reader cannot check it
-  "supersedes": ["<id>"], "superseded_by": "<id>",
-  "retired_reason": "why, in one sentence, with the measurement that retired it",
-  "licensed_by": "<id>",                             // the K8 verdict row behind a licence label; see below
-  "quoted_in": ["README.md#L45", "docs/METHODOLOGY.md#13"],
-  "pack_fingerprint": "sha256:<64 lowercase hex>",  // optional; identity of a calibrated pack artifact -- see below
-  "validity": "VALID" | "VOID",                      // lane arms only; see "Lane fields"
-  "row_status": "OK" | "HARNESS_ERROR" | "REFUSED" | "EXPERIMENTAL",
-  "parity_verdict": "REF" | "PASS" | "VOID" | "no pair" | null,
-  "row_reason": "free text beside a non-OK row_status or a re-run attempt"
+  "schema": "docs/claims-schema.md",
+  "package": "experts4bit-qlora",
+  "generated": "2026-09-05",
+  "status_vocabulary": {"measured": "one or more runs, receipt public in this repo", "...": "..."},
+  "claims": [ { "id": "e4b.serve.b1.qwen3-30b.nf4.5090", "...": "..." } ]
 }
 ```
 
-## What the register check enforces (`scripts/check_claims_register.py`, CI)
+Those five top-level keys are the only ones. `status_vocabulary` names the
+statuses this register uses, each a status of this schema, with a one-line
+gloss. Ids are unique, never reused, and share the register's namespace
+(`e4b.` / `gnf4.`).
 
-Added 2026-09-05 after an audit found every check keying on `status` alone.
-Each rule below is mechanical and fails the discoverability job.
+## Fields
 
-**Evidence entries.** Every element of `evidence[]` is one of:
+A row carries only these fields. The checker refuses any other key, so a typo is
+a finding rather than an ignored field.
 
-- a bare repository-relative path of a FILE in the git tree, optionally with
-  a `#fragment` (`docs/METHODOLOGY.md#10`). The check reads `git ls-files`,
-  not the working tree: `*.log` is gitignored, so a receipt log is evidence
-  once it is force-added and never before; a directory, an absolute path or
-  a path through `..` is a finding (outside a git checkout the working tree
-  stands in and the output says so). No free text, globs or annotations --
-  what a path was run with goes in `notes`, and a script that was never
-  committed is not evidence (say so in `notes` and drop it);
-- `{"repository": "owner/name", "path": "kernel/RESULTS.md"}` -- a file in
-  another repository (the kernel package's receipts); verified against a
-  checkout when the check is given `--sibling PATH` and that checkout's
-  slug matches, otherwise accepted by shape (a sibling whose slug cannot be
-  resolved fails the check rather than skipping these silently);
-- `{"url": "https://github.com/owner/name/issues/N"}` -- an issue or pull
-  request on github.com, for `open` items and refusals tracked there.
+| field | when | what |
+|---|---|---|
+| `id` | always | stable slug in the register's namespace, never reused |
+| `status` | always | a status below |
+| `claim` | always | one sentence, present tense, the thing a user gets |
+| `area` | optional | `train` · `offload` · `serve` · `kernel` · `parity` · `quality` · `provenance` · `portability` · `roadmap` |
+| `package` | optional | this repository's package name, when written |
+| `value`, `unit` | quantitative claims | the headline number and its unit |
+| `model`, `hardware`, `conditions` | optional | what the number was measured on and how |
+| `measured_on` | measured / measured-private / confirmed / verified | ISO date of the run (below) |
+| `tier` | optional, legacy | `confirmed` · `measured` · `projected` (a repository's older tier word) |
+| `evidence` | public-run statuses (non-empty) | public receipts (below) |
+| `evidence_private` | measured-private (non-empty) | where a private receipt lives: strings, listed and never resolved |
+| `supersedes`, `superseded_by` | successors | below |
+| `retired_reason`, `retired_on` | retired rows | the sentence, with the measurement that retired the claim; its date |
+| `licensed_by`, `pack_fingerprint` | licence labels | below |
+| `quoted_in` | optional | locations where the claim is quoted (below) |
+| `validity`, `row_status`, `parity_verdict`, `row_reason` | lane arms | below |
+| `notes` | optional | caveats, refused arms, corrections — never the headline |
 
-**Dates.** `measured`, `measured-private`, `verified` and `confirmed` rows
-carry `measured_on` as `YYYY-MM-DD`. When the run's own date is not on
-record, the receipt's date is used and `notes` says so.
+## Statuses
 
-**Successors.** A `superseded` row carries `superseded_by`; following it
-(through other superseded rows, never a cycle) reaches an ACTIVE row. A
-`retired` row that names what replaced it carries `superseded_by` too, and
-it resolves the same way; an ACTIVE row never carries `superseded_by`. A
-`retired` row carries `retired_reason` and no other row does -- one status
-per row. Every `supersedes` id exists. A restatement with no receipt of its
-own is not a successor: the old row is `retired`, not `superseded`.
+The statuses are these eight. A register's own `status_vocabulary` glosses the
+ones it uses, and the system manifest's `evidence_vocabulary` defines them for
+readers of both.
 
-**Quotes.** Each `quoted_in` entry is `<path>[#fragment][ free text]` and the
-path exists (`CHANGELOG.md 0.28.0`, `README.md (results table)`).
+- **verified** — reproduced under stated conditions, with a public receipt in this
+  repository.
+- **confirmed** — pre-registered, OpenTimestamps-stamped blind confirmatory run.
+  The protocol and pass/fail criteria were fixed before the data.
+- **measured** — one or more runs, with a committed receipt in this repository.
+- **measured-private** — the run happened and its receipt exists, but only in a
+  private audit tree, so a reader of this repository cannot check it. Prose must
+  flag it as such, or the receipt must be published.
+- **projected** — arithmetic, not a run.
+- **retired** — was published and is now known to be wrong. The row is kept so the
+  retraction can be found; it is never deleted.
+- **superseded** — still true as measured, but a later row is the number to quote.
+- **open** — a question the docs raise that has no evidence either way yet.
 
-**No pending on an active row.** `claim` and `notes` of an ACTIVE row never
-say "pending" or "TBD": state what is measured, with ids, or open a row.
+*Active* means verified, confirmed, measured or measured-private: a row presented
+as current.
 
-**Licence labels (`licensed_by`).** An ACTIVE row whose `claim` sentence
-asserts a licence -- an occurrence of the word "licensed" that no negation
-immediately precedes ("not licensed", "not a licensed", "never licensed",
-"no licensed"; "unlicensed" is its own word) and that is not the citation
-form below -- carries `licensed_by`: the
-id of the ACTIVE claim whose receipt holds the K8
-verdict that licenses the configuration (the two-text pass for a calibrated
-pack, the one-text pass for an uncalibrated one, in the gate's own units).
-A row whose own receipt carries the verdict names itself (the bo3 Granite
-row's notes hold its +0.019 ppl pass; the bo6c Qwen3 row IS the verdict).
-A family with no instrument (Gemma-4, gpt-oss on raw text) has no verdict
-row, so no active sentence about it may say "licensed": it says "position
-with the no-instrument caveat" or "measured, not licensed". When a later
-row records FAIL for the same configuration class, the earlier sentence is
-reworded (numbers unchanged) or the row is superseded by the row of the
-configuration that is licensed -- never left saying "best licensed". The
-rule is per occurrence: a sentence that says "unlicensed" of one arm and
-"the licensed stack" of another still asserts the second (label it, cite
-it, or say "the licence label" where no assertion is meant), and a VOID or
-FAIL row says "not licensed" / "unlicensed" of itself. `licensed_by` says
-the row's OWN configuration is licensed by that verdict; it never goes on a
-row whose configuration is not (the p37 head-to-head quotes no licensed
-ratio and carries none).
+## Locations
+
+An `evidence` path and every `quoted_in` entry are **locations**, written `path`
+or `path#anchor`.
+
+- The **path** is a file in the git tree at HEAD. The checker reads `git ls-files`,
+  not the working tree, because `*.log` is gitignored and a receipt log becomes
+  evidence only once it is force-added. The path is relative and never goes
+  through `..`. It is never a directory: cite the directory's index or manifest
+  file instead. It carries no annotation and no glob characters. Outside a git
+  checkout the working tree stands in, and the output says so.
+- The **anchor** is either `L<n>` / `L<n>-L<m>`, lines the file has, or the anchor
+  **github.com itself** gives a Markdown heading in that file. That anchor is the
+  heading's rendered text, lower-cased, with every character other than letters,
+  digits, `_`, `-` and spaces removed, and spaces turned into `-`. A repeated
+  heading gets `-1`, `-2`, …. So `## 0.24.0 — 2026-08-31` is `#0240--2026-08-31`,
+  and `## 10. Energy — measured ([bench/_upstream/…](…))` is
+  `#10-energy--measured-bench_upstream…`: link text is kept, the target is
+  dropped, and the underscore stays. A non-Markdown file takes only line anchors.
+
+Locations are real links, and that is the point of this rule. The consumer site
+links a row's `evidence[0]` at the pinned commit, and GitHub scrolls to exactly
+this anchor. The checker's anchors were verified against the anchors github.com
+rendered for 371 headings across both repositories' READMEs, CHANGELOGs and docs,
+with every one identical.
+
+## Evidence
+
+Each `evidence[]` entry takes one of three forms:
+
+| form | meaning | resolved how |
+|---|---|---|
+| `"bench/p58/RESULTS-p58.md"`, `"CHANGELOG.md#0301--2026-09-05"` | a receipt in this repository | a location (above) |
+| `{"url": "https://github.com/<owner>/<repo>/issues/N"}` | an issue or pull request, for `open` items and refusals tracked there | an issue / pull URL of one of the system's repositories (`docs/system-manifest.json` `packages[].repository`); never fetched |
+| `{"repository": "grouped-nf4-gemm", "path": "kernel/RESULTS.md"}` | a receipt in the other package's repository | `repository` is a package of the system other than this one; `path` is a location resolved in a `--sibling` checkout of it, and listed as SKIP without one |
+
+- **Rows with a public run.** `measured`, `confirmed` and `verified` rows need a
+  non-empty `evidence`, and its **first** entry is a location string: the receipt a
+  reader lands on.
+- **Private runs.** `measured-private` rows need a non-empty `evidence_private`.
+- **Everything else is refused.** Free text, globs, URL strings, notes inside an
+  entry, or any other object shape is a finding. What a path was run with goes in
+  `notes`, and a script that was never committed is not evidence: say so in
+  `notes` and drop it.
+
+## Dates
+
+`measured_on` is required on `measured`, `measured-private`, `confirmed` and
+`verified` rows. Wherever it is present, it is an ISO calendar date `YYYY-MM-DD`:
+a month is not a date, and `null` is not a date (omit the field). It is the date
+of the run the numbers come from: the receipt's own stated date or, where the
+receipt states none, the receipt's first commit, which `notes` then records.
+
+## Successors and retirements
+
+- **Superseded rows.** A `superseded` row carries `superseded_by`. It names the
+  ACTIVE row to quote instead, **directly**. When that row is itself superseded
+  later, every row that pointed at it is re-pointed to the new active row; there
+  are no chains to follow.
+- **Retired rows.** A `retired` row carries a non-empty `retired_reason`, and no
+  other row does. It may carry `superseded_by` when a later row restates the claim
+  correctly; that pointer follows the same rule. A restatement with no receipt of
+  its own is not a successor, so the old row stays `retired`, not `superseded`.
+- **Active rows** never carry `superseded_by`.
+- **Links go both ways.** The row a `superseded_by` names lists the old id in its
+  `supersedes`. Every `supersedes` entry exists, is superseded or retired, and
+  names this row as its `superseded_by`.
+
+## Quotes (`quoted_in`)
+
+`quoted_in` lists locations where the claim is quoted:
+`README.md#what-is-measured`, `CHANGELOG.md#0280--2026-09-03`,
+`docs/METHODOLOGY.md#L13`. Each entry is a location (above). It is a location,
+not a containment check: the file need not spell the id on that line. When a
+quote moves, the entry moves. When the quote is gone, the entry goes, and `notes`
+may keep the history.
+
+## No placeholder on an active row
+
+The `claim` and `notes` of an ACTIVE row never say `pending`, `TBD` or `TODO`.
+An active row is presented as current, so it states the fact, with ids, or the
+row becomes `open`. No check reads numbers from `notes`: the headline numbers are
+`value`, `unit` and the `claim` sentence.
+
+## Licence labels (`licensed_by`)
+
+An ACTIVE row whose `claim` asserts a licence carries `licensed_by`. A licence is
+asserted by any occurrence of the word "licensed" that is not the citation form
+below and that no negation immediately precedes ("not licensed", "not a licensed",
+"never licensed", "no licensed"; "unlicensed" is its own word). `licensed_by` is
+the id of the ACTIVE claim whose receipt holds the verdict that licenses the
+configuration: the two-text pass for a calibrated pack, the one-text pass for an
+uncalibrated one, in the gate's own units. A row whose own receipt carries the
+verdict names itself.
+
+- **The rule is per occurrence.** A sentence that says "unlicensed" of one arm and
+  "the licensed stack" of another still asserts the second. A VOID or FAIL row
+  says "not licensed" or "unlicensed" of itself.
+- **No instrument, no licence.** A family with no instrument (Gemma-4, gpt-oss on
+  raw text) has no verdict row. So no active sentence about it may say "licensed";
+  it says "measured, not licensed".
+- **A later FAIL rewords the earlier row.** When a later row records FAIL for the
+  same configuration class, the earlier sentence is reworded, or superseded by the
+  licensed configuration's row. It is never left saying "best licensed".
+- **Only a licensed configuration carries the label.** `licensed_by` never goes on
+  a row whose own configuration is not licensed.
+
+**Citing another row's licence.** ``licensed by `<id>` `` is a citation, not an
+assertion. It refers to that row's licence, and the citing row needs no
+`licensed_by` for it. `<id>` must be a row of this register that itself carries
+`licensed_by` (a licensed row, or a verdict row). Every citation is resolved, in
+`claim` and in `notes`.
 
 **Pack identity (`pack_fingerprint`).** A calibrated serving licence is a
-property of pack bytes, not of the calibration recipe (#405). When present,
-`pack_fingerprint` is `sha256:<64 lowercase hex>` -- the root hash of a
-canonical pack-manifest (`experts4bit_qlora.engines.pack_manifest`): ordered
-`(path, size, sha256)` of the packed tensors and scales **and of the identity
-payload `payloads/identity.json`** (schema version, layout, model id, model
-revision, per-layer shapes), so the hash names which checkpoint the bytes
-belong to; a manifest whose top-level identity fields disagree with the hashed
-payload is refused. Since #530 a calibrated artifact also hashes **the
-recorded gptq/rtn decision, `payloads/assignment.json`** (`method_map` per
-layer/expert/role, the routed-row counts, and the `min_rows` that created
-it); the manifest's `method_map_hash` is derived from that payload and a
-disagreeing copy is refused; #405 artifacts without it still verify. A
-re-pack that honours the record reproduces the *classification* -- the
-threshold on routed rows that P37 showed flips at the noise floor -- not the
-bytes, which still come only from the artifact. The register check
-regex-checks the format. An ACTIVE row with `licensed_by` is artifact-backed
-once either that row or its verdict carries the field: then both must carry
-it and they must be equal. Unlicensed / VOID observations may record the
-observed fingerprint without `licensed_by`. Existing licence rows omit the
-field until a real artifact is published and K8'd -- never invent a hash.
-Counts (GPTQ vs RTN) stay diagnostics. A licensed load given an expected
-fingerprint refuses a mismatch and never rebuilds from the recipe.
+property of pack bytes, not of the calibration recipe. When present,
+`pack_fingerprint` is `sha256:<64 lowercase hex>`. It is the root hash of a
+canonical pack manifest (`experts4bit_qlora.engines.pack_manifest`), which records
+the ordered `(path, size, sha256)` of the packed tensors, the scales, the identity
+payload and, for a calibrated artifact, the recorded gptq/rtn assignment.
 
-**Citing another row's licence.** The form ``licensed by `<id>` `` is a
-citation, not an assertion: "no ratio against the stack licensed by
-`e4b.serve.buildout.bo6c…`" refers to the bo6c verdict and needs no
-`licensed_by` on the citing row. `<id>` must be a claim in the register
-that itself carries `licensed_by` -- a licensed row, or a verdict row, which
-names itself -- and the check resolves every citation in `claim` and in
-`notes`: a missing id, or a row that carries no `licensed_by`, is a finding.
+- **An artifact-backed licence names the bytes on both rows.** An ACTIVE row with
+  `licensed_by` becomes artifact-backed once either it or its verdict carries the
+  field. From then on both carry it, and the two are equal.
+- **Observations may record without licensing.** Unlicensed and VOID observations
+  may record the fingerprint they observed without `licensed_by`.
+- **Never invent a hash.** Licence rows without a published artifact omit the
+  field.
 
-**Lane fields (`validity`, `row_status`, `parity_verdict`, `row_reason`).**
-Rows that are one arm of a pre-registered lane (the p37 / p38 head-to-heads,
-the tp1 training-parity matrix) carry the lane reducer's verdicts beside
-`status`: `status` says what kind of evidence the row is (`measured`), these
-say what the lane made of it. They are copied from the receipt, never edited
-by hand, and the `claim` sentence opens with them in brackets (`[VALID]`,
-`[OK · VOID]`, `[REFUSED]`). No check keys on them beyond the register's own
-structure; `status` alone decides whether a row may back a capability or a
-README number.
+## Lane fields (`validity`, `row_status`, `parity_verdict`, `row_reason`)
 
-- `validity` -- `VALID` | `VOID`: whether the arm counts under the lane's
-  pre-registered rules. `VOID` is measured, never a position (the p37 arms of
-  the recipe whose pack fingerprint did not match and whose gate then
-  failed); the sentence says why, and no ratio is derived from a VOID arm.
-- `row_status` -- `OK` | `HARNESS_ERROR` | `REFUSED` | `EXPERIMENTAL`:
-  whether the arm ran. `OK`: it ran and wrote its receipt. `HARNESS_ERROR`:
-  the process died before a receipt; the attempt is kept as a row and
-  `row_reason` says what died and where. `REFUSED`: the path refused the
-  configuration by design (gpt-oss fused / batched training). `EXPERIMENTAL`:
-  ran on an experimental path and licenses nothing.
-- `parity_verdict` (tp1 rows) -- `REF` | `PASS` | `VOID` | `no pair` |
-  `null`: the arm's loss-parity verdict against its family's reference arm
-  on the same box. `REF`: the reference arm itself. `PASS`: inside the
-  registered band. `VOID`: the pair cannot be read as parity (the batched
-  arm reached its kernel fewer times per step than the rule requires).
-  `no pair`: no reference arm to compare against (attention-only gpt-oss).
-  `null`: no verdict -- the arm did not run, or was refused.
-- `row_reason` -- free text beside a non-`OK` `row_status` or a re-run
-  attempt: what happened, with the log line that records it.
+Rows that are one arm of a pre-registered lane carry the lane reducer's verdicts
+beside `status`. `status` says what kind of evidence the row is; these fields say
+what the lane made of it. They are copied from the receipt and never edited by
+hand, and the `claim` sentence opens with them in brackets (`[VALID]`,
+`[OK · VOID]`, `[REFUSED]`). Only `status` decides whether a row may back a
+capability or a README number.
 
-Status meanings:
-- **verified** — reproduced under stated conditions, receipt public in this repo.
-- **measured** — one run, receipt public. (The repos' own tier language.)
-- **measured-private** — the receipt exists only in the private audit tree; the
-  number is real but a reader of this repo cannot check it. MUST be flagged in
-  prose, or the receipt published.
-- **projected** — arithmetic, not a run.
-- **retired** — was published, now known wrong; keep the entry so the retraction
-  is findable, never delete.
-- **superseded** — still true as measured, but a later entry replaces it as the
-  number to quote (e.g. v0 offload tok/s superseded by the paged engine).
-- **open** — a claim the docs make that has no evidence either way yet.
+- **`validity`** is `VALID` or `VOID`: whether the arm counts under the lane's
+  rules. A VOID row is measured but is never a position, and no ratio is derived
+  from it.
+- **`row_status`** says whether the arm ran:
+  - `OK`: it ran and wrote its receipt.
+  - `HARNESS_ERROR`: it died before a receipt, and `row_reason` says where.
+  - `REFUSED`: the path refused the configuration by design.
+  - `EXPERIMENTAL`: it ran on an experimental path and licenses nothing.
+- **`parity_verdict`** is the arm's loss-parity verdict against its family's
+  reference arm:
+  - `REF`: this arm is the reference.
+  - `PASS`: inside the registered band.
+  - `VOID`: the pair cannot be read as parity.
+  - `no pair`: no reference arm exists.
+  - `null`: no verdict.
+- **`row_reason`** is free text beside a non-OK `row_status` or a re-run attempt.
 
-Human-readable companion: docs/STATUS.md renders this as three lists —
-"what you get today" (verified/measured), "what changed" (superseded/retired
-with the one-line reason), "what is open".
+## What moved in the 2026-09-23 convergence
+
+Each repository's data was migrated to the rules above. Every migrated entry
+still resolves, and the free text that had to leave a field was kept verbatim in
+the row's `notes`.
+
+- **grouped-nf4-gemm.**
+  - `{"path", "section"}` objects became `path#anchor` locations.
+  - URL strings became `{"url"}` objects. The bare issue-tracker URL on
+    `gnf4.open.issues` became one URL per open issue.
+  - The directory `kernel/receipts-m3/` became its index,
+    `kernel/receipts-m3/m3_manifest.txt`.
+  - Heading-prefix quotes became GitHub anchors. Two K17/K18 entries named
+    `Unreleased`; they had been resolving, under the old prefix rule, to an
+    unrelated historical `## Unreleased` heading. They now name the 0.33.0 entry,
+    where that text shipped.
+- **experts4bit-qlora.**
+  - Free-text `quoted_in` entries became locations. Entries whose file no longer
+    quotes the id were dropped, and their text kept in `notes`.
+  - One evidence fragment was fixed. `docs/METHODOLOGY.md#10-energy--…` had dropped
+    an underscore GitHub keeps, so the link had never scrolled to its section.
+  - The cross-repository entry names the package, not the GitHub slug.
+  - The successor graph was made direct and bidirectional. The gemma4 parity chain
+    now points straight at its active row. Three retired or superseded rows gained
+    the back-links their successors lacked.
+
+Human-readable companion: each repository's `docs/STATUS.md` renders the register
+as "what you get today" (active), "what changed" (superseded and retired, with the
+one-line reason) and "what is open".

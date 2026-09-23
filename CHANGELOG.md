@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### The claims register has ONE schema, shared with grouped-nf4-gemm, and this register is migrated to it (repository tooling and data; nothing in the wheel changes)
+
+- **`scripts/check_claims_register.py` and `docs/claims-schema.md` are one file each, byte-identical in both
+  repositories** (both now in `SHARED`). The two copies had drifted into two schemas that refused each other's data (14
+  findings one way, 38 the other). The converged rules, in `docs/claims-schema.md`:
+  - **Locations.** An evidence path or a `quoted_in` entry is `path` or `path#anchor`. The path is a file in the git
+    tree at HEAD, never a directory, annotation or glob. The anchor is `L<n>` / `L<n>-L<m>`, or the anchor
+    **github.com renders** for a Markdown heading, so every location is a working link. The checker's anchors match
+    github.com's on all 371 headings of both repositories' READMEs, CHANGELOGs and docs.
+  - **Evidence** is a location, `{"url"}` (an issue or pull request of a system repository), or
+    `{"repository": <package>, "path": <location>}` (resolved in a `--sibling` checkout). A public-run row's FIRST
+    entry is a location, because the consumer site links it.
+  - **Successors** are direct and named back. `superseded_by` names the active row itself, with no chains, and that
+    row lists it in `supersedes`. A retired row may name its restatement.
+  - **The file is closed.** Unknown row fields and top-level keys are findings, and `area` / `tier` / lane fields take
+    only their values.
+  - The licence, fingerprint, date and placeholder rules are the union of both repositories' old rules.
+- **Tests.** One test file, identical in both repositories, produces every rule's failure. A mutation sweep disabling
+  each of 32 rules in turn was caught every time.
+- **This register's migration.**
+  - 20 free-text `quoted_in` entries became locations. Entries whose file no longer quotes the id were dropped, and
+    every original entry is kept verbatim in the row's `notes`.
+  - The cross-repository entry names the package (`grouped-nf4-gemm`), not the GitHub slug.
+  - The successor graph was made direct and bidirectional. `e4b.parity.gemma4.behaves` now points at
+    `…no-reference`, not through `…chunk-free`, and three successors gained the `supersedes` back-links they lacked.
+- **A defect the migration found.** The featured claim `e4b.train.energy-honest.scoped-a2000` linked
+  `docs/METHODOLOGY.md#10-energy--measured-benchupstream…`. GitHub's anchor keeps the underscore of `bench/_upstream`,
+  so the receipt link on the consumer site has never scrolled to its section. It is fixed.
+
 ## 0.37.1 — 2026-09-23 — documentation and repository tooling only: the same-box vLLM comparison is P58's everywhere, the cross-host pack limitation is P55x's, CI runs the census cross-check, and the CI scripts shared with grouped-nf4-gemm start to become one file
 
 **0.37.1.** Nothing a user imports changed: the package code is identical to 0.37.0's (under `experts4bit_qlora/`, `git diff v0.37.0` changes only the `__version__` literal). The documentation that ships with it is corrected. The README (which is also the PyPI description), the serving capability and the serving solution page led with the 2026-09-05 comparison against vLLM 0.28.0; they now quote the current same-box one (P58: vLLM 0.30.0 decodes 1.087× faster than this package's current int4 stack at B=1 and 1.396× at B=16, bounded to one box and prompt set). The capability's statement that the streamed calibration does not reproduce across hosts is replaced by what P55x measured. CI additionally runs the census cross-check against the kernel package's shape census (grouped-nf4-gemm#353) and fails if the CI scripts shared with grouped-nf4-gemm stop being byte-identical to its `main`. No action is needed if you are on 0.37.0; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.

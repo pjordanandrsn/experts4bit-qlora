@@ -51,9 +51,9 @@
         "INT4B16/P22C-SPEED-P23-RPLAN"
       ],
       "quoted_in": [
-        "CHANGELOG.md 0.28.0"
+        "CHANGELOG.md#0280--2026-09-03"
       ],
-      "notes": "Qwen3-specific: the same lane is REFUSED on quality on Mixtral (+0.09) and OLMoE (+0.60). Not a general lever."
+      "notes": "Qwen3-specific: the same lane is REFUSED on quality on Mixtral (+0.09) and OLMoE (+0.60). Not a general lever. Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: CHANGELOG.md 0.28.0."
     },
     {
       "id": "e4b.serve.b16.qwen3-30b.int4.5090",
@@ -77,10 +77,10 @@
         "INT4B16/P19-ANCHORCERT"
       ],
       "quoted_in": [
-        "CHANGELOG.md 0.27.0",
-        "CHANGELOG.md 0.24.1"
+        "CHANGELOG.md#0270--2026-09-02",
+        "CHANGELOG.md#0241--2026-08-31"
       ],
-      "notes": "int4 attention is a B=1 lever only (x0.897 at B=16); rows>1 use cached bf16 attention weights."
+      "notes": "int4 attention is a B=1 lever only (x0.897 at B=16); rows>1 use cached bf16 attention weights. Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: CHANGELOG.md 0.27.0; CHANGELOG.md 0.24.1."
     },
     {
       "id": "e4b.serve.h2h.vllm.same-box",
@@ -99,16 +99,11 @@
       "evidence_private": [
         "INT4B16/P20-H2H-FAIR"
       ],
-      "notes": "The only same-box, same-prompt comparison against a production engine this project has. Supersedes the 2026-08 '6.31x ahead' figure (e4b.retired.vllm-6.31x-ahead), which used template prompts and a different box. The e4b arm is the 2026-09-03 RTN int4 configuration class, which later FAILED its second text on lane bo5 (e4b.serve.buildout.qwen3.b1.5090.2026-09-04 notes) and is not the licensed stack (bo6c); the comparison against the licensed stack on one box with a recorded vLLM version is lane P37 and is registered when its receipt lands. SUPERSEDED 2026-09-05 for current-position use by e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 (lane p37: same box, same session, identical prompt ids, vLLM 0.28.0 pinned, every knob recorded; the e4b side is the shipped 0.35.0 code -- the NF4 control VALID, the licensed arms VOID on that box under the pack-fingerprint rule). This entry's numbers stand as measured on their box and date.",
+      "notes": "The only same-box, same-prompt comparison against a production engine this project has. Supersedes the 2026-08 '6.31x ahead' figure (e4b.retired.vllm-6.31x-ahead), which used template prompts and a different box. The e4b arm is the 2026-09-03 RTN int4 configuration class, which later FAILED its second text on lane bo5 (e4b.serve.buildout.qwen3.b1.5090.2026-09-04 notes) and is not the licensed stack (bo6c); the comparison against the licensed stack on one box with a recorded vLLM version is lane P37 and is registered when its receipt lands. SUPERSEDED 2026-09-05 for current-position use by e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05 (lane p37: same box, same session, identical prompt ids, vLLM 0.28.0 pinned, every knob recorded; the e4b side is the shipped 0.35.0 code -- the NF4 control VALID, the licensed arms VOID on that box under the pack-fingerprint rule). This entry's numbers stand as measured on their box and date. Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: README.md ('Do not use this when'; the results table -- re-pointed to the successor 2026-09-05); docs/STATUS.md ('Serving speed'; 'What changed' -- re-pointed 2026-09-05); docs/capabilities.json (serve-moe-on-consumer-gpu claim_ids and limitations -- re-pointed 2026-09-05); docs/solutions/serve-large-moe-on-a-consumer-gpu.md (Limitations; Evidence -- re-pointed 2026-09-05); llms-full.txt (the projections of the above). Since the 2026-09-23 schema convergence (successors are direct): e4b.retired.vllm-6.31x-ahead names e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05, this row's own successor, and that row lists it in supersedes; this row no longer does.",
       "quoted_in": [
-        "README.md ('Do not use this when'; the results table -- re-pointed to the successor 2026-09-05)",
-        "docs/STATUS.md ('Serving speed'; 'What changed' -- re-pointed 2026-09-05)",
-        "docs/capabilities.json (serve-moe-on-consumer-gpu claim_ids and limitations -- re-pointed 2026-09-05)",
-        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md (Limitations; Evidence -- re-pointed 2026-09-05)",
-        "llms-full.txt (the projections of the above)"
-      ],
-      "supersedes": [
-        "e4b.retired.vllm-6.31x-ahead"
+        "docs/STATUS.md#what-you-get-today",
+        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md#limitations",
+        "llms-full.txt"
       ],
       "superseded_by": "e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05"
     },
@@ -189,7 +184,7 @@
         "INT4B16/P25-PARITY.md"
       ],
       "notes": "Whole window ran the fp8 compute path (mech tally fp8 245760 / f32 0). Loading FAILS on 2 of 4 rented hosts (e4b#344, unexplained). SUPERSEDED 2026-09-03: this compared the paged path to the CHUNKED ORACLE, not to the model; against a chunk-free reference the path fails (see e4b.parity.gemma4.chunk-free).",
-      "superseded_by": "e4b.parity.gemma4.chunk-free"
+      "superseded_by": "e4b.parity.gemma4.no-reference"
     },
     {
       "id": "e4b.parity.gemma4.chunk-free",
@@ -207,10 +202,7 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P26b section)"
       ],
-      "supersedes": [
-        "e4b.parity.gemma4.behaves"
-      ],
-      "notes": "full 3.34492 / chunked 3.42629 / paged 3.59239 nats. Two unexplained facts: the floor (HF chunked vs HF full) is 0.081 where other families sit at 0.003-0.018, and the paged gap changes SIGN between this window and the 8192-step window (ppl 28 vs 752). First test: the paged arm with a bf16 KV cache or finer fp8 K groups on this exact window (k_groups=4 at head_dim 512 = 128-wide scale groups). SUPERSEDED 2026-09-03 (P27): one window, one reference; three windows and the three-forward test show the model has no reference at this resolution.",
+      "notes": "full 3.34492 / chunked 3.42629 / paged 3.59239 nats. Two unexplained facts: the floor (HF chunked vs HF full) is 0.081 where other families sit at 0.003-0.018, and the paged gap changes SIGN between this window and the 8192-step window (ppl 28 vs 752). First test: the paged arm with a bf16 KV cache or finer fp8 K groups on this exact window (k_groups=4 at head_dim 512 = 128-wide scale groups). SUPERSEDED 2026-09-03 (P27): one window, one reference; three windows and the three-forward test show the model has no reference at this resolution. Since the 2026-09-23 schema convergence (successors are direct): e4b.parity.gemma4.behaves names e4b.parity.gemma4.no-reference, this row's successor, and no longer passes through this row.",
       "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, sha-matched ids e01de6ebd4af across all three arms; NF4 experts on every arm; paged arm mech tally fp8 15360 / f32 0",
       "superseded_by": "e4b.parity.gemma4.no-reference"
     },
@@ -231,7 +223,8 @@
         "INT4B16/P25-PARITY.md (P27 phases 4, 7, 7b, 8)"
       ],
       "supersedes": [
-        "e4b.parity.gemma4.chunk-free"
+        "e4b.parity.gemma4.chunk-free",
+        "e4b.parity.gemma4.behaves"
       ],
       "notes": "Cache flag is a bit-exact no-op (cached prefill == short forward). Real vs random continuation moves prefix positions 0.24% at layer 1 -> 34% at layer 19 (bf16 batch-shape variance in the expert gathers, amplified by the router); Qwen3-30B: 0.15% -> 3.5%, NLL 0.001. Running the router in fp32 (plain transformers) does not remove the amplification (layer-19 divergence 0.25 against 0.34, top layer unchanged) and itself moves the same tokens' NLL by 1.1 nats, so router precision is not a lever; the sensitivity is the model's.",
       "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, prompt offsets 0/3000/6000; NF4 experts on the e4b arms; plain bf16 transformers 5.16.1 for the three-forward test"
@@ -286,12 +279,13 @@
       "retired_on": "2026-09-03",
       "retired_reason": "The +0.047 ppl is +0.0058 nats, BELOW Qwen3's measured 0.0095-nat arithmetic-order floor; Granite's +0.0028 is below its 0.0033 floor. Indistinguishable from reordering the arithmetic; not attributable to the cache. The derived rule 'buy headroom back from the cache first' is retired with it.",
       "quoted_in": [
-        "CHANGELOG.md 0.30.0 (left as written; corrected by a Corrections entry)",
-        "docs/METHODOLOGY.md#13 (corrected in #353)"
+        "CHANGELOG.md#0300--2026-09-03",
+        "docs/METHODOLOGY.md#13-serving-parity--the-paged-decode-path-against-the-models-own-attention-p25-2026-09-03"
       ],
       "evidence_private": [
         "INT4B16/P25-PARITY.md ('RETIRED' section)"
-      ]
+      ],
+      "notes": "Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: CHANGELOG.md 0.30.0 (left as written; corrected by a Corrections entry); docs/METHODOLOGY.md#13 (corrected in #353)."
     },
     {
       "id": "e4b.retired.gptoss-plus-0.078-real-signal",
@@ -302,9 +296,10 @@
       "retired_on": "2026-09-03",
       "retired_reason": "Against a chunk-free reference the paged path sits at 0.00288 nats, below its floor; the chunked oracle it had been compared to is 6x further from the truth than the path. The 8192-step number tracked the oracle's 32 chunk boundaries, not the serving path.",
       "quoted_in": [
-        "CHANGELOG.md 0.30.0",
-        "docs/support_matrix.md (corrected in #355)"
-      ]
+        "CHANGELOG.md#0300--2026-09-03"
+      ],
+      "notes": "Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: CHANGELOG.md 0.30.0; docs/support_matrix.md (corrected in #355).",
+      "superseded_by": "e4b.parity.gptoss.paged-vs-own-attention"
     },
     {
       "id": "e4b.retired.chunked-scorer-breaks-on-sliding-windows",
@@ -315,8 +310,9 @@
       "retired_on": "2026-09-03",
       "retired_reason": "Widening the window past the context leaves the gap at KL 0.0178; every cache class gives the same gap. The cause is MoE router flips (e4b.parity.moe-routing-flip-floor), which applies to every MoE model.",
       "quoted_in": [
-        "CHANGELOG.md 0.30.0"
-      ]
+        "CHANGELOG.md#0300--2026-09-03"
+      ],
+      "notes": "Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: CHANGELOG.md 0.30.0."
     },
     {
       "id": "e4b.retired.kl-gate-threshold",
@@ -327,8 +323,9 @@
       "retired_on": "2026-09-03",
       "retired_reason": "Its first measurement rejects a shipped configuration (NF4 vs bf16 experts: 0.029 nats, 93.6% top-1). The 0.01 was calibrated from a signed NLL difference and applied to a full-vocabulary KL, a different and strictly larger quantity. Left textually unchanged in METHODOLOGY 13, marked falsified; not retuned.",
       "quoted_in": [
-        "docs/METHODOLOGY.md#13"
-      ]
+        "docs/METHODOLOGY.md#13-serving-parity--the-paged-decode-path-against-the-models-own-attention-p25-2026-09-03"
+      ],
+      "notes": "Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: docs/METHODOLOGY.md#13."
     },
     {
       "id": "e4b.serve.gptoss.loader-faithful",
@@ -528,12 +525,12 @@
       ],
       "superseded_by": "e4b.train.energy-honest.scoped-a2000",
       "quoted_in": [
-        "README.md (opening 'material limitation', 'Do not use this when', 'What is measured' -- re-pointed to the successor 2026-09-04)",
-        "docs/SOLUTIONS.md (limitations that apply to every page -- re-pointed 2026-09-04)",
-        "docs/capabilities.json (non_goals; quantize-fused-moe-experts limitations -- re-pointed 2026-09-04)",
-        "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md (limitations, evidence -- re-pointed 2026-09-04)"
+        "README.md#experts4bit-qlora",
+        "docs/SOLUTIONS.md#limitations-that-apply-to-every-page",
+        "docs/capabilities.json",
+        "docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md#limitations"
       ],
-      "notes": "SUPERSEDED 2026-09-04, number unchanged. The measurement stands exactly as its receipt made it (docs/METHODOLOGY.md section 10; bench/_upstream/bench_energy.py, bench/bench_energy_excluded.py). What is withdrawn is the parenthetical mechanism 'NF4 is storage-only, the GEMM runs in bf16 either way', which was a universal present-tense statement about every bitsandbytes 4-bit path: it is true of the two 4-bit arms this receipt measured (dequantize-then-linear, and the bitsandbytes#1965 fork's matmul_4bit routing on a [packed, 1] weight, on one Ampere card) and of this package's own reference training path, but bitsandbytes >= 0.50.0 CUDA inference can consume packed 4-bit weights directly for supported ordinary 2-D cells (docs/BITSANDBYTES.md), routed grouped MoE execution is a separate contract, and training's input gradient is separate again. The receipt identifies the bitsandbytes build only as '0.50.0.dev0' / 'the fork (bnb 0.50-dev)' (METHODOLOGY section 1 and its packaging note) -- no commit SHA, and the harness does not print bitsandbytes.__version__ -- so whether that build carried upstream 5453368bed15d19cbcfba4426ed118de33dc3d94 is not recoverable from it; the remeasure with a recorded version is e4b#392. Successor: e4b.train.energy-honest.scoped-a2000 (same value, comparator and version scoped)."
+      "notes": "SUPERSEDED 2026-09-04, number unchanged. The measurement stands exactly as its receipt made it (docs/METHODOLOGY.md section 10; bench/_upstream/bench_energy.py, bench/bench_energy_excluded.py). What is withdrawn is the parenthetical mechanism 'NF4 is storage-only, the GEMM runs in bf16 either way', which was a universal present-tense statement about every bitsandbytes 4-bit path: it is true of the two 4-bit arms this receipt measured (dequantize-then-linear, and the bitsandbytes#1965 fork's matmul_4bit routing on a [packed, 1] weight, on one Ampere card) and of this package's own reference training path, but bitsandbytes >= 0.50.0 CUDA inference can consume packed 4-bit weights directly for supported ordinary 2-D cells (docs/BITSANDBYTES.md), routed grouped MoE execution is a separate contract, and training's input gradient is separate again. The receipt identifies the bitsandbytes build only as '0.50.0.dev0' / 'the fork (bnb 0.50-dev)' (METHODOLOGY section 1 and its packaging note) -- no commit SHA, and the harness does not print bitsandbytes.__version__ -- so whether that build carried upstream 5453368bed15d19cbcfba4426ed118de33dc3d94 is not recoverable from it; the remeasure with a recorded version is e4b#392. Successor: e4b.train.energy-honest.scoped-a2000 (same value, comparator and version scoped). Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: README.md (opening 'material limitation', 'Do not use this when', 'What is measured' -- re-pointed to the successor 2026-09-04); docs/SOLUTIONS.md (limitations that apply to every page -- re-pointed 2026-09-04); docs/capabilities.json (non_goals; quantize-fused-moe-experts limitations -- re-pointed 2026-09-04); docs/solutions/bitsandbytes-moe-load-in-4bit-still-ooms.md (limitations, evidence -- re-pointed 2026-09-04)."
     },
     {
       "id": "e4b.train.energy-honest.scoped-a2000",
@@ -547,7 +544,7 @@
       "status": "measured",
       "tier": "measured",
       "evidence": [
-        "docs/METHODOLOGY.md#10-energy--measured-benchupstreambench_energypy-benchbench_energy_excludedpy",
+        "docs/METHODOLOGY.md#10-energy--measured-bench_upstreambench_energypy-benchbench_energy_excludedpy",
         "bench/_upstream/bench_energy.py",
         "bench/bench_energy_excluded.py"
       ],
@@ -613,7 +610,7 @@
       "evidence": [
         "docs/METHODOLOGY.md#11-expert-cpu-offload-offload_experts--correctness-proven-olmoe-ab-specified",
         {
-          "repository": "pjordanandrsn/grouped-nf4-gemm",
+          "repository": "grouped-nf4-gemm",
           "path": "kernel/RESULTS-m2-anchor-recert.md"
         }
       ],
@@ -640,11 +637,10 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.8621, int4exp=1.8578, calib=1.8448. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. NOTE at the 0.35.2 bundle (2026-09-05): this entry's 'best licensed' label predates the application of the calibrated rule's two-text clause (#386) -- lane bo5 scored this configuration class (Qwen3's RTN int4 experts + calibrated attention, `all`) on its second text at +0.063 ppl c4val1, FAIL as registered (e4b.serve.buildout.qwen3.b1.5090.2026-09-04 notes), so under the rule as written the stack is measured, not licensed; the licensed Qwen3 stack is the streamed 64k calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) and its speed on the census box is the number to quote. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same RTN stack on its box: int4all 4.20 ms = 238.1 tok/s B=1 (x2.067 over that box's NF4 8.68 ms = 115.2), 1335.4 B=16 (x2.617) -- measured, not licensed (e4b.serve.census.bo7.qwen3.census.5090.2026-09-05). SUPERSEDED 2026-09-05 by the census row of the licensed stack; this entry's value stands as measured.",
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.8621, int4exp=1.8578, calib=1.8448. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. NOTE at the 0.35.2 bundle (2026-09-05): this entry's 'best licensed' label predates the application of the calibrated rule's two-text clause (#386) -- lane bo5 scored this configuration class (Qwen3's RTN int4 experts + calibrated attention, `all`) on its second text at +0.063 ppl c4val1, FAIL as registered (e4b.serve.buildout.qwen3.b1.5090.2026-09-04 notes), so under the rule as written the stack is measured, not licensed; the licensed Qwen3 stack is the streamed 64k calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) and its speed on the census box is the number to quote. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same RTN stack on its box: int4all 4.20 ms = 238.1 tok/s B=1 (x2.067 over that box's NF4 8.68 ms = 115.2), 1335.4 B=16 (x2.617) -- measured, not licensed (e4b.serve.census.bo7.qwen3.census.5090.2026-09-05). SUPERSEDED 2026-09-05 by the census row of the licensed stack; this entry's value stands as measured. Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: docs/solutions/serve-large-moe-on-a-consumer-gpu.md (Evidence -- marked superseded 2026-09-05); docs/SERVING-THROUGHPUT.md (the 2026-09-04 per-family table, historical).",
       "superseded_by": "e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05",
       "quoted_in": [
-        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md (Evidence -- marked superseded 2026-09-05)",
-        "docs/SERVING-THROUGHPUT.md (the 2026-09-04 per-family table, historical)"
+        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md#evidence"
       ]
     },
     {
@@ -667,11 +663,10 @@
       "evidence_private": [
         "INT4B16/P25-PARITY.md (P30 sections)"
       ],
-      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.8621, int4exp=1.8578, calib=1.8448. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. NOTE at the 0.35.2 bundle (2026-09-05): this entry's 'best licensed' label predates the application of the calibrated rule's two-text clause (#386) -- lane bo5 scored this configuration class (Qwen3's RTN int4 experts + calibrated attention, `all`) on its second text at +0.063 ppl c4val1, FAIL as registered (e4b.serve.buildout.qwen3.b1.5090.2026-09-04 notes), so under the rule as written the stack is measured, not licensed; the licensed Qwen3 stack is the streamed 64k calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) and its speed on the census box is the number to quote. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same RTN stack on its box: int4all 4.20 ms = 238.1 tok/s B=1 (x2.067 over that box's NF4 8.68 ms = 115.2), 1335.4 B=16 (x2.617) -- measured, not licensed (e4b.serve.census.bo7.qwen3.census.5090.2026-09-05). SUPERSEDED 2026-09-05 by the census row of the licensed stack; this entry's value stands as measured.",
+      "notes": "K8 teacher-forced NLL on the same box (2048 steps, wikitext, sha-matched): nf4=1.8621, int4exp=1.8578, calib=1.8448. A refused arm is a build-out item, not a zero; the build-out is in review (e4b#369-#373, grouped-nf4-gemm#327/#328) and unvalidated at this date. NOTE at the 0.35.2 bundle (2026-09-05): this entry's 'best licensed' label predates the application of the calibrated rule's two-text clause (#386) -- lane bo5 scored this configuration class (Qwen3's RTN int4 experts + calibrated attention, `all`) on its second text at +0.063 ppl c4val1, FAIL as registered (e4b.serve.buildout.qwen3.b1.5090.2026-09-04 notes), so under the rule as written the stack is measured, not licensed; the licensed Qwen3 stack is the streamed 64k calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05) and its speed on the census box is the number to quote. bo7 (2026-09-05, box 49916675, an RTX 5090 on an EPYC 7Q83 host, the shipped 0.35.0 / 0.30.0 code, receipt bench/hybrid-g9/throughput-20260904/bo7/) measured the same RTN stack on its box: int4all 4.20 ms = 238.1 tok/s B=1 (x2.067 over that box's NF4 8.68 ms = 115.2), 1335.4 B=16 (x2.617) -- measured, not licensed (e4b.serve.census.bo7.qwen3.census.5090.2026-09-05). SUPERSEDED 2026-09-05 by the census row of the licensed stack; this entry's value stands as measured. Quote history, from quoted_in's free-text form before the 2026-09-23 schema convergence: docs/solutions/serve-large-moe-on-a-consumer-gpu.md (Evidence -- marked superseded 2026-09-05); docs/SERVING-THROUGHPUT.md (the 2026-09-04 per-family table, historical).",
       "superseded_by": "e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05",
       "quoted_in": [
-        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md (Evidence -- marked superseded 2026-09-05)",
-        "docs/SERVING-THROUGHPUT.md (the 2026-09-04 per-family table, historical)"
+        "docs/solutions/serve-large-moe-on-a-consumer-gpu.md#evidence"
       ]
     },
     {
@@ -1933,7 +1928,8 @@
       ],
       "notes": "THREE AXES: ratio x2.067 over NF4 on this box; rental-measured 238.1 tok/s on this box (one RTX 5090, driver 595.84, EPYC 7Q83 host); anchor-class projection about 329 tok/s = 159.2 x 2.067 -- a PROJECTION marked as such (the anchor class was never certified: 12 refusals; 159.2 is the certified single-stream NF4 ceiling on that class). LICENCE: the register's -- pass on both texts under the unchanged gate, wikitext -0.0528 / c4val1 -0.0662 ppl, both sub-floor, at parity or better, no improvement by a number (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05); bo7 licenses nothing, it measures the licensed stack's speed. Ran under P35 AMENDMENT 2 (pre-registered 2026-09-05 06:05Z) after TP_DONE, same box, same session, same install (logs/bo7b.sh, 5400-s alarm; Qwen3 re-baked, logs/bake_qwen3.bo7b.log; TP2_DONE 08:52:27Z), ratio to bo7's own nf4 arm of the census (rule 1 holds). The licensed 64k arm's speed is identical to the census's 16k arm (calibexp_all: 4.20 vs 4.20 ms; 4.1996 vs 4.1971 unrounded) and to the RTN stack (int4all 4.2035): a calibrated pack's kernels do not depend on the calibration size -- the pack changes the values, not the kernel or the bytes read -- as the amendment predicted. Beside, each with its box and never divided into this: bo5's RTN all 204.1 (49841214, EPYC 9755), bo6's all-at-once calibrated stack 158.0 (49861751, Threadripper PRO 7975WX), bo3's 177.9 (49817195). Pre-registered reading rules (P35): (1) every ratio is the family's own NF4 arm on this box, same session; (2) the licence label comes from the register at bundle time -- bo7 measures speed, it licenses nothing; (3) three axes for every licensed best: ratio x N over NF4 on this box, rental-measured tok/s on this box, the anchor-class projection marked as a projection (exists only for Qwen3-30B at B=1; every other family and B=16: no anchor projection, no anchor-class measurement exists); (4) unlicensed arms are 'measured, not licensed', never a position; (5) no cross-lane ratio -- bo3/bo5/bo6 numbers are cited beside, never divided into, bo7's. COMPARATOR (#418): every ratio on this row is vs e4b's own NF4 control on the same box, never a field engine. Same-box field comparator (lane P37, one RTX 5090, one prompt set): vLLM 0.28.0 serving Qwen3-30B-A3B-GPTQ-Int4 via MarlinExperts (4-bit weights; resident footprint not recorded) at 286.0 / 2030.0 tok/s (graph) and 300.9 / 2206.5 (fp8-KV) at B=1 / B=16 -- bounded to those batch shapes on that box; other batch shapes, prefill/TTFT and footprint were not measured. Even the voided licensed recipe on that box (236.4 / 1305.3) is ~0.83x / ~0.65x of vLLM graph. The licensed position is the bo6c pack artifact (11512 gptq / 776 rtn on that box). The P37 box packed 11522/766 and its K8 on that pack FAILed c4val1 +0.109 ppl (#405 is that reproduction item, not a licence withdrawal). Values 238.1 / 1327.5 and licensed_by are unchanged.",
       "supersedes": [
-        "e4b.serve.tp.qwen3.b1.5090.2026-09-04"
+        "e4b.serve.tp.qwen3.b1.5090.2026-09-04",
+        "e4b.retired.inference-md-decode-grid"
       ],
       "licensed_by": "e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05"
     },
@@ -4201,7 +4197,8 @@
         "INT4B16/P25-PARITY.md (P37 / P38 launch log: amendments 1-3, the in-lane progress notes, the TP_DONE reading)"
       ],
       "supersedes": [
-        "e4b.serve.h2h.vllm.same-box"
+        "e4b.serve.h2h.vllm.same-box",
+        "e4b.retired.vllm-6.31x-ahead"
       ],
       "notes": "THE POSITION THIS LANE CAN QUOTE, and what it cannot. Every arm is a row (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.arm.<engine>.b<B>.<arm>, sixteen). The reducer's verdict at TP_DONE (20:13:55Z): NO RATIO QUOTED against the stack licensed by `e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05` -- lic_r1 / lic_r2 / lic_eager (B=1) and lic_r1 (B=16) VOID, '64k pack counts 11512/776 not in log' (this box's per-chunk lines 2418/142, 2398/162, 2412/148, 2338/222, 1956/92 against bo7's 2418/142, 2394/166, 2412/148, 2334/226, 1954/94). The recipe's ratio over the same-box NF4 control reads 2.08 at B=1 (236.4 / 113.5) and 2.61 at B=16 (1305.3 / 500.1) -- bo7's x2.067 / x2.602 reproduced within 1% (rule 4, an instrument reading, not a position). vLLM's memory accounting on the graph arms: 16.7 GiB weights + non-torch, 1.19 GiB peak activation, 0.58 GiB CUDA graphs, 10.34 GiB reserved for KV (its nvidia-smi 30.39-31.0 GB is a policy number, it reserves 0.90 of the card); e4b's nvidia-smi max 18.86-19.99 GB (B=1), 19.41-20.11 (B=16). Predictions: P1/P2 not scorable as registered (the absolutes fell inside P1's ranges and vLLM's B=16 above P2's); P3 wrong by an order of magnitude on both engines (vLLM eager 13.7x slower at B=1, e4b eager 19.4x); P4 held at B=1 (1.052), missed at B=16 (1.087); P5 held on self-pairs and the bo7 reproduction, failed on the pack counts -- the finding; P6 held. AMENDMENT 3 (pre-registered 20:30Z, running on the same box at bundle time): the registered K8 gate on this box's own pack (nf4 and the full stack on wikitext and c4val1, bo6c's k8() verbatim); ppl(all) - ppl(nf4) <= +0.05 on BOTH texts licenses the pack and replaces the fingerprint check for this lane, making the licensed arms VALID and the ratio quotable from these same receipts (B=1 286.0 / 236.4 = 1.21, B=16 2030.0 / 1305.3 = 1.56; fp8-KV secondary 1.27 / 1.69); either text failing leaves VOID standing. OUTCOME (22:18Z, e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate): NOT LICENSED -- wikitext delta -0.0230 PASS, c4val1 delta +0.1093 FAIL against the +0.05 budget; VOID stands, no vLLM / e4b-licensed ratio is quoted on this lane, the recipe's speed rows stay measured-and-unlicensed, and the streamed calibration recipe is shown not to reproduce its licence across boxes (an open reproducibility item, e4b#405). Pre-registered reading rules (P37): same box, same session, identical prompt ids -- the only ratio this lane produces; engagement before reading (an e4b arm without its banners is VOID, never a slower data point; a vLLM kernel fallback is recorded in the row's label); a green skipped path is not evidence; FAIL stays FAIL and DRIFT stays DRIFT; quality is quoted, never equated; the old numbers (x1.47 / x1.55, 2026-09-03, box 49702459, vLLM 0.28.0 vs the 0.27.0/0.21.0 RTN stack) are historical and are never divided into these; three axes for e4b's arm whenever it is quoted; every receipt carries prompts_sha, the box forensics and the engine versions. AMENDMENTS: 1 (the staging refusal, nothing measured), 2 (the GPTQ fetch hang left to its alarm, recovered in-lane; the guarded follow-up ran as NOT NEEDED), 3 (pre-registered 20:30Z after TP_DONE: the registered K8 gate on THIS box's pack -- ppl(all) - ppl(nf4) <= +0.05 on both wikitext and c4val1 licenses the pack and replaces the fingerprint check for this lane; either text failing leaves VOID standing; no threshold, arm, prompt set or knob changes) -- its outcome is recorded in the bundle and this register when its receipts land. BOUNDED (#418): this is behind vLLM's graph decode at B=1 and B=16 on one RTX 5090 box with one prompt set (P37) -- never a general position. Not measured here: other batch shapes, prefill/TTFT, vLLM resident footprint. Weight precision of the field comparator is GPTQ-Int4 (MarlinExperts). Moved from the claim sentence (2026-09-22, llms bundle budget): vLLM 0.28.0 ran on torch 2.13.0+cu130, triton 3.7.1. The NF4 control is the one e4b configuration that quantises nothing beyond NF4 and needs no gate. The VOID arms ran the same recipe, not those bytes; their speed is an observation never divided into a position."
     },
