@@ -35,6 +35,20 @@
   exact kernel commit pip installed (`direct_url.json`), so it is never a second pin. Calibrated: a census with OLMoE's
   down-proj shape removed exits 1 (`census coverage REGRESSED for: olmoe`); the v0.33.0 census exits 0 (4 of 11 probed
   claimed families covered). `--check` writes a missing baseline and passes, so the step asserts the baseline exists first.
+### `check_capabilities.py` joins the shared set; the two discovery corpora stop answering one question two ways
+
+- **`scripts/check_capabilities.py` is one file in both repositories** (added to `SHARED`). grouped-nf4-gemm's copy was a
+  strict subset of this one. Adopting this copy there as it stood would have run cleanly, but only because the
+  serving-position rule's id pattern hard-coded `e4b.` and so could never match a kernel id: deriving the prefix instead
+  made it fire falsely in the kernel repository, whose serving capabilities are separate kernels, each on its own lane
+  (two false warnings measured). The rule is now gated on the repository's role in `docs/system-manifest.json`, and the
+  id namespace is the register's own. Behaviour here is unchanged (the same single WARN on `main` before and after); new
+  tests pin the namespace derivation, the mixed-register refusal and the role gate.
+- **One routing question, one answer per phrasing.** Both repositories' `docs/discovery-queries.json` carried "Where does
+  an NVMe primitive belong versus model-level NVMe integration?", each routed to its own page, so the consumer site's
+  merged corpus recorded it as unmapped with a WARN ("to be settled upstream"). The kernel repository keeps that
+  phrasing (the primitive's side); this repository now asks "Where does model-level NVMe integration live versus the
+  NVMe primitives?" (the integration's side), which still ranks its page first.
 
 ## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); two expert-GEMV levers built and refused (K17, K18), and the B=16 expert GEMV's remaining headroom bounded with no lever to follow (P60, P61)
 
