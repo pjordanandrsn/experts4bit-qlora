@@ -119,7 +119,7 @@ jobs:
           python-version: "3.11"
       - name: capability contract (schema, pyproject, source symbols, claims, install routes)
         run: python scripts/check_capabilities.py
-      - name: claims register hygiene (evidence paths exist at HEAD; measured_on ISO; superseded/retired rows resolve; quoted_in resolves; no pending active row; licence labels name their verdict row)
+      - name: claims register against its one schema (docs/claims-schema.md, the same file in both repositories -- locations are tracked files with GitHub anchors, evidence forms, ISO dates, direct named-back successors, no placeholder on an active row, licence labels)
         run: python scripts/check_claims_register.py
       - name: README = current main (results-table numbers are the register's current values; no superseded/retired id; the release block is generated from CHANGELOG.md) and the position documents cite only ids that exist
         run: python scripts/check_readme_claims.py
