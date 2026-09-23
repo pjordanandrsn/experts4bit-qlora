@@ -60,7 +60,7 @@ for stack in report["unquantized"]:
 
 ## Supported scope
 
-- Families (README "Scope", [`../ARCHITECTURE_SUPPORT.md`](../ARCHITECTURE_SUPPORT.md)): OLMoE, Qwen3-MoE / Qwen3.5-MoE, Gemma-4 (text tower), GraniteMoe, gpt-oss (MXFP4 experts, dequantised bit-identically), DeepSeek-V4 Flash / Pro; loaded with real weights in the support matrix: `olmoe`, `qwen3_moe`, `deepseek_v2`, `qwen3_next`. Mixtral-convention checkpoints are admitted through `arch/moe_conventions.py`.
+- Families (README "Scope", [`../ARCHITECTURE_SUPPORT.md`](../ARCHITECTURE_SUPPORT.md)): 14 claimed in `SUPPORTED_ARCHITECTURES` — OLMoE, Qwen3-MoE / Qwen3.5-MoE, Gemma-4 (text tower), gpt-oss (MXFP4 experts, dequantised bit-identically), GraniteMoe and its shared / hybrid variants, Nemotron-H, LFM2-MoE, Jamba, Kimi K3, DeepSeek-V4 Flash / Pro. Ten of them have a reference-tier row on a real published checkpoint in the support matrix; `jamba` has a toy row, `deepseek_v4` is host-limited, and `kimi_k3` / `gemma4_text` have none (the matrix says why). Qwen2-MoE, Mixtral and PhiMoE checkpoints are read through their storage conventions (`READ_COMPATIBLE_CONVENTIONS` in `loader.py`, conventions in `arch/moe_conventions.py`); that says where the weights are, not that the model's own expert epilogue is supported.
 - Storage: `quant_type=` selects nf4 / fp4 / int8 / fp8 / bf16 / fp16 ([`../STORAGE-MODES.md`](../STORAGE-MODES.md)); nf4 is the benchmarked default.
 - Environment: Linux, an NVIDIA CUDA GPU, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0. CI tests Python 3.11; `requires-python` says >=3.9 but older interpreters are not tested.
 
