@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### P61 read: the B=16 expert GEMV's row work and expert bytes overlap -- no lever lane (lanes `p61-5090-1`..`-6`, $0.28)
+
+- On a 575 W RTX 5090 (`bench/p61/RESULTS-p61.md`), the served int4-b32 expert GEMV reproduces P60's replay: 6.548 vs 6.479
+  ms/step. On per-layer weight stores the recorded B=16 routing's repeated rows cost **0.905 ms/step** in total.
+- The pre-registered additive model (fixed + per-row + per-distinct-expert, fit to a rows x experts grid) predicts 2.42, so P1
+  is refuted. The grid shows why: at fixed rows, time is flat in distinct experts up to ~32, then climbs with them. Row work
+  and expert bytes overlap rather than add. By the registered rule, no lever lane follows; nothing changes a default.
+- Host lesson: run 1's 5090 was power-capped at **450 W** and read the served arm 12 % slow while the light arm matched.
+  Amendment 1 refuses cards below 575 W; adertha-agents #128 lets that refusal (exit 17) exclude its machine. Row
+  `e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23`.
+
 ### K18 read (grouped-nf4-gemm): a grouped expert GEMV is exact and slower — P60's 0.92 ms is not reachable by sharing loads; its re-streaming reading is withdrawn (lane `k18-5090-1`, $0.13)
 
 - **grouped-nf4-gemm lane K18** built the kernel P60 licensed: an int4-b32 split-K GEMV that loads each expert's slice

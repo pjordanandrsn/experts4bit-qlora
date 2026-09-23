@@ -1,0 +1,1 @@
+self-test on cuda: OK

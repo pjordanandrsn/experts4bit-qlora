@@ -2753,18 +2753,13 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   row: **~77 % of roofline at real routing, ~1.4 ms/step of headroom** in the
   largest row of the B=16 step — the lever the P58 gap analysis said was absent
   is present after all, sized by the routing it actually sees.
-- **Where that headroom is (P60, 2026-09-22, `bench/p60/RESULTS-p60.md`):
-  repeated rows.** Replaying the recorded B=16 routing through the shipped GEMV
-  reproduces the served kernel row (6.155 vs 6.340 ms) and shows one row per
-  distinct expert instead of one per routed row runs **0.92 ms/step** faster;
-  ordering rows by expert changes nothing (L2 already serves repeats); row
-  `e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`.
-  **Not reachable by sharing loads (K18):** a grouped GEMV loading each
-  expert's slice once per four rows is exact and 1.49× slower on those ids
-  (9.689 vs 6.520 ms/step, gnf4 row
-  `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`); the 0.92 ms is the
-  extra rows' loads and arithmetic together, and P60's re-streaming reading is
-  withdrawn.
+- **Where that headroom is (P60–P61, `bench/p60/`, `bench/p61/`):** on the
+  recorded B=16 routing, one row per distinct expert instead of one per routed
+  row runs **0.92 ms/step** faster (`e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`),
+  and row order is worth nothing. Sharing loads does not reach it: K18's
+  grouped GEMV is exact and 1.49× slower (`gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`).
+  P61 finds row work and expert bytes overlap rather than add, so no lever is
+  licensed (`e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23`).
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3578,6 +3573,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p59b.qwen3.b16.nf4-int4-kl.5090.2026-09-22 [measured]: Lane P59 anchor: KL(NF4 control || unfused int4 stack) at B=16 = 0.06715 nats/token mean (p95 0.25707), top-1 0.9028, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.
 - e4b.serve.p59b.qwen3.b16.nf4-fqkv-kl.5090.2026-09-22 [measured]: Lane P59 anchor: KL(NF4 control || fused-q/k/v int4 stack) at B=16 = 0.07057 nats/token mean (p95 0.25948), top-1 0.9014, over 2048 teacher-forced decode positions -- the distance of the int4 serving stack from the register's NF4 control on the same rows; reported, not gated.
 - e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22 [measured]: Lane P60: replaying Qwen3-30B-A3B's recorded B=16 routing (128 decode steps x 48 layers, 54.7 distinct experts per layer per step) through the shipped int4-b32 expert GEMV on one RTX 5090 reproduces the served kernel row (6.155 ms/step vs the census's 6.340), and one row per distinct expert instead of one per routed row runs 6.479 vs 5.560 ms/step = 0.919 ms/step faster (the repeated rows' loads and arithmetic together; not reachable by sharing loads, per grouped-nf4-gemm K18); ordering rows by expert changes nothing (-0.55%); one row per expert sits 1.21x above the 1512 GB/s byte floor (4.598 ms).
+- e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23 [measured]: Lane P61 (575 W RTX 5090): the recorded B=16 routing's repeated rows cost the served expert GEMV 0.905 ms/step; an additive rows + experts model predicts 2.42 (refuted): the terms overlap, so no lever lane follows.
 
 Open items (no evidence either way):
 
@@ -3585,4 +3581,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(238 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(239 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

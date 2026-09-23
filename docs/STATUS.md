@@ -865,18 +865,13 @@ ran — 48 in the lane (`TP_DONE` 07:00Z, 5.0 h) and amendment 2's two
   row: **~77 % of roofline at real routing, ~1.4 ms/step of headroom** in the
   largest row of the B=16 step — the lever the P58 gap analysis said was absent
   is present after all, sized by the routing it actually sees.
-- **Where that headroom is (P60, 2026-09-22, `bench/p60/RESULTS-p60.md`):
-  repeated rows.** Replaying the recorded B=16 routing through the shipped GEMV
-  reproduces the served kernel row (6.155 vs 6.340 ms) and shows one row per
-  distinct expert instead of one per routed row runs **0.92 ms/step** faster;
-  ordering rows by expert changes nothing (L2 already serves repeats); row
-  `e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`.
-  **Not reachable by sharing loads (K18):** a grouped GEMV loading each
-  expert's slice once per four rows is exact and 1.49× slower on those ids
-  (9.689 vs 6.520 ms/step, gnf4 row
-  `gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`); the 0.92 ms is the
-  extra rows' loads and arithmetic together, and P60's re-streaming reading is
-  withdrawn.
+- **Where that headroom is (P60–P61, `bench/p60/`, `bench/p61/`):** on the
+  recorded B=16 routing, one row per distinct expert instead of one per routed
+  row runs **0.92 ms/step** faster (`e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22`),
+  and row order is worth nothing. Sharing loads does not reach it: K18's
+  grouped GEMV is exact and 1.49× slower (`gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`).
+  P61 finds row work and expert bytes overlap rather than add, so no lever is
+  licensed (`e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23`).
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

@@ -1,0 +1,6 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (this directory; bench/p60/receipts for the recorded routing) and compares.
+39e7919be6e6212d859fdbabeaf1918cacb3b4ac78b9259dd6fadcb3527eb52c  p61_run.sh
+44b05938e90f6441b56710b887c776f43a7e659f6b718aaa8233b7c281326567  sweep_gemv.py
+c050961e7f7d9f12cca31d71681d6fdbd1984dd2888a87bf044338ff3ee3cc76  eids_b16.int16.bin
+21a756fd02e5ffd416f94d3bf38c5faa7b36d9a26c43054db221635951fc170d  eids_b16.int16.json

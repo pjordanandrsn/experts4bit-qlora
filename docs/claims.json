@@ -6522,6 +6522,32 @@
         "receipts/experts4bit-qlora/2026-09-22/p60-5090-1/ (receipt.json, teardown-proof.json, full fetched run)"
       ],
       "notes": "Pre-registered verdicts: P0 (instrument, served within +-15 % of 6.340) HOLDS -2.9 %; P1 (served - dedup >= 0.8) HOLDS; P2 (dedup/floor <= 1.15) BETWEEN BANDS 1.21; P3 (order within 3 %) HOLDS; P4 (routing 58.7 +- 3) REFUTED 54.7 -- teacher-forced routing is narrower than greedy. Decision: a grouped expert GEMV (grouped-nf4-gemm lane K18) is licensed to build, read against these recorded ids. A replay measurement, not a served step time. Corrected 2026-09-22 after grouped-nf4-gemm lane K18 (gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22): the 0.919 ms was first read as weight re-streaming and as the ceiling a grouped expert GEMV can recover; a grouped GEMV loading each expert's slice once for up to four of its rows is bitwise exact and 1.49x SLOWER on these recorded ids (9.689 vs 6.520 ms/step), so that attribution is withdrawn -- the number stands."
+    },
+    {
+      "id": "e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "claim": "Lane P61 (575 W RTX 5090): the recorded B=16 routing's repeated rows cost the served expert GEMV 0.905 ms/step; an additive rows + experts model predicts 2.42 (refuted): the terms overlap, so no lever lane follows.",
+      "value": 0.905,
+      "unit": "ms/step, per-layer-store served minus one-row-per-distinct-expert, expert GEMV graph time at B=16",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, 575 W, driver 580.119.02), one rented Vast.ai verified/secure host (instance 52146799)",
+      "conditions": "P60's recorded routing (bench/p60/receipts/eids_b16.int16.bin, 128 steps x 48 layers); synthetic int4-b32 weights, 128 experts per layer on per-layer stores (and one shared store for P0); R in {16..128} x D in {1..128} grid; one CUDA graph per cell/step, 20 replays median; gnf4 a12cf46 served plan sk 16/6 at every R",
+      "measured_on": "2026-09-23",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p61/RESULTS-p61.md",
+        "bench/p61/P61-PREREG.md",
+        "bench/p61/sweep_gemv.py",
+        "bench/p61/p61_reduce.py",
+        "bench/p61/receipts/p61_rows.json",
+        "bench/p61/receipts/sweep_log.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-23/p61-5090-6/ (receipt.json, teardown-proof.json, full fetched run); runs -1..-5 beside it"
+      ],
+      "notes": "P0 HOLDS +1.1 %; P1 REFUTED (+167 %); P2 informational MIXED (b1 / L2 floor 1.61 gate_up, 1.47 down); P3 informational (c / DRAM floor 0.73 / 0.56, below any real stream: the additive fit distorts); P4 per-layer minus shared +0.040 ms/step. Six attempts, $0.2787: run 1 failed P0 on a 450 W card, then Amendment 1 refused < 575 W. One row per distinct expert sits 1.22x above the byte floor."
     }
   ]
 }
