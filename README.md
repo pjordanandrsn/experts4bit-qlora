@@ -77,15 +77,16 @@ a version is reached from the release block at the top.
   one card and one bitsandbytes development build, not a statement about
   every 4-bit path).
 - You expect a general-purpose serving engine or a vLLM replacement: on
-  the same box, with identical prompt ids, vLLM 0.28.0 is 2.52× ahead of
-  this package's NF4 stack at B=1 and 4.06× at B=16
-  (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`; **bounded** to graph
-  decode at B=1 and B=16 on one RTX 5090 box with one prompt set — never a
-  general position; other batch shapes, prefill/TTFT and vLLM resident
-  footprint were not recorded; the ratio against the licensed stack is not
-  quoted on that lane — its arms were void on that box and the gate run on
-  that box's pack failed); this is a measured 4-bit path for models that
-  otherwise do not run at all.
+  the same box, with identical prompt ids, vLLM 0.30.0 decodes 1.087× faster
+  than this package's current int4 stack at B=1 and 1.396× at B=16
+  (`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22`,
+  `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22`; **bounded** to
+  graph decode at B=1 and B=16 on one RTX 5090 box with one prompt set —
+  never a general position; vLLM's number includes its serving loop and
+  this package's does not, so the engine advantage is understated; quality
+  is quoted, never equated; footprint and prefill/TTFT were not compared);
+  this is a measured 4-bit path for models that otherwise do not run at
+  all.
 - You need Windows, macOS, ROCm or a non-CUDA accelerator.
 - The model family or expert layout is not in
   [`docs/ARCHITECTURE_SUPPORT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/ARCHITECTURE_SUPPORT.md)
@@ -192,7 +193,7 @@ the register moves here or the build goes red.
 | Paged decode vs the model's own attention (`e4b.parity.*.paged-vs-own-attention`, `e4b.parity.gemma4.no-reference`, `e4b.parity.gemma4.fp8-share`) | indistinguishable on Granite (0.00229 nats), gpt-oss (0.00288) and Qwen3 (0.00173) against a chunk-free reference, each below its own floor; Gemma-4 has no reference at this resolution — its own cached forward swings −0.107 … +0.271 nats across windows — and the paged path's one measured cost there is the fp8 cache, 0.046 nats ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359)) | measured-private |
 | Serving: the licensed best per family under the shipped code, one rented RTX 5090, every ratio vs e4b's own NF4 control on the same box — never a field-engine speedup; Granite, OLMoE, gpt-oss, Gemma-4 and Mixtral have no field comparator measured; Qwen3's field comparator is named on the vLLM row below (`e4b.serve.census.bo7.*.b1.5090.2026-09-05`, `e4b.serve.census.bo7.*.b16.5090.2026-09-05`) | Qwen3-30B-A3B ×2.067 at B=1 (238.1 tok/s on that box; anchor-class projection 159.2 × 2.067 ≈ 329 tok/s, a projection) and ×2.602 at B=16 (1327.5 tok/s); Granite-3.1-3B ×1.341 (304.9) / ×1.160 (1836.8); Gemma-4-26B ×1.281 (103.6) / ×1.106 (675.8), exact arithmetic on NF4 because that family has no K8 instrument; OLMoE (282.5 / 1347.5), Mixtral (50.3 / 191.4) and gpt-oss (144.5 / 761.6) sit at ×1.000, their NF4 or reference arm — nothing above it is licensed; the measured-but-unlicensed arms are in [`SERVING-THROUGHPUT.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-THROUGHPUT.md) | measured |
 | Qwen3-30B-A3B's licensed serving stack passes the registered K8 gate on both texts: streamed 64k-token GPTQ-calibrated int4 experts + C4-calibrated int4 attention + round-1/2 folds + router epilogue + decode glue (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`) | −0.0528 ppl on wikitext and −0.0662 on C4 validation against the same-cut NF4, both inside the family's 0.0095-nat floor — at parity or better, licensed under the unchanged gate, no improvement claimed by a number | measured |
-| Same box, same session, identical prompt ids, against vLLM 0.28.0 (Qwen's GPTQ-Int4, MarlinExperts, default CUDA graphs) on one rented RTX 5090 (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`, `e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate`) | vLLM 286.0 tok/s at B=1 and 2030.0 aggregate at B=16 against this package's NF4 control 113.4 / 500.1 — vLLM/e4b-NF4 2.52 and 4.06, bounded to graph decode at B=1 and B=16 on that box and prompt set (footprint not recorded; other batch shapes and prefill/TTFT not measured); **no ratio against the licensed stack is quoted**: its arms on that box are void under the pre-registered pack-fingerprint rule (the streamed calibration packed 11522 expert matrices GPTQ where the licensed pack has 11512), the registered K8 gate run on that box's pack **fails on C4 validation, +0.109 ppl** against the +0.05 budget (wikitext −0.023, pass), and the recipe's speed there, 236.4 / 1305.3 tok/s, is an unlicensed observation | measured |
+| Same box, same session, identical prompt token ids, against vLLM 0.30.0 (Qwen's GPTQ-Int4 via Marlin, CUDA graphs) on one rented RTX 5090 (`e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b1.5090.2026-09-22`, `e4b.serve.h2h.vllm-0.30.0.p58.qwen3.b16.5090.2026-09-22`) | vLLM 260.3 tok/s at B=1 and 1925.6 aggregate at B=16 against this package's current int4 stack 239.4 / 1379.2 — vLLM / e4b-int4 1.087 and 1.396, vLLM ahead, bounded to graph decode on that box and prompt set (vLLM's number includes its serving loop and this package's does not; quality quoted, never equated; footprint and prefill/TTFT not compared); against the same box's NF4 control vLLM is 2.562 / 3.980 ahead. The 2026-09-05 comparison against vLLM 0.28.0 (`e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05`: 2.52 / 4.06 against that box's NF4 control) stays as history | measured |
 | DeepSeek-V4-Flash (284B, 147 GB of experts on disk) (`e4b.serve.deepseek-v4`) | loads in ~10 s at 8.74 GiB peak VRAM and generates | measured |
 | Informed hot sets vs by-index, identical VRAM (`e4b.serve.informed-hot-sets`) | +37.1% on DeepSeek-V4-Flash; the gain is a property of the host | measured |
 

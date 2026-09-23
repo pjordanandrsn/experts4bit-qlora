@@ -14,6 +14,21 @@
   ranked over their own corpus. This repository has none, so every query keeps its kind and corpus: the 45 rankings are
   identical before and after (37/45 top-1 against the floor of 30), compared line by line.
 
+### Docs: the same-box vLLM comparison is P58's everywhere, and the cross-host pack limitation is P55x's
+
+- The README ("Do not use this when" and the results table), `serve-moe-on-consumer-gpu`'s limitation in
+  `docs/capabilities.json` and `docs/solutions/serve-large-moe-on-a-consumer-gpu.md` still led with lane p37's 2026-09-05
+  comparison against vLLM 0.28.0 (2.52× / 4.06× over the NF4 control). P58 re-measured current against current on
+  2026-09-22 and re-pointed `docs/STATUS.md` and `docs/SERVING-THROUGHPUT.md`, but not these four. They now quote P58
+  (vLLM 0.30.0 / e4b's current int4 stack 1.087 at B=1, 1.396 at B=16) and keep p37 as history. No register check could
+  catch the omission: p37's rows are still `measured`, correctly, because they are history rather than retracted.
+- `docs/STATUS.md` cited `e4b.serve.buildout.bo6.qwen3.calibexp-streamed-*`, a glob that breaks mid-segment; the
+  consumer site's claim-reference check reads it as the id `…calibexp-streamed-`, which is not in the register, and
+  refused the 0.37.0 re-pin on it. The three rows it stood for are now named.
+- The same capability said the streamed 64k calibration "does not reproduce its licence across hosts". P55x found the
+  pack byte-reproducible on one box and across boxes and a release boundary, and P37's divergent pack an outlier; the
+  limitation now says that, and what stays open (the calibrated attention half is not in the fingerprint, #674).
+
 ## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); two expert-GEMV levers built and refused (K17, K18), and the B=16 expert GEMV's remaining headroom bounded with no lever to follow (P60, P61)
 
 **0.37.0.** The loader admits five more MoE families. `nemotron_h`, `granitemoehybrid`, `granitemoeshared` and
