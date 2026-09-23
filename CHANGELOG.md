@@ -31,6 +31,21 @@
   `docs/METHODOLOGY.md#10-energy--measured-benchupstream…`. GitHub's anchor keeps the underscore of `bench/_upstream`,
   so the receipt link on the consumer site has never scrolled to its section. It is fixed.
 
+### Lane B374's runner (`bench/b374/`, for grouped-nf4-gemm#374)
+
+- **What it runs.** The box side of grouped-nf4-gemm's pre-registered lane B374: the word-addressed NF4 decode routes
+  (wide loads, and dot-pad, the default on >= 160-SM parts) put past THEIR 2^31 boundary on an RTX 5090.
+- **Two passes.** `b374_run.sh` installs grouped-nf4-gemm at `GNF4_SHA` and runs its
+  `kernel/test_offset_boundary_words_gpu.py` twice, from two work dirs (the test puts its own directory first on
+  `sys.path`):
+  - against the installed kernels, where all four cases must pass;
+  - against a copy with all six eid promotions removed, where all four must fail. Tripwires record where each pass
+    resolved `nf4_grouped`.
+- **One process per case.** Each GPU case runs in its own pytest process, so a fault cannot poison the verdicts of the
+  cases after it.
+- **Driver and pin.** The driver and the staged pin are K18's, re-pointed. `tests/test_b374_staged_pin.py` mirrors the
+  K18 pin test, and the driver's dry run stages, starts and fetches as written.
+
 ## 0.37.1 — 2026-09-23 — documentation and repository tooling only: the same-box vLLM comparison is P58's everywhere, the cross-host pack limitation is P55x's, CI runs the census cross-check, and the CI scripts shared with grouped-nf4-gemm start to become one file
 
 **0.37.1.** Nothing a user imports changed: the package code is identical to 0.37.0's (under `experts4bit_qlora/`, `git diff v0.37.0` changes only the `__version__` literal). The documentation that ships with it is corrected. The README (which is also the PyPI description), the serving capability and the serving solution page led with the 2026-09-05 comparison against vLLM 0.28.0; they now quote the current same-box one (P58: vLLM 0.30.0 decodes 1.087× faster than this package's current int4 stack at B=1 and 1.396× at B=16, bounded to one box and prompt set). The capability's statement that the streamed calibration does not reproduce across hosts is replaced by what P55x measured. CI additionally runs the census cross-check against the kernel package's shape census (grouped-nf4-gemm#353) and fails if the CI scripts shared with grouped-nf4-gemm stop being byte-identical to its `main`. No action is needed if you are on 0.37.0; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
