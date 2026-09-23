@@ -1,6 +1,63 @@
 # Changelog
 
-## Unreleased
+## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); two expert-GEMV levers built and refused (K17, K18), and the B=16 expert GEMV's remaining headroom bounded with no lever to follow (P60, P61)
+
+**0.37.0.** The loader admits five more MoE families. `nemotron_h`, `granitemoehybrid`, `granitemoeshared` and
+`lfm2_moe` each load a real published checkpoint (`reference-ok`); `jamba` is so far exercised only on a toy
+checkpoint (`toy-ok`). The five families still refused (`axk1`, `dbrx`, `jetmoe`, `qwen3_vl_moe`,
+`qwen3_vl_moe_text`) now each name a measured blocker, asserted by a test that fails the day the blocker lifts. On the
+int4 serving stack, fusing q/k/v is licensed at B=1 (12.4 % per step, token-identical) and at B=16 (0.0044 nats/token).
+A calibrated int4 expert pack for Qwen3-30B-A3B is licensed again, as retained bytes loaded back by fingerprint. A load
+that faults on CUDA can now be re-run with `E4B_LOAD_SYNC_DEBUG=1`, which synchronises after each load stage so the
+failure is reported at the stage that caused it, and a failed shard read now prints the host's memory facts. Everything
+else is measurement: the same-box comparison with vLLM 0.30.0 was re-run (vLLM decodes 1.09× faster at B=1 and 1.40× at
+B=16). Two expert-GEMV levers were built and refused (K17's fused reduce and K18's grouped GEMV), and the B=16
+expert GEMV's remaining headroom was measured and has no lever to follow (P60, P61). Affected: loading of the five newly admitted families
+(CPU and CUDA) and the int4 serving lanes on NVIDIA GPUs. Nothing changes for NF4 training or for any package default, and families
+admitted before 0.37.0 load as they did (the new prefix-rename pass is a no-op for them, asserted by test; the only
+difference they can see is the diagnosis a failed shard read now prints). Upgrade if you load one of the five families or want the
+load-fault diagnosis; no action otherwise. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`; CI now runs against
+grouped-nf4-gemm 0.33.0.
+
+### Loader and engine changes not filed under a lane below
+
+- **`E4B_LOAD_SYNC_DEBUG=1` — staged synchronisation for CUDA load faults** (#660, #344). CUDA reports asynchronously, so
+  the traceback of a fault raised during a streamed load need not name the kernel or the stage that caused it. With the
+  flag set, the loader synchronises at each stage boundary and logs `[sync] <stage>: clean`, so the first stage that
+  does not come back clean is the one that faulted. It also logs the host's `MemTotal` / `MemAvailable` / cgroup limit
+  and the largest shard it will map. The flag is ignored with a log line on a non-CUDA device, and off by default
+  because the synchronisations serialise the load. Separately, and always on, a shard read that raises now logs a
+  diagnosis (shard, size, device, host memory facts) before re-raising unchanged. Nothing branches on the memory
+  numbers: they describe a host, they do not refuse one. `tests/test_load_sync_debug.py`. #344 stays open; the
+  Gemma-4 load fault it tracks is bounded to a stage by this, not fixed.
+- **`E4B_BATCHED_PAD_WASTE_LIMIT`** (#662) overrides the batched engine's 4× pad-waste fallback guard (default
+  unchanged). The guard only protects speed, since falling back and batching compute the same function. A parity arm
+  wants the batched arithmetic on every call, and a run that falls back is measuring the reference against itself.
+  `batched_fallback_stats` reports the limit in force, so a receipt says which one it ran.
+
+### P56 read: Gemma-4's training-parity FAIL is not the fused path's, and the band has no floor term (#662, #671, #672, #675)
+
+- **The kernel-free batched path fails the same 0.05 band** as the fused path on the same box, init and tokens:
+  0.05425 final / 0.08487 median against the fused path's 0.10223 / 0.10639. It never touches grouped-nf4-gemm and has
+  13× less composed gradient error, yet it closes only 1.9× of the gap, so no achievable change to the arithmetic
+  reaches the band. The CPU half (#662) found e4b's expert composition exact and family-blind: every family, Gemma-4
+  included, sits at the same bf16 floor against an fp32 arm over identical quantized weights.
+- `e4b.parity.gemma4.train-internal` is superseded by `e4b.parity.gemma4.train-floor`, the first measurement of this
+  family's training-parity floor (≥ 0.054 final / 0.085 median). The superseded row also mislabelled its unit: it said
+  "held-out" while the number was `loss_last`, the final TRAIN loss. **#558 stays open as a gate defect**:
+  `tp4_reduce.parity()` compares against 0.05 and against zero, with no floor term. Refusing the fused path for
+  `gemma4_text` is not supported by this read.
+- Two harness defects, both fixed. An unquoted expansion in the arm's assignment prefix made the next `VAR=value` the
+  command, so all four arms of draw 1 died with rc 127 after measuring nothing ($0.29). They are now routed through
+  `env`, and a regression test executes the real prefix from the real file (#672). The pre-registration's micro-batch
+  was misstated as 1: the run used the field recipe's micro-batch 2, so the draw matches the standing claim row's
+  fixture, and the erratum is filed rather than edited (#671).
+
+### Lane tooling
+
+- `p47_drive.sh` / `p54_drive.sh` gain the heartbeat, stall verdict and lane-dead exit (25) from `tp4_drive.sh` (#655,
+  fixes #641). `bench/p319/` and `bench/p319b/` carry the pre-registrations that three committed receipts already
+  cited (#669).
 
 ### llms-full.txt headroom: 399,971 → 379,460 bytes against the 400,000 cap (docs only, no number or status changed)
 
@@ -99,7 +156,8 @@
 - **With the round-2 glue forced OFF on both legs, fused q/k/v at B=16 still diverges from unfused on 15 of 16
   sequences** while the control's two draws are bit-identical: the glue path is exonerated (P3). *(Corrected by P59:
   the indices are not P54's, and the divergence is not the K16 GEMM's — see the P59 entry above.)*
-  `--fuse-qkv` stays the default at B=1 and opt-in at B=16 until a KL/K8 read bounds the difference.
+  `--fuse-qkv` stays the default at B=1 and opt-in at B=16 until a KL/K8 read bounds the difference *(it did: P59
+  amendment 1 above licenses it at B=16)*.
 - **The distinct-expert count is READ (amendment 3, run `p57d-5090-1`, $0.07): 58.7 distinct experts per layer per
   decode step at B=16** (layer means 50.9–71.7, 73 steps counted on device; uniform expectation 82.4;
   7–41 of 128 experts per layer never touched). The first two attempts counted 3 warm-up steps because the
@@ -291,7 +349,9 @@ checkpoint behind it rather than a fixture.
   token-IDENTICAL output**, and B=16 11.420 → 11.197 ms (0.223 ms, 2.0 %) where the fused arm's tokens
   **diverge** from the control's on 14 of 16 sequences, reproducibly, against a bit-identical A/A. The K16
   small-M GEMM's accumulation order is a function of N, so the fused N=5120 launch rounds differently from the
-  three it replaces. **`--fuse-qkv` stays opt-in at B=16 and no B=16 position is quoted** until a
+  three it replaces *(explanation withdrawn by the P59 read above: the K16 decode path is bitwise invariant to
+  fusing; the >16-row cuBLAS prefill path is where the bits change)*. **`--fuse-qkv` stays opt-in at B=16 and no B=16
+  position is quoted** *(superseded by P59 amendment 1 above: licensed at B=16)* until a
   KL-from-checkpoint or K8 read bounds the divergence (bar: ≤ 0.10 nats, top-1 ≥ 0.93); B=1 is a licensed
   lever. Four register rows `e4b.serve.p54.qwen3.*.5090.2026-09-21`. The lane's distinct-expert arm (#564's
   unmeasured number) was **unbuildable as registered** — `--series-out` requires `--amort on`, which the
