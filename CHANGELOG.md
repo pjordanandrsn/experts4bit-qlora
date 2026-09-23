@@ -28,6 +28,13 @@
 - The same capability said the streamed 64k calibration "does not reproduce its licence across hosts". P55x found the
   pack byte-reproducible on one box and across boxes and a release boundary, and P37's divergent pack an outlier; the
   limitation now says that, and what stays open (the calibrated attention half is not in the fingerprint, #674).
+### CI runs the census cross-check (grouped-nf4-gemm#353)
+
+- `bench/support/census_cross_check.py --check` (#522) fails when a claimed family that the kernel's shape census covered
+  stops being covered, but nothing ran it. It now runs in `lint-and-test` against `census/shape_census.json` read from the
+  exact kernel commit pip installed (`direct_url.json`), so it is never a second pin. Calibrated: a census with OLMoE's
+  down-proj shape removed exits 1 (`census coverage REGRESSED for: olmoe`); the v0.33.0 census exits 0 (4 of 11 probed
+  claimed families covered). `--check` writes a missing baseline and passes, so the step asserts the baseline exists first.
 
 ## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); two expert-GEMV levers built and refused (K17, K18), and the B=16 expert GEMV's remaining headroom bounded with no lever to follow (P60, P61)
 

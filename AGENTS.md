@@ -99,6 +99,7 @@ python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 30   # queries
 python scripts/check_docs_examples.py --root .   # doc code blocks parse; local links resolve
 python scripts/build_llms_bundle.py --check      # llms-full.txt is current
 python scripts/check_shared_tooling.py --sibling ../grouped-nf4-gemm   # the shared scripts are byte-identical to the kernel repository's
+python bench/support/census_cross_check.py --census ../grouped-nf4-gemm/census/shape_census.json --check   # no claimed family lost the kernel census's coverage (CI: the installed kernel commit's census)
 ```
 
 Anything that needs a GPU, the network, a model download or a large disk runs
