@@ -186,7 +186,8 @@ load fails on the MXFP4 weight conversion
 (`e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.*`); the attention-only
 secondary row trains. **Gemma-4** — both e4b attention-4-bit arms died on the
 converter's own count check (100 projections converted, 120 expected —
-[#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412); the
+[#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412), fixed
+since by #435; the arms have not re-run, [#703](https://github.com/pjordanandrsn/experts4bit-qlora/issues/703); the
 bf16-attention `fast_train` path stays as tp1 left it), while Unsloth's arm
 is OK · VALID (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.unsloth.ckpt_unsloth`).
 e4b's internal fused-vs-reference parity PASSES on all four families that
@@ -637,11 +638,15 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   defaulted to the V4 epilogue, #397). What stays open is a gpt-oss-aware
   adapter; the kernel package's `ExpertsMxfp4LoRA` route is the experimental
   alternative (tp1: canary and provenance pass, never licensed).
-- **[#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412) —
-  Gemma-4 attention 4-bit: the converter found 100 of 120 projections**, so
-  both e4b attention-4-bit arms of tp2/P40 died before a step ran
-  (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.*`). Attention-4-bit
-  training on `gemma4_text` has no receipt and is not supported pending it.
+- **[#703](https://github.com/pjordanandrsn/experts4bit-qlora/issues/703) —
+  Gemma-4 attention 4-bit has no receipt.** Both e4b attention-4-bit arms of
+  tp2/P40 died before a step ran
+  (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.*`). The cause was the
+  converter's count check, which found 100 of 120 projections. That is
+  [#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412), fixed
+  by #435: projections are detected by structure, with `v_proj` optional on
+  `k_eq_v` layers. The arms have not re-run, so attention-4-bit training on
+  `gemma4_text` is not supported pending that re-run.
 - **[#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344) —
   Gemma-4 fails to load on 2 of 6 rented hosts** with `CUDA error: invalid
   argument`, after the experts quantise. A 2 GiB host-hop fix was merged and

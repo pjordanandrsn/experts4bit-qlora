@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Gemma-4 attention-4-bit: the docs point at the open re-run, not the closed count-check bug (documentation; nothing in the wheel changes)
+
+- **Six places said Gemma-4 attention-4-bit training is "NOT supported pending #412"**, and STATUS listed #412 under
+  "What is open": `docs/STATUS.md`, `docs/capabilities.json` (four strings), `docs/ARCHITECTURE_SUPPORT.md` and the
+  QLoRA solution page. #412 was closed on 2026-09-23 as fixed by #435, so the docs pointed at a closed issue.
+  - **What #412 fixed.** It was the converter's count check (100 of 120 projections), which killed tp2/P40's two e4b
+    attn4 arms. #435 now detects projections by structure, with `v_proj` optional on `k_eq_v` layers.
+  - **What stays open.** Nothing has re-run those arms, so the configuration still has no receipt and stays **not
+    supported**. The re-run is now #703, and every reference points there, stating what #412/#435 fixed.
+  - **Register.** The two HARNESS_ERROR rows keep #412 as their evidence and gain a note: fixed by #435, not re-run,
+    #703.
+  - The dated tp2 receipt README is unchanged, because a receipt is a record.
+  - The site's `qlora-fused-moe-experts` FLAG still fires. It is a true family-scoped caveat: the capability is
+    supported, and one family's attention-4-bit cell is not.
+
 ### The serving-position WARN reads STATUS's position section (repository tooling; nothing in the wheel changes)
 
 - **`scripts/check_capabilities.py` (shared; copied byte-for-byte from grouped-nf4-gemm, pjordanandrsn/grouped-nf4-gemm#389).**
