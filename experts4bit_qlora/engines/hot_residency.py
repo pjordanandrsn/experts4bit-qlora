@@ -739,8 +739,12 @@ class _HotResidency:
         if (ck is not None and dn.is_cuda and dn.dtype == torch.bfloat16
                 and input_dtype == torch.bfloat16
                 and dn.device == torch.device(input_dev)):
-            # one launch: fp32 weight-and-sum over the k slots, bf16 out
-            # (the same order and roundings as the chain below)
+            # one launch: fp32 weight-and-sum over the k slots, bf16 out.
+            # NOT bitwise the chain below: the kernel sums in slot order
+            # (with a fused multiply-add, exactly so on sm_86), the chain
+            # rounds each product and sums in torch's order. Both are within the error bound of a
+            # correct fp32 sum (grouped-nf4-gemm lane B393, #393: 144/144
+            # census cases, RTX 5090); E4B_FUSE_COMBINE=0 is the chain.
             return ck(dn, w, k)
         out = (dn.to(torch.float32) * w[:, None]).view(T, k, H)
         return out.sum(dim=1).to(device=input_dev, dtype=input_dtype)

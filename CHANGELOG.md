@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### The fused MoE combine's call-site comment says what lane B393 measured (a comment; no behaviour change)
+
+- **`engines/hot_residency.py`'s call site said `combine_rows` takes "the same order and roundings as the chain
+  below".** grouped-nf4-gemm's lane B393 measured otherwise on an RTX 5090 (grouped-nf4-gemm#397, #393), over 144
+  census cases at every served family's shape:
+  - **Not bitwise.** The kernel differs from the chain in 95 cases, 392 of 9.07 M elements. It sums in slot order,
+    with a fused multiply-add exactly so on sm_86; the chain rounds each product and sums in torch's order.
+  - **Both correct.** Both are within the error bound of a correct fp32 summation in every case, at the same max
+    ratio (claim `gnf4.kernel.combine-rows-accuracy.5090.2026-09-23`).
+- **The comment now says so.** The default stays `E4B_FUSE_COMBINE=1`, because an accuracy-equal kernel is not a defect.
+  The end-to-end size of the difference is #708's probe, with `E4B_FUSE_COMBINE=0` as its control arm.
+
 ### Lane B393's runner (`bench/b393/`, for grouped-nf4-gemm#393)
 
 - **What it runs.** The box side of grouped-nf4-gemm's pre-registered lane B393: are `combine_rows` and
