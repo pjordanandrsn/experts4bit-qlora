@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Lane B393's runner (`bench/b393/`, for grouped-nf4-gemm#393)
+
+- **What it runs.** The box side of grouped-nf4-gemm's pre-registered lane B393: are `combine_rows` and
+  `reduce_partials` bitwise equal to the torch chains they replaced? This repository runs `combine_rows` on every MoE
+  layer by default, and its call site says the fused path takes "the same order and roundings as the chain below".
+- **How.** `b393_run.sh` installs grouped-nf4-gemm at `GNF4_SHA`, clones the same sha for the census script (it is not
+  in the wheel), and proves from a work dir holding only the census that `int4_b32` resolves to the installed
+  package. It then runs the 414-case census once. The verdict is the census JSON, read against grouped-nf4-gemm's
+  pre-registration.
+- **Driver and pin.** The driver and the staged pin follow B374's pattern. `tests/test_b393_staged_pin.py` mirrors the
+  pin test.
+
 ### Correction: Gemma-4 attention-4-bit training HAS receipts; it is unlicensed for a different reason (documentation; nothing in the wheel changes)
 
 - **Two entries below said the arms had not run and had "no receipt", and pointed at a re-run (#703).** That was wrong,
