@@ -49,6 +49,7 @@ SHARED: tuple[str, ...] = (
     "docs/claims-schema.md",
     "scripts/check_discovery_contract.py",
     "scripts/check_docs_examples.py",
+    "scripts/check_readme_claims.py",
     "scripts/check_readme_links.py",
     "scripts/check_system_manifest.py",
     "scripts/check_wheel_metadata.py",
