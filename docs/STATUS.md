@@ -185,7 +185,8 @@ projections carry a bias), its fused path patches nothing, and Unsloth's
 load fails on the MXFP4 weight conversion
 (`e4b.train.h2h.unsloth.gptoss.5090.2026-09-06.arm.*`); the attention-only
 secondary row trains. **Gemma-4** — both e4b attention-4-bit arms died on the
-converter's own count check (100 projections converted, 120 expected —
+harness's projection-count check (the converter returned 100; the harness expected
+4 · n_layers = 120 —
 [#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412), fixed
 since by #435; the arms have not re-run, [#703](https://github.com/pjordanandrsn/experts4bit-qlora/issues/703); the
 bf16-attention `fast_train` path stays as tp1 left it), while Unsloth's arm
