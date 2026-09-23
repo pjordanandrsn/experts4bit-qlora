@@ -14,8 +14,8 @@
   "classes": {
     "public-api-change": {
       "description": "A public entry point changed: a symbol entered or left `__all__`, or a signature, return value or refusal condition of a documented entry point changed.",
-      "mechanical_trigger": "a symbol added to or removed from `__all__` in experts4bit_qlora/__init__.py",
-      "severity": "warn (--strict: fail)",
+      "mechanical_trigger": "a symbol added to or removed from `__all__` in experts4bit_qlora/__init__.py; or the set of entrypoints in docs/capabilities.json changes",
+      "severity": "`__all__`: warn (--strict: fail); the entrypoint set: fail without CHANGELOG.md, warn without README.md",
       "must_change": [
         "docs/capabilities.json OR docs/solutions/*.md",
         "CHANGELOG.md"
@@ -45,7 +45,7 @@
     },
     "measured-result": {
       "description": "A number or a verdict moved: a claim was added, or an existing claim's status or value changed.",
-      "mechanical_trigger": "docs/claims.json gained a claim id, or a claim's `status` or `value` differs from the base",
+      "mechanical_trigger": "docs/claims.json gained a claim id, or a claim's `status`, `value` or `unit` differs from the base",
       "severity": "fail (--allow-claims-only: warn, for a register-only correction whose position did not move)",
       "must_change": [
         "docs/STATUS.md"
@@ -63,8 +63,8 @@
     },
     "dependency-floor": {
       "description": "The `fast` extra's grouped-nf4-gemm floor moved (or another extra's floor did).",
-      "mechanical_trigger": "the grouped-nf4-gemm requirement of `[project.optional-dependencies] fast` in pyproject.toml differs from the base",
-      "severity": "fail",
+      "mechanical_trigger": "the grouped-nf4-gemm requirement of `[project.optional-dependencies] fast` in pyproject.toml differs from the base; or the pyproject version changes (CHANGELOG.md must change); or the pyproject dependencies change (README.md and docs/capabilities.json should)",
+      "severity": "fail (a dependencies change without README.md / docs/capabilities.json: warn)",
       "must_change": [
         "docs/system-manifest.json (the compatibility record for this version)",
         "docs/capabilities.json (special_requirements / install text that states the floor)",

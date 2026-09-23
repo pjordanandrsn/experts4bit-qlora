@@ -114,6 +114,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the change-impact check diffs the working tree against
+          # the merge base of the PR base and HEAD, which a depth-1 checkout
+          # does not have (it exits 2 there rather than diff the wrong commit).
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -144,14 +149,13 @@ jobs:
       - name: dependency-floor drift (every current document states pyproject's [fast] floor; historical lines are listed, not failed)
         run: python scripts/check_dependency_floor.py
       - name: change-impact contract (pull requests only -- docs/change-impact.json, what must move together)
-        # The base commit is not in a depth-1 checkout; fetch it by sha so the
-        # diff is the pull request's own changes. Skipped on push events.
+        # The checkout above has full history (fetch-depth: 0), so the base
+        # commit and its merge base with HEAD are present: no depth-1 fetch,
+        # which would make the clone shallow again. Skipped on push events.
         if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git fetch --no-tags --depth=1 origin "$BASE"
-          python scripts/check_change_impact.py --base "$BASE"
+        run: python scripts/check_change_impact.py --base "$BASE"
       - name: discovery contract (queries -> solution pages -> concepts, canonical install, limitations; BM25 floor = baseline minus two queries, a local proxy)
         run: python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 30
       - name: llms bundle is current

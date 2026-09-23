@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### `check_change_impact.py` and `check_dependency_floor.py` are one file each, shared with grouped-nf4-gemm (repository tooling; nothing in the wheel changes)
+
+- **Byte-copied from grouped-nf4-gemm** (pjordanandrsn/grouped-nf4-gemm#394). With these, `SHARED` lists 14 files:
+  every CI script both repositories carry except the per-package `wheel_smoke.py`. Each reads its role (`runtime` here)
+  through `check_system_manifest.system_role` and keeps this repository's settings in its `PROFILES` entry.
+  - **Change impact diffs against `git merge-base BASE HEAD`**, where this copy diffed against the base itself. On a
+    branch behind its base, the old reading blamed the PR for a claim change the base made, and it passed a PR whose
+    missing companion the moved base happened to supply. CI's discoverability checkout therefore now uses
+    `fetch-depth: 0`, and the depth-1 base fetch is gone, since it would make the clone shallow again. A shallow
+    checkout exits 2 with that hint.
+  - **Change impact now also checks, here:**
+    - a version bump needs CHANGELOG;
+    - a dependencies change warns without README / capabilities;
+    - a capabilities entrypoint change needs CHANGELOG;
+    - a claim's `unit` change is a measured-result trigger;
+    - every class a trigger reports must be named in `docs/change-impact.json`. That contract now describes these
+      triggers.
+  - **Dependency floor now also checks, here,** the kernel copy's version statements: this package's own version and
+    tag links, the torch floor, Python/CI, requires-python and the licence, across the current documents (24
+    statements, all agreeing). The floor still comes from pyproject's `fast` extra, and this copy's historical markers
+    and anchored-document exemption are kept.
+  - **Tests.** `tests/test_readability_checks.py` fixture data only: the fixture manifest names both packages, the
+    pyproject gains a Source URL, and the fixture writes the current documents and a minimal contract. No assertion
+    changed.
+
 ### `check_readme_claims.py` is one file, shared with grouped-nf4-gemm (repository tooling; nothing in the wheel changes)
 
 - **Byte-copied from grouped-nf4-gemm** (pjordanandrsn/grouped-nf4-gemm#392) and now in `SHARED` (12 files). The two
