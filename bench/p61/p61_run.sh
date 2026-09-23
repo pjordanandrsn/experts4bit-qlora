@@ -21,9 +21,11 @@ GPU=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU" in *5090*) ;; *) say "REFUSED: card is '$GPU', the lane registers the RTX 5090 class"; echo "refused: class $GPU" > REFUSAL; finish 15;; esac
 # Amendment 1 (P61-PREREG.md): run 1's card was power-capped at 450 W and its served arm read +11.9 % against the P0
 # anchor (P60 600 W, K18 575 W). The read box must match the anchor's class: refuse below 575 W, before any install.
+# Amendment 2: the power refusal exits 17, the launcher's registered host-limited power-cap code (adertha-agents
+# #128), so its receipt names the machine for exclude_vast_lane_receipts; an unreadable limit stays 15.
 PL=$(nvidia-smi --query-gpu=power.limit --format=csv,noheader,nounits | head -1 | cut -d. -f1)
 case "$PL" in ''|*[!0-9]*) say "REFUSED: unreadable power.limit '$PL'"; echo "refused: power.limit '$PL'" > REFUSAL; finish 15;; esac
-[ "$PL" -ge 575 ] || { say "REFUSED: power.limit ${PL} W < 575 W (Amendment 1)"; echo "refused: power.limit ${PL} W" > REFUSAL; finish 15; }
+[ "$PL" -ge 575 ] || { say "REFUSED: power.limit ${PL} W < 575 W (Amendment 1)"; echo "refused: power.limit ${PL} W" > REFUSAL; finish 17; }
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p61/staged.sha256"; finish 9; }
 
 say "install gnf4 @$GNF4_SHA"
