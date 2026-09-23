@@ -44,6 +44,7 @@ from pathlib import Path
 SHARED: tuple[str, ...] = (
     "scripts/check_shared_tooling.py",
     "scripts/build_llms_bundle.py",
+    "scripts/check_capabilities.py",
     "scripts/check_discovery_contract.py",
     "scripts/check_docs_examples.py",
     "scripts/check_readme_links.py",

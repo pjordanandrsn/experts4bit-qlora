@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.37.1 — 2026-09-23 — documentation and repository tooling only: the same-box vLLM comparison is P58's everywhere, the cross-host pack limitation is P55x's, CI runs the census cross-check, and the CI scripts shared with grouped-nf4-gemm start to become one file
+
+**0.37.1.** Nothing a user imports changed: the package code is identical to 0.37.0's (under `experts4bit_qlora/`, `git diff v0.37.0` changes only the `__version__` literal). The documentation that ships with it is corrected. The README (which is also the PyPI description), the serving capability and the serving solution page led with the 2026-09-05 comparison against vLLM 0.28.0; they now quote the current same-box one (P58: vLLM 0.30.0 decodes 1.087× faster than this package's current int4 stack at B=1 and 1.396× at B=16, bounded to one box and prompt set). The capability's statement that the streamed calibration does not reproduce across hosts is replaced by what P55x measured. CI additionally runs the census cross-check against the kernel package's shape census (grouped-nf4-gemm#353) and fails if the CI scripts shared with grouped-nf4-gemm stop being byte-identical to its `main`. No action is needed if you are on 0.37.0; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
 
 ### The CI scripts both repositories carry start to become one file (repository tooling; nothing in the wheel changes)
 
@@ -35,6 +37,20 @@
   exact kernel commit pip installed (`direct_url.json`), so it is never a second pin. Calibrated: a census with OLMoE's
   down-proj shape removed exits 1 (`census coverage REGRESSED for: olmoe`); the v0.33.0 census exits 0 (4 of 11 probed
   claimed families covered). `--check` writes a missing baseline and passes, so the step asserts the baseline exists first.
+### `check_capabilities.py` joins the shared set; the two discovery corpora stop answering one question two ways
+
+- **`scripts/check_capabilities.py` is one file in both repositories** (added to `SHARED`). grouped-nf4-gemm's copy was a
+  strict subset of this one. Adopting this copy there as it stood would have run cleanly, but only because the
+  serving-position rule's id pattern hard-coded `e4b.` and so could never match a kernel id: deriving the prefix instead
+  made it fire falsely in the kernel repository, whose serving capabilities are separate kernels, each on its own lane
+  (two false warnings measured). The rule is now gated on the repository's role in `docs/system-manifest.json`, and the
+  id namespace is the register's own. Behaviour here is unchanged (the same single WARN on `main` before and after); new
+  tests pin the namespace derivation, the mixed-register refusal and the role gate.
+- **One routing question, one answer per phrasing.** Both repositories' `docs/discovery-queries.json` carried "Where does
+  an NVMe primitive belong versus model-level NVMe integration?", each routed to its own page, so the consumer site's
+  merged corpus recorded it as unmapped with a WARN ("to be settled upstream"). The kernel repository keeps that
+  phrasing (the primitive's side); this repository now asks "Where does model-level NVMe integration live versus the
+  NVMe primitives?" (the integration's side), which still ranks its page first.
 
 ## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); two expert-GEMV levers built and refused (K17, K18), and the B=16 expert GEMV's remaining headroom bounded with no lever to follow (P60, P61)
 

@@ -267,14 +267,36 @@ def _code_ref_resolver(root: Path, py: dict, tree_of):
     return resolve
 
 
-_STATUS_ID = re.compile(r"`(e4b\.[A-Za-z0-9._+*-]+)`")
+def _status_id_pattern(by_id: dict) -> re.Pattern | None:
+    """A backticked id in this register's own namespace -- the first dotted segment
+    every id shares (``e4b.`` here, ``gnf4.`` in the kernel repository). ``None`` when
+    the ids share none, so a mixed or empty register quotes nothing instead of
+    guessing whose ids a STATUS line is citing."""
+    heads = {str(cid).split(".", 1)[0] for cid in by_id}
+    if len(heads) != 1:
+        return None
+    return re.compile(r"`(" + re.escape(heads.pop()) + r"\.[A-Za-z0-9._+*-]+)`")
+
+
+def _system_role(root: Path, package: str | None) -> str | None:
+    """``"runtime"`` / ``"kernels"``: the key under ``packages`` in
+    docs/system-manifest.json whose ``package`` is this repository's; ``None`` when
+    the manifest is absent or does not name it."""
+    try:
+        packages = json.loads(read_text(root / "docs" / "system-manifest.json"))["packages"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return next((role for role, p in packages.items() if isinstance(p, dict) and p.get("package") == package), None)
 
 
 def newest_serving_lane(status_text: str, by_id: dict) -> tuple[str | None, set[str]]:
     """``(measured_on, ids)`` of the newest ``area: serve`` claims docs/STATUS.md
     quotes by backticked id (globs expanded); ``(None, set())`` when it quotes none."""
     quoted: set[str] = set()
-    for ref in _STATUS_ID.findall(status_text):
+    pattern = _status_id_pattern(by_id)
+    if pattern is None:
+        return None, set()
+    for ref in pattern.findall(status_text):
         if "*" in ref:
             quoted.update(k for k in by_id if fnmatch.fnmatchcase(k, ref))
         elif ref in by_id:
@@ -455,8 +477,13 @@ def main() -> int:
         for e in errors:
             print("FAIL:", e)
         return 1
+    # The serving-position rule assumes ONE serving position per repository, which is the
+    # runtime package's: its STATUS names the lane that is the position. The kernel
+    # package's serving capabilities are separate kernels, each on its own lane, and the
+    # rule would warn falsely there, so it runs for the runtime role only -- by name,
+    # rather than by a hard-coded id prefix that happened not to match.
     status_path = root / str(proj.get("status_file") or "docs/STATUS.md")
-    if status_path.is_file():
+    if _system_role(root, pname) == "runtime" and status_path.is_file():
         for w in serving_position_warnings(doc, by_id, read_text(status_path)):
             for line in warning_lines(w):
                 print(line)

@@ -583,7 +583,7 @@
       ]
     },
     {
-      "query": "Where does an NVMe primitive belong versus model-level NVMe integration?",
+      "query": "Where does model-level NVMe integration live versus the NVMe primitives?",
       "expected_package": "experts4bit-qlora",
       "expected_document": "docs/solutions/offload-moe-experts-to-cpu-or-nvme.md",
       "required_concepts": [
