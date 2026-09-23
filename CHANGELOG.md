@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.2 — 2026-09-23 — documentation, register data and repository tooling only (under the package only `__version__` changes): the claims register has ONE schema, shared with grouped-nf4-gemm; lane B374's runner, whose read holds both predictions
 
 ### The claims register has ONE schema, shared with grouped-nf4-gemm, and this register is migrated to it (repository tooling and data; nothing in the wheel changes)
 
@@ -34,7 +34,8 @@
 ### Lane B374's runner (`bench/b374/`, for grouped-nf4-gemm#374)
 
 - **What it runs.** The box side of grouped-nf4-gemm's pre-registered lane B374: the word-addressed NF4 decode routes
-  (wide loads, and dot-pad, the default on >= 160-SM parts) put past THEIR 2^31 boundary on an RTX 5090.
+  (wide loads, and dot-pad, the default on >= 160-SM parts at its census shapes) put past THEIR 2^31 boundary on an
+  RTX 5090.
 - **Two passes.** `b374_run.sh` installs grouped-nf4-gemm at `GNF4_SHA` and runs its
   `kernel/test_offset_boundary_words_gpu.py` twice, from two work dirs (the test puts its own directory first on
   `sys.path`):
@@ -45,6 +46,11 @@
   cases after it.
 - **Driver and pin.** The driver and the staged pin are K18's, re-pointed. `tests/test_b374_staged_pin.py` mirrors the
   K18 pin test, and the driver's dry run stages, starts and fetches as written.
+- **The read (grouped-nf4-gemm #385, 2026-09-23).** Run `b374-5090-1` on one RTX 5090 cost $0.0354, and its teardown
+  is proven. P1 held: all 4 cases pass on the shipped kernels. P2 held: all 4 read the decoy at the int32-wrapped
+  address once the six promotions are stripped. The runner ran unchanged at `cf80b0f`. The results and the claim
+  (`gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23`) live in grouped-nf4-gemm, the repository that owns the
+  kernels.
 
 ## 0.37.1 — 2026-09-23 — documentation and repository tooling only: the same-box vLLM comparison is P58's everywhere, the cross-host pack limitation is P55x's, CI runs the census cross-check, and the CI scripts shared with grouped-nf4-gemm start to become one file
 
