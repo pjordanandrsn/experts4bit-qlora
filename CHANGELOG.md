@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### `check_system_manifest.py` is one file, shared with grouped-nf4-gemm (repository tooling; nothing in the wheel changes)
+
+- **Byte-copied from grouped-nf4-gemm** (pjordanandrsn/grouped-nf4-gemm#391), and now listed in `SHARED`. The two
+  copies had forked by 734 diff lines: this repository's enforced 39 rules and the kernel's 31. The unified file reads
+  its role from the manifest (`runtime` here) and runs that role's rules.
+  - **Runtime role, as before:** the `fast` floor, every kernel-pinning extra, and the CI kernel pin as a release-tag
+    commit (still the only network read).
+  - **Now also checked here:** an ssh-form Source URL; the `Kernel:` URL against `packages.kernels.pypi`; the shape of
+    every compatibility record, including the non-current 0.34.x one; every clause of a range, not just the first;
+    ownership duplicates or overlap; unique invariant ids; the router's size. A `fast` pin with an upper bound
+    (`>=0.30.0,<1`) now fails locally too.
+  - **Output.** The check no longer stops at the first finding, so later findings print as well.
+  - **Parity.** On `main` its verdicts match the old copy's in both CI forms, and the existing tests
+    (`test_check_system_manifest_pin.py`, `test_readability_checks.py`) pass unchanged. No importer here needed an
+    edit.
+
 ### Gemma-4 attention-4-bit: the docs point at the open re-run, not the closed count-check bug (documentation; nothing in the wheel changes)
 
 - **Six places said Gemma-4 attention-4-bit training is "NOT supported pending #412"**, and STATUS listed #412 under
