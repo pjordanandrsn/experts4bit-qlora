@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### llms-full.txt headroom: 399,971 → 379,460 bytes against the 400,000 cap (docs only, no number or status changed)
+
+- `docs/STATUS.md` (−11.9 KB): serving-history paragraphs (p37, bo3, bo5, bo6) now give the verdict and point at their
+  results files. Training paragraphs (tp1, p38, tp2) and restated numbers elsewhere cite the ACTIVE claim rows that the
+  bundle already projects. Numbers with no projected claim row (Gemma-4's P47–P52 store map, P56's first readings) stay.
+- `docs/claims.json` (−8.6 KB projected): 128 ACTIVE `claim` sentences shortened by wording. Hashes, revision pins,
+  library versions and verbatim log quotes move to the same row's `notes`, and the moved text is appended verbatim. Every
+  measured number, id, status and value is unchanged, checked mechanically against `main`.
+
 ### P61 read: the B=16 expert GEMV's row work and expert bytes overlap -- no lever lane (lanes `p61-5090-1`..`-6`, $0.28)
 
 - On a 575 W RTX 5090 (`bench/p61/RESULTS-p61.md`), the served int4-b32 expert GEMV reproduces P60's replay: 6.548 vs 6.479
