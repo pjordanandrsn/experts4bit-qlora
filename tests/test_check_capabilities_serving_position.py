@@ -67,3 +67,27 @@ def test_the_serving_rule_runs_for_the_runtime_role_only(tmp_path):
     assert cc._system_role(root, "grouped-nf4-gemm") == "kernels"
     assert cc._system_role(root, "something-else") is None
     assert cc._system_role(tmp_path, "experts4bit-qlora") is None      # no manifest: no role, no rule
+
+
+# The real STATUS layout: the position, then what changed, then what is open. On 2026-09-23 the rule read
+# the whole file, so P61's diagnostic read -- quoted under "What is open", newer than every position row --
+# became "the position" and the rule warned on every CI run.
+SECTIONED = ("# Status\n\n## What you get today\n\nposition: `e4b.serve.new.*`; before it `e4b.serve.old`.\n\n"
+             "## What changed — retired, superseded, corrected\n\n`e4b.serve.gone` superseded.\n\n"
+             "## What is open\n\na newer diagnostic read: `e4b.serve.diag`.\n")
+BY_ID_DIAG = {**BY_ID, "e4b.serve.diag": {"id": "e4b.serve.diag", "area": "serve", "status": "measured",
+                                          "measured_on": "2026-09-23"}}
+CITES_NEW = {"capabilities": [{"id": "serve", "modes": ["serving"], "claim_ids": ["e4b.serve.new.b1"]}]}
+
+
+def test_a_lane_quoted_only_after_what_changed_is_not_the_position():
+    assert cc.newest_serving_lane(SECTIONED, BY_ID_DIAG)[0] == "2026-09-23"      # the whole file: the diagnostic read
+    assert cc.newest_serving_lane(cc.status_position_text(SECTIONED), BY_ID_DIAG)[0] == "2026-09-05"
+    assert cc.serving_position_warnings(CITES_NEW, BY_ID_DIAG, SECTIONED) == []
+
+
+def test_a_newer_lane_in_the_position_section_still_warns():
+    status = SECTIONED.replace("position: `e4b.serve.new.*`", "position: `e4b.serve.diag`, before it `e4b.serve.new.*`")
+    w = cc.serving_position_warnings(CITES_NEW, BY_ID_DIAG, status)
+    assert len(w) == 1 and "2026-09-23" in w[0] and "e4b.serve.diag" in w[0]
+

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### The serving-position WARN reads STATUS's position section (repository tooling; nothing in the wheel changes)
+
+- **`scripts/check_capabilities.py` (shared; copied byte-for-byte from grouped-nf4-gemm, pjordanandrsn/grouped-nf4-gemm#389).**
+  The WARN takes "the position" to be the newest `area: serve` claims `docs/STATUS.md` quotes. It read the whole file,
+  so P61's diagnostic read counted as the position: that expert-GEMV cost split, measured 2026-09-23, is quoted under
+  "What is open". The capability then warned on every CI run that it "headlines an older lane".
+  - **The fix.** The rule now reads only the text before STATUS's first `## What changed` heading. The position here is
+    P58's 2026-09-22 rows, which `serve-moe-on-consumer-gpu` cites, so the warning clears with no data edit.
+  - **Tests.** Two new tests in `tests/test_check_capabilities_serving_position.py` use the real STATUS layout:
+    - a newer lane quoted only after "What changed" is not the position;
+    - a newer lane in the position section still warns.
+  - **Mutation check.** With the old whole-file read restored, the first test fails.
+
 ## 0.37.2 — 2026-09-23 — documentation, register data and repository tooling only (under the package only `__version__` changes): the claims register has ONE schema, shared with grouped-nf4-gemm; lane B374's runner, whose read holds both predictions
 
 ### The claims register has ONE schema, shared with grouped-nf4-gemm, and this register is migrated to it (repository tooling and data; nothing in the wheel changes)
