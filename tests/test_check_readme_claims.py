@@ -91,10 +91,13 @@ CLAIMS = {
     "e4b.g.a": {"status": "measured", "value": 154.9, "unit": "tok/s", "claim": "154.9 tok/s"},
     "e4b.g.b": {"status": "measured-private", "value": 204.6, "unit": "tok/s", "claim": "204.6 tok/s"},
 }
+PAT = crc.id_pattern(CLAIMS)
+#: This repository's table rules (packages.runtime): tables headed `status`, the result is the row's last other cell.
+RUNTIME = crc.PROFILES["runtime"]
 
 
 def _row(desc, result, status):
-    return crc.check_row(7, [desc, result, status], 2, CLAIMS)
+    return crc.check_row("README.md", 7, [desc, result, status], (2, None, None), CLAIMS, PAT)
 
 
 def test_a_clean_row_passes():
@@ -140,11 +143,12 @@ def test_a_qualitative_claim_needs_no_number():
 def test_tables_are_found_by_their_status_column_and_escaped_pipes_survive():
     text = ("# t\n\n| | result | status |\n|---|---|---|\n"
             "| a (`e4b.x.a`) | \\|Δ\\| 155 tok/s | measured |\n\n| x | y |\n|---|---|\n| 1 | 2 |\n")
-    tables = crc.claim_tables(crc.parse_tables(text))
-    assert len(tables) == 1 and tables[0][1] == 2
+    tables = crc.claim_tables(crc.parse_tables(text), RUNTIME["status_headers"], RUNTIME["result_rule"])
+    assert len(tables) == 1 and tables[0][1] == (2, None, None)
     (_, cells), = tables[0][0]["rows"]
     assert cells[1] == "|Δ| 155 tok/s"
-    assert crc.check_tables(text, CLAIMS) == []
+    assert crc.check_tables("README.md", text, CLAIMS, PAT, status_headers=RUNTIME["status_headers"],
+                            result_rule=RUNTIME["result_rule"], fold_tolerance=RUNTIME["fold_tolerance"]) == []
 
 
 def test_ids_outside_tables_must_exist_and_inactive_ones_must_say_so():
@@ -207,7 +211,7 @@ def test_release_block_is_generated_checked_and_rewritten(tmp_path):
 def test_the_repository_readme_is_current_main():
     """The CI gate itself: README numbers are docs/claims.json's current values
     and the release block is CHANGELOG.md's latest release."""
-    assert crc.check(ROOT) == []
+    assert crc.check(ROOT)[0] == []
 
 
 def test_value_numbers_keep_minus_signs_in_string_values():
@@ -245,7 +249,7 @@ def test_position_documents_cover_status_and_the_solution_pages_and_skip_anchore
     (tmp_path / "docs" / "METHODOLOGY.md").write_text("`e4b.x.gone`\n")
     (tmp_path / "docs" / "METHODOLOGY.md.ots").write_bytes(b"proof")
     assert crc.position_documents(tmp_path) == ["docs/STATUS.md", "docs/solutions/a.md"]
-    findings, n = crc.check_position_docs(tmp_path, CLAIMS)
+    findings, n = crc.check_position_docs(tmp_path, CLAIMS, profile=RUNTIME)
     assert n == 2 and findings == []
 
 

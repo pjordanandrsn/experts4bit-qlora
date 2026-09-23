@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### `check_readme_claims.py` is one file, shared with grouped-nf4-gemm (repository tooling; nothing in the wheel changes)
+
+- **Byte-copied from grouped-nf4-gemm** (pjordanandrsn/grouped-nf4-gemm#392) and now in `SHARED` (12 files). The two
+  copies had forked by 399 diff lines. The unified file reads its role through `check_system_manifest.system_role`
+  and reads the claim-id namespace from the register. This repository is `runtime`, so it keeps this copy's
+  settings:
+  - README is the results document, headed `status`;
+  - a row's result is its last non-status cell;
+  - the generated release block (`--write-release-block` still works, and is a no-op on the current README);
+  - anchored documents are exempt;
+  - a status word in backticks counts.
+- **Now also checked here.** A missing README is reported as a finding (exit 1) instead of a traceback. A register
+  with no dotted id is exit 2. The manifest is required.
+- **Tests.** `tests/test_check_readme_claims.py` needed four edits, all mechanical: the unified functions take the
+  kernel copy's signatures (document name, column tuple, pattern and profile arguments). No assertion was loosened.
+
 ### Gemma-4's tp2 attention-4-bit void was the harness's count check, not the converter's (documentation; nothing in the wheel changes)
 
 - **The docs said both e4b attention-4-bit arms "died on the converter's own count check".** Before #435 the converter
