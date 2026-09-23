@@ -1,0 +1,10 @@
+gnf4 0.32.1 @a12cf4647c72ad636db3122cbf9b2ba74da63bab
+int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py
+torch 2.8.0+cu128
+triton 3.4.0
+self-test on cuda: OK
+[p61] NVIDIA GeForce RTX 5090 (170 SMs), L2 96 MiB, 48 layers, 128 steps
+[p61] copy bandwidth: DRAM 1530 GB/s, L2-resident (24 MiB x2) 5687 GB/s
+[p61] recorded (per_layer) served 7.273  dedup 5.641 ms/step
+[p61] recorded (shared   ) served 7.253  dedup 5.513 ms/step
+[p61] rows -> /root/p61/p61_rows.json

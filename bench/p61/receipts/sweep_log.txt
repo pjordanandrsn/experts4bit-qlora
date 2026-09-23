@@ -1,0 +1,57 @@
+[p61] NVIDIA GeForce RTX 5090 (170 SMs), L2 96 MiB, 48 layers, 128 steps
+[p61] copy bandwidth: DRAM 1528 GB/s, L2-resident (24 MiB x2) 5753 GB/s
+   grid gate_up  R= 16 D=  1  graph   11.45  gemv    9.35  reduce  2.22 us/call
+   grid gate_up  R= 16 D=  2  graph   12.64  gemv    9.60  reduce  2.23 us/call
+   grid gate_up  R= 16 D=  4  graph   12.90  gemv    9.86  reduce  2.21 us/call
+   grid gate_up  R= 16 D=  8  graph   15.00  gemv   11.97  reduce  2.21 us/call
+   grid gate_up  R= 16 D= 16  graph   22.69  gemv   19.62  reduce  2.23 us/call
+   grid gate_up  R= 32 D=  1  graph   19.85  gemv   17.35  reduce  2.17 us/call
+   grid gate_up  R= 32 D=  2  graph   20.78  gemv   17.91  reduce  2.17 us/call
+   grid gate_up  R= 32 D=  4  graph   21.05  gemv   18.22  reduce  2.18 us/call
+   grid gate_up  R= 32 D=  8  graph   21.51  gemv   18.71  reduce  2.19 us/call
+   grid gate_up  R= 32 D= 16  graph   24.91  gemv   22.04  reduce  2.17 us/call
+   grid gate_up  R= 32 D= 32  graph   44.39  gemv   41.41  reduce  2.20 us/call
+   grid gate_up  R= 64 D=  1  graph   37.06  gemv   34.13  reduce  2.47 us/call
+   grid gate_up  R= 64 D=  2  graph   38.24  gemv   35.19  reduce  2.48 us/call
+   grid gate_up  R= 64 D=  4  graph   38.82  gemv   35.75  reduce  2.50 us/call
+   grid gate_up  R= 64 D=  8  graph   39.43  gemv   36.35  reduce  2.52 us/call
+   grid gate_up  R= 64 D= 16  graph   40.42  gemv   36.57  reduce  2.58 us/call
+   grid gate_up  R= 64 D= 32  graph   48.02  gemv   45.38  reduce  2.66 us/call
+   grid gate_up  R= 64 D= 64  graph   91.12  gemv   87.54  reduce  2.88 us/call
+   grid gate_up  R=128 D=  1  graph   68.84  gemv   64.76  reduce  3.82 us/call
+   grid gate_up  R=128 D=  2  graph   70.28  gemv   66.16  reduce  3.81 us/call
+   grid gate_up  R=128 D=  4  graph   71.20  gemv   66.94  reduce  3.82 us/call
+   grid gate_up  R=128 D=  8  graph   71.92  gemv   67.75  reduce  3.85 us/call
+   grid gate_up  R=128 D= 16  graph   72.83  gemv   68.60  reduce  3.88 us/call
+   grid gate_up  R=128 D= 32  graph   75.12  gemv   69.93  reduce  3.94 us/call
+   grid gate_up  R=128 D= 64  graph  106.39  gemv  101.23  reduce  4.86 us/call
+   grid gate_up  R=128 D=128  graph  185.19  gemv  177.18  reduce  7.38 us/call
+   grid down     R= 16 D=  1  graph    6.35  gemv    4.89  reduce  1.11 us/call
+   grid down     R= 16 D=  2  graph    6.40  gemv    4.98  reduce  1.10 us/call
+   grid down     R= 16 D=  4  graph    7.46  gemv    5.54  reduce  1.10 us/call
+   grid down     R= 16 D=  8  graph    8.49  gemv    6.62  reduce  1.10 us/call
+   grid down     R= 16 D= 16  graph   12.15  gemv   10.20  reduce  1.10 us/call
+   grid down     R= 32 D=  1  graph    9.79  gemv    8.42  reduce  1.14 us/call
+   grid down     R= 32 D=  2  graph   10.22  gemv    8.40  reduce  1.15 us/call
+   grid down     R= 32 D=  4  graph   10.70  gemv    8.82  reduce  1.14 us/call
+   grid down     R= 32 D=  8  graph   11.01  gemv    9.12  reduce  1.14 us/call
+   grid down     R= 32 D= 16  graph   13.07  gemv   11.16  reduce  1.14 us/call
+   grid down     R= 32 D= 32  graph   20.77  gemv   18.79  reduce  1.14 us/call
+   grid down     R= 64 D=  1  graph   17.01  gemv   15.62  reduce  1.29 us/call
+   grid down     R= 64 D=  2  graph   17.35  gemv   15.63  reduce  1.31 us/call
+   grid down     R= 64 D=  4  graph   17.90  gemv   16.08  reduce  1.30 us/call
+   grid down     R= 64 D=  8  graph   18.15  gemv   16.34  reduce  1.31 us/call
+   grid down     R= 64 D= 16  graph   18.67  gemv   16.88  reduce  1.32 us/call
+   grid down     R= 64 D= 32  graph   21.76  gemv   19.86  reduce  1.31 us/call
+   grid down     R= 64 D= 64  graph   38.38  gemv   36.24  reduce  1.30 us/call
+   grid down     R=128 D=  1  graph   31.87  gemv   30.21  reduce  1.80 us/call
+   grid down     R=128 D=  2  graph   32.33  gemv   30.28  reduce  1.79 us/call
+   grid down     R=128 D=  4  graph   32.84  gemv   30.71  reduce  1.79 us/call
+   grid down     R=128 D=  8  graph   33.16  gemv   30.98  reduce  1.80 us/call
+   grid down     R=128 D= 16  graph   33.69  gemv   31.53  reduce  1.81 us/call
+   grid down     R=128 D= 32  graph   35.15  gemv   33.54  reduce  1.80 us/call
+   grid down     R=128 D= 64  graph   44.57  gemv   43.47  reduce  1.82 us/call
+   grid down     R=128 D=128  graph   75.55  gemv   73.10  reduce  1.85 us/call
+[p61] recorded (per_layer) served 6.588  dedup 5.683 ms/step
+[p61] recorded (shared   ) served 6.548  dedup 5.565 ms/step
+[p61] rows -> /root/p61/p61_rows.json
