@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Gemma-4's tp2 attention-4-bit void was the harness's count check, not the converter's (documentation; nothing in the wheel changes)
+
+- **The docs said both e4b attention-4-bit arms "died on the converter's own count check".** Before #435 the converter
+  had no count check. The check that voided both arms is the tp2 harness's: `bench/h2h-20260906/tp2/tp2_arm.py:526-527`
+  asserts `n_attn4 == 4 · n_layers` on the converter's return value.
+  - **Corrected in** STATUS, ARCHITECTURE_SUPPORT, `capabilities.json` and the QLoRA solution page. The two
+    HARNESS_ERROR rows keep their headline and gain a precision note.
+  - **Why it matters for #703.** A re-run under that harness as written would void again, because Gemma-4's `k_eq_v`
+    layers put the library's census (`len(detect_attention_projections)`) below `4 · n_layers` by design. The lane's
+    pre-registration has to amend the canary first; see the comment on #703.
+
 ### `check_system_manifest.py` is one file, shared with grouped-nf4-gemm (repository tooling; nothing in the wheel changes)
 
 - **Byte-copied from grouped-nf4-gemm** (pjordanandrsn/grouped-nf4-gemm#391), and now listed in `SHARED`. The two
