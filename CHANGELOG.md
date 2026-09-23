@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); four expert-GEMV levers built, read and refused (K17, K18, P60, P61)
+## 0.37.0 — 2026-09-23 — five more families admitted (`nemotron_h`, `granitemoehybrid`, `granitemoeshared`, `jamba`, `lfm2_moe`) and the five still staged say why, as tests; fused q/k/v licensed on the int4 serving lanes at B=1 and B=16 (P54, P59); a licensed int4 expert pack again, as bytes (P55x); the same-box vLLM comparator re-run on 0.30.0 (P58); two expert-GEMV levers built and refused (K17, K18), and the B=16 expert GEMV's remaining headroom bounded with no lever to follow (P60, P61)
 
 **0.37.0.** The loader admits five more MoE families. `nemotron_h`, `granitemoehybrid`, `granitemoeshared` and
 `lfm2_moe` each load a real published checkpoint (`reference-ok`); `jamba` is so far exercised only on a toy
@@ -11,9 +11,11 @@ A calibrated int4 expert pack for Qwen3-30B-A3B is licensed again, as retained b
 that faults on CUDA can now be re-run with `E4B_LOAD_SYNC_DEBUG=1`, which synchronises after each load stage so the
 failure is reported at the stage that caused it, and a failed shard read now prints the host's memory facts. Everything
 else is measurement: the same-box comparison with vLLM 0.30.0 was re-run (vLLM decodes 1.09× faster at B=1 and 1.40× at
-B=16), and four expert-GEMV levers were built, read and refused. Affected: loading of the five newly admitted families
-(CPU and CUDA) and the int4 serving lanes on NVIDIA GPUs. Nothing changes for NF4 training, for the load path of families
-admitted before 0.37.0, or for any package default. Upgrade if you load one of the five families or want the
+B=16). Two expert-GEMV levers were built and refused (K17's fused reduce and K18's grouped GEMV), and the B=16
+expert GEMV's remaining headroom was measured and has no lever to follow (P60, P61). Affected: loading of the five newly admitted families
+(CPU and CUDA) and the int4 serving lanes on NVIDIA GPUs. Nothing changes for NF4 training or for any package default, and families
+admitted before 0.37.0 load as they did (the new prefix-rename pass is a no-op for them, asserted by test; the only
+difference they can see is the diagnosis a failed shard read now prints). Upgrade if you load one of the five families or want the
 load-fault diagnosis; no action otherwise. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`; CI now runs against
 grouped-nf4-gemm 0.33.0.
 
