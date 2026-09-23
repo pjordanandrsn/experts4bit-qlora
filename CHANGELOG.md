@@ -46,7 +46,7 @@
   cases after it.
 - **Driver and pin.** The driver and the staged pin are K18's, re-pointed. `tests/test_b374_staged_pin.py` mirrors the
   K18 pin test, and the driver's dry run stages, starts and fetches as written.
-- **The read (grouped-nf4-gemm #385, 2026-09-23).** Run `b374-5090-1` on one RTX 5090 cost $0.0354, and its teardown
+- **The read (pjordanandrsn/grouped-nf4-gemm#385, 2026-09-23).** Run `b374-5090-1` on one RTX 5090 cost $0.0354, and its teardown
   is proven. P1 held: all 4 cases pass on the shipped kernels. P2 held: all 4 read the decoy at the int32-wrapped
   address once the six promotions are stripped. The runner ran unchanged at `cf80b0f`. The results and the claim
   (`gnf4.kernel.word-boundary-wide-dotpad.5090.2026-09-23`) live in grouped-nf4-gemm, the repository that owns the
