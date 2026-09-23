@@ -90,3 +90,13 @@ Amendments, dated, go below this line before any data is read.
 
 **Re-run:** exactly one, `p61-5090-2`. This amends STOP-4 for this instrument failure only. If run 2 also fails P0, the lane stops and records that the served GEMV's replay depends on the host's power class.
 
+## Amendment 2 (2026-09-22, still before any P1–P4 read)
+
+**Run 2 refused.** Run `p61-5090-2` (receipt in adertha-receipts, $0.026) took machine 53098 and refused it before any install: `power.limit` **520 W**. It measured nothing, so Amendment 1's single re-run is **not** spent.
+
+**Why a new exit code.** The launcher picks the cheapest verified offer, which is still machine 34261, run 1's 450 W box. Its lane-refusal machine exclusion accepted only 13 (disk) and 14 (egress), so a relaunch would buy the capped box again. adertha-agents #128 registers **17** (power cap below the lane's floor) as a host-limited code; 15 stays out because lanes use it for other things.
+
+**Change:** `p61_run.sh`'s power refusal now exits **17** (an unreadable limit stays 15). Nothing about the measurement changes.
+
+**How the re-run proceeds:** each ≥ 575 W attempt cites every earlier rc-17 receipt in `exclude_vast_lane_receipts`. Refusals cost cents, and all of them count toward the lane's $1 ceiling. The **first box that passes the power check is the one re-run**; a P0 failure there stops the lane, per Amendment 1.
+
