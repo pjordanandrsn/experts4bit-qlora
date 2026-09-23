@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Correction: Gemma-4 attention-4-bit training HAS receipts; it is unlicensed for a different reason (documentation; nothing in the wheel changes)
+
+- **Two entries below said the arms had not run and had "no receipt", and pointed at a re-run (#703).** That was wrong,
+  and I wrote it without checking P56. Since #435 the Gemma-4 attention-4-bit arms have run cleanly on three boxes:
+  `tp4-c-4`, `tp4-c-parity-2` and `p56-gemma4-ladder-3`. Each converts all 115 structural projections (25 sliding
+  layers × 4, and 5 full-attention layers × 3, which have no `v_proj`), and every arm is VALID.
+- **Why it is still not supported.** tp1's internal training-parity band, a constant 0.05 against zero, fails for
+  every accelerated path on this model, the kernel-free batched one included (0.054 final against the fused path's
+  0.102; `e4b.parity.gemma4.train-floor`, `bench/p56/RESULTS-p56.md`). The band cannot tell a defect from the model's
+  own sensitivity. P56 recommends a per-family floor measured by the smallest-perturbation arm, now filed as #713.
+- **What changed.** STATUS, `capabilities.json` (four strings), ARCHITECTURE_SUPPORT, the QLoRA solution page and the
+  two HARNESS_ERROR register notes now say this, and point at #713 instead of #703.
+
 ### `check_change_impact.py` and `check_dependency_floor.py` are one file each, shared with grouped-nf4-gemm (repository tooling; nothing in the wheel changes)
 
 - **Byte-copied from grouped-nf4-gemm** (pjordanandrsn/grouped-nf4-gemm#394). With these, `SHARED` lists 14 files:
@@ -50,9 +63,9 @@
   asserts `n_attn4 == 4 · n_layers` on the converter's return value.
   - **Corrected in** STATUS, ARCHITECTURE_SUPPORT, `capabilities.json` and the QLoRA solution page. The two
     HARNESS_ERROR rows keep their headline and gain a precision note.
-  - **Why it matters for #703.** A re-run under that harness as written would void again, because Gemma-4's `k_eq_v`
-    layers put the library's census (`len(detect_attention_projections)`) below `4 · n_layers` by design. The lane's
-    pre-registration has to amend the canary first; see the comment on #703.
+  - **Why it matters.** A re-run under that harness as written would void again, because Gemma-4's `k_eq_v` layers put
+    the library's census (`len(detect_attention_projections)`) below `4 · n_layers` by design. tp4's harness, which
+    checks the structural census, is the one that has run these arms since (see the correction below).
 
 ### `check_system_manifest.py` is one file, shared with grouped-nf4-gemm (repository tooling; nothing in the wheel changes)
 
@@ -77,8 +90,8 @@
   QLoRA solution page. #412 was closed on 2026-09-23 as fixed by #435, so the docs pointed at a closed issue.
   - **What #412 fixed.** It was the converter's count check (100 of 120 projections), which killed tp2/P40's two e4b
     attn4 arms. #435 now detects projections by structure, with `v_proj` optional on `k_eq_v` layers.
-  - **What stays open.** Nothing has re-run those arms, so the configuration still has no receipt and stays **not
-    supported**. The re-run is now #703, and every reference points there, stating what #412/#435 fixed.
+  - **What stays open.** The configuration stays **not supported**. This entry first said nothing had re-run those arms
+    and pointed at a re-run, #703. That was wrong: the arms have run since, as the correction below records.
   - **Register.** The two HARNESS_ERROR rows keep #412 as their evidence and gain a note: fixed by #435, not re-run,
     #703.
   - The dated tp2 receipt README is unchanged, because a receipt is a record.
