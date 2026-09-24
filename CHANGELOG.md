@@ -27,6 +27,15 @@
 
 ## Unreleased
 
+### Lane P68 read (#725): a verify built from T = 1 calls is bit-identical to decode; the served T > 1 paths are inside the bar (docs, register; no library behaviour change)
+
+- **The reading.** `p68-5090-2` ran on one RTX 5090 for $0.2386. The whole lane cost $0.2799, including the proof and one NOT_RUN on a stale host key, and every teardown is proven. G0 held on both stacks: 27 predictions held and 1 was refuted. Full read: `bench/p68/RESULTS-p68.md`.
+- **Which component.**
+  - The projections alone or the attention core alone leave layer-0 attention differing, and both together move the first difference out of it.
+  - Forcing projections, core, router, LM head and norms to their T = 1 calls makes a verify **bit-identical to decode on both stacks** (264 / 264 positions). Registered as `e4b.serve.p68.qwen3.verify-from-t1-calls.row-exact.5090.2026-09-24`.
+- **The refuted cell: int4 prefill under full forcing.** 159 of 160 positions differ as predicted, but position 0 is exact, because rotation there is the identity.
+- **The size.** Every served T > 1 cell is WITHIN the shipped bar over 952 / 896 / 2,048 positions: KL ≤ 0.017, top-1 ≥ 0.946 (lower CI ≥ 0.9355). Registered as `e4b.serve.p68.qwen3.t-gt-1-vs-t1.within-bar.5090.2026-09-24`. P63's over-bar reads were small-sample top-1, and #725 closes.
+
 ### Lane P68 registered (#725): which part of the attention makes a verify or a prefill differ from T = 1 decode, and is it over the bar once enough positions are read? (bench only; nothing in the wheel changes)
 
 - **The question.** P63 found every first difference between T = 1 decode and a verify or prefill in layer-0 attention. 16 of its 45 cells were under the shipped top-1 bar, all on top-1 over 64–160 positions and none on KL. P68 asks which component makes the difference, and whether the bar is crossed once enough positions are read. Prereg: `bench/p68/P68-PREREG.md`.

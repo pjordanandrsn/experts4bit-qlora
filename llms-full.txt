@@ -2659,8 +2659,17 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     difference is at layer 0 in attention, never in the experts. KL mean is
     0.008–0.033 nats/token and top-1 agreement 0.88–0.98. 16 of 45 cells are
     under the shipped top-1 bar (0.93) over 64–160 positions, while no cell is
-    near its KL bar: that is
-    [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725).
+    near its KL bar. **Lane P68 (`bench/p68/`,
+    [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725),
+    closed) answered both halves:**
+    - **What makes the difference.** Forcing the attention projections and the
+      core to their T = 1 calls, row by row, moves the first difference out of
+      layer-0 attention. Forcing everything that picks its arithmetic by row count
+      makes a verify **bit-identical** to decode on both stacks
+      (`e4b.serve.p68.qwen3.verify-from-t1-calls.row-exact.5090.2026-09-24`).
+    - **The size, over ~1,000–2,000 positions per cell.** Every served T > 1 cell
+      is inside the bar: KL ≤ 0.017, top-1 ≥ 0.946
+      (`e4b.serve.p68.qwen3.t-gt-1-vs-t1.within-bar.5090.2026-09-24`).
   - **`E4B_FUSE_COMBINE=0` at T = 1** (lane B393's size) is KL 1.18e-04 on
     NF4, and 1.70e-02 with 7 of 160 flips on int4.
 - **The int4 experts' int8 activation step costs no measurable quality at
@@ -3499,6 +3508,8 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p64.qwen3.b1.expert-int8-step.5090.2026-09-24 [measured]: Lane P64: on the licensed int4 serving pack (sha256:0c9955a9...) at B = 1, the experts' per-32 int8 activation quantise at T = 1 decode is below Qwen3's arithmetic-order floor on both texts -- KL(bf16 activations || int8) = 0.003392 nats/token on wikitext and 0.002527 on c4val1 (top-1 0.973 / 0.972), 0.61x and 0.77x of the in-lane floor, dNLL -0.00107 / -0.00180 with both 95 % intervals spanning 0: INDISTINGUISHABLE, so W4A8 expert decode stays.
 - e4b.quality.p65.granite.selector-two-arms.5090.2026-09-24 [measured]: Lane P65 on Granite-3.1-3B-A800M: every per-expert ranking survives a wikitext -> C4 calibration-text change -- rel_act 0.932 cross-text Spearman (penalty over resampling 0.043), Colla-Q's rho x error 0.910 (0.063), activation entropy 0.882 (0.086), routing frequency 0.891 (0.093) -- and entropy is not the error metric again (within-layer rho -0.000 / -0.055), so S-C's selector on this family is TWO_ARMS (rel_act and rho x error, frequency as baseline), written in docs/SPECULATIVE_LANES_ADDENDUM_4.md; no mixed-precision cell has run.
 - e4b.quality.p65.collaq-stability.olmoe-mixtral.5090.2026-09-24 [measured]: Lane P65: Colla-Q's claim that an activation-entropy ranking of experts survives a calibration-domain change better than a routing-frequency ranking replicates on OLMoE-1B-7B-Instruct (cross-text Spearman 0.800 vs 0.380, paired difference +0.421 [0.329, 0.501]) and on Colla-Q's own Mixtral-8x7B (0.789 vs 0.310, +0.479 [0.369, 0.588]); their per-layer cosine statistic reads 0.9997 / 0.9999 and cannot see the reordering.
+- e4b.serve.p68.qwen3.verify-from-t1-calls.row-exact.5090.2026-09-24 [measured]: Lane P68: on an RTX 5090, a speculative verify assembled from T = 1 calls -- the attention projections, the attention core (one query row over its own decode prefix, no mask), the router, the LM head and every RMSNorm each called once per row, with the experts on the registered row-exact singleton route -- is bit-identical to incremental T = 1 decode at every position (132/132 verify17+verify16 positions on the nf4 stack and 132/132 on the int4 stack); forcing the projections alone or the core alone leaves layer-0 attention differing, and forcing both moves the first difference to layer 0's router.
+- e4b.serve.p68.qwen3.t-gt-1-vs-t1.within-bar.5090.2026-09-24 [measured]: Lane P68: the served T > 1 paths -- a 17- or 16-row verify and a 512-row prefill, on the HF and on the paged fp8 attention backends, on the nf4 and on the int4 stacks as served -- are inside the shipped KL-from-checkpoint bar relative to T = 1 decode on every cell: KL mean 0.0025-0.0169 nats/token (largest 95 % upper bound 0.0268) and top-1 agreement 0.946-0.986 (lowest 95 % lower bound 0.9355), over 952 / 896 / 2,048 positions per cell; P63's OVER-BAR cells were top-1 read over 64-160 positions.
 
 Open items (no evidence either way):
 
@@ -3506,4 +3517,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(245 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(247 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

@@ -6726,6 +6726,60 @@
         "receipts/experts4bit-qlora/2026-09-24/p65-5090-4/ (receipt.json, teardown-proof.json, the fetched run); the proofs and refused boxes p65-prove-1..6 and p65-5090-1..3 beside it"
       ],
       "notes": "Neither family has a per-expert premise (RTN tail on c4val1 0.2119 / 0.2344, P44's P3 line 0.10), so no selector is written for either. On Mixtral rel_act does NOT survive (0.719, penalty 0.159: P1 refuted there) while entropy does (0.789 / 0.138). Routing-frequency hot sets from hot_sets_from_profile agree across the two texts at Jaccard 0.141 (OLMoE top-6 of 64) and 0.125 (Mixtral top-1 of 8, exactly chance), against 0.663 on Granite -- a ranking fact, not a residency hit-rate measurement. Colla-Q: Shin & Ryu, arXiv:2609.18131, Table 4."
+    },
+    {
+      "id": "e4b.serve.p68.qwen3.verify-from-t1-calls.row-exact.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P68: on an RTX 5090, a speculative verify assembled from T = 1 calls -- the attention projections, the attention core (one query row over its own decode prefix, no mask), the router, the LM head and every RMSNorm each called once per row, with the experts on the registered row-exact singleton route -- is bit-identical to incremental T = 1 decode at every position (132/132 verify17+verify16 positions on the nf4 stack and 132/132 on the int4 stack); forcing the projections alone or the core alone leaves layer-0 attention differing, and forcing both moves the first difference to layer 0's router.",
+      "value": 264,
+      "unit": "verify positions bit-identical to T = 1 decode (132 per stack, of 132)",
+      "hardware": "RTX 5090 (sm_120, 575 W, driver 580.119.02), one rented Vast.ai verified/secure host (instance 52437346)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; e4b at df0dc06 (P68 registered), grouped-nf4-gemm 68a1250; stacks built as P63's (bench/p44/serve_stack): nf4 = NF4 experts + bf16 attention, no folds; int4 = RTN int4 experts + int4 attention (K16 auto), folds r1/r2 + router epilogue, fused q/k/v; HF attention (SDPA + DynamicCache); P63's 160-token fixture, verify widths 17 and 16 at p0 in {128, 96, 64, 32} over a deep-copied control cache; per-site bit comparison at six sites per layer, final norm and logits; forcings are inert at one row (G0: every forced arm's control bit-equal to the unforced control) and counted (every forcing engaged; no T = 1 attention call carried a mask)",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p68/RESULTS-p68.md",
+        "bench/p68/P68-PREREG.md",
+        "bench/p68/p68_probe.py",
+        "bench/p68/p68_reduce.py",
+        "bench/p68/receipts/p68_rep.json",
+        "bench/p68/receipts/RESULTS-p68-generated.md",
+        "tests/test_p68_force.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p68-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proof p68-prove-1 and the NOT_RUN p68-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #733 (Q5). The nf4 prefill under the same forcing is exact too (160/160); the int4 prefill is not (159/160 first-differ at layer-0 attn_core, position 0 exact: above 64 rows the attention fold falls through to a separate norm-then-rotate, where decode's rope_norm_heads fuses them; at position 0 the rotation is the identity) -- Q5's int4-prefill cell is REFUTED as registered on that one position. A statement about arithmetic, not speed: the forced verify runs every component row by row. Lane P68 $0.2799 (proof $0.0102, a NOT_RUN $0.0311, reading $0.2386), teardown proven."
+    },
+    {
+      "id": "e4b.serve.p68.qwen3.t-gt-1-vs-t1.within-bar.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P68: the served T > 1 paths -- a 17- or 16-row verify and a 512-row prefill, on the HF and on the paged fp8 attention backends, on the nf4 and on the int4 stacks as served -- are inside the shipped KL-from-checkpoint bar relative to T = 1 decode on every cell: KL mean 0.0025-0.0169 nats/token (largest 95 % upper bound 0.0268) and top-1 agreement 0.946-0.986 (lowest 95 % lower bound 0.9355), over 952 / 896 / 2,048 positions per cell; P63's OVER-BAR cells were top-1 read over 64-160 positions.",
+      "value": 0.0169,
+      "unit": "largest KL mean (nats/token, T > 1 vs T = 1) over the 12 cells; top-1 >= 0.946 everywhere",
+      "hardware": "RTX 5090 (sm_120, 575 W, driver 580.119.02), one rented Vast.ai verified/secure host (instance 52437346)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; e4b at df0dc06 (P68 registered), grouped-nf4-gemm 68a1250; stacks built as P63's (bench/p44/serve_stack): nf4 = NF4 experts + bf16 attention, no folds; int4 = RTN int4 experts + int4 attention (K16 auto), folds r1/r2 + router epilogue, fused q/k/v; default expert grouping (as served), no forcing; the first 4 of P64's committed wikitext rows (P59's window, f67e7e4d), 512 tokens each; per row incremental T = 1 decode, verify windows every 32 positions from 64 (14 per width), one 512-row prefill; KL fp64 full vocabulary; 95 % CIs by a bootstrap over (row, window) clusters (B = 2,000, seed 68)",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p68/RESULTS-p68.md",
+        "bench/p68/P68-PREREG.md",
+        "bench/p68/p68_probe.py",
+        "bench/p68/p68_reduce.py",
+        "bench/p68/receipts/p68_rep.json",
+        "bench/p68/receipts/RESULTS-p68-generated.md",
+        "tests/test_p68_force.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p68-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proof p68-prove-1 and the NOT_RUN p68-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #733 (S: every cell KL CI upper < 0.05 and top-1 >= 0.93 -- HELD). Classes against the bar (KL <= 0.10, top-1 >= 0.93) from the intervals: WITHIN-BAR on all 12. Closes #725 (P63's decision rule sent the over-bar cells here). The paged backend differs more than HF (its decode reads fp8 K/V), still well inside the bar. Not a quality statement against a bf16 reference (61 GB does not fit)."
     }
   ]
 }

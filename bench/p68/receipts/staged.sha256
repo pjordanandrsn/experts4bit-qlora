@@ -1,0 +1,13 @@
+# Names as the BOX sees them after staging (flat in $W); the box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (bench/p68; bench/p63 for p63_probe.py, p63_compare.py, fixture.txt;
+# bench/p64/receipts for prompts_wikitext.json; bench/p44 for serve_stack.py; bench/p39 for k8_bake.py, calib.json).
+a74569e7f64663503b5a01ef8b41a8ff0435c42314134f7eebf56774474507d5  p68_run.sh
+b53cfee9525fd4375fd773a0b781a1d81b369c5c8d637714c37489e7f9fae3f9  p68_probe.py
+577edf5a318375b3c8976a6f8682007f0d15a402f25b726eec86206c14711b3f  p68_reduce.py
+e0b0ead614726d25b13992cad4fe0a3bc6e5d7f1488e11e3442f6ee6a33e1091  p63_probe.py
+319726bf70c0f41362012f754316ccd2ffc26172565333b47541ed67d5865117  p63_compare.py
+3e80216602cbea311b5df3cd4896506919087c9ac69c53ee65c86856810c56cc  fixture.txt
+2d742276ba3c7b28541e3d1d7f58815d65b3bddf9f65c75d38f16d69bf7e6cab  prompts_wikitext.json
+713d8c7f6e1538790e7e2bf27698ad67ebf95c3c7efac2af51553e3b50bf5f73  serve_stack.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
