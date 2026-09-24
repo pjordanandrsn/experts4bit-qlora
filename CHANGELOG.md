@@ -27,6 +27,11 @@
 
 ## Unreleased
 
+### P66 Amendment 1: the proof and reading rate ceilings follow the verified-5090 market (#711; a lane change, no library change)
+
+- **Why.** Two proof launches were refused at the provider before any instance existed, at $0: the cheapest verified RTX 5090 was $0.7237/h, then $0.6604/h, against the registered $0.65/h.
+- **Amended.** The proof is ≤ $0.75/h with a 0.2 h guard (≤ $0.15), and the reading ≤ $0.75/h with its 2 h guard (≤ $1.50). The $2 lane ceiling holds (≤ $1.95). Registered in `bench/p66/P66-PREREG.md` "Amendment 1", before any data.
+
 ### Lane P65 read (#710): Granite's per-expert selector is TWO_ARMS; Colla-Q's cross-domain claim replicates on OLMoE and Mixtral (docs, register; no library behaviour change)
 
 - **The reading.** `p65-5090-4` ran on one RTX 5090 for $0.5491. The whole lane cost $0.9369 over ten runs: six proofs, three boxes refused before any data, and the read. Teardown is proven for every one.
