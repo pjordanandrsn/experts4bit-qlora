@@ -41,6 +41,7 @@ import argparse
 import collections
 import contextlib
 import gc
+import hashlib
 import json
 import os
 import platform
@@ -249,7 +250,16 @@ def phase_regions(active: bool):
             setattr(cls, meth, orig)
 
 
+def _outs_sha256(outs) -> str:
+    """sha256 over a list of device tensors' raw bytes, in order: the outputs' identity, comparable across boxes."""
+    h = hashlib.sha256()
+    for o in outs:
+        h.update(o.detach().contiguous().view(-1).view(torch.uint8).cpu().numpy().tobytes())
+    return h.hexdigest()
+
+
 # =========================================================================== the token
+
 class Driver:
     """Feeds tokens to an arm and appends every EXECUTED token's routing to the arm's feed log, in order.
 
@@ -338,8 +348,11 @@ class Driver:
         torch.cuda.synchronize()
         d = max(float((a.float() - b.float()).abs().max()) for a, b in zip(eager, self.graph_outs))
         ref = max(float(a.float().abs().max()) for a in eager)
+        # the outputs' own sha256, beside the in-box comparison: a bit statement ACROSS boxes needs the hashes, not a
+        # difference count (grouped-nf4-gemm#398 retracted one made from counts)
         return {"token": t, "bitwise": all(torch.equal(a, b) for a, b in zip(eager, self.graph_outs)),
-                "max_abs": d, "b_rel": d / ref if ref > 0 else None}
+                "max_abs": d, "b_rel": d / ref if ref > 0 else None,
+                "eager_sha256": _outs_sha256(eager), "graph_sha256": _outs_sha256(self.graph_outs)}
 
     def replay(self, t: int, regions: bool = False):
         from torch.autograd.profiler import record_function

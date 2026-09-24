@@ -20,7 +20,7 @@
 # summary.txt as `OVERRIDE ...`, so a rehearsal's receipts can never pass for a reading. They exist so this script
 # itself -- not only the census it runs -- is exercised on the free NAS GPU before a box is rented:
 #   P66_REHEARSAL_CLASS            card-name pattern instead of 5090
-#   P66_REHEARSAL_MIN_VRAM_MB / _MIN_DISK_GB / _MIN_RAM_GB / _PIN_GIB   the host minimums
+#   P66_REHEARSAL_MIN_VRAM_MB / _MIN_DISK_GB / _MIN_RAM_GB / _PIN_GIB / _MIN_MBPS   the host minimums
 #   P66_REHEARSAL_SKIP_INSTALL=1   use the packages already importable; P66_REHEARSAL_GNF4_SRC = a gnf4 tree
 #   P66_REHEARSAL_QWEN_SNAPSHOT / _GPTOSS_SNAPSHOT   local checkpoint dirs instead of the pinned HF fetch
 #   P66_REHEARSAL_NF4_FAMILY       the family label for that NF4 checkpoint
@@ -45,7 +45,7 @@ QMID=Qwen/Qwen3-30B-A3B; QREV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39      # P6
 GMID=openai/gpt-oss-20b; GREV=6cee5e81ee83917806bbde320786a8fb61efebee      # tp4's pin
 : > summary.txt; echo "$P66_INSTANCE_ID" > INSTANCE_ID
 CLASS=${P66_REHEARSAL_CLASS:-5090}; MIN_VRAM_MB=${P66_REHEARSAL_MIN_VRAM_MB:-30000}; MIN_DISK_GB=${P66_REHEARSAL_MIN_DISK_GB:-180}
-MIN_RAM_GB=${P66_REHEARSAL_MIN_RAM_GB:-64}; PIN_GIB=${P66_REHEARSAL_PIN_GIB:-16}; SKIP_INSTALL=${P66_REHEARSAL_SKIP_INSTALL:-0}
+MIN_RAM_GB=${P66_REHEARSAL_MIN_RAM_GB:-64}; MIN_MBPS=${P66_REHEARSAL_MIN_MBPS:-80}; FETCH_WORKERS=8; PIN_GIB=${P66_REHEARSAL_PIN_GIB:-16}; SKIP_INSTALL=${P66_REHEARSAL_SKIP_INSTALL:-0}
 QS_LOCAL=${P66_REHEARSAL_QWEN_SNAPSHOT:-}; GS_LOCAL=${P66_REHEARSAL_GPTOSS_SNAPSHOT:-}; NF_FAM=${P66_REHEARSAL_NF4_FAMILY:-qwen3-30b-a3b}
 MX_LAYERS=${P66_REHEARSAL_MX_LAYERS:-all}; TOKENS=${P66_REHEARSAL_TOKENS:-8}; WARM=${P66_REHEARSAL_WARM:-4}
 echo "MODE $MODE" | tee -a summary.txt
@@ -88,6 +88,37 @@ FREE_GB=$(df -BG --output=avail /root | tail -1 | tr -dc 0-9)
 AVAIL_GB=$(awk '/MemAvailable/ {print int($2/1048576)}' /proc/meminfo)
 CG=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max); CG_GB=$([ "$CG" = max ] && echo 99999 || echo $(( CG / 1073741824 )))
 [ "${AVAIL_GB:-0}" -ge "$MIN_RAM_GB" ] && [ "$CG_GB" -ge "$MIN_RAM_GB" ] || floor 13 "host RAM available ${AVAIL_GB} GB, cgroup ${CG_GB} GB; the pipelined arm pins a 15.2 GiB arena beside 15.2 GiB of materialized experts -- needs >= $MIN_RAM_GB GB"
+# ---- egress, measured the way the fetch runs (P65 Amendment 2's lesson): the reading's snapshot_download pulls with
+# FETCH_WORKERS (8) workers, so the probe is eight parallel 50 MB ranges of one HF CDN file and the rate is their total bytes over
+# the wall time of all eight. In Python: the stock image ships no curl. A single stream under-read a 4-worker fetch
+# 2.3x on P65's boxes. The reading needs ~75 GB (Qwen3 61 + gpt-oss 14): 16 min at the floor.
+say "egress pre-flight: HF CDN, $FETCH_WORKERS parallel 50 MB ranges, 30 s cap (floor ${MIN_MBPS} MB/s aggregate)"
+MBPS=$(P66_FETCH_WORKERS=$FETCH_WORKERS python3 - <<'PYEG' 2>/dev/null || echo 0
+import os, time, urllib.request
+from concurrent.futures import ThreadPoolExecutor
+URL = "https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors"     # 440 MB: holds 8 x 50 MB
+CH, N, CAP = 52428800, int(os.environ["P66_FETCH_WORKERS"]), 30.0
+def get(i):
+    req = urllib.request.Request(URL, headers={"Range": f"bytes={i * CH}-{(i + 1) * CH - 1}"})
+    got, t0 = 0, time.perf_counter()
+    try:
+        with urllib.request.urlopen(req, timeout=CAP) as r:
+            while time.perf_counter() - t0 < CAP:
+                b = r.read(1 << 20)
+                if not b:
+                    break
+                got += len(b)
+    except Exception:
+        pass
+    return got
+t0 = time.perf_counter()
+with ThreadPoolExecutor(N) as ex:
+    total = sum(ex.map(get, range(N)))
+print(round(total / 1e6 / max(1e-3, time.perf_counter() - t0), 1))
+PYEG
+)
+say "HF CDN ${MBPS} MB/s ($FETCH_WORKERS parallel ranges)"; echo "hf_cdn_mbps_${FETCH_WORKERS}x=$MBPS" | tee -a forensics.txt >> summary.txt
+if python3 -c "import sys; sys.exit(0 if float('${MBPS:-0}') < float('$MIN_MBPS') else 1)"; then floor 14 "egress ${MBPS} MB/s < ${MIN_MBPS} MB/s over $FETCH_WORKERS streams (the reading fetches ~75 GB)"; fi
 
 # ---- install: e4b pinned (P37's toolchain pins, image python); gnf4 at GNF4_SHA, plus a clone of the same sha for
 # bench/calibrate.py (not packaged)
@@ -161,7 +192,7 @@ if [ -n "$QS_LOCAL" ]; then
   QS=$QS_LOCAL
 else
   say "fetch $QMID @ $QREV"
-  perl -e 'alarm 4800; exec @ARGV' python -c "from huggingface_hub import snapshot_download as s; print(s('$QMID', revision='$QREV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=8))" > logs/fetch_qwen.out 2> logs/fetch_qwen.log \
+  perl -e 'alarm 4800; exec @ARGV' python -c "from huggingface_hub import snapshot_download as s; print(s('$QMID', revision='$QREV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=$FETCH_WORKERS))" > logs/fetch_qwen.out 2> logs/fetch_qwen.log \
     || { tail -2 logs/fetch_qwen.log; say "DL FAIL (qwen)"; finish 11; }
   QS=$(tail -1 logs/fetch_qwen.out)
 fi
@@ -198,7 +229,7 @@ if [ -n "$GS_LOCAL" ]; then
   GS=$GS_LOCAL
 else
   say "fetch $GMID @ $GREV"
-  if perl -e 'alarm 2400; exec @ARGV' python -c "from huggingface_hub import snapshot_download as s; print(s('$GMID', revision='$GREV', allow_patterns=['model*.safetensors','*.json'], max_workers=8))" > logs/fetch_gptoss.out 2> logs/fetch_gptoss.log; then
+  if perl -e 'alarm 2400; exec @ARGV' python -c "from huggingface_hub import snapshot_download as s; print(s('$GMID', revision='$GREV', allow_patterns=['model*.safetensors','*.json'], max_workers=$FETCH_WORKERS))" > logs/fetch_gptoss.out 2> logs/fetch_gptoss.log; then
     GS=$(tail -1 logs/fetch_gptoss.out)
   else
     tail -2 logs/fetch_gptoss.log; say "DL FAIL (gpt-oss) -- the MXFP4 arms are skipped, recorded"; echo "SKIPPED MXFP4 arms: download failed" >> summary.txt

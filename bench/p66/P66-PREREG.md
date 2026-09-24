@@ -150,9 +150,15 @@ swaps the pipelined arm's all-hot sets for a hot fraction's sets, the same seede
 - **Box.** One RTX 5090 32 GB on Vast verified/secure, image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`
   (Triton and gnf4_native need a C compiler).
   - In a reading, the runner refuses anything else before any install: the card class (15), VRAM free < 30000
-    MiB (15), free disk on `/root` < 180 GB (13), host RAM available < 64 GiB or a cgroup limit below it (13), and
-    a failed 16 GiB pin (13). A proof refuses only on the class, a dud box and its own disk need, and records
-    the rest (below).
+    MiB (15), free disk on `/root` < 180 GB (13), host RAM available < 64 GiB or a cgroup limit below it (13),
+    HF egress < 80 MB/s (14), and a failed 16 GiB pin (13). A proof refuses only on the class, a dud box and its
+    own disk need, and records the rest (below).
+  - **Egress is measured the way the fetch runs** (P65 Amendment 2's lesson: a single-stream probe under-read a
+    four-worker fetch 2.3× and refused boxes that could fetch). The reading's `snapshot_download` calls use
+    `max_workers=$FETCH_WORKERS` (8), so the probe is eight parallel 50 MB byte ranges of one HF CDN file, total
+    bytes over the wall time of all eight, in Python (the stock image ships no `curl`). At the 80 MB/s floor the
+    reading's ~75 GB takes ~16 min, inside the fetch-and-bake estimate below. `tests/test_p66_staged_pin.py`
+    holds the probe and both fetches to one worker count.
   - Why these minimums: the pipelined arm pins a 15.2 GiB arena beside 15.2 GiB of materialized experts.
     Disk holds two checkpoints (~61 + 14 GB), a 16.3 GB NF4 arena plus its transient 16 GB snapshot, and a
     10.2 GB MXFP4 arena. The launcher's offer filter already asks ≥ 320 GB disk and ≥ 98 GB RAM
@@ -170,12 +176,14 @@ swaps the pipelined arm's all-hot sets for a hot fraction's sets, the same seede
     the reading, and only its API counts are compared (P9). The rehearsals fetched it the same way.
   - HF token staged from `~/.config/hf/token`, never on a command line.
 - **Two rentals, in order.** The compute rule in force: a rental whose guard exceeds 1 h first needs a proving
-  rental of at most $0.15 and 10 minutes. The reading needs more than an hour, so:
-  1. **Proving rental: `P66_MODE=prove`, guard 10 min (0.17 h) at ≤ $0.66/h, so ≤ $0.11 per attempt.**
-     - **What it does:** the card-class and dud-box checks, the pinned install (with `git` if the image lacks
-       it), the tripwire, the 16 GiB pin, and then, if the guard still has time, one timed shard of the pinned
-       Qwen3 fetch (`model-00001-of-00016.safetensors`, 240 s alarm). There is no calibration, no bake and no arm.
-     - **What it records but does not enforce:** the reading's host floors (VRAM free, disk, host RAM, the pin).
+  rental of at most $0.15 and 10 minutes of lane time. The reading needs more than an hour, so:
+  1. **Proving rental: `P66_MODE=prove`, guard 0.23 h (≈ 14 min) at ≤ $0.65/h, so ≤ $0.15 per attempt.**
+     - **What it does:** the card-class and dud-box checks, the egress probe, the pinned install (with `git` if
+       the image lacks it), the tripwire, the 16 GiB pin, and then, if the guard still has time, one timed shard
+       of the pinned Qwen3 fetch (`model-00001-of-00016.safetensors`, 240 s alarm). There is no calibration, no
+       bake and no arm.
+     - **What it records but does not enforce:** the reading's host floors (VRAM free, disk, host RAM, egress,
+       the pin).
        Each miss is written as `floor_would_refuse_reading rc=<code> …`. This is P65 Amendment 1's lesson
        (`bench/p65/P65-PREREG.md`): the proving box is not the reading's box, and P65 lost two proofs to
        reading-only floors that each missed by about 2 %.
@@ -184,15 +192,15 @@ swaps the pipelined arm's all-hot sets for a hot fraction's sets, the same seede
      - **Passing:** rc 0 **and** `P66_PROVED.<nonce>`; the driver exits 26 on rc 0 without the marker. Its receipt
        is cited in the reading rental's launch.
      - **Refusals and budget:** a proof refused on class or dud is redrawn on another machine, its receipt
-       excluding the machine. All attempts together cost ≤ $0.33 (at most three).
-     - **The guard's risk, stated:** P65 measured 3–5 min of a 10-minute guard spent in launcher boot and
-       pre-flight, and amended its proofs to 0.23 h (≤ $0.15). This proof is shaped to survive a 10-minute guard:
-       - the install is its only long step; whole proofs ran in 85 s (round 5) and 73 s (round 7) through the real
-         path on the NAS;
+       excluding the machine. All attempts together cost ≤ $0.45 (at most three).
+     - **Why 0.23 h and not 10 min:** P65 measured 3–5 min of a 10-minute guard spent in launcher boot and
+       pre-flight, so its 10-minute proofs began with 438 s and 324 s left (P65 Amendment 1). P64 and P65 then
+       ran their proofs at 0.23 h (≤ $0.15), and so does this one. Inside it:
+       - the install is the only long step; whole proofs ran in 85 s (round 5) and 73 s (round 7) through the
+         real path on the NAS, and the egress probe adds at most 30 s;
        - the timed fetch runs only if at least 30 s remain before the deadline's 120 s margin, and is capped at
          240 s;
        - if the install itself cannot finish in the time left, the proof fails and a redraw is spent.
-       If the rule's owner accepts P65's 0.23 h precedent, that guard is safer at the same ≤ $0.15 ceiling.
      - Its measured fetch rate is recorded against the wallclock estimate below; it does not gate.
   2. **Reading rental: `P66_MODE=full`, guard 2.0 h at ≤ $0.66/h, so ≤ $1.32, expected ≈ $0.95.** Launched only
      after a proving receipt passes.
@@ -208,7 +216,7 @@ swaps the pipelined arm's all-hot sets for a hot fraction's sets, the same seede
   - Each arm is started only if its *expected* time plus a 10-minute teardown margin fits the deadline. Its alarm
     is a separate, larger cap.
   - Level M arms come last and are context, so a slow box skips them before any Level L arm.
-- **Cost ceiling.** Proofs ≤ $0.33 plus the reading ≤ $1.32 = ≤ $1.65. Lane ceiling $2, hard stop $3. No second
+- **Cost ceiling.** Proofs ≤ $0.45 plus the reading ≤ $1.32 = ≤ $1.77. Lane ceiling $2, hard stop $3. No second
   reading box on a disappointing result.
 - **Runner.** `p66_drive.sh` (controller) + `p66_run.sh` (box), the P60/B374 pattern.
   - The driver stages the runner, the census, the reducer, the shim, and three tools reused unchanged
@@ -227,6 +235,7 @@ swaps the pipelined arm's all-hot sets for a hot fraction's sets, the same seede
   - 11: download.
   - 12: bake.
   - 13: host-limited (disk, RAM or pin).
+  - 14: host-limited (egress below 80 MB/s over the fetch's eight streams).
   - 15: wrong class.
   - 32: a Level L arm failed or was skipped. Receipts are kept and the success marker withheld.
   - 33: calibration.
@@ -252,6 +261,10 @@ swaps the pipelined arm's all-hot sets for a hot fraction's sets, the same seede
   the tolerance of `tests/test_pipelined_graphs.py` (bitwise is recorded and expected). A graph that baked a
   stale pointer replays happily while returning garbage (`engines/capture.py`). An engine that claims capture
   and fails to capture fails this gate.
+  - The sha256 of the eager and the replayed outputs is recorded beside it (`eager_sha256`, `graph_sha256`).
+    Within a box the gate compares tensors; a bit statement across boxes (the rehearsal against the reading) may
+    rest only on these hashes, never on a count of differing elements. grouped-nf4-gemm#398 retracted a
+    cross-architecture statement made from counts.
 - **G4 device parity.** Capture changes what the host submits, not what the device runs.
   - The captured token's work nodes (kernel + memcpy + memset, from `graph_nodes`) equal the eager token's *host*
     submissions. Any other node type fails.
@@ -486,7 +499,8 @@ graded.
 - **A probe before round 6** found that torch 2.8's `debug_dump()` writes **nothing, silently**, unless the graph
   is created with `keep_graph=True` and instantiated first. Without that, `capture_end` drops the graph. The same
   probe read a four-node test graph identically through both readers.
-- **Round 6** ran the final census and reducer; its numbers are in `rehearsal-a2000/README.md`.
+- **Round 6** ran the census and reducer as they stood before the rebase onto main 0.37.3; its numbers are in
+  `rehearsal-a2000/README.md`.
 - **17. After a rebase onto main 0.37.3,** the proof adopted P65 Amendment 1's rule, recording reading-only floors
   instead of enforcing them. Round 7 rehearsed it with the reading's floors in force on the A2000, where they
   genuinely fail, then re-ran the full mode on the rebased tree. main's changes since the first cut touch only the

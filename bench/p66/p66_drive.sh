@@ -6,7 +6,7 @@
 # GPU util/mem, workdir size, free disk; a stall is REPORTED, never acted on), fetches receipts (never the
 # checkpoints, arenas or venvs). Nothing here creates, destroys or approves compute.
 # Pattern: bench/p61/p61_drive.sh + bench/tp4/tp4_drive.sh (token staging, lane-dead detection).
-#   P66_MODE=prove   the PROVING rental (10-minute guard): box checks, install, tripwire, pin, one timed shard; it
+#   P66_MODE=prove   the PROVING rental (0.23 h guard): box checks, egress, install, tripwire, pin, one timed shard; it
 #                    must end rc 0 with P66_PROVED.<nonce> before the reading rental (P66_MODE=full, the default) runs.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p66_drive] $*"; }

@@ -65,6 +65,7 @@
 - **Corrected.**
   - `hot_residency.py`'s singleton comment. It said the singleton path is bitwise-equal to the grouped path at every T, "pinned in CI". That holds at T = 1 on NF4 only; at T > 1 the grouped path is a different function.
   - `tests/test_singleton_groups.py`'s docstring. It pins the dispatch algebra through a mocked GEMM, not the arithmetic.
+
 ### Lane P66 registered: the residency launch census (`bench/p66/`, for #711; nothing in the wheel changes)
 
 - **The question.** What residency adds per token, in CUDA launches, copies and host syncs, against the
@@ -103,11 +104,16 @@
       tax is split into added kernels and shared-kernel shift, and time bands are graded only on the registered
       box.
     - The runner's time guard skipped late arms by using their alarm caps as their expected times.
-- **Two rentals.** The reading's guard is 2 h, so under the compute rule a 10-minute **proving rental**
-  (`P66_MODE=prove`, ≤ $0.11 per attempt, ≤ $0.33 over all) comes first. It does the class and dud checks, the
-  pinned install, the tripwire and the pin, and times one checkpoint shard.
-  - Following P65 Amendment 1, it records the reading-only floors (VRAM, disk, RAM, pin) instead of enforcing
-    them, because the proving box is not the reading's box.
+- **Two rentals.** The reading's guard is 2 h, so under the compute rule a **proving rental** comes first
+  (`P66_MODE=prove`, 0.23 h guard, ≤ $0.15 per attempt, ≤ $0.45 over all).
+  - It does the class and dud checks, an egress probe, the pinned install, the tripwire and the pin, and it times
+    one checkpoint shard.
+  - Following P65 Amendment 1, it records the reading-only floors (VRAM, disk, RAM, egress, pin) instead of
+    enforcing them, because the proving box is not the reading's box.
+  - Following P65 Amendment 2, egress is measured the way the fetch runs: eight parallel 50 MB ranges in Python,
+    since the reading's `snapshot_download` uses eight workers. The reading refuses below 80 MB/s (rc 14).
+  - G3 records the sha256 of the eager and replayed outputs, so a bit statement across boxes rests on hashes, not
+    on difference counts.
   - It was rehearsed through the real install path, with those floors genuinely failing on the A2000.
 - **Tests.**
   - `tests/test_p66_reduce.py`: counting rules, gates and every verdict branch, on synthetic event lists.

@@ -102,7 +102,8 @@ def test_the_driver_never_forwards_a_rehearsal_override():
 
 
 def test_the_proving_mode_stops_before_any_measurement():
-    """The compute rule: a rental whose guard exceeds 1 h needs a proving rental (<= $0.15, <= 10 min) first.
+    """The compute rule: a rental whose guard exceeds 1 h needs a proving rental (<= $0.15, <= 10 min of lane time,
+    under a 0.23 h guard because launcher boot takes 3-5 min of it) first.
     `P66_MODE=prove` is that step. It must exit AFTER the box checks, install, tripwire and pin, and BEFORE
     calibration, the fetch of the full checkpoint, any bake and any arm -- or it is not a 10-minute rental."""
     runner = (LANE / "p66_run.sh").read_text()
@@ -160,10 +161,24 @@ def test_which_checks_are_reading_floors_and_which_always_refuse():
     runner = (LANE / "p66_run.sh").read_text()
     body = runner.split("PROOF_MIN_DISK_GB=20", 1)[1]
     # reading-only floors go through floor()
-    for msg in ("MiB VRAM free", "(two checkpoints + two arenas", "host RAM available", "cannot pin"):
+    for msg in ("MiB VRAM free", "(two checkpoints + two arenas", "host RAM available", "cannot pin",
+                "(the reading fetches ~75 GB)"):
         line = next(ln for ln in body.splitlines() if msg in ln)
         assert "floor 1" in line, line
     # the class and a dud box refuse whatever the mode; so does disk below the proof's own need
     assert re.search(r'REFUSED: card is .*finish 15', body)
     assert re.search(r'DUD BOX"; finish 10', body)
     assert re.search(r'\[ "\$MODE" = prove \] && \[ "\$\{FREE_GB:-0\}" -lt "\$PROOF_MIN_DISK_GB" \].*finish 13', body)
+
+
+def test_the_egress_probe_runs_the_way_the_fetch_runs():
+    """P65 Amendment 2's lesson: a single-stream probe under-read a four-worker fetch 2.3x and refused boxes that could
+    fetch. The probe and both snapshot_download calls read one worker count, so they cannot drift apart."""
+    runner = (LANE / "p66_run.sh").read_text()
+    assert "FETCH_WORKERS=8" in runner
+    assert runner.count("max_workers=$FETCH_WORKERS))") == 2
+    assert not re.search(r"max_workers=\d", runner), "a literal worker count would let the fetch drift from the probe"
+    assert "P66_FETCH_WORKERS=$FETCH_WORKERS python3" in runner and 'int(os.environ["P66_FETCH_WORKERS"])' in runner
+    assert "urllib.request" in runner and "curl" not in runner.split("egress pre-flight", 1)[1].split("PYEG\n)", 1)[0]
+    # measured before the install, so a proof records it within its guard
+    assert runner.index("egress pre-flight") < runner.index("install e4b @")
