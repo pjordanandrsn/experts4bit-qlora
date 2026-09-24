@@ -1,9 +1,16 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""AMENDMENT-b1d-capture: the singleton-groups dispatch must be
+"""AMENDMENT-b1d-capture: the singleton-groups dispatch ALGEBRA must be
 value-identical to the grouped dispatch — the whole sort/group/unsort
-algebra collapses away without changing any row's arithmetic. Tested
-with DUPLICATE ids (harder than the exact T=1 case) through a mocked
-GEMM so CI needs no CUDA.
+collapses away without moving any row. Tested with DUPLICATE ids (harder
+than the exact T=1 case) through a mocked GEMM so CI needs no CUDA.
+
+What this file does NOT pin: the kernels' arithmetic. The mock computes
+every row the same way whatever the group size, and the real kernels do
+not: at T > 1 the grouped dispatch hands multi-row groups to a different
+kernel (NF4 M-tile, int4 dequant + bf16 matmul), which lane P63 (#708)
+measured as a different function from the singleton GEMV. That the
+singleton route's rows equal their T = 1 calls on the real kernels is
+pinned on a GPU in tests/test_p63_row_exact_gpu.py.
 
 The mock is installed per-test via monkeypatch, never module-level:
 `sys.modules.setdefault` would silently NOT install under a full

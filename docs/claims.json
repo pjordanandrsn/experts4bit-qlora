@@ -1,6 +1,6 @@
 {
   "package": "experts4bit-qlora",
-  "generated": "2026-09-05",
+  "generated": "2026-09-24",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "verified": "reproduced under stated conditions with a public receipt",
@@ -6558,6 +6558,90 @@
         "receipts/experts4bit-qlora/2026-09-23/p61-5090-6/ (receipt.json, teardown-proof.json, full fetched run); runs -1..-5 beside it"
       ],
       "notes": "P0 HOLDS +1.1 %; P1 REFUTED (+167 %); P2 informational MIXED (b1 / L2 floor 1.61 gate_up, 1.47 down); P3 informational (c / DRAM floor 0.73 / 0.56, below any real stream: the additive fit distorts); P4 per-layer minus shared +0.040 ms/step. Six attempts, $0.2787: run 1 failed P0 on a 450 W card, then Amendment 1 refused < 575 W. One row per distinct expert sits 1.22x above the byte floor."
+    },
+    {
+      "id": "e4b.serve.p63.qwen3.int4-singleton.row-exact.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P63: on the int4 expert store the FORCE_SINGLETON_GROUPS route (the S2 verify default) is row-exact on an RTX 5090 -- every layer's experts module (48/48) called on 16, 17 or 160 tokens returns each token's rows bit-equal to its T = 1 decode call, because every row stays its own group on gemv_int4_b32 (with _int4_part_or_none giving the GEMV its own partials buffer when the store's is too small).",
+      "value": 48,
+      "unit": "experts modules (of 48) bit-equal to T = 1 at every n in {16, 17, 160}",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), one rented Vast.ai verified/secure host (instance 52340702)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777, e4b 0.37.3 at 75c83bd, grouped-nf4-gemm 0.33.2 at f88df1e; a 160-token fixture (bench/p63/fixture.txt) decoded incrementally at T = 1 (the control); module replay: each layer's experts module recorded at T = 1, then the first n in {16, 17, 160} recorded calls stacked into one n-token call, every output row compared bit for bit with its T = 1 recording; kernel census at layer 0's gate_up (N 1536, K 2048) on the model's own rows and routing; route selected by configuration only (hot_residency module flags); stack int4 (RTN int4 experts + int4 attention, folds on, fused q/k/v), sub-arm hf.singleton",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p63/RESULTS-p63.md",
+        "bench/p63/P63-PREREG.md",
+        "bench/p63/p63_probe.py",
+        "bench/p63/p63_reduce.py",
+        "bench/p63/receipts/p63_rep.json",
+        "bench/p63/receipts/RESULTS-p63-generated.md",
+        "tests/test_p63_row_exact_gpu.py",
+        "bench/p63/receipts/a2000-gpu-tests/pytest.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p63-5090-1/ (receipt.json, teardown-proof.json, the full fetched run incl. out/<stack>/p63_detail.pt); the proof p63-prove-1 beside it"
+      ],
+      "notes": "Kernel census: 128/128, 136/136, 1,280/1,280 rows equal. Lane P63 (#708), pre-registered in #720; every registered prediction held (G0 OK on all three stacks). Run p63-5090-1 $0.2881 after the proof p63-prove-1 ($0.0115) at the same commit. The kernel's own row-invariance is grouped-nf4-gemm's claim gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24. tests/test_p63_row_exact_gpu.py asserts the route with torch.equal on the plan and dispatch a 5090 takes (9/9 on an RTX A2000, bench/p63/receipts/a2000-gpu-tests/). One box, one family, one fixture. Row-exact experts do not make the step row-exact: end to end no position was exact, every first difference at layer 0 in attention (#725)."
+    },
+    {
+      "id": "e4b.serve.p63.qwen3.int4-device-gemv.row-exact.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P63: on the int4 expert store the DEVICE_GROUPING route is row-exact up to 256 routed rows on an RTX 5090 -- 48/48 experts modules bit-equal to T = 1 at 16 and 17 tokens (128 and 136 rows, the decode GEMV in input order) on both the HF and the paged attention backends, and 0/48 at 160 tokens (1,280 rows), where it takes the grouped int4 GEMM, reorder-class.",
+      "value": 48,
+      "unit": "experts modules (of 48) bit-equal to T = 1 at n in {16, 17} (0 at n = 160, above the 256-row line)",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), one rented Vast.ai verified/secure host (instance 52340702)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777, e4b 0.37.3 at 75c83bd, grouped-nf4-gemm 0.33.2 at f88df1e; a 160-token fixture (bench/p63/fixture.txt) decoded incrementally at T = 1 (the control); module replay: each layer's experts module recorded at T = 1, then the first n in {16, 17, 160} recorded calls stacked into one n-token call, every output row compared bit for bit with its T = 1 recording; kernel census at layer 0's gate_up (N 1536, K 2048) on the model's own rows and routing; route selected by configuration only (hot_residency module flags); stacks int4 and int4nf, sub-arms hf.device and paged.device",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p63/RESULTS-p63.md",
+        "bench/p63/P63-PREREG.md",
+        "bench/p63/p63_probe.py",
+        "bench/p63/p63_reduce.py",
+        "bench/p63/receipts/p63_rep.json",
+        "bench/p63/receipts/RESULTS-p63-generated.md",
+        "tests/test_p63_row_exact_gpu.py",
+        "bench/p63/receipts/a2000-gpu-tests/pytest.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p63-5090-1/ (receipt.json, teardown-proof.json, the full fetched run incl. out/<stack>/p63_detail.pt); the proof p63-prove-1 beside it"
+      ],
+      "notes": "Above 256 rows: gnf4.kernel.int4-grouped-gemm-reorder.5090.2026-09-24 (max row rel L2 4.4e-4). Lane P63 (#708), pre-registered in #720; every registered prediction held (G0 OK on all three stacks). Run p63-5090-1 $0.2881 after the proof p63-prove-1 ($0.0115) at the same commit. The kernel's own row-invariance is grouped-nf4-gemm's claim gnf4.kernel.int4-gemv-row-invariant.5090.2026-09-24. tests/test_p63_row_exact_gpu.py asserts the route with torch.equal on the plan and dispatch a 5090 takes (9/9 on an RTX A2000, bench/p63/receipts/a2000-gpu-tests/). One box, one family, one fixture. Row-exact experts do not make the step row-exact: end to end no position was exact, every first difference at layer 0 in attention (#725)."
+    },
+    {
+      "id": "e4b.serve.p63.qwen3.nf4-singleton.row-exact.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P63: on the NF4 expert stack the FORCE_SINGLETON_GROUPS route is row-exact on an RTX 5090 -- 48/48 experts modules bit-equal to T = 1 at 16, 17 and 160 tokens, every row on the dot-pad decode GEMV; with GNF4_GEMV_DOTPAD=0 the same route is 0/48 (the scalar GEMV plans its split-K from the rows: reorder-class).",
+      "value": 48,
+      "unit": "experts modules (of 48) bit-equal to T = 1 at every n in {16, 17, 160}",
+      "hardware": "RTX 5090 (sm_120, 170 SMs, 475 W power limit, driver 595.71.05), one rented Vast.ai verified/secure host (instance 52340702)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777, e4b 0.37.3 at 75c83bd, grouped-nf4-gemm 0.33.2 at f88df1e; a 160-token fixture (bench/p63/fixture.txt) decoded incrementally at T = 1 (the control); module replay: each layer's experts module recorded at T = 1, then the first n in {16, 17, 160} recorded calls stacked into one n-token call, every output row compared bit for bit with its T = 1 recording; kernel census at layer 0's gate_up (N 1536, K 2048) on the model's own rows and routing; route selected by configuration only (hot_residency module flags); stack nf4 (NF4 experts, bf16 attention, no folds), sub-arm hf.singleton; dot-pad engaged per nf4_grouped.dispatch_counts()",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p63/RESULTS-p63.md",
+        "bench/p63/P63-PREREG.md",
+        "bench/p63/p63_probe.py",
+        "bench/p63/p63_reduce.py",
+        "bench/p63/receipts/p63_rep.json",
+        "bench/p63/receipts/RESULTS-p63-generated.md",
+        "tests/test_p63_row_exact_gpu.py",
+        "bench/p63/receipts/a2000-gpu-tests/pytest.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p63-5090-1/ (receipt.json, teardown-proof.json, the full fetched run incl. out/<stack>/p63_detail.pt); the proof p63-prove-1 beside it"
+      ],
+      "notes": "The default and DEVICE_GROUPING routes on this stack take the M-tile at T > 1 (TF32 weights): 0/48, a different function. Lane P63 (#708), pre-registered in #720; every registered prediction held (G0 OK on all three stacks). Run p63-5090-1 $0.2881 after the proof p63-prove-1 ($0.0115) at the same commit. The kernel's own row-invariance is grouped-nf4-gemm's claim gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24. tests/test_p63_row_exact_gpu.py asserts the route with torch.equal on the plan and dispatch a 5090 takes (9/9 on an RTX A2000, bench/p63/receipts/a2000-gpu-tests/). One box, one family, one fixture. Row-exact experts do not make the step row-exact: end to end no position was exact, every first difference at layer 0 in attention (#725)."
     }
   ]
 }

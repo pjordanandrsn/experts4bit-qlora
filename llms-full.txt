@@ -2611,6 +2611,38 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   grouped GEMV is exact and 1.49× slower (`gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`).
   P61 finds row work and expert bytes overlap rather than add, so no lever is
   licensed (`e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23`).
+- **A token decoded alone and the same token inside a verify or prefill do not
+  get the same bits (lane P63, `bench/p63/`,
+  [#708](https://github.com/pjordanandrsn/experts4bit-qlora/issues/708),
+  2026-09-24, one RTX 5090, Qwen3-30B-A3B).** The expert routes split three ways:
+  - **Row-exact.** Every experts module (48/48) gives each token its T = 1 bits
+    at 16, 17 and 160 tokens on three routes:
+    - the int4 store under `FORCE_SINGLETON_GROUPS`
+      (`e4b.serve.p63.qwen3.int4-singleton.row-exact.5090.2026-09-24`);
+    - the int4 store under `DEVICE_GROUPING` up to 256 routed rows
+      (`e4b.serve.p63.qwen3.int4-device-gemv.row-exact.5090.2026-09-24`);
+    - NF4 under `FORCE_SINGLETON_GROUPS` on the dot-pad GEMV
+      (`e4b.serve.p63.qwen3.nf4-singleton.row-exact.5090.2026-09-24`).
+  - **A different function at T > 1 than at T = 1.** Each path keeps the
+    quality licence it was measured on, and no licence transfers between row
+    counts. P63 moves no default.
+    - The default T > 1 routes: the int4 store's dequant + bf16 matmul (0 of
+      1,280 rows equal, rel L2 ≤ 1.5e-2), and NF4's M-tile on TF32 weights
+      (rel L2 2.7e-3).
+    - The fused router epilogue's fp32 routing weights at ≤ 64 rows, against
+      the upstream router's bf16 above
+      ([#726](https://github.com/pjordanandrsn/experts4bit-qlora/issues/726)).
+  - **Summation order only (reorder-class).** The grouped int4 GEMM above 256
+    rows, and the scalar NF4 GEMV under `GNF4_GEMV_DOTPAD=0`, as grouped-nf4-gemm's
+    register records.
+  - **End to end.** No position is exact on any route, and every first
+    difference is at layer 0 in attention, never in the experts. KL mean is
+    0.008–0.033 nats/token and top-1 agreement 0.88–0.98. 16 of 45 cells are
+    under the shipped top-1 bar (0.93) over 64–160 positions, while no cell is
+    near its KL bar: that is
+    [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725).
+  - **`E4B_FUSE_COMBINE=0` at T = 1** (lane B393's size) is KL 1.18e-04 on
+    NF4, and 1.70e-02 with 7 of 160 flips on int4.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3427,6 +3459,9 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p59b.qwen3.b16.nf4-fqkv-kl.5090.2026-09-22 [measured]: Lane P59 anchor: KL(NF4 control || fused-q/k/v int4 stack) at B=16 = 0.07057 nats/token mean (p95 0.25948), top-1 0.9014, over 2048 teacher-forced decode positions; reported, not gated.
 - e4b.serve.p60.qwen3.b16.expert-gemv-repeat-cost.5090.2026-09-22 [measured]: Lane P60: replaying Qwen3-30B-A3B's recorded B=16 routing (128 decode steps x 48 layers, 54.7 distinct experts per layer per step) through the shipped int4-b32 expert GEMV on one RTX 5090 reproduces the served kernel row (6.155 ms/step vs the census's 6.340), and one row per distinct expert instead of one per routed row runs 6.479 vs 5.560 ms/step = 0.919 ms/step faster (the repeated rows' loads and arithmetic together; not reachable by sharing loads, per grouped-nf4-gemm K18); ordering rows by expert changes nothing (-0.55%); one row per expert sits 1.21x above the 1512 GB/s byte floor (4.598 ms).
 - e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23 [measured]: Lane P61 (575 W RTX 5090): the recorded B=16 routing's repeated rows cost the served expert GEMV 0.905 ms/step; an additive rows + experts model predicts 2.42 (refuted): the terms overlap, so no lever lane follows.
+- e4b.serve.p63.qwen3.int4-singleton.row-exact.5090.2026-09-24 [measured]: Lane P63: on the int4 expert store the FORCE_SINGLETON_GROUPS route (the S2 verify default) is row-exact on an RTX 5090 -- every layer's experts module (48/48) called on 16, 17 or 160 tokens returns each token's rows bit-equal to its T = 1 decode call, because every row stays its own group on gemv_int4_b32 (with _int4_part_or_none giving the GEMV its own partials buffer when the store's is too small).
+- e4b.serve.p63.qwen3.int4-device-gemv.row-exact.5090.2026-09-24 [measured]: Lane P63: on the int4 expert store the DEVICE_GROUPING route is row-exact up to 256 routed rows on an RTX 5090 -- 48/48 experts modules bit-equal to T = 1 at 16 and 17 tokens (128 and 136 rows, the decode GEMV in input order) on both the HF and the paged attention backends, and 0/48 at 160 tokens (1,280 rows), where it takes the grouped int4 GEMM, reorder-class.
+- e4b.serve.p63.qwen3.nf4-singleton.row-exact.5090.2026-09-24 [measured]: Lane P63: on the NF4 expert stack the FORCE_SINGLETON_GROUPS route is row-exact on an RTX 5090 -- 48/48 experts modules bit-equal to T = 1 at 16, 17 and 160 tokens, every row on the dot-pad decode GEMV; with GNF4_GEMV_DOTPAD=0 the same route is 0/48 (the scalar GEMV plans its split-K from the rows: reorder-class).
 
 Open items (no evidence either way):
 
@@ -3434,4 +3469,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(239 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(242 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

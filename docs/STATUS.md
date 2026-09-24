@@ -720,6 +720,38 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   grouped GEMV is exact and 1.49× slower (`gnf4.kernel.k18-grouped-expert-gemv.5090.2026-09-22`).
   P61 finds row work and expert bytes overlap rather than add, so no lever is
   licensed (`e4b.serve.p61.qwen3.b16.expert-gemv-cost-split.5090.2026-09-23`).
+- **A token decoded alone and the same token inside a verify or prefill do not
+  get the same bits (lane P63, `bench/p63/`,
+  [#708](https://github.com/pjordanandrsn/experts4bit-qlora/issues/708),
+  2026-09-24, one RTX 5090, Qwen3-30B-A3B).** The expert routes split three ways:
+  - **Row-exact.** Every experts module (48/48) gives each token its T = 1 bits
+    at 16, 17 and 160 tokens on three routes:
+    - the int4 store under `FORCE_SINGLETON_GROUPS`
+      (`e4b.serve.p63.qwen3.int4-singleton.row-exact.5090.2026-09-24`);
+    - the int4 store under `DEVICE_GROUPING` up to 256 routed rows
+      (`e4b.serve.p63.qwen3.int4-device-gemv.row-exact.5090.2026-09-24`);
+    - NF4 under `FORCE_SINGLETON_GROUPS` on the dot-pad GEMV
+      (`e4b.serve.p63.qwen3.nf4-singleton.row-exact.5090.2026-09-24`).
+  - **A different function at T > 1 than at T = 1.** Each path keeps the
+    quality licence it was measured on, and no licence transfers between row
+    counts. P63 moves no default.
+    - The default T > 1 routes: the int4 store's dequant + bf16 matmul (0 of
+      1,280 rows equal, rel L2 ≤ 1.5e-2), and NF4's M-tile on TF32 weights
+      (rel L2 2.7e-3).
+    - The fused router epilogue's fp32 routing weights at ≤ 64 rows, against
+      the upstream router's bf16 above
+      ([#726](https://github.com/pjordanandrsn/experts4bit-qlora/issues/726)).
+  - **Summation order only (reorder-class).** The grouped int4 GEMM above 256
+    rows, and the scalar NF4 GEMV under `GNF4_GEMV_DOTPAD=0`, as grouped-nf4-gemm's
+    register records.
+  - **End to end.** No position is exact on any route, and every first
+    difference is at layer 0 in attention, never in the experts. KL mean is
+    0.008–0.033 nats/token and top-1 agreement 0.88–0.98. 16 of 45 cells are
+    under the shipped top-1 bar (0.93) over 64–160 positions, while no cell is
+    near its KL bar: that is
+    [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725).
+  - **`E4B_FUSE_COMBINE=0` at T = 1** (lane B393's size) is KL 1.18e-04 on
+    NF4, and 1.70e-02 with 7 of 160 flips on int4.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

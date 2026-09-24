@@ -279,15 +279,28 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # SYNCS to produce host-side group sizes -- structurally illegal
         # inside CUDA-graph capture. One row per group instead: sizes is
         # a host CONSTANT, the ids ride as a device tensor (the wrapper
-        # accepts one), and no sort/unsort is needed. Exact at T == 1
-        # (a token's top-k ids are distinct, so dedup buys nothing);
-        # per-row arithmetic is identical to the grouped path, so the
-        # outputs are bitwise-equal -- pinned in CI and held by the
-        # on-box hash gate.
+        # accepts one), and no sort/unsort is needed. At T == 1 a token's
+        # top-k ids are distinct, so every group has one row either way:
+        # on the NF4 stack both branches reach the same decode GEMV and
+        # agree bit for bit (held by the on-box hash gate). On the int4
+        # store they do NOT: this branch is the int8 x int4 GEMV and the
+        # grouped branch is dequant + bf16 matmul, different functions
+        # (lane P63). tests/test_singleton_groups.py pins the dispatch
+        # algebra through a mocked GEMM, not the kernels' arithmetic.
         #
-        # PREREG-s2lite: also correct at T > 1, for the same reason --
-        # the M dimension does not participate in any reduction, so a
-        # row's output does not depend on which group it sits in. What
+        # PREREG-s2lite: at T > 1 every row is still its own group, so it
+        # takes the T == 1 kernel and its output does not depend on the
+        # row count. Measured, not argued (lane P63, #708: Qwen3-30B-A3B
+        # on an RTX 5090, 48/48 experts modules bit-equal to their T == 1
+        # calls at 16, 17 and 160 tokens, int4 with _int4_part_or_none and
+        # NF4 on the dot-pad GEMV; tests/test_p63_row_exact_gpu.py). It is
+        # NOT bit-equal to the grouped branch at T > 1: there the group
+        # size picks the kernel (NF4 M-tile, TF32 weights; int4 dequant +
+        # bf16), a different function, not a reordering -- "the M
+        # dimension does not participate in any reduction" is true of the
+        # math only. And the row-invariance is the kernel's plan at a
+        # shape: GNF4_GEMV_DOTPAD=0 plans its split-K from the rows, which
+        # P63 read reorder-class. What
         # it COSTS at T > 1 is different: rows sharing an expert no
         # longer share that expert's weight read, so the MoE side reads
         # ~R distinct expert weight-sets instead of ~E(distinct). A
