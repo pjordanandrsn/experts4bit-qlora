@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.37.3 — 2026-09-24 — a memory-safety fix: the int4 singleton GEMV no longer writes past its preallocated split-K buffer at T > 1 (S2 verify); plus default-off lane switches and pre-registrations for P63, P65 and P67
+
+### The int4 singleton GEMV no longer writes past its preallocated buffer at T > 1 (a fix; T = 1 unchanged)
+
+- **The defect.** `enable_serve_experts_int4` sizes each store's split-K partials buffer `st["part"]` for one token's
+  `top_k` rows. The singleton branch of `hot_residency._fused_over_stack` passed it to `gemv_int4_b32` at every T,
+  and under `FORCE_SINGLETON_GROUPS` at T > 1 (the S2 verify default, `--moe-grouping singleton`) the GEMV has
+  `T * top_k` rows and plans its split count from them. Measured on the NAS A2000 with the buffer a view into a
+  sentinel-filled one: at T = 17 the call wrote 16,384, 12,288 and 180,224 fp32 elements past it at the OLMoE gate_up
+  and Qwen3 gate_up/down shapes; T = 1 and T = 2 wrote nothing past it
+  (`bench/p63/rehearsal-a2000/part_oob.json`). Found while mapping lane P63's routes (#708).
+- **The fix.** `_int4_part_or_none` keeps the buffer when it has the rows the call's own plan needs and passes None
+  otherwise, so the wrapper allocates its own (through the graph pool under capture, as the device-grouping GEMV
+  branch already does). The arithmetic is unchanged: the split count was always the call's own plan. The fit is
+  memoised per (rows, device) on the store, because this runs on every decode expert call and the eager B=1 step is
+  host-bound. Each shape is planned once, then costs a dict lookup.
+- **Tests.** `tests/test_int4_singleton_part_fits.py`, CPU with the kernel stubbed: one token keeps the store's
+  buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
+  triton imports) decides the same way at 26 and 170 SMs.
 
 ### P65 Amendment 1: a proof records the reading-only host floors instead of refusing on them (#710; a lane change, no library change)
 
@@ -71,24 +89,6 @@
     `rel_act`, halves, texts, and layer order;
   - `tests/test_p65_reduce.py`: every decision branch on synthetic rows;
   - `tests/test_p65_staged_pin.py`.
-
-### The int4 singleton GEMV no longer writes past its preallocated buffer at T > 1 (a fix; T = 1 unchanged)
-
-- **The defect.** `enable_serve_experts_int4` sizes each store's split-K partials buffer `st["part"]` for one token's
-  `top_k` rows. The singleton branch of `hot_residency._fused_over_stack` passed it to `gemv_int4_b32` at every T,
-  and under `FORCE_SINGLETON_GROUPS` at T > 1 (the S2 verify default, `--moe-grouping singleton`) the GEMV has
-  `T * top_k` rows and plans its split count from them. Measured on the NAS A2000 with the buffer a view into a
-  sentinel-filled one: at T = 17 the call wrote 16,384, 12,288 and 180,224 fp32 elements past it at the OLMoE gate_up
-  and Qwen3 gate_up/down shapes; T = 1 and T = 2 wrote nothing past it
-  (`bench/p63/rehearsal-a2000/part_oob.json`). Found while mapping lane P63's routes (#708).
-- **The fix.** `_int4_part_or_none` keeps the buffer when it has the rows the call's own plan needs and passes None
-  otherwise, so the wrapper allocates its own (through the graph pool under capture, as the device-grouping GEMV
-  branch already does). The arithmetic is unchanged: the split count was always the call's own plan. The fit is
-  memoised per (rows, device) on the store, because this runs on every decode expert call and the eager B=1 step is
-  host-bound. Each shape is planned once, then costs a dict lookup.
-- **Tests.** `tests/test_int4_singleton_part_fits.py`, CPU with the kernel stubbed: one token keeps the store's
-  buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
-  triton imports) decides the same way at 26 and 170 SMs.
 
 ### Lane P63 registered: does a token's output depend on how many rows share its forward? (#708; bench only)
 
