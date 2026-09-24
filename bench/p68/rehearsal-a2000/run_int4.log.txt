@@ -1,0 +1,23 @@
+[14:16:45]   checkpoint: local directory /models/OLMoE-1B-7B-0924
+[14:16:46]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[14:16:46]   quantized experts on 16/16 MoE layers (64 experts each)
+[14:16:46]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[14:16:46]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[14:16:59]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+P68 int4/hf.base: verify17: exact 0/68 flips 1 first-diff {'attn_core': 68} verify16: exact 0/64 flips 0 first-diff {'attn_core': 64} prefill: exact 0/160 flips 2 first-diff {'attn_in': 160}
+P68 int4/hf.proj: verify17: exact 0/68 flips 0 first-diff {'attn_core': 68} verify16: exact 0/64 flips 0 first-diff {'attn_core': 64} prefill: exact 0/160 flips 4 first-diff {'attn_in': 160}
+P68 int4/hf.core: verify17: exact 0/68 flips 0 first-diff {'attn_core': 68} verify16: exact 0/64 flips 0 first-diff {'attn_core': 64} prefill: exact 0/160 flips 3 first-diff {'attn_in': 160}
+P68 int4/hf.proj_core: verify17: exact 0/68 flips 0 first-diff {'mlp_out': 68} verify16: exact 0/64 flips 0 first-diff {'mlp_out': 64} prefill: exact 0/160 flips 4 first-diff {'attn_in': 160}
+P68 int4/hf.all: verify17: exact 68/68 flips 0 first-diff {'none': 68} verify16: exact 64/64 flips 0 first-diff {'none': 64} prefill: exact 160/160 flips 0 first-diff {'none': 160}
+P68 int4/hf.fp32red: verify17: exact 0/68 flips 0 first-diff {'attn_core': 68} verify16: exact 0/64 flips 0 first-diff {'attn_core': 64} prefill: exact 0/160 flips 2 first-diff {'attn_in': 160}
+P68 int4/paged.base: verify17: exact 0/68 flips 0 first-diff {'attn_core': 68} verify16: exact 0/64 flips 2 first-diff {'attn_core': 64} prefill: exact 0/160 flips 3 first-diff {'attn_in': 160}
+P68 int4/paged.proj: verify17: exact 0/68 flips 0 first-diff {'attn_core': 68} verify16: exact 0/64 flips 0 first-diff {'attn_core': 64} prefill: exact 0/160 flips 4 first-diff {'attn_in': 160}
+P68 size size.hf row 0: verify17: kl 1.398e-03 flips 8/238 verify16: kl 1.287e-03 flips 9/224 prefill: kl 2.272e-03 flips 15/512 (44.6 s)
+P68 size size.hf row 1: verify17: kl 8.139e-04 flips 7/238 verify16: kl 8.896e-04 flips 6/224 prefill: kl 1.705e-03 flips 16/512 (44.4 s)
+P68 size size.hf row 2: verify17: kl 1.562e-03 flips 7/238 verify16: kl 1.334e-03 flips 9/224 prefill: kl 2.154e-03 flips 15/512 (40.6 s)
+P68 size size.hf row 3: verify17: kl 1.349e-03 flips 2/238 verify16: kl 1.135e-03 flips 2/224 prefill: kl 2.433e-03 flips 16/512 (43.7 s)
+P68 size size.paged row 0: verify17: kl 2.579e-03 flips 13/238 verify16: kl 2.615e-03 flips 12/224 prefill: kl 6.515e-03 flips 31/512 (51.2 s)
+P68 size size.paged row 1: verify17: kl 1.640e-03 flips 5/238 verify16: kl 1.674e-03 flips 4/224 prefill: kl 4.351e-03 flips 26/512 (49.0 s)
+P68 size size.paged row 2: verify17: kl 2.304e-03 flips 8/238 verify16: kl 2.015e-03 flips 5/224 prefill: kl 4.522e-03 flips 19/512 (55.2 s)
+P68 size size.paged row 3: verify17: kl 1.812e-03 flips 12/238 verify16: kl 2.044e-03 flips 8/224 prefill: kl 4.784e-03 flips 22/512 (53.5 s)
+P68ARM {"stack": "int4", "arms_run": ["hf.base", "hf.proj", "hf.core", "hf.proj_core", "hf.all", "hf.fp32red", "paged.base", "paged.proj", "size.hf", "size.paged"], "errors": [], "g0": {"hf.proj control == hf.base control": true, "hf.core control == hf.base control": true, "hf.proj_core control == hf.base control": true, "hf.all control == hf.base control": true, "hf.fp32red control == hf.base control": true, "paged.proj control == paged.base control": true, "hf.base control repeat bit-identical": true}}

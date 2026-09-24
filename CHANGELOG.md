@@ -27,6 +27,22 @@
 
 ## Unreleased
 
+### Lane P68 registered (#725): which part of the attention makes a verify or a prefill differ from T = 1 decode, and is it over the bar once enough positions are read? (bench only; nothing in the wheel changes)
+
+- **The question.** P63 found every first difference between T = 1 decode and a verify or prefill in layer-0 attention. 16 of its 45 cells were under the shipped top-1 bar, all on top-1 over 64–160 positions and none on KL. P68 asks which component makes the difference, and whether the bar is crossed once enough positions are read. Prereg: `bench/p68/P68-PREREG.md`.
+- **The instrument.** `bench/p68/p68_probe.py` reuses P63's probe and comparison module unchanged, and adds forcing arms.
+  - A forcing makes one component (projections, attention core, router, LM head, norms) compute a multi-row call one row at a time, as T = 1 decode does.
+  - The prediction is that forcing all of them makes a verify bit-exact on both stacks.
+  - A size reading of the served configuration runs over P64's committed wikitext rows: ~950 verify and 2,048 prefill positions per cell, with bootstrap intervals.
+  - `bench/p68/p68_reduce.py` applies the registration.
+- **Rental lessons applied.**
+  - The proof's guard is 0.23 h.
+  - Egress is measured the way the fetch runs: four parallel ranges, in Python. The reading refuses below 80 MB/s (rc 13).
+- **Tests.**
+  - `tests/test_p68_force.py`: the forcings on CPU (row order, inert at one row, restoration, the core's prefix).
+  - `tests/test_p68_reduce.py`: every gate and verdict branch.
+  - `tests/test_p68_staged_pin.py`: the staged pin, the egress probe, the size rows.
+
 ### P66 Amendment 1: the proof and reading rate ceilings follow the verified-5090 market (#711; a lane change, no library change)
 
 - **Why.** Two proof launches were refused at the provider before any instance existed, at $0: the cheapest verified RTX 5090 was $0.7237/h, then $0.6604/h, against the registered $0.65/h.
