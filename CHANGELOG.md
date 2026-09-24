@@ -27,6 +27,11 @@
 
 ## Unreleased
 
+### P67 Amendment 1: the proof and draw rate ceilings follow the verified-5090 market (#713; a lane change, no library change)
+
+- **Why.** The registration priced P67 at $0.69/h; the verified-5090 floor has moved between $0.66 and $0.81/h in a day, and P66 burned three proof launches on provider refusals before amending. Dated `2026-09-24 16:21Z`, before any rental in this lane.
+- **Amended.** Proof ≤ $0.75/h at its 600 s guard (≤ $0.125, at most three attempts); draw ≤ $0.75/h at its 3 h guard ($2.25 line); lane line $2.625. Rates and dollar lines only — arms, fixture, knobs, predictions and decision rule are unchanged, and the pinned tree is the registration's (`tests/test_p67_staged_pin.py`).
+
 ### Lane P66 read (#711): residency's launch cost is a fixed per-layer count; the bytes model under-predicts the gather on a gen 4 link (docs, register; no library behaviour change)
 
 - **The reading.** `p66-5090-2` ran on one RTX 5090 for $0.3752; the lane cost $0.5285 over nine launches (three $0 price refusals, one Vast API NOT_RUN, one burned id, the proof, an rc-14 egress refusal, the reading), every teardown proven. All six instrument gates held. P1–P6 held, P7 was refuted, P8 and P9 are informational. Full read: `bench/p66/RESULTS-p66.md`; the box's own reducer output and rows under `bench/p66/receipts/`.

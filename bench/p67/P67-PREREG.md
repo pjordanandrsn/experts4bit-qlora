@@ -455,3 +455,30 @@ scripts that ran).
 - **The reducer reads real receipts end to end:** F_hi 0.00380 / 0.00205 → band 0.05 on both; fused 0.00136 /
   0.00339 and batched 0.00141 / 0.00447 read PASS, carried by tolerance, not detectable (D_med / F_hi 1.65 and
   2.18).
+
+---
+
+Amendments, dated, go below this line before any data is read.
+
+## Amendment 1 (2026-09-24 16:21Z, before any rental in this lane)
+
+**What changed since registration.** The registration priced the draw at the then-standing $0.69/h ceiling. Since
+then the verified-5090 floor on Vast moved between $0.66 and $0.81/h within one day (2026-09-24), and P66 lost three
+proof launches to provider refusals at $0.65/h before amending (P66-PREREG Amendment 1). A ceiling the market floor
+crosses gives a refusal, not a measurement, and burns a run id each time. The owner authorised this lane's rental on
+2026-09-24 ("go ahead with the P67 rental (all rentals approved)", chat), relayed on #713.
+
+**Amended (rates and dollar lines only).**
+- **The proving rental:** ≤ **$0.75/h** with its registered **600 s** guard, so ≤ **$0.125** per attempt; the
+  command stays `bench/p56/p56_prove.sh` unchanged. A refusal on class or a dud box is redrawn on another machine,
+  its receipt excluding the machine; at most three attempts, ≤ $0.375 together.
+- **The draw:** ≤ **$0.75/h** with the registered **3 h** guard, so the approval line is **$2.25** (was $2.07); the
+  estimate at P56's realised pace is unchanged (≈ 2.2 h ≈ $1.65 at this rate).
+- **Lane line:** ≤ $0.375 + $2.25 = **$2.625**, inside the $35 per-run cap and the $50 CTO daily ceiling.
+- **The tree.** The draw runs at this amendment's merge commit. Nothing under `bench/tp4/`, `bench/p67/` (other
+  than this file), `bench/p56/p56_prove.sh` or the two flagship-matrix pieces has changed since the registration's
+  merge (`10ce711`), so `staged.sha256` and the rehearsal still describe the tree the box installs; CI's
+  `tests/test_p67_staged_pin.py` holds that.
+
+**Unchanged:** the question, arms, fixture, registered knobs, predictions, decision rule, exit codes, receipts and
+the go/no-go reading of the proof (`GO-CLASS` printed and a teardown proof).
