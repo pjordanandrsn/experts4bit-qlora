@@ -31,6 +31,14 @@ for f in p65_run.sh p65_census.py expert_entropy.py p65_reduce.py expert_residua
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p65/staged.sha256"; finish 9; }
 # ---- card class, host floors, egress: refusal rows, not stalls
+# floor(): a host floor the READING needs. The reading refuses on it (rc 13 / 14, host-limited). A PROOF (P65_PROVE=1)
+# only records it: the proof's box is not the reading's box, so a reading-only floor that refuses a proof buys nothing
+# and burns the proof budget (Amendment 1: p65-prove-1 refused at 0.152 s vs 0.15, p65-prove-3 at 97.8 vs 100 MB/s).
+# Card class (15), a dud (10) and disk (13) still refuse a proof: those would break the proof itself.
+floor(){ local rc=$1 msg=$2
+  if [ "${P65_PROVE:-0}" = "1" ]; then say "PROOF: would refuse the READING -- $msg (recorded, not enforced in a proof)"
+    echo "floor_would_refuse_reading rc=$rc $msg" | tee -a forensics.txt >> summary.txt; return 0; fi
+  say "REFUSED: $msg -- host-limited, not a result"; echo "refused: $msg" > REFUSAL; finish "$rc"; }
 python -c "import torch; assert torch.cuda.is_available()" || { say "DUD BOX"; finish 10; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid --format=csv,noheader | tee forensics.txt
 nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/^/power.limit,clocks.max.sm /" | tee -a forensics.txt
@@ -40,7 +48,7 @@ case "$GPU" in *5090*) ;; *) say "REFUSED: card is '$GPU', the lane registers th
 DISK_GB=$(df -BG --output=avail /root | tail -1 | tr -dc 0-9); RAM_GB=$(awk '/MemAvailable/ {print int($2/1048576)}' /proc/meminfo)
 echo "disk_avail_gb=$DISK_GB ram_avail_gb=$RAM_GB" >> forensics.txt
 [ "${DISK_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${DISK_GB} GB free < ${MIN_DISK_GB} (Mixtral bf16 + its NF4 snapshot + arena)"; echo "refused: disk $DISK_GB GB" > REFUSAL; finish 13; }
-[ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || { say "REFUSED: ${RAM_GB} GB RAM available < ${MIN_RAM_GB} (Mixtral's Hessians + one layer's weights)"; echo "refused: host RAM $RAM_GB GB" > REFUSAL; finish 13; }
+[ "${RAM_GB:-0}" -ge "$MIN_RAM_GB" ] || floor 13 "host RAM ${RAM_GB} GB available < ${MIN_RAM_GB} (Mixtral's Hessians + one layer's weights)"
 # host-side Hessian pre-flight: every calibration batch lands a K x K fp32 gram on the host and scales + adds it into
 # the running mean (gptq_pack.HessianAccumulator, hessian_device="cpu"). At Mixtral's down shape (14336^2, 822 MB) that
 # is ~4,100 updates for the registered census, and it is HOST-bound: 0.33 s per scale+add on the NAS Xeon W-1250, 0.027 s
@@ -55,14 +63,14 @@ print(f"{sorted(ts)[1]:.3f}")
 PYA
 )
 echo "host_scale_add_14336_s=$ACC_S (floor $MAX_ACC_S)" >> forensics.txt; say "host Hessian scale+add at 14336^2: ${ACC_S} s (floor ${MAX_ACC_S})"
-if python3 -c "import sys; sys.exit(0 if float('${ACC_S:-99}') > float('$MAX_ACC_S') else 1)"; then say "REFUSED: host scale+add ${ACC_S} s > ${MAX_ACC_S} -- host-limited, not a result"; echo "refused: host memory bandwidth (scale+add ${ACC_S} s)" > REFUSAL; finish 13; fi
+if python3 -c "import sys; sys.exit(0 if float('${ACC_S:-99}') > float('$MAX_ACC_S') else 1)"; then floor 13 "host memory bandwidth (scale+add ${ACC_S} s > ${MAX_ACC_S})"; fi
 # the Hessian budget scales with the host (bigger chunks = fewer forward passes); recorded
 BUDGET=$(( RAM_GB * 2 / 5 )); [ "$BUDGET" -lt 16 ] && BUDGET=16; [ "$BUDGET" -gt 64 ] && BUDGET=64
 export E4B_INT4_HESSIAN_BUDGET_GB=$BUDGET; echo "E4B_INT4_HESSIAN_BUDGET_GB=$BUDGET" >> forensics.txt
 say "egress pre-flight: HF CDN, 50 MB range, 20 s cap (floor ${MIN_MBPS} MB/s; Mixtral is 93 GB)"
 BPS=$(curl -sSL --max-time 20 -r 0-52428800 -o /dev/null -w '%{speed_download}' https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors 2>/dev/null || echo 0)
 MBPS=$(python3 -c "print(round(float('${BPS:-0}')/1e6,1))"); say "HF CDN ${MBPS} MB/s"; echo "hf_cdn_mbps=$MBPS" >> forensics.txt
-if python3 -c "import sys; sys.exit(0 if float('${MBPS:-0}') < float('$MIN_MBPS') else 1)"; then say "REFUSED: egress ${MBPS} MB/s < ${MIN_MBPS} -- host-limited, not a result"; echo "refused: egress $MBPS MB/s" > REFUSAL; finish 14; fi
+if python3 -c "import sys; sys.exit(0 if float('${MBPS:-0}') < float('$MIN_MBPS') else 1)"; then floor 14 "egress ${MBPS} MB/s < ${MIN_MBPS}"; fi
 # ---- install: e4b pinned + P37's toolchain pins, then gnf4 at the pin (last, so the kernel pin wins)
 say "install e4b @$E4B_SHA (image python; P37 pins) + gnf4 @$GNF4_SHA"
 perl -e 'alarm 1800; exec @ARGV' python -m pip install -q --no-input --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
