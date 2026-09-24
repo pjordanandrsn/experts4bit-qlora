@@ -1,0 +1,6 @@
+e4b 0.37.3 @75c83bd0a11cd4f1b24fcff373ae7c8c75ac4849 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1

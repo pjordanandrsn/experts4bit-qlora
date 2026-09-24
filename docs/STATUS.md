@@ -752,6 +752,20 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725).
   - **`E4B_FUSE_COMBINE=0` at T = 1** (lane B393's size) is KL 1.18e-04 on
     NF4, and 1.70e-02 with 7 of 160 flips on int4.
+- **The int4 experts' int8 activation step costs no measurable quality at
+  B = 1 decode; the attention projections' is still unpriced** (lane P64,
+  `bench/p64/`, 2026-09-24, one RTX 5090, the licensed pack `0c9955a9…`).
+  - **What was compared.** The experts' T = 1 calls were routed through bf16
+    activations instead of the per-32 int8 quantise, over the same int4 bytes.
+  - **The result.** KL was 0.0034 / 0.0025 nats/token on wikitext / c4val1:
+    0.61× and 0.77× of the instrument's own arithmetic-order floor. dNLL
+    spans 0, so the step is **INDISTINGUISHABLE**, and W4A8 expert decode
+    stays (`e4b.serve.p64.qwen3.b1.expert-int8-step.5090.2026-09-24`).
+  - **Unread.** The attention half was skipped for time and stays open
+    ([#728](https://github.com/pjordanandrsn/experts4bit-qlora/issues/728)).
+    Nothing prices the int8 step at B = 16 either: P59's B = 16 KL, whose
+    register row now says so, never ran it, because its scorer leaves
+    `DEVICE_GROUPING` off.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

@@ -1,0 +1,373 @@
+{
+ "rehearsal": false,
+ "pack": {
+  "fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "licensed_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "licensed": true
+ },
+ "build": {
+  "moe_layers": 48,
+  "top_k": 8,
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 192,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "attn_pack_sha256": "sha256:1824cbebe3292e0a07752b516ec5dcc136d10b655557b06319bd5c70c3ee23fa"
+ },
+ "texts": {
+  "wikitext": {
+   "passes": {
+    "a8": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 243.0,
+     "s_per_step": 0.11865,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 1572864,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 1572864,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 619.6,
+     "s_per_step": 0.30253,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16_all": {
+     "skipped": "deadline"
+    },
+    "a8_rep": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 246.5,
+     "s_per_step": 0.12034,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a8_pc64": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 314.9,
+     "s_per_step": 0.15376,
+     "rows": 16,
+     "prefill_chunk": 64
+    },
+    "a8_pc384": {
+     "skipped": "deadline"
+    },
+    "nf4": null
+   },
+   "pairs": {
+    "G_exp": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 151936,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0033919233189435693,
+     "kl_median": 0.0013809989006159417,
+     "kl_p95": 0.010890960534007678,
+     "kl_max_per_token": 0.1640952117584718,
+     "top1_agreement": 0.97314453125,
+     "exactly_zero": false
+    },
+    "G_all": null,
+    "G_attn": null,
+    "F_pc64": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 151936,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.00557840316837417,
+     "kl_median": 0.00169279535367888,
+     "kl_p95": 0.01588027176942319,
+     "kl_max_per_token": 0.8975350809281971,
+     "top1_agreement": 0.97021484375,
+     "exactly_zero": false
+    },
+    "F_pc384": null,
+    "determinism": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 151936,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    },
+    "anchor_a8": null,
+    "anchor_a16": null,
+    "anchor_a16_all": null
+   },
+   "nll": {
+    "a8": 2.083390956238955,
+    "a16": 2.084457272375818,
+    "a8_rep": 2.083390956238955,
+    "a8_pc64": 2.0824995566373046
+   },
+   "prefill_last_identical": {
+    "a16": true,
+    "a8_rep": true
+   },
+   "floor": {
+    "F": 0.00557840316837417,
+    "source": "in-lane (mean of the measured floor pairs)",
+    "samples": [
+     0.00557840316837417
+    ],
+    "F_NLL": 0.0008913996016506331
+   },
+   "stats": {
+    "G_exp": {
+     "G": 0.0033919233189435693,
+     "top1": 0.97314453125,
+     "ratio_to_floor": 0.6080455672643948,
+     "class": "BELOW FLOOR",
+     "dNLL": -0.0010663161368628035,
+     "dNLL_ci95": [
+      -0.007067202146246399,
+      0.005192091987219171
+     ],
+     "F_NLL": 0.0008913996016506331,
+     "material": false
+    },
+    "G_all": null,
+    "G_attn": null
+   }
+  },
+  "c4val1": {
+   "passes": {
+    "a8": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 240.7,
+     "s_per_step": 0.11752,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 1572864,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 1572864,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 594.2,
+     "s_per_step": 0.29013,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16_all": {
+     "skipped": "deadline"
+    },
+    "a8_rep": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 240.3,
+     "s_per_step": 0.11735,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a8_pc64": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "expected": {
+      "expert_quant_decode": 196608,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 393216
+     },
+     "wall_s": 292.9,
+     "s_per_step": 0.14303,
+     "rows": 16,
+     "prefill_chunk": 64
+    },
+    "a8_pc384": {
+     "skipped": "deadline"
+    },
+    "nf4": null
+   },
+   "pairs": {
+    "G_exp": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 151936,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0025273922994719466,
+     "kl_median": 0.0015878413632888274,
+     "kl_p95": 0.007672640146380589,
+     "kl_max_per_token": 0.09240912267131358,
+     "top1_agreement": 0.9716796875,
+     "exactly_zero": false
+    },
+    "G_all": null,
+    "G_attn": null,
+    "F_pc64": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 151936,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0032999763314867175,
+     "kl_median": 0.001831963541343377,
+     "kl_p95": 0.010235051400621756,
+     "kl_max_per_token": 0.20261897980327379,
+     "top1_agreement": 0.970703125,
+     "exactly_zero": false
+    },
+    "F_pc384": null,
+    "determinism": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 151936,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    },
+    "anchor_a8": null,
+    "anchor_a16": null,
+    "anchor_a16_all": null
+   },
+   "nll": {
+    "a8": 2.7348521637831515,
+    "a16": 2.736651043173964,
+    "a8_rep": 2.7348521637831515,
+    "a8_pc64": 2.7347380365075002
+   },
+   "prefill_last_identical": {
+    "a16": true,
+    "a8_rep": true
+   },
+   "floor": {
+    "F": 0.0032999763314867175,
+    "source": "in-lane (mean of the measured floor pairs)",
+    "samples": [
+     0.0032999763314867175
+    ],
+    "F_NLL": 0.00011412727565129899
+   },
+   "stats": {
+    "G_exp": {
+     "G": 0.0025273922994719466,
+     "top1": 0.9716796875,
+     "ratio_to_floor": 0.7658819475027254,
+     "class": "BELOW FLOOR",
+     "dNLL": -0.001798879390812233,
+     "dNLL_ci95": [
+      -0.006097674400835291,
+      0.0018100627741227872
+     ],
+     "F_NLL": 0.00011412727565129899,
+     "material": false
+    },
+    "G_all": null,
+    "G_attn": null
+   }
+  }
+ },
+ "validity": {
+  "status": "VALID",
+  "determinism": true,
+  "prefill_last": true,
+  "engagement": true,
+  "same_prompts": true,
+  "problems": []
+ },
+ "verdicts": {
+  "G_exp": "INDISTINGUISHABLE",
+  "G_all": "UNREAD (a text is missing)",
+  "G_attn": "UNREAD (a text is missing)"
+ }
+}

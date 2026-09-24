@@ -1,0 +1,39 @@
+{
+ "pass": "a8_pc64",
+ "text": "c4val1",
+ "expert_a16": false,
+ "attn_a16": false,
+ "prefill_chunk": 64,
+ "prefix": 384,
+ "rows": 16,
+ "decode_steps": 2048,
+ "toggle_state_during_pass": {
+  "DECODE_A16": false,
+  "GEMV_ROWS_MAX": 1,
+  "SMALLM_ROWS_MAX": 16
+ },
+ "counts": {
+  "attn_quant_decode": 393216,
+  "expert_dequant_prefill": 549036,
+  "expert_quant_decode": 196608,
+  "forwards_decode": 2048,
+  "forwards_prefill": 96
+ },
+ "expected_decode_counts": {
+  "expert_quant_decode": 196608,
+  "expert_dequant_decode": 0,
+  "attn_quant_decode": 393216
+ },
+ "engaged_as_registered": true,
+ "wall_s": 292.9,
+ "s_per_decode_step_incl_prefill": 0.14303,
+ "prompts_sha256": "17e68b4299a6d75a49971f7979922b0bfe2e302279924b1e01266ffc88312de7",
+ "stored_dtype": "torch.bfloat16",
+ "decode_logits_shape": [
+  16,
+  128,
+  151936
+ ],
+ "source": "allenai/c4 en/c4-validation.00001-of-00008 (first 2000 docs) via step_decomp._k8_window",
+ "attn_pack_sha256": "sha256:1824cbebe3292e0a07752b516ec5dcc136d10b655557b06319bd5c70c3ee23fa"
+}
