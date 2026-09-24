@@ -1,0 +1,2 @@
+family=granite rc=0 bake_s=0 census_s=275 budget_gb=2 peak_vram_used_mb(all tenants)=2913
+family=olmoe first=4 rc=0 bake_s=0 census_s=488 budget_gb=16 peak_vram_used_mb(all tenants)=6539

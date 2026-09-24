@@ -1,0 +1,540 @@
+{
+ "granite": {
+  "collaq_claim": {
+   "ci": [
+    -0.03299592864191409,
+    0.03399482436520016
+   ],
+   "mean_diff": 0.002267856840341101,
+   "verdict": "UNRESOLVED"
+  },
+  "entropy_redundant_with_rel_act": false,
+  "experts_per_layer": 32,
+  "family": "granite",
+  "hot_sets_from_profile": {
+   "hot_per_layer": 3,
+   "mean_jaccard_wikitext_vs_c4val1": 0.5833333333333334
+  },
+  "layers": [
+   0,
+   1,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   2,
+   20,
+   21,
+   22,
+   23,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9
+  ],
+  "overlap": {
+   "c4val1:entropy~freq": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": -0.34782165094656015,
+    "top10_jaccard_pooled": 0.013157894736842105
+   },
+   "c4val1:entropy~rel_act": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": -0.043209310850439886,
+    "top10_jaccard_pooled": 0.02666666666666667
+   },
+   "c4val1:rel_act~freq": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": 0.16059786047837205,
+    "top10_jaccard_pooled": 0.1
+   },
+   "c4val1:rel_gu~rel_dn": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": -0.5285618279569892,
+    "top10_jaccard_pooled": 0.006535947712418301
+   },
+   "wikitext:entropy~freq": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": -0.31713795443240816,
+    "top10_jaccard_pooled": 0.019867549668874173
+   },
+   "wikitext:entropy~rel_act": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": -0.03922287390029326,
+    "top10_jaccard_pooled": 0.013157894736842105
+   },
+   "wikitext:rel_act~freq": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": 0.07459207696248414,
+    "top10_jaccard_pooled": 0.08450704225352113
+   },
+   "wikitext:rel_gu~rel_dn": {
+    "chance_jaccard": 0.05277587388622344,
+    "experts": 768,
+    "spearman_within_layer": -0.5164039589442815,
+    "top10_jaccard_pooled": 0.006535947712418301
+   }
+  },
+  "pooled": {
+   "entropy": {
+    "chance": 0.05277587388622344,
+    "experts": 768,
+    "layer_eta2_c4val1": 0.37757664350908876,
+    "top10_jaccard_wikitext_vs_c4val1": 0.7111111111111111
+   },
+   "freq": {
+    "chance": 0.05277587388622344,
+    "experts": 768,
+    "layer_eta2_c4val1": 0.0,
+    "top10_jaccard_wikitext_vs_c4val1": 0.54
+   },
+   "rel_act": {
+    "chance": 0.05277587388622344,
+    "experts": 768,
+    "layer_eta2_c4val1": 0.5570009081288225,
+    "top10_jaccard_wikitext_vs_c4val1": 0.7303370786516854
+   },
+   "rho_x_err": {
+    "chance": 0.05277587388622344,
+    "experts": 768,
+    "layer_eta2_c4val1": 0.5323118843788207,
+    "top10_jaccard_wikitext_vs_c4val1": 0.6210526315789474
+   }
+  },
+  "premise": {
+   "premise": true,
+   "rtn_tail_c4val1": {
+    "experts_for_share": 91,
+    "fraction_for_share": 0.11848958333333333,
+    "max_share": 0.052136861398940394,
+    "n_experts": 768,
+    "share": 0.5,
+    "top10pct_share": 0.46827987568886786
+   },
+   "source": "P44-a P3 0.0992 (recipe/GPTQ, 32/32 layers)"
+  },
+  "selector": "TWO_ARMS",
+  "selector_if_premise": "TWO_ARMS",
+  "selfcheck_ok": true,
+  "stability": {
+   "entropy": {
+    "collaq_cosine": 0.999800749707778,
+    "layers": 24,
+    "penalty": 0.08168453690127078,
+    "penalty_ci": [
+     0.0649185911534702,
+     0.1013227028347996
+    ],
+    "r_cross_full": 0.9030119745845552,
+    "r_cross_half": 0.894855816226784,
+    "r_cross_half_ci": [
+     0.8722927358260019,
+     0.9133560911534703
+    ],
+    "r_split": 0.9765403531280548,
+    "survives": true
+   },
+   "freq": {
+    "collaq_cosine": 0.9831176447180963,
+    "layers": 24,
+    "penalty": 0.09500481429179579,
+    "penalty_ci": [
+     0.07286488169437848,
+     0.11894238066968095
+    ],
+    "r_cross_full": 0.8975428900870585,
+    "r_cross_half": 0.8925879593864429,
+    "r_cross_half_ci": [
+     0.8671443938429896,
+     0.9165962153821962
+    ],
+    "r_split": 0.9875927736782386,
+    "survives": true
+   },
+   "rel_act": {
+    "collaq_cosine": 0.9999289094246503,
+    "layers": 24,
+    "penalty": 0.05458936644672533,
+    "penalty_ci": [
+     0.039091138196480954,
+     0.0713377474340176
+    ],
+    "r_cross_full": 0.9241049608993158,
+    "r_cross_half": 0.9190092711388074,
+    "r_cross_half_ci": [
+     0.8981683009530791,
+     0.938303778714565
+    ],
+    "r_split": 0.9735986375855328,
+    "survives": true
+   },
+   "rho_x_err": {
+    "collaq_cosine": 0.9994185240942346,
+    "layers": 24,
+    "penalty": 0.08313362964320628,
+    "penalty_ci": [
+     0.05743294843597265,
+     0.11352562927663738
+    ],
+    "r_cross_full": 0.8953598484848485,
+    "r_cross_half": 0.8906108718230694,
+    "r_cross_half_ci": [
+     0.8571893328445749,
+     0.9202926441837732
+    ],
+    "r_split": 0.9737445014662757,
+    "survives": true
+   }
+  },
+  "stability_descriptive": {
+   "h_energy": {
+    "collaq_cosine": 0.9999503183926716,
+    "layers": 24,
+    "penalty": 0.04599065249266862,
+    "penalty_ci": [
+     0.031624205767350914,
+     0.06593276515151514
+    ],
+    "r_cross_full": 0.9401423509286412,
+    "r_cross_half": 0.9328254826490713,
+    "r_cross_half_ci": [
+     0.9124915994623657,
+     0.948760538856305
+    ],
+    "r_split": 0.97881613514174,
+    "survives": true
+   },
+   "rel_dn": {
+    "collaq_cosine": 0.9998983692137232,
+    "layers": 24,
+    "penalty": 0.025777813416422286,
+    "penalty_ci": [
+     0.017407823191593345,
+     0.03618302480449659
+    ],
+    "r_cross_full": 0.9616935483870969,
+    "r_cross_half": 0.9537370937194526,
+    "r_cross_half_ci": [
+     0.9409110001221896,
+     0.9654818090175953
+    ],
+    "r_split": 0.9795149071358749,
+    "survives": true
+   },
+   "rel_gu": {
+    "collaq_cosine": 0.9998070042929471,
+    "layers": 24,
+    "penalty": 0.026507514662756578,
+    "penalty_ci": [
+     0.018458272238514168,
+     0.0355029630987292
+    ],
+    "r_cross_full": 0.9678488514173998,
+    "r_cross_half": 0.9665215664711632,
+    "r_cross_half_ci": [
+     0.9564997250733138,
+     0.9754605021994135
+    ],
+    "r_split": 0.9930290811339199,
+    "survives": true
+   },
+   "rho_in": {
+    "collaq_cosine": 0.9997490472095873,
+    "layers": 24,
+    "penalty": 0.11240913462348738,
+    "penalty_ci": [
+     0.08409320014662758,
+     0.14451597629521018
+    ],
+    "r_cross_full": 0.8633877036882445,
+    "r_cross_half": 0.8524103696308277,
+    "r_cross_half_ci": [
+     0.8136390365347018,
+     0.886657273338221
+    ],
+    "r_split": 0.9648195042543151,
+    "survives": true
+   }
+  }
+ },
+ "mixtral": {
+  "reason": "no census file",
+  "verdict": "NOT_READ"
+ },
+ "olmoe": {
+  "collaq_claim": {
+   "ci": [
+    0.17674154287055172,
+    0.481898816149396
+   ],
+   "mean_diff": 0.32932017950997383,
+   "verdict": "REPLICATES"
+  },
+  "entropy_redundant_with_rel_act": false,
+  "experts_per_layer": 64,
+  "family": "olmoe",
+  "hot_sets_from_profile": {
+   "hot_per_layer": 6,
+   "mean_jaccard_wikitext_vs_c4val1": 0.14545454545454545
+  },
+  "layers": [
+   0,
+   1,
+   10,
+   11
+  ],
+  "overlap": {
+   "c4val1:entropy~freq": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": -0.3121624689693813,
+    "top10_jaccard_pooled": 0.0
+   },
+   "c4val1:entropy~rel_act": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": 0.5100160256410257,
+    "top10_jaccard_pooled": 0.2682926829268293
+   },
+   "c4val1:rel_act~freq": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": -0.31208384272748246,
+    "top10_jaccard_pooled": 0.0196078431372549
+   },
+   "c4val1:rel_gu~rel_dn": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": 0.049759615384615395,
+    "top10_jaccard_pooled": 0.0
+   },
+   "wikitext:entropy~freq": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": -0.17666981693546233,
+    "top10_jaccard_pooled": 0.0196078431372549
+   },
+   "wikitext:entropy~rel_act": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": 0.3701236263736264,
+    "top10_jaccard_pooled": 0.10638297872340426
+   },
+   "wikitext:rel_act~freq": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": -0.351006716232654,
+    "top10_jaccard_pooled": 0.0
+   },
+   "wikitext:rel_gu~rel_dn": {
+    "chance_jaccard": 0.053497942386831275,
+    "experts": 256,
+    "spearman_within_layer": -0.0030334249084249046,
+    "top10_jaccard_pooled": 0.0
+   }
+  },
+  "pooled": {
+   "entropy": {
+    "chance": 0.053497942386831275,
+    "experts": 256,
+    "layer_eta2_c4val1": 0.17176784444166637,
+    "top10_jaccard_wikitext_vs_c4val1": 0.5757575757575758
+   },
+   "freq": {
+    "chance": 0.053497942386831275,
+    "experts": 256,
+    "layer_eta2_c4val1": 0.0,
+    "top10_jaccard_wikitext_vs_c4val1": 0.15555555555555556
+   },
+   "rel_act": {
+    "chance": 0.053497942386831275,
+    "experts": 256,
+    "layer_eta2_c4val1": 0.2801625265958783,
+    "top10_jaccard_wikitext_vs_c4val1": 0.5757575757575758
+   },
+   "rho_x_err": {
+    "chance": 0.053497942386831275,
+    "experts": 256,
+    "layer_eta2_c4val1": 0.21377487569082707,
+    "top10_jaccard_wikitext_vs_c4val1": 0.5757575757575758
+   }
+  },
+  "premise": {
+   "experts_for_share": 62,
+   "fraction_for_share": 0.2421875,
+   "max_share": 0.010058056940374833,
+   "n_experts": 256,
+   "premise": false,
+   "rtn_tail_c4val1": {
+    "experts_for_share": 62,
+    "fraction_for_share": 0.2421875,
+    "max_share": 0.010058056940374833,
+    "n_experts": 256,
+    "share": 0.5,
+    "top10pct_share": 0.23091015324363653
+   },
+   "share": 0.5,
+   "source": "P3 on this census (RTN, c4val1 full): fraction 0.2421875",
+   "top10pct_share": 0.23091015324363653
+  },
+  "selector": "NOT_WRITTEN (no per-expert premise)",
+  "selector_if_premise": "REL_ACT_ONLY (entropy refused)",
+  "selfcheck_ok": true,
+  "stability": {
+   "entropy": {
+    "collaq_cosine": 0.9997503331931807,
+    "layers": 4,
+    "penalty": 0.1869276556776557,
+    "penalty_ci": [
+     0.13718807234432234,
+     0.24400469322344326
+    ],
+    "r_cross_full": 0.7812843406593406,
+    "r_cross_half": 0.7832417582417582,
+    "r_cross_half_ci": [
+     0.7150669642857144,
+     0.8439989697802197
+    ],
+    "r_split": 0.9701694139194139,
+    "survives": false
+   },
+   "freq": {
+    "collaq_cosine": 0.9141322098912789,
+    "layers": 4,
+    "penalty": 0.48650311080989445,
+    "penalty_ci": [
+     0.38915456573391866,
+     0.5870997243695762
+    ],
+    "r_cross_full": 0.46883077936567114,
+    "r_cross_half": 0.4539215787317844,
+    "r_cross_half_ci": [
+     0.35905242011434024,
+     0.5487907373492285
+    ],
+    "r_split": 0.9404246895416788,
+    "survives": false
+   },
+   "rel_act": {
+    "collaq_cosine": 0.9998675544557347,
+    "layers": 4,
+    "penalty": 0.050303342490842506,
+    "penalty_ci": [
+     0.029115155677655657,
+     0.07149152930402936
+    ],
+    "r_cross_full": 0.9400412087912088,
+    "r_cross_half": 0.9379178113553114,
+    "r_cross_half_ci": [
+     0.9121050824175824,
+     0.9637305402930403
+    ],
+    "r_split": 0.9882211538461538,
+    "survives": true
+   },
+   "rho_x_err": {
+    "collaq_cosine": 0.9994067986055496,
+    "layers": 4,
+    "penalty": 0.04725274725274725,
+    "penalty_ci": [
+     0.027432463369963356,
+     0.08084935897435896
+    ],
+    "r_cross_full": 0.9437042124542125,
+    "r_cross_half": 0.9382841117216117,
+    "r_cross_half_ci": [
+     0.9088570283882784,
+     0.9595753205128206
+    ],
+    "r_split": 0.9855368589743589,
+    "survives": true
+   }
+  },
+  "stability_descriptive": {
+   "h_energy": {
+    "collaq_cosine": 0.9999245786013433,
+    "layers": 4,
+    "penalty": 0.07119677197802202,
+    "penalty_ci": [
+     0.045690247252747285,
+     0.10305345695970702
+    ],
+    "r_cross_full": 0.9104624542124542,
+    "r_cross_half": 0.8910800137362638,
+    "r_cross_half_ci": [
+     0.8152043269230769,
+     0.9411000457875458
+    ],
+    "r_split": 0.9622767857142858,
+    "survives": true
+   },
+   "rel_dn": {
+    "collaq_cosine": 0.9998975196285675,
+    "layers": 4,
+    "penalty": 0.0766168727106227,
+    "penalty_ci": [
+     0.030048076923076927,
+     0.1420701694139194
+    ],
+    "r_cross_full": 0.9030792124542124,
+    "r_cross_half": 0.897061011904762,
+    "r_cross_half_ci": [
+     0.8342032967032966,
+     0.9538261217948718
+    ],
+    "r_split": 0.9736778846153846,
+    "survives": true
+   },
+   "rel_gu": {
+    "collaq_cosine": 0.9995705491815028,
+    "layers": 4,
+    "penalty": 0.051035943223443264,
+    "penalty_ci": [
+     0.03379693223443225,
+     0.08413461538461545
+    ],
+    "r_cross_full": 0.9437843406593407,
+    "r_cross_half": 0.9420615842490843,
+    "r_cross_half_ci": [
+     0.9096296932234431,
+     0.959498054029304
+    ],
+    "r_split": 0.9930975274725276,
+    "survives": true
+   },
+   "rho_in": {
+    "collaq_cosine": 0.9997261950180052,
+    "layers": 4,
+    "penalty": 0.22207818223443226,
+    "penalty_ci": [
+     0.12977048992674,
+     0.30238667582417583
+    ],
+    "r_cross_full": 0.7399839743589743,
+    "r_cross_half": 0.7439646291208791,
+    "r_cross_half_ci": [
+     0.6423878205128205,
+     0.8455414377289376
+    ],
+    "r_split": 0.9660428113553113,
+    "survives": false
+   }
+  }
+ }
+}

@@ -255,15 +255,23 @@ class _ExpertHessianSink:
     their hot NF4 gate/up stack (``w.h_gu_p``), which is what the fused
     forward is handed; ``layers`` restricts a pass to a subset so the
     running Hessians fit ``hessian_device`` (a 128-expert layer at hidden
-    2048 / inter 768 is 2.4 GB in fp32)."""
+    2048 / inter 768 is 2.4 GB in fp32).
 
-    def __init__(self, layer_of: dict, layers, hessian_device="cpu"):
+    ``means=True`` also keeps each expert's first moment -- the fp64 sum
+    of the gate/up input rows and of the down input rows it saw, on the
+    CPU (two vectors per expert, a few KB). The Hessians are uncentred
+    (``2 X X^T``), so a statistic that needs per-channel means (the
+    activation-entropy ratio of bench/p65) cannot be read from them
+    alone. Off by default; the Hessians are the same tensors either way."""
+
+    def __init__(self, layer_of: dict, layers, hessian_device="cpu", means=False):
         self.layer_of = layer_of            # id(h_gu_p) -> layer index
         self.layers = set(layers)
         self.hessian_device = hessian_device
         self.gu = {}                        # (layer, e) -> HessianAccumulator
         self.dn = {}
         self.rows = {}                      # (layer, e) -> rows seen
+        self.sums = {} if means else None   # (layer, e) -> [sum x (fp64, cpu), sum h (fp64, cpu)]
         self.unmatched = 0
 
     def __call__(self, gu_p, sorted_ids, x_sorted, h):
@@ -284,14 +292,36 @@ class _ExpertHessianSink:
                 self.gu[key] = HessianAccumulator(x_sorted.shape[-1], device=self.hessian_device)
                 self.dn[key] = HessianAccumulator(h.shape[-1], device=self.hessian_device)
                 self.rows[key] = 0
-            self.gu[key].add(x_sorted.index_select(0, idx))
-            self.dn[key].add(h.index_select(0, idx))
+            xe = x_sorted.index_select(0, idx)
+            he = h.index_select(0, idx)
+            self.gu[key].add(xe)
+            self.dn[key].add(he)
             self.rows[key] += int(idx.numel())
+            if self.sums is not None:
+                s = self.sums.get(key)
+                sx = xe.reshape(-1, xe.shape[-1]).to(torch.float64).sum(0).cpu()
+                sh = he.reshape(-1, he.shape[-1]).to(torch.float64).sum(0).cpu()
+                if s is None:
+                    self.sums[key] = [sx, sh]
+                else:
+                    s[0] += sx
+                    s[1] += sh
 
     def hessians(self):
         out = {}
         for (layer, e), acc in self.gu.items():
             out.setdefault(layer, {})[e] = (acc.H, self.dn[(layer, e)].H, self.rows[(layer, e)])
+        return out
+
+    def means(self):
+        """``{layer: {expert: (mean_x, mean_h)}}`` (fp64, CPU) over the rows each
+        expert saw; only when the sink was built with ``means=True``."""
+        if self.sums is None:
+            raise RuntimeError("_ExpertHessianSink: built without means=True")
+        out = {}
+        for (layer, e), (sx, sh) in self.sums.items():
+            n = self.rows[(layer, e)]
+            out.setdefault(layer, {})[e] = (sx / n, sh / n)
         return out
 
 
@@ -329,7 +359,8 @@ def calibrate_expert_hessians(model, source_dir: str, batches, *,
                               hessian_device="cpu",
                               max_hessian_bytes: int = 24 << 30,
                               layers_per_pass: int | None = None,
-                              only_layers=None) -> dict:
+                              only_layers=None,
+                              activation_means: dict | None = None) -> dict:
     """Run ``batches`` (token-id tensors ``[B, T]``) through ``model`` on
     its NF4 expert stacks and return ``{layer: {expert: (H_gu, H_dn,
     rows)}}`` with ``H = 2 X X^T`` over the rows each expert actually
@@ -341,7 +372,13 @@ def calibrate_expert_hessians(model, source_dir: str, batches, *,
     Memory is the constraint, not time: a 128-expert layer's fp32
     Hessians are ~2.4 GB, so the layers are calibrated in passes sized
     by ``max_hessian_bytes`` (or ``layers_per_pass``), each pass a full
-    run over ``batches``."""
+    run over ``batches``.
+
+    ``activation_means``, when a dict is passed, is filled in place with
+    ``{layer: {expert: (mean_x, mean_h)}}`` -- each expert's fp64 mean
+    gate/up input and down input over the same rows, from the same tap
+    (the Hessians alone are uncentred). The return value and the
+    Hessians do not change; ``None`` (the default) keeps no sums."""
     from . import hot_residency as _hr
     _plan, layers = _expert_layers(model, source_dir, model_type, plan_model)
     if not layers:
@@ -374,7 +411,8 @@ def calibrate_expert_hessians(model, source_dir: str, batches, *,
     try:
         for i in range(0, len(order), layers_per_pass):
             chunk = order[i:i + layers_per_pass]
-            sink = _ExpertHessianSink(layer_of, chunk, hessian_device)
+            sink = _ExpertHessianSink(layer_of, chunk, hessian_device,
+                                      means=activation_means is not None)
             _hr._CALIB_SINK = sink
             with torch.no_grad():
                 for ids in batches:
@@ -385,6 +423,8 @@ def calibrate_expert_hessians(model, source_dir: str, batches, *,
                     f"{chunk[:4]}... (unmatched calls: {sink.unmatched}) -- is the model "
                     "on the fused NF4 path (all-VRAM hot residency)?")
             result.update(sink.hessians())
+            if activation_means is not None:
+                activation_means.update(sink.means())
     finally:
         _hr._CALIB_SINK = prev
     return result
