@@ -1,7 +1,7 @@
 # Names as the BOX sees them after staging (flat in $W, hook/ one level down); the box runs `sha256sum -c` on
 # this file and the controller resolves each name to its source (bench/p64 for the lane's own three; bench/p59 for
 # P59's scorer and KL reader; bench/p44 for serve_stack.py; bench/ for kl_fidelity.py; bench/p42/hook; bench/p39) and compares.
-ab1ba44b590bd2a6332cb902d100b4a0dec0205f574a47490f3ea914589a1007  p64_run.sh
+ad2bcdb8b3b62e1a867c4156bda13e99571963a9eb4483d3506648894fbaae41  p64_run.sh
 18a179544d3c7aba0eb781c222c6fb5e1e8c36a931dea12d12cd5c5bcf0e77ff  kl_a16.py
 a529042305bd26a9d1e9ccf400b9b3762b8a78d4f13921d31279b238a61cd68c  p64_reduce.py
 f17cff7c218ef139c53597b94640572212d52a6d67696399e302f860fa62cd39  kl_b16.py

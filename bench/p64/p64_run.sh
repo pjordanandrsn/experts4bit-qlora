@@ -101,8 +101,19 @@ if [ "${P64_PROVE:-0}" = 1 ]; then
   grep -a "PROVEFLAG" logs/prove_flag.log | cut -c1-400 | tee -a summary.txt
   [ "$prc" = 0 ] || { tail -5 logs/prove_flag.log; say "PROVE: the flag check FAILED (rc=$prc)"; finish 27; }
   say "PROVE: HF CDN egress probe (50 MB range, 20 s cap; recorded, not a refusal)"
-  BPS=$(curl -sSL --max-time 20 -r 0-52428800 -o /dev/null -w '%{speed_download}' https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors 2>/dev/null || echo 0)
-  echo "PROVE hf_cdn_mbps=$(python3 -c "print(round(float('${BPS:-0}')/1e6,1))")" | tee -a summary.txt forensics.txt
+  # python, not curl: the image ships neither curl nor wget (the A2000 rehearsal's curl probe read 0.0 on a link that
+  # moved 50 MB/s -- a probe that can only say 0)
+  python - <<'PYE' 2>&1 | tail -1 | tee -a summary.txt forensics.txt
+import time, urllib.request
+t = time.time()
+try:
+    r = urllib.request.urlopen(urllib.request.Request("https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors",
+                                                      headers={"Range": "bytes=0-52428799"}), timeout=20)
+    n = len(r.read())
+    print(f"PROVE hf_cdn_mbps={n / (time.time() - t) / 1e6:.1f} bytes={n}")
+except Exception as e:
+    print(f"PROVE hf_cdn_probe_failed {type(e).__name__}: {str(e)[:120]}")
+PYE
   : > PROVED; finish 0
 fi
 # ---- fetch (pinned), bake (bo7's k8_bake.py), prompts (step_decomp's own window, both texts) -- as P59

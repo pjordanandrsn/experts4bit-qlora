@@ -230,6 +230,24 @@ REHEARSAL_RESULTS
 
 ## Box and cost
 
+**Two rentals, in order.** The compute rule in force says a guard over 1 h needs a proving rental first (≤ $0.15,
+≤ 10 min). This lane cannot fit 1 h: the pack build alone is ~30 min. So:
+
+1. **`p64-prove-1`, the proving rental:** one RTX 5090, **10 min guard**, ≈ 6 min expected, **≈ $0.07**
+   (hard stop $0.15). `p64_drive.sh` with `P64_PROVE=1`: the same staging, nonce handshake, class and disk
+   refusals, pinned install, tripwire, scorer self-test and K0 as the reading, then
+   `kl_a16.py --prove-flag` and a 50 MB HF CDN range probe. `--prove-flag` checks the flag on the box's own sm_120
+   kernels at Qwen3's expert shapes:
+   - off runs `quant_x_rows` + the GEMV;
+   - on runs 2 × 8 dequants and equals the prefill branch bit for bit;
+   - the off route still captures and replays bit-identical to eager;
+   - on refuses under capture.
+
+   It exits 0 with `PROVED`. There is no model, no pack and no KL. Download: the pip packages only (~0.5 GB) plus
+   50 MB. It proves the path the reading takes, on the class, before a 2 h guard is spent. A failure there (any rc
+   but 0) stops the lane before the reading rents anything.
+2. **`p64-5090-1`, the reading:** launched only after `p64-prove-1` returns rc 0 with its receipts fetched.
+
 - **Box:** one RTX 5090, Vast verified/secure, image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`. No power floor:
   nothing is timed.
 - **Guard: 2.0 h.** Estimate ≈ ESTIMATE_MIN min, **≈ $ESTIMATE_USD at $0.66/h**. The lane ceiling is $2 and the hard
@@ -275,7 +293,7 @@ second box on a disappointing result.
 
 | rc | meaning |
 |---|---|
-| 0 | the registered read can be made (validity VALID, the primary pair + determinism + a floor sample on both texts) |
+| 0 | the registered read can be made (validity VALID, the primary pair + determinism + a floor sample on both texts); in the proving run, every proving check passed |
 | 9 | stage / install / tripwire |
 | 10 | no CUDA |
 | 11 / 12 | fetch / bake failed |
@@ -283,8 +301,9 @@ second box on a disappointing result.
 | 15 | wrong GPU class |
 | 16 | K0 controls failed (no KL row) |
 | 19 | prompt dump failed |
-| 20 | pack build failed, or no time left for it |
+| 20 | no pack that verifies (`verify_artifact`) after the build, or no time left for it |
 | 21 | the scorer's CPU self-test failed |
+| 27 | proving run only: the real-kernel flag check failed |
 | 30 | build host-limited (no calibration chunk in time) |
 | 40 | a pass's counts are not the registered ones (the lever did not engage) |
 | 41 | validity not met (P1, P2, census or rows) |
