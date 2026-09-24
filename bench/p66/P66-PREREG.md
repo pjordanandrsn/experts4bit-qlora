@@ -505,7 +505,16 @@ graded.
   instead of enforcing them. Round 7 rehearsed it with the reading's floors in force on the A2000, where they
   genuinely fail, then re-ran the full mode on the rebased tree. main's changes since the first cut touch only the
   int4-store GEMV path and a comment in `hot_residency.py`, and `int4_b32` in grouped-nf4-gemm; no path this lane
-  measures. **Round 7 ran exactly the committed `staged.sha256`.** All six gates held, and P1, P2 and P4–P6 held.
+  measures. Round 7 ran that tree's `staged.sha256`. All six gates held, and P1, P2 and P4–P6 held.
   The proof recorded `rc=15` VRAM free and `rc=13` host RAM on the A2000 and still passed, in 73 s.
+
+- **18. The rental lessons of P64 and P65, applied after a rebase onto main `0644620`.**
+  - The proof's guard is 0.23 h.
+  - Egress is measured the way the fetch runs, eight streams in Python, recorded in a proof and enforced at 80 MB/s in
+    a reading (rc 14).
+  - G3 records output hashes.
+  - **Round 8 ran exactly the committed `staged.sha256`.** The proof passed in 90 s with the reading's floors recorded,
+    not enforced (egress 168.8 MB/s on the NAS). The full mode ran rc 0 in 733 s: all six gates held, P1, P2 and
+    P4–P6 held, and every G3 record carries both hashes (`rehearsal-a2000/README.md`, round 8).
 
 Amendments, dated, go below this line before any data is read.

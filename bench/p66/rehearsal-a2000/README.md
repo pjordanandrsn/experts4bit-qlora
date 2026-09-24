@@ -246,9 +246,9 @@ the overrides.
   - The added kernels' own device time is the stable part: 0.59, 0.49, 0.56 and 0.48 ms/token.
   - P3's band is registered on the added kernels only, for this reason.
 
-## Round 7 (`round7/`): the committed tree, after the rebase onto main 0.37.3
+## Round 7 (`round7/`): the tree after the rebase onto main 0.37.3
 
-This round's `staged.sha256` **is the branch's**, byte for byte. The one change since round 6 is `p66_run.sh`: a proof
+This round's `staged.sha256` was the branch's, byte for byte, until round 8's changes. The one change since round 6 is `p66_run.sh`: a proof
 now records the reading-only floors instead of enforcing them, P65 Amendment 1's rule.
 
 - **(a) `P66_MODE=prove`, real install**, at the new main SHAs (experts4bit-qlora `8020489`, grouped-nf4-gemm
@@ -269,6 +269,31 @@ now records the reading-only floors instead of enforcing them, P65 Amendment 1's
   - 6 lost device records, the worst window at 0.048 %.
 - `round7/full/L/` keeps the eager and graph tables (step_budget's input), plain. The earlier rounds' `rows_*.json`
   are gzipped.
+
+## Round 8 (`round8/`): the rental lessons, on the committed tree
+
+Round 7's `staged.sha256` stopped being the branch's when three rental lessons from lanes P64 and P65 were applied.
+Round 8 ran exactly the new pin.
+- **The changes.**
+  - The proof's guard is 0.23 h instead of 10 min, because launcher boot takes 3–5 min of a guard.
+  - An egress probe measures the way the reading's fetch runs: eight parallel 50 MB ranges, since `snapshot_download`
+    uses eight workers, in Python, since the image has no `curl`. A proof records it; a reading refuses below
+    80 MB/s (rc 14).
+  - G3 records the sha256 of the eager and the replayed outputs, so a bit statement across boxes can rest on hashes.
+- **(a) `P66_MODE=prove`, real install** at main `0644620` / grouped-nf4-gemm `68a1250` (`round8/prove/`).
+  - The reading's floors were in force on the A2000, and the two that genuinely fail were recorded, not enforced
+    (`rc=15` VRAM free, `rc=13` host RAM).
+  - The egress probe read **168.8 MB/s** over eight streams, recorded as `hf_cdn_mbps_8x`.
+  - It then installed, passed the tripwire and the pin, and wrote `P66_PROVED`, in **90 s**.
+- **(b) `P66_MODE=full`** (`round8/full/`, job `job8b.sh`): rc 0, success, `TP_DONE`, **733 s**.
+  - A first attempt (`job.sh`, whose log is `job.log.txt`) also ended rc 0. Its full-mode receipts were lost with the
+    container: the NAS's live `locked_run.sh` does not mount the runner directory. `job8b.sh` copies them out.
+  - All six gates hold, and P1, P2 and P4–P6 hold; the decision rule fires P1 ∧ P2.
+  - Every G3 record now carries `eager_sha256` and `graph_sha256`.
+  - Transfer over cold_deadline: pipelined 0.966–1.017, MXFP4 pinned 1.006–1.071, MXFP4 NVMe 0.995–1.049, hybrid
+    1.109–1.425.
+  - Added kernels' device time 0.48 ms/token captured (the stable figure).
+  - 13 lost device records in total.
 
 ## A download the lane did not list at first
 
