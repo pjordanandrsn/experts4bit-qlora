@@ -1,0 +1,141 @@
+{
+ "granite": {
+  "reference": {
+   "loss_last": 0.95459,
+   "eval_loss_final": 0.88582,
+   "s_per_step": 11.7937,
+   "session": "bench/p67/rehearsal-a2000/receipts"
+  },
+  "floor_draws": [
+   {
+    "tag": "reference_attn4_perm1",
+    "kind": "perm",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.0013400000000000079,
+    "d_med_train": 0.001585000000000003,
+    "d_heldout": 0.0033600000000000296,
+    "d_step0_train": 0.004589999999999872,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "identical": false,
+    "step0_flag": true
+   },
+   {
+    "tag": "reference_attn4_perm2",
+    "kind": "perm",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.0011400000000000299,
+    "d_med_train": 0.001334999999999975,
+    "d_heldout": 0.0002500000000000835,
+    "d_step0_train": 0.0,
+    "first_differing_step": 2,
+    "sign_final": -1,
+    "identical": false,
+    "step0_flag": false
+   },
+   {
+    "tag": "reference_attn4_perm3",
+    "kind": "perm",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.0038000000000000256,
+    "d_med_train": 0.0020499999999999963,
+    "d_heldout": 0.000260000000000038,
+    "d_step0_train": 0.004589999999999872,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "identical": false,
+    "step0_flag": true
+   },
+   {
+    "tag": "reference_attn4_repeat",
+    "kind": "repeat",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.0016500000000000403,
+    "d_med_train": 0.0008249999999999647,
+    "d_heldout": 0.0002300000000000635,
+    "d_step0_train": 0.0,
+    "first_differing_step": 5,
+    "sign_final": -1,
+    "identical": false,
+    "step0_flag": false
+   }
+  ],
+  "floor": {
+   "n_admissible": 4,
+   "n_candidates": 4,
+   "final": {
+    "hi": 0.0038000000000000256,
+    "lo": 0.0011400000000000299,
+    "values": [
+     0.0013400000000000079,
+     0.0011400000000000299,
+     0.0038000000000000256,
+     0.0016500000000000403
+    ],
+    "spread_ratio": 3.333,
+    "band": 0.05
+   },
+   "med": {
+    "hi": 0.0020499999999999963,
+    "lo": 0.0008249999999999647,
+    "values": [
+     0.001585000000000003,
+     0.001334999999999975,
+     0.0020499999999999963,
+     0.0008249999999999647
+    ],
+    "spread_ratio": 2.485,
+    "band": 0.05
+   },
+   "exists": true
+  },
+  "reference_bit_identical_on_repeat": false,
+  "judged": [
+   {
+    "tag": "fused_attn4",
+    "status": "VALID",
+    "why": [],
+    "d_final_train": 0.0013600000000000279,
+    "d_med_train": 0.0033850000000000824,
+    "d_heldout": 0.00030999999999992145,
+    "d_step0_train": 0.040589999999999904,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "constant": "PASS",
+    "verdict": "PASS",
+    "carried_by": "tolerance",
+    "detectable": false,
+    "band_final": 0.05,
+    "band_med": 0.05,
+    "ratio_final": 0.358,
+    "ratio_med": 1.651
+   },
+   {
+    "tag": "batched_attn4",
+    "status": "VALID",
+    "why": [],
+    "d_final_train": 0.0014100000000000223,
+    "d_med_train": 0.004474999999999896,
+    "d_heldout": 0.0010300000000000864,
+    "d_step0_train": 0.0261199999999997,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "constant": "PASS",
+    "verdict": "PASS",
+    "carried_by": "tolerance",
+    "detectable": false,
+    "band_final": 0.05,
+    "band_med": 0.05,
+    "ratio_final": 0.371,
+    "ratio_med": 2.183
+   }
+  ],
+  "consistency": [],
+  "consistency_skipped": [],
+  "reading": "READ"
+ }
+}

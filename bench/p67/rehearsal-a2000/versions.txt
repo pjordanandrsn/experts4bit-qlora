@@ -1,0 +1,3 @@
+torch 2.8.0+cu128 e4b 0.37.2 /w/e4b-reh/experts4bit_qlora/__init__.py gnf4 0.32.1 bnb 0.50.2 transformers 5.17.0
+a74384706c57be65420eed83a74ed194fc817f1bd9f863d1ad429cd9562c5015  experts4bit_qlora/lora.py
+4a7cb27afb14f03dd30a38663dfb3b04c3231d2bb3134fdd9f9edcba2460196c  bench/tp4/tp4_arm.py

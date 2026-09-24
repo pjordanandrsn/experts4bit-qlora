@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### P67 registered: training parity read against a per-family floor, not against zero (#713) (one default-off switch in the wheel; bench tooling)
+
+- **`bench/p67/P67-PREREG.md`, registered before its draw.** tp1's band compares an accelerated arm with the
+  reference against a constant 0.05 **and against zero**, and on Gemma-4 every accelerated path fails it, the
+  kernel-free one included. The lane replaces "against zero" with a measured floor: the SAME reference path, same
+  box and session, run again (a plain repeat, and four runs whose per-expert loop sums the experts in a fixed
+  permuted order, correct by construction). The band is `max(0.05, 3 × F_hi)` on both of tp1's quantities, on the
+  TRAIN loss, with at least 3 admissible floor draws; fewer is NO-FLOOR, never FAIL. The batched arm is judged
+  against that floor, not used as it: it shares code with the fused path and could not judge itself.
+- **The existing receipts, re-read on CPU (`bench/p67/reread-existing/`): no session ever ran the reference twice,
+  so no family has a floor draw.** Every Gemma-4 attention-4-bit row reads NO-FLOOR; every other row is a
+  constant-band PASS, which the rule keeps as a PASS. The rental therefore covers Gemma-4 only: one RTX 5090,
+  ≈ 2.2 h, ≈ $1.5, guard 3 h (approval line $2.07), preceded by a ≤ 10-min proving rental (`p56_prove.sh`, $0.115
+  line). **Not launched.** `claims.json`, `capabilities.json` and STATUS do not change until it is read.
+- **Rehearsed free on the NAS A2000** (`bench/p67/rehearsal-a2000/`, not a reading): on a small MoE the switch
+  reached the loop on every call, a same-box repeat was not bit-identical, and every permuted run moved the
+  trajectory (two of three already at step 0, which revised one prediction before registration).
+- **In the wheel: `E4B_REFERENCE_EXPERT_ORDER` (`experts4bit_qlora/lora.py`), default off.** Unset, the reference
+  loop is the shipped one and the helper is never called. `descending` or `perm:<seed>` visits the same experts in
+  another order, which moves only the rounding of the sums. Anything else raises. `reference_order_stats()` reports
+  what the loop did. Tests: `tests/test_reference_expert_order.py`.
+- **Harness.** `tp4_arm.py` records `reference_order` on every e4b reference receipt and refuses the switch on any
+  other arm (exit 19). `tp4_run.sh` gains an opt-in `TP4_P67=1` block (the floor arms, run last). `tp4_drive.sh` gains
+  `TP4_RUNNER` / `TP4_EXTRA_STAGE`, which default to its own behaviour. `bench/p67/` adds the reducer, the box guard
+  `p67_run.sh` (pins, registered knobs, host RAM ≥ 96 GiB), the controller `p67_drive.sh`, `registered.knobs` and
+  `staged.sha256`. Tests: `tests/test_p67_reduce.py`, `tests/test_p67_harness.py` (which executes the new shell
+  paths rather than parsing them) and `tests/test_p67_staged_pin.py`.
+
 ### P65 registered: per-expert activation entropy beside `rel_act`, and which ranking survives wikitext → c4val1 (#710; not yet run)
 
 - **The calibration tap keeps a first moment, on request.**

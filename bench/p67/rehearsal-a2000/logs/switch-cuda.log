@@ -1,0 +1,6 @@
+[2026-09-24T01:00:49Z] lock taken
+CUDA Version 12.8.1
+cuda True NVIDIA RTX A2000 12GB
+................                                                         [100%]
+16 passed in 4.89s
+[2026-09-24T01:00:59Z] container rc=0

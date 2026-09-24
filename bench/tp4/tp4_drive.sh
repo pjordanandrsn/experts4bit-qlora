@@ -13,6 +13,11 @@ done
 case "$TP4_BOX" in A|B|C|D|E|F) ;; *) say "refusing: TP4_BOX must be A, B, C, D, E or F (D = P43 diagnosis, E = P45 profiling, F = P46 adapter path)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 STAGE="$HERE/tp4_run.sh $HERE/tp4_arm.py $HERE/tp4_reduce.py $HERE/tp4_alpaca.py $REPO/bench/flagship-matrix/drivers/n9_datasets.py $REPO/bench/flagship-matrix/ds_manifest.json"
+# A lane that governs its own draw through tp4's machinery (P67: bench/p67/p67_drive.sh) stages its box-side
+# guard beside these and has the box start THAT, which checks its pins and registered knobs and then execs
+# tp4_run.sh. Both default to tp4's own behaviour; the runner must be one of the staged files.
+STAGE="$STAGE ${TP4_EXTRA_STAGE:-}"; RUNNER=${TP4_RUNNER:-tp4_run.sh}
+case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TP4_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # The e4b the BOX installs is the e4b this driver ships from: the launcher has proven this checkout is the manifest's heads.e4b
 # (pod-launch.sh check_tree). Derived, never a literal; refused if the tree is dirty (p39-box1b-3's lesson).
@@ -36,12 +41,12 @@ PASS="TP4_BOX=$TP4_BOX TP4_RUN_ID=$RUN_ID TP4_RUN_NONCE=$NONCE TP4_DEADLINE_EPOC
 # and TP4_EVAL_N / TP4_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.
 for v in TP4_FAMILIES TP4_SKIP TP4_UNSLOTH_VERSION TP4_UNSLOTH_ZOO_VERSION TP4_PIN_FALLBACK TP4_STEPS \
          TP4_EVAL_N TP4_EVAL_EVERY TP4_SEQ TP4_MB TP4_ACCUM TP4_R TP4_LR TP4_OPTIM TP4_SCHED TP4_WARMUP TP4_GPU_CLASS \
-         TP4_LOG_EVERY TP4_DIAG_ALARM TP4_P56 TP4_PREREG TP4_BATCHED_PAD_WASTE_LIMIT; do
+         TP4_LOG_EVERY TP4_DIAG_ALARM TP4_P56 TP4_PREREG TP4_BATCHED_PAD_WASTE_LIMIT TP4_P67 TP4_P67_PERMS; do
   # Quoted: run tp4-b-p46cut-3 passed TP4_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tp4_run.sh` saw the second
   # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
   [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
 done
-if [ "${TP4_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash tp4_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/tp4"; exit 0; fi
+if [ "${TP4_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage [$(for f in $STAGE; do printf '%s ' "${f##*/}"; done)] -> root@$HOST:$W ; start: env $PASS bash $RUNNER ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/tp4"; exit 0; fi
 say "run $RUN_ID box $TP4_BOX nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); gnf4 $GNF4_SHA; receipts -> $RUN_DIR/tp4; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/data /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }
 $SCP $STAGE "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
@@ -51,7 +56,7 @@ if [ -s "$HF_TOKEN_FILE" ]; then   # HF pulls run authenticated (unauthenticated
 else
   say "no hf token file at $HF_TOKEN_FILE -- pulls run unauthenticated (every registered checkpoint is ungated)"
 fi
-$SSH "cd $W || exit 20; nohup env $PASS bash tp4_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat TP4_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
+$SSH "cd $W || exit 20; nohup env $PASS bash $RUNNER > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat TP4_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
 # Pure decision function, extracted so it can be tested without renting a box.
 # Args: idle_s stall_s util dfk_now dfk_prev du_now du_prev
 # Echoes "" (healthy) | "fetching:<delta>" | "stall:<idle_s>".
