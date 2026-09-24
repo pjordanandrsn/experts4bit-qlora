@@ -52,9 +52,11 @@ harness may flip it in-process.
   the GEMV, dequantises 2 × top-k per layer, and equals the prefill branch on the same rows bit for bit; T > 1 is
   unchanged either way. With the flag off, T = 1 is exactly `quant_x_rows` → GEMV per projection. It also pins the
   device-grouped route's non-coverage and the capture refusal.
-- **Off, against `main`:** a scratch comparison of `main`'s `_fused_over_stack` against this branch's, flag off,
-  over 25 randomized cases on five routes (int4 T = 1, int4 prefill, int4 batched-decode GEMV, NF4 grouped, NF4
-  singleton), is `torch.equal` with the same kernel-call sequence in every case.
+- **Off, against `main`:** `main`'s `_fused_over_stack` against this branch's, flag off, over 25 randomized cases on
+  five routes (int4 T = 1, int4 prefill, int4 batched-decode GEMV, NF4 grouped, NF4 singleton), is `torch.equal`
+  with the same kernel-call sequence in every case (`rehearsal-a2000/cpu-main-vs-branch/`, CPU).
+- **On real kernels:** `kl_a16.py --prove-flag` checks both states and the capture behaviour on the card it runs on.
+  It passed on the A2000 (`rehearsal-a2000/prove/`), and the proving rental runs it on the 5090.
 
 **The scorer:** P59's, reused unchanged. `bench/p59/kl_b16.py:batched_teacher_forced` is called with ONE row at a
 time (`bench/p64/kl_a16.py`), so every decode forward is T = 1.
@@ -122,8 +124,10 @@ time (`bench/p64/kl_a16.py`), so every decode forward is T = 1.
   against bf16's 8, about 0.2 % rms relative.
 - The GEMV keeps the weights exact and rounds the activations instead: per-32 int8, about 0.5 % of the row's σ for
   Gaussian rows.
-- By that estimate a16's own error is about half a8's, in rms. So the A/B is the served decode arithmetic against
-  the served prefill arithmetic on the same bytes, which is what #709 asks. It is not int8 against exact.
+- By that estimate a16's own error is about half a8's, in rms. The proving check later measured 0.38× (0.0046
+  against 0.0122 relative to the fp64 product, at Qwen3's shapes on the A2000). So the A/B is the served decode
+  arithmetic against the served prefill arithmetic on the same bytes, which is what #709 asks. It is not int8
+  against exact.
 - `a16_all`'s attention branch has the same arithmetic class: bf16-rounded dequantised weight, cuBLAS. K16 at
   M = 1, the attention speed candidate #709 names, sits within one bf16 ulp of it by its own contract. K16 is not
   run here.
@@ -226,7 +230,59 @@ What follows:
   - the licensed fingerprint unset.
 - **Image:** `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel` (torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1).
 
-REHEARSAL_RESULTS
+**What ran.** Five runs; the receipts are in `rehearsal-a2000/` (README: NOT a reading).
+
+1. **The registered build command on sm_86 (`smoke-build/`).** P55x's `step_decomp.py` licbuild calibrated the
+   experts (2,048 gptq / 0 rtn over 16 layers) and the attention (64 projections), and dumped the artifact (manifest
+   + 66 payloads). It then died in its own wikitext K8 cross-check: the fp8 paged-KV kernel needs `tl.float8e4nv`,
+   sm_89+. The runner, gating on the exit code, threw the complete pack away (rc 20).
+2. **The proving mode, twice (`prove-curl-probe/`, `prove/`).**
+   - The flag check on real kernels passed both times, at Qwen3's expert shapes:
+     - off: 2 `quant_x_rows` calls, 0 dequants;
+     - on: 0 quantises, 16 dequants, and bit-identical to the prefill branch;
+     - the off route captures and replays bit-identical to eager;
+     - on refuses under capture.
+   - Relative error against the fp64 product of the same int4 values: off 0.01224, on 0.00460.
+   - The first run's egress probe read 0.0 MB/s: the image has no `curl`. The second, in python, read 53.2 MB/s.
+3. **The P59 route probe (`probe/`).** P59's scorer at B = 16, decode phase:
+   - 0 expert int8 quantises and 13,484 expert dequants (the bf16 branch);
+   - with `DEVICE_GROUPING` on, 256 = 2 × 16 layers × 8 steps (the int8 GEMV).
+
+   That is the counted form of this document's correction.
+4. **The whole runner, rc 0 (`full/`).** 16 rows × 2 texts, every pass, the verified pack reused.
+   - **VALIDITY: VALID.**
+     - Determinism is exactly 0 on both texts.
+     - The prefill-last logits are bit-identical across `a8`, `a16`, `a16_all` and `a8_rep`.
+     - Every pass's decode counts equal the registered ones: `a8` 65,536 expert quantises, 0 dequants, 131,072
+       attention quantises; `a16` 0 / 524,288 / 131,072; `a16_all` 0 / 524,288 / 0.
+   - **The read, as a rehearsal** (OLMoE base, a small-calibration pack, the A2000; NOT a reading):
+     - G_exp = 0.00174 (wikitext) and 0.00155 (c4val1), top-1 0.984 and 0.982;
+     - in-lane floors F = 0.00199 and 0.00186, the two floor samples agreeing within 10 % (0.00194 / 0.00204 and
+       0.00178 / 0.00194);
+     - G/F = 0.87 and 0.83, so BELOW FLOOR;
+     - dNLL +0.0012 and −0.0008, both intervals spanning 0;
+     - G_all and G_attn also below floor; anchor KL(nf4 ‖ a8) = 0.070 and 0.062;
+     - verdict INDISTINGUISHABLE on all three.
+   - **Time:** a8 0.060–0.064 s per decode step, a16 0.174 (2.8×), nf4 0.041–0.046. The served process took 43.7 min,
+     the anchor 3.4.
+
+**What the rehearsal changed** (the B393 precedent: fixed and said so here, before any reading):
+
+- **The pack's validity is the library's `verify_artifact`, not the build process's exit code.** Every payload is
+  re-hashed and the root fingerprint recomputed. The build's K8 is P55x's cross-check, and it is an input to
+  nothing. Gated on the exit code, one failed cross-check would have discarded a complete, correct 15.2 GiB pack
+  and ended the lane at rc 20. A verified pack already on the box is also reused, not rebuilt.
+- **The proving run's egress probe is python.** It could only read 0 in the registered image: P55x amendment 1's
+  openrsync lesson again.
+
+**What the rehearsal did not change:**
+
+- The decision rule held up: every control was live, the floor was measurable and stable, and the verdict branch
+  followed from the numbers.
+- The predictions above were written before any rehearsal data and are unchanged.
+- **How to read three statistics at the floor.** G_all ≈ G_exp ≈ G_attn ≈ F: at the floor, any bit-level change to
+  the decode arithmetic reads about F, because router flips carry it (§13.1). A G at the floor says "not resolvable
+  here", never that the effects add.
 
 ## Box and cost
 
@@ -244,19 +300,30 @@ REHEARSAL_RESULTS
    - on refuses under capture.
 
    It exits 0 with `PROVED`. There is no model, no pack and no KL. Download: the pip packages only (~0.5 GB) plus
-   50 MB. It proves the path the reading takes, on the class, before a 2 h guard is spent. A failure there (any rc
+   50 MB. It proves the path the reading takes, on the class, before a 2.5 h guard is spent. A failure there (any rc
    but 0) stops the lane before the reading rents anything.
 2. **`p64-5090-1`, the reading:** launched only after `p64-prove-1` returns rc 0 with its receipts fetched.
 
 - **Box:** one RTX 5090, Vast verified/secure, image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`. No power floor:
   nothing is timed.
-- **Guard: 2.0 h.** Estimate ≈ ESTIMATE_MIN min, **≈ $ESTIMATE_USD at $0.66/h**. The lane ceiling is $2 and the hard
-  stop $3, both under the $35 cap.
+- **Guard: 2.5 h**, above the 2 h default because the evidence says so. Estimate ≈ 2.0 h, **≈ $1.35 at $0.66/h**,
+  ≤ $1.65 at the guard. With the proving rental (≤ $0.11), the lane ceiling is $2 and the hard stop $3, both under
+  the $35 cap.
+- **Timing basis for the passes:**
+  - a8 at B = 1 ≈ 0.10 s per decode step: the rehearsal's a8 / nf4 ratio (1.4), and P59's served Qwen3 NF4 arm on a
+    5090 (0.104 s per forward).
+  - a16 ≈ a8 + 768 dequants × ~53 µs ≈ 0.14 s. The ~53 µs is an estimate: on P59b's 5090 the int4 arm scored
+    ~65 s slower than the NF4 arm (82–85 s against 18.3 s), for ~1.2 M dequants (~110 distinct experts per layer at
+    prefill, P57's 58.7 at decode).
+  - So ~205 s per a8-kind pass-text and ~290 s per a16-kind: **~47 min for the 12 pass-texts**, and ~67 min if a8 is
+    0.15 s.
+- **Priority under a slow host:** the registered read (a8, a16, a8_rep, a8_pc64 on both texts) runs first and needs
+  ~30–45 min. The deadline-aware scorer skips `a16_all`, then `a8_pc384`, before it would shorten anything.
 - **Expected shape:**
   - install ~8 min, K0 ~1, fetch 6–15, bake ~5, prompts ~1;
   - the pack build ~30 (P55x's licbuild: 1,832 s);
-  - the served process: load + attention calibration ~5, then the passes (TIMING_BASIS);
-  - anchor ~4, reduce ~3.
+  - the served process: load + attention calibration ~7, then the passes ~47;
+  - anchor ~5, reduce ~4.
 - **Pins:**
   - e4b = the merge of this change (the launch manifest's `heads.e4b`);
   - grouped-nf4-gemm `5ca1897585f9f456f99ea504b2a1be0ea91db496` (v0.33.0, the consumer CI pin);

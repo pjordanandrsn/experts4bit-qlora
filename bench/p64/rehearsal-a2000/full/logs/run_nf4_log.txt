@@ -1,0 +1,11 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 2802.64it/s]
+[02:09:01]   checkpoint: allenai/OLMoE-1B-7B-0924 @ 6d84c48581ece794365f2b8e9cfb043c68ade9c5 (requested main, unpinned)
+[02:09:01]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[02:09:01]   quantized experts on 16/16 MoE layers (64 experts each)
+[02:09:01]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:09:04]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:09:15]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+P64BUILD {"moe_layers": 16, "top_k": 8, "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "build_s": 19.2, "attn_pack_sha256": null}
+P64PASS {"pass": "nf4", "text": "wikitext", "engaged_as_registered": true, "wall_s": 93.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 0, "attn_quant_decode": 0}}
+P64PASS {"pass": "nf4", "text": "c4val1", "engaged_as_registered": true, "wall_s": 84.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 0, "attn_quant_decode": 0}}

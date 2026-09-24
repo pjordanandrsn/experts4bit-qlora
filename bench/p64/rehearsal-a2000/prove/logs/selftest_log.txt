@@ -1,0 +1,20 @@
+{
+ "one_row_vs_decode_scorer_max_abs_diff": 2.086162567138672e-07,
+ "chunks": [
+  4,
+  5,
+  12
+ ],
+ "rows": 3,
+ "T": 24,
+ "prefix": 12,
+ "census_last": {
+  "forwards_decode": 132,
+  "forwards_prefill": 3
+ },
+ "nll_index_check": [
+  6.299040692116414,
+  6.299040717735502
+ ]
+}
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right

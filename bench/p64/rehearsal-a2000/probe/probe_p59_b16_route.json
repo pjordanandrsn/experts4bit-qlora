@@ -1,0 +1,64 @@
+{
+ "model": "allenai/OLMoE-1B-7B-0924",
+ "B": 16,
+ "prefix": 384,
+ "decode_steps": 8,
+ "prefill_chunk_per_row": 8,
+ "build": {
+  "moe_layers": 16,
+  "top_k": 8,
+  "int4_expert_layers": 16,
+  "int4_attn_projections": 64,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   16,
+   0
+  ],
+  "fuse_router_epilogue_n": 16
+ },
+ "env": {
+  "E4B_ACCUM_RECOMPILE_LIMIT": "64",
+  "E4B_SERVE_ATTN_INT4_CALIB": "0",
+  "E4B_MODEL_ID": "allenai/OLMoE-1B-7B-0924",
+  "E4B_SERVE_EXP_INT4": "1",
+  "E4B_SERVE_ATTN_INT4": "1",
+  "E4B_CALIB_SOURCE": "c4",
+  "E4B_RECOMPILE_LIMIT": "64",
+  "E4B_FUSE_ROUTER_EPI": "1",
+  "E4B_FUSE_T1_GLUE": "1",
+  "E4B_FUSE_T1_GLUE_R2": "1"
+ },
+ "build_s": 253.9,
+ "routes": {
+  "as_P59_ran_it (DEVICE_GROUPING off)": {
+   "decode_counts": {
+    "expert_dequant_decode": 13484,
+    "forwards_decode": 8
+   },
+   "prefill_counts": {
+    "expert_dequant_prefill": 96112,
+    "forwards_prefill": 48
+   },
+   "wall_s": 62.4
+  },
+  "timed_B16_route (DEVICE_GROUPING on)": {
+   "decode_counts": {
+    "expert_quant_decode": 256,
+    "forwards_decode": 8
+   },
+   "prefill_counts": {
+    "expert_quant_prefill": 768,
+    "forwards_prefill": 48
+   },
+   "wall_s": 6.9
+  }
+ },
+ "reading": {
+  "P59_scorer_experts_int8_quantises_at_decode": 0,
+  "P59_scorer_experts_dequants_at_decode": 13484,
+  "P59_scorer_attention_int8_quantises_at_decode": 0,
+  "timed_route_experts_int8_quantises_at_decode": 256,
+  "timed_route_expected_expert_quantises": 256,
+  "note": "L=16 MoE layers, top_k=8; one decode forward = 16 rows"
+ }
+}

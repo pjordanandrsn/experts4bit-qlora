@@ -1,0 +1,16 @@
+KNOBS model=allenai/OLMoE-1B-7B-0924 rev=6d84c48581ece794365f2b8e9cfb043c68ade9c5 licensed_fp=none gpu_class=A2000 min_disk_gb=30 calib_nseq=8 hessian_budget_gb=2 build_ppl_steps=16 build_via=step_decomp rows=2 skip_install=1
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+e4b 0.37.2 @94842a224f0691a008d25a509bd220e4dcb49ca7 (from /src/e4b/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /w/pyenv/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+K0 all_passed kl-fidelity/1.0.0
+BAKE reused (status OK)
+PROMPTS wikitext B=16 corpus=288721 step=18013 sha=3b73a2c857d91f73bb63e9aa9b32f06e017fabd1573a42a118237b97487b17ae
+PROMPTS c4val1 B=16 corpus=886188 step=55354 sha=bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9
+BUILD INT4EXP calibrated experts: 768 gptq / 0 rtn (min_rows=32) over 6 layers
+BUILD INT4EXP calibrated streaming: 16 layers in 2 passes of <= 10 layer(s)
+BUILD FAILED rc=1

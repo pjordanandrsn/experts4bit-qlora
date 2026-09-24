@@ -1,0 +1,34 @@
+KNOBS model=allenai/OLMoE-1B-7B-0924 rev=6d84c48581ece794365f2b8e9cfb043c68ade9c5 licensed_fp=none gpu_class=A2000 min_disk_gb=30 calib_nseq=8 hessian_budget_gb=2 build_ppl_steps=16 build_via=step_decomp rows=2 skip_install=1
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          75          42           0           8          48
+zpool1/zfs22    663G  438G  226G  66% /root/p64
+[2026-09-23T20:58:29Z] p64: install SKIPPED (P64_SKIP_INSTALL=1): the importable packages are whatever the environment provides -- recorded below
+tripwire OK: e4b 0.37.2 gnf4 0.33.0 torch 2.8.0+cu128 triton 3.4.0
+e4b 0.37.2 @94842a224f0691a008d25a509bd220e4dcb49ca7 (from /src/e4b/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /w/pyenv/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+K0 all_passed kl-fidelity/1.0.0
+[2026-09-23T20:59:04Z] p64: fetch allenai/OLMoE-1B-7B-0924 @ 6d84c48581ece794365f2b8e9cfb043c68ade9c5
+[2026-09-23T20:59:04Z] p64: NF4 arena already baked on this box (work/bake.json status OK) -- not re-baked
+[2026-09-23T20:59:04Z] p64: prompt dump: step_decomp._k8_window at B=16 on both texts
+PROMPTS wikitext B=16 corpus=288721 step=18013 sha=3b73a2c857d91f73bb63e9aa9b32f06e017fabd1573a42a118237b97487b17ae
+PROMPTS c4val1 B=16 corpus=886188 step=55354 sha=bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9
+[2026-09-23T20:59:19Z] p64: build the pack (step_decomp) -> artifact1
+[2026-09-23T21:13:59Z] p64: build: calibration chunk 1 in 880s
+    INT4EXP calibrated streaming: 16 layers in 2 passes of <= 10 layer(s)
+    INT4EXP enabled: 16 layers (model_type=olmoe)
+    ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 2 batches of c4; model_type=olmoe)
+        raise ValueError(f'type {self} not supported in this architecture. '
+    ValueError: type fp8e4nv not supported in this architecture. The supported fp8 dtypes are ('fp8e4b15', 'fp8e5')
+    triton.compiler.errors.CompilationError: at 31:12:
+[2026-09-23T21:19:48Z] p64: the build failed (rc=1) -- there is no pack
+[2026-09-23T21:19:48Z] p64: TP_DONE rc=20
+container exit rc=20

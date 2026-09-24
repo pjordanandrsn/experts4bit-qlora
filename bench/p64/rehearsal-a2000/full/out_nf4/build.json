@@ -1,0 +1,37 @@
+{
+ "moe_layers": 16,
+ "experts": 64,
+ "top_k": 8,
+ "fuse_t1_glue_n": 0,
+ "fuse_t1_glue_r2_n": [
+  0,
+  0
+ ],
+ "fuse_router_epilogue_n": 0,
+ "int4_attn_projections": 0,
+ "int4_expert_layers": 0,
+ "int4_store_kinds": [],
+ "build_s": 19.2,
+ "env": {
+  "E4B_ACCUM_RECOMPILE_LIMIT": "64",
+  "E4B_MODEL_ID": "allenai/OLMoE-1B-7B-0924",
+  "GNF4_SHA": "5ca1897585f9f456f99ea504b2a1be0ea91db496",
+  "E4B_RECOMPILE_LIMIT": "64",
+  "E4B_SHA": "f2854d9df143383605ab180c3c2966c511d69537",
+  "E4B_INT4_GPTQ_DEVICE": "cuda",
+  "E4B_INT4_HESSIAN_BUDGET_GB": "2",
+  "E4B_SERVE_EXP_INT4": "0",
+  "E4B_SERVE_ATTN_INT4_CALIB": "0",
+  "E4B_SERVE_ATTN_INT4": "0",
+  "E4B_CALIB_SOURCE": "c4",
+  "E4B_FUSE_T1_GLUE": "0",
+  "E4B_FUSE_T1_GLUE_R2": "0",
+  "E4B_FUSE_ROUTER_EPI": "0"
+ },
+ "attn_pack_sha256": null,
+ "counters": {
+  "expert_quant_counter": true,
+  "expert_dequant_counter": true,
+  "attn_int4linear_counted": 0
+ }
+}

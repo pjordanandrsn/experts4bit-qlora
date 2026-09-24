@@ -1,0 +1,91 @@
+KNOBS model=allenai/OLMoE-1B-7B-0924 rev=6d84c48581ece794365f2b8e9cfb043c68ade9c5 licensed_fp=none gpu_class=A2000 min_disk_gb=30 calib_nseq=8 hessian_budget_gb=2 build_ppl_steps=16 build_via=step_decomp rows=16 skip_install=1
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          66          42           0          16          56
+zpool1/zfs22    691G  457G  235G  67% /root/p64
+[2026-09-24T01:24:31Z] p64: install SKIPPED (P64_SKIP_INSTALL=1): the importable packages are whatever the environment provides -- recorded below
+tripwire OK: e4b 0.37.2 gnf4 0.33.0 torch 2.8.0+cu128 triton 3.4.0
+e4b 0.37.2 @f2854d9df143383605ab180c3c2966c511d69537 (from /src/e4b/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /w/pyenv/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+K0 all_passed kl-fidelity/1.0.0
+[2026-09-24T01:24:47Z] p64: fetch allenai/OLMoE-1B-7B-0924 @ 6d84c48581ece794365f2b8e9cfb043c68ade9c5
+[2026-09-24T01:24:48Z] p64: NF4 arena already baked on this box (work/bake.json status OK) -- not re-baked
+[2026-09-24T01:24:48Z] p64: prompt dump: step_decomp._k8_window at B=16 on both texts
+PROMPTS wikitext B=16 corpus=288721 step=18013 sha=3b73a2c857d91f73bb63e9aa9b32f06e017fabd1573a42a118237b97487b17ae
+PROMPTS c4val1 B=16 corpus=886188 step=55354 sha=bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9
+[2026-09-24T01:25:12Z] p64: pack already built on this box and it verifies -- not rebuilt
+PACK sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c != the licensed none -- the read is labelled 'not the licensed pack'
+[2026-09-24T01:25:12Z] p64: served stack: every pass (kl_a16.py; deadline-aware inside)
+    INT4EXP loading licensed artifact: /root/p64/artifact1 sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c
+    INT4EXP licensed artifact sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c installed on 16 layers
+    INT4EXP enabled: 16 layers (model_type=olmoe)
+    ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 2 batches of c4; model_type=olmoe)
+    P64BUILD {"moe_layers": 16, "top_k": 8, "int4_expert_layers": 16, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 64, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [16, 0], "fuse_router_epilogue_n": 16, "build_s": 115.5, "attn_pack_sha256": "sha256:fc85934341c9ce34ae554a70bbd3e078bd2bea7efb1
+    P64PASS {"pass": "a8", "text": "wikitext", "engaged_as_registered": true, "wall_s": 130.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a16", "text": "wikitext", "engaged_as_registered": true, "wall_s": 357.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a8", "text": "c4val1", "engaged_as_registered": true, "wall_s": 123.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a16", "text": "c4val1", "engaged_as_registered": true, "wall_s": 356.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a8_rep", "text": "wikitext", "engaged_as_registered": true, "wall_s": 123.4, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a8_rep", "text": "c4val1", "engaged_as_registered": true, "wall_s": 125.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a8_pc64", "text": "wikitext", "engaged_as_registered": true, "wall_s": 167.8, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a8_pc64", "text": "c4val1", "engaged_as_registered": true, "wall_s": 169.4, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a16_all", "text": "wikitext", "engaged_as_registered": true, "wall_s": 357.3, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 0}}
+    P64PASS {"pass": "a16_all", "text": "c4val1", "engaged_as_registered": true, "wall_s": 365.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 0}}
+    P64PASS {"pass": "a8_pc384", "text": "wikitext", "engaged_as_registered": true, "wall_s": 111.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+    P64PASS {"pass": "a8_pc384", "text": "c4val1", "engaged_as_registered": true, "wall_s": 109.9, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+[2026-09-24T02:08:54Z] p64: NF4 anchor
+[2026-09-24T02:12:16Z] p64: reduce
+**VALIDITY: VALID** -- determinism True, prefill-last untouched True, engagement True, same rows True
+**VERDICT (expert int8 step, G_exp): INDISTINGUISHABLE** -- REHEARSAL, NOT A READING
+- **G_all (experts + attention): INDISTINGUISHABLE**
+- **G_attn (attention, experts bf16): INDISTINGUISHABLE**
+[2026-09-24T02:13:05Z] p64: ----- summary -----
+KNOBS model=allenai/OLMoE-1B-7B-0924 rev=6d84c48581ece794365f2b8e9cfb043c68ade9c5 licensed_fp=none gpu_class=A2000 min_disk_gb=30 calib_nseq=8 hessian_budget_gb=2 build_ppl_steps=16 build_via=step_decomp rows=16 skip_install=1
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+e4b 0.37.2 @f2854d9df143383605ab180c3c2966c511d69537 (from /src/e4b/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /w/pyenv/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+K0 all_passed kl-fidelity/1.0.0
+BAKE reused (status OK)
+PROMPTS wikitext B=16 corpus=288721 step=18013 sha=3b73a2c857d91f73bb63e9aa9b32f06e017fabd1573a42a118237b97487b17ae
+PROMPTS c4val1 B=16 corpus=886188 step=55354 sha=bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9
+BUILD reused (verify_artifact OK)
+PACK sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c != the licensed none -- the read is labelled 'not the licensed pack'
+P64PASS {"pass": "a8", "text": "wikitext", "engaged_as_registered": true, "wall_s": 130.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a16", "text": "wikitext", "engaged_as_registered": true, "wall_s": 357.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8", "text": "c4val1", "engaged_as_registered": true, "wall_s": 123.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a16", "text": "c4val1", "engaged_as_registered": true, "wall_s": 356.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_rep", "text": "wikitext", "engaged_as_registered": true, "wall_s": 123.4, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_rep", "text": "c4val1", "engaged_as_registered": true, "wall_s": 125.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_pc64", "text": "wikitext", "engaged_as_registered": true, "wall_s": 167.8, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_pc64", "text": "c4val1", "engaged_as_registered": true, "wall_s": 169.4, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a16_all", "text": "wikitext", "engaged_as_registered": true, "wall_s": 357.3, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 0}}
+P64PASS {"pass": "a16_all", "text": "c4val1", "engaged_as_registered": true, "wall_s": 365.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 0}}
+P64PASS {"pass": "a8_pc384", "text": "wikitext", "engaged_as_registered": true, "wall_s": 111.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_pc384", "text": "c4val1", "engaged_as_registered": true, "wall_s": 109.9, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "nf4", "text": "wikitext", "engaged_as_registered": true, "wall_s": 93.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 0, "attn_quant_decode": 0}}
+P64PASS {"pass": "nf4", "text": "c4val1", "engaged_as_registered": true, "wall_s": 84.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 0, "attn_quant_decode": 0}}
+**VALIDITY: VALID** -- determinism True, prefill-last untouched True, engagement True, same rows True
+**VERDICT (expert int8 step, G_exp): INDISTINGUISHABLE** -- REHEARSAL, NOT A READING
+- **G_all (experts + attention): INDISTINGUISHABLE**
+- **G_attn (attention, experts bf16): INDISTINGUISHABLE**
+----- versions -----
+e4b 0.37.2 @f2854d9df143383605ab180c3c2966c511d69537 (from /src/e4b/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /w/pyenv/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+[2026-09-24T02:13:06Z] p64: TP_DONE rc=0

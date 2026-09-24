@@ -45,8 +45,14 @@
   - **What it reads:** the decode-scored KL A/B of that step on Qwen3-30B-A3B's licensed int4 stack, at B = 1, on
     wikitext and c4val1. The scorer is P59's, one row at a time. The floor is the arithmetic-order floor measured in
     the same instrument.
-  - **What was run:** a rehearsal on the NAS RTX A2000 is in `bench/p64/rehearsal-a2000/`, NOT a reading. No box
-    was rented.
+  - **The proving rental:** `P64_PROVE=1` is the proving mode the compute rule asks for before a guard over 1 h.
+    It runs the install, tripwire, self-test, K0, `kl_a16.py --prove-flag` (the flag on the card's real kernels)
+    and an egress probe, with no model and no pack.
+  - **What was run:** the whole runner was rehearsed on the NAS RTX A2000 on OLMoE, rc 0, validity VALID, with
+    every pass's counts exactly as registered. It is in `bench/p64/rehearsal-a2000/`, NOT a reading.
+  - **What the rehearsal fixed:** the runner gates the pack on `verify_artifact`, not on the build process's exit
+    code (a failed K8 cross-check had discarded a complete pack), and the proving run's egress probe is python (the
+    image has no `curl`). No box was rented.
 - **A correction to #709's premise, in the pre-registration.** P59's B = 16 KL never ran the int8 step on the
   experts. Its scorer leaves `DEVICE_GROUPING` off, so T = 16 decode takes the host-grouped dequant + bf16 branch.
   The timed B = 16 arms run the device-grouped GEMV on int8 activations.
