@@ -27,6 +27,23 @@
 
 ## Unreleased
 
+### Lane P63 read (#708): which expert routes give a token the same bits alone and inside a verify or prefill (docs, register, tests; no library behaviour change)
+
+- **The reading.** `p63-5090-1` ran on one RTX 5090 with Qwen3-30B-A3B for $0.2881, after the proof `p63-prove-1` ($0.0115) at the same commit. Teardown is proven. **Every registered prediction held**, and no path was outside its fp64 accuracy bound in 179 records. Full read: `bench/p63/RESULTS-p63.md`. Receipts: `bench/p63/receipts/`, and the reducer reproduces its JSON from them byte for byte.
+- **Row-exact routes, registered.** Every experts module (48/48) returns each token's rows bit-equal to its T = 1 decode call on three routes:
+  - the int4 store under `FORCE_SINGLETON_GROUPS` (`e4b.serve.p63.qwen3.int4-singleton.row-exact.5090.2026-09-24`);
+  - the int4 store under `DEVICE_GROUPING` up to 256 routed rows (`…int4-device-gemv.row-exact…`);
+  - the NF4 stack under `FORCE_SINGLETON_GROUPS` on the dot-pad GEMV (`…nf4-singleton.row-exact…`).
+  The kernels' own row-invariance is registered in grouped-nf4-gemm (#399).
+- **Different functions by row count, recorded in STATUS** (each path keeps its own quality licence; P63 moves no default):
+  - the default T > 1 routes: the int4 store's dequant + bf16 matmul, and NF4's M-tile;
+  - the router epilogue's fp32 weights at ≤ 64 rows against bf16 above (#726).
+- **End to end, no position is exact.** Every first difference is at layer 0 in attention, never in the experts. KL mean is 0.008–0.033 nats/token. 16 of 45 cells are under the shipped top-1 bar of 0.93 (all on top-1, none on KL). Filed as #725.
+- **New test.** `tests/test_p63_row_exact_gpu.py` asserts the three routes with `torch.equal` on the plan and dispatch a 5090 takes, with a control that must fail. It skips on CPU, and ran 9/9 on the NAS RTX A2000.
+- **Corrected.**
+  - `hot_residency.py`'s singleton comment. It said the singleton path is bitwise-equal to the grouped path at every T, "pinned in CI". That holds at T = 1 on NF4 only; at T > 1 the grouped path is a different function.
+  - `tests/test_singleton_groups.py`'s docstring. It pins the dispatch algebra through a mocked GEMM, not the arithmetic.
+
 ### `E4B_INT4_DECODE_A16`: bf16 activations at T = 1 on the int4 expert store, as a quality instrument; lane P64 registered (#709)
 
 - **The flag.** `E4B_INT4_DECODE_A16=1` (default off; `hot_residency.DECODE_A16`, the `FORCE_SINGLETON_GROUPS`

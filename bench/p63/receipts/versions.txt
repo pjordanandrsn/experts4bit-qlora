@@ -1,0 +1,7 @@
+e4b 0.37.3 @75c83bd0a11cd4f1b24fcff373ae7c8c75ac4849
+gnf4 0.33.2 @f88df1ebe7944aa7481f0c784219fad879c7df89
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+int4_part_or_none_fix True

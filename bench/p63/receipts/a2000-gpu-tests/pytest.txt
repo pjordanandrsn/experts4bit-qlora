@@ -1,0 +1,25 @@
+# tests/test_p63_row_exact_gpu.py on the NAS RTX A2000 12 GB (sm_86, 26 SMs, driver 575.64.05), pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel, torch 2.8.0+cu128, triton 3.4.0, bitsandbytes 0.50.1; grouped-nf4-gemm kernel/ from grouped-nf4-gemm#399's branch (da03865, whose kernel sources differ from f88df1e, the lane's cut, only in combine_rows' docstring); not a reading
+[2026-09-24T13:23:09Z] lock taken
+d3f00a49d26749bbce6f2b0bc3b594ea28d6ef12a82bb660ca7a1923cc8a7156  tests/test_p63_row_exact_gpu.py
+0914fa3861889489dd63f8253a0f5133f75cf681dfd8e18a6abc6cba4eebc5cd  experts4bit_qlora/engines/hot_residency.py
+414c0c24c4b86803aee1233e09b6d448dc2d4ee1aed63c38ad1953e73724ec11  tests/test_singleton_groups.py
+tests/test_p63_row_exact_gpu.py::test_int4_singleton_route_is_row_exact[16] PASSED [  5%]
+tests/test_p63_row_exact_gpu.py::test_int4_singleton_route_is_row_exact[17] PASSED [ 10%]
+tests/test_p63_row_exact_gpu.py::test_int4_singleton_route_is_row_exact[160] PASSED [ 15%]
+tests/test_p63_row_exact_gpu.py::test_int4_device_grouping_gemv_is_row_exact[16] PASSED [ 21%]
+tests/test_p63_row_exact_gpu.py::test_int4_device_grouping_gemv_is_row_exact[17] PASSED [ 26%]
+tests/test_p63_row_exact_gpu.py::test_nf4_singleton_route_is_row_exact[16] PASSED [ 31%]
+tests/test_p63_row_exact_gpu.py::test_nf4_singleton_route_is_row_exact[17] PASSED [ 36%]
+tests/test_p63_row_exact_gpu.py::test_nf4_singleton_route_is_row_exact[160] PASSED [ 42%]
+tests/test_p63_row_exact_gpu.py::test_the_check_sees_the_default_route_change_the_function PASSED [ 47%]
+tests/test_singleton_groups.py::test_singleton_matches_grouped_plain PASSED [ 52%]
+tests/test_singleton_groups.py::test_singleton_matches_grouped_gated PASSED [ 57%]
+tests/test_singleton_groups.py::test_singleton_matches_grouped_gptoss_epilogue PASSED [ 63%]
+tests/test_singleton_groups.py::test_swiglu_and_combine_kernels_are_taken_when_present PASSED [ 68%]
+tests/test_int4_singleton_part_fits.py::test_one_token_keeps_the_store_buffer PASSED [ 73%]
+tests/test_int4_singleton_part_fits.py::test_a_verify_shaped_call_does_not_get_a_buffer_it_would_overrun PASSED [ 78%]
+tests/test_int4_singleton_part_fits.py::test_a_larger_buffer_is_kept_when_the_plan_shrinks PASSED [ 84%]
+tests/test_int4_singleton_part_fits.py::test_a_floor_cut_without_the_row_aware_plan_uses_its_n_only_plan PASSED [ 89%]
+tests/test_int4_singleton_part_fits.py::test_the_real_plan_decides_the_same_way_where_the_kernel_imports PASSED [ 94%]
+tests/test_int4_singleton_part_fits.py::test_the_fit_is_planned_once_per_shape_then_looked_up PASSED [100%]
+[2026-09-24T13:24:13Z] container rc=0

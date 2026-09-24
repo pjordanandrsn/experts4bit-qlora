@@ -1,0 +1,62 @@
+e4b 0.37.3 @75c83bd0a11cd4f1b24fcff373ae7c8c75ac4849
+gnf4 0.33.2 @f88df1ebe7944aa7481f0c784219fad879c7df89
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+int4_part_or_none_fix True
+snapshot /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+stack int4 rc=0 P63ARM {"stack": "int4", "subarms_run": ["hf.default", "hf.device", "hf.singleton", "hf.combine0", "paged.default", "paged.device"], "errors": [], "refused": [], "determinism_failed": [], "census": {"int4_linear": 96, "int4_linear_k16": 96, "int4_expert_layers": 48, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}}
+
+stack nf4 rc=0 P63ARM {"stack": "nf4", "subarms_run": ["hf.default", "hf.singleton", "hf.device", "hf.combine0", "hf.singleton.dotpad0", "paged.default"], "errors": [], "refused": [], "determinism_failed": [], "census": {"int4_linear": 0, "int4_linear_k16": 0, "int4_expert_layers": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}}
+
+stack int4nf rc=0 P63ARM {"stack": "int4nf", "subarms_run": ["hf.default", "hf.device", "paged.device"], "errors": [], "refused": [], "determinism_failed": [], "census": {"int4_linear": 96, "int4_linear_k16": 96, "int4_expert_layers": 48, "fuse_qkv_n": 48, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}}
+
+# P63 — generated results (p63_reduce.py; read against P63-PREREG.md)
+
+Stacks: int4, int4nf, nf4; devices: {'nf4': 'NVIDIA GeForce RTX 5090', 'int4': 'NVIDIA GeForce RTX 5090', 'int4nf': 'NVIDIA GeForce RTX 5090'}
+
+## G0 — instrument gates
+- **nf4**: OK
+- **int4**: OK
+- **int4nf**: OK
+
+## P1 — kernel census (layer-0 gate_up)
+| stack | route pair | predicted | observed (by T) | verdict |
+|---|---|---|---|---|
+| int4 | int4.gemv -> int4.gemv | EXACT | {'16': 'EXACT', '17': 'EXACT', '160': 'EXACT'} | HELD |
+| int4nf | int4.gemv -> int4.gemv | EXACT | {'16': 'EXACT', '17': 'EXACT', '160': 'EXACT'} | HELD |
+| int4 | int4.gemv -> int4.deq_bf16 | PRECISION | {'16': 'PRECISION', '17': 'PRECISION', '160': 'PRECISION'} | HELD |
+| int4nf | int4.gemv -> int4.deq_bf16 | PRECISION | {'16': 'PRECISION', '17': 'PRECISION', '160': 'PRECISION'} | HELD |
+| int4 | int4.gemv -> int4.grouped_gemm | REORDER | {'16': 'REORDER', '17': 'REORDER', '160': 'REORDER'} | HELD |
+| int4nf | int4.gemv -> int4.grouped_gemm | REORDER | {'16': 'REORDER', '17': 'REORDER', '160': 'REORDER'} | HELD |
+| nf4 | nf4.dotpad -> nf4.dotpad | EXACT | {'16': 'EXACT', '17': 'EXACT', '160': 'EXACT'} | HELD |
+| nf4 | nf4.dotpad -> nf4.mtile | PRECISION | {'16': 'PRECISION', '17': 'PRECISION', '160': 'PRECISION'} | HELD |
+| nf4 | nf4.gemv_scalar[dotpad=0] -> nf4.gemv_scalar[dotpad=0] | REORDER | {'16': 'REORDER', '17': 'REORDER', '160': 'REORDER'} | HELD |
+
+## P2 — module replay (same bytes in)
+| stack | sub-arm | module | predicted | observed | modules exact | verdict |
+|---|---|---|---|---|---|---|
+| int4 | hf.default | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| int4 | hf.device | experts | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': '48/48 exact', '17': '48/48 exact', '160': '0/48 exact'} | HELD |
+| int4 | hf.singleton | experts | {'16': 'EXACT', '17': 'EXACT', '160': 'EXACT'} | {'16': 'EXACT', '17': 'EXACT', '160': 'EXACT'} | {'16': '48/48 exact', '17': '48/48 exact', '160': '48/48 exact'} | HELD |
+| int4 | hf.combine0 | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| int4 | paged.default | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| int4 | paged.device | experts | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': '48/48 exact', '17': '48/48 exact', '160': '0/48 exact'} | HELD |
+| int4 | hf.default | attn | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/96 exact', '17': '0/96 exact', '160': '0/96 exact'} | HELD |
+| int4 | hf.default | lm_head | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/1 exact', '17': '0/1 exact', '160': '0/1 exact'} | HELD |
+| int4 | hf.default | router | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| int4 | hf.default | input_layernorm | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': '48/48 exact', '17': '48/48 exact', '160': '0/48 exact'} | HELD |
+| int4nf | hf.default | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| int4nf | hf.device | experts | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': '48/48 exact', '17': '48/48 exact', '160': '0/48 exact'} | HELD |
+| int4nf | paged.device | experts | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': 'EXACT', '17': 'EXACT', '160': 'NOT'} | {'16': '48/48 exact', '17': '48/48 exact', '160': '0/48 exact'} | HELD |
+| int4nf | hf.default | attn | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/96 exact', '17': '0/96 exact', '160': '0/96 exact'} | HELD |
+| int4nf | hf.default | lm_head | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/1 exact', '17': '0/1 exact', '160': '0/1 exact'} | HELD |
+| nf4 | hf.default | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| nf4 | hf.singleton | experts | {'16': 'EXACT', '17': 'EXACT', '160': 'EXACT'} | {'16': 'EXACT', '17': 'EXACT', '160': 'EXACT'} | {'16': '48/48 exact', '17': '48/48 exact', '160': '48/48 exact'} | HELD |
+| nf4 | hf.device | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| nf4 | hf.combine0 | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| nf4 | hf.singleton.dotpad0 | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| nf4 | paged.default | experts | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/48 exact', '17': '0/48 exact', '160': '0/48 exact'} | HELD |
+| nf4 | hf.default | attn | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/192 exact', '17': '0/192 exact', '160': '0/192 exact'} | HELD |
+| nf4 | hf.default | lm_head | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': 'NOT', '17': 'NOT', '160': 'NOT'} | {'16': '0/1 exact', '17': '0/1 exact', '1fma_attribution: written
