@@ -1,0 +1,27 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 2931.03it/s]
+[01:25:17]   checkpoint: allenai/OLMoE-1B-7B-0924 @ 6d84c48581ece794365f2b8e9cfb043c68ade9c5 (requested main, unpinned)
+[01:25:17]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[01:25:17]   quantized experts on 16/16 MoE layers (64 experts each)
+[01:25:17]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[01:25:28]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[01:25:35]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 4027.82it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+INT4EXP loading licensed artifact: /root/p64/artifact1 sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c
+INT4EXP licensed artifact sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c installed on 16 layers
+INT4EXP enabled: 16 layers (model_type=olmoe)
+ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 2 batches of c4; model_type=olmoe)
+P64BUILD {"moe_layers": 16, "top_k": 8, "int4_expert_layers": 16, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 64, "fuse_t1_glue_n": 65, "fuse_t1_glue_r2_n": [16, 0], "fuse_router_epilogue_n": 16, "build_s": 115.5, "attn_pack_sha256": "sha256:fc85934341c9ce34ae554a70bbd3e078bd2bea7efb15b74edc69b3b78059cfcf"}
+P64PASS {"pass": "a8", "text": "wikitext", "engaged_as_registered": true, "wall_s": 130.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a16", "text": "wikitext", "engaged_as_registered": true, "wall_s": 357.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8", "text": "c4val1", "engaged_as_registered": true, "wall_s": 123.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a16", "text": "c4val1", "engaged_as_registered": true, "wall_s": 356.1, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_rep", "text": "wikitext", "engaged_as_registered": true, "wall_s": 123.4, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_rep", "text": "c4val1", "engaged_as_registered": true, "wall_s": 125.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_pc64", "text": "wikitext", "engaged_as_registered": true, "wall_s": 167.8, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_pc64", "text": "c4val1", "engaged_as_registered": true, "wall_s": 169.4, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a16_all", "text": "wikitext", "engaged_as_registered": true, "wall_s": 357.3, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 0}}
+P64PASS {"pass": "a16_all", "text": "c4val1", "engaged_as_registered": true, "wall_s": 365.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 524288, "attn_quant_decode": 0}}
+P64PASS {"pass": "a8_pc384", "text": "wikitext", "engaged_as_registered": true, "wall_s": 111.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}
+P64PASS {"pass": "a8_pc384", "text": "c4val1", "engaged_as_registered": true, "wall_s": 109.9, "decode_steps": 2048, "counts": {"expert_quant_decode": 65536, "expert_dequant_decode": 0, "attn_quant_decode": 131072}}

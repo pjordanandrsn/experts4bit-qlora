@@ -1,0 +1,687 @@
+{
+ "rehearsal": true,
+ "pack": {
+  "fingerprint": "sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c",
+  "licensed_fingerprint": "none",
+  "licensed": false
+ },
+ "build": {
+  "moe_layers": 16,
+  "top_k": 8,
+  "int4_expert_layers": 16,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 64,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   16,
+   0
+  ],
+  "fuse_router_epilogue_n": 16,
+  "attn_pack_sha256": "sha256:fc85934341c9ce34ae554a70bbd3e078bd2bea7efb15b74edc69b3b78059cfcf"
+ },
+ "texts": {
+  "wikitext": {
+   "passes": {
+    "a8": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 130.1,
+     "s_per_step": 0.06352,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 357.0,
+     "s_per_step": 0.1743,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16_all": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 0
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 0
+     },
+     "wall_s": 357.3,
+     "s_per_step": 0.17448,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a8_rep": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 123.4,
+     "s_per_step": 0.06023,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a8_pc64": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 167.8,
+     "s_per_step": 0.08193,
+     "rows": 16,
+     "prefill_chunk": 64
+    },
+    "a8_pc384": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 111.2,
+     "s_per_step": 0.05429,
+     "rows": 16,
+     "prefill_chunk": 384
+    },
+    "nf4": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 0
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 0
+     },
+     "wall_s": 93.2,
+     "s_per_step": 0.04552,
+     "rows": 16,
+     "prefill_chunk": 128
+    }
+   },
+   "pairs": {
+    "G_exp": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0017353295892172894,
+     "kl_median": 0.0006819287155669014,
+     "kl_p95": 0.006784908812769564,
+     "kl_max_per_token": 0.09386724653311412,
+     "top1_agreement": 0.984375,
+     "exactly_zero": false
+    },
+    "G_all": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0017336186538208708,
+     "kl_median": 0.0006577571620121031,
+     "kl_p95": 0.00631674795617382,
+     "kl_max_per_token": 0.12752850924307163,
+     "top1_agreement": 0.9833984375,
+     "exactly_zero": false
+    },
+    "G_attn": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.001521781077220074,
+     "kl_median": 0.0005920461544520346,
+     "kl_p95": 0.005452024300266182,
+     "kl_max_per_token": 0.11660623787340937,
+     "top1_agreement": 0.986328125,
+     "exactly_zero": false
+    },
+    "F_pc64": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0019374035412527749,
+     "kl_median": 0.0008755803633386317,
+     "kl_p95": 0.0069651311913075265,
+     "kl_max_per_token": 0.09508955733176074,
+     "top1_agreement": 0.98291015625,
+     "exactly_zero": false
+    },
+    "F_pc384": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0020417866319378678,
+     "kl_median": 0.0008586567774669191,
+     "kl_p95": 0.007561860335519471,
+     "kl_max_per_token": 0.147945981493051,
+     "top1_agreement": 0.97900390625,
+     "exactly_zero": false
+    },
+    "determinism": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    },
+    "anchor_a8": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.06974253807632819,
+     "kl_median": 0.03987677498726366,
+     "kl_p95": 0.2317365649719472,
+     "kl_max_per_token": 1.9123628120276082,
+     "top1_agreement": 0.880859375,
+     "exactly_zero": false
+    },
+    "anchor_a16": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.06900667136628445,
+     "kl_median": 0.039808187065458384,
+     "kl_p95": 0.22380588687324382,
+     "kl_max_per_token": 1.7947649682097209,
+     "top1_agreement": 0.8818359375,
+     "exactly_zero": false
+    },
+    "anchor_a16_all": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.06856878067739511,
+     "kl_median": 0.04022910746605351,
+     "kl_p95": 0.22705293412242927,
+     "kl_max_per_token": 1.6398564646987903,
+     "top1_agreement": 0.88232421875,
+     "exactly_zero": false
+    }
+   },
+   "nll": {
+    "a8": 2.0402021505625068,
+    "a16": 2.0390239505851993,
+    "a16_all": 2.0378199253495506,
+    "a8_rep": 2.0402021505625068,
+    "a8_pc64": 2.0369257069348916,
+    "a8_pc384": 2.038477909960231,
+    "nf4": 1.9983776618706717
+   },
+   "prefill_last_identical": {
+    "a16": true,
+    "a16_all": true,
+    "a8_rep": true
+   },
+   "floor": {
+    "F": 0.0019895950865953214,
+    "source": "in-lane (mean of the measured floor pairs)",
+    "samples": [
+     0.0019374035412527749,
+     0.0020417866319378678
+    ],
+    "F_NLL": 0.002500342114945431
+   },
+   "stats": {
+    "G_exp": {
+     "G": 0.0017353295892172894,
+     "top1": 0.984375,
+     "ratio_to_floor": 0.8722023897771372,
+     "class": "BELOW FLOOR",
+     "dNLL": 0.0011781999773076979,
+     "dNLL_ci95": [
+      -0.0020929525800338637,
+      0.004325125849958089
+     ],
+     "F_NLL": 0.002500342114945431,
+     "material": false
+    },
+    "G_all": {
+     "G": 0.0017336186538208708,
+     "top1": 0.9833984375,
+     "ratio_to_floor": 0.8713424482704729,
+     "class": "BELOW FLOOR",
+     "dNLL": 0.0023822252129561683,
+     "dNLL_ci95": [
+      -0.00021081224201039659,
+      0.005253272785014154
+     ],
+     "F_NLL": 0.002500342114945431,
+     "material": false
+    },
+    "G_attn": {
+     "G": 0.001521781077220074,
+     "top1": 0.986328125,
+     "ratio_to_floor": 0.7648697403169654,
+     "class": "BELOW FLOOR",
+     "dNLL": 0.0012040252356484704,
+     "dNLL_ci95": [
+      -0.0007562377658809849,
+      0.0031738458438723143
+     ],
+     "F_NLL": 0.002500342114945431,
+     "material": false
+    }
+   }
+  },
+  "c4val1": {
+   "passes": {
+    "a8": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 123.2,
+     "s_per_step": 0.06014,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 356.1,
+     "s_per_step": 0.1739,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a16_all": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 0
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 524288,
+      "attn_quant_decode": 0
+     },
+     "wall_s": 365.0,
+     "s_per_step": 0.17823,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a8_rep": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 125.0,
+     "s_per_step": 0.06102,
+     "rows": 16,
+     "prefill_chunk": 128
+    },
+    "a8_pc64": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 169.4,
+     "s_per_step": 0.08272,
+     "rows": 16,
+     "prefill_chunk": 64
+    },
+    "a8_pc384": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "expected": {
+      "expert_quant_decode": 65536,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 131072
+     },
+     "wall_s": 109.9,
+     "s_per_step": 0.05368,
+     "rows": 16,
+     "prefill_chunk": 384
+    },
+    "nf4": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 0
+     },
+     "expected": {
+      "expert_quant_decode": 0,
+      "expert_dequant_decode": 0,
+      "attn_quant_decode": 0
+     },
+     "wall_s": 84.1,
+     "s_per_step": 0.04109,
+     "rows": 16,
+     "prefill_chunk": 128
+    }
+   },
+   "pairs": {
+    "G_exp": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.00154967951252034,
+     "kl_median": 0.0007106873357354191,
+     "kl_p95": 0.005785772801307422,
+     "kl_max_per_token": 0.043060173166037545,
+     "top1_agreement": 0.98193359375,
+     "exactly_zero": false
+    },
+    "G_all": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0017242874668851635,
+     "kl_median": 0.0008044695234865444,
+     "kl_p95": 0.006555472329940377,
+     "kl_max_per_token": 0.0671226848541447,
+     "top1_agreement": 0.98486328125,
+     "exactly_zero": false
+    },
+    "G_attn": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0013648741720313526,
+     "kl_median": 0.0006033421742454251,
+     "kl_p95": 0.005165102813677274,
+     "kl_max_per_token": 0.04040347671854917,
+     "top1_agreement": 0.98095703125,
+     "exactly_zero": false
+    },
+    "F_pc64": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0017807941802179365,
+     "kl_median": 0.0009031404754723648,
+     "kl_p95": 0.006245698986036993,
+     "kl_max_per_token": 0.06296119395493985,
+     "top1_agreement": 0.9794921875,
+     "exactly_zero": false
+    },
+    "F_pc384": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0019406364397270416,
+     "kl_median": 0.000943741605046699,
+     "kl_p95": 0.0067016717979163495,
+     "kl_max_per_token": 0.0608063918779408,
+     "top1_agreement": 0.98388671875,
+     "exactly_zero": false
+    },
+    "determinism": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    },
+    "anchor_a8": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.06186726267815859,
+     "kl_median": 0.037200984082083596,
+     "kl_p95": 0.1851675773577912,
+     "kl_max_per_token": 1.8065460239707145,
+     "top1_agreement": 0.86767578125,
+     "exactly_zero": false
+    },
+    "anchor_a16": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.061617908713915454,
+     "kl_median": 0.03718692032881448,
+     "kl_p95": 0.18883876205214076,
+     "kl_max_per_token": 1.7490357113978936,
+     "top1_agreement": 0.8681640625,
+     "exactly_zero": false
+    },
+    "anchor_a16_all": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 16,
+     "n_tokens_scored": 2048,
+     "kl_mean": 0.0617550097214744,
+     "kl_median": 0.037723827495351886,
+     "kl_p95": 0.1838555752637072,
+     "kl_max_per_token": 1.8764507557373276,
+     "top1_agreement": 0.869140625,
+     "exactly_zero": false
+    }
+   },
+   "nll": {
+    "a8": 2.6109109580056824,
+    "a16": 2.6116800185724305,
+    "a16_all": 2.6110780565420555,
+    "a8_rep": 2.6109109580056824,
+    "a8_pc64": 2.611713211598571,
+    "a8_pc384": 2.6091331500007287,
+    "nf4": 2.5914215467010804
+   },
+   "prefill_last_identical": {
+    "a16": true,
+    "a16_all": true,
+    "a8_rep": true
+   },
+   "floor": {
+    "F": 0.001860715309972489,
+    "source": "in-lane (mean of the measured floor pairs)",
+    "samples": [
+     0.0017807941802179365,
+     0.0019406364397270416
+    ],
+    "F_NLL": 0.0012900307989212045
+   },
+   "stats": {
+    "G_exp": {
+     "G": 0.00154967951252034,
+     "top1": 0.98193359375,
+     "ratio_to_floor": 0.8328407382982473,
+     "class": "BELOW FLOOR",
+     "dNLL": -0.0007690605667479145,
+     "dNLL_ci95": [
+      -0.003574042101816037,
+      0.0018472368448495652
+     ],
+     "F_NLL": 0.0012900307989212045,
+     "material": false
+    },
+    "G_all": {
+     "G": 0.0017242874668851635,
+     "top1": 0.98486328125,
+     "ratio_to_floor": 0.9266798943631293,
+     "class": "BELOW FLOOR",
+     "dNLL": -0.00016709853637297822,
+     "dNLL_ci95": [
+      -0.0025809678475506733,
+      0.0021278247458121962
+     ],
+     "F_NLL": 0.0012900307989212045,
+     "material": false
+    },
+    "G_attn": {
+     "G": 0.0013648741720313526,
+     "top1": 0.98095703125,
+     "ratio_to_floor": 0.7335212241853013,
+     "class": "BELOW FLOOR",
+     "dNLL": 0.0006019620303749362,
+     "dNLL_ci95": [
+      -0.001334837400186125,
+      0.0026577349514964746
+     ],
+     "F_NLL": 0.0012900307989212045,
+     "material": false
+    }
+   }
+  }
+ },
+ "validity": {
+  "status": "VALID",
+  "determinism": true,
+  "prefill_last": true,
+  "engagement": true,
+  "same_prompts": true,
+  "problems": []
+ },
+ "verdicts": {
+  "G_exp": "INDISTINGUISHABLE",
+  "G_all": "INDISTINGUISHABLE",
+  "G_attn": "INDISTINGUISHABLE"
+ }
+}

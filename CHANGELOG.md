@@ -27,6 +27,36 @@
 
 ## Unreleased
 
+### `E4B_INT4_DECODE_A16`: bf16 activations at T = 1 on the int4 expert store, as a quality instrument; lane P64 registered (#709)
+
+- **The flag.** `E4B_INT4_DECODE_A16=1` (default off; `hot_residency.DECODE_A16`, the `FORCE_SINGLETON_GROUPS`
+  pattern) routes the int4-b32 store's singleton-groups calls through the prefill branch. That is T = 1 decode in
+  every default configuration. Each routed expert is dequantised and bf16-matmul'd over the same int4 bytes, and
+  `quant_x_rows` is not called. There is no new kernel.
+  - **Not covered:** the device-grouped batched-decode routes and the MXFP4 store.
+  - **Eager only:** under CUDA-graph capture it refuses with a sentence, because the dequant loop reads the expert
+    ids on the host.
+  - **Off:** behaviour is unchanged.
+- **Tests.** `tests/test_int4_decode_a16.py` pins both states on CPU with the int4 kernels stubbed: T = 1 is the
+  GEMV on int8 activations when off, and the prefill branch bit for bit when on. It also pins that T > 1 is
+  untouched, that the device-grouped route is not covered, and the capture refusal.
+- **Lane P64** (`bench/p64/`: pre-registration, `kl_a16.py`, `p64_reduce.py`, `p64_run.sh`, `p64_drive.sh`,
+  `staged.sha256`; `tests/test_p64_staged_pin.py`, `tests/test_p64_reduce.py`).
+  - **What it reads:** the decode-scored KL A/B of that step on Qwen3-30B-A3B's licensed int4 stack, at B = 1, on
+    wikitext and c4val1. The scorer is P59's, one row at a time. The floor is the arithmetic-order floor measured in
+    the same instrument.
+  - **The proving rental:** `P64_PROVE=1` is the proving mode the compute rule asks for before a guard over 1 h.
+    It runs the install, tripwire, self-test, K0, `kl_a16.py --prove-flag` (the flag on the card's real kernels)
+    and an egress probe, with no model and no pack.
+  - **What was run:** the whole runner was rehearsed on the NAS RTX A2000 on OLMoE, rc 0, validity VALID, with
+    every pass's counts exactly as registered. It is in `bench/p64/rehearsal-a2000/`, NOT a reading.
+  - **What the rehearsal fixed:** the runner gates the pack on `verify_artifact`, not on the build process's exit
+    code (a failed K8 cross-check had discarded a complete pack), and the proving run's egress probe is python (the
+    image has no `curl`). No box was rented.
+- **A correction to #709's premise, in the pre-registration.** P59's B = 16 KL never ran the int8 step on the
+  experts. Its scorer leaves `DEVICE_GROUPING` off, so T = 16 decode takes the host-grouped dequant + bf16 branch.
+  The timed B = 16 arms run the device-grouped GEMV on int8 activations.
+
 ### P65 Amendment 1: a proof records the reading-only host floors instead of refusing on them (#710; a lane change, no library change)
 
 - **Three proving draws, none reached the install.** The first box missed the host scale-and-add floor, 0.152 s against 0.15 s. The second was a launcher refusal: I named the first receipt in the wrong exclusion class. The third missed the egress floor, 97.8 MB/s against 100. That spent $0.1009 of the registration's $0.15 proof budget. Those floors exist for the reading's Mixtral census. The proof's box is not the reading's box, and the proof never runs Mixtral.

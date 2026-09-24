@@ -1,0 +1,36 @@
+{
+ "pass": "nf4",
+ "text": "wikitext",
+ "expert_a16": false,
+ "attn_a16": false,
+ "prefill_chunk": 128,
+ "prefix": 384,
+ "rows": 16,
+ "decode_steps": 2048,
+ "toggle_state_during_pass": {
+  "DECODE_A16": false,
+  "GEMV_ROWS_MAX": 1,
+  "SMALLM_ROWS_MAX": 16
+ },
+ "counts": {
+  "forwards_decode": 2048,
+  "forwards_prefill": 48
+ },
+ "expected_decode_counts": {
+  "expert_quant_decode": 0,
+  "expert_dequant_decode": 0,
+  "attn_quant_decode": 0
+ },
+ "engaged_as_registered": true,
+ "wall_s": 93.2,
+ "s_per_decode_step_incl_prefill": 0.04552,
+ "prompts_sha256": "3b73a2c857d91f73bb63e9aa9b32f06e017fabd1573a42a118237b97487b17ae",
+ "stored_dtype": "torch.bfloat16",
+ "decode_logits_shape": [
+  16,
+  128,
+  50304
+ ],
+ "source": "wikitext-2-raw-v1 test via step_decomp._k8_window",
+ "attn_pack_sha256": null
+}

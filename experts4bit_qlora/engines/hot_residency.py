@@ -48,6 +48,24 @@ FORCE_SINGLETON_GROUPS = [False]
 DEVICE_GROUPING = [False]
 
 
+def _decode_a16_default() -> bool:
+    """``E4B_INT4_DECODE_A16=1`` (lane P64, e4b#709): the default of
+    :data:`DECODE_A16`, read once at import."""
+    return os.environ.get("E4B_INT4_DECODE_A16", "0") == "1"
+
+
+# P64 (e4b#709): a QUALITY INSTRUMENT, off by default. When set, the int4-b32
+# store's singleton-groups calls -- T == 1 decode in every default
+# configuration, which would otherwise run gemv_int4_b32 on quant_x_rows'
+# int8 activations -- take the prefill branch instead: dequant each routed
+# expert, bf16 matmul. Same int4 bytes, bf16 activations, no new kernel. The
+# device-grouped batched-decode routes and the MXFP4 store are NOT covered.
+# The dequant loop reads the expert ids on the host, so the flag is
+# eager-only (it refuses under CUDA-graph capture) and slower. The
+# environment sets the default at import; a harness may flip it in-process.
+DECODE_A16 = [_decode_a16_default()]
+
+
 #: Rows up to which the MXFP4 store's decode GEMV beats the alternatives
 #: (bo3n: x1.22 over NF4 at 4 rows, x0.81 at 64); above it the NF4 stacks,
 #: when kept, serve the call.
@@ -392,7 +410,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 return gemm_int4_b32_grouped_captured(
                     xq, xs, st["packed"], st["scales"],
                     t_row0, t_rows, t_grp)
-        elif singleton_groups:
+        elif singleton_groups and not DECODE_A16[0]:
             # decode: the int4-b32 grouped GEMV -- measured 2.7-3.3x
             # over the NF4 path at the census cells, grid +0.007 ppl
             from int4_b32 import gemv_int4_b32, quant_x_rows
@@ -410,6 +428,16 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             # routed expert once and matmul -- the winning regime per
             # the fused/dequant crossover, paid once per request. The
             # host loop over ~E_active groups is prefill-frequency.
+            # Under DECODE_A16 (P64) the singleton decode rows land here
+            # too, one row per group: bf16 activations, no quant_x_rows.
+            if (singleton_groups and x_rows.is_cuda
+                    and torch.cuda.is_current_stream_capturing()):
+                raise RuntimeError(
+                    "E4B_INT4_DECODE_A16=1 routes decode through the "
+                    "prefill branch, which reads the expert ids on the "
+                    "host -- illegal under CUDA-graph capture. The flag "
+                    "is an eager-only quality instrument; unset it for "
+                    "a graphed decode.")
             from int4_pack_ref import dequant_int4_ref
             eids_l = (eids.tolist() if torch.is_tensor(eids) else list(eids))
             row0 = [0]

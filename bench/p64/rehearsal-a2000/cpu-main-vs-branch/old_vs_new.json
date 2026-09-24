@@ -1,0 +1,236 @@
+{
+ "all_equal_and_same_calls": true,
+ "n_cases": 25,
+ "cases": [
+  {
+   "route": "int4 T=1 singleton (trial 0)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "int4 T>1 host-grouped prefill (trial 0)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": []
+  },
+  {
+   "route": "int4 batched decode GEMV, device grouping <=256 rows (trial 0)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "NF4 grouped (trial 0)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "NF4 singleton (trial 0)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "int4 T=1 singleton (trial 1)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "int4 T>1 host-grouped prefill (trial 1)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": []
+  },
+  {
+   "route": "int4 batched decode GEMV, device grouping <=256 rows (trial 1)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "NF4 grouped (trial 1)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "NF4 singleton (trial 1)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "int4 T=1 singleton (trial 2)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "int4 T>1 host-grouped prefill (trial 2)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": []
+  },
+  {
+   "route": "int4 batched decode GEMV, device grouping <=256 rows (trial 2)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "NF4 grouped (trial 2)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "NF4 singleton (trial 2)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "int4 T=1 singleton (trial 3)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "int4 T>1 host-grouped prefill (trial 3)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": []
+  },
+  {
+   "route": "int4 batched decode GEMV, device grouping <=256 rows (trial 3)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "NF4 grouped (trial 3)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "NF4 singleton (trial 3)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "int4 T=1 singleton (trial 4)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "int4 T>1 host-grouped prefill (trial 4)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": []
+  },
+  {
+   "route": "int4 batched decode GEMV, device grouping <=256 rows (trial 4)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "quant",
+    "gemv",
+    "quant",
+    "gemv"
+   ]
+  },
+  {
+   "route": "NF4 grouped (trial 4)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  },
+  {
+   "route": "NF4 singleton (trial 4)",
+   "equal": true,
+   "calls_equal": true,
+   "calls": [
+    "nf4",
+    "nf4"
+   ]
+  }
+ ]
+}

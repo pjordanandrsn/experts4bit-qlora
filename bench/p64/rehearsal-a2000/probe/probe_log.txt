@@ -1,0 +1,17 @@
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+[01:17:55]   checkpoint: allenai/OLMoE-1B-7B-0924 @ 6d84c48581ece794365f2b8e9cfb043c68ade9c5 (requested main, unpinned)
+[01:17:55]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[01:17:55]   quantized experts on 16/16 MoE layers (64 experts each)
+[01:17:55]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[01:18:04]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[01:18:14]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+INT4EXP enabled: 16 layers (model_type=olmoe)
+ATTNINT4 rtn: 64 projections (uncalibrated; model_type=olmoe)
+{
+ "P59_scorer_experts_int8_quantises_at_decode": 0,
+ "P59_scorer_experts_dequants_at_decode": 13484,
+ "P59_scorer_attention_int8_quantises_at_decode": 0,
+ "timed_route_experts_int8_quantises_at_decode": 256,
+ "timed_route_expected_expert_quantises": 256,
+ "note": "L=16 MoE layers, top_k=8; one decode forward = 16 rows"
+}

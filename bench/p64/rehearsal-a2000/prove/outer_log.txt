@@ -1,0 +1,24 @@
+KNOBS model=allenai/OLMoE-1B-7B-0924 rev=6d84c48581ece794365f2b8e9cfb043c68ade9c5 licensed_fp=none gpu_class=A2000 min_disk_gb=30 calib_nseq=8 hessian_budget_gb=2 build_ppl_steps=16 build_via=step_decomp rows=16 skip_install=1
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          68          41           0          16          55
+zpool1/zfs22    691G  457G  235G  67% /root/p64
+[2026-09-24T01:24:02Z] p64: install SKIPPED (P64_SKIP_INSTALL=1): the importable packages are whatever the environment provides -- recorded below
+tripwire OK: e4b 0.37.2 gnf4 0.33.0 torch 2.8.0+cu128 triton 3.4.0
+e4b 0.37.2 @f2854d9df143383605ab180c3c2966c511d69537 (from /src/e4b/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /w/pyenv/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+K0 all_passed kl-fidelity/1.0.0
+PROVE -- the proving run: no model, no pack, no KL row
+[2026-09-24T01:24:19Z] p64: PROVE: the flag on this card's real kernels (kl_a16.py --prove-flag)
+PROVEFLAG {"gpu": "NVIDIA RTX A2000 12GB", "all_passed": true, "on_equals_prefill_branch": true, "on_refuses_under_capture": true, "off_captures_and_replays_equal": true, "off_rel_err_vs_fp64_of_same_int4": 0.012237332689067704, "on_rel_err_vs_fp64_of_same_int4": 0.0045993964677562916}
+[2026-09-24T01:24:28Z] p64: PROVE: HF CDN egress probe (50 MB range, 20 s cap; recorded, not a refusal)
+PROVE hf_cdn_mbps=53.2 bytes=52428800
+[2026-09-24T01:24:29Z] p64: TP_DONE rc=0

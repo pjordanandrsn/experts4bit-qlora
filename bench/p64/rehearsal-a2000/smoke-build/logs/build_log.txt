@@ -1,0 +1,131 @@
+P64 build via=step_decomp at=2026-09-23T20:59:19Z
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1379.25it/s]
+[20:59:28]   checkpoint: allenai/OLMoE-1B-7B-0924 @ 6d84c48581ece794365f2b8e9cfb043c68ade9c5 (requested main, unpinned)
+[20:59:28]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[20:59:28]   quantized experts on 16/16 MoE layers (64 experts each)
+[20:59:28]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:59:31]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[21:01:04]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 2294.76it/s]
+INT4EXP calibrating (streamed): 2 batches of c4 budget GB 2 assignment recipe dump /root/p64/artifact1
+INT4EXP calibration order: layers_per_pass = 10
+INT4EXP calibrated experts: 1280 gptq / 0 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 768 gptq / 0 rtn (min_rows=32) over 6 layers
+INT4EXP calibrated streaming: 16 layers in 2 passes of <= 10 layer(s)
+INT4EXP enabled: 16 layers (model_type=olmoe)
+ATTNINT4 calibrated: 64 projections (attn=1 head=0 dense=0; hessians from 2 batches of c4; model_type=olmoe)
+Traceback (most recent call last):
+  File "/opt/conda/lib/python3.11/site-packages/triton/language/core.py", line 42, in wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/language/core.py", line 1131, in to
+    return cast(self, dtype, fp_downcast_rounding, bitcast, _semantic=_semantic)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/language/core.py", line 42, in wrapper
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/language/core.py", line 2002, in cast
+    return _semantic.cast(input, dtype, fp_downcast_rounding)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/language/semantic.py", line 824, in cast
+    self.builder.create_fp_to_fp(input.handle, dst_ty.to_ir(self.builder), fp_downcast_rounding), dst_ty)
+                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/language/core.py", line 730, in to_ir
+    return builder.get_block_ty(self.element_ty.to_ir(builder), self.shape)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/language/core.py", line 593, in to_ir
+    raise ValueError(f'type {self} not supported in this architecture. '
+ValueError: type fp8e4nv not supported in this architecture. The supported fp8 dtypes are ('fp8e4b15', 'fp8e5')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/p64/step_decomp.py", line 3529, in <module>
+    main()
+  File "/root/p64/step_decomp.py", line 3232, in main
+    _b1d_stage_a(a, model, runner, sched, kv,
+  File "/root/p64/step_decomp.py", line 1641, in _b1d_stage_a
+    out = model(input_ids=in_ids, position_ids=pos,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/w/pyenv/transformers/utils/generic.py", line 939, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/w/pyenv/transformers/models/olmoe/modeling_olmoe.py", line 642, in forward
+    outputs: MoeModelOutputWithPast = self.model(
+                                      ^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/w/pyenv/transformers/utils/generic.py", line 1068, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/w/pyenv/transformers/utils/output_capturing.py", line 262, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/w/pyenv/transformers/models/olmoe/modeling_olmoe.py", line 492, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "/w/pyenv/transformers/modeling_layers.py", line 114, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/src/e4b/experts4bit_qlora/engines/glue_r2.py", line 217, in _fwd
+    hidden_states, _ = _m.self_attn(
+                       ^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/w/pyenv/transformers/models/olmoe/modeling_olmoe.py", line 271, in forward
+    attn_output, attn_weights = attention_interface(
+                                ^^^^^^^^^^^^^^^^^^^^
+  File "/src/e4b/experts4bit_qlora/engines/paged_attention.py", line 187, in paged_attention_forward
+    ctx.kv.append_graph_t1(
+  File "/src/e4b/experts4bit_qlora/engines/fp8_paged_kv.py", line 673, in append_graph_t1
+    fp8_kv_append_t1(v, self._g_vflat[layer],
+  File "/w/pyenv/fp8_kv.py", line 299, in fp8_kv_append_t1
+    _fp8_append_t1_side[(H,)](
+  File "/opt/conda/lib/python3.11/site-packages/triton/runtime/jit.py", line 390, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/runtime/jit.py", line 594, in run
+    kernel = self.compile(src, target=target, options=options.__dict__)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/compiler/compiler.py", line 339, in compile
+    module = src.make_ir(options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/triton/compiler/compiler.py", line 83, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 31:12:
+    # int64 BEFORE any byte product: row * row_bytes overflows int32
+    # on multi-GiB arenas (the nf4_grouped lesson).
+    row = tl.load(tbl_ptr + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + h * D
+    sc = (row * row_bytes + pay_bytes
+          + (fill * (H * GROUPS) + h * GROUPS) * 4)
+    for g in tl.static_range(GROUPS):
+        offs = tl.arange(0, GS)
+        x = tl.load(x_ptr + h * D + g * GS + offs).to(tl.float32)
+        amax = tl.max(tl.abs(x), axis=0)
+        scale = tl.where(amax > 0, amax / E4M3_MAX, 1.0)
+        q = (x / scale).to(tl.float8e4nv).to(tl.uint8, bitcast=True)
+            ^

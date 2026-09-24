@@ -1,0 +1,36 @@
+{
+ "pass": "nf4",
+ "text": "c4val1",
+ "expert_a16": false,
+ "attn_a16": false,
+ "prefill_chunk": 128,
+ "prefix": 384,
+ "rows": 16,
+ "decode_steps": 2048,
+ "toggle_state_during_pass": {
+  "DECODE_A16": false,
+  "GEMV_ROWS_MAX": 1,
+  "SMALLM_ROWS_MAX": 16
+ },
+ "counts": {
+  "forwards_decode": 2048,
+  "forwards_prefill": 48
+ },
+ "expected_decode_counts": {
+  "expert_quant_decode": 0,
+  "expert_dequant_decode": 0,
+  "attn_quant_decode": 0
+ },
+ "engaged_as_registered": true,
+ "wall_s": 84.1,
+ "s_per_decode_step_incl_prefill": 0.04109,
+ "prompts_sha256": "bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9",
+ "stored_dtype": "torch.bfloat16",
+ "decode_logits_shape": [
+  16,
+  128,
+  50304
+ ],
+ "source": "allenai/c4 en/c4-validation.00001-of-00008 (first 2000 docs) via step_decomp._k8_window",
+ "attn_pack_sha256": null
+}
