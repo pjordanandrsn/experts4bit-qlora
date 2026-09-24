@@ -20,6 +20,13 @@
   buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
   triton imports) decides the same way at 26 and 170 SMs.
 
+### P65 Amendment 2: the egress floor measures the fetch's own four-stream path (#710; a lane change, no library change)
+
+- **The single-stream egress probe under-read the fetch by 2.3×.** It read 36.1 MB/s on a box whose 4-worker Granite fetch then ran at ~83.5 MB/s. It refused every box the lane drew: 97.8, 36.1 and 21.8 MB/s, the last on the first reading box.
+- **Amended.** `p65_run.sh` probes four parallel 50 MB ranges in Python, since the image has no `curl`. The floor is 80 MB/s aggregate (Mixtral ~19.5 min); the deadline logic still skips Mixtral rather than cut it. Registered in `bench/p65/P65-PREREG.md` "Amendment 2", before any reading data.
+
+## Unreleased
+
 ### P65 Amendment 1: a proof records the reading-only host floors instead of refusing on them (#710; a lane change, no library change)
 
 - **Three proving draws, none reached the install.** The first box missed the host scale-and-add floor, 0.152 s against 0.15 s. The second was a launcher refusal: I named the first receipt in the wrong exclusion class. The third missed the egress floor, 97.8 MB/s against 100. That spent $0.1009 of the registration's $0.15 proof budget. Those floors exist for the reading's Mixtral census. The proof's box is not the reading's box, and the proof never runs Mixtral.
