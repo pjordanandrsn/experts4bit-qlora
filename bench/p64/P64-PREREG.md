@@ -289,8 +289,10 @@ What follows:
 **Two rentals, in order.** The compute rule in force says a guard over 1 h needs a proving rental first (≤ $0.15,
 ≤ 10 min). This lane cannot fit 1 h: the pack build alone is ~30 min. So:
 
-1. **`p64-prove-1`, the proving rental:** one RTX 5090, **10 min guard**, ≈ 6 min expected, **≈ $0.07**
-   (hard stop $0.15). `p64_drive.sh` with `P64_PROVE=1`: the same staging, nonce handshake, class and disk
+1. **`p64-prove-1`, the proving rental:** one RTX 5090, **0.23 h guard (≈ 14 min) at ≤ $0.65/h**, ≈ 6 min of lane
+   time expected, **≈ $0.07** (≤ $0.15 at the guard). The guard is longer than the lane because launcher boot and
+   pre-flight take 3–5 min of it before the lane starts: lane P65's 10 min proofs began with 438 s and 324 s left
+   (P65-PREREG Amendment 1). The earlier proving rentals `p55x-prove` and `p56-prove` used 0.2 h for the same reason. `p64_drive.sh` with `P64_PROVE=1`: the same staging, nonce handshake, class and disk
    refusals, pinned install, tripwire, scorer self-test and K0 as the reading, then
    `kl_a16.py --prove-flag` and a 50 MB HF CDN range probe. `--prove-flag` checks the flag on the box's own sm_120
    kernels at Qwen3's expert shapes:
@@ -307,7 +309,7 @@ What follows:
 - **Box:** one RTX 5090, Vast verified/secure, image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`. No power floor:
   nothing is timed.
 - **Guard: 2.5 h**, above the 2 h default because the evidence says so. Estimate ≈ 2.0 h, **≈ $1.35 at $0.66/h**,
-  ≤ $1.65 at the guard. With the proving rental (≤ $0.11), the lane ceiling is $2 and the hard stop $3, both under
+  ≤ $1.65 at the guard. With the proving rental (≤ $0.15), the lane ceiling is $2 and the hard stop $3, both under
   the $35 cap.
 - **Timing basis for the passes:**
   - a8 at B = 1 ≈ 0.10 s per decode step: the rehearsal's a8 / nf4 ratio (1.4), and P59's served Qwen3 NF4 arm on a
