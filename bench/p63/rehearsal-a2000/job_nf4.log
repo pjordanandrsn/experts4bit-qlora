@@ -1,0 +1,13 @@
+[2026-09-24T01:08:21Z] lock taken
+NVIDIA RTX A2000 12GB, 1374 MiB, 12282 MiB, 575.64.05
+torch 2.8.0+cu128 triton 3.4.0 transformers 5.16.1 e4b 0.37.2 gnf4 0.33.2
+stack nf4 rc=0
+P63 nf4/hf.default: verify17: exact 0/68 flips 1 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 4 first-diff-layer 0 (24.1 s)
+P63 nf4/hf.singleton: verify17: exact 0/68 flips 0 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 2 first-diff-layer 0 (12.8 s)
+P63 nf4/hf.device: verify17: exact 0/68 flips 1 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 4 first-diff-layer 0 (11.5 s)
+P63 nf4/hf.combine0: verify17: exact 0/68 flips 1 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 3 first-diff-layer 0 (10.6 s)
+P63 nf4/hf.singleton.dotpad0: verify17: exact 0/68 flips 0 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 2 first-diff-layer 0 (15.0 s)
+P63 nf4/paged.default: verify17: exact 0/68 flips 2 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 4 first-diff-layer 0 (15.5 s)
+P63ARM {"stack": "nf4", "subarms_run": ["hf.default", "hf.singleton", "hf.device", "hf.combine0", "hf.singleton.dotpad0", "paged.default"], "errors": [], "refused": [], "determinism_failed": [], "census": {"int4_linear": 0, "int4_linear_k16": 0, "int4_expert_layers": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}}
+reduce rc=0
+[2026-09-24T01:10:37Z] container rc=0
