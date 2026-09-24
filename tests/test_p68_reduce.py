@@ -4,7 +4,6 @@ modes the probe registers."""
 import importlib.util
 import json
 import pathlib
-import sys
 
 import pytest
 
@@ -69,7 +68,6 @@ A = ("attn_core",)
 
 
 def test_the_prediction_tables_name_only_registered_arms_and_modes():
-    probe_spec = importlib.util.spec_from_file_location("p68_probe", REPO / "bench" / "p68" / "p68_probe.py")
     src = (REPO / "bench" / "p68" / "p68_probe.py").read_text()
     names = {a for a in ("hf.base", "hf.proj", "hf.core", "hf.proj_core", "hf.all", "hf.fp32red", "paged.base",
                          "paged.proj") if f'"name": "{a}"' in src}
