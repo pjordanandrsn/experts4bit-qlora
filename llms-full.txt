@@ -2142,13 +2142,33 @@ text** (RTN int4 experts +0.255 ppl on C4; the Qwen3 calibrated recipe
 +0.443 — worse than RTN, so OLMoE stays NF4); and **Gemma-4's served NF4
 stack is 1.08 nats/token from the bf16 checkpoint with 36 % top-1
 disagreement**, lever-independent, reproduced across three runs, where
-the same instrument reads the other four families at 0.02–0.1. That is
-a served-model defect, not a quantisation cost, filed as
-[#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597)
-with a three-arm diagnostic to pre-register; no Gemma-4 serving position
-is quoted. The per-expert error census on Granite and Mixtral
+the same instrument reads the other four families at 0.02–0.1. It was
+filed as a served-model defect
+([#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597)), and
+#597 closed 2026-09-19 the other way. Lanes P47–P51 (below) place the cost
+in the quantised model's early expert layers, not in the serving stack:
+NF4 in layer 0 alone costs 0.892 of the 1.08 nats. No Gemma-4 serving
+position is quoted. The per-expert error census on Granite and Mixtral
 (`e4b.serve.p44.census.granite-mixtral.2026-09-19`) is data for a per-expert
 fallback that is not built.
+
+Lane P65 (`bench/p65/`, 2026-09-24) asked which per-expert ranking would
+choose that fallback's experts, and whether it survives a change of
+calibration text. On Granite every ranking survives:
+- `rel_act` 0.932 cross-text Spearman;
+- Colla-Q's entropy-weighted error 0.910;
+- routing frequency 0.891.
+
+So S-C's selector there has two arms, written in
+[`SPECULATIVE_LANES_ADDENDUM_4.md`](SPECULATIVE_LANES_ADDENDUM_4.md)
+(`e4b.quality.p65.granite.selector-two-arms.5090.2026-09-24`). OLMoE and
+Mixtral have no per-expert premise, so neither gets a selector. On both,
+the entropy ranking transfers across texts better than routing frequency,
+as Colla-Q reported: +0.421 and +0.479
+(`e4b.quality.p65.collaq-stability.olmoe-mixtral.5090.2026-09-24`).
+Routing-frequency hot sets agree across the two texts at only 0.14
+(OLMoE) and 0.125 (Mixtral, chance) Jaccard. No mixed-precision cell has
+run.
 
 **Calibration does not rescue Gemma-4's experts, and the more principled
 calibration is worse** (P53, [`bench/p53/RESULTS-p53.md`](../bench/p53/RESULTS-p53.md),
@@ -3477,6 +3497,8 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p63.qwen3.int4-device-gemv.row-exact.5090.2026-09-24 [measured]: Lane P63: on the int4 expert store the DEVICE_GROUPING route is row-exact up to 256 routed rows on an RTX 5090 -- 48/48 experts modules bit-equal to T = 1 at 16 and 17 tokens (128 and 136 rows, the decode GEMV in input order) on both the HF and the paged attention backends, and 0/48 at 160 tokens (1,280 rows), where it takes the grouped int4 GEMM, reorder-class.
 - e4b.serve.p63.qwen3.nf4-singleton.row-exact.5090.2026-09-24 [measured]: Lane P63: on the NF4 expert stack the FORCE_SINGLETON_GROUPS route is row-exact on an RTX 5090 -- 48/48 experts modules bit-equal to T = 1 at 16, 17 and 160 tokens, every row on the dot-pad decode GEMV; with GNF4_GEMV_DOTPAD=0 the same route is 0/48 (the scalar GEMV plans its split-K from the rows: reorder-class).
 - e4b.serve.p64.qwen3.b1.expert-int8-step.5090.2026-09-24 [measured]: Lane P64: on the licensed int4 serving pack (sha256:0c9955a9...) at B = 1, the experts' per-32 int8 activation quantise at T = 1 decode is below Qwen3's arithmetic-order floor on both texts -- KL(bf16 activations || int8) = 0.003392 nats/token on wikitext and 0.002527 on c4val1 (top-1 0.973 / 0.972), 0.61x and 0.77x of the in-lane floor, dNLL -0.00107 / -0.00180 with both 95 % intervals spanning 0: INDISTINGUISHABLE, so W4A8 expert decode stays.
+- e4b.quality.p65.granite.selector-two-arms.5090.2026-09-24 [measured]: Lane P65 on Granite-3.1-3B-A800M: every per-expert ranking survives a wikitext -> C4 calibration-text change -- rel_act 0.932 cross-text Spearman (penalty over resampling 0.043), Colla-Q's rho x error 0.910 (0.063), activation entropy 0.882 (0.086), routing frequency 0.891 (0.093) -- and entropy is not the error metric again (within-layer rho -0.000 / -0.055), so S-C's selector on this family is TWO_ARMS (rel_act and rho x error, frequency as baseline), written in docs/SPECULATIVE_LANES_ADDENDUM_4.md; no mixed-precision cell has run.
+- e4b.quality.p65.collaq-stability.olmoe-mixtral.5090.2026-09-24 [measured]: Lane P65: Colla-Q's claim that an activation-entropy ranking of experts survives a calibration-domain change better than a routing-frequency ranking replicates on OLMoE-1B-7B-Instruct (cross-text Spearman 0.800 vs 0.380, paired difference +0.421 [0.329, 0.501]) and on Colla-Q's own Mixtral-8x7B (0.789 vs 0.310, +0.479 [0.369, 0.588]); their per-layer cosine statistic reads 0.9997 / 0.9999 and cannot see the reordering.
 
 Open items (no evidence either way):
 
@@ -3484,4 +3506,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(243 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(245 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
