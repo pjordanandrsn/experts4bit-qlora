@@ -68,7 +68,7 @@ verify16 reads the same on every arm: `hf.all` is exact 64 / 64 on both stacks.
   - **Prefill** (layer-0 `attn_core` on nf4, `attn_in` on int4): HELD.
   - **Verify** carried no prediction. With the projections forced, layer-0 attention is exact on this box on both
     stacks: the first differences are at L0 `mlp_out` and later. So on the 5090 the fp8 kernel's verify path computes
-    each row as its decode call does. (The sm_86 rehearsal read it not exact; the plan differs by SM count.)
+    each row as its decode call does. (The sm_86 rehearsal read it not exact. Why the two boxes differ was not measured.)
 - **Q6, `hf.fp32red`** (informational). Turning off torch's bf16 reduced-precision cuBLAS reduction alone leaves
   every position differing at layer-0 attention, at a KL similar to `hf.base`.
 
