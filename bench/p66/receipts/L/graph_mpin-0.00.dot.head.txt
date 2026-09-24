@@ -1,0 +1,63 @@
+digraph dot {
+subgraph cluster_13 {
+label="graph_13" graph[style="dashed"];
+"graph_13_node_0"[style="bold" shape="record" label="{KERNEL
+| {ID | 0 (topoId: 911) | _ZN2at6native29vectorized_elementwise_kernelILi2ENS0_11FillFunctorIlEESt5arrayIPcLm1EEEEviT0_T1_\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x00005607AD1A4780 | 0x000056079A59A5D0}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+
+"graph_13_node_1"[style="solid" shape="record" label="{
+MEMCPY
+| {{ID | node handle} | {1 (topoId: 910) | 0x00005607AD1A4EE8}}
+| {kind | DtoD (DEVICE to DEVICE)}
+| {{srcPtr | dstPtr} | {pitch | ptr | xsize | ysize | pitch | ptr | xsize | ysize} | {0 | 0x0000000302CF0000 | 0 | 0 | 0 | 0x0000000302C00800 | 0 | 0}}
+| {{srcPos | {{x | 0} | {y | 0} | {z | 0}}} | {dstPos | {{x | 0} | {y | 0} | {z | 0}}} | {Extent | {{Width | 32} | {Height | 1} | {Depth | 1}}}}
+}"];
+
+"graph_13_node_2"[style="bold" shape="record" label="{KERNEL
+| {ID | 2 (topoId: 909) | _ZN2at6native44_GLOBAL__N__50c743a2_11_Indexing_cu_89862edb21indexSelectSmallIndexIlljLi1ELi1ELin2EEEvNS_4cuda6detail10TensorInfoIT_T1_EENS5_IKS6_S7_EENS5_IKT0_S7_EEiiS7_l\<\<\<1,1,0\>\>\>}
+| {{node handle | func handle} | {0x00005607AD1A5650 | 0x000056079F444BA0}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+
+"graph_13_node_3"[style="bold" shape="record" label="{KERNEL
+| {ID | 3 (topoId: 908) | _ZN2at6native29vectorized_elementwise_kernelILi4ENS0_13BinaryFunctorIllbNS0_51_GLOBAL__N__28ce311f_18_CompareEQKernel_cu_d8008c9616CompareEqFunctorIlEEEESt5arrayIPcLm3EEEEviT0_T1_\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x00005607AD1A5DB8 | 0x00005607A33796C0}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+
+"graph_13_node_4"[style="bold" shape="record" label="{KERNEL
+| {ID | 4 (topoId: 907) | _ZN2at6native44_GLOBAL__N__50c743a2_11_Indexing_cu_89862edb21indexSelectSmallIndexIbljLi1ELi1ELin2EEEvNS_4cuda6detail10TensorInfoIT_T1_EENS5_IKS6_S7_EENS5_IKT0_S7_EEiiS7_l\<\<\<1,1,0\>\>\>}
+| {{node handle | func handle} | {0x00005607AD1A6C88 | 0x000056079EFDF230}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+
+"graph_13_node_5"[style="bold" shape="record" label="{KERNEL
+| {ID | 5 (topoId: 906) | _ZN2at6native29vectorized_elementwise_kernelILi4EZNS0_23bitwise_not_kernel_cudaERNS_18TensorIteratorBaseEEUlbE_St5arrayIPcLm2EEEEviT0_T1_\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x00005607AD1A73F0 | 0x00005607A4850060}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+
+"graph_13_node_6"[style="bold" shape="record" label="{KERNEL
+| {ID | 6 (topoId: 905) | _ZN2at6native29vectorized_elementwise_kernelILi4ENS0_13BinaryFunctorIbbbNS0_17BitwiseAndFunctorIbEEEESt5arrayIPcLm3EEEEviT0_T1_\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x00005607AD1A7B58 | 0x00005607A52059F0}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+
+"graph_13_node_7"[style="bold" shape="record" label="{KERNEL
+| {ID | 7 (topoId: 904) | _ZN2at6native27unrolled_elementwise_kernelIZZZNS0_23direct_copy_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE1_clEvENKUlvE2_clEvEUllE_St5arrayIPcLm2EELi4E23TrivialOffsetCalculatorILi1EjESB_NS0_6memory12LoadWithCastILi1EEENSC_13StoreWithCastILi1EEEEEviT_T0_T2_T3_T4_T5_\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x00005607AD1A82C0 | 0x00005607A5BFA7D0}}
+| {accessPoli

@@ -1,0 +1,10 @@
+[calibrate] running CPU microbench (/usr/bin/cc -O3 -march=native)...
+[calibrate] running GPU benches...
+
+calibration blob: /root/p66/calib.json
+host: AMD EPYC 7C13 64-Core Processor | 256 cpus | quota 49.152 | flags ['avx2']
+B_dram triad best :     87.1 GB/s  (16t spread nt=1)
+grouped scatter   :     60.3 GB/s  (64t, 2 MiB blocks, E=4096)
+GATE G0           : 69.2% of triad -> PROCEED-RESOLVE-AND-REPORT
+cuda:0 NVIDIA GeForce RTX 5090: triad 1568.3 GB/s | link h2d 23.07 / d2h 28.65 GB/s
+B_nvme seq best   : 5.69 GB/s (o_direct=True)

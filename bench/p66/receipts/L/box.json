@@ -1,0 +1,33 @@
+{
+ "schema": "p66-census/1",
+ "host": {
+  "platform": "Linux-5.15.0-191-generic-x86_64-with-glibc2.35",
+  "python": "3.11.13",
+  "torch": "2.8.0+cu128",
+  "triton": "3.4.0",
+  "cuda": "12.8",
+  "cpu_model": "AMD EPYC 7C13 64-Core Processor",
+  "nproc": 256,
+  "affinity": 256,
+  "cgroup_cpu_max": "4915200 100000",
+  "cgroup_memory_max": "377392988160",
+  "meminfo": "MemTotal: 858436216 kB\nMemAvailable: 727975844 kB",
+  "numa_nodes": 2,
+  "gpu": "NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, 1, 4, 16, 16, 600.00 W, 3135 MHz",
+  "sm_count": 170
+ },
+ "probes": {
+  "aten_launch_host_us": 6.422012438997626,
+  "triton_launch_host_us": 13.171569583937526,
+  "sync_idle_us": 4.573493497446179,
+  "item_roundtrip_us": 8.896808489225805,
+  "h2d_pinned_64mb_gbs": 14.716328179649139,
+  "d2d_copy_rw_gbs": 1505.8636659541642
+ },
+ "costs": {
+  "source": "calib:calib.json",
+  "b_link_gbs": 23.07,
+  "b_vram_gbs": 1568.3,
+  "b_dram_gbs": 87.14
+ }
+}

@@ -1,0 +1,7 @@
+{
+ "first_sync": {
+  "error": "RuntimeError: called a synchronizing CUDA operation",
+  "site": "hot_residency.py:738 forward: hr = hot_row.nonzero(as_tuple=False).view(-1)"
+ },
+ "capture": "AcceleratorError: CUDA error: operation failed due to a previous error during capture"
+}

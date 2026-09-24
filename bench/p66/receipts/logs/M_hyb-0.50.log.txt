@@ -1,0 +1,15 @@
+[15:31:42]   checkpoint: local directory /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[15:31:42]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[15:31:42]   quantized experts on 48/48 MoE layers (128 experts each)
+[15:31:42]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[15:31:43]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[15:31:44]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[15:31:58]   hybrid tier active on 48 module(s): vram/dram/nvme masses 0.00/0.00/0.00
+fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+TORCH_PROFILE_OUT /root/p66/M/M_hyb-0.50_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_hyb-0.50_sync.json active=12/12
+DECOMP step=324.4ms  fwd_submit=323.9 (attn_host=39.4 dram=0.0 other=284.5)  drain=0.3  sched_py=0.1
+DEVICE attn=44.51ms/step gpu_experts=0.00ms/step attn_host_us_per_call=820
+PREFILL tokens=128 wall=4022ms dram=0 gpu_dev=0
+STEP_DECOMP_DONE

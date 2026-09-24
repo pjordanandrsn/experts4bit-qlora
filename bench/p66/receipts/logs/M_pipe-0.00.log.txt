@@ -1,0 +1,20 @@
+[15:29:51]   checkpoint: local directory /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[15:29:51]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[15:29:51]   quantized experts on 48/48 MoE layers (128 experts each)
+[15:29:51]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[15:29:53]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+/root/p66/step_decomp.py:85: UserWarning: The given NumPy array is not writable, and PyTorch does not support non-writable tensors. This means writing to this tensor will result in undefined behavior. You may want to copy the array to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:203.)
+  flat[e] = torch.from_numpy(
+materialized 48 modules from /root/p66/work_qwen3/nf4.arena (byte-exact, per-segment lengths asserted)
+[p66_step] pipelined hot sets: 0/128 per layer (hot_frac 0.0, seed 66)
+fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+TORCH_PROFILE_OUT /root/p66/M/M_pipe-0.00_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_pipe-0.00_sync.json active=12/12
+DECOMP step=106.1ms  fwd_submit=104.4 (attn_host=36.2 dram=0.0 other=68.2)  drain=1.6  sched_py=0.2
+DEVICE attn=25.41ms/step gpu_experts=0.00ms/step attn_host_us_per_call=755
+PREFILL tokens=1 wall=582ms dram=0 gpu_dev=0
+PREFILL tokens=1 wall=94ms dram=0 gpu_dev=0
+PREFILL tokens=1 wall=96ms dram=0 gpu_dev=0
+PREFILL tokens=1 wall=90ms dram=0 gpu_dev=0
+STEP_DECOMP_DONE

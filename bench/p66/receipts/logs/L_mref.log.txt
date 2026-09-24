@@ -1,0 +1,8 @@
+[p66] host AMD EPYC 7C13 64-Core Processor | gpu NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, 1, 4, 16, 16, 600.00 W, 3135 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 23.07, 'b_vram_gbs': 1568.3, 'b_dram_gbs': 87.14}
+[p66] arm mref: L=24 E=32 k=4 n_hot=32 windows=['uniform']
+[p66] mref: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp71tet2k8/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] mref: wrote rows_mref.json

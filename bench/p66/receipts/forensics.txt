@@ -1,0 +1,12 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 32110 MiB, 580.95.05, GPU-d321d32d-c03d-b266-a033-cddcb4447116
+power,clock,pcie gen cur,max,width cur,max: 600.00 W, 3135 MHz, 1, 4, 16, 16
+CPU(s):                                  256
+Model name:                              AMD EPYC 7C13 64-Core Processor
+NUMA node(s):                            2
+               total        used        free      shared  buff/cache   available
+Mem:             818         117         155           0         545         694
+cgroup memory.max 377392988160
+cgroup cpu.max 4915200 100000
+overlay         320G   52M  320G   1% /
+Build cuda_12.8.r12.8/compiler.35583870_0
+hf_cdn_mbps_8x=224.0
