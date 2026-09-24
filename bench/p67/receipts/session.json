@@ -1,0 +1,235 @@
+{
+ "gemma4": {
+  "reference": {
+   "loss_last": 1.12894,
+   "eval_loss_final": 1.19205,
+   "s_per_step": 42.0258,
+   "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-24/p67-gemma4-floor-1"
+  },
+  "floor_draws": [
+   {
+    "tag": "reference_attn4_perm1",
+    "kind": "perm",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.121,
+    "d_med_train": 0.08037000000000005,
+    "d_heldout": 0.11233000000000004,
+    "d_step0_train": 0.21725999999999956,
+    "first_differing_step": 0,
+    "sign_final": 1,
+    "identical": false,
+    "step0_flag": true
+   },
+   {
+    "tag": "reference_attn4_perm2",
+    "kind": "perm",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.011239999999999917,
+    "d_med_train": 0.05225999999999986,
+    "d_heldout": 0.02151000000000014,
+    "d_step0_train": 0.057439999999999714,
+    "first_differing_step": 0,
+    "sign_final": 1,
+    "identical": false,
+    "step0_flag": true
+   },
+   {
+    "tag": "reference_attn4_perm3",
+    "kind": "perm",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.11468999999999996,
+    "d_med_train": 0.1275249999999999,
+    "d_heldout": 0.18906999999999985,
+    "d_step0_train": 0.0518200000000002,
+    "first_differing_step": 0,
+    "sign_final": 1,
+    "identical": false,
+    "step0_flag": true
+   },
+   {
+    "tag": "reference_attn4_perm4",
+    "kind": "perm",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.02563000000000004,
+    "d_med_train": 0.07790000000000008,
+    "d_heldout": 0.05349999999999988,
+    "d_step0_train": 0.08194000000000035,
+    "first_differing_step": 0,
+    "sign_final": 1,
+    "identical": false,
+    "step0_flag": true
+   },
+   {
+    "tag": "reference_attn4_repeat",
+    "kind": "repeat",
+    "admissible": true,
+    "why": [],
+    "d_final_train": 0.022359999999999935,
+    "d_med_train": 0.045094999999999996,
+    "d_heldout": 0.024739999999999984,
+    "d_step0_train": 0.0,
+    "first_differing_step": 2,
+    "sign_final": 1,
+    "identical": false,
+    "step0_flag": false
+   }
+  ],
+  "floor": {
+   "n_admissible": 5,
+   "n_candidates": 5,
+   "final": {
+    "hi": 0.121,
+    "lo": 0.011239999999999917,
+    "values": [
+     0.121,
+     0.011239999999999917,
+     0.11468999999999996,
+     0.02563000000000004,
+     0.022359999999999935
+    ],
+    "spread_ratio": 10.765,
+    "band": 0.363
+   },
+   "med": {
+    "hi": 0.1275249999999999,
+    "lo": 0.045094999999999996,
+    "values": [
+     0.08037000000000005,
+     0.05225999999999986,
+     0.1275249999999999,
+     0.07790000000000008,
+     0.045094999999999996
+    ],
+    "spread_ratio": 2.828,
+    "band": 0.38257499999999967
+   },
+   "exists": true
+  },
+  "reference_bit_identical_on_repeat": false,
+  "judged": [
+   {
+    "tag": "fused_attn4",
+    "status": "VALID",
+    "why": [],
+    "d_final_train": 0.013309999999999933,
+    "d_med_train": 0.03564500000000004,
+    "d_heldout": 0.011360000000000037,
+    "d_step0_train": 0.03390000000000004,
+    "first_differing_step": 0,
+    "sign_final": 1,
+    "constant": "PASS",
+    "verdict": "PASS",
+    "carried_by": "tolerance",
+    "detectable": false,
+    "band_final": 0.363,
+    "band_med": 0.38257499999999967,
+    "ratio_final": 0.11,
+    "ratio_med": 0.28
+   },
+   {
+    "tag": "batched_attn4",
+    "status": "VALID",
+    "why": [],
+    "d_final_train": 0.03693999999999997,
+    "d_med_train": 0.04803499999999994,
+    "d_heldout": 0.037860000000000005,
+    "d_step0_train": 0.06538000000000022,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "constant": "PASS",
+    "verdict": "PASS",
+    "carried_by": "tolerance",
+    "detectable": false,
+    "band_final": 0.363,
+    "band_med": 0.38257499999999967,
+    "ratio_final": 0.305,
+    "ratio_med": 0.377
+   },
+   {
+    "tag": "fused_attn4_nodgrad",
+    "status": "VOID",
+    "why": [
+     "status 'not_run'",
+     "C1 frozen bytes not bit-exact",
+     "0 losses for 20 steps"
+    ]
+   }
+  ],
+  "consistency": [
+   {
+    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2",
+    "tag": "fused_attn4",
+    "d_final_train": 0.08256999999999981,
+    "d_med_train": 0.12420500000000001,
+    "d_heldout": 0.15985000000000005,
+    "d_step0_train": 0.03390000000000004,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "verdict": "PASS",
+    "carried_by": "floor",
+    "detectable": false,
+    "band_final": 0.363,
+    "band_med": 0.38257499999999967,
+    "ratio_final": 0.682,
+    "ratio_med": 0.974
+   },
+   {
+    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
+    "tag": "fused_attn4",
+    "d_final_train": 0.10223000000000004,
+    "d_med_train": 0.10638999999999998,
+    "d_heldout": 0.16378000000000004,
+    "d_step0_train": 0.03390000000000004,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "verdict": "PASS",
+    "carried_by": "floor",
+    "detectable": false,
+    "band_final": 0.363,
+    "band_med": 0.38257499999999967,
+    "ratio_final": 0.845,
+    "ratio_med": 0.834
+   },
+   {
+    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
+    "tag": "batched_attn4",
+    "d_final_train": 0.05424999999999991,
+    "d_med_train": 0.08487,
+    "d_heldout": 0.08594999999999997,
+    "d_step0_train": 0.08716000000000079,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "verdict": "PASS",
+    "carried_by": "floor",
+    "detectable": false,
+    "band_final": 0.363,
+    "band_med": 0.38257499999999967,
+    "ratio_final": 0.448,
+    "ratio_med": 0.666
+   },
+   {
+    "session": "/Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3",
+    "tag": "fused_attn4_nodgrad",
+    "d_final_train": 0.10274000000000005,
+    "d_med_train": 0.11677999999999988,
+    "d_heldout": 0.18264999999999998,
+    "d_step0_train": 0.03390000000000004,
+    "first_differing_step": 0,
+    "sign_final": -1,
+    "verdict": "PASS",
+    "carried_by": "floor",
+    "detectable": false,
+    "band_final": 0.363,
+    "band_med": 0.38257499999999967,
+    "ratio_final": 0.849,
+    "ratio_med": 0.916
+   }
+  ],
+  "consistency_skipped": [],
+  "reading": "READ"
+ }
+}

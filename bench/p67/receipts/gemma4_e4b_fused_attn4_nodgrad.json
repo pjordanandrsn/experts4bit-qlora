@@ -1,0 +1,14 @@
+{
+ "framework": "e4b",
+ "fam": "gemma4",
+ "arm": "fused",
+ "tag": "fused_attn4_nodgrad",
+ "status": "not_run",
+ "reason": "skipped by TP4_SKIP",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tp4_run.sh",
+ "prereg": "bench/p67/P67-PREREG.md"
+}

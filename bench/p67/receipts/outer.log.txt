@@ -1,0 +1,163 @@
+[2026-09-24T16:30:13Z] p67: pins OK (8 files)
+[2026-09-24T16:30:13Z] p67: RAM OK: 241 GiB effective
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=48 autocast=0
+FIXTURE anchor: template=clinical steps=60 seq=512 micro_batch=1 accum=1 r=8 alpha=16 lr=1e-4 wd=0.01 sched=constant optim=adamw_torch seed=0
+BOX C families: gemma4; e4b cd2716decf77f0c7d0e81b7e58dbe5dd5345cc29 gnf4 9206352f7c49d76432824f7ce8872f0b285f2a4e; run p67-gemma4-floor-1 instance 52449460 deadline 1790278126
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.105.08, GPU-410f2ec3-a11a-7262-d019-99ba772e7c4e, 520.00 W, 3105 MHz
+CPU(s):                                  64
+Model name:                              AMD EPYC 7302 16-Core Processor
+MemTotal:       528207196 kB
+cgroup memory.max 259623223296
+overlay         320G   76M  320G   1% /
+[2026-09-24T16:30:13Z] tp4/boxC: venv-e4b (system torch): e4b @cd2716decf77f0c7d0e81b7e58dbe5dd5345cc29 + gnf4 @9206352f7c49d76432824f7ce8872f0b285f2a4e + transformers==5.17.0 bitsandbytes==0.50.2 peft==0.20.0
+pip(e4b) rc=0
+tp4 tripwire OK (e4b): 0.37.3 @ cd2716decf77 gnf4 0.32.1 @ 9206352f7c49 torch 2.8.0+cu128 triton 3.4.0 transformers 5.17.0 bnb 0.50.2 peft 0.20.0
+[2026-09-24T16:31:02Z] tp4/boxC: venv-unsloth: unsloth[cu128-torch280]==2026.9.11 unsloth_zoo==2026.9.7
+pip(unsloth) rc=0
+[2026-09-24T16:35:21Z] tp4/boxC: tripwire(unsloth) failed on ScalingType -> removing torchao (P38 amendment 2)
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from venv-unsloth after the tripwire failed on ScalingType
+tp4 tripwire OK (unsloth): 2026.9.11 zoo 2026.9.7 torch 2.8.0+cu128 triton 3.4.0 transformers 5.5.0 bnb 0.50.2 peft 0.21.0 torchao None moe_backend native_torch separated_lora True FastModel True
+[2026-09-24T16:35:37Z] tp4/boxC: dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)
+DS alpaca n_train=1200 n_eval=48 seed=3407 sha256=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb -> /root/tp4/data/ds_alpaca.json
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+[2026-09-24T16:35:41Z] tp4/boxC: ===== family gemma4 (google/gemma-4-26B-A4B-it @ 4d7ae4984b7db7de8f8457170b3f1a419ee76d52; mode=normal offload=0 unsloth_targets=q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj)
+[2026-09-24T16:35:41Z] tp4/boxC: fetch gemma4 (google/gemma-4-26B-A4B-it, unpinned; pin 4d7ae4984b7db7de8f8457170b3f1a419ee76d52)
+staged in 14.4 min at /root/.cache/huggingface/hub/models--google--gemma-4-26B-A4B-it/snapshots/4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+PIN OK gemma4 staged=4d7ae4984b7db7de8f8457170b3f1a419ee76d52 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+overlay         320G   57G  264G  18% /
+[2026-09-24T16:50:07Z] tp4/boxC: tokenise gemma4 (alpaca, seq 2048) -> tokens_gemma4.json
+TOKENS fam=gemma4 template=alpaca n_train=1200 n_eval=48 train_tokens=244431 mean=203.7 pad_id=0 sha=4ea779a5b6a1e694b04eda3613ffbbdc1c04245434de75f2aa02442ae6b693f3
+TOKENS gemma4 alpaca sha=4ea779a5b6a1e694b04eda3613ffbbdc1c04245434de75f2aa02442ae6b693f3
+[2026-09-24T16:50:16Z] tp4/boxC: arm gemma4/e4b/fused_attn4 (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "fused", "model_type": "gemma4", "n_layers": 30, "load_s": 40.3, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 30, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_para
+    PROLOGUE {"phase_seconds": {"preamble": 5.266, "load_weights": 26.876, "verify": 0.001, "attn4": 8.412, "lora": 0.027, "enable": 0.005, "tokenizer": 3.463, "census": 0.017, "trainable_sha": 2.075, "counters": 0.0, "c1_before": 25.422, "eval0": 19.211, "optimizer": 0.321}, "phase_budget_s": 1260.0, "
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro
+0 MiB
+[2026-09-24T16:53:48Z] tp4/boxC: skip gemma4/unsloth/ckpt_unsloth
+STUB NOT_RUN gemma4/unsloth/ckpt_unsloth: skipped by TP4_SKIP
+[2026-09-24T16:53:48Z] tp4/boxC: skip gemma4/hf/hf_peft
+STUB NOT_RUN gemma4/hf/hf_peft: skipped by TP4_SKIP
+[2026-09-24T16:53:48Z] tp4/boxC: arm gemma4/e4b/reference_attn4 (arm=reference recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=5400 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "reference", "model_type": "gemma4", "n_layers": 30, "load_s": 42.6, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 0, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_p
+    PROLOGUE {"phase_seconds": {"preamble": 4.717, "load_weights": 29.723, "verify": 0.001, "attn4": 8.313, "lora": 0.02, "enable": 0.004, "tokenizer": 3.117, "census": 0.017, "trainable_sha": 2.097, "counters": 0.001, "c1_before": 24.935, "eval0": 91.553, "optimizer": 0.261}, "phase_budget_s": 1890.0, 
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": "ok", "steps": 20, "seq": 2048, "accum": 4
+0 MiB
+[2026-09-24T17:12:39Z] tp4/boxC: skip gemma4/e4b/fused_attn4_nodgrad
+STUB NOT_RUN gemma4/e4b/fused_attn4_nodgrad: skipped by TP4_SKIP
+[2026-09-24T17:12:39Z] tp4/boxC: arm gemma4/e4b/batched_attn4 (arm=batched recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=5400 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "batched", "model_type": "gemma4", "n_layers": 30, "load_s": 39.7, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 30, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_pa
+    PROLOGUE {"phase_seconds": {"preamble": 5.082, "load_weights": 26.44, "verify": 0.001, "attn4": 8.436, "lora": 0.023, "enable": 0.004, "tokenizer": 3.34, "census": 0.018, "trainable_sha": 2.074, "counters": 0.001, "c1_before": 26.001, "eval0": 10.753, "optimizer": 0.316}, "phase_budget_s": 1890.0, "
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "batched", "tag": "batched_attn4", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "m
+0 MiB
+[2026-09-24T17:16:12Z] tp4/boxC: arm gemma4/e4b/reference_attn4_repeat (arm=reference recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=5400 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "reference", "model_type": "gemma4", "n_layers": 30, "load_s": 40.9, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 0, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_p
+    PROLOGUE {"phase_seconds": {"preamble": 5.146, "load_weights": 27.693, "verify": 0.001, "attn4": 8.465, "lora": 0.023, "enable": 0.004, "tokenizer": 3.22, "census": 0.015, "trainable_sha": 2.079, "counters": 0.001, "c1_before": 25.658, "eval0": 89.405, "optimizer": 0.335}, "phase_budget_s": 1890.0, 
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_repeat", "status": "ok", "steps": 20, "seq": 2048, "ac
+0 MiB
+[2026-09-24T17:34:41Z] tp4/boxC: arm gemma4/e4b/reference_attn4_perm1 (arm=reference recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=5400 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "reference", "model_type": "gemma4", "n_layers": 30, "load_s": 39.9, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 0, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_p
+    PROLOGUE {"phase_seconds": {"preamble": 4.82, "load_weights": 26.971, "verify": 0.001, "attn4": 8.369, "lora": 0.024, "enable": 0.004, "tokenizer": 3.143, "census": 0.017, "trainable_sha": 2.121, "counters": 0.001, "c1_before": 25.328, "eval0": 89.745, "optimizer": 0.275}, "phase_budget_s": 1890.0, 
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm1", "status": "ok", "steps": 20, "seq": 2048, "acc
+0 MiB
+[2026-09-24T17:53:37Z] tp4/boxC: arm gemma4/e4b/reference_attn4_perm2 (arm=reference recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=4809 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "reference", "model_type": "gemma4", "n_layers": 30, "load_s": 39.3, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 0, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_p
+    PROLOGUE {"phase_seconds": {"preamble": 4.594, "load_weights": 26.615, "verify": 0.001, "attn4": 8.141, "lora": 0.022, "enable": 0.004, "tokenizer": 3.144, "census": 0.016, "trainable_sha": 2.107, "counters": 0.001, "c1_before": 24.243, "eval0": 90.422, "optimizer": 0.387}, "phase_budget_s": 1683.1,
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm2", "status": "ok", "steps": 20, "seq": 2048, "acc
+0 MiB
+[2026-09-24T18:12:26Z] tp4/boxC: arm gemma4/e4b/reference_attn4_perm3 (arm=reference recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3680 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "reference", "model_type": "gemma4", "n_layers": 30, "load_s": 38.9, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 0, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_p
+    PROLOGUE {"phase_seconds": {"preamble": 4.761, "load_weights": 26.305, "verify": 0.001, "attn4": 8.102, "lora": 0.018, "enable": 0.004, "tokenizer": 3.061, "census": 0.015, "trainable_sha": 2.052, "counters": 0.001, "c1_before": 23.925, "eval0": 90.644, "optimizer": 0.289}, "phase_budget_s": 1288.0,
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm3", "status": "ok", "steps": 20, "seq": 2048, "acc
+0 MiB
+[2026-09-24T18:31:20Z] tp4/boxC: arm gemma4/e4b/reference_attn4_perm4 (arm=reference recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2546 expect_trainable=none --attn-4bit 1)
+    LOAD OK {"fam": "gemma4", "framework": "e4b", "arm": "reference", "model_type": "gemma4", "n_layers": 30, "load_s": 39.3, "verify": {"n_quantized": 30, "n_unquantized": 0}, "n_attn4": 115, "n_patched": 0, "structural_expected_n_attn4": 115, "detector_version": "0.37.3+det:8af1918f6c2e", "trainable_p
+    PROLOGUE {"phase_seconds": {"preamble": 4.963, "load_weights": 26.623, "verify": 0.001, "attn4": 8.128, "lora": 0.021, "enable": 0.004, "tokenizer": 3.045, "census": 0.015, "trainable_sha": 2.084, "counters": 0.001, "c1_before": 24.089, "eval0": 90.403, "optimizer": 0.309}, "phase_budget_s": 891.1, 
+    CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm4", "status": "ok", "steps": 20, "seq": 2048, "acc
+0 MiB
+GEMMA4 DONE
+[2026-09-24T18:50:16Z] tp4/boxC: freed gemma4 (disk: 266G free)
+[2026-09-24T18:50:16Z] tp4/boxC: reduce
+- e4b internal parity (tp1's rule, informational): fused_attn4 vs reference_attn4 Δfinal 0.01331, median step |Δ| 0.03565 → **PASS** (band 0.05/0.05); ×11.28 faster per step, peak ×1.000
+- **NO POSITION QUOTED (unsloth)** — arms not both VALID: e4b VALID / unsloth —
+- **NO POSITION QUOTED (hf)** — arms not both VALID: e4b VALID / hf —
+
+## Cross-family summary
+| family | e4b primary | unsloth primary | hf primary | unsloth/e4b s/step | hf/e4b s/step | quality | e4b internal parity | notes |
+|---|---|---|---|---|---|---|---|---|
+| Granite-3.1-3B-A800M-instruct | (no receipts) | | | | | | | |
+| OLMoE-1B-7B-0924-Instruct | (no receipts) | | | | | | | |
+| gpt-oss-20b | (no receipts) | | | | | | | |
+| Qwen3-30B-A3B | (no receipts) | | | | | | | |
+| Qwen3.6-35B-A3B (qwen3_5_moe) | (no receipts) | | | | | | | |
+| Gemma-4-26B-A4B-it | OK VALID | NOT_RUN — | NOT_RUN — | not quoted | not quoted | — | PASS | e4b/reference_attn4: OK; e4b/batched_attn4: OK; e4b/fused_attn4_nodgrad: NOT_RUN; e4b/reference_attn4_perm1: OK; e4b/reference_attn4_perm2: OK; e4b/reference_attn4_perm3: OK; e4b/reference_attn4_perm4: OK; e4b/reference_attn4_repeat: OK |
+| Mixtral-8x7B-Instruct-v0.1 | (no receipts) | | | | | | | |
+| DeepSeek-V4-Flash | (no receipts) | | | | | | | |
+| Kimi-K3 | (no receipts) | | | | | | | |
+
+## Predictions P1–P9 (TP4-PREREG.md, scored mechanically)
+| prediction | family | verdict | evidence |
+|---|---|---|---|
+| P1 | granite | **UNTESTED** | no receipts |
+| P1 | olmoe | **UNTESTED** | no receipts |
+| P2 | qwen3 | **UNTESTED** | no receipts |
+| P3 | qwen3 | **UNTESTED** | no anchor-pair receipts |
+| P4 | qwen3_5 | **UNTESTED** | no receipts |
+| P5 | gemma4 | **FALSIFIED** | e4b OK, unsloth NOT_RUN, hf NOT_RUN |
+| P6 | mixtral | **UNTESTED** | no receipts |
+| P7 | gptoss | **UNTESTED** | no receipts |
+| P8 | all | **UNTESTED** | no pair with both arms VALID |
+| P9 | all | **HELD** | gemma4 PASS |
+----- summary.txt -----
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=48 autocast=0
+FIXTURE anchor: template=clinical steps=60 seq=512 micro_batch=1 accum=1 r=8 alpha=16 lr=1e-4 wd=0.01 sched=constant optim=adamw_torch seed=0
+BOX C families: gemma4; e4b cd2716decf77f0c7d0e81b7e58dbe5dd5345cc29 gnf4 9206352f7c49d76432824f7ce8872f0b285f2a4e; run p67-gemma4-floor-1 instance 52449460 deadline 1790278126
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from venv-unsloth after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK gemma4 staged=4d7ae4984b7db7de8f8457170b3f1a419ee76d52 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS gemma4 alpaca sha=4ea779a5b6a1e694b04eda3613ffbbdc1c04245434de75f2aa02442ae6b693f3
+gemma4/e4b/fused_attn4 PROLOGUE {"phase_seconds": {"preamble": 5.266, "load_weights": 26.876, "verify": 0.001, "attn4": 8.412, "lora": 0.027, "enable": 0.005, "tokenizer": 3.463, "census": 0.017, "trainable_sha": 2.075, "counters": 0.0, "c1_before": 25.422, "eval0": 19.211, "optimizer": 0.321}, "phase_budget_s": 1260.0, "prologue_s": 92.65, "prologue_unattributed_s": 1.555}
+gemma4/e4b/fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false, "
+
+gemma4/unsloth/ckpt_unsloth STUB not_run: skipped by TP4_SKIP
+gemma4/hf/hf_peft STUB not_run: skipped by TP4_SKIP
+gemma4/e4b/reference_attn4 PROLOGUE {"phase_seconds": {"preamble": 4.717, "load_weights": 29.723, "verify": 0.001, "attn4": 8.313, "lora": 0.02, "enable": 0.004, "tokenizer": 3.117, "census": 0.017, "trainable_sha": 2.097, "counters": 0.001, "c1_before": 24.935, "eval0": 91.553, "optimizer": 0.261}, "phase_budget_s": 1890.0, "prologue_s": 166.183, "prologue_unattributed_s": 1.425}
+gemma4/e4b/reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": 
+
+gemma4/e4b/fused_attn4_nodgrad STUB not_run: skipped by TP4_SKIP
+gemma4/e4b/batched_attn4 PROLOGUE {"phase_seconds": {"preamble": 5.082, "load_weights": 26.44, "verify": 0.001, "attn4": 8.436, "lora": 0.023, "enable": 0.004, "tokenizer": 3.34, "census": 0.018, "trainable_sha": 2.074, "counters": 0.001, "c1_before": 26.001, "eval0": 10.753, "optimizer": 0.316}, "phase_budget_s": 1890.0, "prologue_s": 83.938, "prologue_unattributed_s": 1.45}
+gemma4/e4b/batched_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "batched", "tag": "batched_attn4", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": fals
+
+gemma4/e4b/reference_attn4_repeat PROLOGUE {"phase_seconds": {"preamble": 5.146, "load_weights": 27.693, "verify": 0.001, "attn4": 8.465, "lora": 0.023, "enable": 0.004, "tokenizer": 3.22, "census": 0.015, "trainable_sha": 2.079, "counters": 0.001, "c1_before": 25.658, "eval0": 89.405, "optimizer": 0.335}, "phase_budget_s": 1890.0, "prologue_s": 163.563, "prologue_unattributed_s": 1.518}
+gemma4/e4b/reference_attn4_repeat rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_repeat", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "off
+
+gemma4/e4b/reference_attn4_perm1 PROLOGUE {"phase_seconds": {"preamble": 4.82, "load_weights": 26.971, "verify": 0.001, "attn4": 8.369, "lora": 0.024, "enable": 0.004, "tokenizer": 3.143, "census": 0.017, "trainable_sha": 2.121, "counters": 0.001, "c1_before": 25.328, "eval0": 89.745, "optimizer": 0.275}, "phase_budget_s": 1890.0, "prologue_s": 162.192, "prologue_unattributed_s": 1.373}
+gemma4/e4b/reference_attn4_perm1 rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm1", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offl
+
+gemma4/e4b/reference_attn4_perm2 PROLOGUE {"phase_seconds": {"preamble": 4.594, "load_weights": 26.615, "verify": 0.001, "attn4": 8.141, "lora": 0.022, "enable": 0.004, "tokenizer": 3.144, "census": 0.016, "trainable_sha": 2.107, "counters": 0.001, "c1_before": 24.243, "eval0": 90.422, "optimizer": 0.387}, "phase_budget_s": 1683.1, "prologue_s": 161.083, "prologue_unattributed_s": 1.387}
+gemma4/e4b/reference_attn4_perm2 rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offl
+
+gemma4/e4b/reference_attn4_perm3 PROLOGUE {"phase_seconds": {"preamble": 4.761, "load_weights": 26.305, "verify": 0.001, "attn4": 8.102, "lora": 0.018, "enable": 0.004, "tokenizer": 3.061, "census": 0.015, "trainable_sha": 2.052, "counters": 0.001, "c1_before": 23.925, "eval0": 90.644, "optimizer": 0.289}, "phase_budget_s": 1288.0, "prologue_s": 160.573, "prologue_unattributed_s": 1.395}
+gemma4/e4b/reference_attn4_perm3 rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm3", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offl
+
+gemma4/e4b/reference_attn4_perm4 PROLOGUE {"phase_seconds": {"preamble": 4.963, "load_weights": 26.623, "verify": 0.001, "attn4": 8.128, "lora": 0.021, "enable": 0.004, "tokenizer": 3.045, "census": 0.015, "trainable_sha": 2.084, "counters": 0.001, "c1_before": 24.089, "eval0": 90.403, "optimizer": 0.309}, "phase_budget_s": 891.1, "prologue_s": 161.128, "prologue_unattributed_s": 1.443}
+gemma4/e4b/reference_attn4_perm4 rc=0 CELL OK {"framework": "e4b", "fam": "gemma4", "model": "google/gemma-4-26B-A4B-it", "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52", "model_type": "gemma4", "n_layers": 30, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm4", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offl
+
+GEMMA4 DONE
+----- versions.txt -----
+e4b 0.37.3 @cd2716decf77f0c7d0e81b7e58dbe5dd5345cc29 (GitHub main)
+gnf4 0.32.1 @9206352f7c49d76432824f7ce8872f0b285f2a4e (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.17.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.20.0
+unsloth 2026.9.11
+unsloth_zoo 2026.9.7
+torch(unsloth) 2.8.0+cu128
+triton(unsloth) 3.4.0
+transformers(unsloth) 5.5.0
+bitsandbytes(unsloth) 0.50.2
+peft(unsloth) 0.21.0
+torchao None
+moe_backend native_torch
+[2026-09-24T18:50:16Z] tp4/boxC: TP_DONE rc=0

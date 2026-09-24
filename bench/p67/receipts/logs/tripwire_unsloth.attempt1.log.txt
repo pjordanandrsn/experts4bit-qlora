@@ -1,0 +1,56 @@
+Skipping import of cpp extensions due to incompatible torch version. Please upgrade to torch >= 2.11.0 (found 2.8.0+cu128).
+Traceback (most recent call last):
+  File "/root/tp4/tripwire_unsloth.py", line 1, in <module>
+    import importlib.metadata as md, torch, transformers, bitsandbytes, peft
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/peft/__init__.py", line 17, in <module>
+    from .auto import (
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/peft/auto.py", line 31, in <module>
+    from .config import PeftConfig
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/peft/config.py", line 30, in <module>
+    from .utils import CONFIG_NAME, PeftType, TaskType
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/peft/utils/__init__.py", line 15, in <module>
+    from .constants import ALLOWED_COMPUTE_DTYPES, UPCAST_DTYPES
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/peft/utils/constants.py", line 16, in <module>
+    from transformers import BloomPreTrainedModel
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/utils/import_utils.py", line 2207, in __getattr__
+    module = self._get_module(self._class_to_module[name])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/utils/import_utils.py", line 2441, in _get_module
+    raise e
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/utils/import_utils.py", line 2439, in _get_module
+    return importlib.import_module("." + module_name, self.__name__)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/importlib/__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/models/bloom/modeling_bloom.py", line 26, in <module>
+    from ...modeling_layers import GradientCheckpointingLayer
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/modeling_layers.py", line 27, in <module>
+    from .processing_utils import Unpack
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/processing_utils.py", line 79, in <module>
+    from .modeling_utils import PreTrainedAudioTokenizerBase
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/modeling_utils.py", line 94, in <module>
+    from .quantizers import HfQuantizer
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/quantizers/__init__.py", line 14, in <module>
+    from .auto import AutoHfQuantizer, AutoQuantizationConfig, register_quantization_config, register_quantizer
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/quantizers/auto.py", line 67, in <module>
+    from .quantizer_torchao import TorchAoHfQuantizer
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/transformers/quantizers/quantizer_torchao.py", line 41, in <module>
+    from torchao.prototype.safetensors.safetensors_support import (
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/__init__.py", line 107, in <module>
+    from torchao.quantization import (
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/quantization/__init__.py", line 24, in <module>
+    from .quant_api import (
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/quantization/quant_api.py", line 47, in <module>
+    from torchao.prototype.quantization.quant_api import (
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/prototype/quantization/__init__.py", line 2, in <module>
+    from .quant_api import Int8DynamicActivationUIntxWeightConfig, UIntxWeightOnlyConfig
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/prototype/quantization/quant_api.py", line 37, in <module>
+    from torchao.quantization.quantize_.workflows import (
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/quantization/quantize_/workflows/__init__.py", line 4, in <module>
+    from .float8.float8_sparse_2x4_1d_data_1d_metadata_tensor import (
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/quantization/quantize_/workflows/float8/float8_sparse_2x4_1d_data_1d_metadata_tensor.py", line 39, in <module>
+    from .float8_tensor import QuantizeTensorToFloat8Kwargs
+  File "/root/tp4/venv-unsloth/lib/python3.11/site-packages/torchao/quantization/quantize_/workflows/float8/float8_tensor.py", line 12, in <module>
+    from torch.nn.functional import ScalingType, scaled_grouped_mm
+ImportError: cannot import name 'ScalingType' from 'torch.nn.functional' (/root/tp4/venv-unsloth/lib/python3.11/site-packages/torch/nn/functional.py)

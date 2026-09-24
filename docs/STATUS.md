@@ -188,8 +188,9 @@ secondary row trains. **Gemma-4** — both e4b attention-4-bit arms died on the
 harness's projection-count check (the converter returned 100; the harness expected
 4 · n_layers = 120 —
 [#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412), fixed
-since by #435; the attention-4-bit arms have run cleanly since, in P56
-and tp4, and are not licensed, [#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713); the
+since by #435; the attention-4-bit arms have run cleanly since, in P56,
+tp4 and P67, and are **licensed since lane P67** (2026-09-24) under the family's
+measured floor, [#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713); the
 bf16-attention `fast_train` path stays as tp1 left it), while Unsloth's arm
 is OK · VALID (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.unsloth.ckpt_unsloth`).
 e4b's internal fused-vs-reference parity PASSES on all four families that
@@ -300,7 +301,7 @@ reproducing the 0.09037 / 0.11801 of the previous kernel cut; the fused path
 is 11.65× faster on that pair (internal, no competitive position). As the
 P47–P51 lanes predicted, the sensitivity is **positional and lives in the
 quantised model**, not the adapter path. [`e4b.parity.gemma4.train-internal`](claims.json) is **SUPERSEDED** 2026-09-22 by lane P56
-([`e4b.parity.gemma4.train-floor`](claims.json),
+([`e4b.parity.gemma4.train-floor`](claims.json), itself superseded 2026-09-24 by lane P67, below;
 [`bench/p56/RESULTS-p56.md`](../bench/p56/RESULTS-p56.md)): the disagreement is
 **not attributable to the fused path** — e4b's kernel-free batched path, with
 13× less composed gradient error, fails the same band, and no achievable
@@ -309,7 +310,16 @@ family's training-parity floor for the first time (**≥ 0.054 final / 0.085
 median step-wise**), and `tp4_reduce.parity()` compares against 0.05 **and
 against zero**, with no floor term. So #558 stands open as a **gate** defect,
 not a fused-path defect; the serving side already fixed the same class of
-error by moving to a measured floor.
+error by moving to a measured floor. That proxy floor is in turn **SUPERSEDED**
+2026-09-24 by lane P67 ([`e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24`](claims.json),
+[`bench/p67/RESULTS-p67.md`](../bench/p67/RESULTS-p67.md)): measured as the
+reference against its own reorderings (one repeat, four fixed permutations of the
+per-expert loop, same session), the floor is **0.121 final / 0.128 median** — larger
+than the proxy — and read against `max(0.05, 3 · F_hi)` both accelerated arms
+**PASS** (fused 0.013 / 0.036, batched 0.037 / 0.048), as do the two earlier
+sessions' constant-band FAILs. #558 does not reopen; the attention-4-bit paths
+are supported on `gemma4_text`, as a statement of resolution: two correct
+reference runs land 0.011–0.121 apart at step 20 on this model.
 
 **Gemma-4's experts take a graded store map, not one store** (lanes P47–P51,
 2026-09-19; `bench/p47`–`bench/p51`, all against the bf16 checkpoint on the
@@ -686,16 +696,22 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   defaulted to the V4 epilogue, #397). What stays open is a gpt-oss-aware
   adapter; the kernel package's `ExpertsMxfp4LoRA` route is the experimental
   alternative (tp1: canary and provenance pass, never licensed).
-- **[#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713) — Gemma-4 attention 4-bit runs, and the training-parity band cannot
-  license it.** Since #435 the arms convert all 115 structural projections: 25 sliding
-  layers × 4, and 5 full-attention layers × 3, which have no `v_proj`. They run VALID in
-  `p56-gemma4-ladder-3` and `tp4-c-4`. But tp1's constant 0.05 band fails for every
-  accelerated path, the kernel-free batched one included (0.054 final, against the fused
-  path's 0.102; `e4b.parity.gemma4.train-floor`), so the band cannot tell a defect from the
-  model's own sensitivity. P56 recommends a per-family floor measured by the
-  smallest-perturbation arm. Until that band is registered, attention-4-bit training on
-  `gemma4_text` is not supported. tp2/P40's own two arms were voided by its harness's count
-  check ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)); that harness still hard-codes 4 · n_layers.
+- **[#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713) — answered by lane P67 (2026-09-24): Gemma-4's
+  training-parity floor is measured, and the attention-4-bit paths are licensed under it.** Since #435 the arms
+  convert all 115 structural projections (25 sliding layers × 4, 5 full-attention layers × 3 without `v_proj`) and
+  run VALID. tp1's constant 0.05 band against zero failed every accelerated path here, the kernel-free one included
+  (P56). P67 drew the floor the registration asked for — the reference against itself, one plain repeat and four
+  fixed permutations of the per-expert loop, one session on one RTX 5090 — and read F_hi **0.121 final / 0.128
+  median** ([`e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24`](claims.json)): the reorderings move the
+  step-0 loss by 0.052–0.217 where the fused kernels move it 0.034, and the plain repeat diverges at step 2. Against
+  `max(0.05, 3 · F_hi)` = 0.363 / 0.383 the fused arm (0.013 / 0.036) and the batched arm (0.037 / 0.048) **PASS**,
+  carried by the tolerance and not detectable, and the two earlier sessions' FAILs PASS the same band, so the
+  reading is not MIXED. Under the registered table `fast_train` and `reference_train` in the attention-4-bit
+  configuration are **supported** on `gemma4_text` ([`capabilities.json`](capabilities.json)); `batched_train`
+  stays void (its arm ran at `pad_waste_limit` 64, not the shipped default). What stays open is resolution, not
+  licence: a 20-step trajectory cannot detect a 0.05-nat defect on this model, so a per-op or matched-routing
+  instrument is the next step if one is ever wanted ([`bench/p67/RESULTS-p67.md`](../bench/p67/RESULTS-p67.md)).
+  tp2/P40's harness still hard-codes 4 · n_layers ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)).
 - **[#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344) —
   Gemma-4 fails to load on 2 of 6 rented hosts** with `CUDA error: invalid
   argument`, after the experts quantise. A 2 GiB host-hop fix was merged and

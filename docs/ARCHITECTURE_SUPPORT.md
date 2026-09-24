@@ -186,7 +186,9 @@ LoRA and OLMoE's crash at engage are the rows `…granite….coverage` and `…o
 and Mixtral's 3.223-vs-29.163 GB reading is the row `…mixtral….footprint` beside its s/step position.
 The attention-4-bit configuration these receipts add per family is recorded in `training_support` in
 [`capabilities.json`](capabilities.json) — inside the per-path structure: supported with receipts on `granitemoe`,
-`olmoe`, `qwen3_moe`, `mixtral`; not supported on `gemma4_text` (its arms run since #435, but tp1's constant parity band fails every accelerated path there, the kernel-free one included: #713); refused on `gpt_oss` (bias-carrying
+`olmoe`, `qwen3_moe`, `mixtral`, and since lane P67 (2026-09-24, #713) on `gemma4_text` — read against the family's own
+floor (the reference against its reorderings, F_hi 0.121 / 0.128 nats) rather than tp1's constant band against zero, the
+fused arm is indistinguishable from that reordering noise (`e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24`); refused on `gpt_oss` (bias-carrying
 projections). No tp1 verdict moved, no gate or threshold moved, and P38's 200-step curve row (Unsloth lower at N=200)
 still stands beside any Qwen3 position.
 

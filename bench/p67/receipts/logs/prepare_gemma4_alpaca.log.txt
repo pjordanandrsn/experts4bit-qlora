@@ -1,0 +1,1 @@
+TOKENS fam=gemma4 template=alpaca n_train=1200 n_eval=48 train_tokens=244431 mean=203.7 pad_id=0 sha=4ea779a5b6a1e694b04eda3613ffbbdc1c04245434de75f2aa02442ae6b693f3

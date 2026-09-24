@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.105.08, GPU-410f2ec3-a11a-7262-d019-99ba772e7c4e, 520.00 W, 3105 MHz
+CPU(s):                                  64
+Model name:                              AMD EPYC 7302 16-Core Processor
+MemTotal:       528207196 kB
+cgroup memory.max 259623223296
+overlay         320G   76M  320G   1% /

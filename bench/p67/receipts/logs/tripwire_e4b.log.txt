@@ -1,0 +1,1 @@
+tp4 tripwire OK (e4b): 0.37.3 @ cd2716decf77 gnf4 0.32.1 @ 9206352f7c49 torch 2.8.0+cu128 triton 3.4.0 transformers 5.17.0 bnb 0.50.2 peft 0.20.0
