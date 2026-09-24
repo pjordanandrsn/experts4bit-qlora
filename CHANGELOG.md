@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Lane P69 registered: does grouped-nf4-gemm's single-copy link probe read the gen-4 gather rate P66 implied? (for grouped-nf4-gemm#400; bench only, nothing in the wheel changes)
+
+- **The question.** P66 found the pipelined gather running at the box's single-copy H2D rate (14.72 GB/s probed, 14.44 implied) while `cold_deadline` was given the back-to-back rate (23.07), so its transfer term under-predicted the gather 1.57–2.02× on a gen 4 × 16 RTX 5090. grouped-nf4-gemm#402 moves that probe into `bench/calibrate.py` (schema `gnf4-hybrid-calib/2`) and carries the ratio as `Costs.link_eff`. P69 runs that script, at the pinned commit, twice on a 5090 of the class the consumer serves, and reads the ratio. Prereg: `bench/p69/P69-PREREG.md`.
+- **Predictions, written before the box.** `link_eff` ∈ [0.55, 0.75] (P1); back-to-back 20–30 GB/s (P2); single 12–18 GB/s (P3); the two runs within 10 % (P4). Disclosed: the NAS A2000 (gen 3 × 8) read single 5.67 vs back-to-back 5.46 → 1.0, the gen-3 control.
+- **The instrument.** `bench/p69/p69_drive.sh`, controller side like `p56_prove.sh`: refuses outside the launcher's environment (78) and any card that is not an RTX 5090 (15), fetches `calibrate.py` at `GNF4_SHA` with its sha256 recorded, stages it, runs it twice with `--skip-cpu`, fetches both blobs and prints the read. Nothing installed on the box. `tests/test_p69_drive.py` holds the refusals, the exit codes and the probe fields.
+- **Cost.** ≤ $0.75/h at a 0.25 h guard ($0.1875 line), no proving rental (the guard is under an hour). Decision rule: whatever P1 reads, both blobs become grouped-nf4-gemm's 5090 calibration receipt and one claim (`gnf4.calib.link-efficiency.5090.<date>`); nothing in either model is tuned to the outcome.
+
 ## 0.37.4 — 2026-09-24 — documentation, register data, evidence and repository tooling; under the package one default-off switch: `E4B_INT4_DECODE_A16` (lane P64's eager-only quality instrument, with its CUDA-graph-capture guard in `engines/hot_residency.py`). Six lanes read on rented RTX 5090s — P63 (row-exact expert routes), P64 (the int8 activation step is indistinguishable), P65 (Granite's selector is TWO_ARMS; Colla-Q replicates), P66 (residency's fixed launch count; cold_deadline under-predicts the gen-4 gather), P67 (Gemma-4's training-parity floor; attention-4-bit training supported under it), P68 (a verify from T = 1 calls is bit-identical; T > 1 inside the bar) — with their registrations and amendments; 13 claims added, P56's proxy floor superseded; `docs/ARCHITECTURE_SUPPORT.md` leaves the llms bundle
 
 ### Lane P67 read (#713): Gemma-4's training-parity floor is measured; the attention-4-bit paths are supported under it (docs, register, capabilities; no library behaviour change)
