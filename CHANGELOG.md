@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Lane P69 read (for grouped-nf4-gemm#400): the link-efficiency factor is per host, not a 5090-class constant (docs only; nothing in the wheel changes)
+
+- `p69-5090-2` ran grouped-nf4-gemm's `bench/calibrate.py` (schema /2) twice on one gen 4 × 16 RTX 5090 (host EPYC 7663) for $0.0146: back-to-back 20.58 / 20.72 GB/s, single copy 17.97 / 19.90 → `link_eff` **0.873 / 0.960**. The registered [0.55, 0.75] (P66's other 5090 host: 0.638) is **REFUTED**; repeatability held at 9.7 %. The two hosts' difference is stated, not explained. Receipt and claim in grouped-nf4-gemm (`bench/cold-engine/calib-5090-p69/`, `gnf4.calib.link-efficiency.5090.2026-09-24`, PR #403); the read here: `bench/p69/RESULTS-p69.md`. No default moves.
+
 ### Lane P69 registered: does grouped-nf4-gemm's single-copy link probe read the gen-4 gather rate P66 implied? (for grouped-nf4-gemm#400; bench only, nothing in the wheel changes)
 
 - **The question.** P66 found the pipelined gather running at the box's single-copy H2D rate (14.72 GB/s probed, 14.44 implied) while `cold_deadline` was given the back-to-back rate (23.07), so its transfer term under-predicted the gather 1.57–2.02× on a gen 4 × 16 RTX 5090. grouped-nf4-gemm#402 moves that probe into `bench/calibrate.py` (schema `gnf4-hybrid-calib/2`) and carries the ratio as `Costs.link_eff`. P69 runs that script, at the pinned commit, twice on a 5090 of the class the consumer serves, and reads the ratio. Prereg: `bench/p69/P69-PREREG.md`.
