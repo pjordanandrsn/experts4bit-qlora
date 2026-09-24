@@ -1,0 +1,7 @@
+/root/tp4/venv-unsloth/lib/python3.11/site-packages/unsloth/__init__.py:1589: UserWarning: WARNING: Unsloth should be imported before [transformers, peft] to ensure all optimizations are applied. Your code may run slower or encounter memory issues without these optimizations.
+
+Please restructure your imports with 'import unsloth' at the top of your file.
+  from ._gpu_init import *
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+tp4 tripwire OK (unsloth): 2026.9.11 zoo 2026.9.7 torch 2.8.0+cu128 triton 3.4.0 transformers 5.5.0 bnb 0.50.2 peft 0.21.0 torchao None moe_backend native_torch separated_lora True FastModel True

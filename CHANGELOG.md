@@ -27,6 +27,13 @@
 
 ## Unreleased
 
+### Lane P67 read (#713): Gemma-4's training-parity floor is measured; the attention-4-bit paths are supported under it (docs, register, capabilities; no library behaviour change)
+
+- **The draw.** `p67-gemma4-floor-1` ran on one RTX 5090 for $1.4426 (lane $1.4523 with the proof), every arm OK · VALID, both teardowns proven. Full read: `bench/p67/RESULTS-p67.md`; the box's receipts under `bench/p67/receipts/`.
+- **The floor.** Five admissible draws of the reference against itself (one plain repeat, four fixed permutations of the per-expert loop): **F_hi(final) 0.121, F_hi(med) 0.1275**, bands 0.363 / 0.383. The plain repeat is not bit-identical (diverges at step 2). Registered as `e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24`, superseding P56's proxy `e4b.parity.gemma4.train-floor`.
+- **The verdicts.** `fused_attn4` D 0.013 / 0.036 and `batched_attn4` D 0.037 / 0.048: both **PASS**, carried by the tolerance, neither detectable against the floor; the two earlier sessions' constant-band FAILs PASS the floor band, so the reading is not MIXED. `docs/capabilities.json`: `gemma4_text.fast_train` and `reference_train` in the attention-4-bit configuration are **supported**; `batched_train` stays void (the arm ran at pad_waste_limit 64, not the shipped default).
+- **Predictions.** Q1, Q2 held. Q3, Q4, Q6 refuted and Q5 mostly refuted, all in the direction of noise: the floor is larger than predicted, the loop reorder moves the step-0 loss more than the fused kernels do (0.052–0.217 vs 0.034), and the accelerated arms landed closer than their standing values. No default moves; no speed claim.
+
 ### `llms-full.txt`: `docs/ARCHITECTURE_SUPPORT.md` leaves the bundle (discoverability only; no library change)
 
 - The bundle stood at 397,928 of its 400,000-byte cap after the P66 read, and every lane read adds a STATUS paragraph and claims. The architecture-support table (27.7 KB) is dropped from `docs/llms-bundle.json`; it stays linked from `llms.txt`, the README and `docs/INDEX.md`, so nothing becomes undiscoverable. The bundle is 370 KB.

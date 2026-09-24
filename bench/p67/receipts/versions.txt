@@ -1,0 +1,16 @@
+e4b 0.37.3 @cd2716decf77f0c7d0e81b7e58dbe5dd5345cc29 (GitHub main)
+gnf4 0.32.1 @9206352f7c49d76432824f7ce8872f0b285f2a4e (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.17.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.20.0
+unsloth 2026.9.11
+unsloth_zoo 2026.9.7
+torch(unsloth) 2.8.0+cu128
+triton(unsloth) 3.4.0
+transformers(unsloth) 5.5.0
+bitsandbytes(unsloth) 0.50.2
+peft(unsloth) 0.21.0
+torchao None
+moe_backend native_torch

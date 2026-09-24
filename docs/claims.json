@@ -5372,7 +5372,7 @@
         "receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2/ (run tp4-c-parity-2)"
       ],
       "notes": "Registered before the run as amendment 5 of bench/tp4/TP4-PREREG.md (commit ccefeec, merged 20:21:05Z; launch 21:43:31Z), which deliberately predicted only that parity become READABLE and explicitly did NOT predict the verdict. The direction is consistent with lanes P47-P51: Gemma-4's sensitivity is POSITIONAL and lives in the quantised model, not the adapter path, so an adapter-path change was not expected to move it -- and it did not (final delta -8.6%, median step delta +5.3%, both far outside the band). Also measured on the same pair: the fused path is 10.81x faster per step at identical peak VRAM; that is an internal comparison and no competitive position is quoted from it. SUPERSEDED 2026-09-22 by P56: the disagreement is NOT specific to the fused path. e4b's KERNEL-FREE batched path, carrying 13x less composed gradient error and never touching grouped-nf4-gemm, also fails the band (0.05425 final / 0.08487 median). Also: this row's unit string says 'final held-out loss' but its value came from tp4_reduce.parity(), which reads loss_last -- the final TRAIN loss. See e4b.parity.gemma4.train-floor.",
-      "superseded_by": "e4b.parity.gemma4.train-floor"
+      "superseded_by": "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24"
     },
     {
       "id": "e4b.parity.gemma4.train-floor",
@@ -5384,7 +5384,7 @@
       "model": "google/gemma-4-26B-A4B-it",
       "hardware": "RTX 5090, rented (Vast instance ssh7.vast.ai:25378)",
       "measured_on": "2026-09-22",
-      "status": "measured-private",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/p56/RESULTS-p56.md"
@@ -5392,11 +5392,9 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3/ (run p56-gemma4-ladder-3)"
       ],
-      "supersedes": [
-        "e4b.parity.gemma4.train-internal"
-      ],
       "notes": "Registered before the run as bench/p56/P56-PREREG.md (merged d0f8fde, 2026-09-21), which deliberately did NOT predict the verdict and disclosed two priors favouring this one. Four arms ordered by per-op error; all VALID (identical init_sha and tokens sha, 487,280,640 trainable each, n_patched 30, C1 bit-exact, 20 steps). The batched rung engaged 7680/7680 calls with 0 fallbacks at pad_waste_limit 64 -- it had VOIDed on this family before for pad-waste fallback. HONEST LIMIT: the deltas are MONOTONE in per-op error and all accelerated arms sit on the same side of the reference, so the arithmetic is not irrelevant; the reducer's flat-pattern test (hi <= 2*lo) passed with only 5.6% headroom. The defensible claim is the sublinearity and the kernel-free arm's failure, not 'pure chaos'. The standing FAIL reproduced on a third box (0.10223 vs the prior 0.08257), so it is real and stable. Nothing is quoted against another framework: the Unsloth and HF arms were skipped by registration. e4b#558 stays open as a GATE defect (no per-family floor term) rather than a fused-path defect.",
-      "conditions": "tp4 field fixture: alpaca, seq 2048, micro-batch 2 x accum 4, r16/alpha16, lr 2e-4, AdamW-8bit, linear warmup 5, seed 3407, N=20, --attn-4bit 1; grouped-nf4-gemm pinned 9206352f (v0.32.1)"
+      "conditions": "tp4 field fixture: alpaca, seq 2048, micro-batch 2 x accum 4, r16/alpha16, lr 2e-4, AdamW-8bit, linear warmup 5, seed 3407, N=20, --attn-4bit 1; grouped-nf4-gemm pinned 9206352f (v0.32.1)",
+      "superseded_by": "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24"
     },
     {
       "id": "e4b.quality.gemma4.calibration-refuted",
@@ -6888,6 +6886,91 @@
         "receipts/experts4bit-qlora/2026-09-24/p66-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proofs p66-prove-1..6 and the refused reading p66-5090-1 beside it"
       ],
       "notes": "Pre-registered in #731 (P4, P5, P6): all HELD. P4's +3 syncs are structural (the host needs the ids to issue disk reads); two of the three are pageable H2D copies, and the pinned-staging follow-up the rule conditions on their host cost >= 10 % of the token is NOT licensed by this read -- the instrument records counts and sync sites, not those copies' host time. P6: cold_dest='deadline' prices bytes only, so its GPU side omits the mixed-layer dispatch term (recorded in the cold_deadline follow-up). Same per-layer counts on the A2000 rehearsal."
+    },
+    {
+      "id": "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "google/gemma-4-26B-A4B-it",
+      "claim": "Lane P67: Gemma-4-26B-A4B-it's training-parity FLOOR at tp4's field fixture, measured as the reference path against ITSELF -- the same ExpertsLoRA per-expert loop, same session, same init_sha and tokens, with the hit experts visited in a fixed permuted order (E4B_REFERENCE_EXPERT_ORDER=perm:1..4, exact in real arithmetic) and one plain repeat -- is F_hi(final) = 0.121 nats and F_hi(med) = 0.1275 over five admissible draws (final 0.011-0.121, med 0.045-0.128; the plain repeat 0.022 / 0.045, not bit-identical, diverging at step 2), giving the registered bands max(0.05, 3 F_hi) = 0.363 / 0.383; at step 0 the reorderings move the train loss by 0.052-0.217, more than the fused kernels' 0.034.",
+      "value": 0.121,
+      "unit": "F_hi(final) nats, the largest |delta loss_last| of five reference-vs-reference draws (F_hi(med) 0.1275; bands 0.363 / 0.383)",
+      "hardware": "RTX 5090 (sm_120, 520 W, driver 580.105.08) on an AMD EPYC 7302 (64 CPUs, 504 GiB, cgroup 242 GiB), one rented Vast.ai verified/secure host (instance 52449460)",
+      "conditions": "Lane P67 (registered #718 at 10ce711, Amendment 1 #737 rates only): tp4's field fixture byte for byte -- alpaca 5324987a, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, wd 0.001, warm-up 5 linear, seed 3407, N = 20, 48 held-out rows at steps 0 and 20, --attn-4bit 1 (115 projections); google/gemma-4-26B-A4B-it @ 4d7ae498, e4b 0.37.3 at cd2716d, grouped-nf4-gemm 0.32.1 at 9206352f (v0.32.1), torch 2.8.0+cu128, transformers 5.17.0; one session, one box; every run arm VALID (init_sha 7588b481, tokens sha 4ea779a5, 487,280,640 trainable, C1 bit-exact, 20 steps); D on the TRAIN loss against the session's reference_attn4 (D_final = |delta loss_last|, D_med = median per-step |delta|), held-out beside, gating nothing; B(q) = max(0.05, 3 * F_hi(q)), N_MIN 3, as p67_reduce.py fixes them; the switch shares no code with any accelerated path; a draw bit-identical to the reference would be refused as a zero floor (none was)",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p67/RESULTS-p67.md",
+        "bench/p67/P67-PREREG.md",
+        "bench/p67/p67_reduce.py",
+        "bench/p67/receipts/session.md",
+        "bench/p67/receipts/session.json",
+        "bench/p67/receipts/summary.txt",
+        "tests/test_p67_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p67-gemma4-floor-1/ (receipt.json, teardown-proof.json, the fetched tp4/ tree); the proof p67-prove-1 beside it; the consistency sessions receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2 and 2026-09-22/p56-gemma4-ladder-3"
+      ],
+      "supersedes": [
+        "e4b.parity.gemma4.train-floor",
+        "e4b.parity.gemma4.train-internal"
+      ],
+      "notes": "Pre-registered #718. Q2 HELD (the repeat is not bit-identical; the source kernel is not established). Q4 REFUTED (predicted [0.005, 0.08]); Q3 REFUTED (predicted every reorder's step-0 delta below both accelerated arms'). Supersedes P56's proxy floor (and, directly, the P44-era train-internal row it had superseded) (the batched arm as the smallest perturbation, 0.054 / 0.085): the floor is the reference against itself and it is larger. Consistency: the two earlier same-fixture sessions' judged pairs (fused 0.083/0.124 and 0.102/0.106, batched 0.054/0.085, fused_nodgrad 0.103/0.117) all PASS against these bands, so the reading is not MIXED. Step-0 train loss is the same across three sessions and hosts per path (reference 5.73957, fused 5.70567); the 20-step endpoints scatter (reference 1.1605 / 1.1819 / 1.1289). Lane $1.4523 (proof $0.0097, draw $1.4426), teardowns proven."
+    },
+    {
+      "id": "e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "google/gemma-4-26B-A4B-it",
+      "claim": "Lane P67: e4b's fused expert path in the attention-4-bit configuration (fused_attn4: enable_fast_train + TRAIN_ATTN_4BIT, 30 modules patched, 115 NF4 attention projections) PASSES Gemma-4-26B-A4B-it's registered floor band on both quantities -- D_final 0.01331 and D_med 0.03565 nats against bands 0.363 / 0.383 (max(0.05, 3 F_hi)) -- carried by the tolerance (inside tp1's constant 0.05 on its own in this session) and not detectable against the reference's own reordering floor (D / F_hi 0.11, 0.28); held-out delta 0.011; step-0 delta 0.034; the two earlier sessions' fused pairs (0.083 / 0.124, 0.102 / 0.106) PASS the same band, so the reading is not MIXED. The registered decision: fast_train and reference_train in the attention-4-bit configuration are supported on gemma4_text.",
+      "value": 0.01331,
+      "unit": "D_final train nats vs the session's reference (D_med 0.03565); bands 0.363 / 0.383",
+      "hardware": "RTX 5090 (sm_120, 520 W, driver 580.105.08) on an AMD EPYC 7302 (64 CPUs, 504 GiB, cgroup 242 GiB), one rented Vast.ai verified/secure host (instance 52449460)",
+      "conditions": "Lane P67 (registered #718 at 10ce711, Amendment 1 #737 rates only): tp4's field fixture byte for byte -- alpaca 5324987a, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, wd 0.001, warm-up 5 linear, seed 3407, N = 20, 48 held-out rows at steps 0 and 20, --attn-4bit 1 (115 projections); google/gemma-4-26B-A4B-it @ 4d7ae498, e4b 0.37.3 at cd2716d, grouped-nf4-gemm 0.32.1 at 9206352f (v0.32.1), torch 2.8.0+cu128, transformers 5.17.0; one session, one box; every run arm VALID (init_sha 7588b481, tokens sha 4ea779a5, 487,280,640 trainable, C1 bit-exact, 20 steps); D on the TRAIN loss against the session's reference_attn4 (D_final = |delta loss_last|, D_med = median per-step |delta|), held-out beside, gating nothing; B(q) = max(0.05, 3 * F_hi(q)), N_MIN 3, as p67_reduce.py fixes them; fused_attn4 is the second arm of the session, before the floor draws",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p67/RESULTS-p67.md",
+        "bench/p67/P67-PREREG.md",
+        "bench/p67/p67_reduce.py",
+        "bench/p67/receipts/session.md",
+        "bench/p67/receipts/session.json",
+        "bench/p67/receipts/summary.txt",
+        "tests/test_p67_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p67-gemma4-floor-1/ (receipt.json, teardown-proof.json, the fetched tp4/ tree); the proof p67-prove-1 beside it; the consistency sessions receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2 and 2026-09-22/p56-gemma4-ladder-3"
+      ],
+      "notes": "Pre-registered #718; the verdict was NOT predicted (Q7). Q5 REFUTED (predicted D_final [0.06, 0.13], D_med [0.08, 0.15] from the standing sessions), Q6 REFUTED (D(fused) < D(batched) here, 0.013 vs 0.037). A statement of resolution, not equality: on this family two correct reference runs land 0.011-0.121 apart at step 20, so a 20-step trajectory cannot resolve a 0.05-nat defect; a per-op or matched-routing instrument would. No speed claim; bf16-attention fast_train unchanged (tp1)."
+    },
+    {
+      "id": "e4b.train.p67.gemma4.batched-attn4.floor-band.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "google/gemma-4-26B-A4B-it",
+      "claim": "Lane P67: e4b's kernel-free batched path in the attention-4-bit configuration (batched_attn4: enable_batched_train at pad_waste_limit 64 -- 7,680 of 7,680 calls batched, 0 fallbacks; 30 modules patched) PASSES Gemma-4-26B-A4B-it's registered floor band -- D_final 0.03694 and D_med 0.04803 nats against 0.363 / 0.383 -- carried by the tolerance and not detectable (D / F_hi 0.30, 0.38); held-out delta 0.038; step-0 delta 0.065; P56's batched pair (0.054 / 0.085) PASSES the same band.",
+      "value": 0.03694,
+      "unit": "D_final train nats vs the session's reference (D_med 0.04803); bands 0.363 / 0.383; pad_waste_limit 64",
+      "hardware": "RTX 5090 (sm_120, 520 W, driver 580.105.08) on an AMD EPYC 7302 (64 CPUs, 504 GiB, cgroup 242 GiB), one rented Vast.ai verified/secure host (instance 52449460)",
+      "conditions": "Lane P67 (registered #718 at 10ce711, Amendment 1 #737 rates only): tp4's field fixture byte for byte -- alpaca 5324987a, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, wd 0.001, warm-up 5 linear, seed 3407, N = 20, 48 held-out rows at steps 0 and 20, --attn-4bit 1 (115 projections); google/gemma-4-26B-A4B-it @ 4d7ae498, e4b 0.37.3 at cd2716d, grouped-nf4-gemm 0.32.1 at 9206352f (v0.32.1), torch 2.8.0+cu128, transformers 5.17.0; one session, one box; every run arm VALID (init_sha 7588b481, tokens sha 4ea779a5, 487,280,640 trainable, C1 bit-exact, 20 steps); D on the TRAIN loss against the session's reference_attn4 (D_final = |delta loss_last|, D_med = median per-step |delta|), held-out beside, gating nothing; B(q) = max(0.05, 3 * F_hi(q)), N_MIN 3, as p67_reduce.py fixes them; TP4_BATCHED_PAD_WASTE_LIMIT=64 is the registered knob, NOT the shipped default _PAD_WASTE_LIMIT of 4",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p67/RESULTS-p67.md",
+        "bench/p67/P67-PREREG.md",
+        "bench/p67/p67_reduce.py",
+        "bench/p67/receipts/session.md",
+        "bench/p67/receipts/session.json",
+        "bench/p67/receipts/summary.txt",
+        "tests/test_p67_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p67-gemma4-floor-1/ (receipt.json, teardown-proof.json, the fetched tp4/ tree); the proof p67-prove-1 beside it; the consistency sessions receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2 and 2026-09-22/p56-gemma4-ladder-3"
+      ],
+      "notes": "Pre-registered #718. Q5: D_final HELD ([0.03, 0.08]), D_med REFUTED ([0.05, 0.11], by 0.002). This row does NOT license the shipped batched_train default (limit 4), by the registration's own line; gemma4_text.batched_train stays as tp1 left it (void: the fallback took every layer on some steps at the default)."
     }
   ]
 }

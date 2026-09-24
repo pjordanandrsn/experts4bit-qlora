@@ -1188,7 +1188,7 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "enable_fast, enable_fast_train and enable_batched_train refuse a wrapper whose base violates the stock-epilogue contract (EpilogueContractError, #402) instead of silently computing act(gate)*up over a base that applies biases, clamps or another gating rule -- a refusal is loud, a wrong epilogue is not; gpt-oss is the family this protects, and DeepSeek-V4 supplies its epilogue through _apply_gate and is admitted",
     "Head-to-head against Unsloth's 4-bit MoE QLoRA path on one identical training problem (lane p38, 2026-09-05, one rented RTX 5090, Qwen3-30B-A3B, the clinical fixture tokenised once, seq 512, r 8 / alpha 16, identical targets, optimizer, batch, steps, precision and eval; bench/h2h-20260905/p38/): the shipped fused dgrad path with NF4 attention is faster per step, lower in peak VRAM and lower in energy per step than Unsloth on that box, and the two are comparable on held-out loss at sixty steps (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05, ...quality-n60) -- BUT the two-hundred-step curve favours Unsloth: its held-out loss is lower at the end of the curve while e4b's flattens from step sixty (e4b.train.h2h.unsloth.qwen3.5090.2026-09-05.curve-n200). Quote the position only beside that row. Candidate causes (the eval schedule, the checkpointing mode, the transformers/peft versions of the two stacks, the expert adapter's precision -- bf16 on this side, the loader passes the model dtype to ExpertsLoRA -- against fp32 on Unsloth's) are not established. One workload, one box, one family; nothing here licenses a path (tp1 does) and no general speed claim is made",
     "tp2/P40 (2026-09-06, one rented RTX 5090, receipts in bench/h2h-20260906/tp2/) extends the Unsloth head-to-head to all six families on one box and one fixture, and its rows are statuses, not one number: positions exist only for Qwen3-30B-A3B (s/step ratio Unsloth/e4b 1.457, e4b faster per step, quality COMPARABLE; it agrees with P38's 1.413 inside the pre-registered anchor band, e4b.train.h2h.unsloth.qwen3.5090.2026-09-06) and Mixtral-8x7B, whose row leads with the footprint trade: e4b trained its experts under CPU offload at roughly one-ninth of Unsloth's resident allocator peak (the registered design; the footprint row e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint -- a trainable-on-smaller-cards capability, quality COMPARABLE) while Unsloth ran resident, its only mode, and what that VRAM buys it is speed per step (s/step ratio 0.361, e4b.train.h2h.unsloth.mixtral.5090.2026-09-06 -- a footprint-vs-speed trade, not a kernel deficit). No position on the other four, and the coverage rows are results, not empty cells: on Granite the comparator attached LoRA to the attention only, a fraction of e4b's trainable count with ExpertsLoRA on every MoE layer (e4b.train.h2h.unsloth.granite.5090.2026-09-06.coverage), and on OLMoE it died at MoE-LoRA engage while both e4b arms trained (e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.coverage); gpt-oss refuses on both sides (P5 held), and Gemma-4's e4b attention-4-bit arms died on the projection-count check (#412, fixed since by #435; the arms have run since in P56 and tp4, all 115 projections converted, and are not licensed because tp1's constant parity band fails every accelerated path on this model, the kernel-free one included: #713; the bf16-attention fast_train path stays as tp1 left it) while Unsloth's arm trained. P38's two-hundred-step curve row (Unsloth lower at the end of the curve) still stands beside any Qwen3 position; per-arm rows are e4b.train.h2h.unsloth.<family>.5090.2026-09-06.arm.*",
-    "Attention projection targeting (add_attention_lora and TRAIN_ATTN_4BIT / quantize_attention_projections_4bit) is by module STRUCTURE, never family name: q_proj, k_proj and o_proj must be supported linears; v_proj may be a supported linear or absent/None (Gemma-4 attention_k_eq_v layers). The expected count is len(candidates) from detect_attention_projections, never 4 * n_layers. A layer with q_proj/o_proj but no k_proj is refused. A projection that carries a bias is refused (gpt-oss). Gemma-4 attention-4-bit remains not supported: with this detector its arms convert all 115 projections and run VALID (P56 ladder-3, tp4-c-4), but tp1's constant 0.05 parity band fails every accelerated path on this model, the kernel-free one included (e4b.parity.gemma4.train-floor), so licensing waits on a per-family floor band (#713)"
+    "Attention projection targeting (add_attention_lora and TRAIN_ATTN_4BIT / quantize_attention_projections_4bit) is by module STRUCTURE, never family name: q_proj, k_proj and o_proj must be supported linears; v_proj may be a supported linear or absent/None (Gemma-4 attention_k_eq_v layers). The expected count is len(candidates) from detect_attention_projections, never 4 * n_layers. A layer with q_proj/o_proj but no k_proj is refused. A projection that carries a bias is refused (gpt-oss). Gemma-4 attention-4-bit is supported since lane P67 (2026-09-24, #713): with this detector its arms convert all 115 projections and run VALID (P56 ladder-3, tp4-c-4, P67), and read against the family's own floor -- the reference against its own reorderings (e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24) instead of tp1's constant 0.05 band against zero -- the fused arm is indistinguishable from that reordering noise (e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24)"
    ],
    "status": "supported",
    "training_support": {
@@ -1300,9 +1300,11 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
        "claim_ids": [
         "e4b.train.parity.tp1.gemma4.reference.2026-09-05",
         "e4b.train.flagship-matrix",
-        "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4"
+        "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4",
+        "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24",
+        "e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24"
        ],
-       "reason": "tp1 and the flagship, with bf16 attention. The attention-4-bit configuration is NOT supported: its arms run since #435 (P56, tp4; all 115 projections), but tp1's constant parity band fails every accelerated path on this model, the kernel-free one included, so licensing waits on a per-family floor band (#713) (tp2/P40: 'quantize_attention_projections_4bit converted 100 projections, expected 120'; e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4)."
+       "reason": "tp1 and the flagship, with bf16 attention. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4, all 115 projections since #435) is supported since lane P67 (2026-09-24, #713): its arm is VALID and the family's floor is measured from five more VALID runs of it against itself (e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24); the fused arm read against that floor PASSES (e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24). tp2/P40's two arms had died on the harness's projection-count check ('quantize_attention_projections_4bit converted 100 projections, expected 120'; e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4)."
       },
       "fast_train": {
        "status": "supported",
@@ -1310,16 +1312,19 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
         "e4b.train.parity.tp1.gemma4.fused.2026-09-05",
         "e4b.train.flagship-matrix",
         "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4",
-        "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.fused_attn4"
+        "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.fused_attn4",
+        "e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24",
+        "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24"
        ],
-       "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4 / fused_attn4) is NOT supported on this family: its arms run since #435 (p56-gemma4-ladder-3, tp4-c-4; all 115 projections converted), but tp1's constant parity band fails every accelerated path here, the kernel-free one included, and licensing waits on a per-family floor band (#713). On tp2/P40 (2026-09-06) both e4b attention-4-bit arms died on the harness's projection-count check (tp2_arm.py asserts n_attn4 == 4 * n_layers on the converter's return value) -- 'quantize_attention_projections_4bit converted 100 projections, expected 120' -- before a step ran (void_attn4 receipts, reduced as HARNESS_ERROR; the two .arm.e4b.* claim ids here). The fast_train path with bf16 attention stays exactly as tp1 left it: supported."
+       "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4 / fused_attn4, 115 projections) is supported since lane P67 (2026-09-24, #713) under the registered per-family floor band (max of tp1's tolerance and three times the floor's upper edge): the fused arm PASSES, carried by the tolerance and not detectable against the reference's own reordering floor, and the two earlier sessions' FAILs against the constant band PASS the same floor band, so the reading is not MIXED (e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24, e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24). A statement of resolution, not equality: on this family two correct reference runs land far enough apart at step 20 that a 20-step trajectory cannot resolve a tolerance-sized defect (the numbers are in the claim rows). On tp2/P40 (2026-09-06) both e4b attention-4-bit arms had died on the harness's projection-count check ('quantize_attention_projections_4bit converted 100 projections, expected 120') before a step ran (void_attn4 receipts, HARNESS_ERROR; fixed by #435). The fast_train path with bf16 attention stays exactly as tp1 left it: supported."
       },
       "batched_train": {
        "status": "void",
        "claim_ids": [
-        "e4b.train.parity.tp1.gemma4.batched.2026-09-05"
+        "e4b.train.parity.tp1.gemma4.batched.2026-09-05",
+        "e4b.train.p67.gemma4.batched-attn4.floor-band.5090.2026-09-24"
        ],
-       "reason": "tp1: on some steps the batched kernel was not reached on any layer (the _PAD_WASTE_LIMIT fallback took every layer), as prediction P2 stated for this family; the batched label bought nothing here"
+       "reason": "tp1: on some steps the batched kernel was not reached on any layer (the _PAD_WASTE_LIMIT fallback took every layer), as prediction P2 stated for this family; the batched label bought nothing here. Lane P67 (2026-09-24) ran the arm at pad_waste_limit 64 (7,680 of 7,680 calls batched, 0 fallbacks) and it PASSES the floor band (e4b.train.p67.gemma4.batched-attn4.floor-band.5090.2026-09-24); by the registration's own line that verdict does not license the shipped default of 4, so this cell stays void."
       },
       "nvme_train": {
        "status": "not_tested",
@@ -2079,8 +2084,9 @@ secondary row trains. **Gemma-4** — both e4b attention-4-bit arms died on the
 harness's projection-count check (the converter returned 100; the harness expected
 4 · n_layers = 120 —
 [#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412), fixed
-since by #435; the attention-4-bit arms have run cleanly since, in P56
-and tp4, and are not licensed, [#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713); the
+since by #435; the attention-4-bit arms have run cleanly since, in P56,
+tp4 and P67, and are **licensed since lane P67** (2026-09-24) under the family's
+measured floor, [#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713); the
 bf16-attention `fast_train` path stays as tp1 left it), while Unsloth's arm
 is OK · VALID (`e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.unsloth.ckpt_unsloth`).
 e4b's internal fused-vs-reference parity PASSES on all four families that
@@ -2191,7 +2197,7 @@ reproducing the 0.09037 / 0.11801 of the previous kernel cut; the fused path
 is 11.65× faster on that pair (internal, no competitive position). As the
 P47–P51 lanes predicted, the sensitivity is **positional and lives in the
 quantised model**, not the adapter path. [`e4b.parity.gemma4.train-internal`](claims.json) is **SUPERSEDED** 2026-09-22 by lane P56
-([`e4b.parity.gemma4.train-floor`](claims.json),
+([`e4b.parity.gemma4.train-floor`](claims.json), itself superseded 2026-09-24 by lane P67, below;
 [`bench/p56/RESULTS-p56.md`](../bench/p56/RESULTS-p56.md)): the disagreement is
 **not attributable to the fused path** — e4b's kernel-free batched path, with
 13× less composed gradient error, fails the same band, and no achievable
@@ -2200,7 +2206,16 @@ family's training-parity floor for the first time (**≥ 0.054 final / 0.085
 median step-wise**), and `tp4_reduce.parity()` compares against 0.05 **and
 against zero**, with no floor term. So #558 stands open as a **gate** defect,
 not a fused-path defect; the serving side already fixed the same class of
-error by moving to a measured floor.
+error by moving to a measured floor. That proxy floor is in turn **SUPERSEDED**
+2026-09-24 by lane P67 ([`e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24`](claims.json),
+[`bench/p67/RESULTS-p67.md`](../bench/p67/RESULTS-p67.md)): measured as the
+reference against its own reorderings (one repeat, four fixed permutations of the
+per-expert loop, same session), the floor is **0.121 final / 0.128 median** — larger
+than the proxy — and read against `max(0.05, 3 · F_hi)` both accelerated arms
+**PASS** (fused 0.013 / 0.036, batched 0.037 / 0.048), as do the two earlier
+sessions' constant-band FAILs. #558 does not reopen; the attention-4-bit paths
+are supported on `gemma4_text`, as a statement of resolution: two correct
+reference runs land 0.011–0.121 apart at step 20 on this model.
 
 **Gemma-4's experts take a graded store map, not one store** (lanes P47–P51,
 2026-09-19; `bench/p47`–`bench/p51`, all against the bf16 checkpoint on the
@@ -2577,16 +2592,22 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   defaulted to the V4 epilogue, #397). What stays open is a gpt-oss-aware
   adapter; the kernel package's `ExpertsMxfp4LoRA` route is the experimental
   alternative (tp1: canary and provenance pass, never licensed).
-- **[#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713) — Gemma-4 attention 4-bit runs, and the training-parity band cannot
-  license it.** Since #435 the arms convert all 115 structural projections: 25 sliding
-  layers × 4, and 5 full-attention layers × 3, which have no `v_proj`. They run VALID in
-  `p56-gemma4-ladder-3` and `tp4-c-4`. But tp1's constant 0.05 band fails for every
-  accelerated path, the kernel-free batched one included (0.054 final, against the fused
-  path's 0.102; `e4b.parity.gemma4.train-floor`), so the band cannot tell a defect from the
-  model's own sensitivity. P56 recommends a per-family floor measured by the
-  smallest-perturbation arm. Until that band is registered, attention-4-bit training on
-  `gemma4_text` is not supported. tp2/P40's own two arms were voided by its harness's count
-  check ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)); that harness still hard-codes 4 · n_layers.
+- **[#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713) — answered by lane P67 (2026-09-24): Gemma-4's
+  training-parity floor is measured, and the attention-4-bit paths are licensed under it.** Since #435 the arms
+  convert all 115 structural projections (25 sliding layers × 4, 5 full-attention layers × 3 without `v_proj`) and
+  run VALID. tp1's constant 0.05 band against zero failed every accelerated path here, the kernel-free one included
+  (P56). P67 drew the floor the registration asked for — the reference against itself, one plain repeat and four
+  fixed permutations of the per-expert loop, one session on one RTX 5090 — and read F_hi **0.121 final / 0.128
+  median** ([`e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24`](claims.json)): the reorderings move the
+  step-0 loss by 0.052–0.217 where the fused kernels move it 0.034, and the plain repeat diverges at step 2. Against
+  `max(0.05, 3 · F_hi)` = 0.363 / 0.383 the fused arm (0.013 / 0.036) and the batched arm (0.037 / 0.048) **PASS**,
+  carried by the tolerance and not detectable, and the two earlier sessions' FAILs PASS the same band, so the
+  reading is not MIXED. Under the registered table `fast_train` and `reference_train` in the attention-4-bit
+  configuration are **supported** on `gemma4_text` ([`capabilities.json`](capabilities.json)); `batched_train`
+  stays void (its arm ran at `pad_waste_limit` 64, not the shipped default). What stays open is resolution, not
+  licence: a 20-step trajectory cannot detect a 0.05-nat defect on this model, so a per-op or matched-routing
+  instrument is the next step if one is ever wanted ([`bench/p67/RESULTS-p67.md`](../bench/p67/RESULTS-p67.md)).
+  tp2/P40's harness still hard-codes 4 · n_layers ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)).
 - **[#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344) —
   Gemma-4 fails to load on 2 of 6 rented hosts** with `CUDA error: invalid
   argument`, after the experts quantise. A 2 GiB host-hop fix was merged and
@@ -3212,7 +3233,6 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.h2h.unsloth.qwen3_5.5090.2026-09-19.arm.unsloth.ckpt_unsloth [measured]: tp4 field-recipe arm on grouped-nf4-gemm 0.32.1: unsloth/ckpt_unsloth on qwen3_5 takes 26.9787 s/step (49.5 tok/s, 21.638 GB peak, held-out final 0.93144). An arm row, not a position.
 - e4b.train.h2h.unsloth.qwen3_5.5090.2026-09-19.e4b-internal-parity [measured]: e4b's fused training path against its own dense reference on qwen3_5, same box and tokens: 0.00159 nats final against tp1's 0.05 band -- PASS, with the fused path x13.89 faster per step. Registered as A3 in P46 amendment 2: a refused parity on any family would have stopped the release.
 - e4b.train.h2h.unsloth.coverage.5090.2026-09-19 [measured]: Coverage of the 0.32.1 re-run, stated so the gaps are not read as results: positions are quoted for Qwen3-30B-A3B against Unsloth (4.490) and Granite against HF+PEFT (1.292). NOT quoted: Granite and Qwen3.6 against Unsloth (its arm trains 5.2 M parameters against e4b's 99.6 M -- attention only, VOID by tp4's regime rule); OLMoE against Unsloth (its arm died before its first step); OLMoE against HF (ratio 1.945 but the held-out gap is 0.0550 nats, outside the reading band -- FLAGGED); gpt-oss (e4b's fused path refuses the family by citation, so no primary pair); Qwen3 and Qwen3.6 against HF (OOM). Gemma-4 and Mixtral were not in this re-run's scope.
-- e4b.parity.gemma4.train-floor [measured-private] (receipt private): Gemma-4-26B-A4B-it's training-parity FAIL is not attributable to the fused expert path: on one box, one init_sha and the same tokens, e4b's KERNEL-FREE batched path -- 13x less composed gradient error, never touching grouped-nf4-gemm -- also fails tp1's 0.05/0.05 band, at 0.05425 final train / 0.08487 median step-wise against the fused path's 0.10223 / 0.10639. Cutting the per-op error 13x closes only 1.9x of the gap, so no achievable arithmetic change reaches the band. The smallest perturbation available therefore MEASURES this family's training-parity floor for the first time: >= 0.054 final / 0.085 median step-wise. tp4's parity() compares against 0.05 AND AGAINST ZERO, with no floor term.
 - e4b.quality.gemma4.calibration-refuted [measured-private] (receipt private): GPTQ calibration does NOT rescue Gemma-4-26B-A4B-it's quantised experts, and SEQUENTIAL calibration is WORSE than all-at-once on this family: with all 30 expert layers quantised, KL vs the bf16 checkpoint reads NF4 round-to-nearest 1.0772 (top-1 0.6438), calibrated int4 all-at-once 1.1050 (0.6423), calibrated int4 sequential 1.1564 (0.6299). Calibration batches, source and Hessian budget identical across the calibrated arms; ORDER was the only difference. The Qwen3-30B ordering effect (streamed -0.050 ppl vs all-at-once +0.150) does not transfer to Gemma-4's experts -- it inverts. No serving position is quoted from this lane; the row records a refutation.
 - e4b.serve.p54.qwen3.b16.control.5090.2026-09-21 [measured]: Lane P54: batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v as three projections: 11.420 ms/step (median of two interleaved draws: 11.443 / 11.396), 1401.1 tok/s on this box.
 - e4b.serve.p54.qwen3.b16.fqkv.5090.2026-09-21 [measured]: Lane P54: batched (B=16, aggregate) paged decode of Qwen/Qwen3-30B-A3B's int4 serving stack on one RTX 5090 with q/k/v FUSED into one Int4Linear: 11.197 ms/step (median of two interleaved draws: 11.194 / 11.200), 1429.0 tok/s on this box.
@@ -3271,6 +3291,9 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p66.qwen3.pipelined-fixed-tax.captured.5090.2026-09-24 [measured]: Lane P66: with every expert hot and zero cold traffic, the kernels the pipelined residency engine adds cost 1.184 ms/token of device time captured (576 added device rows, 2.06 us each) on an RTX 5090, inside the registered 0.5-1.5 ms band; the kernels both paths run equally often shifted +0.011 ms/token (the shared NF4 GEMV on the engine's row-block store, reported, not folded in); the captured wall tax is 1.401 ms/token (4.754 against 3.353) and the eager wall tax 8.054 ms/token (26.301 against 18.247) for 576 extra host submissions on a host-submission-bound eager step.
 - e4b.serve.p66.qwen3.pipelined-gather-over-cold-deadline.5090.2026-09-24 [measured]: Lane P66: grouped-nf4-gemm's cold cost model (kernel/cold_deadline.py gpu_us: bytes over the link plus bytes over VRAM, with the box's calibrated b_link 23.07 GB/s) UNDER-predicts the pipelined engine's measured UVA gather on an RTX 5090 (PCIe gen 4 x16) by 1.574x at hot fraction 0, 1.734x at 0.25, 1.766x at 0.5 and 2.018x at 0.83 on uniform windows (1.395-1.764x on the controlled windows): the gather moves the copied rows at 11.3-16.3 GB/s, the single-copy rate the same box's own probe read (14.72 GB/s for one synchronized 64 MB pinned copy), not the 40-deep back-to-back rate the calibration blob records; the A2000 rehearsal (gen 3 x8), where the two probes agreed (6.14 vs 6.12 GB/s), read 0.97-1.02x.
 - e4b.serve.p66.gptoss.mxfp4-and-hybrid-sync-census.5090.2026-09-24 [measured]: Lane P66: per MoE layer per token, eager, grouped-nf4-gemm's Mxfp4NvmeResidency issues 37 launches, 6 copies and 4 host syncs, fixed across every window and hot fraction (0, 0.25, 0.5, 1), which is -1 launch / +3 copies / +3 syncs against the all-resident Mxfp4PipelinedGptOss step (38 / 3 / 1); the pinned all-E arena (Mxfp4PipelinedGptOss with host rows) is identical to that step at hot fractions 0 and 0.5 (delta 0 / 0 / 0); and e4b's hybrid tier (hot in VRAM, rest on NVMe, cold_dest=gpu) moves with the layer's composition: 41 launches / 7 copies / 4 syncs on a hot-only layer, 75 / 20 / 10 mixed, 50 / 15 / 8 cold-only (launch spread 1,632 per token), and refuses CUDA-graph capture at hot_residency.py:738 (nonzero).
+- e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24 [measured]: Lane P67: Gemma-4-26B-A4B-it's training-parity FLOOR at tp4's field fixture, measured as the reference path against ITSELF -- the same ExpertsLoRA per-expert loop, same session, same init_sha and tokens, with the hit experts visited in a fixed permuted order (E4B_REFERENCE_EXPERT_ORDER=perm:1..4, exact in real arithmetic) and one plain repeat -- is F_hi(final) = 0.121 nats and F_hi(med) = 0.1275 over five admissible draws (final 0.011-0.121, med 0.045-0.128; the plain repeat 0.022 / 0.045, not bit-identical, diverging at step 2), giving the registered bands max(0.05, 3 F_hi) = 0.363 / 0.383; at step 0 the reorderings move the train loss by 0.052-0.217, more than the fused kernels' 0.034.
+- e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24 [measured]: Lane P67: e4b's fused expert path in the attention-4-bit configuration (fused_attn4: enable_fast_train + TRAIN_ATTN_4BIT, 30 modules patched, 115 NF4 attention projections) PASSES Gemma-4-26B-A4B-it's registered floor band on both quantities -- D_final 0.01331 and D_med 0.03565 nats against bands 0.363 / 0.383 (max(0.05, 3 F_hi)) -- carried by the tolerance (inside tp1's constant 0.05 on its own in this session) and not detectable against the reference's own reordering floor (D / F_hi 0.11, 0.28); held-out delta 0.011; step-0 delta 0.034; the two earlier sessions' fused pairs (0.083 / 0.124, 0.102 / 0.106) PASS the same band, so the reading is not MIXED. The registered decision: fast_train and reference_train in the attention-4-bit configuration are supported on gemma4_text.
+- e4b.train.p67.gemma4.batched-attn4.floor-band.5090.2026-09-24 [measured]: Lane P67: e4b's kernel-free batched path in the attention-4-bit configuration (batched_attn4: enable_batched_train at pad_waste_limit 64 -- 7,680 of 7,680 calls batched, 0 fallbacks; 30 modules patched) PASSES Gemma-4-26B-A4B-it's registered floor band -- D_final 0.03694 and D_med 0.04803 nats against 0.363 / 0.383 -- carried by the tolerance and not detectable (D / F_hi 0.30, 0.38); held-out delta 0.038; step-0 delta 0.065; P56's batched pair (0.054 / 0.085) PASSES the same band.
 
 Open items (no evidence either way):
 
@@ -3278,4 +3301,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(251 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(253 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

@@ -1,0 +1,15 @@
+{
+ "box": "C",
+ "run_id": "p67-gemma4-floor-1",
+ "instance_id": "52449460",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "580.105.08",
+ "cpu": "AMD EPYC 7302 16-Core Processor",
+ "nproc": 64,
+ "mem_total_kb": "528207196",
+ "cgroup_memory_max": "259623223296",
+ "disk_root": "overlay         320G   76M  320G   1% /",
+ "hostname": "ba15a6aa9460",
+ "registered_gpu_class": "5090",
+ "prereg": "tp4/TP4-PREREG.md"
+}
