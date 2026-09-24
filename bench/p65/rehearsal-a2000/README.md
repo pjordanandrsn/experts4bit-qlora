@@ -45,7 +45,13 @@ expert layouts; the reducer reads real rows; and the costs extrapolate to the re
   halves and the full rows, census 38.5 s, bake 74 s wall. It shows the cut-down census the proof runs is complete on
   CUDA. It is not the proof, which runs on the rented class.
 - `harness/`: the rehearsal's own shell (`setup.sh`, the CPU install and text prefetch; `gpu_job.sh`, the shared-GPU
-  lock plus one job; `gpu.sh`, bake and census; `ci.sh`, the CI job reproduced on Linux).
+  lock plus one job; `gpu.sh`, bake and census; `ci_git.sh`, the CI job reproduced on Linux).
+  - Use `ci_git.sh`, not `ci.sh`. `ci.sh` ran on a copy without `.git`, in an image without `git`. Its full run
+    (4 failed, 48 errors) failed only in the two files that shell out to git, `test_check_claims_register.py` and
+    `test_readability_checks.py`.
+  - `ci_git.sh` ships the real repository and installs `git`, as `actions/checkout` gives CI. There those two files
+    pass 77/77, and the full suite passes on `11c2e09`: 1,917 passed, 223 skipped, 0 failed, ruff clean
+    (`ci_git_log.txt`).
 
 ## Numbers
 

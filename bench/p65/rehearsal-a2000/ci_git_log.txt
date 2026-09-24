@@ -1,0 +1,13 @@
+git version 2.34.1
+11c2e09 P65: a proving rental in front of the 2 h reading (compute rule: a guard over 1 h needs a proof, <= 10 min, <= $0.15)
+(status above)
+int4 tripwire ok
+All checks passed!
+ruff rc=0
+== the two git-dependent files
+........................................................................ [ 93%]
+.....                                                                    [100%]
+77 passed in 3.39s
+== full suite
+1917 passed, 223 skipped, 2 warnings in 1050.17s (0:17:30)
+pytest rc=0
