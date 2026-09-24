@@ -1,0 +1,10 @@
+[calibrate] running CPU microbench (/usr/bin/cc -O3 -march=native)...
+[calibrate] running GPU benches...
+
+calibration blob: /root/p66/calib.json
+host: Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | 12 cpus | quota None | flags ['avx2']
+B_dram triad best :     18.0 GB/s  (8t compact nt=1)
+grouped scatter   :     21.6 GB/s  (12t, 2 MiB blocks, E=4096)
+GATE G0           : 120.0% of triad -> PROCEED
+cuda:0 NVIDIA RTX A2000 12GB: triad 257.5 GB/s | link h2d 6.11 / d2h 6.58 GB/s
+B_nvme seq best   : 9.78 GB/s (o_direct=True)

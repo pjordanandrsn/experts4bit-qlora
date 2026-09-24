@@ -1,0 +1,13 @@
+MODE prove
+OVERRIDE P66_REHEARSAL_CLASS=A2000 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_QWEN_SNAPSHOT=/models/OLMoE-1B-7B-0924 -- this run is a REHEARSAL, not a reading
+floor_would_refuse_reading rc=15 10531 MiB VRAM free, the all-resident arms need >= 30000
+floor_would_refuse_reading rc=13 host RAM available 57 GB, cgroup 99999 GB; the pipelined arm pins a 15.2 GiB arena beside 15.2 GiB of materialized experts -- needs >= 64 GB
+e4b 0.37.3 @80204893083ec84057a8cd78993e55bbc361aae0
+gnf4 0.33.2 @f88df1ebe7944aa7481f0c784219fad879c7df89
+e4b from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/__init__.py
+gnf4 from /opt/conda/lib/python3.11/site-packages/nf4_grouped.py
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+PROVE fetch: skipped (rehearsal: local snapshot)

@@ -1,0 +1,28 @@
+MODE prove
+OVERRIDE P66_REHEARSAL_CLASS=A2000 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_MIN_DISK_GB=50 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_MIN_RAM_GB=16 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_MIN_VRAM_MB=8500 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_PIN_GIB=4 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_QWEN_SNAPSHOT=/models/OLMoE-1B-7B-0924 -- this run is a REHEARSAL, not a reading
+NVIDIA RTX A2000 12GB, 12282 MiB, 10531 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d
+power,clock,pcie gen cur,max,width cur,max: 70.00 W, 2100 MHz, 1, 3, 8, 16
+CPU(s):                               12
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          68          48           0           8          55
+overlay         598G  195G  398G  33% /
+Build cuda_12.8.r12.8/compiler.35583870_0
+[2026-09-24T00:38:04Z] p66: no git in the image: apt-get install git
+[2026-09-24T00:38:17Z] p66: install e4b @94842a224f0691a008d25a509bd220e4dcb49ca7
+tripwire OK: 0.37.2 0.33.2 2.8.0+cu128 3.4.0
+e4b 0.37.2 @94842a224f0691a008d25a509bd220e4dcb49ca7
+gnf4 0.33.2 @66d41c821bb29e37551a721f91b16b8ecbb49ed9
+e4b from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/__init__.py
+gnf4 from /opt/conda/lib/python3.11/site-packages/nf4_grouped.py
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+PROVE fetch: skipped (rehearsal: local snapshot)
+[2026-09-24T00:39:27Z] p66: PROVED: class, host minimums, install, tripwire and pin all pass on this box
+[2026-09-24T00:39:27Z] p66: TP_DONE rc=0

@@ -1,0 +1,16 @@
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.25, 'b_vram_gbs': 257.4, 'b_dram_gbs': 22.26}
+[p66] arm hyb-0.50: L=16 E=64 k=8 n_hot=32 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[20:37:50]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.50/0.00/0.50
+[p66] hyb-0.50: window uniform
+[p66] hyb-0.50: window ctrl0
+[p66] hyb-0.50: window ctrl4
+[p66] hyb-0.50: window ctrl8
+[p66] hyb-0.50: wrote rows_hyb-0.50.json
+[p66] arm hyb-0.25: L=16 E=64 k=8 n_hot=16 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[20:38:23]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.25/0.00/0.75
+[p66] hyb-0.25: window uniform
+[p66] hyb-0.25: window ctrl0
+[p66] hyb-0.25: window ctrl4
+[p66] hyb-0.25: window ctrl8
+[p66] hyb-0.25: wrote rows_hyb-0.25.json
+[p66] capture probe on hyb: {'first_sync': {'error': 'RuntimeError: called a synchronizing CUDA operation', 'site': 'hot_residency.py:664 forward: hr = hot_row.nonzero(as_tuple=False).view(-1)'}, 'capture': 'AcceleratorError: CUDA error: operation failed due to a previous error during capture'}

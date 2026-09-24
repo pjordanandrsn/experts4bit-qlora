@@ -1,0 +1,50 @@
+[2026-09-24T02:14:51Z] waiting for /share/Container/gnf4-interp/a2000.lock
+[2026-09-24T02:14:51Z] lock taken by p66:dotprobe
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /w/work/dot/g.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+torch 2.8.0+cu128 raw_cuda_graph True instantiate True
+libcudart candidates ['/usr/local/cuda/lib64/libcudart.so', '/usr/local/cuda/lib64/libcudart.so.12', '/usr/local/cuda/lib64/libcudart.so.12.8.90']
+cudaGraphGetNodes(count) rc 0 nodes 4
+runtime node types ['KERNEL', 'KERNEL', 'MEMCPY', 'KERNEL']
+replay ok 2.0 -> 6.0 2 -> 3
+dot exists True
+digraph dot {
+subgraph cluster_1 {
+label="graph_1" graph[style="dashed"];
+"graph_1_node_0"[style="bold" shape="record" label="{KERNEL
+| {ID | 0 (topoId: 3) | _ZN2at6native29vectorized_elementwise_kernelILi4ENS0_21CUDAFunctorOnSelf_addIfEESt5arrayIPcLm2EEEEviT0_T1_\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x000055E7277A5C20 | 0x000055E7270A5A90}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+"graph_1_node_1"[style="bold" shape="record" label="{KERNEL
+| {ID | 1 (topoId: 2) | _k\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x000055E7277A6370 | 0x000055E727662310}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+"graph_1_node_2"[style="solid" shape="record" label="{
+MEMCPY
+| {{ID | node handle} | {2 (topoId: 1) | 0x000055E7277A6AC0}}
+| {kind | DtoD (DEVICE to DEVICE)}
+| {{srcPtr | dstPtr} | {pitch | ptr | xsize | ysize | pitch | ptr | xsize | ysize} | {0 | 0x0000000302000000 | 0 | 0 | 0 | 0x0000000302001200 | 0 | 0}}
+| {{srcPos | {{x | 0} | {y | 0} | {z | 0}}} | {dstPos | {{x | 0} | {y | 0} | {z | 0}}} | {Extent | {{Width | 4096} | {Height | 1} | {Depth | 1}}}}
+}"];
+"graph_1_node_3"[style="bold" shape="record" label="{KERNEL
+| {ID | 3 (topoId: 0) | _ZN2at6native29vectorized_elementwise_kernelILi4ENS0_13AUnaryFunctorIfffNS0_15binary_internal10MulFunctorIfEEEESt5arrayIPcLm2EEEEviT0_T1_\<\<\<1,128,0\>\>\>}
+| {{node handle | func handle} | {0x000055E7277A7210 | 0x000055E727587C30}}
+| {accessPolicyWindow | {base_ptr | num_bytes | hitRatio | hitProp | missProp} | {0x0000000000000000 | 0 | 0.000000 | N | N}}
+| {cooperative | 0}
+| {priority | 0}
+}"];
+"graph_1_node_0" -> "graph_1_node_1" [headlabel=0];
+"graph_1_node_1" -> "graph_1_node_2" [headlabel=0];
+"graph_1_node_2" -> "graph_1_node_3" [headlabel=0];
+}
+}
+[2026-09-24T02:14:56Z] job rc=0; lock released
+P66_JOB_DONE rc=0

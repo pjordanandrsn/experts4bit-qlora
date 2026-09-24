@@ -1,0 +1,17 @@
+[20:41:58]   checkpoint: local directory /models/OLMoE-1B-7B-0924
+[20:41:59]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[20:41:59]   quantized experts on 16/16 MoE layers (64 experts each)
+[20:41:59]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:42:17]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:43:47]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+fused q/k/v projections on 0 attention modules (RESULTS-f2-tail default)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 56948.73 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 570187.32 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 401767.59 examples/s]
+TORCH_PROFILE_OUT /root/p66/M/M_ref_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_ref_sync.json active=12/12
+DECOMP step=60.2ms  fwd_submit=59.1 (attn_host=22.2 dram=0.0 other=36.9)  drain=0.9  sched_py=0.2
+DEVICE attn=66.51ms/step gpu_experts=0.00ms/step attn_host_us_per_call=1385
+PREFILL tokens=128 wall=11016ms dram=0 gpu_dev=0
+STEP_DECOMP_DONE

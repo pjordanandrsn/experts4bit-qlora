@@ -1,0 +1,46 @@
+# probe 2: keep_graph=True -> instantiate() -> debug_dump(); cross-checked by cudaGraphGetNodes/cudaGraphNodeGetType
+import ctypes, glob, inspect, os
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _k(p, BLOCK: tl.constexpr):
+    o = tl.arange(0, BLOCK)
+    tl.store(p + o, tl.load(p + o) + 1)
+
+
+print("torch", torch.__version__, "raw_cuda_graph", hasattr(torch.cuda.CUDAGraph, "raw_cuda_graph"),
+      "instantiate", hasattr(torch.cuda.CUDAGraph, "instantiate"))
+x = torch.zeros(1024, device="cuda"); y = torch.zeros(16, device="cuda", dtype=torch.int32); z = torch.empty_like(x)
+for _ in range(2):
+    x.add_(1); _k[(1,)](y, BLOCK=16); z.copy_(x)
+torch.cuda.synchronize()
+g = torch.cuda.CUDAGraph(keep_graph=True); g.enable_debug_mode()
+with torch.cuda.graph(g):
+    x.add_(1); _k[(1,)](y, BLOCK=16); z.copy_(x); x.mul_(2)
+# independent count through the runtime, BEFORE the dump destroys the kept graph
+try:
+    cands = sorted(set(glob.glob("/usr/local/cuda/lib64/libcudart.so*") + glob.glob(os.path.join(os.path.dirname(torch.__file__), "lib", "libcudart*"))
+                       + glob.glob("/opt/conda/lib/libcudart.so*")))
+    print("libcudart candidates", cands)
+    rt = ctypes.CDLL(cands[0])
+    h = ctypes.c_void_p(g.raw_cuda_graph())
+    n = ctypes.c_size_t(0)
+    print("cudaGraphGetNodes(count) rc", rt.cudaGraphGetNodes(h, None, ctypes.byref(n)), "nodes", n.value)
+    arr = (ctypes.c_void_p * n.value)()
+    rt.cudaGraphGetNodes(h, arr, ctypes.byref(n))
+    names = {0: "KERNEL", 1: "MEMCPY", 2: "MEMSET", 3: "HOST", 4: "GRAPH", 5: "EMPTY", 6: "WAIT_EVENT", 7: "EVENT_RECORD"}
+    types = []
+    for i in range(n.value):
+        t = ctypes.c_int(-1); rt.cudaGraphNodeGetType(ctypes.c_void_p(arr[i]), ctypes.byref(t)); types.append(names.get(t.value, t.value))
+    print("runtime node types", types)
+except Exception as e:
+    print("runtime count failed:", type(e).__name__, e)
+g.instantiate()
+g.debug_dump("/w/work/dot/g.dot")
+x0, y0 = float(x[0]), int(y[0])
+g.replay(); torch.cuda.synchronize(); print("replay ok", x0, "->", float(x[0]), y0, "->", int(y[0]))
+print("dot exists", os.path.exists("/w/work/dot/g.dot"))
+print(open("/w/work/dot/g.dot").read()[:9000])

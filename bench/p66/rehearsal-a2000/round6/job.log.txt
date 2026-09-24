@@ -1,0 +1,36 @@
+[2026-09-24T02:16:57Z] waiting for /share/Container/gnf4-interp/a2000.lock
+[2026-09-24T02:16:57Z] lock taken by p66:smoke6
+NVIDIA RTX A2000 12GB, 1374 MiB, 10531 MiB
+full rc=0 seconds=680 exit=0 success=P66_SUCCESS.fd5b5840179ab0d08da4a78a8230de8c6ab52cfd0ef4824383357c2bc55e54f4 tp_done=TP_DONE.fd5b5840179ab0d08da4a78a8230de8c6ab52cfd0ef4824383357c2bc55e54f4
+summary.txt:L L_mref rc=0
+summary.txt:L L_mpin rc=0
+summary.txt:L L_mnvme rc=0
+summary.txt:M M_ref rc=0
+summary.txt:M M_pipe-1.00 rc=0
+summary.txt:M M_pipe-0.00 rc=0
+summary.txt:M M_hyb-0.50 rc=0
+outer.log:MODE full
+outer.log:L L_ref rc=0
+outer.log:L L_pipe rc=0
+outer.log:L L_hyb rc=0
+outer.log:L L_mref rc=0
+outer.log:L L_mpin rc=0
+outer.log:L L_mnvme rc=0
+outer.log:M M_ref rc=0
+outer.log:M M_pipe-1.00 rc=0
+outer.log:M M_pipe-0.00 rc=0
+outer.log:M M_hyb-0.50 rc=0
+outer.log:MODE full
+outer.log:L L_ref rc=0
+outer.log:L L_pipe rc=0
+outer.log:L L_hyb rc=0
+outer.log:L L_mref rc=0
+outer.log:L L_mpin rc=0
+outer.log:L L_mnvme rc=0
+outer.log:M M_ref rc=0
+outer.log:M M_pipe-1.00 rc=0
+outer.log:M M_pipe-0.00 rc=0
+outer.log:M M_hyb-0.50 rc=0
+outer.log:[2026-09-24T02:28:18Z] p66: TP_DONE rc=0
+[2026-09-24T02:28:18Z] job rc=0; lock released
+P66_JOB_DONE rc=0

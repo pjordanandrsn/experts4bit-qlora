@@ -1,0 +1,172 @@
+[2026-09-23T20:03:07Z] waiting for /share/Container/gnf4-interp/a2000.lock
+[2026-09-23T20:03:07Z] lock taken by p66:smoke1
+NVIDIA RTX A2000 12GB, 12282 MiB, 1374 MiB, 10531 MiB, 1, 8
+calibrate rc=0
+grouped scatter   :     26.3 GB/s  (8t, 8 MiB blocks, E=256)
+GATE G0           : 113.0% of triad -> PROCEED
+cuda:0 NVIDIA RTX A2000 12GB: triad 256.6 GB/s | link h2d 6.28 / d2h 6.59 GB/s
+B_nvme seq best   : 19.39 GB/s (o_direct=True)
+L_ref rc=0
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.28, 'b_vram_gbs': 256.6, 'b_dram_gbs': 23.23}
+[p66] arm ref: L=16 E=64 k=8 n_hot=64 windows=['uniform']
+[p66] ref: window uniform
+[p66] ref: wrote rows_ref.json
+L_pipe rc=0
+[p66] pipe-0.50/uniform: have-skip simulator 272 vs engine counters 272 cold rows
+[p66] pipe-0.50: window ctrl0
+[p66] pipe-0.50/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.50: window ctrl4
+[p66] pipe-0.50/ctrl4: have-skip simulator 245 vs engine counters 245 cold rows
+[p66] pipe-0.50: window ctrl8
+[p66] pipe-0.50/ctrl8: have-skip simulator 483 vs engine counters 483 cold rows
+[p66] pipe-0.50: wrote rows_pipe-0.50.json
+[p66] arm pipe-0.00: L=16 E=64 k=8 n_hot=0 windows=['uniform']
+[p66] pipe-0.00: window uniform
+[p66] pipe-0.00/uniform: have-skip simulator 511 vs engine counters 511 cold rows
+[p66] pipe-0.00: wrote rows_pipe-0.00.json
+L_hyb rc=0
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.28, 'b_vram_gbs': 256.6, 'b_dram_gbs': 23.23}
+[p66] arm hyb-0.50: L=16 E=64 k=8 n_hot=32 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[p66] hyb-0.50: window uniform
+[p66] hyb-0.50: window ctrl0
+[p66] hyb-0.50: window ctrl4
+[p66] hyb-0.50: window ctrl8
+[p66] hyb-0.50: wrote rows_hyb-0.50.json
+[p66] capture probe on hyb: AcceleratorError: CUDA error: operation failed due to a previous error during capture
+L_mref rc=0
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.28, 'b_vram_gbs': 256.6, 'b_dram_gbs': 23.23}
+[p66] arm mref: L=8 E=32 k=4 n_hot=32 windows=['uniform']
+[p66] mref: window uniform
+[p66] mref: wrote rows_mref.json
+L_mpin rc=0
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.28, 'b_vram_gbs': 256.6, 'b_dram_gbs': 23.23}
+[p66] arm mpin-0.50: L=8 E=32 k=4 n_hot=16 windows=['uniform', 'ctrl0', 'ctrl2', 'ctrl4']
+[p66] mpin-0.50: window uniform
+[p66] mpin-0.50: window ctrl0
+[p66] mpin-0.50: window ctrl2
+[p66] mpin-0.50: window ctrl4
+[p66] mpin-0.50: wrote rows_mpin-0.50.json
+[p66] arm mpin-0.00: L=8 E=32 k=4 n_hot=0 windows=['uniform']
+[p66] mpin-0.00: window uniform
+[p66] mpin-0.00: wrote rows_mpin-0.00.json
+L_mnvme rc=0
+[p66] mnvme-1.00: window uniform
+[p66] mnvme-1.00: wrote rows_mnvme-1.00.json
+[p66] arm mnvme-0.50: L=8 E=32 k=4 n_hot=16 windows=['uniform', 'ctrl0', 'ctrl2', 'ctrl4']
+[p66] mnvme-0.50: window uniform
+[p66] mnvme-0.50: window ctrl0
+[p66] mnvme-0.50: window ctrl2
+[p66] mnvme-0.50: window ctrl4
+[p66] mnvme-0.50: wrote rows_mnvme-0.50.json
+[p66] arm mnvme-0.00: L=8 E=32 k=4 n_hot=0 windows=['uniform']
+[p66] mnvme-0.00: window uniform
+[p66] mnvme-0.00: wrote rows_mnvme-0.00.json
+[p66] capture probe on mnvme: RuntimeError: Mxfp4NvmeResidency cannot be captured in a CUDA graph: residency is a host-side disk read, so the wanted expert ids must be read back to the CPU. Capture the fully-resident Mxfp4PipelinedGptOss instead, or run this engine eagerly.
+  hyb-0.50       uniform    eager  launches   1199.5 syncs  160.0 kernels   1519.5 xfer   47627.3us  | d_launch  +1071.5 d_sync +160.0 d_kern  +1391.5
+  hyb-0.50       uniform    graph  REFUSED: the v0 dispatch under the hybrid tier synchronizes (nonzero / tolist / tier reads), which 
+  hyb-0.50       ctrl0      eager  launches    656.0 syncs   64.0 kernels    767.8 xfer       0.0us  | d_launch   +528.0 d_sync  +64.0 d_kern   +639.8
+  hyb-0.50       ctrl0      graph  REFUSED: the v0 dispatch under the hybrid tier synchronizes (nonzero / tolist / tier reads), which 
+  hyb-0.50       ctrl4      eager  launches   1200.0 syncs  160.0 kernels   1520.0 xfer   39221.0us  | d_launch  +1072.0 d_sync +160.0 d_kern  +1392.0
+  hyb-0.50       ctrl4      graph  REFUSED: the v0 dispatch under the hybrid tier synchronizes (nonzero / tolist / tier reads), which 
+  hyb-0.50       ctrl8      eager  launches    800.0 syncs  128.0 kernels   1040.0 xfer   94621.7us  | d_launch   +672.0 d_sync +128.0 d_kern   +912.0
+  hyb-0.50       ctrl8      graph  REFUSED: the v0 dispatch under the hybrid tier synchronizes (nonzero / tolist / tier reads), which 
+  pipe-0.00      uniform    eager  launches    240.0 syncs    0.0 kernels    272.0 xfer   78315.0us  | d_launch   +112.0 d_sync   +0.0 d_kern   +144.0
+  pipe-0.00      uniform    graph  launches      0.0 syncs    0.0 kernels    274.0 xfer   74789.1us  | d_launch     +0.0 d_sync   +0.0 d_kern   +144.0
+  pipe-0.50      uniform    eager  launches    288.0 syncs    0.0 kernels    320.0 xfer   36512.5us  | d_launch   +160.0 d_sync   +0.0 d_kern   +192.0
+  pipe-0.50      uniform    graph  launches      0.0 syncs    0.0 kernels    322.0 xfer   36723.0us  | d_launch     +0.0 d_sync   +0.0 d_kern   +192.0
+  pipe-0.50      ctrl0      eager  launches    288.0 syncs    0.0 kernels    320.0 xfer      46.4us  | d_launch   +160.0 d_sync   +0.0 d_kern   +192.0
+  pipe-0.50      ctrl0      graph  launches      0.0 syncs    0.0 kernels    322.0 xfer      46.0us  | d_launch     +0.0 d_sync   +0.0 d_kern   +192.0
+  pipe-0.50      ctrl4      eager  launches    288.0 syncs    0.0 kernels    320.0 xfer   40645.9us  | d_launch   +160.0 d_sync   +0.0 d_kern   +192.0
+  pipe-0.50      ctrl4      graph  launches      0.0 syncs    0.0 kernels    322.0 xfer   37672.7us  | d_launch     +0.0 d_sync   +0.0 d_kern   +192.0
+  pipe-0.50      ctrl8      eager  launches    288.0 syncs    0.0 kernels    320.0 xfer   80239.9us  | d_launch   +160.0 d_sync   +0.0 d_kern   +192.0
+  pipe-0.50      ctrl8      graph  launches      0.0 syncs    0.0 kernels    322.0 xfer   74411.7us  | d_launch     +0.0 d_sync   +0.0 d_kern   +192.0
+  pipe-1.00      uniform    eager  launches    288.0 syncs    0.0 kernels    320.0 xfer      73.6us  | d_launch   +160.0 d_sync   +0.0 d_kern   +192.0
+  pipe-1.00      uniform    graph  launches      0.0 syncs    0.0 kernels    322.0 xfer      55.0us  | d_launch     +0.0 d_sync   +0.0 d_kern   +192.0
+  ref            uniform    eager  launches    128.0 syncs    0.0 kernels    128.0 xfer       0.0us
+  ref            uniform    graph  launches      0.0 syncs    0.0 kernels    130.0 xfer       0.0us
+  mnvme-0.00     uniform    eager  launches    296.0 syncs   32.0 kernels    344.0 xfer   69590.1us  | d_launch     -8.0 d_sync  +24.0 d_kern    +16.0
+  mnvme-0.00     uniform    graph  REFUSED: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the host to issue disk reads and r
+  mnvme-0.50     uniform    eager  launches    296.0 syncs   32.0 kernels    344.0 xfer   33256.1us  | d_launch     -8.0 d_sync  +24.0 d_kern    +16.0
+  mnvme-0.50     uniform    graph  REFUSED: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the host to issue disk reads and r
+  mnvme-0.50     ctrl0      eager  launches    296.0 syncs   32.0 kernels    344.0 xfer    3263.5us  | d_launch     -8.0 d_sync  +24.0 d_kern    +16.0
+  mnvme-0.50     ctrl0      graph  REFUSED: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the host to issue disk reads and r
+  mnvme-0.50     ctrl2      eager  launches    296.0 syncs   32.0 kernels    344.0 xfer   34834.4us  | d_launch     -8.0 d_sync  +24.0 d_kern    +16.0
+  mnvme-0.50     ctrl2      graph  REFUSED: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the host to issue disk reads and r
+  mnvme-0.50     ctrl4      eager  launches    296.0 syncs   32.0 kernels    344.0 xfer   69817.9us  | d_launch     -8.0 d_sync  +24.0 d_kern    +16.0
+  mnvme-0.50     ctrl4      graph  REFUSED: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the host to issue disk reads and r
+  mnvme-1.00     uniform    eager  launches    296.0 syncs   32.0 kernels    344.0 xfer    3271.8us  | d_launch     -8.0 d_sync  +24.0 d_kern    +16.0
+  mnvme-1.00     uniform    graph  REFUSED: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the host to issue disk reads and r
+  mpin-0.00      uniform    eager  launches    304.0 syncs    8.0 kernels    328.0 xfer   69689.5us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.00      uniform    graph  launches      0.0 syncs    0.0 kernels    306.0 xfer   69453.5us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      uniform    eager  launches    304.0 syncs    8.0 kernels    328.0 xfer   36048.0us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      uniform    graph  launches      0.0 syncs    0.0 kernels    306.0 xfer   26203.7us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      ctrl0      eager  launches    304.0 syncs    8.0 kernels    328.0 xfer    3258.6us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      ctrl0      graph  launches      0.0 syncs    0.0 kernels    306.0 xfer    3260.3us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      ctrl2      eager  launches    304.0 syncs    8.0 kernels    328.0 xfer   34769.4us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      ctrl2      graph  launches      0.0 syncs    0.0 kernels    306.0 xfer   35973.0us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      ctrl4      eager  launches    304.0 syncs    8.0 kernels    328.0 xfer   70411.7us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mpin-0.50      ctrl4      graph  launches      0.0 syncs    0.0 kernels    306.0 xfer   70094.2us  | d_launch     +0.0 d_sync   +0.0 d_kern     +0.0
+  mref           uniform    eager  launches    304.0 syncs    8.0 kernels    328.0 xfer    3262.3us
+  mref           uniform    graph  launches      0.0 syncs    0.0 kernels    306.0 xfer    3265.4us
+device budget: 16.08 ms/step over 4 active steps (coverage 100.0% of 16.08 ms truth)
+  matmul        15.78 ms       32 launches/step   98.1%
+  elementwise    0.21 ms       64 launches/step    1.3%
+  other          0.09 ms       32 launches/step    0.6%
+  top rows:
+    _gemv_nf4_grouped                                       15775.5 us x32  [matmul]
+    void at::native::unrolled_elementwise_kernel<at::nat      116.2 us x48  [elementwise]
+    void at::native::(anonymous namespace)::indexSelectS       93.1 us x16  [elementwise]
+    _combine_rows                                              48.4 us x16  [other]
+    _swiglu_rows                                               42.7 us x16  [other]
+total 387
+drwxr-xr-x+ 2 root root     53 Sep 23 20:06 .
+drwxr-xr-x+ 3 root root     11 Sep 23 20:06 ..
+-rw-r--r--+ 1 root root    907 Sep 23 20:06 box.json
+-rw-r--r--+ 1 root root     86 Sep 23 20:05 capture_probe_hyb.txt
+-rw-r--r--+ 1 root root    245 Sep 23 20:06 capture_probe_mnvme.txt
+-rw-r--r--+ 1 root root 339436 Sep 23 20:06 read.json
+-rw-r--r--+ 1 root root 153575 Sep 23 20:05 rows_hyb-0.50.json
+-rw-r--r--+ 1 root root  27409 Sep 23 20:06 rows_mnvme-0.00.json
+-rw-r--r--+ 1 root root 108654 Sep 23 20:06 rows_mnvme-0.50.json
+-rw-r--r--+ 1 root root  28780 Sep 23 20:06 rows_mnvme-1.00.json
+-rw-r--r--+ 1 root root  39087 Sep 23 20:06 rows_mpin-0.00.json
+-rw-r--r--+ 1 root root 156652 Sep 23 20:06 rows_mpin-0.50.json
+-rw-r--r--+ 1 root root  40317 Sep 23 20:05 rows_mref.json
+-rw-r--r--+ 1 root root  23376 Sep 23 20:04 rows_pipe-0.00.json
+-rw-r--r--+ 1 root root 101873 Sep 23 20:04 rows_pipe-0.50.json
+-rw-r--r--+ 1 root root  29692 Sep 23 20:04 rows_pipe-1.00.json
+-rw-r--r--+ 1 root root  10460 Sep 23 20:03 rows_ref.json
+-rw-r--r--+ 1 root root  17335 Sep 23 20:04 table_hyb-0.50_ctrl0_eager.txt
+-rw-r--r--+ 1 root root  18524 Sep 23 20:05 table_hyb-0.50_ctrl4_eager.txt
+-rw-r--r--+ 1 root root  18521 Sep 23 20:05 table_hyb-0.50_ctrl8_eager.txt
+-rw-r--r--+ 1 root root  18521 Sep 23 20:04 table_hyb-0.50_uniform_eager.txt
+-rw-r--r--+ 1 root root  16940 Sep 23 20:06 table_mnvme-0.00_uniform_eager.txt
+-rw-r--r--+ 1 root root  16938 Sep 23 20:06 table_mnvme-0.50_ctrl0_eager.txt
+-rw-r--r--+ 1 root root  16940 Sep 23 20:06 table_mnvme-0.50_ctrl2_eager.txt
+-rw-r--r--+ 1 root root  16940 Sep 23 20:06 table_mnvme-0.50_ctrl4_eager.txt
+-rw-r--r--+ 1 root root  16940 Sep 23 20:06 table_mnvme-0.50_uniform_eager.txt
+-rw-r--r--+ 1 root root  16938 Sep 23 20:06 table_mnvme-1.00_uniform_eager.txt
+-rw-r--r--+ 1 root root  15356 Sep 23 20:06 table_mpin-0.00_uniform_eager.txt
+-rw-r--r--+ 1 root root   9218 Sep 23 20:06 table_mpin-0.00_uniform_graph.txt
+-rw-r--r--+ 1 root root  15354 Sep 23 20:06 table_mpin-0.50_ctrl0_eager.txt
+-rw-r--r--+ 1 root root   9216 Sep 23 20:06 table_mpin-0.50_ctrl0_graph.txt
+-rw-r--r--+ 1 root root  15356 Sep 23 20:06 table_mpin-0.50_ctrl2_eager.txt
+-rw-r--r--+ 1 root root   9218 Sep 23 20:06 table_mpin-0.50_ctrl2_graph.txt
+-rw-r--r--+ 1 root root  15356 Sep 23 20:06 table_mpin-0.50_ctrl4_eager.txt
+-rw-r--r--+ 1 root root   9218 Sep 23 20:06 table_mpin-0.50_ctrl4_graph.txt
+-rw-r--r--+ 1 root root  15356 Sep 23 20:06 table_mpin-0.50_uniform_eager.txt
+-rw-r--r--+ 1 root root   9218 Sep 23 20:06 table_mpin-0.50_uniform_graph.txt
+-rw-r--r--+ 1 root root  15354 Sep 23 20:05 table_mref_uniform_eager.txt
+-rw-r--r--+ 1 root root   9216 Sep 23 20:05 table_mref_uniform_graph.txt
+-rw-r--r--+ 1 root root  10010 Sep 23 20:04 table_pipe-0.00_uniform_eager.txt
+-rw-r--r--+ 1 root root   6644 Sep 23 20:04 table_pipe-0.00_uniform_graph.txt
+-rw-r--r--+ 1 root root  10206 Sep 23 20:04 table_pipe-0.50_ctrl0_eager.txt
+-rw-r--r--+ 1 root root   6840 Sep 23 20:04 table_pipe-0.50_ctrl0_graph.txt
+-rw-r--r--+ 1 root root  10208 Sep 23 20:04 table_pipe-0.50_ctrl4_eager.txt
+-rw-r--r--+ 1 root root   6842 Sep 23 20:04 table_pipe-0.50_ctrl4_graph.txt
+-rw-r--r--+ 1 root root  10406 Sep 23 20:04 table_pipe-0.50_ctrl8_eager.txt
+-rw-r--r--+ 1 root root   6842 Sep 23 20:04 table_pipe-0.50_ctrl8_graph.txt
+-rw-r--r--+ 1 root root  10208 Sep 23 20:04 table_pipe-0.50_uniform_eager.txt
+-rw-r--r--+ 1 root root   6842 Sep 23 20:04 table_pipe-0.50_uniform_graph.txt
+[2026-09-23T20:06:56Z] job rc=0; lock released
+P66_JOB_DONE rc=0

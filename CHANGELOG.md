@@ -65,6 +65,56 @@
 - **Corrected.**
   - `hot_residency.py`'s singleton comment. It said the singleton path is bitwise-equal to the grouped path at every T, "pinned in CI". That holds at T = 1 on NF4 only; at T > 1 the grouped path is a different function.
   - `tests/test_singleton_groups.py`'s docstring. It pins the dispatch algebra through a mocked GEMM, not the arithmetic.
+### Lane P66 registered: the residency launch census (`bench/p66/`, for #711; nothing in the wheel changes)
+
+- **The question.** What residency adds per token, in CUDA launches, copies and host syncs, against the
+  all-resident step on the same box. Whether that moves with cold fraction. Whether grouped-nf4-gemm's cold cost
+  model (`kernel/cold_deadline.py`, bytes over the link plus bytes over VRAM) predicts the measured transfer.
+  vLLM #57794 left all three open, with an unexplained 2–4× cold-cost gap.
+  - Paths: pipelined NF4 at five hot fractions including 0 and the RFC's 17.19 % cold; the hybrid tier (VRAM +
+    NVMe); grouped-nf4-gemm's MXFP4 pinned and NVMe engines.
+  - Each path is measured against its family's all-resident step, captured where capture works.
+  - Families: Qwen3-30B-A3B (NF4) and gpt-oss-20b (native MXFP4) on an RTX 5090. The prereg is
+    `bench/p66/P66-PREREG.md`.
+- **The instrument.**
+  - `p66_census.py` drives one MoE token (every layer's real expert bytes, routing set per window) through each
+    engine. It counts CUDA API calls inside record_function regions, attributed to the engine's own phases, plus
+    device rows, a sync-debug pass, timing, and a graph replay checked against eager.
+  - `p66_reduce.py` is pure Python: the gates, the attribution against the reference, the cold-fraction test and
+    the registered verdicts.
+  - `p66_step.py` runs `bench/hybrid-g9/step_decomp.py` unchanged, swapping only the pipelined arm's hot sets, for
+    the served-step context.
+  - Runner and driver are the P60/B374 pattern (`p66_run.sh`, `p66_drive.sh`, `staged.sha256`).
+- **Rehearsed on the NAS RTX A2000**, disclosed in the prereg and in `bench/p66/rehearsal-a2000/`, which is not a
+  reading. The last round ran `p66_run.sh` itself end to end (rc 0) under documented rehearsal-only overrides.
+  - The pipelined engine added a fixed +10 launches and +2 copies per MoE layer (+7 and +2 with no hot experts),
+    and 0 syncs, identical at cold fraction 0, 0.5 and 1, eager and captured (replays bitwise equal to eager).
+  - The v0-dispatch hybrid tier moved with layer composition. The MXFP4 NVMe engine held a fixed 4 syncs per
+    layer.
+  - The served step through step_decomp reproduced the MoE token's API deltas exactly.
+  - cold_deadline's bytes model predicted the pipelined gather at 0.99–1.05× (MXFP4 engines 0.95–1.01×).
+  - The rehearsals changed the instrument seventeen times before registration, each listed in the prereg. Three
+    examples:
+    - The profiler's device view drops records, eager and captured, while host counts stay exact. So eager
+      counts come from host API calls, and captured counts from the graph's own node list: the CUDA runtime's
+      `cudaGraphGetNodes`, cross-checked against torch's dot dump. That dump writes nothing, silently, on torch
+      2.8 unless the graph is kept.
+    - A +1.7 ms "GEMV slowdown" in round 1 was the shared card's state (+0.04 and +1.37 on later rounds). So the
+      tax is split into added kernels and shared-kernel shift, and time bands are graded only on the registered
+      box.
+    - The runner's time guard skipped late arms by using their alarm caps as their expected times.
+- **Two rentals.** The reading's guard is 2 h, so under the compute rule a 10-minute **proving rental**
+  (`P66_MODE=prove`, ≤ $0.11 per attempt, ≤ $0.33 over all) comes first. It does the class and dud checks, the
+  pinned install, the tripwire and the pin, and times one checkpoint shard.
+  - Following P65 Amendment 1, it records the reading-only floors (VRAM, disk, RAM, pin) instead of enforcing
+    them, because the proving box is not the reading's box.
+  - It was rehearsed through the real install path, with those floors genuinely failing on the A2000.
+- **Tests.**
+  - `tests/test_p66_reduce.py`: counting rules, gates and every verdict branch, on synthetic event lists.
+  - `tests/test_p66_census_helpers.py`: the profiler-tree walk, routing and schedule, on CPU.
+  - `tests/test_p66_staged_pin.py`: the staged pin, the driver's mapping, that the driver never forwards the
+    runner's rehearsal-only overrides, that the proving mode stops before any measurement, and that every arm's
+    expected time is below its alarm.
 
 ### `E4B_INT4_DECODE_A16`: bf16 activations at T = 1 on the int4 expert store, as a quality instrument; lane P64 registered (#709)
 

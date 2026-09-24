@@ -1,0 +1,10 @@
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.25, 'b_vram_gbs': 257.4, 'b_dram_gbs': 22.26}
+[p66] arm mpin-0.50: L=8 E=32 k=4 n_hot=16 windows=['uniform', 'ctrl0', 'ctrl2', 'ctrl4']
+[p66] mpin-0.50: window uniform
+[p66] mpin-0.50: window ctrl0
+[p66] mpin-0.50: window ctrl2
+[p66] mpin-0.50: window ctrl4
+[p66] mpin-0.50: wrote rows_mpin-0.50.json
+[p66] arm mpin-0.00: L=8 E=32 k=4 n_hot=0 windows=['uniform']
+[p66] mpin-0.00: window uniform
+[p66] mpin-0.00: wrote rows_mpin-0.00.json

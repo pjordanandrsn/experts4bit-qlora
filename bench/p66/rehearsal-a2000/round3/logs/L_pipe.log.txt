@@ -1,0 +1,41 @@
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.25, 'b_vram_gbs': 257.4, 'b_dram_gbs': 22.26}
+[p66] arm pipe-1.00: L=16 E=64 k=8 n_hot=64 windows=['uniform']
+/root/p66/p66_census.py:438: UserWarning: The given NumPy array is not writable, and PyTorch does not support non-writable tensors. This means writing to this tensor will result in undefined behavior. You may want to copy the array to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:203.)
+  flat[e] = torch.from_numpy(np.ascontiguousarray(mm[lo:lo + ln]))
+[p66] pipe-1.00: window uniform
+[p66] pipe-1.00/uniform: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-1.00: wrote rows_pipe-1.00.json
+[p66] arm pipe-0.83: L=16 E=64 k=8 n_hot=53 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[p66] pipe-0.83: window uniform
+[p66] pipe-0.83/uniform: have-skip simulator 89 vs engine counters 89 cold rows
+[p66] pipe-0.83: window ctrl0
+[p66] pipe-0.83/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.83: window ctrl4
+[p66] pipe-0.83/ctrl4: have-skip simulator 232 vs engine counters 232 cold rows
+[p66] pipe-0.83: window ctrl8
+[p66] pipe-0.83/ctrl8: have-skip simulator 455 vs engine counters 455 cold rows
+[p66] pipe-0.83: wrote rows_pipe-0.83.json
+[p66] arm pipe-0.50: L=16 E=64 k=8 n_hot=32 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[p66] pipe-0.50: window uniform
+[p66] pipe-0.50/uniform: have-skip simulator 262 vs engine counters 262 cold rows
+[p66] pipe-0.50: window ctrl0
+[p66] pipe-0.50/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.50: window ctrl4
+[p66] pipe-0.50/ctrl4: have-skip simulator 245 vs engine counters 245 cold rows
+[p66] pipe-0.50: window ctrl8
+[p66] pipe-0.50/ctrl8: have-skip simulator 495 vs engine counters 495 cold rows
+[p66] pipe-0.50: wrote rows_pipe-0.50.json
+[p66] arm pipe-0.25: L=16 E=64 k=8 n_hot=16 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[p66] pipe-0.25: window uniform
+[p66] pipe-0.25/uniform: have-skip simulator 373 vs engine counters 373 cold rows
+[p66] pipe-0.25: window ctrl0
+[p66] pipe-0.25/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.25: window ctrl4
+[p66] pipe-0.25/ctrl4: have-skip simulator 248 vs engine counters 248 cold rows
+[p66] pipe-0.25: window ctrl8
+[p66] pipe-0.25/ctrl8: have-skip simulator 499 vs engine counters 499 cold rows
+[p66] pipe-0.25: wrote rows_pipe-0.25.json
+[p66] arm pipe-0.00: L=16 E=64 k=8 n_hot=0 windows=['uniform']
+[p66] pipe-0.00: window uniform
+[p66] pipe-0.00/uniform: have-skip simulator 510 vs engine counters 510 cold rows
+[p66] pipe-0.00: wrote rows_pipe-0.00.json

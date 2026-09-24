@@ -1,0 +1,37 @@
+profiled decode steps: 4 (active window: 4/4)
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                         e4b::p66.token         0.00%       0.000us         0.00%       0.000us       0.000us     330.212ms       100.00%     330.212ms      82.553ms             4  
+                                      _gather_rows_addr         0.00%       0.000us         0.00%       0.000us       0.000us     288.636ms        87.41%     288.636ms       4.510ms            64  
+                                      _gemv_nf4_grouped         0.00%       0.000us         0.00%       0.000us       0.000us      39.056ms        11.83%      39.056ms     305.121us           128  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     807.541us         0.24%     807.541us       4.206us           192  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     282.277us         0.09%     282.277us       2.205us           128  
+void at::native::reduce_kernel<128, 4, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us     206.943us         0.06%     206.943us       3.233us            64  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     189.945us         0.06%     189.945us       2.968us            64  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     178.852us         0.05%     178.852us       2.795us            64  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us     170.143us         0.05%     170.143us       1.329us           128  
+                         Memcpy DtoD (Device -> Device)         0.00%       0.000us         0.00%       0.000us       0.000us     165.344us         0.05%     165.344us       1.216us           136  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     164.357us         0.05%     164.357us       2.568us            64  
+void at::native::elementwise_kernel<128, 4, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us     135.965us         0.04%     135.965us       2.124us            64  
+void at::native::elementwise_kernel<128, 2, at::nati...         0.00%       0.000us         0.00%       0.000us       0.000us      86.491us         0.03%      86.491us       1.351us            64  
+                                         e4b::p66.input         0.00%       0.000us         0.00%       0.000us       0.000us      83.072us         0.03%      83.072us      20.768us             4  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us      73.914us         0.02%      73.914us       1.155us            64  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      66.051us         0.02%      66.051us       1.032us            64  
+                                            aten::copy_         0.03%      82.999us         0.16%     525.610us      65.701us      13.793us         0.00%      15.841us       1.980us             8  
+                                Activity Buffer Request         0.04%     121.725us         0.04%     121.725us     121.725us       2.048us         0.00%       2.048us       2.048us             1  
+                                         e4b::p66.token         0.07%     241.796us         1.15%       3.806ms     951.455us       0.000us         0.00%      15.841us       3.960us             4  
+                                         e4b::p66.input         0.08%     264.310us         0.26%     870.380us     217.595us       0.000us         0.00%      15.841us       3.960us             4  
+                                           aten::select         0.02%      65.197us         0.03%      84.025us       7.002us       0.000us         0.00%       0.000us       0.000us            12  
+                                       aten::as_strided         0.01%      22.178us         0.01%      22.178us       1.109us       0.000us         0.00%       0.000us       0.000us            20  
+                                        aten::unsqueeze         0.01%      21.314us         0.01%      24.664us       3.083us       0.000us         0.00%       0.000us       0.000us             8  
+                                        cudaMemcpyAsync         0.10%     320.886us         0.10%     320.886us      40.111us       0.000us         0.00%       0.000us       0.000us             8  
+                                  cudaStreamIsCapturing         0.00%       5.207us         0.00%       5.207us       1.302us       0.000us         0.00%       0.000us       0.000us             4  
+                                        cudaGraphLaunch         0.81%       2.688ms         0.81%       2.688ms     671.998us       0.000us         0.00%       0.000us       0.000us             4  
+                                   cudaDriverGetVersion         0.00%       0.446us         0.00%       0.446us       0.112us       0.000us         0.00%       0.000us       0.000us             4  
+                                     aten::resolve_conj         0.00%       1.066us         0.00%       1.066us       0.267us       0.000us         0.00%       0.000us       0.000us             4  
+                                      aten::resolve_neg         0.00%       0.548us         0.00%       0.548us       0.137us       0.000us         0.00%       0.000us       0.000us             4  
+                                  cudaDeviceSynchronize        98.84%     327.472ms        98.84%     327.472ms     163.736ms       0.000us         0.00%       0.000us       0.000us             2  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 331.308ms
+Self CUDA time total: 330.220ms

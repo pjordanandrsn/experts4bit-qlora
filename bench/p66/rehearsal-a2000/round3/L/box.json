@@ -1,0 +1,33 @@
+{
+ "schema": "p66-census/1",
+ "host": {
+  "platform": "Linux-6.6.32-qnap-x86_64-with-glibc2.35",
+  "python": "3.11.13",
+  "torch": "2.8.0+cu128",
+  "triton": "3.4.0",
+  "cuda": "12.8",
+  "cpu_model": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz",
+  "nproc": 12,
+  "affinity": 12,
+  "cgroup_cpu_max": "",
+  "cgroup_memory_max": "",
+  "meminfo": "MemTotal: 131757372 kB\nMemAvailable: 56463296 kB",
+  "numa_nodes": null,
+  "gpu": "NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz",
+  "sm_count": 26
+ },
+ "probes": {
+  "aten_launch_host_us": 6.389903975650668,
+  "triton_launch_host_us": 21.351088024675846,
+  "sync_idle_us": 7.607964100316167,
+  "item_roundtrip_us": 8.782081422396004,
+  "h2d_pinned_64mb_gbs": 6.199414293482654,
+  "d2d_copy_rw_gbs": 253.32396808133527
+ },
+ "costs": {
+  "source": "calib:calib.json",
+  "b_link_gbs": 6.25,
+  "b_vram_gbs": 257.4,
+  "b_dram_gbs": 22.26
+ }
+}
