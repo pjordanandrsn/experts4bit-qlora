@@ -21,7 +21,7 @@ NSEQ=${P65_NSEQ:-64}                                  # windows of 512 per text;
 # Mixtral: the first 16 layers of the plan's own enumeration order -- the order P44-a's census walked (checkpoint-index
 # key order, lexicographic), so the SAME half P44-a measured; the census records the list (layers_requested)
 MIXTRAL_FIRST=${P65_MIXTRAL_FIRST_LAYERS:-16}
-MIN_MBPS=${P65_MIN_MBPS:-100}; MIN_DISK_GB=${P65_MIN_DISK_GB:-200}; MIN_RAM_GB=${P65_MIN_RAM_GB:-64}
+MIN_MBPS=${P65_MIN_MBPS:-80}; MIN_DISK_GB=${P65_MIN_DISK_GB:-200}; MIN_RAM_GB=${P65_MIN_RAM_GB:-64}
 # seconds a family needs, fetch + bake + census, from the rehearsal (P65-PREREG "Box and cost"); a family that cannot
 # fit before the deadline is SKIPPED (host-limited), never started and cut
 NEED_granite=${P65_NEED_GRANITE_S:-1500}; NEED_olmoe=${P65_NEED_OLMOE_S:-2100}; NEED_mixtral=${P65_NEED_MIXTRAL_S:-4500}
@@ -67,9 +67,37 @@ if python3 -c "import sys; sys.exit(0 if float('${ACC_S:-99}') > float('$MAX_ACC
 # the Hessian budget scales with the host (bigger chunks = fewer forward passes); recorded
 BUDGET=$(( RAM_GB * 2 / 5 )); [ "$BUDGET" -lt 16 ] && BUDGET=16; [ "$BUDGET" -gt 64 ] && BUDGET=64
 export E4B_INT4_HESSIAN_BUDGET_GB=$BUDGET; echo "E4B_INT4_HESSIAN_BUDGET_GB=$BUDGET" >> forensics.txt
-say "egress pre-flight: HF CDN, 50 MB range, 20 s cap (floor ${MIN_MBPS} MB/s; Mixtral is 93 GB)"
-BPS=$(curl -sSL --max-time 20 -r 0-52428800 -o /dev/null -w '%{speed_download}' https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors 2>/dev/null || echo 0)
-MBPS=$(python3 -c "print(round(float('${BPS:-0}')/1e6,1))"); say "HF CDN ${MBPS} MB/s"; echo "hf_cdn_mbps=$MBPS" >> forensics.txt
+# Amendment 2: measure the fetch's OWN path. snapshot_download pulls with max_workers=4, so the probe is four parallel
+# 50 MB ranges of one HF CDN file and the rate is their total bytes over the wall time of all four (a single-stream
+# probe read 36.1 MB/s on p65-prove-4's box, whose 4-worker Granite fetch then ran at ~83.5 MB/s).
+say "egress pre-flight: HF CDN, 4 parallel 50 MB ranges, 30 s cap (floor ${MIN_MBPS} MB/s aggregate; Mixtral is 93 GB)"
+MBPS=$(python3 - <<'PYEG' 2>/dev/null || echo 0
+# four parallel 50 MB byte ranges of one HF CDN file, in Python (the image need not ship curl); the rate is total bytes
+# over the wall time of all four -- the way snapshot_download's four workers share the path
+import time, urllib.request
+from concurrent.futures import ThreadPoolExecutor
+URL = "https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors"
+CH, N, CAP = 52428800, 4, 30.0
+def get(i):
+    req = urllib.request.Request(URL, headers={"Range": f"bytes={i * CH}-{(i + 1) * CH - 1}"})
+    got, t0 = 0, time.perf_counter()
+    try:
+        with urllib.request.urlopen(req, timeout=CAP) as r:
+            while time.perf_counter() - t0 < CAP:
+                b = r.read(1 << 20)
+                if not b:
+                    break
+                got += len(b)
+    except Exception:
+        pass
+    return got
+t0 = time.perf_counter()
+with ThreadPoolExecutor(N) as ex:
+    total = sum(ex.map(get, range(N)))
+print(round(total / 1e6 / max(1e-3, time.perf_counter() - t0), 1))
+PYEG
+)
+say "HF CDN ${MBPS} MB/s (4 parallel ranges)"; echo "hf_cdn_mbps_4x=$MBPS" >> forensics.txt
 if python3 -c "import sys; sys.exit(0 if float('${MBPS:-0}') < float('$MIN_MBPS') else 1)"; then floor 14 "egress ${MBPS} MB/s < ${MIN_MBPS}"; fi
 # ---- install: e4b pinned + P37's toolchain pins, then gnf4 at the pin (last, so the kernel pin wins)
 say "install e4b @$E4B_SHA (image python; P37 pins) + gnf4 @$GNF4_SHA"

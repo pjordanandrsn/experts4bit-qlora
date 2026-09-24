@@ -443,3 +443,37 @@ Proof spend was **$0.1009** against this registration's "all proving attempts to
 
 The runner's reading path is byte-identical except where the three floor checks now call `floor()`, which in a reading
 behaves exactly as the old inline refusal, with the same exit codes. `staged.sha256` is updated for `p65_run.sh`.
+
+## Amendment 2 (2026-09-24 ~02:40Z, after the first reading box was refused and before any reading data)
+
+**What happened.** The proof passed under Amendment 1 (`p65-prove-4`: rc 0, Granite first layer end to end, 480 rows,
+selfcheck 1.38e-08, $0.0577). The first reading box, `p65-5090-1`, was refused rc 14 at **21.8 MB/s** against the
+100 MB/s egress floor ($0.0648). Every box this lane has drawn failed that floor or read below it: 97.8, 36.1
+and 21.8 MB/s.
+
+**The floor measured the wrong quantity.** The probe was one `curl` stream of a 50 MB range. The fetch it guards is
+`snapshot_download(max_workers=4)`: four streams. On `p65-prove-4`'s box the single stream read **36.1 MB/s**, and the
+same box's four-worker Granite fetch then pulled 6.6 GB in 79 s, **~83.5 MB/s**, 2.3× the probe. This project
+already records the pattern (a pre-flight number that does not measure the path the run depends on). It has now
+refused a box that could fetch.
+
+**Amended.**
+- **The probe measures the fetch's own path.** It makes four parallel 50 MB byte-range requests of one HF CDN file, and
+  the rate is total bytes over the wall time of all four, with a 30 s cap per stream. It is implemented in Python
+  (`urllib`, four threads), because the image does not ship `curl`: the stock `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`
+  has none, and it was present only on the Vast boxes. Checked from the NAS: 136.1 MB/s. It is recorded as
+  `hf_cdn_mbps_4x`.
+- **The floor is 80 MB/s on that aggregate,** down from 100 on a single stream. At 80 MB/s Mixtral's 93.4 GB takes
+  ~19.5 min against the registered 7–16. That moves the estimate's upper end from ~135 to ~139 min, still under what the
+  runner protects. A family that cannot finish before the deadline is skipped (rc 40), never started and cut, and
+  Mixtral starts only with `P65_NEED_MIXTRAL_S` left. A floor set too lax therefore costs at most the registered
+  Mixtral-only follow-up. One set too strict blocks the lane.
+- `staged.sha256` is updated for `p65_run.sh`.
+
+**Unchanged:**
+- the question, instrument, families, texts, predictions, decision rule and reducer;
+- every other floor;
+- the proof rules (Amendment 1), and the lane ceiling of $2.05, with $0.2234 spent so far.
+
+Because the runner changed, the reading needs a fresh passing proof at the new commit, as the prereg's same-SHA rule
+requires.
