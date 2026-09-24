@@ -281,6 +281,7 @@ OLMoE):
 | entropy | `rel_act` | S-C's selector (written in `docs/SPECULATIVE_LANES_ADDENDUM_4.md`) |
 |---|---|---|
 | survives, not redundant, and `rho_x_err` survives | survives | **TWO_ARMS**: rank by `rel_act`, and by `rho_x_err` (Colla-Q's weighting). The addendum compares the two at matched bytes on an outcome (two-text K8, or KL where K8 cannot read), against routing frequency as the baseline arm. |
+| survives, not redundant, but `rho_x_err` does NOT survive | survives | **REL_ACT_ONLY (rho_x_err does not survive although both parts do)**: each part transfers but their product does not, so there is no TWO_ARMS selector to write. Recorded as that finding. |
 | survives, not redundant | does not survive | **ENTROPY_ONLY**: the only one-text ranking that transfers is label-free. The addendum must show it predicts the serving text's error before any cell. |
 | redundant | survives | **REL_ACT_ONLY (entropy redundant)**: entropy adds nothing the error metric lacks. Recorded, and the issue's premise is answered no. |
 | does not survive | survives | **REL_ACT_ONLY (entropy refused)**. |
