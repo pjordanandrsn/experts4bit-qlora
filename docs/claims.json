@@ -6669,7 +6669,9 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-24/p64-5090-1/ (receipt.json, teardown-proof.json, the fetched run); the per-pass logits stayed on the box by registration; the proof p64-prove-1 beside it"
       ],
-      "notes": "Pre-registered in #724 (P1 determinism, P2, P3 floor, P4, P5, P8 HELD; P6 attention and P7 anchor UNREAD: the a16_all passes, the second floor pair a8_pc384 and the NF4 anchor were skipped for time by the deadline-aware scorer, as registered). F here is the one pc64 floor pair; no value of the missing pc384 pair could make G_exp > 2F. Validity VALID: KL(a8 || a8_rep) exactly 0 on 4,096 positions, prefill-last logits bit-identical across passes, every pass's decode counts the registered ones. Not a statement about the attention projections' int8 step (#728), about B = 16 or the device-grouped GEMV, or about quality against bf16. Runs p64-prove-1 $0.0201 + p64-5090-1 $1.4193, teardown proven."
+      "notes": "Pre-registered in #724 (P1 determinism, P2, P3 floor, P4, P5, P8 HELD; P6 attention and P7 anchor UNREAD: the a16_all passes, the second floor pair a8_pc384 and the NF4 anchor were skipped for time by the deadline-aware scorer, as registered). F here is the one pc64 floor pair; no value of the missing pc384 pair could make G_exp > 2F. Validity VALID: KL(a8 || a8_rep) exactly 0 on 4,096 positions, prefill-last logits bit-identical across passes, every pass's decode counts the registered ones. Not a statement about the attention projections' int8 step (#728), about B = 16 or the device-grouped GEMV, or about quality against bf16. Runs p64-prove-1 $0.0201 + p64-5090-1 $1.4193, teardown proven.",
+      "licensed_by": "e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22",
+      "pack_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
     }
   ]
 }
