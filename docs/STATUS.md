@@ -768,8 +768,17 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     difference is at layer 0 in attention, never in the experts. KL mean is
     0.008–0.033 nats/token and top-1 agreement 0.88–0.98. 16 of 45 cells are
     under the shipped top-1 bar (0.93) over 64–160 positions, while no cell is
-    near its KL bar: that is
-    [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725).
+    near its KL bar. **Lane P68 (`bench/p68/`,
+    [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725),
+    closed) answered both halves:**
+    - **What makes the difference.** Forcing the attention projections and the
+      core to their T = 1 calls, row by row, moves the first difference out of
+      layer-0 attention. Forcing everything that picks its arithmetic by row count
+      makes a verify **bit-identical** to decode on both stacks
+      (`e4b.serve.p68.qwen3.verify-from-t1-calls.row-exact.5090.2026-09-24`).
+    - **The size, over ~1,000–2,000 positions per cell.** Every served T > 1 cell
+      is inside the bar: KL ≤ 0.017, top-1 ≥ 0.946
+      (`e4b.serve.p68.qwen3.t-gt-1-vs-t1.within-bar.5090.2026-09-24`).
   - **`E4B_FUSE_COMBINE=0` at T = 1** (lane B393's size) is KL 1.18e-04 on
     NF4, and 1.70e-02 with 7 of 160 flips on int4.
 - **The int4 experts' int8 activation step costs no measurable quality at
