@@ -27,6 +27,13 @@
 
 ## Unreleased
 
+### Lane P64 read (#709): the int4 experts' int8 activation step at B = 1 decode is below Qwen3's arithmetic-order floor (docs, register; no library behaviour change)
+
+- **The reading.** `p64-5090-1` ran on one RTX 5090 for $1.4193, after the proof `p64-prove-1` ($0.0201). Teardown is proven, and the validity checks were VALID.
+- **What it ran on.** The licensed pack (`sha256:0c9955a9…`), rebuilt on the box and verified by `verify_artifact`. The build's K8 read ppl 6.36709, as P55x's did.
+- **G_exp was INDISTINGUISHABLE.** KL(bf16 activations ‖ int8) was 0.003392 / 0.002527 nats/token on wikitext / c4val1, which is 0.61× / 0.77× of the in-lane floor. dNLL's intervals include 0. Recorded as `e4b.serve.p64.qwen3.b1.expert-int8-step.5090.2026-09-24`. W4A8 expert decode stays, and #709 closes for the experts.
+- **G_attn was UNREAD.** The `a16_all` passes, the second floor pair and the NF4 anchor were skipped for time: a host-limited 67-minute pack build left too little deadline. The attention half is #728. Full read: `bench/p64/RESULTS-p64.md`; receipts: `bench/p64/receipts/`.
+- **P59's B = 16 KL row now states its scope.** Its scorer leaves `DEVICE_GROUPING` off, so its decode experts took dequant + bf16 and never ran the int8 step. The fusion licence is unaffected.
 ### Lane P63 read (#708): which expert routes give a token the same bits alone and inside a verify or prefill (docs, register, tests; no library behaviour change)
 
 - **The reading.** `p63-5090-1` ran on one RTX 5090 with Qwen3-30B-A3B for $0.2881, after the proof `p63-prove-1` ($0.0115) at the same commit. Teardown is proven. **Every registered prediction held**, and no path was outside its fp64 accuracy bound in 179 records. Full read: `bench/p63/RESULTS-p63.md`. Receipts: `bench/p63/receipts/`, and the reducer reproduces its JSON from them byte for byte.

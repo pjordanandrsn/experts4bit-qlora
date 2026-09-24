@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-404da2c0-2473-668c-0a50-343986ffb418
+power.limit,clocks.max.sm 400.00 W, 3090 MHz
+Model name:                              AMD EPYC 7C13 64-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:            1007         808          72          65         126         127
+overlay         320G   52M  320G   1% /

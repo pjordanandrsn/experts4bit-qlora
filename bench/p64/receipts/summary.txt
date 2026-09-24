@@ -1,0 +1,33 @@
+KNOBS model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 min_disk_gb=200 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048 build_via=step_decomp rows=16 skip_install=0
+e4b 0.37.3 @75c83bd0a11cd4f1b24fcff373ae7c8c75ac4849 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+K0 all_passed kl-fidelity/1.0.0
+PROMPTS wikitext B=16 corpus=298938 step=18651 sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+PROMPTS c4val1 B=16 corpus=866460 step=54121 sha=17e68b4299a6d75a49971f7979922b0bfe2e302279924b1e01266ffc88312de7
+WIKITEXT ROWS = P59's (f67e7e4d)
+BUILD INT4EXP calibrated experts: 1954 gptq / 94 rtn (min_rows=32) over 8 layers
+BUILD INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+BUILD K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/p64/build_ppl_wikitext.json
+PACK sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 = the licensed pack (P55x)
+P64PASS {"pass": "a8", "text": "wikitext", "engaged_as_registered": true, "wall_s": 243.0, "decode_steps": 2048, "counts": {"expert_quant_decode": 196608, "expert_dequant_decode": 0, "attn_quant_decode": 393216}}
+P64PASS {"pass": "a16", "text": "wikitext", "engaged_as_registered": true, "wall_s": 619.6, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 1572864, "attn_quant_decode": 393216}}
+P64PASS {"pass": "a8", "text": "c4val1", "engaged_as_registered": true, "wall_s": 240.7, "decode_steps": 2048, "counts": {"expert_quant_decode": 196608, "expert_dequant_decode": 0, "attn_quant_decode": 393216}}
+P64PASS {"pass": "a16", "text": "c4val1", "engaged_as_registered": true, "wall_s": 594.2, "decode_steps": 2048, "counts": {"expert_quant_decode": 0, "expert_dequant_decode": 1572864, "attn_quant_decode": 393216}}
+P64PASS {"pass": "a8_rep", "text": "wikitext", "engaged_as_registered": true, "wall_s": 246.5, "decode_steps": 2048, "counts": {"expert_quant_decode": 196608, "expert_dequant_decode": 0, "attn_quant_decode": 393216}}
+P64PASS {"pass": "a8_rep", "text": "c4val1", "engaged_as_registered": true, "wall_s": 240.3, "decode_steps": 2048, "counts": {"expert_quant_decode": 196608, "expert_dequant_decode": 0, "attn_quant_decode": 393216}}
+P64PASS {"pass": "a8_pc64", "text": "wikitext", "engaged_as_registered": true, "wall_s": 314.9, "decode_steps": 2048, "counts": {"expert_quant_decode": 196608, "expert_dequant_decode": 0, "attn_quant_decode": 393216}}
+P64PASS {"pass": "a8_pc64", "text": "c4val1", "engaged_as_registered": true, "wall_s": 292.9, "decode_steps": 2048, "counts": {"expert_quant_decode": 196608, "expert_dequant_decode": 0, "attn_quant_decode": 393216}}
+P64 SKIPPED a16_all/wikitext: needs ~594s, deadline in 999s (host-limited)
+P64 SKIPPED a16_all/c4val1: needs ~594s, deadline in 999s (host-limited)
+P64 SKIPPED a8_pc384/wikitext: needs ~293s, deadline in 999s (host-limited)
+P64 SKIPPED a8_pc384/c4val1: needs ~293s, deadline in 999s (host-limited)
+SKIPPED anchor host-limited deadline
+**VALIDITY: VALID** -- determinism True, prefill-last untouched True, engagement True, same rows True
+**VERDICT (expert int8 step, G_exp): INDISTINGUISHABLE**
+- **G_all (experts + attention): UNREAD (a text is missing)**
+- **G_attn (attention, experts bf16): UNREAD (a text is missing)**

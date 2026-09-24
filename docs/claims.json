@@ -6449,7 +6449,7 @@
         "bench/p59/probe/p59_probe.py",
         "bench/p59/probe/probe.json"
       ],
-      "notes": "kl_mean 0.00440 (hold <= 0.01, refute > 0.03), top-1 0.9775 (hold >= 0.97, refute < 0.95). KL(nf4||int4_fqkv) - KL(nf4||int4) = +0.00342 (band +-0.005); anchors 0.06715 / 0.07057. Pre-registered bands: hold <= 0.01 nats & top-1 >= 0.97; refuted > 0.03 or < 0.95; the shipped KL-from-checkpoint bar (<= 0.10 nats, top-1 >= 0.93) is the outer limit. The anchor is the NF4 control, not a bf16 reference (Qwen3-30B-A3B bf16 is 61 GB). Decision rule outcome recorded in RESULTS-p59.md. AMENDMENT 1 (the gating read): decision rule MET (P1, P2, P3 exactly 0, census 192/96 K16-routed) -> --fuse-qkv is the default on the int4 serving lanes at B=16; P4 (prefill-last KL <= 1e-4) refuted as the amendment anticipated -- the >16-row cuBLAS path is where fusion changes bits. Run 1 (one-forward prefill) read exactly 0: e4b.serve.p59.qwen3.b16.fqkv-kl.5090.2026-09-22."
+      "notes": "kl_mean 0.00440 (hold <= 0.01, refute > 0.03), top-1 0.9775 (hold >= 0.97, refute < 0.95). KL(nf4||int4_fqkv) - KL(nf4||int4) = +0.00342 (band +-0.005); anchors 0.06715 / 0.07057. Pre-registered bands: hold <= 0.01 nats & top-1 >= 0.97; refuted > 0.03 or < 0.95; the shipped KL-from-checkpoint bar (<= 0.10 nats, top-1 >= 0.93) is the outer limit. The anchor is the NF4 control, not a bf16 reference (Qwen3-30B-A3B bf16 is 61 GB). Decision rule outcome recorded in RESULTS-p59.md. AMENDMENT 1 (the gating read): decision rule MET (P1, P2, P3 exactly 0, census 192/96 K16-routed) -> --fuse-qkv is the default on the int4 serving lanes at B=16; P4 (prefill-last KL <= 1e-4) refuted as the amendment anticipated -- the >16-row cuBLAS path is where fusion changes bits. Run 1 (one-forward prefill) read exactly 0: e4b.serve.p59.qwen3.b16.fqkv-kl.5090.2026-09-22. Corrected scope (lane P64's registration, 2026-09-23, counted in bench/p64/rehearsal-a2000/probe/): this scorer does not set hot_residency.DEVICE_GROUPING, so its B = 16 decode experts took the host-grouped dequant + bf16 branch -- 0 int8 activation quantises -- whereas the timed B = 16 arms run the device-grouped int8 GEMV. The fusion licence is unaffected (both arms took the same expert route); the int8 step at B = 16 is priced by no receipt."
     },
     {
       "package": "experts4bit-qlora",
@@ -6642,6 +6642,34 @@
         "receipts/experts4bit-qlora/2026-09-24/p63-5090-1/ (receipt.json, teardown-proof.json, the full fetched run incl. out/<stack>/p63_detail.pt); the proof p63-prove-1 beside it"
       ],
       "notes": "The default and DEVICE_GROUPING routes on this stack take the M-tile at T > 1 (TF32 weights): 0/48, a different function. Lane P63 (#708), pre-registered in #720; every registered prediction held (G0 OK on all three stacks). Run p63-5090-1 $0.2881 after the proof p63-prove-1 ($0.0115) at the same commit. The kernel's own row-invariance is grouped-nf4-gemm's claim gnf4.kernel.nf4-dotpad-gemv-row-invariant.5090.2026-09-24. tests/test_p63_row_exact_gpu.py asserts the route with torch.equal on the plan and dispatch a 5090 takes (9/9 on an RTX A2000, bench/p63/receipts/a2000-gpu-tests/). One box, one family, one fixture. Row-exact experts do not make the step row-exact: end to end no position was exact, every first difference at layer 0 in attention (#725)."
+    },
+    {
+      "id": "e4b.serve.p64.qwen3.b1.expert-int8-step.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P64: on the licensed int4 serving pack (sha256:0c9955a9...) at B = 1, the experts' per-32 int8 activation quantise at T = 1 decode is below Qwen3's arithmetic-order floor on both texts -- KL(bf16 activations || int8) = 0.003392 nats/token on wikitext and 0.002527 on c4val1 (top-1 0.973 / 0.972), 0.61x and 0.77x of the in-lane floor, dNLL -0.00107 / -0.00180 with both 95 % intervals spanning 0: INDISTINGUISHABLE, so W4A8 expert decode stays.",
+      "value": 0.003392,
+      "unit": "nats/token, KL(a16 || a8) over the same int4 expert bytes, B = 1 teacher-forced decode, larger of the two texts",
+      "hardware": "RTX 5090 (sm_120, 400 W power limit, driver 595.71.05), one rented Vast.ai verified/secure host (instance 52340908), shared host (808 of 1,007 GiB RAM in use)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; P55x's licensed pack rebuilt on the box and verified by verify_artifact (build K8 ppl 6.36709), C4-calibrated int4 attention (192 Int4Linear), folds r1/r2 + router epilogue, --no-fuse-qkv, built once by bench/p44/serve_stack.build_served_model; 16 rows x 512 tokens per text (wikitext-2 = P59's rows f67e7e4d; c4val1 17e68b42), 384 prefilled in 128-token chunks, 128 decoded one token per forward (every decode forward T = 1); a16 = E4B_INT4_DECODE_A16 (the expert singleton calls through dequant + bf16); floor = KL(a8 || a8 prefilled in 64-token chunks); KL kl_fidelity's (fp64, full vocabulary, token-weighted) over 2,048 decode positions per text; e4b 0.37.3 at 75c83bd, grouped-nf4-gemm 0.33.0 at 5ca1897",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p64/RESULTS-p64.md",
+        "bench/p64/P64-PREREG.md",
+        "bench/p64/kl_a16.py",
+        "bench/p64/p64_reduce.py",
+        "bench/p64/receipts/p64_rep.json",
+        "bench/p64/receipts/RESULTS-p64-generated.md",
+        "bench/p64/receipts/summary.txt",
+        "bench/p64/receipts/pack.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p64-5090-1/ (receipt.json, teardown-proof.json, the fetched run); the per-pass logits stayed on the box by registration; the proof p64-prove-1 beside it"
+      ],
+      "notes": "Pre-registered in #724 (P1 determinism, P2, P3 floor, P4, P5, P8 HELD; P6 attention and P7 anchor UNREAD: the a16_all passes, the second floor pair a8_pc384 and the NF4 anchor were skipped for time by the deadline-aware scorer, as registered). F here is the one pc64 floor pair; no value of the missing pc384 pair could make G_exp > 2F. Validity VALID: KL(a8 || a8_rep) exactly 0 on 4,096 positions, prefill-last logits bit-identical across passes, every pass's decode counts the registered ones. Not a statement about the attention projections' int8 step (#728), about B = 16 or the device-grouped GEMV, or about quality against bf16. Runs p64-prove-1 $0.0201 + p64-5090-1 $1.4193, teardown proven."
     }
   ]
 }
