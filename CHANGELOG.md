@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### The int4 singleton GEMV no longer writes past its preallocated buffer at T > 1 (a fix; T = 1 unchanged)
+
+- **The defect.** `enable_serve_experts_int4` sizes each store's split-K partials buffer `st["part"]` for one token's
+  `top_k` rows. The singleton branch of `hot_residency._fused_over_stack` passed it to `gemv_int4_b32` at every T,
+  and under `FORCE_SINGLETON_GROUPS` at T > 1 (the S2 verify default, `--moe-grouping singleton`) the GEMV has
+  `T * top_k` rows and plans its split count from them. Measured on the NAS A2000 with the buffer a view into a
+  sentinel-filled one: at T = 17 the call wrote 16,384, 12,288 and 180,224 fp32 elements past it at the OLMoE gate_up
+  and Qwen3 gate_up/down shapes; T = 1 and T = 2 wrote nothing past it
+  (`bench/p63/rehearsal-a2000/part_oob.json`). Found while mapping lane P63's routes (#708).
+- **The fix.** `_int4_part_or_none` keeps the buffer when it has the rows the call's own plan needs and passes None
+  otherwise, so the wrapper allocates its own (through the graph pool under capture, as the device-grouping GEMV
+  branch already does). The arithmetic is unchanged: the split count was always the call's own plan.
+- **Tests.** `tests/test_int4_singleton_part_fits.py`, CPU with the kernel stubbed: one token keeps the store's
+  buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
+  triton imports) decides the same way at 26 and 170 SMs.
+
 ### The fused MoE combine's call-site comment says what lane B393 measured (a comment; no behaviour change)
 
 - **`engines/hot_residency.py`'s call site said `combine_rows` takes "the same order and roundings as the chain

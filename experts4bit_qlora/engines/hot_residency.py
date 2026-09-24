@@ -105,6 +105,31 @@ def _combine_kernel():
         _COMBINE["k"] = k
     return _COMBINE["k"]
 
+def _int4_part_or_none(st, rows: int, device):
+    """The store's preallocated split-K partials buffer when it fits THIS call, else None.
+
+    ``enable_serve_experts_int4`` sizes ``st["part"]`` for one token's ``top_k`` rows (the
+    B=1 capture pattern: no allocation inside a captured decode step). The singleton branch
+    also runs at T > 1 under ``FORCE_SINGLETON_GROUPS`` -- the S2 verify default -- where the
+    GEMV has ``T * top_k`` rows and plans its split count from them. Handed the small buffer
+    there, it wrote past the end (lane P63, measured on an A2000: 16,384 fp32 elements past a
+    128-row buffer at T = 17). The kernel uses the first ``sk * rows`` rows, so a buffer with at
+    least that many is kept, exactly as before; a shorter one is replaced by None, and the wrapper
+    allocates its own -- through the graph pool under capture, the pattern the device-grouping
+    GEMV branch already uses. The arithmetic is the same either way: ``sk`` is the call's own plan."""
+    part = st.get("part")
+    if part is None:
+        return None
+    from int4_b32 import _plan
+    try:
+        from int4_b32 import _sm_count          # grouped-nf4-gemm >= 0.31: the plan takes the row count
+        _bn, _wp, sk, _ku = _plan(st["N"], st["K"], rows, _sm_count(device))
+    except ImportError:                         # 0.30.x (the [fast] floor): the N-only plan, as its wrapper uses
+        _bn, _wp, sk, _ku = _plan(st["N"], st["K"])
+    fits = part.dim() == 2 and part.shape[1] == st["N"] and part.shape[0] >= sk * rows
+    return part if fits else None
+
+
 #: Calibration tap for the expert Hessians (engines/int4_experts):
 #: ``sink(gu_p, sorted_ids, x_sorted, h)`` is called once per MoE call
 #: with the gate/up input rows and the down-projection input rows, in
@@ -371,7 +396,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 xq, xs = quant_x_rows(xr)
                 return gemv_int4_b32(xq, xs, st["packed"], st["scales"],
                                      e32, st["N"], st["K"],
-                                     part=st.get("part"))
+                                     part=_int4_part_or_none(st, e32.numel(),
+                                                             xq.device))
         else:
             # prefill / verify (M per group is large): dequant each
             # routed expert once and matmul -- the winning regime per
