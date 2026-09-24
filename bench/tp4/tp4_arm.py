@@ -1248,6 +1248,12 @@ def run_arm(a, load_fn, sampler=True):
     # #548: the window opens HERE, not at LOAD OK -- so the receipt accounts for the whole process, not a chosen slice.
     PH.reset()
     PH.begin(PROC_T0 if _FIRST_ARM[0] else time.perf_counter())
+    if a.framework == "e4b":                        # P67: the switch's counter is per ARM (the selftest runs many in one process)
+        try:
+            from experts4bit_qlora.lora import reset_reference_order_stats
+            reset_reference_order_stats()
+        except Exception:                           # an e4b without the switch; the receipt then records calls=None
+            pass
     _FIRST_ARM[0] = False
     os.makedirs(a.out, exist_ok=True)
     os.makedirs(a.adapter_dir, exist_ok=True)
@@ -1531,6 +1537,18 @@ def run_arm(a, load_fn, sampler=True):
         from experts4bit_qlora import batched_fallback_stats
         batched_stats = batched_fallback_stats(model)
         batched_stats.pop("per_module", None)     # totals + by_reason; per-module is 30 dicts
+    # P67: what the perturbed-reference switch DID on this arm, read from the loop itself, never from the
+    # environment alone -- an order that was set but never reached ExpertsLoRA.forward would make a floor
+    # arm a plain repeat, and p67_reduce.py refuses such an arm as a floor draw. None on every other arm.
+    reference_order = None
+    if a.framework == "e4b" and a.arm == "reference":
+        reference_order = {"requested": os.environ.get("E4B_REFERENCE_EXPERT_ORDER") or None}
+        try:
+            from experts4bit_qlora.lora import reference_order_stats
+            reference_order.update(reference_order_stats())
+        except Exception:                         # an e4b without the switch: say so rather than guess (the reducer refuses it)
+            reference_order["calls"] = None
+            reference_order["order"] = None
     key = {"e4b": "fused_grouped_lora", "unsloth": "moe_bnb4bit_backend", "hf": "experts_forward"}[a.framework]
     kps = [k[key] for k in kcalls]
     efw = [k["experts_forward"] for k in kcalls]
@@ -1555,6 +1573,7 @@ def run_arm(a, load_fn, sampler=True):
         "adapter_dtypes_before": dtypes_before, "adapter_dtypes_after": dtypes_after,
         "lora_cast_to_fp32": cast, "init_sha": init_sha, "n_patched": n_patched, "enable_reason": reason, "probes": x.get("probes"),
         "batched_stats": batched_stats,          # P56: None unless --arm batched; see below
+        "reference_order": reference_order,      # P67: None unless an e4b reference arm; see above
         "dgrad": (bool(getattr(a, "dgrad", 1)) if a.arm == "fused" else None),   # P56: which backward the fused arm ran
         "kernel_counter_key": key, "kernel_calls_per_step": kps, "kernel_calls_per_step_min": (min(kps) if kps else 0),
         "experts_forward_calls_per_step_min": (min(efw) if efw else 0), "kernel_calls_all": kcalls,
@@ -2164,6 +2183,12 @@ def main():
         return prepare(a)
     if not a.prereg:
         ap.error("--prereg is required for a real run: a receipt must name the pre-registration it ran under (tp4: tp4/TP4-PREREG.md)")
+    # P67: the perturbed-reference order is a switch for the e4b REFERENCE arm only. Anywhere else it reaches the
+    # per-expert loop only through a fallback (batched) or not at all (fused), so the receipt would describe an arm
+    # that did not run. Refused before anything loads -- and before the CUDA check, so CI can drive the refusal.
+    if os.environ.get("E4B_REFERENCE_EXPERT_ORDER") and not (a.framework == "e4b" and a.arm == "reference"):
+        stub(a, "harness_error", f"E4B_REFERENCE_EXPERT_ORDER={os.environ['E4B_REFERENCE_EXPERT_ORDER']!r} is set on "
+             f"{a.framework}/{a.arm}; it is a reference-arm switch only (bench/p67/P67-PREREG.md)", {"phase": "preamble"}, code=19)
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf}[a.framework]

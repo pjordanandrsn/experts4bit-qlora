@@ -1,0 +1,12 @@
+# P67's registered knobs (bench/p67/P67-PREREG.md, "The draw"), one KEY|VALUE per line. The ONE copy: read by
+# p67_drive.sh on the controller and by p67_run.sh on the box, staged beside them and pinned in staged.sha256.
+TP4_BOX|C
+TP4_FAMILIES|gemma4
+TP4_STEPS|20
+TP4_P56|1
+TP4_BATCHED_PAD_WASTE_LIMIT|64
+TP4_P67|1
+TP4_P67_PERMS|1 2 3 4
+TP4_SKIP|gemma4/unsloth/ckpt_unsloth gemma4/hf/hf_peft gemma4/e4b/fused_attn4_nodgrad
+TP4_PREREG|bench/p67/P67-PREREG.md
+GNF4_SHA|9206352f7c49d76432824f7ce8872f0b285f2a4e

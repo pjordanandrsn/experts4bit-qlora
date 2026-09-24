@@ -1,0 +1,1564 @@
+{
+ "groups": [
+  {
+   "fam": "gemma4",
+   "fixture": {
+    "fam": "gemma4",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 1,
+    "accum": 8,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "4ea779a5b6a1e694b04eda3613ffbbdc1c04245434de75f2aa02442ae6b693f3",
+    "init_sha": "7588b481859259309a2007b536104e401e72a77bb9f8c5d385c6a3f043146aaf"
+   },
+   "sessions": [
+    "tp4-b-p46cut-C2"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "gemma4",
+   "fixture": {
+    "fam": "gemma4",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 1,
+    "accum": 8,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "f758d35ebff378dc06af031f03003dc73877eec1e8b2b45234ed98bb76da1821",
+    "init_sha": "7588b481859259309a2007b536104e401e72a77bb9f8c5d385c6a3f043146aaf"
+   },
+   "sessions": [
+    "tp4-c-4"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "gemma4",
+   "fixture": {
+    "fam": "gemma4",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "4ea779a5b6a1e694b04eda3613ffbbdc1c04245434de75f2aa02442ae6b693f3",
+    "init_sha": "7588b481859259309a2007b536104e401e72a77bb9f8c5d385c6a3f043146aaf"
+   },
+   "sessions": [
+    "p56-gemma4-ladder-3",
+    "tp4-b-p46cut-C2",
+    "tp4-c-parity-2"
+   ],
+   "judged": [
+    {
+     "session": "tp4-c-parity-2",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.08256999999999981,
+     "d_med_train": 0.12420500000000001,
+     "d_heldout": 0.15985000000000005,
+     "d_step0_train": 0.03390000000000004,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "FAIL",
+     "verdict": "NO-FLOOR",
+     "carried_by": null,
+     "detectable": null,
+     "note": "the constant band fails and no floor exists (0 admissible floor draw(s) < N_MIN=3): undecidable, not FAIL"
+    },
+    {
+     "session": "p56-gemma4-ladder-3",
+     "tag": "batched_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.05424999999999991,
+     "d_med_train": 0.08487,
+     "d_heldout": 0.08594999999999997,
+     "d_step0_train": 0.08716000000000079,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "FAIL",
+     "verdict": "NO-FLOOR",
+     "carried_by": null,
+     "detectable": null,
+     "note": "the constant band fails and no floor exists (0 admissible floor draw(s) < N_MIN=3): undecidable, not FAIL"
+    },
+    {
+     "session": "p56-gemma4-ladder-3",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.10223000000000004,
+     "d_med_train": 0.10638999999999998,
+     "d_heldout": 0.16378000000000004,
+     "d_step0_train": 0.03390000000000004,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "FAIL",
+     "verdict": "NO-FLOOR",
+     "carried_by": null,
+     "detectable": null,
+     "note": "the constant band fails and no floor exists (0 admissible floor draw(s) < N_MIN=3): undecidable, not FAIL"
+    },
+    {
+     "session": "p56-gemma4-ladder-3",
+     "tag": "fused_attn4_nodgrad",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.10274000000000005,
+     "d_med_train": 0.11677999999999988,
+     "d_heldout": 0.18264999999999998,
+     "d_step0_train": 0.03390000000000004,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "FAIL",
+     "verdict": "NO-FLOOR",
+     "carried_by": null,
+     "detectable": null,
+     "note": "the constant band fails and no floor exists (0 admissible floor draw(s) < N_MIN=3): undecidable, not FAIL"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [
+    {
+     "tag": "fused_attn4",
+     "a": "tp4-b-p46cut-C2",
+     "b": "tp4-c-parity-2",
+     "d_final_train": 0.06441999999999992,
+     "d_med_train": 0.08155999999999997,
+     "d_heldout": 0.11060000000000003,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": -1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    },
+    {
+     "tag": "fused_attn4",
+     "a": "tp4-b-p46cut-C2",
+     "b": "p56-gemma4-ladder-3",
+     "d_final_train": 0.06268000000000007,
+     "d_med_train": 0.05639000000000005,
+     "d_heldout": 0.06319000000000008,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": -1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    },
+    {
+     "tag": "fused_attn4",
+     "a": "tp4-c-parity-2",
+     "b": "p56-gemma4-ladder-3",
+     "d_final_train": 0.0017399999999998528,
+     "d_med_train": 0.04620000000000002,
+     "d_heldout": 0.04740999999999995,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": 1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    },
+    {
+     "tag": "reference_attn4",
+     "a": "tp4-c-parity-2",
+     "b": "p56-gemma4-ladder-3",
+     "d_final_train": 0.021400000000000086,
+     "d_med_train": 0.02560499999999999,
+     "d_heldout": 0.05133999999999994,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": 1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    }
+   ],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "gemma4",
+   "fixture": {
+    "fam": "gemma4",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "f758d35ebff378dc06af031f03003dc73877eec1e8b2b45234ed98bb76da1821",
+    "init_sha": "7588b481859259309a2007b536104e401e72a77bb9f8c5d385c6a3f043146aaf"
+   },
+   "sessions": [
+    "tp4-c-4"
+   ],
+   "judged": [
+    {
+     "session": "tp4-c-4",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.09037000000000006,
+     "d_med_train": 0.11801499999999987,
+     "d_heldout": 0.09827999999999992,
+     "d_step0_train": 0.03390000000000004,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "FAIL",
+     "verdict": "NO-FLOOR",
+     "carried_by": null,
+     "detectable": null,
+     "note": "the constant band fails and no floor exists (0 admissible floor draw(s) < N_MIN=3): undecidable, not FAIL"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "gemma4",
+   "fixture": {
+    "fam": "gemma4",
+    "steps": 60,
+    "seq": 512,
+    "micro_batch": null,
+    "accum": null,
+    "r": 8,
+    "alpha": 16,
+    "lr": 0.0001,
+    "seed": 0,
+    "optimizer": null,
+    "attn_4bit": null,
+    "tokens_sha": "tp1-clinical",
+    "init_sha": "a059fa05b41f1c3215fab3899f4e2a6729eb663efa5ece601ac9a17d77c24ffc"
+   },
+   "sessions": [
+    "tp1 (clinical, bf16 attention)"
+   ],
+   "judged": [
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "batched_attn4",
+     "status": "VOID",
+     "why": [
+      "kernel calls/step min 0 < 2*n_patched=60 (tp1: fallback took layers)"
+     ]
+    },
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.023850000000000038,
+     "d_med_train": 0.04741500000000001,
+     "d_heldout": 0.0021900000000000253,
+     "d_step0_train": 0.07006999999999941,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "gptoss",
+   "fixture": {
+    "fam": "gptoss",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": false,
+    "tokens_sha": "de8b9f385f53e1f7723ecd8d2dad9d8f94b2ddd8629e948fedb60bb6fd74737b",
+    "init_sha": "d0fc834b8a5137f86e515113ad2bb5959b0dce1d1b8c8b153146be1ec95756e3"
+   },
+   "sessions": [
+    "tp4-b-p46cut-A"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "gptoss",
+   "fixture": {
+    "fam": "gptoss",
+    "steps": 60,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": false,
+    "tokens_sha": "de8b9f385f53e1f7723ecd8d2dad9d8f94b2ddd8629e948fedb60bb6fd74737b",
+    "init_sha": "d0fc834b8a5137f86e515113ad2bb5959b0dce1d1b8c8b153146be1ec95756e3"
+   },
+   "sessions": [
+    "tp4-a"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "granite",
+   "fixture": {
+    "fam": "granite",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "858f71901429c848c92a5f7bb86edd25244e476dd9048d9e694b932612ee3e9a",
+    "init_sha": "87fd1d94f030c032d8acc4d84900063e7e8e6b8a427bea9c644bde1c2b16d8f0"
+   },
+   "sessions": [
+    "tp4-b-p46cut-A"
+   ],
+   "judged": [
+    {
+     "session": "tp4-b-p46cut-A",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.0006300000000000194,
+     "d_med_train": 0.0013500000000000179,
+     "d_heldout": 0.00019999999999997797,
+     "d_step0_train": 0.004269999999999996,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "granite",
+   "fixture": {
+    "fam": "granite",
+    "steps": 60,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "858f71901429c848c92a5f7bb86edd25244e476dd9048d9e694b932612ee3e9a",
+    "init_sha": "87fd1d94f030c032d8acc4d84900063e7e8e6b8a427bea9c644bde1c2b16d8f0"
+   },
+   "sessions": [
+    "tp4-a",
+    "tp4-d"
+   ],
+   "judged": [
+    {
+     "session": "tp4-a",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.00029999999999996696,
+     "d_med_train": 0.0014800000000000368,
+     "d_heldout": 0.00029999999999996696,
+     "d_step0_train": 0.004269999999999996,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    },
+    {
+     "session": "tp4-d",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.00273000000000001,
+     "d_med_train": 0.0016200000000000103,
+     "d_heldout": 0.0008900000000000574,
+     "d_step0_train": 0.004269999999999996,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [
+    {
+     "tag": "fused_attn4",
+     "a": "tp4-a",
+     "b": "tp4-d",
+     "d_final_train": 0.0018599999999999728,
+     "d_med_train": 0.001224999999999976,
+     "d_heldout": 0.0015900000000000913,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": 1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    },
+    {
+     "tag": "reference_attn4",
+     "a": "tp4-a",
+     "b": "tp4-d",
+     "d_final_train": 0.0005700000000000705,
+     "d_med_train": 0.0009000000000000119,
+     "d_heldout": 0.0010000000000000009,
+     "d_step0_train": 0.0,
+     "first_differing_step": 5,
+     "sign_final": -1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    }
+   ],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "granite",
+   "fixture": {
+    "fam": "granite",
+    "steps": 60,
+    "seq": 512,
+    "micro_batch": null,
+    "accum": null,
+    "r": 8,
+    "alpha": 16,
+    "lr": 0.0001,
+    "seed": 0,
+    "optimizer": null,
+    "attn_4bit": null,
+    "tokens_sha": "tp1-clinical",
+    "init_sha": "9da33dcfb11c4259cc42d4aaeccb8d94feec9343bb111e97fd4528bd22d80bf3"
+   },
+   "sessions": [
+    "tp1 (clinical, bf16 attention)"
+   ],
+   "judged": [
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "batched_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.015529999999999988,
+     "d_med_train": 0.01680999999999999,
+     "d_heldout": 0.005510000000000015,
+     "d_step0_train": 0.0040999999999997705,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    },
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.013289999999999996,
+     "d_med_train": 0.012699999999999989,
+     "d_heldout": 0.00495000000000001,
+     "d_step0_train": 0.002220000000000333,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "mixtral",
+   "fixture": {
+    "fam": "mixtral",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 1,
+    "accum": 8,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "4a41b3f4a56149f688da50886b694239ac8bbdda715310d2375c1ea172bd59cf",
+    "init_sha": "e88e53c07cc8a72d8fda0984acd0538adabd8b88d40c0b5537a0d9624fe5c71d"
+   },
+   "sessions": [
+    "tp4-c-4"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "mixtral",
+   "fixture": {
+    "fam": "mixtral",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "4a41b3f4a56149f688da50886b694239ac8bbdda715310d2375c1ea172bd59cf",
+    "init_sha": "e88e53c07cc8a72d8fda0984acd0538adabd8b88d40c0b5537a0d9624fe5c71d"
+   },
+   "sessions": [
+    "tp4-c-4"
+   ],
+   "judged": [
+    {
+     "session": "tp4-c-4",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.004029999999999978,
+     "d_med_train": 0.004149999999999876,
+     "d_heldout": 0.0008700000000000374,
+     "d_step0_train": 0.009650000000000158,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "mixtral",
+   "fixture": {
+    "fam": "mixtral",
+    "steps": 60,
+    "seq": 512,
+    "micro_batch": null,
+    "accum": null,
+    "r": 8,
+    "alpha": 16,
+    "lr": 0.0001,
+    "seed": 0,
+    "optimizer": null,
+    "attn_4bit": null,
+    "tokens_sha": "tp1-clinical",
+    "init_sha": "46ea74b4d8860671a32e3ad5a8b81b248884ceff21f43ff6d8ae1678c96c6b72"
+   },
+   "sessions": [
+    "tp1 (clinical, bf16 attention)"
+   ],
+   "judged": [
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "batched_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.00766,
+     "d_med_train": 0.010565000000000005,
+     "d_heldout": 0.007169999999999954,
+     "d_step0_train": 0.0007799999999997809,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    },
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.00953000000000001,
+     "d_med_train": 0.00945,
+     "d_heldout": 0.0006799999999999584,
+     "d_step0_train": 0.003529999999999589,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "olmoe",
+   "fixture": {
+    "fam": "olmoe",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "de1b303bff2eec2b86857d821b2b776701b0c0a87afb102d13f8371f99e3f8ca",
+    "init_sha": "9180a93ddf31eee33c8c943230bc2a3bb736bb358f7c1095ca74e091dd985a70"
+   },
+   "sessions": [
+    "tp4-b-p46cut-A"
+   ],
+   "judged": [
+    {
+     "session": "tp4-b-p46cut-A",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.0020299999999999763,
+     "d_med_train": 0.0011650000000000271,
+     "d_heldout": 0.0011599999999999389,
+     "d_step0_train": 0.0136099999999999,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "olmoe",
+   "fixture": {
+    "fam": "olmoe",
+    "steps": 60,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "de1b303bff2eec2b86857d821b2b776701b0c0a87afb102d13f8371f99e3f8ca",
+    "init_sha": "9180a93ddf31eee33c8c943230bc2a3bb736bb358f7c1095ca74e091dd985a70"
+   },
+   "sessions": [
+    "tp4-a"
+   ],
+   "judged": [
+    {
+     "session": "tp4-a",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.00019000000000002348,
+     "d_med_train": 0.0012450000000000516,
+     "d_heldout": 0.0011900000000000244,
+     "d_step0_train": 0.0136099999999999,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "olmoe",
+   "fixture": {
+    "fam": "olmoe",
+    "steps": 60,
+    "seq": 512,
+    "micro_batch": null,
+    "accum": null,
+    "r": 8,
+    "alpha": 16,
+    "lr": 0.0001,
+    "seed": 0,
+    "optimizer": null,
+    "attn_4bit": null,
+    "tokens_sha": "tp1-clinical",
+    "init_sha": "b14ec24782b3eb8a6bf0335ce5d3afb816046fb846a93accdd59c1379b36d5cd"
+   },
+   "sessions": [
+    "tp1 (clinical, bf16 attention)"
+   ],
+   "judged": [
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "batched_attn4",
+     "status": "VOID",
+     "why": [
+      "kernel calls/step min 24 < 2*n_patched=32 (tp1: fallback took layers)"
+     ]
+    },
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.013270000000000004,
+     "d_med_train": 0.012490000000000001,
+     "d_heldout": 0.00380999999999998,
+     "d_step0_train": 0.0051800000000001845,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 1,
+    "accum": 8,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+    "init_sha": "0e2825d314c814c933ae610073fb90690dbef3fd2e88806e807980495d1b1abd"
+   },
+   "sessions": [
+    "p43-t1-qwen3-2",
+    "tp4-b-p46cut-4"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [
+    {
+     "tag": "fused_attn4_mb1",
+     "a": "p43-t1-qwen3-2",
+     "b": "tp4-b-p46cut-4",
+     "d_final_train": 0.0018099999999999783,
+     "d_med_train": 0.0008449999999999847,
+     "d_heldout": 0.0001100000000000545,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": -1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    }
+   ],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 1,
+    "accum": 8,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac",
+    "init_sha": "0e2825d314c814c933ae610073fb90690dbef3fd2e88806e807980495d1b1abd"
+   },
+   "sessions": [
+    "tp4-qwen-mb1-2"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": false,
+    "tokens_sha": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+    "init_sha": "0e2825d314c814c933ae610073fb90690dbef3fd2e88806e807980495d1b1abd"
+   },
+   "sessions": [
+    "p43-t1-qwen3-2"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+    "init_sha": "0e2825d314c814c933ae610073fb90690dbef3fd2e88806e807980495d1b1abd"
+   },
+   "sessions": [
+    "p43-t1-qwen3-2",
+    "p46-qwen3lora",
+    "tp4-b-p46cut-4"
+   ],
+   "judged": [
+    {
+     "session": "p46-qwen3lora",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.0023600000000000287,
+     "d_med_train": 0.001774999999999971,
+     "d_heldout": 0.0015300000000000313,
+     "d_step0_train": 0.0036000000000000476,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    },
+    {
+     "session": "tp4-b-p46cut-4",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.0013999999999999568,
+     "d_med_train": 0.0014199999999999768,
+     "d_heldout": 0.000500000000000056,
+     "d_step0_train": 0.0036000000000000476,
+     "first_differing_step": 0,
+     "sign_final": 1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [
+    {
+     "tag": "fused_attn4",
+     "a": "p43-t1-qwen3-2",
+     "b": "p46-qwen3lora",
+     "d_final_train": 0.0017399999999999638,
+     "d_med_train": 0.0008600000000000274,
+     "d_heldout": 0.00017999999999995797,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": 1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    },
+    {
+     "tag": "fused_attn4",
+     "a": "p43-t1-qwen3-2",
+     "b": "tp4-b-p46cut-4",
+     "d_final_train": 0.0027599999999999847,
+     "d_med_train": 0.0011900000000000244,
+     "d_heldout": 0.0007899999999999574,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": 1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    },
+    {
+     "tag": "fused_attn4",
+     "a": "p46-qwen3lora",
+     "b": "tp4-b-p46cut-4",
+     "d_final_train": 0.0010200000000000209,
+     "d_med_train": 0.0009950000000000236,
+     "d_heldout": 0.0006099999999999994,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": 1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    },
+    {
+     "tag": "reference_attn4",
+     "a": "p46-qwen3lora",
+     "b": "tp4-b-p46cut-4",
+     "d_final_train": 0.001980000000000093,
+     "d_med_train": 0.0009299999999999864,
+     "d_heldout": 0.0016399999999999748,
+     "d_step0_train": 0.0,
+     "first_differing_step": 2,
+     "sign_final": 1,
+     "admissible": false,
+     "why": "different sessions (disclosed, never a floor draw)"
+    }
+   ],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 60,
+    "seq": 512,
+    "micro_batch": 1,
+    "accum": 1,
+    "r": 8,
+    "alpha": 16,
+    "lr": 0.0001,
+    "seed": 0,
+    "optimizer": "adamw_torch(lr=0.0001, weight_decay=0.01) schedule=constant warmup_steps=0",
+    "attn_4bit": true,
+    "tokens_sha": "81dc24c3c195667fd7d0829a5f73f401e91708bd911ef21cb89794515cd1e583",
+    "init_sha": "2b362f7b19ad8830d01afaa62685dc284a673a71099e0570e966bcb4bf5f32d7"
+   },
+   "sessions": [
+    "tp4-a"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 60,
+    "seq": 512,
+    "micro_batch": 1,
+    "accum": 1,
+    "r": 8,
+    "alpha": 16,
+    "lr": 0.0001,
+    "seed": 0,
+    "optimizer": "adamw_torch(lr=0.0001, weight_decay=0.01) schedule=constant warmup_steps=0",
+    "attn_4bit": true,
+    "tokens_sha": "cb4f505d61ef3b485fddaf0d31e57197d79c7c6b2728467f5d56565f42355fc5",
+    "init_sha": "2b362f7b19ad8830d01afaa62685dc284a673a71099e0570e966bcb4bf5f32d7"
+   },
+   "sessions": [
+    "tp4-b"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 60,
+    "seq": 512,
+    "micro_batch": null,
+    "accum": null,
+    "r": 8,
+    "alpha": 16,
+    "lr": 0.0001,
+    "seed": 0,
+    "optimizer": null,
+    "attn_4bit": null,
+    "tokens_sha": "tp1-clinical",
+    "init_sha": "2b362f7b19ad8830d01afaa62685dc284a673a71099e0570e966bcb4bf5f32d7"
+   },
+   "sessions": [
+    "tp1 (clinical, bf16 attention)"
+   ],
+   "judged": [
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "batched_attn4",
+     "status": "VOID",
+     "why": [
+      "kernel calls/step min 12 < 2*n_patched=96 (tp1: fallback took layers)"
+     ]
+    },
+    {
+     "session": "tp1 (clinical, bf16 attention)",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.013149999999999995,
+     "d_med_train": 0.010504999999999987,
+     "d_heldout": 0.0024399999999999977,
+     "d_step0_train": 0.009220000000000006,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3",
+   "fixture": {
+    "fam": "qwen3",
+    "steps": 8,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "6d5783ce31b2ff57a05cca2db0446ab8bbf7697bd322d22e7b0545a25585b3b2",
+    "init_sha": "0e2825d314c814c933ae610073fb90690dbef3fd2e88806e807980495d1b1abd"
+   },
+   "sessions": [
+    "p45-qwen3prof-2"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3_5",
+   "fixture": {
+    "fam": "qwen3_5",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 1,
+    "accum": 8,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "20d39334fad63864f5c90432ceba9ced43e70a319ae11399abda651301178100",
+    "init_sha": "128029371c87656ddd72e419b2b4f9cf0143f9458dbce1558f09e54225a10848"
+   },
+   "sessions": [
+    "tp4-b-p46cut-4"
+   ],
+   "judged": [],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  },
+  {
+   "fam": "qwen3_5",
+   "fixture": {
+    "fam": "qwen3_5",
+    "steps": 20,
+    "seq": 2048,
+    "micro_batch": 2,
+    "accum": 4,
+    "r": 16,
+    "alpha": 16,
+    "lr": 0.0002,
+    "seed": 3407,
+    "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+    "attn_4bit": true,
+    "tokens_sha": "20d39334fad63864f5c90432ceba9ced43e70a319ae11399abda651301178100",
+    "init_sha": "128029371c87656ddd72e419b2b4f9cf0143f9458dbce1558f09e54225a10848"
+   },
+   "sessions": [
+    "tp4-b-p46cut-4"
+   ],
+   "judged": [
+    {
+     "session": "tp4-b-p46cut-4",
+     "tag": "fused_attn4",
+     "status": "VALID",
+     "why": [],
+     "d_final_train": 0.0015900000000000913,
+     "d_med_train": 0.0015399999999999303,
+     "d_heldout": 7.00000000000145e-05,
+     "d_step0_train": 0.0004900000000001015,
+     "first_differing_step": 0,
+     "sign_final": -1,
+     "constant": "PASS",
+     "verdict": "PASS",
+     "carried_by": "tolerance",
+     "detectable": null,
+     "note": "no floor measured; B >= TOL by construction, so the constant band's PASS stands"
+    }
+   ],
+   "floor_draws": [],
+   "cross_session_pairs": [],
+   "n_admissible_floor_draws": 0
+  }
+ ],
+ "inputs": [
+  {
+   "session": "p43-t1-qwen3-2",
+   "file": "qwen3_e4b_fused_attn4.json",
+   "sha256": "be538c574546649fb5fd6c523eab2cdaa7e0b26aee4905f88b90f6c5bd33d1d3"
+  },
+  {
+   "session": "p43-t1-qwen3-2",
+   "file": "qwen3_e4b_fused_attn4_mb1.json",
+   "sha256": "be96b8f0025f19176c48723f770c0a0385dd56f15fda90f2ca97d36e47af1aa8"
+  },
+  {
+   "session": "p43-t1-qwen3-2",
+   "file": "qwen3_e4b_fused_bf16attn.json",
+   "sha256": "c8af281ad3cdadacf5993b880cbc99c58e9507bf67dbdcf056db09af02e1f97a"
+  },
+  {
+   "session": "p45-qwen3prof-2",
+   "file": "qwen3_e4b_fused_attn4.json",
+   "sha256": "3b1766addef7a9e9757572fdf6fbf46560f2dfe427702be32da34217f51246ea"
+  },
+  {
+   "session": "p46-qwen3lora",
+   "file": "qwen3_e4b_fused_attn4.json",
+   "sha256": "4516d6a2f05a0e684bc29a1fc0cd923d4214ab1cd533665585eb49363f6bd8b5"
+  },
+  {
+   "session": "p46-qwen3lora",
+   "file": "qwen3_e4b_fused_attn4_pad.json",
+   "sha256": "d9da3a500ab3f36502692ebd4c6a532f63400e5ceaabced3074a919ad3632447"
+  },
+  {
+   "session": "p46-qwen3lora",
+   "file": "qwen3_e4b_reference_attn4.json",
+   "sha256": "8f0077c11d3b791a909f39a7992a214e35245a6b3c0985e742e4c801afc55d83"
+  },
+  {
+   "session": "p56-gemma4-ladder-3",
+   "file": "gemma4_e4b_batched_attn4.json",
+   "sha256": "ab5434504268d619fc03c0f11d987adf537c359f1e133f9e4fad4772403e33bf"
+  },
+  {
+   "session": "p56-gemma4-ladder-3",
+   "file": "gemma4_e4b_fused_attn4.json",
+   "sha256": "050fee35dff4bdd3fc6621a72a35756038129d6e6887fb36f8a1f2237ff25d2a"
+  },
+  {
+   "session": "p56-gemma4-ladder-3",
+   "file": "gemma4_e4b_fused_attn4_nodgrad.json",
+   "sha256": "071b46ff824aaf012d6c8f6e83b6de4878abfd9a80bee663a60c60e1d493c00b"
+  },
+  {
+   "session": "p56-gemma4-ladder-3",
+   "file": "gemma4_e4b_reference_attn4.json",
+   "sha256": "766a75edd98b4d81534ad172a13773506f10204ed812e93a88448a97cf5b9f2d"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "gemma4_train_batched.json",
+   "sha256": "95c1c22a97e583ea94ad38df4247cc784fc1d24e70fbd3935e089d491cb87761"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "gemma4_train_fused.json",
+   "sha256": "ebbdd010d17486c6fbe3d26626e62ec4639267eb1d7b376cd31bb4631fe7780b"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "gemma4_train_reference.json",
+   "sha256": "a6b8f6d46dbf4695c51840cf7d6ff8e5fb797de5dbd62baa4709076b7986c0df"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "gptoss_train_batched.json",
+   "sha256": "9e61760c9bf1130f5ac3565af0a5c73e2899cb1e4afff4b2ccda617c40d74b22"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "gptoss_train_fused.json",
+   "sha256": "ee1f22015f35c0aa4a061ea0703229d8fd7b5a1b5a657f707c130f56535789d8"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "granite_train_batched.json",
+   "sha256": "f81fca5977cd05f0523050cb7c300178b8e707d44a647071fd625d3c691e1a92"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "granite_train_fused.json",
+   "sha256": "caf53cb09379ced5d1809312c6f2e27cfe13e59b40897764b0136fd158bab344"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "granite_train_reference.json",
+   "sha256": "1a1285859e8556968abf0cbe7540c2ad11233f8b48c416fb27e46d44e9c9c9f7"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "mixtral_train_batched.json",
+   "sha256": "463dbb03a8bc466a2c4f1976c4d1da6aa27d88db146be8e6dcc1522785aa33e5"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "mixtral_train_fused.json",
+   "sha256": "0883af480141f03ebc51af3abb38cfa92fd26e0c97fe5808718480a56bde7bae"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "mixtral_train_reference.json",
+   "sha256": "efa43ba8875eddb4cdb823eb9368330c3e11eb6ed646442fc3297f9752f6649c"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "olmoe_train_batched.json",
+   "sha256": "b68ec5f2a1ed95d01a247aa2296b3e3db1d294ea5988cd935f638d3f9e00b150"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "olmoe_train_fused.json",
+   "sha256": "46be3798c830b57f5e767d0b38f59a19c10ae1fe70aa657eeb884bd695c971fc"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "olmoe_train_reference.json",
+   "sha256": "86d197d7ff32f54a278e6b4a02cf247267f377ec60f2fb99c3379e4a2de3168a"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "qwen3_train_batched.json",
+   "sha256": "348ed78d7fe62ab83a2b9f303593760e01d7e7609d03577758dd0033955a7760"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "qwen3_train_fused.json",
+   "sha256": "49b03967e5c2411906223f27d29eed1db5567de082cb1be1eb9e3d4fb19f759d"
+  },
+  {
+   "session": "tp1 (clinical, bf16 attention)",
+   "file": "qwen3_train_reference.json",
+   "sha256": "9ec88062c7b6fdc3d620cff83257987930f4d6b9b3f2a5374b688c9914d7507f"
+  },
+  {
+   "session": "tp4-a",
+   "file": "deepseek_v4_e4b_fused_attn4.json",
+   "sha256": "265712aada47adae0857e49fd2c578afebc9c311e822749f9557b36f0925611d"
+  },
+  {
+   "session": "tp4-a",
+   "file": "deepseek_v4_e4b_reference_attn4.json",
+   "sha256": "72d2e32697094f9d90ed476c0fe6f884516b6a7cb6cc85eb534f70d4e7646574"
+  },
+  {
+   "session": "tp4-a",
+   "file": "gptoss_e4b_attn_only.json",
+   "sha256": "326cbb79983ac0852db847e573f941916034e46328cfa77a5d6650ca52ea5bd0"
+  },
+  {
+   "session": "tp4-a",
+   "file": "gptoss_e4b_fused_attn4.json",
+   "sha256": "231e1d8a84133db3b00da077a6e34d01cce1dc14320f084edd31b6e7373a7a97"
+  },
+  {
+   "session": "tp4-a",
+   "file": "gptoss_e4b_reference_attn4.json",
+   "sha256": "5623b180ff83b9f0fd775334df137d2fd1ac6186d69d108a0faed15c52185000"
+  },
+  {
+   "session": "tp4-a",
+   "file": "granite_e4b_fused_attn4.json",
+   "sha256": "76308ff8d4d2feba6267f06f2d92f69fbc289490cfb44e29dc66b863587991ec"
+  },
+  {
+   "session": "tp4-a",
+   "file": "granite_e4b_reference_attn4.json",
+   "sha256": "2457732fef3cd7edec47bf1ce63bb7725dbfe207b1b56a0d8e2ef3d64c4989e1"
+  },
+  {
+   "session": "tp4-a",
+   "file": "kimi_k3_e4b_fused_attn4.json",
+   "sha256": "1e5033563424597ad97348e00623ed6c851183fdc76d4b426949823ddf60fc18"
+  },
+  {
+   "session": "tp4-a",
+   "file": "kimi_k3_e4b_reference_attn4.json",
+   "sha256": "a247299442f6e38305629badaa05d14c5ade2aede16a088da14b56625b01e86d"
+  },
+  {
+   "session": "tp4-a",
+   "file": "olmoe_e4b_fused_attn4.json",
+   "sha256": "30badca2d316c59cec63d785d73bf3aba173a4604a963cb07e11c73ae53b9ada"
+  },
+  {
+   "session": "tp4-a",
+   "file": "olmoe_e4b_reference_attn4.json",
+   "sha256": "063bfcd159f294e1658dd3bcb66a2453a59fa9c4441019a1485afb0a1d9ea607"
+  },
+  {
+   "session": "tp4-a",
+   "file": "qwen3_e4b_fused_attn4_p38.json",
+   "sha256": "64aa8a6c53cc83a447f554f29bae914692dedadc860d6a03e9381ad19394f993"
+  },
+  {
+   "session": "tp4-b",
+   "file": "qwen3_e4b_fused_attn4.json",
+   "sha256": "95feaede1a3fce53006c5848fbcc7ca4409f19a710afca83ccc24c3eb8c8ebc5"
+  },
+  {
+   "session": "tp4-b",
+   "file": "qwen3_e4b_fused_attn4_p38.json",
+   "sha256": "272f7dcf02af7ca424ee87709fe53ac8a0157decd6f880d020b1897fdd672ff4"
+  },
+  {
+   "session": "tp4-b-p46cut-4",
+   "file": "qwen3_5_e4b_fused_attn4.json",
+   "sha256": "bf85ed92a1d4751185a70c38a9955a8119567f9d0f0a19044b0bcc7b2fe28f85"
+  },
+  {
+   "session": "tp4-b-p46cut-4",
+   "file": "qwen3_5_e4b_fused_attn4_mb1.json",
+   "sha256": "9f6615cf1ad654564ec90b5a8402eea6b6ec57d89dd18f10dc8d8997a7cb0d9a"
+  },
+  {
+   "session": "tp4-b-p46cut-4",
+   "file": "qwen3_5_e4b_reference_attn4.json",
+   "sha256": "d6cc195b6733c60ee9c6340643afb8052c66069b860a77ec495ab5ceace36c44"
+  },
+  {
+   "session": "tp4-b-p46cut-4",
+   "file": "qwen3_e4b_fused_attn4.json",
+   "sha256": "b38aaba2b3544df0dbe29caeeff200be529a98444fd0b6f001239851a4c27156"
+  },
+  {
+   "session": "tp4-b-p46cut-4",
+   "file": "qwen3_e4b_fused_attn4_mb1.json",
+   "sha256": "94920226338eba09ccfb081a2e6e4c1c74a92f00bc656e841d9dd223b70af086"
+  },
+  {
+   "session": "tp4-b-p46cut-4",
+   "file": "qwen3_e4b_reference_attn4.json",
+   "sha256": "23a6c85e10d36967502202411a71f3a0e817aed1a8dc24529ca606fbd2c7114b"
+  },
+  {
+   "session": "tp4-b-p46cut-A",
+   "file": "gptoss_e4b_attn_only.json",
+   "sha256": "5276965193d00a97eaf3654db7eb859920256a87b81c30b3c72ca30ac8fcca93"
+  },
+  {
+   "session": "tp4-b-p46cut-A",
+   "file": "gptoss_e4b_fused_attn4.json",
+   "sha256": "7cc64958f1ad874e8ade21f7e69638e9639041fa4268c76bd3ed7dad2a5801da"
+  },
+  {
+   "session": "tp4-b-p46cut-A",
+   "file": "gptoss_e4b_reference_attn4.json",
+   "sha256": "febcd6c4451d927b6d787508314df04e18ea4d4610459a8b93afbe8c912b3152"
+  },
+  {
+   "session": "tp4-b-p46cut-A",
+   "file": "granite_e4b_fused_attn4.json",
+   "sha256": "651bd6990792d77fcf80e19ad79874150924b3cef73803b3945a379e9c8d15e8"
+  },
+  {
+   "session": "tp4-b-p46cut-A",
+   "file": "granite_e4b_reference_attn4.json",
+   "sha256": "af2ee871540827002715789625d3470b3cff73e69a506262ccbaa4991aa9ad6a"
+  },
+  {
+   "session": "tp4-b-p46cut-A",
+   "file": "olmoe_e4b_fused_attn4.json",
+   "sha256": "05bbf7c63b9070fd476fe1ecd84c80b53685b5e1ee0afa963474a9a1748b4082"
+  },
+  {
+   "session": "tp4-b-p46cut-A",
+   "file": "olmoe_e4b_reference_attn4.json",
+   "sha256": "bcf8e31a5858a13b4e01f6203fff236bebded56e0db0bbf9b1aad9b39a97a1f7"
+  },
+  {
+   "session": "tp4-b-p46cut-C2",
+   "file": "gemma4_e4b_fused_attn4.json",
+   "sha256": "656a250ba89be151197e67d838e6ba4990d3a3f292b82445a17e67997e6748cd"
+  },
+  {
+   "session": "tp4-b-p46cut-C2",
+   "file": "gemma4_e4b_fused_attn4_mb1.json",
+   "sha256": "9819cba5f8c158564a1aff13ebae724192adbd3d8b6cceea4c90c5240bc87c1a"
+  },
+  {
+   "session": "tp4-b-p46cut-C2",
+   "file": "gemma4_e4b_reference_attn4.json",
+   "sha256": "29434dccbc6df181227f052b373a5fc2d6b69ade8206cd670d6ee3fb7ebe4ef6"
+  },
+  {
+   "session": "tp4-b-p46cut-C2",
+   "file": "mixtral_e4b_fused_attn4.json",
+   "sha256": "c5d057b5f0241a266c7d41f30d69da2fbe41b051d32b4d5c24e3561bb19aa74a"
+  },
+  {
+   "session": "tp4-b-p46cut-C2",
+   "file": "mixtral_e4b_reference_attn4.json",
+   "sha256": "64fe6b40fd19b24e5bcaf3fe2b42eb6aa7aaa6b9e13e24b9ab72695420abdf0c"
+  },
+  {
+   "session": "tp4-c-4",
+   "file": "gemma4_e4b_fused_attn4.json",
+   "sha256": "96b074e8d91fc13f658f9fbe733062d76ee87a173f02be3a1643bf0757fa34bb"
+  },
+  {
+   "session": "tp4-c-4",
+   "file": "gemma4_e4b_fused_attn4_mb1.json",
+   "sha256": "eef2182b5c2cfec416518aa47fcee9d5e31938faca76059125536940723bb80f"
+  },
+  {
+   "session": "tp4-c-4",
+   "file": "gemma4_e4b_reference_attn4.json",
+   "sha256": "470fb87c9d6d833758a68075d34b15d4656600031512ad9265d4834bb544cf9a"
+  },
+  {
+   "session": "tp4-c-4",
+   "file": "mixtral_e4b_fused_attn4.json",
+   "sha256": "9de1dc0bfdc43cf63f6d4366115e24131e9b450ade56de62407a3f44297527b1"
+  },
+  {
+   "session": "tp4-c-4",
+   "file": "mixtral_e4b_fused_attn4_mb1.json",
+   "sha256": "1f01209e48c66e7520673ab1c0df707c9d853e0448babecb4dc287ae7c68e20a"
+  },
+  {
+   "session": "tp4-c-4",
+   "file": "mixtral_e4b_reference_attn4.json",
+   "sha256": "a041f28a25cc93c2193464343c201bb3334dca8109bd2a8297c0704c7e315734"
+  },
+  {
+   "session": "tp4-c-parity-2",
+   "file": "gemma4_e4b_fused_attn4.json",
+   "sha256": "b59e94575d90966084ca746affa47ccf0047ab339868559483d4430f8f02cea6"
+  },
+  {
+   "session": "tp4-c-parity-2",
+   "file": "gemma4_e4b_reference_attn4.json",
+   "sha256": "9d3648b5d84eb13ceda2dfece4249ccc849b718a4c946e844de53b0467f7a054"
+  },
+  {
+   "session": "tp4-d",
+   "file": "granite_e4b_fused_attn4.json",
+   "sha256": "387591f572685c22e358b8e6e350b6a14e0c948f6eefd8ca82a148838bc1d095"
+  },
+  {
+   "session": "tp4-d",
+   "file": "granite_e4b_reference_attn4.json",
+   "sha256": "8d1f2f10fd8fba66fb7aa00287fa35e4a93c094d6ef8da527eda8f99a223db82"
+  },
+  {
+   "session": "tp4-qwen-mb1-2",
+   "file": "qwen3_e4b_fused_attn4.json",
+   "sha256": "5e775a8d63a73e6cbf9fce479c8c8c3077fcfaaa2f27e4b3925f180e70e3cdeb"
+  },
+  {
+   "session": "tp4-qwen-mb1-2",
+   "file": "qwen3_e4b_reference_attn4.json",
+   "sha256": "3009c07735eec4fa4ec0540112eee461787a6a41f5eda3ab6876ee97df38bf5b"
+  }
+ ]
+}

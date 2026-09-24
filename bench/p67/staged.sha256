@@ -1,0 +1,11 @@
+# Names as the BOX sees them after staging (flat in /root/tp4). p67_run.sh runs `sha256sum -c` on this file ON
+# the box before anything else; p67_drive.sh resolves each name to its source in this tree and compares; CI
+# (tests/test_p67_staged_pin.py) does the same. Regenerate with bench/p67/pin.sh.
+e9a99bd993a68dec680570d00fa8246142a2b3547d5221a4453a4386d50cddcf  p67_run.sh
+21329569353ce03095df7f7b9545df085af593a3473285c8650493fbeb92cd30  registered.knobs
+4b7057f01d1595c2d3f82993480d3230d873ae2202fe44c5d30026f557a6bada  tp4_run.sh
+4a7cb27afb14f03dd30a38663dfb3b04c3231d2bb3134fdd9f9edcba2460196c  tp4_arm.py
+e77a75453cb77ce560413a32dee973e8bde569478f9f8d6b3f29cfc55223f65d  tp4_reduce.py
+34761911c2a6986bffbcb72d3ebb5ce56d54834bb2285fec8a6f0b996562535d  tp4_alpaca.py
+7c6653bf6dd94c307112567638f2dcc0905b71cbde5667cf3ca859f5f6793544  n9_datasets.py
+38b3508f2d0bb51c7217cfd6768a4866a5b300a158631a7803016c1f9883a9e3  ds_manifest.json

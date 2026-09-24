@@ -103,6 +103,73 @@ def _infer_gemv_enabled() -> bool:
     return os.environ.get("E4B_INFER_GEMV", "1") != "0"
 
 
+# ---------------------------------------------------------------------------------------------------
+# P67 (bench/p67/P67-PREREG.md): the perturbed-reference floor arm. DEFAULT OFF.
+#
+# A training-parity delta has to be read against how far two equally-correct runs of the SAME
+# reference land apart, not against zero. This switch makes such a second run: the per-expert loop
+# in :meth:`ExpertsLoRA.forward` visits the hit experts in a different, fixed order. Nothing else
+# changes. Every expert's projections are computed exactly as before; only the order in which their
+# contributions are summed into the fp32 accumulator (forward) -- and the order autograd sums the
+# input gradient over experts (backward) -- differs. Both are sums of the same terms, so the change
+# is exact in real arithmetic and moves only rounding. It is correct by construction, and it shares
+# no code with any accelerated path, which is what lets it judge them.
+#
+#   unset / "ascending"  the shipped order (ascending expert id) -- the default; the loop is the shipped one
+#   "descending"         reverse order
+#   "perm:<seed>"        a fixed pseudo-random permutation of the expert ids, one per integer seed
+#
+# Read on every call (tests toggle it); anything else is refused rather than read as the default,
+# because a typo that silently ran the default order would make a floor arm a plain repeat.
+_REFERENCE_ORDER_ENV = "E4B_REFERENCE_EXPERT_ORDER"
+_REFERENCE_ORDER_STATS = {"order": None, "calls": 0}
+
+
+def _reference_expert_order():
+    """The registered order in force: ``None`` (the default), ``"descending"`` or ``"perm:<seed>"``."""
+    raw = os.environ.get(_REFERENCE_ORDER_ENV, "").strip()
+    if raw in ("", "ascending"):
+        return None
+    if raw == "descending":
+        return raw
+    if raw.startswith("perm:") and raw[5:].isdigit():
+        return f"perm:{int(raw[5:])}"
+    raise ValueError(
+        f"{_REFERENCE_ORDER_ENV}={raw!r} is not a registered order; use 'ascending' (the default), "
+        f"'descending' or 'perm:<non-negative integer seed>' (bench/p67/P67-PREREG.md)"
+    )
+
+
+@functools.lru_cache(maxsize=64)
+def _perm_rank(num_experts: int, seed: int) -> torch.Tensor:
+    """``rank[e]`` = the position of expert ``e`` in seed ``seed``'s permutation (CPU, cached)."""
+    g = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(num_experts, generator=g)
+    rank = torch.empty_like(perm)
+    rank[perm] = torch.arange(num_experts)
+    return rank
+
+
+def _order_expert_hit(expert_hit: torch.Tensor, num_experts: int, order: str) -> torch.Tensor:
+    """``expert_hit`` (ascending ids) re-ordered by ``order``. The SET of experts is unchanged."""
+    if order == "descending":
+        return expert_hit.flip(0)
+    rank = _perm_rank(num_experts, int(order[5:])).to(expert_hit.device)
+    return expert_hit[torch.argsort(rank[expert_hit])]
+
+
+def reference_order_stats() -> dict:
+    """What the P67 switch did in this process: the order last applied and how many
+    :meth:`ExpertsLoRA.forward` calls it re-ordered (recompute passes under gradient
+    checkpointing count too). ``calls == 0`` under a non-default order means the switch never
+    reached the loop -- the arm would be a plain repeat, and its receipt must say so."""
+    return dict(_REFERENCE_ORDER_STATS)
+
+
+def reset_reference_order_stats() -> None:
+    _REFERENCE_ORDER_STATS.update(order=None, calls=0)
+
+
 def _epilogue(base, proj):
     """The base's own activation, not an assumed SwiGLU.
 
@@ -582,6 +649,13 @@ class ExpertsLoRA(nn.Module):
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=base.num_experts).permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
+            # P67 floor arm only (default None: this branch is never taken and the loop below is
+            # the shipped ascending-id loop, unchanged). See _reference_expert_order.
+            order = _reference_expert_order()
+            if order is not None:
+                expert_hit = _order_expert_hit(expert_hit, base.num_experts, order)
+                _REFERENCE_ORDER_STATS["order"] = order
+                _REFERENCE_ORDER_STATS["calls"] += 1
 
         for expert_idx in expert_hit:
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])

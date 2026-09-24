@@ -1,0 +1,1 @@
+TOKENS fam=granite template=alpaca n_train=1200 n_eval=16 train_tokens=271024 mean=225.9 pad_id=0 sha=2febbf0461fcf35f1f9345adb28210b438e0fc139c7a06f172a1b43cb191fe48

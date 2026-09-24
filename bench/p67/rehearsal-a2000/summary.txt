@@ -1,0 +1,16 @@
+TOKENS fam=granite template=alpaca n_train=1200 n_eval=16 train_tokens=271024 mean=225.9 pad_id=0 sha=2febbf0461fcf35f1f9345adb28210b438e0fc139c7a06f172a1b43cb191fe48
+reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": 
+
+reference_attn4_repeat rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_repeat", "st
+
+reference_attn4_perm1 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm1", "sta
+
+reference_attn4_perm2 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm2", "sta
+
+reference_attn4_perm3 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm3", "sta
+
+batched_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "batched", "tag": "batched_attn4", "status": "ok"
+
+fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "s
+
+REHEARSAL DONE

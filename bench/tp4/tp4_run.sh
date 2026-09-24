@@ -338,6 +338,21 @@ family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 FUAL=$5 UAL=$6 HAL=$7 RAL=$8 OFF=$9 
       can_run 600 $FAM/e4b/fused_nodgrad && arm $FAM e4b fused_attn4_nodgrad fused $FUAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 --dgrad 0
       can_run 900 $FAM/e4b/batched && arm $FAM e4b batched_attn4 batched $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
     fi
+    # P67 (bench/p67/P67-PREREG.md): the FLOOR arms, OPT-IN via TP4_P67=1 so no other draw's arm set, cost or
+    # ordering changes. Each is the REFERENCE path again -- this box, this session, the same init and tokens: one
+    # plain repeat (does the reference reproduce itself on one box?) and one perturbed repeat per seed in
+    # TP4_P67_PERMS, whose per-expert loop visits the experts in a fixed permutation (E4B_REFERENCE_EXPERT_ORDER=
+    # perm:<s>, experts4bit_qlora/lora.py): the same sums in a different order, correct by construction, sharing no
+    # code with any accelerated arm. They run LAST, because can_run drops arms from the END as the window closes and
+    # the reducer counts the floor draws it got; the judged arms above are the ones that must not be lost.
+    # The prefix assignment on a FUNCTION call is exported for its duration (the P46 lora_family pattern).
+    if [ "${TP4_P67:-0}" = 1 ]; then
+      can_run 900 $FAM/e4b/reference_repeat && arm $FAM e4b reference_attn4_repeat reference $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
+      for s in ${TP4_P67_PERMS:-1 2 3 4}; do
+        case "$s" in *[!0-9]*|"") say "P67: perm seed '$s' is not a non-negative integer -- skipped"; echo "P67 BAD_SEED $s" >> summary.txt; continue;; esac
+        can_run 900 $FAM/e4b/reference_perm$s && E4B_REFERENCE_EXPERT_ORDER=perm:$s arm $FAM e4b reference_attn4_perm$s reference $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1
+      done
+    fi
     # the secondary pair (TP4-PREREG "Arms"): micro-batch 1 x accum 8 -- same tokens per step -- for EVERY framework, only when a primary arm OOMed
     local se su sh; se=$(status_of $FAM e4b fused_attn4); su=$(status_of $FAM unsloth ckpt_unsloth); sh=$(status_of $FAM hf hf_peft)
     if [ "$se" = oom ] || [ "$su" = oom ] || [ "$sh" = oom ]; then

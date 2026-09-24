@@ -1,0 +1,37 @@
+[2026-09-23T21:19:57Z] lock taken
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.8.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+NVIDIA RTX A2000 12GB, 1374 MiB, 12282 MiB, 575.64.05, 8.6
+torch 2.8.0+cu128 e4b 0.37.2 /w/e4b-reh/experts4bit_qlora/__init__.py gnf4 0.32.1 bnb 0.50.2 transformers 5.17.0
+a74384706c57be65420eed83a74ed194fc817f1bd9f863d1ad429cd9562c5015  experts4bit_qlora/lora.py
+4a7cb27afb14f03dd30a38663dfb3b04c3231d2bb3134fdd9f9edcba2460196c  bench/tp4/tp4_arm.py
+TOKENS fam=granite template=alpaca n_train=1200 n_eval=16 train_tokens=271024 mean=225.9 pad_id=0 sha=2febbf0461fcf35f1f9345adb28210b438e0fc139c7a06f172a1b43cb191fe48
+reference_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4", "status": 
+
+reference_attn4_repeat rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_repeat", "st
+
+reference_attn4_perm1 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm1", "sta
+
+reference_attn4_perm2 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm2", "sta
+
+reference_attn4_perm3 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_perm3", "sta
+
+batched_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "batched", "tag": "batched_attn4", "status": "ok"
+
+fused_attn4 rc=0 CELL OK {"framework": "e4b", "fam": "granite", "model": "/models/granite-3.0-1b-a400m-instruct", "revision": "local", "model_type": "granitemoe", "n_layers": 24, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4", "status": "ok", "s
+
+REHEARSAL DONE
+[2026-09-23T21:48:44Z] container rc=0
