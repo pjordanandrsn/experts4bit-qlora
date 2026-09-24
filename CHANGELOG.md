@@ -1,31 +1,6 @@
 # Changelog
 
-## 0.37.3 — 2026-09-24 — a memory-safety fix: the int4 singleton GEMV no longer writes past its preallocated split-K buffer at T > 1 (S2 verify); plus default-off lane switches and pre-registrations for P63, P65 and P67
-
-### The int4 singleton GEMV no longer writes past its preallocated buffer at T > 1 (a fix; T = 1 unchanged)
-
-- **The defect.** `enable_serve_experts_int4` sizes each store's split-K partials buffer `st["part"]` for one token's
-  `top_k` rows. The singleton branch of `hot_residency._fused_over_stack` passed it to `gemv_int4_b32` at every T,
-  and under `FORCE_SINGLETON_GROUPS` at T > 1 (the S2 verify default, `--moe-grouping singleton`) the GEMV has
-  `T * top_k` rows and plans its split count from them. Measured on the NAS A2000 with the buffer a view into a
-  sentinel-filled one: at T = 17 the call wrote 16,384, 12,288 and 180,224 fp32 elements past it at the OLMoE gate_up
-  and Qwen3 gate_up/down shapes; T = 1 and T = 2 wrote nothing past it
-  (`bench/p63/rehearsal-a2000/part_oob.json`). Found while mapping lane P63's routes (#708).
-- **The fix.** `_int4_part_or_none` keeps the buffer when it has the rows the call's own plan needs and passes None
-  otherwise, so the wrapper allocates its own (through the graph pool under capture, as the device-grouping GEMV
-  branch already does). The arithmetic is unchanged: the split count was always the call's own plan. The fit is
-  memoised per (rows, device) on the store, because this runs on every decode expert call and the eager B=1 step is
-  host-bound. Each shape is planned once, then costs a dict lookup.
-- **Tests.** `tests/test_int4_singleton_part_fits.py`, CPU with the kernel stubbed: one token keeps the store's
-  buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
-  triton imports) decides the same way at 26 and 170 SMs.
-
-### P65 Amendment 2: the egress floor measures the fetch's own four-stream path (#710; a lane change, no library change)
-
-- **The single-stream egress probe under-read the fetch by 2.3×.** It read 36.1 MB/s on a box whose 4-worker Granite fetch then ran at ~83.5 MB/s. It refused every box the lane drew: 97.8, 36.1 and 21.8 MB/s, the last on the first reading box.
-- **Amended.** `p65_run.sh` probes four parallel 50 MB ranges in Python, since the image has no `curl`. The floor is 80 MB/s aggregate (Mixtral ~19.5 min); the deadline logic still skips Mixtral rather than cut it. Registered in `bench/p65/P65-PREREG.md` "Amendment 2", before any reading data.
-
-## Unreleased
+## 0.37.4 — 2026-09-24 — documentation, register data, evidence and repository tooling; under the package one default-off switch: `E4B_INT4_DECODE_A16` (lane P64's eager-only quality instrument, with its CUDA-graph-capture guard in `engines/hot_residency.py`). Six lanes read on rented RTX 5090s — P63 (row-exact expert routes), P64 (the int8 activation step is indistinguishable), P65 (Granite's selector is TWO_ARMS; Colla-Q replicates), P66 (residency's fixed launch count; cold_deadline under-predicts the gen-4 gather), P67 (Gemma-4's training-parity floor; attention-4-bit training supported under it), P68 (a verify from T = 1 calls is bit-identical; T > 1 inside the bar) — with their registrations and amendments; 13 claims added, P56's proxy floor superseded; `docs/ARCHITECTURE_SUPPORT.md` leaves the llms bundle
 
 ### Lane P67 read (#713): Gemma-4's training-parity floor is measured; the attention-4-bit paths are supported under it (docs, register, capabilities; no library behaviour change)
 
@@ -206,6 +181,35 @@
 - **A correction to #709's premise, in the pre-registration.** P59's B = 16 KL never ran the int8 step on the
   experts. Its scorer leaves `DEVICE_GROUPING` off, so T = 16 decode takes the host-grouped dequant + bf16 branch.
   The timed B = 16 arms run the device-grouped GEMV on int8 activations.
+
+### P65 Amendment 2: the egress floor measures the fetch's own four-stream path (#710; a lane change, no library change)
+
+- **The single-stream egress probe under-read the fetch by 2.3×.** It read 36.1 MB/s on a box whose 4-worker Granite fetch then ran at ~83.5 MB/s. It refused every box the lane drew: 97.8, 36.1 and 21.8 MB/s, the last on the first reading box.
+- **Amended.** `p65_run.sh` probes four parallel 50 MB ranges in Python, since the image has no `curl`. The floor is 80 MB/s aggregate (Mixtral ~19.5 min); the deadline logic still skips Mixtral rather than cut it. Registered in `bench/p65/P65-PREREG.md` "Amendment 2", before any reading data.
+
+### The P65 addendum's OpenTimestamps proof completed (#736; a binary file, no text change)
+
+- `docs/SPECULATIVE_LANES_ADDENDUM_4.md.ots` was calendar-pending at #730; `ots upgrade` fetched its Bitcoin block-header attestations (blocks 968405 and 968406). The document is byte-unchanged.
+
+## 0.37.3 — 2026-09-24 — a memory-safety fix: the int4 singleton GEMV no longer writes past its preallocated split-K buffer at T > 1 (S2 verify); plus default-off lane switches and pre-registrations for P63, P65 and P67
+
+### The int4 singleton GEMV no longer writes past its preallocated buffer at T > 1 (a fix; T = 1 unchanged)
+
+- **The defect.** `enable_serve_experts_int4` sizes each store's split-K partials buffer `st["part"]` for one token's
+  `top_k` rows. The singleton branch of `hot_residency._fused_over_stack` passed it to `gemv_int4_b32` at every T,
+  and under `FORCE_SINGLETON_GROUPS` at T > 1 (the S2 verify default, `--moe-grouping singleton`) the GEMV has
+  `T * top_k` rows and plans its split count from them. Measured on the NAS A2000 with the buffer a view into a
+  sentinel-filled one: at T = 17 the call wrote 16,384, 12,288 and 180,224 fp32 elements past it at the OLMoE gate_up
+  and Qwen3 gate_up/down shapes; T = 1 and T = 2 wrote nothing past it
+  (`bench/p63/rehearsal-a2000/part_oob.json`). Found while mapping lane P63's routes (#708).
+- **The fix.** `_int4_part_or_none` keeps the buffer when it has the rows the call's own plan needs and passes None
+  otherwise, so the wrapper allocates its own (through the graph pool under capture, as the device-grouping GEMV
+  branch already does). The arithmetic is unchanged: the split count was always the call's own plan. The fit is
+  memoised per (rows, device) on the store, because this runs on every decode expert call and the eager B=1 step is
+  host-bound. Each shape is planned once, then costs a dict lookup.
+- **Tests.** `tests/test_int4_singleton_part_fits.py`, CPU with the kernel stubbed: one token keeps the store's
+  buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
+  triton imports) decides the same way at 26 and 170 SMs.
 
 ### P65 Amendment 1: a proof records the reading-only host floors instead of refusing on them (#710; a lane change, no library change)
 
