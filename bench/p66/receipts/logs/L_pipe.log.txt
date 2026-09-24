@@ -1,0 +1,97 @@
+[p66] host AMD EPYC 7C13 64-Core Processor | gpu NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, 1, 4, 16, 16, 600.00 W, 3135 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 23.07, 'b_vram_gbs': 1568.3, 'b_dram_gbs': 87.14}
+[p66] arm pipe-1.00: L=48 E=128 k=8 n_hot=128 windows=['uniform']
+/root/p66/p66_census.py:518: UserWarning: The given NumPy array is not writable, and PyTorch does not support non-writable tensors. This means writing to this tensor will result in undefined behavior. You may want to copy the array to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:203.)
+  flat[e] = torch.from_numpy(np.ascontiguousarray(mm[lo:lo + ln]))
+[p66] pipe-1.00: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp199lmnsj/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-1.00/uniform: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-1.00: wrote rows_pipe-1.00.json
+[p66] arm pipe-0.83: L=48 E=128 k=8 n_hot=106 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[p66] pipe-0.83: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpbxwrpwc9/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.83/uniform: have-skip simulator 508 vs engine counters 508 cold rows
+[p66] pipe-0.83: window ctrl0
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpqc0ktgvh/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.83/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.83: window ctrl4
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp9hfkpe13/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.83/ctrl4: have-skip simulator 1457 vs engine counters 1457 cold rows
+[p66] pipe-0.83: window ctrl8
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp00a_hq5w/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.83/ctrl8: have-skip simulator 2928 vs engine counters 2928 cold rows
+[p66] pipe-0.83: wrote rows_pipe-0.83.json
+[p66] arm pipe-0.50: L=48 E=128 k=8 n_hot=64 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[p66] pipe-0.50: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmptjxa8u0z/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.50/uniform: have-skip simulator 1537 vs engine counters 1537 cold rows
+[p66] pipe-0.50: window ctrl0
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpsgjycv4d/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.50/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.50: window ctrl4
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpkki0g4kf/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.50/ctrl4: have-skip simulator 1513 vs engine counters 1513 cold rows
+[p66] pipe-0.50: window ctrl8
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpzevobqym/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.50/ctrl8: have-skip simulator 3022 vs engine counters 3022 cold rows
+[p66] pipe-0.50: wrote rows_pipe-0.50.json
+[p66] arm pipe-0.25: L=48 E=128 k=8 n_hot=32 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[p66] pipe-0.25: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpy1urx0to/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.25/uniform: have-skip simulator 2300 vs engine counters 2300 cold rows
+[p66] pipe-0.25: window ctrl0
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp2tazjpr0/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.25/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.25: window ctrl4
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp_wanfrlc/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.25/ctrl4: have-skip simulator 1526 vs engine counters 1526 cold rows
+[p66] pipe-0.25: window ctrl8
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpyafj0lsl/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.25/ctrl8: have-skip simulator 3040 vs engine counters 3040 cold rows
+[p66] pipe-0.25: wrote rows_pipe-0.25.json
+[p66] arm pipe-0.00: L=48 E=128 k=8 n_hot=0 windows=['uniform']
+[p66] pipe-0.00: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpb7igx0ye/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] pipe-0.00/uniform: have-skip simulator 3056 vs engine counters 3056 cold rows
+[p66] pipe-0.00: wrote rows_pipe-0.00.json

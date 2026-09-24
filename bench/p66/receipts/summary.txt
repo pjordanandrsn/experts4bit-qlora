@@ -1,0 +1,45 @@
+MODE full
+hf_cdn_mbps_8x=224.0
+e4b 0.37.3 @c85145fef24c3ab865a7658fba9f72e63efe559f
+gnf4 0.33.2 @68a125099c54ddbcf5c26195bd480f79ed9b0724
+e4b from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora/__init__.py
+gnf4 from /opt/conda/lib/python3.11/site-packages/nf4_grouped.py
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+grouped scatter   :     60.3 GB/s  (64t, 2 MiB blocks, E=4096)
+GATE G0           : 69.2% of triad -> PROCEED-RESOLVE-AND-REPORT
+cuda:0 NVIDIA GeForce RTX 5090: triad 1568.3 GB/s | link h2d 23.07 / d2h 28.65 GB/s
+B_nvme seq best   : 5.69 GB/s (o_direct=True)
+nf4 snapshot /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK 48 128 15.19 GiB
+L L_ref rc=0
+L L_pipe rc=0
+[p66] pipe-0.50/ctrl8: have-skip simulator 3022 vs engine counters 3022 cold rows
+[p66] pipe-0.25/uniform: have-skip simulator 2300 vs engine counters 2300 cold rows
+[p66] pipe-0.25/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.25/ctrl4: have-skip simulator 1526 vs engine counters 1526 cold rows
+[p66] pipe-0.25/ctrl8: have-skip simulator 3040 vs engine counters 3040 cold rows
+[p66] pipe-0.00/uniform: have-skip simulator 3056 vs engine counters 3056 cold rows
+L L_hyb rc=0
+[p66] capture probe on hyb: {'first_sync': {'error': 'RuntimeError: called a synchronizing CUDA operation', 'site': 'hot_residency.py:738 forward: hr = hot_row.nonzero(as_tuple=False).view(-1)'}, 'capture': 'AcceleratorError: CUDA error: operation failed due to a previous error during capture'}
+bake complete: 768 rows x 13221888 B (10.15 GB) in 20s
+L L_mref rc=0
+L L_mpin rc=0
+L L_mnvme rc=0
+[p66] capture probe on mnvme: {'first_sync': {'error': 'RuntimeError: called a synchronizing CUDA operation', 'site': 'mxfp4_pipelined.py:430 _forward_decode: if bool((want >= self.E).any()):'}, 'capture': 'RuntimeError: Mxfp4NvmeResidency cannot be captured in a CUDA graph: residency is a host-side disk read, so the wanted expert ids must be read back to the CPU. Capture the fully-resident Mxfp4PipelinedGptOss instead, or run this engine eagerly.'}
+M M_ref rc=0
+[15:26:29]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+TORCH_PROFILE_OUT /root/p66/M/M_ref_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_ref_sync.json active=12/12
+M M_pipe-1.00 rc=0
+TORCH_PROFILE_OUT /root/p66/M/M_pipe-1.00_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_pipe-1.00_sync.json active=12/12
+M M_pipe-0.00 rc=0
+[p66_step] pipelined hot sets: 0/128 per layer (hot_frac 0.0, seed 66)
+TORCH_PROFILE_OUT /root/p66/M/M_pipe-0.00_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_pipe-0.00_sync.json active=12/12
+M M_hyb-0.50 rc=0
+[15:31:58]   hybrid tier active on 48 module(s): vram/dram/nvme masses 0.00/0.00/0.00
+TORCH_PROFILE_OUT /root/p66/M/M_hyb-0.50_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_hyb-0.50_sync.json active=12/12

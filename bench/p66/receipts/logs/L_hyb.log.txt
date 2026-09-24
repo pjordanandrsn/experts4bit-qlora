@@ -1,0 +1,18 @@
+[p66] host AMD EPYC 7C13 64-Core Processor | gpu NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, 1, 4, 16, 16, 600.00 W, 3135 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 23.07, 'b_vram_gbs': 1568.3, 'b_dram_gbs': 87.14}
+[p66] arm hyb-0.50: L=48 E=128 k=8 n_hot=64 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[15:13:47]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[15:13:56]   hybrid tier active on 48 module(s): vram/dram/nvme masses 0.50/0.00/0.50
+[p66] hyb-0.50: window uniform
+[p66] hyb-0.50: window ctrl0
+[p66] hyb-0.50: window ctrl4
+[p66] hyb-0.50: window ctrl8
+[p66] hyb-0.50: wrote rows_hyb-0.50.json
+[p66] arm hyb-0.25: L=48 E=128 k=8 n_hot=32 windows=['uniform', 'ctrl0', 'ctrl4', 'ctrl8']
+[15:17:19]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[15:17:23]   hybrid tier active on 48 module(s): vram/dram/nvme masses 0.25/0.00/0.75
+[p66] hyb-0.25: window uniform
+[p66] hyb-0.25: window ctrl0
+[p66] hyb-0.25: window ctrl4
+[p66] hyb-0.25: window ctrl8
+[p66] hyb-0.25: wrote rows_hyb-0.25.json
+[p66] capture probe on hyb: {'first_sync': {'error': 'RuntimeError: called a synchronizing CUDA operation', 'site': 'hot_residency.py:738 forward: hr = hot_row.nonzero(as_tuple=False).view(-1)'}, 'capture': 'AcceleratorError: CUDA error: operation failed due to a previous error during capture'}

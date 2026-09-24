@@ -1,0 +1,30 @@
+[p66] host AMD EPYC 7C13 64-Core Processor | gpu NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, 1, 4, 16, 16, 600.00 W, 3135 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 23.07, 'b_vram_gbs': 1568.3, 'b_dram_gbs': 87.14}
+[p66] arm mpin-0.50: L=24 E=32 k=4 n_hot=16 windows=['uniform', 'ctrl0', 'ctrl2', 'ctrl4']
+[p66] mpin-0.50: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpiirstfyz/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] mpin-0.50: window ctrl0
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpoe78aj5x/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] mpin-0.50: window ctrl2
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp6ug13_t9/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] mpin-0.50: window ctrl4
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmplwqul3um/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] mpin-0.50: wrote rows_mpin-0.50.json
+[p66] arm mpin-0.00: L=24 E=32 k=4 n_hot=0 windows=['uniform']
+[p66] mpin-0.00: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmpr1qo8ytg/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] mpin-0.00: wrote rows_mpin-0.00.json

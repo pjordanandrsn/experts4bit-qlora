@@ -1,0 +1,18 @@
+[15:08:10]   checkpoint: local directory /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[15:08:10]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[15:08:30]   quantized experts on 48/48 MoE layers (128 experts each)
+[15:08:30]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=48 experts=128
+  shard 0/48  0.3 GiB  1s
+  shard 8/48  2.8 GiB  10s
+  shard 16/48  5.4 GiB  20s
+  shard 24/48  7.9 GiB  28s
+  shard 32/48  10.4 GiB  39s
+  shard 40/48  13.0 GiB  48s
+snapshot done 15.19 GiB in 56.0s
+expert-tensor bake: L=48 E=128 (baking 128) row=2654208 stride=2654208 total=16.3 GB workers=8
+  2048/6144 rows (5 GB, 3s)
+  4096/6144 rows (11 GB, 5s)
+  6144/6144 rows (16 GB, 8s)
+bake complete: 6144 rows (16.3 GB) in 14s
+BAKE OK

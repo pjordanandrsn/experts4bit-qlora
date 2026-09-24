@@ -1,0 +1,20 @@
+[p66] host AMD EPYC 7C13 64-Core Processor | gpu NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, 1, 4, 16, 16, 600.00 W, 3135 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 23.07, 'b_vram_gbs': 1568.3, 'b_dram_gbs': 87.14}
+[p66] arm mnvme-1.00: L=24 E=32 k=4 n_hot=32 windows=['uniform']
+[p66] mnvme-1.00: window uniform
+[p66] mnvme-1.00: wrote rows_mnvme-1.00.json
+[p66] arm mnvme-0.50: L=24 E=32 k=4 n_hot=16 windows=['uniform', 'ctrl0', 'ctrl2', 'ctrl4']
+[p66] mnvme-0.50: window uniform
+[p66] mnvme-0.50: window ctrl0
+[p66] mnvme-0.50: window ctrl2
+[p66] mnvme-0.50: window ctrl4
+[p66] mnvme-0.50: wrote rows_mnvme-0.50.json
+[p66] arm mnvme-0.25: L=24 E=32 k=4 n_hot=8 windows=['uniform', 'ctrl0', 'ctrl2', 'ctrl4']
+[p66] mnvme-0.25: window uniform
+[p66] mnvme-0.25: window ctrl0
+[p66] mnvme-0.25: window ctrl2
+[p66] mnvme-0.25: window ctrl4
+[p66] mnvme-0.25: wrote rows_mnvme-0.25.json
+[p66] arm mnvme-0.00: L=24 E=32 k=4 n_hot=0 windows=['uniform']
+[p66] mnvme-0.00: window uniform
+[p66] mnvme-0.00: wrote rows_mnvme-0.00.json
+[p66] capture probe on mnvme: {'first_sync': {'error': 'RuntimeError: called a synchronizing CUDA operation', 'site': 'mxfp4_pipelined.py:430 _forward_decode: if bool((want >= self.E).any()):'}, 'capture': 'RuntimeError: Mxfp4NvmeResidency cannot be captured in a CUDA graph: residency is a host-side disk read, so the wanted expert ids must be read back to the CPU. Capture the fully-resident Mxfp4PipelinedGptOss instead, or run this engine eagerly.'}

@@ -643,6 +643,32 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   superseded, since the bo7 census rows take their licence from it and nothing
   establishes that their pack is this pack. `min_rows`, damping and the K8
   budget are unchanged.
+- **Residency's launch cost is a fixed per-layer count, and the cold cost
+  model's transfer term is wrong on a gen 4 link (lane P66, `bench/p66/`,
+  [#711](https://github.com/pjordanandrsn/experts4bit-qlora/issues/711),
+  2026-09-24).** A pre-registered census on one RTX 5090 read the pipelined
+  engine at **+10 launches, +2 copies, 0 syncs per MoE layer per token**
+  against the all-resident step, spread exactly 0 across cold fraction 0 /
+  0.5 / 1.0, eager and captured
+  ([`e4b.serve.p66.qwen3.pipelined-residency-fixed-count.5090.2026-09-24`](claims.json));
+  the all-hot fixed tax is 1.184 ms/token of device time captured, 8.05 ms
+  of eager wall
+  ([`…pipelined-fixed-tax.captured…`](claims.json)), and at the RFC's 17 %
+  cold it is 8.9 % of residency's captured cost — launches cannot explain an
+  RFC-size gap in this engine. What is open is the transfer: grouped-nf4-gemm's
+  `cold_deadline` (bytes over link + bytes over VRAM) **under-predicts the
+  measured UVA gather by 1.57–2.02×** there
+  ([`…pipelined-gather-over-cold-deadline…`](claims.json)). The gather runs at
+  the box's single-copy link rate (14.4 GB/s implied, 14.72 GB/s probed), not
+  the back-to-back rate the calibration blob records (23.07 GB/s); on the
+  A2000 rehearsal's gen 3 × 8 link the two probes agreed and the ratio was
+  ~1.0. Which constant the model should carry, and why the two differ on a
+  gen 4 × 16 link, is the follow-up filed against `kernel/cold_deadline.py`
+  (a per-step fixed term, a measured efficiency factor before any RFC
+  comparison, the hybrid tier's mixed-layer dispatch term the deadline
+  destination omits). The MXFP4 NVMe engine's 4 syncs per layer and the
+  hybrid tier's composition-dependent 4 / 10 / 8 are structural, as
+  registered ([`…gptoss.mxfp4-and-hybrid-sync-census…`](claims.json)).
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the

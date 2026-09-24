@@ -27,6 +27,15 @@
 
 ## Unreleased
 
+### Lane P66 read (#711): residency's launch cost is a fixed per-layer count; the bytes model under-predicts the gather on a gen 4 link (docs, register; no library behaviour change)
+
+- **The reading.** `p66-5090-2` ran on one RTX 5090 for $0.3752; the lane cost $0.5285 over nine launches (three $0 price refusals, one Vast API NOT_RUN, one burned id, the proof, an rc-14 egress refusal, the reading), every teardown proven. All six instrument gates held. P1–P6 held, P7 was refuted, P8 and P9 are informational. Full read: `bench/p66/RESULTS-p66.md`; the box's own reducer output and rows under `bench/p66/receipts/`.
+- **The count is fixed (P1, P2).** The pipelined engine adds **+10 launches, +2 copies, 0 syncs per MoE layer per token** with `n_hot > 0` (+7 / +2 / 0 at `n_hot = 0`), spread exactly 0 across cold fraction 0 / 0.5 / 1.0, eager and captured. Level M agrees by API name to the launch. Registered as `e4b.serve.p66.qwen3.pipelined-residency-fixed-count.5090.2026-09-24`.
+- **The fixed tax (P3).** 1.184 ms/token of added device time captured (576 rows at 2.06 µs); 8.05 ms/token of eager wall for the same 576 submissions on a host-bound step. `…pipelined-fixed-tax.captured…`. At the RFC's 17.19 % cold the tax is 8.9 % of residency's captured cost (P8): launches cannot explain an RFC-size gap in this engine.
+- **P7 REFUTED.** cold_deadline's bytes-over-link prediction is under the measured gather by **1.57–2.02×**; the gather runs at the box's *single-copy* link rate (14.4 GB/s implied against a 14.72 GB/s single-copy probe), not the 40-deep back-to-back 23.07 GB/s the calibration blob records. On the A2000 rehearsal the two probes agreed and the ratio was ~1.0. Registered as `…pipelined-gather-over-cold-deadline…`; the cause is not attributed.
+- **MXFP4 and the hybrid tier (P4, P5, P6)** read as registered: NVMe engine 4 syncs/layer fixed (−1 / +3 / +3 against all-resident), pinned = all-resident, hybrid tier 4 / 10 / 8 syncs by layer composition. `…gptoss.mxfp4-and-hybrid-sync-census…`. The pinned-staging follow-up is not licensed (its licensing measurement was not taken).
+- **Follow-up filed in grouped-nf4-gemm** on `kernel/cold_deadline.py`: a per-step fixed term, a measured UVA-read efficiency factor before any RFC comparison, and the mixed-layer dispatch term the deadline destination omits. No default moves.
+
 ### Lane P68 read (#725): a verify built from T = 1 calls is bit-identical to decode; the served T > 1 paths are inside the bar (docs, register; no library behaviour change)
 
 - **The reading.** `p68-5090-2` ran on one RTX 5090 for $0.2386. The whole lane cost $0.2799, including the proof and one NOT_RUN on a stale host key, and every teardown is proven. G0 held on both stacks: 27 predictions held and 1 was refuted. Full read: `bench/p68/RESULTS-p68.md`.

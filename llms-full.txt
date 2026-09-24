@@ -2534,6 +2534,32 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   superseded, since the bo7 census rows take their licence from it and nothing
   establishes that their pack is this pack. `min_rows`, damping and the K8
   budget are unchanged.
+- **Residency's launch cost is a fixed per-layer count, and the cold cost
+  model's transfer term is wrong on a gen 4 link (lane P66, `bench/p66/`,
+  [#711](https://github.com/pjordanandrsn/experts4bit-qlora/issues/711),
+  2026-09-24).** A pre-registered census on one RTX 5090 read the pipelined
+  engine at **+10 launches, +2 copies, 0 syncs per MoE layer per token**
+  against the all-resident step, spread exactly 0 across cold fraction 0 /
+  0.5 / 1.0, eager and captured
+  ([`e4b.serve.p66.qwen3.pipelined-residency-fixed-count.5090.2026-09-24`](claims.json));
+  the all-hot fixed tax is 1.184 ms/token of device time captured, 8.05 ms
+  of eager wall
+  ([`…pipelined-fixed-tax.captured…`](claims.json)), and at the RFC's 17 %
+  cold it is 8.9 % of residency's captured cost — launches cannot explain an
+  RFC-size gap in this engine. What is open is the transfer: grouped-nf4-gemm's
+  `cold_deadline` (bytes over link + bytes over VRAM) **under-predicts the
+  measured UVA gather by 1.57–2.02×** there
+  ([`…pipelined-gather-over-cold-deadline…`](claims.json)). The gather runs at
+  the box's single-copy link rate (14.4 GB/s implied, 14.72 GB/s probed), not
+  the back-to-back rate the calibration blob records (23.07 GB/s); on the
+  A2000 rehearsal's gen 3 × 8 link the two probes agreed and the ratio was
+  ~1.0. Which constant the model should carry, and why the two differ on a
+  gen 4 × 16 link, is the follow-up filed against `kernel/cold_deadline.py`
+  (a per-step fixed term, a measured efficiency factor before any RFC
+  comparison, the hybrid tier's mixed-layer dispatch term the deadline
+  destination omits). The MXFP4 NVMe engine's 4 syncs per layer and the
+  hybrid tier's composition-dependent 4 / 10 / 8 are structural, as
+  registered ([`…gptoss.mxfp4-and-hybrid-sync-census…`](claims.json)).
 - **`enable_batched_train`'s engagement envelope.** It falls back to the
   reference forward per call above `_PAD_WASTE_LIMIT` (`engines/batched.py`);
   a positive return value is a patch count, not kernel engagement. In the
@@ -3510,6 +3536,10 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.quality.p65.collaq-stability.olmoe-mixtral.5090.2026-09-24 [measured]: Lane P65: Colla-Q's claim that an activation-entropy ranking of experts survives a calibration-domain change better than a routing-frequency ranking replicates on OLMoE-1B-7B-Instruct (cross-text Spearman 0.800 vs 0.380, paired difference +0.421 [0.329, 0.501]) and on Colla-Q's own Mixtral-8x7B (0.789 vs 0.310, +0.479 [0.369, 0.588]); their per-layer cosine statistic reads 0.9997 / 0.9999 and cannot see the reordering.
 - e4b.serve.p68.qwen3.verify-from-t1-calls.row-exact.5090.2026-09-24 [measured]: Lane P68: on an RTX 5090, a speculative verify assembled from T = 1 calls -- the attention projections, the attention core (one query row over its own decode prefix, no mask), the router, the LM head and every RMSNorm each called once per row, with the experts on the registered row-exact singleton route -- is bit-identical to incremental T = 1 decode at every position (132/132 verify17+verify16 positions on the nf4 stack and 132/132 on the int4 stack); forcing the projections alone or the core alone leaves layer-0 attention differing, and forcing both moves the first difference to layer 0's router.
 - e4b.serve.p68.qwen3.t-gt-1-vs-t1.within-bar.5090.2026-09-24 [measured]: Lane P68: the served T > 1 paths -- a 17- or 16-row verify and a 512-row prefill, on the HF and on the paged fp8 attention backends, on the nf4 and on the int4 stacks as served -- are inside the shipped KL-from-checkpoint bar relative to T = 1 decode on every cell: KL mean 0.0025-0.0169 nats/token (largest 95 % upper bound 0.0268) and top-1 agreement 0.946-0.986 (lowest 95 % lower bound 0.9355), over 952 / 896 / 2,048 positions per cell; P63's OVER-BAR cells were top-1 read over 64-160 positions.
+- e4b.serve.p66.qwen3.pipelined-residency-fixed-count.5090.2026-09-24 [measured]: Lane P66: the pipelined residency engine adds a FIXED, id-independent count per MoE layer per token against the all-resident NF4 step, whatever the cold fraction: +10 kernel launches, +2 cudaMemcpyAsync, 0 syncs with n_hot > 0 (Qwen3: 864 launches / 96 copies per token against 384 / 0), and +7 / +2 / 0 at n_hot = 0; the spread across windows spanning realized cold fraction 0, 0.5 and 1.0 is exactly 0 in every count class, eager and captured, at hot fractions 0, 0.25, 0.5, 0.83 and 1.0; captured, the host side collapses to 1 graph launch + 2 staging copies per token with 864 kernel + 96 memcpy work nodes.
+- e4b.serve.p66.qwen3.pipelined-fixed-tax.captured.5090.2026-09-24 [measured]: Lane P66: with every expert hot and zero cold traffic, the kernels the pipelined residency engine adds cost 1.184 ms/token of device time captured (576 added device rows, 2.06 us each) on an RTX 5090, inside the registered 0.5-1.5 ms band; the kernels both paths run equally often shifted +0.011 ms/token (the shared NF4 GEMV on the engine's row-block store, reported, not folded in); the captured wall tax is 1.401 ms/token (4.754 against 3.353) and the eager wall tax 8.054 ms/token (26.301 against 18.247) for 576 extra host submissions on a host-submission-bound eager step.
+- e4b.serve.p66.qwen3.pipelined-gather-over-cold-deadline.5090.2026-09-24 [measured]: Lane P66: grouped-nf4-gemm's cold cost model (kernel/cold_deadline.py gpu_us: bytes over the link plus bytes over VRAM, with the box's calibrated b_link 23.07 GB/s) UNDER-predicts the pipelined engine's measured UVA gather on an RTX 5090 (PCIe gen 4 x16) by 1.574x at hot fraction 0, 1.734x at 0.25, 1.766x at 0.5 and 2.018x at 0.83 on uniform windows (1.395-1.764x on the controlled windows): the gather moves the copied rows at 11.3-16.3 GB/s, the single-copy rate the same box's own probe read (14.72 GB/s for one synchronized 64 MB pinned copy), not the 40-deep back-to-back rate the calibration blob records; the A2000 rehearsal (gen 3 x8), where the two probes agreed (6.14 vs 6.12 GB/s), read 0.97-1.02x.
+- e4b.serve.p66.gptoss.mxfp4-and-hybrid-sync-census.5090.2026-09-24 [measured]: Lane P66: per MoE layer per token, eager, grouped-nf4-gemm's Mxfp4NvmeResidency issues 37 launches, 6 copies and 4 host syncs, fixed across every window and hot fraction (0, 0.25, 0.5, 1), which is -1 launch / +3 copies / +3 syncs against the all-resident Mxfp4PipelinedGptOss step (38 / 3 / 1); the pinned all-E arena (Mxfp4PipelinedGptOss with host rows) is identical to that step at hot fractions 0 and 0.5 (delta 0 / 0 / 0); and e4b's hybrid tier (hot in VRAM, rest on NVMe, cold_dest=gpu) moves with the layer's composition: 41 launches / 7 copies / 4 syncs on a hot-only layer, 75 / 20 / 10 mixed, 50 / 15 / 8 cold-only (launch spread 1,632 per token), and refuses CUDA-graph capture at hot_residency.py:738 (nonzero).
 
 Open items (no evidence either way):
 
@@ -3517,4 +3547,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(247 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(251 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

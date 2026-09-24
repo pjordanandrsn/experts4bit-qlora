@@ -1,0 +1,10 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (this directory; bench/p39 for k8_bake.py, bench/hybrid-g9 for
+# step_decomp.py, bench/hybrid-g9/f1 for step_budget.py) and compares. tests/test_p66_staged_pin.py holds it in CI.
+abe8bc8cb0489745c56ffc409700f6315c6f307559fa0b689f10955c1effa94b  p66_run.sh
+25cf51949cbdb10682f9d5de48902f0c9854303a27efe8e1097dc6597bc547ea  p66_census.py
+ec36056aa488a057c44a0faab996fc9ea6188ca12388509d55a4df889d7fbfe1  p66_reduce.py
+ab373c889af7445e20e6a949b3b7acb95b327c598b64fe2fa08d678dd593ddc5  p66_step.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+a5facc7fe1f794816a82828e138a258f87c63ecb84a19fe02cafb07eaeb10e09  step_decomp.py
+93da87ac391f556c9b28fb53580582b512689fca5d4e8f3087af9472a3596479  step_budget.py

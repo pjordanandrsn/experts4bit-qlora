@@ -1,0 +1,28 @@
+{
+ "active_steps": 12,
+ "dispatch_diet": false,
+ "op_counts": {
+  "aten::nonzero": 1152,
+  "aten::copy_": 14112,
+  "aten::to": 22488,
+  "aten::_to_copy": 12672,
+  "aten::index_select": 6924,
+  "aten::index_put_": 288,
+  "aten::unique2": 0,
+  "aten::sort": 576,
+  "aten::arange": 2688,
+  "aten::item": 288,
+  "aten::_local_scalar_dense": 288,
+  "cudaLaunchKernel": 63552,
+  "cudaMemcpyAsync": 4548,
+  "cudaStreamSynchronize": 2532,
+  "cudaDeviceSynchronize": 1
+ },
+ "nonzero_attr": {
+  "engine": 0,
+  "other": 1152,
+  "frames": {
+   "<no-py-frame>": 1152
+  }
+ }
+}

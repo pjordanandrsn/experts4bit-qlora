@@ -1,0 +1,18 @@
+[15:26:01]   checkpoint: local directory /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[15:26:01]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[15:26:01]   quantized experts on 48/48 MoE layers (128 experts each)
+[15:26:01]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[15:26:03]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[15:26:03]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[15:26:29]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 71513.77 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 729826.15 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 720150.83 examples/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+TORCH_PROFILE_OUT /root/p66/M/M_ref_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_ref_sync.json active=12/12
+DECOMP step=104.5ms  fwd_submit=104.1 (attn_host=37.9 dram=0.0 other=66.2)  drain=0.4  sched_py=0.1
+DEVICE attn=67.48ms/step gpu_experts=0.00ms/step attn_host_us_per_call=789
+PREFILL tokens=128 wall=8714ms dram=0 gpu_dev=0
+STEP_DECOMP_DONE

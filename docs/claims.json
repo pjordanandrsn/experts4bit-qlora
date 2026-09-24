@@ -6780,6 +6780,114 @@
         "receipts/experts4bit-qlora/2026-09-24/p68-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proof p68-prove-1 and the NOT_RUN p68-5090-1 beside it"
       ],
       "notes": "Pre-registered in #733 (S: every cell KL CI upper < 0.05 and top-1 >= 0.93 -- HELD). Classes against the bar (KL <= 0.10, top-1 >= 0.93) from the intervals: WITHIN-BAR on all 12. Closes #725 (P63's decision rule sent the over-bar cells here). The paged backend differs more than HF (its decode reads fp8 K/V), still well inside the bar. Not a quality statement against a bf16 reference (61 GB does not fit)."
+    },
+    {
+      "id": "e4b.serve.p66.qwen3.pipelined-residency-fixed-count.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P66: the pipelined residency engine adds a FIXED, id-independent count per MoE layer per token against the all-resident NF4 step, whatever the cold fraction: +10 kernel launches, +2 cudaMemcpyAsync, 0 syncs with n_hot > 0 (Qwen3: 864 launches / 96 copies per token against 384 / 0), and +7 / +2 / 0 at n_hot = 0; the spread across windows spanning realized cold fraction 0, 0.5 and 1.0 is exactly 0 in every count class, eager and captured, at hot fractions 0, 0.25, 0.5, 0.83 and 1.0; captured, the host side collapses to 1 graph launch + 2 staging copies per token with 864 kernel + 96 memcpy work nodes.",
+      "value": 10,
+      "unit": "added kernel launches per MoE layer per token (with +2 copies, 0 syncs; +7/+2/0 at n_hot = 0)",
+      "hardware": "RTX 5090 (sm_120, 600 W, driver 580.95.05, 170 SMs, PCIe gen 4 x16) on an AMD EPYC 7C13 (256 CPUs, 2 NUMA nodes, 818 GB), one rented Vast.ai verified/secure host (instance 52436541)",
+      "conditions": "e4b 0.37.3 at c85145f (P66 registered + Amendment 1), grouped-nf4-gemm 0.33.2 at 68a1250; torch 2.8.0+cu128, Triton 3.4.0; Level L token = every MoE layer's expert forward in order (attention, norms, router, LM head left out, so they cancel); hot sets = the first round(h*E) of a seeded permutation per layer (seed 66); windows uniform + ctrl0/ctrl-k/2/ctrl-k at each 0 < h < 1 (realized cold fraction 0, 0.5, 1.0 at a fixed hot set); 8 profiled tokens per window after 4 warm; eager counts from torch.profiler CUDA API events inside e4b::p66.token regions, captured counts from the graph's own nodes (cudaGraphGetNodes + debug_dump agree); gates G1-G6 all held; the _fetch region holds 8 of the 10 launches and both copies (5 and 2 at n_hot = 0); the other 2 are the unfused epilogue and combine chain against the reference's fused _swiglu_rows / _combine_rows; Level M (step_decomp, 12 served steps) agrees exactly by API name: +528 cudaLaunchKernel / +96 cudaMemcpyAsync / 0 syncs per step at h = 1, +384 / +96 / 0 at h = 0",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p66/RESULTS-p66.md",
+        "bench/p66/P66-PREREG.md",
+        "bench/p66/p66_census.py",
+        "bench/p66/p66_reduce.py",
+        "bench/p66/receipts/RESULTS-p66-generated.md",
+        "bench/p66/receipts/p66_read.json.gz",
+        "tests/test_p66_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p66-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proofs p66-prove-1..6 and the refused reading p66-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #731 (P1, P2): HELD as registered. This is the issue's hypothesis (#711): residency's launch cost is a per-step fixed term, never a per-cold-expert one; grouped-nf4-gemm's kernel/cold_deadline.py follow-up carries it. The A2000 rehearsal (sm_86) read the same per-layer counts on OLMoE. Lane P66 $0.5285 (three $0 price refusals, one API NOT_RUN $0.0195, one burned id, proof $0.0674, an rc-14 egress refusal $0.0664, the reading $0.3752), every teardown proven."
+    },
+    {
+      "id": "e4b.serve.p66.qwen3.pipelined-fixed-tax.captured.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P66: with every expert hot and zero cold traffic, the kernels the pipelined residency engine adds cost 1.184 ms/token of device time captured (576 added device rows, 2.06 us each) on an RTX 5090, inside the registered 0.5-1.5 ms band; the kernels both paths run equally often shifted +0.011 ms/token (the shared NF4 GEMV on the engine's row-block store, reported, not folded in); the captured wall tax is 1.401 ms/token (4.754 against 3.353) and the eager wall tax 8.054 ms/token (26.301 against 18.247) for 576 extra host submissions on a host-submission-bound eager step.",
+      "value": 1.184,
+      "unit": "ms/token of added device time, captured (eager wall tax 8.054 ms/token)",
+      "hardware": "RTX 5090 (sm_120, 600 W, driver 580.95.05, 170 SMs, PCIe gen 4 x16) on an AMD EPYC 7C13 (256 CPUs, 2 NUMA nodes, 818 GB), one rented Vast.ai verified/secure host (instance 52436541)",
+      "conditions": "e4b 0.37.3 at c85145f (P66 registered + Amendment 1), grouped-nf4-gemm 0.33.2 at 68a1250; torch 2.8.0+cu128, Triton 3.4.0; Level L token = every MoE layer's expert forward in order (attention, norms, router, LM head left out, so they cancel); hot sets = the first round(h*E) of a seeded permutation per layer (seed 66); windows uniform + ctrl0/ctrl-k/2/ctrl-k at each 0 < h < 1 (realized cold fraction 0, 0.5, 1.0 at a fixed hot set); 8 profiled tokens per window after 4 warm; eager counts from torch.profiler CUDA API events inside e4b::p66.token regions, captured counts from the graph's own nodes (cudaGraphGetNodes + debug_dump agree); gates G1-G6 all held; P3 arm pipe-1.00 (n_hot = E) against ref, uniform window, captured as one CUDA graph per token (G3: replay within b_rel 1.5e-2 of eager, hashes recorded) and eager; device time from the profiler's device rows; the box's unit host costs: aten launch 6.42 us, Triton launch 13.17 us, idle cudaStreamSynchronize 4.57 us",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p66/RESULTS-p66.md",
+        "bench/p66/P66-PREREG.md",
+        "bench/p66/p66_census.py",
+        "bench/p66/p66_reduce.py",
+        "bench/p66/receipts/RESULTS-p66-generated.md",
+        "bench/p66/receipts/p66_read.json.gz",
+        "tests/test_p66_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p66-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proofs p66-prove-1..6 and the refused reading p66-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #731 (P3): HELD. This is the per-step fixed term cold_deadline gets (captured: this device time; eager: submissions x the host's unit cost). P8 at the RFC-matched 17.19 % cold: the tax is 8.9 % of residency's whole captured cost (1.40 of 15.76 ms/token), so launches cannot explain an RFC-size gap in this engine; eager the all-hot arm is slower than the 17 %-cold arm (26.30 vs 25.17 ms) because the cold gather's device time hides under host submission. A2000 rehearsal: 0.49 ms on 16 OLMoE layers (192 rows, 2.6 us each), never quoted as a result."
+    },
+    {
+      "id": "e4b.serve.p66.qwen3.pipelined-gather-over-cold-deadline.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P66: grouped-nf4-gemm's cold cost model (kernel/cold_deadline.py gpu_us: bytes over the link plus bytes over VRAM, with the box's calibrated b_link 23.07 GB/s) UNDER-predicts the pipelined engine's measured UVA gather on an RTX 5090 (PCIe gen 4 x16) by 1.574x at hot fraction 0, 1.734x at 0.25, 1.766x at 0.5 and 2.018x at 0.83 on uniform windows (1.395-1.764x on the controlled windows): the gather moves the copied rows at 11.3-16.3 GB/s, the single-copy rate the same box's own probe read (14.72 GB/s for one synchronized 64 MB pinned copy), not the 40-deep back-to-back rate the calibration blob records; the A2000 rehearsal (gen 3 x8), where the two probes agreed (6.14 vs 6.12 GB/s), read 0.97-1.02x.",
+      "value": 1.574,
+      "unit": "measured / predicted transfer time at hot fraction 0 (1.734 / 1.766 / 2.018 at 0.25 / 0.5 / 0.83)",
+      "hardware": "RTX 5090 (sm_120, 600 W, driver 580.95.05, 170 SMs, PCIe gen 4 x16) on an AMD EPYC 7C13 (256 CPUs, 2 NUMA nodes, 818 GB), one rented Vast.ai verified/secure host (instance 52436541)",
+      "conditions": "e4b 0.37.3 at c85145f (P66 registered + Amendment 1), grouped-nf4-gemm 0.33.2 at 68a1250; torch 2.8.0+cu128, Triton 3.4.0; Level L token = every MoE layer's expert forward in order (attention, norms, router, LM head left out, so they cancel); hot sets = the first round(h*E) of a seeded permutation per layer (seed 66); windows uniform + ctrl0/ctrl-k/2/ctrl-k at each 0 < h < 1 (realized cold fraction 0, 0.5, 1.0 at a fixed hot set); 8 profiled tokens per window after 4 warm; eager counts from torch.profiler CUDA API events inside e4b::p66.token regions, captured counts from the graph's own nodes (cudaGraphGetNodes + debug_dump agree); gates G1-G6 all held; measured = device time per token of the _gather_rows_* kernels plus Memcpy HtoD rows (eager, profiled); predicted = cold_deadline.gpu_us summed over layers on exactly the rows the engine copied (have-skip simulation = engine counters, G2), Costs.from_blob on bench/calibrate.py's blob (b_link = h2d_64mb 23.07 GB/s, b_vram = triad 1568.3 GB/s); recorded, not graded: MXFP4 pinned 1.163-1.684x (19.6 GB/s at h = 0 on 13.2 MB rows), MXFP4 NVMe 1.445-1.655x, hybrid tier's pageable H2D 5.5-16.5x",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p66/RESULTS-p66.md",
+        "bench/p66/P66-PREREG.md",
+        "bench/p66/p66_census.py",
+        "bench/p66/p66_reduce.py",
+        "bench/p66/receipts/RESULTS-p66-generated.md",
+        "bench/p66/receipts/p66_read.json.gz",
+        "tests/test_p66_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p66-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proofs p66-prove-1..6 and the refused reading p66-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #731 (P7: HOLDS at 0.80-1.25, REFUTED above 1.50): REFUTED as registered on every graded window. Decision rule: the model needs a measured efficiency factor (UVA-read efficiency, #105 candidate 4) before any comparison with vLLM's RFC (vllm-project/vllm#57794) is made; goes to the grouped-nf4-gemm follow-up with both link probes. Why the gather runs at the single-copy rate here and not on the A2000 (idle link state -- nvidia-smi read PCIe gen 1 current at the forensics -- NUMA placement of the pinned arena, the kernel's access pattern) was not measured."
+    },
+    {
+      "id": "e4b.serve.p66.gptoss.mxfp4-and-hybrid-sync-census.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "openai/gpt-oss-20b (MXFP4 engines) + Qwen/Qwen3-30B-A3B (hybrid tier)",
+      "claim": "Lane P66: per MoE layer per token, eager, grouped-nf4-gemm's Mxfp4NvmeResidency issues 37 launches, 6 copies and 4 host syncs, fixed across every window and hot fraction (0, 0.25, 0.5, 1), which is -1 launch / +3 copies / +3 syncs against the all-resident Mxfp4PipelinedGptOss step (38 / 3 / 1); the pinned all-E arena (Mxfp4PipelinedGptOss with host rows) is identical to that step at hot fractions 0 and 0.5 (delta 0 / 0 / 0); and e4b's hybrid tier (hot in VRAM, rest on NVMe, cold_dest=gpu) moves with the layer's composition: 41 launches / 7 copies / 4 syncs on a hot-only layer, 75 / 20 / 10 mixed, 50 / 15 / 8 cold-only (launch spread 1,632 per token), and refuses CUDA-graph capture at hot_residency.py:738 (nonzero).",
+      "value": 4,
+      "unit": "host syncs per MoE layer per token on the MXFP4 NVMe engine (all-resident 1; hybrid tier 4 / 10 / 8 by composition)",
+      "hardware": "RTX 5090 (sm_120, 600 W, driver 580.95.05, 170 SMs, PCIe gen 4 x16) on an AMD EPYC 7C13 (256 CPUs, 2 NUMA nodes, 818 GB), one rented Vast.ai verified/secure host (instance 52436541)",
+      "conditions": "e4b 0.37.3 at c85145f (P66 registered + Amendment 1), grouped-nf4-gemm 0.33.2 at 68a1250; torch 2.8.0+cu128, Triton 3.4.0; Level L token = every MoE layer's expert forward in order (attention, norms, router, LM head left out, so they cancel); hot sets = the first round(h*E) of a seeded permutation per layer (seed 66); windows uniform + ctrl0/ctrl-k/2/ctrl-k at each 0 < h < 1 (realized cold fraction 0, 0.5, 1.0 at a fixed hot set); 8 profiled tokens per window after 4 warm; eager counts from torch.profiler CUDA API events inside e4b::p66.token regions, captured counts from the graph's own nodes (cudaGraphGetNodes + debug_dump agree); gates G1-G6 all held; gpt-oss-20b @ 6cee5e81 (24 layers x 32 experts, top-4, 13.2 MB rows, relocation-baked), Qwen3-30B-A3B @ ad44e777 for the hybrid tier (h = 0.25, 0.5, no DRAM tier); the NVMe engine's four sync sites, one per layer each: mxfp4_pipelined.py:430 (padded-index guard), mxfp4_residency.py:598 and :644 (_resolve_src), :660 (_invalidate); both the NVMe engine and the hybrid tier refuse capture by design (probe records the first synchronizing op)",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p66/RESULTS-p66.md",
+        "bench/p66/P66-PREREG.md",
+        "bench/p66/p66_census.py",
+        "bench/p66/p66_reduce.py",
+        "bench/p66/receipts/RESULTS-p66-generated.md",
+        "bench/p66/receipts/p66_read.json.gz",
+        "tests/test_p66_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p66-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the proofs p66-prove-1..6 and the refused reading p66-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #731 (P4, P5, P6): all HELD. P4's +3 syncs are structural (the host needs the ids to issue disk reads); two of the three are pageable H2D copies, and the pinned-staging follow-up the rule conditions on their host cost >= 10 % of the token is NOT licensed by this read -- the instrument records counts and sync sites, not those copies' host time. P6: cold_dest='deadline' prices bytes only, so its GPU side omits the mixed-layer dispatch term (recorded in the cold_deadline follow-up). Same per-layer counts on the A2000 rehearsal."
     }
   ]
 }

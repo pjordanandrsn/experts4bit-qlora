@@ -1,0 +1,986 @@
+{
+  "model": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "batch": 1,
+  "layers": 48,
+  "compile_layers": false,
+  "compile_moe_tier": false,
+  "compile_attn_tier": false,
+  "compile_mode": null,
+  "fuse_qkv": true,
+  "warmup_rows_dropped": 0,
+  "generated_tokens": {
+    "0": [
+      566,
+      1083,
+      9723,
+      304,
+      279,
+      220,
+      17,
+      15,
+      15,
+      20,
+      4531,
+      576,
+      7996,
+      6210,
+      315,
+      19085,
+      659,
+      758,
+      220,
+      17,
+      15,
+      15,
+      21,
+      1154,
+      566,
+      6342,
+      279,
+      3476,
+      315,
+      330,
+      6798,
+      330,
+      304,
+      279,
+      12425,
+      4013,
+      576,
+      8246,
+      320,
+      6424,
+      873,
+      659,
+      758,
+      220,
+      17,
+      15,
+      15,
+      22
+    ]
+  },
+  "prompt_tokens": {
+    "0": [
+      284,
+      8397,
+      425,
+      10965,
+      465,
+      284,
+      14731,
+      8397,
+      425,
+      10965,
+      465,
+      374,
+      458,
+      6364,
+      4531,
+      1154,
+      12425,
+      323,
+      33496,
+      12089,
+      659,
+      1260,
+      1030,
+      264,
+      8640,
+      569,
+      12,
+      31,
+      39400,
+      3476,
+      389,
+      279,
+      12425,
+      4013,
+      576,
+      8596,
+      304,
+      220,
+      17,
+      15,
+      15,
+      15,
+      659,
+      1096,
+      572,
+      8110,
+      553,
+      264,
+      39400,
+      3476,
+      304,
+      279,
+      1486,
+      6252,
+      2382,
+      5326,
+      553,
+      21315,
+      75923,
+      1154,
+      892,
+      572,
+      10660,
+      304,
+      220,
+      17,
+      15,
+      15,
+      16,
+      518,
+      279,
+      16194,
+      7154,
+      26221,
+      659,
+      1260,
+      1030,
+      264,
+      8640,
+      3476,
+      304,
+      279,
+      12425,
+      4013,
+      20207,
+      3757,
+      1581,
+      291,
+      304,
+      220,
+      17,
+      15,
+      15,
+      17,
+      659,
+      758,
+      220,
+      17,
+      15,
+      15,
+      19,
+      425,
+      10965,
+      465,
+      26120,
+      264,
+      3476,
+      438,
+      330,
+      28417,
+      330,
+      304,
+      279,
+      9234,
+      330,
+      70066,
+      364,
+      82,
+      15106,
+      330,
+      315,
+      279,
+      12425,
+      4013,
+      576,
+      5724,
+      37625,
+      2587
+    ]
+  },
+  "decode_steps": 47,
+  "decode_median_ms": {
+    "step": 118.047673,
+    "forward_submission": 117.591567,
+    "drain": 0.359755,
+    "attention_host": 39.554546,
+    "dram_experts_host": 0.0,
+    "other_submission": 78.037021,
+    "scheduler_python_and_bookkeeping": 0.09635100000000546
+  },
+  "decode_device_ms": {
+    "attention_kernels_per_step": 43.09050546174354,
+    "gpu_expert_kernels_per_step": 0.0
+  },
+  "attn_calls_per_step": 48,
+  "attn_host_us_per_call": 824.0530416666667,
+  "prefill": [
+    {
+      "tokens": 1,
+      "wall_ms": 585.199856,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.81134,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 88.945587,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.229071,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.727969,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 88.075365,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.581884,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.118299,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.593487,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.731434,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.354137,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.483316,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.838761,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 89.012779,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.916352,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.76127,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.206147,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.78098,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.817911,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 76.930503,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.164655,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.252798,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.053169,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.607931,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.156941,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.655123,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 90.606852,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.724874,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.543702,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.44949,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.700003,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.269927,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.749904,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.739895,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.993447,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.13238,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.528505,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.829406,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.887066,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.418844,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 86.191537,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 84.480513,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.216246,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.703043,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.788225,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.572907,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.052719,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 77.821996,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.418075,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 86.038135,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.421059,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.728528,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.695128,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.207931,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.319542,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.792944,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.668438,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.576917,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.256682,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 91.411425,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.372048,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.573691,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.929896,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.825585,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.201006,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.387268,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.968712,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.698852,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 83.182944,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 78.993683,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.47737,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 90.200226,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.031888,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.787444,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.281487,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.358928,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.11906,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.549561,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.549531,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.817085,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.684283,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 79.670622,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 91.854421,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.84195,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.293582,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.565421,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.303211,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.4816,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.700012,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.366262,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.768769,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.779719,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.859811,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 87.318644,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 80.977602,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 83.900115,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.917326,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.466218,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.606271,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.681296,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.825094,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 83.070353,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.23631,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.641672,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.698072,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.077939,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.933886,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.282687,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 85.065632,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 85.71347,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.328172,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 81.883386,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.625985,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 83.003352,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.769098,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 82.133388,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 83.476089,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 85.531799,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 85.263155,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 85.194014,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 85.642961,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 84.423782,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 84.96852,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 84.085217,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 84.129268,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 84.823488,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 90.039694,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    },
+    {
+      "tokens": 1,
+      "wall_ms": 192.706314,
+      "dram_ms": 0.0,
+      "gpu_dev_ms": 0.0
+    }
+  ],
+  "prefill_attn_dev_total_ms": 2787.1947200894356,
+  "engine": "pipelined",
+  "placement_override": "none",
+  "collapse": true,
+  "manifest_counts": null
+}
