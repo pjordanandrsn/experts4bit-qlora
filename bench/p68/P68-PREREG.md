@@ -204,17 +204,19 @@ any cell that misses either.
 - **Proving rental first** (the compute rule for any guard over 1 h). One RTX 5090 of the same class and image runs the
   launcher's trivial command (`nvidia-smi` over ssh) at the SAME e4b commit on a clean tree. It proves attach,
   pre-flight, command handoff, receipt, ledger row, teardown proof and zero live instances afterwards.
-  - **Guard 0.23 h at ≤ $0.65/h, so ≤ $0.15.** Launcher boot takes 3–5 minutes of a guard (P65 Amendment 1).
+  - **Guard 0.2 h at ≤ $0.75/h, so ≤ $0.15.** Launcher boot takes 3–5 minutes of a guard (P65 Amendment 1). The
+    rate follows the verified-5090 market: P66's proofs were refused at $0.72, $0.66 and $0.81/h against $0.65 (P66
+    Amendment 1, the same terms). A launcher refusal before any instance exists costs $0 and burns only the run id.
   - It has no reading-only floors to record: it runs no lane code.
   - The reading launches only after it returns OK. A failed proof is a row and a defect, not a retry.
   - Nothing merges to e4b `main` between the proof and the reading.
-- **The reading:** a 2 h guard at ≤ $0.66/h, so ≤ $1.32. Expected ~75 minutes:
+- **The reading:** a 2 h guard at ≤ $0.75/h, so ≤ $1.50. Expected ~75 minutes:
   - install ~8, egress 1, fetch ~10, bake ~5;
   - `int4` ~30: the pack ~2, eight ablation arms ~10, two size arms ~18;
   - `nf4` ~20;
   - reduce 1.
   - The runner starts a stack only if it can finish 10 minutes before teardown. `int4`, the served stack, runs first.
-- **Lane ceiling:** $1.50 (proof ≤ $0.15 plus reading ≤ $1.32); hard stop $2.
+- **Lane ceiling:** $2 (proofs ≤ $0.45 over at most three attempts, plus the reading ≤ $1.50); hard stop $3.
 - **Runner:** [`p68_drive.sh`](p68_drive.sh) (controller) and [`p68_run.sh`](p68_run.sh) (box), P63's pattern.
   - e4b is installed at the driver's own HEAD, refused if the tree is dirty.
   - grouped-nf4-gemm is installed at `GNF4_SHA`, from the launch manifest: `68a1250` (grouped-nf4-gemm#399's merge) or
