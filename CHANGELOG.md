@@ -27,6 +27,20 @@
 
 ## Unreleased
 
+### Lane P65 read (#710): Granite's per-expert selector is TWO_ARMS; Colla-Q's cross-domain claim replicates on OLMoE and Mixtral (docs, register; no library behaviour change)
+
+- **The reading.** `p65-5090-4` ran on one RTX 5090 for $0.5491. The whole lane cost $0.9369 over ten runs: six proofs, three boxes refused before any data, and the read. Teardown is proven for every one.
+- **Completeness.** All three censuses are complete and self-checked. The reducer reproduces its output byte for byte from the committed receipts. Full read: `bench/p65/RESULTS-p65.md`.
+- **Granite: TWO_ARMS.** Every ranking survives the wikitext → C4 change: `rel_act` 0.932, ρ·error 0.910, entropy 0.882 and routing frequency 0.891. Entropy is not redundant with `rel_act` (ρ ≤ 0.055).
+  - The selector is written in the new `docs/SPECULATIVE_LANES_ADDENDUM_4.md`: rank by `rel_act` and by ρ·error, with frequency as the baseline, compared at matched bytes on K8. The OpenTimestamps-anchored plan documents are not edited.
+  - Register row: `e4b.quality.p65.granite.selector-two-arms.5090.2026-09-24`.
+- **OLMoE and Mixtral: NOT_WRITTEN.** Neither has a per-expert premise.
+  - Colla-Q's comparative claim replicates on both: +0.421 and +0.479, recorded as `e4b.quality.p65.collaq-stability.olmoe-mixtral.5090.2026-09-24`.
+  - Routing-frequency hot sets barely transfer between texts: Jaccard 0.141, and 0.125 (chance) on Mixtral.
+- **One prediction refuted.** P1 on Mixtral: `rel_act`'s domain penalty there is 0.159 against the 0.15 survival line.
+- **P44-a's census row now names its Mixtral layers.** They are {0, 1, 2, 10–22}, verified from its receipt.
+- **STATUS.** Its P44 paragraph no longer calls Gemma-4's gap a served-model defect: #597 closed on P47–P51.
+
 ### Lane P64 read (#709): the int4 experts' int8 activation step at B = 1 decode is below Qwen3's arithmetic-order floor (docs, register; no library behaviour change)
 
 - **The reading.** `p64-5090-1` ran on one RTX 5090 for $1.4193, after the proof `p64-prove-1` ($0.0201). Teardown is proven, and the validity checks were VALID.
