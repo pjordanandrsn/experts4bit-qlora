@@ -1,0 +1,9 @@
+[p66] host Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz | gpu NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 1, 3, 8, 16, 70.00 W, 2100 MHz | costs {'source': 'calib:calib.json', 'b_link_gbs': 6.11, 'b_vram_gbs': 257.5, 'b_dram_gbs': 18.01}
+[p66] arm ref: L=16 E=64 k=8 n_hot=64 windows=['uniform']
+[02:19:33]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[p66] ref: window uniform
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling debug_dump() (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:233.)
+  return super().debug_dump(debug_path)
+/opt/conda/lib/python3.11/site-packages/torch/cuda/graphs.py:143: UserWarning: DEBUG: calling cudaGraphDebugDotPrint() with /tmp/tmp_9j3xk8g/token.dot (Triggered internally at /pytorch/aten/src/ATen/cuda/CUDAGraph.cpp:235.)
+  return super().debug_dump(debug_path)
+[p66] ref: wrote rows_ref.json

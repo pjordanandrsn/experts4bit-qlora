@@ -1,0 +1,7 @@
+{
+ "first_sync": {
+  "error": "RuntimeError: called a synchronizing CUDA operation",
+  "site": "mxfp4_pipelined.py:430 _forward_decode: if bool((want >= self.E).any()):"
+ },
+ "capture": "RuntimeError: Mxfp4NvmeResidency cannot be captured in a CUDA graph: residency is a host-side disk read, so the wanted expert ids must be read back to the CPU. Capture the fully-resident Mxfp4PipelinedGptOss instead, or run this engine eagerly."
+}

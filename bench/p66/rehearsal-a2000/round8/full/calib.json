@@ -1,0 +1,390 @@
+{
+  "schema": "gnf4-hybrid-calib/1",
+  "created_utc": "2026-09-24T14:02:48Z",
+  "quick_mode": false,
+  "host": {
+    "hostname": "p66",
+    "kernel": "6.6.32-qnap",
+    "machine": "x86_64",
+    "cpu_model": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz",
+    "cpu_flags_watched": [
+      "avx2"
+    ],
+    "online_cpus": 12,
+    "cgroup_cpu_quota": null,
+    "numa_nodes": 0,
+    "mem_total_gib": 125.7,
+    "thp": "",
+    "hugetlb_2m_total": "0",
+    "governor": "performance",
+    "loadavg_at_start": "11.12 13.60 14.61 7/9087 240"
+  },
+  "gpus": [
+    {
+      "index": "0",
+      "name": "NVIDIA RTX A2000 12GB",
+      "vram": "12282 MiB",
+      "power_limit": "70.00 W",
+      "pcie_gen_max": "3",
+      "pcie_width_max": "16",
+      "pcie_gen_idle": "3",
+      "pcie_width_idle": "8"
+    }
+  ],
+  "notes": [],
+  "cpu_bench_build": "/usr/bin/cc -O3 -march=native",
+  "cpu_bench": {
+    "features": {
+      "avx2": 1,
+      "avx512f": 0,
+      "avx512bw": 0,
+      "avx512vl": 0,
+      "avx512vbmi": 0,
+      "avx512vnni": 0
+    },
+    "topology": {
+      "online_cpus": 12,
+      "l3_domains": 1
+    },
+    "compiled_simd": "avx2",
+    "triad": [
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 13.17
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 16.15
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 17.78
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 17.26
+      },
+      {
+        "threads": 12,
+        "pin": "compact",
+        "nt": 0,
+        "gbs": 16.08
+      },
+      {
+        "threads": 1,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 15.9
+      },
+      {
+        "threads": 2,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 20.86
+      },
+      {
+        "threads": 4,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 22.03
+      },
+      {
+        "threads": 8,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 22.35
+      },
+      {
+        "threads": 12,
+        "pin": "compact",
+        "nt": 1,
+        "gbs": 17.55
+      }
+    ],
+    "triad_best": {
+      "gbs": 22.35,
+      "threads": 8,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter": [
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 1,
+        "gbs": 14.23
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 2,
+        "gbs": 19.82
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 4,
+        "gbs": 24.43
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 8,
+        "gbs": 24.2
+      },
+      {
+        "block_mib": 2,
+        "experts": 4096,
+        "threads": 12,
+        "gbs": 23.35
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 1,
+        "gbs": 13.72
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 2,
+        "gbs": 15.71
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 4,
+        "gbs": 18.8
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 8,
+        "gbs": 22.83
+      },
+      {
+        "block_mib": 4,
+        "experts": 2048,
+        "threads": 12,
+        "gbs": 23.62
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 1,
+        "gbs": 15.34
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 2,
+        "gbs": 20.46
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 4,
+        "gbs": 23.44
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 8,
+        "gbs": 24.1
+      },
+      {
+        "block_mib": 8,
+        "experts": 1024,
+        "threads": 12,
+        "gbs": 25.07
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 1,
+        "gbs": 15.91
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 2,
+        "gbs": 20.89
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 4,
+        "gbs": 23.0
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 8,
+        "gbs": 24.9
+      },
+      {
+        "block_mib": 16,
+        "experts": 512,
+        "threads": 12,
+        "gbs": 23.52
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 1,
+        "gbs": 14.69
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 2,
+        "gbs": 19.58
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 4,
+        "gbs": 20.85
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 8,
+        "gbs": 23.34
+      },
+      {
+        "block_mib": 32,
+        "experts": 256,
+        "threads": 12,
+        "gbs": 23.46
+      }
+    ],
+    "scatter_best": {
+      "gbs": 25.07,
+      "block_mib": 8,
+      "threads": 12,
+      "experts": 1024
+    },
+    "gate_g0": {
+      "scatter_pct_of_triad": 112.2
+    },
+    "nvme": {
+      "o_direct": true,
+      "points": [
+        {
+          "mode": "seq",
+          "qd": 1,
+          "gbs": 0.29,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 4,
+          "gbs": 2.76,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 8,
+          "gbs": 4.84,
+          "ok": true
+        },
+        {
+          "mode": "seq",
+          "qd": 16,
+          "gbs": 3.96,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 1,
+          "gbs": 0.78,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 4,
+          "gbs": 1.61,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 8,
+          "gbs": 2.44,
+          "ok": true
+        },
+        {
+          "mode": "rand",
+          "qd": 16,
+          "gbs": 1.7,
+          "ok": true
+        }
+      ]
+    },
+    "config": {
+      "triad_gib": 2,
+      "arena_gib": 8,
+      "topk": 8,
+      "fetches": 400,
+      "seed": 20260816,
+      "reps": 5,
+      "tile_bytes": 1048576
+    }
+  },
+  "gpu_bench": {
+    "devices": [
+      {
+        "device": "cuda:0",
+        "name": "NVIDIA RTX A2000 12GB",
+        "b_vram_triad_gbs": 257.4,
+        "b_link": {
+          "h2d_8kb": {
+            "gbs": 1.72,
+            "usec": 4.8
+          },
+          "d2h_8kb": {
+            "gbs": 1.72,
+            "usec": 4.8
+          },
+          "h2d_64mb": {
+            "gbs": 6.12,
+            "usec": 10965.0
+          },
+          "d2h_64mb": {
+            "gbs": 6.58,
+            "usec": 10193.9
+          }
+        }
+      }
+    ]
+  },
+  "gate_g0": {
+    "scatter_pct_of_triad": 112.2,
+    "verdict": "proceed",
+    "thresholds": {
+      "proceed": 70.0,
+      "resolve": 50.0
+    },
+    "triad_best": {
+      "gbs": 22.35,
+      "threads": 8,
+      "pin": "compact",
+      "nt": 1
+    },
+    "scatter_best": {
+      "gbs": 25.07,
+      "block_mib": 8,
+      "threads": 12,
+      "experts": 1024
+    }
+  },
+  "wall_seconds": 200.3
+}

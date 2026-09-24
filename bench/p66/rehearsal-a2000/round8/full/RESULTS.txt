@@ -1,0 +1,107 @@
+## Generated read (p66_reduce.py, unedited)
+
+Box: NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, 3, 3, 8, 16, 70.00 W, 2100 MHz (26 SMs) on Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz; torch 2.8.0+cu128, triton 3.4.0. Host unit costs: {"aten_launch_host_us": 8.041368564590812, "triton_launch_host_us": 22.348190378397703, "sync_idle_us": 6.9634305546060205, "item_roundtrip_us": 7.641744101420045, "h2d_pinned_64mb_gbs": 6.140934554970246, "d2d_copy_rw_gbs": 252.73713405608478}. Transfer constants: {"source": "calib:calib.json", "b_link_gbs": 6.12, "b_vram_gbs": 257.4, "b_dram_gbs": 22.35}.
+
+### olmoe-1b-7b (reference: `ref`)
+
+| arm | window | cold frac | mode | launches/tok | copies/tok | syncs/tok | kernels/tok | device ms/tok | Δlaunch vs ref | Δsync vs ref | wall ms/tok |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| hyb-0.25 | uniform | 0.734 | eager | 1183.2 | 317.5 | 159.0 | 1500.8 | 100.303 | +1055.2 | +159.0 | 298.355 |
+| hyb-0.25 | uniform | 0.734 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| hyb-0.25 | ctrl0 | 0.000 | eager | 656.0 | 112.0 | 64.0 | 767.2 | 17.315 | +528.0 | +64.0 | 31.828 |
+| hyb-0.25 | ctrl0 | 0.000 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| hyb-0.25 | ctrl4 | 0.500 | eager | 1200.0 | 320.0 | 160.0 | 1520.0 | 61.992 | +1072.0 | +160.0 | 186.171 |
+| hyb-0.25 | ctrl4 | 0.500 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| hyb-0.25 | ctrl8 | 1.000 | eager | 800.0 | 240.0 | 128.0 | 1039.0 | 106.653 | +672.0 | +128.0 | 288.103 |
+| hyb-0.25 | ctrl8 | 1.000 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| hyb-0.50 | uniform | 0.465 | eager | 1199.5 | 320.0 | 160.0 | 1519.5 | 61.903 | +1071.5 | +160.0 | 236.218 |
+| hyb-0.50 | uniform | 0.465 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| hyb-0.50 | ctrl0 | 0.000 | eager | 656.0 | 112.0 | 64.0 | 768.0 | 17.944 | +528.0 | +64.0 | 37.875 |
+| hyb-0.50 | ctrl0 | 0.000 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| hyb-0.50 | ctrl4 | 0.500 | eager | 1200.0 | 320.0 | 160.0 | 1520.0 | 59.277 | +1072.0 | +160.0 | 206.512 |
+| hyb-0.50 | ctrl4 | 0.500 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| hyb-0.50 | ctrl8 | 1.000 | eager | 800.0 | 240.0 | 128.0 | 1039.8 | 115.159 | +672.0 | +128.0 | 422.736 |
+| hyb-0.50 | ctrl8 | 1.000 | graph | refused: the v0 dispatch under the hybrid tier synchronizes (nonzero  | | | | | | | |
+| pipe-0.00 | uniform | 1.000 | eager | 240.0 | 32.0 | 0.0 | 272.0 | 85.428 | +112.0 | +0.0 | 86.253 |
+| pipe-0.00 | uniform | 1.000 | graph | 0.0 | 2.0 | 0.0 | 274.0 | 85.496 | +0.0 | +0.0 | 86.313 |
+| pipe-0.25 | uniform | 0.734 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 66.553 | +160.0 | +0.0 | 66.926 |
+| pipe-0.25 | uniform | 0.734 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 66.355 | +0.0 | +0.0 | 69.694 |
+| pipe-0.25 | ctrl0 | 0.000 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 10.905 | +160.0 | +0.0 | 11.884 |
+| pipe-0.25 | ctrl0 | 0.000 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 10.767 | +0.0 | +0.0 | 10.685 |
+| pipe-0.25 | ctrl4 | 0.500 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 48.101 | +160.0 | +0.0 | 47.333 |
+| pipe-0.25 | ctrl4 | 0.500 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 46.875 | +0.0 | +0.0 | 46.643 |
+| pipe-0.25 | ctrl8 | 1.000 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 85.895 | +160.0 | +0.0 | 85.629 |
+| pipe-0.25 | ctrl8 | 1.000 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 85.247 | +0.0 | +0.0 | 85.359 |
+| pipe-0.50 | uniform | 0.465 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 45.676 | +160.0 | +0.0 | 47.397 |
+| pipe-0.50 | uniform | 0.465 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 44.138 | +0.0 | +0.0 | 48.132 |
+| pipe-0.50 | ctrl0 | 0.000 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 10.566 | +160.0 | +0.0 | 11.742 |
+| pipe-0.50 | ctrl0 | 0.000 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 10.731 | +0.0 | +0.0 | 10.801 |
+| pipe-0.50 | ctrl4 | 0.500 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 47.068 | +160.0 | +0.0 | 47.379 |
+| pipe-0.50 | ctrl4 | 0.500 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 46.129 | +0.0 | +0.0 | 46.297 |
+| pipe-0.50 | ctrl8 | 1.000 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 84.094 | +160.0 | +0.0 | 85.195 |
+| pipe-0.50 | ctrl8 | 1.000 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 83.327 | +0.0 | +0.0 | 83.424 |
+| pipe-0.83 | uniform | 0.172 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 22.817 | +160.0 | +0.0 | 21.151 |
+| pipe-0.83 | uniform | 0.172 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 23.133 | +0.0 | +0.0 | 21.358 |
+| pipe-0.83 | ctrl0 | 0.000 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 11.162 | +160.0 | +0.0 | 11.787 |
+| pipe-0.83 | ctrl0 | 0.000 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 10.626 | +0.0 | +0.0 | 10.633 |
+| pipe-0.83 | ctrl4 | 0.500 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 44.176 | +160.0 | +0.0 | 46.011 |
+| pipe-0.83 | ctrl4 | 0.500 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 43.818 | +0.0 | +0.0 | 44.764 |
+| pipe-0.83 | ctrl8 | 1.000 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 76.831 | +160.0 | +0.0 | 80.636 |
+| pipe-0.83 | ctrl8 | 1.000 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 82.263 | +0.0 | +0.0 | 79.772 |
+| pipe-1.00 | uniform | 0.000 | eager | 288.0 | 32.0 | 0.0 | 320.0 | 16.920 | +160.0 | +0.0 | 13.182 |
+| pipe-1.00 | uniform | 0.000 | graph | 0.0 | 2.0 | 0.0 | 322.0 | 10.511 | +0.0 | +0.0 | 10.656 |
+| ref | uniform | 0.000 | eager | 128.0 | 0.0 | 0.0 | 128.0 | 16.079 | +0.0 | +0.0 | 13.607 |
+| ref | uniform | 0.000 | graph | 0.0 | 2.0 | 0.0 | 130.0 | 10.132 | +0.0 | +0.0 | 10.202 |
+
+### gpt-oss-20b (reference: `mref`)
+
+| arm | window | cold frac | mode | launches/tok | copies/tok | syncs/tok | kernels/tok | device ms/tok | Δlaunch vs ref | Δsync vs ref | wall ms/tok |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| mnvme-0.00 | uniform | 1.000 | eager | 296.0 | 48.0 | 32.0 | 343.8 | 82.657 | -8.0 | +24.0 | 243.575 |
+| mnvme-0.00 | uniform | 1.000 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.25 | uniform | 0.766 | eager | 296.0 | 48.0 | 32.0 | 343.8 | 65.674 | -8.0 | +24.0 | 188.414 |
+| mnvme-0.25 | uniform | 0.766 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.25 | ctrl0 | 0.000 | eager | 296.0 | 48.0 | 32.0 | 343.8 | 11.624 | -8.0 | +24.0 | 16.659 |
+| mnvme-0.25 | ctrl0 | 0.000 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.25 | ctrl2 | 0.500 | eager | 296.0 | 48.0 | 32.0 | 343.8 | 43.928 | -8.0 | +24.0 | 165.227 |
+| mnvme-0.25 | ctrl2 | 0.500 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.25 | ctrl4 | 1.000 | eager | 296.0 | 48.0 | 32.0 | 343.8 | 82.534 | -8.0 | +24.0 | 241.599 |
+| mnvme-0.25 | ctrl4 | 1.000 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.50 | uniform | 0.523 | eager | 296.0 | 48.0 | 32.0 | 344.0 | 48.565 | -8.0 | +24.0 | 127.448 |
+| mnvme-0.50 | uniform | 0.523 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.50 | ctrl0 | 0.000 | eager | 296.0 | 48.0 | 32.0 | 344.0 | 12.016 | -8.0 | +24.0 | 14.761 |
+| mnvme-0.50 | ctrl0 | 0.000 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.50 | ctrl2 | 0.500 | eager | 296.0 | 48.0 | 32.0 | 344.0 | 43.862 | -8.0 | +24.0 | 129.233 |
+| mnvme-0.50 | ctrl2 | 0.500 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-0.50 | ctrl4 | 1.000 | eager | 296.0 | 48.0 | 32.0 | 344.0 | 82.487 | -8.0 | +24.0 | 215.589 |
+| mnvme-0.50 | ctrl4 | 1.000 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mnvme-1.00 | uniform | 0.000 | eager | 296.0 | 48.0 | 32.0 | 344.0 | 12.019 | -8.0 | +24.0 | 18.054 |
+| mnvme-1.00 | uniform | 0.000 | graph | refused: Mxfp4NvmeResidency._resolve_src reads the wanted ids to the  | | | | | | | |
+| mpin-0.00 | uniform | 1.000 | eager | 304.0 | 24.0 | 8.0 | 328.0 | 82.513 | +0.0 | +0.0 | 87.955 |
+| mpin-0.00 | uniform | 1.000 | graph | 0.0 | 2.0 | 0.0 | 306.0 | 80.983 | +0.0 | +0.0 | 80.153 |
+| mpin-0.50 | uniform | 0.523 | eager | 304.0 | 24.0 | 8.0 | 328.0 | 47.954 | +0.0 | +0.0 | 47.217 |
+| mpin-0.50 | uniform | 0.523 | graph | 0.0 | 2.0 | 0.0 | 306.0 | 40.349 | +0.0 | +0.0 | 39.315 |
+| mpin-0.50 | ctrl0 | 0.000 | eager | 304.0 | 24.0 | 8.0 | 328.0 | 10.065 | +0.0 | +0.0 | 13.739 |
+| mpin-0.50 | ctrl0 | 0.000 | graph | 0.0 | 2.0 | 0.0 | 306.0 | 10.001 | +0.0 | +0.0 | 10.128 |
+| mpin-0.50 | ctrl2 | 0.500 | eager | 304.0 | 24.0 | 8.0 | 328.0 | 43.868 | +0.0 | +0.0 | 49.651 |
+| mpin-0.50 | ctrl2 | 0.500 | graph | 0.0 | 2.0 | 0.0 | 306.0 | 43.767 | +0.0 | +0.0 | 43.652 |
+| mpin-0.50 | ctrl4 | 1.000 | eager | 304.0 | 24.0 | 8.0 | 328.0 | 81.565 | +0.0 | +0.0 | 96.278 |
+| mpin-0.50 | ctrl4 | 1.000 | graph | 0.0 | 2.0 | 0.0 | 306.0 | 87.263 | +0.0 | +0.0 | 88.439 |
+| mref | uniform | 0.000 | eager | 304.0 | 24.0 | 8.0 | 328.0 | 12.059 | +0.0 | +0.0 | 15.538 |
+| mref | uniform | 0.000 | graph | 0.0 | 2.0 | 0.0 | 306.0 | 10.256 | +0.0 | +0.0 | 10.293 |
+
+### Verdicts (pre-registered)
+
+- **P0 (gates): ALL HOLD** -- nesting 39/39, simulator 14/14, graph check 21/21, graph parity 21/21, budget coverage 39/39, record completeness 39/39 (13 dropped device record(s) in total)
+- **P1: HOLDS** -- `{"arms": {"pipe-0.00/eager": {"windows": 1, "fixed": true, "spreads": {"launches": 0.0, "async_copies": 0.0, "syncs": 0.0, "memsets": 0.0}}, "pipe-0.00/graph": {"windows": 1, "fixed": true, "spreads": {"graph_nodes.work": 0.0, "graph_nodes.kernel": 0.0, "graph_nodes.memcpy": 0.0, "graph_nodes.memset": 0.0}}, "pipe-0.25/eager": {"windows": 4, "fixed": true, "spreads": {"launches": 0.0, "async_copies": 0.0, "syncs": 0.0, "memsets": 0.0}}, "pipe-0.25/graph": {"windows": 4, "fixed": true, "spreads": {"graph_nodes.work": 0.0, "graph_nodes.kernel": 0.0, "graph_nodes.memcpy": 0.0, "graph_nodes.memset`
+- **P2: HOLDS** -- `{"arms": {"pipe-0.00": {"delta_per_layer": {"launches": 7.0, "async_copies": 2.0, "syncs": 0.0}, "want": {"launches": 7, "async_copies": 2, "syncs": 0}, "fetch_per_layer": {"launch": 5.0, "memcpy": 2.0, "sync": 0.0}, "want_fetch": {"launch": 5, "memcpy": 2, "sync": 0}, "holds": true, "delta_per_token": {"launches": 112.0, "async_copies": 32.0, "syncs": 0.0}}, "pipe-0.25": {"delta_per_layer": {"launches": 10.0, "async_copies": 2.0, "syncs": 0.0}, "want": {"launches": 10, "async_copies": 2, "syncs": 0}, "fetch_per_layer": {"launch": 8.0, "memcpy": 2.0, "sync": 0.0}, "want_fetch": {"launch": 8, "`
+- **P3: RECORDED (not the registered box)** -- `{"band_ms": [0.5, 1.5], "families": {"olmoe-1b-7b": {"graph": {"device_ms_per_token": 0.37901450000001025, "added_kernels_ms_per_token": 0.48158925000000596, "shared_kernels_ms_per_token": -0.10257474999999613, "shared_by_kernel_us": {"_gemv_nf4_grouped": -102.57474999999613}, "submissions_per_token": 0.0, "wall_ms_per_token": 0.45425869757309556}, "eager": {"device_ms_per_token": 0.8406830000000355, "added_kernels_ms_per_token": 0.8287515000000292, "shared_kernels_ms_per_token": 0.011931500000004234, "shared_by_kernel_us": {"_gemv_nf4_grouped": 11.931500000004235}, "submissions_per_token": 19`
+- **P4: HOLDS** -- `{"arms": {"mnvme-0.00": {"fixed": true, "delta_per_layer": {"launches": -1.0, "async_copies": 3.0, "syncs": 3.0}, "want": {"launches": -1, "async_copies": 3, "syncs": 3}, "syncs_per_layer": 4.0, "fetch_syncs_per_layer": 3.0, "holds": true}, "mnvme-0.25": {"fixed": true, "delta_per_layer": {"launches": -1.0, "async_copies": 3.0, "syncs": 3.0}, "want": {"launches": -1, "async_copies": 3, "syncs": 3}, "syncs_per_layer": 4.0, "fetch_syncs_per_layer": 3.0, "holds": true}, "mnvme-0.50": {"fixed": true, "delta_per_layer": {"launches": -1.0, "async_copies": 3.0, "syncs": 3.0}, "want": {"launches": -1,`
+- **P5: HOLDS** -- `{"arms": {"mpin-0.00": {"fixed": true, "delta_per_layer": {"launches": 0.0, "async_copies": 0.0, "syncs": 0.0}, "want": {"launches": 0, "async_copies": 0, "syncs": 0}, "holds": true}, "mpin-0.50": {"fixed": true, "delta_per_layer": {"launches": 0.0, "async_copies": 0.0, "syncs": 0.0}, "want": {"launches": 0, "async_copies": 0, "syncs": 0}, "holds": true}}}`
+- **P6: HOLDS** -- `{"arms": {"hyb-0.25": {"launch_spread_per_token": 544.0, "windows": {"ctrl0": {"composition": "ctrl0", "syncs_per_layer": 4.0, "launches_per_layer": 41.0, "want_syncs": 4}, "ctrl4": {"composition": "mixed", "syncs_per_layer": 10.0, "launches_per_layer": 75.0, "want_syncs": 10}, "ctrl8": {"composition": "cold_only", "syncs_per_layer": 8.0, "launches_per_layer": 50.0, "want_syncs": 8}}, "holds": true}, "hyb-0.50": {"launch_spread_per_token": 544.0, "windows": {"ctrl0": {"composition": "ctrl0", "syncs_per_layer": 4.0, "launches_per_layer": 41.0, "want_syncs": 4}, "ctrl4": {"composition": "mixed",`
+- **P7: RECORDED (not the registered box)** -- `{"band": [0.8, 1.25], "refute_above": 1.5, "windows": {"hyb-0.25/uniform": {"path": "hybrid", "measured_us": 79278.61824999987, "hot_d2d_us": 0.0, "predicted_us": 55648.71766351296, "ratio": 1.4246261473511053}, "hyb-0.25/ctrl4": {"path": "hybrid", "measured_us": 47141.00800000017, "hot_d2d_us": 0.0, "predicted_us": 37888.48862196626, "ratio": 1.2442039710359327}, "hyb-0.25/ctrl8": {"path": "hybrid", "measured_us": 88340.14249999986, "hot_d2d_us": 0.0, "predicted_us": 75776.97724393252, "ratio": 1.1657913222854672}, "hyb-0.50/uniform": {"path": "hybrid", "measured_us": 41242.65350000002, "hot_`
+- **P8 (informational)** -- `{"status": "INFORMATIONAL", "rows": {"olmoe-1b-7b/pipe-0.00/graph": {"cold_fraction": 1.0, "residency_ms": 76.11083472147584, "fixed_tax_ms": 0.45425869757309556, "tax_share": 0.005968384123435707}, "olmoe-1b-7b/pipe-0.00/eager": {"cold_fraction": 1.0, "residency_ms": 72.64604681404307, "fixed_tax_ms": -0.42559270514175296, "tax_share": -0.005858442734415693}, "olmoe-1b-7b/pipe-0.25/graph": {"cold_fraction": 0.75, "residency_ms": 59.49173797853291, "fixed_tax_ms": 0.45425869757309556, "tax_share": 0.007635660227929649}, "olmoe-1b-7b/pipe-0.25/eager": {"cold_fraction": 0.75, "residency_ms": 53.31899906741455, "fixed_tax_ms": -0.42559270514175296, "tax_share": -0.007982008525772388}, "olmoe-1b-7b/pipe-0.50/graph": {"cold_fraction": 0.5, "residency_ms": 37.930421240162104, "fixed_tax_ms": 0.45425869757309556, "tax_share": 0.011976104739171997}, "olmoe-1b-7b/pipe-0.50/eager": {"cold_fraction`
+- **P9 (informational)** -- `{"status": "INFORMATIONAL", "cross_level": {"M_pipe-0.00": {"level_m_per_step": {"cudaLaunchKernel": 128.0, "cudaMemcpyAsync": 32.0, "cudaStreamSynchronize": 0.0}, "level_l_per_token": {"cudaLaunchKernel": 128.0, "cudaMemcpyAsync": 32.0, "cudaStreamSynchronize": 0.0}, "agree": true}, "M_pipe-1.00": {"level_m_per_step": {"cudaLaunchKernel": 176.0, "cudaMemcpyAsync": 32.0, "cudaStreamSynchronize": 0.0}, "level_l_per_token": {"cudaLaunchKernel": 176.0, "cudaMemcpyAsync": 32.0, "cudaStreamSynchronize": 0.0}, "agree": true}}, "level_m": {"M_hyb-0.50": {"steps": 12, "coverage": 0.9927924997999306, "kernel_calls_per_step": 1719.0000000000002, "device_ms_per_step": 77.53502591666667, "manifest_counts": {"vram": 512, "dram": 0, "nvme": 512}, "active_steps": 12, "per_step": {"cudaLaunchKernel": 1778.6666666666667, "cudaMemcpyAsync": 128.33333333333334, "cudaStreamSynchronize": 72.33333333333333, "`
+
+**Decision rule:** P1 ∧ P2: the pipelined engine's residency cost is a FIXED per-layer count (as registered), independent of cold fraction -> register the measured claim; the cost model gets a per-step fixed term (P3's graph device time, and submissions x the host's unit cost when eager), never a per-cold-expert launch term (grouped-nf4-gemm follow-up on kernel/cold_deadline.py) | P4: the MXFP4 NVMe engine's +3 syncs/layer are structural; a pinned-staging follow-up (two of the three are pageable H2D copies) is licensed only if their host cost >= 10 % of that token | P6: the hybrid tier's cost is layer-COMPOSITION-dependent (hot-only / mixed / cold-only); cold_dest='deadline' prices only bytes, so its GPU side omits the mixed-layer dispatch term | P8: at the RFC's 17.2 % cold the fixed tax is 4% of residency's cost -- in this engine launches cannot explain an RFC-size (2-4x) gap; the gap would be link-side
+

@@ -1,0 +1,56 @@
+OVERRIDE P66_REHEARSAL_CLASS=A2000 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_GNF4_SRC=/w/src/gnf4 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_GPTOSS_SNAPSHOT=/models/gpt-oss-20b -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_MIN_DISK_GB=50 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_MIN_RAM_GB=16 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_MIN_VRAM_MB=8500 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_MX_LAYERS=0-7 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_NF4_ARENA=/w/work/olmoe/nf4.arena -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_NF4_FAMILY=olmoe-1b-7b -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_PIN_GIB=4 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_QWEN_SNAPSHOT=/models/OLMoE-1B-7B-0924 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_SKIP_INSTALL=1 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_TOKENS=4 -- this run is a REHEARSAL, not a reading
+OVERRIDE P66_REHEARSAL_WARM=2 -- this run is a REHEARSAL, not a reading
+e4b 0.37.2 @94842a224f0691a008d25a509bd220e4dcb49ca7
+gnf4 0.33.2 @66d41c821bb29e37551a721f91b16b8ecbb49ed9
+e4b from /w/pydeps/experts4bit_qlora/__init__.py
+gnf4 from /w/pydeps/nf4_grouped.py
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+grouped scatter   :     26.4 GB/s  (12t, 4 MiB blocks, E=2048)
+GATE G0           : 96.9% of triad -> PROCEED
+cuda:0 NVIDIA RTX A2000 12GB: triad 257.6 GB/s | link h2d 6.28 / d2h 6.58 GB/s
+B_nvme seq best   : 18.01 GB/s (o_direct=True)
+nf4 snapshot /models/OLMoE-1B-7B-0924
+L L_ref rc=0
+L L_pipe rc=0
+[p66] pipe-0.50/ctrl8: have-skip simulator 495 vs engine counters 495 cold rows
+[p66] pipe-0.25/uniform: have-skip simulator 373 vs engine counters 373 cold rows
+[p66] pipe-0.25/ctrl0: have-skip simulator 0 vs engine counters 0 cold rows
+[p66] pipe-0.25/ctrl4: have-skip simulator 248 vs engine counters 248 cold rows
+[p66] pipe-0.25/ctrl8: have-skip simulator 499 vs engine counters 499 cold rows
+[p66] pipe-0.00/uniform: have-skip simulator 510 vs engine counters 510 cold rows
+L L_hyb rc=0
+[p66] capture probe on hyb: {'first_sync': {'error': 'RuntimeError: called a synchronizing CUDA operation', 'site': 'hot_residency.py:664 forward: hr = hot_row.nonzero(as_tuple=False).view(-1)'}, 'capture': 'AcceleratorError: CUDA error: operation failed due to a previous error during capture'}
+bake complete: 256 rows x 13221888 B (3.38 GB) in 41s
+L L_mref rc=0
+L L_mpin rc=0
+L L_mnvme rc=0
+[p66] capture probe on mnvme: {'first_sync': {'error': 'RuntimeError: called a synchronizing CUDA operation', 'site': 'mxfp4_pipelined.py:430 _forward_decode: if bool((want >= self.E).any()):'}, 'capture': 'RuntimeError: Mxfp4NvmeResidency cannot be captured in a CUDA graph: residency is a host-side disk read, so the wanted expert ids must be read back to the CPU. Capture the fully-resident Mxfp4PipelinedGptOss instead, or run this engine eagerly.'}
+M M_ref rc=0
+[22:07:16]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+TORCH_PROFILE_OUT /root/p66/M/M_ref_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_ref_sync.json active=12/12
+M M_pipe-1.00 rc=0
+TORCH_PROFILE_OUT /root/p66/M/M_pipe-1.00_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_pipe-1.00_sync.json active=12/12
+M M_pipe-0.00 rc=0
+[p66_step] pipelined hot sets: 0/64 per layer (hot_frac 0.0, seed 66)
+TORCH_PROFILE_OUT /root/p66/M/M_pipe-0.00_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_pipe-0.00_sync.json active=12/12
+M M_hyb-0.50 rc=0
+[22:09:27]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.00/0.00/0.00
+TORCH_PROFILE_OUT /root/p66/M/M_hyb-0.50_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_hyb-0.50_sync.json active=12/12

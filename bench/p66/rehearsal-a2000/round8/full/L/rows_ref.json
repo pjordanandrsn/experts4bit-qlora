@@ -1,0 +1,313 @@
+{
+ "schema": "p66-census/1",
+ "arm": "ref",
+ "family": "olmoe-1b-7b",
+ "path": "hybrid",
+ "hot_frac": 1.0,
+ "n_hot": 64,
+ "layers": 16,
+ "experts": 64,
+ "k": 8,
+ "row_bytes": 3538944,
+ "reference": true,
+ "residency_phase": "e4b::p66.cold",
+ "capturable": true,
+ "windows": [
+  {
+   "name": "uniform",
+   "modes": {
+    "eager": {
+     "tokens": 4,
+     "api": {
+      "cudaLaunchKernel": 256,
+      "cuLaunchKernelEx": 256
+     },
+     "api_by_phase": {
+      "e4b::p66.layer": {
+       "cudaLaunchKernel": 256,
+       "cuLaunchKernelEx": 256
+      }
+     },
+     "api_by_phase_nearest": {
+      "e4b::p66.layer": {
+       "cudaLaunchKernel": 256,
+       "cuLaunchKernelEx": 256
+      }
+     },
+     "ops": {
+      "aten::select": 256,
+      "aten::as_strided": 512,
+      "aten::unsqueeze": 128,
+      "aten::to": 384,
+      "aten::reshape": 128,
+      "aten::view": 128,
+      "aten::index_select": 64,
+      "aten::empty": 320,
+      "aten::resize_": 64,
+      "aten::_to_copy": 192,
+      "aten::empty_strided": 192,
+      "aten::copy_": 192,
+      "aten::chunk": 64,
+      "aten::split": 64,
+      "aten::narrow": 128,
+      "aten::slice": 128
+     },
+     "kernels_by_phase": {
+      "e4b::p66.layer": {
+       "void at::native::(anonymous namespace)::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, 2, 2, -2>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, at::cuda::detail::TensorInfo<long const, unsigned int>, int, int, unsigned int, long)": 66,
+       "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)": 135,
+       "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)": 66
+      }
+     },
+     "token_regions": 4,
+     "api_global": {
+      "cudaLaunchKernel": 256,
+      "cuLaunchKernelEx": 256,
+      "cudaDeviceSynchronize": 2
+     },
+     "kernels": {
+      "void at::native::(anonymous namespace)::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, 2, 2, -2>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, at::cuda::detail::TensorInfo<long const, unsigned int>, int, int, unsigned int, long)": {
+       "count": 64,
+       "self_device_us": 371.0070000000376
+      },
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)": {
+       "count": 128,
+       "self_device_us": 273.72699999997053
+      },
+      "_gemv_nf4_grouped": {
+       "count": 128,
+       "self_device_us": 63120.81499999998
+      },
+      "_swiglu_rows": {
+       "count": 64,
+       "self_device_us": 171.45300000003454
+      },
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)": {
+       "count": 64,
+       "self_device_us": 187.64699999996992
+      },
+      "_combine_rows": {
+       "count": 64,
+       "self_device_us": 191.48600000000442
+      }
+     },
+     "table": "table_ref_uniform_eager.txt"
+    },
+    "graph": {
+     "tokens": 4,
+     "api": {
+      "cudaMemcpyAsync": 8,
+      "cudaGraphLaunch": 4
+     },
+     "api_by_phase": {
+      "e4b::p66.input": {
+       "cudaMemcpyAsync": 8
+      },
+      "e4b::p66.token": {
+       "cudaGraphLaunch": 4
+      }
+     },
+     "api_by_phase_nearest": {
+      "e4b::p66.input": {
+       "cudaMemcpyAsync": 8
+      },
+      "e4b::p66.token": {
+       "cudaGraphLaunch": 4
+      }
+     },
+     "ops": {
+      "aten::select": 8,
+      "aten::as_strided": 16,
+      "aten::unsqueeze": 8,
+      "aten::copy_": 8
+     },
+     "kernels_by_phase": {
+      "e4b::p66.input": {
+       "Memcpy DtoD (Device -> Device)": 9
+      }
+     },
+     "token_regions": 4,
+     "api_global": {
+      "cudaMemcpyAsync": 8,
+      "cudaGraphLaunch": 4,
+      "cudaDeviceSynchronize": 2
+     },
+     "kernels": {
+      "Memcpy DtoD (Device -> Device)": {
+       "count": 8,
+       "self_device_us": 13.440000000003693
+      },
+      "void at::native::(anonymous namespace)::indexSelectSmallIndex<c10::BFloat16, long, unsigned int, 2, 2, -2>(at::cuda::detail::TensorInfo<c10::BFloat16, unsigned int>, at::cuda::detail::TensorInfo<c10::BFloat16 const, unsigned int>, at::cuda::detail::TensorInfo<long const, unsigned int>, int, int, unsigned int, long)": {
+       "count": 64,
+       "self_device_us": 239.32799999999918
+      },
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#3}::operator()() const::{lambda(int)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)": {
+       "count": 128,
+       "self_device_us": 157.88400000004742
+      },
+      "_gemv_nf4_grouped": {
+       "count": 128,
+       "self_device_us": 39807.40899999998
+      },
+      "_swiglu_rows": {
+       "count": 64,
+       "self_device_us": 95.00899999999751
+      },
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, 4, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1> >(int, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#7}::operator()() const::{lambda(float)#1}, std::array<char*, 2ul>, TrivialOffsetCalculator<1, unsigned int>, TrivialOffsetCalculator<1, unsigned int>, at::native::memory::LoadWithCast<1>, at::native::memory::StoreWithCast<1>)": {
+       "count": 64,
+       "self_device_us": 104.86399999996638
+      },
+      "_combine_rows": {
+       "count": 64,
+       "self_device_us": 108.09800000000928
+      }
+     },
+     "table": "table_ref_uniform_graph.txt"
+    }
+   },
+   "sync_debug": {
+    "tokens": 4,
+    "warnings": 0,
+    "per_token": 0.0,
+    "by_site": {},
+    "outside_tokens": {
+     "__init__.py:1193": 1
+    }
+   },
+   "predicted_transfer_us_per_token": 0.0,
+   "routing": {
+    "cold_fraction": 0.0,
+    "cold_lanes_per_token": 0.0,
+    "lanes_per_token": 128,
+    "cold_rows_per_token": 0.0,
+    "cold_rows_per_layer_token": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    ]
+   },
+   "graph_nodes": {
+    "by_type": {
+     "KERNEL": 128
+    },
+    "work": 128,
+    "nodes": 128,
+    "source": "cudaGraphGetNodes",
+    "dot": {
+     "by_type": {
+      "KERNEL": 128
+     },
+     "work": 128,
+     "nodes": 128
+    },
+    "dot_bytes": 69298
+   },
+   "graph_check": {
+    "token": 23,
+    "bitwise": true,
+    "max_abs": 0.0,
+    "b_rel": 0.0,
+    "eager_sha256": "25984caba50cd877bd9067a25ff25285001699c52b17add84a7b9fcd81c1383e",
+    "graph_sha256": "25984caba50cd877bd9067a25ff25285001699c52b17add84a7b9fcd81c1383e"
+   },
+   "timing": {
+    "eager": {
+     "tokens": 4,
+     "wall_ms_per_token": 13.607311469968408,
+     "submit_ms_per_token": 6.895561469718814,
+     "gpu_ms_per_token": 13.585448265075684
+    },
+    "graph": {
+     "tokens": 4,
+     "wall_ms_per_token": 10.202019300777465,
+     "submit_ms_per_token": 0.12932653771713376,
+     "gpu_ms_per_token": 10.182640075683594
+    }
+   },
+   "tier": {
+    "requests": 0,
+    "hits": 0,
+    "misses": 0,
+    "disk_reads": 0,
+    "disk_bytes": 0,
+    "demand_fill_ns": 0,
+    "evictions": 0
+   }
+  }
+ ],
+ "setup_s": 7.162333250045776,
+ "masses": {
+  "vram_frac": 1.0,
+  "dram_frac": 0.0,
+  "nvme_frac": 0.0
+ }
+}

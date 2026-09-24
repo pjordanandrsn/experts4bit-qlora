@@ -1,0 +1,9 @@
+  baked layer 0 (1/8, 0.42 GB, 9s)
+  baked layer 1 (2/8, 0.85 GB, 17s)
+  baked layer 2 (3/8, 1.27 GB, 25s)
+  baked layer 3 (4/8, 1.69 GB, 41s)
+  baked layer 4 (5/8, 2.12 GB, 51s)
+  baked layer 5 (6/8, 2.54 GB, 58s)
+  baked layer 6 (7/8, 2.96 GB, 66s)
+  baked layer 7 (8/8, 3.38 GB, 79s)
+bake complete: 256 rows x 13221888 B (3.38 GB) in 79s

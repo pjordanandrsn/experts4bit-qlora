@@ -1,0 +1,20 @@
+[00:57:26]   checkpoint: local directory /models/OLMoE-1B-7B-0924
+[00:57:26]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[00:57:26]   quantized experts on 16/16 MoE layers (64 experts each)
+[00:57:26]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[00:57:27]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+/root/p66/step_decomp.py:85: UserWarning: The given NumPy array is not writable, and PyTorch does not support non-writable tensors. This means writing to this tensor will result in undefined behavior. You may want to copy the array to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:203.)
+  flat[e] = torch.from_numpy(
+materialized 16 modules from /w/work/olmoe/nf4.arena (byte-exact, per-segment lengths asserted)
+[p66_step] pipelined hot sets: 0/64 per layer (hot_frac 0.0, seed 66)
+fused q/k/v projections on 0 attention modules (RESULTS-f2-tail default)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+TORCH_PROFILE_OUT /root/p66/M/M_pipe-0.00_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_pipe-0.00_sync.json active=12/12
+DECOMP step=94.1ms  fwd_submit=54.7 (attn_host=20.3 dram=0.0 other=34.4)  drain=36.3  sched_py=3.0
+DEVICE attn=7.09ms/step gpu_experts=0.00ms/step attn_host_us_per_call=1266
+PREFILL tokens=1 wall=378ms dram=0 gpu_dev=0
+PREFILL tokens=1 wall=97ms dram=0 gpu_dev=0
+PREFILL tokens=1 wall=112ms dram=0 gpu_dev=0
+PREFILL tokens=1 wall=79ms dram=0 gpu_dev=0
+STEP_DECOMP_DONE

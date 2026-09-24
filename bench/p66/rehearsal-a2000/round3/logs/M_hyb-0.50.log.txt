@@ -1,0 +1,14 @@
+[20:52:14]   checkpoint: local directory /models/OLMoE-1B-7B-0924
+[20:52:15]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[20:52:15]   quantized experts on 16/16 MoE layers (64 experts each)
+[20:52:15]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:52:28]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:53:10]   hybrid tier active on 16 module(s): vram/dram/nvme masses 0.00/0.00/0.00
+fused q/k/v projections on 0 attention modules (RESULTS-f2-tail default)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+TORCH_PROFILE_OUT /root/p66/M/M_hyb-0.50_kernels.txt active=12/12
+SYNC_ATTR_OUT /root/p66/M/M_hyb-0.50_sync.json active=12/12
+DECOMP step=5230.7ms  fwd_submit=5229.7 (attn_host=42.7 dram=0.0 other=5187.0)  drain=0.8  sched_py=0.1
+DEVICE attn=62.55ms/step gpu_experts=0.00ms/step attn_host_us_per_call=2670
+PREFILL tokens=128 wall=31068ms dram=0 gpu_dev=0
+STEP_DECOMP_DONE
