@@ -518,3 +518,30 @@ graded.
     P4–P6 held, and every G3 record carries both hashes (`rehearsal-a2000/README.md`, round 8).
 
 Amendments, dated, go below this line before any data is read.
+
+## Amendment 1 (2026-09-24 14:27Z, after two refused proof launches and before any data)
+
+**What happened.** Both proof launches were refused by the launcher before any instance existed, at $0 each:
+
+| run | refusal | receipt (adertha-receipts) |
+|---|---|---|
+| `p66-prove-1` | the cheapest verified RTX 5090 was $0.7237/h, above the manifest's $0.65/h | `426446b` |
+| `p66-prove-2` | the cheapest was $0.6604/h, above $0.65/h | `04b97f5` |
+
+The registered rate ceilings, $0.65/h for the proof and $0.66/h for the reading, sit at the current verified-5090 floor.
+A ceiling the market floor crosses gives a refusal, not a measurement. It also burns a run id each time.
+
+**Amended (the rates, guards and dollar ceilings only).**
+- **The proof:** ≤ $0.75/h with a **0.2 h** guard, so ≤ $0.15 per attempt. That is the compute rule's per-proof cap,
+  and the guard the earlier proving rentals `p55x-prove` and `p56-prove` used.
+  - The proof's own work fits: 73–90 s through the real install path in rounds 7 and 8, plus at most 30 s of egress
+    probe.
+  - The timed shard runs only if time remains, as before.
+  - The proof budget stays ≤ $0.45 over all attempts. The two refused launches cost $0.
+- **The reading:** ≤ $0.75/h with the registered **2 h** guard, so ≤ **$1.50** (was $1.32).
+- **Lane ceiling:** proofs ≤ $0.45 plus the reading ≤ $1.50 = ≤ $1.95, inside the registered **$2** lane ceiling. The
+  hard stop stays $3.
+
+**Unchanged:** the question, instrument, families, predictions, gates, decision rule, floors and the runner. No staged
+file changes, so `staged.sha256` and the round-8 rehearsal still describe the tree the box installs.
+
