@@ -1,7 +1,8 @@
 # P65 — which per-expert ranking survives a calibration-domain shift, and does activation entropy earn a place in S-C's selector? (registered 2026-09-23, before the run)
 
 Work item: experts4bit-qlora#710. Owner authorization (relayed with the lane assignment, 2026-09-23): the work, and one
-later rental within the standing caps. Nothing here has been rented; the run this registers cites the merge commit.
+later rental within the standing caps. Under the compute rule relayed 2026-09-24, that rental is a proving rental
+followed by the reading ("Box and cost"). Nothing here has been rented; the run this registers cites the merge commit.
 
 **Predecessors.**
 - **P44-a** (`bench/p44/RESULTS-p44.md:20-24`): the per-expert RTN/GPTQ residual census. Granite-3.1-3B's error is
@@ -309,7 +310,24 @@ a kernel or a stored format.
     on an M1 Max (`rehearsal-a2000/accbench_*.json`). The update count is 16 layers × 8 experts × 8 batches × 4 halves
     = 4,096 per projection. At the NAS's speed, with its landing copy, that alone is ~39 min for Mixtral; at the floor,
     about 18 min.
-- **Guard: 2 h. Estimate:** ~75 min typical (≈ $0.80 at $0.65/h); ≤ $1.30 at the guard. The bases are the rehearsal
+- **A proving rental comes first.** The compute rule in force (relayed 2026-09-24) puts a proving rental (≤ $0.15,
+  ≤ 10 min) in front of any rental whose guard exceeds 1 h, and the reading's does. The proof is `p65_drive.sh` with
+  `P65_PROVE=1`, on the same class, at the SHAs the reading will install, with a 10 min guard (≤ $0.11 at $0.65/h).
+  - **What it runs.** Every refusal above, the install and the tripwire. Then Granite-3.1-3B end to end on a cut-down
+    census: its first plan-order layer at `nseq 8`, covering fetch at the pin, bake, build, the on-box selfcheck, both
+    texts, both halves and the full rows.
+  - **What it writes.** `prove_census_granite.json` and `MODE` = `prove`. The reducer reads only `census_<family>.json`,
+    so a proof can never be read as the lane's result.
+  - **Rehearsed.** The same cut-down census ran on the A2000 (Granite-1B): rc 0, selfcheck 6.0e-8, 384 rows over 1 layer, census 38.5 s, bake 74 s wall. That is ~2 min of the proof's
+    10, beside ~5 min of install and ~1 min of Granite-3B fetch at the egress floor. It is recorded in
+    `rehearsal-a2000/prove_config_*`.
+  - **Pass.** The proof passes iff rc 0. Its receipts also carry the egress, the host scale-and-add and the wall times
+    of install, fetch, bake and census, which the reading's estimate below is checked against before that box is
+    started.
+  - **Fail.** A harness failure (rc 3, 9, 11, 12, 41) means the reading is not rented: the fault is fixed and proved
+    again. A host refusal (rc 10, 13, 14, 15) is a refused box, not a failed proof, and another proving box is drawn.
+    All proving attempts together stay ≤ $0.15.
+- **The reading. Guard: 2 h**, started only after a passing proof at the same `E4B_SHA` / `GNF4_SHA`. **Estimate:** ~75 min typical (≈ $0.80 at $0.65/h); ≤ $1.30 at the guard. The bases are the rehearsal
   (a contended A2000 on a busy NAS, so an upper bound per call), P44-a's Mixtral run, and the host benchmark.
 
 | step | basis | estimate on a box at the floors |
@@ -325,9 +343,10 @@ a kernel or a stored format.
 - **If the guard binds.** The upper end exceeds the guard only if every host floor binds at once. Mixtral is then the
   family the runner skips (rc 40), since it starts only with its whole budget (`P65_NEED_MIXTRAL_S` = 75 min) left
   before the deadline. The single follow-up this registration allows is one Mixtral-only box: `P65_FAMILIES=mixtral`,
-  1.5 h guard, ≤ $0.98, needing the owner's rental approval like any box. Nothing else re-runs.
-- **Ceilings:** lane $1.50 for the run plus refusals, $2.50 with the Mixtral-only follow-up, hard stop $3.00. No second
-  box on a disappointing result.
+  1.5 h guard, ≤ $0.98, needing the owner's rental approval like any box. Its guard also exceeds 1 h, so it too is
+  preceded by its own passing proof (≤ $0.15). Nothing else re-runs.
+- **Ceilings:** lane $1.75 for the proof, the reading and any refusals; $2.90 with the Mixtral-only follow-up and its
+  proof; hard stop $3.00. No second box on a disappointing result.
 - **Downloads** (pinned revisions, authenticated with the staged token, never on a command line):
   - Granite-3.1-3B-A800M-instruct, ~6.6 GB;
   - OLMoE-1B-7B-0924-Instruct, ~13.8 GB;
@@ -375,6 +394,7 @@ reducer smoke (`p65_table.md`), and the teardown proof. They go to `receipts/exp
 | 25 | the lane died on the box |
 | 78 | refusing |
 
-The verdict is read from the JSON, never from an exit code.
+Under `P65_PROVE=1` the same box codes apply: rc 0 means the proof passed, and `MODE` reads `prove`. The verdict is
+read from the JSON, never from an exit code.
 
 Amendments, dated, go below this line before any data is read.

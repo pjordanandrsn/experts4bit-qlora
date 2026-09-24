@@ -40,6 +40,10 @@ expert layouts; the reducer reads real rows; and the costs extrapolate to the re
 - `census_<family>_log.txt`, `bake_<family>_log.txt`, `forensics_<family>.txt`, `timing.txt` and `versions.txt`.
 - `accbench_nas.json` / `accbench_mac.json` (`harness/accbench.py`): the host-side cost of one Hessian update at
   Mixtral's shapes on the NAS Xeon W-1250 and an M1 Max. This is the basis of the runner's host pre-flight.
+- `prove_config_*`: the PROVING configuration (`P65_PROVE=1`: first layer, `nseq 8`) on Granite-1B, run 2026-09-24
+  00:35Z under the lock with the registered census (`52203b13…`). rc 0: selfcheck 5.97e-8, 384 rows, both texts, both
+  halves and the full rows, census 38.5 s, bake 74 s wall. It shows the cut-down census the proof runs is complete on
+  CUDA. It is not the proof, which runs on the rented class.
 - `harness/`: the rehearsal's own shell (`setup.sh`, the CPU install and text prefetch; `gpu_job.sh`, the shared-GPU
   lock plus one job; `gpu.sh`, bake and census; `ci.sh`, the CI job reproduced on Linux).
 

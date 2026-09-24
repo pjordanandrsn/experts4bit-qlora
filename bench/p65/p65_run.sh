@@ -81,10 +81,22 @@ open("/root/p65/versions.txt", "w").write(f"e4b {e.__version__} @{os.environ['E4
 print("tripwire OK: e4b", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__)
 PYT
 cat versions.txt | tee -a summary.txt
+# ---- the PROVING mode (P65-PREREG "Box and cost"): the compute rule puts a proving rental (<= 10 min, <= $0.15) in front
+# of any guard over 1 h. P65_PROVE=1 runs everything above -- card class, every host floor, egress, install, tripwire --
+# then ONE registered family end to end on a cut-down census: Granite, its first plan-order layer, nseq 8 (fetch at the
+# pin, bake, build, selfcheck, both texts, both halves, full rows). Its census is written as prove_census_granite.json,
+# which the reducer never reads (it reads census_<family>.json), and MODE says which run this was. Not a reading.
+PFX=""; MARGIN=600; ALARM_FLOOR=900; PROVE_FIRST=""
+if [ "${P65_PROVE:-0}" = "1" ]; then
+  FAMILIES=granite; NSEQ=8; PFX=prove_; MARGIN=60; ALARM_FLOOR=120; PROVE_FIRST=1; NEED_granite=${P65_NEED_PROVE_S:-240}
+  echo prove > MODE; say "PROVING run (not a reading): granite, first 1 layer, nseq 8"; echo "mode=PROVE granite first-layers 1 nseq 8" | tee -a summary.txt
+else
+  echo reading > MODE
+fi
 # ---- helpers (P44-a's)
 left(){ echo $(( P65_DEADLINE_EPOCH - $(date +%s) )); }
-can_run(){ local need=$1; [ $(( $(date +%s) + need + 600 )) -le "$P65_DEADLINE_EPOCH" ] || { say "STOP: $2 needs ${need}s, only $(left)s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
-arm_alarm(){ local l=$(( P65_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$l" -lt 900 ] && l=900; [ "$l" -gt 14400 ] && l=14400; echo "$l"; }
+can_run(){ local need=$1; [ $(( $(date +%s) + need + MARGIN )) -le "$P65_DEADLINE_EPOCH" ] || { say "STOP: $2 needs ${need}s, only $(left)s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
+arm_alarm(){ local l=$(( P65_DEADLINE_EPOCH - $(date +%s) - MARGIN )); [ "$l" -lt "$ALARM_FLOOR" ] && l=$ALARM_FLOOR; [ "$l" -gt 14400 ] && l=14400; echo "$l"; }
 fetch(){ local MID=$1 REV=$2; say "fetch $MID @ $REV"
   perl -e "alarm $(arm_alarm); exec @ARGV" python - "$MID" "$REV" <<'PYF' > logs/fetch_${MID//\//--}.log 2>&1
 import os, sys, time
@@ -107,17 +119,17 @@ census(){ local FAM=$1 NEED=$2 FIRST=${3:-}; read MID REV <<<"$(python -c "impor
   fetch "$MID" "$REV" && bake "$MID" $FAM || { echo "CENSUS $FAM fetch/bake FAILED" >> summary.txt; return 11; }
   say "census $FAM (nseq $NSEQ per text${FIRST:+, first $FIRST layers of the plan order})"
   E4B_MODEL_ID=$MID perl -e "alarm $(arm_alarm); exec @ARGV" python $W/p65_census.py --family $FAM --arena $W/work_$FAM/nf4.arena --calib $W/calib.json \
-      --nseq "$NSEQ" ${FIRST:+--first-layers "$FIRST"} --out $W/census_$FAM.json > logs/census_$FAM.log 2>&1; local rc=$?
-  tail -3 logs/census_$FAM.log | sed "s/^/    /"; { echo -n "census $FAM rc=$rc wall=$(( $(date +%s) - t0 ))s "; tail -1 logs/census_$FAM.log | cut -c1-200; } >> summary.txt
+      --nseq "$NSEQ" ${FIRST:+--first-layers "$FIRST"} --out $W/${PFX}census_$FAM.json > logs/${PFX}census_$FAM.log 2>&1; local rc=$?
+  tail -3 logs/${PFX}census_$FAM.log | sed "s/^/    /"; { echo -n "${PFX}census $FAM rc=$rc wall=$(( $(date +%s) - t0 ))s "; tail -1 logs/${PFX}census_$FAM.log | cut -c1-200; } >> summary.txt
   free_family $FAM "$MID"; return $rc; }
 rc_any=0
 FAMS=",$FAMILIES,"
-[[ "$FAMS" == *,granite,* ]] && { census granite "$NEED_granite" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
+[[ "$FAMS" == *,granite,* ]] && { census granite "$NEED_granite" "$PROVE_FIRST" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
 [[ "$FAMS" == *,olmoe,* ]] && { census olmoe "$NEED_olmoe" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
 [[ "$FAMS" == *,mixtral,* ]] && { census mixtral "$NEED_mixtral" "$MIXTRAL_FIRST" || { r=$?; [ "$rc_any" = 0 ] && rc_any=$r; }; }
 # ---- every registered census present, complete (every requested layer, both texts, both halves) and self-checked
 for FAM in ${FAMILIES//,/ }; do
-  python - "$W/census_$FAM.json" <<'PYC' >> summary.txt 2>&1 || { echo "ROW census_$FAM INCOMPLETE" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }
+  python - "$W/${PFX}census_$FAM.json" <<'PYC' >> summary.txt 2>&1 || { echo "ROW ${PFX}census_$FAM INCOMPLETE" >> summary.txt; [ "$rc_any" = 0 ] && rc_any=41; }
 import json, sys
 c = json.load(open(sys.argv[1]))
 assert (c.get("selfcheck") or {}).get("ok"), "selfcheck did not pass"
@@ -127,6 +139,8 @@ assert cells == {(t, h) for t in ("wikitext", "c4val1") for h in (0, 1, "full")}
 print(f"ROW census_{c['family']} complete: {len(c['layers_censused'])} layers, {len(c['rows'])} rows, selfcheck max rel diff {c['selfcheck']['max_rel_diff']:.2e}")
 PYC
 done
-python $W/p65_reduce.py $W --md $W/p65_table.md --json $W/p65_verdicts.json > logs/reduce.log 2>&1 && cat $W/p65_table.md >> summary.txt || say "reducer smoke failed (the fetched receipts are re-reduced off the box)"
+if [ -z "$PFX" ]; then
+  python $W/p65_reduce.py $W --md $W/p65_table.md --json $W/p65_verdicts.json > logs/reduce.log 2>&1 && cat $W/p65_table.md >> summary.txt || say "reducer smoke failed (the fetched receipts are re-reduced off the box)"
+fi
 say "----- summary -----"; cat summary.txt
 finish "$rc_any"

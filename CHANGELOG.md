@@ -25,6 +25,10 @@
     - HF egress ≥ 100 MB/s, because Mixtral is 93 GB;
     - a host-side Hessian update ≤ 0.15 s at Mixtral's 14336² shape. That update runs about 4,100 times, and the
       rehearsal measured 0.33 s for it on the NAS Xeon.
+  - **`P65_PROVE=1`** is the proving rental the compute rule requires in front of a guard over 1 h (≤ 10 min,
+    ≤ $0.15). It runs every refusal, the install and the tripwire, then Granite's first layer at `nseq 8` end to end.
+    It writes `prove_census_granite.json` and `MODE=prove`, which the reducer never reads. The same cut-down census
+    passed on the A2000 (`rehearsal-a2000/prove_config_*`).
 - **Rehearsed on the NAS RTX A2000**, not a reading (`bench/p65/rehearsal-a2000/`). It found that the census walks
   layers in checkpoint-key order (0, 1, 10, 11, …). P44-a's "16 of 32" Mixtral layers were therefore most probably
   not 0–15; unverified here. P65 takes the first 16 of the same order (`--first-layers`).
