@@ -1,0 +1,11 @@
+[21:49:09]   checkpoint: local directory /models/OLMoE-1B-7B-0924
+[21:49:09]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[21:50:57]   quantized experts on 16/16 MoE layers (64 experts each)
+[21:50:57]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64
+  shard 0/16  0.2 GiB  0s
+  shard 8/16  1.9 GiB  5s
+snapshot done 3.38 GiB in 7.9s
+expert-tensor bake: L=16 E=64 (baking 64) row=3538944 stride=3538944 total=3.6 GB workers=8
+bake complete: 1024 rows (3.6 GB) in 3s
+BAKE OK

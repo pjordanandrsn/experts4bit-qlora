@@ -1,0 +1,259 @@
+{
+ "lane": "P63",
+ "stack": "int4",
+ "device": "NVIDIA RTX A2000 12GB",
+ "sm_count": 26,
+ "versions": {
+  "torch": "2.8.0+cu128",
+  "cuda": "12.8",
+  "experts4bit-qlora": "0.37.2",
+  "grouped-nf4-gemm": "0.33.2",
+  "transformers": "5.16.1",
+  "triton": "3.4.0",
+  "bitsandbytes": "0.50.1",
+  "matmul_flags": {
+   "allow_tf32": false,
+   "allow_bf16_reduced_precision_reduction": true,
+   "allow_fp16_reduced_precision_reduction": true
+  },
+  "sdp_flags": {
+   "flash": true,
+   "mem_efficient": true,
+   "math": true
+  }
+ },
+ "env": {
+  "E4B_FUSE_T1_GLUE": "1",
+  "E4B_FUSE_T1_GLUE_R2": "1",
+  "E4B_FUSE_ROUTER_EPI": "1"
+ },
+ "census": {
+  "moe_layers": 16,
+  "experts": 64,
+  "top_k": 8,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   16,
+   0
+  ],
+  "fuse_router_epilogue_n": 16,
+  "int4_attn_projections": 0,
+  "int4_expert_layers": 16,
+  "int4_store_kinds": [],
+  "build_nf4_s": 8.6,
+  "model_type": "olmoe",
+  "int4_expert_layers_enabled": 16,
+  "int4_pack_s": 86.4,
+  "int4_attn_enabled": 64,
+  "fuse_qkv_n": 0,
+  "hf_attn_impl": "sdpa",
+  "int4_linear": 64,
+  "int4_linear_k16": 64,
+  "collapse_resident": true,
+  "glue_env": {
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  }
+ },
+ "fixture": {
+  "path": "fixture.txt",
+  "text_sha256": "3e80216602cbea311b5df3cd4896506919087c9ac69c53ee65c86856810c56cc",
+  "L": 160,
+  "ids_sha256": "8b378ed0f580f0ca195839cf64cd7184057665faebc9fb324cf50008ac6f4382"
+ },
+ "config": {
+  "L": 160,
+  "windows": [
+   32,
+   64,
+   96,
+   128
+  ],
+  "widths": [
+   17,
+   16
+  ],
+  "replay_ns": [
+   1,
+   16,
+   17,
+   160
+  ]
+ },
+ "subarms": {
+  "hf.default": {
+   "error": "RuntimeError('The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1')",
+   "tb": "Traceback (most recent call last):\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 937, in main\n    res, ctrl, det, xr = run_subarm(model, cap, ids, sa, a, paged, first, a.stack, census[\"hf_attn_impl\"])\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 634, in run_subarm\n    out[\"replay\"] = replay(rec, [n for n in a.replay_ns if n <= L],\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in replay\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in <listcomp>\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 289, in rows_equal_to_singles\n    eq = bit_equal(b, s)\n         ^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 86, in bit_equal\n    return (a.contiguous().view(torch.int16) == b.contiguous().view(torch.int16)).all(dim)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1\n"
+  },
+  "hf.device": {
+   "error": "RuntimeError('The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1')",
+   "tb": "Traceback (most recent call last):\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 937, in main\n    res, ctrl, det, xr = run_subarm(model, cap, ids, sa, a, paged, first, a.stack, census[\"hf_attn_impl\"])\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 634, in run_subarm\n    out[\"replay\"] = replay(rec, [n for n in a.replay_ns if n <= L],\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in replay\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in <listcomp>\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 289, in rows_equal_to_singles\n    eq = bit_equal(b, s)\n         ^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 86, in bit_equal\n    return (a.contiguous().view(torch.int16) == b.contiguous().view(torch.int16)).all(dim)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1\n"
+  },
+  "hf.singleton": {
+   "error": "RuntimeError('The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1')",
+   "tb": "Traceback (most recent call last):\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 937, in main\n    res, ctrl, det, xr = run_subarm(model, cap, ids, sa, a, paged, first, a.stack, census[\"hf_attn_impl\"])\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 634, in run_subarm\n    out[\"replay\"] = replay(rec, [n for n in a.replay_ns if n <= L],\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in replay\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in <listcomp>\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 289, in rows_equal_to_singles\n    eq = bit_equal(b, s)\n         ^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 86, in bit_equal\n    return (a.contiguous().view(torch.int16) == b.contiguous().view(torch.int16)).all(dim)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1\n"
+  },
+  "hf.combine0": {
+   "error": "RuntimeError('The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1')",
+   "tb": "Traceback (most recent call last):\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 937, in main\n    res, ctrl, det, xr = run_subarm(model, cap, ids, sa, a, paged, first, a.stack, census[\"hf_attn_impl\"])\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 634, in run_subarm\n    out[\"replay\"] = replay(rec, [n for n in a.replay_ns if n <= L],\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in replay\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in <listcomp>\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 289, in rows_equal_to_singles\n    eq = bit_equal(b, s)\n         ^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 86, in bit_equal\n    return (a.contiguous().view(torch.int16) == b.contiguous().view(torch.int16)).all(dim)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1\n"
+  },
+  "paged.default": {
+   "error": "RuntimeError('The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1')",
+   "tb": "Traceback (most recent call last):\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 937, in main\n    res, ctrl, det, xr = run_subarm(model, cap, ids, sa, a, paged, first, a.stack, census[\"hf_attn_impl\"])\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 634, in run_subarm\n    out[\"replay\"] = replay(rec, [n for n in a.replay_ns if n <= L],\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in replay\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in <listcomp>\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 289, in rows_equal_to_singles\n    eq = bit_equal(b, s)\n         ^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 86, in bit_equal\n    return (a.contiguous().view(torch.int16) == b.contiguous().view(torch.int16)).all(dim)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1\n"
+  },
+  "paged.device": {
+   "error": "RuntimeError('The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1')",
+   "tb": "Traceback (most recent call last):\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 937, in main\n    res, ctrl, det, xr = run_subarm(model, cap, ids, sa, a, paged, first, a.stack, census[\"hf_attn_impl\"])\n                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 634, in run_subarm\n    out[\"replay\"] = replay(rec, [n for n in a.replay_ns if n <= L],\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in replay\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_probe.py\", line 376, in <listcomp>\n    parts = [C.rows_equal_to_singles(o, r) for o, r in zip(outs, refs)]\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 289, in rows_equal_to_singles\n    eq = bit_equal(b, s)\n         ^^^^^^^^^^^^^^^\n  File \"/w/src/e4b/bench/p63/p63_compare.py\", line 86, in bit_equal\n    return (a.contiguous().view(torch.int16) == b.contiguous().view(torch.int16)).all(dim)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nRuntimeError: The size of tensor a (8) must match the size of tensor b (16) at non-singleton dimension 1\n"
+  }
+ },
+ "refused": {},
+ "cross_controls": {},
+ "combine_census": {
+  "k": 8,
+  "H": 2048,
+  "seed": 0,
+  "records": [
+   {
+    "path": "chain",
+    "T": 1,
+    "rows": 1,
+    "rows_bit_equal": 1,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.979766215602126,
+    "rel_rms_err": 0.0016784629439385817
+   },
+   {
+    "path": "chain",
+    "T": 2,
+    "rows": 2,
+    "rows_bit_equal": 2,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.979766215602126,
+    "rel_rms_err": 0.0016427425647801382
+   },
+   {
+    "path": "chain",
+    "T": 16,
+    "rows": 16,
+    "rows_bit_equal": 16,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.9917995642445514,
+    "rel_rms_err": 0.00165089087495874
+   },
+   {
+    "path": "chain",
+    "T": 17,
+    "rows": 17,
+    "rows_bit_equal": 17,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.9917995642445514,
+    "rel_rms_err": 0.0016504498186403016
+   },
+   {
+    "path": "chain",
+    "T": 64,
+    "rows": 64,
+    "rows_bit_equal": 64,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.99461031818186,
+    "rel_rms_err": 0.0016591011386257793
+   },
+   {
+    "path": "chain",
+    "T": 160,
+    "rows": 160,
+    "rows_bit_equal": 160,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.9953994830927666,
+    "rel_rms_err": 0.0016569783339821212
+   },
+   {
+    "path": "combine_rows",
+    "T": 1,
+    "rows": 1,
+    "rows_bit_equal": 1,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.979766215602126,
+    "rel_rms_err": 0.0016784629439385817,
+    "bit_equal_to_chain": true
+   },
+   {
+    "path": "combine_rows",
+    "T": 2,
+    "rows": 2,
+    "rows_bit_equal": 2,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.979766215602126,
+    "rel_rms_err": 0.0016427425647801382,
+    "bit_equal_to_chain": true
+   },
+   {
+    "path": "combine_rows",
+    "T": 16,
+    "rows": 16,
+    "rows_bit_equal": 16,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.9917995642445514,
+    "rel_rms_err": 0.00165089087495874,
+    "bit_equal_to_chain": true
+   },
+   {
+    "path": "combine_rows",
+    "T": 17,
+    "rows": 17,
+    "rows_bit_equal": 17,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.9917995642445514,
+    "rel_rms_err": 0.0016504498186403016,
+    "bit_equal_to_chain": true
+   },
+   {
+    "path": "combine_rows",
+    "T": 64,
+    "rows": 64,
+    "rows_bit_equal": 64,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.99461031818186,
+    "rel_rms_err": 0.001659101138625528,
+    "bit_equal_to_chain": false
+   },
+   {
+    "path": "combine_rows",
+    "T": 160,
+    "rows": 160,
+    "rows_bit_equal": 160,
+    "max_ulp_sig": 0,
+    "max_rel_l2": 0.0,
+    "max_abs": 0.0,
+    "bound_ratio": 0.9953994830927666,
+    "rel_rms_err": 0.0016569783340576614,
+    "bit_equal_to_chain": false
+   }
+  ],
+  "kernel_present": true
+ },
+ "cuda_max_memory_allocated_gib": 4.825
+}

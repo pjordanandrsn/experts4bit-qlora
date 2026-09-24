@@ -1,0 +1,25 @@
+# P63 runner dry runs (2026-09-24, before any rental). Controller: p63_drive.sh on the Mac, no box contacted.
+# Box side: p63_run.sh staged flat into /root/p63 in a GPU-less pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime container on the NAS.
+
+## 1. no launcher env
+[2026-09-24T01:24:48Z] [p63_drive] refusing: E4B_RENT_SSH_HOST is not set -- run as rent.py --command after a live pre-flight
+rc=78
+## 2. dry run, clean tree
+DRYRUN stage -> root@203.0.113.1:/root/p63 ; start: env P63_RUN_ID=p63-dry P63_RUN_NONCE=<nonce> P63_DEADLINE_EPOCH=2000000000 P63_INSTANCE_ID=0 E4B_SHA=830da048b80caaca32a9d72a67860a777b0b71ae GNF4_SHA=f88df1ebe7944aa7481f0c784219fad879c7df89 bash p63_run.sh ; poll TP_DONE.<nonce> until 2000000000 ; fetch -> <run dir>/p63 checkout>/../dry/p63
+rc=0
+## 3. no GNF4_SHA (before the fix: a bare ${GNF4_SHA:?} expansion, rc 1)
+<e4b checkout>/bench/p63/p63_drive.sh: line 33: GNF4_SHA: the lane reads a gnf4 cut; pass GNF4_SHA=<40-hex> from the launch manifest
+rc=1
+## 4. drifted staged piece
+[2026-09-24T01:24:48Z] [p63_drive] refusing: <e4b checkout>/bench/p63/fixture.txt is 67984bddef02c8a7ab0919e4b8f098ec9682c64b3743e3c915e467b7cf6cc829, staged.sha256 says 3e80216602cbea311b5df3cd4896506919087c9ac69c53ee65c86856810c56cc
+rc=78
+## 5. dirty tree (untracked file)
+[2026-09-24T01:24:48Z] [p63_drive] refusing: <e4b checkout> is dirty -- the box would install a commit that does not describe this tree
+rc=78
+## 3b. no GNF4_SHA, after making it an explicit refusal
+[p63_drive] refusing: GNF4_SHA is not set -- pass the launch manifest's grouped-nf4-gemm cut (f88df1e or later)
+rc=78
+
+## box side
+runner rc=10 (DUD BOX: no CUDA in the container); staged.sha256 verified before it; markers written: P63_RUN_NONCE, P63_EXIT_CODE.<nonce> = 10, TP_DONE.<nonce>
+drifted fixture.txt -> 'STAGED FILES DIFFER FROM bench/p63/staged.sha256', runner rc=9

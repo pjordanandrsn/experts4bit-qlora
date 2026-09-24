@@ -90,6 +90,36 @@
   buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
   triton imports) decides the same way at 26 and 170 SMs.
 
+### Lane P63 registered: does a token's output depend on how many rows share its forward? (#708; bench only)
+
+- **What.** `bench/p63/`: the pre-registration, a GPU probe, its comparison module and reducer, and the rental runner.
+  Nothing is claimed yet and no default moves.
+- **The routes, mapped against the code.** The int4 store (T = 1 GEMV on int8 activations vs a dequant + bf16 matmul
+  above it; `DEVICE_GROUPING`'s GEMV up to 256 rows), NF4 (dot-pad or scalar decode GEMV vs the TF32 M-tile), the
+  three int4 attention buckets, `combine_rows`, and routes #708 did not list: the decode folds switch to the torch
+  chains above 64 rows, the paged prefill attends bf16 K/V where decode and verify read fp8, and cuBLAS picks its dense
+  kernel by M.
+- **The probe.** Qwen3-30B-A3B on an RTX 5090, three stacks and fifteen sub-arms, each a route chosen by
+  configuration. Each sub-arm is read three ways:
+  - end to end: per token, layer and site, the T = 1 incremental-decode control against the same token in 17- and
+    16-row verifies and a 160-row prefill;
+  - a module replay of the recorded T = 1 inputs as one n-row call;
+  - a kernel census against fp64.
+- **The design moved before registration, and the prereg says where.**
+  - Per-layer ULPs are reported only over significant elements, the B393 lesson.
+  - The fp64 accuracy bound is the defect line and not a classifier, because at served K it cannot see a bf16-rounded
+    weight. The REORDER vs PRECISION classes come from the kernels' declared operand models.
+  - cuBLAS paths are rerun with torch's `allow_bf16_reduced_precision_reduction` off for that line.
+- **Rehearsed on the NAS A2000** (OLMoE, not a reading; `bench/p63/rehearsal-a2000/`). It found a route #708 did not
+  list: the fused router epilogue returns fp32 routing weights up to 64 rows and the upstream router bf16 above. That is
+  registered as P7.
+- **B393's side diagnostic** (`fma_attribution.py`, grouped-nf4-gemm #397, present from `f88df1e`) rides along,
+  guarded and non-fatal.
+- **The rental plan** is a 1.5 h guard, preceded by the ≤ $0.15, ≤ 10 min proving rental the standing rule requires,
+  ≤ $1.15 in all.
+- **Tests.** `tests/test_p63_compare.py`, `tests/test_p63_reduce.py`, `tests/test_p63_probe_plumbing.py` (a tiny random
+  Qwen3-MoE on CPU) and `tests/test_p63_staged_pin.py`.
+
 ### The fused MoE combine's call-site comment says what lane B393 measured (a comment; no behaviour change)
 
 - **`engines/hot_residency.py`'s call site said `combine_rows` takes "the same order and roundings as the chain

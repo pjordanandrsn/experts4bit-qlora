@@ -1,0 +1,10 @@
+[01:11:02]   checkpoint: local directory /models/OLMoE-1B-7B-0924
+[01:11:02]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[01:11:02]   quantized experts on 16/16 MoE layers (64 experts each)
+[01:11:02]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[01:11:03]   experts deferred to the arena: 16 module(s), 80 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[01:11:10]   hybrid tier active on 16 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+P63 int4nf/hf.default: verify17: exact 0/68 flips 0 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 4 first-diff-layer 0 (35.4 s)
+P63 int4nf/hf.device: verify17: exact 0/68 flips 0 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 4 first-diff-layer 0 (12.9 s)
+P63 int4nf/paged.device: verify17: exact 0/68 flips 1 first-diff-layer 0 verify16: exact 0/64 flips 0 first-diff-layer 0 prefill: exact 0/160 flips 4 first-diff-layer 0 (16.1 s)
+P63ARM {"stack": "int4nf", "subarms_run": ["hf.default", "hf.device", "paged.device"], "errors": [], "refused": [], "determinism_failed": [], "census": {"int4_linear": 64, "int4_linear_k16": 64, "int4_expert_layers": 16, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}}
