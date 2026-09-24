@@ -29,7 +29,7 @@ or fused q/k/v (OLMoE's attention is not Qwen3-MoE's and does not fuse).
 
 ## Receipts
 
-- `out/<stack>/p63_arm.json` — the probe's receipts (the per-position `p63_detail.pt` tensors are not committed).
+- `out/<stack>/p63_arm.json.gz` — the probe's receipts, gzipped (2.3 MB → 217 KB; `p63_reduce.py` reads them as they are and reproduces `p63_rep.json` byte for byte) (the per-position `p63_detail.pt` tensors are not committed).
 - `RESULTS-rehearsal-generated.md`, `p63_rep.json` — `p63_reduce.py` over the three stacks; the NAS's run of the
   reducer and a local rerun produced byte-identical JSON.
 - `job_<stack>.log`, `run_<stack>.log`, `gpu.txt`, `bake.log` — logs.

@@ -176,3 +176,15 @@ def test_markdown_renders_every_section(tmp_path):
     md = R.to_md(rep)
     for h in ("G0", "P1", "P2", "P3", "P4 / P5", "P6"):
         assert f"## {h}" in md
+
+
+def test_load_reads_gzipped_arm_receipts(tmp_path):
+    # the committed rehearsal receipts are gzipped (bench/p63/rehearsal-a2000/out/<stack>/p63_arm.json.gz)
+    import gzip
+    (tmp_path / "nf4").mkdir()
+    (tmp_path / "int4").mkdir()
+    (tmp_path / "nf4" / "p63_arm.json").write_text(json.dumps({"stack": "nf4"}))
+    with gzip.open(tmp_path / "int4" / "p63_arm.json.gz", "wt") as f:
+        json.dump({"stack": "int4"}, f)
+    arms = R._load(str(tmp_path))
+    assert arms == {"nf4": {"stack": "nf4"}, "int4": {"stack": "int4"}}

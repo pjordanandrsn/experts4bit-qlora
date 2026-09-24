@@ -100,6 +100,10 @@ def _load(out_dir: str) -> dict:
         p = os.path.join(out_dir, stack, "p63_arm.json")
         if os.path.exists(p):
             arms[stack] = json.load(open(p))
+        elif os.path.exists(p + ".gz"):              # committed rehearsal receipts are gzipped
+            import gzip
+            with gzip.open(p + ".gz", "rt") as f:
+                arms[stack] = json.load(f)
     return arms
 
 
