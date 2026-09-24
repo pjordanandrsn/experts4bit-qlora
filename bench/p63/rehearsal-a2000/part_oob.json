@@ -1,0 +1,85 @@
+{
+ "device": "NVIDIA RTX A2000 12GB",
+ "sm_count": 26,
+ "N=2048 K=2048 T=1": {
+  "rows_R": 8,
+  "sk_store": 16,
+  "sk_call": 16,
+  "part_rows_allocated": 128,
+  "part_rows_the_call_indexes": 128,
+  "sentinel_elements_overwritten_past_the_buffer": 0,
+  "out_equals_part_None_out": true
+ },
+ "N=2048 K=2048 T=2": {
+  "rows_R": 16,
+  "sk_store": 16,
+  "sk_call": 1,
+  "part_rows_allocated": 128,
+  "part_rows_the_call_indexes": 16,
+  "sentinel_elements_overwritten_past_the_buffer": 0,
+  "out_equals_part_None_out": true
+ },
+ "N=2048 K=2048 T=17": {
+  "rows_R": 136,
+  "sk_store": 16,
+  "sk_call": 1,
+  "part_rows_allocated": 128,
+  "part_rows_the_call_indexes": 136,
+  "sentinel_elements_overwritten_past_the_buffer": 16384,
+  "out_equals_part_None_out": true
+ },
+ "N=1536 K=2048 T=1": {
+  "rows_R": 8,
+  "sk_store": 16,
+  "sk_call": 16,
+  "part_rows_allocated": 128,
+  "part_rows_the_call_indexes": 128,
+  "sentinel_elements_overwritten_past_the_buffer": 0,
+  "out_equals_part_None_out": true
+ },
+ "N=1536 K=2048 T=2": {
+  "rows_R": 16,
+  "sk_store": 16,
+  "sk_call": 2,
+  "part_rows_allocated": 128,
+  "part_rows_the_call_indexes": 32,
+  "sentinel_elements_overwritten_past_the_buffer": 0,
+  "out_equals_part_None_out": true
+ },
+ "N=1536 K=2048 T=17": {
+  "rows_R": 136,
+  "sk_store": 16,
+  "sk_call": 1,
+  "part_rows_allocated": 128,
+  "part_rows_the_call_indexes": 136,
+  "sentinel_elements_overwritten_past_the_buffer": 12288,
+  "out_equals_part_None_out": true
+ },
+ "N=2048 K=768 T=1": {
+  "rows_R": 8,
+  "sk_store": 6,
+  "sk_call": 6,
+  "part_rows_allocated": 48,
+  "part_rows_the_call_indexes": 48,
+  "sentinel_elements_overwritten_past_the_buffer": 0,
+  "out_equals_part_None_out": true
+ },
+ "N=2048 K=768 T=2": {
+  "rows_R": 16,
+  "sk_store": 6,
+  "sk_call": 1,
+  "part_rows_allocated": 48,
+  "part_rows_the_call_indexes": 16,
+  "sentinel_elements_overwritten_past_the_buffer": 0,
+  "out_equals_part_None_out": true
+ },
+ "N=2048 K=768 T=17": {
+  "rows_R": 136,
+  "sk_store": 6,
+  "sk_call": 1,
+  "part_rows_allocated": 48,
+  "part_rows_the_call_indexes": 136,
+  "sentinel_elements_overwritten_past_the_buffer": 180224,
+  "out_equals_part_None_out": true
+ }
+}
