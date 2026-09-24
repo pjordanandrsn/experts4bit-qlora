@@ -13,7 +13,9 @@
   (`bench/p63/rehearsal-a2000/part_oob.json`). Found while mapping lane P63's routes (#708).
 - **The fix.** `_int4_part_or_none` keeps the buffer when it has the rows the call's own plan needs and passes None
   otherwise, so the wrapper allocates its own (through the graph pool under capture, as the device-grouping GEMV
-  branch already does). The arithmetic is unchanged: the split count was always the call's own plan.
+  branch already does). The arithmetic is unchanged: the split count was always the call's own plan. The fit is
+  memoised per (rows, device) on the store, because this runs on every decode expert call and the eager B=1 step is
+  host-bound. Each shape is planned once, then costs a dict lookup.
 - **Tests.** `tests/test_int4_singleton_part_fits.py`, CPU with the kernel stubbed: one token keeps the store's
   buffer, a 17-token call gets None, a buffer the call's smaller plan fits is kept, and the shipped planner (where
   triton imports) decides the same way at 26 and 170 SMs.

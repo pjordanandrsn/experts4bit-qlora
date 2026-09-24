@@ -120,13 +120,20 @@ def _int4_part_or_none(st, rows: int, device):
     part = st.get("part")
     if part is None:
         return None
-    from int4_b32 import _plan
-    try:
-        from int4_b32 import _sm_count          # grouped-nf4-gemm >= 0.31: the plan takes the row count
-        _bn, _wp, sk, _ku = _plan(st["N"], st["K"], rows, _sm_count(device))
-    except ImportError:                         # 0.30.x (the [fast] floor): the N-only plan, as its wrapper uses
-        _bn, _wp, sk, _ku = _plan(st["N"], st["K"])
-    fits = part.dim() == 2 and part.shape[1] == st["N"] and part.shape[0] >= sk * rows
+    # memoised per (rows, device): this runs on every decode expert call, and the eager B=1 step is
+    # host-bound, so the plan is computed once per shape, then it costs one dict lookup
+    fits_by = st.setdefault("_part_fits", {})
+    key = (rows, str(device))
+    fits = fits_by.get(key)
+    if fits is None:
+        from int4_b32 import _plan
+        try:
+            from int4_b32 import _sm_count      # grouped-nf4-gemm >= 0.31: the plan takes the row count
+            _bn, _wp, sk, _ku = _plan(st["N"], st["K"], rows, _sm_count(device))
+        except ImportError:                     # 0.30.x (the [fast] floor): the N-only plan, as its wrapper uses
+            _bn, _wp, sk, _ku = _plan(st["N"], st["K"])
+        fits = part.dim() == 2 and part.shape[1] == st["N"] and part.shape[0] >= sk * rows
+        fits_by[key] = fits
     return part if fits else None
 
 

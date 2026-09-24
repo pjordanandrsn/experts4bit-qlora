@@ -109,3 +109,20 @@ def test_the_real_plan_decides_the_same_way_where_the_kernel_imports():
             assert hr._int4_part_or_none(st, 8, "cpu") is st["part"]
             assert hr._int4_part_or_none(st, 17 * 8, "cpu") is None
         real._SM_CACHE.pop("cpu", None)
+
+
+def test_the_fit_is_planned_once_per_shape_then_looked_up(monkeypatch):
+    # the decode path calls this on every expert projection, and the eager B=1 step is host-bound,
+    # so the plan is memoised per (rows, device) on the store: repeat calls must not re-plan
+    _stub(monkeypatch, lambda r: SK)
+    calls = []
+    real = sys.modules["int4_b32"]._plan
+    sys.modules["int4_b32"]._plan = lambda *a, **k: (calls.append(a), real(*a, **k))[1]
+    stores = _stores(TOP_K)
+    for _ in range(3):
+        _run(stores, TOP_K)
+    assert len(calls) == 2                      # once for gu, once for dn
+    _run(stores, 17 * TOP_K)                    # a new row count plans again, once per store
+    assert len(calls) == 4
+    assert stores["gu"]["_part_fits"][(TOP_K, "cpu")] is True
+    assert stores["gu"]["_part_fits"][(17 * TOP_K, "cpu")] is False
