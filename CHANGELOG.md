@@ -27,6 +27,10 @@
 
 ## Unreleased
 
+### `llms-full.txt`: `docs/ARCHITECTURE_SUPPORT.md` leaves the bundle (discoverability only; no library change)
+
+- The bundle stood at 397,928 of its 400,000-byte cap after the P66 read, and every lane read adds a STATUS paragraph and claims. The architecture-support table (27.7 KB) is dropped from `docs/llms-bundle.json`; it stays linked from `llms.txt`, the README and `docs/INDEX.md`, so nothing becomes undiscoverable. The bundle is 370 KB.
+
 ### P67 Amendment 1: the proof and draw rate ceilings follow the verified-5090 market (#713; a lane change, no library change)
 
 - **Why.** The registration priced P67 at $0.69/h; the verified-5090 floor has moved between $0.66 and $0.81/h in a day, and P66 burned three proof launches on provider refusals before amending. Dated `2026-09-24 16:21Z`, before any rental in this lane.

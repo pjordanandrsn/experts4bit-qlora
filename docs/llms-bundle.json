@@ -1,5 +1,5 @@
 {
-  "$comment": "Curated inputs for scripts/build_llms_bundle.py (llms-full.txt). Order matters; no receipts, no changelog, no anchored research records.",
+  "$comment": "Curated inputs for scripts/build_llms_bundle.py (llms-full.txt). Order matters; no receipts, no changelog, no anchored research records. docs/ARCHITECTURE_SUPPORT.md left the bundle 2026-09-24 to keep it under max_bytes (it is linked from llms.txt, README and docs/INDEX.md).",
   "title": "experts4bit-qlora — context bundle",
   "preamble": "A project-generated convenience bundle (not part of the llms.txt proposal): the README opening, the solution pages, the capability contract, the status page, the routing documents and a projection of the ACTIVE claims. docs/claims.json is authoritative for every number; docs/STATUS.md for the position.",
   "canonical_url_base": "https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/",
@@ -11,7 +11,6 @@
     {"path": "docs/capabilities.json"},
     {"path": "docs/STATUS.md"},
     {"path": "docs/CHOOSING.md"},
-    {"path": "docs/ARCHITECTURE_SUPPORT.md"},
     {"path": "AGENTS.md"},
     {"path": "docs/claims.json", "kind": "claims"}
   ]
