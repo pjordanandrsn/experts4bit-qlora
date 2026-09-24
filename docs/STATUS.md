@@ -251,13 +251,33 @@ text** (RTN int4 experts +0.255 ppl on C4; the Qwen3 calibrated recipe
 +0.443 — worse than RTN, so OLMoE stays NF4); and **Gemma-4's served NF4
 stack is 1.08 nats/token from the bf16 checkpoint with 36 % top-1
 disagreement**, lever-independent, reproduced across three runs, where
-the same instrument reads the other four families at 0.02–0.1. That is
-a served-model defect, not a quantisation cost, filed as
-[#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597)
-with a three-arm diagnostic to pre-register; no Gemma-4 serving position
-is quoted. The per-expert error census on Granite and Mixtral
+the same instrument reads the other four families at 0.02–0.1. It was
+filed as a served-model defect
+([#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597)), and
+#597 closed 2026-09-19 the other way. Lanes P47–P51 (below) place the cost
+in the quantised model's early expert layers, not in the serving stack:
+NF4 in layer 0 alone costs 0.892 of the 1.08 nats. No Gemma-4 serving
+position is quoted. The per-expert error census on Granite and Mixtral
 (`e4b.serve.p44.census.granite-mixtral.2026-09-19`) is data for a per-expert
 fallback that is not built.
+
+Lane P65 (`bench/p65/`, 2026-09-24) asked which per-expert ranking would
+choose that fallback's experts, and whether it survives a change of
+calibration text. On Granite every ranking survives:
+- `rel_act` 0.932 cross-text Spearman;
+- Colla-Q's entropy-weighted error 0.910;
+- routing frequency 0.891.
+
+So S-C's selector there has two arms, written in
+[`SPECULATIVE_LANES_ADDENDUM_4.md`](SPECULATIVE_LANES_ADDENDUM_4.md)
+(`e4b.quality.p65.granite.selector-two-arms.5090.2026-09-24`). OLMoE and
+Mixtral have no per-expert premise, so neither gets a selector. On both,
+the entropy ranking transfers across texts better than routing frequency,
+as Colla-Q reported: +0.421 and +0.479
+(`e4b.quality.p65.collaq-stability.olmoe-mixtral.5090.2026-09-24`).
+Routing-frequency hot sets agree across the two texts at only 0.14
+(OLMoE) and 0.125 (Mixtral, chance) Jaccard. No mixed-precision cell has
+run.
 
 **Calibration does not rescue Gemma-4's experts, and the more principled
 calibration is worse** (P53, [`bench/p53/RESULTS-p53.md`](../bench/p53/RESULTS-p53.md),

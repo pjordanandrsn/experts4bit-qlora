@@ -1,0 +1,10 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02, GPU-31353d67-c56d-4e33-f946-5f99966b6c00
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+Model name:                              AMD EPYC 9655 96-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             108           1          52           0          53         105
+overlay         320G  1.3M  320G   1% /
+disk_avail_gb=320 ram_avail_gb=105
+host_scale_add_14336_s=0.010 (floor 0.15)
+E4B_INT4_HESSIAN_BUDGET_GB=42
+hf_cdn_mbps_4x=129.2

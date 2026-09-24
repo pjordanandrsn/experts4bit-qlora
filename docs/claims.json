@@ -4809,7 +4809,7 @@
         "receipts/experts4bit-qlora/2026-09-19/p44-a-census/p44a/census_granite.json",
         "receipts/experts4bit-qlora/2026-09-19/p44-a-census/p44a/census_mixtral.json"
       ],
-      "notes": "Granite's hold is marginal and stated as such. Mixtral is a partial row (16/32 layers); the other half would have to be extraordinary to reverse a flat distribution, and no redraw is scheduled unless a per-expert fallback is pursued for Mixtral, which this row argues against."
+      "notes": "Granite's hold is marginal and stated as such. Mixtral is a partial row (16/32 layers); the other half would have to be extraordinary to reverse a flat distribution, and no redraw is scheduled unless a per-expert fallback is pursued for Mixtral, which this row argues against. Mixtral's 16 layers, verified 2026-09-24 from this row's receipt (census_mixtral.json rows): {0, 1, 2, 10-22}, the first 16 of the checkpoint index's string-sorted key order, not 0-15 (lane P65 found the ordering; bench/p65/RESULTS-p65.md)."
     },
     {
       "package": "experts4bit-qlora",
@@ -6672,6 +6672,60 @@
       "notes": "Pre-registered in #724 (P1 determinism, P2, P3 floor, P4, P5, P8 HELD; P6 attention and P7 anchor UNREAD: the a16_all passes, the second floor pair a8_pc384 and the NF4 anchor were skipped for time by the deadline-aware scorer, as registered). F here is the one pc64 floor pair; no value of the missing pc384 pair could make G_exp > 2F. Validity VALID: KL(a8 || a8_rep) exactly 0 on 4,096 positions, prefill-last logits bit-identical across passes, every pass's decode counts the registered ones. Not a statement about the attention projections' int8 step (#728), about B = 16 or the device-grouped GEMV, or about quality against bf16. Runs p64-prove-1 $0.0201 + p64-5090-1 $1.4193, teardown proven.",
       "licensed_by": "e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22",
       "pack_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
+    },
+    {
+      "id": "e4b.quality.p65.granite.selector-two-arms.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "quality",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "claim": "Lane P65 on Granite-3.1-3B-A800M: every per-expert ranking survives a wikitext -> C4 calibration-text change -- rel_act 0.932 cross-text Spearman (penalty over resampling 0.043), Colla-Q's rho x error 0.910 (0.063), activation entropy 0.882 (0.086), routing frequency 0.891 (0.093) -- and entropy is not the error metric again (within-layer rho -0.000 / -0.055), so S-C's selector on this family is TWO_ARMS (rel_act and rho x error, frequency as baseline), written in docs/SPECULATIVE_LANES_ADDENDUM_4.md; no mixed-precision cell has run.",
+      "value": 0.932,
+      "unit": "within-layer Spearman, rel_act ranking, wikitext half vs c4val1 half (r_cross_half)",
+      "hardware": "RTX 5090 (sm_120, 575 W, driver 580.119.02), one rented Vast.ai verified/secure host (instance on run p65-5090-4)",
+      "conditions": "within-layer Spearman averaged over layers, bootstrap 95 % CIs over layers (B = 2,000, seed 65); texts wikitext-2-raw-v1 train and allenai/c4 validation shard 00001, each split into two interleaved halves of 32 x 512 tokens; RTN int4 bytes (text-independent) on the NF4-served model's rows; experts with >= 32 rows; e4b 0.37.3 at ee3f006, grouped-nf4-gemm 0.33.0 at 5ca1897; all 32 layers, 40 experts, top-8",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p65/RESULTS-p65.md",
+        "bench/p65/P65-PREREG.md",
+        "bench/p65/p65_reduce.py",
+        "bench/p65/expert_entropy.py",
+        "bench/p65/receipts/p65_verdicts.json",
+        "bench/p65/receipts/p65_table.md",
+        "docs/SPECULATIVE_LANES_ADDENDUM_4.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p65-5090-4/ (receipt.json, teardown-proof.json, the fetched run); the proofs and refused boxes p65-prove-1..6 and p65-5090-1..3 beside it"
+      ],
+      "notes": "Pre-registered in #717 with Amendments 1 (#721) and 2 (#723). Premise: P44-a P3 0.0992 (e4b.serve.p44.census.granite-mixtral.2026-09-19). Colla-Q's comparative claim (entropy vs frequency) is UNRESOLVED here: -0.009 [-0.044, 0.024]. A ranking-stability read, not a selector-quality read: which arm recovers more at matched bytes is the addendum's cell. Lane $0.9369 over ten runs (reading p65-5090-4 $0.5491), teardown proven."
+    },
+    {
+      "id": "e4b.quality.p65.collaq-stability.olmoe-mixtral.5090.2026-09-24",
+      "package": "experts4bit-qlora",
+      "area": "quality",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct; mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "claim": "Lane P65: Colla-Q's claim that an activation-entropy ranking of experts survives a calibration-domain change better than a routing-frequency ranking replicates on OLMoE-1B-7B-Instruct (cross-text Spearman 0.800 vs 0.380, paired difference +0.421 [0.329, 0.501]) and on Colla-Q's own Mixtral-8x7B (0.789 vs 0.310, +0.479 [0.369, 0.588]); their per-layer cosine statistic reads 0.9997 / 0.9999 and cannot see the reordering.",
+      "value": 0.421,
+      "unit": "paired r_cross_half(entropy) - r_cross_half(freq), OLMoE (Mixtral +0.479)",
+      "hardware": "RTX 5090 (sm_120, 575 W, driver 580.119.02), one rented Vast.ai verified/secure host (instance on run p65-5090-4)",
+      "conditions": "within-layer Spearman averaged over layers, bootstrap 95 % CIs over layers (B = 2,000, seed 65); texts wikitext-2-raw-v1 train and allenai/c4 validation shard 00001, each split into two interleaved halves of 32 x 512 tokens; RTN int4 bytes (text-independent) on the NF4-served model's rows; experts with >= 32 rows; e4b 0.37.3 at ee3f006, grouped-nf4-gemm 0.33.0 at 5ca1897; OLMoE all 16 layers (64 experts, top-8); Mixtral the first 16 layers of the checkpoint-key order {0, 1, 2, 10-22} (8 experts, top-2), the layers P44-a censused",
+      "measured_on": "2026-09-24",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p65/RESULTS-p65.md",
+        "bench/p65/P65-PREREG.md",
+        "bench/p65/p65_reduce.py",
+        "bench/p65/expert_entropy.py",
+        "bench/p65/receipts/p65_verdicts.json",
+        "bench/p65/receipts/p65_table.md",
+        "docs/SPECULATIVE_LANES_ADDENDUM_4.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-24/p65-5090-4/ (receipt.json, teardown-proof.json, the fetched run); the proofs and refused boxes p65-prove-1..6 and p65-5090-1..3 beside it"
+      ],
+      "notes": "Neither family has a per-expert premise (RTN tail on c4val1 0.2119 / 0.2344, P44's P3 line 0.10), so no selector is written for either. On Mixtral rel_act does NOT survive (0.719, penalty 0.159: P1 refuted there) while entropy does (0.789 / 0.138). Routing-frequency hot sets from hot_sets_from_profile agree across the two texts at Jaccard 0.141 (OLMoE top-6 of 64) and 0.125 (Mixtral top-1 of 8, exactly chance), against 0.663 on Granite -- a ranking fact, not a residency hit-rate measurement. Colla-Q: Shin & Ryu, arXiv:2609.18131, Table 4."
     }
   ]
 }
