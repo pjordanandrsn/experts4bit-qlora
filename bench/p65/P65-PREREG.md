@@ -399,3 +399,47 @@ Under `P65_PROVE=1` the same box codes apply: rc 0 means the proof passed, and `
 read from the JSON, never from an exit code.
 
 Amendments, dated, go below this line before any data is read.
+
+## Amendment 1 (2026-09-24 ~02:10Z, after three proof draws and before any reading)
+
+**What happened.** Three proving attempts ran under this registration, and none reached the install:
+
+| run | outcome | cost |
+|---|---|---|
+| `p65-prove-1` | refused rc 13, host scale-and-add **0.152 s** against the 0.15 s floor | $0.0419 |
+| `p65-prove-2` | refused by the launcher before renting: my manifest named the first receipt in the wrong exclusion class, and the run id was burned (adertha-agents#112) | $0.00 |
+| `p65-prove-3` | refused rc 14, egress **97.8 MB/s** against the 100 MB/s floor | $0.0590 |
+
+Proof spend was **$0.1009** against this registration's "all proving attempts together ≤ $0.15". No reading was rented.
+
+**Two design flaws, both mine.**
+1. **The proof enforced floors that only the reading needs.** The RAM, host scale-and-add and egress floors exist
+   because Mixtral's 16-layer census has to fit the reading's 2 h guard. A proof never runs Mixtral, and **its box is
+   not the reading's box**. So a proof refused on those floors proves nothing and spends the proof budget. Both real
+   refusals missed by about 2 %.
+2. **The 10 min guard cannot hold the proof.** Launcher boot and pre-flight took 3–5 min of the guard: the lane began
+   with 438 s and 324 s left. The proof itself needs about 8 min (install ~5, the Granite-3B fetch ~1, bake and
+   cut-down census ~2). So even a box passing every floor would have stopped for time.
+
+**Amended (the code is in this change; everything else in this registration is unchanged).**
+- **In proof mode (`P65_PROVE=1`), the RAM, host scale-and-add and egress floors are measured and recorded, not
+  enforced.** `floor()` in `p65_run.sh` writes `floor_would_refuse_reading rc=<code> <measurement>` to `forensics.txt`
+  and `summary.txt`, then continues. Card class (15), a dud box (10) and disk (13) still refuse a proof, because those
+  would break the proof itself. **The reading enforces every floor exactly as registered.** The proof's recorded
+  measurements are reported beside the reading's.
+- **The proof's guard is 0.23 h** (≈ 14 min) at ≤ $0.65/h, so **≤ $0.15 per proof**. This matches the earlier
+  proving rentals' 0.2 h guards (`p55x-prove`, `p56-prove`) and keeps each proof inside the compute rule's per-proof
+  $0.15.
+- **The proof budget is ≤ $0.45 over all attempts, including the $0.1009 already spent**, and each attempt is
+  ≤ $0.15. The lane ceiling rises from $1.75 to **$2.05** for proofs, the reading and refusals, and stays under the
+  $3.00 hard stop. With the Mixtral follow-up and its proof, the ceiling becomes $3.00, the unchanged hard stop.
+- **Pass and fail are unchanged.** A proof passes iff rc 0. A harness failure means no reading. A host refusal on class,
+  dud or disk draws another proving box.
+
+**What this does not change.**
+- the question, instrument, families, texts, predictions and decision rule;
+- the reading's box floors, guard and estimate;
+- the reducer.
+
+The runner's reading path is byte-identical except where the three floor checks now call `floor()`, which in a reading
+behaves exactly as the old inline refusal, with the same exit codes. `staged.sha256` is updated for `p65_run.sh`.

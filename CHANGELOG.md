@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### P65 Amendment 1: a proof records the reading-only host floors instead of refusing on them (#710; a lane change, no library change)
+
+- **Three proving draws, none reached the install.** The first box missed the host scale-and-add floor, 0.152 s against 0.15 s. The second was a launcher refusal: I named the first receipt in the wrong exclusion class. The third missed the egress floor, 97.8 MB/s against 100. That spent $0.1009 of the registration's $0.15 proof budget. Those floors exist for the reading's Mixtral census. The proof's box is not the reading's box, and the proof never runs Mixtral.
+- **Amended.** In a proof, `p65_run.sh`'s new `floor()` records the RAM, scale-and-add and egress floors (`floor_would_refuse_reading`) and continues. Class, dud and disk still refuse, and a reading refuses on every floor exactly as before.
+- **Guard and budget.** The proof guard is 0.23 h, ≤ $0.15 each; launcher boot had taken 3–5 min of the old 10 min guard. The proof budget is ≤ $0.45 over all attempts, and the lane ceiling is $2.05. Registered in `bench/p65/P65-PREREG.md` "Amendment 1", before any reading.
+
 ### P67 registered: training parity read against a per-family floor, not against zero (#713) (one default-off switch in the wheel; bench tooling)
 
 - **`bench/p67/P67-PREREG.md`, registered before its draw.** tp1's band compares an accelerated arm with the

@@ -1,7 +1,7 @@
 # Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
 # controller resolves each name to its source (this directory; bench/p44 for P44-a's census row, served-model
 # builder and tail statistic; bench/p39 for the bake and the placement calibration) and compares.
-53c35ff286b2c01b4e01a097fd9542cef462a308aef6096b96821dfff483eb3b  p65_run.sh
+9469485de448d3b7e036463c3bfb68d4dea09ef0cad10833bca059afff57aa68  p65_run.sh
 52203b13932b3eb5b66eae2e412ee266994096bb2683749948ef7fef8473f617  p65_census.py
 02a6c44b66cbb660dfc838fe3d4192f22ded4a37879f1c6314d2ac24fb3a6493  expert_entropy.py
 bd0260e82bc83b53d6455abc30095925adc492edaead0bce3db292499024bc72  p65_reduce.py
