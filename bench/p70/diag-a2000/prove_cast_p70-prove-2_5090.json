@@ -1,0 +1,14 @@
+{
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "patched": 1,
+ "off_dtype_le64": "torch.float32",
+ "on_dtype_le64": "torch.bfloat16",
+ "off_dtype_gt64": "torch.bfloat16",
+ "on_dtype_gt64": "torch.bfloat16",
+ "same_experts_as_upstream_le64": false,
+ "gt64_is_upstream_both_states": true,
+ "on_bit_equal_to_upstream_fraction_le64": 0.78125,
+ "off_minus_upstream_max_abs_le64": 0.0017962753772735596,
+ "one_row_equals_row0_of_64": false,
+ "all_passed": false
+}
