@@ -1,0 +1,19 @@
+{
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "patched": 1,
+ "amendment": 1,
+ "gemm_varies_with_rows_64_vs_80": true,
+ "gemm_varies_with_rows_1_vs_64": true,
+ "off_dtype_le64": "torch.float32",
+ "on_dtype_le64": "torch.bfloat16",
+ "off_dtype_gt64": "torch.bfloat16",
+ "on_dtype_gt64": "torch.bfloat16",
+ "same_experts_as_upstream_64": true,
+ "same_experts_as_upstream_1": true,
+ "gt64_is_upstream_both_states": true,
+ "on_bit_equal_to_upstream_fraction_64": 1.0,
+ "on_bit_equal_to_upstream_fraction_1": 1.0,
+ "off_minus_upstream_max_abs_64": 0.0004873722791671753,
+ "slot_order_equals_upstream_64": false,
+ "all_passed": true
+}

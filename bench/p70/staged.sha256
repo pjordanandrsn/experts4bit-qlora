@@ -2,7 +2,7 @@
 # this file and the controller resolves each name to its source (bench/p70 for the lane's own three; bench/p64 for P64's
 # scorer and reducer, imported unchanged; bench/p59; bench/p44; bench/ for kl_fidelity.py; bench/p42/hook; bench/p39) and compares.
 39049000fc8b9926f9811090daa1a9cd69b0a27d706a918c6fed6029c5bf6183  p70_run.sh
-5396384c835a91d9fc1ddb8c514fc403b0c08126d213c01b4af8c876e651aea0  kl_router.py
+a5420720872bc17f82cdb1249a6a6167664de88930a8ca0cd986a5ddf71c921c  kl_router.py
 b2bbcffe1271c51889c82b11cd1de5679d2cc82b82d0492f58d896cc8e431986  p70_reduce.py
 18a179544d3c7aba0eb781c222c6fb5e1e8c36a931dea12d12cd5c5bcf0e77ff  kl_a16.py
 a529042305bd26a9d1e9ccf400b9b3762b8a78d4f13921d31279b238a61cd68c  p64_reduce.py

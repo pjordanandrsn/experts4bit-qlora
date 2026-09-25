@@ -186,3 +186,40 @@ registered read cannot be made, 43 reducer, and the reducer's validity. Controll
 20–25 stage / start / fetch / deadline / nonce / dead lane.
 
 Amendments, dated, go below this line before any data is read.
+
+### Amendment 1 (2026-09-25, before any reading): the cast proof compares at matching row counts, as maps
+
+**What happened.** The first proving rental that reached a box, `p70-prove-2`, exited 27 ($0.0345, teardown proven). On
+the RTX 5090's real `router_epilogue`, the dtypes were as registered, and the > 64-row path equalled upstream in both
+states. Three comparisons failed: the same experts as upstream at ≤ 64 rows, one row equal to row 0 of 64, and only
+0.781 of cast-on weights bit-equal. Receipt: `receipts/experts4bit-qlora/2026-09-25/p70-prove-2/`; its
+`prove_cast.json` is copied to [`diag-a2000/prove_cast_p70-prove-2_5090.json`](diag-a2000/prove_cast_p70-prove-2_5090.json).
+
+**Why: the instrument, not the router.** The proof compared the fused 1- and 64-row calls with rows of ONE 80-row
+upstream call. A bf16 GEMM's last-place logits change with the row count. A free diagnosis on the NAS A2000
+([`diag-a2000/`](diag-a2000/)), on the same kernel source, measured the following:
+- The logits differ at 1 vs 64 and at 64 vs 80 rows, so upstream's own experts differ between its 64- and 80-row
+  calls.
+- Against upstream **at the same row count**, the fused path picks the same experts at 64 and at 1 row, cast off and
+  on.
+- With the cast on, every expert's weight is bit-equal to upstream's (fraction 1.0).
+- Given identical fp32 logits, the kernel's fp32 weights are within 3e-8 of torch's, bit-equal on 39 % before the
+  cast and 100 % after it.
+- **The top-k slot order differs from `torch.topk`'s.** The expert set and each expert's weight are the same; the
+  layout is not.
+
+**The change** (`kl_router.py`; re-pinned in `staged.sha256`; CPU tests in `tests/test_p70_prove_cast.py`):
+- Every fused call is compared with upstream at its own row count: 1, 64 and 80.
+- Routings are compared as maps from expert to weight (`_routing_map`), not slot by slot.
+- **Asserted:** the dtypes; the same experts as upstream at 64 and at 1 row, in both states; above 64 rows, upstream
+  in both states. The asserted "one row equals row 0 of 64" is dropped, because it tests the GEMM.
+- **Reported, not asserted, as registered:** the bit-equal fraction of cast-on weights, the slot-order agreement,
+  and whether the GEMM varies with the row count on the card.
+- The corrected proof passed on the A2000 ([`diag-a2000/prove_cast_corrected.json`](diag-a2000/prove_cast_corrected.json)).
+
+**What this corrects in the text above.** "To the bit" in the Question and the Decision rule means the routing as a
+map, expert to weight, at the same row count. It does not mean the slot layout. Nothing in the decision rule, the
+passes, the predictions or the reading's arithmetic changes. Every pass of the reading routes its ≤ 64-row
+forwards through the same kernel, so any effect of the slot layout is common to the reference, the lever and the floor.
+Whether a consumer's accumulation order depends on the layout is not claimed. The next proving attempt is `p70-prove-3`. Two of the registered three attempts remain,
+since `p70-prove-1` was refused at $0 before any rental, and the lane has spent $0.0345 of its $2.50.

@@ -52,8 +52,12 @@ def _cast_default() -> bool:
 #: expert's output with different functions at the same token (lane P63's
 #: P7). On: every row count returns the logits' dtype. On the
 #: ``softmax_topk`` kind (Qwen3-MoE, OLMoE, Mixtral) that is the upstream
-#: function to the bit -- the same fp32 softmax, top-k and renormalisation,
-#: then the same cast. On ``topk_softmax`` (gpt-oss, GraniteMoe) the dtype
+#: function: at the same row count, the same experts and, after the cast,
+#: each expert's weight bit-equal to upstream's (the kernel's fp32 weights
+#: differ from torch's in the last place; the bf16 rounding absorbed every
+#: one on the A2000 diagnosis, bench/p70/diag-a2000/). The top-k SLOT order
+#: can differ from torch.topk's where two probabilities tie within fp32
+#: rounding -- the routing is the same, the slot layout is not. On ``topk_softmax`` (gpt-oss, GraniteMoe) the dtype
 #: matches but not every bit: upstream takes the k-softmax in the logits'
 #: dtype, the kernel in fp32. Gemma-4's branch casts already and is not
 #: affected. Whether the cast may become the default is lane P70's

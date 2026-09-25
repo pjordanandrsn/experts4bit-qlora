@@ -155,13 +155,39 @@ def apply_overrides():
 
 
 # ----------------------------------------------------------------------------------------------- the proving run
+def _routing_map(w: torch.Tensor, i: torch.Tensor):
+    """A router's output as the function it is: for each row, the expert ids in ascending order and the weight each
+    expert gets. The top-k SLOT order is not part of it -- the kernel's order can differ from torch.topk's where
+    two probabilities tie within fp32 rounding (amendment 1)."""
+    order = i.argsort(-1)
+    return i.gather(-1, order), w.gather(-1, order)
+
+
+def _same_experts(a, b) -> bool:
+    return bool(torch.equal(_routing_map(*a)[0], _routing_map(*b)[0]))
+
+
+def _map_bit_equal_frac(a, b) -> float:
+    """Fraction of (row, expert) weights bit-equal between two routings with the same experts; 0.0 if they differ."""
+    (ia, wa), (ib, wb) = _routing_map(*a), _routing_map(*b)
+    if not torch.equal(ia, ib) or wa.dtype != wb.dtype:
+        return 0.0
+    return float((wa == wb).float().mean())
+
+
 def _prove_cast(out_path: str) -> int:
     """On this card's REAL `int4_b32.router_epilogue`, no checkpoint: a transformers Qwen3MoeTopKRouter at Qwen3-30B-
     A3B's shape (hidden 2048, 128 experts, top-8), bf16, patched by `fuse_router_epilogue`, against an unpatched copy.
-    Checked: switch off -> fp32 weights at <= 64 rows, the same experts as upstream; switch on -> bf16 weights at
-    <= 64 rows; above 64 rows the original forward runs whatever the switch says; the switch is read per call.
-    Reported, not asserted: the fraction of weights bit-equal to upstream's with the cast on (the kernel's fp32
-    softmax may differ from torch's in the last place, which a bf16 rounding usually, not always, absorbs)."""
+
+    Every comparison is at the SAME row count as upstream's (amendment 1, 2026-09-25): a bf16 GEMM's last-place
+    logits depend on the row count (measured: 1 vs 64 vs 80 rows all differ on the A2000), so a fused 64-row call
+    compared with rows of an 80-row upstream call measures the GEMM, not the router. p70-prove-2 did exactly that.
+    Routings are compared as maps expert -> weight (`_routing_map`), not slot by slot.
+
+    Asserted: switch off -> fp32 weights at <= 64 rows, on -> bf16; at 64 rows and at 1 row, the same experts as
+    upstream at that row count, both states; above 64 rows the original forward, both states, equal to upstream.
+    Reported, not asserted: the fraction of cast-on weights bit-equal to upstream's (the registered design), the
+    slot-order agreement, and whether the GEMM itself varies with the row count on this card."""
     from transformers.models.qwen3_moe.modeling_qwen3_moe import Qwen3MoeConfig, Qwen3MoeTopKRouter
     re_mod = _re()
     assert re_mod.CAST_WEIGHTS[0] is False, "CAST_WEIGHTS on at process start"
@@ -175,32 +201,37 @@ def _prove_cast(out_path: str) -> int:
     holder.gate = Qwen3MoeTopKRouter(cfg).to("cuda", torch.bfloat16)
     holder.gate.load_state_dict(ref.state_dict())
     n = re_mod.fuse_router_epilogue(holder)
-    res = {"gpu": torch.cuda.get_device_name(0), "patched": n}
+    res = {"gpu": torch.cuda.get_device_name(0), "patched": n, "amendment": 1}
     x = (torch.randn(80, 2048) * 0.5).to("cuda", torch.bfloat16)
+    lin = lambda t: torch.nn.functional.linear(t, ref.weight)  # noqa: E731
     with torch.no_grad():
-        _, rw, ri = ref(x)
+        up = {m: ref(x[:m])[1:] for m in (1, 64, 80)}          # (weights, indices) at each row count
+        res["gemm_varies_with_rows_64_vs_80"] = not torch.equal(lin(x[:64]), lin(x)[:64])
+        res["gemm_varies_with_rows_1_vs_64"] = not torch.equal(lin(x[:1]), lin(x[:64])[:1])
         out = {}
         for cast in (False, True):
             re_mod.CAST_WEIGHTS[0] = cast
-            _, w1, i1 = holder.gate(x[:1])
-            _, w64, i64 = holder.gate(x[:64])
-            _, w80, i80 = holder.gate(x)
-            out[cast] = (w1, i1, w64, i64, w80, i80)
+            out[cast] = {m: holder.gate(x[:m])[1:] for m in (1, 64, 80)}
         re_mod.CAST_WEIGHTS[0] = False
     torch.cuda.synchronize()
     off, on = out[False], out[True]
     res.update({
-        "off_dtype_le64": str(off[2].dtype), "on_dtype_le64": str(on[2].dtype),
-        "off_dtype_gt64": str(off[4].dtype), "on_dtype_gt64": str(on[4].dtype),
-        "same_experts_as_upstream_le64": bool(torch.equal(off[3], ri[:64]) and torch.equal(on[3], ri[:64])),
-        "gt64_is_upstream_both_states": bool(torch.equal(off[4], rw) and torch.equal(on[4], rw)),
-        "on_bit_equal_to_upstream_fraction_le64": float((on[2] == rw[:64]).float().mean()),
-        "off_minus_upstream_max_abs_le64": float((off[2] - rw[:64].float()).abs().max()),
-        "one_row_equals_row0_of_64": bool(torch.equal(on[0], on[2][:1]) and torch.equal(off[0], off[2][:1])),
+        "off_dtype_le64": str(off[64][0].dtype), "on_dtype_le64": str(on[64][0].dtype),
+        "off_dtype_gt64": str(off[80][0].dtype), "on_dtype_gt64": str(on[80][0].dtype),
+        "same_experts_as_upstream_64": _same_experts(off[64], up[64]) and _same_experts(on[64], up[64]),
+        "same_experts_as_upstream_1": _same_experts(off[1], up[1]) and _same_experts(on[1], up[1]),
+        "gt64_is_upstream_both_states": bool(torch.equal(off[80][0], up[80][0]) and torch.equal(off[80][1], up[80][1])
+                                             and torch.equal(on[80][0], up[80][0]) and torch.equal(on[80][1], up[80][1])),
+        "on_bit_equal_to_upstream_fraction_64": _map_bit_equal_frac(on[64], up[64]),
+        "on_bit_equal_to_upstream_fraction_1": _map_bit_equal_frac(on[1], up[1]),
+        "off_minus_upstream_max_abs_64": float((_routing_map(*off[64])[1].float() - _routing_map(*up[64])[1].float()).abs().max())
+                                         if _same_experts(off[64], up[64]) else None,
+        "slot_order_equals_upstream_64": bool(torch.equal(on[64][1], up[64][1])),
     })
     ok = (n == 1 and res["off_dtype_le64"] == "torch.float32" and res["on_dtype_le64"] == "torch.bfloat16"
           and res["off_dtype_gt64"] == res["on_dtype_gt64"] == "torch.bfloat16"
-          and res["same_experts_as_upstream_le64"] and res["gt64_is_upstream_both_states"] and res["one_row_equals_row0_of_64"])
+          and res["same_experts_as_upstream_64"] and res["same_experts_as_upstream_1"]
+          and res["gt64_is_upstream_both_states"])
     res["all_passed"] = bool(ok)
     json.dump(res, open(out_path, "w"), indent=1)
     print("PROVECAST " + json.dumps(res), flush=True)
