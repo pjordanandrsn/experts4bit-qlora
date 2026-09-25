@@ -16,6 +16,17 @@ keywords = [
     "quantization", "nf4", "mxfp4", "int4", "fp8", "cuda", "triton", "gpu-offload", "nvme",
     "llm-inference", "llm-training", "fine-tuning", "consumer-gpu",
 ]
+# No `License ::` classifier: `license` is a PEP 639 expression (scripts/check_wheel_metadata.py).
+classifiers = [
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "torch>=2.2",
     "bitsandbytes>=0.43",

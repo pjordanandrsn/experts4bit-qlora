@@ -263,7 +263,7 @@
       },
       "nvme_train": {
        "status": "not_tested",
-       "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+       "reason": "outside the registered tp1 protocol: the arena-vs-host-RAM ladder that trained this family against an nvme_bake_nf4 arena is a separate receipt (e4b.offload.arena-vs-host-ram, measured)"
       },
       "native_mxfp4_train": {
        "status": "n/a",
@@ -311,7 +311,7 @@
       },
       "nvme_train": {
        "status": "not_tested",
-       "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+       "reason": "outside the registered tp1 protocol: the arena-vs-host-RAM ladder that trained this family against an nvme_bake_nf4 arena is a separate receipt (e4b.offload.arena-vs-host-ram, measured)"
       },
       "native_mxfp4_train": {
        "status": "n/a",
@@ -361,7 +361,7 @@
       },
       "nvme_train": {
        "status": "not_tested",
-       "reason": "no shipped tool bakes the training arena (e4b.open.tr2-repro-gap); the arena-vs-host-RAM ladder that trained this family against an arena is measured-private (e4b.offload.arena-vs-host-ram), outside the registered tp1 protocol"
+       "reason": "outside the registered tp1 protocol: the arena-vs-host-RAM ladder that trained this family against an nvme_bake_nf4 arena is a separate receipt (e4b.offload.arena-vs-host-ram, measured)"
       },
       "native_mxfp4_train": {
        "status": "n/a",
@@ -628,11 +628,11 @@
    },
    "install": [
     {
-     "purpose": "residency/NVMe/fast-kernel route",
-     "command": "pip install \"experts4bit-qlora[fast]\""
+     "purpose": "NVMe arena route (the solution page's example): the streaming loader plus grouped-nf4-gemm's arena engines",
+     "command": "pip install \"experts4bit-qlora[train,fast]\""
     },
     {
-     "purpose": "host-RAM training route",
+     "purpose": "host-RAM route only: the streaming loader and pinned-host expert offload",
      "command": "pip install \"experts4bit-qlora[train]\""
     }
    ],
@@ -652,7 +652,7 @@
     "e4b.serve.deepseek-v4"
    ],
    "limitations": [
-    "No shipped tool bakes the training arena from a bf16 checkpoint yet (docs/STATUS.md, open)",
+    "The training arena is a separate GPU-side bake (grouped-nf4-gemm's nvme_bake_nf4); e4b.open.tr2-repro-gap, reproducing the TR2 training receipt, is still open in the register (docs/STATUS.md)",
     "enable_nvme_train_residency refuses hot_rows below the expert count and requires gradient checkpointing",
     "NVMe residency is a batch-throughput path; cold-expert latency is bounded by the device link"
    ],

@@ -290,11 +290,12 @@ def enable_batched_train(model, verbose: bool = False) -> int:
     patched; assert it, because ``0`` and "silently still on the loop" look the same
     from the caller's side.
 
-    Choosing between this and ``enable_fast_train``: this one measured faster on the
-    box in the module docstring, and spends peak memory to get there (a whole decoded
-    stack rather than a single decoded expert). Take the kernel lane when VRAM is the
-    binding constraint or experts are offloaded; take this one otherwise, or when
-    ``grouped-nf4-gemm`` will not build.
+    Choosing between this and ``enable_fast_train``: this one wins the module
+    docstring's toy-width microbench, but at Qwen3-30B width it gives no speed-up over
+    the reference loop and costs the most peak memory of any lane (a whole decoded
+    stack rather than a single decoded expert; module docstring, claim
+    ``e4b.train.fast-train-dgrad``). Default to ``enable_fast_train(dgrad=True)``;
+    take this one when ``grouped-nf4-gemm`` will not build.
 
     A module already carrying the fused training patch is SKIPPED rather than wrapped.
     Both patch ``ExpertsLoRA.forward``, so stacking them would make this path's

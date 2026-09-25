@@ -2,8 +2,8 @@
 """Measured decode and training throughput for every e4b execution config.
 
 The dtype sweep answers "does precision change the answer". It says nothing
-about the configs that actually exist here: e4b exposes sixteen ``enable_*``
-entry points — resident, pipelined, cold-engine, offloaded, NVMe-backed, fused
+about the configs that actually exist here: e4b exposes eighteen ``enable_*``
+entry points (in ``experts4bit_qlora.__all__``) — resident, pipelined, cold-engine, offloaded, NVMe-backed, fused
 — and each is a different execution path through the same weights. A user
 choosing between them has no basis to choose without numbers.
 

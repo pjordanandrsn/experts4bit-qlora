@@ -78,7 +78,7 @@ model.eval()
 # do NOT call model.to("cuda"): the experts live in pinned host RAM by design
 ```
 
-Or from the CLI: `OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora.infer`. Dense side too large too? `enable_dense_offload(model, "cuda")` composes with it.
+Or from the CLI: `MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 python -m experts4bit_qlora.infer` (without `MODEL`, `infer` loads `allenai/OLMoE-1B-7B-0924`). Dense side too large too? `enable_dense_offload(model, "cuda")` composes with it.
 
 ## Expected result
 

@@ -48,7 +48,7 @@ pip install "experts4bit-qlora[train,fast]"  # loader plus the native-byte engin
 
 ## Smallest correct example
 
-Needs: GPU + network + model download + local NVMe.
+Needs: GPU + network + the DeepSeek-V4-Flash snapshot on local disk + local NVMe with room for the arena (147 GB of experts, claim `e4b.serve.deepseek-v4`).
 
 ```bash
 python -c "
@@ -92,7 +92,7 @@ assert n > 0
 - `enable_mxfp4_nvme_residency` refuses `ExpertsLoRA`-wrapped modules: under the arena loader the base buffers are on `meta`, and binding would discard the adapter. Serve from the arena or train against it, not both on one load.
 - Trainable LoRA over gpt-oss's biased, clamped experts needs a gpt-oss-aware adapter; that is a separate change (`arch/gptoss.py`).
 - DeepSeek-V4's full-width resident load does not fit a small card; use the arena path.
-- No shipped tool bakes a training arena from a bf16 checkpoint (open, `e4b.open.tr2-repro-gap`).
+- A bf16 checkpoint's training arena is an NF4 quantise-at-bake (grouped-nf4-gemm's `nvme_bake_nf4`, [`offload-moe-experts-to-cpu-or-nvme.md`](offload-moe-experts-to-cpu-or-nvme.md)), not the native-byte path; `e4b.open.tr2-repro-gap` (reproducing the TR2 training receipt) stays open in the register.
 - Training on an MXFP4 arena has a CPU spec and a bench directory (`bench/mxfp4-arena-train/`) but no entry in the claims register: a capability, not a measured result.
 
 ## Related

@@ -22,13 +22,13 @@ Layer-granular offload bounds VRAM but not host RAM: its homes are the full `[E,
 ## Install
 
 ```bash
-pip install "experts4bit-qlora[fast]"    # residency/NVMe/fast-kernel route: grouped-nf4-gemm's arena bake, reader, tier and kernels
-pip install "experts4bit-qlora[train]"   # host-RAM training route: the streaming loader and pinned-host expert offload
+pip install "experts4bit-qlora[train,fast]"   # NVMe arena route (the example below): the streaming loader plus grouped-nf4-gemm's arena bake, reader, tier and kernels
+pip install "experts4bit-qlora[train]"        # host-RAM route only: the streaming loader and pinned-host expert offload
 ```
 
 ## Smallest correct example
 
-Needs: GPU + network + model download + a baked NF4 arena + local NVMe.
+Needs: the `[train,fast]` extras, GPU + network + model download + a baked NF4 arena + local NVMe.
 
 ```python
 import torch
@@ -57,13 +57,13 @@ Serving a native-MXFP4 arena (DeepSeek-V4) is the other side of the seam — [`m
 
 ## Supported scope
 
-- Families in the register for this path: Qwen3-MoE and OLMoE (host-RAM ceiling receipts), DeepSeek-V4 Flash / Pro and gpt-oss (native MXFP4).
+- Families in the register for this path: Qwen3-MoE, Gemma-4 and OLMoE (host-RAM ceiling receipts, `e4b.offload.arena-vs-host-ram`) and DeepSeek-V4-Flash (native MXFP4, `e4b.serve.deepseek-v4`). gpt-oss has no native-MXFP4 arena route here: `enable_mxfp4_nvme_residency` refuses its bias-carrying modules, and it has no arena-training route ([`mxfp4-moe-training-and-residency.md`](mxfp4-moe-training-and-residency.md)).
 - Arena formats: NF4 quantize-at-bake (four segments per expert row) and native MXFP4 relocation (six segments, fused on read). The manifest's `bake_mode` records which provenance claim the arena supports.
 - Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), Triton (Linux-only), local NVMe or a fast block device, pinned host RAM for the hot tier; CI tests Python 3.11.
 
 ## Limitations
 
-- **No shipped tool bakes the training arena from a bf16 checkpoint** — open, claim `e4b.open.tr2-repro-gap`; `TRAIN_ARENA` in the trainer takes a *path* to a pre-baked arena.
+- **The training arena is a separate bake, on a GPU**: grouped-nf4-gemm's `nvme_bake_nf4` (`python -m nvme_bake_nf4 --snapshot <local snapshot dir> --out <arena>`) quantises a bf16 checkpoint's experts into the four NF4 segments `enable_nvme_train_residency` stages; the host-RAM ceiling receipts baked theirs with it (`bench/host-ram-ceiling/prep.sh`). `TRAIN_ARENA` in the trainer takes a *path* to such an arena. The register still lists `e4b.open.tr2-repro-gap` (open) for reproducing the TR2 training receipt; no TR2 rerun from an `nvme_bake_nf4` arena is recorded.
 - `hot_rows` floors are hard: at least `k` for decode, approaching `min(T*k, num_experts)` for a prefill batch, and at least `num_experts` for training. Undersizing raises rather than thrashing.
 - Training on an arena lifts the **host RAM** ceiling, not VRAM: one layer's full `[E, ...]` stack is still device-resident, and gradient checkpointing is required.
 - The serving engines refuse `ExpertsLoRA`-wrapped modules rather than discard the adapter; `enable_mxfp4_nvme_residency` and training are mutually exclusive on one load.
@@ -89,4 +89,4 @@ Register: [`../claims.json`](../claims.json).
 - `e4b.offload.arena-vs-host-ram` — measured: against a descending host-RAM cap the arena path completes where the pinned-RAM path is OOM-killed, on OLMoE, Gemma-4 and Qwen3-30B.
 - `e4b.serve.deepseek-v4` — measured: DeepSeek-V4-Flash loads and generates with its experts served from an on-disk arena at small peak VRAM.
 - `e4b.serve.informed-hot-sets` — measured: hot sets ranked from a routing profile beat index-ordered ones at identical VRAM on V4-Flash.
-- `e4b.open.tr2-repro-gap` — open: no shipped arena bake for the training receipt.
+- `e4b.open.tr2-repro-gap` — open: reproducing the TR2 training receipt from published artifacts (see Limitations).

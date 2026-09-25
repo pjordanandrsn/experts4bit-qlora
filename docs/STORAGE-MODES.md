@@ -65,8 +65,8 @@ state_dict tensor keys. The loader still instantiates `Experts4bit` for 4-bit ru
   — and the save loads as a legacy (unvalidated) checkpoint. Adapter-only saves never carry it.
 - **Non-checkpointed offload *training* is unsupported** and fails loudly naming the invariant
   (the shipped trainer always enables gradient checkpointing).
-- **`offload_model_experts` raises when it finds no `ExpertsLoRA` modules** (changed this
-  version: it used to return `[]` silently). The streaming loader likewise refuses to return a
+- **`offload_model_experts` raises when it finds no `ExpertsLoRA` modules** (changed in
+  0.3.0: it used to return `[]` silently). The streaming loader likewise refuses to return a
   model on which it quantized zero expert layers.
 - **GEMV is 4-bit-only** and probe-gated per configuration; the 8/16-bit schemes always decode
   via the dequantize path.
@@ -82,7 +82,7 @@ during a QLoRA training step with `OFFLOAD_EXPERTS=1`** on the reference A2000: 
 layer's experts resident plus activations/adapters, while the other ~13–15 GB of packed experts
 sit in pinned CPU RAM. It is a *capability* number — fits vs doesn't fit — not a throughput
 claim: the same mechanism costs ~+11 % s/step at OLMoE scale and is PCIe-bound at 26–30B scale
-(0.22–0.43 tok/s decode). Method and grids: [`docs/METHODOLOGY.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/docs/METHODOLOGY.md) §11–§12;
+(0.22–0.43 tok/s decode). Method and grids: [`docs/METHODOLOGY.md`](METHODOLOGY.md) §11–§12;
 environment and commit pins: [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/PROVENANCE.md).
 
 ### How to reproduce validation

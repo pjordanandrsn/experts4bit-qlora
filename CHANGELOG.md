@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Package metadata: trove classifiers (no library change)
+
+- `pyproject.toml` declares classifiers for the first time: NVIDIA CUDA, Linux, Python 3 only, the AI topic, typed (`py.typed` already ships), and developer and research audiences. There is no `License ::` classifier, because the licence is a PEP 639 expression. PyPI shows them from the next upload.
+
 ### The fused router now returns the model's dtype by default for `softmax_topk` (#726; a default changes)
 
 - **What changes.** With `E4B_FUSE_ROUTER_EPI=1`, the fused router epilogue on the `softmax_topk` kind (Qwen3-MoE, OLMoE, Mixtral) now casts its top-k weights to the router logits' dtype, which is bf16 on a bf16 model. That is what the upstream router returns above 64 rows, so a decode or verify step and a prefill now weight each expert with one function.
