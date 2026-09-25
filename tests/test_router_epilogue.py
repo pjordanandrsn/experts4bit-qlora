@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """The router-epilogue fusion patches only routers whose own forward
 agrees with the reference epilogue, and never mis-routes."""
+import copy
 import os
 import sys
 import types
@@ -412,9 +413,8 @@ def test_the_default_keeps_topk_softmax_in_fp32_until_it_is_read(monkeypatch):
     _stub(monkeypatch, calls)
     torch.manual_seed(12)
     m = torch.nn.Module()
-    m.gate = GptOssLikeRouter()
-    assert fuse_router_epilogue(m) == 1                  # probed in fp32 (a bf16 k-softmax misses the probe's 2**-8)
-    m.gate.to(torch.bfloat16)                            # the patched forward reads the weights live
+    m.gate = GptOssLikeRouter().to(torch.bfloat16)       # bf16 BEFORE fusing, as a served model is
+    assert fuse_router_epilogue(m) == 1
     x = torch.randn(4, HID, dtype=torch.bfloat16)
     monkeypatch.setattr(re_mod, "CAST_WEIGHTS", [None])
     assert m.gate(x)[1].dtype == torch.float32
@@ -477,3 +477,112 @@ def test_the_env_var_sets_the_default(monkeypatch):
         monkeypatch.setenv("E4B_ROUTER_EPI_CAST", typo)
         with pytest.raises(ValueError, match="E4B_ROUTER_EPI_CAST"):
             re_mod._cast_default()
+
+
+# ------------------------- bf16 select-on-logits routers, built in bf16 BEFORE fusing --
+
+
+def _upstream_router(name):
+    """The pinned transformers' own router class, sized like the toys, with
+    weights at roughly gpt-oss-20b's router-logit scale (its zero init would
+    route every token by index order)."""
+    if name == "GptOssTopKRouter":
+        mod = pytest.importorskip("transformers.models.gpt_oss.modeling_gpt_oss")
+        from transformers import GptOssConfig
+        r = mod.GptOssTopKRouter(GptOssConfig(hidden_size=HID, num_local_experts=E, num_experts_per_tok=K))
+        with torch.no_grad():
+            r.weight.normal_()
+            r.bias.normal_(0.0, 2.0)
+        return r, (0, 1, 2)
+    mod = pytest.importorskip("transformers.models.granitemoe.modeling_granitemoe")
+    from transformers import GraniteMoeConfig
+    r = mod.GraniteMoeTopKRouter(GraniteMoeConfig(hidden_size=HID, num_local_experts=E, num_experts_per_tok=K))
+    with torch.no_grad():
+        r.weight.normal_()
+    return r, (2, 1, 0)
+
+
+def _toy_router(cls):
+    return cls(), ((2, 1, 0) if cls is GraniteLikeRouter else (0, 1, 2))
+
+
+_BF16_ROUTERS = [
+    pytest.param(lambda: _toy_router(GptOssLikeRouter), id="GptOssLikeRouter"),
+    pytest.param(lambda: _toy_router(GraniteLikeRouter), id="GraniteLikeRouter"),
+    pytest.param(lambda: _upstream_router("GptOssTopKRouter"), id="transformers-GptOssTopKRouter"),
+    pytest.param(lambda: _upstream_router("GraniteMoeTopKRouter"), id="transformers-GraniteMoeTopKRouter"),
+]
+
+
+@pytest.mark.parametrize("make", _BF16_ROUTERS)
+def test_bf16_select_on_logits_routers_are_licensed_and_route_as_upstream(monkeypatch, make):
+    """A gpt-oss / GraniteMoe router converted to bf16 BEFORE fusing is
+    licensed, and at decode shapes the fused path selects EXACTLY the experts
+    the module's own forward selects, on every row of many draws.
+
+    gpt-oss adds its bias inside the GEMM, so its logits round to bf16 WITH
+    the bias. The fused path used to add the bias afterwards in fp32: the
+    probe then refused the toy outright, licensed 16 of gpt-oss-20b's 24 real
+    routers, and on the licensed ones a near-tie could route a token to a
+    different expert set than upstream. Mis-routing is not a rounding error,
+    so the index check is exact; the weights differ from upstream's bf16
+    k-softmax by its rounding alone (half an ulp, 2**-8 relative)."""
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    monkeypatch.setattr(re_mod, "CAST_WEIGHTS", [None])
+    calls = {"fused": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(13)
+    gate, (fpos, wpos, ipos) = make()
+    gate = gate.to(torch.bfloat16)
+    ref = copy.deepcopy(gate)
+    m = torch.nn.Module()
+    m.gate = gate
+    assert fuse_router_epilogue(m) == 1
+    g = torch.Generator().manual_seed(14)
+    for draw in range(32):
+        x = torch.randn(64, HID, generator=g).to(torch.bfloat16)
+        got, want = m.gate(x), ref(x)
+        assert torch.equal(got[ipos], want[ipos]), f"draw {draw}: the fused path routed differently"
+        assert torch.allclose(got[wpos].float(), want[wpos].float(), rtol=2 ** -8, atol=2 ** -12)
+        assert torch.allclose(got[fpos].float(), want[fpos].float(), rtol=2 ** -6, atol=2 ** -8)
+    assert calls["fused"] == 32
+
+
+def test_bf16_gpt_oss_bias_is_added_before_the_logits_round(monkeypatch):
+    """Pins the mechanism: with the bias added in fp32 AFTER the bf16 GEMM,
+    this router selects a different expert set from its own forward on some
+    decode rows -- so any such reference, or fused path, is a different
+    router, and the probe must not license it."""
+    torch.manual_seed(13)
+    gate = GptOssLikeRouter().to(torch.bfloat16)
+    g = torch.Generator().manual_seed(14)
+    x = torch.randn(2048, HID, generator=g).to(torch.bfloat16)
+    with torch.no_grad():
+        _, _, want = gate(x)
+        late = F.linear(x, gate.weight).float() + gate.bias.float()
+    late_set = torch.topk(late, K, dim=-1).indices.sort(-1).values
+    assert not torch.equal(late_set, want.sort(-1).values), \
+        "the late-bias function should differ somewhere; if not, this test no longer pins anything"
+
+
+class UnbiasedFirstSlotGptOssRouter(GptOssLikeRouter):
+    """Selects on the BIASED logits but returns the UNbiased projection in
+    its first slot. No family does this; the fused path's logits carry the
+    bias, so it must be refused rather than licensed with a "raw" first slot
+    it would then get wrong."""
+    def forward(self, x):
+        x = x.reshape(-1, HID)
+        _, w, i = super().forward(x)
+        return F.linear(x, self.weight), w, i
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_a_biased_router_returning_unbiased_logits_is_refused(monkeypatch, dtype):
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    _stub(monkeypatch, {"fused": 0})
+    torch.manual_seed(15)
+    m = torch.nn.Module()
+    m.gate = UnbiasedFirstSlotGptOssRouter().to(dtype)
+    with pytest.raises(RuntimeError, match="failed the semantic probe"):
+        fuse_router_epilogue(m)
