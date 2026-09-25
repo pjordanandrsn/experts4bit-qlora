@@ -34,7 +34,7 @@ statement that the page describes a capability without a measurement).
 Lookup aliases (`e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit`, `experts-mxfp4`) install this package;
 always install and cite `experts4bit-qlora`.
 
-## Environment, in one line
+## Environment
 
 Linux, an NVIDIA CUDA GPU, torch ≥ 2.2, bitsandbytes ≥ 0.43; transformers
 ≥ 5.0 for the streaming loader (`[train]`); for the kernel path (`[fast]`),
@@ -48,16 +48,21 @@ what is measured-private and what is open, is [`STATUS.md`](STATUS.md).
 
 ## Limitations that apply to every page
 
-- Linux + NVIDIA CUDA only; Python 3.11 is what CI tests. The kernel path
-  needs Triton on an sm_80+ GPU.
+- The environment above (Linux + NVIDIA CUDA only; Python 3.11 is what CI
+  tests; Triton on an sm_80+ GPU for the kernel path) applies to every page.
 - Nothing falls back silently: an unsupported family fails fast with a
   named error, and every `enable_*` returns a count or a non-empty handle
   list, or raises — the caller asserts it. One known exception, recorded
-  rather than hidden: `enable_batched_train`'s per-call fallback above
-  `_PAD_WASTE_LIMIT` keeps the count positive while some layers run the
-  reference loop; a batched training arm is read only with a kernel-call
-  counter (tp1's OLMoE row is VOID on this,
-  `e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
+  rather than hidden: `enable_batched_train` can return a positive count
+  while some layers still run the reference loop, because each call falls
+  back to the reference whenever a batch's padding waste exceeds the
+  pad-waste guard (`_PAD_WASTE_LIMIT` in
+  `experts4bit_qlora/engines/batched.py`, overridable with
+  `E4B_BATCHED_PAD_WASTE_LIMIT`). The fallback is correct and invisible
+  from the output, so trust a batched training run only when
+  `batched_fallback_stats(model)` reports `fallback_calls == 0`; the tp1
+  training-parity lane (real weights, 2026-09-05) marked OLMoE's batched
+  run VOID for exactly this (`e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
 - A model that already fits in bf16 with headroom gains nothing here:
   4-bit is a memory trade, and on the measured comparator it cost energy
   (`e4b.train.energy-honest.scoped-a2000`).

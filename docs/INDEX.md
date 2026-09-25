@@ -1,6 +1,6 @@
 # Docs index — what each document is, and whether it is current
 
-48 documents accumulated over two months of measured campaigns (the count is
+54 documents accumulated over two months of measured campaigns (the count is
 the number of distinct documents this index links, held by `tests/test_docs_index_count.py`).
 This index says what each one is *for*, whether it is still the thing to
 read, and whether it is OpenTimestamps-anchored (**anchored** documents
@@ -33,6 +33,15 @@ Start here: [`STATUS.md`](STATUS.md) (one page, current) →
 - **[`discovery-queries.json`](discovery-queries.json)** — the
   discoverability regression corpus (`scripts/check_discovery_contract.py`).
   Current.
+- **[`benchmark-receipt-schema.json`](benchmark-receipt-schema.json)** — JSON
+  Schema for the benchmark-evidence receipt a lane writes beside its results:
+  what code, model, data and hardware produced a number, and whether the arm
+  is valid. Reproducibility only; the operational (rental-administration)
+  half is not public. Cited by `bench/p41/P41-PREREG.md`. Current.
+- **[`llms-bundle.json`](llms-bundle.json)** — the curated source list for
+  `scripts/build_llms_bundle.py`, which renders `llms-full.txt`;
+  `scripts/check_docs_examples.py` takes its document set from the same
+  list. Current.
 - **[`RELEASE_NOTES_GUIDE.md`](RELEASE_NOTES_GUIDE.md)** — how the first
   paragraph of a release note is written. Current.
 
@@ -93,7 +102,7 @@ surface *of that campaign*.
 | [`POST_AUDIT_WORK_QUEUE.md`](POST_AUDIT_WORK_QUEUE.md) | the post-audit queue; quarantines Q1–Q4 and stops S8–S10 |
 | [`NEXT_CAMPAIGN_LANES.md`](NEXT_CAMPAIGN_LANES.md) | licensed continuations; corrects the "queue empty" claim |
 | [`N1_ROUTING_PINNED_SERVE.md`](N1_ROUTING_PINNED_SERVE.md) | a pre-registration that was never run |
-| [`SPECULATIVE_LANES_PLAN.md`](SPECULATIVE_LANES_PLAN.md) + [`ADDENDUM_1`](SPECULATIVE_LANES_ADDENDUM_1.md) · [`_2`](SPECULATIVE_LANES_ADDENDUM_2.md) · [`_3`](SPECULATIVE_LANES_ADDENDUM_3.md) | exploratory lanes, "second-class by construction"; Addendum 3 has an explicit staleness reconciliation |
+| [`SPECULATIVE_LANES_PLAN.md`](SPECULATIVE_LANES_PLAN.md) + [`ADDENDUM_1`](SPECULATIVE_LANES_ADDENDUM_1.md) · [`_2`](SPECULATIVE_LANES_ADDENDUM_2.md) · [`_3`](SPECULATIVE_LANES_ADDENDUM_3.md) · [`_4`](SPECULATIVE_LANES_ADDENDUM_4.md) | exploratory lanes, "second-class by construction"; Addendum 3 has an explicit staleness reconciliation; Addendum 4 (2026-09-24, anchored) writes S-C's Granite selector as lane P65 read it |
 | [`PLAN_ROUTED_V3_AMENDMENTS_A1-A4.md`](PLAN_ROUTED_V3_AMENDMENTS_A1-A4.md) | amendments to a plan that is not in this repository |
 | [`expertsnbit_finish_plan.md`](expertsnbit_finish_plan.md) | the v0.2.x completion plan, with its own calibration correction and the cross-card verification matrix |
 
@@ -107,7 +116,17 @@ surface *of that campaign*.
 ## The evidence layer, outside `docs/`
 
 Receipts for the numbers in `claims.json` live beside the scripts that
-produced them: `bench/*/RESULTS-*.md` (74 files), `PROVENANCE.md`
+produced them: `bench/**/RESULTS-*.md`, `PROVENANCE.md`
 (anchored, the v0.2.0 convergence record specifically), and
 `audits/`. Several serving-lane receipts (the P-series) live in a
 private audit tree and are marked `measured-private` in the register.
+
+| record | what it is |
+|---|---|
+| [`../experts4bit_qlora/README-LAYOUT.md`](../experts4bit_qlora/README-LAYOUT.md) | the package layout (`arch/`, `formats/`, `engines/`) and where a new file goes; ships in the wheel (`[tool.setuptools.package-data]`). Current. |
+| [`../deploy/`](../deploy/) | the serving container — Dockerfile and compose file — described in [`SERVING.md`](SERVING.md). Current. |
+| [`../tools/`](../tools/) | measurement drivers (`config_matrix.py`, `moe_matrix.py`, `quality_matrix.py`) and the V4 fixture builder (`make_v4_fixtures.py`, [`DEEPSEEK-V4.md`](DEEPSEEK-V4.md)); repo-only. Current. |
+| [`audits/no-silent-fallback-2026-09-05.md`](audits/no-silent-fallback-2026-09-05.md) | dated audit of the public enable/load/train/serve entry points against the `no-silent-fallback` invariant in `system-manifest.json`. Record, unanchored. |
+| [`../audits/unsloth-zoo-4032/REPORT.md`](../audits/unsloth-zoo-4032/REPORT.md) | the 2026-07-02 falsification report on unsloth-zoo's MoE bnb-4bit fix (unsloth#4032); its two bugs were filed as unsloth-zoo#849 and #850. Record, unanchored. |
+| [`../ab-telemetry/README.md`](../ab-telemetry/README.md) | the OLMoE `OFFLOAD_EXPERTS` off/on A/B on an RTX A2000 12 GB (JSONL, charts, offline runs). Record, unanchored. |
+| [`../runs/results/BUNDLE.md`](../runs/results/BUNDLE.md) | evidence bundle `olmoe-qlora-grid-20260705-1351` of the 2026-07-05 OLMoE ExpertsNbit validation — the `runs/results/` the anchored campaign documents cite. Record, unanchored. |

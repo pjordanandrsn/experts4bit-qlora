@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "experts4bit-qlora: train and serve Mixture-of-Experts models that do not fit in VRAM"
+abstract: >-
+  Train and serve fused Mixture-of-Experts models in 4-bit on hardware
+  that cannot hold them in bf16: fused 4-bit experts, QLoRA, CPU/NVMe
+  offload, and inference on consumer NVIDIA GPUs.
+authors:
+  - family-names: Anderson
+    given-names: Jordan
+    email: jordan@cerinamroth.com
+repository-code: "https://github.com/pjordanandrsn/experts4bit-qlora"
+url: "https://cerinamroth.com/ml/experts4bit-qlora/"
+license: MIT
+keywords:
+  - mixture-of-experts
+  - moe
+  - qlora
+  - quantization
+  - nf4
+  - mxfp4
+  - gpu-offload
+  - nvme
+  - consumer-gpu

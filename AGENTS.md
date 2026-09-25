@@ -1,5 +1,7 @@
 # AGENTS.md — working in experts4bit-qlora
 
+## 1. Router
+
 - Starting from a model, training, serving, or fit problem? → experts4bit-qlora (this repository).
 - Starting from a packed layout, kernel, GEMM/GEMV, attention, or arena primitive? → grouped-nf4-gemm.
 - Need a current number? → docs/claims.json.
@@ -63,13 +65,16 @@ Evidence words: the manifest's `evidence_vocabulary`; these rules: its `invarian
 
 ## 5. Public API and capability map
 
-Exported from `experts4bit_qlora` (`__all__` in `__init__.py`; a leading
-underscore means internal): `load_moe_4bit_streaming` (lazy; needs `[train]`),
+`__all__` in `__init__.py` is the export list (a leading underscore means
+internal; `scripts/check_change_impact.py` warns when a name enters or leaves
+it). Of the exports, the ones [`docs/capabilities.json`](docs/capabilities.json)
+names as entry points are `load_moe_4bit_streaming` (lazy; needs `[train]`),
 `verify_moe_4bit`, `Experts4bit`, `ExpertsNbit`, `ExpertsLoRA`, `enable_fast`,
-`enable_fast_train`, `enable_batched_train`, `enable_dense_offload`,
-`enable_nvme_residency`, `enable_mxfp4_nvme_residency`,
+`enable_fast_train`, `enable_batched_train`, `enable_expert_offload`,
+`enable_dense_offload`, `enable_nvme_residency`, `enable_mxfp4_nvme_residency`,
 `enable_nvme_train_residency`, `enable_pipelined_residency`,
-`hot_sets_from_profile`, `capture_decode` / `probe_capture`. The serving lanes
+`hot_sets_from_profile` and `capture_decode` (its probe is `probe_capture`).
+The serving lanes
 (`engines/int4_experts.py`, `int4_attn_calib.py`, `glue_fuse.py`, `glue_r2.py`,
 `router_epilogue.py`), the `E4B_*` flag each reads and which surfaces consult
 it are the lever table in [`docs/solutions/serve-large-moe-on-a-consumer-gpu.md`](docs/solutions/serve-large-moe-on-a-consumer-gpu.md).
@@ -156,12 +161,14 @@ host-bound: absolutes do not travel between hosts, ratios do.
 
 ## 10. Contributing
 
-- A change starts from an issue and ends as a pull request that cites it. Every
-  pull request gets one independent review — by someone who did not write it —
-  before it merges. Nobody merges their own. CI runs on `main` and on a pull
+- A change starts from an issue and ends as a pull request that cites it. The
+  maintainer reviews every pull request — including the maintainer's own — and
+  squash-merges it when the required checks are green. The `CI` workflow
+  (lint-and-test, wheel-smoke, discoverability) runs on `main` and on a pull
   request once it carries the `ready-to-merge` label (or leaves draft), never on
-  every push; a head with no CI run is not green, so remove and re-apply the
-  label after a new push.
+  every push; `private-marker-guard` runs on every push and pull-request event,
+  and its `guard` job is required alongside the three CI jobs. A head with no
+  `CI` run is not green, so remove and re-apply the label after a new push.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
   registered claim. If the task needs one, stop and say so on the issue.
 - Sections 2–9 bind every contributor equally: structure not names, counts or

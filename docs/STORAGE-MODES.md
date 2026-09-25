@@ -41,7 +41,9 @@ recompute-in-backward projection so training holds no dequantized-expert activat
 
 **Is not:** grouped-GEMM (per-expert loop only, intentionally), a Transformers-wide quantization
 walker, double quantization, multi-GPU/FSDP, or a speed play — on a card that already fits the
-model it is strictly a memory trade (see the energy caveat above).
+model it is strictly a memory trade (see the energy scope note in
+[METHODOLOGY.md §10](METHODOLOGY.md) and [BITSANDBYTES.md](BITSANDBYTES.md); register
+`e4b.train.energy-honest.scoped-a2000`).
 
 ### Experts4bit compatibility
 
@@ -68,8 +70,10 @@ state_dict tensor keys. The loader still instantiates `Experts4bit` for 4-bit ru
   model on which it quantized zero expert layers.
 - **GEMV is 4-bit-only** and probe-gated per configuration; the 8/16-bit schemes always decode
   via the dequantize path.
-- **Loader scope** is the four architecture families under [Scope](#scope); the `ExpertsNbit`
-  primitive itself is model-agnostic.
+- **Loader scope** is the 14 fused-MoE families in `SUPPORTED_ARCHITECTURES` plus every model
+  type on a convention in `READ_COMPATIBLE_CONVENTIONS` — the README's [Scope](../README.md#scope)
+  section and [`docs/ARCHITECTURE_SUPPORT.md`](ARCHITECTURE_SUPPORT.md) list them; the
+  `ExpertsNbit` primitive itself is model-agnostic.
 
 ### Reading the headline memory numbers
 
@@ -102,7 +106,7 @@ It runs the tested contract per scheme (build, forward parity, state round-trip,
 synthetic decode sanity, offload identity) plus the checkpoint-metadata guard; SKIP lines always
 say why (e.g. a host whose bitsandbytes can't quantize a scheme). The full suite is
 `pip install -e ".[test]" && pytest tests/ -q`; big-model numbers reproduce via the manual
-[Benchmarks](#benchmarks) scripts, not this report.
+[BENCHMARKS.md](BENCHMARKS.md) scripts, not this report.
 
 ### Validation grids
 
