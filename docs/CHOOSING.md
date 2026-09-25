@@ -1,7 +1,7 @@
 # Which door? Start from what does not fit
 
-Moved off the README (2026-08-01) so the landing page carries the decision *table* and this
-page carries the reasoning. Nothing here is new; the wording is as it was.
+The README's 'Which door? Start from what does not fit' table carries the decision; this
+page carries the reasoning and the caveats.
 
 Every mode below exists because something ran out: VRAM, host RAM, or disk. Find
 your constraint, not your model.
@@ -12,17 +12,41 @@ forward is the default and needs no flag, works on any host and any storage
 scheme, and is the convergence-tested path.
 
 **It trains, but each step is slow.**
-`enable_fast_train(model)` (needs `[fast]`). Routes the *differentiable* expert path through
-the fused grouped kernel — see [Training + expert offload](#training--expert-offload) for the
-measured cost. Opt-in on purpose: it changes the expert summation order (group-sorted vs
-ascending expert id), an ulp-level difference that should be a deliberate choice in a training
-run. **Returns the number of modules patched — check it.** A zero means `grouped-nf4-gemm` is
-missing and you are silently on the reference path.
+`enable_fast_train(model, dgrad=True)` (needs `[fast]`). Routes the *differentiable* expert path
+through the fused grouped kernel; `dgrad=True` additionally routes the backward through
+`grouped-nf4-gemm`'s single-launch dgrad kernel, and without it the backward stays on the
+per-expert decode loop. The `dgrad=True` form is the one the README's door and results tables,
+`docs/STATUS.md` and `docs/capabilities.json` quote and the one the tp1 training-parity
+receipts measured — see `e4b.train.flagship-matrix` in [claims.json](claims.json) and the tp1
+rows in [ARCHITECTURE_SUPPORT.md](ARCHITECTURE_SUPPORT.md#training-on-real-weights-tp1-2026-09-05)
+for the measured cost. Both are opt-in on purpose: the fused forward changes the expert
+summation order (group-sorted vs ascending expert id), an ulp-level difference that should be
+a deliberate choice in a training run, and `dgrad` is a second numerics change (the backward
+accumulates fp32 in a different order; at real width it adds no composed gradient error over
+the lane it extends, `e4b.train.fast-train-dgrad`). **Returns the number of modules patched —
+check it.** A zero means `grouped-nf4-gemm` is missing and you are silently on the reference
+path; `dgrad=True` on a kernel cut too old for it is turned off with a `RuntimeWarning`, not
+an error.
+
+**It trains, but each step is slow — and `[fast]` will not build.**
+`enable_batched_train(model)` (no extra: stock torch + bitsandbytes). The kernel-free lane:
+one whole-stack dequant in place of the per-expert loop. It is the fallback for an arch
+`grouped-nf4-gemm` will not build on, not a faster `enable_fast_train`: at real width it barely
+beats the loop and costs the most peak memory of any lane (a whole decoded stack rather than
+one decoded expert), so default to `enable_fast_train(model, dgrad=True)` wherever `[fast]`
+builds. **The count says which modules are patched, not which calls ran batched**: a call
+whose padding waste exceeds `_PAD_WASTE_LIMIT` falls back to the reference loop with the count
+still positive, so read a batched training result only with `batched_fallback_stats(model)`
+(assert `fallback_calls == 0`); tp1's OLMoE row is VOID on exactly this
+(`e4b.train.parity.tp1.olmoe.batched.2026-09-05`; [SOLUTIONS.md](SOLUTIONS.md),
+"Limitations that apply to every page").
 
 **The experts do not fit in VRAM.**
 `load_moe_4bit_streaming(..., offload=True)` or `OFFLOAD_EXPERTS=1`. Frozen
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
-a 30B-class MoE trainable on a 24 GB card. Requires gradient checkpointing
+a 30B-class MoE QLoRA-trainable on a 12 GB card (`e4b.offload.fits-30b-class`:
+Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM
+without offload). Requires gradient checkpointing
 (`use_reentrant=False`), which the shipped trainer always enables; the
 unsupported non-checkpointed combination fails loudly rather than mis-training.
 
@@ -31,6 +55,18 @@ unsupported non-checkpointed combination fails loudly rather than mis-training.
 instead of RAM. For models where even the pinned host copy is too large. It binds
 over the *frozen* stack and replaces the module's forward, so it refuses an
 adapter-wrapped module rather than silently discarding the delta.
+
+**…and the experts are native MXFP4 (gpt-oss, DeepSeek-V4).**
+`enable_mxfp4_nvme_residency(...)` (needs `[fast]` + an arena). The difference from
+`enable_nvme_residency` is provenance, not just format: an NF4 arena is baked by
+re-quantising, while `grouped-nf4-gemm`'s `nvme_arena.bake_expert_tensors` relocates the
+released blocks and scales verbatim, so this path computes on the checkpoint's own expert
+bytes. Same seam as the NF4 lane — frozen experts only; an `ExpertsLoRA`-wrapped module is
+refused. A bias-carrying module (gpt-oss) is refused on its structure rather than served
+through the wrong epilogue: serve that family from an NF4 arena with `enable_nvme_residency`,
+or from VRAM through `enable_serve_experts_int4`. DeepSeek-V4 after a relocation bake is the
+experimental route. Which model takes which route, and what is refused, is
+[solutions/mxfp4-moe-training-and-residency.md](solutions/mxfp4-moe-training-and-residency.md).
 
 **The experts do not fit in host RAM either — and I am TRAINING.**
 `enable_nvme_train_residency(model, arena_path, hot_rows=...)`. Same arena, other
@@ -44,7 +80,7 @@ Three things to know before using it:
 * **Gradient checkpointing is required**, and this is enforced. The evict hook
   fires when a forward returns, so the checkpoint recompute is what re-stages a
   layer for its own backward. Without it the read is refused with a message
-  saying so, rather than returning uninitialized memory.
+  saying so, rather than returning uninitialised memory.
 * **VRAM is unchanged.** The staged stack keeps its full `[E, ...]` shape so every
   consumer still indexes by global expert id. One layer is device-resident, same
   as ordinary offload — this lifts the *host RAM* ceiling, not the VRAM one.
@@ -55,14 +91,23 @@ Three things to know before using it:
 **The DENSE side does not fit.**
 `enable_dense_offload(model, "cuda")` keeps the non-expert weights in pinned host
 RAM; `DenseDiskSource(path)` serves them from the checkpoint's own safetensors
-when host RAM cannot hold them either — 114.4 GB for a K3-class model. **Nothing
-is transformed**: the bytes handed to the GPU are the bytes in the checkpoint. The
-alternative way to fit a 114 GB dense side on a small card is to quantize it,
-which changes the model.
+when host RAM cannot hold them either — 114.4 GB for a K3-class model (Kimi K3's
+non-expert tensors summed across its 96 shard headers, 2026-07-30: a checkpoint size,
+not a register entry; the breakdown is in the `engines/dense_offload.py` docstring).
+**Nothing is transformed**: the bytes handed to the GPU are the bytes in the
+checkpoint. The alternative way to fit a 114 GB dense side on a small card is to
+quantise it, which changes the model.
 
 **I am serving, not training, and want it faster.**
-`enable_fast(model)` (needs `[fast]`) — 3.65× at bs=1 decode on OLMoE geometry.
-Inference only; for training use `enable_fast_train`.
+`enable_fast(model)` (needs `[fast]`) routes the frozen experts through the grouped kernel
+(eval, `no_grad`) instead of the per-expert loop. Inference only; for training use
+`enable_fast_train`. **Assert the count**: `0` means no eligible module, not a missing
+kernel — a missing `grouped-nf4-gemm` surfaces as `ImportError` at the first forward that
+reaches the fused path, so call `fast_available()` first. The register has no row for this
+call's own decode speedup (the multiplier this page used to quote was the 0.5.0 perf smoke,
+#25, and never entered it). The serving position is the census (`e4b.serve.census.bo7.*`),
+whose arms reach the kernel through the paged runner and the residency engines — see
+[serve-large-moe-on-a-consumer-gpu](solutions/serve-large-moe-on-a-consumer-gpu.md).
 
 **I am serving and have some spare VRAM to trade.**
 `enable_pipelined_residency(model, hot_sets, k_slots=k)` (needs `[fast]`). Keeps K hot experts
@@ -81,6 +126,7 @@ the host instead of streaming them. Bit-exact host decode and CPU-complete tests
 **performance-experimental** until the AVX2 kernel lands.
 
 **Deprecated:** `enable_hot_residency` is superseded by
-`enable_pipelined_residency` (same capability, K is config). It still ships in
-0.8.0 — an earlier note promised removal *in* 0.7 and that was wrong — and warns
-at call. It is kept only so the v0 receipts stay reproducible; do not build on it.
+`enable_pipelined_residency` (same capability, K is config). It still ships and
+warns at call; the removal *in* 0.7 that an earlier note (and the warning text
+itself) promised did not happen. It is kept only so the v0 receipts stay
+reproducible; do not build on it.

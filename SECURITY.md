@@ -2,9 +2,8 @@
 
 ## Reporting
 
-**Do not open a public issue.** Either private channel:
+**Do not open a public issue.** Report by email:
 
-- [GitHub private advisory](https://github.com/pjordanandrsn/experts4bit-qlora/security/advisories/new)
 - `security@cerinamroth.com` — encrypt to the
   [published key](https://cerinamroth.com/.well-known/cerinamroth-pubkey.asc)
   (`gpg --locate-keys security@cerinamroth.com`)

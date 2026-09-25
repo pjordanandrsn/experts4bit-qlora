@@ -1,10 +1,10 @@
 # Residency engines — pipelined, v0 hot, cold, and NVMe
 
 Moved out of the README (2026-08-01) so the landing page states *which door to use* and
-this page states *why and when*. Nothing here is new; the measurements and dates are as
-they were.
+this page states *why and when*. The measurements and dates are as they were; the
+wrapper-reach section was revised 2026-09-04.
 
-Four ways to place expert weights, all sharing one idea: keep the experts you actually
+Five ways to place expert weights, all sharing one idea: keep the experts you actually
 route to close, stream or compute the rest.
 
 | engine | hot experts | cold experts | needs |
@@ -12,6 +12,7 @@ route to close, stream or compute the rest.
 | `enable_pipelined_residency` | resident VRAM | streamed from pinned host RAM | `[fast]` |
 | `enable_hot_residency` | resident VRAM | streamed from pinned host RAM | `[fast]`, **superseded** |
 | `enable_cold_engine` | resident VRAM | **computed on the host CPU** | — |
+| `enable_nvme_residency` | resident VRAM | streamed from an on-disk NF4 arena | `[fast]` + a baked NF4 arena |
 | `enable_mxfp4_nvme_residency` | resident VRAM | streamed from an on-disk arena | `[fast]` + a baked arena |
 
 ## Which engines reach an `ExpertsLoRA`-wrapped base (2026-07-28, revised 2026-09-04)

@@ -78,8 +78,11 @@ discarding the adapter.
 
 ## Training
 
-V4 is trainable. `ExpertsLoRA` re-implements the expert math inline so the low-rank delta
-lands before the nonlinearity, which means it also owns the choice of nonlinearity — that
+V4 is admitted to training by structure — no training receipt is registered, and arena
+training is experimental
+([`solutions/mxfp4-moe-training-and-residency.md`](solutions/mxfp4-moe-training-and-residency.md)).
+`ExpertsLoRA` re-implements the expert math inline so the low-rank delta lands before the
+nonlinearity, which means it also owns the choice of nonlinearity — that
 choice used to be hardcoded to plain SwiGLU, so wrapping any clamped-expert architecture
 optimised a function the frozen base does not compute, silently, with the loss still
 falling. The base now supplies the epilogue via `_apply_gate`.

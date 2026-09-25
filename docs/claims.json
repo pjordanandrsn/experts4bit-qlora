@@ -349,7 +349,7 @@
       "id": "e4b.open.gemma4-load-fault",
       "package": "experts4bit-qlora",
       "area": "serve",
-      "claim": "OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 4 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).",
+      "claim": "OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 6 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).",
       "status": "open",
       "evidence": [
         {
@@ -5392,7 +5392,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-22/p56-gemma4-ladder-3/ (run p56-gemma4-ladder-3)"
       ],
-      "notes": "Registered before the run as bench/p56/P56-PREREG.md (merged d0f8fde, 2026-09-21), which deliberately did NOT predict the verdict and disclosed two priors favouring this one. Four arms ordered by per-op error; all VALID (identical init_sha and tokens sha, 487,280,640 trainable each, n_patched 30, C1 bit-exact, 20 steps). The batched rung engaged 7680/7680 calls with 0 fallbacks at pad_waste_limit 64 -- it had VOIDed on this family before for pad-waste fallback. HONEST LIMIT: the deltas are MONOTONE in per-op error and all accelerated arms sit on the same side of the reference, so the arithmetic is not irrelevant; the reducer's flat-pattern test (hi <= 2*lo) passed with only 5.6% headroom. The defensible claim is the sublinearity and the kernel-free arm's failure, not 'pure chaos'. The standing FAIL reproduced on a third box (0.10223 vs the prior 0.08257), so it is real and stable. Nothing is quoted against another framework: the Unsloth and HF arms were skipped by registration. e4b#558 stays open as a GATE defect (no per-family floor term) rather than a fused-path defect.",
+      "notes": "Registered before the run as bench/p56/P56-PREREG.md (merged d0f8fde, 2026-09-21), which deliberately did NOT predict the verdict and disclosed two priors favouring this one. Four arms ordered by per-op error; all VALID (identical init_sha and tokens sha, 487,280,640 trainable each, n_patched 30, C1 bit-exact, 20 steps). The batched rung engaged 7680/7680 calls with 0 fallbacks at pad_waste_limit 64 -- it had VOIDed on this family before for pad-waste fallback. HONEST LIMIT: the deltas are MONOTONE in per-op error and all accelerated arms sit on the same side of the reference, so the arithmetic is not irrelevant; the reducer's flat-pattern test (hi <= 2*lo) passed with only 5.6% headroom. The defensible claim is the sublinearity and the kernel-free arm's failure, not 'pure chaos'. The standing FAIL reproduced on a third box (0.10223 vs the prior 0.08257), so it is real and stable. Nothing is quoted against another framework: the Unsloth and HF arms were skipped by registration. e4b#558 closed 2026-09-20 as explained, not fixed; the GATE defect (no per-family floor term), not a fused-path defect, was filed as e4b#713.",
       "conditions": "tp4 field fixture: alpaca, seq 2048, micro-batch 2 x accum 4, r16/alpha16, lr 2e-4, AdamW-8bit, linear warmup 5, seed 3407, N=20, --attn-4bit 1; grouped-nf4-gemm pinned 9206352f (v0.32.1)",
       "superseded_by": "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24"
     },

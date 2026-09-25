@@ -113,9 +113,10 @@ family-dependent and smaller elsewhere, as pre-registered: Granite 2.853 →
 2.366 (×1.21) and OLMoE 2.739 → 1.395 (×1.96), both with parity passing.
 **Nothing is quoted against Unsloth on Granite or Qwen3.6** (its arm
 trains the attention only there, VOID by tp4's regime rule) **nor on OLMoE**
-(its arm died before its first step; `e4b.train.h2h.unsloth.coverage.5090.2026-09-19`). The two Unsloth positions on this page (1.413 at p38's
-clinical fixture, 4.490 here) are different workloads on different cuts
-and neither supersedes the other.
+(its arm died before its first step; `e4b.train.h2h.unsloth.coverage.5090.2026-09-19`). The three Qwen3-30B-A3B positions against Unsloth on
+this page — 1.413 (p38) and 1.457 (tp2/P40) at the clinical fixture,
+4.490 here at the notebooks' recipe — are two workloads on different
+cuts and boxes, and none supersedes another.
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane
@@ -296,7 +297,7 @@ early expert layers in high precision, and that lever is memory.
 **Gemma-4's fused training path does not agree with e4b's own dense
 reference, and a kernel change did not fix it.** On one box, the same tokens
 and identical trainable counts, fused and dense reference end 0.08257 nats
-apart on held-out loss (median step-wise 0.12421) against a 0.05/0.05 band,
+apart on final train loss (median step-wise 0.12421) against a 0.05/0.05 band,
 reproducing the 0.09037 / 0.11801 of the previous kernel cut; the fused path
 is 11.65× faster on that pair (internal, no competitive position). As the
 P47–P51 lanes predicted, the sensitivity is **positional and lives in the
@@ -308,9 +309,12 @@ quantised model**, not the adapter path. [`e4b.parity.gemma4.train-internal`](cl
 arithmetic change reaches 0.05. The FAIL is real and stable; P56 measures this
 family's training-parity floor for the first time (**≥ 0.054 final / 0.085
 median step-wise**), and `tp4_reduce.parity()` compares against 0.05 **and
-against zero**, with no floor term. So #558 stands open as a **gate** defect,
-not a fused-path defect; the serving side already fixed the same class of
-error by moving to a measured floor. That proxy floor is in turn **SUPERSEDED**
+against zero**, with no floor term. So the defect is the **gate**, not the fused
+path — [#558](https://github.com/pjordanandrsn/experts4bit-qlora/issues/558)
+closed 2026-09-20 as explained, not fixed, and the missing per-family floor was
+filed as [#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713);
+the serving side already fixed the same class of error by moving to a measured
+floor. That proxy floor is in turn **SUPERSEDED**
 2026-09-24 by lane P67 ([`e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24`](claims.json),
 [`bench/p67/RESULTS-p67.md`](../bench/p67/RESULTS-p67.md)): measured as the
 reference against its own reorderings (one repeat, four fixed permutations of the
@@ -510,8 +514,9 @@ uncertified class) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4
 control** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. The
 same-box field comparator is now P58's vLLM 0.30.0 GPTQ-Int4 / MarlinExperts
 (260.3 / 1925.6 graph vs the current int4 stack's 239.4 / 1379.2 — 1.087 / 1.396,
-2026-09-22; P37's 0.28.0 rows 286.0 / 2030.0 are history); #405 is the P37
-reproduction item (c4val1 FAIL), not a licence withdrawal. Its
+2026-09-22; P37's 0.28.0 rows 286.0 / 2030.0 are history); #405 (closed
+2026-09-06) is the P37 reproduction item (c4val1 FAIL), not a licence
+withdrawal. Its
 speed matches the lane's 16k arm and the RTN stack within 1%: the pack
 changes the values, not the kernel or the bytes. **Gemma-4 has no K8
 instrument, so no arm carries a K8 licence**; the register's position with
@@ -642,8 +647,10 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   5090, e4b 0.35.3 against 0.36.4): four builds across at least three boxes and
   a release boundary agree on every byte, so **P37's divergence (11522/766,
   c4val1 +0.109) is an outlier rather than the rule**, and the open question is
-  what was different about that host
-  ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
+  what was different about that host — the question
+  [#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405) was
+  narrowed to on 2026-09-22, though #405 has been closed since 2026-09-06 and no
+  open issue carries it.
   Two things stay open and are not small. **The fingerprint covers the experts
   only**: `engines/int4_attn_calib.py` has no serialisation, so the 192
   calibrated attention projections are re-derived on every load — and the same

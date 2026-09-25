@@ -5,7 +5,7 @@ host — an RTX A2000 12 GB in a NAS-class host (Xeon W-1250, PCIe 3.0-only plat
 the chassis's sole x8 electrical slot, full production stack live (load ~45, GPU shared with six other
 dev-agent containers — not quiesced). Reproduce with the env flags at the end.*
 
-Expert CPU-offload ([`experts4bit_qlora/offload.py`](../experts4bit_qlora/offload.py)) streams each
+Expert CPU-offload ([`experts4bit_qlora/engines/offload.py`](../experts4bit_qlora/engines/offload.py)) streams each
 layer's frozen NF4 experts host→device per forward. Its throughput is bounded by one number — the
 pinned-PCIe H2D bandwidth of the host — and this note pins that number, checks the observed per-layer
 figures against it, and reports whether copy consolidation buys anything. **It does not: the link is

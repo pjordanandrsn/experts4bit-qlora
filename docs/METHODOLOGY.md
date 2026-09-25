@@ -40,7 +40,7 @@ Model: `allenai/OLMoE-1B-7B-0924` (hidden 2048, intermediate 1024, 16 layers, 64
 
 ## 2. The single controlled procedure
 
-Every number comes from **one deterministic procedure** (`examples/olmoe_experts4bit_qlora.py`), identical across configs except for the three train-placement switches:
+Every number comes from **one deterministic procedure** (`experts4bit_qlora/train.py`, run as `python -m experts4bit_qlora.train` — §8), identical across configs except for the three train-placement switches:
 
 ```
 seed = 0                                   # torch.manual_seed(0), fixed
@@ -138,7 +138,7 @@ bash bench/run-ablation.sh
 
 ## 9. Pinning claim #4 — the `matmul_4bit` routing (`97fa09f`), measured
 
-Harness: [bench/_upstream/bench_matmul4bit.py](../bench/_upstream/bench_matmul4bit.py) (requires bitsandbytes ≥ 0.50). Both paths (`_dequantize_expert`→`F.linear` vs `bnb.matmul_4bit`) coexist in the primitive, so they're A/B'd in one process. RTX A2000, bf16, OLMoE dims.
+Harness: [bench/_upstream/bench_matmul4bit.py](../bench/_upstream/bench_matmul4bit.py) (run on the bitsandbytes#1965 fork build, 0.50.0.dev0; stock ≥ 0.50.0 unverified — #392, scope note below). Both paths (`_dequantize_expert`→`F.linear` vs `bnb.matmul_4bit`) coexist in the primitive, so they're A/B'd in one process. RTX A2000, bf16, OLMoE dims.
 
 *(Status as of v0.2.0: the packaged library achieves this commit's memory property portably via the recompute-in-backward Function — see the packaging note; the `matmul_4bit` training routing measured here remains the upstream PR's approach, benched on the fork.)*
 
@@ -213,7 +213,7 @@ servers, Home Assistant, DNS, seven dev-agent containers *sharing this same A200
 load average ~45), so the ceiling and per-layer figures are a floor under realistic contention, not a
 quiet-rig best case.
 
-Even in 4-bit, the experts are the bulk of a fused-MoE's weights, and for the real targets they alone exceed a 12 GB card: Qwen3-30B-A3B ≈ **15 GB** of 4-bit experts, Gemma-4-26B-A4B ≈ **13 GB**. `OFFLOAD_EXPERTS=1` keeps each `Experts4bit` base's packed weights + absmax in **pinned CPU RAM** and streams one layer's experts to the GPU just-in-time (forward pre-hook on `ExpertsLoRA`), evicting after. Gradient checkpointing (`use_reentrant=False`) recomputes each layer's forward in backward, so the pre-hook re-stages for the recompute; PyTorch stops that recompute *early* (the evict post-hook does **not** fire on it), so a **single-resident-slot** — staging a layer first evicts the previously-staged one — is what keeps **only one layer's experts GPU-resident at a time, in forward and backward alike.** Mechanism and correctness argument: [`experts4bit_qlora/offload.py`](../experts4bit_qlora/offload.py).
+Even in 4-bit, the experts are the bulk of a fused-MoE's weights, and for the real targets they alone exceed a 12 GB card: Qwen3-30B-A3B ≈ **15 GB** of 4-bit experts, Gemma-4-26B-A4B ≈ **13 GB**. `OFFLOAD_EXPERTS=1` keeps each `Experts4bit` base's packed weights + absmax in **pinned CPU RAM** and streams one layer's experts to the GPU just-in-time (forward pre-hook on `ExpertsLoRA`), evicting after. Gradient checkpointing (`use_reentrant=False`) recomputes each layer's forward in backward, so the pre-hook re-stages for the recompute; PyTorch stops that recompute *early* (the evict post-hook does **not** fire on it), so a **single-resident-slot** — staging a layer first evicts the previously-staged one — is what keeps **only one layer's experts GPU-resident at a time, in forward and backward alike.** Mechanism and correctness argument: [`experts4bit_qlora/engines/offload.py`](../experts4bit_qlora/engines/offload.py).
 
 ### a. Correctness — offload changes tensor *location*, not math (the load-bearing claim)
 

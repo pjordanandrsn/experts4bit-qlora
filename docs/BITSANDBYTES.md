@@ -37,7 +37,7 @@ adapters — first, and it is the better choice when fused-forward throughput is
 projects optimize different axes: that one is a *kernel* project (grouped-GEMM speed; its fused
 4-bit-dequant kernel is forward-only and listed as in-progress); this one is a *storage-contract*
 project — deliberately per-expert-loop (see
-[what ExpertsNbit is / is not](#what-expertsnbit-is--is-not)) — whose distinct contributions are
+[what ExpertsNbit is / is not](STORAGE-MODES.md#what-expertsnbit-is--is-not)) — whose distinct contributions are
 the tested training contract (recompute-in-backward holding no dequantized-expert activations,
 offload asserted bit-identical to resident execution, packed storage asserted unchanged through
 training steps), the fidelity-pinned N-bit storage matrix, the streaming loader + past-VRAM expert

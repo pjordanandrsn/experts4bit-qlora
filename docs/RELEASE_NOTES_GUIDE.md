@@ -22,8 +22,9 @@ from `main` by the maintainer; do not tag or publish from a branch.
 The README is written against `main` and links only `main`; the one place
 it names a release is the generated block between
 `<!-- release-block:start -->` and `<!-- release-block:end -->`. The release
-recipe is therefore: add the `## <version> — <date>` section here in
-`CHANGELOG.md` and bump `pyproject.toml` (and `__version__`) in the same
+recipe is therefore: add the `## <version> — <date>` section at the top of
+`CHANGELOG.md` (newest first; below an `## Unreleased` section, if there is
+one) and bump `pyproject.toml` (and `__version__`) in the same
 change, then run `python scripts/check_readme_claims.py --write-release-block`
 — the block's version is derived from that heading and cross-checked
 against `pyproject.toml`, never typed; `scripts/check_readme_claims.py` in CI

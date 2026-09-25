@@ -17,20 +17,23 @@ Each section below starts with `## Source:` and the canonical URL of the file it
 **Latest released package:** [`experts4bit-qlora` 0.37.4](https://pypi.org/project/experts4bit-qlora/0.37.4/) · **Current development status:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md) on `main` (this README describes `main`) · **Released documentation for 0.37.4:** [`docs/`](https://github.com/pjordanandrsn/experts4bit-qlora/tree/v0.37.4/docs) · [`README.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.37.4/README.md) · [`CHANGELOG.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.37.4/CHANGELOG.md)
 <!-- release-block:end -->
 
-Train and serve **fused Mixture-of-Experts** models in 4-bit on hardware
-that cannot hold them in bf16.
+Train and serve **fused Mixture-of-Experts** models — MoEs whose experts
+transformers v5 stores as one 3-D parameter per layer rather than as
+per-expert `nn.Linear` — in 4-bit on hardware that cannot hold them in bf16.
 
 **The problem in one line:** `load_in_4bit=True` leaves a fused MoE's
 expert weights in bf16, so the model still OOMs; this package quantises
 exactly those experts, fine-tunes them with QLoRA, keeps them in host RAM
 or on NVMe when they do not fit, and serves them on one consumer NVIDIA
 GPU. **Canonical package:** `experts4bit-qlora` on PyPI (`import
-experts4bit_qlora`); `e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit` and
-`experts-mxfp4` are lookup aliases. **Two repositories:** this one owns loading, quantisation
-orchestration, adapters, training, residency and serving; the kernels it
-calls through the `[fast]` extra live in
+experts4bit_qlora`); the lookup aliases are listed under Install.
+**Two repositories:** this one owns loading, quantisation orchestration,
+adapters, training, residency (which tier each expert's bytes live in
+while the model runs: VRAM, pinned host RAM or an NVMe arena) and serving;
+the kernels it calls through the `[fast]` extra live in
 [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm).
-**Environment:** Linux, a CUDA GPU, torch ≥ 2.2 and bitsandbytes ≥ 0.43
+**Environment:** Linux, a CUDA GPU, torch ≥ 2.2 and bitsandbytes ≥ 0.43,
+with transformers ≥ 5.0 for the streaming loader and trainer via `[train]`
 (the floors are `pyproject.toml`'s; Python 3.11 is what CI tests; the
 kernels need Triton on an sm_80+ GPU). **The material limitation:** on a
 model that already fits in bf16, 4-bit here is a memory trade, not a
@@ -51,7 +54,7 @@ per-expert LoRA so you can fine-tune, and serves the result through a
 paged decode engine that is measured against each model's own attention.
 
 **Current position, one page:** [`docs/STATUS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md).
-**Every number, with its evidence and status:** [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json).
+**Every number, with its evidence and status:** [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json) — the claims register ('the register' below).
 This README describes `main`: every link is to `main`, every number is the
 current value of the claim it names, and the documentation as released with
 a version is reached from the release block at the top.
@@ -64,13 +67,19 @@ a version is reached from the release block at the top.
 - You need QLoRA or LoRA on the experts themselves, and PEFT or the
   bitsandbytes walker never sees them.
 - The quantised experts fit in host RAM but not VRAM (stream per layer),
-  or fit on NVMe but not host RAM (serve or train from an arena).
+  or fit on NVMe but not host RAM (serve or train from an *arena* — a baked,
+  expert-row-addressable file on NVMe that `grouped-nf4-gemm` produces;
+  [`docs/solutions/offload-moe-experts-to-cpu-or-nvme.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md)).
 - You want to train a 30B-class MoE on a 12–24 GB consumer GPU (expert
   offload; `e4b.offload.fits-30b-class`), or serve one on an RTX 5090 —
-  the only card the serving claims (`e4b.serve.census.bo7.*`, the position;
-  `e4b.serve.buildout.*` behind it) are measured on.
-- You are choosing between the reference per-expert path, the batched
-  path, the fused kernel path, host-streamed residency and the NVMe tier —
+  the only card the serving claims are measured on
+  (`e4b.serve.census.bo7.*` is the current position; `e4b.serve.buildout.*`
+  are the build-out lanes behind it).
+- You are choosing between the reference per-expert path (the default
+  `ExpertsNbit` forward — one expert at a time, no flag needed; "the
+  reference loop" and "the per-expert loop" below name the same path), the
+  batched path, the fused kernel path, host-streamed residency and the NVMe
+  tier —
   [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/CHOOSING.md) is the decision page.
 - Your experts are NF4, native MXFP4 (gpt-oss, DeepSeek-V4), int4-b32 for
   serving, fp8 for the KV cache, or a mix across storage and residency
@@ -82,9 +91,8 @@ a version is reached from the release block at the top.
   covers every `nn.Linear`.
 - The model already fits in bf16 with headroom: 4-bit is a memory trade
   there, and on the measured comparator it was slower and used more
-  energy (`e4b.train.energy-honest.scoped-a2000` in the claims register —
-  one card and one bitsandbytes development build, not a statement about
-  every 4-bit path).
+  energy (`e4b.train.energy-honest.scoped-a2000`; the scope and the
+  withdrawal note are under "What is measured").
 - You expect a general-purpose serving engine or a vLLM replacement: on
   the same box, with identical prompt ids, vLLM 0.30.0 decodes 1.087× faster
   than this package's current int4 stack at B=1 and 1.396× at B=16
@@ -115,7 +123,7 @@ a version is reached from the release block at the top.
 | [`grouped-nf4-gemm`](https://github.com/pjordanandrsn/grouped-nf4-gemm) | the kernel package this one drives (`pip install "experts4bit-qlora[fast]"`) |
 | [PyPI: experts4bit-qlora](https://pypi.org/project/experts4bit-qlora/) | the canonical distribution |
 | [`llms.txt`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/llms.txt) · [`AGENTS.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/AGENTS.md) | orientation for language models and coding agents |
-| The routing page for this project on cerinamroth.com (problem-first index, status, compatibility) | [https://cerinamroth.com/ml/experts4bit-qlora/](https://cerinamroth.com/ml/experts4bit-qlora/) |
+| [cerinamroth.com/ml/experts4bit-qlora/](https://cerinamroth.com/ml/experts4bit-qlora/) | the routing page for this project (problem-first index, status, compatibility) |
 
 ## Install
 
@@ -127,7 +135,8 @@ pip install "experts4bit-qlora[fast]"   # + the fused grouped-GEMM path (grouped
 
 `e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit` and `experts-mxfp4` are
 lookup aliases that install this package; always install and cite
-`experts4bit-qlora`. Runs on stock bitsandbytes; every feature has a
+`experts4bit-qlora`. Trusted publishing; every wheel carries a PEP 740
+attestation. Runs on stock bitsandbytes; every feature has a
 reference path. Building from source — `pip install --no-build-isolation`,
 or any build outside pip's isolated build environment — needs setuptools ≥ 77
 for the PEP 639 license metadata in `pyproject.toml`; an ordinary
@@ -136,7 +145,11 @@ extra's floor on `grouped-nf4-gemm` is `pyproject.toml`'s and is not
 repeated here; which version of this package needs which kernel release,
 and why, is the `compatibility` record in
 [`docs/system-manifest.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/system-manifest.json),
-validated in CI against `pyproject.toml`.
+validated in CI against `pyproject.toml`. `[fast]` also brings the kernel
+package's own torch floor, torch 2.8 or newer (grouped-nf4-gemm's
+`pyproject.toml`; pre-releases accepted) — above this package's 2.2, so
+check `python -c "import torch; print(torch.__version__)"` first on a CUDA
+image whose torch you want to keep.
 
 ## Which door? Start from what does not fit
 
@@ -153,26 +166,44 @@ validated in CI against `pyproject.toml`.
 | serving, want it faster | `enable_fast(model)` | `[fast]` |
 | serving, spare VRAM to trade | `enable_pipelined_residency(model, hot_sets, k_slots=k)` | `[fast]` |
 
+An arena is baked by `grouped-nf4-gemm`, not by this package; the bake
+tools, and how to bind an arena to a model, are on
+[`docs/solutions/offload-moe-experts-to-cpu-or-nvme.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md).
+
 Reasoning and caveats for each: [`docs/CHOOSING.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/CHOOSING.md).
 **Assert the return value** of every `enable_*`: `0` and "silently still
 on the per-expert loop" look identical from the caller's side.
 
 ## Quickstart
 
+Needs the `[train]` extra: the streaming loader imports transformers ≥ 5.0,
+so on the base install the import below raises `ModuleNotFoundError`. It
+also needs a CUDA GPU, network access and the checkpoint download.
+`verify_moe_4bit(..., strict=True)` returning silently is the success signal.
+
 ```python
 import torch
 from experts4bit_qlora import Experts4bit, ExpertsLoRA, load_moe_4bit_streaming, verify_moe_4bit
 
-# A real fused-MoE checkpoint, quantised on the way to the GPU (never bf16-resident):
+# A real fused-MoE checkpoint, quantised on the way to the GPU (never bf16-resident).
+# As written the 4-bit experts stay resident, so the card must hold them; on a 12 GB
+# card add offload=True (experts in pinned host RAM, one layer on the GPU at a time;
+# `e4b.offload.fits-30b-class`: Qwen3-30B-A3B QLoRA-trains at a 7.16 GB peak).
 model, config = load_moe_4bit_streaming(
     "Qwen/Qwen3-30B-A3B", "cuda", torch.bfloat16, r=8, alpha=16, quant_type="nf4",
 )
 verify_moe_4bit(model, strict=True)   # raises if any expert stack is still high precision
 ```
 
+The shipped trainer and `infer` read their settings from environment
+variables (`python -m experts4bit_qlora.train --help` lists them). Without
+`MODEL=` both default to `allenai/OLMoE-1B-7B-0924` (the trainer on
+`tatsu-lab/alpaca`); `R`/`ALPHA` must match the adapter and `QUANT_TYPE`
+the training run. To train and serve the model loaded above:
+
 ```bash
-STEPS=150 R=8 TRAIN_EXPERTS=1 OUT=./out python -m experts4bit_qlora.train      # QLoRA fine-tune
-ADAPTER=./out/adapter_best.pt python -m experts4bit_qlora.infer                 # serve it
+MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 STEPS=150 R=8 TRAIN_EXPERTS=1 OUT=./out python -m experts4bit_qlora.train   # QLoRA fine-tune; writes ./out/adapter_best.pt
+MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 ADAPTER=./out/adapter_best.pt python -m experts4bit_qlora.infer            # serve it
 ```
 
 Do **not** load these models with stock `from_pretrained(...,
@@ -217,7 +248,7 @@ statement that the page describes a capability without a measurement).
 Lookup aliases (`e4b`, `e4b-qlora`, `experts4bit`, `expertsnbit`, `experts-mxfp4`) install this package;
 always install and cite `experts4bit-qlora`.
 
-## Environment, in one line
+## Environment
 
 Linux, an NVIDIA CUDA GPU, torch ≥ 2.2, bitsandbytes ≥ 0.43; transformers
 ≥ 5.0 for the streaming loader (`[train]`); for the kernel path (`[fast]`),
@@ -231,16 +262,21 @@ what is measured-private and what is open, is [`STATUS.md`](STATUS.md).
 
 ## Limitations that apply to every page
 
-- Linux + NVIDIA CUDA only; Python 3.11 is what CI tests. The kernel path
-  needs Triton on an sm_80+ GPU.
+- The environment above (Linux + NVIDIA CUDA only; Python 3.11 is what CI
+  tests; Triton on an sm_80+ GPU for the kernel path) applies to every page.
 - Nothing falls back silently: an unsupported family fails fast with a
   named error, and every `enable_*` returns a count or a non-empty handle
   list, or raises — the caller asserts it. One known exception, recorded
-  rather than hidden: `enable_batched_train`'s per-call fallback above
-  `_PAD_WASTE_LIMIT` keeps the count positive while some layers run the
-  reference loop; a batched training arm is read only with a kernel-call
-  counter (tp1's OLMoE row is VOID on this,
-  `e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
+  rather than hidden: `enable_batched_train` can return a positive count
+  while some layers still run the reference loop, because each call falls
+  back to the reference whenever a batch's padding waste exceeds the
+  pad-waste guard (`_PAD_WASTE_LIMIT` in
+  `experts4bit_qlora/engines/batched.py`, overridable with
+  `E4B_BATCHED_PAD_WASTE_LIMIT`). The fallback is correct and invisible
+  from the output, so trust a batched training run only when
+  `batched_fallback_stats(model)` reports `fallback_calls == 0`; the tp1
+  training-parity lane (real weights, 2026-09-05) marked OLMoE's batched
+  run VOID for exactly this (`e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
 - A model that already fits in bf16 with headroom gains nothing here:
   4-bit is a memory trade, and on the measured comparator it cost energy
   (`e4b.train.energy-honest.scoped-a2000`).
@@ -893,7 +929,7 @@ Single-stream decode is bandwidth-bound: each token reads the routed experts plu
 | router epilogue | `engines.router_epilogue.fuse_router_epilogue` | `E4B_FUSE_ROUTER_EPI=1` |
 | paged fp8 KV cache | `engines.fp8_paged_kv` + `engines.paged_attention` | — |
 
-The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the in-tree harness `bench/hybrid-g9/step_decomp.py`, which produced the receipts; the HTTP shim and `infer` CLI do not read them. `E4B_SERVE_EXP_INT4` is read only by an out-of-tree bench hook (a `usercustomize` module that is not in this repository), never by the package: the in-package entry point for the int4 expert store is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
+The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the in-tree harness `bench/hybrid-g9/step_decomp.py`, which produced the receipts; the HTTP shim and `infer` CLI do not read them. `E4B_SERVE_EXP_INT4` is read only by the bench lanes' `usercustomize` hook (checked in with each bench lane, e.g. `bench/hybrid-g9/throughput-20260904/bo7/logs/hook/usercustomize.py`, and put on `PYTHONPATH` per lane; not shipped in the package), never by the package: the in-package entry point for the int4 expert store is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
 
 ## Install
 
@@ -2009,9 +2045,10 @@ family-dependent and smaller elsewhere, as pre-registered: Granite 2.853 →
 2.366 (×1.21) and OLMoE 2.739 → 1.395 (×1.96), both with parity passing.
 **Nothing is quoted against Unsloth on Granite or Qwen3.6** (its arm
 trains the attention only there, VOID by tp4's regime rule) **nor on OLMoE**
-(its arm died before its first step; `e4b.train.h2h.unsloth.coverage.5090.2026-09-19`). The two Unsloth positions on this page (1.413 at p38's
-clinical fixture, 4.490 here) are different workloads on different cuts
-and neither supersedes the other.
+(its arm died before its first step; `e4b.train.h2h.unsloth.coverage.5090.2026-09-19`). The three Qwen3-30B-A3B positions against Unsloth on
+this page — 1.413 (p38) and 1.457 (tp2/P40) at the clinical fixture,
+4.490 here at the notebooks' recipe — are two workloads on different
+cuts and boxes, and none supersedes another.
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane
@@ -2192,7 +2229,7 @@ early expert layers in high precision, and that lever is memory.
 **Gemma-4's fused training path does not agree with e4b's own dense
 reference, and a kernel change did not fix it.** On one box, the same tokens
 and identical trainable counts, fused and dense reference end 0.08257 nats
-apart on held-out loss (median step-wise 0.12421) against a 0.05/0.05 band,
+apart on final train loss (median step-wise 0.12421) against a 0.05/0.05 band,
 reproducing the 0.09037 / 0.11801 of the previous kernel cut; the fused path
 is 11.65× faster on that pair (internal, no competitive position). As the
 P47–P51 lanes predicted, the sensitivity is **positional and lives in the
@@ -2204,9 +2241,12 @@ quantised model**, not the adapter path. [`e4b.parity.gemma4.train-internal`](cl
 arithmetic change reaches 0.05. The FAIL is real and stable; P56 measures this
 family's training-parity floor for the first time (**≥ 0.054 final / 0.085
 median step-wise**), and `tp4_reduce.parity()` compares against 0.05 **and
-against zero**, with no floor term. So #558 stands open as a **gate** defect,
-not a fused-path defect; the serving side already fixed the same class of
-error by moving to a measured floor. That proxy floor is in turn **SUPERSEDED**
+against zero**, with no floor term. So the defect is the **gate**, not the fused
+path — [#558](https://github.com/pjordanandrsn/experts4bit-qlora/issues/558)
+closed 2026-09-20 as explained, not fixed, and the missing per-family floor was
+filed as [#713](https://github.com/pjordanandrsn/experts4bit-qlora/issues/713);
+the serving side already fixed the same class of error by moving to a measured
+floor. That proxy floor is in turn **SUPERSEDED**
 2026-09-24 by lane P67 ([`e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24`](claims.json),
 [`bench/p67/RESULTS-p67.md`](../bench/p67/RESULTS-p67.md)): measured as the
 reference against its own reorderings (one repeat, four fixed permutations of the
@@ -2406,8 +2446,9 @@ uncertified class) and ×2.602 at B=16 (1327.5 tok/s) vs e4b's own NF4
 control** — `e4b.serve.census.bo7.qwen3.b1.5090.2026-09-05` / `e4b.serve.census.bo7.qwen3.b16.5090.2026-09-05`. The
 same-box field comparator is now P58's vLLM 0.30.0 GPTQ-Int4 / MarlinExperts
 (260.3 / 1925.6 graph vs the current int4 stack's 239.4 / 1379.2 — 1.087 / 1.396,
-2026-09-22; P37's 0.28.0 rows 286.0 / 2030.0 are history); #405 is the P37
-reproduction item (c4val1 FAIL), not a licence withdrawal. Its
+2026-09-22; P37's 0.28.0 rows 286.0 / 2030.0 are history); #405 (closed
+2026-09-06) is the P37 reproduction item (c4val1 FAIL), not a licence
+withdrawal. Its
 speed matches the lane's 16k arm and the RTN stack within 1%: the pack
 changes the values, not the kernel or the bytes. **Gemma-4 has no K8
 instrument, so no arm carries a K8 licence**; the register's position with
@@ -2538,8 +2579,10 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   5090, e4b 0.35.3 against 0.36.4): four builds across at least three boxes and
   a release boundary agree on every byte, so **P37's divergence (11522/766,
   c4val1 +0.109) is an outlier rather than the rule**, and the open question is
-  what was different about that host
-  ([#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)).
+  what was different about that host — the question
+  [#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405) was
+  narrowed to on 2026-09-22, though #405 has been closed since 2026-09-06 and no
+  open issue carries it.
   Two things stay open and are not small. **The fingerprint covers the experts
   only**: `engines/int4_attn_calib.py` has no serialisation, so the 192
   calibrated attention projections are re-derived on every load — and the same
@@ -2769,8 +2812,8 @@ check.
 
 # Which door? Start from what does not fit
 
-Moved off the README (2026-08-01) so the landing page carries the decision *table* and this
-page carries the reasoning. Nothing here is new; the wording is as it was.
+The README's 'Which door? Start from what does not fit' table carries the decision; this
+page carries the reasoning and the caveats.
 
 Every mode below exists because something ran out: VRAM, host RAM, or disk. Find
 your constraint, not your model.
@@ -2781,17 +2824,41 @@ forward is the default and needs no flag, works on any host and any storage
 scheme, and is the convergence-tested path.
 
 **It trains, but each step is slow.**
-`enable_fast_train(model)` (needs `[fast]`). Routes the *differentiable* expert path through
-the fused grouped kernel — see [Training + expert offload](#training--expert-offload) for the
-measured cost. Opt-in on purpose: it changes the expert summation order (group-sorted vs
-ascending expert id), an ulp-level difference that should be a deliberate choice in a training
-run. **Returns the number of modules patched — check it.** A zero means `grouped-nf4-gemm` is
-missing and you are silently on the reference path.
+`enable_fast_train(model, dgrad=True)` (needs `[fast]`). Routes the *differentiable* expert path
+through the fused grouped kernel; `dgrad=True` additionally routes the backward through
+`grouped-nf4-gemm`'s single-launch dgrad kernel, and without it the backward stays on the
+per-expert decode loop. The `dgrad=True` form is the one the README's door and results tables,
+`docs/STATUS.md` and `docs/capabilities.json` quote and the one the tp1 training-parity
+receipts measured — see `e4b.train.flagship-matrix` in [claims.json](claims.json) and the tp1
+rows in [ARCHITECTURE_SUPPORT.md](ARCHITECTURE_SUPPORT.md#training-on-real-weights-tp1-2026-09-05)
+for the measured cost. Both are opt-in on purpose: the fused forward changes the expert
+summation order (group-sorted vs ascending expert id), an ulp-level difference that should be
+a deliberate choice in a training run, and `dgrad` is a second numerics change (the backward
+accumulates fp32 in a different order; at real width it adds no composed gradient error over
+the lane it extends, `e4b.train.fast-train-dgrad`). **Returns the number of modules patched —
+check it.** A zero means `grouped-nf4-gemm` is missing and you are silently on the reference
+path; `dgrad=True` on a kernel cut too old for it is turned off with a `RuntimeWarning`, not
+an error.
+
+**It trains, but each step is slow — and `[fast]` will not build.**
+`enable_batched_train(model)` (no extra: stock torch + bitsandbytes). The kernel-free lane:
+one whole-stack dequant in place of the per-expert loop. It is the fallback for an arch
+`grouped-nf4-gemm` will not build on, not a faster `enable_fast_train`: at real width it barely
+beats the loop and costs the most peak memory of any lane (a whole decoded stack rather than
+one decoded expert), so default to `enable_fast_train(model, dgrad=True)` wherever `[fast]`
+builds. **The count says which modules are patched, not which calls ran batched**: a call
+whose padding waste exceeds `_PAD_WASTE_LIMIT` falls back to the reference loop with the count
+still positive, so read a batched training result only with `batched_fallback_stats(model)`
+(assert `fallback_calls == 0`); tp1's OLMoE row is VOID on exactly this
+(`e4b.train.parity.tp1.olmoe.batched.2026-09-05`; [SOLUTIONS.md](SOLUTIONS.md),
+"Limitations that apply to every page").
 
 **The experts do not fit in VRAM.**
 `load_moe_4bit_streaming(..., offload=True)` or `OFFLOAD_EXPERTS=1`. Frozen
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
-a 30B-class MoE trainable on a 24 GB card. Requires gradient checkpointing
+a 30B-class MoE QLoRA-trainable on a 12 GB card (`e4b.offload.fits-30b-class`:
+Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM
+without offload). Requires gradient checkpointing
 (`use_reentrant=False`), which the shipped trainer always enables; the
 unsupported non-checkpointed combination fails loudly rather than mis-training.
 
@@ -2800,6 +2867,18 @@ unsupported non-checkpointed combination fails loudly rather than mis-training.
 instead of RAM. For models where even the pinned host copy is too large. It binds
 over the *frozen* stack and replaces the module's forward, so it refuses an
 adapter-wrapped module rather than silently discarding the delta.
+
+**…and the experts are native MXFP4 (gpt-oss, DeepSeek-V4).**
+`enable_mxfp4_nvme_residency(...)` (needs `[fast]` + an arena). The difference from
+`enable_nvme_residency` is provenance, not just format: an NF4 arena is baked by
+re-quantising, while `grouped-nf4-gemm`'s `nvme_arena.bake_expert_tensors` relocates the
+released blocks and scales verbatim, so this path computes on the checkpoint's own expert
+bytes. Same seam as the NF4 lane — frozen experts only; an `ExpertsLoRA`-wrapped module is
+refused. A bias-carrying module (gpt-oss) is refused on its structure rather than served
+through the wrong epilogue: serve that family from an NF4 arena with `enable_nvme_residency`,
+or from VRAM through `enable_serve_experts_int4`. DeepSeek-V4 after a relocation bake is the
+experimental route. Which model takes which route, and what is refused, is
+[solutions/mxfp4-moe-training-and-residency.md](solutions/mxfp4-moe-training-and-residency.md).
 
 **The experts do not fit in host RAM either — and I am TRAINING.**
 `enable_nvme_train_residency(model, arena_path, hot_rows=...)`. Same arena, other
@@ -2813,7 +2892,7 @@ Three things to know before using it:
 * **Gradient checkpointing is required**, and this is enforced. The evict hook
   fires when a forward returns, so the checkpoint recompute is what re-stages a
   layer for its own backward. Without it the read is refused with a message
-  saying so, rather than returning uninitialized memory.
+  saying so, rather than returning uninitialised memory.
 * **VRAM is unchanged.** The staged stack keeps its full `[E, ...]` shape so every
   consumer still indexes by global expert id. One layer is device-resident, same
   as ordinary offload — this lifts the *host RAM* ceiling, not the VRAM one.
@@ -2824,14 +2903,23 @@ Three things to know before using it:
 **The DENSE side does not fit.**
 `enable_dense_offload(model, "cuda")` keeps the non-expert weights in pinned host
 RAM; `DenseDiskSource(path)` serves them from the checkpoint's own safetensors
-when host RAM cannot hold them either — 114.4 GB for a K3-class model. **Nothing
-is transformed**: the bytes handed to the GPU are the bytes in the checkpoint. The
-alternative way to fit a 114 GB dense side on a small card is to quantize it,
-which changes the model.
+when host RAM cannot hold them either — 114.4 GB for a K3-class model (Kimi K3's
+non-expert tensors summed across its 96 shard headers, 2026-07-30: a checkpoint size,
+not a register entry; the breakdown is in the `engines/dense_offload.py` docstring).
+**Nothing is transformed**: the bytes handed to the GPU are the bytes in the
+checkpoint. The alternative way to fit a 114 GB dense side on a small card is to
+quantise it, which changes the model.
 
 **I am serving, not training, and want it faster.**
-`enable_fast(model)` (needs `[fast]`) — 3.65× at bs=1 decode on OLMoE geometry.
-Inference only; for training use `enable_fast_train`.
+`enable_fast(model)` (needs `[fast]`) routes the frozen experts through the grouped kernel
+(eval, `no_grad`) instead of the per-expert loop. Inference only; for training use
+`enable_fast_train`. **Assert the count**: `0` means no eligible module, not a missing
+kernel — a missing `grouped-nf4-gemm` surfaces as `ImportError` at the first forward that
+reaches the fused path, so call `fast_available()` first. The register has no row for this
+call's own decode speedup (the multiplier this page used to quote was the 0.5.0 perf smoke,
+#25, and never entered it). The serving position is the census (`e4b.serve.census.bo7.*`),
+whose arms reach the kernel through the paged runner and the residency engines — see
+[serve-large-moe-on-a-consumer-gpu](solutions/serve-large-moe-on-a-consumer-gpu.md).
 
 **I am serving and have some spare VRAM to trade.**
 `enable_pipelined_residency(model, hot_sets, k_slots=k)` (needs `[fast]`). Keeps K hot experts
@@ -2850,13 +2938,16 @@ the host instead of streaming them. Bit-exact host decode and CPU-complete tests
 **performance-experimental** until the AVX2 kernel lands.
 
 **Deprecated:** `enable_hot_residency` is superseded by
-`enable_pipelined_residency` (same capability, K is config). It still ships in
-0.8.0 — an earlier note promised removal *in* 0.7 and that was wrong — and warns
-at call. It is kept only so the v0 receipts stay reproducible; do not build on it.
+`enable_pipelined_residency` (same capability, K is config). It still ships and
+warns at call; the removal *in* 0.7 that an earlier note (and the warning text
+itself) promised did not happen. It is kept only so the v0 receipts stay
+reproducible; do not build on it.
 
 ## Source: AGENTS.md (https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/AGENTS.md)
 
 # AGENTS.md — working in experts4bit-qlora
+
+## 1. Router
 
 - Starting from a model, training, serving, or fit problem? → experts4bit-qlora (this repository).
 - Starting from a packed layout, kernel, GEMM/GEMV, attention, or arena primitive? → grouped-nf4-gemm.
@@ -2921,13 +3012,16 @@ Evidence words: the manifest's `evidence_vocabulary`; these rules: its `invarian
 
 ## 5. Public API and capability map
 
-Exported from `experts4bit_qlora` (`__all__` in `__init__.py`; a leading
-underscore means internal): `load_moe_4bit_streaming` (lazy; needs `[train]`),
+`__all__` in `__init__.py` is the export list (a leading underscore means
+internal; `scripts/check_change_impact.py` warns when a name enters or leaves
+it). Of the exports, the ones [`docs/capabilities.json`](docs/capabilities.json)
+names as entry points are `load_moe_4bit_streaming` (lazy; needs `[train]`),
 `verify_moe_4bit`, `Experts4bit`, `ExpertsNbit`, `ExpertsLoRA`, `enable_fast`,
-`enable_fast_train`, `enable_batched_train`, `enable_dense_offload`,
-`enable_nvme_residency`, `enable_mxfp4_nvme_residency`,
+`enable_fast_train`, `enable_batched_train`, `enable_expert_offload`,
+`enable_dense_offload`, `enable_nvme_residency`, `enable_mxfp4_nvme_residency`,
 `enable_nvme_train_residency`, `enable_pipelined_residency`,
-`hot_sets_from_profile`, `capture_decode` / `probe_capture`. The serving lanes
+`hot_sets_from_profile` and `capture_decode` (its probe is `probe_capture`).
+The serving lanes
 (`engines/int4_experts.py`, `int4_attn_calib.py`, `glue_fuse.py`, `glue_r2.py`,
 `router_epilogue.py`), the `E4B_*` flag each reads and which surfaces consult
 it are the lever table in [`docs/solutions/serve-large-moe-on-a-consumer-gpu.md`](docs/solutions/serve-large-moe-on-a-consumer-gpu.md).
@@ -3014,12 +3108,14 @@ host-bound: absolutes do not travel between hosts, ratios do.
 
 ## 10. Contributing
 
-- A change starts from an issue and ends as a pull request that cites it. Every
-  pull request gets one independent review — by someone who did not write it —
-  before it merges. Nobody merges their own. CI runs on `main` and on a pull
+- A change starts from an issue and ends as a pull request that cites it. The
+  maintainer reviews every pull request — including the maintainer's own — and
+  squash-merges it when the required checks are green. The `CI` workflow
+  (lint-and-test, wheel-smoke, discoverability) runs on `main` and on a pull
   request once it carries the `ready-to-merge` label (or leaves draft), never on
-  every push; a head with no CI run is not green, so remove and re-apply the
-  label after a new push.
+  every push; `private-marker-guard` runs on every push and pull-request event,
+  and its `guard` job is required alongside the three CI jobs. A head with no
+  `CI` run is not green, so remove and re-apply the label after a new push.
 - A task pull request never moves a gate, a threshold, the `[fast]` floor or a
   registered claim. If the task needs one, stop and say so on the issue.
 - Sections 2–9 bind every contributor equally: structure not names, counts or
@@ -3297,7 +3393,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 
 Open items (no evidence either way):
 
-- e4b.open.gemma4-load-fault [open]: OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 4 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).
+- e4b.open.gemma4-load-fault [open]: OPEN: Gemma-4-26B-A4B-it fails to load with 'CUDA error: invalid argument' on 2 of 6 rented 5090 hosts, inside load_moe_4bit_streaming after the experts quantise; the traceback site may not be the faulting kernel (asynchronous CUDA error).
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 

@@ -35,7 +35,7 @@ Single-stream decode is bandwidth-bound: each token reads the routed experts plu
 | router epilogue | `engines.router_epilogue.fuse_router_epilogue` | `E4B_FUSE_ROUTER_EPI=1` |
 | paged fp8 KV cache | `engines.fp8_paged_kv` + `engines.paged_attention` | — |
 
-The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the in-tree harness `bench/hybrid-g9/step_decomp.py`, which produced the receipts; the HTTP shim and `infer` CLI do not read them. `E4B_SERVE_EXP_INT4` is read only by an out-of-tree bench hook (a `usercustomize` module that is not in this repository), never by the package: the in-package entry point for the int4 expert store is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
+The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv` and by the in-tree harness `bench/hybrid-g9/step_decomp.py`, which produced the receipts; the HTTP shim and `infer` CLI do not read them. `E4B_SERVE_EXP_INT4` is read only by the bench lanes' `usercustomize` hook (checked in with each bench lane, e.g. `bench/hybrid-g9/throughput-20260904/bo7/logs/hook/usercustomize.py`, and put on `PYTHONPATH` per lane; not shipped in the package), never by the package: the in-package entry point for the int4 expert store is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
 
 ## Install
 

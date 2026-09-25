@@ -14,7 +14,7 @@
 - [ ] **README routing** (Use this when / Do not use this when / Start here) still accurate.
 - [ ] **Examples** in new docs are executed in CI, executed in a hardware lane, or explicitly marked as needing GPU / network / model download / large storage. No example silently falls back.
 - [ ] **Related repository** updated (or an issue filed there) if the kernel/consumer contract changed.
-- [ ] **Anchored docs untouched**: nothing under `docs/` with an `ots-attestation-footer` was edited (`grep -l ots-attestation-footer docs/*.md`).
+- [ ] **Anchored docs untouched**: no edited file, at any path, has a sibling `.ots` or an `<!-- ots-attestation-footer -->` line (`for f in $(git diff --name-only origin/main); do test -e "$f.ots" && echo ANCHORED $f; grep -q '^<!-- ots-attestation-footer -->' "$f" 2>/dev/null && echo ANCHORED $f; done` prints nothing); a correction to an anchored document goes in a sibling file (`AGENTS.md` §4).
 - [ ] **Measured numbers** ship a self-pair, two devices or the named single architecture, real text (not random token ids), and report the cells that lose (`CONTRIBUTING.md`).
 - [ ] **Expert-math changes** (`ExpertsLoRA`, an epilogue, a kernel lane) carry a parity test against the reference, not a loss curve.
 - [ ] **Enabler return values are asserted** (`n = enable_*(...)`; `0` looks identical to "silently on the per-expert loop").

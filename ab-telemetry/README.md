@@ -32,7 +32,8 @@ Hardware: single RTX A2000 12 GB (sm_86) on a shared host; container CPU-capped 
   the dequant/reload path.
 - **Throughput caveat**: the +30 % median s/step above is an *upper bound* — the host was under
   heavy external CPU load (~55 on 12 cores) during both arms, which inflates the offload arm's
-  H2D cost. Uncontended, the same card measures ~+11 % (see the top-level README benchmarks).
+  H2D cost. Uncontended, the same card measures ~+11 % (claim `e4b.offload.fits-30b-class` in
+  `docs/claims.json`: about +11 % s/step at OLMoE scale).
 
 ![loss](charts/loss_curve.png)
 ![vram](charts/vram.png)

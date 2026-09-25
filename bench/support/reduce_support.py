@@ -131,7 +131,7 @@ def _claimed() -> dict[str, str]:
 # record with an evidenced family is an argument, not a load.
 NO_PUBLISHED_CHECKPOINT = {
     "gemma4_text": (
-        "the text tower of a `gemma4` config -- `moe_conventions.py:328` gives ONE "
+        "the text tower of a `gemma4` config -- `moe_conventions.py` gives ONE "
         "convention record (`GEMMA4`) for `{gemma4_text, gemma4}`, and its own comment "
         "calls `gemma4_text` \"what the loader constructs from `text_config`\". Every "
         "released gemma-4 (26B-A4B, 26B-A4B-it, 31B, E4B) reports `model_type: gemma4`; "
