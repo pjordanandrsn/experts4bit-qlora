@@ -95,12 +95,25 @@ def _ref_epilogue(logits: torch.Tensor, k: int, norm: bool):
     return probs, vals, idx
 
 
-def _ref_topk_softmax(logits: torch.Tensor, k: int, bias):
-    """gpt-oss / GraniteMoe: top-k ON THE LOGITS (plus the router bias
-    when it carries one), then a softmax over the k selected."""
-    x = logits.float() + (bias.float() if bias is not None else 0.0)
+def _ref_topk_softmax(logits: torch.Tensor, k: int):
+    """gpt-oss / GraniteMoe: top-k ON THE LOGITS, then a softmax over the
+    k selected. A router bias is already in ``logits``: it is added inside
+    the GEMM, in the module's dtype (:func:`_topk_softmax_logits`)."""
+    x = logits.float()
     top, idx = torch.topk(x, k, dim=-1)
     return x, torch.softmax(top, dim=-1), idx
+
+
+def _topk_softmax_logits(mod, rows, has_bias):
+    """The select-on-logits kind's logits, formed the way the upstream
+    router forms them: ``F.linear(rows, weight, bias)``, so the bias is added
+    BEFORE the logits round to the module's dtype. Adding it afterwards in
+    fp32 is a different function at bf16: gpt-oss-20b's real routers, fed
+    4 random bf16 rows, selected a different expert SET in 46 of 1200
+    (layer, seed) probes that way, and the probe licensed only 16 of the 24
+    layers (found writing #747's tests). Reads the bias live, as it reads the
+    weight."""
+    return torch.nn.functional.linear(rows, mod.weight, mod.bias if has_bias else None)
 
 
 def _gemma4_pre(mod, rows):
@@ -187,10 +200,9 @@ def _reference_for(mod, kind, spec, x):
         logits = torch.nn.functional.linear(_gemma4_pre(mod, x), mod.proj.weight)
         probs, vals, idx = _ref_epilogue(logits, spec["k"], True)
         return probs, vals * mod.per_expert_scale.float()[idx], idx
-    logits = torch.nn.functional.linear(x, mod.weight)
     if kind == "softmax_topk":
-        return _ref_epilogue(logits, spec["k"], spec["norm"])
-    return _ref_topk_softmax(logits, spec["k"], spec["bias"])
+        return _ref_epilogue(torch.nn.functional.linear(x, mod.weight), spec["k"], spec["norm"])
+    return _ref_topk_softmax(_topk_softmax_logits(mod, x, spec["bias"] is not None), spec["k"])
 
 
 def _probe_matches(mod, kind, spec) -> bool:
@@ -213,10 +225,20 @@ def _probe_matches(mod, kind, spec) -> bool:
     got_f, got_w, got_i = out[pos[0]], out[pos[1]], out[pos[2]]
     with torch.no_grad():
         ref_f, ref_w, ref_i = _reference_for(mod, kind, spec, x)
-        pre = _gemma4_pre(mod, x) if kind == "gemma4" else x
-        raw = torch.nn.functional.linear(pre, w)
+        # "raw" is exactly what the fused path returns as its logits -- for
+        # the select-on-logits kind that carries the bias, since it is
+        # added inside the GEMM; a module returning the UNbiased projection
+        # first is refused rather than handed the biased one.
+        if kind == "topk_softmax":
+            raw = _topk_softmax_logits(mod, x, spec["bias"] is not None)
+        else:
+            pre = _gemma4_pre(mod, x) if kind == "gemma4" else x
+            raw = torch.nn.functional.linear(pre, w)
     if got_i.shape != ref_i.shape or not torch.equal(got_i.cpu(), ref_i.cpu()):
         return False
+    # 2**-8 is bf16's half-ulp: a module that rounds the fp32 k-softmax to
+    # bf16 (gpt-oss's softmax in the logits' dtype, GraniteMoe's type_as) sits
+    # inside it by construction, once the logits are formed as it forms them.
     if not torch.allclose(got_w.float().cpu(), ref_w.float().cpu(), rtol=2 ** -8, atol=2 ** -12):
         return False
     # The FIRST slot is part of the module's contract too (callers that
@@ -309,13 +331,13 @@ def fuse_router_epilogue(model) -> int:
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         else:
-            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _bias=spec["bias"], _raw=raw_first):
+            def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos,
+                     _has_bias=spec["bias"] is not None, _raw=raw_first):
                 rows = hidden_states.reshape(-1, _h)
                 if rows.shape[0] > _MAX_DECODE_ROWS:
                     return _orig(hidden_states)
-                logits = torch.nn.functional.linear(rows, _m.weight)
-                first, w, idx = router_epilogue(logits.float(), _k, False,
-                                                select_on_logits=True, bias=_bias)
+                logits = _topk_softmax_logits(_m, rows, _has_bias)
+                first, w, idx = router_epilogue(logits.float(), _k, False, select_on_logits=True)
                 if _cast_for("topk_softmax"):
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
