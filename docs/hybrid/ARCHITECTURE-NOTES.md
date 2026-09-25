@@ -1,5 +1,13 @@
 # Hybrid CPU/GPU execution tier — architecture notes (e4b side)
 
+*Status: a pre-work map. Much of it shipped in 0.20.0 (2026-08-23): the hybrid
+three-tier engine with its QLoRA backward (`engines/hybrid.py`,
+`engines/hybrid_train.py`), the CPU router (`engines/cpu_router.py`), the
+placement manifest (`engines/placement.py`, checked by
+`python -m experts4bit_qlora.verify --manifest`) and paged KV/attention.
+Statements below that say "today" describe the tree before that release; the
+0.20.0 entry of [`CHANGELOG.md`](../../CHANGELOG.md) records what landed.*
+
 Pre-work map for the hybrid-tier program (Stage 1 Phases 0–5, gated G0–G5):
 where each phase hooks into this repo. Kernel-side notes live in
 `grouped-nf4-gemm/docs/cold-engine/ARCHITECTURE-NOTES.md`. Placement rule:

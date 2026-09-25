@@ -327,7 +327,9 @@ its other half — finer fp8 K-cache groups on the 512-dim heads — shipped
 in 0.32.0 with grouped-nf4-gemm 0.26.0); the model fails to load on
 2 of 6 rented hosts
 ([#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344));
-no shipped tool bakes the training arena from a bf16 checkpoint yet.
+reproducing the TR2 training receipt from published artifacts is still
+open in the register (`e4b.open.tr2-repro-gap`), although grouped-nf4-gemm's
+`nvme_bake_nf4` bakes the NF4 arena its trainer lane reads.
 
 ## Docs
 
