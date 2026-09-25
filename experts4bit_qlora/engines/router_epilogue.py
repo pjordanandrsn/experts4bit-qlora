@@ -30,9 +30,35 @@ import os
 
 import torch
 
-__all__ = ["fuse_router_epilogue"]
+__all__ = ["fuse_router_epilogue", "CAST_WEIGHTS"]
 
 _MAX_DECODE_ROWS = 64
+
+
+def _cast_default() -> bool:
+    """``E4B_ROUTER_EPI_CAST=1`` (lane P70, e4b#726): the default of
+    :data:`CAST_WEIGHTS`, read once at import."""
+    return os.environ.get("E4B_ROUTER_EPI_CAST", "0") == "1"
+
+
+#: Whether the fused path rounds its routing weights to the router logits'
+#: dtype before returning them, as the upstream router does (e4b#726). One
+#: element, read on EVERY fused call, so a harness can flip it per pass
+#: without re-patching (hot_residency.DECODE_A16's pattern). Default off:
+#: the fused path returns the kernel's fp32 weights, while the original
+#: forward -- which runs above ``_MAX_DECODE_ROWS`` rows -- returns
+#: ``router_top_value.to(router_logits.dtype)`` (bf16 on a bf16 model).
+#: So today a decode or verify step (<= 64 rows) and a prefill weight each
+#: expert's output with different functions at the same token (lane P63's
+#: P7). On: every row count returns the logits' dtype. On the
+#: ``softmax_topk`` kind (Qwen3-MoE, OLMoE, Mixtral) that is the upstream
+#: function to the bit -- the same fp32 softmax, top-k and renormalisation,
+#: then the same cast. On ``topk_softmax`` (gpt-oss, GraniteMoe) the dtype
+#: matches but not every bit: upstream takes the k-softmax in the logits'
+#: dtype, the kernel in fp32. Gemma-4's branch casts already and is not
+#: affected. Whether the cast may become the default is lane P70's
+#: decode-scored read (bench/p70/P70-PREREG.md); nothing here moves it.
+CAST_WEIGHTS = [_cast_default()]
 
 
 def _ref_epilogue(logits: torch.Tensor, k: int, norm: bool):
@@ -255,6 +281,8 @@ def fuse_router_epilogue(model) -> int:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(rows, _m.weight)
                 first, w, idx = router_epilogue(logits.float(), _k, _norm)
+                if CAST_WEIGHTS[0]:
+                    w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         else:
             def _fwd(hidden_states, _m=mod, _orig=orig, _k=k, _h=hidden, _pos=pos, _bias=spec["bias"], _raw=raw_first):
@@ -264,6 +292,8 @@ def fuse_router_epilogue(model) -> int:
                 logits = torch.nn.functional.linear(rows, _m.weight)
                 first, w, idx = router_epilogue(logits.float(), _k, False,
                                                 select_on_logits=True, bias=_bias)
+                if CAST_WEIGHTS[0]:
+                    w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd
         n += 1

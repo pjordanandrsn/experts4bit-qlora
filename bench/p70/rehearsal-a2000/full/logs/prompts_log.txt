@@ -1,0 +1,7 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 80867.02 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 829007.89 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 327455.47 examples/s]
+PROMPTS wikitext B=16 corpus=288721 step=18013 sha=3b73a2c857d91f73bb63e9aa9b32f06e017fabd1573a42a118237b97487b17ae
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 56098.34 examples/s]Generating v split: 18275 examples [00:00, 57291.39 examples/s]Generating v split: 27432 examples [00:00, 52023.05 examples/s]Generating v split: 36604 examples [00:00, 53519.86 examples/s]Generating v split: 45576 examples [00:00, 51317.71 examples/s]Generating v split: 45576 examples [00:00, 52545.30 examples/s]
+PROMPTS c4val1 B=16 corpus=886188 step=55354 sha=bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9

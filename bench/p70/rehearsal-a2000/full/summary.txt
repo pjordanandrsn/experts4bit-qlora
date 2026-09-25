@@ -1,0 +1,31 @@
+KNOBS model=allenai/OLMoE-1B-7B-0924 rev=6d84c48581ece794365f2b8e9cfb043c68ade9c5 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=A2000 min_disk_gb=50 calib_nseq=8 hessian_budget_gb=2 build_ppl_steps=64 build_via=step_decomp rows=4 skip_install=1
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+e4b 0.37.4 @abb198d3e1261a67607b412bebeb4a2a5d66cade (from /w/src/e4b/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /w/pydeps/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+self-test OK (P70): P64's scorer self-test; the router census equals expected_counts for fused and original prefills, cast off and on; the cast leaves an original-router prefill bit-identical and changes decode
+K0 all_passed kl-fidelity/1.0.0
+PROMPTS wikitext B=16 corpus=288721 step=18013 sha=3b73a2c857d91f73bb63e9aa9b32f06e017fabd1573a42a118237b97487b17ae
+PROMPTS c4val1 B=16 corpus=886188 step=55354 sha=bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9
+BUILD INT4EXP calibrated experts: 768 gptq / 0 rtn (min_rows=32) over 6 layers
+BUILD INT4EXP calibrated streaming: 16 layers in 2 passes of <= 10 layer(s)
+BUILD rc=1 after a verified dump: K8 cross-check failed, pack OK
+PACK sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c != the licensed sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 -- the read is labelled 'not the licensed pack'
+P64PASS {"pass": "ep32", "text": "wikitext", "engaged_as_registered": true, "wall_s": 29.6, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_decode":
+P64PASS {"pass": "ep16", "text": "wikitext", "engaged_as_registered": true, "wall_s": 30.3, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 0, "router_le64_fp32_prefill": 0, "router_le64_bf16_decode": 81
+P64PASS {"pass": "ep32", "text": "c4val1", "engaged_as_registered": true, "wall_s": 31.2, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_decode": 0
+P64PASS {"pass": "ep16", "text": "c4val1", "engaged_as_registered": true, "wall_s": 30.3, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 0, "router_le64_fp32_prefill": 0, "router_le64_bf16_decode": 8192
+P64PASS {"pass": "ep32_rep", "text": "wikitext", "engaged_as_registered": true, "wall_s": 29.5, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_deco
+P64PASS {"pass": "ep32_rep", "text": "c4val1", "engaged_as_registered": true, "wall_s": 30.7, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_decode
+P64PASS {"pass": "ep32_pc96", "text": "wikitext", "engaged_as_registered": true, "wall_s": 33.8, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_dec
+P64PASS {"pass": "ep32_pc96", "text": "c4val1", "engaged_as_registered": true, "wall_s": 34.8, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_decod
+P64PASS {"pass": "ep32_pc384", "text": "wikitext", "engaged_as_registered": true, "wall_s": 21.0, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_de
+P64PASS {"pass": "ep32_pc384", "text": "c4val1", "engaged_as_registered": true, "wall_s": 21.8, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 0, "router_le64_bf16_deco
+P64PASS {"pass": "ep32_pc64", "text": "wikitext", "engaged_as_registered": true, "wall_s": 42.8, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 384, "router_le64_bf16_d
+P64PASS {"pass": "ep32_pc64", "text": "c4val1", "engaged_as_registered": true, "wall_s": 41.2, "decode_steps": 512, "counts": {"expert_quant_decode": 16384, "expert_dequant_decode": 0, "attn_quant_decode": 32768, "router_le64_fp32_decode": 8192, "router_le64_fp32_prefill": 384, "router_le64_bf16_dec
+**VALIDITY: VALID** -- determinism True, prefill-last untouched True, engagement True, same rows True, every router hooked True
+**VERDICT (the cast, G): INDISTINGUISHABLE** -- REHEARSAL, NOT A READING

@@ -1,0 +1,12 @@
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1520.53it/s]
+[02:34:50]   checkpoint: allenai/OLMoE-1B-7B-0924 @ 6d84c48581ece794365f2b8e9cfb043c68ade9c5 (requested main, unpinned)
+[02:34:50]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[02:36:02]   quantized experts on 16/16 MoE layers (64 experts each)
+[02:36:02]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=16 experts=64
+  shard 0/16  0.2 GiB  1s
+  shard 8/16  1.9 GiB  7s
+snapshot done 3.38 GiB in 11.6s
+expert-tensor bake: L=16 E=64 (baking 64) row=3538944 stride=3538944 total=3.6 GB workers=8
+bake complete: 1024 rows (3.6 GB) in 4s
+BAKE OK
