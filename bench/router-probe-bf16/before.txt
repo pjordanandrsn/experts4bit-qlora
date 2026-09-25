@@ -1,0 +1,7 @@
+# torch 2.14.0 (CPU), transformers 5.16.1, macOS arm64, 2026-09-25; router_epilogue.py at origin/main 81f137d
+== torch.float32
+  gpt-oss-20b: licensed by _probe_matches (seed 4242): 24/24 layers; across 50 seeds x 24 layers: {'PASS': 1200}
+  granite-1b-a400m: licensed by _probe_matches (seed 4242): 24/24 layers; across 50 seeds x 24 layers: {'PASS': 1200}
+== torch.bfloat16
+  gpt-oss-20b: licensed by _probe_matches (seed 4242): 16/24 layers; across 50 seeds x 24 layers: {'index-order': 100, 'weights': 263, 'index-SET': 46, 'PASS': 791}
+  granite-1b-a400m: licensed by _probe_matches (seed 4242): 24/24 layers; across 50 seeds x 24 layers: {'PASS': 1200}
