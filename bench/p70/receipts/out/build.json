@@ -1,0 +1,44 @@
+{
+ "moe_layers": 48,
+ "experts": 128,
+ "top_k": 8,
+ "fuse_t1_glue_n": 193,
+ "fuse_t1_glue_r2_n": [
+  48,
+  48
+ ],
+ "fuse_router_epilogue_n": 48,
+ "int4_attn_projections": 192,
+ "int4_expert_layers": 48,
+ "int4_store_kinds": [
+  "int4_b32"
+ ],
+ "build_s": 227.2,
+ "env": {
+  "E4B_ACCUM_RECOMPILE_LIMIT": "64",
+  "E4B_MODEL_ID": "Qwen/Qwen3-30B-A3B",
+  "GNF4_SHA": "5ca1897585f9f456f99ea504b2a1be0ea91db496",
+  "E4B_RECOMPILE_LIMIT": "64",
+  "E4B_SHA": "c77aab6dafb5f08d98a7387d1e986d141b20a2d3",
+  "E4B_INT4_GPTQ_DEVICE": "cuda",
+  "E4B_INT4_HESSIAN_BUDGET_GB": "24",
+  "E4B_SERVE_EXP_INT4": "1",
+  "E4B_SERVE_EXP_INT4_CALIB": "1",
+  "E4B_CALIB_NSEQ": "128",
+  "E4B_INT4_ARTIFACT_DIR": "/root/p70/artifact1",
+  "E4B_INT4_EXPECTED_FINGERPRINT": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "E4B_SERVE_ATTN_INT4_CALIB": "1",
+  "E4B_SERVE_ATTN_INT4": "0",
+  "E4B_CALIB_SOURCE": "c4",
+  "E4B_FUSE_T1_GLUE": "1",
+  "E4B_FUSE_T1_GLUE_R2": "1",
+  "E4B_FUSE_ROUTER_EPI": "1"
+ },
+ "attn_pack_sha256": "sha256:1824cbebe3292e0a07752b516ec5dcc136d10b655557b06319bd5c70c3ee23fa",
+ "counters": {
+  "expert_quant_counter": true,
+  "expert_dequant_counter": true,
+  "attn_int4linear_counted": 192,
+  "router_hooks": 48
+ }
+}

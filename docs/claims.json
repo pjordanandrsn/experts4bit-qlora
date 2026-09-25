@@ -6672,6 +6672,37 @@
       "pack_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
     },
     {
+      "id": "e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P70: on the licensed int4 serving pack (sha256:0c9955a9...) at B = 1, casting the fused router epilogue's fp32 top-k weights to bf16 at <= 64 rows (E4B_ROUTER_EPI_CAST=1, the upstream router's own dtype) is below Qwen3's arithmetic-order floor on both texts -- KL(cast off || cast on) = 0.003309 nats/token on wikitext and 0.002806 on c4val1 (top-1 0.978 / 0.976), 0.60x and 0.92x of the in-lane floor, dNLL +0.00096 / +0.00216 with both 95 % intervals spanning 0: INDISTINGUISHABLE, so the cast becomes the default for the softmax_topk kind.",
+      "value": 0.003309,
+      "unit": "nats/token, KL(fp32 router weights || bf16 router weights) at <= 64 rows, B = 1 teacher-forced decode, larger of the two texts",
+      "hardware": "RTX 5090 (sm_120, 600 W power limit, driver 575.57.08), one rented Vast.ai verified/secure host (instance 52527996, AMD Ryzen 9 7950X, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; P55x's licensed pack rebuilt on the box and verified by verify_artifact (build K8 ppl 6.36709), C4-calibrated int4 attention (192 Int4Linear), folds r1/r2 + router epilogue (48 routers hooked), --no-fuse-qkv, built once by bench/p44/serve_stack.build_served_model; P64's scorer and reducer unchanged; 16 rows x 512 tokens per text (wikitext-2 = P59's rows f67e7e4d; c4val1 17e68b42), 384 prefilled in 128-token chunks through the original router, 128 decoded one token per forward (every decode router call <= 64 rows, fused); floor = mean of KL(ep32 || ep32 prefilled in 96-token chunks) and (384-token chunks), both keeping the prefill on the original router; KL kl_fidelity's (fp64, full vocabulary, token-weighted) over 2,048 decode positions per text; e4b 0.37.4 at c77aab6, grouped-nf4-gemm 0.33.0 at 5ca1897",
+      "measured_on": "2026-09-25",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p70/RESULTS-p70.md",
+        "bench/p70/P70-PREREG.md",
+        "bench/p70/kl_router.py",
+        "bench/p70/p70_reduce.py",
+        "bench/p70/receipts/p70_rep.json",
+        "bench/p70/receipts/RESULTS-p70-generated.md",
+        "bench/p70/receipts/summary.txt",
+        "bench/p70/receipts/pack.json",
+        "bench/p70/receipts/proof/prove_cast.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-25/p70-5090-2/ (receipt.json, teardown-proof.json, the fetched run); the per-pass logits stayed on the box by registration; the proof p70-prove-4 and the refused / failed / dud runs p70-prove-1..3 and p70-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #744 with amendment 1 (#745, before the reading: the proof compares at matching row counts, as maps expert -> weight). P1 determinism, P2, P3, P4 and P6 HELD; P5 (|dNLL| <= F_NLL) BROKEN on c4val1 (0.00216 > 0.00180, CI spans 0), which moves no class. Proof p70-prove-4: cast-on weights bit-equal to upstream's (1.0) at 64 and 1 rows on sm_120, same experts; the top-k slot order differs from torch.topk's. P64's pc64 floor sample read 1.01 F / 1.08 F (P6), so P64's floor stands. Validity VALID: KL(ep32 || ep32_rep) exactly 0 on 4,096 positions, prefill-last logits bit-identical across passes, every pass's router census as registered. Not a statement about verify or B = 16, the topk_softmax kind, speed, or quality against bf16. Lane $0.8156 over six runs (reading p70-5090-2 $0.6925), teardown proven.",
+      "licensed_by": "e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22",
+      "pack_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
+    },
+    {
       "id": "e4b.quality.p65.granite.selector-two-arms.5090.2026-09-24",
       "package": "experts4bit-qlora",
       "area": "quality",

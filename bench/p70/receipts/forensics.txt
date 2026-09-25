@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 575.57.08, GPU-7a6634c6-2afe-863b-7f96-d00691343cdc
+power.limit,clocks.max.sm 600.00 W, 3105 MHz
+Model name:                              AMD Ryzen 9 7950X 16-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             124           3          91           0          29         120
+overlay         320G   55M  320G   1% /
