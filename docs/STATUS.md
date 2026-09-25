@@ -856,8 +856,9 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     0.60× and 0.92× of the instrument's own floor. dNLL spans 0, so the cast
     is **INDISTINGUISHABLE**
     (`e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25`). By the
-    registered rule it becomes the default for the `softmax_topk` kind in the
-    next release. `topk_softmax` keeps fp32 until it is read.
+    registered rule it is now the default for the `softmax_topk` kind
+    (Unreleased). `E4B_ROUTER_EPI_CAST=0` restores fp32 for one release.
+    `topk_softmax` keeps fp32 until it is read.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
