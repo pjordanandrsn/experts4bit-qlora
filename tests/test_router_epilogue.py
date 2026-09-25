@@ -375,18 +375,54 @@ def _qwen3_pair(monkeypatch):
     return re_mod, m.gate, ref, calls
 
 
-def test_the_cast_is_off_by_default_and_off_returns_the_kernels_fp32(monkeypatch):
-    """Today's behaviour, pinned: the fused path returns fp32 weights while
-    the upstream router returns bf16 -- the discontinuity #726 names."""
+def test_the_default_casts_softmax_topk_to_the_upstream_router(monkeypatch):
+    """Since lane P70's read (INDISTINGUISHABLE): with the env var unset, the
+    softmax_topk kind returns exactly what the upstream router returns at the
+    same rows -- bf16, the same bits, the same experts."""
     monkeypatch.delenv("E4B_ROUTER_EPI_CAST", raising=False)
     from experts4bit_qlora.engines import router_epilogue as re_mod
-    assert re_mod._cast_default() is False
+    assert re_mod._cast_default() is None
     re_mod, gate, ref, calls = _qwen3_pair(monkeypatch)
+    re_mod.CAST_WEIGHTS[0] = None
+    x = torch.randn(8, HID, dtype=torch.bfloat16)
+    _, w, i = gate(x)
+    _, rw, ri = ref(x)
+    assert calls["fused"] == 1 and w.dtype == rw.dtype == torch.bfloat16
+    assert torch.equal(w, rw) and torch.equal(i, ri)
+
+
+def test_zero_restores_the_fp32_weights(monkeypatch):
+    """E4B_ROUTER_EPI_CAST=0: the behaviour of every release before the P70
+    read, kept for one release -- fp32 weights where upstream returns bf16."""
+    re_mod, gate, ref, calls = _qwen3_pair(monkeypatch)
+    re_mod.CAST_WEIGHTS[0] = False
     x = torch.randn(8, HID, dtype=torch.bfloat16)
     _, w, i = gate(x)
     _, rw, ri = ref(x)
     assert calls["fused"] == 1 and w.dtype == torch.float32 and rw.dtype == torch.bfloat16
     assert torch.equal(i, ri)
+
+
+def test_the_default_keeps_topk_softmax_in_fp32_until_it_is_read(monkeypatch):
+    """P70 read the softmax_topk kind only; gpt-oss / GraniteMoe keep the
+    kernel's fp32 weights under the default and cast only on '1'."""
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    calls = {"fused": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(12)
+    m = torch.nn.Module()
+    m.gate = GptOssLikeRouter()
+    assert fuse_router_epilogue(m) == 1                  # probed in fp32 (a bf16 k-softmax misses the probe's 2**-8)
+    m.gate.to(torch.bfloat16)                            # the patched forward reads the weights live
+    x = torch.randn(4, HID, dtype=torch.bfloat16)
+    monkeypatch.setattr(re_mod, "CAST_WEIGHTS", [None])
+    assert m.gate(x)[1].dtype == torch.float32
+    re_mod.CAST_WEIGHTS[0] = True
+    assert m.gate(x)[1].dtype == torch.bfloat16
+    re_mod.CAST_WEIGHTS[0] = False
+    assert m.gate(x)[1].dtype == torch.float32
+    assert calls["fused"] == 3
 
 
 def test_cast_on_is_the_upstream_router_to_the_bit(monkeypatch):
@@ -435,3 +471,9 @@ def test_the_env_var_sets_the_default(monkeypatch):
     assert re_mod._cast_default() is True
     monkeypatch.setenv("E4B_ROUTER_EPI_CAST", "0")
     assert re_mod._cast_default() is False
+    monkeypatch.setenv("E4B_ROUTER_EPI_CAST", "")
+    assert re_mod._cast_default() is None
+    for typo in ("true", "yes", "2", "off"):
+        monkeypatch.setenv("E4B_ROUTER_EPI_CAST", typo)
+        with pytest.raises(ValueError, match="E4B_ROUTER_EPI_CAST"):
+            re_mod._cast_default()

@@ -35,34 +35,54 @@ __all__ = ["fuse_router_epilogue", "CAST_WEIGHTS"]
 _MAX_DECODE_ROWS = 64
 
 
-def _cast_default() -> bool:
-    """``E4B_ROUTER_EPI_CAST=1`` (lane P70, e4b#726): the default of
-    :data:`CAST_WEIGHTS`, read once at import."""
-    return os.environ.get("E4B_ROUTER_EPI_CAST", "0") == "1"
+def _cast_default():
+    """``E4B_ROUTER_EPI_CAST`` (e4b#726, lane P70), read once at import into
+    :data:`CAST_WEIGHTS`. Unset (or empty) -> ``None``, the per-kind default
+    (:func:`_cast_for`); ``"1"`` -> ``True``, cast every kind; ``"0"`` ->
+    ``False``, the fp32 weights of every release before the P70 read, kept
+    for ONE release. Anything else is refused: a typo must not silently pick
+    an arithmetic."""
+    v = os.environ.get("E4B_ROUTER_EPI_CAST", "")
+    if v == "":
+        return None
+    if v in ("0", "1"):
+        return v == "1"
+    raise ValueError(f"E4B_ROUTER_EPI_CAST={v!r}: expected '0', '1' or unset")
 
 
 #: Whether the fused path rounds its routing weights to the router logits'
 #: dtype before returning them, as the upstream router does (e4b#726). One
 #: element, read on EVERY fused call, so a harness can flip it per pass
-#: without re-patching (hot_residency.DECODE_A16's pattern). Default off:
-#: the fused path returns the kernel's fp32 weights, while the original
-#: forward -- which runs above ``_MAX_DECODE_ROWS`` rows -- returns
-#: ``router_top_value.to(router_logits.dtype)`` (bf16 on a bf16 model).
-#: So today a decode or verify step (<= 64 rows) and a prefill weight each
-#: expert's output with different functions at the same token (lane P63's
-#: P7). On: every row count returns the logits' dtype. On the
-#: ``softmax_topk`` kind (Qwen3-MoE, OLMoE, Mixtral) that is the upstream
-#: function: at the same row count, the same experts and, after the cast,
-#: each expert's weight bit-equal to upstream's (the kernel's fp32 weights
-#: differ from torch's in the last place; the bf16 rounding absorbed every
-#: one on the A2000 diagnosis, bench/p70/diag-a2000/). The top-k SLOT order
-#: can differ from torch.topk's where two probabilities tie within fp32
-#: rounding -- the routing is the same, the slot layout is not. On ``topk_softmax`` (gpt-oss, GraniteMoe) the dtype
+#: without re-patching (hot_residency.DECODE_A16's pattern).
+#:
+#: Why: the original forward -- which runs above ``_MAX_DECODE_ROWS`` rows --
+#: returns ``router_top_value.to(router_logits.dtype)`` (bf16 on a bf16
+#: model). Without the cast, a decode or verify step (<= 64 rows) and a
+#: prefill weight each expert's output with different functions at the same
+#: token (lane P63's P7).
+#:
+#: ``None`` (the default since lane P70's read): the ``softmax_topk`` kind
+#: (Qwen3-MoE, OLMoE, Mixtral) casts; the ``topk_softmax`` kind (gpt-oss,
+#: GraniteMoe) keeps fp32 until it is read. P70 read the cast on Qwen3-30B-A3B
+#: at B = 1 decode as INDISTINGUISHABLE from the instrument's floor
+#: (``e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25``). On
+#: ``softmax_topk`` the cast is the upstream function: at the same row count,
+#: the same experts and each expert's weight bit-equal to upstream's (the
+#: RTX 5090 proof, bench/p70/receipts/proof/). The top-k SLOT order can differ
+#: from torch.topk's where two probabilities tie within fp32 rounding -- the
+#: routing is the same, the slot layout is not. On ``topk_softmax`` the dtype
 #: matches but not every bit: upstream takes the k-softmax in the logits'
-#: dtype, the kernel in fp32. Gemma-4's branch casts already and is not
-#: affected. Whether the cast may become the default is lane P70's
-#: decode-scored read (bench/p70/P70-PREREG.md); nothing here moves it.
+#: dtype, the kernel in fp32. ``True`` casts both kinds; ``False`` casts
+#: neither. Gemma-4's branch casts already and is not affected.
 CAST_WEIGHTS = [_cast_default()]
+
+
+def _cast_for(kind: str) -> bool:
+    """Whether the fused ``kind`` branch casts on this call."""
+    v = CAST_WEIGHTS[0]
+    if v is None:
+        return kind == "softmax_topk"
+    return bool(v)
 
 
 def _ref_epilogue(logits: torch.Tensor, k: int, norm: bool):
@@ -285,7 +305,7 @@ def fuse_router_epilogue(model) -> int:
                     return _orig(hidden_states)
                 logits = torch.nn.functional.linear(rows, _m.weight)
                 first, w, idx = router_epilogue(logits.float(), _k, _norm)
-                if CAST_WEIGHTS[0]:
+                if _cast_for("softmax_topk"):
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         else:
@@ -296,7 +316,7 @@ def fuse_router_epilogue(model) -> int:
                 logits = torch.nn.functional.linear(rows, _m.weight)
                 first, w, idx = router_epilogue(logits.float(), _k, False,
                                                 select_on_logits=True, bias=_bias)
-                if CAST_WEIGHTS[0]:
+                if _cast_for("topk_softmax"):
                     w = w.to(logits.dtype)
                 return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### The fused router now returns the model's dtype by default for `softmax_topk` (#726; a default changes)
+
+- **What changes.** With `E4B_FUSE_ROUTER_EPI=1`, the fused router epilogue on the `softmax_topk` kind (Qwen3-MoE, OLMoE, Mixtral) now casts its top-k weights to the router logits' dtype, which is bf16 on a bf16 model. That is what the upstream router returns above 64 rows, so a decode or verify step and a prefill now weight each expert with one function.
+- **Why.** Lane P70 read the cast as INDISTINGUISHABLE at B = 1 decode on Qwen3-30B-A3B (`e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25`). Its registered decision rule makes it the default.
+- **The `topk_softmax` kind is unchanged.** gpt-oss and GraniteMoe keep the kernel's fp32 weights until that kind is read.
+- **`E4B_ROUTER_EPI_CAST`.** Unset means the per-kind default above. `=0` restores fp32 weights for every kind, as before, **for one release**. `=1` also casts `topk_softmax`, which is unread. Any other value is refused with a `ValueError` at import.
+- **Harnesses.** No other lane reads the switch. P70's own runner refuses on this commit instead of silently measuring the new default, because its tripwire requires the cast off at import. The runner also unsets the variable, so rerunning P70 means running it at its registered commit, `c77aab6`.
+
 ### Lane P70 read (#726): the fused router's weights cast to bf16 is INDISTINGUISHABLE at B = 1 decode (docs and bench only; the default flips in a follow-up)
 
 - `p70-5090-2` ran on one RTX 5090 with the licensed pack `0c9955a9…` (build K8 ppl 6.36709) for $0.6925. The lane cost $0.8156 over six runs. Validity was VALID.
